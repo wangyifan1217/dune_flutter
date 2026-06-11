@@ -24,7 +24,7 @@ window.DunesKbChat = (function () {
     return document.querySelector('.screen.active')?.dataset?.screen === screen;
   }
   function apiBase() {
-    var base = window.__dunesApiBase || localStorage.getItem('dunes_api_base') || 'http://localhost:6090/api/v1';
+    var base = window.__dunesApiBase || localStorage.getItem('dunes_api_base') || '__DUNES_API_BASE__';
     return String(base || '').replace(/\/$/, '');
   }
   function token() {
@@ -33,6 +33,20 @@ window.DunesKbChat = (function () {
   function kbAvHtml() {
     if (window.dunesKbAvatarHtml) return window.dunesKbAvatarHtml('msg-av-sm kb-ai-av');
     return '<div class="msg-av-sm kb-ai-av"><i class="ti ti-books"></i></div>';
+  }
+  function kbSelfInitial() {
+    var n = localStorage.getItem('dunes_display_name') || '我';
+    return n ? n.charAt(0) : '我';
+  }
+  function kbUserAvHtml() {
+    if (typeof myMsgAvatarHtml === 'function') return myMsgAvatarHtml(kbSelfInitial());
+    return '<div class="msg-av-sm person-e">' + esc(kbSelfInitial()) + '</div>';
+  }
+  function hydrateKbUserAvatars(root) {
+    if (typeof hydrateMsgAvatarsIn === 'function') hydrateMsgAvatarsIn(root);
+    else if (typeof applyMyMsgAvatar === 'function' && root) {
+      root.querySelectorAll('.msg-row.sent').forEach(function (row) { applyMyMsgAvatar(row, kbSelfInitial()); });
+    }
   }
   function esc(s) {
     return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -449,12 +463,13 @@ window.DunesKbChat = (function () {
     if (meta.id) row.setAttribute('data-message-id', String(meta.id));
     if (meta.createdAt) row.setAttribute('data-created-at', String(meta.createdAt));
     var time = formatTime(meta.createdAt || new Date().toISOString());
-    row.innerHTML = '<div class="msg-av-sm person-e">我</div><div class="msg-content"><div class="msg-meta"><span class="nm">我</span>' + (time ? '<span>' + time + '</span>' : '') + '</div>'
+    row.innerHTML = kbUserAvHtml() + '<div class="msg-content"><div class="msg-meta"><span class="nm">我</span>' + (time ? '<span>' + time + '</span>' : '') + '</div>'
       + '<div class="msg-bubble sent dunes-voice-bubble' + (pending ? ' pending' : '') + '" data-url="' + esc(url) + '" data-object-key="' + esc(objectKey) + '" data-bucket="im-attachments">'
       + '<span class="voice-sec">' + sec + '\'</span><span class="voice-wave"><i class="ti ti-volume"></i></span></div>'
       + (pending ? '<div class="kb-voice-asr-hint" style="font-size:11px;color:var(--text-3);margin-top:4px;text-align:right">语音识别中…</div>' : '')
       + '</div></div>';
     box.appendChild(row);
+    hydrateKbUserAvatars(row);
     wireK2VoicePlay();
     scrollK2();
     return row;
@@ -651,7 +666,7 @@ window.DunesKbChat = (function () {
     if (meta.createdAt) row.setAttribute('data-created-at', String(meta.createdAt));
     if (role === 'user') {
       var time = formatTime(meta.createdAt);
-      row.innerHTML = '<div class="msg-av-sm person-e">我</div><div class="msg-content"><div class="msg-meta"><span class="nm">我</span>' + (time ? '<span>' + time + '</span>' : '') + '</div><div class="msg-bubble sent">' + esc(text) + '</div></div>';
+      row.innerHTML = kbUserAvHtml() + '<div class="msg-content"><div class="msg-meta"><span class="nm">我</span>' + (time ? '<span>' + time + '</span>' : '') + '</div><div class="msg-bubble sent">' + esc(text) + '</div></div>';
     } else {
       var time2 = formatTime(meta.createdAt);
       var cites = '';
@@ -664,6 +679,7 @@ window.DunesKbChat = (function () {
       row.innerHTML = kbAvHtml() + '<div class="msg-content" style="max-width:88%"><div class="msg-meta"><span class="nm">知识库</span><span class="badge-ai">AI</span>' + (time2 ? '<span>' + time2 + '</span>' : '') + '</div><div class="msg-bubble ai-recv kb-ai-bubble">' + kbBubbleHtml(text) + cites + '</div></div>';
     }
     box.appendChild(row);
+    if (role === 'user') hydrateKbUserAvatars(row);
     if (!skipScroll) scrollK2();
     return row;
   }
@@ -699,6 +715,7 @@ window.DunesKbChat = (function () {
       appendMsg(m.role === 'user' ? 'user' : 'assistant', m.content || '', m.citations || [], true, { id: m.id, createdAt: at, metadata: m.metadata || null });
       prevAt = at;
     });
+    hydrateKbUserAvatars(box);
     msgHasMore = false;
     msgOldestId = items && items.length ? Number(items[0].id || 0) : 0;
     scrollK2();
@@ -864,6 +881,9 @@ window.DunesKbChat = (function () {
   }
   function onScreen(screen) {
     if (screen === 'K2') {
+      if (typeof window.__dunesRefreshUserProfile === 'function') {
+        window.__dunesRefreshUserProfile();
+      }
       wireK2();
       wireK2Scroll();
       applyKbChatChrome();

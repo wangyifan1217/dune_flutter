@@ -188,7 +188,7 @@ window.DunesImChat = (function () {
   }
   function apiFetch(path, opts) {
     opts = opts || {};
-    var base = localStorage.getItem('dunes_api_base') || 'http://localhost:6090/api/v1';
+    var base = localStorage.getItem('dunes_api_base') || '__DUNES_API_BASE__';
     var token = localStorage.getItem('dunes_token') || localStorage.getItem('dunes_jwt') || '';
     var headers = Object.assign({}, opts.headers || {});
     if (token) headers.Authorization = 'Bearer ' + token;
@@ -200,12 +200,94 @@ window.DunesImChat = (function () {
   function defaultWsUrl() {
     var base = localStorage.getItem('dunes_ws_base') || '';
     if (base) return base;
-    var api = localStorage.getItem('dunes_api_base') || 'http://localhost:6090/api/v1';
+    var api = localStorage.getItem('dunes_api_base') || '__DUNES_API_BASE__';
     return api.replace(/\/api\/v1\/?$/, '') + '/connection/websocket';
   }
   function personCls(seed) {
     var n = Math.abs(Number(seed) || 0) % 6;
     return 'person-' + ['a', 'b', 'c', 'd', 'e', 'f'][n];
+  }
+  function msgAvatarHtml(uid, initial) {
+    return '<div class="msg-av-sm ' + personCls(uid) + '" data-avatar-user-id="' + Number(uid || 0) + '">' + esc(initial || '?') + '</div>';
+  }
+  function profileForMsgSender(m, peer, uid) {
+    uid = Number(uid || msgSenderId(m) || 0);
+    if (!uid) return null;
+    if (m && m.sender && (m.sender.avatarPreset || m.sender.avatarObjectKey)) {
+      return {
+        userId: uid,
+        displayName: m.sender.displayName || '',
+        avatarPreset: m.sender.avatarPreset || '',
+        avatarObjectKey: m.sender.avatarObjectKey || ''
+      };
+    }
+    if (typeof profileForUserId === 'function') {
+      var cached = profileForUserId(uid);
+      if (cached && (cached.avatarPreset || cached.avatarObjectKey || cached.displayName)) return cached;
+    }
+    if (uid === devUserId() && window.__dunesCurrentProfile) {
+      var me = window.__dunesCurrentProfile;
+      return {
+        userId: uid,
+        displayName: me.displayName || myDisplayName(),
+        avatarPreset: me.avatarPreset || '',
+        avatarObjectKey: me.avatarObjectKey || ''
+      };
+    }
+    if (peer && Number(peer.userId) === uid) {
+      return {
+        userId: uid,
+        displayName: peer.displayName || '',
+        avatarPreset: peer.avatarPreset || '',
+        avatarObjectKey: peer.avatarObjectKey || ''
+      };
+    }
+    if (window.__dunesGroupMembers) {
+      var gm = window.__dunesGroupMembers.find(function (x) { return Number(x.userId) === uid; });
+      if (gm) {
+        return {
+          userId: uid,
+          displayName: gm.displayName || '',
+          avatarPreset: gm.avatarPreset || '',
+          avatarObjectKey: gm.avatarObjectKey || ''
+        };
+      }
+    }
+    return typeof profileForUserId === 'function' ? profileForUserId(uid) : null;
+  }
+  function finishMsgRow(row, uid, initial, m, peer) {
+    if (!row || row.classList.contains('msg-system')) return row;
+    var av = row.querySelector('.msg-av-sm:not(.ai-bot):not(.kb-ai-av)');
+    if (!av) return row;
+    uid = Number(uid || 0);
+    if (uid) av.setAttribute('data-avatar-user-id', String(uid));
+    var p = profileForMsgSender(m, peer, uid);
+    if (p && typeof rememberUserProfile === 'function') rememberUserProfile(p);
+    if (typeof renderListAvatar === 'function' && p && (p.avatarPreset || p.avatarObjectKey)) {
+      renderListAvatar(av, p, initial);
+    }
+    return row;
+  }
+  function hydrateMsgAvatars(root) {
+    if (typeof hydrateMsgAvatarsIn === 'function') return hydrateMsgAvatarsIn(root);
+    if (!root || typeof renderListAvatar !== 'function') return;
+    root.querySelectorAll('.msg-av-sm[data-avatar-user-id]:not(.ai-bot):not(.kb-ai-av)').forEach(function (el) {
+      var uid = Number(el.getAttribute('data-avatar-user-id'));
+      if (!uid) return;
+      if (el.classList.contains('has-img')) return;
+      var p = typeof profileForUserId === 'function' ? profileForUserId(uid) : null;
+      if (!p && uid === devUserId() && window.__dunesCurrentProfile) {
+        var me = window.__dunesCurrentProfile;
+        p = {
+          userId: uid,
+          displayName: me.displayName || myDisplayName(),
+          avatarPreset: me.avatarPreset || '',
+          avatarObjectKey: me.avatarObjectKey || ''
+        };
+      }
+      if (!p || (!p.avatarPreset && !p.avatarObjectKey)) return;
+      renderListAvatar(el, p, (p.displayName || el.textContent || '?').slice(0, 1));
+    });
   }
   function deptTitleHtml(dept, title) {
     var parts = [];
@@ -369,12 +451,12 @@ window.DunesImChat = (function () {
   }
   function storageGetEndpoint(objectKey, bucket) {
     if (!objectKey) return '';
-    var base = localStorage.getItem('dunes_api_base') || 'http://localhost:6090/api/v1';
+    var base = localStorage.getItem('dunes_api_base') || '__DUNES_API_BASE__';
     return base + '/storage/presigned-get?bucket=' + encodeURIComponent(bucket || 'im-attachments') + '&objectKey=' + encodeURIComponent(objectKey);
   }
   function storageDownloadEndpoint(objectKey, bucket, fileName) {
     if (!objectKey) return '';
-    var base = localStorage.getItem('dunes_api_base') || 'http://localhost:6090/api/v1';
+    var base = localStorage.getItem('dunes_api_base') || '__DUNES_API_BASE__';
     var q = 'bucket=' + encodeURIComponent(bucket || 'im-attachments') + '&objectKey=' + encodeURIComponent(objectKey);
     if (fileName) q += '&fileName=' + encodeURIComponent(fileName);
     return base + '/storage/download?' + q;
@@ -522,11 +604,12 @@ window.DunesImChat = (function () {
         + '</div>';
       var read = sent ? readStatusHtml(m.id, peerLastRead) : '';
       if (sent) {
-        row.innerHTML = '<div class="msg-av-sm ' + personCls(me) + '">' + esc(myInitial) + '</div><div class="msg-content">' + bubble + read + '</div>';
+        row.innerHTML = msgAvatarHtml(me, myInitial) + '<div class="msg-content">' + bubble + read + '</div>';
       } else {
-        row.innerHTML = '<div class="msg-av-sm ' + personCls(senderId || (peer && peer.userId)) + '">' + esc(avInitial) + '</div><div class="msg-content"><div class="msg-meta"><span class="nm">' + esc(name) + '</span>' + peerTag + '<span>' + esc(t) + '</span></div>' + bubble + '</div>';
+        var recvUid = senderId || (peer && peer.userId);
+        row.innerHTML = msgAvatarHtml(recvUid, avInitial) + '<div class="msg-content"><div class="msg-meta"><span class="nm">' + esc(name) + '</span>' + peerTag + '<span>' + esc(t) + '</span></div>' + bubble + '</div>';
       }
-      return row;
+      return finishMsgRow(row, sent ? me : (senderId || (peer && peer.userId)), sent ? myInitial : avInitial, m, peer);
     }
     if (m.kind === 'AUDIO') {
       row.className = 'msg-row ' + (sent ? 'sent' : 'recv');
@@ -538,11 +621,12 @@ window.DunesImChat = (function () {
         + '</div>';
       var read = sent ? readStatusHtml(m.id, peerLastRead) : '';
       if (sent) {
-        row.innerHTML = '<div class="msg-av-sm ' + personCls(me) + '">' + esc(myInitial) + '</div><div class="msg-content">' + voice + read + '</div>';
+        row.innerHTML = msgAvatarHtml(me, myInitial) + '<div class="msg-content">' + voice + read + '</div>';
       } else {
-        row.innerHTML = '<div class="msg-av-sm ' + personCls(senderId || (peer && peer.userId)) + '">' + esc(avInitial) + '</div><div class="msg-content"><div class="msg-meta"><span class="nm">' + esc(name) + '</span>' + peerTag + '<span>' + esc(t) + '</span></div>' + voice + '</div>';
+        var recvUid = senderId || (peer && peer.userId);
+        row.innerHTML = msgAvatarHtml(recvUid, avInitial) + '<div class="msg-content"><div class="msg-meta"><span class="nm">' + esc(name) + '</span>' + peerTag + '<span>' + esc(t) + '</span></div>' + voice + '</div>';
       }
-      return row;
+      return finishMsgRow(row, sent ? me : (senderId || (peer && peer.userId)), sent ? myInitial : avInitial, m, peer);
     }
     if (m.kind === 'FILE' && payload && (payload.url || payload.objectKey)) {
       row.className = 'msg-row ' + (sent ? 'sent' : 'recv');
@@ -558,11 +642,12 @@ window.DunesImChat = (function () {
       var bubble = '<div class="msg-bubble ' + (sent ? 'sent' : 'recv') + '"><i class="ti ' + icon + '"></i> <a class="dunes-attach-link" href="' + esc(href) + '" data-url="' + esc(payload.url || '') + '" data-object-key="' + esc(payload.objectKey || '') + '" data-bucket="im-attachments" data-file-name="' + esc(fileName) + '" target="_blank" rel="noopener" download>' + body + '</a></div>';
       var read = sent ? readStatusHtml(m.id, peerLastRead) : '';
       if (sent) {
-        row.innerHTML = '<div class="msg-av-sm ' + personCls(me) + '">' + esc(myInitial) + '</div><div class="msg-content">' + bubble + read + '</div>';
+        row.innerHTML = msgAvatarHtml(me, myInitial) + '<div class="msg-content">' + bubble + read + '</div>';
       } else {
-        row.innerHTML = '<div class="msg-av-sm ' + personCls(senderId || (peer && peer.userId)) + '">' + esc(avInitial) + '</div><div class="msg-content"><div class="msg-meta"><span class="nm">' + esc(name) + '</span>' + peerTag + '<span>' + esc(t) + '</span></div>' + bubble + '</div>';
+        var recvUid = senderId || (peer && peer.userId);
+        row.innerHTML = msgAvatarHtml(recvUid, avInitial) + '<div class="msg-content"><div class="msg-meta"><span class="nm">' + esc(name) + '</span>' + peerTag + '<span>' + esc(t) + '</span></div>' + bubble + '</div>';
       }
-      return row;
+      return finishMsgRow(row, sent ? me : (senderId || (peer && peer.userId)), sent ? myInitial : avInitial, m, peer);
     }
     if (sent) {
       row.className = 'msg-row sent';
@@ -572,12 +657,13 @@ window.DunesImChat = (function () {
       }
       var read = readStatusHtml(m.id, peerLastRead);
       var sentName = name || myDisplayName();
-      row.innerHTML = '<div class="msg-av-sm ' + personCls(me) + '">' + esc(myInitial) + '</div><div class="msg-content"><div class="msg-meta"><span>' + esc(t) + '</span><span class="nm">' + esc(sentName) + '</span></div><div class="msg-bubble sent">' + body + '</div>' + read + recall + '</div>';
+      row.innerHTML = msgAvatarHtml(me, myInitial) + '<div class="msg-content"><div class="msg-meta"><span>' + esc(t) + '</span><span class="nm">' + esc(sentName) + '</span></div><div class="msg-bubble sent">' + body + '</div>' + read + recall + '</div>';
     } else {
       row.className = 'msg-row recv';
-      row.innerHTML = '<div class="msg-av-sm ' + personCls(senderId || (peer && peer.userId)) + '">' + esc(avInitial) + '</div><div class="msg-content"><div class="msg-meta"><span class="nm">' + esc(name) + '</span>' + peerTag + '<span>' + esc(t) + '</span></div><div class="msg-bubble recv">' + body + '</div></div>';
+      var recvUid = senderId || (peer && peer.userId);
+      row.innerHTML = msgAvatarHtml(recvUid, avInitial) + '<div class="msg-content"><div class="msg-meta"><span class="nm">' + esc(name) + '</span>' + peerTag + '<span>' + esc(t) + '</span></div><div class="msg-bubble recv">' + body + '</div></div>';
     }
-    return row;
+    return finishMsgRow(row, sent ? me : (senderId || (peer && peer.userId)), sent ? myInitial : avInitial, m, peer);
   }
   function ensureImageViewer() {
     var viewer = document.getElementById('dunes-image-viewer');
@@ -896,6 +982,7 @@ window.DunesImChat = (function () {
     wireImageThumbs(box);
     wireAttachmentInteractions(box);
     hydrateMediaUrls(box);
+    hydrateMsgAvatars(box);
   }
   function appendRealtimeMessage(msg, screenId, convId) {
     if (!msg || !msg.id) return;
@@ -926,6 +1013,7 @@ window.DunesImChat = (function () {
     wireImageThumbs(box);
     wireAttachmentInteractions(box);
     hydrateMediaUrls(box);
+    hydrateMsgAvatars(box);
     wireRecall(box, screenId);
     if (isLatestChatView()) scrollChatToBottom(sid);
   }
@@ -1527,6 +1615,7 @@ window.DunesImChat = (function () {
     ensureLeadingDateDivider(box);
     wireImageThumbs(box);
     wireAttachmentInteractions(box);
+    hydrateMsgAvatars(box);
     var sid = screenIdFromBox(box);
     hydrateMediaUrls(box).then(function () {
       if (!prepend && !append && sid && !isHistoryLocatedChat()) scrollChatToBottom(sid);
@@ -1764,10 +1853,18 @@ window.DunesImChat = (function () {
     var sub = screen.querySelector('.cv-sub');
     var name = peer.displayName || title || '私聊';
     if (av) {
-      var on = isUserOnline(peer.userId);
-      av.innerHTML = esc(name.slice(0, 1)) + '<div class="av-dot' + (on ? ' on' : '') + '"></div>';
       av.setAttribute('data-go', 'C9');
+      av.setAttribute('data-avatar-user-id', String(peer.userId || ''));
       av.className = 'cv-av-mini ' + personCls(peer.userId);
+      rememberUserProfile(peer);
+      if (typeof renderListAvatar === 'function') {
+        renderListAvatar(av, peer, name.slice(0, 1));
+        var dot = av.querySelector('.av-dot');
+        if (dot) dot.classList.toggle('on', isUserOnline(peer.userId));
+      } else {
+        var on = isUserOnline(peer.userId);
+        av.innerHTML = esc(name.slice(0, 1)) + '<div class="av-dot' + (on ? ' on' : '') + '"></div>';
+      }
     }
     if (nm) nm.textContent = name;
     if (sub) {
@@ -2041,7 +2138,7 @@ window.DunesImChat = (function () {
     }
     async function uploadViaPresigned(bucket, file) {
       bucket = bucket || 'im-attachments';
-      var base = localStorage.getItem('dunes_api_base') || 'http://localhost:6090/api/v1';
+      var base = localStorage.getItem('dunes_api_base') || '__DUNES_API_BASE__';
       var token = localStorage.getItem('dunes_token') || localStorage.getItem('dunes_jwt') || '';
       var authHeaders = token ? { Authorization: 'Bearer ' + token } : {};
       var form = new FormData();
@@ -2514,8 +2611,20 @@ window.DunesImChat = (function () {
     } catch (e) {}
     return null;
   }
+  async function ensureMyProfileCached() {
+    if (window.__dunesCurrentProfile && (window.__dunesCurrentProfile.avatarPreset || window.__dunesCurrentProfile.avatarObjectKey)) {
+      if (typeof rememberUserProfile === 'function') {
+        rememberUserProfile(Object.assign({ userId: devUserId() }, window.__dunesCurrentProfile));
+      }
+      return;
+    }
+    if (typeof window.__dunesRefreshUserProfile === 'function') {
+      await window.__dunesRefreshUserProfile();
+    }
+  }
   async function loadChat(screenId) {
     if (screenId !== 'C5' && screenId !== 'C2') return;
+    await ensureMyProfileCached();
     var gen = ++imLoadGen;
     var focusId = Number(window.__dunesFocusMessageId || 0);
     var anchorId = Number(window.__dunesMsgAnchorId || 0);
@@ -2568,7 +2677,9 @@ window.DunesImChat = (function () {
                   displayName: cj.data.displayName,
                   departmentName: cj.data.department || cj.data.departmentName,
                   title: cj.data.title,
-                  roleLabel: (cj.data.roleLabels && cj.data.roleLabels[0]) || ''
+                  roleLabel: (cj.data.roleLabels && cj.data.roleLabels[0]) || '',
+                  avatarPreset: cj.data.avatarPreset || '',
+                  avatarObjectKey: cj.data.avatarObjectKey || ''
                 };
               }
             } catch (e) {}
@@ -2581,6 +2692,13 @@ window.DunesImChat = (function () {
           });
           window.__dunesGroupDetail = info.data;
           applyGroupHeader(info.data);
+        }
+        if (typeof rememberUserProfile === 'function') {
+          if (peer) rememberUserProfile(peer);
+          (info.data.members || []).forEach(rememberUserProfile);
+          if (window.__dunesCurrentProfile) {
+            rememberUserProfile(Object.assign({ userId: devUserId() }, window.__dunesCurrentProfile));
+          }
         }
       }
       var msgPath = '/conversations/' + convId + '/messages?size=' + (locating ? 40 : 20);
@@ -2608,6 +2726,7 @@ window.DunesImChat = (function () {
       } else {
         paintMessages(box, items, peer, false);
         wireRecall(box, screenId);
+        hydrateMsgAvatars(box);
         ensureLoadMoreHint(box, screenId);
         ensureLoadNewerHint(box, screenId);
         ensureLeadingDateDivider(box);

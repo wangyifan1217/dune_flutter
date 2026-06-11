@@ -16,10 +16,6 @@ class AuthService {
   static String _defaultApiBase() {
     const fromEnv = String.fromEnvironment('DUNES_API_BASE');
     if (fromEnv.isNotEmpty) return fromEnv;
-    final host = Uri.base.host;
-    if (host.isNotEmpty && host != 'localhost' && host != '127.0.0.1') {
-      return 'http://$host:${DunesDefaults.gatewayPort}/api/v1';
-    }
     return DunesDefaults.apiBase;
   }
 

@@ -43,14 +43,19 @@ class PrototypeWebView extends StatefulWidget {
 }
 
 class PrototypeWebViewState extends State<PrototypeWebView> {
+  static bool _platformViewStyleInstalled = false;
+
   late final String _viewType;
   late final html.IFrameElement _iframe;
   StreamSubscription<html.MessageEvent>? _messageSub;
+  StreamSubscription<html.Event>? _resizeSub;
+  String? _blobUrl;
   bool _ready = false;
 
   @override
   void initState() {
     super.initState();
+    _installPlatformViewStyles();
     _viewType = 'dunes-prototype-${DateTime.now().microsecondsSinceEpoch}';
     _iframe = html.IFrameElement()
       ..style.border = '0'
@@ -62,7 +67,43 @@ class PrototypeWebViewState extends State<PrototypeWebView> {
     // ignore: undefined_prefixed_name
     ui_web.platformViewRegistry.registerViewFactory(_viewType, (_) => _iframe);
     _messageSub = html.window.onMessage.listen(_onFrameMessage);
+    _syncIframeSize();
+    _resizeSub = html.window.onResize.listen((_) => _syncIframeSize());
     _loadPrototype();
+  }
+
+  static void _installPlatformViewStyles() {
+    if (_platformViewStyleInstalled) return;
+    _platformViewStyleInstalled = true;
+    html.document.head?.append(
+      html.StyleElement()
+        ..id = 'dunes-platform-view-fix'
+        ..innerHtml = '''
+flt-platform-view {
+  width: 100% !important;
+  height: 100% !important;
+}
+flt-platform-view iframe {
+  width: 100% !important;
+  height: 100% !important;
+  border: 0;
+}
+''',
+    );
+  }
+
+  void _syncIframeSize() {
+    final w = html.window.innerWidth;
+    final h = html.window.innerHeight;
+    _iframe.style.width = '${w}px';
+    _iframe.style.height = '${h}px';
+  }
+
+  void _revokeBlobUrl() {
+    final url = _blobUrl;
+    if (url == null) return;
+    html.Url.revokeObjectUrl(url);
+    _blobUrl = null;
   }
 
   Future<void> _loadPrototype() async {
@@ -76,7 +117,12 @@ class PrototypeWebViewState extends State<PrototypeWebView> {
       phone: widget.phone,
       roles: widget.roles,
     );
-    _iframe.srcdoc = await _injectWebBridge(authed);
+    final htmlContent = await _injectWebBridge(authed);
+    _revokeBlobUrl();
+    final blob = html.Blob([htmlContent], 'text/html');
+    _blobUrl = html.Url.createObjectUrlFromBlob(blob);
+    _iframe.src = _blobUrl;
+    _syncIframeSize();
     if (mounted) setState(() => _ready = true);
   }
 
@@ -217,21 +263,28 @@ ${MobileInjection.bootstrapScript()}
   @override
   void dispose() {
     _messageSub?.cancel();
+    _resizeSub?.cancel();
+    _revokeBlobUrl();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        HtmlElementView(viewType: _viewType),
-        if (!_ready)
-          const ColoredBox(
-            color: Color(0xFFFBFAF6),
-            child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
-          ),
-      ],
+    final size = MediaQuery.sizeOf(context);
+    return SizedBox(
+      width: size.width,
+      height: size.height,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          HtmlElementView(viewType: _viewType),
+          if (!_ready)
+            const ColoredBox(
+              color: Color(0xFFFBFAF6),
+              child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+            ),
+        ],
+      ),
     );
   }
 }

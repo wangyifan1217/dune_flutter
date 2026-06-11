@@ -19691,15 +19691,42 @@ const DunesApi=(function(){
   }
   function kbSubCreatorLabel(row){
     const mode=String((row&&row.accessMode)||'').toLowerCase();
-    if(row&&row.ownerName) return String(row.ownerName)+' 创建的';
-    if(row&&row.publisherName) return String(row.publisherName)+' 创建的';
-    if(row&&row.publisherUserId) return '用户'+String(row.publisherUserId)+' 创建的';
+    const owner=row&&row.ownerName?String(row.ownerName).trim():'';
+    if(owner&&!/^用户\d+$/.test(owner)) return owner+' 创建的';
+    const pub=row&&row.publisherName?String(row.publisherName).trim():'';
+    if(pub) return pub+' 创建的';
+    const pid=row&&(row.publisherUserId||row.ownerId);
+    if(pid){
+      const prof=window.__dunesUserProfiles&&window.__dunesUserProfiles[String(pid)];
+      if(prof&&prof.displayName) return String(prof.displayName)+' 创建的';
+      return '用户'+String(pid)+' 创建的';
+    }
     if(row&&row.source==='catalog') return '其他用户发布';
     if(mode==='owner'||mode==='') return '我 创建的';
     if(row&&row.ownerId) return '用户'+String(row.ownerId)+' 创建的';
     if(mode==='team') return '团队共享';
     if(mode==='subscribed_readonly') return '订阅知识库';
     return '';
+  }
+  async function kbHydratePublisherNames(rows){
+    if(typeof rememberUserProfile!=='function') return;
+    const need=new Set();
+    (rows||[]).forEach(r=>{
+      if(!r) return;
+      const owner=r.ownerName?String(r.ownerName).trim():'';
+      if(owner&&!/^用户\d+$/.test(owner)) return;
+      const pid=Number(r.publisherUserId||r.ownerId||0);
+      if(!pid) return;
+      const cached=window.__dunesUserProfiles&&window.__dunesUserProfiles[String(pid)];
+      if(cached&&cached.displayName) return;
+      need.add(pid);
+    });
+    for(const pid of need){
+      try{
+        const j=await api('/contacts/'+pid);
+        if(j.success&&j.data) rememberUserProfile(j.data);
+      }catch(e){}
+    }
   }
   function kbSubRowMeta(row){
     const bits=[];
@@ -19777,7 +19804,15 @@ const DunesApi=(function(){
       owned.forEach(x=>{ const id=String((x&&x.id)||'').trim(); if(id) ownedIds[id]=true; });
       const subByDataset={};
       subs.forEach(s=>{ if(s.datasetId) subByDataset[s.datasetId]=s; });
-      const mine=subs.filter(s=>String(s.status||'').toLowerCase()!=='cancelled');
+      const mineSeen={};
+      const mine=subs.filter(s=>{
+        if(String(s.status||'').toLowerCase()==='cancelled') return false;
+        const dsId=String((s&&s.datasetId)||'').trim();
+        if(!dsId) return true;
+        if(mineSeen[dsId]) return false;
+        mineSeen[dsId]=true;
+        return true;
+      });
       const browse=(Array.isArray(acc.subscribable)?acc.subscribable:[]).filter(x=>!ownedIds[String((x&&x.id)||'').trim()]);
       let approvals=[];
       for(const ds of owned){
@@ -19795,6 +19830,7 @@ const DunesApi=(function(){
         {title:'我发布的',rows:owned,empty:'暂无我发布的知识库',action:'owner'},
         {title:'待我审批',rows:approvals,empty:'暂无待审批订阅',action:'approve'}
       ];
+      await kbHydratePublisherNames([].concat(mine,browse,owned,approvals));
       renderKbSubscribeSections(window.__kbSubscribeSections);
       if(status) status.textContent='订阅后，问知识库将默认绑定这些知识库';
     }catch(err){
@@ -21636,8 +21672,16 @@ const DunesApi=(function(){
       const pos=document.getElementById('c9-ph-pos');
       const name=c.displayName||('用户'+uid);
       if(av){
-        var on=window.DunesPresence&&typeof window.DunesPresence.isUserOnline==='function'&&window.DunesPresence.isUserOnline(pendingContactUserId);
-        av.innerHTML=escHtml(name.slice(0,1))+'<div class="av-dot'+(on?' on':'')+'"></div>';
+        av.setAttribute('data-avatar-user-id', String(pendingContactUserId));
+        rememberUserProfile(c);
+        if(typeof renderListAvatar==='function'){
+          renderListAvatar(av, c, name.slice(0,1));
+          var dot=av.querySelector('.av-dot');
+          if(dot) dot.classList.toggle('on', window.DunesPresence&&typeof window.DunesPresence.isUserOnline==='function'&&window.DunesPresence.isUserOnline(pendingContactUserId));
+        }else{
+          var on=window.DunesPresence&&typeof window.DunesPresence.isUserOnline==='function'&&window.DunesPresence.isUserOnline(pendingContactUserId);
+          av.innerHTML=escHtml(name.slice(0,1))+'<div class="av-dot'+(on?' on':'')+'"></div>';
+        }
       }
       if(nm) nm.innerHTML=escHtml(name)+' <span class="role-tag finance">'+(c.title||'同事')+'</span>';
       if(pos){

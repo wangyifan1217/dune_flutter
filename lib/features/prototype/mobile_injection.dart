@@ -2,6 +2,7 @@
 
 import 'package:flutter/services.dart';
 
+import '../../core/config/dunes_defaults.dart';
 import '../im/im_chat_injection.dart';
 import '../im/kb_chat_injection.dart';
 import '../im/nova_chat_injection.dart';
@@ -249,7 +250,42 @@ abstract final class MobileInjection {
 .flutter-app-mode .contact-row .cr-av .av-dot.on { display: block; }
 .flutter-app-mode .profile-hero .ph-av .av-dot { display: none; }
 .flutter-app-mode .profile-hero .ph-av .av-dot.on { display: block; }
-.flutter-app-mode .chat-conv-header.private .cv-av-mini { position: relative; }
+.flutter-app-mode .chat-row .cr-av,
+.flutter-app-mode .contact-row .cr-av,
+.flutter-app-mode .cp-av,
+.flutter-app-mode .cv-av-mini,
+.flutter-app-mode .ph-av {
+  position: relative;
+  overflow: visible;
+}
+.flutter-app-mode .chat-row .cr-av .av-dot,
+.flutter-app-mode .contact-row .cr-av .av-dot,
+.flutter-app-mode .cp-av .av-dot,
+.flutter-app-mode .cv-av-mini .av-dot,
+.flutter-app-mode .ph-av .av-dot {
+  position: absolute;
+  bottom: -1px;
+  right: -1px;
+  z-index: 5;
+  pointer-events: none;
+  box-sizing: border-box;
+}
+.flutter-app-mode .chat-row .cr-av .av-dot {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: #5D8A4E;
+  border: 2px solid var(--bg-app);
+}
+.flutter-app-mode .contact-row .cr-av .av-dot,
+.flutter-app-mode .cp-av .av-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #22A47D;
+  border: 1.5px solid var(--bg-app);
+}
+.flutter-app-mode .chat-conv-header.private .cv-av-mini { position: relative; overflow: visible; }
 .flutter-app-mode .chat-conv-header.private .cv-av-mini .av-dot {
   position: absolute; bottom: -1px; right: -1px;
   width: 9px; height: 9px; border-radius: 50%;
@@ -706,6 +742,35 @@ abstract final class MobileInjection {
   object-fit: cover;
   border-radius: 50%;
 }
+.flutter-app-mode .cr-av.has-img,
+.flutter-app-mode .cp-av.has-img,
+.flutter-app-mode .cv-av-mini.has-img,
+.flutter-app-mode .ph-av.has-img {
+  background: transparent;
+  color: transparent;
+  overflow: visible;
+  position: relative;
+}
+.flutter-app-mode .cr-av.has-img img,
+.flutter-app-mode .cp-av.has-img img,
+.flutter-app-mode .cv-av-mini.has-img img,
+.flutter-app-mode .ph-av.has-img img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: inherit;
+}
+.flutter-app-mode .msg-row .msg-av-sm.has-img {
+  background: transparent;
+  color: transparent;
+  overflow: hidden;
+}
+.flutter-app-mode .msg-row .msg-av-sm.has-img img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
+}
 .flutter-app-mode .b2-logout-wrap {
   padding: 20px 0 28px;
   margin-top: 8px;
@@ -1121,7 +1186,7 @@ async function resolveAvatarUrl(profile) {
   if (!profile) return '';
   if (profile.avatarPreset) return presetAvatarSrc(profile.avatarPreset);
   if (!profile.avatarObjectKey) return '';
-  var base = localStorage.getItem('dunes_api_base') || 'http://localhost:6090/api/v1';
+  var base = localStorage.getItem('dunes_api_base') || '__DUNES_API_BASE__';
   var token = localStorage.getItem('dunes_token') || '';
   try {
     var r = await fetch(base + '/storage/presigned-get?bucket=user-avatars&objectKey=' + encodeURIComponent(profile.avatarObjectKey), {
@@ -1158,6 +1223,129 @@ function renderProfileAvatar(el, profile) {
     el.appendChild(img);
   });
 }
+window.__dunesUserProfiles = window.__dunesUserProfiles || {};
+function rememberUserProfile(c) {
+  if (!c) return;
+  var uid = Number(c.userId || c.peerUserId || c.id);
+  if (!uid) return;
+  var prev = window.__dunesUserProfiles[String(uid)] || {};
+  window.__dunesUserProfiles[String(uid)] = {
+    userId: uid,
+    displayName: c.displayName || c.peerDisplayName || prev.displayName || '',
+    avatarPreset: c.avatarPreset || c.peerAvatarPreset || prev.avatarPreset || '',
+    avatarObjectKey: c.avatarObjectKey || c.peerAvatarObjectKey || prev.avatarObjectKey || ''
+  };
+}
+function rememberDeptProfiles(dep) {
+  (dep.users || []).forEach(rememberUserProfile);
+  (dep.children || []).forEach(rememberDeptProfiles);
+}
+function profileForUserId(uid) {
+  return window.__dunesUserProfiles[String(uid)] || null;
+}
+function devUserIdFromStorage() {
+  var uid = parseInt(localStorage.getItem('dunes_user_id') || '0', 10);
+  return isNaN(uid) ? 0 : uid;
+}
+function personClassForUser(uid) {
+  var n = Math.abs(Number(uid) || 0) % 6;
+  return 'person-' + ['a', 'b', 'c', 'd', 'e', 'f'][n];
+}
+function refreshAvatarDotForEl(el, uid) {
+  if (!el) return;
+  var dot = el.querySelector('.av-dot');
+  if (!dot) return;
+  uid = Number(uid || el.getAttribute('data-avatar-user-id') || 0);
+  var online = window.__dunesOnlineUserIds || {};
+  var on = uid > 0 && !!online[String(uid)];
+  if (window.DunesPresence && typeof window.DunesPresence.isUserOnline === 'function' && uid > 0) {
+    on = window.DunesPresence.isUserOnline(uid);
+  }
+  dot.classList.toggle('on', on);
+}
+function myMsgAvatarHtml(initial) {
+  var uid = devUserIdFromStorage();
+  var letter = String(initial || '?').slice(0, 1);
+  return '<div class="msg-av-sm ' + personClassForUser(uid) + '" data-avatar-user-id="' + uid + '">' + letter + '</div>';
+}
+function applyMyMsgAvatar(row, initial) {
+  if (!row) return;
+  var av = row.querySelector('.msg-av-sm[data-avatar-user-id]:not(.ai-bot):not(.kb-ai-av)');
+  if (!av || typeof renderListAvatar !== 'function') return;
+  var uid = devUserIdFromStorage();
+  var p = profileForUserId(uid) || (window.__dunesCurrentProfile ? Object.assign({ userId: uid }, window.__dunesCurrentProfile) : null);
+  if (p) renderListAvatar(av, p, initial || (p.displayName || '?').slice(0, 1));
+}
+function hydrateMsgAvatarsIn(root) {
+  if (!root || typeof renderListAvatar !== 'function') return;
+  root.querySelectorAll('.msg-av-sm[data-avatar-user-id]:not(.ai-bot):not(.kb-ai-av)').forEach(function (el) {
+    if (el.classList.contains('has-img')) return;
+    var uid = Number(el.getAttribute('data-avatar-user-id'));
+    if (!uid) return;
+    var p = profileForUserId(uid);
+    if (!p && uid === devUserIdFromStorage() && window.__dunesCurrentProfile) {
+      p = Object.assign({ userId: uid }, window.__dunesCurrentProfile);
+    }
+    if (!p || (!p.avatarPreset && !p.avatarObjectKey)) return;
+    renderListAvatar(el, p, (p.displayName || el.textContent || '?').slice(0, 1));
+  });
+}
+function renderListAvatar(el, profile, initial) {
+  if (!el) return;
+  var dot = el.querySelector('.av-dot');
+  var hadOn = dot && dot.classList.contains('on');
+  var letter = initial || (profile && profile.displayName ? profile.displayName.charAt(0) : '?');
+  el.classList.remove('has-img');
+  el.textContent = letter;
+  var dotEl = document.createElement('div');
+  dotEl.className = 'av-dot' + (hadOn ? ' on' : '');
+  el.appendChild(dotEl);
+  refreshAvatarDotForEl(el, profile && (profile.userId || profile.id));
+  if (!profile) return;
+  var srcPromise;
+  if (profile.avatarPreset) {
+    srcPromise = Promise.resolve(presetAvatarSrc(profile.avatarPreset));
+  } else if (profile.avatarObjectKey) {
+    srcPromise = resolveAvatarUrl(profile);
+  } else {
+    return;
+  }
+  srcPromise.then(function (src) {
+    if (!src || !el.isConnected) return;
+    var keepOn = el.querySelector('.av-dot');
+    hadOn = keepOn && keepOn.classList.contains('on');
+    el.classList.add('has-img');
+    el.textContent = '';
+    var img = document.createElement('img');
+    img.alt = profile.displayName || '头像';
+    img.src = src;
+    el.appendChild(img);
+    dotEl = document.createElement('div');
+    dotEl.className = 'av-dot' + (hadOn ? ' on' : '');
+    el.appendChild(dotEl);
+    refreshAvatarDotForEl(el, profile && (profile.userId || profile.id));
+  });
+}
+function hydrateAvatarsIn(root) {
+  if (!root) return;
+  root.querySelectorAll('[data-avatar-user-id]').forEach(function (el) {
+    var uid = Number(el.getAttribute('data-avatar-user-id'));
+    if (!uid) return;
+    var p = profileForUserId(uid);
+    if (p) renderListAvatar(el, p, (p.displayName || '?').slice(0, 1));
+  });
+}
+window.DunesAvatars = {
+  rememberUserProfile: rememberUserProfile,
+  rememberDeptProfiles: rememberDeptProfiles,
+  profileForUserId: profileForUserId,
+  renderListAvatar: renderListAvatar,
+  hydrateAvatarsIn: hydrateAvatarsIn,
+  myMsgAvatarHtml: myMsgAvatarHtml,
+  applyMyMsgAvatar: applyMyMsgAvatar,
+  hydrateMsgAvatarsIn: hydrateMsgAvatarsIn,
+  refreshAvatarDotForEl: refreshAvatarDotForEl
+};
 function applyUserProfile(p) {
   if (!p) return;
   var screen = document.querySelector('.screen[data-screen="B2"]');
@@ -1485,7 +1673,7 @@ function openAvatarSheet(profile) {
   root.classList.add('show');
 }
 async function uploadAvatarFile(file) {
-  var base = localStorage.getItem('dunes_api_base') || 'http://localhost:6090/api/v1';
+  var base = localStorage.getItem('dunes_api_base') || '__DUNES_API_BASE__';
   var token = localStorage.getItem('dunes_token') || '';
   var form = new FormData();
   form.append('file', file, file.name || ('avatar-' + Date.now() + '.jpg'));
@@ -1502,7 +1690,7 @@ async function uploadAvatarFile(file) {
   return j.data.objectKey;
 }
 async function saveAvatarSelection() {
-  var base = localStorage.getItem('dunes_api_base') || 'http://localhost:6090/api/v1';
+  var base = localStorage.getItem('dunes_api_base') || '__DUNES_API_BASE__';
   var token = localStorage.getItem('dunes_token') || '';
   if (!token) throw new Error('未登录');
   var body = {};
@@ -1583,7 +1771,7 @@ async function refreshUserProfile() {
   var cached = readCachedProfile();
   window.__dunesCurrentProfile = cached;
   applyUserProfile(cached);
-  var base = localStorage.getItem('dunes_api_base') || 'http://localhost:6090/api/v1';
+  var base = localStorage.getItem('dunes_api_base') || '__DUNES_API_BASE__';
   var token = localStorage.getItem('dunes_token') || '';
   if (!token) return;
   try {
@@ -1594,6 +1782,7 @@ async function refreshUserProfile() {
     if (d) {
       window.__dunesCurrentProfile = d;
       applyUserProfile(d);
+      rememberUserProfile(Object.assign({ userId: d.id || d.userId }, d));
     }
   } catch (e) {}
 }
@@ -1697,7 +1886,7 @@ window.DunesContacts = (function () {
   }
   function apiFetch(path, opts) {
     opts = opts || {};
-    var base = localStorage.getItem('dunes_api_base') || 'http://localhost:6090/api/v1';
+    var base = localStorage.getItem('dunes_api_base') || '__DUNES_API_BASE__';
     var token = localStorage.getItem('dunes_token') || localStorage.getItem('dunes_jwt') || '';
     var headers = Object.assign({}, opts.headers || {});
     if (token) headers.Authorization = 'Bearer ' + token;
@@ -1753,7 +1942,7 @@ window.DunesContacts = (function () {
     var dept = c.department || '';
     return ''
       + '<div class="contact-row tappable" data-go="C9" data-contact-user-id="' + uid + '">'
-      + '<div class="cr-av ' + personCls(uid) + '">' + esc((c.displayName || '?').slice(0, 1)) + '<div class="av-dot"></div></div>'
+      + '<div class="cr-av ' + personCls(uid) + '" data-avatar-user-id="' + uid + '">' + esc((c.displayName || '?').slice(0, 1)) + '<div class="av-dot"></div></div>'
       + '<div class="ct-bd"><div class="ct-nm">' + esc(c.displayName || '') + me + '</div>'
       + '<div class="ct-meta"><span class="role">' + esc(role) + '</span><span>id=' + uid + '</span><span>' + esc(dept) + '</span></div></div>'
       + '<div class="ct-actions">'
@@ -1807,7 +1996,7 @@ window.DunesContacts = (function () {
     var on = window.c7SelectedIds && window.c7SelectedIds.has(uid) ? ' on' : '';
     return '<div class="contact-pick-row tappable' + on + '" data-pick-user-id="' + uid + '">'
       + '<div class="cp-check"><i class="ti ti-check"></i></div>'
-      + '<div class="cp-av ' + personCls(uid) + '">' + esc((c.displayName || '?').slice(0, 1)) + '</div>'
+      + '<div class="cp-av ' + personCls(uid) + '" data-avatar-user-id="' + uid + '">' + esc((c.displayName || '?').slice(0, 1)) + '</div>'
       + '<div class="cp-bd"><div class="cp-nm">' + esc(c.displayName || '') + '</div>'
       + '<div class="cp-m"><span>' + esc(c.title || '') + '</span><span>' + esc(c.department || '') + '</span></div></div></div>';
   }
@@ -2015,12 +2204,14 @@ window.DunesContacts = (function () {
           return;
         }
         items.forEach(function (c) {
+          rememberUserProfile(c);
           tree.insertAdjacentHTML('beforeend', renderContactRow(c));
         });
         wireMsgButtons(tree);
         c3Loaded = true;
         c3LastQuery = q;
         restoreC3Scroll();
+        hydrateAvatarsIn(tree);
         refreshOnlineDots();
         return;
       }
@@ -2029,6 +2220,7 @@ window.DunesContacts = (function () {
         return;
       }
       depts.forEach(function (dep) {
+        rememberDeptProfiles(dep);
         tree.insertAdjacentHTML('beforeend', renderDeptBlock(dep, false));
       });
       wireDeptToggle(tree);
@@ -2036,6 +2228,7 @@ window.DunesContacts = (function () {
       c3Loaded = true;
       c3LastQuery = q || '';
       restoreC3Scroll();
+      hydrateAvatarsIn(tree);
       refreshOnlineDots();
     } catch (e) {
       tree.innerHTML = '<div class="api-strip"><span>通讯录加载失败：' + esc(e.message || e) + '</span></div>';
@@ -2062,6 +2255,7 @@ window.DunesContacts = (function () {
           return;
         }
         items.forEach(function (c) {
+          rememberUserProfile(c);
           box.insertAdjacentHTML('beforeend', renderPickRow(c));
         });
       } else if (!depts.length) {
@@ -2069,6 +2263,7 @@ window.DunesContacts = (function () {
         return;
       } else {
         depts.forEach(function (dep) {
+          rememberDeptProfiles(dep);
           box.insertAdjacentHTML('beforeend', renderDeptBlock(dep, true));
         });
       }
@@ -2077,6 +2272,7 @@ window.DunesContacts = (function () {
       wireDeptToggle(box);
       wireC7PickRows(box);
       updateC7SelectedStack();
+      hydrateAvatarsIn(box);
       refreshOnlineDots();
     } catch (e) {
       box.innerHTML = '<div class="api-strip"><span>加载失败：' + esc(e.message || e) + '</span></div>';
@@ -2168,7 +2364,7 @@ window.DunesInbox = (function () {
   }
   function apiFetch(path, opts) {
     opts = opts || {};
-    var base = localStorage.getItem('dunes_api_base') || 'http://localhost:6090/api/v1';
+    var base = localStorage.getItem('dunes_api_base') || '__DUNES_API_BASE__';
     var token = localStorage.getItem('dunes_token') || localStorage.getItem('dunes_jwt') || '';
     var headers = Object.assign({}, opts.headers || {});
     if (token) headers.Authorization = 'Bearer ' + token;
@@ -2208,6 +2404,12 @@ window.DunesInbox = (function () {
   function privateConvRow(c) {
     var peerName = c.peerDisplayName || c.title || '私聊';
     var peerId = Number(c.peerUserId || 0);
+    rememberUserProfile({
+      userId: peerId,
+      displayName: peerName,
+      avatarPreset: c.peerAvatarPreset,
+      avatarObjectKey: c.peerAvatarObjectKey
+    });
     var seed = peerId || Number(c.id);
     var initial = (peerName || '?').slice(0, 1);
     var tm = formatTimeDetailed(c.lastMessageAt, true);
@@ -2217,7 +2419,7 @@ window.DunesInbox = (function () {
       : '';
     var sub = c.peerTitle || c.peerRoleLabel || '';
     return '<div class="chat-row tappable" data-go="C5" data-conv-id="' + c.id + '" data-peer-user-id="' + peerId + '" data-contact-user-id="' + peerId + '" data-last-at="' + esc(c.lastMessageAt || '') + '">'
-      + '<div class="cr-av ' + personCls(seed) + '" data-open-contact="1">' + esc(initial) + '<div class="av-dot"></div></div>'
+      + '<div class="cr-av ' + personCls(seed) + '" data-open-contact="1" data-avatar-user-id="' + peerId + '">' + esc(initial) + '<div class="av-dot"></div></div>'
       + '<div class="cr-bd"><div class="cr-top"><div class="cr-nm">' + esc(peerName)
       + deptTitleHtml(c.peerDepartment, sub) + '</div><div class="cr-tm">' + esc(tm) + '</div></div>'
       + '<div class="cr-pv">' + preview + '</div></div>' + meta + '</div>';
@@ -3016,6 +3218,7 @@ window.DunesInbox = (function () {
       ensureC1ScrollWired();
       wireC1Search();
       wireC1RowActions(list);
+      hydrateAvatarsIn(list);
       if (window.DunesPresence && typeof window.DunesPresence.refreshAll === 'function') {
         window.DunesPresence.refreshAll();
       } else {
@@ -3174,7 +3377,7 @@ window.DunesGroupInfo = (function () {
   }
   function apiFetch(path, opts) {
     opts = opts || {};
-    var base = localStorage.getItem('dunes_api_base') || 'http://localhost:6090/api/v1';
+    var base = localStorage.getItem('dunes_api_base') || '__DUNES_API_BASE__';
     var token = localStorage.getItem('dunes_token') || localStorage.getItem('dunes_jwt') || '';
     var headers = Object.assign({}, opts.headers || {});
     if (token) headers.Authorization = 'Bearer ' + token;
@@ -3204,12 +3407,12 @@ window.DunesGroupInfo = (function () {
   }
   function storageGetEndpoint(objectKey, bucket) {
     if (!objectKey) return '';
-    var base = localStorage.getItem('dunes_api_base') || 'http://localhost:6090/api/v1';
+    var base = localStorage.getItem('dunes_api_base') || '__DUNES_API_BASE__';
     return base + '/storage/presigned-get?bucket=' + encodeURIComponent(bucket || 'im-attachments') + '&objectKey=' + encodeURIComponent(objectKey);
   }
   function storageDownloadEndpoint(objectKey, bucket, fileName) {
     if (!objectKey) return '';
-    var base = localStorage.getItem('dunes_api_base') || 'http://localhost:6090/api/v1';
+    var base = localStorage.getItem('dunes_api_base') || '__DUNES_API_BASE__';
     var q = 'bucket=' + encodeURIComponent(bucket || 'im-attachments') + '&objectKey=' + encodeURIComponent(objectKey);
     if (fileName) q += '&fileName=' + encodeURIComponent(fileName);
     return base + '/storage/download?' + q;
@@ -4158,16 +4361,18 @@ window.DunesGroupInfo = (function () {
 ''';
 
   static String bootstrapScript() {
-    return bootstrapJs
-        .replaceAll('__DUNES_CSS__', _escapeJsString(css))
-        .replaceAll('__DUNES_DIALOG_JS__', _dialogJs)
-        .replaceAll('__DUNES_PROFILE_JS__', _profileJs)
-        .replaceAll('__DUNES_CONTACTS_JS__', _contactsJs)
-        .replaceAll('__DUNES_INBOX_JS__', _inboxJs)
-        .replaceAll('__DUNES_IM_JS__', ImChatInjection.js)
-        .replaceAll('__DUNES_KB_CHAT_JS__', KbChatInjection.js)
-        .replaceAll('__DUNES_NOVA_JS__', NovaChatInjection.js)
-        .replaceAll('__DUNES_GROUP_JS__', _groupInfoJs);
+    return DunesDefaults.bindApiBase(
+      bootstrapJs
+          .replaceAll('__DUNES_CSS__', _escapeJsString(css))
+          .replaceAll('__DUNES_DIALOG_JS__', _dialogJs)
+          .replaceAll('__DUNES_PROFILE_JS__', _profileJs)
+          .replaceAll('__DUNES_CONTACTS_JS__', _contactsJs)
+          .replaceAll('__DUNES_INBOX_JS__', _inboxJs)
+          .replaceAll('__DUNES_IM_JS__', ImChatInjection.js)
+          .replaceAll('__DUNES_KB_CHAT_JS__', KbChatInjection.js)
+          .replaceAll('__DUNES_NOVA_JS__', NovaChatInjection.js)
+          .replaceAll('__DUNES_GROUP_JS__', _groupInfoJs),
+    );
   }
 
   static String profileScript() => _profileJs;
@@ -4251,7 +4456,7 @@ window.DunesGroupInfo = (function () {
         '',
       );
     }
-    return result;
+    return DunesDefaults.bindApiBase(result);
   }
 
   static String injectAuthPrelude(
@@ -4306,7 +4511,10 @@ window.DunesGroupInfo = (function () {
     final writes = entries.entries
         .map((e) => "localStorage.setItem('${e.key}', ${_escapeJsString(e.value)});")
         .join();
-    return 'try{$writes}catch(e){}';
+    final windowApiBase = (apiBase != null && apiBase.isNotEmpty)
+        ? 'window.__dunesApiBase=${_escapeJsString(apiBase)};'
+        : '';
+    return 'try{$windowApiBase$writes}catch(e){}';
   }
 
   static String _escapeJsString(String s) {

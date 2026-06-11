@@ -143,7 +143,7 @@ window.DunesNovaChat = (function () {
   }
 
   function apiBase() {
-    return localStorage.getItem('dunes_api_base') || 'http://localhost:6090/api/v1';
+    return localStorage.getItem('dunes_api_base') || '__DUNES_API_BASE__';
   }
   function authHeaders(extra) {
     var h = Object.assign({}, extra || {});
@@ -168,6 +168,16 @@ window.DunesNovaChat = (function () {
   function selfInitial() {
     var n = selfName();
     return n ? n.charAt(0) : '我';
+  }
+  function novaUserAvHtml() {
+    if (typeof myMsgAvatarHtml === 'function') return myMsgAvatarHtml(selfInitial());
+    return '<div class="msg-av-sm person-e">' + esc(selfInitial()) + '</div>';
+  }
+  function hydrateNovaUserAvatars(root) {
+    if (typeof hydrateMsgAvatarsIn === 'function') hydrateMsgAvatarsIn(root);
+    else if (typeof applyMyMsgAvatar === 'function' && root) {
+      root.querySelectorAll('.msg-row.sent').forEach(function (row) { applyMyMsgAvatar(row, selfInitial()); });
+    }
   }
   function msgTimeLabel(at) {
     if (!at) return '';
@@ -1236,7 +1246,7 @@ window.DunesNovaChat = (function () {
       var src = isPublicMediaUrl(mediaUrl) ? esc(mediaUrl) : '';
       return ''
         + '<div class="msg-row sent" data-msg-id="' + esc(m.id) + '" data-message-id="' + esc(m.id) + '"' + createdAttr + '>'
-        + '<div class="msg-av-sm person-e">' + esc(selfInitial()) + '</div>'
+        + novaUserAvHtml()
         + '<div class="msg-content"><div class="msg-meta"><span>' + esc(time) + '</span><span class="nm">' + esc(selfName()) + '</span></div>'
         + '<div class="msg-bubble sent"><img src="' + src + '" class="dunes-img-thumb" data-url="' + esc(mediaUrl) + '" data-object-key="' + esc(mediaKey) + '" data-bucket="im-attachments" data-full-url="' + esc(mediaUrl) + '" style="max-width:170px;border-radius:10px;display:block;cursor:pointer"></div>'
         + readStatusHtml(m.id) + '</div></div>';
@@ -1247,7 +1257,7 @@ window.DunesNovaChat = (function () {
       var audioUrl = payload && (payload.url || audioKey) || '';
       return ''
         + '<div class="msg-row sent" data-msg-id="' + esc(m.id) + '" data-message-id="' + esc(m.id) + '"' + createdAttr + '>'
-        + '<div class="msg-av-sm person-e">' + esc(selfInitial()) + '</div>'
+        + novaUserAvHtml()
         + '<div class="msg-content"><div class="msg-meta"><span>' + esc(time) + '</span><span class="nm">' + esc(selfName()) + '</span></div>'
         + '<div class="msg-bubble sent dunes-voice-bubble" data-url="' + esc(audioUrl) + '" data-object-key="' + esc(audioKey) + '" data-bucket="im-attachments">'
         + '<span class="voice-sec">' + sec + '\'</span><span class="voice-wave"><i class="ti ti-volume"></i></span></div>'
@@ -1259,7 +1269,7 @@ window.DunesNovaChat = (function () {
       var href = isPublicMediaUrl(fileUrl) ? esc(fileUrl) : storageDownloadEndpoint(fileKey || fileUrl, 'im-attachments', payload.fileName || body);
       return ''
         + '<div class="msg-row sent" data-msg-id="' + esc(m.id) + '" data-message-id="' + esc(m.id) + '"' + createdAttr + '>'
-        + '<div class="msg-av-sm person-e">' + esc(selfInitial()) + '</div>'
+        + novaUserAvHtml()
         + '<div class="msg-content"><div class="msg-meta"><span>' + esc(time) + '</span><span class="nm">' + esc(selfName()) + '</span></div>'
         + '<div class="msg-bubble sent"><i class="ti ti-paperclip"></i> <a class="dunes-attach-link dunes-nova-file-link" href="' + href + '" data-url="' + esc(fileUrl) + '" data-object-key="' + esc(fileKey) + '" data-bucket="im-attachments" data-file-name="' + esc(payload.fileName || body) + '" target="_blank" rel="noopener">' + esc(body) + '</a></div>'
         + readStatusHtml(m.id) + '</div></div>';
@@ -1267,7 +1277,7 @@ window.DunesNovaChat = (function () {
     if (isUser && kind === 'TEXT') {
       return ''
         + '<div class="msg-row sent" data-msg-id="' + esc(m.id) + '" data-message-id="' + esc(m.id) + '"' + createdAttr + '>'
-        + '<div class="msg-av-sm person-e">' + esc(selfInitial()) + '</div>'
+        + novaUserAvHtml()
         + '<div class="msg-content">'
         + '<div class="msg-meta"><span>' + esc(time) + '</span><span class="nm">' + esc(selfName()) + '</span></div>'
         + '<div class="msg-bubble sent">' + esc(body) + '</div>'
@@ -1645,6 +1655,7 @@ window.DunesNovaChat = (function () {
     setHasChat(true);
     refreshNovaReadStatuses();
     hydrateNovaMediaUrls(box);
+    hydrateNovaUserAvatars(box);
     wireC4VoicePlay();
     if (opts.scroll !== false) scrollC4();
   }
@@ -2046,13 +2057,14 @@ window.DunesNovaChat = (function () {
     row.className = 'msg-row sent dunes-nova-live';
     if (msgId) row.dataset.messageId = String(msgId);
     row.innerHTML = ''
-      + '<div class="msg-av-sm person-e">' + esc(selfInitial()) + '</div>'
+      + novaUserAvHtml()
       + '<div class="msg-content">'
       + '<div class="msg-meta"><span class="nm">' + esc(selfName()) + '</span></div>'
       + '<div class="msg-bubble sent">' + esc(text) + '</div>'
       + readStatusHtml(msgId || 0)
       + '</div>';
     box.appendChild(row);
+    hydrateNovaUserAvatars(row);
     setHasChat(true);
     scrollC4();
   }
@@ -2524,6 +2536,9 @@ window.DunesNovaChat = (function () {
       return;
     }
     if (id !== 'C4') return;
+    if (typeof window.__dunesRefreshUserProfile === 'function') {
+      window.__dunesRefreshUserProfile();
+    }
     if (typeof window.__dunesWireNovaC4 === 'function') window.__dunesWireNovaC4();
     wireStackOnce();
     wireC4Header();

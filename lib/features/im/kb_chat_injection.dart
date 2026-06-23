@@ -270,19 +270,10 @@ window.DunesKbChat = (function () {
   function refreshKbInboxPreviewNow() {
     if (!token()) return Promise.resolve();
     if (_kbPreviewInflight) return _kbPreviewInflight;
-    _kbPreviewInflight = apiJson('/ai/conversations?kind=KB_ALL&size=1').then(function (d) {
-      var items = d.items || [];
-      if (!items.length) {
-        patchKbInbox(false, '');
-        return;
-      }
-      var row = items[0];
-      if (row.assistantGenerating) {
-        kbGenStatus = row.assistantGeneratingStatus || kbGenStatus || '知识库助手正在生成…';
-        patchKbInbox(true);
-        return;
-      }
-      patchKbInbox(false, row.lastMessagePreview || '', row.lastMessageAt || row.updatedAt || row.createdAt || '');
+    _kbPreviewInflight = Promise.resolve().then(function () {
+      var cached = cachedKbPreview();
+      var at = cachedKbPreviewAt();
+      patchKbInbox(false, cached || '向知识库提问…', at);
     }).catch(function () {}).then(function () {
       _kbPreviewInflight = null;
     });
@@ -540,33 +531,10 @@ window.DunesKbChat = (function () {
     });
   }
   async function transcribeKbVoice(prepared) {
-    var form = new FormData();
-    var voiceFile;
-    try {
-      voiceFile = new File([prepared.blob], prepared.fileName, { type: prepared.mimeType });
-    } catch (_) {
-      voiceFile = prepared.blob;
+    if (!window.DunesNovaApi || typeof window.DunesNovaApi.transcribeAudio !== 'function') {
+      throw new Error('云枢语音识别未就绪');
     }
-    form.append('file', voiceFile, prepared.fileName);
-    var url = apiBase() + '/ai/transcribe';
-    var r = await fetch(url, {
-      method: 'POST',
-      headers: { Authorization: 'Bearer ' + token() },
-      body: form
-    });
-    var textBody = await r.text();
-    var j = {};
-    try { j = JSON.parse(textBody); } catch (e) {}
-    if (r.status === 404) {
-      throw new Error('语音识别接口未就绪，请重启 kb-go 与 API 网关后重试');
-    }
-    if (!r.ok || j.success === false) {
-      throw new Error(j.message || ('语音识别失败 HTTP ' + r.status));
-    }
-    var data = j.data || j;
-    var text = String((data && data.text) || '').trim();
-    if (!text) throw new Error('语音识别未得到有效转写，请改用文字发送或稍后重试');
-    return text;
+    return window.DunesNovaApi.transcribeAudio(prepared.blob, prepared.fileName || 'voice.wav');
   }
   function sendVoiceQuestion(text, voiceMeta) {
     text = String(text || '').trim();
@@ -721,12 +689,24 @@ window.DunesKbChat = (function () {
     scrollK2();
   }
   function ensureSession(forceNew) {
-    var kind = String(window.pendingKbKind || 'KB_ALL').toUpperCase();
-    var path = forceNew ? '/ai/conversations/sessions/new' : '/ai/conversations/sessions/ensure';
-    return apiJson(path, { method: 'POST', body: JSON.stringify({ kind: kind }) }).then(function (d) {
-      convId = Number(d.conversationId || 0);
-      return d;
-    });
+    if (convId && !forceNew) return Promise.resolve({ conversationId: convId });
+    if (forceNew) {
+      convId = Date.now() % 2000000000;
+      localStorage.setItem('dunes_kb_conv_id', String(convId));
+      localStorage.setItem('dunes_kb_nova_chat_session', 'kb-sess-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8));
+      window.pendingKbConvId = convId;
+      return Promise.resolve({ conversationId: convId });
+    }
+    var pending = Number(window.pendingKbConvId || localStorage.getItem('dunes_kb_conv_id') || 0);
+    if (pending > 0) {
+      convId = pending;
+      return Promise.resolve({ conversationId: convId });
+    }
+    convId = Date.now() % 2000000000;
+    localStorage.setItem('dunes_kb_conv_id', String(convId));
+    localStorage.setItem('dunes_kb_nova_chat_session', 'kb-sess-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8));
+    window.pendingKbConvId = convId;
+    return Promise.resolve({ conversationId: convId });
   }
   function showKbTip(msg) {
     msg = String(msg || '').trim() || '请稍后再试';
@@ -749,13 +729,48 @@ window.DunesKbChat = (function () {
     return Promise.resolve();
   }
   function checkReady() {
-    return apiJson('/kb/readiness').catch(function (err) {
-      var detail = String((err && err.message) || '');
-      var msg = '知识库服务暂不可用，请稍后重试';
-      if (/502|503|504|upstream|ECONNREFUSED|connect|HTTP 5/i.test(detail)) {
-        msg = '知识库服务连接失败，请确认后端 kb-go 已启动';
+    if (!window.DunesNovaApi || typeof window.DunesNovaApi.fetchKbStatus !== 'function') {
+      return Promise.resolve({ canChat: false, code: 'service_unavailable', message: '云枢知识库未就绪' });
+    }
+    return window.DunesNovaApi.refreshCredentials().then(function () {
+      return window.DunesNovaApi.fetchKbStatus();
+    }).then(function (st) {
+      st = st || {};
+      var summary = (window.DunesNovaApi && typeof window.DunesNovaApi.parseKbSummary === 'function')
+        ? window.DunesNovaApi.parseKbSummary(st)
+        : null;
+      if (!summary) {
+        var docs = Array.isArray(st.documents) ? st.documents : [];
+        var docCount = Number(st.documentCount || st.documentsCount || docs.length || 0);
+        var ready = st.canChat === true || st.ready === true || st.status === 'ready';
+        summary = { documentCount: docCount, ready: ready, canChat: ready, message: st.message || '' };
       }
-      return { canChat: false, code: 'service_unavailable', message: msg };
+      var indexedCount = 0;
+      if (Array.isArray(summary.documents)) {
+        indexedCount = summary.documents.filter(function (d) {
+          return d && (d.indexed === true || String(d.ingestionStatus || '').toUpperCase() === 'INDEXED');
+        }).length;
+      }
+      var rag = st.rag || {};
+      var rf = st.ragflow || {};
+      var ready = summary.ready === true || summary.canChat === true;
+      if (!ready && (rag.ready === true || rf.ready === true)) ready = true;
+      if (!ready && (indexedCount > 0 || Number(summary.documentCount || 0) > 0)) {
+        if (indexedCount > 0 || Number(rf.indexedDocCount || 0) > 0) ready = true;
+      }
+      return {
+        canChat: ready,
+        code: st.code || (ready ? 'ready' : 'no_kb_source'),
+        message: summary.message || st.message || (ready ? '' : '请先上传文档并等待解析完成'),
+        documents: {
+          indexed: indexedCount || Number(summary.documentCount || 0),
+          hasIndexed: indexedCount > 0 || Number(summary.documentCount || 0) > 0
+        },
+        rag: { ready: ready || rag.ready === true },
+        ragflow: rf
+      };
+    }).catch(function (err) {
+      return { canChat: false, code: 'service_unavailable', message: (err && err.message) || '知识库服务暂不可用，请稍后重试' };
     });
   }
   function showKbNotReadyTip(readiness) {
@@ -1152,6 +1167,50 @@ window.DunesKbChat = (function () {
       stream.scrollTop = stream.scrollHeight - prevHeight;
     }).catch(function () {}).then(function () { msgLoadingOlder = false; });
   }
+  function mapNovaRagToCites(rag) {
+    if (!rag || !rag.chunks) return [];
+    return rag.chunks.map(function (c, i) {
+      return {
+        documentTitle: c.documentTitle || c.docTitle || c.title || ('文档 ' + (i + 1)),
+        chunkText: c.text || c.chunkText || c.content || '',
+        page: c.page || c.pageNo || null
+      };
+    });
+  }
+  function sendCurrentViaNova(text, skipUserBubble, voiceMeta, row, bubble) {
+    var acc = '';
+    var cites = [];
+    var answerSource = '';
+    var finished = false;
+    return window.DunesNovaApi.chatCompletionsStream({
+      messages: [{ role: 'user', content: text }],
+      conversationId: convId,
+      sessionId: localStorage.getItem('dunes_kb_nova_chat_session') || '',
+    }).then(function (r) {
+      return window.DunesNovaApi.pumpOpenAiSse(r, {
+        onDelta: function (piece) {
+          acc = mergeKbStreamText(acc, piece);
+          if (bubble) bubble.innerHTML = kbBubbleHtml(acc);
+          scrollK2();
+        },
+        onRag: function (rag) {
+          if (rag && rag.used) answerSource = 'rag';
+          if (rag && rag.chunks) cites = mapNovaRagToCites(rag);
+        },
+        onError: function (err) { throw err; }
+      });
+    }).then(function () {
+      finished = true;
+      kbGenerating = false;
+      clearKbGenerating(convId);
+      if (bubble) appendCitations(bubble, acc, cites, answerSource);
+      try {
+        localStorage.setItem(KB_PREVIEW_CACHE_KEY, kbSanitizeAnswer(acc).slice(0, 120));
+        localStorage.setItem(KB_PREVIEW_TIME_CACHE_KEY, new Date().toISOString());
+      } catch (e) {}
+      return acc;
+    });
+  }
   function sendCurrent(forcedText, skipUserBubble, voiceMeta) {
     if (sending) return;
     if (forcedText != null && typeof forcedText !== 'string') forcedText = null;
@@ -1174,86 +1233,26 @@ window.DunesKbChat = (function () {
     patchKbInbox(true);
     var streamBody = { content: text };
     if (voiceMeta) streamBody.metadata = voiceMeta;
-    fetch(apiBase() + '/ai/conversations/' + convId + '/messages/stream', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token() },
-      body: JSON.stringify(streamBody)
-    }).then(function (r) {
-      if (!r.ok) {
-        return r.text().then(function (body) {
-          var msg = '知识库问答暂不可用，请稍后重试';
-          try { var j = JSON.parse(body); if (j.message) msg = j.message; } catch (e) {}
-          throw new Error(msg);
-        });
-      }
-      var reader = r.body.getReader();
-      var dec = new TextDecoder();
-      var sseBuf = '';
-      function pump() {
-        return reader.read().then(function (chunk) {
-          if (chunk.done) {
-            if (!finished && bubble) appendCitations(bubble, acc, cites, answerSource);
-            return;
-          }
-          sseBuf += dec.decode(chunk.value, { stream: true });
-          var blocks = sseBuf.split('\n\n');
-          sseBuf = blocks.pop() || '';
-          blocks.forEach(function (block) {
-            var dataLine = '';
-            block.split('\n').forEach(function (line) { if (line.indexOf('data:') === 0) dataLine = line.slice(5).trim(); });
-            if (!dataLine) return;
-            try {
-              var ev = JSON.parse(dataLine);
-              if (ev.event === 'error' && ev.message) {
-                finished = true;
-                kbGenerating = false;
-                clearKbGenerating(convId);
-                if (bubble) bubble.innerHTML = kbBubbleHtml(ev.message);
-                scrollK2();
-              }
-              if (ev.event === 'assistant_saved' && ev.text && bubble) {
-                acc = mergeKbStreamText(acc, ev.text);
-                bubble.innerHTML = kbBubbleHtml(acc || ev.text);
-                if (ev.messageId && row) row.setAttribute('data-message-id', String(ev.messageId));
-                scrollK2();
-              }
-              if (ev.event === 'user_saved' && ev.messageId) {
-                var liveVoice = document.querySelector('#k2-api-rows .msg-row[data-kb-voice="1"]:not([data-message-id])');
-                tagKbVoiceRow(liveVoice, { messageId: ev.messageId });
-              }
-              if (ev.event === 'delta' && ev.text) {
-                acc = mergeKbStreamText(acc, ev.text);
-                if (bubble) bubble.innerHTML = kbBubbleHtml(acc);
-                scrollK2();
-              }
-              if (ev.source) answerSource = ev.source;
-              if (ev.event === 'citations') {
-                cites = ev.citations || [];
-                finished = true;
-                kbGenerating = false;
-                clearKbGenerating(convId);
-                appendCitations(bubble, acc, cites, answerSource);
-              }
-              if (ev.event === 'done' && !finished) {
-                finished = true;
-                kbGenerating = false;
-                clearKbGenerating(convId);
-                appendCitations(bubble, acc, cites, answerSource);
-              }
-            } catch (e) {}
-          });
-          return pump();
-        });
-      }
-      return pump();
-    }).catch(function (e) {
+    if (!window.DunesNovaApi || !window.DunesNovaApi.isReady()) {
+      kbGenerating = false;
+      clearKbGenerating(convId);
+      if (bubble) bubble.textContent = '云枢知识库尚未就绪，请稍后重试';
+      sending = false;
+      setInputEnabled(true, '向知识库提问…');
+      return;
+    }
+    sendCurrentViaNova(text, skipUserBubble, voiceMeta, row, bubble).catch(function (e) {
       kbGenerating = false;
       clearKbGenerating(convId);
       if (bubble) bubble.textContent = e.message || '知识库问答暂不可用，请稍后重试';
-    }).then(function () {
+      return '';
+    }).then(function (resultAcc) {
       sending = false;
-      patchKbInbox(false, kbSanitizeAnswer(acc) || (bubble ? bubble.textContent : ''), new Date().toISOString());
+      patchKbInbox(false, kbSanitizeAnswer(resultAcc || '') || (bubble ? bubble.textContent : ''), new Date().toISOString());
       setInputEnabled(true, '向知识库提问…');
+      if (window.DunesNovaApi && window.DunesNovaApi.upsertLocalTurn) {
+        window.DunesNovaApi.upsertLocalTurn('kb', { conversationId: convId, title: text.slice(0, 24) || '提问', lastMessagePreview: kbSanitizeAnswer(resultAcc || '').slice(0, 80), lastMessageAt: new Date().toISOString() });
+      }
     });
   }
   function wireK11() {
@@ -1284,27 +1283,17 @@ window.DunesKbChat = (function () {
     historyLoading = true;
     historyNextBefore = '';
     box.innerHTML = '<div class="api-strip"><i class="ti ti-loader"></i><span>加载对话历史…</span></div>';
-    return apiJson('/kb/chat/history?view=turns&size=30').then(function (d) {
-      historyAll = Array.isArray(d) ? d : (d.items || []);
-      historyHasMore = !!d.hasMore;
-      historyNextBefore = d.nextBefore || '';
-      renderHistory(historyAll);
-    }).catch(function (e) {
-      box.innerHTML = '<div class="api-strip"><span>' + esc(e.message || e) + '</span></div>';
-    }).then(function () {
-      historyLoading = false;
-    });
+    historyAll = (window.DunesNovaApi && window.DunesNovaApi.loadLocalTurns)
+      ? window.DunesNovaApi.loadLocalTurns('kb')
+      : [];
+    historyHasMore = false;
+    historyNextBefore = '';
+    renderHistory(historyAll);
+    historyLoading = false;
+    return Promise.resolve();
   }
   function loadMoreHistory() {
-    if (historyLoading || !historyHasMore || !historyNextBefore) return Promise.resolve();
-    historyLoading = true;
-    return apiJson('/kb/chat/history?view=turns&size=30&before=' + encodeURIComponent(historyNextBefore)).then(function (d) {
-      var items = d.items || [];
-      historyAll = historyAll.concat(items);
-      historyHasMore = !!d.hasMore;
-      historyNextBefore = d.nextBefore || '';
-      renderHistory(historyAll);
-    }).then(function () { historyLoading = false; }, function () { historyLoading = false; });
+    return Promise.resolve();
   }
   function filterHistory(q) {
     q = String(q || '').toLowerCase();

@@ -1,11 +1,12 @@
 /// DUNES API 地址配置，端口与 [new_dune/scripts/dunes-ports.ps1] 保持一致。
 abstract final class DunesDefaults {
   static const gatewayPort = 6090;
+  static const flowPort = 6087;
 
   /// 联调/生产服务器 IP 或域名。留空则本机用 localhost，局域网访问时自动用页面 host。
   ///
   /// 也可启动时覆盖：`--dart-define=DUNES_API_HOST=1.2.3.4`
-  static const devServerHost = '115.159.46.108';
+  static const devServerHost = '124.221.216.24';
 
   static const _hostFromDefine = String.fromEnvironment(
     'DUNES_API_HOST',
@@ -29,6 +30,10 @@ abstract final class DunesDefaults {
 
   static String get apiBase =>
       'http://${resolveGatewayHost()}:$gatewayPort/api/v1';
+
+  /// flow-go 直连（XFlow 模板/提交；网关 6090 可能未代理 /xflow）
+  static String get flowApiBase =>
+      'http://${resolveGatewayHost()}:$flowPort/api/v1';
 
   static String get wsBase =>
       'ws://${resolveGatewayHost()}:$gatewayPort/connection/websocket';

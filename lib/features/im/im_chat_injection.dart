@@ -197,11 +197,52 @@ window.DunesImChat = (function () {
       method: opts.method || 'GET', headers: headers, body: opts.body || undefined
     }).then(function (r) { return r.json(); });
   }
+  function apiHostFromBase() {
+    var api = localStorage.getItem('dunes_api_base') || window.__dunesApiBase || '__DUNES_API_BASE__';
+    var m = String(api).match(/^https?:\/\/([^:/]+)/i);
+    return m ? m[1].toLowerCase() : '';
+  }
+  function deriveWsUrl() {
+    var api = localStorage.getItem('dunes_api_base') || window.__dunesApiBase || '__DUNES_API_BASE__';
+    var http = String(api).replace(/\/api\/v1\/?$/, '');
+    return http.replace(/^http/i, 'ws') + '/connection/websocket';
+  }
   function defaultWsUrl() {
-    var base = localStorage.getItem('dunes_ws_base') || '';
-    if (base) return base;
-    var api = localStorage.getItem('dunes_api_base') || '__DUNES_API_BASE__';
-    return api.replace(/\/api\/v1\/?$/, '') + '/connection/websocket';
+    var derived = deriveWsUrl();
+    var custom = localStorage.getItem('dunes_ws_base') || '';
+    if (!custom) return derived;
+    try {
+      var apiHost = apiHostFromBase();
+      var customHost = new URL(custom).hostname.toLowerCase();
+      if (apiHost && customHost === apiHost) return custom;
+      console.warn('[DunesImChat] ignore stale dunes_ws_base', custom, 'use', derived);
+      localStorage.removeItem('dunes_ws_base');
+    } catch (e) {
+      localStorage.removeItem('dunes_ws_base');
+    }
+    return derived;
+  }
+  function resolveWsUrl(serverUrl) {
+    var fallback = defaultWsUrl();
+    if (!serverUrl) return fallback;
+    try {
+      var resolved = serverUrl;
+      if (!/^wss?:\/\//i.test(resolved)) {
+        var http = String(localStorage.getItem('dunes_api_base') || window.__dunesApiBase || '__DUNES_API_BASE__').replace(/\/api\/v1\/?$/, '');
+        resolved = http.replace(/^http/i, 'ws') + (serverUrl.startsWith('/') ? serverUrl : '/' + serverUrl);
+      }
+      var u = new URL(resolved);
+      var host = u.hostname.toLowerCase();
+      if (host === '127.0.0.1' || host === 'localhost' || host === '0.0.0.0') return fallback;
+      var apiHost = apiHostFromBase();
+      if (apiHost && host !== apiHost) {
+        console.warn('[DunesImChat] ignore mismatched wsUrl from server', serverUrl, 'use', fallback);
+        return fallback;
+      }
+      return u.toString().replace(/\/$/, '');
+    } catch (e) {
+      return fallback;
+    }
   }
   function personCls(seed) {
     var n = Math.abs(Number(seed) || 0) % 6;
@@ -303,6 +344,166 @@ window.DunesImChat = (function () {
     if (lr >= id) return '<div class="msg-read-status read">已读</div>';
     return '<div class="msg-read-status unread">未读</div>';
   }
+  function isActiveGroupChat() {
+    var active = document.querySelector('.screen.active');
+    return !!(active && active.dataset.screen === 'C2');
+  }
+  function isGroupOwner() {
+    var d = window.__dunesGroupDetail;
+    if (d && d.isOwner) return true;
+    var me = devUserId();
+    var members = (d && d.members) || groupMembers();
+    return members.some(function (m) {
+      return Number(m.userId) === me && String(m.role || '').toUpperCase() === 'OWNER';
+    });
+  }
+  function isGroupDissolved(detail) {
+    var d = detail || window.__dunesGroupDetail;
+    if (!d) return false;
+    return !!(d.dissolved || d.isDissolved || d.status === 'DISSOLVED' || d.frozen);
+  }
+  function memberDeptTitle(m) {
+    if (!m) return '';
+    var dept = m.departmentName || m.department || '';
+    var title = m.title || m.roleLabel || '';
+    if (dept && title) return dept + ' · ' + title;
+    return dept || title || '';
+  }
+  function fullNameForUserId(uid, fallback) {
+    uid = Number(uid || 0);
+    var best = fallback || '';
+    if (!uid) return best;
+    var pool = ((window.__dunesGroupDetail && window.__dunesGroupDetail.members) || []).concat(groupMembers());
+    var mem = pool.find(function (x) { return Number(x.userId) === uid; });
+    if (mem && mem.displayName && String(mem.displayName).length > String(best || '').length) {
+      best = mem.displayName;
+    }
+    if (typeof profileForUserId === 'function') {
+      var p = profileForUserId(uid);
+      if (p && p.displayName && String(p.displayName).length > String(best || '').length) {
+        best = p.displayName;
+      }
+    }
+    if (uid === devUserId()) {
+      var mine = myDisplayName();
+      if (mine && mine.length > String(best || '').length) best = mine;
+    }
+    return best;
+  }
+  function recallNoticeText(m, evt) {
+    evt = evt || {};
+    var msg = m || evt.message || {};
+    var payload = msg.payload;
+    if (typeof payload === 'string' && payload) {
+      try { payload = JSON.parse(payload); } catch (e) { payload = null; }
+    }
+    var name = (evt.recalledByName || evt.recalledByDisplayName)
+      || (msg.recalledBy && msg.recalledBy.displayName)
+      || (payload && (payload.recalledByName || payload.recalledByDisplayName))
+      || '';
+    var uid = Number((evt.recalledByUserId || evt.userId)
+      || (msg.recalledByUserId || (msg.recalledBy && msg.recalledBy.userId)) || 0);
+    if (uid) name = fullNameForUserId(uid, name);
+    if (!name) name = '有人';
+    return '"' + esc(name) + '" 撤回了一条消息';
+  }
+  function groupReadPeers() {
+    var members = (window.__dunesGroupDetail && window.__dunesGroupDetail.members) || groupMembers();
+    var me = devUserId();
+    return members.filter(function (m) { return Number(m.userId) !== me; });
+  }
+  function recordGroupMemberRead(userId, lastReadMessageId) {
+    var uid = Number(userId || 0);
+    var lr = Number(lastReadMessageId || 0);
+    if (!uid || uid === devUserId() || !lr) return;
+    window.__dunesGroupMemberReads = window.__dunesGroupMemberReads || {};
+    var prev = Number(window.__dunesGroupMemberReads[String(uid)] || 0);
+    if (lr > prev) window.__dunesGroupMemberReads[String(uid)] = lr;
+  }
+  function groupReadCountForMsg(msgId) {
+    var id = Number(msgId);
+    if (!id) return 0;
+    var reads = window.__dunesGroupMemberReads || {};
+    var count = 0;
+    groupReadPeers().forEach(function (m) {
+      if (Number(reads[String(m.userId)] || 0) >= id) count++;
+    });
+    return count;
+  }
+  function readStatusForMsg(msgId, peerLastRead) {
+    if (isActiveGroupChat()) {
+      var id = Number(msgId);
+      if (!id) return '';
+      var total = groupReadPeers().length;
+      var count = groupReadCountForMsg(id);
+      if (!total) return '';
+      if (count <= 0) {
+        return '<div class="msg-read-status unread group-read tappable" data-msg-id="' + id + '" role="button" tabindex="0">未读</div>';
+      }
+      return '<div class="msg-read-status read group-read tappable" data-msg-id="' + id + '" role="button" tabindex="0">' + count + '人已读</div>';
+    }
+    return readStatusHtml(msgId, peerLastRead);
+  }
+  async function refreshGroupReadMap(convId) {
+    if (!convId) return;
+    try {
+      var j = await apiFetch('/conversations/' + convId + '/read-status');
+      if (!j.success || !j.data) return;
+      var items = j.data.members || j.data.items || j.data.readers || [];
+      items.forEach(function (it) {
+        recordGroupMemberRead(it.userId, it.lastReadMessageId || it.readMessageId || it.lastRead);
+      });
+      refreshReadStatuses();
+    } catch (e) {}
+  }
+  async function pullNewerGroupMessages(screenId, convId) {
+    if (isHistoryLocatedChat()) return;
+    var newest = Number(window.__dunesMsgNewestId || 0);
+    if (!convId) return;
+    try {
+      var path = '/conversations/' + convId + '/messages?size=30';
+      if (newest > 0) path += '&after=' + newest;
+      var mj = await apiFetch(path);
+      if (!mj.success || !mj.data) return;
+      var items = mj.data.items || [];
+      if (!items.length) return;
+      items.forEach(function (m) { normalizeMsg(m); });
+      var box = msgBoxForScreen(screenId);
+      if (!boxMatchesConv(box, convId)) return;
+      items.forEach(function (m) {
+        if (!m.id || box.querySelector('[data-message-id="' + m.id + '"]')) return;
+        appendRealtimeMessage(m, screenId, convId);
+      });
+    } catch (e) {}
+  }
+  function applyGroupChatLocked(dissolved) {
+    var screen = document.querySelector('.screen[data-screen="C2"]');
+    if (!screen) return;
+    screen.classList.toggle('group-dissolved', !!dissolved);
+    var input = document.getElementById('c2-input');
+    var btn = document.getElementById('c2-send');
+    var bar = screen.querySelector('.msg-input-bar');
+    var qa = screen.querySelector('.msg-quick-actions');
+    if (input) {
+      input.disabled = !!dissolved;
+      input.placeholder = dissolved ? '群已解散，无法发送消息' : '输入消息 · @人时唤出选择器';
+    }
+    if (btn) btn.style.pointerEvents = dissolved ? 'none' : '';
+    if (bar) bar.style.pointerEvents = dissolved ? 'none' : '';
+    if (qa) qa.style.pointerEvents = dissolved ? 'none' : '';
+    var stream = screen.querySelector('.msg-stream');
+    if (!stream) return;
+    var banner = document.getElementById('dunes-group-dissolved-banner');
+    if (dissolved) {
+      if (!banner) {
+        banner = document.createElement('div');
+        banner.id = 'dunes-group-dissolved-banner';
+        banner.className = 'dunes-group-dissolved-banner';
+        banner.textContent = '该群已解散，可查看历史消息，无法发送或操作';
+        stream.parentNode.insertBefore(banner, stream);
+      }
+    } else if (banner) banner.remove();
+  }
   function msgTimeLabel(at) {
     if (!at) return '';
     var d = new Date(at);
@@ -367,6 +568,79 @@ window.DunesImChat = (function () {
     div.textContent = label;
     return div;
   }
+  function isLoadHintEl(el) {
+    return el && (el.id === 'dunes-load-newer-msgs' || el.id === 'dunes-load-more-msgs');
+  }
+  function lastContentChild(box) {
+    if (!box) return null;
+    var i = box.children.length;
+    while (i--) {
+      var el = box.children[i];
+      if (!el || isLoadHintEl(el)) continue;
+      return el;
+    }
+    return null;
+  }
+  function removeOrphanTailDivider(divider) {
+    if (!divider || !divider.classList.contains('msg-date-divider')) return;
+    var next = divider.nextElementSibling;
+    while (next) {
+      if (isLoadHintEl(next)) {
+        next = next.nextElementSibling;
+        continue;
+      }
+      if (next.classList.contains('msg-date-divider')) return;
+      if (next.getAttribute('data-message-id')) return;
+      next = next.nextElementSibling;
+    }
+    if (divider.parentNode) divider.parentNode.removeChild(divider);
+  }
+  function cleanupPendingUploadNode(node) {
+    if (!node) return;
+    var local = node.dataset.localUrl;
+    if (local) {
+      try { URL.revokeObjectURL(local); } catch (e) {}
+      delete node.dataset.localUrl;
+    }
+  }
+  function removePendingMessageNode(node) {
+    if (!node || !node.parentNode) return;
+    cleanupPendingUploadNode(node);
+    var prev = node.previousElementSibling;
+    node.parentNode.removeChild(node);
+    removeOrphanTailDivider(prev);
+  }
+  function updatePendingUploadProgress(node, percent, statusText) {
+    if (!node) return;
+    var bar = node.querySelector('.dunes-upload-progress-bar');
+    var label = node.querySelector('.dunes-upload-label');
+    var p = Math.max(0, Math.min(100, Number(percent) || 0));
+    if (bar) bar.style.width = p + '%';
+    if (label) label.textContent = statusText || ('上传中 ' + p + '%');
+  }
+  function createPendingUploadNode(kind, file, label) {
+    var me = devUserId();
+    var row = document.createElement('div');
+    row.className = 'msg-row sent dunes-upload-pending';
+    row.dataset.pendingUpload = '1';
+    var myInitial = myDisplayName().slice(0, 1);
+    var progressBlock = '<div class="dunes-upload-progress"><div class="dunes-upload-progress-bar"></div></div>'
+      + '<div class="dunes-upload-label">上传中 0%</div>';
+    var inner = '';
+    if (kind === 'IMAGE') {
+      var localUrl = URL.createObjectURL(file);
+      row.dataset.localUrl = localUrl;
+      inner = '<div class="msg-bubble sent dunes-upload-bubble">'
+        + '<img src="' + esc(localUrl) + '" alt="uploading" class="dunes-img-thumb dunes-upload-preview">'
+        + progressBlock + '</div>';
+    } else {
+      inner = '<div class="msg-bubble sent dunes-upload-bubble">'
+        + '<div class="dunes-upload-file"><i class="ti ti-paperclip"></i> ' + esc(label || (file && file.name) || '文件') + '</div>'
+        + progressBlock + '</div>';
+    }
+    row.innerHTML = msgAvatarHtml(me, myInitial) + '<div class="msg-content">' + inner + '</div>';
+    return row;
+  }
   function lastMessageCreatedAt(box) {
     if (!box) return null;
     var i = box.children.length;
@@ -402,11 +676,25 @@ window.DunesImChat = (function () {
       var sib = beforeNode.previousElementSibling;
       while (sib && sib.classList.contains('msg-date-divider')) sib = sib.previousElementSibling;
       if (sib) prevAt = sib.getAttribute('data-created-at');
+      var prevDivider = beforeNode.previousElementSibling;
+      if (prevDivider && prevDivider.classList.contains('msg-date-divider')) {
+        var boundaryLabel = dayDividerLabel(createdAt, prevAt);
+        if (boundaryLabel && prevDivider.textContent === boundaryLabel) return prevDivider;
+      }
     } else {
+      var tail = lastContentChild(box);
+      if (tail && tail.classList.contains('msg-date-divider')) {
+        var orphanLabel = dayDividerLabel(createdAt, lastMessageCreatedAt(box));
+        if (orphanLabel && tail.textContent === orphanLabel) return tail;
+      }
       prevAt = lastMessageCreatedAt(box);
     }
     var label = dayDividerLabel(createdAt, prevAt);
     if (!label) return null;
+    if (!beforeNode) {
+      var tailDup = lastContentChild(box);
+      if (tailDup && tailDup.classList.contains('msg-date-divider') && tailDup.textContent === label) return tailDup;
+    }
     var div = createDateDivider(label);
     if (beforeNode) box.insertBefore(div, beforeNode);
     else {
@@ -570,16 +858,19 @@ window.DunesImChat = (function () {
     var senderId = msgSenderId(m);
     var name = senderDisplayName(m, peer);
     var body = esc(m.bodyText || '');
+    var bodyHtml = formatMentionHtml(m.bodyText || '');
     var payload = m.payload || null;
     var row = document.createElement('div');
     row.dataset.messageId = m.id || '';
     if (m.recalled) {
       row.className = 'msg-system';
-      row.innerHTML = '<span class="pill">该消息已撤回</span>';
+      row.dataset.messageId = m.id || '';
+      row.innerHTML = '<span class="pill">' + recallNoticeText(m) + '</span>';
       return row;
     }
     if (m.kind === 'SYSTEM' || m.kind === 'SYSTEM_JOIN' || m.kind === 'SYSTEM_LEAVE' || m.kind === 'SYSTEM_REMOVE' || m.kind === 'SYSTEM_FLOW') {
       row.className = 'msg-system';
+      row.dataset.messageId = m.id || '';
       row.innerHTML = '<span class="pill">' + body + '</span>';
       return row;
     }
@@ -595,14 +886,15 @@ window.DunesImChat = (function () {
       var mediaUrl = payload.url || payload.previewUrl || payload.objectKey || '';
       var direct = isPublicMediaUrl(mediaUrl);
       var imgKey = direct ? '' : (payload.objectKey || '');
+      if (!imgKey && mediaUrl && !direct) imgKey = mediaUrl;
+      var imgName = payload.fileName || String(m.bodyText || '').replace(/^\[[^\]]+\]\s*/, '') || 'image.jpg';
       var src = direct ? esc(mediaUrl) : '';
-      var full = esc(mediaUrl);
-      var bubble = '<div class="msg-bubble ' + (sent ? 'sent' : 'recv') + '">'
+      var full = direct ? esc(mediaUrl) : '';
+      var bubble = '<div class="msg-bubble ' + (sent ? 'sent msg-bubble--media' : 'recv') + '">'
         + '<img src="' + src + '" alt="image" class="dunes-img-thumb" data-full-url="' + full + '"'
-        + ' data-object-key="' + esc(imgKey) + '" data-bucket="im-attachments"'
-        + ' style="max-width:170px;max-height:170px;border-radius:10px;display:block;cursor:pointer">'
+        + ' data-object-key="' + esc(imgKey) + '" data-file-name="' + esc(imgName) + '" data-bucket="im-attachments">'
         + '</div>';
-      var read = sent ? readStatusHtml(m.id, peerLastRead) : '';
+      var read = sent ? readStatusForMsg(m.id, peerLastRead) : '';
       if (sent) {
         row.innerHTML = msgAvatarHtml(me, myInitial) + '<div class="msg-content">' + bubble + read + '</div>';
       } else {
@@ -619,7 +911,7 @@ window.DunesImChat = (function () {
       var voice = '<div class="msg-bubble ' + (sent ? 'sent' : 'recv') + ' dunes-voice-bubble" data-url="' + esc(audioUrl) + '" data-object-key="' + esc(audioKey) + '" data-bucket="im-attachments">'
         + (sent ? '<span class="voice-sec">' + sec + '\'\'</span><span class="voice-wave"><i class="ti ti-volume"></i></span>' : '<span class="voice-wave"><i class="ti ti-volume"></i></span><span class="voice-sec">' + sec + '\'\'</span>')
         + '</div>';
-      var read = sent ? readStatusHtml(m.id, peerLastRead) : '';
+      var read = sent ? readStatusForMsg(m.id, peerLastRead) : '';
       if (sent) {
         row.innerHTML = msgAvatarHtml(me, myInitial) + '<div class="msg-content">' + voice + read + '</div>';
       } else {
@@ -639,8 +931,8 @@ window.DunesImChat = (function () {
         : (objKey
         ? storageDownloadEndpoint(objKey, 'im-attachments', fileName)
         : esc(payload.url || ''));
-      var bubble = '<div class="msg-bubble ' + (sent ? 'sent' : 'recv') + '"><i class="ti ' + icon + '"></i> <a class="dunes-attach-link" href="' + esc(href) + '" data-url="' + esc(payload.url || '') + '" data-object-key="' + esc(payload.objectKey || '') + '" data-bucket="im-attachments" data-file-name="' + esc(fileName) + '" target="_blank" rel="noopener" download>' + body + '</a></div>';
-      var read = sent ? readStatusHtml(m.id, peerLastRead) : '';
+      var bubble = '<div class="msg-bubble ' + (sent ? 'sent msg-bubble--media' : 'recv') + '"><i class="ti ' + icon + '"></i> <a class="dunes-attach-link" href="' + esc(href) + '" data-url="' + esc(payload.url || '') + '" data-object-key="' + esc(payload.objectKey || '') + '" data-bucket="im-attachments" data-file-name="' + esc(fileName) + '" target="_blank" rel="noopener" download>' + body + '</a></div>';
+      var read = sent ? readStatusForMsg(m.id, peerLastRead) : '';
       if (sent) {
         row.innerHTML = msgAvatarHtml(me, myInitial) + '<div class="msg-content">' + bubble + read + '</div>';
       } else {
@@ -655,13 +947,13 @@ window.DunesImChat = (function () {
       if (m.createdAt && Date.now() - new Date(m.createdAt).getTime() < 120000) {
         recall = '<button type="button" class="im-recall-btn" data-msg-id="' + m.id + '" style="font-size:10px;color:var(--text-3);background:none;border:none;cursor:pointer;margin-top:2px">撤回</button>';
       }
-      var read = readStatusHtml(m.id, peerLastRead);
+      var read = readStatusForMsg(m.id, peerLastRead);
       var sentName = name || myDisplayName();
-      row.innerHTML = msgAvatarHtml(me, myInitial) + '<div class="msg-content"><div class="msg-meta"><span>' + esc(t) + '</span><span class="nm">' + esc(sentName) + '</span></div><div class="msg-bubble sent">' + body + '</div>' + read + recall + '</div>';
+      row.innerHTML = msgAvatarHtml(me, myInitial) + '<div class="msg-content"><div class="msg-meta"><span>' + esc(t) + '</span><span class="nm">' + esc(sentName) + '</span></div><div class="msg-bubble sent">' + bodyHtml + '</div>' + read + recall + '</div>';
     } else {
       row.className = 'msg-row recv';
       var recvUid = senderId || (peer && peer.userId);
-      row.innerHTML = msgAvatarHtml(recvUid, avInitial) + '<div class="msg-content"><div class="msg-meta"><span class="nm">' + esc(name) + '</span>' + peerTag + '<span>' + esc(t) + '</span></div><div class="msg-bubble recv">' + body + '</div></div>';
+      row.innerHTML = msgAvatarHtml(recvUid, avInitial) + '<div class="msg-content"><div class="msg-meta"><span class="nm">' + esc(name) + '</span>' + peerTag + '<span>' + esc(t) + '</span></div><div class="msg-bubble recv">' + bodyHtml + '</div></div>';
     }
     return finishMsgRow(row, sent ? me : (senderId || (peer && peer.userId)), sent ? myInitial : avInitial, m, peer);
   }
@@ -672,9 +964,11 @@ window.DunesImChat = (function () {
     viewer.id = 'dunes-image-viewer';
     viewer.className = 'dunes-image-viewer';
     viewer.innerHTML = '<button type="button" class="dunes-image-close" aria-label="关闭"><i class="ti ti-x"></i></button>'
+      + '<button type="button" class="dunes-image-download" aria-label="下载"><i class="ti ti-download"></i></button>'
       + '<div class="dunes-image-stage"><img class="dunes-image-full" alt="preview"></div>';
     document.body.appendChild(viewer);
     var closeBtn = viewer.querySelector('.dunes-image-close');
+    var downloadBtn = viewer.querySelector('.dunes-image-download');
     var stage = viewer.querySelector('.dunes-image-stage');
     var img = viewer.querySelector('.dunes-image-full');
     var state = {
@@ -690,6 +984,7 @@ window.DunesImChat = (function () {
       dragging: false,
       lastTapAt: 0
     };
+    var viewerMeta = { url: '', objectKey: '', fileName: 'image.jpg', bucket: 'im-attachments' };
     function applyTransform() {
       img.style.transform = 'translate(' + state.tx + 'px,' + state.ty + 'px) scale(' + state.scale + ')';
     }
@@ -704,9 +999,14 @@ window.DunesImChat = (function () {
       img.removeAttribute('src');
       resetTransform();
     }
-    function openViewer(url) {
-      if (!url) return;
-      img.src = url;
+    function openViewer(url, meta) {
+      meta = meta || {};
+      if (!url && !meta.objectKey) return;
+      viewerMeta.url = url || '';
+      viewerMeta.objectKey = meta.objectKey || '';
+      viewerMeta.fileName = meta.fileName || 'image.jpg';
+      viewerMeta.bucket = meta.bucket || 'im-attachments';
+      img.src = url || '';
       viewer.classList.add('show');
       resetTransform();
     }
@@ -715,7 +1015,24 @@ window.DunesImChat = (function () {
     });
     closeBtn.addEventListener('click', function (e) {
       e.preventDefault();
+      e.stopPropagation();
       closeViewer();
+    });
+    downloadBtn.addEventListener('click', async function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      try {
+        var dlUrl = viewerMeta.url;
+        if (!isPublicMediaUrl(dlUrl) && viewerMeta.objectKey) {
+          var fake = document.createElement('span');
+          fake.setAttribute('data-object-key', viewerMeta.objectKey);
+          fake.setAttribute('data-bucket', viewerMeta.bucket);
+          dlUrl = await resolveAttachmentUrl(fake) || dlUrl;
+        }
+        await openAttachmentUrl(dlUrl, viewerMeta.fileName, viewerMeta.objectKey, viewerMeta.bucket);
+      } catch (err) {
+        alert('下载失败：' + (err.message || err));
+      }
     });
     img.addEventListener('touchstart', function (e) {
       if (e.touches.length === 2) {
@@ -782,14 +1099,46 @@ window.DunesImChat = (function () {
     if (box.id === 'c5-api-rows') return 'C5';
     return '';
   }
+  function chatScreenEl(screenId) {
+    return document.querySelector('.screen[data-screen="' + screenId + '"]');
+  }
+  function chatScrollEl(screenId) {
+    var screen = chatScreenEl(screenId);
+    if (!screen) return null;
+    var content = screen.querySelector('.content');
+    var stream = screen.querySelector('.msg-stream');
+    function scrolls(el) {
+      if (!el) return false;
+      var oy = getComputedStyle(el).overflowY;
+      return (oy === 'auto' || oy === 'scroll') && el.scrollHeight > el.clientHeight + 1;
+    }
+    if (document.documentElement.classList.contains('flutter-app-mode') && stream) return stream;
+    if (scrolls(stream)) return stream;
+    if (scrolls(content)) return content;
+    return stream || content;
+  }
+  function chatOverlayHost(screenId) {
+    var screen = chatScreenEl(screenId);
+    if (!screen) return null;
+    var phone = screen.querySelector('.phone-screen') || screen;
+    var host = phone.querySelector('.dunes-chat-overlays');
+    if (!host) {
+      host = document.createElement('div');
+      host.className = 'dunes-chat-overlays';
+      var bar = screen.querySelector('.msg-input-bar');
+      if (bar) phone.insertBefore(host, bar);
+      else phone.appendChild(host);
+    }
+    return host;
+  }
   function scrollChatToBottom(screenId, opts) {
     opts = opts || {};
     if (isHistoryLocatedChat() && !opts.force) return;
-    var stream = document.querySelector('.screen[data-screen="' + screenId + '"] .msg-stream');
-    if (!stream) return;
+    var scrollEl = chatScrollEl(screenId);
+    if (!scrollEl) return;
     var box = msgBoxForScreen(screenId);
     function doScroll() {
-      stream.scrollTop = stream.scrollHeight;
+      scrollEl.scrollTop = scrollEl.scrollHeight;
       if (box) {
         var last = box.querySelector('[data-message-id]:last-of-type') || box.lastElementChild;
         if (last && last.scrollIntoView) {
@@ -818,15 +1167,30 @@ window.DunesImChat = (function () {
   function wireImageThumbs(root) {
     if (!root) return;
     ensureImageViewer();
-    root.querySelectorAll('.dunes-img-thumb[data-full-url]').forEach(function (img) {
+    root.querySelectorAll('.dunes-img-thumb:not(.dunes-upload-preview)').forEach(function (img) {
       if (img.dataset.wiredOpen) return;
       img.dataset.wiredOpen = '1';
-      img.addEventListener('click', async function () {
-        var u = img.getAttribute('data-full-url') || '';
-        if (img.getAttribute('data-object-key')) {
-          try { u = await resolveAttachmentUrl(img) || u; } catch (e) {}
+      img.style.cursor = 'pointer';
+      img.addEventListener('click', async function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        var u = img.getAttribute('data-full-url') || img.getAttribute('data-url') || '';
+        var objectKey = img.getAttribute('data-object-key') || '';
+        if (!objectKey && u && !isPublicMediaUrl(u)) objectKey = u;
+        if (objectKey || (!isPublicMediaUrl(u) && u)) {
+          try { u = await resolveAttachmentUrl(img) || u; } catch (err) {}
         }
-        if (u && window.__dunesOpenImageViewer) window.__dunesOpenImageViewer(u);
+        if (!u && !objectKey) {
+          alert('图片加载中，请稍后再试');
+          return;
+        }
+        if (window.__dunesOpenImageViewer) {
+          window.__dunesOpenImageViewer(u, {
+            objectKey: objectKey,
+            fileName: img.getAttribute('data-file-name') || 'image.jpg',
+            bucket: img.getAttribute('data-bucket') || 'im-attachments'
+          });
+        }
       });
     });
     bindChatImageLoadScroll(root, screenIdFromBox(root));
@@ -906,9 +1270,10 @@ window.DunesImChat = (function () {
       if (old) old.remove();
       var content = row.querySelector('.msg-content');
       if (!content) return;
-      var html = readStatusHtml(row.dataset.messageId, lr);
+      var html = readStatusForMsg(row.dataset.messageId, lr);
       if (html) content.insertAdjacentHTML('beforeend', html);
     });
+    wireGroupReadDetail(box);
   }
   function activeChatScreenId() {
     var active = document.querySelector('.screen.active');
@@ -1005,8 +1370,15 @@ window.DunesImChat = (function () {
       node.setAttribute('data-msg-id', String(msg.id || ''));
       node.setAttribute('data-created-at', msgCreatedAt(msg));
     }
-    if (isLatestChatView()) appendMessageTail(box, node, msg);
-    else {
+    if (isLatestChatView()) {
+      appendMessageTail(box, node, msg);
+      if (window.__dunesStickBottom !== false) {
+        window.__dunesBottomAnchorId = msg.id;
+        scrollChatToBottom(sid);
+      } else {
+        refreshNewBelowFloat(sid);
+      }
+    } else {
       insertMessageInOrder(box, node, msg.id);
       insertDateDividerIfNeeded(box, msgCreatedAt(msg) || node.getAttribute('data-created-at'), node);
     }
@@ -1015,15 +1387,15 @@ window.DunesImChat = (function () {
     hydrateMediaUrls(box);
     hydrateMsgAvatars(box);
     wireRecall(box, screenId);
-    if (isLatestChatView()) scrollChatToBottom(sid);
+    wireGroupReadDetail(box);
   }
   function rtEventKey(data) {
     if (!data || !data.type) return '';
     if ((data.type === 'message' || data.type === 'system_flow') && data.message && data.message.id) {
       return data.type + ':' + data.message.id;
     }
-    if (data.type === 'message_recalled' && data.message && data.message.id) {
-      return 'recall:' + data.message.id;
+    if (data.type === 'message_recalled' && (data.messageId || (data.message && data.message.id))) {
+      return 'recall:' + (data.messageId || data.message.id);
     }
     if (data.type === 'message_updated' && data.message && data.message.id) {
       return 'updated:' + data.message.id;
@@ -1038,6 +1410,14 @@ window.DunesImChat = (function () {
       return 'notification:' + data.title + ':' + (data.body || '');
     }
     return '';
+  }
+  function dispatchInboxRealtime(data) {
+    if (!data || !window.DunesInbox) return;
+    if (typeof window.DunesInbox.applyConvEvent === 'function') {
+      window.DunesInbox.applyConvEvent(data);
+    } else if (typeof window.DunesInbox.scheduleCommBadgeRefresh === 'function') {
+      window.DunesInbox.scheduleCommBadgeRefresh();
+    }
   }
   function consumeRtEvent(data) {
     var key = rtEventKey(data);
@@ -1068,10 +1448,18 @@ window.DunesImChat = (function () {
     var eventConvId = convIdFromRealtime(data, channel);
     var inThisChat = eventConvId > 0 && activeConvId > 0 && eventConvId === activeConvId
       && (sid === 'C2' || sid === 'C5');
-    if (sid === 'C1' && (data.type === 'message' || data.type === 'system_flow') && isConvChannel(channel)) {
+    if (!consumeRtEvent(data)) {
+      if ((data.type === 'message' || data.type === 'system_flow') && data.message && inThisChat) {
+        var dupBox = msgBoxForScreen(sid);
+        var dupMid = data.message.id;
+        if (boxMatchesConv(dupBox, eventConvId) && dupMid && !dupBox.querySelector('[data-message-id="' + dupMid + '"]')) {
+          appendRealtimeMessage(data.message, sid, eventConvId);
+          afterReadInChat(activeConvId);
+          if (sid === 'C2') refreshGroupReadMap(activeConvId);
+        }
+      }
       return;
     }
-    if (!consumeRtEvent(data)) return;
     if ((data.type === 'message' || data.type === 'system_flow') && data.message) {
       if (eventConvId) data.message.conversationId = eventConvId;
       if (inThisChat) {
@@ -1082,29 +1470,32 @@ window.DunesImChat = (function () {
           afterReadInChat(activeConvId);
           var fromPeer = data.message.sender && Number(data.message.sender.userId) !== devUserId();
           if (fromPeer) refreshPeerReadFromServer(activeConvId);
+          if (sid === 'C2') refreshGroupReadMap(activeConvId);
         } else if (!boxMatchesConv(box, eventConvId)) {
           markRtEventSeen(data);
         } else {
           markRtEventSeen(data);
         }
-      } else if (window.DunesInbox) {
-        if (typeof window.DunesInbox.applyConvEvent === 'function') {
-          window.DunesInbox.applyConvEvent(data);
-        } else if (typeof window.DunesInbox.scheduleCommBadgeRefresh === 'function') {
-          window.DunesInbox.scheduleCommBadgeRefresh();
-        }
+      } else {
+        dispatchInboxRealtime(data);
       }
     }
     if (data.type === 'conversation_updated') {
-      if (window.DunesInbox && typeof window.DunesInbox.applyConvEvent === 'function') {
-        window.DunesInbox.applyConvEvent(data);
-      } else if (window.DunesInbox && typeof window.DunesInbox.scheduleCommBadgeRefresh === 'function') {
-        window.DunesInbox.scheduleCommBadgeRefresh();
+      if (inThisChat && (sid === 'C2' || sid === 'C5')) {
+        pullNewerGroupMessages(sid, activeConvId);
+        if (isGroupDissolved(data)) applyGroupChatLocked(true);
+      }
+      dispatchInboxRealtime(data);
+    }
+    if (data.type === 'workbench_updated') {
+      if (window.WorkbenchLive && typeof window.WorkbenchLive.scheduleMyBadgeRefresh === 'function') {
+        window.WorkbenchLive.scheduleMyBadgeRefresh();
       }
     }
-    if (data.type === 'message_recalled' && data.message && activeConvId && String(data.conversationId) === String(activeConvId)) {
+    if (data.type === 'message_recalled' && activeConvId && String(data.conversationId) === String(activeConvId)) {
       if (sid === 'C2' || sid === 'C5') {
-        if (!patchRecalledMessage(data.message.id)) loadChat(sid);
+        var recallId = data.messageId || (data.message && data.message.id);
+        if (!patchRecalledMessage(recallId, data)) loadChat(sid);
       }
     }
     if (data.type === 'message_updated' && data.message && inThisChat) {
@@ -1118,15 +1509,20 @@ window.DunesImChat = (function () {
         if (!removeDeletedMessage(mid)) loadChat(sid);
       }
     }
-    if (data.type === 'read' && activeConvId && String(data.conversationId) === String(activeConvId)) {
+    if (data.type === 'read' && eventConvId) {
+      if (!data.conversationId) data.conversationId = eventConvId;
       var uid = Number(data.userId);
-      if (uid && uid !== devUserId()) {
-        window.__dunesPeerLastRead = Number(data.lastReadMessageId || 0);
-        refreshReadStatuses();
+      if (activeConvId && String(eventConvId) === String(activeConvId)) {
+        if (uid && uid !== devUserId()) {
+          if (isActiveGroupChat()) recordGroupMemberRead(uid, data.lastReadMessageId || data.readMessageId || data.messageId);
+          else window.__dunesPeerLastRead = Number(data.lastReadMessageId || 0);
+          refreshReadStatuses();
+        }
+        if (inThisChat && uid === devUserId() && window.DunesInbox && window.DunesInbox.patchConvUnread) {
+          window.DunesInbox.patchConvUnread(activeConvId, 0);
+        }
       }
-      if (inThisChat && window.DunesInbox && window.DunesInbox.patchConvUnread) {
-        window.DunesInbox.patchConvUnread(activeConvId, 0);
-      }
+      dispatchInboxRealtime(data);
     }
     if (data.type === 'notification') {
       if (sid === 'Z2' && window.DunesInbox && window.DunesInbox.loadZ2Notifications) {
@@ -1140,15 +1536,16 @@ window.DunesImChat = (function () {
   }
   function presenceUserId(c) {
     if (!c) return '';
-    if (c.user != null && c.user !== '') return String(c.user);
-    if (c.userId != null && c.userId !== '') return String(c.userId);
-    if (c.info) {
+    var uid = '';
+    if (c.user != null && c.user !== '') uid = String(c.user);
+    else if (c.userId != null && c.userId !== '') uid = String(c.userId);
+    else if (c.info) {
       try {
         var info = typeof c.info === 'string' ? JSON.parse(c.info) : c.info;
-        if (info && info.userId != null && info.userId !== '') return String(info.userId);
+        if (info && info.userId != null && info.userId !== '') uid = String(info.userId);
       } catch (e) {}
     }
-    if (c.client != null && c.client !== '') return String(c.client);
+    if (uid && /^\d+$/.test(uid)) return uid;
     return '';
   }
   function isUserOnline(uid) {
@@ -1288,7 +1685,18 @@ window.DunesImChat = (function () {
     return sub;
   }
   function applyOnlinePresence() {
-    if (imPresenceDenied || !imCentrifuge) return;
+    if (!imCentrifuge) {
+      window.__dunesOnlineUserIds = {};
+      window.__dunesOnlineUserIds[String(devUserId())] = true;
+      refreshAllPresenceUi();
+      return;
+    }
+    if (imPresenceDenied) {
+      window.__dunesOnlineUserIds = {};
+      window.__dunesOnlineUserIds[String(devUserId())] = true;
+      refreshAllPresenceUi();
+      return;
+    }
     callChannelPresence('online', function (res) {
       var map = {};
       var clients = res && res.clients ? res.clients : {};
@@ -1485,7 +1893,7 @@ window.DunesImChat = (function () {
         subscribeImChannels(j.data.channels || []);
         return;
       }
-      var wsUrl = j.data.wsUrl || defaultWsUrl();
+      var wsUrl = resolveWsUrl(j.data.wsUrl);
       var channels = j.data.channels || [];
       console.log('[DunesImChat] connecting', wsUrl);
       if (imCentrifuge) {
@@ -1532,6 +1940,67 @@ window.DunesImChat = (function () {
         apiFetch('/conversations/' + convId + '/messages/' + btn.dataset.msgId + '/recall', { method: 'POST' })
           .then(function () { loadChat(screenId); });
       });
+    });
+    wireMsgAvatarClicks(box);
+  }
+  function wireMsgAvatarClicks(box) {
+    if (!box) return;
+    box.querySelectorAll('.msg-row.recv .msg-av-sm[data-avatar-user-id]').forEach(function (av) {
+      if (av.dataset.wiredContact) return;
+      var uid = Number(av.getAttribute('data-avatar-user-id'));
+      if (!uid || uid === devUserId()) return;
+      av.dataset.wiredContact = '1';
+      av.style.cursor = 'pointer';
+      av.addEventListener('click', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        var uid = Number(av.getAttribute('data-avatar-user-id'));
+        if (!uid || uid === devUserId()) return;
+        if (window.DunesContacts && typeof window.DunesContacts.openContact === 'function') {
+          window.DunesContacts.openContact(uid);
+        } else {
+          window.__dunesC9ReturnScreen = document.querySelector('.screen.active')?.dataset?.screen || 'C1';
+          window.pendingContactUserId = uid;
+          try { pendingContactUserId = uid; } catch (err) {}
+          if (typeof go === 'function') go('C9');
+        }
+      });
+    });
+  }
+  function wireChatCallButtons() {
+    ['C2', 'C5'].forEach(function (sid) {
+      var screen = document.querySelector('.screen[data-screen="' + sid + '"]');
+      if (!screen || screen.dataset.callWired) return;
+      screen.dataset.callWired = '1';
+      screen.querySelectorAll('.cv-act .ic-btn[data-go="C8"]').forEach(function (btn) {
+        btn.removeAttribute('data-go');
+        if (btn.dataset.wiredCall) return;
+        btn.dataset.wiredCall = '1';
+        btn.addEventListener('click', function (e) {
+          e.preventDefault();
+          e.stopPropagation();
+          showChatToast(screen, '敬请期待');
+        });
+      });
+      var av = screen.querySelector('.cv-av-mini[data-go="C9"]');
+      if (av && !av.dataset.wiredContact) {
+        av.dataset.wiredContact = '1';
+        av.style.cursor = 'pointer';
+        av.addEventListener('click', function (e) {
+          e.preventDefault();
+          e.stopPropagation();
+          var uid = Number(av.getAttribute('data-contact-user-id') || av.getAttribute('data-avatar-user-id') || (window.__dunesChatPeer && window.__dunesChatPeer.userId) || 0);
+          if (!uid) return;
+          if (window.DunesContacts && typeof window.DunesContacts.openContact === 'function') {
+            window.DunesContacts.openContact(uid);
+          } else {
+            window.__dunesC9ReturnScreen = document.querySelector('.screen.active')?.dataset?.screen || 'C1';
+            window.pendingContactUserId = uid;
+            try { pendingContactUserId = uid; } catch (err) {}
+            if (typeof go === 'function') go('C9');
+          }
+        });
+      }
     });
   }
   function resetMsgStream(screenId) {
@@ -1621,13 +2090,13 @@ window.DunesImChat = (function () {
       if (!prepend && !append && sid && !isHistoryLocatedChat()) scrollChatToBottom(sid);
     });
   }
-  function patchRecalledMessage(msgId) {
+  function patchRecalledMessage(msgId, evt) {
     if (!msgId) return false;
     var row = document.querySelector('[data-message-id="' + msgId + '"]')
       || document.querySelector('.msg-row[data-msg-id="' + msgId + '"]');
     if (!row) return false;
     row.className = 'msg-system';
-    row.innerHTML = '<span class="pill">该消息已撤回</span>';
+    row.innerHTML = '<span class="pill">' + recallNoticeText(evt && evt.message, evt) + '</span>';
     return true;
   }
   function patchUpdatedMessage(msg, screenId) {
@@ -1680,12 +2149,276 @@ window.DunesImChat = (function () {
     } catch (e) {}
     return items;
   }
+  function olderThanPivotId(items, pivotId) {
+    return (items || []).filter(function (m) { return Number(m.id) < Number(pivotId); });
+  }
+  function mergeChatItems() {
+    var map = {};
+    for (var i = 0; i < arguments.length; i++) {
+      (arguments[i] || []).forEach(function (m) {
+        if (m && m.id) map[m.id] = m;
+      });
+    }
+    return sortChatItems(Object.keys(map).map(function (k) { return map[k]; }));
+  }
+  async function searchMessagesApi(convId, q, opts) {
+    opts = opts || {};
+    var size = opts.size || 20;
+    var path = '/conversations/' + convId + '/messages/search?q=' + encodeURIComponent(q || '') + '&size=' + size + '&page=1';
+    if (opts.before) path += '&before=' + opts.before;
+    var j = await apiFetch(path);
+    var items = j.success && j.data ? (j.data.items || []) : [];
+    items.forEach(function (m) { normalizeMsg(m); });
+    return {
+      items: sortChatItems(items),
+      hasMore: !!(j.success && j.data && j.data.hasMore),
+    };
+  }
+  function oldestChatMsgId(items) {
+    if (!items || !items.length) return 0;
+    return items.reduce(function (min, m) {
+      var id = Number(m.id);
+      return id > 0 && (!min || id < min) ? id : min;
+    }, 0);
+  }
+  async function fetchOlderMessagesPage(convId, pivotId, size, existingIds) {
+    size = size || 20;
+    existingIds = existingIds || {};
+    var collected = [];
+    var hasMore = false;
+    var mj = await apiFetch('/conversations/' + convId + '/messages?size=' + size + '&before=' + pivotId);
+    var listItems = olderThanPivotId(mj.success && mj.data ? (mj.data.items || []) : [], pivotId);
+    hasMore = !!(mj.success && mj.data && mj.data.hasMore);
+    listItems.forEach(function (m) {
+      if (m && m.id && Number(m.id) < Number(pivotId) && !existingIds[m.id]) {
+        existingIds[m.id] = true;
+        collected.push(m);
+      }
+    });
+    if (collected.length >= size) {
+      return { items: sortChatItems(collected), hasMore: hasMore, nextBefore: oldestChatMsgId(collected) };
+    }
+    var cursor = Number(pivotId);
+    for (var attempt = 0; attempt < 4 && collected.length < size; attempt++) {
+      var sp = await searchMessagesApi(convId, '', { size: size, before: cursor });
+      var incoming = sp.items || [];
+      hasMore = sp.hasMore;
+      if (!incoming.length) {
+        hasMore = false;
+        break;
+      }
+      incoming.forEach(function (m) {
+        if (m && m.id && Number(m.id) < Number(pivotId) && !existingIds[m.id]) {
+          existingIds[m.id] = true;
+          collected.push(m);
+        }
+      });
+      if (collected.length > 0 || !hasMore) break;
+      var batchMin = oldestChatMsgId(incoming);
+      if (!batchMin) break;
+      if (batchMin >= cursor) {
+        cursor = batchMin - 1;
+        if (cursor <= 0) {
+          hasMore = false;
+          break;
+        }
+      } else {
+        cursor = batchMin;
+      }
+    }
+    return {
+      items: sortChatItems(collected),
+      hasMore: hasMore,
+      nextBefore: collected.length ? oldestChatMsgId(collected) : cursor,
+    };
+  }
+  async function probeHasOlderMessages(convId, pivotId) {
+    var listProbe = await apiFetch('/conversations/' + convId + '/messages?size=5&before=' + pivotId);
+    if (olderThanPivotId(listProbe.success && listProbe.data ? (listProbe.data.items || []) : [], pivotId).length) return true;
+    var sp = await searchMessagesApi(convId, '', { size: 5, before: pivotId });
+    return olderThanPivotId(sp.items, pivotId).length > 0;
+  }
+  async function fetchNewerFromPivot(convId, messageId, opts) {
+    opts = opts || {};
+    var maxItems = opts.maxItems || 300;
+    var maxRounds = opts.maxRounds || 20;
+    var map = {};
+    function takeNewer(list) {
+      (list || []).forEach(function (m) {
+        if (m && Number(m.id) > Number(messageId)) map[m.id] = m;
+      });
+    }
+    var after = messageId;
+    for (var i = 0; i < 8 && Object.keys(map).length < maxItems; i++) {
+      var mj = await apiFetch('/conversations/' + convId + '/messages?size=40&after=' + after);
+      var batch = (mj.success && mj.data ? (mj.data.items || []) : []).filter(function (m) { return Number(m.id) > after; });
+      takeNewer(batch);
+      if (!batch.length) break;
+      after = Math.max.apply(null, batch.map(function (m) { return Number(m.id); }));
+      if (!(mj.success && mj.data && mj.data.hasNewer)) break;
+    }
+    var before;
+    var reachedPivot = false;
+    for (var round = 0; round < maxRounds && Object.keys(map).length < maxItems; round++) {
+      var sp = await searchMessagesApi(convId, '', { size: 50, before: before });
+      var items = sp.items || [];
+      if (!items.length) break;
+      items.forEach(function (m) {
+        if (Number(m.id) > Number(messageId)) map[m.id] = m;
+        else reachedPivot = true;
+      });
+      if (reachedPivot) break;
+      var oldestId = items.reduce(function (min, m) { return Number(m.id) < min ? Number(m.id) : min; }, Number(items[0].id));
+      if (before !== undefined && oldestId >= before) break;
+      if (!sp.hasMore) break;
+      before = oldestId;
+    }
+    var tail = await apiFetch('/conversations/' + convId + '/messages?size=5');
+    var tailItems = tail.success && tail.data ? (tail.data.items || []) : [];
+    var newestInConv = tailItems.length ? tailItems[tailItems.length - 1].id : 0;
+    return {
+      items: sortChatItems(Object.keys(map).map(function (k) { return map[k]; })),
+      newestInConv: newestInConv,
+      reachedPivot: reachedPivot,
+    };
+  }
+  async function buildLocatedMessageWindow(convId, messageId, hit) {
+    var olderSearch = await searchMessagesApi(convId, '', { size: 40, before: messageId });
+    var olderList = await apiFetch('/conversations/' + convId + '/messages?size=30&before=' + messageId);
+    var olderListItems = olderThanPivotId(olderList.success && olderList.data ? (olderList.data.items || []) : [], messageId);
+    var newerPack = await fetchNewerFromPivot(convId, messageId);
+    var readPage = await apiFetch('/conversations/' + convId + '/messages?size=1');
+    var items = mergeChatItems(olderListItems, olderSearch.items, [hit], newerPack.items);
+    var maxInWindow = items.length ? items[items.length - 1].id : messageId;
+    return {
+      items: items,
+      hasMore: !!olderSearch.hasMore || olderListItems.length > 0,
+      hasNewer: maxInWindow < newerPack.newestInConv || (!newerPack.reachedPivot && newerPack.items.length >= 300),
+      peerLastReadMessageId: readPage.success && readPage.data ? readPage.data.peerLastReadMessageId : null,
+    };
+  }
+  async function findMessageInSearch(convId, messageId) {
+    var near = await searchMessagesApi(convId, '', { size: 40, before: messageId + 1 });
+    var nearHit = (near.items || []).find(function (m) { return Number(m.id) === Number(messageId); });
+    if (nearHit) return nearHit;
+    var before = messageId;
+    for (var i = 0; i < 12; i++) {
+      var page = await searchMessagesApi(convId, '', { size: 50, before: before });
+      var items = page.items || [];
+      var hit = items.find(function (m) { return Number(m.id) === Number(messageId); });
+      if (hit) return hit;
+      if (!items.length || !page.hasMore) break;
+      var oldest = items[0];
+      if (!oldest || Number(oldest.id) >= before) break;
+      before = oldest.id;
+    }
+    return null;
+  }
+  async function fetchMessagesAround(convId, messageId, hint) {
+    var mj = await apiFetch('/conversations/' + convId + '/messages?size=40&around=' + messageId);
+    var items = mj.success && mj.data ? (mj.data.items || []) : [];
+    items.forEach(function (m) { normalizeMsg(m); });
+    if (items.some(function (m) { return Number(m.id) === Number(messageId); })) {
+      return {
+        items: sortChatItems(items),
+        hasMore: !!(mj.success && mj.data && mj.data.hasMore),
+        hasNewer: !!(mj.success && mj.data && mj.data.hasNewer),
+        peerLastReadMessageId: mj.success && mj.data ? mj.data.peerLastReadMessageId : null,
+      };
+    }
+    if (hint && Number(hint.id) === Number(messageId)) {
+      return buildLocatedMessageWindow(convId, messageId, hint);
+    }
+    var older = await apiFetch('/conversations/' + convId + '/messages?size=25&before=' + messageId);
+    var newer = await apiFetch('/conversations/' + convId + '/messages?size=25&after=' + messageId);
+    items = mergeChatItems(
+      olderThanPivotId(older.success && older.data ? (older.data.items || []) : [], messageId),
+      newer.success && newer.data ? (newer.data.items || []) : [],
+    );
+    if (!items.some(function (m) { return Number(m.id) === Number(messageId); })) {
+      var hit = hint || await findMessageInSearch(convId, messageId);
+      if (hit) return buildLocatedMessageWindow(convId, messageId, hit);
+    }
+    return {
+      items: sortChatItems(items),
+      hasMore: !!(older.success && older.data && older.data.hasMore),
+      hasNewer: !!(newer.success && newer.data && newer.data.hasNewer),
+      peerLastReadMessageId: mj.success && mj.data ? mj.data.peerLastReadMessageId : null,
+    };
+  }
+  function hideNewMsgsFloat() {
+    var float = document.getElementById('dunes-new-msgs-float');
+    if (float) float.style.display = 'none';
+  }
+  function ensureNewMsgsFloat(screenId, count) {
+    if (!count || isHistoryLocatedChat()) {
+      hideNewMsgsFloat();
+      return;
+    }
+    var host = chatOverlayHost(screenId);
+    if (!host) return;
+    var float = document.getElementById('dunes-new-msgs-float');
+    if (!float) {
+      float = document.createElement('button');
+      float.id = 'dunes-new-msgs-float';
+      float.type = 'button';
+      float.className = 'dunes-new-msgs-float tappable';
+      float.addEventListener('click', function () {
+        window.__dunesStickBottom = true;
+        window.__dunesBottomAnchorId = window.__dunesMsgNewestId || 0;
+        hideNewMsgsFloat();
+        if (isHistoryLocatedChat()) jumpToLatestMessages(screenId);
+        else scrollChatToBottom(screenId, { force: true });
+      });
+      host.appendChild(float);
+    } else if (float.parentNode !== host) {
+      host.appendChild(float);
+    }
+    float.textContent = count + ' 条新消息 ↓';
+    float.style.display = '';
+  }
+  function refreshNewBelowFloat(screenId) {
+    if (isHistoryLocatedChat()) {
+      hideNewMsgsFloat();
+      return;
+    }
+    if (window.__dunesStickBottom) {
+      hideNewMsgsFloat();
+      return;
+    }
+    var box = msgBoxForScreen(screenId);
+    if (!box) return;
+    var anchor = Number(window.__dunesBottomAnchorId || 0);
+    if (!anchor) anchor = Number(window.__dunesMsgNewestId || 0);
+    var count = 0;
+    box.querySelectorAll('[data-message-id]').forEach(function (row) {
+      if (Number(row.dataset.messageId) > anchor) count++;
+    });
+    if (count > 0) ensureNewMsgsFloat(screenId, count);
+    else hideNewMsgsFloat();
+  }
+  function updateStickBottomState(screenId) {
+    var scrollEl = chatScrollEl(screenId);
+    if (!scrollEl) return;
+    var near = scrollEl.scrollHeight - scrollEl.scrollTop - scrollEl.clientHeight < 80;
+    var wasNear = window.__dunesStickBottom !== false;
+    window.__dunesStickBottom = near;
+    if (near) {
+      window.__dunesBottomAnchorId = window.__dunesMsgNewestId || 0;
+      hideNewMsgsFloat();
+    } else if (wasNear && !window.__dunesBottomAnchorId) {
+      window.__dunesBottomAnchorId = window.__dunesMsgNewestId || 0;
+    } else if (!near) {
+      refreshNewBelowFloat(screenId);
+    }
+  }
   function ensureJumpToLatestBar(screenId) {
     if (!window.__dunesMsgAnchorId && !window.__dunesMsgHasNewer) return;
-    var stream = document.querySelector('.screen[data-screen="' + screenId + '"] .msg-stream');
-    if (!stream) return;
+    var host = chatOverlayHost(screenId);
+    if (!host) return;
     var old = document.getElementById('dunes-jump-latest');
-    if (old) return;
+    if (old && old.parentNode !== host) old.remove();
+    if (document.getElementById('dunes-jump-latest')) return;
     var bar = document.createElement('div');
     bar.id = 'dunes-jump-latest';
     bar.className = 'dunes-jump-latest';
@@ -1693,7 +2426,7 @@ window.DunesImChat = (function () {
     bar.querySelector('button').addEventListener('click', function () {
       jumpToLatestMessages(screenId);
     });
-    stream.appendChild(bar);
+    host.appendChild(bar);
   }
   function jumpToLatestMessages(screenId) {
     clearChatLocateState();
@@ -1711,6 +2444,7 @@ window.DunesImChat = (function () {
     if (jumpBar) jumpBar.remove();
     var newer = document.getElementById('dunes-load-newer-msgs');
     if (newer) newer.remove();
+    hideNewMsgsFloat();
   }
   function reloadLatestChat(screenId) {
     clearChatLocateState();
@@ -1726,9 +2460,10 @@ window.DunesImChat = (function () {
     function tryScroll() {
       tries++;
       var row = document.querySelector('[data-message-id="' + msgId + '"]')
-        || document.querySelector('.msg-row[data-msg-id="' + msgId + '"]');
+        || document.querySelector('.msg-row[data-msg-id="' + msgId + '"]')
+        || document.querySelector('.msg-system[data-message-id="' + msgId + '"]');
       if (!row) {
-        if (tries < 8) setTimeout(tryScroll, 80);
+        if (tries < 24) setTimeout(tryScroll, 100);
         return;
       }
       row.scrollIntoView({ block: 'center', behavior: tries < 2 ? 'auto' : 'smooth' });
@@ -1762,32 +2497,35 @@ window.DunesImChat = (function () {
     box.appendChild(bar);
   }
   async function loadOlderMessages(screenId) {
-    var convId = currentPendingConvId();
+    var box = document.getElementById(screenId === 'C2' ? 'c2-api-rows' : 'c5-api-rows');
+    var scrollEl = chatScrollEl(screenId);
+    if (!box) return;
+    var convId = Number(window.__dunesActiveConvId || msgBoxLoadedConvId(box) || currentPendingConvId() || 0);
     if (_msgLoadingOlder || !window.__dunesMsgHasMore || !convId) return;
     var before = window.__dunesMsgOldestId;
     if (!before) return;
-    var box = document.getElementById(screenId === 'C2' ? 'c2-api-rows' : 'c5-api-rows');
-    var stream = box && box.closest('.msg-stream');
-    if (!box) return;
     _msgLoadingOlder = true;
-    var prevHeight = stream ? stream.scrollHeight : 0;
+    var prevHeight = scrollEl ? scrollEl.scrollHeight : 0;
     try {
-      var mj = await apiFetch('/conversations/' + convId + '/messages?size=20&before=' + before);
-      if (!mj.success || !mj.data) return;
-      var items = mj.data.items || [];
-      items.forEach(function (m) { normalizeMsg(m); });
-      window.__dunesMsgHasMore = !!mj.data.hasMore;
+      var existing = {};
+      box.querySelectorAll('[data-message-id]').forEach(function (row) {
+        existing[row.dataset.messageId] = true;
+      });
+      var page = await fetchOlderMessagesPage(convId, before, 20, existing);
+      var items = page.items || [];
       if (!items.length) {
         window.__dunesMsgHasMore = false;
         ensureLoadMoreHint(box, screenId);
         return;
       }
-      window.__dunesMsgOldestId = items[0].id;
+      items.forEach(function (m) { normalizeMsg(m); });
+      window.__dunesMsgHasMore = !!page.hasMore;
+      window.__dunesMsgOldestId = Number(items[0].id);
       var peer = window.__dunesChatPeer;
       paintMessages(box, items, peer, true);
       wireRecall(box, screenId);
       ensureLoadMoreHint(box, screenId);
-      if (stream) stream.scrollTop = stream.scrollHeight - prevHeight;
+      if (scrollEl) scrollEl.scrollTop = scrollEl.scrollHeight - prevHeight;
     } catch (e) {
       console.warn('loadOlderMessages', e);
     } finally {
@@ -1795,20 +2533,32 @@ window.DunesImChat = (function () {
     }
   }
   async function loadNewerMessages(screenId) {
-    var convId = currentPendingConvId();
+    var box = document.getElementById(screenId === 'C2' ? 'c2-api-rows' : 'c5-api-rows');
+    var convId = Number(window.__dunesActiveConvId || msgBoxLoadedConvId(box) || currentPendingConvId() || 0);
     if (_msgLoadingNewer || !window.__dunesMsgHasNewer || !convId) return;
     var after = window.__dunesMsgNewestId;
     if (!after) return;
-    var box = document.getElementById(screenId === 'C2' ? 'c2-api-rows' : 'c5-api-rows');
-    var stream = box && box.closest('.msg-stream');
+    var scrollEl = chatScrollEl(screenId);
     if (!box) return;
     _msgLoadingNewer = true;
     var nearBottom = false;
-    if (stream) nearBottom = (stream.scrollHeight - stream.scrollTop - stream.clientHeight) < 120;
+    if (scrollEl) nearBottom = (scrollEl.scrollHeight - scrollEl.scrollTop - scrollEl.clientHeight) < 120;
     try {
       var mj = await apiFetch('/conversations/' + convId + '/messages?size=20&after=' + after);
       if (!mj.success || !mj.data) return;
-      var items = mj.data.items || [];
+      var items = (mj.data.items || []).filter(function (m) { return Number(m.id) > after; });
+      var hasNewer = !!mj.data.hasMore;
+      if (!items.length || (items[0] && Number(items[0].id) > after + 1)) {
+        var pack = await fetchNewerFromPivot(convId, after, { maxItems: 40, maxRounds: 6 });
+        var fromSearch = (pack.items || []).filter(function (m) { return Number(m.id) > after; });
+        if (fromSearch.length) {
+          items = mergeChatItems(items, fromSearch);
+          if (items.length) {
+            var maxId = items[items.length - 1].id;
+            hasNewer = maxId < pack.newestInConv || !pack.reachedPivot;
+          }
+        }
+      }
       items.forEach(function (m) { normalizeMsg(m); });
       if (!items.length) {
         window.__dunesMsgHasNewer = false;
@@ -1818,7 +2568,7 @@ window.DunesImChat = (function () {
       var peer = window.__dunesChatPeer;
       paintMessages(box, items, peer, false, true);
       window.__dunesMsgNewestId = items[items.length - 1].id;
-      window.__dunesMsgHasNewer = !!mj.data.hasMore;
+      window.__dunesMsgHasNewer = hasNewer;
       wireRecall(box, screenId);
       ensureLoadNewerHint(box, screenId);
       if (!window.__dunesMsgHasNewer) {
@@ -1828,20 +2578,91 @@ window.DunesImChat = (function () {
       } else {
         ensureJumpToLatestBar(screenId);
       }
-      if (stream && nearBottom) scrollChatToBottom(screenId, { gentle: true });
+      if (scrollEl && nearBottom) scrollChatToBottom(screenId, { gentle: true });
     } catch (e) {
       console.warn('loadNewerMessages', e);
     } finally {
       _msgLoadingNewer = false;
     }
   }
+  async function locateMessageInChat(screenId, messageId, hint) {
+    var convId = currentPendingConvId();
+    if (!convId || !messageId) return;
+    var gen = ++imLoadGen;
+    var box = msgBoxForScreen(screenId);
+    if (!box) return;
+    var peer = window.__dunesChatPeer;
+    var loading = document.getElementById('dunes-locate-loading');
+    if (!loading) {
+      loading = document.createElement('div');
+      loading.id = 'dunes-locate-loading';
+      loading.className = 'msg-system dunes-locate-loading';
+      loading.innerHTML = '<span class="pill"><i class="ti ti-loader"></i> 定位中…</span>';
+      box.insertBefore(loading, box.firstChild);
+    }
+    try {
+      var pack = await fetchMessagesAround(convId, messageId, hint || null);
+      if (gen !== imLoadGen || Number(window.__dunesActiveConvId) !== Number(convId)) return;
+      var items = pack.items || [];
+      items.forEach(function (m) { normalizeMsg(m); });
+      window.__dunesMsgHasMore = !!pack.hasMore;
+      window.__dunesMsgHasNewer = !!pack.hasNewer;
+      window.__dunesMsgOldestId = items.length ? items[0].id : 0;
+      window.__dunesMsgNewestId = items.length ? items[items.length - 1].id : 0;
+      window.__dunesMsgAnchorId = messageId;
+      window.__dunesLocateFromHistory = false;
+      window.__dunesFocusMessageId = null;
+      window.__dunesLocateHintMsg = null;
+      window.__dunesStickBottom = false;
+      if (pack.peerLastReadMessageId != null) {
+        window.__dunesPeerLastRead = Number(pack.peerLastReadMessageId);
+      }
+      if (!items.length) {
+        alert('未找到该消息');
+        return;
+      }
+      paintMessages(box, items, peer, false);
+      wireRecall(box, screenId);
+      wireGroupReadDetail(box);
+      hydrateMsgAvatars(box);
+      ensureLoadMoreHint(box, screenId);
+      ensureLoadNewerHint(box, screenId);
+      ensureLeadingDateDivider(box);
+      wireMsgStreamHistory(screenId);
+      markMsgBoxConv(box, convId);
+      focusMessageInChat(messageId);
+      ensureJumpToLatestBar(screenId);
+      hideNewMsgsFloat();
+    } catch (e) {
+      console.warn('locateMessageInChat', e);
+      alert('定位失败：' + (e.message || e));
+    } finally {
+      var el = document.getElementById('dunes-locate-loading');
+      if (el) el.remove();
+    }
+  }
   function wireMsgStreamHistory(screenId) {
-    var stream = document.querySelector('.screen[data-screen="' + screenId + '"] .msg-stream');
-    if (!stream || stream.dataset.wiredHistory) return;
-    stream.dataset.wiredHistory = '1';
-    stream.addEventListener('scroll', function () {
-      if (stream.scrollTop < 72) loadOlderMessages(screenId);
-    });
+    var screen = chatScreenEl(screenId);
+    if (!screen) return;
+    var scrollEl = chatScrollEl(screenId);
+    if (!scrollEl) return;
+    function onChatScroll(el) {
+      updateStickBottomState(screenId);
+      if (el.scrollTop < 72) loadOlderMessages(screenId);
+    }
+    if (!scrollEl.dataset.dunesChatScrollWired) {
+      scrollEl.dataset.dunesChatScrollWired = '1';
+      scrollEl.addEventListener('scroll', function () { onChatScroll(scrollEl); }, { passive: true });
+    }
+    var alt = scrollEl.classList.contains('msg-stream')
+      ? screen.querySelector('.content')
+      : screen.querySelector('.msg-stream');
+    if (alt && alt !== scrollEl && !alt.dataset.dunesChatScrollWired) {
+      alt.dataset.dunesChatScrollWired = '1';
+      alt.addEventListener('scroll', function () { onChatScroll(alt); }, { passive: true });
+    }
+    window.__dunesStickBottom = true;
+    window.__dunesBottomAnchorId = window.__dunesMsgNewestId || 0;
   }
   function applyPrivateHeader(peer, title) {
     var screen = document.querySelector('.screen[data-screen="C5"]');
@@ -1854,6 +2675,7 @@ window.DunesImChat = (function () {
     var name = peer.displayName || title || '私聊';
     if (av) {
       av.setAttribute('data-go', 'C9');
+      av.setAttribute('data-contact-user-id', String(peer.userId || ''));
       av.setAttribute('data-avatar-user-id', String(peer.userId || ''));
       av.className = 'cv-av-mini ' + personCls(peer.userId);
       rememberUserProfile(peer);
@@ -1934,7 +2756,11 @@ window.DunesImChat = (function () {
       }
       btn.addEventListener('click', function () {
         var inp = document.getElementById(screenId === 'C2' ? 'c2-input' : 'c5-input');
-        if (inp) { inp.value += ch; inp.focus(); }
+        if (inp) {
+          if (screenId === 'C2') setGroupInputValue(inp, (inp.value || '') + ch);
+          else inp.value += ch;
+          inp.focus();
+        }
         panel.style.display = 'none';
       });
       grid.appendChild(btn);
@@ -1971,94 +2797,344 @@ window.DunesImChat = (function () {
   function groupMembers() {
     return window.__dunesGroupMembers || [];
   }
-  function ensureAtPicker(screenId) {
-    var id = 'dunes-at-picker-' + (screenId === 'C2' ? 'c2' : 'c5');
-    var existing = document.getElementById(id);
-    if (existing) return existing;
-    var screen = document.querySelector('.screen[data-screen="' + screenId + '"]');
-    if (!screen) return null;
-    var panel = document.createElement('div');
-    panel.id = id;
-    panel.className = 'dunes-at-picker';
-    panel.style.cssText = 'display:none;position:absolute;left:12px;right:12px;bottom:96px;max-height:160px;overflow-y:auto;background:var(--bg-app);border:1px solid var(--border-soft);border-radius:10px;z-index:90;box-shadow:0 8px 24px rgba(0,0,0,.12)';
-    var bar = screen.querySelector('.msg-input-bar');
-    if (bar && bar.parentNode) bar.parentNode.insertBefore(panel, bar);
-    else screen.appendChild(panel);
-    return panel;
+  var AT_ALL_LABEL = '所有人';
+  var atMentionSheetWired = false;
+  var atMentionSheetFilter = '';
+  var atMentionSelected = {};
+  function injectAtMentionSheetStyles() {
+    if (document.getElementById('dunes-at-sheet-style')) return;
+    var s = document.createElement('style');
+    s.id = 'dunes-at-sheet-style';
+    s.textContent = ''
+      + '.dunes-at-sheet-root{position:fixed;inset:0;z-index:130;display:flex;align-items:flex-end;justify-content:center;pointer-events:none;opacity:0;visibility:hidden;transition:opacity .24s ease,visibility .24s}'
+      + '.dunes-at-sheet-root.show{pointer-events:auto;opacity:1;visibility:visible}'
+      + '.dunes-at-sheet-backdrop{position:absolute;inset:0;background:rgba(12,10,20,.42);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);opacity:0;transition:opacity .24s ease}'
+      + '.dunes-at-sheet-root.show .dunes-at-sheet-backdrop{opacity:1}'
+      + '.dunes-at-sheet{position:relative;width:100%;max-width:430px;background:var(--bg-card,#fff);border-radius:20px 20px 0 0;padding:8px 0 calc(12px + env(safe-area-inset-bottom,0px));box-shadow:0 -8px 40px rgba(0,0,0,.12);transform:translateY(100%);transition:transform .28s cubic-bezier(.32,.72,0,1);max-height:min(72vh,520px);display:flex;flex-direction:column}'
+      + '.dunes-at-sheet-root.show .dunes-at-sheet{transform:translateY(0)}'
+      + '.dunes-at-sheet-handle{width:36px;height:4px;border-radius:99px;background:var(--line-soft,rgba(0,0,0,.12));margin:6px auto 10px;flex-shrink:0}'
+      + '.dunes-at-sheet-title{padding:0 18px 4px;font-size:14px;font-weight:700;color:var(--text-1,#1a1a1a)}'
+      + '.dunes-at-sheet-hint{padding:0 18px 8px;font-size:11px;color:var(--text-3,#999)}'
+      + '.dunes-at-sheet-search-wrap{padding:0 14px 10px;flex-shrink:0}'
+      + '.dunes-at-sheet-search{display:flex;align-items:center;gap:8px;padding:10px 12px;border-radius:12px;background:var(--bg-app,#f5f4f1);border:1px solid var(--line-soft,rgba(0,0,0,.06))}'
+      + '.dunes-at-sheet-search i{font-size:16px;color:var(--text-3,#999);flex-shrink:0}'
+      + '.dunes-at-sheet-search input{flex:1;min-width:0;border:none;background:transparent;font-size:14px;color:var(--text-1,#1a1a1a);outline:none}'
+      + '.dunes-at-sheet-search input::placeholder{color:var(--text-3,#999)}'
+      + '.dunes-at-sheet-list{padding:0 10px;overflow-y:auto;flex:1;min-height:0}'
+      + '.dunes-at-sheet-item{display:flex;align-items:center;gap:12px;width:100%;padding:11px 12px;border:none;border-radius:14px;background:transparent;cursor:pointer;text-align:left;-webkit-tap-highlight-color:transparent;transition:background .15s}'
+      + '.dunes-at-sheet-item:active{background:var(--bg-soft,#f3f2ef)}'
+      + '.dunes-at-sheet-item.selected{background:rgba(85,59,150,.08);box-shadow:inset 0 0 0 1px rgba(85,59,150,.16)}'
+      + '.dunes-at-sheet-item-check{width:22px;height:22px;border-radius:99px;border:1.5px solid var(--line-soft,rgba(0,0,0,.18));display:flex;align-items:center;justify-content:center;flex-shrink:0;color:#fff;font-size:12px}'
+      + '.dunes-at-sheet-item.selected .dunes-at-sheet-item-check{background:linear-gradient(135deg,#553B96,#7B5CB8);border-color:transparent}'
+      + '.dunes-at-sheet-item-av{width:40px;height:40px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:600;flex-shrink:0}'
+      + '.dunes-at-sheet-item-av.all{background:linear-gradient(135deg,#E85D4C,#F07A5A);color:#fff;font-size:13px;font-weight:700}'
+      + '.dunes-at-sheet-item-bd{flex:1;min-width:0}'
+      + '.dunes-at-sheet-item-nm{font-size:14px;font-weight:600;color:var(--text-1,#1a1a1a)}'
+      + '.dunes-at-sheet-item-sub{font-size:11px;color:var(--text-3,#999);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}'
+      + '.dunes-at-sheet-empty{padding:28px 18px;text-align:center;font-size:13px;color:var(--text-3,#999)}'
+      + '.dunes-at-sheet-footer{padding:10px 14px 0;flex-shrink:0;border-top:1px solid var(--line-soft,rgba(0,0,0,.06))}'
+      + '.dunes-at-sheet-confirm{width:100%;padding:12px 16px;border:none;border-radius:14px;background:linear-gradient(135deg,#7E64BD,#553B96);color:#fff;font-size:14px;font-weight:600;cursor:pointer}'
+      + '.dunes-group-dissolved-banner{padding:8px 12px;background:#FFF4E8;color:#9A5B00;font-size:12px;text-align:center;border-bottom:1px solid #F2D9B3}'
+      + '.dunes-read-sheet-root{position:fixed;inset:0;z-index:135;display:flex;align-items:flex-end;justify-content:center;pointer-events:none;opacity:0;visibility:hidden;transition:opacity .24s ease,visibility .24s}'
+      + '.dunes-read-sheet-root.show{pointer-events:auto;opacity:1;visibility:visible}'
+      + '.dunes-read-sheet-backdrop{position:absolute;inset:0;background:rgba(12,10,20,.42);opacity:0;transition:opacity .24s ease}'
+      + '.dunes-read-sheet-root.show .dunes-read-sheet-backdrop{opacity:1}'
+      + '.dunes-read-sheet{position:relative;width:100%;max-width:430px;background:var(--bg-card,#fff);border-radius:20px 20px 0 0;padding:8px 0 calc(12px + env(safe-area-inset-bottom,0px));max-height:min(68vh,480px);display:flex;flex-direction:column;transform:translateY(100%);transition:transform .28s cubic-bezier(.32,.72,0,1)}'
+      + '.dunes-read-sheet-root.show .dunes-read-sheet{transform:translateY(0)}'
+      + '.dunes-read-sheet-title{padding:0 18px 10px;font-size:14px;font-weight:700}'
+      + '.dunes-read-sheet-body{padding:0 10px;overflow-y:auto;flex:1}'
+      + '.dunes-read-sheet-sec{padding:8px 8px 4px;font-size:12px;font-weight:700;color:var(--text-2,#555)}'
+      + '.dunes-read-sheet-row{display:flex;align-items:center;gap:10px;padding:10px 8px;border-radius:12px}'
+      + '.dunes-read-sheet-row .nm{flex:1;font-size:13px;font-weight:600}'
+      + '.dunes-read-sheet-row .sub{font-size:11px;color:var(--text-3,#999)}'
+      + '.msg-bubble.recv .mention{color:#576B95;font-weight:500;background:none;padding:0;border-radius:0;margin-right:0}'
+      + '.msg-bubble.sent .mention{color:#FFE7A8;font-weight:500;background:none;padding:0;border-radius:0;margin-right:0}'
+      + '.msg-read-status.group-read{cursor:pointer}'
+      + '.dunes-compose-wrap{flex:1;min-width:0;position:relative;display:flex;align-items:stretch}'
+      + '.dunes-compose-mirror{position:absolute;inset:0;pointer-events:none;overflow:hidden;white-space:pre;color:var(--text-1,#1a1a1a);z-index:0;border-radius:18px}'
+      + '.dunes-compose-input{position:relative;z-index:1;width:100%;flex:1;min-width:0;color:transparent!important;-webkit-text-fill-color:transparent!important;caret-color:var(--text-1,#1a1a1a);background:transparent!important}'
+      + '.dunes-compose-mirror .mention{color:#576B95;font-weight:500}';
+    document.head.appendChild(s);
   }
-  function hideAtPicker(screenId) {
-    var panel = document.getElementById('dunes-at-picker-' + (screenId === 'C2' ? 'c2' : 'c5'));
-    if (panel) panel.style.display = 'none';
+  function mentionNamesForFormat() {
+    var names = [AT_ALL_LABEL];
+    groupMembers().forEach(function (m) {
+      if (m.displayName) names.push(m.displayName);
+    });
+    return names.sort(function (a, b) { return b.length - a.length; });
   }
-  function renderAtPickerContent(screenId, filter) {
-    if (screenId !== 'C2') return;
+  function formatMentionHtml(text) {
+    if (!text) return '';
+    var names = mentionNamesForFormat();
+    var out = '';
+    var i = 0;
+    while (i < text.length) {
+      if (text.charAt(i) === '@') {
+        var hit = null;
+        for (var ni = 0; ni < names.length; ni++) {
+          var nm = names[ni];
+          if (text.slice(i + 1, i + 1 + nm.length) === nm) { hit = nm; break; }
+        }
+        if (hit) {
+          out += '<span class="mention">@' + esc(hit) + '</span>';
+          i += 1 + hit.length;
+          continue;
+        }
+      }
+      out += esc(text.charAt(i));
+      i++;
+    }
+    return out;
+  }
+  function formatComposerMentionHtml(text) {
+    if (!text) return '';
+    var partial = text.match(/@([^@\s]*)$/);
+    if (!partial) return formatMentionHtml(text);
+    var token = partial[1];
+    if (mentionNamesForFormat().indexOf(token) >= 0) return formatMentionHtml(text);
+    var head = text.slice(0, text.length - partial[0].length);
+    var tail = text.slice(text.length - partial[0].length);
+    return formatMentionHtml(head) + esc(tail);
+  }
+  function groupInputMirror(input) {
+    if (!input) return null;
+    var wrap = input.closest('.dunes-compose-wrap');
+    return wrap ? wrap.querySelector('.dunes-compose-mirror') : null;
+  }
+  function syncGroupInputMirror(input) {
+    var mirror = groupInputMirror(input);
+    if (!mirror || !input) return;
+    var text = input.value || '';
+    mirror.innerHTML = text ? formatComposerMentionHtml(text) : '<span class="dunes-compose-ph">&nbsp;</span>';
+    mirror.scrollLeft = input.scrollLeft || 0;
+  }
+  function setGroupInputValue(input, value) {
+    if (!input) return;
+    input.value = value == null ? '' : String(value);
+    syncGroupInputMirror(input);
+  }
+  function clearGroupInput(input) {
+    setGroupInputValue(input, '');
+  }
+  function ensureGroupRichInput() {
+    injectAtMentionSheetStyles();
+    var input = document.getElementById('c2-input');
+    if (!input) return null;
+    if (!input.closest('.dunes-compose-wrap')) {
+      var wrap = document.createElement('div');
+      wrap.className = 'dunes-compose-wrap';
+      wrap.id = 'c2-compose-wrap';
+      var mirror = document.createElement('div');
+      mirror.className = 'dunes-compose-mirror input-box';
+      mirror.id = 'c2-input-mirror';
+      mirror.setAttribute('aria-hidden', 'true');
+      input.classList.add('dunes-compose-input');
+      var parent = input.parentNode;
+      if (parent) {
+        parent.insertBefore(wrap, input);
+        wrap.appendChild(mirror);
+        wrap.appendChild(input);
+      }
+      if (!input.dataset.composeScrollWired) {
+        input.dataset.composeScrollWired = '1';
+        input.addEventListener('scroll', function () {
+          var m = groupInputMirror(input);
+          if (m) m.scrollLeft = input.scrollLeft || 0;
+        });
+      }
+    }
+    syncGroupInputMirror(input);
+    return input;
+  }
+  function atSheetMemberHtml(m) {
+    var name = m.displayName || '';
+    var sub = memberDeptTitle(m);
+    var selected = !!atMentionSelected[name];
+    return ''
+      + '<button type="button" class="dunes-at-sheet-item' + (selected ? ' selected' : '') + '" data-at-name="' + esc(name) + '" data-at-user-id="' + esc(m.userId) + '">'
+      + '<span class="dunes-at-sheet-item-check">' + (selected ? '<i class="ti ti-check"></i>' : '') + '</span>'
+      + '<span class="dunes-at-sheet-item-av no-initial ' + personCls(m.userId) + '"> </span>'
+      + '<span class="dunes-at-sheet-item-bd">'
+      + '<div class="dunes-at-sheet-item-nm">' + esc(name) + '</div>'
+      + '<div class="dunes-at-sheet-item-sub">' + esc(sub || '群成员') + '</div>'
+      + '</span></button>';
+  }
+  function atSheetAllHtml() {
+    var selected = !!atMentionSelected[AT_ALL_LABEL];
+    return ''
+      + '<button type="button" class="dunes-at-sheet-item' + (selected ? ' selected' : '') + '" data-at-name="' + AT_ALL_LABEL + '" data-at-all="1">'
+      + '<span class="dunes-at-sheet-item-check">' + (selected ? '<i class="ti ti-check"></i>' : '') + '</span>'
+      + '<span class="dunes-at-sheet-item-av all">@</span>'
+      + '<span class="dunes-at-sheet-item-bd">'
+      + '<div class="dunes-at-sheet-item-nm">@' + AT_ALL_LABEL + '</div>'
+      + '<div class="dunes-at-sheet-item-sub">提醒群内所有成员</div>'
+      + '</span></button>';
+  }
+  function updateAtMentionConfirmBtn() {
+    var btn = document.getElementById('dunes-at-sheet-confirm');
+    if (!btn) return;
+    var n = Object.keys(atMentionSelected).filter(function (k) { return atMentionSelected[k]; }).length;
+    btn.textContent = n ? ('完成（' + n + '）') : '完成';
+    btn.disabled = n <= 0;
+  }
+  function toggleAtMentionSelection(name, isAll) {
+    if (!name) return;
+    if (isAll) {
+      if (atMentionSelected[AT_ALL_LABEL]) delete atMentionSelected[AT_ALL_LABEL];
+      else {
+        atMentionSelected = {};
+        atMentionSelected[AT_ALL_LABEL] = true;
+      }
+    } else {
+      if (atMentionSelected[AT_ALL_LABEL]) delete atMentionSelected[AT_ALL_LABEL];
+      if (atMentionSelected[name]) delete atMentionSelected[name];
+      else atMentionSelected[name] = true;
+    }
+    syncAtMentionSheetList(atMentionSheetFilter);
+  }
+  function syncAtMentionSheetList(filter) {
+    var list = document.getElementById('dunes-at-sheet-list');
+    if (!list) return;
     var members = groupMembers();
-    var panel = ensureAtPicker(screenId);
-    if (!panel || !members.length) { hideAtPicker(screenId); return; }
-    var q = String(filter || '').trim().toLowerCase();
+    var displayQ = String(filter != null ? filter : atMentionSheetFilter || '').trim();
+    var q = displayQ.toLowerCase();
+    atMentionSheetFilter = displayQ;
+    var searchInp = document.getElementById('dunes-at-sheet-search-input');
+    if (searchInp && document.activeElement !== searchInp && searchInp.value !== displayQ) searchInp.value = displayQ;
+    var showAll = isGroupOwner() && (!q || AT_ALL_LABEL.indexOf(q) >= 0 || '所有人'.indexOf(q) >= 0);
     var rows = members.filter(function (m) {
       if (!q) return true;
-      return String(m.displayName || '').toLowerCase().indexOf(q) >= 0;
+      var name = String(m.displayName || '').toLowerCase();
+      var dept = String(m.departmentName || m.department || '').toLowerCase();
+      var title = String(m.title || m.roleLabel || '').toLowerCase();
+      return name.indexOf(q) >= 0 || dept.indexOf(q) >= 0 || title.indexOf(q) >= 0;
     });
-    if (!rows.length) { hideAtPicker(screenId); return; }
-    panel.innerHTML = '<div style="padding:8px 12px;font-size:11px;color:var(--text-3);border-bottom:1px solid var(--border-soft);display:flex;align-items:center;justify-content:space-between">'
-      + '<span>可多选成员，点选后继续输入</span>'
-      + '<button type="button" class="dunes-at-done" style="border:none;background:transparent;color:var(--accent);font-weight:700;font-size:12px;cursor:pointer;padding:2px 4px">完成</button></div>'
-      + rows.map(function (m) {
-        return '<div class="dunes-at-row tappable" data-at-user-id="' + m.userId + '" data-at-name="' + esc(m.displayName || '') + '" style="padding:10px 12px;border-bottom:1px solid var(--border-soft);font-size:13px">@' + esc(m.displayName || '') + '</div>';
-      }).join('');
-    panel.style.display = 'block';
+    var html = '';
+    if (showAll) html += atSheetAllHtml();
+    if (rows.length) html += rows.map(atSheetMemberHtml).join('');
+    else if (!showAll) html += '<div class="dunes-at-sheet-empty">未找到匹配成员</div>';
+    list.innerHTML = html;
+    list.querySelectorAll('.dunes-at-sheet-item-av:not(.all)').forEach(function (av) {
+      var btn = av.closest('.dunes-at-sheet-item');
+      if (!btn) return;
+      var uid = Number(btn.getAttribute('data-at-user-id'));
+      if (!uid) return;
+      var m = members.find(function (x) { return Number(x.userId) === uid; });
+      if (m && typeof renderListAvatar === 'function') renderListAvatar(av, m, ' ');
+    });
+    updateAtMentionConfirmBtn();
   }
-  function bindAtPickerDismiss() {
-    if (window.__dunesAtDismissBound) return;
-    window.__dunesAtDismissBound = true;
-    document.addEventListener('keydown', function (e) {
-      if (e.key === 'Escape') hideAtPicker('C2');
-    });
-    document.addEventListener('mousedown', function (e) {
-      var panel = document.getElementById('dunes-at-picker-c2');
-      if (!panel || panel.style.display === 'none') return;
-      if (panel.contains(e.target)) return;
-      var inp = document.getElementById('c2-input');
-      if (inp && (inp === e.target || inp.contains(e.target))) return;
-      if (e.target.closest && e.target.closest('[data-qa="at"]')) return;
-      hideAtPicker('C2');
-    });
+  function closeAtMentionSheet() {
+    var root = document.getElementById('dunes-at-sheet-root');
+    if (root) root.classList.remove('show');
+    atMentionSheetFilter = '';
+    atMentionSelected = {};
   }
-  function bindAtPickerOnce(screenId) {
-    if (screenId !== 'C2') return;
-    var panel = ensureAtPicker(screenId);
-    if (!panel || panel.dataset.wired) return;
-    panel.dataset.wired = '1';
-    panel.addEventListener('mousedown', function (e) { e.preventDefault(); });
-    panel.addEventListener('click', function (e) {
-      if (e.target.closest('.dunes-at-done')) {
+  function ensureAtMentionSheet() {
+    injectAtMentionSheetStyles();
+    var root = document.getElementById('dunes-at-sheet-root');
+    if (root) return root;
+    root = document.createElement('div');
+    root.id = 'dunes-at-sheet-root';
+    root.className = 'dunes-at-sheet-root';
+    root.innerHTML = ''
+      + '<div class="dunes-at-sheet-backdrop" data-at-sheet-close></div>'
+      + '<div class="dunes-at-sheet" role="dialog" aria-label="选择提醒的人">'
+      + '<div class="dunes-at-sheet-handle"></div>'
+      + '<div class="dunes-at-sheet-title">选择提醒的人</div>'
+      + '<div class="dunes-at-sheet-hint">可多选成员，支持按姓名、部门、职位搜索</div>'
+      + '<div class="dunes-at-sheet-search-wrap">'
+      + '<div class="dunes-at-sheet-search"><i class="ti ti-search"></i>'
+      + '<input id="dunes-at-sheet-search-input" type="search" inputmode="search" autocomplete="off" placeholder="搜索姓名 / 部门 / 职位" aria-label="搜索群成员"></div></div>'
+      + '<div id="dunes-at-sheet-list" class="dunes-at-sheet-list"></div>'
+      + '<div class="dunes-at-sheet-footer"><button type="button" id="dunes-at-sheet-confirm" class="dunes-at-sheet-confirm" disabled>完成</button></div></div>';
+    var host = document.querySelector('.screen[data-screen="C2"] .phone-screen') || document.body;
+    host.appendChild(root);
+    if (!atMentionSheetWired) {
+      atMentionSheetWired = true;
+      root.addEventListener('click', function (e) {
+        if (e.target.closest('[data-at-sheet-close]')) { closeAtMentionSheet(); return; }
+        if (e.target.closest('#dunes-at-sheet-confirm')) {
+          e.preventDefault();
+          confirmAtMentionSelection();
+          return;
+        }
+        var item = e.target.closest('.dunes-at-sheet-item');
+        if (!item) return;
         e.preventDefault();
-        hideAtPicker('C2');
-        var inp = document.getElementById('c2-input');
-        if (inp) inp.focus();
-        return;
+        var name = item.getAttribute('data-at-name') || '';
+        if (!name) return;
+        toggleAtMentionSelection(name, item.getAttribute('data-at-all') === '1');
+      });
+      var searchInp = root.querySelector('#dunes-at-sheet-search-input');
+      if (searchInp) {
+        searchInp.addEventListener('input', function () {
+          atMentionSheetFilter = searchInp.value || '';
+          syncAtMentionSheetList(atMentionSheetFilter);
+          var inp = document.getElementById('c2-input');
+          if (!inp) return;
+          var v = inp.value || '';
+          var partial = v.match(/^(.*)@[^@\s]*$/);
+          if (partial) setGroupInputValue(inp, partial[1] + '@' + atMentionSheetFilter);
+        });
       }
-      var row = e.target.closest('.dunes-at-row');
-      if (!row) return;
-      e.preventDefault();
-      var inp = document.getElementById('c2-input');
-      var name = row.getAttribute('data-at-name') || '';
-      if (inp) {
-        var v = inp.value || '';
-        var partial = v.match(/^(.*)@[^@\s]*$/);
-        if (partial) inp.value = partial[1] + '@' + name + ' ';
-        else inp.value = v + (v && !/\s$/.test(v) ? ' ' : '') + '@' + name + ' ';
-        inp.focus();
-        renderAtPickerContent('C2', '');
+      document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') closeAtMentionSheet();
+      });
+    }
+    return root;
+  }
+  function insertAtMentions(names) {
+    var inp = ensureGroupRichInput();
+    if (!inp || !names || !names.length) return;
+    var v = inp.value || '';
+    var partial = v.match(/^(.*)@[^@\s]*$/);
+    var prefix = partial ? partial[1] : (v + (v && !/\s$/.test(v) ? ' ' : ''));
+    var tail = names.map(function (n) { return '@' + n; }).join(' ') + ' ';
+    setGroupInputValue(inp, prefix + tail);
+    inp.focus();
+    try {
+      var len = inp.value.length;
+      inp.setSelectionRange(len, len);
+    } catch (e) {}
+  }
+  function confirmAtMentionSelection() {
+    var names = Object.keys(atMentionSelected).filter(function (k) { return atMentionSelected[k]; });
+    if (!names.length) return;
+    if (names.indexOf(AT_ALL_LABEL) >= 0) names = [AT_ALL_LABEL];
+    insertAtMentions(names);
+    closeAtMentionSheet();
+  }
+  function insertAtMention(name) {
+    insertAtMentions([name]);
+  }
+  function openAtMemberPicker(screenId, filter, focusSearch) {
+    if (screenId !== 'C2') return;
+    if (!groupMembers().length) return;
+    var root = ensureAtMentionSheet();
+    if (!root) return;
+    atMentionSheetFilter = String(filter || '');
+    syncAtMentionSheetList(atMentionSheetFilter);
+    root.classList.add('show');
+    if (focusSearch) {
+      var searchInp = document.getElementById('dunes-at-sheet-search-input');
+      if (searchInp) {
+        searchInp.value = atMentionSheetFilter;
+        setTimeout(function () { try { searchInp.focus(); } catch (e) {} }, 80);
       }
-    });
-    bindAtPickerDismiss();
+    }
   }
   function parseMentionUserIds(text) {
-    var members = window.__dunesGroupMembers || [];
+    var members = ((window.__dunesGroupDetail && window.__dunesGroupDetail.members) || []).concat(groupMembers());
     var ids = [];
     var seen = {};
+    if (text.indexOf('@' + AT_ALL_LABEL) >= 0) {
+      members.forEach(function (m) {
+        var uid = Number(m.userId);
+        if (uid && uid !== devUserId() && !seen[uid]) { seen[uid] = true; ids.push(uid); }
+      });
+      return ids;
+    }
     members.forEach(function (m) {
       var name = m.displayName || '';
       if (!name || text.indexOf('@' + name) < 0) return;
@@ -2067,23 +3143,101 @@ window.DunesImChat = (function () {
     });
     return ids;
   }
-  function openAtMemberPicker(screenId, filter) {
-    if (screenId !== 'C2') return;
-    if (!groupMembers().length) return;
-    bindAtPickerOnce(screenId);
-    renderAtPickerContent(screenId, filter);
+  function ensureGroupReadSheet() {
+    injectAtMentionSheetStyles();
+    var root = document.getElementById('dunes-read-sheet-root');
+    if (root) return root;
+    root = document.createElement('div');
+    root.id = 'dunes-read-sheet-root';
+    root.className = 'dunes-read-sheet-root';
+    root.innerHTML = ''
+      + '<div class="dunes-read-sheet-backdrop" data-read-sheet-close></div>'
+      + '<div class="dunes-read-sheet" role="dialog" aria-label="消息已读详情">'
+      + '<div class="dunes-at-sheet-handle"></div>'
+      + '<div class="dunes-read-sheet-title" id="dunes-read-sheet-title">已读详情</div>'
+      + '<div class="dunes-read-sheet-body" id="dunes-read-sheet-body"></div></div>';
+    var host = document.querySelector('.screen[data-screen="C2"] .phone-screen') || document.body;
+    host.appendChild(root);
+    root.addEventListener('click', function (e) {
+      if (e.target.closest('[data-read-sheet-close]')) root.classList.remove('show');
+    });
+    return root;
+  }
+  function openGroupReadSheet(msgId) {
+    var id = Number(msgId);
+    if (!id) return;
+    var root = ensureGroupReadSheet();
+    var body = document.getElementById('dunes-read-sheet-body');
+    var title = document.getElementById('dunes-read-sheet-title');
+    if (!body || !root) return;
+    var reads = window.__dunesGroupMemberReads || {};
+    var readRows = [];
+    var unreadRows = [];
+    groupReadPeers().forEach(function (m) {
+      var uid = Number(m.userId);
+      var row = { name: m.displayName || ('用户' + uid), sub: memberDeptTitle(m), uid: uid };
+      if (Number(reads[String(uid)] || 0) >= id) readRows.push(row);
+      else unreadRows.push(row);
+    });
+    if (title) title.textContent = readRows.length + '人已读 · ' + unreadRows.length + '人未读';
+    function rowHtml(r) {
+      return '<div class="dunes-read-sheet-row"><div class="dunes-at-sheet-item-av ' + personCls(r.uid) + '">' + esc((r.name || '?').slice(0, 1)) + '</div>'
+        + '<div><div class="nm">' + esc(r.name) + '</div>' + (r.sub ? '<div class="sub">' + esc(r.sub) + '</div>' : '') + '</div></div>';
+    }
+    body.innerHTML = ''
+      + '<div class="dunes-read-sheet-sec">已读（' + readRows.length + '）</div>'
+      + (readRows.length ? readRows.map(rowHtml).join('') : '<div class="dunes-read-sheet-row"><div class="sub">暂无</div></div>')
+      + '<div class="dunes-read-sheet-sec">未读（' + unreadRows.length + '）</div>'
+      + (unreadRows.length ? unreadRows.map(rowHtml).join('') : '<div class="dunes-read-sheet-row"><div class="sub">全部已读</div></div>');
+    root.classList.add('show');
+    var convId = currentPendingConvId();
+    if (convId) {
+      apiFetch('/conversations/' + convId + '/messages/' + id + '/read-receipts').then(function (j) {
+        if (!j.success || !j.data || !body.isConnected) return;
+        var items = j.data.readers || j.data.items || j.data.members || [];
+        if (!items.length) return;
+        items.forEach(function (it) {
+          if (it.userId != null && it.lastReadMessageId != null) recordGroupMemberRead(it.userId, it.lastReadMessageId);
+        });
+        var reads2 = window.__dunesGroupMemberReads || {};
+        var readRows2 = [];
+        var unreadRows2 = [];
+        groupReadPeers().forEach(function (m) {
+          var uid2 = Number(m.userId);
+          var row2 = { name: m.displayName || ('用户' + uid2), sub: memberDeptTitle(m), uid: uid2 };
+          if (Number(reads2[String(uid2)] || 0) >= id) readRows2.push(row2);
+          else unreadRows2.push(row2);
+        });
+        if (title) title.textContent = readRows2.length + '人已读 · ' + unreadRows2.length + '人未读';
+        body.innerHTML = ''
+          + '<div class="dunes-read-sheet-sec">已读（' + readRows2.length + '）</div>'
+          + (readRows2.length ? readRows2.map(rowHtml).join('') : '<div class="dunes-read-sheet-row"><div class="sub">暂无</div></div>')
+          + '<div class="dunes-read-sheet-sec">未读（' + unreadRows2.length + '）</div>'
+          + (unreadRows2.length ? unreadRows2.map(rowHtml).join('') : '<div class="dunes-read-sheet-row"><div class="sub">全部已读</div></div>');
+      }).catch(function () {});
+    }
+  }
+  function wireGroupReadDetail(box) {
+    if (!box || box.dataset.groupReadWired) return;
+    box.dataset.groupReadWired = '1';
+    box.addEventListener('click', function (e) {
+      var el = e.target.closest('.group-read');
+      if (!el) return;
+      e.preventDefault();
+      openGroupReadSheet(el.getAttribute('data-msg-id'));
+    });
   }
   function wireGroupAtMention(screenId) {
     if (screenId !== 'C2') return;
-    var input = document.getElementById('c2-input');
+    var input = ensureGroupRichInput();
     if (!input || input.dataset.atWired) return;
     input.dataset.atWired = '1';
-    bindAtPickerOnce(screenId);
     input.addEventListener('input', function () {
+      syncGroupInputMirror(input);
       var v = input.value || '';
       var m = v.match(/@([^@\s]*)$/);
-      if (m) renderAtPickerContent('C2', m[1]);
-      else hideAtPicker('C2');
+      if (m) openAtMemberPicker('C2', m[1], false);
+      else closeAtMentionSheet();
     });
   }
   function pickFileInput(prefix) {
@@ -2136,7 +3290,35 @@ window.DunesImChat = (function () {
       alert('请先进入一个会话再发送');
       return false;
     }
-    async function uploadViaPresigned(bucket, file) {
+    function xhrRequest(method, url, headers, body, onUploadProgress) {
+      return new Promise(function (resolve, reject) {
+        var xhr = new XMLHttpRequest();
+        xhr.open(method, url);
+        Object.keys(headers || {}).forEach(function (k) {
+          if (headers[k] != null) xhr.setRequestHeader(k, headers[k]);
+        });
+        if (onUploadProgress && xhr.upload) {
+          xhr.upload.onprogress = function (e) {
+            if (e.lengthComputable) onUploadProgress(Math.round((e.loaded / e.total) * 100));
+          };
+        }
+        xhr.onload = function () {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            var ct = xhr.getResponseHeader('Content-Type') || '';
+            if (ct.indexOf('json') >= 0 || (xhr.responseText && xhr.responseText.charAt(0) === '{')) {
+              try { resolve(JSON.parse(xhr.responseText)); return; } catch (e) {}
+            }
+            resolve(xhr.responseText);
+            return;
+          }
+          reject(new Error('HTTP ' + xhr.status));
+        };
+        xhr.onerror = function () { reject(new Error('network error')); };
+        xhr.send(body);
+      });
+    }
+    async function uploadViaPresigned(bucket, file, onProgress) {
+      onProgress = onProgress || function () {};
       bucket = bucket || 'im-attachments';
       var base = localStorage.getItem('dunes_api_base') || '__DUNES_API_BASE__';
       var token = localStorage.getItem('dunes_token') || localStorage.getItem('dunes_jwt') || '';
@@ -2146,39 +3328,58 @@ window.DunesImChat = (function () {
       form.append('bucket', bucket);
       var convId = currentPendingConvId();
       if (convId) form.append('conversationId', String(convId));
-      var proxy = await fetch(base + '/storage/upload', {
-        method: 'POST',
-        headers: authHeaders,
-        body: form
-      }).then(function (r) { return r.json(); });
+      var proxy = await xhrRequest('POST', base + '/storage/upload', authHeaders, form, function (p) {
+        onProgress(Math.min(92, p));
+      });
       if (proxy && proxy.success && proxy.data) {
         var url = proxy.data.url || '';
         var key = proxy.data.objectKey || url;
-        if (url || key) return { url: url || key, objectKey: url || key };
+        if (url || key) {
+          onProgress(95);
+          return { url: url || key, objectKey: key || url };
+        }
       }
       if (bucket === 'im-attachments') {
         throw new Error((proxy && proxy.message) || 'upload failed');
       }
       var contentType = file.type || 'application/octet-stream';
       var headers = Object.assign({ 'Content-Type': 'application/json' }, authHeaders);
-      var pr = await fetch(base + '/storage/presigned-put', {
-        method: 'POST',
-        headers: headers,
-        body: JSON.stringify({
-          bucket: bucket,
-          fileName: file.name || ('upload-' + Date.now()),
-          contentType: contentType
-        })
-      }).then(function (r) { return r.json(); });
+      var pr = await xhrRequest('POST', base + '/storage/presigned-put', headers, JSON.stringify({
+        bucket: bucket,
+        fileName: file.name || ('upload-' + Date.now()),
+        contentType: contentType
+      }));
       if (!pr.success || !pr.data || !pr.data.url || !pr.data.objectKey) {
         throw new Error((proxy && proxy.message) || (pr && pr.message) || 'presigned failed');
       }
-      var put = await fetch(pr.data.url, {
-        method: 'PUT',
-        body: file
+      await xhrRequest('PUT', pr.data.url, { 'Content-Type': contentType }, file, function (p) {
+        onProgress(Math.min(95, 50 + Math.round(p / 2)));
       });
-      if (!put.ok) throw new Error('upload failed ' + put.status);
+      onProgress(95);
       return { objectKey: pr.data.objectKey, url: '' };
+    }
+    async function uploadAndSendAttachment(kind, file, label, buildPayload) {
+      if (!ensureConvReady()) return;
+      var convId = currentPendingConvId();
+      var box = msgBoxForScreen(screenId);
+      var pendingNode = null;
+      if (box && boxMatchesConv(box, convId)) {
+        pendingNode = createPendingUploadNode(kind, file, label);
+        appendMessageTail(box, pendingNode, { id: 'pending-upload-' + Date.now() });
+        scrollChatToBottom(screenId);
+      }
+      try {
+        var up = await uploadViaPresigned('im-attachments', file, function (p) {
+          updatePendingUploadProgress(pendingNode, p);
+        });
+        updatePendingUploadProgress(pendingNode, 96, '发送中…');
+        var fileUrl = up.url || up.objectKey;
+        await sendAttachment(kind, label, buildPayload(fileUrl, file), { pendingNode: pendingNode });
+      } catch (e) {
+        cleanupPendingUploadNode(pendingNode);
+        if (pendingNode && pendingNode.parentNode) removePendingMessageNode(pendingNode);
+        alert('上传失败：' + (e.message || e));
+      }
     }
     function sendAttachment(kind, label, payload, opts) {
       opts = opts || {};
@@ -2191,11 +3392,17 @@ window.DunesImChat = (function () {
         body: JSON.stringify({ kind: kind, bodyText: label, payload: payload || null })
       }).then(function (j) {
         if (!j.success) throw new Error(j.message || '发送失败');
-        if (opts.pendingNode && opts.pendingNode.parentNode) opts.pendingNode.parentNode.removeChild(opts.pendingNode);
+        updatePendingUploadProgress(opts.pendingNode, 100, '已发送');
+        if (opts.pendingNode && opts.pendingNode.parentNode) removePendingMessageNode(opts.pendingNode);
         if (wasHistoryView) return jumpToLatestMessages(screenId);
         var msg = j.data && (j.data.message || j.data);
         if (!boxMatchesConv(msgBoxForScreen(screenId), convId)) return loadChat(screenId);
         if (msg && msg.id) {
+          if (payload && payload.objectKey && !msg.payload) msg.payload = payload;
+          if (msg.payload && payload) {
+            if (!msg.payload.objectKey && payload.objectKey) msg.payload.objectKey = payload.objectKey;
+            if (!msg.payload.fileName && payload.fileName) msg.payload.fileName = payload.fileName;
+          }
           markRtEventSeen({ type: 'message', conversationId: convId, message: msg });
           ensureMessageSender(msg);
           appendRealtimeMessage(msg, screenId, convId);
@@ -2203,50 +3410,53 @@ window.DunesImChat = (function () {
         }
         return loadChat(screenId);
       }).catch(function (e) {
-        if (opts.pendingNode && opts.pendingNode.parentNode) opts.pendingNode.parentNode.removeChild(opts.pendingNode);
+        cleanupPendingUploadNode(opts.pendingNode);
+        if (opts.pendingNode && opts.pendingNode.parentNode) removePendingMessageNode(opts.pendingNode);
         alert('发送失败：' + (e.message || e));
       });
     }
     camInput.addEventListener('change', function () {
       var f = camInput.files && camInput.files[0];
       if (f) {
-        uploadViaPresigned('im-attachments', f).then(function (up) {
-          var fileUrl = up.url || up.objectKey;
-          sendAttachment('IMAGE', '[拍照] ' + f.name, {
+        uploadAndSendAttachment('IMAGE', f, '[拍照] ' + f.name, function (fileUrl, file) {
+          return {
             url: fileUrl,
+            objectKey: isPublicMediaUrl(fileUrl) ? '' : fileUrl,
             previewUrl: fileUrl,
+            fileName: f.name,
             mimeType: f.type || 'image/*'
-          });
-        }).catch(function (e) { alert('上传失败：' + (e.message || e)); });
+          };
+        });
       }
       camInput.value = '';
     });
     albumInput.addEventListener('change', function () {
       var f = albumInput.files && albumInput.files[0];
       if (f) {
-        uploadViaPresigned('im-attachments', f).then(function (up) {
-          var fileUrl = up.url || up.objectKey;
-          sendAttachment('IMAGE', '[相册] ' + f.name, {
+        uploadAndSendAttachment('IMAGE', f, '[相册] ' + f.name, function (fileUrl, file) {
+          return {
             url: fileUrl,
+            objectKey: isPublicMediaUrl(fileUrl) ? '' : fileUrl,
             previewUrl: fileUrl,
+            fileName: f.name,
             mimeType: f.type || 'image/*'
-          });
-        }).catch(function (e) { alert('上传失败：' + (e.message || e)); });
+          };
+        });
       }
       albumInput.value = '';
     });
     fileInput.addEventListener('change', function () {
       var f = fileInput.files && fileInput.files[0];
       if (f) {
-        uploadViaPresigned('im-attachments', f).then(function (up) {
-          var fileUrl = up.url || up.objectKey;
-          sendAttachment('FILE', f.name, {
+        uploadAndSendAttachment('FILE', f, f.name, function (fileUrl, file) {
+          return {
             url: fileUrl,
+            objectKey: isPublicMediaUrl(fileUrl) ? '' : fileUrl,
             mimeType: f.type || 'application/octet-stream',
             fileName: f.name,
             size: f.size || 0
-          });
-        }).catch(function (e) { alert('上传失败：' + (e.message || e)); });
+          };
+        });
       }
       fileInput.value = '';
     });
@@ -2277,14 +3487,14 @@ window.DunesImChat = (function () {
         else if (qa === 'file' || cell.id === prefix + '-attach-btn') openFilePicker();
         else if (qa === 'emoji') toggleEmojiPanel(screenId);
         else if (qa === 'at' && screenId === 'C2') {
-          var atInp = document.getElementById('c2-input');
+          var atInp = ensureGroupRichInput();
           if (atInp) {
             var cur = atInp.value || '';
             if (!/@([^@\s]*)$/.test(cur)) {
-              atInp.value = cur + (cur && !/\s$/.test(cur) ? ' ' : '') + '@';
+              setGroupInputValue(atInp, cur + (cur && !/\s$/.test(cur) ? ' ' : '') + '@');
             }
             atInp.focus();
-            openAtMemberPicker('C2', '');
+            openAtMemberPicker('C2', '', true);
           }
         } else if (qa === 'at' && screenId !== 'C5') {
           var peer = window.__dunesChatPeer;
@@ -2401,6 +3611,12 @@ window.DunesImChat = (function () {
           pendingNode = renderMsg(pendingMsg, window.__dunesChatPeer, window.__dunesPeerLastRead);
           if (pendingNode) {
             pendingNode.classList.add('dunes-voice-pending');
+            var voiceContent = pendingNode.querySelector('.msg-content');
+            if (voiceContent) {
+              voiceContent.insertAdjacentHTML('beforeend',
+                '<div class="dunes-upload-progress"><div class="dunes-upload-progress-bar"></div></div>'
+                + '<div class="dunes-upload-label">上传中 0%</div>');
+            }
             appendMessageTail(box, pendingNode, pendingMsg);
             wireAttachmentInteractions(box);
             scrollChatToBottom(screenId);
@@ -2416,17 +3632,21 @@ window.DunesImChat = (function () {
           voiceFile.name = fileName;
         }
         try {
-          var up = await uploadViaPresigned('im-attachments', voiceFile);
+          var up = await uploadViaPresigned('im-attachments', voiceFile, function (p) {
+            updatePendingUploadProgress(pendingNode, p);
+          });
+          updatePendingUploadProgress(pendingNode, 96, '发送中…');
           var fileUrl = up.url || up.objectKey;
           await sendAttachment('AUDIO', '[语音] ' + sec + 's', {
             url: fileUrl,
+            objectKey: isPublicMediaUrl(fileUrl) ? '' : fileUrl,
             mimeType: recMime,
             durationSec: sec,
             fileName: fileName,
             size: blob.size
           }, { skipPendingRemove: false, pendingNode: pendingNode });
         } catch (err) {
-          if (pendingNode && pendingNode.parentNode) pendingNode.parentNode.removeChild(pendingNode);
+          if (pendingNode && pendingNode.parentNode) removePendingMessageNode(pendingNode);
           throw err;
         }
       }
@@ -2641,8 +3861,14 @@ window.DunesImChat = (function () {
     var convChanged = prevConvId > 0 && prevConvId !== Number(convId);
     if (convChanged) clearChatLocateState();
     var box = document.getElementById(screenId === 'C2' ? 'c2-api-rows' : 'c5-api-rows');
-    var forceReset = convChanged || !box || msgBoxLoadedConvId(box) !== Number(convId)
-      || !!(locateFromHistory && focusId);
+    var forceReset = convChanged || !box || msgBoxLoadedConvId(box) !== Number(convId);
+    if (locating && !convChanged && box && msgBoxLoadedConvId(box) === Number(convId)) {
+      var hintMsg = (window.__dunesLocateHintMsg && Number(window.__dunesLocateHintMsg.id) === centerId)
+        ? window.__dunesLocateHintMsg : null;
+      window.__dunesLocateFromHistory = false;
+      window.__dunesFocusMessageId = null;
+      return locateMessageInChat(screenId, centerId, hintMsg);
+    }
     if (forceReset) {
       box = resetMsgStream(screenId);
       if (!box) return;
@@ -2687,11 +3913,31 @@ window.DunesImChat = (function () {
           applyPrivateHeader(peer, info.data.title);
         } else {
           window.__dunesChatPeer = null;
-          window.__dunesGroupMembers = (info.data.members || []).filter(function (m) {
-            return Number(m.userId) !== devUserId();
-          });
-          window.__dunesGroupDetail = info.data;
-          applyGroupHeader(info.data);
+          try {
+            var gi = await apiFetch('/conversations/' + convId + '/info');
+            if (gi.success && gi.data) {
+              window.__dunesGroupDetail = gi.data;
+              window.__dunesGroupMembers = (gi.data.members || []).filter(function (m) {
+                return Number(m.userId) !== devUserId();
+              });
+              applyGroupHeader(gi.data);
+              applyGroupChatLocked(isGroupDissolved(gi.data));
+            } else {
+              window.__dunesGroupMembers = (info.data.members || []).filter(function (m) {
+                return Number(m.userId) !== devUserId();
+              });
+              window.__dunesGroupDetail = info.data;
+              applyGroupHeader(info.data);
+              applyGroupChatLocked(isGroupDissolved(info.data));
+            }
+          } catch (e2) {
+            window.__dunesGroupMembers = (info.data.members || []).filter(function (m) {
+              return Number(m.userId) !== devUserId();
+            });
+            window.__dunesGroupDetail = info.data;
+            applyGroupHeader(info.data);
+            applyGroupChatLocked(isGroupDissolved(info.data));
+          }
         }
         if (typeof rememberUserProfile === 'function') {
           if (peer) rememberUserProfile(peer);
@@ -2703,19 +3949,45 @@ window.DunesImChat = (function () {
       }
       var msgPath = '/conversations/' + convId + '/messages?size=' + (locating ? 40 : 20);
       if (locating) msgPath += '&around=' + centerId;
-      var mj = await apiFetch(msgPath);
-      if (gen !== imLoadGen || window.__dunesActiveConvId !== convId) return;
-      if (mj.success && mj.data && mj.data.peerLastReadMessageId != null) {
-        window.__dunesPeerLastRead = Number(mj.data.peerLastReadMessageId);
+      var items = [];
+      var msgHasMore = false;
+      var msgHasNewer = false;
+      if (locating) {
+        var hint = (window.__dunesLocateHintMsg && Number(window.__dunesLocateHintMsg.id) === centerId)
+          ? window.__dunesLocateHintMsg : null;
+        window.__dunesLocateHintMsg = null;
+        var pack = await fetchMessagesAround(convId, centerId, hint);
+        if (gen !== imLoadGen || window.__dunesActiveConvId !== convId) return;
+        items = pack.items || [];
+        msgHasMore = !!pack.hasMore;
+        msgHasNewer = !!pack.hasNewer;
+        if (pack.peerLastReadMessageId != null) {
+          window.__dunesPeerLastRead = Number(pack.peerLastReadMessageId);
+        }
+        if (!items.some(function (m) { return Number(m.id) === centerId; })) {
+          msgHasMore = true;
+          msgHasNewer = true;
+        }
+      } else {
+        var mj = await apiFetch(msgPath);
+        if (gen !== imLoadGen || window.__dunesActiveConvId !== convId) return;
+        if (mj.success && mj.data && mj.data.peerLastReadMessageId != null) {
+          window.__dunesPeerLastRead = Number(mj.data.peerLastReadMessageId);
+        }
+        items = mj.success && mj.data ? (mj.data.items || []) : [];
+        msgHasMore = !!(mj.success && mj.data && mj.data.hasMore);
+        msgHasNewer = !!(mj.success && mj.data && mj.data.hasNewer);
       }
-      var items = mj.success && mj.data ? (mj.data.items || []) : [];
       items.forEach(function (m) { normalizeMsg(m); });
       items = sortChatItems(items);
       var shouldFocusLocate = locating;
-      window.__dunesMsgHasMore = !!(mj.success && mj.data && mj.data.hasMore);
+      window.__dunesMsgHasMore = msgHasMore;
       window.__dunesMsgOldestId = items.length ? items[0].id : 0;
       window.__dunesMsgNewestId = items.length ? items[items.length - 1].id : 0;
-      window.__dunesMsgHasNewer = !!(mj.success && mj.data && mj.data.hasNewer);
+      window.__dunesMsgHasNewer = msgHasNewer;
+      if (!locating && items.length && !msgHasMore) {
+        window.__dunesMsgHasMore = await probeHasOlderMessages(convId, items[0].id);
+      }
       if (!items.length) {
         if (!box.querySelector('[data-message-id]')) {
           box.innerHTML = '<div class="msg-system"><span class="pill">暂无消息</span></div>';
@@ -2726,6 +3998,7 @@ window.DunesImChat = (function () {
       } else {
         paintMessages(box, items, peer, false);
         wireRecall(box, screenId);
+        wireGroupReadDetail(box);
         hydrateMsgAvatars(box);
         ensureLoadMoreHint(box, screenId);
         ensureLoadNewerHint(box, screenId);
@@ -2737,16 +4010,25 @@ window.DunesImChat = (function () {
           window.__dunesMsgAnchorId = centerId;
           window.__dunesLocateFromHistory = false;
           window.__dunesFocusMessageId = null;
+          window.__dunesStickBottom = false;
           focusMessageInChat(centerId);
           ensureJumpToLatestBar(screenId);
+          setTimeout(function () { ensureJumpToLatestBar(screenId); }, 120);
         } else {
           window.__dunesMsgAnchorId = null;
           var jumpBar = document.getElementById('dunes-jump-latest');
           if (jumpBar) jumpBar.remove();
+          window.__dunesStickBottom = true;
+          window.__dunesBottomAnchorId = window.__dunesMsgNewestId || 0;
+          hideNewMsgsFloat();
           scrollChatToBottom(screenId);
         }
       }
       await afterReadInChat(convId);
+      if (screenId === 'C2') {
+        await refreshGroupReadMap(convId);
+        pullNewerGroupMessages(screenId, convId);
+      }
       setTimeout(function () { syncConvPresence(); applyOnlinePresence(); }, 300);
       if (window.__dunesChatPresenceTimer) clearInterval(window.__dunesChatPresenceTimer);
       window.__dunesChatPresenceTimer = setInterval(function () {
@@ -2756,6 +4038,10 @@ window.DunesImChat = (function () {
         }
         syncConvPresence();
         refreshPeerReadFromServer(convId);
+        if (document.querySelector('.screen.active').dataset.screen === 'C2') {
+          refreshGroupReadMap(convId);
+          pullNewerGroupMessages('C2', convId);
+        }
       }, 8000);
     } catch (e) {
       if (gen !== imLoadGen) return;
@@ -2766,15 +4052,23 @@ window.DunesImChat = (function () {
   }
   function wireInput(screenId) {
     stripLegacyImInputHandlers(screenId);
+    if (screenId === 'C2') ensureGroupRichInput();
     var input = document.getElementById(screenId === 'C2' ? 'c2-input' : 'c5-input');
     var btn = document.getElementById(screenId === 'C2' ? 'c2-send' : 'c5-send');
     if (!input || input.dataset.dunesImWired) return;
     input.dataset.dunesImWired = '1';
     async function send() {
+      if (screenId === 'C2' && isGroupDissolved()) {
+        alert('群已解散，无法发送消息');
+        return;
+      }
       var text = input.value.trim();
       var convId = currentPendingConvId();
       if (!text || !convId) return;
-      input.value = '';
+      if (screenId === 'C2') {
+        clearGroupInput(input);
+        closeAtMentionSheet();
+      } else input.value = '';
       var wasHistoryView = isHistoryLocatedChat();
       clearChatLocateState();
       try {
@@ -2832,7 +4126,10 @@ window.DunesImChat = (function () {
       ni.value = input.value;
       ni.removeAttribute('data-wired' + screenId);
       ni.removeAttribute('data-dunes-im-wired');
+      ni.removeAttribute('data-at-wired');
+      ni.removeAttribute('data-compose-scroll-wired');
       input.parentNode.replaceChild(ni, input);
+      if (screenId === 'C2') syncGroupInputMirror(ni);
     }
     if (btn && btn.parentNode) {
       var nb = btn.cloneNode(true);
@@ -2862,12 +4159,11 @@ window.DunesImChat = (function () {
     stripLegacyAttachHandlers('C5');
     wireInput('C2');
     wireInput('C5');
+    wireChatCallButtons();
     var origLoadContact = window.DunesApi.loadContactDetail;
     if (typeof origLoadContact === 'function') {
       window.DunesApi.loadContactDetail = function (uid) {
-        return Promise.resolve(origLoadContact(uid)).then(function () {
-          refreshC9Presence();
-        });
+        return Promise.resolve(origLoadContact(uid));
       };
     }
   }
@@ -2882,6 +4178,10 @@ window.DunesImChat = (function () {
   var _c12HasMore = false;
   var _c12OldestId = 0;
   var _c12LastQuery = '';
+  var _c12SearchInflight = null;
+  var _c12SearchInflightKey = '';
+  var _c12SearchLastAt = 0;
+  var _c12SearchLastKey = '';
   async function currentConvKind() {
     var convId = currentPendingConvId();
     if (!convId) return window.__dunesActiveConvKind || '';
@@ -2906,7 +4206,7 @@ window.DunesImChat = (function () {
     if (actionBack) actionBack.dataset.go = ret;
     var crumb = document.querySelector('.screen[data-screen="C12"] .ds-crumb');
     if (crumb) {
-      if (window.__dunesC12NovaMode) crumb.textContent = 'NOVA · 搜索';
+      if (window.__dunesC12NovaMode) crumb.textContent = '云枢 · 搜索';
       else {
         var d = window.__dunesGroupDetail || {};
         crumb.textContent = (d.title || '群聊') + ' · 搜索';
@@ -2925,10 +4225,25 @@ window.DunesImChat = (function () {
     var clr = document.getElementById('c12-search-clear');
     if (input && !input.dataset.dunesWired) {
       input.dataset.dunesWired = '1';
-      var run = function () { searchConvMessages(input.value.trim()); };
-      input.addEventListener('input', run);
-      input.addEventListener('keydown', function (e) { if (e.key === 'Enter') run(); });
-      if (clr) clr.addEventListener('click', function () { input.value = ''; run(); });
+      var debounceTimer = null;
+      var run = function (immediate) {
+        var q = input.value.trim();
+        if (debounceTimer) {
+          clearTimeout(debounceTimer);
+          debounceTimer = null;
+        }
+        if (immediate) {
+          searchConvMessages(q);
+          return;
+        }
+        debounceTimer = setTimeout(function () {
+          debounceTimer = null;
+          searchConvMessages(q);
+        }, 280);
+      };
+      input.addEventListener('input', function () { run(false); });
+      input.addEventListener('keydown', function (e) { if (e.key === 'Enter') run(true); });
+      if (clr) clr.addEventListener('click', function () { input.value = ''; run(true); });
     }
     wireC12Paging();
   }
@@ -2970,6 +4285,7 @@ window.DunesImChat = (function () {
     var prevAt = append ? lastC12CreatedAt(box) : null;
     var frag = document.createDocumentFragment();
     hits.forEach(function (m) {
+      if (append && m.id && box.querySelector('.noti-card[data-message-id="' + m.id + '"]')) return;
       var at = msgCreatedAt(m);
       var divLabel = dayDividerLabel(at, prevAt);
       if (divLabel) frag.appendChild(createDateDivider(divLabel));
@@ -2995,10 +4311,20 @@ window.DunesImChat = (function () {
       + '<div class="nc-body"><div class="nc-top"><div class="nc-title">' + esc(name) + '</div><div class="nc-time">' + esc(tm) + '</div></div>'
       + '<div class="nc-desc">' + esc(m.bodyText || '') + '<span style="font-family:var(--mono);font-size:9px;color:var(--accent);margin-left:5px">→ 点击定位</span></div></div>';
     card.addEventListener('click', function () {
-      window.__dunesLocateFromHistory = true;
-      window.__dunesFocusMessageId = Number(m.id || 0);
-      window.__dunesMsgAnchorId = Number(m.id || 0);
+      var mid = Number(m.id || 0);
+      var hint = m;
       var target = searchTargetScreen(kind);
+      var active = document.querySelector('.screen.active');
+      var alreadyOnChat = active && active.dataset.screen === target;
+      var convId = currentPendingConvId();
+      if (alreadyOnChat && convId && mid) {
+        void locateMessageInChat(target, mid, hint);
+        return;
+      }
+      window.__dunesLocateFromHistory = true;
+      window.__dunesFocusMessageId = mid;
+      window.__dunesMsgAnchorId = mid;
+      window.__dunesLocateHintMsg = hint;
       if (window.__dunesC12NovaMode) window.__dunesC12NovaMode = false;
       if (typeof go === 'function') go(target);
       else if (typeof setScreen === 'function') setScreen(target, false);
@@ -3041,34 +4367,53 @@ window.DunesImChat = (function () {
   async function searchConvMessages(q) {
     var box = document.getElementById('c12-api-rows');
     if (!box) return;
-    if (!currentPendingConvId()) {
+    var convId = Number(currentPendingConvId() || 0);
+    if (!convId) {
       box.innerHTML = '<div class="api-strip"><i class="ti ti-info-circle"></i><span>请先进入一个会话再查看历史</span></div>';
       return;
     }
+    var query = String(q || '');
+    var key = convId + '|' + query;
+    var now = Date.now();
+    // setScreen wrappers can invoke C12 onScreen twice in quick succession.
+    if (_c12SearchInflight && _c12SearchInflightKey === key) return _c12SearchInflight;
+    if (_c12SearchLastKey === key && now - _c12SearchLastAt < 500) return;
+    _c12SearchLastKey = key;
+    _c12SearchLastAt = now;
     var gen = ++_c12Gen;
     _c12Loading = true;
     _c12HasMore = false;
     _c12OldestId = 0;
-    _c12LastQuery = q || '';
+    _c12LastQuery = query;
     box.innerHTML = '<div class="api-strip"><i class="ti ti-loader"></i><span>查询聊天记录…</span></div>';
-    try {
-      var result = await fetchC12Messages(q || '', 0);
-      if (gen !== _c12Gen) return;
-      var hits = result.hits;
-      if (!hits.length) {
-        box.innerHTML = '<div class="api-strip"><i class="ti ti-info-circle"></i><span>' + (q ? '无匹配聊天记录' : '暂无聊天记录') + '</span></div>';
-        return;
+    var pending = (async function () {
+      try {
+        var result = await fetchC12Messages(query, 0);
+        if (gen !== _c12Gen) return;
+        var hits = result.hits;
+        if (!hits.length) {
+          box.innerHTML = '<div class="api-strip"><i class="ti ti-info-circle"></i><span>' + (query ? '无匹配聊天记录' : '暂无聊天记录') + '</span></div>';
+          return;
+        }
+        box.innerHTML = '';
+        paintC12Hits(box, hits, result.kind, false);
+        _c12OldestId = hits[hits.length - 1].id || 0;
+        _c12HasMore = !!result.hasMore;
+      } catch (e) {
+        box.innerHTML = '<div class="api-strip"><span>搜索失败：' + esc(e.message || e) + '</span></div>';
+        console.warn('searchConvMessages', e);
+      } finally {
+        if (gen === _c12Gen) _c12Loading = false;
       }
-      box.innerHTML = '';
-      paintC12Hits(box, hits, result.kind, false);
-      _c12OldestId = hits[hits.length - 1].id || 0;
-      _c12HasMore = !!result.hasMore;
-    } catch (e) {
-      box.innerHTML = '<div class="api-strip"><span>搜索失败：' + esc(e.message || e) + '</span></div>';
-      console.warn('searchConvMessages', e);
-    } finally {
-      if (gen === _c12Gen) _c12Loading = false;
-    }
+    })();
+    _c12SearchInflight = pending;
+    _c12SearchInflightKey = key;
+    return pending.finally(function () {
+      if (_c12SearchInflight === pending) {
+        _c12SearchInflight = null;
+        _c12SearchInflightKey = '';
+      }
+    });
   }
   async function loadMoreC12Messages() {
     var box = document.getElementById('c12-api-rows');
@@ -3106,6 +4451,12 @@ window.DunesImChat = (function () {
     if (convId && window.DunesInbox && window.DunesInbox.patchConvUnread) {
       window.DunesInbox.patchConvUnread(convId, 0);
     }
+    window.__dunesActiveConvId = null;
+    window.pendingConvId = 0;
+    try { pendingConvId = 0; } catch (e) {}
+    if (window.DunesInbox && typeof window.DunesInbox.refreshNovaInboxPreview === 'function') {
+      window.DunesInbox.refreshNovaInboxPreview();
+    }
   }
   function chatAlreadyLoaded(screenId) {
     if (screenId !== 'C5' && screenId !== 'C2') return false;
@@ -3119,21 +4470,52 @@ window.DunesImChat = (function () {
     return !!(active && active.dataset.screen === screenId
       && !window.__dunesLocateFromHistory && !window.__dunesMsgAnchorId);
   }
+  var _onScreenQueued = null;
+  var _onScreenTick = null;
   function onScreen(id) {
+    _onScreenQueued = id;
+    if (_onScreenTick) return;
+    _onScreenTick = Promise.resolve().then(function () {
+      var sid = _onScreenQueued;
+      _onScreenQueued = null;
+      _onScreenTick = null;
+      onScreenNow(sid);
+    });
+  }
+  function onScreenNow(id) {
     if (id === 'C12') {
       window.__dunesWasOnC12 = true;
       currentConvKind().then(function () {
         wireC12Search();
-        searchConvMessages('');
+        var input = document.getElementById('c12-search-input');
+        var q = input ? input.value.trim() : '';
+        searchConvMessages(q);
       });
     }
     if (id === 'C5' || id === 'C2') {
-      if (window.__dunesWasOnC12 && !window.__dunesLocateFromHistory && !window.__dunesMsgAnchorId) {
+      var locating = !!(window.__dunesLocateFromHistory && Number(window.__dunesFocusMessageId || 0));
+      var locateId = Number(window.__dunesFocusMessageId || window.__dunesMsgAnchorId || 0);
+      var hint = window.__dunesLocateHintMsg || null;
+      if (window.__dunesWasOnC12 && !locating && !window.__dunesMsgAnchorId) {
         clearHistoryLocateState();
       }
       window.__dunesWasOnC12 = false;
       var targetConv = currentPendingConvId();
       var box = msgBoxForScreen(id);
+      if (locating && locateId && targetConv && box && msgBoxLoadedConvId(box) === targetConv
+          && Number(window.__dunesActiveConvId || 0) === targetConv) {
+        window.__dunesLocateFromHistory = false;
+        window.__dunesFocusMessageId = null;
+        void locateMessageInChat(id, locateId, hint);
+        resubscribeImRealtime();
+        wireInput(id);
+        return;
+      }
+      if (targetConv && window.__dunesForceChatReload) {
+        window.__dunesForceChatReload = false;
+        loadChat(id);
+        return;
+      }
       if (targetConv && (Number(window.__dunesActiveConvId || 0) !== targetConv
           || msgBoxLoadedConvId(box) !== targetConv)) {
         loadChat(id);
@@ -3168,7 +4550,10 @@ window.DunesImChat = (function () {
       var cid = Number(convId || 0);
       var pid = Number(peerUserId || 0);
       if (pid > 0) setPendingPeerUserId(pid);
-      if (cid > 0) setPendingConvId(cid);
+      if (cid > 0) {
+        setPendingConvId(cid);
+        window.__dunesForceChatReload = true;
+      }
       else if (pid > 0 && currentPendingConvId()) {
         window.__dunesActiveConvId = null;
         clearChatLocateState();
@@ -3194,13 +4579,15 @@ window.DunesImChat = (function () {
   return {
     onScreen: onScreen,
     loadChat: loadChat,
+    locateMessageInChat: locateMessageInChat,
     reloadActiveChat: function (screenId) { return loadChat(screenId || 'C2'); },
     wireC12Search: wireC12Search,
     searchConvMessages: searchConvMessages,
     leaveChat: leaveChat,
     connectImRealtime: connectImRealtime,
     markConversationRead: markConversationRead,
-    refreshAllPresenceUi: refreshAllPresenceUi
+    refreshAllPresenceUi: refreshAllPresenceUi,
+    ensureImageViewer: ensureImageViewer
   };
 })();
 ''';

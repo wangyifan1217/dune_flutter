@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>沙丘 · 统一审批系统 · 交互原型</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.28.1/dist/tabler-icons.min.css">
+<link rel="stylesheet" href="xflow_fields.css">
 <script><!-- dunes-centrifuge --></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -2422,7 +2423,8 @@ body{
 .tab-bar .tab{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;color:var(--text-3);font-size:9.5px;letter-spacing:-.005em;cursor:pointer;position:relative;padding:1px 0}
 .tab-bar .tab.active{color:var(--accent)}
 .tab-bar .tab .tab-ic{width:20px;height:20px}
-.tab-bar .tab .red-dot{position:absolute;top:-1px;right:12px;width:6px;height:6px;background:var(--coral);border-radius:50%;border:1.5px solid var(--bg-app)}
+.tab-bar .tab .red-dot{display:none;position:absolute;top:-1px;right:12px;width:6px;height:6px;background:var(--coral);border-radius:50%;border:1.5px solid var(--bg-app)}
+.tab-bar .tab .red-dot.show{display:inline-block}
 
 /* action bar */
 .action-bar{flex-shrink:0;display:flex;align-items:center;gap:8px;padding:10px 14px 22px;border-top:1px solid var(--border-soft);background:var(--bg-app);position:relative}
@@ -2509,7 +2511,7 @@ body{
 .noti-card .nc-top{display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-bottom:3px}
 .noti-card .nc-title{font-size:12.5px;font-weight:500;color:var(--text);letter-spacing:-.005em;line-height:1.35;flex:1}
 .noti-card .nc-time{font-family:var(--mono);font-size:9px;color:var(--text-3);letter-spacing:.02em;white-space:nowrap}
-.noti-card .nc-desc{font-family:var(--mono);font-size:10px;color:var(--text-3);letter-spacing:.02em;line-height:1.45}
+.noti-card .nc-desc{font-family:var(--mono);font-size:10px;color:var(--text-3);letter-spacing:.02em;line-height:1.45;white-space:pre-wrap;word-break:break-word}
 .noti-card .nc-tag{display:inline-block;font-family:var(--mono);font-size:8.5px;font-weight:500;padding:1px 5px;border-radius:3px;letter-spacing:.04em;margin-right:4px;margin-top:3px}
 .noti-card .nc-tag.biz{background:var(--accent-soft);color:var(--accent-deep)}
 .noti-card .nc-tag.adm{background:var(--green-soft);color:#085041}
@@ -2754,7 +2756,8 @@ body::before,body::after{display:none}
 .phone-screen [data-go],.phone-screen .tab,.phone-screen .ds-back,
 .phone-screen .icon-btn,.phone-screen .mod-card,.phone-screen .launch-card,
 .phone-screen .init-card,.phone-screen .link-item,.phone-screen .ledger-card,
-.phone-screen .qa-row,.phone-screen .act-btn,.phone-screen .cond-chip{cursor:pointer;-webkit-tap-highlight-color:transparent}
+.phone-screen .qa-row,.phone-screen .act-btn,.phone-screen .cond-chip,
+.phone-screen .qi-cell,.phone-screen [data-xflow-sales]{cursor:pointer;-webkit-tap-highlight-color:transparent}
 .tappable{position:relative;transition:transform .12s ease, filter .12s ease}
 .tappable:active{transform:scale(.975);filter:brightness(.97)}
 .nav-target{position:relative}
@@ -5480,6 +5483,8 @@ body::before,body::after{display:none}
 .p-list-card{background:var(--bg-app);border:1px solid var(--border);border-radius:11px;padding:11px 12px;margin-bottom:8px;cursor:pointer;transition:all .15s;display:flex;flex-direction:column;gap:6px}
 .p-list-card:hover{border-color:var(--accent-line);background:linear-gradient(135deg,#FAF8FF 0%,var(--bg-app) 70%)}
 .p-list-card .pl-h{display:flex;justify-content:space-between;align-items:start;gap:8px}
+.p-list-card .pl-del-btn{flex-shrink:0;border:none;background:var(--coral-soft);color:var(--coral);width:28px;height:28px;border-radius:8px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;margin-right:4px}
+.p-list-card .pl-del-btn:active{transform:scale(.96);opacity:.85}
 .p-list-card .pl-h .pl-name{font-size:12.5px;font-weight:500;color:var(--text);letter-spacing:-.005em;line-height:1.3;flex:1;min-width:0}
 .p-list-card .pl-id{font-family:var(--mono);font-size:9.5px;color:var(--text-3);letter-spacing:.02em;margin-top:1px}
 .p-list-card .pl-meta{display:flex;align-items:center;gap:7px;flex-wrap:wrap;font-family:var(--mono);font-size:9.5px;color:var(--text-3);letter-spacing:.02em}
@@ -6187,7 +6192,7 @@ body.mobile-mode .screen[data-screen="C1"] .chat-search-wrap{padding:4px 14px 10
   letter-spacing:-.005em;font-weight:500;line-height:1.2;
 }
 
-/* C4 NOVA：消息区滚动，快捷栏 + 输入框固定底部 */
+/* C4 云枢：消息区滚动，快捷栏 + 输入框固定底部 */
 .screen[data-screen="C4"] .phone-screen{
   display:flex;flex-direction:column;height:100%;
 }
@@ -6272,7 +6277,7 @@ body.mobile-mode .screen[data-screen="C1"] .chat-search-wrap{padding:4px 14px 10
 .dept-head .dh-bd{flex:1;min-width:0}
 .dept-head .dh-nm{font-size:11.5px;font-weight:600;color:var(--text);letter-spacing:-.005em;font-family:var(--serif)}
 .dept-head .dh-sub{font-family:var(--mono);font-size:9px;color:var(--text-3);letter-spacing:.02em;margin-top:1px}
-.dept-head .dh-cnt{font-family:var(--mono);font-size:10px;background:var(--bg-app);color:var(--text-2);padding:2px 6px;border-radius:4px;letter-spacing:.04em;font-weight:600;flex-shrink:0;border:1px solid var(--border-soft)}
+.dept-head .dh-cnt{display:none}
 
 .dept-people{padding-left:8px;margin-bottom:9px}
 
@@ -6507,6 +6512,18 @@ body.mobile-mode .screen[data-screen="C1"] .chat-search-wrap{padding:4px 14px 10
   border-radius:8px;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;
 }
 .kb-folder-doc-del:active{background:#F5C6B3}
+.kb-doc-del{
+  width:30px;height:30px;border:none;background:var(--coral-soft);color:var(--coral);
+  border-radius:8px;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;
+}
+.kb-doc-del:active{background:#F5C6B3}
+.kb-doc-row.has-del{padding-right:8px}
+.kb-doc-row-static{cursor:default!important}
+.kb-doc-row-static:hover{border-color:var(--border)!important;background:var(--bg-app)!important}
+.kb-doc-row-static:active{transform:none!important;filter:none!important}
+#kb-my-docs-list .kb-doc-row .kd-ic,
+#kb-my-docs-list .kb-doc-row .kd-bd{pointer-events:none}
+#kb-my-docs-list .kb-doc-del{pointer-events:auto}
 .msg-bubble.kb-ai-bubble{border-color:var(--accent-line)}
 .screen[data-screen="K2"] .chat-conv-header .cv-nm{font-weight:600}
 .screen[data-screen="K2"] #k2-api-rows:empty+.msg-system{display:none}
@@ -8039,22 +8056,15 @@ body.mobile-mode .screen[data-screen="C1"] .chat-search-wrap{padding:4px 14px 10
           </div>
         </div>
 
-        <!-- 双域入口 · 业务 / 非业务（style 模版） -->
-        <div class="section-label">审批分类 · <span class="accent">业务相关</span> / <span style="color:var(--amber)">非业务相关</span> <span class="line"></span></div>
+        <!-- 销售提案入口（对齐 proposal_workflow P0） -->
+        <div class="section-label">审批分类 · <span class="accent">销售提案</span> <span class="line"></span></div>
         <div class="launcher-grid">
-          <div class="launch-card biz" data-go="B3" data-init-cat="biz">
-            <span class="lc-badge">12</span>
-            <div class="lc-ic"><i class="ti ti-credit-card-pay"></i></div>
-            <div class="lc-name">业务相关</div>
-            <div class="lc-desc">付款 / 提案 / 上线 · 关联账单与提案</div>
-            <div class="lc-foot"><span class="l">待我处理</span><span class="v">12</span></div>
-          </div>
-          <div class="launch-card adm" data-go="B3" data-init-cat="adm">
-            <span class="lc-badge" style="background:var(--amber)">5</span>
-            <div class="lc-ic"><i class="ti ti-clipboard-list"></i></div>
-            <div class="lc-name">非业务相关</div>
-            <div class="lc-desc">合同用印 / 行政 / 赔付 / 资质 · 手动发起</div>
-            <div class="lc-foot"><span class="l">待我处理</span><span class="v">5</span></div>
+          <div class="launch-card biz tappable" data-go="XF" data-xflow-sales>
+            <span class="lc-badge">新建</span>
+            <div class="lc-ic"><i class="ti ti-clipboard-text"></i></div>
+            <div class="lc-name">销售提案</div>
+            <div class="lc-desc">业务元数据 · 财务 · 四流 · 方案叙事 · 提交审批</div>
+            <div class="lc-foot"><span class="l">PROPOSAL_3STEP</span><span class="v">XFlow</span></div>
           </div>
         </div>
 
@@ -8113,7 +8123,7 @@ body.mobile-mode .screen[data-screen="C1"] .chat-search-wrap{padding:4px 14px 10
           <div class="ds-crumb">沙丘 · 通知</div>
           <div class="ds-name">全部消息 <span class="id" id="z2-unread-badge">8 未读</span></div>
         </div>
-        <button class="ds-more"><i class="ti ti-checks"></i></button>
+        <button class="ds-more" style="display:none" aria-hidden="true"><i class="ti ti-checks"></i></button>
       </div>
       <div class="content" id="z2-noti-list">
         <div id="z2-api-rows"></div>
@@ -8382,35 +8392,18 @@ body.mobile-mode .screen[data-screen="C1"] .chat-search-wrap{padding:4px 14px 10
         </div>
 
         <!-- AI 助手置顶（最最上）-->
-        <div class="chat-section pin"><span class="chat-section-nova-ic"><img class="nova-icon-img nova-ic-sm" src="" alt="NOVA" data-nova-icon></span>NOVA · 24/7 在线<span class="cnt">2</span></div>
+        <div class="chat-section pin"><span class="chat-section-nova-ic"><img class="nova-icon-img nova-ic-sm" src="" alt="云枢" data-nova-icon></span>云枢<span class="cnt">1</span></div>
 
         <div class="chat-row pinned" data-go="C4">
-          <div class="cr-av ai-bot nova-icon-host"><img class="nova-icon-img" src="" alt="NOVA" data-nova-icon></div>
+          <div class="cr-av ai-bot nova-icon-host"><img class="nova-icon-img" src="" alt="云枢" data-nova-icon></div>
           <div class="cr-bd">
             <div class="cr-top">
-              <div class="cr-nm">NOVA <span class="ai-mark">AI</span></div>
+              <div class="cr-nm">云枢 <span class="ai-mark">AI</span></div>
               <div class="cr-tm">09:36</div>
             </div>
             <div class="cr-pv">湖北中石油总共 <b>4 笔欠票</b>，金额 ¥48 万…</div>
           </div>
           <div class="cr-meta"><span class="badge-num accent">1</span></div>
-        </div>
-
-        <div class="chat-row pinned kb-chat-row tappable" data-kb-chat="1">
-          <div class="cr-av kb-chat" aria-hidden="true">
-            <svg class="kb-chat-ic" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M5 4.5C5 3.67 5.67 3 6.5 3H11v18H6.5A1.5 1.5 0 0 1 5 19.5V4.5Z" fill="rgba(255,255,255,.92)"/>
-              <path d="M13 3h4.5c.83 0 1.5.67 1.5 1.5v15c0 .83-.67 1.5-1.5 1.5H13V3Z" fill="rgba(255,255,255,.72)"/>
-              <path d="M11 3v18" stroke="rgba(255,255,255,.32)" stroke-width=".8"/>
-              <path d="M17.2 5.4l.55 1.12 1.24.18-.9.88.21 1.23-1.1-.58-1.1.58.21-1.23-.9-.88 1.24-.18z" fill="#FFD580"/>
-            </svg>
-          </div>
-          <div class="cr-bd">
-            <div class="cr-top">
-              <div class="cr-nm">知识库 <span class="ai-mark">AI</span></div>
-            </div>
-            <div class="cr-pv">查询我的知识库与已订阅内容</div>
-          </div>
         </div>
 
         <!-- 系统通知（直跳 Z2）& 公司广播 -->
@@ -8432,7 +8425,7 @@ body.mobile-mode .screen[data-screen="C1"] .chat-search-wrap{padding:4px 14px 10
           <div class="cr-av broadcast"><i class="ti ti-broadcast"></i></div>
           <div class="cr-bd">
             <div class="cr-top">
-              <div class="cr-nm">公司广播 · XYYT <span class="role">HR · 只读</span></div>
+              <div class="cr-nm">公司广播 · XYYT</div>
               <div class="cr-tm">昨天</div>
             </div>
             <div class="cr-pv">【人事】关于 2026 年端午节放假安排的通知 · 6 月 8-10 日 · 共 3 天</div>
@@ -8441,19 +8434,7 @@ body.mobile-mode .screen[data-screen="C1"] .chat-search-wrap{padding:4px 14px 10
         </div>
 
         <!-- 审批工作群（系统自动创建）-->
-        <div class="chat-section pin"><i class="ti ti-route"></i>审批工作群 · 系统自动建群<span class="cnt">2</span></div>
-
-        <div class="chat-row workgroup-approval pinned" data-go="C2" data-conv-id="2">
-          <div class="cr-av workgroup-approval"><i class="ti ti-clipboard-text"></i></div>
-          <div class="cr-bd">
-            <div class="cr-top">
-              <div class="cr-nm">广西天琨保证金返佣 · 审批工作群 <span class="cnt">(7)</span></div>
-              <div class="cr-tm">9:41</div>
-            </div>
-            <div class="cr-pv"><span class="sys-tag">PROPOSAL #312</span><span class="mention">@王一凡</span>SEQ 4 协议槽用了 BY_PRICE_CONFIG，能否说明下…</div>
-          </div>
-          <div class="cr-meta"><span class="badge-num accent">3</span></div>
-        </div>
+        <div class="chat-section pin"><i class="ti ti-route"></i>审批工作群 · 系统自动建群<span class="cnt">1</span></div>
 
         <div class="chat-row workgroup-approval pinned" data-go="C2" data-conv-id="3">
           <div class="cr-av workgroup-approval"><i class="ti ti-file-certificate"></i></div>
@@ -8762,7 +8743,7 @@ body.mobile-mode .screen[data-screen="C1"] .chat-search-wrap{padding:4px 14px 10
       <div class="content" style="padding-top:9px">
 
         <!-- 总裁办（展开） -->
-        <div class="section-label"><span class="accent">组织树</span> · 上海卓悦优泰 <span class="line"></span><span class="cnt">XYYT · 46 人</span></div>
+        <div class="section-label"><span class="accent">组织树</span> <span class="line"></span><span class="cnt">— 人</span></div>
 
         <div class="dept-tree">
 
@@ -8773,7 +8754,6 @@ body.mobile-mode .screen[data-screen="C1"] .chat-search-wrap{padding:4px 14px 10
               <div class="dh-nm">总裁办</div>
               <div class="dh-sub">PRESIDENT_OFFICE · final-2of3</div>
             </div>
-            <div class="dh-cnt">3</div>
           </div>
           <div class="dept-people">
             <div class="contact-row" data-go="C9">
@@ -8808,7 +8788,6 @@ body.mobile-mode .screen[data-screen="C1"] .chat-search-wrap{padding:4px 14px 10
               <div class="dh-nm">能源版块</div>
               <div class="dh-sub">ENERGY · 我所在版块</div>
             </div>
-            <div class="dh-cnt">14</div>
           </div>
           <div class="dept-people">
             <div class="contact-row" data-go="C9">
@@ -8864,7 +8843,6 @@ body.mobile-mode .screen[data-screen="C1"] .chat-search-wrap{padding:4px 14px 10
               <div class="dh-nm">财务部</div>
               <div class="dh-sub">FINANCE · 财务/出纳/复核</div>
             </div>
-            <div class="dh-cnt">11</div>
           </div>
           <div class="dept-people">
             <div class="contact-row" data-go="C9">
@@ -8899,7 +8877,6 @@ body.mobile-mode .screen[data-screen="C1"] .chat-search-wrap{padding:4px 14px 10
               <div class="dh-nm">行政部</div>
               <div class="dh-sub">ADMIN · 含 SEAL_OFFICER 2 人</div>
             </div>
-            <div class="dh-cnt">8</div>
           </div>
 
           <!-- 客服 / CRM -->
@@ -8910,7 +8887,6 @@ body.mobile-mode .screen[data-screen="C1"] .chat-search-wrap{padding:4px 14px 10
               <div class="dh-nm">客户服务 / CRM</div>
               <div class="dh-sub">CUSTOMER_SERVICE · 含杨芬细审</div>
             </div>
-            <div class="dh-cnt">4</div>
           </div>
 
           <!-- 新能源版块（折叠） -->
@@ -8921,7 +8897,6 @@ body.mobile-mode .screen[data-screen="C1"] .chat-search-wrap{padding:4px 14px 10
               <div class="dh-nm">新能源版块</div>
               <div class="dh-sub">NEW_ENERGY</div>
             </div>
-            <div class="dh-cnt">8</div>
           </div>
 
           <!-- 运营 -->
@@ -8932,7 +8907,6 @@ body.mobile-mode .screen[data-screen="C1"] .chat-search-wrap{padding:4px 14px 10
               <div class="dh-nm">运营 / 产品上线</div>
               <div class="dh-sub">OPS · LAUNCH 经办</div>
             </div>
-            <div class="dh-cnt">2</div>
           </div>
 
         </div>
@@ -8940,7 +8914,7 @@ body.mobile-mode .screen[data-screen="C1"] .chat-search-wrap{padding:4px 14px 10
       </div>
       <div class="tab-bar"><div class="tab active" data-go="C1"><svg class="tab-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg><span>通讯</span><span class="red-dot"></span></div><div class="tab " data-go="QJ"><svg class="tab-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="5" height="5" rx="1.1"/><rect x="9.5" y="3" width="5" height="5" rx="1.1"/><rect x="16" y="3" width="5" height="5" rx="1.1"/><rect x="3" y="9.5" width="5" height="5" rx="1.1"/><rect x="9.5" y="9.5" width="5" height="5" rx="1.1" fill="currentColor" fill-opacity=".22" stroke-width="1.75"/><rect x="16" y="9.5" width="5" height="5" rx="1.1"/><rect x="3" y="16" width="5" height="5" rx="1.1"/><rect x="9.5" y="16" width="5" height="5" rx="1.1"/><rect x="16" y="16" width="5" height="5" rx="1.1"/></svg><span>千机</span></div><div class="tab " data-go="LH"><svg class="tab-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M9 4h6l1 7H8z"/><path d="M8 11h8l1.2 9H6.8z"/><path d="M12 2v1.5M5.5 7l1.6.4M18.5 7l-1.6.4"/></svg><span>灯塔</span></div><div class="tab " data-go="B2"><svg class="tab-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg><span>我的</span></div></div>
     </div></section>
-<section class="screen" data-screen="C4" data-name="NOVA" data-region="lh"><div class="phone-screen">
+<section class="screen" data-screen="C4" data-name="云枢" data-region="lh"><div class="phone-screen">
       <div class="status-bar"><span>9:41</span><span class="right">
         <svg class="sb-ic" viewBox="0 0 24 24" fill="currentColor"><rect x="2" y="14" width="3" height="6" rx=".5"/><rect x="7" y="10" width="3" height="10" rx=".5"/><rect x="12" y="6" width="3" height="14" rx=".5"/><rect x="17" y="2" width="3" height="18" rx=".5"/></svg>
         <svg class="sb-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12.55a11 11 0 0 1 14 0"/><path d="M8.5 16.15a7 7 0 0 1 7 0"/><path d="M12 20h.01"/></svg>
@@ -8951,23 +8925,24 @@ body.mobile-mode .screen[data-screen="C1"] .chat-search-wrap{padding:4px 14px 10
       <div class="chat-conv-header">
         <div class="back" data-go="C1"><i class="ti ti-chevron-left"></i></div>
         <div class="cv-bd">
-          <div class="cv-nm">NOVA <span class="group-tag" style="background:linear-gradient(135deg,#FFD580,#FFA850);color:#5D3508">AI</span></div>
+          <div class="cv-nm">云枢 <span class="group-tag" style="background:linear-gradient(135deg,#FFD580,#FFA850);color:#5D3508">AI</span></div>
         </div>
         <div class="cv-act">
           <div class="ic-btn" id="c4-btn-new" title="新对话"><i class="ti ti-plus"></i></div>
           <div class="ic-btn" id="c4-btn-history" data-go="C11" title="对话历史"><i class="ti ti-history"></i></div>
-          <div class="ic-btn" id="c4-btn-search" title="搜索聊天记录"><i class="ti ti-search"></i></div>
           <div class="ic-btn" data-go="K1" title="知识库"><i class="ti ti-book"></i></div>
-          <div class="ic-btn"><i class="ti ti-dots-vertical"></i></div>
         </div>
       </div>
+
+      <!-- 模型选择（运行时填充） -->
+      <div id="c4-model-picker-slot"></div>
 
       <!-- AI hero -->
       <div class="ai-hero">
         <div class="ah-top">
-          <div class="ah-av nova-icon-host"><img class="nova-icon-img" src="" alt="NOVA" data-nova-icon></div>
+          <div class="ah-av nova-icon-host"><img class="nova-icon-img" src="" alt="云枢" data-nova-icon></div>
           <div class="ah-bd">
-            <div class="ah-nm">NOVA<span class="badge-ai">AI</span></div>
+            <div class="ah-nm">云枢<span class="badge-ai">AI</span></div>
           </div>
         </div>
         <div class="ah-stats">
@@ -8977,48 +8952,13 @@ body.mobile-mode .screen[data-screen="C1"] .chat-search-wrap{padding:4px 14px 10
         </div>
       </div>
 
-      <!-- 推荐 prompts（默认折叠） -->
-      <div class="ai-prompts" id="c4-ai-prompts">
-        <div class="ap-h" id="c4-prompts-toggle" role="button" tabindex="0" aria-expanded="false">
-          <span class="ap-h-t">推荐对话 · 试试问我</span>
-          <i class="ti ti-chevron-down ap-chev"></i>
-        </div>
-        <div class="ai-prompts-grid">
-          <div class="ai-prompt-card featured tappable" data-c4-prompt="我还有几个待办？">
-            <div class="ap-ic"><i class="ti ti-clipboard-text"></i></div>
-            <div class="ap-t">我还有几个待办？</div>
-            <div class="ap-d">列出 PAY / REVIEW / CHASE 节点</div>
-          </div>
-          <div class="ai-prompt-card amber tappable" data-c4-prompt="本月欠票多少？">
-            <div class="ap-ic"><i class="ti ti-receipt-2"></i></div>
-            <div class="ap-t">本月欠票多少？</div>
-            <div class="ap-d">含 OVERDUE 60 天明细</div>
-          </div>
-          <div class="ai-prompt-card blue tappable" data-c4-prompt="查湖北中石油的合同">
-            <div class="ap-ic"><i class="ti ti-search"></i></div>
-            <div class="ap-t">查湖北中石油的合同</div>
-            <div class="ap-d">所有相关合同 + 当前状态</div>
-          </div>
-          <div class="ai-prompt-card green tappable" data-c4-prompt="PROPOSAL_3STEP 啥意思？">
-            <div class="ap-ic"><i class="ti ti-route"></i></div>
-            <div class="ap-t">PROPOSAL_3STEP 啥意思？</div>
-            <div class="ap-d">查 BPMN 流程文档</div>
-          </div>
-          <div class="ai-prompt-card" data-go="MM0" style="background:linear-gradient(135deg,#FBFAF6 0%,var(--bg-app) 70%);border-color:var(--accent-line);grid-column:span 2">
-            <div class="ap-ic" style="background:linear-gradient(135deg,#2F5D62,#1B3A3F);color:#fff;box-shadow:0 4px 10px -3px rgba(47,93,98,.45)"><i class="ti ti-microphone"></i></div>
-            <div class="ap-t" style="color:var(--accent-deep)">会议纪要 · 音频转纪要 <span style="font-family:var(--mono);font-size:8px;background:linear-gradient(135deg,#FFD580,#FFA850);color:#5D3508;padding:1px 5px;border-radius:3px;font-weight:700;letter-spacing:.06em;margin-left:4px;vertical-align:1px">AI</span></div>
-            <div class="ap-d">多段录音上传 → AI 转写 + 议题/决议/待办自动生成</div>
-          </div>
-        </div>
-      </div>
-
       <div class="content" style="padding:0">
 
         <!-- 消息流 · C4 API -->
         <div class="msg-stream" id="c4-msg-stream">
 
           <div class="msg-system dunes-nova-pinned">
-            <span class="pill"><i class="ti ti-sparkles"></i>NOVA · 已接入企业知识库与工具调用</span>
+            <span class="pill"><i class="ti ti-sparkles"></i>云枢 · 已接入企业知识库与工具调用</span>
           </div>
           <div id="c4-api-rows"></div>
 
@@ -9026,8 +8966,8 @@ body.mobile-mode .screen[data-screen="C1"] .chat-search-wrap{padding:4px 14px 10
           <div class="msg-row recv">
             <div class="msg-av-sm ai-bot"><i class="ti ti-sparkles"></i></div>
             <div class="msg-content">
-              <div class="msg-meta"><span class="nm">NOVA</span><span class="role" style="background:linear-gradient(135deg,#FFD580,#FFA850);color:#5D3508;border-color:#FFA850">AI</span><span>09:35</span></div>
-              <div class="msg-bubble ai-recv">你好，我是你的 NOVA 助手。可以帮你查审批、找合同、对账单、读文档；展开上方推荐问题或直接问我。</div>
+              <div class="msg-meta"><span class="nm">云枢</span><span class="role" style="background:linear-gradient(135deg,#FFD580,#FFA850);color:#5D3508;border-color:#FFA850">AI</span><span>09:35</span></div>
+              <div class="msg-bubble ai-recv">你好，我是你的云枢助手。可以帮你查审批、找合同、对账单、读文档；直接问我即可。</div>
             </div>
           </div>
 
@@ -9044,7 +8984,7 @@ body.mobile-mode .screen[data-screen="C1"] .chat-search-wrap{padding:4px 14px 10
           <div class="msg-row recv">
             <div class="msg-av-sm ai-bot"><i class="ti ti-sparkles"></i></div>
             <div class="msg-content">
-              <div class="msg-meta"><span class="nm">NOVA</span><span>09:36</span></div>
+              <div class="msg-meta"><span class="nm">云枢</span><span>09:36</span></div>
               <div class="msg-bubble ai-recv" style="padding:5px 11px">
                 <div class="ai-thinking"><span class="dot"></span><span class="dot"></span><span class="dot"></span>正在分析…</div>
               </div>
@@ -9055,7 +8995,7 @@ body.mobile-mode .screen[data-screen="C1"] .chat-search-wrap{padding:4px 14px 10
           <div class="msg-row recv">
             <div class="msg-av-sm ai-bot"><i class="ti ti-sparkles"></i></div>
             <div class="msg-content">
-              <div class="msg-meta"><span class="nm">NOVA</span><span class="role" style="background:linear-gradient(135deg,#FFD580,#FFA850);color:#5D3508;border-color:#FFA850">AI</span><span>09:36</span></div>
+              <div class="msg-meta"><span class="nm">云枢</span><span class="role" style="background:linear-gradient(135deg,#FFD580,#FFA850);color:#5D3508;border-color:#FFA850">AI</span><span>09:36</span></div>
               <div class="msg-bubble ai-recv">
                 <div style="margin-bottom:6px">
                   <span class="ai-tool-call"><i class="ti ti-tool"></i>GET /workbench/inbox?userId=7<i class="ti ti-check check"></i></span>
@@ -9109,7 +9049,7 @@ body.mobile-mode .screen[data-screen="C1"] .chat-search-wrap{padding:4px 14px 10
           <div class="msg-row recv">
             <div class="msg-av-sm ai-bot"><i class="ti ti-sparkles"></i></div>
             <div class="msg-content">
-              <div class="msg-meta"><span class="nm">NOVA</span><span class="role" style="background:linear-gradient(135deg,#FFD580,#FFA850);color:#5D3508;border-color:#FFA850">AI</span><span>09:40</span></div>
+              <div class="msg-meta"><span class="nm">云枢</span><span class="role" style="background:linear-gradient(135deg,#FFD580,#FFA850);color:#5D3508;border-color:#FFA850">AI</span><span>09:40</span></div>
               <div class="msg-bubble ai-recv">
                 <div style="margin-bottom:6px">
                   <span class="ai-tool-call blue"><i class="ti ti-search"></i>search(湖北中石油)<i class="ti ti-check check"></i></span>
@@ -9138,16 +9078,13 @@ body.mobile-mode .screen[data-screen="C1"] .chat-search-wrap{padding:4px 14px 10
       <div class="msg-quick-actions" id="c4-quick-actions">
         <div class="qa-cell" data-qa="camera"><i class="ti ti-camera qa-ic"></i><span class="qa-t">拍照</span></div>
         <div class="qa-cell" data-qa="album"><i class="ti ti-photo qa-ic"></i><span class="qa-t">图片</span></div>
-        <div class="qa-cell"><i class="ti ti-clipboard-text qa-ic"></i><span class="qa-t">查代办</span></div>
-        <div class="qa-cell"><i class="ti ti-file-certificate qa-ic"></i><span class="qa-t">查合同</span></div>
-        <div class="qa-cell"><i class="ti ti-route qa-ic"></i><span class="qa-t">流程</span></div>
         <div class="qa-cell" data-qa="new-chat"><i class="ti ti-plus qa-ic"></i><span class="qa-t">新对话</span></div>
       </div>
 
       <!-- 输入区 -->
       <div class="msg-input-bar">
         <div class="voice-btn"><i class="ti ti-microphone"></i></div>
-        <input class="input-box" id="c4-input" placeholder="问NOVA">
+        <input class="input-box" id="c4-input" placeholder="问云枢">
         <div class="emoji-btn"><i class="ti ti-paperclip"></i></div>
         <div class="plus-btn tappable" id="c4-send" role="button" tabindex="0" title="发送" style="background:linear-gradient(135deg,#2F5D62,#5F8B8F)"><i class="ti ti-send"></i></div>
       </div>
@@ -9444,6 +9381,7 @@ body.mobile-mode .screen[data-screen="C1"] .chat-search-wrap{padding:4px 14px 10
         <!-- 危险操作 -->
         <div class="gi-section">&nbsp;</div>
         <div class="gi-danger tappable" id="c6-clear-history">清空聊天记录</div>
+        <div class="gi-danger tappable" id="c6-dissolve-group" style="display:none">解散该群</div>
         <div class="gi-danger tappable" id="c6-leave-group">退出该群</div>
 
       </div>
@@ -9471,28 +9409,28 @@ body.mobile-mode .screen[data-screen="C1"] .chat-search-wrap{padding:4px 14px 10
 
         <!-- 会话类型 -->
         <div class="new-conv-kinds">
-          <div class="nck featured">
+          <div class="nck featured" data-c7-mode="group">
             <div class="nck-ic"><i class="ti ti-users"></i></div>
             <div class="nck-bd">
               <div class="nck-t">创建群聊</div>
               <div class="nck-d">3+ 成员</div>
             </div>
           </div>
-          <div class="nck">
+          <div class="nck" data-c7-mode="private">
             <div class="nck-ic"><i class="ti ti-user"></i></div>
             <div class="nck-bd">
               <div class="nck-t">单聊</div>
               <div class="nck-d">1 对 1 私聊</div>
             </div>
           </div>
-          <div class="nck">
+          <div class="nck nck-disabled" data-c7-mode="approval" aria-hidden="true">
             <div class="nck-ic"><i class="ti ti-clipboard-text"></i></div>
             <div class="nck-bd">
               <div class="nck-t">关联审批群</div>
               <div class="nck-d">基于现有审批建群</div>
             </div>
           </div>
-          <div class="nck">
+          <div class="nck nck-disabled" data-c7-mode="scan" aria-hidden="true">
             <div class="nck-ic"><i class="ti ti-link"></i></div>
             <div class="nck-bd">
               <div class="nck-t">扫码加入</div>
@@ -9511,10 +9449,8 @@ body.mobile-mode .screen[data-screen="C1"] .chat-search-wrap{padding:4px 14px 10
 
         <!-- 已选成员 -->
         <div class="selected-stack">
-          <span style="font-family:var(--mono);font-size:9px;color:var(--text-3);letter-spacing:.04em;font-weight:700;text-transform:uppercase;margin-right:2px">已选 3：</span>
-          <span class="ss-tag">朱子姝<i class="ti ti-x"></i></span>
-          <span class="ss-tag">邓艳丽<i class="ti ti-x"></i></span>
-          <span class="ss-tag">吕奇<i class="ti ti-x"></i></span>
+          <span style="font-family:var(--mono);font-size:9px;color:var(--text-3);letter-spacing:.04em;font-weight:700;text-transform:uppercase;margin-right:2px">已选 0：</span>
+          <span style="font-size:11px;color:var(--text-3)">请从组织树选择成员</span>
         </div>
 
         <!-- 联系人列表（API） -->
@@ -9650,7 +9586,7 @@ body.mobile-mode .screen[data-screen="C1"] .chat-search-wrap{padding:4px 14px 10
 
       <!-- Hero - 大头像 + 名字 + 部门 -->
       <div class="profile-hero">
-        <div class="ph-back" data-go="C3"><i class="ti ti-chevron-left"></i></div>
+        <div class="ph-back tappable" data-back="1"><i class="ti ti-chevron-left"></i></div>
         <div class="ph-more"><i class="ti ti-dots-vertical"></i></div>
 
         <div class="ph-av" id="c9-ph-av">邓<div class="av-dot"></div></div>
@@ -9684,7 +9620,7 @@ body.mobile-mode .screen[data-screen="C1"] .chat-search-wrap{padding:4px 14px 10
         </div>
       </div>
 
-      <div class="content" style="padding:0;background:var(--bg-sunken)">
+      <div class="content c9-mock" style="padding:0;background:var(--bg-sunken)">
 
         <!-- 共事统计 -->
         <div class="profile-stats">
@@ -9836,6 +9772,7 @@ body.mobile-mode .screen[data-screen="C1"] .chat-search-wrap{padding:4px 14px 10
         </div>
 
       </div>
+      <div id="c9-dynamic-body" class="content" style="padding:0;background:var(--bg-sunken);display:none"></div>
 
     </div></section>
 
@@ -9848,29 +9785,19 @@ body.mobile-mode .screen[data-screen="C1"] .chat-search-wrap{padding:4px 14px 10
       <div class="kb-hero">
         <div class="kb-hero-toolbar">
           <button type="button" class="kb-back ds-back tappable" id="kb-home-back" aria-label="返回"><i class="ti ti-chevron-left"></i></button>
-          <button type="button" class="kb-subscribe tappable" id="kb-home-subscribe" aria-label="订阅知识库"><i class="ti ti-rss"></i></button>
         </div>
         <div class="kb-hero-body">
         <div class="kbh-k">DUNES KNOWLEDGE · 企业知识库</div>
         <div class="kbh-t">知识库</div>
         <div class="kbh-sub">公司制度 / 流程 SOP / 合同模板 / 法务条款 / 财务规则 — 一处查全</div>
         <div class="kbh-stats">
-          <div class="it"><div class="v">1,247</div><div class="l">文档</div></div>
-          <div class="it"><div class="v">47</div><div class="l">分类</div></div>
-          <div class="it"><div class="v">23</div><div class="l">我的收藏</div></div>
+          <div class="it"><div class="v">0</div><div class="l">文档</div></div>
+          <div class="it"><div class="v">0</div><div class="l">分类</div></div>
+          <div class="it"><div class="v">0</div><div class="l">未读</div></div>
         </div>
         </div>
       </div>
 
-      <!-- AI 入口 -->
-      <div class="kb-ai-entry tappable" id="kb-ai-entry">
-        <div class="kae-av"><i class="ti ti-sparkles"></i></div>
-        <div class="kae-bd">
-          <div class="kae-t">问知识库 <span class="badge-ai">AI</span></div>
-          <div class="kae-d">用自然语言查制度 · 流程 · 模板 · 引用原文</div>
-        </div>
-        <i class="ti ti-chevron-right kae-arr"></i>
-      </div>
       <div class="kb-sync-row">
         <button type="button" class="kb-sync-btn tappable" id="kb-ragflow-sync"><i class="ti ti-refresh"></i>同步 RAGFlow</button>
         <div class="kb-sync-status" id="kb-ragflow-sync-status">打开页面自动读本地库 · 后台同步 RAGFlow · 可手动刷新</div>
@@ -9881,24 +9808,11 @@ body.mobile-mode .screen[data-screen="C1"] .chat-search-wrap{padding:4px 14px 10
         <div class="section-label" style="margin-top:5px"><span class="accent">上传</span> · 知识库文档 <span class="line"></span><span class="cnt"></span></div>
         <div class="kb-upload-panel" id="kb-upload-panel">
           <div class="kb-upload-step">
-            <div class="kus-h"><span class="kus-n">1</span>选择或创建知识库文件夹</div>
-            <div class="kb-folder-row">
-              <select id="kb-upload-category" disabled>
-                <option value="">正在加载知识库文件夹…</option>
-              </select>
-              <button type="button" class="kb-folder-new-btn" id="kb-folder-new-btn"><i class="ti ti-folder-plus"></i>新建</button>
-            </div>
-            <div class="kb-folder-create-row" id="kb-folder-create-row" style="display:none">
-              <input type="text" id="kb-folder-name" placeholder="输入文件夹名称，如：产品资料" maxlength="40">
-              <button type="button" class="kb-folder-create-btn" id="kb-folder-create-btn">创建</button>
-            </div>
-          </div>
-          <div class="kb-upload-step">
-            <div class="kus-h"><span class="kus-n">2</span>选择要上传的文档</div>
-            <div class="kb-file-pick disabled" id="kb-file-pick">
+            <div class="kus-h"><span class="kus-n">1</span>选择并上传文档</div>
+            <div class="kb-file-pick" id="kb-file-pick">
               <div class="kfp-ic"><i class="ti ti-file-upload"></i></div>
               <div class="kfp-t">点击选择 PDF / Word / Excel / Markdown</div>
-              <div class="kfp-m" id="kb-file-hint">请先完成步骤 1</div>
+              <div class="kfp-m" id="kb-file-hint">上传后自动解析入库</div>
             </div>
             <div class="kb-file-preview" id="kb-file-preview" style="display:none">
               <div class="kfp-ic"><i class="ti ti-file"></i></div>
@@ -9920,73 +9834,10 @@ body.mobile-mode .screen[data-screen="C1"] .chat-search-wrap{padding:4px 14px 10
           <div class="api-strip" style="grid-column:1/-1"><i class="ti ti-info-circle"></i><span>正在加载知识库…</span></div>
         </div>
 
-        <!-- 我的收藏 -->
-        <div class="section-label"><span class="accent">我的收藏</span> · 高频查阅 <span class="line"></span><span class="cnt">3 / 23</span></div>
-
-        <div class="kb-doc-row tappable" data-go="K3" data-kb-doc-id="101">
-          <div class="kd-ic pdf"><i class="ti ti-file-type-pdf"></i></div>
-          <div class="kd-bd">
-            <div class="kd-nm">合同审批 SOP · 2026 修订版</div>
-            <div class="kd-meta"><span class="tag-doc">PDF · 28 页</span><span>更新 5-15</span><span>32 引用</span></div>
-          </div>
-          <i class="ti ti-star-filled kd-fav"></i>
-        </div>
-
-        <div class="kb-doc-row tappable" data-go="K3" data-kb-doc-id="102">
-          <div class="kd-ic md"><i class="ti ti-markdown"></i></div>
-          <div class="kd-bd">
-            <div class="kd-nm">提案 8 协议槽位规则说明</div>
-            <div class="kd-meta"><span class="tag-doc">MD · 12 页</span><span>更新 4-22</span><span>BY_PRICE_CONFIG</span></div>
-          </div>
-          <i class="ti ti-star-filled kd-fav"></i>
-        </div>
-
-        <div class="kb-doc-row tappable" data-go="K3" data-kb-doc-id="103">
-          <div class="kd-ic xls"><i class="ti ti-file-type-xls"></i></div>
-          <div class="kd-bd">
-            <div class="kd-nm">非业务类审批流程 260528.xlsx</div>
-            <div class="kd-meta"><span class="tag-doc">XLSX · 19 类</span><span>4 sheet</span><span>Excel 母表</span></div>
-          </div>
-          <i class="ti ti-star-filled kd-fav"></i>
-        </div>
-
-        <!-- 最近 -->
-        <div class="section-label"><span class="accent">最近查阅</span> <span class="line"></span><span class="cnt">7 篇</span></div>
-
-        <div class="kb-doc-row tappable" data-go="K3" data-kb-doc-id="201">
-          <div class="kd-ic pdf"><i class="ti ti-file-type-pdf"></i></div>
-          <div class="kd-bd">
-            <div class="kd-nm">无票流处理指引（IRRECOVERABLE / SUBSTITUTE）</div>
-            <div class="kd-meta"><span class="tag-doc">PDF · 8 页</span><span>1 小时前</span></div>
-          </div>
-          <i class="ti ti-star kd-fav empty"></i>
-        </div>
-
-        <div class="kb-doc-row tappable" data-go="K3" data-kb-doc-id="202">
-          <div class="kd-ic doc"><i class="ti ti-file-type-doc"></i></div>
-          <div class="kd-bd">
-            <div class="kd-nm">合同付款验收单前置规则</div>
-            <div class="kd-meta"><span class="tag-doc">DOCX · 6 页</span><span>昨天</span></div>
-          </div>
-          <i class="ti ti-star kd-fav empty"></i>
-        </div>
-
-        <div class="kb-doc-row tappable" data-go="K3" data-kb-doc-id="203">
-          <div class="kd-ic md"><i class="ti ti-markdown"></i></div>
-          <div class="kd-bd">
-            <div class="kd-nm">parallel_mode 4 种类型对照</div>
-            <div class="kd-meta"><span class="tag-doc">MD · 4 页</span><span>5-28</span></div>
-          </div>
-          <i class="ti ti-star kd-fav empty"></i>
-        </div>
-
-        <div class="kb-doc-row tappable" data-go="K3" data-kb-doc-id="301">
-          <div class="kd-ic pdf"><i class="ti ti-file-type-pdf"></i></div>
-          <div class="kd-bd">
-            <div class="kd-nm">总裁办 PARALLEL_2OF3 决策机制</div>
-            <div class="kd-meta"><span class="tag-doc">PDF · 14 页</span><span>5-26</span></div>
-          </div>
-          <i class="ti ti-star kd-fav empty"></i>
+        <!-- 我的文档 -->
+        <div class="section-label" id="kb-my-docs-label"><span class="accent">我的文档</span> <span class="line"></span><span class="cnt">0 篇</span></div>
+        <div id="kb-my-docs-list">
+          <div class="api-strip"><i class="ti ti-info-circle"></i><span>正在加载文档…</span></div>
         </div>
 
       </div>
@@ -10036,7 +9887,7 @@ body.mobile-mode .screen[data-screen="C1"] .chat-search-wrap{padding:4px 14px 10
           <div class="api-strip"><i class="ti ti-loader"></i><span>正在加载文档…</span></div>
         </div>
         <div class="action-bar">
-          <button type="button" class="act-btn danger" id="kb-folder-delete">删除此文件夹</button>
+          <button type="button" class="act-btn danger" id="kb-folder-delete" style="display:none">删除此文件夹</button>
         </div>
       </div>
     </div></section>
@@ -10253,7 +10104,7 @@ body.mobile-mode .screen[data-screen="C1"] .chat-search-wrap{padding:4px 14px 10
             <div class="qj-cell tappable" data-go="LH"><div class="qj-ic"><i class="ti ti-lighthouse"></i></div><div class="qj-nm">灯塔</div><div class="qj-en">beacon</div></div>
             <div class="qj-cell tappable" data-go="P0"><div class="qj-ic"><i class="ti ti-file-import"></i></div><div class="qj-nm">提案导入</div><div class="qj-en">proposal</div></div>
             <div class="qj-cell tappable" data-go="K1"><div class="qj-ic"><i class="ti ti-book"></i></div><div class="qj-nm">知识库</div><div class="qj-en">kb</div></div>
-            <div class="qj-cell tappable" data-go="C4"><div class="qj-ic"><img class="nova-icon-img" src="" alt="NOVA" data-nova-icon></div><div class="qj-nm">沙丘助手</div><div class="qj-en">ai</div></div>
+            <div class="qj-cell tappable" data-go="C4"><div class="qj-ic"><img class="nova-icon-img" src="" alt="云枢" data-nova-icon></div><div class="qj-nm">沙丘助手</div><div class="qj-en">ai</div></div>
             <div class="qj-cell tappable" data-go="W2"><div class="qj-ic"><i class="ti ti-edit"></i></div><div class="qj-nm">写汇报</div><div class="qj-en">report</div></div>
             <div class="qj-cell tappable" data-go="MM0"><div class="qj-ic"><i class="ti ti-microphone"></i></div><div class="qj-nm">会议纪要</div><div class="qj-en">minutes</div></div>
             <div class="qj-cell tappable" data-go="Z4"><div class="qj-ic"><i class="ti ti-search"></i></div><div class="qj-nm">跨域搜索</div><div class="qj-en">search</div></div>
@@ -11967,213 +11818,37 @@ body.mobile-mode .screen[data-screen="C1"] .chat-search-wrap{padding:4px 14px 10
       <div class="app-bar has-back">
         <button type="button" class="ds-back" aria-label="返回"><i class="ti ti-chevron-left"></i></button>
         <div class="title"><span class="accent">沙丘</span><span class="sub">业务审批</span></div>
-        <div class="actions">
-          <div class="icon-btn"><i class="ti ti-search"></i></div>
-          <div class="icon-btn"><i class="ti ti-bell"></i><span class="red-dot"></span></div>
-        </div>
       </div>
       <div class="content">
 
-        <!-- Hero · 待我处理 -->
+        <!-- Hero · 待我审批 -->
         <div class="hero-stat">
-          <div class="head"><span class="k">业务待办 · 工作台合并视图</span><span class="badge urge">3 OVERDUE</span></div>
+          <div class="head"><span class="k">待我审批 · 0 项</span><span class="badge">无待办</span></div>
           <div class="main-row">
-            <div><div class="big">10<span class="u">项</span></div>
-              <div style="font-family:var(--mono);font-size:8px;opacity:.6;letter-spacing:.06em;text-transform:uppercase;margin-top:2px">/workbench/inbox · 节点聚合</div></div>
-            <div style="text-align:right"><div style="font-family:var(--mono);font-size:8.5px;opacity:.55;letter-spacing:.06em;text-transform:uppercase">本月经办</div>
-              <div style="font-family:var(--sans);font-size:13px;font-weight:500;letter-spacing:-.015em;margin-top:1px">¥ 1,247万</div></div>
+            <div><div class="big">0<span class="u">项</span></div></div>
           </div>
           <div class="foot">
-            <div class="item"><span class="l">待我处理</span><span class="v urge">10</span></div>
-            <div class="item"><span class="l">我发起的</span><span class="v">28</span></div>
-            <div class="item"><span class="l">本月经办</span><span class="v pos">23</span></div>
-            <div class="item"><span class="l">欠票</span><span class="v neg">30万</span></div>
+            <div class="item"><span class="l">待审批</span><span class="v">0</span></div>
+            <div class="item"><span class="l">抄送</span><span class="v">0</span></div>
+            <div class="item"><span class="l">任务</span><span class="v">0</span></div>
+            <div class="item"><span class="l">执行</span><span class="v">0</span></div>
           </div>
         </div>
 
-        <!-- 节点筛选 · PAY / REVIEW / CHASE （后端 node 枚举） -->
-        <div class="node-tabs" id="nodeTabs">
-          <div class="nt on" data-node="ALL"><span class="code">ALL</span><span class="num">10</span><span style="font-size:10px;color:var(--text-3)">全部</span></div>
-          <div class="nt" data-node="PAY"><span class="code">PAY</span><span class="num">3</span><span style="font-size:10px;color:var(--text-3)">付款·出纳</span></div>
-          <div class="nt" data-node="REVIEW"><span class="code">REVIEW</span><span class="num urge">4</span><span style="font-size:10px;color:var(--text-3)">审批</span></div>
-          <div class="nt urge" data-node="CHASE"><span class="code">CHASE</span><span class="num">3</span><span style="font-size:10px;color:var(--text-3)">续签·催办·欠票</span></div>
+        <div class="cond-chips" id="b1StatusChips" style="margin-bottom:10px"></div>
+
+        <div class="wf-list-search" id="b1SearchWrap">
+          <i class="ti ti-search"></i>
+          <input type="search" id="b1SearchInput" placeholder="搜索提案名称、编号、提交人…" autocomplete="off" />
         </div>
 
-        <!-- 业务 / 非业务 + kind 二级筛选 -->
-        <div class="domain-chips" id="b1DomainChips">
-          <div class="cond-chip on" data-b1-domain="ALL"><span class="dot"></span>全部 10</div>
-          <div class="cond-chip biz" data-b1-domain="biz">业务相关 9</div>
-          <div class="cond-chip adm" data-b1-domain="adm">非业务 1</div>
-        </div>
-        <div class="cond-chips" id="b1KindChips" style="margin-bottom:8px">
-          <div class="cond-chip on" data-b1-kind="ALL"><span class="dot"></span>全部 kind</div>
-          <div class="cond-chip" data-b1-kind="APPROVAL">APPROVAL 5</div>
-          <div class="cond-chip" data-b1-kind="TASK">TASK 2</div>
-          <div class="cond-chip" data-b1-kind="EXECUTION">EXECUTION 1</div>
-          <div class="cond-chip" data-b1-kind="CC_RO">CC_RO 1</div>
+        <div class="section-label"><span class="accent">审批</span> · 按发起时间倒序 <span class="line"></span></div>
+
+        <div id="b1ListCards">
+          <div class="xf-loading-hint">加载中…</div>
         </div>
 
-        <!-- 待办列表 -->
-        <div class="section-label"><span class="accent">代办列表</span> · 按 urgency 排序 <span class="line"></span><span class="cnt" id="b1ListLabel">REVIEW 节点</span></div>
-
-        <div id="b1LedgerList">
-        <div class="ledger-card compact tappable" data-business-type="PROPOSAL" data-go="B10" data-inbox-node="REVIEW" data-inbox-domain="biz" data-inbox-kind="APPROVAL">
-          <div class="lg-top">
-            <div>
-              <div class="lg-name">广西天琨 11 月保证金返佣 <span class="kind-tag k-approval">APPROVAL</span></div>
-              <div class="lg-id">PROPOSAL #312 · 第 1/3 步 主管审 · 320万</div>
-            </div>
-            <span class="lg-arch wait"><span class="urgency-dot high"></span>HIGH</span>
-          </div>
-          <div class="lg-prog">
-            <div class="lg-bar"><i style="width:33%;background:var(--accent)"></i></div>
-            <span class="lg-pct">流转 1/3</span>
-          </div>
-          <div class="lg-foot">
-            <span class="it"><i class="ti ti-cash"></i>账单 <b>BILL-2026-0488</b></span>
-            <span class="it"><i class="ti ti-user"></i><b>王一凡</b> 发起 · 今日到期</span>
-          </div>
-        </div>
-
-        <div class="ledger-card compact tappable" data-business-type="CONTRACT" data-go="A8" data-inbox-node="REVIEW" data-inbox-domain="biz" data-inbox-kind="APPROVAL">
-          <div class="lg-top">
-            <div>
-              <div class="lg-name">湖北中石油卡券采购合同 <span class="kind-tag k-approval">APPROVAL</span></div>
-              <div class="lg-id">CONTRACT #88 · 风控 2/3 会签 · ¥240万</div>
-            </div>
-            <span class="lg-arch wait"><span class="urgency-dot normal"></span>NORMAL</span>
-          </div>
-          <div class="lg-prog">
-            <div class="lg-bar"><i style="width:50%;background:var(--accent)"></i></div>
-            <span class="lg-pct">PARALLEL_N_OF_M · 1/3 通过</span>
-          </div>
-          <div class="lg-foot">
-            <span class="it"><i class="ti ti-stamp"></i>合同 <b>HT-2026-0088</b></span>
-            <span class="it"><i class="ti ti-shield-check"></i>法务 AI <b>PASS</b></span>
-          </div>
-        </div>
-
-        <div class="ledger-card compact tappable" data-business-type="REFUND" data-go="E4" data-inbox-node="REVIEW" data-inbox-domain="adm" data-inbox-kind="APPROVAL">
-          <div class="lg-top">
-            <div>
-              <div class="lg-name">客户赔付 · 电子券退款 <span class="kind-tag k-approval">APPROVAL</span></div>
-              <div class="lg-id">REFUND #19 · 待 CRM_YANGFEN 细审</div>
-            </div>
-            <span class="lg-arch wait"><span class="urgency-dot normal"></span>NORMAL</span>
-          </div>
-          <div class="lg-foot">
-            <span class="it"><i class="ti ti-user-star"></i>客服 <b>李婷婷</b> 发起</span>
-            <span class="it"><i class="ti ti-headphones"></i>REFUND_WITH_CRM 路由</span>
-          </div>
-        </div>
-
-        <div class="ledger-card compact tappable" data-business-type="INVOICE" data-go="B13" data-inbox-node="REVIEW" data-inbox-domain="biz" data-inbox-kind="CC_RO">
-          <div class="lg-top">
-            <div>
-              <div class="lg-name">湖北 SaaS 4 月开票审批 <span class="kind-tag k-cc">CC_RO</span></div>
-              <div class="lg-id">INVOICE #455 · 抄送·已阅</div>
-            </div>
-            <span class="lg-arch ok">只读</span>
-          </div>
-          <div class="lg-foot">
-            <span class="it"><i class="ti ti-eye"></i>无审批按钮 · 完成即已阅</span>
-          </div>
-        </div>
-
-        <div class="ledger-card compact tappable" data-business-type="PAYMENT" data-go="B13" data-inbox-node="PAY" data-inbox-domain="biz" data-inbox-kind="TASK">
-          <div class="lg-top">
-            <div>
-              <div class="lg-name">长沙微企预付款 · 差异决策 <span class="kind-tag k-task">TASK</span></div>
-              <div class="lg-id">PAYMENT #421 · 实付 280 vs 申请 300</div>
-            </div>
-            <span class="lg-arch over"><span class="urgency-dot over"></span>OVERDUE 2d</span>
-          </div>
-          <div class="lg-prog">
-            <div class="lg-bar"><i style="width:93%;background:var(--coral)"></i></div>
-            <span class="lg-pct">¥差异 20万</span>
-          </div>
-          <div class="lg-foot">
-            <span class="it warn"><i class="ti ti-alert-triangle"></i>POST <b>/payments/{id}/variance-decide</b></span>
-          </div>
-        </div>
-
-        <div class="ledger-card compact tappable" data-business-type="PAYMENT" data-go="PY1" data-inbox-pay-screen="PY1" data-inbox-node="PAY" data-inbox-domain="biz" data-inbox-kind="EXECUTION">
-          <div class="lg-top">
-            <div>
-              <div class="lg-name">湖北中石油 4 月采购款 · 出纳实付 <span class="kind-tag k-task">EXECUTION</span></div>
-              <div class="lg-id">PAYMENT #488 · 审批已通过 · 待打款</div>
-            </div>
-            <span class="lg-arch wait"><span class="urgency-dot high"></span>HIGH</span>
-          </div>
-          <div class="lg-prog">
-            <div class="lg-bar"><i style="width:100%;background:var(--green)"></i></div>
-            <span class="lg-pct">PAY-2026-0488 · 320万</span>
-          </div>
-          <div class="lg-foot">
-            <span class="it"><i class="ti ti-cash-banknote"></i>出纳 <b>李强</b> · POST /payments/{id}/pay</span>
-          </div>
-        </div>
-
-        <div class="ledger-card compact tappable" data-business-type="PAYMENT" data-go="B5" data-b5-mode="detail" data-inbox-pay-screen="detail" data-inbox-node="PAY" data-inbox-domain="biz" data-inbox-kind="APPROVAL">
-          <div class="lg-top">
-            <div>
-              <div class="lg-name">广西天琨保证金 · 付款审批 <span class="kind-tag k-approval">APPROVAL</span></div>
-              <div class="lg-id">PAYMENT #488 · 财务 2/2 步 · ¥320万</div>
-            </div>
-            <span class="lg-arch wait"><span class="urgency-dot normal"></span>NORMAL</span>
-          </div>
-          <div class="lg-prog">
-            <div class="lg-bar"><i style="width:66%;background:var(--accent)"></i></div>
-            <span class="lg-pct">流转 2/2 · FINANCE</span>
-          </div>
-          <div class="lg-foot">
-            <span class="it"><i class="ti ti-file-invoice"></i>关联 <b>BILL-2026-0488</b></span>
-            <span class="it"><i class="ti ti-arrow-right"></i>GET <b>/payments/502</b></span>
-          </div>
-        </div>
-
-        <div class="ledger-card compact tappable" data-business-type="CONTRACT" data-go="A8" data-inbox-chase="1" data-inbox-node="CHASE" data-inbox-domain="biz" data-inbox-kind="TASK">
-          <div class="lg-top">
-            <div>
-              <div class="lg-name">HT-2026-0088 · 合同续签提醒 <span class="kind-tag k-task">CHASE</span></div>
-              <div class="lg-id">CONTRACT #88 · 距到期 18 天 · 需发起续签</div>
-            </div>
-            <span class="lg-arch over"><span class="urgency-dot over"></span>续签</span>
-          </div>
-          <div class="lg-foot">
-            <span class="it"><i class="ti ti-calendar-event"></i>到期 <b>2026-06-18</b></span>
-            <span class="it"><i class="ti ti-bell-ringing"></i>CHASE · 续签</span>
-          </div>
-        </div>
-
-        <div class="ledger-card compact tappable" data-business-type="PAYMENT" data-go="B9" data-inbox-chase="1" data-inbox-node="CHASE" data-inbox-domain="biz" data-inbox-kind="TASK">
-          <div class="lg-top">
-            <div>
-              <div class="lg-name">湖南渠道 3 月采购 · 欠票催补 <span class="kind-tag k-task">CHASE</span></div>
-              <div class="lg-id">PAYMENT #377 · 已付 ¥86万 · 缺增值税专票</div>
-            </div>
-            <span class="lg-arch over"><span class="urgency-dot over"></span>欠票</span>
-          </div>
-          <div class="lg-foot">
-            <span class="it warn"><i class="ti ti-receipt-off"></i>欠票 <b>30万</b> 面值未核销</span>
-            <span class="it"><i class="ti ti-arrow-right"></i>→ B9 欠票复核</span>
-          </div>
-        </div>
-
-        <div class="ledger-card compact tappable" data-business-type="PROPOSAL" data-go="B13" data-inbox-chase="1" data-inbox-node="CHASE" data-inbox-domain="biz" data-inbox-kind="APPROVAL">
-          <div class="lg-top">
-            <div>
-              <div class="lg-name">PROP-26-0312 · 审批催办 <span class="kind-tag k-approval">CHASE</span></div>
-              <div class="lg-id">PROPOSAL #312 · 卡在 FINANCE · 已等 2 天</div>
-            </div>
-            <span class="lg-arch wait"><span class="urgency-dot high"></span>催办</span>
-          </div>
-          <div class="lg-foot">
-            <span class="it"><i class="ti ti-clock-exclamation"></i>待 <b>邓艳丽</b> 审批</span>
-            <span class="it"><i class="ti ti-bell-ringing"></i>CHASE · 催办</span>
-          </div>
-        </div>
-        </div>
+        <div id="b1LedgerList" style="display:none"></div>
 
       </div>
       <div class="tab-bar"><div class="tab " data-go="C1"><svg class="tab-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg><span>通讯</span><span class="red-dot"></span></div><div class="tab " data-go="QJ"><svg class="tab-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="5" height="5" rx="1.1"/><rect x="9.5" y="3" width="5" height="5" rx="1.1"/><rect x="16" y="3" width="5" height="5" rx="1.1"/><rect x="3" y="9.5" width="5" height="5" rx="1.1"/><rect x="9.5" y="9.5" width="5" height="5" rx="1.1" fill="currentColor" fill-opacity=".22" stroke-width="1.75"/><rect x="16" y="9.5" width="5" height="5" rx="1.1"/><rect x="3" y="16" width="5" height="5" rx="1.1"/><rect x="9.5" y="16" width="5" height="5" rx="1.1"/><rect x="16" y="16" width="5" height="5" rx="1.1"/></svg><span>千机</span></div><div class="tab " data-go="LH"><svg class="tab-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M9 4h6l1 7H8z"/><path d="M8 11h8l1.2 9H6.8z"/><path d="M12 2v1.5M5.5 7l1.6.4M18.5 7l-1.6.4"/></svg><span>灯塔</span></div><div class="tab active" data-go="B2"><svg class="tab-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg><span>我的</span></div></div>
@@ -12196,57 +11871,39 @@ body.mobile-mode .screen[data-screen="C1"] .chat-search-wrap{padding:4px 14px 10
           <div class="avatar">王</div>
           <div class="info">
             <div class="nm">王一凡</div>
-            <div class="rl">市场部 · 能源版块 · 工号 EMP-2041</div>
-            <div class="badges">
-              <span class="rb role">发起人</span>
-              <span class="rb">市场审批人</span>
-              <span class="rb">L3</span>
-            </div>
+            <div class="rl">市场部 · 能源版块</div>
+            <div class="badges" style="display:none"></div>
           </div>
         </div>
 
         <div class="quick-stats">
-          <div class="qs-cell urge" data-go="B1">
+          <div class="qs-cell" data-go="B1">
             <div class="l">待我处理</div>
-            <div class="v">10</div>
+            <div class="v">0</div>
           </div>
           <div class="qs-cell" data-go="B14">
             <div class="l">我发起的</div>
-            <div class="v">28</div>
+            <div class="v">0</div>
           </div>
           <div class="qs-cell" data-go="R1">
             <div class="l">本月经办</div>
-            <div class="v">1.2<small>万</small></div>
+            <div class="v">0</div>
           </div>
           <div class="qs-cell" data-go="B9">
             <div class="l">欠票</div>
-            <div class="v">30<small>万</small></div>
+            <div class="v">0<small>笔</small></div>
           </div>
         </div>
 
         <div class="quick-init-title">
           <span class="t">快速发起</span>
-          <span class="all" data-go="B3">全部 19 类 →</span>
+          <span class="all tappable" data-go="XF" data-xflow-sales>销售提案 →</span>
         </div>
         <div class="quick-init">
-          <div class="qi-cell" data-go="P0">
+          <div class="qi-cell tappable" data-go="XF" data-xflow-sales>
             <div class="qi-ic a"><i class="ti ti-clipboard-text"></i></div>
             <div class="qi-t">销售提案</div>
-            <span class="qi-bz">业务</span>
-          </div>
-          <div class="qi-cell" data-go="A2">
-            <div class="qi-ic g"><i class="ti ti-stamp"></i></div>
-            <div class="qi-t">合同用印</div>
-            <span class="qi-bz">业务</span>
-          </div>
-          <div class="qi-cell" data-go="B5">
-            <div class="qi-ic b"><i class="ti ti-credit-card-pay"></i></div>
-            <div class="qi-t">付款审批</div>
-            <span class="qi-bz">业务</span>
-          </div>
-          <div class="qi-cell" data-go="E1">
-            <div class="qi-ic m"><i class="ti ti-shopping-cart"></i></div>
-            <div class="qi-t">行政采购</div>
+            <span class="qi-bz">新建</span>
           </div>
         </div>
 
@@ -12256,33 +11913,32 @@ body.mobile-mode .screen[data-screen="C1"] .chat-search-wrap{padding:4px 14px 10
             <div class="mi-ic"><i class="ti ti-send"></i></div>
             <div class="mi-body">
               <div class="mi-t">我发起的审批</div>
-              <div class="mi-d">28 条 · 3 处理中 · 2 已退回</div>
+              <div class="mi-d">0 条 · 0 审批中 · 0 已驳回</div>
             </div>
             <div class="mi-meta">
-              <span class="num-badge coral">3</span>
+              <span class="num-badge gray">0</span>
               <i class="ti ti-chevron-right arr"></i>
             </div>
           </div>
           <div class="menu-item" data-go="P1">
             <div class="mi-ic"><i class="ti ti-clipboard-list" style="color:var(--accent)"></i></div>
             <div class="mi-body">
-              <div class="mi-t">我发起的提案</div>
-              <div class="mi-d">28 份 · DRAFT 3 · PENDING 2 · APPROVED 18 · LIVE 5</div>
+              <div class="mi-t">抄送我的提案</div>
+              <div class="mi-d">0 份抄送 · 0 审批中</div>
             </div>
             <div class="mi-meta">
-              <span class="num-badge">28</span>
+              <span class="num-badge gray">0</span>
               <i class="ti ti-chevron-right arr"></i>
             </div>
           </div>
           <div class="menu-item" data-go="B1">
-            <span class="red-dot" style="position:absolute;top:9px;left:34px;width:6px;height:6px;background:var(--coral);border-radius:50%;border:1.5px solid var(--bg-soft)"></span>
             <div class="mi-ic green"><i class="ti ti-checkup-list"></i></div>
             <div class="mi-body">
               <div class="mi-t">我审批的</div>
-              <div class="mi-d">12 待我审 · 23 本月已审</div>
+              <div class="mi-d">0 待我审 · 0 已审核</div>
             </div>
             <div class="mi-meta">
-              <span class="num-badge">12</span>
+              <span class="num-badge gray">0</span>
               <i class="ti ti-chevron-right arr"></i>
             </div>
           </div>
@@ -12290,10 +11946,10 @@ body.mobile-mode .screen[data-screen="C1"] .chat-search-wrap{padding:4px 14px 10
             <div class="mi-ic"><i class="ti ti-book"></i></div>
             <div class="mi-body">
               <div class="mi-t">知识库</div>
-              <div class="mi-d">1,247 文档 · 6 分类 · 23 未读</div>
+              <div class="mi-d">0 文档 · 0 分类 · 0 未读</div>
             </div>
             <div class="mi-meta">
-              <span class="num-badge">23</span>
+              <span class="num-badge gray">0</span>
               <i class="ti ti-chevron-right arr"></i>
             </div>
           </div>
@@ -12301,10 +11957,10 @@ body.mobile-mode .screen[data-screen="C1"] .chat-search-wrap{padding:4px 14px 10
             <div class="mi-ic"><i class="ti ti-edit"></i></div>
             <div class="mi-body">
               <div class="mi-t">写汇报</div>
-              <div class="mi-d">28 篇 · 2 草稿 · 日 / 周 / 月 / 季</div>
+              <div class="mi-d">0 篇 · 0 草稿 · 日 / 周 / 月 / 季</div>
             </div>
             <div class="mi-meta">
-              <span class="num-badge">28</span>
+              <span class="num-badge gray">0</span>
               <i class="ti ti-chevron-right arr"></i>
             </div>
           </div>
@@ -12312,10 +11968,10 @@ body.mobile-mode .screen[data-screen="C1"] .chat-search-wrap{padding:4px 14px 10
             <div class="mi-ic"><i class="ti ti-microphone"></i></div>
             <div class="mi-body">
               <div class="mi-t">会议纪要</div>
-              <div class="mi-d">5 条 · 3 已生成 · 2 转写中</div>
+              <div class="mi-d">0 条 · 0 已生成 · 0 转写中</div>
             </div>
             <div class="mi-meta">
-              <span class="num-badge">5</span>
+              <span class="num-badge gray">0</span>
               <i class="ti ti-chevron-right arr"></i>
             </div>
           </div>
@@ -12336,10 +11992,10 @@ body.mobile-mode .screen[data-screen="C1"] .chat-search-wrap{padding:4px 14px 10
             <div class="mi-ic blue"><i class="ti ti-file-invoice"></i></div>
             <div class="mi-body">
               <div class="mi-t">应付账单</div>
-              <div class="mi-d">8 待处理 · 总 ¥412万 · 灯塔联动</div>
+              <div class="mi-d">0 待处理 · 总 ¥0 · 灯塔联动</div>
             </div>
             <div class="mi-meta">
-              <span class="num-badge gray">8</span>
+              <span class="num-badge gray">0</span>
               <i class="ti ti-chevron-right arr"></i>
             </div>
           </div>
@@ -12347,7 +12003,7 @@ body.mobile-mode .screen[data-screen="C1"] .chat-search-wrap{padding:4px 14px 10
             <div class="mi-ic"><i class="ti ti-file-certificate"></i></div>
             <div class="mi-body">
               <div class="mi-t">我的合同 / 用印记录</div>
-              <div class="mi-d">14 份 · 2 临期 · 寄出待回收 1</div>
+              <div class="mi-d">0 份 · 0 临期 · 寄出待回收 0</div>
             </div>
             <div class="mi-meta">
               <i class="ti ti-chevron-right arr"></i>
@@ -12357,10 +12013,10 @@ body.mobile-mode .screen[data-screen="C1"] .chat-search-wrap{padding:4px 14px 10
             <div class="mi-ic coral"><i class="ti ti-alert-triangle"></i></div>
             <div class="mi-body">
               <div class="mi-t">欠票催办</div>
-              <div class="mi-d">1 笔 ¥30万 · 欠 13 天</div>
+              <div class="mi-d">0 笔 · ¥0 · 欠 0 天</div>
             </div>
             <div class="mi-meta">
-              <span class="num-badge coral">!</span>
+              <span class="num-badge gray">0</span>
               <i class="ti ti-chevron-right arr"></i>
             </div>
           </div>
@@ -12567,200 +12223,79 @@ body.mobile-mode .screen[data-screen="C1"] .chat-search-wrap{padding:4px 14px 10
         <button class="ds-back"><i class="ti ti-chevron-left"></i></button>
         <div class="ds-titlebox">
           <div class="ds-crumb">我的 · 发起新审批</div>
-          <div class="ds-name">选择审批类型</div>
+          <div class="ds-name">新建销售提案</div>
         </div>
         <button class="ds-more"><i class="ti ti-help"></i></button>
       </div>
       <div class="content" data-init-screen="B3">
 
-        <div class="init-cat-tab">
-          <div class="ic-tab on biz" data-init-tab="biz">业务相关 <span class="ct">3 类</span></div>
-          <div class="ic-tab adm" data-init-tab="adm">非业务相关 <span class="ct">19 类</span></div>
+        <div class="init-cat-tab" style="display:none">
+          <div class="ic-tab on biz" data-init-tab="biz">业务相关 <span class="ct">1 类</span></div>
         </div>
 
         <div class="init-pane biz active">
           <div class="bind-hint">
-            <div class="bh-ic"><i class="ti ti-link"></i></div>
+            <div class="bh-ic"><i class="ti ti-clipboard-text"></i></div>
             <div class="bh-body">
-              <div class="bh-t">业务类必须从账单 / 提案发起</div>
-              <div class="bh-d">下一步会进入选账单或导入提案，关联后才能填表。<b>不支持手动录入项目名</b>。</div>
-              <div class="bh-api">POST /payments · category=BUSINESS_SETTLEMENT 须 billId；有 contractId 须 acceptanceDocId</div>
+              <div class="bh-t">新建销售提案</div>
+              <div class="bh-d">业务元数据 · 财务 · 四流 · 方案叙事 · 提交后按规则自动抄送知会。</div>
             </div>
           </div>
           <div class="section-label">
-            <span class="accent">业务相关</span>
+            <span class="accent">销售提案</span>
             <span class="line"></span>
-            <span class="cnt">关联提案 + 账单</span>
+            <span class="cnt">XFlow 模板</span>
           </div>
           <div class="init-grid">
-            <div class="init-card biz" data-go="B4">
-              <div class="ig-tag">从应付</div>
-              <div class="ig-ic"><i class="ti ti-credit-card-pay"></i></div>
-              <div class="ig-t">付款审批</div>
-              <div class="ig-d">石油款 / 推广费 / 保证金 / 服务费等支付</div>
-              <div class="ig-api">GET /bills?type=… → POST /payments</div>
-            </div>
-            <div class="init-card biz" data-go="P0">
-              <div class="ig-tag">导入</div>
-              <div class="ig-ic"><i class="ti ti-clipboard-check"></i></div>
-              <div class="ig-t">销售提案</div>
-              <div class="ig-d">批量导入产品 · 8 协议槽位 · 提交审批</div>
-              <div class="ig-api">POST /proposals/import · PROPOSAL_3STEP</div>
-            </div>
-            <div class="init-card biz" data-go="B11">
-              <div class="ig-tag">从提案</div>
-              <div class="ig-ic"><i class="ti ti-rocket"></i></div>
-              <div class="ig-t">产品上线申请</div>
-              <div class="ig-d">合同关联后提交 · 运营配产品 · 测试双确认</div>
-              <div class="ig-api">POST /launch-applications · /test-sessions</div>
-            </div>
           </div>
         </div>
 
-        <div class="init-pane adm">
-          <div class="bind-hint adm">
-            <div class="bh-ic"><i class="ti ti-forms"></i></div>
-            <div class="bh-body">
-              <div class="bh-t">非业务类可手动发起</div>
-              <div class="bh-d">行政采购、用印、赔付、资质等无需灯塔账单；付款可走 <b>NON_BUSINESS</b> 并填 proposalId 或说明。<b>含 5 类占位 PH1–PH5（后端未做）</b>。</div>
-              <div class="bh-api">POST /contracts · /customer-refunds · /admin-misc · /entity-lifecycles</div>
-            </div>
+        <div class="init-pane adm" style="display:none">
+          <div class="init-grid"></div>
+        </div>
+
+
+      </div>
+    </div></section>
+<section class="screen" data-screen="XF" data-name="新建销售提案" data-region="biz"><div class="phone-screen">
+      <div class="status-bar"><span>9:41</span><span class="right">
+        <svg class="sb-ic" viewBox="0 0 24 24" fill="currentColor"><rect x="2" y="14" width="3" height="6" rx=".5"/><rect x="7" y="10" width="3" height="10" rx=".5"/><rect x="12" y="6" width="3" height="14" rx=".5"/><rect x="17" y="2" width="3" height="18" rx=".5"/></svg>
+      </span></div>
+      <div class="ds-bar">
+        <button class="ds-back" data-back><i class="ti ti-chevron-left"></i></button>
+        <div class="ds-titlebox">
+          <div class="ds-crumb">销售提案 · PROPOSAL_3STEP</div>
+          <div class="ds-name">新建销售提案</div>
+        </div>
+        <button class="ds-more"><i class="ti ti-dots"></i></button>
+      </div>
+      <div class="content">
+        <div id="xf-form-panel">
+        <div class="form-card">
+          <div class="fc-h"><span id="xf-form-title">新建销售提案</span><span class="fc-tag">XFlow</span></div>
+          <div id="xf-form-fields"><div class="xf-loading-hint">正在加载表单模板…</div></div>
+        </div>
+        <div class="form-card">
+          <div class="fc-h">审批流程</div>
+          <div id="xf-stages-list"><div class="xf-loading-hint">加载中…</div></div>
+        </div>
+        <div class="form-card xf-cc-rules-card" id="xf-cc-rules-card">
+          <div class="fc-h xf-cc-rules-toggle" role="button" tabindex="0" style="cursor:pointer;user-select:none;display:flex;align-items:center;gap:6px;margin-bottom:0">
+            <span>抄送规则说明</span>
+            <span style="font-size:10px;color:var(--text-3);font-weight:400">提交后按规则自动知会相关人员</span>
+            <i class="ti ti-chevron-down xf-cc-rules-chevron" style="margin-left:auto;font-size:16px;color:var(--text-3);transition:transform .2s"></i>
           </div>
-          <div class="section-label">
-            <span class="accent" style="color:var(--amber)">非业务相关</span>
-            <span class="line"></span>
-            <span class="cnt">手动发起</span>
-          </div>
-          <div class="init-grid">
-            <div class="init-card adm" data-go="A2">
-              <div class="ig-tag">合同</div>
-              <div class="ig-ic"><i class="ti ti-stamp"></i></div>
-              <div class="ig-t">合同审批用印</div>
-              <div class="ig-d">借阅 / 审批 / 用印 / 寄出 / 回收闭环</div>
-              <div class="ig-api">contract-oa.bpmn · CONTRACT_3STEP</div>
-            </div>
-            <div class="init-card adm" data-go="E1">
-              <div class="ig-tag">行政</div>
-              <div class="ig-ic"><i class="ti ti-shopping-cart"></i></div>
-              <div class="ig-t">行政采购 / 费用</div>
-              <div class="ig-d">办公用品 / 房租物业 / 水电</div>
-              <div class="ig-api">POST /expenses · 5 万金额分支</div>
-            </div>
-            <div class="init-card adm" data-go="E4">
-              <div class="ig-tag">客服</div>
-              <div class="ig-ic"><i class="ti ti-headphones"></i></div>
-              <div class="ig-t">客户赔付</div>
-              <div class="ig-d">客诉赔付 · 多级审批至出纳</div>
-              <div class="ig-api">POST /customer-refunds</div>
-            </div>
-            <div class="init-card adm" data-go="E3">
-              <div class="ig-tag">印章</div>
-              <div class="ig-ic"><i class="ti ti-stamp"></i></div>
-              <div class="ig-t">非合同用印</div>
-              <div class="ig-d">用印申请 · 自动注入财务核对</div>
-              <div class="ig-api">POST /seal-applies</div>
-            </div>
-            <div class="init-card adm" data-go="E2">
-              <div class="ig-tag">招待</div>
-              <div class="ig-ic"><i class="ti ti-glass-full"></i></div>
-              <div class="ig-t">招待费申请</div>
-              <div class="ig-d">1000 元 / 核心高层分支</div>
-              <div class="ig-api">POST /entertainment-requests</div>
-            </div>
-            <div class="init-card adm" data-go="E5">
-              <div class="ig-tag">主体</div>
-              <div class="ig-ic"><i class="ti ti-building-community"></i></div>
-              <div class="ig-t">存续公司</div>
-              <div class="ig-d">新设 · 变更 · 注销</div>
-              <div class="ig-api">POST /entity-lifecycles</div>
-            </div>
-            <div class="init-card adm" data-go="E6">
-              <div class="ig-tag">资质</div>
-              <div class="ig-ic"><i class="ti ti-certificate-2"></i></div>
-              <div class="ig-t">资质维护</div>
-              <div class="ig-d">续展 · 新办 · 变更</div>
-              <div class="ig-api">POST /qualifications/maint</div>
-            </div>
-            <div class="init-card adm" data-go="E7">
-              <div class="ig-tag">借用</div>
-              <div class="ig-ic"><i class="ti ti-hand-grab"></i></div>
-              <div class="ig-t">资质借用 / 归还</div>
-              <div class="ig-d">借用记录 + 归还登记</div>
-              <div class="ig-api">POST /qualifications/borrow · /return</div>
-            </div>
-            <div class="init-card adm" data-go="E8">
-              <div class="ig-tag">借阅</div>
-              <div class="ig-ic"><i class="ti ti-book-2"></i></div>
-              <div class="ig-t">合同借阅 / 归还</div>
-              <div class="ig-d">电子 / 纸质 · 水印 · 催办</div>
-              <div class="ig-api">POST /contracts/{id}/borrow · /return</div>
-            </div>
-            <div class="init-card adm" data-go="M1">
-              <div class="ig-tag">轻流程</div>
-              <div class="ig-ic"><i class="ti ti-id-badge-2"></i></div>
-              <div class="ig-t">名片申请</div>
-              <div class="ig-d">数量 · 模板 · 单步</div>
-              <div class="ig-api">POST /admin-misc · BUSINESS_CARD</div>
-            </div>
-            <div class="init-card adm" data-go="M2">
-              <div class="ig-tag">轻流程</div>
-              <div class="ig-ic"><i class="ti ti-car"></i></div>
-              <div class="ig-t">公车申请</div>
-              <div class="ig-d">用车计划 · 司机 · 油费</div>
-              <div class="ig-api">POST /admin-misc · COMPANY_CAR</div>
-            </div>
-            <div class="init-card adm" data-go="M3">
-              <div class="ig-tag">轻流程</div>
-              <div class="ig-ic"><i class="ti ti-gift"></i></div>
-              <div class="ig-t">礼品申请</div>
-              <div class="ig-d">★ contractId 必填</div>
-              <div class="ig-api">POST /admin-misc · GIFT</div>
-            </div>
-            <div class="init-card adm" data-go="M4">
-              <div class="ig-tag">轻流程</div>
-              <div class="ig-ic"><i class="ti ti-device-desktop"></i></div>
-              <div class="ig-t">设备租赁</div>
-              <div class="ig-d">★ contractId 必填 · 押金</div>
-              <div class="ig-api">POST /admin-misc · EQUIPMENT_LEASE</div>
-            </div>
-            <div class="init-card adm" data-go="PH1" style="opacity:.75">
-              <div class="ig-tag" style="background:var(--coral-soft);color:var(--coral);border-color:var(--coral-line)">占位</div>
-              <div class="ig-ic"><i class="ti ti-plane"></i></div>
-              <div class="ig-t">差旅申请 (拟)</div>
-              <div class="ig-d">后端 BPMN 未开发</div>
-              <div class="ig-api">PLACEHOLDER · 本期不做</div>
-            </div>
-            <div class="init-card adm" data-go="PH2" style="opacity:.75">
-              <div class="ig-tag" style="background:var(--coral-soft);color:var(--coral);border-color:var(--coral-line)">占位</div>
-              <div class="ig-ic"><i class="ti ti-receipt-2"></i></div>
-              <div class="ig-t">电子报销 (拟)</div>
-              <div class="ig-d">携程对接待定</div>
-              <div class="ig-api">PLACEHOLDER</div>
-            </div>
-            <div class="init-card adm" data-go="PH3" style="opacity:.75">
-              <div class="ig-tag" style="background:var(--coral-soft);color:var(--coral);border-color:var(--coral-line)">占位</div>
-              <div class="ig-ic"><i class="ti ti-coin"></i></div>
-              <div class="ig-t">薪酬福利 (拟)</div>
-              <div class="ig-d">HR 提报审批流</div>
-              <div class="ig-api">PLACEHOLDER</div>
-            </div>
-            <div class="init-card adm" data-go="PH4" style="opacity:.75">
-              <div class="ig-tag" style="background:var(--coral-soft);color:var(--coral);border-color:var(--coral-line)">占位</div>
-              <div class="ig-ic"><i class="ti ti-package"></i></div>
-              <div class="ig-t">物品领用 (拟)</div>
-              <div class="ig-d">耗材 · IT · 劳保</div>
-              <div class="ig-api">PLACEHOLDER</div>
-            </div>
-            <div class="init-card adm" data-go="PH5" style="opacity:.75">
-              <div class="ig-tag" style="background:var(--coral-soft);color:var(--coral);border-color:var(--coral-line)">占位</div>
-              <div class="ig-ic"><i class="ti ti-home-2"></i></div>
-              <div class="ig-t">驻外补贴 (拟)</div>
-              <div class="ig-d">租房可走 E1·RENT</div>
-              <div class="ig-api">PLACEHOLDER</div>
+          <div id="xf-cc-rules-body" class="xf-cc-rules-body" hidden>
+            <div id="xf-cc-rules-panel" style="padding-top:10px">
+              <div class="xf-loading-hint">加载抄送规则…</div>
             </div>
           </div>
         </div>
-
+        <div class="action-bar">
+          <button type="button" class="act-btn primary" id="xf-submit-btn"><i class="ti ti-send"></i>提交审批</button>
+        </div>
+        </div>
+        <div id="xf-detail-panel" style="display:none"></div>
       </div>
     </div></section>
 <section class="screen" data-screen="B4" data-name="选应付账单" data-region="biz"><div class="phone-screen">
@@ -13862,6 +13397,19 @@ body.mobile-mode .screen[data-screen="C1"] .chat-search-wrap{padding:4px 14px 10
           </div>
         </div>
 
+        <div class="form-card xf-cc-rules-card" id="b10-cc-rules-card">
+          <div class="fc-h xf-cc-rules-toggle" role="button" tabindex="0" style="cursor:pointer;user-select:none;display:flex;align-items:center;gap:6px;margin-bottom:0">
+            <span>抄送规则说明</span>
+            <span style="font-size:10px;color:var(--text-3);font-weight:400">提交后按规则自动知会相关人员</span>
+            <i class="ti ti-chevron-down xf-cc-rules-chevron" style="margin-left:auto;font-size:16px;color:var(--text-3);transition:transform .2s"></i>
+          </div>
+          <div id="b10-cc-rules-body" class="xf-cc-rules-body" hidden>
+            <div id="b10-cc-rules-panel" style="padding-top:10px">
+              <div class="xf-loading-hint">加载抄送规则…</div>
+            </div>
+          </div>
+        </div>
+
         <div class="confirm-bar" id="b10ConfirmBar">
           <div class="cb-t">撤回将清除 <b>1 步</b>已通过审批，确认撤回 PROP-26-0312？</div>
           <div class="cb-actions">
@@ -14227,73 +13775,38 @@ body.mobile-mode .screen[data-screen="C1"] .chat-search-wrap{padding:4px 14px 10
       <div class="ds-bar">
         <button class="ds-back"><i class="ti ti-chevron-left"></i></button>
         <div class="ds-titlebox">
-          <div class="ds-crumb">我发起的 · <span data-go="P1" style="color:var(--accent);cursor:pointer">提案列表</span></div>
-          <div class="ds-name" id="b14Title">全部事项 <span class="id">GET /workbench/my-initiated</span></div>
+          <div class="ds-crumb">我的 · 我发起的审批</div>
+          <div class="ds-name" id="b14Title">审批列表</div>
         </div>
-        <button class="ds-more" data-go="P1" title="提案列表"><i class="ti ti-list"></i></button>
       </div>
       <div class="content">
 
-        <div class="tab-tog" id="b14ViewTabs">
-          <div class="tt on" data-b14-view="list"><span>列表</span><span class="tc">8</span></div>
-          <div class="tt" data-b14-view="track"><span>追踪</span></div>
-        </div>
-
-        <div class="mode-pane on" id="b14ListPane">
-          <div class="hero-stat">
-            <div class="head"><span class="k">我发起的 · 全部类型</span><span class="badge urge">2 PENDING</span></div>
-            <div class="foot">
-              <div class="item"><span class="l">PROPOSAL</span><span class="v">12</span></div>
-              <div class="item"><span class="l">CONTRACT</span><span class="v">8</span></div>
-              <div class="item"><span class="l">PAYMENT</span><span class="v">5</span></div>
-              <div class="item"><span class="l">EXPENSE</span><span class="v">3</span></div>
-            </div>
+        <div class="hero-stat">
+          <div class="head"><span class="k">我发起的审批 · 0 份</span><span class="badge">无待审</span></div>
+          <div class="main-row">
+            <div><div class="big">0<span class="u">份</span></div></div>
           </div>
-          <div class="cond-chips" id="b14TypeChips" style="margin-bottom:10px">
-            <div class="cond-chip on" data-b14-type="ALL"><span class="dot"></span>全部 8</div>
-            <div class="cond-chip" data-b14-type="PROPOSAL">PROPOSAL 3</div>
-            <div class="cond-chip" data-b14-type="CONTRACT">CONTRACT 2</div>
-            <div class="cond-chip" data-b14-type="PAYMENT">PAYMENT 2</div>
-            <div class="cond-chip" data-b14-type="EXPENSE">EXPENSE 1</div>
-          </div>
-          <div class="section-label"><span class="accent">my-initiated</span> · 按时间倒序 <span class="line"></span></div>
-          <div id="b14ListCards">
-            <div class="p-list-card b14-item" data-b14-type="PROPOSAL" data-b14-track="prop312">
-              <div class="pl-h"><div style="flex:1"><div class="pl-name">广西天琨保证金返佣</div><div class="pl-id">PROPOSAL #312 · PROP-26-0312</div></div><span class="st-badge pending">PENDING</span></div>
-              <div class="pl-meta"><span>FINANCE 待审</span><span class="dot"></span><span>5-27</span><span class="dot"></span><b>¥320万</b></div>
-            </div>
-            <div class="p-list-card b14-item" data-b14-type="CONTRACT" data-b14-track="contract88">
-              <div class="pl-h"><div style="flex:1"><div class="pl-name">湖北中石油卡券采购合同</div><div class="pl-id">CONTRACT #88 · HT-2026-0088</div></div><span class="st-badge pending">PENDING</span></div>
-              <div class="pl-meta"><span>风控 2/3 会签</span><span class="dot"></span><span>5-20</span><span class="dot"></span><b>¥240万</b></div>
-            </div>
-            <div class="p-list-card b14-item" data-b14-type="PAYMENT" data-b14-track="pay488">
-              <div class="pl-h"><div style="flex:1"><div class="pl-name">湖北中石油 4 月采购款</div><div class="pl-id">PAYMENT #488 · PAY-2026-0488</div></div><span class="st-badge pending">PENDING</span></div>
-              <div class="pl-meta"><span>CASHIER 待实付</span><span class="dot"></span><span>5-28</span><span class="dot"></span><b>¥320万</b></div>
-            </div>
-            <div class="p-list-card b14-item" data-b14-type="EXPENSE" data-b14-track="exp451">
-              <div class="pl-h"><div style="flex:1"><div class="pl-name">总部办公租赁 · 5 月</div><div class="pl-id">EXPENSE #451 · CG-2026-0451</div></div><span class="st-badge approved">APPROVED</span></div>
-              <div class="pl-meta"><span>行政采购</span><span class="dot"></span><span>5-15</span><span class="dot"></span><b>¥20万</b></div>
-            </div>
-            <div class="p-list-card b14-item" data-b14-type="PROPOSAL" data-b14-track="prop289">
-              <div class="pl-h"><div style="flex:1"><div class="pl-name">江西中石油平安电子券</div><div class="pl-id">PROPOSAL #289 · PROP-26-0289</div></div><span class="st-badge approved">APPROVED</span></div>
-              <div class="pl-meta"><span>待准备合同</span><span class="dot"></span><span>4-15</span></div>
-            </div>
-            <div class="p-list-card b14-item" data-b14-type="CONTRACT" data-b14-track="contract88">
-              <div class="pl-h"><div style="flex:1"><div class="pl-name">总部办公楼租赁合同</div><div class="pl-id">CONTRACT #210 · HT-2025-0210</div></div><span class="st-badge live">SEALED</span></div>
-              <div class="pl-meta"><span>台账已生成</span><span class="dot"></span><span>2025</span></div>
-            </div>
-            <div class="p-list-card b14-item" data-b14-type="PAYMENT" data-b14-track="pay488">
-              <div class="pl-h"><div style="flex:1"><div class="pl-name">预付款 · 办公租赁押金</div><div class="pl-id">PAYMENT #412 · PREPAY</div></div><span class="st-badge live">PAID</span></div>
-              <div class="pl-meta"><span>押金条已录</span><span class="dot"></span><span>1-10</span></div>
-            </div>
-            <div class="p-list-card b14-item" data-b14-type="PROPOSAL" data-b14-track="propdraft">
-              <div class="pl-h"><div style="flex:1"><div class="pl-name">2026 Q2 新签提案 · 草稿</div><div class="pl-id">PROP-DRAFT-005</div></div><span class="st-badge draft">DRAFT</span></div>
-              <div class="pl-meta"><span style="color:var(--coral)">8 槽未齐</span><span class="dot"></span><span>5-28</span></div>
-            </div>
+          <div class="foot">
+            <div class="item"><span class="l">草稿</span><span class="v">0</span></div>
+            <div class="item"><span class="l">审批中</span><span class="v">0</span></div>
+            <div class="item"><span class="l">已通过</span><span class="v">0</span></div>
+            <div class="item"><span class="l">已驳回</span><span class="v">0</span></div>
           </div>
         </div>
 
-        <div class="mode-pane" id="b14TrackPane">
+        <div class="cond-chips" id="b14StatusChips" style="margin-bottom:10px"></div>
+
+        <div class="wf-list-search" id="b14SearchWrap">
+          <i class="ti ti-search"></i>
+          <input type="search" id="b14SearchInput" placeholder="搜索提案名称、编号、类型…" autocomplete="off" />
+        </div>
+
+        <div class="section-label"><span class="accent">审批</span> · 按发起时间倒序 <span class="line"></span></div>
+        <div id="b14ListCards">
+          <div class="xf-loading-hint">加载中…</div>
+        </div>
+
+        <div class="mode-pane" id="b14TrackPane" style="display:none">
 
         <!-- 追踪 hero -->
         <div class="track-hero" id="b14TrackHero">
@@ -14379,8 +13892,8 @@ body.mobile-mode .screen[data-screen="C1"] .chat-search-wrap{padding:4px 14px 10
 
       </div>
       <div class="action-bar" id="b14ActionBar">
-        <button class="act-btn" id="b14WithdrawBtn"><i class="ti ti-arrow-back-up"></i>撤回</button>
-        <button class="act-btn primary"><i class="ti ti-bell-ringing"></i>催办邓艳丽</button>
+        <button class="act-btn" data-go="B2"><i class="ti ti-arrow-left"></i>返回</button>
+        <button class="act-btn primary" data-go="B3"><i class="ti ti-plus"></i>创建新提案</button>
       </div>
     </div></section>
 <section class="screen" data-screen="R1" data-name="角色工作台" data-region="biz"><div class="phone-screen">
@@ -14589,136 +14102,43 @@ body.mobile-mode .screen[data-screen="C1"] .chat-search-wrap{padding:4px 14px 10
       <div class="ds-bar">
         <button class="ds-back"><i class="ti ti-chevron-left"></i></button>
         <div class="ds-titlebox">
-          <div class="ds-crumb">我的 · 我发起的提案</div>
-          <div class="ds-name">提案列表 <span class="id">GET /proposals?owner=me</span></div>
+          <div class="ds-crumb">我的 · 抄送我的提案</div>
+          <div class="ds-name">抄送提案列表</div>
         </div>
         <button class="ds-more"><i class="ti ti-filter"></i></button>
       </div>
       <div class="content">
 
         <div class="hero-stat">
-          <div class="head"><span class="k">我发起的提案 · 28 份</span><span class="badge urge">2 PENDING</span></div>
+          <div class="head"><span class="k">抄送我的提案 · 0 份</span><span class="badge">无待审</span></div>
           <div class="main-row">
-            <div><div class="big">28<span class="u">份</span></div>
-              <div style="font-family:var(--mono);font-size:9px;opacity:.6;letter-spacing:.06em;text-transform:uppercase;margin-top:3px">SALES 23 · PROCUREMENT 5</div></div>
-            <div style="text-align:right"><div style="font-family:var(--mono);font-size:9.5px;opacity:.55;letter-spacing:.06em;text-transform:uppercase">本月新发起</div>
-              <div style="font-family:var(--sans);font-size:16px;font-weight:500;letter-spacing:-.015em;margin-top:2px">7 份</div></div>
+            <div><div class="big">0<span class="u">份</span></div></div>
           </div>
           <div class="foot">
-            <div class="item"><span class="l">DRAFT</span><span class="v">3</span></div>
-            <div class="item"><span class="l">PENDING</span><span class="v urge">2</span></div>
-            <div class="item"><span class="l">APPROVED</span><span class="v pos">18</span></div>
-            <div class="item"><span class="l">LIVE</span><span class="v pos">5</span></div>
+            <div class="item"><span class="l">草稿</span><span class="v">0</span></div>
+            <div class="item"><span class="l">审批中</span><span class="v">0</span></div>
+            <div class="item"><span class="l">已通过</span><span class="v">0</span></div>
+            <div class="item"><span class="l">已上线</span><span class="v">0</span></div>
           </div>
         </div>
 
-        <div class="cond-chips" style="margin-bottom:8px">
-          <div class="cond-chip on"><span class="dot"></span>全部 28</div>
-          <div class="cond-chip">DRAFT 3</div>
-          <div class="cond-chip">PENDING 2</div>
-          <div class="cond-chip">APPROVED 18</div>
-          <div class="cond-chip">LIVE 5</div>
-        </div>
-        <div class="cond-chips" style="margin-bottom:10px">
-          <div class="cond-chip on">SALES 23</div>
-          <div class="cond-chip">PROCUREMENT 5</div>
+        <div class="cond-chips" id="p1StatusChips" style="margin-bottom:10px"></div>
+
+        <div class="wf-list-search" id="p1SearchWrap">
+          <i class="ti ti-search"></i>
+          <input type="search" id="p1SearchInput" placeholder="搜索提案名称、编号、类型…" autocomplete="off" />
         </div>
 
         <div class="section-label"><span class="accent">提案</span> · 按创建时间倒序 <span class="line"></span></div>
 
-        <div class="p-list-card" data-go="B10" data-p0-proposal-id="312">
-          <div class="pl-h">
-            <div style="flex:1;min-width:0">
-              <div class="pl-name">广西天琨保证金返佣 · 11 月</div>
-              <div class="pl-id">PROP-26-0312 · proposalKind=SALES</div>
-            </div>
-            <span class="st-badge pending">PENDING</span>
-          </div>
-          <div class="pl-meta">
-            <span>王一凡</span><span class="dot"></span><span>5-27 09:42</span><span class="dot"></span><span>10 产品</span><span class="dot"></span><b>¥320万</b>
-          </div>
-          <div class="pl-foot">
-            <div class="progress"><div class="pb"><i style="width:50%;background:var(--accent)"></i></div><span class="px">2/3 步</span></div>
-            <span style="font-family:var(--mono);font-size:9px;color:var(--accent);letter-spacing:.04em;font-weight:600">→ FINANCE 待审</span>
-          </div>
-        </div>
-
-        <div class="p-list-card" data-go="B10" data-p0-proposal-id="312">
-          <div class="pl-h">
-            <div style="flex:1;min-width:0">
-              <div class="pl-name">湖北中石油卡券资源</div>
-              <div class="pl-id">PROP-26-0312 · proposalKind=SALES · LIVE</div>
-            </div>
-            <span class="st-badge live">LIVE</span>
-          </div>
-          <div class="pl-meta">
-            <span>王一凡</span><span class="dot"></span><span>3-26</span><span class="dot"></span><span>16 产品</span><span class="dot"></span><b>¥240万</b>
-          </div>
-          <div class="pl-foot">
-            <div class="progress"><div class="pb"><i style="width:100%;background:#1D9E75"></i></div><span class="px">已上线</span></div>
-            <span style="font-family:var(--mono);font-size:9px;color:#085041;letter-spacing:.04em;font-weight:600">→ HT-2026-0088</span>
-          </div>
-        </div>
-
-        <div class="p-list-card" data-go="B10" data-p0-proposal-id="289">
-          <div class="pl-h">
-            <div style="flex:1;min-width:0">
-              <div class="pl-name">江西中石油 4 月平安电子券</div>
-              <div class="pl-id">PROP-26-0289 · proposalKind=SALES</div>
-            </div>
-            <span class="st-badge approved">APPROVED</span>
-          </div>
-          <div class="pl-meta">
-            <span>王一凡</span><span class="dot"></span><span>4-15</span><span class="dot"></span><span>8 产品</span><span class="dot"></span><b>¥218万</b>
-          </div>
-          <div class="pl-foot">
-            <div class="progress"><div class="pb"><i style="width:100%;background:#185FA5"></i></div><span class="px">待合同</span></div>
-            <span style="font-family:var(--mono);font-size:9px;color:#0C447C;letter-spacing:.04em;font-weight:600">→ 准备合同 TASK</span>
-          </div>
-        </div>
-
-        <div class="p-list-card" data-go="B10">
-          <div class="pl-h">
-            <div style="flex:1;min-width:0">
-              <div class="pl-name">湖南中石油加油卡采购</div>
-              <div class="pl-id">PROP-26-0271 · proposalKind=PROCUREMENT</div>
-            </div>
-            <span class="st-badge approved">APPROVED</span>
-          </div>
-          <div class="pl-meta">
-            <span>王一凡</span><span class="dot"></span><span>3-12</span><span class="dot"></span><span>price_config 写入</span>
-          </div>
-          <div class="pl-foot">
-            <div class="progress"><div class="pb"><i style="width:100%;background:var(--amber)"></i></div><span class="px">采购链结束</span></div>
-            <span style="font-family:var(--mono);font-size:9px;color:#5D3508;letter-spacing:.04em;font-weight:600">无 LIVE 态</span>
-          </div>
-        </div>
-
-        <div class="p-list-card">
-          <div class="pl-h">
-            <div style="flex:1;min-width:0">
-              <div class="pl-name">2026 Q2 新签提案 · 草稿</div>
-              <div class="pl-id">PROP-DRAFT-005 · 未提交</div>
-            </div>
-            <span class="st-badge draft">DRAFT</span>
-          </div>
-          <div class="pl-meta">
-            <span>王一凡</span><span class="dot"></span><span>5-28 16:20</span><span class="dot"></span><span style="color:var(--coral)">8 槽未齐</span>
-          </div>
-          <div class="pl-foot">
-            <div class="progress"><div class="pb"><i style="width:25%;background:var(--text-3)"></i></div><span class="px">2/8 槽</span></div>
-            <span style="font-family:var(--mono);font-size:9px;color:var(--accent);letter-spacing:.04em;font-weight:600">→ 继续编辑</span>
-          </div>
-        </div>
-
-        <div style="text-align:center;padding:10px;font-family:var(--mono);font-size:10px;color:var(--accent);letter-spacing:.04em;cursor:pointer">
-          加载剩余 23 条 →
+        <div id="p1ListCards">
+          <div class="xf-loading-hint">加载中…</div>
         </div>
 
       </div>
       <div class="action-bar">
         <button class="act-btn" data-go="B2"><i class="ti ti-arrow-left"></i>返回</button>
-        <button class="act-btn primary" data-go="P0"><i class="ti ti-plus"></i>导入新提案</button>
+        <button class="act-btn primary" data-go="B3"><i class="ti ti-plus"></i>创建新提案</button>
       </div>
     </div></section>
 <section class="screen" data-screen="R2" data-name="关联审批选择" data-region="biz"><div class="phone-screen">
@@ -16313,12 +15733,12 @@ body.mobile-mode .screen[data-screen="C1"] .chat-search-wrap{padding:4px 14px 10
         <button class="ds-back" data-go="C1"><i class="ti ti-chevron-left"></i></button>
         <div class="ds-titlebox">
           <div class="ds-crumb">公司广播 · XYYT</div>
-          <div class="ds-name">广播历史 <span class="id">HR · 行政 · 只读</span></div>
+          <div class="ds-name">广播历史</div>
         </div>
-        <button class="ds-more"><i class="ti ti-bell-off" title="管理订阅"></i></button>
       </div>
       <div class="content">
         <div id="c10-api-rows"></div>
+        <div id="c10-load-more" class="api-strip" style="display:none"></div>
 
         <!-- 筛选 -->
         <div class="cond-chips">
@@ -16433,7 +15853,7 @@ body.mobile-mode .screen[data-screen="C1"] .chat-search-wrap{padding:4px 14px 10
       <div class="ds-bar">
         <button class="ds-back" data-go="C4"><i class="ti ti-chevron-left"></i></button>
         <div class="ds-titlebox">
-          <div class="ds-name">NOVA对话历史</div>
+          <div class="ds-name">云枢对话历史</div>
         </div>
         <button class="ds-more" id="c11-header-search" type="button" title="搜索"><i class="ti ti-search"></i></button>
       </div>
@@ -17267,7 +16687,8 @@ const DunesAPI=(function(){
   }
   async function ensureToken(userId){
     if(token) return token;
-    const r=await fetch(BASE+'/auth/token/'+(userId||7),{method:'POST'});
+    const uid=userId||parseInt(localStorage.getItem('dunes_user_id')||'',10)||7;
+    const r=await fetch(BASE+'/auth/token/'+uid,{method:'POST'});
     if(!r.ok) throw new Error('auth '+r.status);
     const d=await r.json();
     token=(d.data&&d.data.token)||d.token||d.accessToken||d.access_token||'';
@@ -17533,10 +16954,26 @@ function setScreen(id,back){
   keepPhoneInView();
   next.querySelector('.content')?.scrollTo(0,0);
   if(id==='B3') setInitCategory(next,pendingInitCat);
+  if(id==='B3'&&window.XFlowDynamic) window.XFlowDynamic.loadB3Templates();
+  if(id==='XF'&&window.XFlowDynamic){
+    if(window.__xfSkipFormRender){
+      /* openProposalDetail 正在打开详情，避免 renderCurrentForm 覆盖详情面板 */
+    }else if(window.pendingProposalDetailId){
+      var _xfPid=window.pendingProposalDetailId;
+      window.pendingProposalDetailId=null;
+      window.XFlowDynamic.showProposalDetail(_xfPid);
+    }else{
+      window.XFlowDynamic.renderCurrentForm();
+    }
+  }
   if(id==='B5') setB5Mode(pendingB5Mode);
-  if(id==='B14') setB14View(pendingB14View);
   if(id==='B14') loadB14Workbench();
-  if(id==='B10') setB10ProposalContext(pendingProposalId);
+  if(id==='P1') loadP1Workbench();
+  if(id==='B10'){
+    setB10ProposalContext(pendingProposalId);
+    if(window.WorkbenchLive&&window.WorkbenchLive.loadB10FromApi) window.WorkbenchLive.loadB10FromApi(pendingProposalId);
+    if(window.XFlowDynamic&&window.XFlowDynamic.loadCcRulesPanel) window.XFlowDynamic.loadCcRulesPanel({cardId:'b10-cc-rules-card',panelId:'b10-cc-rules-panel'});
+  }
   if(id==='B2'&&window.DunesApi) DunesApi.loadWorkProfile();
   if(id==='B2') loadB2Workbench();
   if(id==='B1') loadB1Workbench();
@@ -17544,7 +16981,7 @@ function setScreen(id,back){
     if(DunesApi.wireKbHomeBack) DunesApi.wireKbHomeBack();
     if(DunesApi.wireKbUpload) DunesApi.wireKbUpload();
     if(DunesApi.wireKbSync) DunesApi.wireKbSync();
-    if(DunesApi.wireKbSubscribe) DunesApi.wireKbSubscribe();
+    if(DunesApi.wireKbFolderSheet) DunesApi.wireKbFolderSheet();
     DunesApi.loadKbHome();
   }
   if(id==='K3'){
@@ -17604,7 +17041,11 @@ function keepPhoneInView(){
     deck.scrollIntoView({behavior:'smooth',block:'start'});
   }
 }
-function go(id){ if(id&&id!==history_[history_.length-1]){history_.push(id);} setScreen(id,false); }
+function go(id){
+  if(id==='P0'&&window.XFlowDynamic&&window.XFlowDynamic.openSalesProposal){ window.XFlowDynamic.openSalesProposal(); return; }
+  if(id==='XF'){ window.pendingXFlowKey=window.pendingXFlowKey||'sales-proposal'; }
+  if(id&&id!==history_[history_.length-1]){history_.push(id);} setScreen(id,false);
+}
 function back(){
   if(history_.length>1){
     history_.pop();
@@ -17615,7 +17056,7 @@ function back(){
   const rootFallback={
     LH:'Z1',B2:'Z1',B1:'B2',A1:'Z1',A7:'A1',
     K1:'B2',K2:'K1',K3:'K1',K11:'K2',MM:'B2',MM0:'B2','MM-L':'B2',
-    C10:'C1',C11:'C4',C12:'C6',C13:'C6',
+    C10:'C1',C11:'C4',C12:'C6',C13:'C6',C9:window.__dunesC9ReturnScreen||'C1',
     A8A:'A8',A8F:'A8',B4D:'B4',W3:'W2',W1:'W2',W2:'B2'
   };
   if(cur&&rootFallback[cur]&&cur!=='Z1'){
@@ -17674,6 +17115,12 @@ document.querySelectorAll('.screen').forEach(function(s){
 
 // delegated clicks inside phone
 document.getElementById('stack').addEventListener('click',e=>{
+  const kbMyDoc=e.target.closest('#kb-my-docs-list .kb-doc-row');
+  if(kbMyDoc&&!e.target.closest('[data-kb-doc-del]')){
+    e.preventDefault();
+    e.stopPropagation();
+    return;
+  }
   const kbFolder=e.target.closest('[data-kb-folder-id]');
   if(kbFolder&&!e.target.closest('[data-kb-folder-del],[data-kb-doc-del]')){
     e.preventDefault();
@@ -17703,6 +17150,17 @@ document.getElementById('stack').addEventListener('click',e=>{
     else { pendingKbKind='KB_ALL'; window.pendingKbKind='KB_ALL'; go('K2'); }
     return;
   }
+  const xflowSales=e.target.closest('[data-xflow-sales]');
+  if(xflowSales){
+    e.preventDefault();
+    e.stopPropagation();
+    ripple(xflowSales,e);
+    setTimeout(function(){
+      if(window.XFlowDynamic&&window.XFlowDynamic.openSalesProposal) window.XFlowDynamic.openSalesProposal();
+      else { window.pendingXFlowKey='sales-proposal'; go('XF'); }
+    },90);
+    return;
+  }
   const catLaunch=e.target.closest('[data-init-cat]');
   if(catLaunch&&catLaunch.dataset.initCat) pendingInitCat=catLaunch.dataset.initCat;
   if(e.target.closest('[data-b5-mode]')) pendingB5Mode=e.target.closest('[data-b5-mode]').dataset.b5Mode;
@@ -17723,6 +17181,14 @@ document.getElementById('stack').addEventListener('click',e=>{
   }
   if(t.dataset.contactUserId){
     pendingContactUserId=Number(t.dataset.contactUserId);
+    window.pendingContactUserId=pendingContactUserId;
+  }else if(t.dataset.avatarUserId){
+    pendingContactUserId=Number(t.dataset.avatarUserId);
+    window.pendingContactUserId=pendingContactUserId;
+  }
+  if(t.dataset.go==='C9'||t.dataset.avatarUserId||t.dataset.contactUserId){
+    const curGo=document.querySelector('.screen.active')?.dataset?.screen;
+    if(curGo&&curGo!=='C9') window.__dunesC9ReturnScreen=curGo;
   }
   if(t.dataset.meetingId){
     pendingMmMeetingId=Number(t.dataset.meetingId);
@@ -17911,7 +17377,7 @@ document.querySelectorAll('#roleSwitch .rs').forEach(function(rs){
 
 // B1 inbox · U-35 businessType 分跳 + U-36 PAY/CHASE mock
 const B1_INBOX_ROUTE={
-  PROPOSAL:'B10',
+  PROPOSAL:'XF',
   CONTRACT:'A8',
   PAYMENT:'B5',
   LAUNCH:'B11',
@@ -18026,18 +17492,26 @@ function formatInboxDue(iso){
 function fillQuickStats(screenId,stats){
   const root=document.querySelector('.screen[data-screen="'+screenId+'"] .quick-stats');
   if(!root||!stats) return;
-  const cells=root.querySelectorAll('.qs-cell .v');
-  if(cells[0]) cells[0].textContent=String(stats.pendingForMe!=null?stats.pendingForMe:0);
-  if(cells[1]) cells[1].textContent=String(stats.initiatedByMe!=null?stats.initiatedByMe:0);
-  if(cells[2]) cells[2].textContent=String(stats.handledThisMonth!=null?stats.handledThisMonth:0);
-  if(cells[3]){
-    const n=stats.outstandingInvoices!=null?stats.outstandingInvoices:0;
-    cells[3].innerHTML=n+'<small>笔</small>';
-  }
+  const cells=root.querySelectorAll('.qs-cell');
+  const pending=stats.pendingForMe!=null?stats.pendingForMe:0;
+  cells.forEach(function(cell,i){
+    const v=cell.querySelector('.v');
+    if(!v) return;
+    if(i===0){ v.textContent=String(pending); cell.classList.toggle('qs-urgent',pending>0); }
+    if(i===1) v.textContent=String(stats.initiatedByMe!=null?stats.initiatedByMe:0);
+    if(i===2) v.textContent=String(stats.handledThisMonth!=null?stats.handledThisMonth:0);
+    if(i===3){
+      const n=stats.outstandingInvoices!=null?stats.outstandingInvoices:0;
+      v.innerHTML=n+'<small>笔</small>';
+    }
+  });
 }
 function applyMyStats(stats){
   if(!stats) return;
   fillQuickStats('B2',stats);
+  if(window.WorkbenchLive&&typeof window.WorkbenchLive.updateMyTabBadge==='function'){
+    window.WorkbenchLive.updateMyTabBadge(stats.pendingForMe!=null?stats.pendingForMe:stats.openTodos||0);
+  }
   const b1=document.querySelector('.screen[data-screen="B1"]');
   if(!b1) return;
   const hero=b1.querySelector('.hero-stat');
@@ -18135,30 +17609,42 @@ function applyB1Inbox(items){
   filterB1Inbox();
 }
 async function loadB2Workbench(){
-  if(!window.DunesAPI) return;
-  try{
-    const res=await DunesAPI.myStats;
-    applyMyStats((res&&res.data)||res);
-  }catch(e){ /* 保持静态 mock */ }
+  if(window.DunesAPI){
+    try{
+      const res=await DunesAPI.myStats;
+      applyMyStats((res&&res.data)||res);
+    }catch(e){ /* 保持静态 mock */ }
+  }
+  if(window.DunesApi&&typeof window.DunesApi.refreshKbMenuStats==='function'){
+    try{ await window.DunesApi.refreshKbMenuStats(); }catch(e){}
+  }
+  if(window.WorkbenchLive&&window.WorkbenchLive.refreshMyProposals){
+    try{ await window.WorkbenchLive.refreshMyProposals(); }catch(e){}
+  }else if(window.WorkbenchLive&&window.WorkbenchLive.refreshMyBadgeFromServer){
+    try{ await window.WorkbenchLive.refreshMyBadgeFromServer(); }catch(e){}
+  }
+}
+async function loadP1Workbench(){
+  if(window.WorkbenchLive&&window.WorkbenchLive.loadCCProposals){
+    try{ await window.WorkbenchLive.loadCCProposals(); }catch(e){}
+  }
 }
 async function loadB1Workbench(){
+  if(window.WorkbenchLive&&window.WorkbenchLive.loadB1ApprovalTodos){
+    try{ await window.WorkbenchLive.loadB1ApprovalTodos(); }catch(e){}
+    return;
+  }
   hydrateB1InboxCards();
   filterB1Inbox();
-  if(!window.DunesAPI) return;
-  try{
-    const results=await Promise.all([DunesAPI.inbox,DunesAPI.myStats]);
-    const inboxRes=results[0];
-    const statsRes=results[1];
-    const stats=(statsRes&&statsRes.data)||statsRes;
-    if(stats) applyMyStats(stats);
-    const items=(inboxRes&&inboxRes.data)||inboxRes||[];
-    if(Array.isArray(items)&&items.length){
-      applyB1Inbox(items);
-      DunesAPI.toast('inbox '+items.length+' 条 · 已同步');
-    }else if(Array.isArray(items)){
-      updateB1FilterCounts(items);
-    }
-  }catch(e){ /* 保留静态卡片 */ }
+}
+async function loadB14Workbench(){
+  if(window.WorkbenchLive&&window.WorkbenchLive.loadB14Initiated){
+    try{ await window.WorkbenchLive.loadB14Initiated(); }catch(e){ console.warn('loadB14Workbench',e); }
+    return;
+  }
+  const list=document.getElementById('b14ListCards');
+  if(list) list.innerHTML='<div class="xf-loading-hint">工作台模块未加载，请重启 App</div>';
+  wireB14ListCards();
 }
 
 // B5 三模式切换
@@ -18279,7 +17765,9 @@ function formatB14Date(iso){
   if(!iso) return '—';
   try{
     const d=new Date(iso);
-    return (d.getMonth()+1)+'-'+d.getDate();
+    if(isNaN(d.getTime())) return '—';
+    const p=n=>String(n).padStart(2,'0');
+    return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())+' '+p(d.getHours())+':'+p(d.getMinutes())+':'+p(d.getSeconds());
   }catch(e){ return '—'; }
 }
 function renderB14Card(item){
@@ -18382,21 +17870,6 @@ function applyB14Initiated(items){
   wireB14ListCards();
   filterB14List();
 }
-async function loadB14Workbench(){
-  if(!window.DunesAPI) return;
-  try{
-    const res=await DunesAPI.myInitiated;
-    const items=(res&&res.data)||res||[];
-    if(Array.isArray(items)&&items.length){
-      applyB14Initiated(items);
-      DunesAPI.toast('my-initiated '+items.length+' 条 · 已同步');
-    }else{
-      wireB14ListCards();
-    }
-  }catch(e){
-    wireB14ListCards();
-  }
-}
 
 /** U-102 · Z2 通知穿透 */
 function resolveNotiGo(card){
@@ -18419,6 +17892,7 @@ function resolveNotiGo(card){
 }
 function wireZ2NotiCards(){
   document.querySelectorAll('#z2-noti-list .noti-card').forEach(function(card){
+    if(card.closest('#z2-api-rows')||card.classList.contains('noti-card-static')) return;
     if(!card.dataset.go){
       card.classList.add('tappable');
       card.dataset.go=resolveNotiGo(card);
@@ -19353,11 +18827,50 @@ const DunesApi=(function(){
   function apiBase(){
     return localStorage.getItem('dunes_api_base')||'http://localhost:6090/api/v1';
   }
-  function defaultWsUrl(){
-    const custom=localStorage.getItem('dunes_ws_base');
-    if(custom) return custom;
+  function apiHostFromBase(){
+    const m=String(apiBase()).match(/^https?:\/\/([^:/]+)/i);
+    return m?m[1].toLowerCase():'';
+  }
+  function deriveWsUrl(){
     const http=apiBase().replace(/\/api\/v1\/?$/,'');
-    return http.replace(/^http/,'ws')+'/connection/websocket';
+    return http.replace(/^http/i,'ws')+'/connection/websocket';
+  }
+  function defaultWsUrl(){
+    const derived=deriveWsUrl();
+    const custom=localStorage.getItem('dunes_ws_base');
+    if(!custom) return derived;
+    try{
+      const apiHost=apiHostFromBase();
+      const customHost=new URL(custom).hostname.toLowerCase();
+      if(apiHost&&customHost===apiHost) return custom;
+      console.warn('[IM] ignore stale dunes_ws_base',custom,'use',derived);
+      localStorage.removeItem('dunes_ws_base');
+    }catch(e){
+      localStorage.removeItem('dunes_ws_base');
+    }
+    return derived;
+  }
+  function resolveWsUrl(serverUrl){
+    const fallback=defaultWsUrl();
+    if(!serverUrl) return fallback;
+    try{
+      let resolved=serverUrl;
+      if(!/^wss?:\/\//i.test(resolved)){
+        const http=apiBase().replace(/\/api\/v1\/?$/,'');
+        resolved=http.replace(/^http/i,'ws')+(serverUrl.startsWith('/')?serverUrl:'/'+serverUrl);
+      }
+      const u=new URL(resolved);
+      const host=u.hostname.toLowerCase();
+      if(host==='127.0.0.1'||host==='localhost'||host==='0.0.0.0') return fallback;
+      const apiHost=apiHostFromBase();
+      if(apiHost&&host!==apiHost){
+        console.warn('[IM] ignore mismatched wsUrl from server',serverUrl,'use',fallback);
+        return fallback;
+      }
+      return u.toString().replace(/\/$/,'');
+    }catch(e){
+      return fallback;
+    }
   }
   function parseJwtUserId(){
     try{
@@ -19583,42 +19096,185 @@ const DunesApi=(function(){
       box.innerHTML='<div class="kb-doc-row tappable" data-go="MM"><div class="kd-bd"><div class="kd-nm">湖北中石油 2026 框架续签讨论</div><div class="kd-meta"><span>GENERATED</span></div></div></div>';
     }
   }
-  async function loadKbHome(){
-    clearKbHomeApiAreas('正在加载知识库…');
+  function parseKbSummaryLocal(st){
+    if(window.DunesNovaApi&&typeof window.DunesNovaApi.parseKbSummary==='function'){
+      return window.DunesNovaApi.parseKbSummary(st);
+    }
+    st=st||{};
+    const docs=Array.isArray(st.documents)?st.documents:[];
+    const folders=Array.isArray(st.folders)?st.folders:(Array.isArray(st.datasets)?st.datasets:[]);
+    const docCount=Number(st.documentCount||st.documentsCount||st.total||docs.length||0);
+    let categoryCount=folders.length;
+    if(!categoryCount&&(st.folderId||st.datasetId||st.dataset_id||docCount>0)) categoryCount=1;
+    const unreadCount=Number(st.unreadCount!=null?st.unreadCount:(st.unreadDocuments!=null?st.unreadDocuments:0))||0;
+    const ready=st.canChat===true||st.ready===true||String(st.status||'').toLowerCase()==='ready'||String(st.kb_status||'').toLowerCase()==='ready';
+    return {
+      documentCount:docCount,categoryCount,unreadCount,ready,canChat:ready,
+      documents:docs.map(normalizeKbDocRow),folders,
+      folderId:st.folderId||st.datasetId||st.dataset_id||(folders[0]&&(folders[0].id||folders[0].datasetId))||'',
+      message:st.message||''
+    };
+  }
+  function applyKbHeroStats(summary){
+    summary=summary||{};
+    document.querySelectorAll('.kbh-stats .it').forEach((it,i)=>{
+      const v=it.querySelector('.v');
+      if(!v) return;
+      if(i===0) v.textContent=summary.documentCount||0;
+      if(i===1) v.textContent=summary.categoryCount||0;
+      if(i===2) v.textContent=summary.unreadCount||0;
+    });
+  }
+  function applyKbMenuStats(summary){
+    summary=summary||{};
+    window.__dunesKbSummary=summary;
+    const screen=document.querySelector('.screen[data-screen="B2"]');
+    if(!screen) return;
+    const mi=screen.querySelector('.menu-item[data-go="K1"]');
+    if(!mi) return;
+    const desc=mi.querySelector('.mi-d');
+    const badge=mi.querySelector('.num-badge');
+    const docCount=Number(summary.documentCount||0);
+    const categoryCount=Number(summary.categoryCount||0);
+    const unreadCount=Number(summary.unreadCount||0);
+    if(desc) desc.textContent=docCount+' 文档 · '+categoryCount+' 分类 · '+unreadCount+' 未读';
+    if(badge){
+      badge.textContent=String(unreadCount);
+      badge.className='num-badge'+(unreadCount>0?' coral urge':' gray');
+    }
+  }
+  async function refreshKbMenuStats(){
+    if(!window.DunesNovaApi||typeof window.DunesNovaApi.fetchKbStatus!=='function') return null;
     try{
-      const j=await api('/kb/home');
-      if(!j.success||!j.data) throw new Error(j.message||'知识库接口不可用');
-      const stats=j.data.stats||{};
-      document.querySelectorAll('.kbh-stats .it').forEach((it,i)=>{
-        const v=it.querySelector('.v');
-        if(!v) return;
-        if(i===0&&stats.totalDocuments!=null) v.textContent=stats.totalDocuments;
-        if(i===1&&stats.totalCategories!=null) v.textContent=stats.totalCategories;
-        if(i===2&&stats.myFavorites!=null) v.textContent=stats.myFavorites;
-      });
-      renderKbCategories(j.data.categories||[]);
-      renderKbSelect(j.data.categories||[]);
-      renderKbDocSection('我的收藏','暂无收藏',j.data.favorites||[],0);
-      renderKbDocSection('最近查阅','暂无最近查阅',j.data.recents||[],1);
-      const entry=document.getElementById('kb-ai-entry');
-      if(entry&&j.data.readiness){
-        const rd=j.data.readiness;
-        const hint=entry.querySelector('.kae-d');
-        if(hint) hint.textContent=rd.canChat
-          ? '用自然语言查询制度 · 流程 · 模板 · 引用原文'
-          : (rd.message||'请先上传文档并等待 RAGFlow 解析完成');
-        entry.dataset.kbReady=rd.canChat?'1':'0';
-      }
+      await window.DunesNovaApi.refreshCredentials();
+      const st=await window.DunesNovaApi.fetchKbStatus();
+      const summary=st.__summary||parseKbSummaryLocal(st);
+      applyKbMenuStats(summary);
+      return summary;
     }catch(e){
-      clearKbHomeApiAreas('知识库接口不可用，请稍后重试');
-      renderKbSelect([]);
-      const entry=document.getElementById('kb-ai-entry');
-      if(entry){
-        const hint=entry.querySelector('.kae-d');
-        if(hint) hint.textContent='知识库服务暂时不可用，请稍后重试';
-        entry.dataset.kbReady='0';
+      applyKbMenuStats({documentCount:0,categoryCount:0,unreadCount:0});
+      return null;
+    }
+  }
+  function normalizeKbDocRow(doc,i){
+    doc=doc||{};
+    const runStatus=String(doc.runStatus||doc.run||'').trim();
+    const runUpper=runStatus.toUpperCase();
+    const progress=Number(doc.progress);
+    const chunkCount=Number(doc.chunk_count!=null?doc.chunk_count:doc.chunkCount);
+    let indexed=doc.indexed===true||String(doc.ingestionStatus||'').toUpperCase()==='INDEXED';
+    if(!indexed&&runUpper==='DONE'&&(progress===1||(chunkCount||0)>0)) indexed=true;
+    return {
+      id:doc.id||doc.documentId||doc.ragflowDocId||('doc-'+i),
+      title:doc.title||doc.name||doc.fileName||'知识库文档',
+      fileName:doc.fileName||doc.name||doc.title||'',
+      fileExtension:doc.fileExtension||'',
+      ingestionStatus:doc.ingestionStatus||(indexed?'INDEXED':(runUpper==='DONE'?'DONE':'UPLOADED')),
+      indexed:indexed,
+      runStatus:runStatus
+    };
+  }
+  function kbDocStatusLabel(doc){
+    if(!doc) return '已上传';
+    if(doc.indexed===true||String(doc.ingestionStatus||'').toUpperCase()==='INDEXED') return '已索引';
+    const run=String(doc.runStatus||'').toUpperCase();
+    if(run==='RUNNING'||run==='1'||String(doc.ingestionStatus||'').toUpperCase()==='PARSING') return '解析中';
+    if(run==='FAIL'||run==='FAILED') return '解析失败';
+    if(run==='DONE') return '已索引';
+    return '已上传';
+  }
+  function kbDocIconClass(doc){
+    const ext=String(doc.fileExtension||doc.fileName||doc.title||'').split('.').pop().toLowerCase();
+    if(ext.includes('pdf')) return 'pdf';
+    if(ext.includes('xls')) return 'xls';
+    if(ext.includes('md')) return 'md';
+    if(ext.includes('doc')) return 'doc';
+    return 'doc';
+  }
+  async function deleteKbDocById(docId,name){
+    if(!docId) throw new Error('缺少文档 ID');
+    if(window.DunesNovaApi&&typeof window.DunesNovaApi.deleteKbDocument==='function'&&window.DunesNovaApi.isReady()){
+      // 员工个人库：sk- 令牌，不传 folderId
+      await window.DunesNovaApi.deleteKbDocument(docId);
+      return;
+    }
+    const folderId=window.__dunesKbSummary&&window.__dunesKbSummary.folderId;
+    if(folderId){
+      await api('/kb/datasets/'+encodeURIComponent(folderId)+'/documents/'+encodeURIComponent(docId),{method:'DELETE'});
+      return;
+    }
+    throw new Error('Nova 知识库未就绪，无法删除');
+  }
+  function renderKbMyDocuments(docs){
+    const list=document.getElementById('kb-my-docs-list');
+    const label=document.getElementById('kb-my-docs-label');
+    const cnt=label&&label.querySelector('.cnt');
+    docs=(docs||[]).map(normalizeKbDocRow);
+    if(cnt) cnt.textContent=docs.length+' 篇';
+    if(!list) return;
+    list.innerHTML='';
+    if(!docs.length){
+      list.innerHTML='<div class="api-strip"><i class="ti ti-info-circle"></i><span>暂无文档 · 上传后将自动解析</span></div>';
+      return;
+    }
+    docs.forEach(doc=>{
+      const row=document.createElement('div');
+      row.className='kb-doc-row has-del kb-doc-row-static';
+      const ext=String(doc.fileExtension||doc.fileName||'').split('.').pop().toLowerCase();
+      const icon=kbDocIconClass(doc);
+      const status=kbDocStatusLabel(doc);
+      row.innerHTML='<div class="kd-ic '+icon+'"><i class="ti ti-file"></i></div>'
+        +'<div class="kd-bd"><div class="kd-nm">'+escHtml(doc.title||doc.fileName||'知识库文档')+'</div>'
+        +'<div class="kd-meta"><span class="tag-doc">'+escHtml((ext||'文档').toUpperCase())+'</span><span>'+escHtml(status)+'</span></div></div>'
+        +'<button type="button" class="kb-doc-del" data-kb-doc-del="1" aria-label="删除文档"><i class="ti ti-trash"></i></button>';
+      row.addEventListener('click',function(e){
+        if(e.target.closest('[data-kb-doc-del]')) return;
+        e.preventDefault();
+        e.stopPropagation();
+      });
+      row.querySelector('[data-kb-doc-del]').addEventListener('click',async function(e){
+        e.preventDefault(); e.stopPropagation();
+        const docName=doc.title||doc.fileName||'此文档';
+        if(!(await showKbConfirm('确定删除「'+docName+'」？将从知识库中移除。'))) return;
+        try{
+          await deleteKbDocById(doc.id,docName);
+          await loadKbHome();
+          await refreshKbMenuStats();
+        }catch(err){ await showKbTip(err.message||'删除失败'); }
+      });
+      list.appendChild(row);
+    });
+  }
+  async function loadKbHome(){
+    if(window.DunesNovaApi&&typeof window.DunesNovaApi.fetchKbStatus==='function'){
+      clearKbHomeApiAreas('正在加载知识库…');
+      try{
+        await window.DunesNovaApi.refreshCredentials();
+        const st=await window.DunesNovaApi.fetchKbStatus();
+        const summary=st.__summary||parseKbSummaryLocal(st);
+        window.__dunesKbSummary=summary;
+        window.__kbDocuments=(summary.documents||[]).map(normalizeKbDocRow);
+        applyKbHeroStats(summary);
+        applyKbMenuStats(summary);
+        const phone=localStorage.getItem('dunes_phone')||'';
+        const folderId=summary.folderId||'mine';
+        const cats=[{
+          id:folderId,
+          name:'我的知识库'+(phone?'（'+phone+'）':''),
+          documentCount:summary.documentCount,
+          source:'ragflow'
+        }];
+        renderKbCategories(cats);
+        renderKbMyDocuments(summary.documents||[]);
+        updateKbUploadState();
+        return;
+      }catch(e){
+        clearKbHomeApiAreas((e&&e.message)||'Nova 知识库暂不可用');
+        applyKbMenuStats({documentCount:0,categoryCount:0,unreadCount:0});
+        return;
       }
     }
+    clearKbHomeApiAreas('Nova 知识库未就绪');
   }
   async function syncKbRagflow(){
     const btn=document.getElementById('kb-ragflow-sync');
@@ -19626,31 +19282,22 @@ const DunesApi=(function(){
     if(btn&&btn.disabled) return;
     if(btn) btn.disabled=true;
     if(status) status.textContent='正在同步 RAGFlow 文件夹与文件…';
-    try{
-      const j=await api('/kb/sync',{method:'POST'});
-      const data=j&&j.data?j.data:null;
-      if(data){
-        const stats=data.stats||{};
-        document.querySelectorAll('.kbh-stats .it').forEach((it,i)=>{
-          const v=it.querySelector('.v');
-          if(!v) return;
-          if(i===0&&stats.totalDocuments!=null) v.textContent=stats.totalDocuments;
-          if(i===1&&stats.totalCategories!=null) v.textContent=stats.totalCategories;
-          if(i===2&&stats.myFavorites!=null) v.textContent=stats.myFavorites;
-        });
-        renderKbCategories(data.categories||[]);
-        renderKbSelect(data.categories||[]);
-        renderKbDocSection('我的收藏','暂无收藏',data.favorites||[],0);
-        renderKbDocSection('最近查阅','暂无最近查阅',data.recents||[],1);
-      }else{
+    if(window.DunesNovaApi&&typeof window.DunesNovaApi.fetchKbStatus==='function'){
+      try{
+        await window.DunesNovaApi.refreshCredentials();
+        await window.DunesNovaApi.fetchKbStatus();
         await loadKbHome();
+        await refreshKbMenuStats();
+        if(status) status.textContent='同步完成，已更新知识库状态';
+      }catch(err){
+        if(status) status.textContent=(err&&err.message)||'同步失败，请稍后重试';
+      }finally{
+        if(btn) btn.disabled=false;
       }
-      if(status) status.textContent='同步完成，已更新本地知识库数据';
-    }catch(err){
-      if(status) status.textContent=err.message||'同步失败，请稍后重试';
-    }finally{
-      if(btn) btn.disabled=false;
+      return;
     }
+    if(status) status.textContent='Nova 知识库未就绪';
+    if(btn) btn.disabled=false;
   }
   function wireKbSync(){
     const btn=document.getElementById('kb-ragflow-sync');
@@ -19793,6 +19440,20 @@ const DunesApi=(function(){
     const body=document.getElementById('kb-subscribe-body');
     const status=document.getElementById('kb-subscribe-status');
     if(body) body.innerHTML='<div class="api-strip"><i class="ti ti-loader"></i><span>正在加载订阅信息…</span></div>';
+    if(window.DunesNovaApi&&typeof window.DunesNovaApi.fetchKbStatus==='function'){
+      try{
+        await window.DunesNovaApi.refreshCredentials();
+        const st=await window.DunesNovaApi.fetchKbStatus();
+        const docCount=Number(st.documentCount||st.documentsCount||(Array.isArray(st.documents)?st.documents.length:0)||0);
+        window.__kbSubscribeSections=[
+          {title:'我的知识库',rows:[{datasetName:'专属知识库',documentCount:docCount,status:'active'}],empty:'',action:'owner'},
+          {title:'可订阅',rows:[],empty:'您已拥有专属知识库，无需订阅',action:'subscribe'}
+        ];
+        renderKbSubscribeSections(window.__kbSubscribeSections);
+        if(status) status.textContent='Nova 专属知识库 · '+docCount+' 篇文档';
+        return;
+      }catch(e){}
+    }
     try{
       const subsJ=await api('/kb/subscriptions');
       const accJ=await api('/kb/datasets/accessible');
@@ -19963,10 +19624,7 @@ const DunesApi=(function(){
     }
   }
   function clearKbHomeApiAreas(message){
-    document.querySelectorAll('.kbh-stats .it').forEach((it,i)=>{
-      const v=it.querySelector('.v');
-      if(v) v.textContent=i===1?'0':'0';
-    });
+    applyKbHeroStats({documentCount:0,categoryCount:0,unreadCount:0});
     const grid=document.querySelector('.kb-cat-grid');
     if(grid){
       grid.innerHTML='<div class="api-strip" style="grid-column:1/-1"><i class="ti ti-info-circle"></i><span>'+escHtml(message||'暂无知识库')+'</span></div>';
@@ -19976,8 +19634,11 @@ const DunesApi=(function(){
       const cnt=catLabel.querySelector('.cnt');
       if(cnt) cnt.textContent='0 个';
     }
-    renderKbDocSection('我的收藏','暂无收藏',[],0);
-    renderKbDocSection('最近查阅','暂无最近查阅',[],1);
+    renderKbMyDocuments([]);
+    const list=document.getElementById('kb-my-docs-list');
+    if(list&&message){
+      list.innerHTML='<div class="api-strip"><i class="ti ti-info-circle"></i><span>'+escHtml(message)+'</span></div>';
+    }
     resetKbFilePick();
   }
   function kbIconClass(cat){
@@ -20092,19 +19753,18 @@ const DunesApi=(function(){
     return (n/1024/1024).toFixed(1)+' MB';
   }
   function updateKbUploadState(){
-    const select=document.getElementById('kb-upload-category');
     const pick=document.getElementById('kb-file-pick');
     const hint=document.getElementById('kb-file-hint');
     const submit=document.getElementById('kb-upload-submit');
-    const hasFolder=!!(select&&select.value);
+    const novaReady=window.DunesNovaApi&&typeof window.DunesNovaApi.isReady==='function'&&window.DunesNovaApi.isReady();
     if(pick){
-      pick.classList.toggle('disabled',!hasFolder);
-      if(hint) hint.textContent=hasFolder?'支持 PDF / Word / Excel / Markdown':'请先完成步骤 1';
+      pick.classList.toggle('disabled',!novaReady);
+      if(hint) hint.textContent=novaReady?'支持 PDF / Word / Excel / Markdown · 上传后自动解析':'Nova 知识库未就绪，请稍后重试';
     }
     const hasFile=!!window._kbPendingFile;
     if(submit){
-      submit.disabled=!(hasFolder&&hasFile);
-      submit.classList.toggle('ready',hasFolder&&hasFile);
+      submit.disabled=!(novaReady&&hasFile);
+      submit.classList.toggle('ready',novaReady&&hasFile);
     }
   }
   function resetKbFilePick(){
@@ -20168,11 +19828,6 @@ const DunesApi=(function(){
     }
   }
   function wireKbUpload(){
-    const select=document.getElementById('kb-upload-category');
-    const newBtn=document.getElementById('kb-folder-new-btn');
-    const createRow=document.getElementById('kb-folder-create-row');
-    const createBtn=document.getElementById('kb-folder-create-btn');
-    const folderName=document.getElementById('kb-folder-name');
     const pick=document.getElementById('kb-file-pick');
     const input=document.getElementById('kb-file-input');
     const clearBtn=document.getElementById('kb-file-clear');
@@ -20180,38 +19835,6 @@ const DunesApi=(function(){
     const status=document.getElementById('kb-upload-status');
     if(!pick||pick.dataset.wiredKbUpload) return;
     pick.dataset.wiredKbUpload='1';
-    if(select) select.addEventListener('change',updateKbUploadState);
-    if(newBtn&&!newBtn.dataset.wiredKbNew){
-      newBtn.dataset.wiredKbNew='1';
-      newBtn.addEventListener('click',function(e){
-        e.preventDefault();
-        e.stopPropagation();
-        if(createRow) createRow.style.display=createRow.style.display==='none'?'flex':'none';
-        if(folderName) folderName.focus();
-      });
-    }
-    if(createBtn&&!createBtn.dataset.wiredKbCreate){
-      createBtn.dataset.wiredKbCreate='1';
-      createBtn.addEventListener('click',async function(e){
-        e.preventDefault();
-        e.stopPropagation();
-        const name=folderName?folderName.value:'';
-        if(status) status.textContent='正在创建文件夹…';
-        try{
-          const folder=await createKbFolder(name);
-          if(folderName) folderName.value='';
-          if(createRow) createRow.style.display='none';
-          upsertKbFolderInSelect(folder);
-          upsertKbFolderInGrid(folder);
-          try{await loadKbHome();}catch(e){}
-          upsertKbFolderInSelect(folder);
-          upsertKbFolderInGrid(folder);
-          if(status) status.textContent='文件夹「'+(folder.name||name)+'」已创建';
-        }catch(err){
-          if(status) status.textContent=err.message||'创建失败';
-        }
-      });
-    }
     pick.addEventListener('click',function(e){
       e.preventDefault();
       e.stopPropagation();
@@ -20242,20 +19865,25 @@ const DunesApi=(function(){
       e.preventDefault();
       e.stopPropagation();
       const file=window._kbPendingFile;
-      const datasetId=select&&select.value?String(select.value):'';
-      if(!datasetId||!file) return;
+      if(!file) return;
       submit.disabled=true;
       submit.classList.remove('ready');
       if(status) status.textContent='正在上传并解析…';
       try{
-        const key=await uploadViaPresigned('kb-documents',file);
-        const reg=await registerKbDoc(file,key);
-        resetKbFilePick();
-        if(status) status.textContent='上传成功，文档解析中'+(reg&&reg.documentId?' · #'+reg.documentId:'');
-        await loadKbHome();
-        updateKbUploadState();
+        if(window.DunesNovaApi&&typeof window.DunesNovaApi.uploadKbDocument==='function'&&window.DunesNovaApi.isReady()){
+          const reg=await window.DunesNovaApi.uploadKbDocument(file);
+          resetKbFilePick();
+          if(status) status.textContent='上传成功，文档解析中'+(reg&&reg.documentId?' · #'+reg.documentId:'');
+          await loadKbHome();
+          await refreshKbMenuStats();
+          updateKbUploadState();
+          return;
+        }
+        throw new Error('Nova 知识库未就绪，无法上传');
       }catch(err){
-        if(status) status.textContent=err.message||'上传失败';
+        const msg=err.message||'上传失败';
+        if(status) status.textContent=msg;
+        await showKbTip(msg);
         updateKbUploadState();
       }
     });
@@ -20325,18 +19953,33 @@ const DunesApi=(function(){
     }
     return Promise.resolve();
   }
-  async function checkKbReadiness(){
-    try{
-      const j=await api('/kb/readiness');
-      if(j.success&&j.data) return j.data;
-    }catch(e){
-      console.warn('kb readiness',e);
-      const detail=String((e&&e.message)||'');
-      let msg='知识库服务暂不可用，请稍后重试';
-      if(/502|503|504|upstream|ECONNREFUSED|connect|HTTP 5/i.test(detail)) msg='知识库服务连接失败，请确认后端 kb-go 已启动';
-      return {canChat:false,code:'service_unavailable',message:msg};
+  async function showKbConfirm(msg){
+    msg=String(msg||'').trim()||'确认操作？';
+    if(window.DunesDialog&&typeof window.DunesDialog.confirm==='function'){
+      return window.DunesDialog.confirm(msg);
     }
-    return {canChat:false,code:'check_failed',message:'无法检查知识库状态，请稍后重试'};
+    return Promise.resolve(window.confirm(msg));
+  }
+  async function checkKbReadiness(){
+    if(window.DunesNovaApi&&typeof window.DunesNovaApi.fetchKbStatus==='function'){
+      try{
+        await window.DunesNovaApi.refreshCredentials();
+        const st=await window.DunesNovaApi.fetchKbStatus();
+        const summary=st.__summary||parseKbSummaryLocal(st);
+        const indexedCount=(summary.documents||[]).filter(d=>d.indexed===true||String(d.ingestionStatus||'').toUpperCase()==='INDEXED').length;
+        return {
+          canChat:summary.ready,
+          code:st.code||(summary.ready?'ready':'no_kb_source'),
+          message:summary.message||(summary.ready?'':'请先上传文档并等待解析完成'),
+          documents:{indexed:indexedCount||summary.documentCount,hasIndexed:indexedCount>0||summary.documentCount>0},
+          rag:{ready:summary.ready||(st.rag&&st.rag.ready===true)},
+          ragflow:st.ragflow||{}
+        };
+      }catch(e){
+        return {canChat:false,code:'service_unavailable',message:(e&&e.message)||'知识库服务暂不可用，请稍后重试'};
+      }
+    }
+    return {canChat:false,code:'service_unavailable',message:'Nova 知识库未就绪'};
   }
   let kbFolderCurrentId=null;
   let kbFolderCurrentName='';
@@ -20351,6 +19994,7 @@ const DunesApi=(function(){
     const body=document.getElementById('kb-folder-body');
     if(!body) return;
     body.innerHTML='';
+    docs=(docs||[]).map(normalizeKbDocRow);
     if(!docs.length){
       body.innerHTML='<div class="api-strip"><i class="ti ti-info-circle"></i><span>此文件夹暂无文档</span></div>';
       return;
@@ -20359,19 +20003,19 @@ const DunesApi=(function(){
       const row=document.createElement('div');
       row.className='kb-folder-doc-row';
       row.innerHTML='<div class="kd-ic doc"><i class="ti ti-file-text"></i></div>'
-        +'<div class="kfd-bd"><div class="kfd-nm">'+escHtml(doc.name||'未命名文档')+'</div>'
-        +'<div class="kfd-m">'+escHtml(kbFolderStatusLabel(doc))+(doc.chunkNum?(' · '+doc.chunkNum+' 块'):'')+'</div></div>'
+        +'<div class="kfd-bd"><div class="kfd-nm">'+escHtml(doc.title||doc.fileName||doc.name||'未命名文档')+'</div>'
+        +'<div class="kfd-m">'+escHtml(kbDocStatusLabel(doc))+'</div></div>'
         +'<button type="button" class="kb-folder-doc-del" data-kb-doc-del="1" aria-label="删除文档"><i class="ti ti-trash"></i></button>';
       row.querySelector('[data-kb-doc-del]').addEventListener('click',async function(e){
         e.preventDefault(); e.stopPropagation();
-        if(!kbFolderCurrentId) return;
-        const name=doc.name||'此文档';
-        if(!confirm('确定删除「'+name+'」？将从 RAGFlow 与本地镜像中移除。')) return;
+        const docName=doc.title||doc.fileName||doc.name||'此文档';
+        if(!(await showKbConfirm('确定删除「'+docName+'」？将从知识库中移除。'))) return;
         try{
-          await api('/kb/datasets/'+encodeURIComponent(kbFolderCurrentId)+'/documents/'+encodeURIComponent(doc.ragflowDocId||doc.id),{method:'DELETE'});
+          await deleteKbDocById(doc.id,docName);
           await loadKbFolderDocs(kbFolderCurrentId);
           await loadKbHome();
-        }catch(err){ alert(err.message||'删除失败'); }
+          await refreshKbMenuStats();
+        }catch(err){ await showKbTip(err.message||'删除失败'); }
       });
       body.appendChild(row);
     });
@@ -20379,6 +20023,23 @@ const DunesApi=(function(){
   async function loadKbFolderDocs(datasetId){
     const body=document.getElementById('kb-folder-body');
     if(body) body.innerHTML='<div class="api-strip"><i class="ti ti-loader"></i><span>正在加载文档…</span></div>';
+    if(window.DunesNovaApi&&typeof window.DunesNovaApi.fetchKbStatus==='function'){
+      try{
+        await window.DunesNovaApi.refreshCredentials();
+        const st=await window.DunesNovaApi.fetchKbStatus();
+        const summary=st.__summary||parseKbSummaryLocal(st);
+        window.__kbDocuments=(summary.documents||[]).map(normalizeKbDocRow);
+        renderKbFolderDocs(summary.documents||[]);
+        return;
+      }catch(e){
+        if(Array.isArray(window.__kbDocuments)&&window.__kbDocuments.length){
+          renderKbFolderDocs(window.__kbDocuments);
+          return;
+        }
+        if(body) body.innerHTML='<div class="api-strip"><i class="ti ti-alert-circle"></i><span>'+escHtml(e.message||'加载失败')+'</span></div>';
+        return;
+      }
+    }
     try{
       const j=await api('/kb/datasets/'+encodeURIComponent(datasetId)+'/documents');
       renderKbFolderDocs(j.success&&Array.isArray(j.data)?j.data:[]);
@@ -20421,12 +20082,12 @@ const DunesApi=(function(){
       del.addEventListener('click',async function(e){
         e.preventDefault();
         if(!kbFolderCurrentId) return;
-        if(!confirm('确定删除文件夹「'+kbFolderCurrentName+'」？将同时删除 RAGFlow 数据集及其中所有文档。')) return;
+        if(!(await showKbConfirm('确定删除文件夹「'+kbFolderCurrentName+'」？将同时删除其中所有文档。'))) return;
         try{
           await api('/kb/datasets/'+encodeURIComponent(kbFolderCurrentId),{method:'DELETE'});
           closeKbFolderSheet();
           await loadKbHome();
-        }catch(err){ alert(err.message||'删除失败'); }
+        }catch(err){ await showKbTip(err.message||'删除失败'); }
       });
     }
   }
@@ -20491,22 +20152,6 @@ const DunesApi=(function(){
   }
   function init(){
     wireKbHomeBack();
-    const kbAi=document.getElementById('kb-ai-entry');
-    if(kbAi&&!kbAi.dataset.wiredKbAi){
-      kbAi.dataset.wiredKbAi='1';
-      kbAi.addEventListener('click',async function(e){
-        e.preventDefault();
-        e.stopPropagation();
-        if(kbAi.dataset.kbReady==='0'){
-          const rd=await checkKbReadiness();
-          if(!kbAccountsReady(rd)){
-            await showKbTip(rd.message||'知识库正在准备中，请稍后再试');
-            return;
-          }
-        }
-        enterKbChat({kind:'KB_ALL'});
-      });
-    }
     const k3Ask=document.getElementById('k3-ask-ai');
     if(k3Ask&&!k3Ask.dataset.wiredKbAsk){
       k3Ask.dataset.wiredKbAsk='1';
@@ -20519,7 +20164,6 @@ const DunesApi=(function(){
     }
     wireKbUpload();
     wireKbSync();
-    wireKbSubscribe();
     wireKbFolderSheet();
     bindUploadSlot(document.getElementById('mm-upload-slot'),(file,key)=>{
       document.getElementById('mm0-status').innerHTML='<i class="ti ti-check"></i><span>已上传 · meetingId 待创建</span>';
@@ -21125,13 +20769,12 @@ const DunesApi=(function(){
       }else{
         box.innerHTML=rows.map(n=>{
           const urg=n.unread||!n.readAt?' urgent':'';
-          const go=n.clickAction?' data-go="'+n.clickAction+'"':'';
-          const tm=n.createdAt?new Date(n.createdAt).toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit'}):'';
-          return '<div class="noti-card tappable'+urg+'"'+go+'><span class="nc-dot"></span><div class="nc-ic"><i class="ti ti-bell"></i></div><div class="nc-body"><div class="nc-top"><div class="nc-title">'+(n.title||'')+'</div><div class="nc-time">'+tm+'</div></div><div class="nc-desc">'+(n.body||'')+'</div><span class="nc-tag biz">'+(n.kind||'系统')+'</span></div></div>';
+          const tm=n.createdAt?new Date(n.createdAt).toLocaleString('zh-CN',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}):'';
+          const body=String(n.body||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/\n/g,'<br>');
+          return '<div class="noti-card noti-card-static'+urg+'" data-noti-id="'+(n.id||'')+'"><span class="nc-dot"></span><div class="nc-ic"><i class="ti ti-bell"></i></div><div class="nc-body"><div class="nc-top"><div class="nc-title">'+(n.title||'')+'</div><div class="nc-time">'+tm+'</div></div><div class="nc-desc">'+body+'</div><span class="nc-tag biz">'+(n.kind||'系统')+'</span></div></div>';
         }).join('');
       }
       if(root) root.classList.add('z2-api-ready');
-      wireZ2NotiCards();
     }catch(e){
       if(root) root.classList.remove('z2-api-ready');
       console.warn('Z2 notifications',e);
@@ -21181,14 +20824,53 @@ const DunesApi=(function(){
       card.addEventListener('click',()=>sendAssistantStream(card.dataset.c4Prompt));
     });
     if(typeof window.__dunesWireNovaC4==='function') window.__dunesWireNovaC4();
+    if(window.DunesNovaChat&&typeof window.DunesNovaChat.checkNovaReadiness==='function'){
+      window.DunesNovaChat.checkNovaReadiness();
+    }else{
+      refreshC4Readiness();
+    }
+  }
+  let c4NovaReady=true;
+  let c4NovaBlockMsg='';
+  async function refreshC4Readiness(){
+    c4NovaReady=true;
+    c4NovaBlockMsg='';
+    try{
+      const j=await api('/ai/assistant/readiness');
+      if(j.success&&j.data&&!j.data.ready){
+        c4NovaReady=false;
+        c4NovaBlockMsg=j.data.message||'云枢账号尚未开通，请稍后再试';
+        showC4BlockedBanner(c4NovaBlockMsg);
+      }else{
+        hideC4BlockedBanner();
+      }
+    }catch(e){ console.warn('C4 readiness',e); }
+  }
+  function showC4BlockedBanner(msg){
+    const stream=document.getElementById('c4-msg-stream');
+    if(!stream) return;
+    let banner=document.getElementById('c4-nova-block');
+    if(!banner){
+      banner=document.createElement('div');
+      banner.id='c4-nova-block';
+      banner.className='msg-system';
+      stream.prepend(banner);
+    }
+    banner.innerHTML='<span class="pill" style="background:var(--coral-soft);color:var(--coral-deep);border-color:var(--coral-line)"><i class="ti ti-alert-circle"></i>'+escHtml(msg)+'</span>';
+  }
+  function hideC4BlockedBanner(){
+    document.getElementById('c4-nova-block')?.remove();
   }
   async function sendAssistantStream(text){
     const stream=document.getElementById('c4-msg-stream');
     if(!stream||!text) return;
-    const user=document.createElement('div');
-    user.className='msg-row sent';
-    user.innerHTML='<div class="msg-content"><div class="msg-bubble">'+text+'</div></div>';
-    stream.appendChild(user);
+    if(window.DunesNovaChat&&typeof window.DunesNovaChat.sendMessage==='function'){
+      return window.DunesNovaChat.sendMessage(text);
+    }
+    if(!c4NovaReady){
+      alert(c4NovaBlockMsg||'云枢账号尚未开通，请稍后再试');
+      return;
+    }
     const ai=document.createElement('div');
     ai.className='msg-row recv';
     ai.innerHTML=(window.dunesNovaAvatarHtml?window.dunesNovaAvatarHtml('msg-av-sm ai-bot'):'<div class="msg-av-sm ai-bot"><i class="ti ti-sparkles"></i></div>')+'<div class="msg-content"><div class="msg-bubble" id="c4-stream-buf">…</div></div>';
@@ -21201,6 +20883,24 @@ const DunesApi=(function(){
         headers:{'Content-Type':'application/json',Authorization:'Bearer '+t},
         body:JSON.stringify({content:text})
       });
+      if(!r.ok){
+        let errMsg='云枢助手暂不可用';
+        try{
+          const j=await r.json();
+          errMsg=j.message||errMsg;
+          if(j.code==='nova_not_ready'){
+            c4NovaReady=false;
+            c4NovaBlockMsg=errMsg;
+            showC4BlockedBanner(errMsg);
+          }
+        }catch(e){}
+        if(buf) buf.textContent=errMsg;
+        return;
+      }
+      const user=document.createElement('div');
+      user.className='msg-row sent';
+      user.innerHTML='<div class="msg-content"><div class="msg-bubble">'+escHtml(text)+'</div></div>';
+      stream.insertBefore(user,ai);
       const reader=r.body.getReader();
       const dec=new TextDecoder();
       let acc='';
@@ -21213,12 +20913,20 @@ const DunesApi=(function(){
             const ev=JSON.parse(line.slice(5).trim());
             if(ev.event==='delta'&&ev.data) acc+=ev.data;
             if(ev.data&&ev.data.event==='delta') acc+=ev.data.data||'';
+            if(ev.event==='error'&&ev.data?.message){
+              acc=ev.data.message;
+              if(ev.data.code==='nova_not_ready'){
+                c4NovaReady=false;
+                c4NovaBlockMsg=ev.data.message;
+                showC4BlockedBanner(ev.data.message);
+              }
+            }
           }catch(e){}
         });
         if(buf) buf.textContent=acc||'思考中…';
       }
     }catch(e){
-      if(buf) buf.textContent='（mock）助手暂不可用：'+e.message;
+      if(buf) buf.textContent='助手暂不可用：'+e.message;
     }
   }
   let kbConvId=null;
@@ -21661,35 +21369,126 @@ const DunesApi=(function(){
     }catch(e){ console.warn('contacts',e); }
   }
   async function loadContactDetail(userId){
-    const uid=userId||pendingContactUserId||6;
+    const uid=Number(userId||window.pendingContactUserId||pendingContactUserId||0);
+    const screen=document.querySelector('.screen[data-screen="C9"]');
+    if(!screen) return;
+    const mock=screen.querySelector('.c9-mock');
+    const dynamicBody=screen.querySelector('#c9-dynamic-body');
+    const av=document.getElementById('c9-ph-av');
+    const nm=document.getElementById('c9-ph-nm');
+    const pos=document.getElementById('c9-ph-pos');
+    const tags=screen.querySelector('.profile-hero .ph-tags');
+    const more=screen.querySelector('.profile-hero .ph-more');
+    if(mock) mock.style.display='none';
+    if(more) more.style.display='none';
+    if(tags) tags.style.display='none';
+    if(av) av.innerHTML='…';
+    if(nm) nm.textContent='加载中…';
+    if(pos){ pos.textContent=''; pos.style.display='none'; }
+    if(dynamicBody){
+      dynamicBody.style.display='';
+      dynamicBody.innerHTML='<div style="padding:24px;text-align:center;color:var(--text-3)">加载中…</div>';
+    }
+    if(!uid){
+      if(nm) nm.textContent='联系人不存在';
+      if(dynamicBody) dynamicBody.innerHTML='<div style="padding:24px;text-align:center;color:var(--text-3)">未选择联系人</div>';
+      return;
+    }
     try{
       const j=await api('/contacts/'+uid);
-      if(!j.success||!j.data) return;
+      if(!j.success||!j.data){
+        if(nm) nm.textContent='加载失败';
+        if(dynamicBody) dynamicBody.innerHTML='<div style="padding:24px;text-align:center;color:var(--text-3)">加载失败</div>';
+        return;
+      }
       const c=j.data;
       pendingContactUserId=Number(c.userId||uid);
-      const av=document.getElementById('c9-ph-av');
-      const nm=document.getElementById('c9-ph-nm');
-      const pos=document.getElementById('c9-ph-pos');
-      const name=c.displayName||('用户'+uid);
+      window.pendingContactUserId=pendingContactUserId;
+      if(typeof rememberUserProfile==='function') rememberUserProfile(c);
+      const name=(c.displayName||('用户'+uid))+(c.enabled===false?'-停用':'');
+      const title=c.title||(c.roleLabels&&c.roleLabels[0])||(c.roleCodes&&c.roleCodes[0])||'';
+      const dept=c.department||c.departmentName||'';
+      const tags=document.querySelector('.screen[data-screen="C9"] .profile-hero .ph-tags');
+      if(tags) tags.style.display='none';
       if(av){
         av.setAttribute('data-avatar-user-id', String(pendingContactUserId));
-        rememberUserProfile(c);
         if(typeof renderListAvatar==='function'){
           renderListAvatar(av, c, name.slice(0,1));
-          var dot=av.querySelector('.av-dot');
-          if(dot) dot.classList.toggle('on', window.DunesPresence&&typeof window.DunesPresence.isUserOnline==='function'&&window.DunesPresence.isUserOnline(pendingContactUserId));
+          const dot=av.querySelector('.av-dot');
+          if(dot) dot.style.display='none';
         }else{
-          var on=window.DunesPresence&&typeof window.DunesPresence.isUserOnline==='function'&&window.DunesPresence.isUserOnline(pendingContactUserId);
-          av.innerHTML=escHtml(name.slice(0,1))+'<div class="av-dot'+(on?' on':'')+'"></div>';
+          av.innerHTML=escHtml(name.slice(0,1));
         }
       }
-      if(nm) nm.innerHTML=escHtml(name)+' <span class="role-tag finance">'+(c.title||'同事')+'</span>';
-      if(pos){
-        var on=window.DunesPresence&&typeof window.DunesPresence.isUserOnline==='function'&&window.DunesPresence.isUserOnline(pendingContactUserId);
-        pos.textContent=(c.department||'')+' · '+(on?'在线':'离线');
+      if(nm){
+        nm.innerHTML=escHtml(name)+(title?(' <span class="role-tag finance">'+escHtml(title)+'</span>'):'');
       }
-      if(window.DunesPresence&&typeof window.DunesPresence.refreshC9==='function') window.DunesPresence.refreshC9();
-    }catch(e){ console.warn('C9 contact',e); }
+      if(pos){
+        pos.textContent=dept||'';
+        pos.style.display=dept?'':'none';
+      }
+      wireC9ProfileActions();
+      if(dynamicBody){
+        let rows='';
+        if(c.phone) rows+=c9InfoRow('手机', String(c.phone));
+        if(dept) rows+=c9InfoRow('部门', dept);
+        if(title) rows+=c9InfoRow('职位', title);
+        dynamicBody.innerHTML=rows
+          ? ('<div class="profile-section">基本信息</div>'+rows)
+          : '<div style="padding:20px;text-align:center;color:var(--text-3);font-size:12px">暂无更多资料</div>';
+      }
+    }catch(e){
+      console.warn('C9 contact',e);
+      if(dynamicBody) dynamicBody.innerHTML='<div style="padding:24px;text-align:center;color:var(--text-3)">加载失败</div>';
+    }
+  }
+  function c9InfoRow(label, val){
+    return '<div class="profile-info-row"><span class="pir-l">'+escHtml(label)+'</span><span class="pir-v">'+escHtml(val||'')+'</span></div>';
+  }
+  function showC9Toast(msg){
+    const phone=document.querySelector('.screen[data-screen="C9"] .phone-screen');
+    if(!phone) return;
+    const t=document.createElement('div');
+    t.style.cssText='position:absolute;left:50%;bottom:88px;transform:translateX(-50%);max-width:88%;background:rgba(20,20,20,.88);color:#fff;padding:10px 14px;border-radius:9px;font-size:11.5px;z-index:80;text-align:center';
+    t.textContent=msg;
+    phone.appendChild(t);
+    setTimeout(()=>t.remove(), 2800);
+  }
+  function wireC9ProfileActions(){
+    const back=document.querySelector('.screen[data-screen="C9"] .ph-back');
+    if(back&&!back.dataset.c9BackWired){
+      back.dataset.c9BackWired='1';
+      back.removeAttribute('data-go');
+      back.setAttribute('data-back','1');
+      back.classList.add('tappable');
+    }
+    const actions=document.querySelector('.screen[data-screen="C9"] .profile-actions');
+    if(!actions||actions.dataset.c9Wired) return;
+    actions.dataset.c9Wired='1';
+    actions.querySelectorAll('.pa-btn').forEach(btn=>{
+      const label=(btn.querySelector('.pa-t')||{}).textContent||'';
+      if(label==='发消息'){
+        btn.removeAttribute('data-go');
+        btn.addEventListener('click', e=>{
+          e.preventDefault(); e.stopPropagation();
+          const id=Number(pendingContactUserId||0);
+          if(!id) return;
+          if(window.DunesContacts&&typeof window.DunesContacts.startPrivateChat==='function'){
+            window.DunesContacts.startPrivateChat(id);
+          }else if(typeof go==='function'){
+            go('C5');
+          }
+        });
+      }else if(label==='语音'||label==='视频'){
+        btn.removeAttribute('data-go');
+        btn.addEventListener('click', e=>{
+          e.preventDefault(); e.stopPropagation();
+          showC9Toast('敬请期待');
+        });
+      }else if(label==='收藏'){
+        btn.style.display='none';
+      }
+    });
   }
   function wireC7Create(){
     if(window.DunesContacts&&typeof window.DunesContacts.wireC7Create==='function'){
@@ -21716,18 +21515,32 @@ const DunesApi=(function(){
   async function loadBroadcastList(){
     const box=document.getElementById('c10-api-rows');
     if(!box) return;
+    if(window.DunesInbox&&typeof window.DunesInbox.loadBroadcastList==='function'){
+      return window.DunesInbox.loadBroadcastList();
+    }
     try{
       const j=await api('/conversations?kind=BROADCAST');
       const rows=j.data||[];
       box.innerHTML='';
       if(!rows.length){
-        box.innerHTML='<div class="api-strip"><i class="ti ti-info-circle"></i><span>暂无广播 · 保持下方 mock</span></div>';
+        box.innerHTML='<div class="api-strip"><i class="ti ti-info-circle"></i><span>暂无广播</span></div>';
         return;
       }
-      rows.slice(0,10).forEach(r=>{
+      const convId=rows[0].id;
+      const mj=await api('/conversations/'+convId+'/messages?size=20');
+      const items=(mj.data&&mj.data.items)||[];
+      if(!items.length){
+        box.innerHTML='<div class="api-strip"><i class="ti ti-info-circle"></i><span>暂无广播消息</span></div>';
+        return;
+      }
+      items.sort((a,b)=>Number(b.id)-Number(a.id));
+      const title=rows[0].title||'公司广播';
+      items.forEach(m=>{
         const div=document.createElement('div');
-        div.className='noti-card tappable';
-        div.innerHTML='<div class="nc-ic"><i class="ti ti-speakerphone"></i></div><div class="nc-body"><div class="nc-top"><div class="nc-title">'+(r.title||'')+'</div></div><div class="nc-desc">'+(r.lastMessagePreview||'')+'</div></div>';
+        div.className='noti-card noti-card-static';
+        const tm=m.createdAt?new Date(m.createdAt).toLocaleString('zh-CN',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}):'';
+        const body=String(m.bodyText||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/\n/g,'<br>');
+        div.innerHTML='<div class="nc-ic"><i class="ti ti-speakerphone"></i></div><div class="nc-body"><div class="nc-top"><div class="nc-title">'+title+'</div><div class="nc-time">'+tm+'</div></div><div class="nc-desc">'+body+'</div></div>';
         box.appendChild(div);
       });
     }catch(e){ console.warn('C10',e); }
@@ -21862,6 +21675,13 @@ const DunesApi=(function(){
       const active=document.querySelector('.screen.active');
       if(active&&active.dataset.screen==='C1'&&typeof loadConversations==='function') loadConversations();
     }
+    if(data.type==='workbench_updated'){
+      if(data.event==='approval_rejected'&&window.WorkbenchLive&&typeof window.WorkbenchLive.onApprovalRejected==='function'){
+        window.WorkbenchLive.onApprovalRejected(data);
+      }else if(window.WorkbenchLive&&typeof window.WorkbenchLive.scheduleMyBadgeRefresh==='function'){
+        window.WorkbenchLive.scheduleMyBadgeRefresh(data);
+      }
+    }
   }
   function teardownImSubs(){
     if(imConvSub){ try{ imConvSub.unsubscribe(); imConvSub.removeAllListeners(); }catch(e){} imConvSub=null; }
@@ -21904,7 +21724,7 @@ const DunesApi=(function(){
       await ensureToken();
       const j=await api('/realtime/connection-token');
       if(!j.success||!j.data||!j.data.token){ console.warn('realtime token',j); return; }
-      const wsUrl=j.data.wsUrl||defaultWsUrl();
+      const wsUrl=resolveWsUrl(j.data.wsUrl);
       const channels=j.data.channels||[];
       if(imCentrifuge){
         const st=imCentrifuge.state;
@@ -22002,11 +21822,18 @@ const DunesApi=(function(){
       if(footEl&&d.footnote) footEl.textContent=d.footnote;
     }catch(e){ console.warn('loadWorkProfile',e); }
   }
-  return {init,loadWorkProfile,loadKbHome,wireKbHomeBack,wireKbUpload,wireKbSync,wireKbSubscribe,wireKbFolderSheet,openKbFolder,refreshK2KbContext,checkKbReadiness,enterKbChat,loadK3Preview,loadMmList,loadMmDetail,wireMmActions,exportMmPdf,regenerateMm,ensureToken,recordKbView,loadW2List,ensureW1Draft,wireW1Actions,wireW2Tabs,loadW3Detail,wireW3Actions,postW3Comment,recallW3Report,saveW1Draft,submitW1,aiGenerateW1,setReportId,setKbDocId,startW1Autosave,stopW1Autosave,loadNotifications,loadConversations,wireC4Assistant,sendAssistantStream,initK2,streamKbMessage,loadImDetail,sendImMessage,recallImMessage,wireImInput,wireImAttach,connectImWs,loadConvInfo,wireC6Members,loadContacts,loadContactDetail,wireC7Create,loadBroadcastList,loadAiConvHistory,wireC12Search,searchConvMessages,loadConvMedia,runB6Ocr,runB6Reconcile,wireB6Actions,wireA2Actions,ensureA2ContractDraft,postA2Attachment,submitA2Contract,syncW1Attachments};
+  return {init,loadWorkProfile,loadKbHome,refreshKbMenuStats,applyKbMenuStats,wireKbHomeBack,wireKbUpload,wireKbSync,wireKbFolderSheet,openKbFolder,refreshK2KbContext,checkKbReadiness,enterKbChat,loadK3Preview,loadMmList,loadMmDetail,wireMmActions,exportMmPdf,regenerateMm,ensureToken,recordKbView,loadW2List,ensureW1Draft,wireW1Actions,wireW2Tabs,loadW3Detail,wireW3Actions,postW3Comment,recallW3Report,saveW1Draft,submitW1,aiGenerateW1,setReportId,setKbDocId,startW1Autosave,stopW1Autosave,loadNotifications,loadConversations,wireC4Assistant,sendAssistantStream,initK2,streamKbMessage,loadImDetail,sendImMessage,recallImMessage,wireImInput,wireImAttach,connectImWs,loadConvInfo,wireC6Members,loadContacts,loadContactDetail,wireC7Create,loadBroadcastList,loadAiConvHistory,wireC12Search,searchConvMessages,loadConvMedia,runB6Ocr,runB6Reconcile,wireB6Actions,wireA2Actions,ensureA2ContractDraft,postA2Attachment,submitA2Contract,syncW1Attachments};
 })();
 window.DunesApi=DunesApi;
 DunesApi.init();
 
 </script>
+<script src="dunes_app_ui.js"></script>
+<script src="workbench_live.js"></script>
+<script src="xflow_linkage.js"></script>
+<script src="xflow_render.js"></script>
+<script src="xflow_detail.js"></script>
+<script src="xflow_dynamic.js"></script>
 </body>
+</html>
 </html>

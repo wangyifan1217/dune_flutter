@@ -11,7 +11,7 @@ class DunesShell extends StatefulWidget {
   const DunesShell({
     super.key,
     required this.session,
-    this.initialScreen = 'C1',
+    this.initialScreen = 'B2',
     this.onLogout,
   });
 
@@ -64,6 +64,7 @@ class _DunesShellState extends State<DunesShell> {
                 displayName: widget.session.displayName,
                 phone: widget.session.phone,
                 roles: widget.session.roles,
+                novaLocalStorage: widget.session.novaLocalStorage,
               ),
             ),
           ),

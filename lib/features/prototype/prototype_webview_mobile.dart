@@ -6,6 +6,7 @@ import 'package:webview_flutter/webview_flutter.dart';
 
 import '../../core/navigation/navigation_controller.dart';
 import '../contacts/contacts_bridge.dart';
+import '../nova/nova_web_storage.dart';
 import 'mobile_injection.dart';
 
 /// Android / iOS 端使用原生 WebView 承载 index.html。
@@ -21,6 +22,7 @@ class PrototypeWebView extends StatefulWidget {
     this.displayName,
     this.phone,
     this.roles = const [],
+    this.novaLocalStorage,
   });
 
   final DunesNavigationController navigation;
@@ -32,6 +34,7 @@ class PrototypeWebView extends StatefulWidget {
   final String? displayName;
   final String? phone;
   final List<String> roles;
+  final Map<String, String>? novaLocalStorage;
 
   @override
   State<PrototypeWebView> createState() => PrototypeWebViewState();
@@ -39,6 +42,7 @@ class PrototypeWebView extends StatefulWidget {
 
 class PrototypeWebViewState extends State<PrototypeWebView> {
   late final WebViewController _controller;
+  Map<String, String> _restoredNovaStorage = const {};
   bool _ready = false;
 
   @override
@@ -57,8 +61,16 @@ class PrototypeWebViewState extends State<PrototypeWebView> {
         ),
       );
 
-    _loadPrototype();
+    _bootstrap();
     widget.navigation.addListener(_onNavChanged);
+  }
+
+  Future<void> _bootstrap() async {
+    final uid = widget.userId ?? 0;
+    if (uid > 0) {
+      _restoredNovaStorage = await NovaWebStorage.load(uid);
+    }
+    await _loadPrototype();
   }
 
   Future<void> _loadPrototype() async {
@@ -72,7 +84,10 @@ class PrototypeWebViewState extends State<PrototypeWebView> {
         displayName: widget.displayName,
         phone: widget.phone,
         roles: widget.roles,
+        novaLocalStorage: widget.novaLocalStorage,
+        novaWebStorage: _restoredNovaStorage,
       ),
+      baseUrl: MobileInjection.prototypeBaseUrl,
     );
   }
 
@@ -85,6 +100,8 @@ class PrototypeWebViewState extends State<PrototypeWebView> {
       displayName: widget.displayName,
       phone: widget.phone,
       roles: widget.roles,
+      novaLocalStorage: widget.novaLocalStorage,
+      novaWebStorage: _restoredNovaStorage,
     ));
     await _controller.runJavaScript(MobileInjection.bootstrapScript());
     if (widget.initialScreen != 'B2') {
@@ -99,6 +116,16 @@ class PrototypeWebViewState extends State<PrototypeWebView> {
       final type = data['type'] as String?;
       if (type == 'logout') {
         widget.onLogout?.call();
+        return;
+      }
+      if (type == 'nova-storage') {
+        final raw = data['data'];
+        if (raw is Map && widget.userId != null && widget.userId! > 0) {
+          NovaWebStorage.save(
+            widget.userId!,
+            Map<String, dynamic>.from(raw),
+          );
+        }
         return;
       }
       if (type == 'screen' || type == 'ready') {
@@ -127,7 +154,7 @@ class PrototypeWebViewState extends State<PrototypeWebView> {
 
   Future<void> reloadPrototype() async {
     setState(() => _ready = false);
-    await _loadPrototype();
+    await _bootstrap();
   }
 
   @override

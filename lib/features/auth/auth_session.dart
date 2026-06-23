@@ -9,6 +9,7 @@ class AuthSession {
     required this.roles,
     this.displayName,
     this.departmentId,
+    this.novaLocalStorage,
   });
 
   final String phone;
@@ -19,7 +20,10 @@ class AuthSession {
   final String? displayName;
   final int? departmentId;
 
-  String get landingScreen => 'C1';
+  /// Nova Provisioning 结果，注入 WebView localStorage（与 dunes JWT 分离）。
+  final Map<String, String>? novaLocalStorage;
+
+  String get landingScreen => 'B2';
 
   bool get canUseApproval =>
       roles.any((r) => {'BUSINESS', 'INITIATOR', 'FINANCE', 'ADMIN'}.contains(r));
@@ -63,6 +67,8 @@ class AuthSession {
       'roles': roles,
       'displayName': displayName,
       'departmentId': departmentId,
+      if (novaLocalStorage != null && novaLocalStorage!.isNotEmpty)
+        'novaLocalStorage': novaLocalStorage,
     };
   }
 
@@ -78,6 +84,16 @@ class AuthSession {
       roles: roles,
       displayName: json['displayName'] as String?,
       departmentId: (json['departmentId'] as num?)?.toInt(),
+      novaLocalStorage: _parseNovaStorage(json['novaLocalStorage']),
     );
+  }
+
+  static Map<String, String>? _parseNovaStorage(Object? raw) {
+    if (raw is! Map) return null;
+    final out = <String, String>{};
+    raw.forEach((key, value) {
+      if (key is String && value != null) out[key] = value.toString();
+    });
+    return out.isEmpty ? null : out;
   }
 }

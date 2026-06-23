@@ -1,11 +1,13 @@
-﻿import 'dart:convert';
+import 'dart:convert';
 
 import 'package:flutter/services.dart';
 
 import '../../core/config/dunes_defaults.dart';
+import '../../core/config/nova_config.dart';
 import '../im/im_chat_injection.dart';
 import '../im/kb_chat_injection.dart';
 import '../im/nova_chat_injection.dart';
+import '../nova/nova_api_injection.dart';
 
 /// 注入 WebView 的 JS / CSS，将原型页转为全屏 App 模式并桥接导航。
 abstract final class MobileInjection {
@@ -55,6 +57,13 @@ abstract final class MobileInjection {
 .flutter-app-mode .phone-screen {
   border-radius: 0 !important;
 }
+.flutter-app-mode .tab-bar {
+  padding-bottom: 8px !important;
+}
+.flutter-app-mode .tab-bar::after,
+.flutter-app-mode .home-indicator {
+  display: none !important;
+}
 .flutter-app-mode .overlay {
   z-index: 200 !important;
 }
@@ -70,8 +79,13 @@ abstract final class MobileInjection {
   height: 100% !important;
 }
 .flutter-app-mode .screen[data-screen="C4"] .chat-conv-header,
-.flutter-app-mode .screen[data-screen="C4"] .ai-prompts {
+.flutter-app-mode .screen[data-screen="C4"] #c4-model-picker-slot,
+.flutter-app-mode .screen[data-screen="C4"] .c4-model-picker-wrap {
   flex-shrink: 0 !important;
+}
+.flutter-app-mode .screen[data-screen="C4"] .ai-prompts,
+.flutter-app-mode .screen[data-screen="C4"] #c4-ai-prompts {
+  display: none !important;
 }
 .flutter-app-mode .screen[data-screen="C4"] .ai-hero {
   display: none !important;
@@ -100,9 +114,18 @@ abstract final class MobileInjection {
 .flutter-app-mode .screen[data-screen="C4"] .msg-input-bar {
   flex-shrink: 0 !important;
 }
+.flutter-app-mode .screen[data-screen="C4"] .c4-nova-draft-tray {
+  flex-shrink: 0 !important;
+  display: none;
+  max-height: 120px;
+  overflow: hidden;
+}
+.flutter-app-mode .screen[data-screen="C4"] .c4-nova-draft-tray.show {
+  display: block !important;
+}
 .flutter-app-mode .screen[data-screen="C4"] .msg-quick-actions {
   display: grid !important;
-  grid-template-columns: repeat(6, minmax(0, 1fr)) !important;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
   width: 100% !important;
   gap: 0 !important;
   padding: 10px 0 8px !important;
@@ -293,13 +316,32 @@ abstract final class MobileInjection {
   display: none;
 }
 .flutter-app-mode .chat-conv-header.private .cv-av-mini .av-dot.on { display: block; }
+.flutter-app-mode .screen[data-screen="C2"] .phone-screen,
+.flutter-app-mode .screen[data-screen="C5"] .phone-screen {
+  position: relative;
+}
+.flutter-app-mode .dunes-chat-overlays {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 58px;
+  z-index: 12;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  pointer-events: none;
+}
+.flutter-app-mode .dunes-chat-overlays > * {
+  pointer-events: auto;
+}
 .flutter-app-mode .dunes-jump-latest {
-  position: sticky;
-  bottom: 8px;
+  position: static;
+  bottom: auto;
   z-index: 6;
   display: flex;
   justify-content: center;
-  padding: 6px 0 4px;
+  padding: 0;
   pointer-events: none;
 }
 .flutter-app-mode .dunes-jump-latest button {
@@ -313,6 +355,42 @@ abstract final class MobileInjection {
   box-shadow: 0 4px 14px rgba(31, 36, 33, 0.12);
   cursor: pointer;
 }
+.flutter-app-mode .msg-stream {
+  position: relative;
+}
+.flutter-app-mode .dunes-new-msgs-float {
+  position: static;
+  bottom: auto;
+  z-index: 7;
+  display: none;
+  margin: 0;
+  width: fit-content;
+  padding: 8px 14px;
+  border: none;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #7E64BD 0%, #553B96 100%);
+  color: #fff;
+  font-size: 12px;
+  box-shadow: 0 4px 12px rgba(85, 59, 150, 0.35);
+  cursor: pointer;
+}
+.flutter-app-mode .msg-system.dunes-msg-focus,
+.flutter-app-mode .msg-row.dunes-msg-focus {
+  animation: dunes-msg-flash 2.4s ease;
+}
+@keyframes dunes-msg-flash {
+  0%, 100% { background: transparent; }
+  20%, 60% { background: rgba(124, 98, 194, 0.14); border-radius: 8px; }
+}
+.flutter-app-mode .msg-row.sent .msg-bubble.sent.msg-bubble--media {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+}
+.flutter-app-mode .msg-row.sent .msg-bubble.sent.msg-bubble--media .dunes-attach-link {
+  color: var(--accent-deep, #553B96);
+}
 .flutter-app-mode #c1-conv-list:not(.dunes-api-ready) > * { display: none !important; }
 .flutter-app-mode #c1-conv-list.dunes-api-ready:empty::before {
   content: '加载会话…';
@@ -320,6 +398,60 @@ abstract final class MobileInjection {
   padding: 24px 16px;
   color: var(--text-3);
   font-size: 12px;
+}
+.flutter-app-mode .c1-swipe-item {
+  position: relative;
+  overflow: hidden;
+  background: var(--bg-app);
+}
+.flutter-app-mode .c1-swipe-item + .c1-swipe-item::before,
+.flutter-app-mode .c1-swipe-item + .chat-row::before,
+.flutter-app-mode .chat-row + .c1-swipe-item::before {
+  content: '';
+  position: absolute;
+  left: 72px;
+  right: 0;
+  top: 0;
+  height: 1px;
+  background: var(--border-soft);
+  pointer-events: none;
+}
+.flutter-app-mode .c1-swipe-actions {
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 72px;
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  background: #E5484D;
+}
+.flutter-app-mode .c1-swipe-delete {
+  flex: 1;
+  border: 0;
+  background: transparent;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+}
+.flutter-app-mode .c1-swipe-content {
+  position: relative;
+  z-index: 1;
+  background: var(--bg-app);
+  transition: transform 0.22s ease;
+  will-change: transform;
+}
+.flutter-app-mode .c1-swipe-item.open .c1-swipe-content {
+  transform: translateX(-72px);
+}
+.flutter-app-mode .c1-swipe-item .chat-row::before {
+  display: none !important;
+}
+.flutter-app-mode .c1-swipe-item .chat-row {
+  background: var(--bg-app);
 }
 .flutter-app-mode .chat-row .cr-bd .cr-pv .generating {
   color: var(--accent-deep);
@@ -426,8 +558,40 @@ abstract final class MobileInjection {
   display: none !important;
 }
 .flutter-app-mode #c7-mock-contacts,
+.flutter-app-mode .screen[data-screen="C7"] .content > .chat-section,
 .flutter-app-mode .screen[data-screen="C3"] .dept-tree > :not(.dept-block) {
   display: none !important;
+}
+.flutter-app-mode .screen[data-screen="C7"] .new-conv-kinds .nck.nck-disabled {
+  display: none !important;
+}
+.flutter-app-mode .dept-head .dh-select-all {
+  margin-left: 8px;
+  padding: 2px 8px;
+  border: 1px solid var(--accent-line);
+  border-radius: 6px;
+  background: var(--accent-soft);
+  color: var(--accent-deep);
+  font-size: 10px;
+  font-weight: 600;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.flutter-app-mode .c7-bulk-bar {
+  display: flex;
+  gap: 8px;
+  padding: 6px 12px 4px;
+  align-items: center;
+}
+.flutter-app-mode .c7-bulk-bar button {
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border-soft);
+  background: var(--bg-soft);
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-2);
+  cursor: pointer;
 }
 .flutter-app-mode .screen[data-screen="C7"] .content > .contact-pick-row,
 .flutter-app-mode .screen[data-screen="C7"] .selected-stack .ss-tag {
@@ -442,6 +606,14 @@ abstract final class MobileInjection {
 .flutter-app-mode .dept-people { margin: 0 0 8px 4px; }
 .flutter-app-mode .dept-people .contact-row,
 .flutter-app-mode .dept-people .contact-pick-row { margin-bottom: 4px; }
+.flutter-app-mode .contact-row.contact-disabled .ct-nm { color: var(--text-3); }
+.flutter-app-mode .screen[data-screen="C7"] .cp-av .av-dot { display: none !important; }
+.flutter-app-mode #dunes-member-picker-list .cp-av .av-dot { display: none !important; }
+.flutter-app-mode .screen[data-screen="C9"] .c9-mock { display: none !important; }
+.flutter-app-mode .screen[data-screen="C9"] .profile-hero .ph-tags { display: none !important; }
+.flutter-app-mode .screen[data-screen="C9"] .profile-hero .ph-av .av-dot { display: none !important; }
+.flutter-app-mode .screen[data-screen="C9"] .profile-hero .ph-more { display: none !important; }
+.flutter-app-mode .screen[data-screen="C9"] #c9-dynamic-body { display: block !important; }
 .flutter-app-mode #c7-contact-list.dept-tree { padding: 0 10px 12px; }
 .flutter-app-mode #z2-noti-list:not(.z2-api-ready) > *:not(#z2-api-rows) { display: none !important; }
 .flutter-app-mode #z2-noti-list.z2-api-ready > *:not(#z2-api-rows) { display: none !important; }
@@ -469,8 +641,33 @@ abstract final class MobileInjection {
 .flutter-app-mode .screen[data-screen="C12"] .ds-crumb,
 .flutter-app-mode .screen[data-screen="C12"] .ds-name .id,
 .flutter-app-mode .screen[data-screen="C12"] .ds-more,
+.flutter-app-mode .screen[data-screen="C10"] .ds-more,
+.flutter-app-mode .screen[data-screen="Z2"] .ds-more,
 .flutter-app-mode .screen[data-screen="C12"] .action-bar {
   display: none !important;
+}
+.flutter-app-mode .noti-card.noti-card-static { cursor: default; }
+.flutter-app-mode .noti-card .nc-desc,
+.flutter-app-mode .chat-row.broadcast .cr-pv,
+.flutter-app-mode .chat-row.system .cr-pv {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+/* 云枢列表预览单行省略 */
+.flutter-app-mode #c1-conv-list .chat-row .cr-av.ai-bot + .cr-bd .cr-pv {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1.4;
+  max-width: 100%;
+}
+.flutter-app-mode #c1-conv-list .chat-row .cr-av.ai-bot + .cr-bd .cr-pv .generating {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
 }
 .flutter-app-mode .screen[data-screen="C12"] .ds-name {
   font-size: 17px !important;
@@ -604,6 +801,55 @@ abstract final class MobileInjection {
   text-decoration: none;
   font-weight: 600;
 }
+.flutter-app-mode .dunes-img-thumb {
+  max-width: 170px;
+  max-height: 170px;
+  border-radius: 10px;
+  display: block;
+  cursor: pointer;
+  object-fit: cover;
+}
+.flutter-app-mode .dunes-upload-bubble {
+  position: relative;
+  min-width: 120px;
+}
+.flutter-app-mode .dunes-upload-preview {
+  opacity: 0.78;
+}
+.flutter-app-mode .dunes-upload-file {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  max-width: 220px;
+  word-break: break-all;
+}
+.flutter-app-mode .dunes-upload-progress {
+  margin-top: 8px;
+  height: 4px;
+  border-radius: 99px;
+  background: rgba(0, 0, 0, 0.08);
+  overflow: hidden;
+}
+.flutter-app-mode .msg-bubble.sent .dunes-upload-progress {
+  background: rgba(255, 255, 255, 0.28);
+}
+.flutter-app-mode .dunes-upload-progress-bar {
+  height: 100%;
+  width: 0;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #7E64BD, #553B96);
+  transition: width 0.18s ease;
+}
+.flutter-app-mode .dunes-upload-label {
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--text-3, #888);
+  text-align: center;
+}
+.flutter-app-mode .msg-bubble.sent .dunes-upload-label {
+  color: rgba(255, 255, 255, 0.82);
+}
 @keyframes dunesVoicePulse {
   0%, 100% { opacity: .45; transform: scale(.92); }
   50% { opacity: 1; transform: scale(1.08); }
@@ -651,6 +897,24 @@ abstract final class MobileInjection {
   justify-content: center;
   font-size: 18px;
   cursor: pointer;
+  z-index: 2;
+}
+.flutter-app-mode .dunes-image-viewer .dunes-image-download {
+  position: absolute;
+  top: 16px;
+  right: 60px;
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,0.28);
+  background: rgba(255,255,255,0.12);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  cursor: pointer;
+  z-index: 2;
 }
 .flutter-app-mode .screen[data-screen="C2"] .chat-pinned-ctx {
   display: none !important;
@@ -741,6 +1005,38 @@ abstract final class MobileInjection {
   height: 100%;
   object-fit: cover;
   border-radius: 50%;
+}
+.flutter-app-mode .profile-head .badges {
+  display: none !important;
+}
+.flutter-app-mode .dunes-ptr-indicator {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 0;
+  overflow: hidden;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  z-index: 30;
+  pointer-events: none;
+  transition: height .18s ease;
+}
+.flutter-app-mode .dunes-ptr-indicator .dunes-ptr-inner {
+  padding: 8px 0 10px;
+  font-size: 11px;
+  color: var(--text-3, #888);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.flutter-app-mode .dunes-ptr-indicator.pulling .dunes-ptr-inner,
+.flutter-app-mode .dunes-ptr-indicator.refreshing .dunes-ptr-inner {
+  color: var(--accent, #7e64bd);
+}
+.flutter-app-mode .screen .content.dunes-ptr-pulling {
+  transition: transform .12s ease;
 }
 .flutter-app-mode .cr-av.has-img,
 .flutter-app-mode .cp-av.has-img,
@@ -958,8 +1254,9 @@ abstract final class MobileInjection {
 }
 .flutter-app-mode .screen[data-screen="C4"] #c4-api-rows .msg-row.recv .nova-think-toggle {
   display: flex;
-  align-items: center;
-  gap: 6px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 4px 6px;
   padding: 8px 10px;
   cursor: pointer;
   user-select: none;
@@ -975,12 +1272,15 @@ abstract final class MobileInjection {
   color: var(--text-1);
 }
 .flutter-app-mode .screen[data-screen="C4"] #c4-api-rows .msg-row.recv .nova-think-toggle .nova-think-status {
-  flex: 1;
+  flex: 1 1 100%;
+  min-width: 0;
   font-size: 11px;
   color: var(--text-3);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  white-space: normal;
+  overflow: visible;
+  text-overflow: unset;
+  line-height: 1.4;
+  word-break: break-word;
 }
 .flutter-app-mode .screen[data-screen="C4"] #c4-api-rows .msg-row.recv .nova-think-toggle .nova-think-chev {
   font-size: 12px;
@@ -1069,6 +1369,7 @@ abstract final class MobileInjection {
   max-width: 100%;
   text-align: left;
   transition: background 0.15s, border-color 0.15s;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.04);
 }
 .flutter-app-mode .screen[data-screen="C4"] .dunes-nova-file-card:active {
   background: var(--accent-soft);
@@ -1106,7 +1407,14 @@ abstract final class MobileInjection {
 }
 .flutter-app-mode .screen[data-screen="C4"] .dunes-nova-file-card .dnf-go {
   flex-shrink: 0;
-  color: var(--text-4);
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: var(--bg-soft);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent-deep);
   font-size: 16px;
 }
 .flutter-app-mode .screen[data-screen="C4"] .dunes-nova-image-card {
@@ -1153,6 +1461,141 @@ abstract final class MobileInjection {
   font-size: 11px;
   color: var(--text-3);
 }
+.flutter-app-mode .screen[data-screen="C4"] .dunes-nova-image-card .dni-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.flutter-app-mode .screen[data-screen="C4"] .dunes-nova-image-card .dni-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 8px;
+  background: var(--bg-soft);
+  color: var(--text-2);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.flutter-app-mode .screen[data-screen="C4"] .dunes-nova-image-card .dni-btn:active {
+  background: var(--accent-soft);
+  color: var(--accent-deep);
+}
+.flutter-app-mode .screen[data-screen="C4"] .msg-bubble.ai-recv .nova-text,
+.flutter-app-mode .screen[data-screen="C4"] .msg-bubble.ai-recv {
+  line-height: 1.65;
+  word-break: break-word;
+}
+.flutter-app-mode .screen[data-screen="C4"] .nova-inline-code {
+  font-family: var(--mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
+  font-size: 0.88em;
+  padding: 0.15em 0.45em;
+  border-radius: 6px;
+  background: rgba(47, 93, 98, 0.08);
+  color: var(--accent-deep);
+  border: 1px solid rgba(47, 93, 98, 0.12);
+}
+.flutter-app-mode .screen[data-screen="C4"] .nova-md-link {
+  color: var(--accent-deep);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  word-break: break-all;
+}
+.flutter-app-mode .screen[data-screen="C4"] .nova-md-link:active {
+  opacity: 0.75;
+}
+.flutter-app-mode .screen[data-screen="C4"] .nova-md-h {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text);
+  margin: 10px 0 6px;
+  line-height: 1.45;
+}
+.flutter-app-mode .screen[data-screen="C4"] .nova-md-p {
+  margin: 4px 0;
+  line-height: 1.65;
+}
+.flutter-app-mode .screen[data-screen="C4"] .nova-md-list {
+  margin: 6px 0 8px;
+  padding-left: 18px;
+  list-style: disc;
+}
+.flutter-app-mode .screen[data-screen="C4"] .nova-md-list li {
+  margin: 4px 0;
+  line-height: 1.6;
+}
+.flutter-app-mode .screen[data-screen="C4"] .chat-conv-header .ic-btn.nova-header-disabled {
+  opacity: 0.38;
+  pointer-events: none;
+}
+.flutter-app-mode .screen[data-screen="C4"] .nova-code-block {
+  margin: 10px 0;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  background: #1e1e2e;
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.08);
+  max-width: 100%;
+}
+.flutter-app-mode .screen[data-screen="C4"] .nova-code-block.is-streaming {
+  border-color: rgba(47, 93, 98, 0.35);
+}
+.flutter-app-mode .screen[data-screen="C4"] .nova-code-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+.flutter-app-mode .screen[data-screen="C4"] .nova-code-lang {
+  font-family: var(--mono, ui-monospace, monospace);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.55);
+}
+.flutter-app-mode .screen[data-screen="C4"] .nova-code-copy {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 11px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.flutter-app-mode .screen[data-screen="C4"] .nova-code-copy:active {
+  background: rgba(255, 255, 255, 0.14);
+}
+.flutter-app-mode .screen[data-screen="C4"] .nova-code-pre {
+  margin: 0;
+  padding: 14px 16px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.flutter-app-mode .screen[data-screen="C4"] .nova-code-body {
+  font-family: var(--mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
+  font-size: 13px;
+  line-height: 1.55;
+  color: #e2e8f0;
+  white-space: pre;
+  tab-size: 2;
+}
+.flutter-app-mode .screen[data-screen="C4"] .nova-code-stream-hint {
+  padding: 6px 12px 10px;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.45);
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
 .flutter-app-mode .screen[data-screen="C4"] .nova-tool-chip.pending {
   opacity: 0.85;
 }
@@ -1162,6 +1605,118 @@ abstract final class MobileInjection {
 @keyframes spin {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
+}
+/* 敬请期待 · 模糊遮罩（千机 / 我的薪资等未开放板块） */
+.flutter-app-mode .coming-soon-wrap {
+  position: relative;
+  isolation: isolate;
+}
+.flutter-app-mode .coming-soon-wrap > .coming-soon-mask {
+  position: absolute;
+  inset: 0;
+  z-index: 12;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(251, 250, 246, 0.55);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border-radius: 12px;
+  pointer-events: auto;
+  cursor: default;
+}
+.flutter-app-mode .coming-soon-wrap > .coming-soon-mask .soon-label {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  font-family: var(--serif);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent-deep);
+  letter-spacing: 0.1em;
+  padding: 9px 18px;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid var(--accent-line);
+  border-radius: 999px;
+  box-shadow: 0 6px 24px -6px rgba(85, 59, 150, 0.25);
+  line-height: 1.2;
+  text-align: center;
+}
+.flutter-app-mode .coming-soon-wrap > .coming-soon-mask .soon-block {
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  opacity: 0.72;
+  text-transform: none;
+}
+.flutter-app-mode .b2-soon-disabled {
+  cursor: default !important;
+}
+.flutter-app-mode .b2-soon-disabled .arr {
+  opacity: 0.35;
+}
+.flutter-app-mode .screen[data-screen="LH"] .app-bar.has-back > .ds-back,
+.flutter-app-mode .screen[data-screen="B2"] .app-bar.has-back > .ds-back {
+  display: none !important;
+}
+.flutter-app-mode .screen[data-screen="LH"] .app-bar.has-back,
+.flutter-app-mode .screen[data-screen="B2"] .app-bar.has-back {
+  gap: 0;
+}
+.flutter-app-mode .screen[data-screen="C6"] .gi-row.c6-flow-push-hidden {
+  display: none !important;
+}
+.flutter-app-mode #c6-clear-history {
+  display: none !important;
+}
+.flutter-app-mode .coming-soon-wrap > .coming-soon-mask .soon-main {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+}
+.flutter-app-mode .screen[data-screen="QJ"] .content.coming-soon-wrap {
+  min-height: 58vh;
+}
+.flutter-app-mode .coming-soon-wrap.dunes-soon-block {
+  margin-bottom: 10px;
+}
+/* 统一页面 loading 遮罩：数据就绪前隐藏内容区 */
+.flutter-app-mode .screen.dunes-screen-loading .content,
+.flutter-app-mode .screen.dunes-screen-loading .msg-stream {
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+.flutter-app-mode .phone-screen {
+  position: relative;
+}
+.flutter-app-mode .dunes-screen-loading-mask {
+  position: absolute;
+  inset: 0;
+  z-index: 90;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-app, #fbfaf6);
+}
+.flutter-app-mode .screen.dunes-screen-loading .dunes-screen-loading-mask {
+  display: flex;
+}
+.flutter-app-mode .dunes-screen-loading-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  color: var(--text-3, #8a8178);
+  font-size: 12px;
+}
+.flutter-app-mode .dunes-screen-loading-spin {
+  width: 28px;
+  height: 28px;
+  border: 2.5px solid rgba(85, 59, 150, 0.15);
+  border-top-color: var(--accent, #553B96);
+  border-radius: 50%;
+  animation: spin 0.75s linear infinite;
 }
 ''';
 
@@ -1332,7 +1887,7 @@ function hydrateAvatarsIn(root) {
     var uid = Number(el.getAttribute('data-avatar-user-id'));
     if (!uid) return;
     var p = profileForUserId(uid);
-    if (p) renderListAvatar(el, p, (p.displayName || '?').slice(0, 1));
+    if (p) renderListAvatar(el, p, el.classList.contains('no-initial') ? ' ' : (p.displayName || '?').slice(0, 1));
   });
 }
 window.DunesAvatars = {
@@ -1347,34 +1902,42 @@ window.DunesAvatars = {
   refreshAvatarDotForEl: refreshAvatarDotForEl
 };
 function applyUserProfile(p) {
-  if (!p) return;
+  p = p || {};
   var screen = document.querySelector('.screen[data-screen="B2"]');
   if (!screen) return;
   var avatar = screen.querySelector('.profile-head .avatar');
   var nm = screen.querySelector('.profile-head .nm');
   var rl = screen.querySelector('.profile-head .rl');
   var badges = screen.querySelector('.profile-head .badges');
-  var name = p.displayName || '';
+  var protoName = '王一凡';
+  var protoRole = '市场部 · 能源版块';
+  var name = String(p.displayName || localStorage.getItem('dunes_display_name') || '').trim();
+  if (!name) {
+    var phone = String(p.phone || localStorage.getItem('dunes_phone') || '').trim();
+    if (phone) name = phone;
+  }
+  if (!name) {
+    var uid = localStorage.getItem('dunes_user_id') || '';
+    if (uid) name = '用户' + uid;
+  }
   renderProfileAvatar(avatar, p);
-  if (nm && name) nm.textContent = name;
+  if (nm) {
+    if (name) nm.textContent = name;
+    else if ((nm.textContent || '').trim() === protoName) nm.textContent = '—';
+  }
   if (rl) {
     var parts = [];
     if (p.departmentName) parts.push(p.departmentName);
     if (p.title) parts.push(p.title);
-    if (p.phone) parts.push(maskPhone(p.phone));
-    rl.textContent = parts.filter(Boolean).join(' · ');
+    if (p.phone) parts.push(String(p.phone));
+    var line = parts.filter(Boolean).join(' · ');
+    if (line) rl.textContent = line;
+    else if ((rl.textContent || '').trim() === protoRole) rl.textContent = '';
+    else rl.textContent = '';
   }
   if (badges) {
-    var labels = p.roleLabels || p.roles || [];
-    if (labels.length) {
-      badges.innerHTML = labels.map(function (r, i) {
-        var label = typeof r === 'string' ? r : (r.name || r.code || r);
-        var cls = i === 0 ? 'rb role' : 'rb';
-        return '<span class="' + cls + '">' + label + '</span>';
-      }).join('');
-    } else {
-      badges.innerHTML = '<span class="rb role">员工</span>';
-    }
+    badges.innerHTML = '';
+    badges.style.display = 'none';
   }
 }
 function readCachedProfile() {
@@ -1414,6 +1977,14 @@ function clearAuthStorage() {
     try { localStorage.removeItem(k); } catch (e) {}
   });
 }
+function handleSessionRevoked() {
+  clearAuthStorage();
+  notifyFlutterLogout();
+  if (window.DunesDialog && typeof window.DunesDialog.alert === 'function') {
+    window.DunesDialog.alert('账号已在其他设备登录，请重新登录');
+  }
+}
+window.__dunesHandleSessionRevoked = handleSessionRevoked;
 window.__dunesWireHoldToTalkVoice = function (opts) {
   opts = opts || {};
   var screen = opts.screen;
@@ -1789,67 +2360,28 @@ async function refreshUserProfile() {
 window.__dunesRefreshUserProfile = refreshUserProfile;
 
 function wireNovaC4() {
-  var NOVA_INTRO = '你好，我是你的 NOVA 助手';
-  var NOVA_HEAD = 'NOVA <span class="group-tag" style="background:linear-gradient(135deg,#FFD580,#FFA850);color:#5D3508">AI</span>';
+  var YUNSHU_NAME = '云枢';
+  var YUNSHU_INTRO = '你好，我是你的云枢助手';
+  var YUNSHU_HEAD = YUNSHU_NAME + ' <span class="group-tag" style="background:linear-gradient(135deg,#FFD580,#FFA850);color:#5D3508">AI</span>';
   var screen = document.querySelector('.screen[data-screen="C4"]');
   if (!screen) return;
-  screen.dataset.name = 'NOVA';
+  screen.dataset.name = YUNSHU_NAME;
   document.querySelectorAll('.screen[data-screen="C4"] .cv-nm').forEach(function (el) {
-    el.innerHTML = NOVA_HEAD;
+    el.innerHTML = YUNSHU_HEAD;
   });
   document.querySelectorAll('.screen[data-screen="C4"] .ah-nm').forEach(function (el) {
-    el.innerHTML = 'NOVA<span class="badge-ai">AI</span>';
+    el.innerHTML = YUNSHU_NAME + '<span class="badge-ai">AI</span>';
   });
   document.querySelectorAll('.screen[data-screen="C4"] .msg-meta .nm').forEach(function (el) {
-    if (el.textContent.indexOf('沙丘助手') >= 0 || el.textContent.indexOf('NOVA') >= 0) el.textContent = 'NOVA';
+    if (el.textContent.indexOf('沙丘助手') >= 0 || el.textContent.indexOf('NOVA') >= 0 || el.textContent.indexOf(YUNSHU_NAME) >= 0) el.textContent = YUNSHU_NAME;
   });
-  var panel = document.getElementById('c4-ai-prompts') || screen.querySelector('.ai-prompts');
-  if (panel && !panel.id) panel.id = 'c4-ai-prompts';
-  var toggle = document.getElementById('c4-prompts-toggle') || (panel && panel.querySelector('.ap-h'));
-  if (toggle && !toggle.id) toggle.id = 'c4-prompts-toggle';
-  if (toggle && !toggle.querySelector('.ap-chev')) {
-    toggle.insertAdjacentHTML('beforeend', '<i class="ti ti-chevron-down ap-chev"></i>');
-  }
-  if (toggle) {
-    toggle.setAttribute('role', 'button');
-    toggle.setAttribute('tabindex', '0');
-  }
-  function flipC4Prompts(open) {
-    var p = document.getElementById('c4-ai-prompts');
-    if (!p) return;
-    var next = open !== undefined ? !!open : !p.classList.contains('expanded');
-    p.classList.toggle('expanded', next);
-    p.classList.remove('collapsed');
-    var grid = p.querySelector('.ai-prompts-grid');
-    if (grid) {
-      if (next) grid.style.removeProperty('display');
-      else grid.style.display = 'none';
-    }
-    var t = document.getElementById('c4-prompts-toggle');
-    if (t) t.setAttribute('aria-expanded', next ? 'true' : 'false');
-  }
-  window.__dunesFlipC4Prompts = flipC4Prompts;
-  if (!screen.dataset.c4PromptsToggleWired) {
-    screen.dataset.c4PromptsToggleWired = '1';
-    screen.addEventListener('click', function (e) {
-      var hit = e.target.closest('#c4-prompts-toggle, #c4-ai-prompts > .ap-h');
-      if (!hit) return;
-      e.preventDefault();
-      e.stopPropagation();
-      flipC4Prompts();
-    }, true);
-    if (toggle) {
-      toggle.addEventListener('keydown', function (e) {
-        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); flipC4Prompts(); }
-      });
-    }
-  }
-  flipC4Prompts(false);
+  var prompts = document.getElementById('c4-ai-prompts') || screen.querySelector('.ai-prompts');
+  if (prompts) prompts.style.display = 'none';
   document.querySelectorAll('.screen[data-screen="C4"] .ah-av').forEach(function (el) {
     if (window.dunesNovaIconHtml) el.innerHTML = window.dunesNovaIconHtml();
   });
   if (typeof window.patchNovaIcons === 'function') window.patchNovaIcons();
-  window.__dunesNovaIntro = NOVA_INTRO;
+  window.__dunesNovaIntro = YUNSHU_INTRO;
 }
 window.__dunesWireNovaC4 = wireNovaC4;
 ''';
@@ -1884,6 +2416,40 @@ window.DunesContacts = (function () {
       .replace(/</g, '&lt;')
       .replace(/"/g, '&quot;');
   }
+  function isContactDisabled(c) {
+    return !!(c && c.enabled === false);
+  }
+  function contactDisplayName(c) {
+    var name = (c && c.displayName) || '';
+    if (isContactDisabled(c)) name += '-停用';
+    return name;
+  }
+  function contactMetaHtml(c) {
+    var role = c.title || (c.roleCodes && c.roleCodes[0]) || '';
+    var dept = c.department || '';
+    var html = '';
+    if (role) html += '<span class="role">' + esc(role) + '</span>';
+    if (dept) html += '<span>' + esc(dept) + '</span>';
+    return html;
+  }
+  function updateC7OrgLabel(total) {
+    var list = document.getElementById('c7-contact-list');
+    if (!list) return;
+    var wrap = document.getElementById('c7-org-label');
+    if (!wrap) {
+      wrap = document.createElement('div');
+      wrap.id = 'c7-org-label';
+      wrap.className = 'section-label';
+      wrap.style.margin = '8px 14px 4px';
+      list.parentNode.insertBefore(wrap, list);
+    }
+    wrap.innerHTML = '<span class="accent">组织树</span> <span class="line"></span><span class="cnt">' + total + ' 人</span>';
+  }
+  function updateC3OrgLabel(total) {
+    var label = document.querySelector('.screen[data-screen="C3"] .section-label');
+    if (!label) return;
+    label.innerHTML = '<span class="accent">组织树</span> <span class="line"></span><span class="cnt">' + total + ' 人</span>';
+  }
   function apiFetch(path, opts) {
     opts = opts || {};
     var base = localStorage.getItem('dunes_api_base') || '__DUNES_API_BASE__';
@@ -1895,7 +2461,13 @@ window.DunesContacts = (function () {
       method: opts.method || 'GET',
       headers: headers,
       body: opts.body || undefined
-    }).then(function (r) { return r.json(); });
+    }).then(function (r) {
+      if (r.status === 401 && typeof window.__dunesHandleSessionRevoked === 'function') {
+        window.__dunesHandleSessionRevoked();
+        return { success: false, message: '账号已在其他设备登录，请重新登录' };
+      }
+      return r.json();
+    });
   }
   async function startPrivateChat(peerUserId) {
     if (!peerUserId) return;
@@ -1938,13 +2510,13 @@ window.DunesContacts = (function () {
   function renderContactRow(c) {
     var uid = Number(c.userId);
     var me = uid === devUserId() ? '<span class="me-tag">我</span>' : '';
-    var role = c.title || (c.roleCodes && c.roleCodes[0]) || '';
-    var dept = c.department || '';
+    var nm = contactDisplayName(c);
+    var disabledCls = isContactDisabled(c) ? ' contact-disabled' : '';
     return ''
-      + '<div class="contact-row tappable" data-go="C9" data-contact-user-id="' + uid + '">'
+      + '<div class="contact-row tappable' + disabledCls + '" data-go="C9" data-contact-user-id="' + uid + '">'
       + '<div class="cr-av ' + personCls(uid) + '" data-avatar-user-id="' + uid + '">' + esc((c.displayName || '?').slice(0, 1)) + '<div class="av-dot"></div></div>'
-      + '<div class="ct-bd"><div class="ct-nm">' + esc(c.displayName || '') + me + '</div>'
-      + '<div class="ct-meta"><span class="role">' + esc(role) + '</span><span>id=' + uid + '</span><span>' + esc(dept) + '</span></div></div>'
+      + '<div class="ct-bd"><div class="ct-nm">' + esc(nm) + me + '</div>'
+      + '<div class="ct-meta">' + contactMetaHtml(c) + '</div></div>'
       + '<div class="ct-actions">'
       + '<div class="ic-btn primary tappable" data-msg-user-id="' + uid + '" title="发消息"><i class="ti ti-message"></i></div>'
       + '</div></div>';
@@ -1967,14 +2539,18 @@ window.DunesContacts = (function () {
       });
     });
   }
-  function renderDeptBlock(dep, pickMode) {
+  function renderDeptBlock(dep, pickMode, allowDeptSelect) {
     var exp = !!dep.expanded;
+    var showDeptSelect = pickMode && allowDeptSelect !== false;
+    var selectAll = showDeptSelect
+      ? '<button type="button" class="dh-select-all" data-dept-select-all="1">全选</button>'
+      : '';
     var head = ''
       + '<div class="dept-head' + (exp ? ' expanded' : '') + '">'
       + '<i class="ti ti-chevron-right dh-chev"></i>'
       + '<div class="dh-ic"><i class="ti ti-building"></i></div>'
-      + '<div class="dh-bd"><div class="dh-nm">' + esc(dep.name || '部门') + '</div>'
-      + '<div class="dh-sub">' + esc(dep.code || '') + '</div></div>'
+      + '<div class="dh-bd"><div class="dh-nm">' + esc(dep.name || '部门') + '</div></div>'
+      + selectAll
       + '<div class="dh-cnt">' + (dep.userCount || (dep.users && dep.users.length) || 0) + '</div></div>';
     var peopleHtml = '';
     (dep.users || []).forEach(function (c) {
@@ -1983,22 +2559,92 @@ window.DunesContacts = (function () {
     var people = '<div class="dept-people"' + (exp ? '' : ' style="display:none"') + '>' + peopleHtml + '</div>';
     var childHtml = '';
     (dep.children || []).forEach(function (ch) {
-      childHtml += renderDeptBlock(ch, pickMode);
+      childHtml += renderDeptBlock(ch, pickMode, allowDeptSelect);
     });
     var children = childHtml
       ? '<div class="dept-children"' + (exp ? '' : ' style="display:none"') + '>' + childHtml + '</div>'
       : '';
     return '<div class="dept-block" data-api-dept="1" data-dept-id="' + (dep.id || 0) + '">' + head + people + children + '</div>';
   }
+  function memberPickState() {
+    return window.__dunesMemberPickState || null;
+  }
+  function isUserPicked(uid) {
+    var ps = memberPickState();
+    if (ps && ps.selected && ps.selected.has(uid)) return true;
+    return !!(window.c7SelectedIds && window.c7SelectedIds.has(uid));
+  }
   function renderPickRow(c) {
     var uid = Number(c.userId);
-    if (!uid || uid === devUserId()) return '';
-    var on = window.c7SelectedIds && window.c7SelectedIds.has(uid) ? ' on' : '';
+    if (!uid || uid === devUserId() || isContactDisabled(c)) return '';
+    var on = isUserPicked(uid) ? ' on' : '';
     return '<div class="contact-pick-row tappable' + on + '" data-pick-user-id="' + uid + '">'
       + '<div class="cp-check"><i class="ti ti-check"></i></div>'
-      + '<div class="cp-av ' + personCls(uid) + '" data-avatar-user-id="' + uid + '">' + esc((c.displayName || '?').slice(0, 1)) + '</div>'
-      + '<div class="cp-bd"><div class="cp-nm">' + esc(c.displayName || '') + '</div>'
-      + '<div class="cp-m"><span>' + esc(c.title || '') + '</span><span>' + esc(c.department || '') + '</span></div></div></div>';
+      + '<div class="cp-av no-initial ' + personCls(uid) + '" data-avatar-user-id="' + uid + '"> </div>'
+      + '<div class="cp-bd"><div class="cp-nm">' + esc(contactDisplayName(c)) + '</div>'
+      + '<div class="cp-m"><span>' + esc(c.title || '') + '</span>'
+      + (c.department ? '<span>' + esc(c.department || '') + '</span>' : '') + '</div></div></div>';
+  }
+  function pickSelectionSet() {
+    var ps = memberPickState();
+    if (ps && ps.selected) return ps.selected;
+    if (!window.c7SelectedIds) window.c7SelectedIds = new Set();
+    return window.c7SelectedIds;
+  }
+  function afterPickSelectionChange(fromPicker) {
+    if (fromPicker) return;
+    updateC7SelectedStack();
+  }
+  function wireDeptSelectAll(root, fromPicker) {
+    if (!root) return;
+    root.querySelectorAll('[data-dept-select-all]').forEach(function (btn) {
+      if (btn.dataset.wiredSelAll) return;
+      btn.dataset.wiredSelAll = '1';
+      btn.addEventListener('click', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (!fromPicker && window.c7Mode === 'private') return;
+        var block = btn.closest('.dept-block');
+        if (!block) return;
+        var sel = pickSelectionSet();
+        block.querySelectorAll('[data-pick-user-id]').forEach(function (row) {
+          var uid = Number(row.getAttribute('data-pick-user-id'));
+          if (!uid) return;
+          sel.add(uid);
+          row.classList.add('on');
+        });
+        afterPickSelectionChange(fromPicker);
+      });
+    });
+  }
+  function ensureC7BulkBar() {
+    var stack = document.querySelector('.screen[data-screen="C7"] .selected-stack');
+    if (!stack || document.getElementById('c7-bulk-bar')) return;
+    var bar = document.createElement('div');
+    bar.id = 'c7-bulk-bar';
+    bar.className = 'c7-bulk-bar';
+    bar.innerHTML = '<button type="button" id="c7-select-all-btn">全选可见成员</button>'
+      + '<button type="button" id="c7-clear-all-btn">清空已选</button>';
+    stack.parentNode.insertBefore(bar, stack.nextSibling);
+    document.getElementById('c7-select-all-btn').addEventListener('click', function () {
+      if (window.c7Mode === 'private') return;
+      if (!window.c7SelectedIds) window.c7SelectedIds = new Set();
+      document.querySelectorAll('#c7-contact-list [data-pick-user-id]').forEach(function (row) {
+        var uid = Number(row.getAttribute('data-pick-user-id'));
+        if (!uid) return;
+        window.c7SelectedIds.add(uid);
+        row.classList.add('on');
+      });
+      updateC7SelectedStack();
+    });
+    document.getElementById('c7-clear-all-btn').addEventListener('click', function () {
+      if (!window.c7SelectedIds) window.c7SelectedIds = new Set();
+      window.c7SelectedIds.clear();
+      document.querySelectorAll('#c7-contact-list .contact-pick-row.on').forEach(function (row) {
+        row.classList.remove('on');
+      });
+      updateC7SelectedStack();
+    });
   }
   function updateC7SelectedStack() {
     var stack = document.querySelector('.screen[data-screen="C7"] .selected-stack');
@@ -2027,7 +2673,7 @@ window.DunesContacts = (function () {
       });
     });
   }
-  function wireC7PickRows(root) {
+  function wirePickRows(root, fromPicker) {
     if (!root) return;
     root.querySelectorAll('[data-pick-user-id]').forEach(function (row) {
       if (row.dataset.wiredPick) return;
@@ -2035,22 +2681,25 @@ window.DunesContacts = (function () {
       row.addEventListener('click', function () {
         var uid = Number(row.getAttribute('data-pick-user-id'));
         if (!uid) return;
-        if (!window.c7SelectedIds) window.c7SelectedIds = new Set();
-        if (window.c7Mode === 'private') {
-          window.c7SelectedIds.clear();
+        var sel = pickSelectionSet();
+        var ps = memberPickState();
+        var single = fromPicker ? (ps && ps.single) : (window.c7Mode === 'private');
+        if (single) {
+          sel.clear();
           root.querySelectorAll('.contact-pick-row.on').forEach(function (r) { r.classList.remove('on'); });
         }
-        if (window.c7SelectedIds.has(uid)) {
-          window.c7SelectedIds.delete(uid);
+        if (sel.has(uid)) {
+          sel.delete(uid);
           row.classList.remove('on');
         } else {
-          window.c7SelectedIds.add(uid);
+          sel.add(uid);
           row.classList.add('on');
         }
-        updateC7SelectedStack();
+        afterPickSelectionChange(fromPicker);
       });
     });
   }
+  function wireC7PickRows(root) { wirePickRows(root, false); }
   async function createC7Conversation() {
     var ids = window.c7SelectedIds ? [...window.c7SelectedIds].filter(function (id) { return id !== devUserId(); }) : [];
     if (!ids.length) {
@@ -2103,8 +2752,9 @@ window.DunesContacts = (function () {
     btn.dataset.wiredC7 = '1';
     window.c7SelectedIds = window.c7SelectedIds || new Set();
     window.c7Mode = window.c7Mode || 'group';
-    document.querySelectorAll('.screen[data-screen="C7"] .new-conv-kinds .nck').forEach(function (nck, idx) {
+    document.querySelectorAll('.screen[data-screen="C7"] .new-conv-kinds .nck').forEach(function (nck) {
       if (nck.dataset.wiredNck) return;
+      if (nck.classList.contains('nck-disabled')) return;
       nck.dataset.wiredNck = '1';
       nck.classList.add('tappable');
       nck.addEventListener('click', function () {
@@ -2112,7 +2762,16 @@ window.DunesContacts = (function () {
           x.classList.remove('featured');
         });
         nck.classList.add('featured');
-        window.c7Mode = idx === 0 ? 'group' : 'private';
+        var mode = nck.getAttribute('data-c7-mode') || 'group';
+        window.c7Mode = mode === 'private' ? 'private' : 'group';
+        if (window.c7Mode === 'private' && window.c7SelectedIds && window.c7SelectedIds.size > 1) {
+          var first = window.c7SelectedIds.values().next().value;
+          window.c7SelectedIds = new Set(first ? [first] : []);
+          document.querySelectorAll('#c7-contact-list .contact-pick-row.on').forEach(function (row) {
+            var uid = Number(row.getAttribute('data-pick-user-id'));
+            if (!window.c7SelectedIds.has(uid)) row.classList.remove('on');
+          });
+        }
         updateC7SelectedStack();
       });
     });
@@ -2197,6 +2856,7 @@ window.DunesContacts = (function () {
       var depts = d.departments || [];
       var items = d.items || [];
       if (sub) sub.textContent = 'CONTACTS · ' + total;
+      updateC3OrgLabel(total);
       tree.innerHTML = '';
       if (q) {
         if (!items.length) {
@@ -2224,6 +2884,7 @@ window.DunesContacts = (function () {
         tree.insertAdjacentHTML('beforeend', renderDeptBlock(dep, false));
       });
       wireDeptToggle(tree);
+      wireDeptSelectAll(tree);
       wireMsgButtons(tree);
       c3Loaded = true;
       c3LastQuery = q || '';
@@ -2248,8 +2909,11 @@ window.DunesContacts = (function () {
       var d = j.data || {};
       var depts = d.departments || [];
       var items = d.items || [];
+      var total = d.total || 0;
+      updateC7OrgLabel(total);
       box.innerHTML = '';
       if (q) {
+        items = items.filter(function (c) { return !isContactDisabled(c); });
         if (!items.length) {
           box.innerHTML = '<div class="api-strip"><span>无匹配联系人</span></div>';
           return;
@@ -2270,10 +2934,10 @@ window.DunesContacts = (function () {
       var mock = document.getElementById('c7-mock-contacts');
       if (mock) mock.style.display = 'none';
       wireDeptToggle(box);
+      wireDeptSelectAll(box);
       wireC7PickRows(box);
       updateC7SelectedStack();
       hydrateAvatarsIn(box);
-      refreshOnlineDots();
     } catch (e) {
       box.innerHTML = '<div class="api-strip"><span>加载失败：' + esc(e.message || e) + '</span></div>';
       console.warn('DunesContacts.loadC7', e);
@@ -2285,8 +2949,13 @@ window.DunesContacts = (function () {
       var dot = row.querySelector('.av-dot');
       if (!dot) return;
       var uid = Number(row.getAttribute('data-contact-user-id'));
-      if (uid && online[String(uid)]) dot.classList.add('on');
-      else dot.classList.remove('on');
+      var on = false;
+      if (window.DunesPresence && typeof window.DunesPresence.isUserOnline === 'function') {
+        on = window.DunesPresence.isUserOnline(uid);
+      } else if (uid) {
+        on = !!online[String(uid)];
+      }
+      dot.classList.toggle('on', on);
     });
   }
   function wireC7Search() {
@@ -2313,27 +2982,40 @@ window.DunesContacts = (function () {
     if (id === 'C7') {
       wireC7Search();
       wireC7Create();
+      ensureC7BulkBar();
       loadC7('');
     }
     if (id === 'C9') {
-      var uid = Number(window.pendingContactUserId || 0);
+      var uid = Number(window.pendingContactUserId || pendingContactUserId || 0);
       if (window.DunesApi && typeof window.DunesApi.loadContactDetail === 'function') {
         window.DunesApi.loadContactDetail(uid);
       }
-      if (window.DunesPresence && typeof window.DunesPresence.refreshC9 === 'function') {
-        window.DunesPresence.refreshC9();
-      }
     }
+  }
+  function openContact(userId) {
+    var uid = Number(userId || 0);
+    if (!uid) return;
+    window.__dunesC9ReturnScreen = document.querySelector('.screen.active')?.dataset?.screen || 'C1';
+    window.pendingContactUserId = uid;
+    try { pendingContactUserId = uid; } catch (e) {}
+    if (typeof go === 'function') go('C9');
   }
   return {
     onScreen: onScreen,
+    openContact: openContact,
     loadC3: loadC3,
     loadC7: loadC7,
     wireC7Create: wireC7Create,
     createC7Conversation: createC7Conversation,
-    refreshOnlineDots: refreshOnlineDots
+    startPrivateChat: startPrivateChat,
+    refreshOnlineDots: refreshOnlineDots,
+    renderDeptBlock: renderDeptBlock,
+    wireDeptToggle: wireDeptToggle,
+    wireDeptSelectAll: wireDeptSelectAll,
+    wirePickRows: wirePickRows
   };
 })();
+window.__dunesContactsPick = window.DunesContacts;
 ''';
 
   /// C1 消息首页：用 im-go `/conversations` + `/notifications` 渲染，替换静态 mock 行（不改 UI 样式类名）。
@@ -2342,6 +3024,279 @@ window.DunesInbox = (function () {
   var searchWired = false;
   var _c1RefreshTimer = null;
   var _c1Loaded = false;
+  var HIDDEN_C1_KEY = 'dunes_c1_hidden_conversations_v1';
+  var C1_SWIPE_W = 72;
+  var _c1SwipeOpen = null;
+  function readHiddenConvMap() {
+    try {
+      var raw = localStorage.getItem(HIDDEN_C1_KEY);
+      if (!raw) return {};
+      var j = JSON.parse(raw);
+      return j && typeof j === 'object' ? j : {};
+    } catch (e) { return {}; }
+  }
+  function writeHiddenConvMap(map) {
+    try { localStorage.setItem(HIDDEN_C1_KEY, JSON.stringify(map || {})); } catch (e) {}
+  }
+  function normalizeHiddenEntry(v) {
+    if (typeof v === 'number') return { at: v, permanent: false };
+    return { at: (v && v.at) || Date.now(), permanent: !!(v && v.permanent) };
+  }
+  function isConvPermanentlyHidden(convId) {
+    if (!convId) return false;
+    var entry = readHiddenConvMap()[String(convId)];
+    if (entry == null) return false;
+    return normalizeHiddenEntry(entry).permanent;
+  }
+  function isSystemMsgKind(kind) {
+    kind = String(kind || '').toUpperCase();
+    return kind.indexOf('SYSTEM') === 0;
+  }
+  function isConvHidden(convId) {
+    if (!convId) return false;
+    return !!readHiddenConvMap()[String(convId)];
+  }
+  function hideConvLocally(convId, permanent) {
+    if (!convId) return;
+    var map = readHiddenConvMap();
+    map[String(convId)] = { at: Date.now(), permanent: !!permanent };
+    writeHiddenConvMap(map);
+  }
+  function finishExitGroup(convId, msg, permanent) {
+    if (convId) hideConvLocally(convId, permanent !== false);
+    window.pendingConvId = 0;
+    try { pendingConvId = 0; } catch (e) {}
+    window.__dunesActiveConvId = null;
+    if (msg) toast(msg);
+    if (typeof go === 'function') go('C1');
+    else if (typeof setScreen === 'function') setScreen('C1', false);
+    if (window.DunesInbox && window.DunesInbox.loadC1) window.DunesInbox.loadC1();
+    if (window.DunesInbox && typeof window.DunesInbox.refreshNovaInboxPreview === 'function') {
+      window.DunesInbox.refreshNovaInboxPreview();
+    }
+  }
+  function unhideConvLocally(convId) {
+    if (!convId) return;
+    var map = readHiddenConvMap();
+    var entry = map[String(convId)];
+    if (entry == null) return;
+    if (normalizeHiddenEntry(entry).permanent) return;
+    delete map[String(convId)];
+    writeHiddenConvMap(map);
+  }
+  function isDissolvedConv(c) {
+    return !!(c && (c.dissolved || c.isDissolved || c.status === 'DISSOLVED' || c.frozen));
+  }
+  function filterVisibleConvs(convs) {
+    return (convs || []).filter(function (c) {
+      if (!c || !c.id || isConvHidden(c.id)) return false;
+      if (isDissolvedConv(c)) return false;
+      var st = String(c.membershipStatus || c.memberStatus || '').toUpperCase();
+      if (st === 'LEFT' || st === 'REMOVED') return false;
+      return true;
+    });
+  }
+  function purgeDissolvedConvsFromServer(convs) {
+    (convs || []).forEach(function (c) {
+      if (!c || !c.id || !isDissolvedConv(c)) return;
+      hideConvLocally(c.id, true);
+      exitGroupMembership(c.id, true).catch(function () {});
+    });
+  }
+  function upgradeDissolvedHiddenConvs(convs) {
+    var map = readHiddenConvMap();
+    var changed = false;
+    (convs || []).forEach(function (c) {
+      if (!c || !c.id) return;
+      var dissolved = !!(c.dissolved || c.isDissolved || c.status === 'DISSOLVED' || c.frozen);
+      if (!dissolved || !map[String(c.id)]) return;
+      if (!normalizeHiddenEntry(map[String(c.id)]).permanent) {
+        map[String(c.id)] = { at: Date.now(), permanent: true };
+        changed = true;
+      }
+    });
+    if (changed) writeHiddenConvMap(map);
+  }
+  function isSwipeableConvKind(kind) {
+    kind = String(kind || '').toUpperCase();
+    return kind === 'PRIVATE' || kind === 'WORKGROUP' || kind === 'GROUP' || kind === 'WORKGROUP_APPROVAL';
+  }
+  function wrapSwipeRow(convId, rowHtml) {
+    return '<div class="c1-swipe-item" data-conv-id="' + convId + '">'
+      + '<div class="c1-swipe-actions"><button type="button" class="c1-swipe-delete">删除</button></div>'
+      + '<div class="c1-swipe-content">' + rowHtml + '</div></div>';
+  }
+  function findC1ConvRow(list, convId) {
+    if (!list || !convId) return null;
+    var wrap = list.querySelector('.c1-swipe-item[data-conv-id="' + convId + '"]');
+    if (wrap) return wrap.querySelector('.chat-row');
+    return list.querySelector('.chat-row[data-conv-id="' + convId + '"]');
+  }
+  function shouldUnhideFromEvent(data) {
+    if (!data) return false;
+    if (data.type === 'message' || data.type === 'system_flow') {
+      var convId = Number(data.conversationId || (data.message && data.message.conversationId) || 0);
+      if (convId && isConvPermanentlyHidden(convId)) return false;
+      var me = Number(localStorage.getItem('dunes_user_id') || '0');
+      if (data.message && data.message.sender && Number(data.message.sender.userId) !== me) {
+        if (isSystemMsgKind(data.message.kind)) return false;
+        return true;
+      }
+    }
+    return false;
+  }
+  async function exitGroupMembership(convId, dissolved) {
+    var me = Number(localStorage.getItem('dunes_user_id') || '0');
+    try {
+      var j = await apiFetch('/conversations/' + convId + '/leave', { method: 'POST' });
+      if (j && j.success) return true;
+      var apiMsg = String((j && j.message) || '退出失败');
+      if (!dissolved && !/dissolved|解散|group dissolved/i.test(apiMsg)) throw new Error(apiMsg);
+    } catch (err) {
+      var errMsg = String((err && err.message) || '退出失败');
+      if (!dissolved && !/dissolved|解散|group dissolved/i.test(errMsg)) throw err;
+    }
+    if (me > 0) {
+      try {
+        var dj = await apiFetch('/conversations/' + convId + '/members/' + me, { method: 'DELETE' });
+        if (dj && dj.success) return true;
+      } catch (e) {}
+    }
+    return false;
+  }
+  function closeC1SwipeOpen() {
+    if (_c1SwipeOpen) {
+      _c1SwipeOpen.classList.remove('open');
+      var content = _c1SwipeOpen.querySelector('.c1-swipe-content');
+      if (content) content.style.transform = '';
+      _c1SwipeOpen = null;
+    }
+  }
+  function refreshC1SectionCounts(list) {
+    if (!list) return;
+    list.querySelectorAll('.chat-section[data-section-key]').forEach(function (header) {
+      var key = header.getAttribute('data-section-key');
+      if (key === 'ai') return;
+      var cnt = 0;
+      var n = header.nextElementSibling;
+      while (n && !(n.classList && n.classList.contains('chat-section'))) {
+        if (n.classList.contains('c1-swipe-item')) cnt++;
+        else if (n.classList.contains('chat-row') && !n.closest('.c1-swipe-item')) cnt++;
+        n = n.nextElementSibling;
+      }
+      var badge = header.querySelector('.cnt');
+      if (badge) badge.textContent = String(cnt);
+      header.style.display = cnt > 0 ? '' : 'none';
+    });
+  }
+  async function requestDeleteConv(item) {
+    if (!item) return;
+    var convId = Number(item.getAttribute('data-conv-id'));
+    if (!convId) return;
+    closeC1SwipeOpen();
+    var titleEl = item.querySelector('.cr-nm');
+    var title = titleEl ? String(titleEl.textContent || '').trim().slice(0, 24) : '该会话';
+    var msg = '删除「' + title + '」后将不再显示在列表中，有新消息时会重新出现。确定删除吗？';
+    var ok = false;
+    if (window.DunesDialog && typeof window.DunesDialog.confirm === 'function') {
+      ok = await window.DunesDialog.confirm(msg);
+    } else {
+      ok = confirm(msg);
+    }
+    if (!ok) return;
+    hideConvLocally(convId);
+    item.remove();
+    var list = document.getElementById('c1-conv-list');
+    refreshC1SectionCounts(list);
+    if (typeof recalcCommBadgeFromDom === 'function') recalcCommBadgeFromDom();
+  }
+  function wireC1SwipeDelete(root) {
+    if (!root) return;
+    root.querySelectorAll('.c1-swipe-item:not([data-swipe-wired])').forEach(function (item) {
+      item.dataset.swipeWired = '1';
+      var content = item.querySelector('.c1-swipe-content');
+      var deleteBtn = item.querySelector('.c1-swipe-delete');
+      if (!content) return;
+      if (deleteBtn) {
+        deleteBtn.addEventListener('click', function (e) {
+          e.preventDefault();
+          e.stopPropagation();
+          requestDeleteConv(item);
+        });
+      }
+      var startX = 0;
+      var startY = 0;
+      var baseX = 0;
+      var dragging = false;
+      var locked = false;
+      function onStart(clientX, clientY) {
+        closeC1SwipeOpen();
+        startX = clientX;
+        startY = clientY;
+        baseX = item.classList.contains('open') ? -C1_SWIPE_W : 0;
+        dragging = false;
+        locked = false;
+        content.style.transition = 'none';
+      }
+      function onMove(clientX, clientY, prevent) {
+        var dx = clientX - startX;
+        var dy = clientY - startY;
+        if (!dragging && !locked) {
+          if (Math.abs(dy) > Math.abs(dx) && Math.abs(dy) > 8) { locked = true; return; }
+          if (Math.abs(dx) > 8) dragging = true;
+        }
+        if (!dragging || locked) return;
+        var x = Math.min(0, Math.max(-C1_SWIPE_W, baseX + dx));
+        content.style.transform = 'translateX(' + x + 'px)';
+        if (prevent && Math.abs(dx) > 4) prevent();
+      }
+      function onEnd() {
+        content.style.transition = '';
+        if (!dragging || locked) return;
+        var tx = content.style.transform || '';
+        var x = 0;
+        var m = tx.match(/-?\d+(\.\d+)?/);
+        if (m) x = parseFloat(m[0]) || 0;
+        if (x <= -C1_SWIPE_W * 0.45) {
+          item.classList.add('open');
+          content.style.transform = '';
+          _c1SwipeOpen = item;
+        } else {
+          item.classList.remove('open');
+          content.style.transform = '';
+        }
+      }
+      content.addEventListener('touchstart', function (e) {
+        if (e.touches.length !== 1) return;
+        onStart(e.touches[0].clientX, e.touches[0].clientY);
+      }, { passive: true });
+      content.addEventListener('touchmove', function (e) {
+        if (e.touches.length !== 1) return;
+        onMove(e.touches[0].clientX, e.touches[0].clientY, function () { e.preventDefault(); });
+      }, { passive: false });
+      content.addEventListener('touchend', onEnd);
+      content.addEventListener('touchcancel', onEnd);
+      content.addEventListener('mousedown', function (e) {
+        if (e.button !== 0) return;
+        onStart(e.clientX, e.clientY);
+        function mm(ev) { onMove(ev.clientX, ev.clientY, null); }
+        function mu() {
+          document.removeEventListener('mousemove', mm);
+          document.removeEventListener('mouseup', mu);
+          onEnd();
+        }
+        document.addEventListener('mousemove', mm);
+        document.addEventListener('mouseup', mu);
+      });
+    });
+    if (root.dataset.c1SwipeCloseWired) return;
+    root.dataset.c1SwipeCloseWired = '1';
+    root.addEventListener('click', function (e) {
+      if (e.target.closest('.c1-swipe-delete')) return;
+      if (e.target.closest('.c1-swipe-item.open')) return;
+      closeC1SwipeOpen();
+    }, true);
+  }
   function c1ContentEl() {
     return document.querySelector('.screen[data-screen="C1"] .content');
   }
@@ -2362,6 +3317,157 @@ window.DunesInbox = (function () {
       .replace(/</g, '&lt;')
       .replace(/"/g, '&quot;');
   }
+  function formatBodyHtml(s) {
+    return esc(s).replace(/\r\n/g, '\n').replace(/\n/g, '<br>');
+  }
+  function compactMessagePreview(kind, text) {
+    var k = String(kind || '').toUpperCase();
+    var s = String(text || '').trim();
+    if (k === 'IMAGE' || /^\[(相册|拍照|图片)\]/.test(s)) return '发送了一张图片';
+    if (k === 'AUDIO' || /^\[语音\]/.test(s)) return '发送了一条语音';
+    if (k === 'FILE' || /^\[文件\]/.test(s)) return '发送了一个文件';
+    if (/\.(png|jpe?g|gif|webp|bmp|heic|heif)$/i.test(s)) return '发送了一张图片';
+    if (/\.(pdf|docx?|xlsx?|pptx?|zip|rar|7z|txt|csv|md|pages|numbers|key)$/i.test(s)) return '发送了一个文件';
+    return s;
+  }
+  function isSystemMsgKind(kind) {
+    var k = String(kind || '').toUpperCase();
+    return k === 'SYSTEM' || k === 'SYSTEM_JOIN' || k === 'SYSTEM_LEAVE' || k === 'SYSTEM_REMOVE' || k === 'SYSTEM_FLOW';
+  }
+  function isGroupConvKind(kind) {
+    var k = String(kind || '').toUpperCase();
+    return k === 'WORKGROUP' || k === 'WORKGROUP_APPROVAL' || k === 'GROUP';
+  }
+  function splitPreviewSender(text) {
+    var s = String(text || '').trim();
+    var m = s.match(/^([^:：]{1,24})[:：]\s*(.+)$/);
+    if (!m) return { sender: '', body: s };
+    return { sender: m[1].trim(), body: m[2].trim() };
+  }
+  window.__dunesConvPreviewMeta = window.__dunesConvPreviewMeta || {};
+  function rememberConvPreviewMeta(convId, preview, kind, at) {
+    if (!convId || !preview) return;
+    var parsed = splitPreviewSender(preview);
+    if (!parsed.sender) return;
+    window.__dunesConvPreviewMeta[String(convId)] = {
+      senderName: parsed.sender,
+      body: parsed.body,
+      kind: kind || '',
+      at: at || null
+    };
+  }
+  function cacheConvPreviewSender(convId, senderName, kind, text, at) {
+    if (!convId || !senderName) return;
+    var body = compactMessagePreview(kind, text);
+    window.__dunesConvPreviewMeta[String(convId)] = {
+      senderName: String(senderName).trim(),
+      body: body,
+      kind: kind || '',
+      at: at || null
+    };
+  }
+  function previewBodyMatches(cachedBody, nextBody, kind) {
+    if (!cachedBody || !nextBody) return false;
+    if (cachedBody === nextBody) return true;
+    return compactMessagePreview(kind, cachedBody) === nextBody;
+  }
+  function enrichGroupPreview(convId, preview, isGroupRow, row) {
+    if (!isGroupRow || !preview) return preview;
+    if (preview.indexOf(':') >= 0 || preview.indexOf('：') >= 0) {
+      rememberConvPreviewMeta(convId, preview);
+      return preview;
+    }
+    var sender = '';
+    if (row) {
+      var pv = row.querySelector('.cr-pv');
+      var prevParsed = splitPreviewSender(pv ? pv.textContent : '');
+      if (prevParsed.sender && previewBodyMatches(prevParsed.body, preview)) sender = prevParsed.sender;
+    }
+    if (!sender) {
+      var cached = window.__dunesConvPreviewMeta[String(convId)];
+      if (cached && cached.senderName && previewBodyMatches(cached.body, preview, cached.kind)) {
+        sender = cached.senderName;
+      }
+    }
+    if (sender) {
+      preview = sender + ': ' + preview;
+      rememberConvPreviewMeta(convId, preview);
+    }
+    return preview;
+  }
+  function lastSenderNameFromConv(c) {
+    if (!c) return '';
+    if (c.lastMessageSenderDisplayName) return String(c.lastMessageSenderDisplayName);
+    if (c.lastSenderDisplayName) return String(c.lastSenderDisplayName);
+    if (c.lastMessageSenderName) return String(c.lastMessageSenderName);
+    if (c.lastSenderName) return String(c.lastSenderName);
+    if (c.lastMessageSender && c.lastMessageSender.displayName) return String(c.lastMessageSender.displayName);
+    if (c.lastSender && c.lastSender.displayName) return String(c.lastSender.displayName);
+    var uid = Number(c.lastMessageSenderUserId || c.lastSenderUserId
+      || (c.lastMessageSender && c.lastMessageSender.userId) || (c.lastSender && c.lastSender.userId) || 0);
+    var me = Number(localStorage.getItem('dunes_user_id') || '0');
+    if (uid && uid === me) {
+      var mine = localStorage.getItem('dunes_display_name') || '';
+      if (mine) return mine;
+    }
+    if (uid && typeof profileForUserId === 'function') {
+      var p = profileForUserId(uid);
+      if (p && p.displayName) return p.displayName;
+    }
+    return splitPreviewSender(c.lastMessagePreview || '').sender;
+  }
+  function groupPreviewWithSender(kind, text, senderName) {
+    if (isSystemMsgKind(kind)) return compactMessagePreview(kind, text);
+    var parsed = splitPreviewSender(text);
+    var bodyText = parsed.body || text;
+    var body = compactMessagePreview(kind, bodyText);
+    senderName = String(senderName || parsed.sender || '').trim();
+    if (!senderName) return body;
+    if (body.indexOf(senderName + ':') === 0) return body;
+    return senderName + ': ' + body;
+  }
+  function convPreviewText(c) {
+    if (!c) return '';
+    var kind = c.lastMessageKind || c.lastKind || c.messageKind || '';
+    var text = c.lastMessagePreview || '';
+    if (isGroupConvKind(c.kind)) {
+      var preview = groupPreviewWithSender(kind, text, lastSenderNameFromConv(c));
+      preview = enrichGroupPreview(c.id, preview, true, null);
+      return preview;
+    }
+    return compactMessagePreview(kind, text);
+  }
+  function eventPreviewText(data, opts) {
+    opts = opts || {};
+    if (!data) return '';
+    var kind = '';
+    var text = '';
+    var senderName = '';
+    var convId = data.conversationId || data.id || 0;
+    if (data.message) {
+      kind = data.message.kind;
+      text = data.message.bodyText || '';
+      senderName = (data.message.sender && data.message.sender.displayName)
+        || data.message.senderDisplayName || '';
+      if (!senderName) {
+        var sid = Number((data.message.sender && data.message.sender.userId) || data.message.senderUserId || 0);
+        var me = Number(localStorage.getItem('dunes_user_id') || '0');
+        if (sid && sid === me) senderName = localStorage.getItem('dunes_display_name') || '';
+      }
+    } else {
+      kind = data.lastMessageKind || data.lastKind || data.messageKind || '';
+      text = data.lastMessagePreview || '';
+      senderName = lastSenderNameFromConv(data);
+    }
+    var preview;
+    if (opts.group || isGroupConvKind(data.kind || data.conversationKind)) {
+      preview = groupPreviewWithSender(kind, text, senderName);
+      if (convId) preview = enrichGroupPreview(convId, preview, true, opts.row || null);
+    } else {
+      preview = compactMessagePreview(kind, text);
+    }
+    return preview;
+  }
   function apiFetch(path, opts) {
     opts = opts || {};
     var base = localStorage.getItem('dunes_api_base') || '__DUNES_API_BASE__';
@@ -2373,7 +3479,13 @@ window.DunesInbox = (function () {
       method: opts.method || 'GET',
       headers: headers,
       body: opts.body || undefined
-    }).then(function (r) { return r.json(); });
+    }).then(function (r) {
+      if (r.status === 401 && typeof window.__dunesHandleSessionRevoked === 'function') {
+        window.__dunesHandleSessionRevoked();
+        return { success: false, message: '账号已在其他设备登录，请重新登录' };
+      }
+      return r.json();
+    });
   }
   function personCls(seed) {
     var n = Math.abs(Number(seed) || 0) % 6;
@@ -2413,16 +3525,16 @@ window.DunesInbox = (function () {
     var seed = peerId || Number(c.id);
     var initial = (peerName || '?').slice(0, 1);
     var tm = formatTimeDetailed(c.lastMessageAt, true);
-    var preview = esc(c.lastMessagePreview || '');
+    var preview = formatBodyHtml(convPreviewText(c));
     var meta = c.unreadCount
       ? '<div class="cr-meta"><span class="badge-num accent">' + c.unreadCount + '</span></div>'
       : '';
     var sub = c.peerTitle || c.peerRoleLabel || '';
-    return '<div class="chat-row tappable" data-go="C5" data-conv-id="' + c.id + '" data-peer-user-id="' + peerId + '" data-contact-user-id="' + peerId + '" data-last-at="' + esc(c.lastMessageAt || '') + '">'
+    return wrapSwipeRow(c.id, '<div class="chat-row tappable" data-go="C5" data-conv-id="' + c.id + '" data-peer-user-id="' + peerId + '" data-contact-user-id="' + peerId + '" data-last-at="' + esc(c.lastMessageAt || '') + '">'
       + '<div class="cr-av ' + personCls(seed) + '" data-open-contact="1" data-avatar-user-id="' + peerId + '">' + esc(initial) + '<div class="av-dot"></div></div>'
       + '<div class="cr-bd"><div class="cr-top"><div class="cr-nm">' + esc(peerName)
       + deptTitleHtml(c.peerDepartment, sub) + '</div><div class="cr-tm">' + esc(tm) + '</div></div>'
-      + '<div class="cr-pv">' + preview + '</div></div>' + meta + '</div>';
+      + '<div class="cr-pv">' + preview + '</div></div>' + meta + '</div>');
   }
   function section(icon, label, cnt, rows, pin, key, ts) {
     var iconHtml = key === 'ai' && window.dunesNovaIconHtml
@@ -2461,32 +3573,151 @@ window.DunesInbox = (function () {
     });
     return max;
   }
-  var NOVA_INTRO = '你好，我是你的 NOVA 助手';
+  var YUNSHU_NAME = '云枢';
+  var YUNSHU_INTRO = '你好，我是你的云枢助手';
   function assistantDisplayTitle(c) {
-    // 通讯列表固定展示 NOVA；会话 title 仅用于 C11 历史列表区分多轮对话
-    return 'NOVA';
+    // 通讯列表固定展示云枢；会话 title 仅用于 C11 历史列表区分多轮对话
+    return YUNSHU_NAME;
+  }
+  function stripMarkdownPreview(text) {
+    return String(text || '')
+      .replace(/\*\*([^*]+)\*\*/g, '$1')
+      .replace(/\*([^*]+)\*/g, '$1')
+      .replace(/^#+\s*/gm, '')
+      .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+      .replace(/\s+/g, ' ')
+      .trim();
   }
   function assistantPreview(text) {
-    var s = String(text || '');
-    if (!s || s.indexOf('沙丘助手') >= 0 || /^你好/.test(s)) return NOVA_INTRO;
+    var s = stripMarkdownPreview(text);
+    if (!s || isNovaWelcomePreview(s)) return YUNSHU_INTRO;
+    if (s.length > 48) s = s.slice(0, 48) + '…';
     return s;
+  }
+  function isNovaWelcomePreview(text) {
+    text = String(text || '').trim();
+    if (!text) return true;
+    if (text.indexOf('你好，我是你的云枢助手') === 0) return true;
+    if (text.indexOf('沙丘助手') >= 0) return true;
+    return false;
   }
   function novaGeneratingPreviewHtml(status) {
     var s = esc(status || '正在生成…');
     return '<span class="generating"><i class="ti ti-loader ti-spin"></i> ' + s + '</span>';
   }
-  function novaConvPreview(c) {
-    if (c.assistantGenerating) {
-      return novaGeneratingPreviewHtml(c.assistantGeneratingStatus);
+  function novaLatestConvIdFromHistory() {
+    try {
+      var local = JSON.parse(localStorage.getItem('dunes_nova_local_history') || '[]');
+      var best = 0;
+      var bestAt = 0;
+      (local || []).forEach(function (t) {
+        var id = Number(t.conversationId || t.id || 0);
+        var at = new Date(t.lastMessageAt || 0).getTime();
+        if (id > 0 && at >= bestAt) { bestAt = at; best = id; }
+      });
+      return best;
+    } catch (e) { return 0; }
+  }
+  function novaActiveConvId() {
+    var saved = Number(localStorage.getItem('dunes_nova_conv_id') || 0);
+    if (saved > 0) return saved;
+    return novaLatestConvIdFromHistory();
+  }
+  function findNovaInboxRow(convId) {
+    var list = document.getElementById('c1-conv-list');
+    if (!list) return null;
+    var active = novaActiveConvId();
+    var tryId = Number(convId || active || 0);
+    var row = null;
+    if (tryId > 0) row = list.querySelector('.chat-row[data-conv-id="' + tryId + '"]');
+    if (!row) row = list.querySelector('.chat-row[data-go="C4"]');
+    if (!row) {
+      list.querySelectorAll('.chat-row.pinned').forEach(function (r) {
+        if (!row && r.querySelector('.cr-av.ai-bot')) row = r;
+      });
     }
-    return esc(assistantPreview(c.lastMessagePreview));
+    return row;
+  }
+  function readNovaPersistedGenerating(convId) {
+    var ids = [];
+    var active = novaActiveConvId();
+    if (Number(convId || 0) > 0) ids.push(Number(convId));
+    if (active > 0 && ids.indexOf(active) < 0) ids.push(active);
+    for (var i = 0; i < ids.length; i++) {
+      try {
+        var raw = sessionStorage.getItem('dunes_nova_generating_' + String(ids[i]));
+        if (!raw) continue;
+        var o = JSON.parse(raw);
+        if (!o || Date.now() - Number(o.at || 0) > 15 * 60 * 1000) continue;
+        return o;
+      } catch (e) {}
+    }
+    return null;
+  }
+  function novaLocalTurnForConv(convId) {
+    try {
+      var local = JSON.parse(localStorage.getItem('dunes_nova_local_history') || '[]');
+      var cid = Number(convId || 0);
+      for (var i = 0; i < local.length; i++) {
+        if (Number(local[i].conversationId) === cid) return local[i];
+      }
+    } catch (e) {}
+    return null;
+  }
+  function novaSessionPreviewForConv(convId) {
+    try {
+      var raw = localStorage.getItem('dunes_nova_msgs_' + String(convId || 0));
+      if (!raw) return { text: '', at: 0 };
+      var items = JSON.parse(raw);
+      for (var i = items.length - 1; i >= 0; i--) {
+        var m = items[i];
+        if (!m) continue;
+        var role = String(m.role || '').toLowerCase();
+        var kind = String(m.kind || '').toUpperCase();
+        if (role === 'assistant' || kind.indexOf('AI') >= 0) {
+          return {
+            text: String(m.bodyText || m.content || '').trim(),
+            at: new Date(m.createdAt || 0).getTime()
+          };
+        }
+      }
+    } catch (e) {}
+    return { text: '', at: 0 };
+  }
+  function novaConvPreviewText(c) {
+    var originalId = Number(c.id || 0);
+    var cid = originalId;
+    if (String(c.kind || '').toUpperCase() === 'AI_ASSISTANT') {
+      var active = novaActiveConvId();
+      if (active > 0) cid = active;
+    }
+    var session = novaSessionPreviewForConv(cid);
+    if (session.text && !isNovaWelcomePreview(session.text)) return session.text;
+    var localTurn = novaLocalTurnForConv(cid);
+    if (localTurn && localTurn.lastMessagePreview && !isNovaWelcomePreview(localTurn.lastMessagePreview)) {
+      return localTurn.lastMessagePreview;
+    }
+    if (cid > 0 && originalId > 0 && cid !== originalId) return '';
+    var serverPreview = String(c.lastMessagePreview || '');
+    if (serverPreview && !isNovaWelcomePreview(serverPreview)) return serverPreview;
+    return '';
+  }
+  function novaConvPreview(c) {
+    var cid = Number(c.id || 0);
+    var gen = readNovaPersistedGenerating(cid);
+    if (c.assistantGenerating || (gen && gen.status)) {
+      return novaGeneratingPreviewHtml(c.assistantGeneratingStatus || (gen && gen.status) || '正在生成…');
+    }
+    return esc(assistantPreview(novaConvPreviewText(c)));
   }
   function patchNovaGeneratingPreview(convId, generating, status, normalPreview) {
-    if (!convId) return;
     var list = document.getElementById('c1-conv-list');
     if (!list || !list.classList.contains('dunes-api-ready')) return;
-    var row = list.querySelector('.chat-row[data-conv-id="' + convId + '"]');
+    var active = novaActiveConvId();
+    if (active > 0) convId = active;
+    var row = findNovaInboxRow(convId);
     if (!row) return;
+    if (convId) row.setAttribute('data-conv-id', String(convId));
     var pv = row.querySelector('.cr-pv');
     if (!pv) return;
     if (generating) {
@@ -2496,16 +3727,55 @@ window.DunesInbox = (function () {
       return;
     }
     row.classList.remove('nova-generating');
-    if (normalPreview != null && normalPreview !== '') {
-      pv.innerHTML = esc(assistantPreview(normalPreview));
+    var previewText = normalPreview;
+    if (previewText == null || previewText === '') {
+      var cid = Number(convId || row.dataset.convId || active || 0);
+      if (cid) previewText = novaConvPreviewText({ id: cid, kind: 'AI_ASSISTANT', lastMessagePreview: '' });
+    }
+    if (previewText !== undefined) {
+      pv.innerHTML = esc(assistantPreview(previewText || ''));
       delete row.dataset.previewNormal;
     } else if (row.dataset.previewNormal) {
       pv.innerHTML = row.dataset.previewNormal;
       delete row.dataset.previewNormal;
     }
   }
+  function refreshNovaInboxPreview() {
+    var list = document.getElementById('c1-conv-list');
+    if (!list || !list.classList.contains('dunes-api-ready')) return;
+    var active = novaActiveConvId();
+    var row = findNovaInboxRow(active);
+    if (!row) return;
+    if (active > 0) {
+      row.setAttribute('data-conv-id', String(active));
+    }
+    var gen = readNovaPersistedGenerating(active);
+    var pv = row.querySelector('.cr-pv');
+    if (!pv) return;
+    if (gen && gen.status) {
+      if (!row.dataset.previewNormal) row.dataset.previewNormal = pv.innerHTML;
+      pv.innerHTML = novaGeneratingPreviewHtml(gen.status);
+      row.classList.add('nova-generating');
+      return;
+    }
+    row.classList.remove('nova-generating');
+    pv.innerHTML = novaConvPreview({
+      id: active || Number(row.dataset.convId || 0),
+      kind: 'AI_ASSISTANT',
+      lastMessagePreview: ''
+    });
+  }
   function convRow(c) {
     var kind = String(c.kind || '').toUpperCase();
+    if (kind === 'AI_ASSISTANT') {
+      var activeId = novaActiveConvId();
+      if (activeId > 0) {
+        c = Object.assign({}, c, {
+          id: activeId,
+          lastMessagePreview: activeId === Number(c.id || 0) ? c.lastMessagePreview : ''
+        });
+      }
+    }
     var go = kind === 'AI_ASSISTANT' ? 'C4' : kind === 'BROADCAST' ? 'C10' : kind === 'PRIVATE' ? 'C5' : 'C2';
     var rowCls = 'chat-row tappable';
     if (kind === 'AI_ASSISTANT') rowCls = 'chat-row pinned';
@@ -2530,9 +3800,12 @@ window.DunesInbox = (function () {
       avCls += 'group';
       avInner = '<i class="ti ti-users"></i>';
     }
-    var mc = c.memberCount ? ' <span class="cnt">(' + c.memberCount + ')</span>' : '';
+    var mc = '';
+    if (kind !== 'BROADCAST' && kind !== 'AI_ASSISTANT' && c.memberCount) {
+      mc = ' <span class="cnt">(' + c.memberCount + ')</span>';
+    }
     var tm = formatTime(c.lastMessageAt);
-    var preview = kind === 'AI_ASSISTANT' ? novaConvPreview(c) : esc(c.lastMessagePreview || '');
+    var preview = kind === 'AI_ASSISTANT' ? novaConvPreview(c) : formatBodyHtml(convPreviewText(c));
     if (c.businessType) {
       preview = '<span class="sys-tag">' + esc(String(c.businessType)) + '</span>' + preview;
     }
@@ -2547,15 +3820,18 @@ window.DunesInbox = (function () {
       meta = '<div class="cr-meta">' + mutedMark + '</div>';
     }
     var aiMark = kind === 'AI_ASSISTANT' ? ' <span class="ai-mark">AI</span>' : '';
-    var roleSpan = kind === 'BROADCAST' ? ' <span class="role">HR · 只读</span>' : '';
-    return '<div class="' + rowCls + '" data-go="' + go + '" data-conv-id="' + c.id + '" data-last-at="' + esc(c.lastMessageAt || '') + '">'
+    var roleSpan = '';
+    var rowHtml = '<div class="' + rowCls + '" data-go="' + go + '" data-conv-id="' + c.id + '" data-last-at="' + esc(c.lastMessageAt || '') + '">'
       + '<div class="' + avCls + '">' + avInner + '</div>'
       + '<div class="cr-bd"><div class="cr-top"><div class="cr-nm">' + esc(kind === 'AI_ASSISTANT' ? assistantDisplayTitle(c) : (c.title || '会话')) + aiMark + roleSpan + mc + '</div>'
       + '<div class="cr-tm">' + esc(tm) + '</div></div><div class="cr-pv">' + preview + '</div></div>'
       + meta + '</div>';
+    if (isSwipeableConvKind(kind)) return wrapSwipeRow(c.id, rowHtml);
+    return rowHtml;
   }
   function systemRow(n, unread) {
-    var pv = n ? esc((n.title || '') + (n.body ? '：' + n.body : '')) : '暂无新通知';
+    var pvBody = n && n.body ? formatBodyHtml(n.body) : '';
+    var pv = n ? esc(n.title || '') + (pvBody ? '<br>' + pvBody : '') : '暂无新通知';
     var tag = n && n.kind ? '<span class="sys-tag">' + esc(n.kind) + '</span>' : '';
     var badge = unread > 0 ? '<div class="cr-meta"><span class="badge-num">' + unread + '</span></div>' : '';
     return '<div class="chat-row system pinned tappable" data-go="Z2" data-last-at="' + esc(n && n.createdAt ? n.createdAt : '') + '">'
@@ -2568,8 +3844,8 @@ window.DunesInbox = (function () {
     return convRow({
       id: 0,
       kind: 'AI_ASSISTANT',
-      title: 'NOVA',
-      lastMessagePreview: preview || NOVA_INTRO,
+      title: YUNSHU_NAME,
+      lastMessagePreview: preview || YUNSHU_INTRO,
       unreadCount: 0,
       pinned: true,
       lastMessageAt: null
@@ -2603,7 +3879,7 @@ window.DunesInbox = (function () {
     return convRow({
       id: 0,
       kind: 'BROADCAST',
-      title: '公司广播 · XYYT',
+      title: '公司广播',
       lastMessagePreview: preview || '暂无消息',
       unreadCount: 0,
       pinned: true,
@@ -2621,13 +3897,12 @@ window.DunesInbox = (function () {
     }
     var broadcast = convs.filter(function (c) { return c.kind === 'BROADCAST'; });
     var aiRows = ai.length ? ai.map(convRow).join('') : defaultAiRow(placeholders.ai);
-    aiRows += defaultKbChatRow();
-    var aiCnt = (ai.length || 1) + 1;
+    var aiCnt = ai.length || 1;
     var pinRows = systemRow(notif, notifUnread);
     pinRows += broadcast.length ? broadcast.map(convRow).join('') : defaultBroadcastRow(placeholders.broadcast);
     var pinCnt = 1 + (broadcast.length || 1);
     var html = '';
-    html += section('ti-sparkles', 'NOVA · 24/7 在线', aiCnt, aiRows, true, 'ai', maxConvTs(ai));
+    html += section('ti-sparkles', YUNSHU_NAME, aiCnt, aiRows, true, 'ai', maxConvTs(ai));
     var notifTs = notif && notif.createdAt ? new Date(notif.createdAt).getTime() : 0;
     if (isNaN(notifTs)) notifTs = 0;
     return {
@@ -2652,6 +3927,36 @@ window.DunesInbox = (function () {
       if (n > 0) dot.classList.add('show');
       else dot.classList.remove('show');
     });
+  }
+  function parseEventPayload(data) {
+    var payload = data && data.message ? data.message.payload : null;
+    if (!payload) return {};
+    if (typeof payload === 'object') return payload;
+    try { return JSON.parse(payload); } catch (e) { return {}; }
+  }
+  function eventMentionsMe(data) {
+    if (!data || !data.message) return false;
+    var me = Number(localStorage.getItem('dunes_user_id') || '0');
+    if (!me) return false;
+    var payload = parseEventPayload(data);
+    if (payload.mentionAll || payload.atAll || payload.isAtAll) return true;
+    var lists = [payload.mentionUserIds, payload.mentionedUserIds, payload.atUserIds, payload.mentions];
+    for (var i = 0; i < lists.length; i++) {
+      var arr = lists[i];
+      if (!arr) continue;
+      if (!Array.isArray(arr)) arr = [arr];
+      for (var j = 0; j < arr.length; j++) {
+        var item = arr[j];
+        var uid = Number(item && typeof item === 'object' ? (item.userId || item.id) : item);
+        if (uid === me) return true;
+      }
+    }
+    var body = String(data.message.bodyText || '');
+    var mine = localStorage.getItem('dunes_display_name') || '';
+    return body.indexOf('@所有人') >= 0 || (mine && body.indexOf('@' + mine) >= 0);
+  }
+  function rowMutedMark(row) {
+    return row && row.querySelector('.cr-meta .muted') ? '<span class="muted"><i class="ti ti-volume-off"></i></span>' : '';
   }
   var _commBadgeRefreshTimer = null;
   function scheduleCommBadgeRefresh() {
@@ -2679,19 +3984,20 @@ window.DunesInbox = (function () {
         convs.forEach(function (c) {
           if (!c.id) return;
           if (String(c.kind || '').toUpperCase() === 'AI_ASSISTANT') {
-            patchNovaGeneratingPreview(c.id, !!c.assistantGenerating, c.assistantGeneratingStatus, c.lastMessagePreview);
+            refreshNovaInboxPreview();
           }
           list.querySelectorAll('.chat-row[data-conv-id="' + c.id + '"]').forEach(function (row) {
             var n = Number(c.unreadCount || 0);
             var meta = row.querySelector('.cr-meta');
+            var mutedMark = rowMutedMark(row);
             if (n > 0) {
               if (!meta) {
                 meta = document.createElement('div');
                 meta.className = 'cr-meta';
                 row.appendChild(meta);
               }
-              meta.innerHTML = '<span class="badge-num accent">' + n + '</span>';
-            } else if (meta) meta.innerHTML = '';
+              meta.innerHTML = mutedMark + '<span class="badge-num accent">' + n + '</span>';
+            } else if (meta) meta.innerHTML = mutedMark;
           });
         });
         var sysRow = list.querySelector('.chat-row.system[data-go="Z2"]');
@@ -2721,14 +4027,15 @@ window.DunesInbox = (function () {
     var n = Number(count) || 0;
     list.querySelectorAll('.chat-row[data-conv-id="' + convId + '"]').forEach(function (row) {
       var meta = row.querySelector('.cr-meta');
+      var mutedMark = rowMutedMark(row);
       if (!meta && n > 0) {
         meta = document.createElement('div');
         meta.className = 'cr-meta';
         row.appendChild(meta);
       }
       if (!meta) return;
-      if (n > 0) meta.innerHTML = '<span class="badge-num accent">' + n + '</span>';
-      else meta.innerHTML = '';
+      if (n > 0) meta.innerHTML = mutedMark + '<span class="badge-num accent">' + n + '</span>';
+      else meta.innerHTML = mutedMark;
     });
     var convUnread = 0;
     list.querySelectorAll('.chat-row[data-conv-id] .badge-num').forEach(function (b) {
@@ -2764,15 +4071,14 @@ window.DunesInbox = (function () {
   }
   function notiCardHtml(n) {
     var unread = n.unread || !n.readAt;
-    var cls = 'noti-card tappable' + (unread ? ' urgent' : '');
-    var goAttr = n.clickAction ? ' data-go="' + esc(String(n.clickAction)) + '"' : '';
+    var cls = 'noti-card noti-card-static' + (unread ? ' urgent' : '');
     var kind = n.kind || '系统';
     var time = n.createdAt ? formatTimeDetailed(n.createdAt, true) : '';
-    return '<div class="' + cls + '"' + goAttr + ' data-noti-id="' + (n.id || '') + '">'
+    return '<div class="' + cls + '" data-noti-id="' + (n.id || '') + '">'
       + '<span class="nc-dot"></span><div class="nc-ic"><i class="ti ti-bell"></i></div>'
       + '<div class="nc-body"><div class="nc-top"><div class="nc-title">' + esc(n.title || '')
       + '</div><div class="nc-time">' + esc(time) + '</div></div>'
-      + '<div class="nc-desc">' + esc(n.body || '') + '</div>'
+      + '<div class="nc-desc">' + formatBodyHtml(n.body || '') + '</div>'
       + '<span class="nc-tag biz">' + esc(kind) + '</span></div></div>';
   }
   async function refreshSystemNotifRow() {
@@ -2794,8 +4100,9 @@ window.DunesInbox = (function () {
       var tm = row.querySelector('.cr-tm');
       if (pv) {
         var tag = notif && notif.kind ? '<span class="sys-tag">' + esc(notif.kind) + '</span>' : '';
+        var bodyHtml = notif && notif.body ? formatBodyHtml(notif.body) : '';
         var text = notif
-          ? esc((notif.title || '') + (notif.body ? '：' + notif.body : ''))
+          ? esc(notif.title || '') + (bodyHtml ? '<br>' + bodyHtml : '')
           : '暂无新通知';
         pv.innerHTML = tag + text;
       }
@@ -2842,26 +4149,126 @@ window.DunesInbox = (function () {
       console.warn('markAllBroadcastsRead', e);
     }
   }
+  var _c10State = { convId: 0, hasMore: false, loading: false, oldestId: 0, title: '公司广播' };
+  function broadcastCardHtml(msg, channelTitle) {
+    var time = msg.createdAt ? formatTimeDetailed(msg.createdAt, true) : '';
+    var body = msg.recalled ? '消息已撤回' : (msg.bodyText || '');
+    return '<div class="noti-card noti-card-static broadcast-msg-card" data-msg-id="' + (msg.id || '') + '">'
+      + '<div class="nc-ic"><i class="ti ti-speakerphone"></i></div>'
+      + '<div class="nc-body"><div class="nc-top"><div class="nc-title">' + esc(channelTitle || '公司广播')
+      + '</div><div class="nc-time">' + esc(time) + '</div></div>'
+      + '<div class="nc-desc">' + formatBodyHtml(body) + '</div></div></div>';
+  }
+  function updateC10Header(title) {
+    var screen = document.querySelector('.screen[data-screen="C10"]');
+    if (!screen) return;
+    var crumb = screen.querySelector('.ds-crumb');
+    var name = screen.querySelector('.ds-name');
+    var short = String(title || '广播').replace(/^公司广播\s*[·•]\s*/, '');
+    if (crumb) crumb.textContent = '公司广播 · ' + short;
+    if (name) name.textContent = '广播历史';
+  }
+  async function resolveBroadcastConvId() {
+    var cid = Number(window.pendingConvId || 0);
+    if (cid > 0) return cid;
+    try {
+      var pending = typeof pendingConvId !== 'undefined' ? Number(pendingConvId) : 0;
+      if (pending > 0) return pending;
+    } catch (e) {}
+    var j = await apiFetch('/conversations?kind=BROADCAST');
+    if (j.success && j.data && j.data.length) return Number(j.data[0].id) || 0;
+    return 0;
+  }
+  function ensureC10ScrollWired() {
+    var box = document.getElementById('c10-api-rows');
+    if (!box || box.dataset.c10ScrollWired) return;
+    box.dataset.c10ScrollWired = '1';
+    var content = box.closest('.content') || box.parentElement;
+    if (!content) return;
+    content.addEventListener('scroll', function () {
+      if (_c10State.loading || !_c10State.hasMore) return;
+      if (content.scrollTop + content.clientHeight < content.scrollHeight - 72) return;
+      loadBroadcastMore();
+    }, { passive: true });
+  }
+  function setC10LoadHint(text, show) {
+    var hint = document.getElementById('c10-load-more');
+    if (!hint) return;
+    hint.innerHTML = text || '';
+    hint.style.display = show ? '' : 'none';
+  }
+  async function loadBroadcastMore() {
+    var box = document.getElementById('c10-api-rows');
+    if (!box || _c10State.loading || !_c10State.hasMore || !_c10State.convId || !_c10State.oldestId) return;
+    _c10State.loading = true;
+    setC10LoadHint('<i class="ti ti-loader"></i><span>加载更早广播…</span>', true);
+    try {
+      var mj = await apiFetch('/conversations/' + _c10State.convId + '/messages?size=20&before=' + _c10State.oldestId);
+      if (!mj.success || !mj.data) return;
+      var items = mj.data.items || [];
+      if (!items.length) {
+        _c10State.hasMore = false;
+        setC10LoadHint('', false);
+        return;
+      }
+      items.sort(function (a, b) { return Number(a.id) - Number(b.id); });
+      _c10State.oldestId = Number(items[0].id) || _c10State.oldestId;
+      _c10State.hasMore = !!mj.data.hasMore;
+      box.insertAdjacentHTML('beforeend', items.map(function (m) {
+        return broadcastCardHtml(m, _c10State.title);
+      }).join(''));
+      if (!_c10State.hasMore) setC10LoadHint('', false);
+      else setC10LoadHint('<i class="ti ti-chevron-down"></i><span>上滑加载更早</span>', true);
+    } catch (e) {
+      console.warn('loadBroadcastMore', e);
+      setC10LoadHint('<span>加载失败</span>', true);
+    } finally {
+      _c10State.loading = false;
+    }
+  }
   async function loadBroadcastList() {
     var box = document.getElementById('c10-api-rows');
     if (!box) return;
+    _c10State.loading = true;
+    _c10State.hasMore = false;
+    _c10State.oldestId = 0;
+    box.innerHTML = '<div class="api-strip"><i class="ti ti-loader"></i><span>加载广播…</span></div>';
+    setC10LoadHint('', false);
     try {
-      await markAllBroadcastsRead();
-      var j = await apiFetch('/conversations?kind=BROADCAST');
-      if (!j.success) throw new Error(j.message || 'broadcast failed');
-      var rows = j.data || [];
-      if (!rows.length) {
-        box.innerHTML = '<div class="api-strip"><i class="ti ti-info-circle"></i><span>暂无广播</span></div>';
+      var convId = await resolveBroadcastConvId();
+      if (!convId) {
+        box.innerHTML = '<div class="api-strip"><i class="ti ti-info-circle"></i><span>暂无广播频道</span></div>';
         return;
       }
-      box.innerHTML = rows.slice(0, 20).map(function (r) {
-        return '<div class="noti-card tappable"><div class="nc-ic"><i class="ti ti-speakerphone"></i></div>'
-          + '<div class="nc-body"><div class="nc-top"><div class="nc-title">' + esc(r.title || '公司广播') + '</div></div>'
-          + '<div class="nc-desc">' + esc(r.lastMessagePreview || '') + '</div></div></div>';
-      }).join('');
+      _c10State.convId = convId;
+      window.pendingConvId = convId;
+      try { pendingConvId = convId; } catch (e) {}
+      await markBroadcastRead(convId);
+      var title = '公司广播';
+      try {
+        var dj = await apiFetch('/conversations/' + convId);
+        if (dj.success && dj.data && dj.data.title) title = dj.data.title;
+      } catch (e) {}
+      _c10State.title = title;
+      updateC10Header(title);
+      var mj = await apiFetch('/conversations/' + convId + '/messages?size=20');
+      if (!mj.success) throw new Error(mj.message || 'messages failed');
+      var items = (mj.data && mj.data.items) || [];
+      if (!items.length) {
+        box.innerHTML = '<div class="api-strip"><i class="ti ti-info-circle"></i><span>暂无广播消息</span></div>';
+        return;
+      }
+      items.sort(function (a, b) { return Number(b.id) - Number(a.id); });
+      _c10State.oldestId = Number(items[items.length - 1].id) || 0;
+      _c10State.hasMore = !!(mj.data && mj.data.hasMore);
+      box.innerHTML = items.map(function (m) { return broadcastCardHtml(m, title); }).join('');
+      if (_c10State.hasMore) setC10LoadHint('<i class="ti ti-chevron-down"></i><span>上滑加载更早</span>', true);
+      ensureC10ScrollWired();
     } catch (e) {
       box.innerHTML = '<div class="api-strip"><span>' + esc(String(e.message || e)) + '</span></div>';
       console.warn('loadBroadcastList', e);
+    } finally {
+      _c10State.loading = false;
     }
   }
   async function markAllNotificationsRead() {
@@ -2893,7 +4300,6 @@ window.DunesInbox = (function () {
         ? rows.map(notiCardHtml).join('')
         : '<div class="api-strip"><i class="ti ti-info-circle"></i><span>暂无通知</span></div>';
       if (root) root.classList.add('z2-api-ready');
-      if (typeof wireZ2NotiCards === 'function') wireZ2NotiCards();
       refreshSystemNotifRow();
     } catch (e) {
       box.innerHTML = '<div class="api-strip"><span>' + esc(String(e.message || e)) + '</span></div>';
@@ -2996,7 +4402,13 @@ window.DunesInbox = (function () {
       var q = inp.value.trim().toLowerCase();
       var list = document.getElementById('c1-conv-list');
       if (!list) return;
+      list.querySelectorAll('.c1-swipe-item').forEach(function (wrap) {
+        var row = wrap.querySelector('.chat-row');
+        var hit = !q || (row && (row.textContent || '').toLowerCase().indexOf(q) >= 0);
+        wrap.style.display = hit ? '' : 'none';
+      });
       list.querySelectorAll('.chat-row').forEach(function (row) {
+        if (row.closest('.c1-swipe-item')) return;
         var hit = !q || (row.textContent || '').toLowerCase().indexOf(q) >= 0;
         row.style.display = hit ? '' : 'none';
       });
@@ -3041,7 +4453,14 @@ window.DunesInbox = (function () {
     var max = Number(header.getAttribute('data-section-ts') || 0) || 0;
     var n = header.nextElementSibling;
     while (n && !(n.classList && n.classList.contains('chat-section'))) {
-      if (n.classList && n.classList.contains('chat-row')) {
+      if (n.classList && n.classList.contains('c1-swipe-item')) {
+        var inner = n.querySelector('.chat-row[data-last-at]');
+        if (inner) {
+          var rawInner = inner.getAttribute('data-last-at') || '';
+          var tInner = rawInner ? new Date(rawInner).getTime() : 0;
+          if (!isNaN(tInner) && tInner > max) max = tInner;
+        }
+      } else if (n.classList && n.classList.contains('chat-row')) {
         var raw = n.getAttribute('data-last-at') || '';
         var t = raw ? new Date(raw).getTime() : 0;
         if (!isNaN(t) && t > max) max = t;
@@ -3069,7 +4488,9 @@ window.DunesInbox = (function () {
   }
   function moveConvRowToTop(row) {
     if (!row || !row.parentNode) return;
-    var el = row.previousElementSibling;
+    var target = row.closest ? row.closest('.c1-swipe-item') : null;
+    if (!target) target = row;
+    var el = target.previousElementSibling;
     var section = null;
     while (el) {
       if (el.classList && el.classList.contains('chat-section')) {
@@ -3078,31 +4499,57 @@ window.DunesInbox = (function () {
       }
       el = el.previousElementSibling;
     }
-    if (!section || section.nextElementSibling === row) return;
-    row.parentNode.insertBefore(row, section.nextElementSibling);
+    if (!section || section.nextElementSibling === target) return;
+    target.parentNode.insertBefore(target, section.nextElementSibling);
   }
   function applyConvEvent(data) {
     if (!data || !data.conversationId) return;
     var convId = data.conversationId;
     var me = Number(localStorage.getItem('dunes_user_id') || '0');
-    var fromPeer = data.message && data.message.sender
-      && Number(data.message.sender.userId) !== me;
-    var activeScreen = document.querySelector('.screen.active')?.dataset?.screen || '';
-    var pendingNova = Number(window.pendingConvId || 0);
-    var isNovaAiMsg = data.message && (
-      String(data.message.kind || '').indexOf('AI') >= 0
-      || (data.message.sender && (!data.message.sender.userId || data.message.sender.displayName === 'NOVA'))
-    );
-    var viewingNova = activeScreen === 'C4' && pendingNova === Number(convId);
-    var bumpUnread = (fromPeer && (data.type === 'message' || data.type === 'system_flow'))
-      || (isNovaAiMsg && !viewingNova && data.type === 'message');
-    var list = document.getElementById('c1-conv-list');
-    if (!list || !list.classList.contains('dunes-api-ready')) {
-      if (bumpUnread) scheduleCommBadgeRefresh();
-      else scheduleC1Refresh();
+    if (data.type === 'read') {
+      if (Number(data.userId || 0) === me && typeof scheduleConvUnreadSync === 'function') {
+        scheduleConvUnreadSync(convId);
+      }
       return;
     }
-    var row = list.querySelector('.chat-row[data-conv-id="' + convId + '"]');
+    var senderId = data.message
+      ? Number((data.message.sender && data.message.sender.userId) || data.message.senderUserId || 0)
+      : 0;
+    var fromPeer = !!(data.message && senderId && senderId !== me);
+    var activeScreen = document.querySelector('.screen.active')?.dataset?.screen || '';
+    var novaConvId = Number(localStorage.getItem('dunes_nova_conv_id') || 0);
+    var isNovaAiMsg = data.message && (
+      String(data.message.kind || '').indexOf('AI') >= 0
+      || (data.message.sender && (!data.message.sender.userId || data.message.sender.displayName === '云枢' || data.message.sender.displayName === 'NOVA'))
+    );
+    var viewingNova = activeScreen === 'C4' && novaConvId > 0 && novaConvId === Number(convId);
+    var bumpUnread = (fromPeer && (data.type === 'message' || data.type === 'system_flow'))
+      || (isNovaAiMsg && !viewingNova && data.type === 'message');
+    var mentionHit = eventMentionsMe(data);
+    if (mentionHit && activeScreen !== 'C2') bumpUnread = true;
+    var list = document.getElementById('c1-conv-list');
+    if (!list || !list.classList.contains('dunes-api-ready')) {
+      if (isConvHidden(convId)) {
+        if (shouldUnhideFromEvent(data)) {
+          unhideConvLocally(convId);
+          scheduleC1Refresh();
+        }
+        return;
+      }
+      if (bumpUnread || data.type === 'conversation_updated' || data.type === 'notification') scheduleCommBadgeRefresh();
+      if (mentionHit && bumpUnread) updateCommTabBadge((window.__dunesCommUnread || 0) + 1);
+      if (data.type === 'conversation_updated') scheduleC1Refresh();
+      else if (!bumpUnread) scheduleC1Refresh();
+      return;
+    }
+    if (isConvHidden(convId)) {
+      if (shouldUnhideFromEvent(data)) {
+        unhideConvLocally(convId);
+        scheduleC1Refresh();
+      }
+      return;
+    }
+    var row = findC1ConvRow(list, convId);
     if (!row) {
       if (bumpUnread) scheduleCommBadgeRefresh();
       scheduleC1Refresh();
@@ -3110,27 +4557,43 @@ window.DunesInbox = (function () {
     }
     var preview = '';
     var at = null;
+    var isGroupRow = row.getAttribute('data-go') === 'C2' || row.classList.contains('workgroup-approval');
     if (data.type === 'message' && data.message) {
-      preview = data.message.bodyText || '';
-      var sysKinds = { SYSTEM: 1, SYSTEM_JOIN: 1, SYSTEM_LEAVE: 1, SYSTEM_REMOVE: 1, SYSTEM_FLOW: 1 };
-      if (!sysKinds[data.message.kind] && data.message.sender && data.message.sender.displayName) {
-        var go = row.getAttribute('data-go');
-        if (go === 'C2' || row.classList.contains('workgroup-approval')) {
-          preview = data.message.sender.displayName + ': ' + preview;
+      preview = eventPreviewText(data, { group: isGroupRow, row: row });
+      if (isGroupRow) {
+        var msgSender = (data.message.sender && data.message.sender.displayName)
+          || data.message.senderDisplayName || '';
+        if (!msgSender) {
+          var msgSid = Number((data.message.sender && data.message.sender.userId) || data.message.senderUserId || 0);
+          var meId = Number(localStorage.getItem('dunes_user_id') || '0');
+          if (msgSid && msgSid === meId) msgSender = localStorage.getItem('dunes_display_name') || '';
         }
+        if (msgSender) cacheConvPreviewSender(convId, msgSender, data.message.kind, data.message.bodyText, data.message.createdAt);
       }
       at = data.message.createdAt;
     } else if (data.type === 'message_recalled') {
       preview = (data.preview == null || data.preview === '') ? '消息已撤回' : String(data.preview);
+      if (isGroupRow) {
+        var recallName = data.recalledByName || data.recalledByDisplayName || '';
+        if (!recallName && data.userId) {
+          var rp = typeof profileForUserId === 'function' ? profileForUserId(Number(data.userId)) : null;
+          if (rp && rp.displayName) recallName = rp.displayName;
+        }
+        if (recallName) preview = recallName + ': ' + preview;
+      }
       at = data.previewAt || null;
     } else if (data.type === 'message_updated' && data.message) {
-      preview = data.message.bodyText || '';
+      preview = eventPreviewText(data, { group: isGroupRow, row: row });
       at = data.message.createdAt;
     } else if (data.type === 'message_deleted') {
       preview = '消息已删除';
     } else if (data.type === 'system_flow' && data.message) {
       preview = data.message.bodyText || '[系统]';
       at = data.message.createdAt;
+    } else if (data.type === 'conversation_updated') {
+      preview = eventPreviewText(data, { group: isGroupRow, row: row });
+      at = data.updatedAt || data.lastMessageAt || null;
+      if (row.classList.contains('broadcast') && activeScreen !== 'C10') bumpUnread = true;
     }
     if (preview) {
       var pv = row.querySelector('.cr-pv');
@@ -3153,18 +4616,34 @@ window.DunesInbox = (function () {
     }
     moveConvRowToTop(row);
     reorderC1Sections();
-    if (bumpUnread) scheduleConvUnreadSync(convId);
+    if (bumpUnread) {
+      if (mentionHit) {
+        var cur = 0;
+        var badge = row.querySelector('.badge-num');
+        if (badge) cur = parseInt(badge.textContent, 10) || 0;
+        patchConvUnread(convId, Math.max(cur + 1, 1));
+      } else {
+        var curUnread = 0;
+        var unreadBadge = row.querySelector('.badge-num');
+        if (unreadBadge) curUnread = parseInt(unreadBadge.textContent, 10) || 0;
+        patchConvUnread(convId, Math.max(curUnread + 1, 1));
+        scheduleConvUnreadSync(convId);
+      }
+    }
   }
   async function loadC1() {
     var list = document.getElementById('c1-conv-list');
     var sub = document.querySelector('.screen[data-screen="C1"] .ch-t .sub');
     if (!list) return;
+    if (window.DunesScreenLoader) window.DunesScreenLoader.show('C1', '加载通讯…');
     list.classList.remove('dunes-api-ready');
     list.innerHTML = '';
     try {
       var convJ = await apiFetch('/conversations');
       if (!convJ.success) throw new Error(convJ.message || 'conversations failed');
       var convs = convJ.data || [];
+      upgradeDissolvedHiddenConvs(convs);
+      purgeDissolvedConvsFromServer(convs);
       var notif = null;
       var notifUnread = 0;
       try {
@@ -3176,12 +4655,13 @@ window.DunesInbox = (function () {
           if (items.length) notif = items[0];
         }
       } catch (e) {}
-      var approval = sortConvList(convs.filter(function (c) { return c.kind === 'WORKGROUP_APPROVAL'; }));
-      var groups = sortConvList(convs.filter(function (c) {
+      var approval = sortConvList(filterVisibleConvs(convs.filter(function (c) { return c.kind === 'WORKGROUP_APPROVAL'; })));
+      var groups = sortConvList(filterVisibleConvs(convs.filter(function (c) {
         return c.kind === 'WORKGROUP' || c.kind === 'GROUP';
-      }));
-      var priv = convs.filter(function (c) { return c.kind === 'PRIVATE'; });
-      if (sub) sub.textContent = 'CHAT · ' + convs.length;
+      })));
+      var priv = filterVisibleConvs(convs.filter(function (c) { return c.kind === 'PRIVATE'; }));
+      var visibleCount = approval.length + groups.length + priv.length;
+      if (sub) sub.textContent = 'CHAT · ' + visibleCount;
       var fixed = buildFixedSections(convs, notif, notifUnread);
       var html = fixed.html + renderDynamicSections([
         fixed.systemSection,
@@ -3218,6 +4698,7 @@ window.DunesInbox = (function () {
       ensureC1ScrollWired();
       wireC1Search();
       wireC1RowActions(list);
+      wireC1SwipeDelete(list);
       hydrateAvatarsIn(list);
       if (window.DunesPresence && typeof window.DunesPresence.refreshAll === 'function') {
         window.DunesPresence.refreshAll();
@@ -3235,6 +4716,15 @@ window.DunesInbox = (function () {
       if (window.DunesKbChat && typeof window.DunesKbChat.refreshKbInboxPreview === 'function') {
         window.DunesKbChat.refreshKbInboxPreview(true);
       }
+      if (window.DunesNovaChat && typeof window.DunesNovaChat.prefetchServerHistory === 'function') {
+        window.DunesNovaChat.prefetchServerHistory().then(function () {
+          refreshNovaInboxPreview();
+        }).catch(function () {
+          refreshNovaInboxPreview();
+        });
+      } else {
+        refreshNovaInboxPreview();
+      }
     } catch (e) {
       var errPreview = '消息列表加载失败：' + (e.message || e);
       var fallback = buildFixedSections([], null, 0);
@@ -3244,6 +4734,8 @@ window.DunesInbox = (function () {
       list.innerHTML = errHtml;
       list.classList.add('dunes-api-ready');
       console.warn('DunesInbox.loadC1', e);
+    } finally {
+      if (window.DunesScreenLoader) window.DunesScreenLoader.hide('C1');
     }
   }
   function onScreen(id) {
@@ -3252,8 +4744,17 @@ window.DunesInbox = (function () {
       if (_c1Loaded && window.__dunesRefreshC1OnNextShow) {
         window.__dunesRefreshC1OnNextShow = false;
         loadC1();
-      } else if (_c1Loaded) restoreC1Scroll();
-      else loadC1();
+      } else if (_c1Loaded) {
+        restoreC1Scroll();
+        refreshNovaInboxPreview();
+        if (window.DunesNovaChat && typeof window.DunesNovaChat.prefetchServerHistory === 'function') {
+          window.DunesNovaChat.prefetchServerHistory().then(function () {
+            refreshNovaInboxPreview();
+          }).catch(function () {
+            refreshNovaInboxPreview();
+          });
+        }
+      } else loadC1();
     }
     if (id === 'Z2') {
       markAllNotificationsRead().then(function () { loadZ2Notifications(); });
@@ -3277,9 +4778,13 @@ window.DunesInbox = (function () {
     updateCommTabBadge: updateCommTabBadge,
     patchConvUnread: patchConvUnread,
     patchNovaGeneratingPreview: patchNovaGeneratingPreview,
+    refreshNovaInboxPreview: refreshNovaInboxPreview,
     recalcCommBadgeFromDom: recalcCommBadgeFromDom,
     refreshCommBadgeFromServer: refreshCommBadgeFromServer,
-    scheduleCommBadgeRefresh: scheduleCommBadgeRefresh
+    scheduleCommBadgeRefresh: scheduleCommBadgeRefresh,
+    finishExitGroup: finishExitGroup,
+    hideConvLocally: hideConvLocally,
+    exitGroupMembership: exitGroupMembership
   };
 })();
 ''';
@@ -3386,14 +4891,22 @@ window.DunesGroupInfo = (function () {
       method: opts.method || 'GET',
       headers: headers,
       body: opts.body || undefined
-    }).then(function (r) { return r.json(); });
+    }).then(function (r) {
+      if (r.status === 401 && typeof window.__dunesHandleSessionRevoked === 'function') {
+        window.__dunesHandleSessionRevoked();
+        return { success: false, message: '账号已在其他设备登录，请重新登录' };
+      }
+      return r.json();
+    });
   }
   function toast(msg) {
     if (window.DunesAPI && window.DunesAPI.toast) window.DunesAPI.toast(msg);
+    else if (window.DunesDialog && window.DunesDialog.alert) window.DunesDialog.alert(msg);
     else alert(msg);
   }
   function dlgConfirm(msg) {
     if (window.DunesDialog && window.DunesDialog.confirm) return window.DunesDialog.confirm(msg);
+    if (window.dunesConfirm) return window.dunesConfirm(msg);
     return Promise.resolve(confirm(msg));
   }
   function dlgPrompt(msg, def) {
@@ -3428,38 +4941,68 @@ window.DunesGroupInfo = (function () {
   }
   async function downloadMediaItem(item) {
     var payload = parsePayload(item.payload);
-    var objectKey = payload.objectKey || '';
-    var fileName = payload.fileName || item.bodyText || 'download';
+    var objectKey = String(payload.objectKey || payload.object_key || '').trim();
+    var url = String(payload.url || payload.previewUrl || '').trim();
+    if (!objectKey && url && !/^https?:\/\//i.test(url)) objectKey = url;
+    var fileName = payload.fileName || payload.file_name || item.bodyText || 'download';
     var bucket = payload.bucket || 'im-attachments';
     var token = localStorage.getItem('dunes_token') || localStorage.getItem('dunes_jwt') || '';
     if (objectKey) {
-      var dl = storageDownloadEndpoint(objectKey, bucket, fileName);
-      var resp = await fetch(dl, { headers: token ? { Authorization: 'Bearer ' + token } : {} });
-      if (!resp.ok) throw new Error('HTTP ' + resp.status);
-      var blob = await resp.blob();
-      var blobUrl = URL.createObjectURL(blob);
-      var a = document.createElement('a');
-      a.href = blobUrl;
-      a.download = fileName.replace(/^\[[^\]]+\]\s*/, '');
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      setTimeout(function () { URL.revokeObjectURL(blobUrl); }, 2000);
+      try {
+        var dl = storageDownloadEndpoint(objectKey, bucket, fileName);
+        var resp = await fetch(dl, { headers: token ? { Authorization: 'Bearer ' + token } : {} });
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        var blob = await resp.blob();
+        var blobUrl = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = blobUrl;
+        a.download = fileName.replace(/^\[[^\]]+\]\s*/, '');
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(function () { URL.revokeObjectURL(blobUrl); }, 2000);
+        return;
+      } catch (e) {
+        try {
+          var signed = await resolveMediaUrl(objectKey, bucket);
+          if (signed) {
+            var r2 = await fetch(signed);
+            if (!r2.ok) throw new Error('HTTP ' + r2.status);
+            var b2 = await r2.blob();
+            var u2 = URL.createObjectURL(b2);
+            var a2 = document.createElement('a');
+            a2.href = u2;
+            a2.download = fileName.replace(/^\[[^\]]+\]\s*/, '');
+            document.body.appendChild(a2);
+            a2.click();
+            a2.remove();
+            setTimeout(function () { URL.revokeObjectURL(u2); }, 2000);
+            return;
+          }
+        } catch (e2) {}
+      }
+    }
+    if (!url) throw new Error('无下载地址');
+    if (/^https?:\/\//i.test(url)) {
+      try {
+        var r3 = await fetch(url, { mode: 'cors' });
+        if (r3.ok) {
+          var b3 = await r3.blob();
+          var u3 = URL.createObjectURL(b3);
+          var link = document.createElement('a');
+          link.href = u3;
+          link.download = fileName.replace(/^\[[^\]]+\]\s*/, '');
+          document.body.appendChild(link);
+          link.click();
+          link.remove();
+          setTimeout(function () { URL.revokeObjectURL(u3); }, 2000);
+          return;
+        }
+      } catch (e3) {}
+      window.open(url, '_blank', 'noopener');
       return;
     }
-    var url = payload.url || payload.previewUrl || '';
-    if (!url) throw new Error('无下载地址');
-    var r = await fetch(url, { mode: 'cors' });
-    if (!r.ok) throw new Error('HTTP ' + r.status);
-    var b = await r.blob();
-    var u = URL.createObjectURL(b);
-    var link = document.createElement('a');
-    link.href = u;
-    link.download = fileName.replace(/^\[[^\]]+\]\s*/, '');
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    setTimeout(function () { URL.revokeObjectURL(u); }, 2000);
+    throw new Error('无下载地址');
   }
   function mediaTimeLabel(iso) {
     if (!iso) return '';
@@ -3486,7 +5029,9 @@ window.DunesGroupInfo = (function () {
     var title = (payload.fileName || item.bodyText || kind).replace(/^\[[^\]]+\]\s*/, '');
     var sender = (item.sender && item.sender.displayName) || item.senderDisplayName || '';
     var time = mediaTimeLabel(item.createdAt);
-    var objectKey = payload.objectKey || '';
+    var objectKey = String(payload.objectKey || payload.object_key || '').trim();
+    var urlRaw = String(payload.url || payload.previewUrl || '').trim();
+    if (!objectKey && urlRaw && !/^https?:\/\//i.test(urlRaw)) objectKey = urlRaw;
     var bucket = payload.bucket || 'im-attachments';
     var row = document.createElement('div');
     row.className = 'upload-slot filled dunes-c13-row';
@@ -3660,6 +5205,7 @@ window.DunesGroupInfo = (function () {
     var el = document.getElementById('dunes-member-picker');
     if (el) el.style.display = 'none';
     pickState = null;
+    window.__dunesMemberPickState = null;
   }
   function openMemberPicker(opts) {
     opts = opts || {};
@@ -3671,6 +5217,7 @@ window.DunesGroupInfo = (function () {
       candidates: opts.candidates || null,
       excludeIds: opts.excludeIds || []
     };
+    window.__dunesMemberPickState = pickState;
     var overlay = ensurePickerOverlay();
     overlay.style.display = 'flex';
     document.getElementById('dunes-member-picker-title').textContent =
@@ -3679,61 +5226,86 @@ window.DunesGroupInfo = (function () {
     if (searchInp) searchInp.value = '';
     renderPickerList(pickState.candidates, pickState.excludeIds, '');
   }
+  function renderPickerFlatRows(list, rows) {
+    list.innerHTML = rows.map(function (c) {
+      var uid = Number(c.userId);
+      var on = pickState && pickState.selected.has(uid) ? ' on' : '';
+      var nm = (c.displayName || '') + (c.enabled === false ? '-停用' : '');
+      var meta = '';
+      if (c.title) meta += '<span>' + esc(c.title) + '</span>';
+      var dept = c.department || c.departmentName || '';
+      if (dept) meta += '<span>' + esc(dept) + '</span>';
+      return '<div class="contact-pick-row tappable' + on + '" data-pick-user-id="' + uid + '">'
+        + '<div class="cp-check"><i class="ti ti-check"></i></div>'
+        + '<div class="cp-av no-initial ' + personCls(uid) + '" data-avatar-user-id="' + uid + '"> </div>'
+        + '<div class="cp-bd"><div class="cp-nm">' + esc(nm) + '</div>'
+        + '<div class="cp-m">' + meta + '</div></div></div>';
+    }).join('');
+    if (pickApi.wirePickRows) pickApi.wirePickRows(list, true);
+    hydrateAvatarsIn(list);
+  }
   async function renderPickerList(candidates, excludeIds, query) {
     var list = document.getElementById('dunes-member-picker-list');
     if (!list) return;
+    var pickApi = window.__dunesContactsPick || window.DunesContacts || {};
     list.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-3)">加载中…</div>';
     var exclude = {};
     (excludeIds || []).forEach(function (id) { exclude[String(id)] = true; });
-    var rows = candidates;
-    if (!rows) {
-      try {
-        var q = query ? ('?q=' + encodeURIComponent(query)) : '';
-        var j = await apiFetch('/contacts' + q);
-        rows = j.success ? (j.data || []) : [];
-      } catch (e) { rows = []; }
-    }
-    rows = (rows || []).filter(function (c) {
-      var uid = Number(c.userId);
-      if (!uid || uid === devUserId() || exclude[String(uid)]) return false;
-      if (!query || candidates) return true;
-      var q = String(query).toLowerCase();
-      var hay = [c.displayName, c.department, c.departmentName, c.title].join(' ').toLowerCase();
-      return hay.indexOf(q) >= 0;
-    });
-    if (!rows.length) {
-      list.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-3)">暂无可选成员</div>';
+    if (candidates) {
+      var flat = (candidates || []).filter(function (c) {
+        var uid = Number(c.userId);
+        return uid && uid !== devUserId() && !exclude[String(uid)] && !isContactDisabled(c);
+      });
+      if (!flat.length) {
+        list.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-3)">暂无可选成员</div>';
+        return;
+      }
+      list.classList.remove('dept-tree');
+      renderPickerFlatRows(list, flat);
       return;
     }
-    list.innerHTML = rows.map(function (c) {
-      var uid = Number(c.userId);
-      return '<div class="contact-pick-row tappable" data-pick-user-id="' + uid + '">'
-        + '<div class="cp-check"><i class="ti ti-check"></i></div>'
-        + '<div class="cp-av ' + personCls(uid) + '">' + esc((c.displayName || '?').slice(0, 1)) + '</div>'
-        + '<div class="cp-bd"><div class="cp-nm">' + esc(c.displayName || '') + '</div>'
-        + '<div class="cp-m"><span>' + esc(c.department || c.departmentName || '') + '</span>'
-        + '<span>' + esc(c.title || '') + '</span></div></div></div>';
-    }).join('');
-    list.querySelectorAll('.contact-pick-row').forEach(function (row) {
-      row.addEventListener('click', function () {
-        var uid = Number(row.getAttribute('data-pick-user-id'));
-        if (!pickState) return;
-        if (pickState.single) {
-          list.querySelectorAll('.contact-pick-row.on').forEach(function (r) { r.classList.remove('on'); });
-          pickState.selected.clear();
-          pickState.selected.add(uid);
-          row.classList.add('on');
-        } else {
-          if (pickState.selected.has(uid)) {
-            pickState.selected.delete(uid);
-            row.classList.remove('on');
-          } else {
-            pickState.selected.add(uid);
-            row.classList.add('on');
-          }
+    list.classList.add('dept-tree');
+    try {
+      var qs = query ? ('&q=' + encodeURIComponent(query)) : '';
+      var j = await apiFetch('/contacts?view=org' + qs);
+      if (!j.success) throw new Error(j.message || 'contacts failed');
+      var d = j.data || {};
+      var depts = d.departments || [];
+      var items = d.items || [];
+      list.innerHTML = '';
+      if (query) {
+        items = items.filter(function (c) {
+          var uid = Number(c.userId);
+          return uid && uid !== devUserId() && !exclude[String(uid)] && !isContactDisabled(c);
+        });
+        if (!items.length) {
+          list.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-3)">无匹配联系人</div>';
+          return;
+        }
+        list.classList.remove('dept-tree');
+        renderPickerFlatRows(list, items);
+        return;
+      }
+      if (!depts.length) {
+        list.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-3)">暂无组织数据</div>';
+        return;
+      }
+      depts.forEach(function (dep) {
+        rememberDeptProfiles(dep);
+        var allowDeptSelect = !pickState || !pickState.single;
+        if (pickApi.renderDeptBlock) {
+          list.insertAdjacentHTML('beforeend', pickApi.renderDeptBlock(dep, true, allowDeptSelect));
         }
       });
-    });
+      if (pickApi.wireDeptToggle) pickApi.wireDeptToggle(list);
+      if (pickApi.wireDeptSelectAll) pickApi.wireDeptSelectAll(list, true);
+      if (pickApi.wirePickRows) pickApi.wirePickRows(list, true);
+      hydrateAvatarsIn(list);
+      if (pickApi.refreshOnlineDots) pickApi.refreshOnlineDots();
+    } catch (e) {
+      list.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-3)">加载失败：' + esc(e.message || e) + '</div>';
+      console.warn('DunesContacts.renderPickerList', e);
+    }
   }
   async function confirmPicker() {
     if (!pickState || !pickState.convId) return;
@@ -3761,7 +5333,28 @@ window.DunesGroupInfo = (function () {
       toast((e && e.message) || '操作失败');
     }
   }
+  function sortGroupMembers(members) {
+    return (members || []).slice().sort(function (a, b) {
+      var aOwner = String(a.role || '').toUpperCase() === 'OWNER';
+      var bOwner = String(b.role || '').toUpperCase() === 'OWNER';
+      if (aOwner && !bOwner) return -1;
+      if (!aOwner && bOwner) return 1;
+      var an = String(a.displayName || '');
+      var bn = String(b.displayName || '');
+      try { return an.localeCompare(bn, 'zh-CN'); } catch (e) { return an.localeCompare(bn); }
+    });
+  }
+  function hideC6FlowPushRow() {
+    document.querySelectorAll('.screen[data-screen="C6"] .gi-row').forEach(function (row) {
+      var title = row.querySelector('.gr-t');
+      if (title && title.textContent.trim() === '流转消息推送') {
+        row.classList.add('c6-flow-push-hidden');
+        row.style.display = 'none';
+      }
+    });
+  }
   function wireSettings(detail) {
+    hideC6FlowPushRow();
     var rows = document.querySelectorAll('.screen[data-screen="C6"] .gi-row');
     rows.forEach(function (row, idx) {
       var title = row.querySelector('.gr-t');
@@ -3807,26 +5400,45 @@ window.DunesGroupInfo = (function () {
   }
   function wireDanger(detail) {
     var clearBtn = document.getElementById('c6-clear-history');
-    if (clearBtn && !clearBtn.dataset.wired) {
-      clearBtn.dataset.wired = '1';
-      clearBtn.addEventListener('click', async function (e) {
-        e.preventDefault();
-        var convId = currentConvId();
-        if (!convId) return;
-        if (!(await dlgConfirm('清空后仅对你不可见，确定继续？'))) return;
-        try {
-          var j = await apiFetch('/conversations/' + convId + '/clear-history', { method: 'POST' });
-          if (!j.success) throw new Error(j.message || '清空失败');
-          toast('聊天记录已清空');
-          if (window.DunesImChat && typeof window.DunesImChat.reloadActiveChat === 'function') {
-            window.DunesImChat.reloadActiveChat('C2');
-          }
-        } catch (err) { toast((err && err.message) || '清空失败'); }
-      });
+    if (clearBtn) {
+      clearBtn.style.display = 'none';
+    }
+    var dissolveBtn = document.getElementById('c6-dissolve-group');
+    if (dissolveBtn) {
+      var dissolved = !!(detail && (detail.dissolved || detail.isDissolved || detail.status === 'DISSOLVED' || detail.frozen));
+      var showDissolve = !!(detail && detail.isOwner && !dissolved);
+      dissolveBtn.style.display = showDissolve ? 'block' : 'none';
+      if (!dissolveBtn.dataset.wired) {
+        dissolveBtn.dataset.wired = '1';
+        dissolveBtn.addEventListener('click', async function (e) {
+          e.preventDefault();
+          var d = window.__dunesGroupDetail || detail;
+          if (!d || !d.isOwner) { toast('仅群主可解散群聊'); return; }
+          var convId = currentConvId();
+          if (!convId) return;
+          if (!(await dlgConfirm('解散后群聊仍保留历史记录，但所有成员将无法再发送消息或操作群设置。确定解散？'))) return;
+          try {
+            var j = await apiFetch('/conversations/' + convId + '/dissolve', { method: 'POST' });
+            if (!j.success) throw new Error(j.message || '解散失败');
+            toast('群聊已解散');
+            d.dissolved = true;
+            d.isDissolved = true;
+            d.status = 'DISSOLVED';
+            window.__dunesGroupDetail = d;
+            dissolveBtn.style.display = 'none';
+            if (window.DunesImChat && typeof window.DunesImChat.reloadActiveChat === 'function') {
+              window.DunesImChat.reloadActiveChat('C2');
+            }
+            await loadConvInfo();
+          } catch (err) { toast((err && err.message) || '解散失败'); }
+        });
+      }
     }
     var leaveBtn = document.getElementById('c6-leave-group');
     if (leaveBtn) {
-      var canLeave = !!(detail && detail.canLeave);
+      var dissolved = !!(detail && (detail.dissolved || detail.isDissolved || detail.status === 'DISSOLVED' || detail.frozen));
+      var canLeave = !!(detail && (detail.canLeave || dissolved));
+      leaveBtn.style.display = canLeave ? 'block' : 'none';
       leaveBtn.style.opacity = canLeave ? '1' : '.5';
       leaveBtn.style.cursor = canLeave ? 'pointer' : 'not-allowed';
       if (!leaveBtn.dataset.wired) {
@@ -3834,21 +5446,26 @@ window.DunesGroupInfo = (function () {
         leaveBtn.addEventListener('click', async function (e) {
           e.preventDefault();
           var d = window.__dunesGroupDetail || detail;
-          if (!d || !d.canLeave) {
+          var dissolvedLeave = !!(d && (d.dissolved || d.isDissolved || d.status === 'DISSOLVED' || d.frozen));
+          if (!d || (!d.canLeave && !dissolvedLeave)) {
             toast('系统群不可退出');
             return;
           }
           var convId = currentConvId();
           if (!convId) return;
-          if (!(await dlgConfirm('确定退出该群聊？'))) return;
+          if (!(await dlgConfirm(dissolvedLeave ? '该群已解散，退出后将从你的会话列表中移除。确定退出？' : '确定退出该群聊？'))) return;
           try {
-            var j = await apiFetch('/conversations/' + convId + '/leave', { method: 'POST' });
-            if (!j.success) throw new Error(j.message || '退出失败');
-            toast('已退出群聊');
-            if (typeof go === 'function') go('C1');
-            else if (typeof setScreen === 'function') setScreen('C1', false);
-            if (window.DunesInbox && window.DunesInbox.loadC1) window.DunesInbox.loadC1();
-          } catch (err) { toast((err && err.message) || '退出失败'); }
+            var exitFn = window.DunesInbox && window.DunesInbox.exitGroupMembership;
+            if (typeof exitFn !== 'function') throw new Error('退出功能未就绪，请返回会话列表后重试');
+            var serverRemoved = await exitFn(convId, dissolvedLeave);
+            var permanent = dissolvedLeave || !serverRemoved;
+            var okMsg = dissolvedLeave ? '该群已解散，已为你退出' : '已退出群聊';
+            if (window.DunesInbox && window.DunesInbox.finishExitGroup) {
+              window.DunesInbox.finishExitGroup(convId, okMsg, permanent);
+            } else { toast(okMsg); if (typeof go === 'function') go('C1'); }
+          } catch (err) {
+            toast(String((err && err.message) || '退出失败'));
+          }
         });
       }
     }
@@ -3996,6 +5613,7 @@ window.DunesGroupInfo = (function () {
   async function loadConvInfo() {
     var convId = currentConvId();
     if (!convId) return;
+    if (window.DunesScreenLoader) window.DunesScreenLoader.show('C6', '加载群信息…');
     try {
       var j = await apiFetch('/conversations/' + convId + '/info');
       if (!j.success || !j.data) return;
@@ -4009,15 +5627,17 @@ window.DunesGroupInfo = (function () {
       var lbl = document.getElementById('c6-member-label');
       if (nm) nm.textContent = d.title || '群聊';
       syncC6Header(d);
+      var dissolved = !!(d.dissolved || d.isDissolved || d.status === 'DISSOLVED' || d.frozen);
       if (sub) {
         var bits = [];
+        if (dissolved) bits.push('已解散');
         if (d.kind === 'WORKGROUP_APPROVAL') bits.push('审批工作群');
         else if (d.kind === 'WORKGROUP') bits.push('工作群');
         else bits.push(d.kind || '群聊');
         if (d.createdAt) bits.push('创建于 ' + String(d.createdAt).slice(0, 10));
         sub.textContent = bits.join(' · ');
       }
-      var members = d.members || [];
+      var members = sortGroupMembers(d.members || []);
       if (lbl) lbl.textContent = '群成员 · ' + members.length + ' 人';
       var grid = document.getElementById('c6-member-grid');
       if (grid) {
@@ -4030,11 +5650,10 @@ window.DunesGroupInfo = (function () {
           var initial = (m.displayName || '用户').slice(0, 1);
           var me = Number(m.userId) === devUserId() ? ' ·我' : '';
           div.innerHTML = '<div class="gm-av ' + personCls(m.userId) + '">' + esc(initial) + '</div>'
-            + '<div class="gm-nm">' + esc(m.displayName || '') + (me ? '<span style="color:var(--accent);font-size:7px;font-weight:700">' + me + '</span>' : '') + '</div>'
-            + '<div class="gm-role">' + esc(m.role || '') + '</div>';
+            + '<div class="gm-nm">' + esc(m.displayName || '') + (me ? '<span style="color:var(--accent);font-size:7px;font-weight:700">' + me + '</span>' : '') + '</div>';
           grid.appendChild(div);
         });
-        if (d.isOwner) {
+        if (d.isOwner && !dissolved) {
           var add = document.createElement('div');
           add.className = 'gi-member tappable';
           add.id = 'c6-add-member';
@@ -4055,6 +5674,9 @@ window.DunesGroupInfo = (function () {
       loadLinkedApprovals(d);
       loadMediaCount(convId);
     } catch (e) { console.warn('DunesGroupInfo.loadConvInfo', e); }
+    finally {
+      if (window.DunesScreenLoader) window.DunesScreenLoader.hide('C6');
+    }
   }
   function onScreen(id) {
     if (id === 'C6') loadConvInfo();
@@ -4064,13 +5686,76 @@ window.DunesGroupInfo = (function () {
 })();
 ''';
 
-
   static const bootstrapJs = r'''
 (function () {
   if (window.__dunesFlutterReady) return;
   window.__dunesFlutterReady = true;
 
   document.body.classList.add('flutter-app-mode');
+  window.DunesScreenLoader = (function () {
+    function phone(screen) {
+      if (!screen) return null;
+      return screen.querySelector('.phone-screen') || screen;
+    }
+    function ensureMask(screen, msg) {
+      var host = phone(screen);
+      if (!host) return null;
+      var mask = host.querySelector('.dunes-screen-loading-mask');
+      if (!mask) {
+        mask = document.createElement('div');
+        mask.className = 'dunes-screen-loading-mask';
+        mask.innerHTML = '<div class="dunes-screen-loading-inner"><div class="dunes-screen-loading-spin"></div><span class="dunes-screen-loading-text">加载中…</span></div>';
+        host.appendChild(mask);
+      }
+      var t = mask.querySelector('.dunes-screen-loading-text');
+      if (t && msg) t.textContent = msg;
+      return mask;
+    }
+    return {
+      show: function (screenId, msg) {
+        var screen = document.querySelector('.screen[data-screen="' + screenId + '"]');
+        if (!screen) return;
+        var mask = ensureMask(screen, msg || '加载中…');
+        if (mask) mask.style.display = 'flex';
+        screen.classList.add('dunes-screen-loading');
+      },
+      hide: function (screenId) {
+        var screen = document.querySelector('.screen[data-screen="' + screenId + '"]');
+        if (!screen) return;
+        screen.classList.remove('dunes-screen-loading');
+        var host = phone(screen);
+        var mask = host && host.querySelector('.dunes-screen-loading-mask');
+        if (mask) mask.style.display = 'none';
+      }
+    };
+  })();
+  (function ensureNovaOwnerStorage() {
+    var uid = parseInt(localStorage.getItem('dunes_user_id') || '0', 10) || 0;
+    var owner = parseInt(localStorage.getItem('dunes_nova_owner_uid') || '0', 10) || 0;
+    if (uid > 0 && owner > 0 && owner !== uid) {
+      if (window.DunesNovaApi && typeof window.DunesNovaApi.clearAllAiLocalHistory === 'function') {
+        window.DunesNovaApi.clearAllAiLocalHistory();
+      } else {
+        ['dunes_nova_conv_id', 'dunes_nova_local_history', 'dunes_nova_msgs_', 'dunes_nova_profile_session'].forEach(function (k) {
+          try {
+            if (k.indexOf('_') === k.length - 1) {
+              var drop = [];
+              for (var i = 0; i < localStorage.length; i++) {
+                var key = localStorage.key(i);
+                if (key && key.indexOf(k) === 0) drop.push(key);
+              }
+              drop.forEach(function (dk) { localStorage.removeItem(dk); });
+            } else {
+              localStorage.removeItem(k);
+            }
+          } catch (e) {}
+        });
+      }
+    }
+    if (uid > 0) {
+      try { localStorage.setItem('dunes_nova_owner_uid', String(uid)); } catch (e2) {}
+    }
+  })();
   (function hidePrototypeMocks() {
     var c1 = document.getElementById('c1-conv-list');
     if (c1) { c1.innerHTML = ''; c1.classList.remove('dunes-api-ready'); }
@@ -4103,7 +5788,7 @@ window.DunesGroupInfo = (function () {
     var src = window.__dunesNovaIconSrc || '';
     if (!src) return '<i class="ti ti-sparkles"></i>';
     var cls = 'nova-icon-img' + (extraClass ? ' ' + extraClass : '');
-    return '<img class="' + cls + '" src="' + src + '" alt="NOVA" draggable="false">';
+    return '<img class="' + cls + '" src="' + src + '" alt="云枢" draggable="false">';
   };
   window.dunesNovaAvatarHtml = function (avClass) {
     return '<div class="' + (avClass || 'msg-av-sm ai-bot') + '">' + window.dunesNovaIconHtml() + '</div>';
@@ -4119,7 +5804,7 @@ window.DunesGroupInfo = (function () {
       el.innerHTML = window.dunesNovaIconHtml();
     });
     document.querySelectorAll('.chat-section').forEach(function (el) {
-      if (el.textContent.indexOf('NOVA') < 0) return;
+      if (el.textContent.indexOf('云枢') < 0 && el.textContent.indexOf('NOVA') < 0) return;
       var ic = el.querySelector('i.ti-sparkles');
       if (!ic) return;
       var wrap = document.createElement('span');
@@ -4137,10 +5822,251 @@ window.DunesGroupInfo = (function () {
   style.textContent = __DUNES_CSS__;
   document.head.appendChild(style);
 
+  (function installComingSoonMasks() {
+    function soonLabel(blockName) {
+      if (!blockName) return '<span class="soon-label"><span class="soon-main">敬请期待</span></span>';
+      return (
+        '<span class="soon-label">' +
+        '<span class="soon-block">' + blockName + '</span>' +
+        '<span class="soon-main">敬请期待</span></span>'
+      );
+    }
+
+    function appendMask(wrap, blockName) {
+      if (!wrap || wrap.querySelector(':scope > .coming-soon-mask')) return;
+      var mask = document.createElement('div');
+      mask.className = 'coming-soon-mask';
+      mask.setAttribute('aria-hidden', 'true');
+      mask.innerHTML = soonLabel(blockName || '');
+      wrap.appendChild(mask);
+      mask.addEventListener('click', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+      }, true);
+    }
+
+    function wrapElement(el, extraClass, blockName) {
+      if (!el || el.closest('.coming-soon-wrap')) return;
+      var outer = document.createElement('div');
+      outer.className = 'coming-soon-wrap' + (extraClass ? ' ' + extraClass : '');
+      el.parentNode.insertBefore(outer, el);
+      outer.appendChild(el);
+      appendMask(outer, blockName);
+    }
+
+    function wrapSiblingNodes(nodes, extraClass, blockName) {
+      if (!nodes || !nodes.length) return;
+      var wrap = document.createElement('div');
+      wrap.className = 'coming-soon-wrap' + (extraClass ? ' ' + extraClass : '');
+      var parent = nodes[0].parentNode;
+      parent.insertBefore(wrap, nodes[0]);
+      nodes.forEach(function (n) { wrap.appendChild(n); });
+      appendMask(wrap, blockName);
+    }
+
+    function labelSection(b2Content, keyword, untilSelector) {
+      var labels = b2Content.querySelectorAll('.section-label');
+      for (var i = 0; i < labels.length; i++) {
+        var label = labels[i];
+        if ((label.textContent || '').indexOf(keyword) < 0) continue;
+        if (label.closest('.coming-soon-wrap')) continue;
+        var nodes = [label];
+        var sibling = label.nextElementSibling;
+        while (sibling) {
+          if (untilSelector && sibling.matches(untilSelector)) break;
+          nodes.push(sibling);
+          sibling = sibling.nextElementSibling;
+        }
+        wrapSiblingNodes(nodes, 'dunes-soon-block', keyword);
+        return;
+      }
+    }
+
+    function labelSectionWithNextClass(b2Content, keyword, nextClass) {
+      var labels = b2Content.querySelectorAll('.section-label');
+      for (var i = 0; i < labels.length; i++) {
+        var label = labels[i];
+        if ((label.textContent || '').indexOf(keyword) < 0) continue;
+        if (label.closest('.coming-soon-wrap')) continue;
+        var nodes = [label];
+        var next = label.nextElementSibling;
+        if (next && next.classList.contains(nextClass)) nodes.push(next);
+        wrapSiblingNodes(nodes, 'dunes-soon-block', keyword);
+        return;
+      }
+    }
+
+    var qjContent = document.querySelector('.screen[data-screen="QJ"] .content');
+    if (qjContent && !qjContent.classList.contains('coming-soon-wrap')) {
+      qjContent.classList.add('coming-soon-wrap');
+      appendMask(qjContent, '千机');
+    }
+
+    var b2Content = document.querySelector('.screen[data-screen="B2"] .content');
+    if (b2Content) {
+      labelSection(b2Content, '薪资组成', '.work-profile, #wp-root');
+      var wp = b2Content.querySelector('.work-profile, #wp-root');
+      wrapElement(wp, 'dunes-soon-block', '工作画像');
+      labelSectionWithNextClass(b2Content, '绩效考核', 'perf-card');
+      labelSectionWithNextClass(b2Content, '福利', 'me-stats');
+    }
+  })();
+
+  (function wireB2ComingSoonItems() {
+    function showB2SoonToast() {
+      var phone = document.querySelector('.screen[data-screen="B2"] .phone-screen');
+      if (!phone) return;
+      var t = phone.querySelector('.dunes-b2-soon-toast');
+      if (!t) {
+        t = document.createElement('div');
+        t.className = 'dunes-b2-soon-toast';
+        t.style.cssText = 'position:absolute;left:50%;bottom:88px;transform:translateX(-50%);max-width:88%;background:rgba(20,20,20,.88);color:#fff;padding:10px 14px;border-radius:9px;font-size:11.5px;z-index:80;text-align:center';
+        phone.appendChild(t);
+      }
+      t.textContent = '敬请期待';
+      t.style.display = 'block';
+      clearTimeout(t._hideTimer);
+      t._hideTimer = setTimeout(function () { t.style.display = 'none'; }, 2800);
+    }
+    function resetB2SoonVisuals(screen) {
+      if (!screen) return;
+      screen.querySelectorAll('.quick-stats .qs-cell[data-b2-soon]').forEach(function (cell) {
+        var l = (cell.querySelector('.l') || {}).textContent || '';
+        var v = cell.querySelector('.v');
+        if (!v) return;
+        if (l.indexOf('欠票') >= 0) v.innerHTML = '0<small>笔</small>';
+        else v.textContent = '0';
+      });
+      screen.querySelectorAll('.menu-item[data-b2-soon]').forEach(function (mi) {
+        var title = (mi.querySelector('.mi-t') || {}).textContent || '';
+        var desc = mi.querySelector('.mi-d');
+        var badge = mi.querySelector('.num-badge');
+        if (title.indexOf('写汇报') >= 0) {
+          if (desc) desc.textContent = '0 篇 · 0 草稿 · 日 / 周 / 月 / 季';
+          if (badge) { badge.textContent = '0'; badge.className = 'num-badge gray'; }
+        } else if (title.indexOf('会议纪要') >= 0) {
+          if (desc) desc.textContent = '0 条 · 0 已生成 · 0 转写中';
+          if (badge) { badge.textContent = '0'; badge.className = 'num-badge gray'; }
+        } else if (title.indexOf('应付账单') >= 0) {
+          if (desc) desc.textContent = '0 待处理 · 总 ¥0 · 灯塔联动';
+          if (badge) { badge.textContent = '0'; badge.className = 'num-badge gray'; }
+        } else if (title.indexOf('我的合同') >= 0) {
+          if (desc) desc.textContent = '0 份 · 0 临期 · 寄出待回收 0';
+        } else if (title.indexOf('欠票催办') >= 0) {
+          if (desc) desc.textContent = '0 笔 · ¥0 · 欠 0 天';
+          if (badge) { badge.textContent = '0'; badge.className = 'num-badge gray'; }
+        }
+      });
+    }
+    function lockB2Item(el) {
+      if (!el || el.dataset.b2SoonLocked) return;
+      el.dataset.b2SoonLocked = '1';
+      el.dataset.b2Soon = '1';
+      el.removeAttribute('data-go');
+      el.classList.remove('tappable');
+      el.classList.add('b2-soon-disabled');
+      el.addEventListener('click', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        showB2SoonToast();
+      }, true);
+    }
+    function installB2ComingSoon() {
+      var screen = document.querySelector('.screen[data-screen="B2"]');
+      if (!screen) return;
+      screen.querySelectorAll('.quick-stats .qs-cell').forEach(function (cell) {
+        var l = (cell.querySelector('.l') || {}).textContent || '';
+        if (l.indexOf('本月经办') >= 0 || l.indexOf('欠票') >= 0) lockB2Item(cell);
+      });
+      screen.querySelectorAll('.menu-item').forEach(function (mi) {
+        var title = (mi.querySelector('.mi-t') || {}).textContent || '';
+        var go = mi.getAttribute('data-go') || '';
+        var soon = go === 'W2' || go === 'MM0' || go === 'B4' || go === 'A7'
+          || (go === 'B9' && title.indexOf('欠票') >= 0)
+          || (go === 'B1' && title.indexOf('业务工作台') >= 0);
+        if (soon) lockB2Item(mi);
+      });
+      resetB2SoonVisuals(screen);
+    }
+    window.__dunesInstallB2ComingSoon = installB2ComingSoon;
+    window.__dunesResetB2SoonVisuals = function () {
+      resetB2SoonVisuals(document.querySelector('.screen[data-screen="B2"]'));
+    };
+    installB2ComingSoon();
+    (function wireC9BackButton() {
+      var back = document.querySelector('.screen[data-screen="C9"] .ph-back');
+      if (!back) return;
+      back.removeAttribute('data-go');
+      back.setAttribute('data-back', '1');
+      back.classList.add('tappable');
+    })();
+    if (typeof fillQuickStats === 'function') {
+      var origFillQuickStats = fillQuickStats;
+      fillQuickStats = function (screenId, stats) {
+        if (!stats) return origFillQuickStats(screenId, stats);
+        var patched = Object.assign({}, stats);
+        if (screenId === 'B2') {
+          patched.outstandingInvoices = 0;
+        }
+        origFillQuickStats(screenId, patched);
+        if (screenId === 'B2') resetB2SoonVisuals(document.querySelector('.screen[data-screen="B2"]'));
+      };
+    }
+    if (typeof applyMyStats === 'function') {
+      var origApplyMyStats = applyMyStats;
+      applyMyStats = function (stats) {
+        if (!stats) return origApplyMyStats(stats);
+        var patched = Object.assign({}, stats);
+        patched.outstandingInvoices = 0;
+        origApplyMyStats(patched);
+        resetB2SoonVisuals(document.querySelector('.screen[data-screen="B2"]'));
+      };
+    }
+    setTimeout(function () {
+      if (window.WorkbenchLive && typeof window.WorkbenchLive.refreshB2Menu === 'function') {
+        var origRefreshB2Menu = window.WorkbenchLive.refreshB2Menu;
+        window.WorkbenchLive.refreshB2Menu = function (stats) {
+          origRefreshB2Menu(stats);
+          resetB2SoonVisuals(document.querySelector('.screen[data-screen="B2"]'));
+        };
+      }
+    }, 0);
+  })();
+
   __DUNES_DIALOG_JS__
+  (function patchNativeDialogs() {
+    if (window.__dunesNativeDialogPatch) return;
+    window.__dunesNativeDialogPatch = true;
+    var nativeAlert = window.alert.bind(window);
+    window.alert = function (msg) {
+      if (window.DunesDialog && typeof window.DunesDialog.alert === 'function') {
+        return window.DunesDialog.alert(msg == null ? '' : String(msg));
+      }
+      return nativeAlert(msg);
+    };
+    window.dunesConfirm = function (msg) {
+      if (window.DunesDialog && typeof window.DunesDialog.confirm === 'function') {
+        return window.DunesDialog.confirm(msg == null ? '' : String(msg));
+      }
+      return Promise.resolve(window.confirm(msg));
+    };
+  })();
   __DUNES_PROFILE_JS__
+  (function initB2AfterProfileJs() {
+    if (typeof readCachedProfile === 'function' && typeof applyUserProfile === 'function') {
+      applyUserProfile(readCachedProfile());
+    }
+    if (typeof refreshUserProfile === 'function') refreshUserProfile();
+    var active = document.querySelector('.screen.active');
+    var sid = active && active.dataset ? active.dataset.screen : 'B2';
+    if (sid === 'B2') {
+      if (typeof loadB2Workbench === 'function') loadB2Workbench();
+      else if (typeof window.__dunesRefreshRootTab === 'function') window.__dunesRefreshRootTab('B2');
+    }
+  })();
   __DUNES_CONTACTS_JS__
   __DUNES_INBOX_JS__
+  __DUNES_NOVA_API_JS__
   __DUNES_IM_JS__
   __DUNES_KB_CHAT_JS__
   __DUNES_NOVA_JS__
@@ -4217,6 +6143,15 @@ window.DunesGroupInfo = (function () {
         }
         return;
       }
+      var goC4 = e.target.closest('[data-go="C4"]');
+      if (goC4 && !goC4.hasAttribute('data-conv-id')) {
+        var novaOnly = Number(localStorage.getItem('dunes_nova_conv_id') || 0);
+        if (!novaOnly) novaOnly = Number(localStorage.getItem('dunes_nova_conv_id') || 0);
+        if (novaOnly > 0) {
+          window.pendingConvId = novaOnly;
+          try { pendingConvId = novaOnly; } catch (e3) {}
+        }
+      }
       var t = e.target.closest('[data-conv-id],[data-peer-user-id],[data-contact-user-id]');
       if (!t) return;
       var cid = t.dataset.convId ? Number(t.dataset.convId) : 0;
@@ -4226,19 +6161,66 @@ window.DunesGroupInfo = (function () {
         return;
       }
       if (t.dataset.contactUserId) window.pendingContactUserId = Number(t.dataset.contactUserId);
+      else if (t.dataset.avatarUserId) window.pendingContactUserId = Number(t.dataset.avatarUserId);
       else if (t.dataset.peerUserId) window.pendingContactUserId = Number(t.dataset.peerUserId);
       if (t.dataset.peerUserId) window.__dunesPendingPeerUserId = Number(t.dataset.peerUserId);
       if (cid) {
+        var goTarget = t.closest('[data-go]');
+        if (goTarget && goTarget.dataset.go === 'C4') {
+          var novaActive = Number(localStorage.getItem('dunes_nova_conv_id') || 0);
+          if (!novaActive) novaActive = Number(localStorage.getItem('dunes_nova_conv_id') || 0);
+          if (novaActive > 0) cid = novaActive;
+          else if (window.DunesInbox && typeof window.DunesInbox.refreshNovaInboxPreview === 'function') {
+            window.DunesInbox.refreshNovaInboxPreview();
+          }
+        }
         window.pendingConvId = cid;
         try { pendingConvId = cid; } catch (e2) {}
       }
     }, true);
   })();
 
+  var ROOT_TABS = { C1: 1, QJ: 1, LH: 1, B2: 1 };
+  function refreshRootTab(id) {
+    if (!id || !ROOT_TABS[id]) return;
+    if (id === 'B2') {
+      if (window.DunesScreenLoader) window.DunesScreenLoader.show('B2', '加载中…');
+      if (typeof refreshUserProfile === 'function') refreshUserProfile();
+      var chain = Promise.resolve();
+      if (typeof loadB2Workbench === 'function') {
+        chain = loadB2Workbench().catch(function () {});
+      } else if (window.WorkbenchLive && typeof WorkbenchLive.refreshMyBadgeFromServer === 'function') {
+        chain = WorkbenchLive.refreshMyBadgeFromServer().catch(function () {});
+      }
+      chain.finally(function () {
+        if (window.DunesScreenLoader) window.DunesScreenLoader.hide('B2');
+      });
+      if (typeof window.__dunesResetB2SoonVisuals === 'function') window.__dunesResetB2SoonVisuals();
+    }
+    if (id === 'C1') {
+      if (window.DunesInbox && typeof DunesInbox.loadC1 === 'function') DunesInbox.loadC1();
+      else if (window.DunesApi && typeof DunesApi.loadConversations === 'function') DunesApi.loadConversations();
+      if (window.DunesInbox && typeof DunesInbox.refreshCommBadgeFromServer === 'function') {
+        DunesInbox.refreshCommBadgeFromServer().catch(function () {});
+      }
+    }
+  }
+  window.__dunesRefreshRootTab = refreshRootTab;
+
   var origSetScreen = typeof setScreen === 'function' ? setScreen : null;
   if (origSetScreen) {
     setScreen = function (id, back) {
       var prev = document.querySelector('.screen.active')?.dataset?.screen;
+      var curScreen = document.querySelector('.screen.active');
+      if (prev === 'C4' && (id === 'C11' || id === 'C12') && window.DunesNovaChat
+        && typeof window.DunesNovaChat.isGenerationActive === 'function'
+        && window.DunesNovaChat.isGenerationActive()) {
+        return;
+      }
+      if (curScreen && curScreen.dataset && curScreen.dataset.screen === id && ROOT_TABS[id]) {
+        refreshRootTab(id);
+        return;
+      }
       var finish = function () {
         if (prev === 'C4' && id !== 'C4' && window.DunesNovaChat && typeof window.DunesNovaChat.onLeave === 'function') {
           window.DunesNovaChat.onLeave();
@@ -4247,8 +6229,20 @@ window.DunesGroupInfo = (function () {
           window.DunesKbChat.onLeave(prev);
         }
         if (prev === 'C12' && id !== 'C12') window.__dunesC12NovaMode = false;
+        if ((prev === 'C2' || prev === 'C5' || prev === 'C13' || prev === 'C6') && id === 'C1') {
+          window.pendingConvId = 0;
+          try { pendingConvId = 0; } catch (e) {}
+          window.__dunesActiveConvId = null;
+        }
+        if (id === 'C4') {
+          var novaActive = Number(localStorage.getItem('dunes_nova_conv_id') || 0);
+          if (novaActive > 0) {
+            window.pendingConvId = novaActive;
+            try { pendingConvId = novaActive; } catch (e) {}
+          }
+        }
         origSetScreen(id, back);
-        if (id === 'B2' && typeof refreshUserProfile === 'function') refreshUserProfile();
+        if (ROOT_TABS[id]) refreshRootTab(id);
         if (id === 'C4' && typeof wireNovaC4 === 'function') wireNovaC4();
       if (window.DunesNovaChat && typeof window.DunesNovaChat.onScreen === 'function') {
         window.DunesNovaChat.onScreen(id);
@@ -4267,6 +6261,12 @@ window.DunesGroupInfo = (function () {
       }
       if (window.DunesGroupInfo && typeof window.DunesGroupInfo.onScreen === 'function') {
         window.DunesGroupInfo.onScreen(id);
+      }
+      if (id === 'B3' && window.XFlowDynamic && typeof window.XFlowDynamic.loadB3Templates === 'function') {
+        window.XFlowDynamic.loadB3Templates();
+      }
+      if (id === 'XF' && window.XFlowDynamic && typeof window.XFlowDynamic.renderCurrentForm === 'function') {
+        window.XFlowDynamic.renderCurrentForm();
       }
       try {
         if (window.DunesFlutterChannel) {
@@ -4297,8 +6297,8 @@ window.DunesGroupInfo = (function () {
           if (id && window.DunesFlutterChannel) {
             window.DunesFlutterChannel.postMessage(JSON.stringify({ type: 'screen', id: id }));
           }
-          if (id === 'B2' && typeof refreshUserProfile === 'function') refreshUserProfile();
-          if (id === 'C1' && window.DunesInbox) window.DunesInbox.loadC1();
+          if (ROOT_TABS[id]) refreshRootTab(id);
+          else if (id === 'C1' && window.DunesInbox) window.DunesInbox.loadC1();
           if ((id === 'C5' || id === 'C2') && window.DunesImChat) window.DunesImChat.onScreen(id);
         } catch (e) {}
       };
@@ -4327,13 +6327,152 @@ window.DunesGroupInfo = (function () {
     }
   };
 
+  (function wirePullToRefresh() {
+    if (window.__dunesPullRefreshWired) return;
+    window.__dunesPullRefreshWired = true;
+    var PTR = { startY: 0, pulling: false, activeEl: null, threshold: 72 };
+    function activeScreenEl() {
+      return document.querySelector('.screen.active');
+    }
+    function contentEl(screen) {
+      return screen && screen.querySelector('.content');
+    }
+    function ensureIndicator(content) {
+      if (!content) return null;
+      var existing = content.parentElement && content.parentElement.querySelector('.dunes-ptr-indicator');
+      if (existing) return existing;
+      var wrap = content.parentElement;
+      if (!wrap || !wrap.classList.contains('screen')) return null;
+      if (getComputedStyle(wrap).position === 'static') wrap.style.position = 'relative';
+      var el = document.createElement('div');
+      el.className = 'dunes-ptr-indicator';
+      el.innerHTML = '<div class="dunes-ptr-inner"><i class="ti ti-arrow-down"></i><span class="dunes-ptr-text">下拉刷新</span></div>';
+      wrap.insertBefore(el, content);
+      return el;
+    }
+    async function refreshActiveScreen() {
+      var id = activeScreenEl()?.dataset?.screen || 'B2';
+      if (ROOT_TABS[id]) {
+        refreshRootTab(id);
+        return;
+      }
+      var tasks = [];
+      if (window.WorkbenchLive) {
+        if (id === 'B1' && WorkbenchLive.loadB1ApprovalTodos) tasks.push(WorkbenchLive.loadB1ApprovalTodos());
+        if (id === 'B14' && WorkbenchLive.loadB14Initiated) tasks.push(WorkbenchLive.loadB14Initiated());
+        if (id === 'P1' && WorkbenchLive.loadCCProposals) tasks.push(WorkbenchLive.loadCCProposals());
+        if (id === 'B3' && window.XFlowDynamic && XFlowDynamic.loadB3Templates) {
+          try { window.XFlowDynamic.loadB3Templates(); } catch (e) {}
+        }
+      }
+      if (window.DunesInbox && typeof DunesInbox.onScreen === 'function') {
+        try { DunesInbox.onScreen(id); } catch (e) {}
+      }
+      if (window.DunesContacts && typeof DunesContacts.onScreen === 'function') {
+        try { DunesContacts.onScreen(id); } catch (e) {}
+      }
+      if (window.DunesImChat && typeof DunesImChat.onScreen === 'function') {
+        try { DunesImChat.onScreen(id); } catch (e) {}
+      }
+      if (window.DunesKbChat && typeof DunesKbChat.onScreen === 'function') {
+        try { DunesKbChat.onScreen(id); } catch (e) {}
+      }
+      if (window.DunesNovaChat && typeof DunesNovaChat.onScreen === 'function') {
+        try { DunesNovaChat.onScreen(id); } catch (e) {}
+      }
+      if (window.DunesGroupInfo && typeof DunesGroupInfo.onScreen === 'function') {
+        try { DunesGroupInfo.onScreen(id); } catch (e) {}
+      }
+      await Promise.all(tasks.map(function (t) { return Promise.resolve(t).catch(function () {}); }));
+    }
+    window.__dunesRefreshActiveScreen = refreshActiveScreen;
+    function resetPtr(content, indicator) {
+      if (content) {
+        content.classList.remove('dunes-ptr-pulling');
+        content.style.transform = '';
+      }
+      if (indicator) {
+        indicator.classList.remove('pulling', 'refreshing');
+        indicator.style.height = '0px';
+        var text = indicator.querySelector('.dunes-ptr-text');
+        if (text) text.textContent = '下拉刷新';
+        var icon = indicator.querySelector('.ti');
+        if (icon) icon.className = 'ti ti-arrow-down';
+      }
+      PTR.pulling = false;
+      PTR.activeEl = null;
+    }
+    document.addEventListener('touchstart', function (ev) {
+      var content = contentEl(activeScreenEl());
+      if (!content || ev.touches.length !== 1) return;
+      if ((content.scrollTop || 0) > 2) return;
+      PTR.startY = ev.touches[0].clientY;
+      PTR.activeEl = content;
+      PTR.pulling = false;
+    }, { passive: true });
+    document.addEventListener('touchmove', function (ev) {
+      if (!PTR.activeEl || ev.touches.length !== 1) return;
+      var dy = ev.touches[0].clientY - PTR.startY;
+      if (dy <= 0) {
+        if (PTR.pulling) resetPtr(PTR.activeEl, ensureIndicator(PTR.activeEl));
+        return;
+      }
+      if ((PTR.activeEl.scrollTop || 0) > 2) return;
+      PTR.pulling = true;
+      var indicator = ensureIndicator(PTR.activeEl);
+      if (!indicator) return;
+      var h = Math.min(96, dy * 0.45);
+      indicator.style.height = h + 'px';
+      indicator.classList.add('pulling');
+      PTR.activeEl.classList.add('dunes-ptr-pulling');
+      PTR.activeEl.style.transform = 'translateY(' + Math.min(36, dy * 0.25) + 'px)';
+      var text = indicator.querySelector('.dunes-ptr-text');
+      var icon = indicator.querySelector('.ti');
+      if (text) text.textContent = dy >= PTR.threshold ? '松开刷新' : '下拉刷新';
+      if (icon) icon.className = dy >= PTR.threshold ? 'ti ti-refresh' : 'ti ti-arrow-down';
+      if (dy > 12) ev.preventDefault();
+    }, { passive: false });
+    document.addEventListener('touchend', function () {
+      if (!PTR.activeEl) return;
+      var content = PTR.activeEl;
+      var indicator = ensureIndicator(content);
+      var text = indicator && indicator.querySelector('.dunes-ptr-text');
+      var shouldRefresh = PTR.pulling && text && text.textContent === '松开刷新';
+      if (!shouldRefresh) {
+        resetPtr(content, indicator);
+        return;
+      }
+      if (indicator) {
+        indicator.classList.add('refreshing');
+        indicator.style.height = '52px';
+        if (text) text.textContent = '刷新中…';
+      }
+      refreshActiveScreen().catch(function () {}).finally(function () {
+        resetPtr(content, indicator);
+      });
+    }, { passive: true });
+  })();
+
   setTimeout(function () {
     if (typeof refreshUserProfile === 'function') refreshUserProfile();
     if (typeof wireNovaC4 === 'function') wireNovaC4();
     if (typeof window.patchNovaIcons === 'function') window.patchNovaIcons();
+    if (window.DunesNovaApi && typeof window.DunesNovaApi.ensureNovaProfileSession === 'function') {
+      window.DunesNovaApi.ensureNovaProfileSession();
+    }
+    if (window.DunesNovaChat && typeof window.DunesNovaChat.prefetchServerHistory === 'function') {
+      window.DunesNovaChat.prefetchServerHistory().then(function () {
+        if (window.DunesInbox && typeof window.DunesInbox.refreshNovaInboxPreview === 'function') {
+          window.DunesInbox.refreshNovaInboxPreview();
+        }
+      }).catch(function () {});
+    }
     var active = document.querySelector('.screen.active')?.dataset?.screen || 'B2';
     if (window.DunesInbox && typeof window.DunesInbox.refreshCommBadgeFromServer === 'function') {
       window.DunesInbox.refreshCommBadgeFromServer();
+    }
+    if (window.WorkbenchLive && typeof window.WorkbenchLive.refreshMyBadgeFromServer === 'function') {
+      window.WorkbenchLive.refreshMyBadgeFromServer();
     }
     if (window.DunesInbox && typeof window.DunesInbox.onScreen === 'function') {
       window.DunesInbox.onScreen(active);
@@ -4360,18 +6499,103 @@ window.DunesGroupInfo = (function () {
 })();
 ''';
 
+  static const prototypeBaseUrl = 'https://app.dunes.local/';
+
+  static String novaStorageBridgeScript() {
+    return r'''
+(function () {
+  var EXACT = {
+    'dunes_nova_conv_id': 1,
+    'dunes_nova_profile_session': 1,
+    'dunes_nova_local_history': 1,
+    'dunes_nova_chat_model': 1,
+    'dunes_nova_view_since': 1,
+    'dunes_nova_history_sync_queue': 1,
+    'dunes_ai_local_purge_v': 1,
+    'dunes_kb_local_history': 1,
+    'dunes_kb_conv_id': 1,
+    'dunes_kb_last_preview': 1
+  };
+  var PREFIX = ['dunes_nova_msgs_', 'dunes_kb_msgs_'];
+  function shouldPersist(key) {
+    if (!key) return false;
+    if (EXACT[key]) return true;
+    for (var i = 0; i < PREFIX.length; i++) {
+      if (key.indexOf(PREFIX[i]) === 0) return true;
+    }
+    return false;
+  }
+  function collectNovaPersistState() {
+    var out = {};
+    Object.keys(EXACT).forEach(function (k) {
+      try {
+        var v = localStorage.getItem(k);
+        if (v != null && v !== '') out[k] = v;
+      } catch (e) {}
+    });
+    try {
+      for (var i = 0; i < localStorage.length; i++) {
+        var k = localStorage.key(i);
+        if (!k || !shouldPersist(k) || EXACT[k]) continue;
+        var val = localStorage.getItem(k);
+        if (val != null && val !== '') out[k] = val;
+      }
+    } catch (e2) {}
+    return out;
+  }
+  function emitNovaPersistState() {
+    var data = collectNovaPersistState();
+    var payload = JSON.stringify({ type: 'nova-storage', data: data });
+    try {
+      if (window.DunesFlutterChannel && window.DunesFlutterChannel.postMessage) {
+        window.DunesFlutterChannel.postMessage(payload);
+      }
+    } catch (e) {}
+    try {
+      parent.postMessage({ source: 'dunes-prototype', type: 'nova-storage', data: data }, '*');
+    } catch (e2) {}
+  }
+  function scheduleNovaPersist() {
+    clearTimeout(window.__dunesNovaPersistTimer);
+    window.__dunesNovaPersistTimer = setTimeout(emitNovaPersistState, 500);
+  }
+  window.__dunesScheduleNovaPersist = scheduleNovaPersist;
+  window.__dunesEmitNovaPersistState = emitNovaPersistState;
+  try {
+    var _setItem = localStorage.setItem.bind(localStorage);
+    localStorage.setItem = function (k, v) {
+      _setItem(k, v);
+      if (shouldPersist(k)) scheduleNovaPersist();
+    };
+    var _removeItem = localStorage.removeItem.bind(localStorage);
+    localStorage.removeItem = function (k) {
+      _removeItem(k);
+      if (shouldPersist(k)) scheduleNovaPersist();
+    };
+  } catch (e3) {}
+  window.addEventListener('pagehide', emitNovaPersistState);
+  if (window.DunesNovaApi && typeof window.DunesNovaApi.ensureNovaProfileSession === 'function') {
+    window.DunesNovaApi.ensureNovaProfileSession();
+  }
+})();
+''';
+  }
+
   static String bootstrapScript() {
-    return DunesDefaults.bindApiBase(
-      bootstrapJs
-          .replaceAll('__DUNES_CSS__', _escapeJsString(css))
-          .replaceAll('__DUNES_DIALOG_JS__', _dialogJs)
-          .replaceAll('__DUNES_PROFILE_JS__', _profileJs)
-          .replaceAll('__DUNES_CONTACTS_JS__', _contactsJs)
-          .replaceAll('__DUNES_INBOX_JS__', _inboxJs)
-          .replaceAll('__DUNES_IM_JS__', ImChatInjection.js)
-          .replaceAll('__DUNES_KB_CHAT_JS__', KbChatInjection.js)
-          .replaceAll('__DUNES_NOVA_JS__', NovaChatInjection.js)
-          .replaceAll('__DUNES_GROUP_JS__', _groupInfoJs),
+    return NovaConfig.bindNovaBase(
+      DunesDefaults.bindApiBase(
+        bootstrapJs
+            .replaceAll('__DUNES_CSS__', _escapeJsString(css))
+            .replaceAll('__DUNES_DIALOG_JS__', _dialogJs)
+            .replaceAll('__DUNES_PROFILE_JS__', _profileJs)
+            .replaceAll('__DUNES_CONTACTS_JS__', _contactsJs)
+            .replaceAll('__DUNES_INBOX_JS__', _inboxJs)
+            .replaceAll('__DUNES_NOVA_API_JS__', NovaApiInjection.js)
+            .replaceAll('__DUNES_IM_JS__', ImChatInjection.js)
+            .replaceAll('__DUNES_KB_CHAT_JS__', KbChatInjection.js)
+            .replaceAll('__DUNES_NOVA_JS__', NovaChatInjection.js)
+            .replaceAll('__DUNES_GROUP_JS__', _groupInfoJs),
+      ),
     );
   }
 
@@ -4390,9 +6614,12 @@ window.DunesGroupInfo = (function () {
     if (_tablerIconsStyleFailed) return null;
     if (_tablerIconsStyleCache != null) return _tablerIconsStyleCache;
     try {
-      final css =
-          await rootBundle.loadString('assets/prototype/tabler-icons.min.css');
-      final fontBytes = await rootBundle.load('assets/prototype/tabler-icons.woff2');
+      final css = await rootBundle.loadString(
+        'assets/prototype/tabler-icons.min.css',
+      );
+      final fontBytes = await rootBundle.load(
+        'assets/prototype/tabler-icons.woff2',
+      );
       final fontUri =
           'data:font/woff2;base64,${base64Encode(fontBytes.buffer.asUint8List())}';
       final inlined = css
@@ -4408,12 +6635,67 @@ window.DunesGroupInfo = (function () {
             RegExp(r'url\("\./fonts/tabler-icons\.ttf[^"]*"\)'),
             'url("$fontUri")',
           );
-      _tablerIconsStyleCache = '<style id="dunes-tabler-icons">$inlined</style>';
+      _tablerIconsStyleCache =
+          '<style id="dunes-tabler-icons">$inlined</style>';
       return _tablerIconsStyleCache;
     } catch (_) {
       _tablerIconsStyleFailed = true;
       return null;
     }
+  }
+
+  static Future<String> _loadAsset(String path) =>
+      rootBundle.loadString('assets/prototype/$path');
+
+  /// Flutter WebView / blob 无法加载相对路径 script src，须内联 XFlow 资源。
+  static Future<String> inlineXFlowAssets(String html) async {
+    final appUi = await _loadAsset('dunes_app_ui.js');
+    final workbenchLive = await _loadAsset('workbench_live.js');
+    final linkage = await _loadAsset('xflow_linkage.js');
+    final render = await _loadAsset('xflow_render.js');
+    final detail = await _loadAsset('xflow_detail.js');
+    final dynamic = await _loadAsset('xflow_dynamic.js');
+    final fieldsCss = await _loadAsset('xflow_fields.css');
+    var out = html;
+    if (out.contains('<head>')) {
+      out = out.replaceFirst(
+        '<head>',
+        '<head><style id="xf-fields-css">$fieldsCss</style>',
+      );
+    }
+    out = out.replaceFirst(
+      '<script src="dunes_app_ui.js"></script>',
+      '<script>$appUi</script>',
+    );
+    const workbenchTag = '<script src="workbench_live.js"></script>';
+    if (out.contains(workbenchTag)) {
+      out = out.replaceFirst(
+        workbenchTag,
+        '<script>$workbenchLive</script>',
+      );
+    } else if (out.contains('<script src="xflow_linkage.js"></script>')) {
+      out = out.replaceFirst(
+        '<script src="xflow_linkage.js"></script>',
+        '<script>$workbenchLive</script>\n<script src="xflow_linkage.js"></script>',
+      );
+    }
+    out = out.replaceFirst(
+      '<script src="xflow_linkage.js"></script>',
+      '<script>$linkage</script>',
+    );
+    out = out.replaceFirst(
+      '<script src="xflow_render.js"></script>',
+      '<script>$render</script>',
+    );
+    out = out.replaceFirst(
+      '<script src="xflow_detail.js"></script>',
+      '<script>$detail</script>',
+    );
+    out = out.replaceFirst(
+      '<script src="xflow_dynamic.js"></script>',
+      '<script>$dynamic</script>',
+    );
+    return out;
   }
 
   static Future<String> preparePrototypeHtml(
@@ -4424,6 +6706,8 @@ window.DunesGroupInfo = (function () {
     String? displayName,
     String? phone,
     List<String>? roles,
+    Map<String, String>? novaLocalStorage,
+    Map<String, String>? novaWebStorage,
   }) async {
     final iconBytes = await rootBundle.load('assets/prototype/nova-icon.png');
     final iconDataUri =
@@ -4439,6 +6723,8 @@ window.DunesGroupInfo = (function () {
       displayName: displayName,
       phone: phone,
       roles: roles,
+      novaLocalStorage: novaLocalStorage,
+      novaWebStorage: novaWebStorage,
     );
     if (result.contains('<head>')) {
       result = result.replaceFirst(
@@ -4456,7 +6742,29 @@ window.DunesGroupInfo = (function () {
         '',
       );
     }
-    return DunesDefaults.bindApiBase(result);
+    result = await inlineXFlowAssets(result);
+    result = DunesDefaults.bindApiBase(result);
+    return applyAppShellMode(result);
+  }
+
+  /// 在 HTML 解析阶段就进入 App 全屏模式，避免先闪出原型介绍页（hero）。
+  static String applyAppShellMode(String html) {
+    var result = html;
+    if (result.contains('<head>')) {
+      result = result.replaceFirst(
+        '<head>',
+        '<head><style id="dunes-flutter-shell">$css</style>',
+      );
+    }
+    if (result.contains('<body class="flutter-app-mode">')) {
+      return result;
+    }
+    if (result.contains('<body>')) {
+      result = result.replaceFirst('<body>', '<body class="flutter-app-mode">');
+    } else {
+      result = result.replaceFirst('<body ', '<body class="flutter-app-mode" ');
+    }
+    return result;
   }
 
   static String injectAuthPrelude(
@@ -4467,9 +6775,11 @@ window.DunesGroupInfo = (function () {
     String? displayName,
     String? phone,
     List<String>? roles,
+    Map<String, String>? novaLocalStorage,
+    Map<String, String>? novaWebStorage,
   }) {
     final script =
-        '<script>${authScript(token: token, apiBase: apiBase, userId: userId, displayName: displayName, phone: phone, roles: roles)}</script>';
+        '<script>${authScript(token: token, apiBase: apiBase, userId: userId, displayName: displayName, phone: phone, roles: roles, novaLocalStorage: novaLocalStorage, novaWebStorage: novaWebStorage)}</script>';
     if (html.contains('<head>')) {
       return html.replaceFirst('<head>', '<head>$script');
     }
@@ -4483,6 +6793,15 @@ window.DunesGroupInfo = (function () {
     return '$ws/connection/websocket';
   }
 
+  static String _flowApiBaseFromApi(String? apiBase) {
+    if (apiBase == null || apiBase.isEmpty) return DunesDefaults.flowApiBase;
+    final uri = Uri.tryParse(apiBase);
+    if (uri == null || uri.host.isEmpty) return DunesDefaults.flowApiBase;
+    return uri
+        .replace(port: DunesDefaults.flowPort, path: '/api/v1')
+        .toString();
+  }
+
   static String authScript({
     String? token,
     String? apiBase,
@@ -4490,15 +6809,26 @@ window.DunesGroupInfo = (function () {
     String? displayName,
     String? phone,
     List<String>? roles,
+    Map<String, String>? novaLocalStorage,
+    Map<String, String>? novaWebStorage,
   }) {
     final wsBase = _wsBaseFromApi(apiBase);
     final roleList = roles;
     final entries = <String, String>{};
+    if (novaWebStorage != null) entries.addAll(novaWebStorage);
+    entries['dunes_nova_base'] =
+        novaLocalStorage?['dunes_nova_base'] ?? NovaConfig.baseUrl;
+    if (novaLocalStorage != null) entries.addAll(novaLocalStorage);
     if (token != null && token.isNotEmpty) {
       entries['dunes_token'] = token;
       entries['dunes_jwt'] = token;
     }
-    if (apiBase != null && apiBase.isNotEmpty) entries['dunes_api_base'] = apiBase;
+    if (apiBase != null && apiBase.isNotEmpty) {
+      entries['dunes_api_base'] = apiBase;
+      entries['dunes_flow_api_base'] = _flowApiBaseFromApi(apiBase);
+    } else {
+      entries['dunes_flow_api_base'] = DunesDefaults.flowApiBase;
+    }
     if (wsBase != null) entries['dunes_ws_base'] = wsBase;
     if (userId != null) entries['dunes_user_id'] = '$userId';
     if (displayName != null && displayName.isNotEmpty) {
@@ -4509,12 +6839,21 @@ window.DunesGroupInfo = (function () {
       entries['dunes_roles'] = jsonEncode(roleList);
     }
     final writes = entries.entries
-        .map((e) => "localStorage.setItem('${e.key}', ${_escapeJsString(e.value)});")
+        .map(
+          (e) =>
+              "localStorage.setItem('${e.key}', ${_escapeJsString(e.value)});",
+        )
         .join();
     final windowApiBase = (apiBase != null && apiBase.isNotEmpty)
         ? 'window.__dunesApiBase=${_escapeJsString(apiBase)};'
         : '';
-    return 'try{$windowApiBase$writes}catch(e){}';
+    final windowNovaBase =
+        "window.__dunesNovaBase=${_escapeJsString(entries['dunes_nova_base'] ?? NovaConfig.baseUrl)};";
+    final windowNovaKey = entries['dunes_nova_api_key'];
+    final windowNovaKeyWrite = windowNovaKey != null && windowNovaKey.isNotEmpty
+        ? 'window.__dunesNovaApiKey=${_escapeJsString(windowNovaKey)};'
+        : '';
+    return 'try{$windowApiBase$windowNovaBase$windowNovaKeyWrite$writes;${novaStorageBridgeScript()}}catch(e){}';
   }
 
   static String _escapeJsString(String s) {
@@ -4524,7 +6863,8 @@ window.DunesGroupInfo = (function () {
   static String goToScreen(String screenId) =>
       "window.DunesFlutter && window.DunesFlutter.go('$screenId');";
 
-  static String goBack() => "window.DunesFlutter && window.DunesFlutter.back();";
+  static String goBack() =>
+      "window.DunesFlutter && window.DunesFlutter.back();";
 
   static String currentScreen() =>
       "window.DunesFlutter ? window.DunesFlutter.currentScreen() : 'B2';";

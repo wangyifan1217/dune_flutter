@@ -27,8 +27,12 @@ class AuthService {
     final resp = await _client.post(
       uri,
       headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({'phone': phone}),
+      body: jsonEncode({'phone': phone, 'channel': 'app'}),
     );
+    if (resp.statusCode == 403) {
+      final msg = _apiMessage(resp.body) ?? '账号已停用';
+      throw AuthException(msg);
+    }
     if (resp.statusCode < 200 || resp.statusCode >= 300) {
       final msg = _apiMessage(resp.body) ?? '发送验证码失败：${resp.statusCode}';
       throw AuthException(msg);
@@ -42,17 +46,21 @@ class AuthService {
     if (!RegExp(r'^\d{11}$').hasMatch(phone)) {
       throw AuthException('请输入 11 位手机号');
     }
-    if (!RegExp(r'^\d{5}$').hasMatch(code)) {
-      throw AuthException('请输入 5 位验证码');
+    if (!RegExp(r'^\d{6}$').hasMatch(code)) {
+      throw AuthException('请输入 6 位验证码');
     }
 
     final uri = Uri.parse('$apiBase/auth/sms/token');
     final response = await _client.post(
       uri,
       headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({'phone': phone, 'code': code}),
+      body: jsonEncode({'phone': phone, 'code': code, 'channel': 'app'}),
     );
 
+    if (response.statusCode == 403) {
+      final msg = _apiMessage(response.body) ?? '账号已停用';
+      throw AuthException(msg);
+    }
     if (response.statusCode < 200 || response.statusCode >= 300) {
       final msg = _apiMessage(response.body) ?? '登录失败：${response.statusCode}';
       throw AuthException(msg);

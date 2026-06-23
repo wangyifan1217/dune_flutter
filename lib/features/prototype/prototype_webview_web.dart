@@ -1,6 +1,7 @@
 // ignore_for_file: avoid_web_libraries_in_flutter, deprecated_member_use
 
 import 'dart:async';
+import 'dart:convert';
 import 'dart:html' as html;
 import 'dart:ui_web' as ui_web;
 
@@ -8,6 +9,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../core/navigation/navigation_controller.dart';
+import '../nova/nova_web_storage.dart';
 import 'mobile_injection.dart';
 
 /// Flutter Web / Chrome 端使用 iframe 承载原型。
@@ -26,6 +28,7 @@ class PrototypeWebView extends StatefulWidget {
     this.displayName,
     this.phone,
     this.roles = const [],
+    this.novaLocalStorage,
   });
 
   final DunesNavigationController navigation;
@@ -37,6 +40,7 @@ class PrototypeWebView extends StatefulWidget {
   final String? displayName;
   final String? phone;
   final List<String> roles;
+  final Map<String, String>? novaLocalStorage;
 
   @override
   State<PrototypeWebView> createState() => PrototypeWebViewState();
@@ -50,6 +54,7 @@ class PrototypeWebViewState extends State<PrototypeWebView> {
   StreamSubscription<html.MessageEvent>? _messageSub;
   StreamSubscription<html.Event>? _resizeSub;
   String? _blobUrl;
+  Map<String, String> _restoredNovaStorage = const {};
   bool _ready = false;
 
   @override
@@ -69,7 +74,15 @@ class PrototypeWebViewState extends State<PrototypeWebView> {
     _messageSub = html.window.onMessage.listen(_onFrameMessage);
     _syncIframeSize();
     _resizeSub = html.window.onResize.listen((_) => _syncIframeSize());
-    _loadPrototype();
+    _bootstrap();
+  }
+
+  Future<void> _bootstrap() async {
+    final uid = widget.userId ?? 0;
+    if (uid > 0) {
+      _restoredNovaStorage = await NovaWebStorage.load(uid);
+    }
+    await _loadPrototype();
   }
 
   static void _installPlatformViewStyles() {
@@ -93,10 +106,8 @@ flt-platform-view iframe {
   }
 
   void _syncIframeSize() {
-    final w = html.window.innerWidth;
-    final h = html.window.innerHeight;
-    _iframe.style.width = '${w}px';
-    _iframe.style.height = '${h}px';
+    _iframe.style.width = '100%';
+    _iframe.style.height = '100%';
   }
 
   void _revokeBlobUrl() {
@@ -116,8 +127,10 @@ flt-platform-view iframe {
       displayName: widget.displayName,
       phone: widget.phone,
       roles: widget.roles,
+      novaLocalStorage: widget.novaLocalStorage,
+      novaWebStorage: _restoredNovaStorage,
     );
-    final htmlContent = await _injectWebBridge(authed);
+    final htmlContent = await _injectWebBridge(authed, widget.initialScreen);
     _revokeBlobUrl();
     final blob = html.Blob([htmlContent], 'text/html');
     _blobUrl = html.Url.createObjectUrlFromBlob(blob);
@@ -126,8 +139,9 @@ flt-platform-view iframe {
     if (mounted) setState(() => _ready = true);
   }
 
-  Future<String> _injectWebBridge(String htmlSource) async {
+  Future<String> _injectWebBridge(String htmlSource, String initialScreen) async {
     final centrifuge = await MobileInjection.centrifugeScript();
+    final landing = initialScreen.isNotEmpty ? initialScreen : 'B2';
     final bridge = '''
 <script>
 $centrifuge
@@ -202,7 +216,12 @@ ${MobileInjection.bootstrapScript()}
   setTimeout(function () {
     if (typeof refreshUserProfile === 'function') refreshUserProfile();
     if (typeof wireNovaC4 === 'function') wireNovaC4();
-    notify(activeId());
+    var landing = ${jsonEncode(landing)};
+    if (landing && landing !== activeId()) {
+      if (typeof go === 'function') go(landing);
+      else if (typeof setScreen === 'function') setScreen(landing, false);
+    }
+    notify(landing || activeId());
   }, 120);
 })();
 </script>
@@ -217,6 +236,16 @@ ${MobileInjection.bootstrapScript()}
     final type = data['type'];
     if (type == 'logout') {
       widget.onLogout?.call();
+      return;
+    }
+    if (type == 'nova-storage') {
+      final raw = data['data'];
+      if (raw is Map && widget.userId != null && widget.userId! > 0) {
+        NovaWebStorage.save(
+          widget.userId!,
+          Map<String, dynamic>.from(raw),
+        );
+      }
       return;
     }
     if (type == 'html-input-focus') {
@@ -257,7 +286,7 @@ ${MobileInjection.bootstrapScript()}
 
   Future<void> reloadPrototype() async {
     setState(() => _ready = false);
-    await _loadPrototype();
+    await _bootstrap();
   }
 
   @override
@@ -270,10 +299,7 @@ ${MobileInjection.bootstrapScript()}
 
   @override
   Widget build(BuildContext context) {
-    final size = MediaQuery.sizeOf(context);
-    return SizedBox(
-      width: size.width,
-      height: size.height,
+    return SizedBox.expand(
       child: Stack(
         fit: StackFit.expand,
         children: [

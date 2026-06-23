@@ -20,7 +20,7 @@ const kDunesScreens = <DunesScreenInfo>[
   DunesScreenInfo(id: 'C1', name: '消息', region: DunesRegion.lh),
   DunesScreenInfo(id: 'C2', name: '审批工作群', region: DunesRegion.lh),
   DunesScreenInfo(id: 'C3', name: '通讯录', region: DunesRegion.lh),
-  DunesScreenInfo(id: 'C4', name: 'NOVA', region: DunesRegion.lh),
+  DunesScreenInfo(id: 'C4', name: '云枢', region: DunesRegion.lh),
   DunesScreenInfo(id: 'C5', name: '私聊·邓艳丽', region: DunesRegion.lh),
   DunesScreenInfo(id: 'C6', name: '群信息', region: DunesRegion.lh),
   DunesScreenInfo(id: 'C7', name: '新建会话', region: DunesRegion.lh),

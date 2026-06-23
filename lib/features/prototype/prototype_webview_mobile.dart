@@ -49,7 +49,25 @@ class PrototypeWebViewState extends State<PrototypeWebView> {
   Map<String, String> _restoredNovaStorage = const {};
   bool _ready = false;
   bool _bootstrapStarted = false;
+  bool _fallbackLiteLoaded = false;
   Timer? _bootstrapWatchdog;
+
+  void _trace(String message) {
+    final uid = widget.userId ?? 0;
+    debugPrint('[DUNES_WEBVIEW][uid:$uid] $message');
+  }
+
+  Future<void> _measureStep(String name, Future<void> Function() run) async {
+    final sw = Stopwatch()..start();
+    _trace('$name:start');
+    try {
+      await run();
+      _trace('$name:ok ${sw.elapsedMilliseconds}ms');
+    } catch (error) {
+      _trace('$name:fail ${sw.elapsedMilliseconds}ms error=$error');
+      rethrow;
+    }
+  }
 
   @override
   void initState() {
@@ -79,6 +97,7 @@ class PrototypeWebViewState extends State<PrototypeWebView> {
       ..setNavigationDelegate(
         NavigationDelegate(
           onPageFinished: (_) {
+            _trace('onPageFinished');
             // 仅以 HTML 首屏渲染为准收起全屏 loading，后续增强脚本后台继续注入。
             if (mounted && !_ready) {
               setState(() => _ready = true);
@@ -97,16 +116,30 @@ class PrototypeWebViewState extends State<PrototypeWebView> {
   }
 
   Future<void> _bootstrap() async {
+    final sw = Stopwatch()..start();
+    _trace('_bootstrap:start');
     _bootstrapWatchdog?.cancel();
     _bootstrapWatchdog = Timer(_bootstrapTimeout, _markReady);
     final uid = widget.userId ?? 0;
     if (uid > 0) {
       _restoredNovaStorage = await NovaWebStorage.load(uid);
     }
-    await _loadPrototype();
+    try {
+      await _measureStep('loadPrototype:full', () => _loadPrototype());
+    } catch (error, stack) {
+      _trace('loadPrototype:full failed, retry lite mode');
+      debugPrint('Prototype load failed, retry lite mode: $error\n$stack');
+      if (_fallbackLiteLoaded) rethrow;
+      _fallbackLiteLoaded = true;
+      await _measureStep(
+        'loadPrototype:lite',
+        () => _loadPrototype(lightweightAssets: true),
+      );
+    }
+    _trace('_bootstrap:done ${sw.elapsedMilliseconds}ms');
   }
 
-  Future<void> _loadPrototype() async {
+  Future<void> _loadPrototype({bool lightweightAssets = false}) async {
     final source = await rootBundle.loadString('assets/prototype/index.html');
     await _controller.loadHtmlString(
       await MobileInjection.preparePrototypeHtml(
@@ -119,6 +152,7 @@ class PrototypeWebViewState extends State<PrototypeWebView> {
         roles: widget.roles,
         novaLocalStorage: widget.novaLocalStorage,
         novaWebStorage: _restoredNovaStorage,
+        lightweightAssets: lightweightAssets,
       ),
       baseUrl: MobileInjection.prototypeBaseUrl,
     );
@@ -135,29 +169,76 @@ class PrototypeWebViewState extends State<PrototypeWebView> {
     _bootstrapStarted = true;
 
     try {
-      await _runJs(await MobileInjection.centrifugeScript());
-      await _runJs(MobileInjection.authScript(
-        token: widget.authToken,
-        apiBase: widget.apiBase,
-        userId: widget.userId,
-        displayName: widget.displayName,
-        phone: widget.phone,
-        roles: widget.roles,
-        novaLocalStorage: widget.novaLocalStorage,
-        novaWebStorage: _restoredNovaStorage,
-      ));
-      await _runJs(
-        MobileInjection.bootstrapScript(),
-        timeout: const Duration(seconds: 45),
-      );
+      await _measureStep('inject:js_error_bridge', _installJsErrorBridge);
+      await _measureStep('inject:centrifuge', () async {
+        await _runJs(await MobileInjection.centrifugeScript());
+      });
+      await _measureStep('inject:auth', () async {
+        await _runJs(MobileInjection.authScript(
+          token: widget.authToken,
+          apiBase: widget.apiBase,
+          userId: widget.userId,
+          displayName: widget.displayName,
+          phone: widget.phone,
+          roles: widget.roles,
+          novaLocalStorage: widget.novaLocalStorage,
+          novaWebStorage: _restoredNovaStorage,
+        ));
+      });
+      await _measureStep('inject:bootstrap', () async {
+        await _runJs(
+          MobileInjection.bootstrapScript(),
+          timeout: const Duration(seconds: 45),
+        );
+      });
       if (widget.initialScreen != 'B2') {
-        await navigateTo(widget.initialScreen);
+        await _measureStep('inject:navigate_initial', () async {
+          await navigateTo(widget.initialScreen);
+        });
       }
     } catch (error, stack) {
       debugPrint('Prototype bootstrap failed: $error\n$stack');
     } finally {
       _markReady();
     }
+  }
+
+  Future<void> _installJsErrorBridge() async {
+    await _runJs('''
+      (function () {
+        if (window.__dunesJsErrorBridgeInstalled) return;
+        window.__dunesJsErrorBridgeInstalled = true;
+        function post(type, payload) {
+          try {
+            if (!window.DunesFlutterChannel || !window.DunesFlutterChannel.postMessage) return;
+            window.DunesFlutterChannel.postMessage(JSON.stringify({
+              type: type,
+              data: payload || {}
+            }));
+          } catch (e) {}
+        }
+        window.addEventListener('error', function (event) {
+          post('js-error', {
+            message: event && event.message ? String(event.message) : 'unknown error',
+            source: event && event.filename ? String(event.filename) : '',
+            line: event && event.lineno ? Number(event.lineno) : 0,
+            column: event && event.colno ? Number(event.colno) : 0,
+            stack: event && event.error && event.error.stack ? String(event.error.stack) : ''
+          });
+        });
+        window.addEventListener('unhandledrejection', function (event) {
+          var reason = '';
+          try {
+            var raw = event ? event.reason : '';
+            reason = typeof raw === 'string' ? raw : JSON.stringify(raw);
+          } catch (e) {
+            reason = String((event && event.reason) || '');
+          }
+          post('js-unhandledrejection', { reason: reason });
+        });
+        post('js-bridge-ready', { ok: true });
+      })();
+    ''');
   }
 
   void _markReady() {
@@ -183,6 +264,29 @@ class PrototypeWebViewState extends State<PrototypeWebView> {
             Map<String, dynamic>.from(raw),
           );
         }
+        return;
+      }
+      if (type == 'js-bridge-ready') {
+        _trace('js-bridge-ready');
+        return;
+      }
+      if (type == 'js-error') {
+        final raw = data['data'];
+        final payload = raw is Map ? Map<String, dynamic>.from(raw) : const <String, dynamic>{};
+        _trace(
+          'js-error msg=${payload['message'] ?? ''} '
+          'src=${payload['source'] ?? ''}:${payload['line'] ?? 0}:${payload['column'] ?? 0}',
+        );
+        final stack = payload['stack'];
+        if (stack is String && stack.isNotEmpty) {
+          debugPrint('[DUNES_WEBVIEW][js-stack] $stack');
+        }
+        return;
+      }
+      if (type == 'js-unhandledrejection') {
+        final raw = data['data'];
+        final payload = raw is Map ? Map<String, dynamic>.from(raw) : const <String, dynamic>{};
+        _trace('js-unhandledrejection reason=${payload['reason'] ?? ''}');
         return;
       }
       if (type == 'screen' || type == 'ready') {

@@ -6729,13 +6729,14 @@ window.DunesGroupInfo = (function () {
     List<String>? roles,
     Map<String, String>? novaLocalStorage,
     Map<String, String>? novaWebStorage,
+    bool lightweightAssets = false,
   }) async {
     final iconBytes = await rootBundle.load('assets/prototype/nova-icon.png');
     final iconDataUri =
         'data:image/png;base64,${base64Encode(iconBytes.buffer.asUint8List())}';
     final iconScript =
         "<script>window.__dunesNovaIconSrc=${_escapeJsString(iconDataUri)};</script>";
-    final tablerStyle = await tablerIconsStyle();
+    final tablerStyle = lightweightAssets ? null : await tablerIconsStyle();
     var result = injectAuthPrelude(
       html,
       token: token,
@@ -6763,7 +6764,9 @@ window.DunesGroupInfo = (function () {
         '',
       );
     }
-    result = await inlineXFlowAssets(result);
+    if (!lightweightAssets) {
+      result = await inlineXFlowAssets(result);
+    }
     result = DunesDefaults.bindApiBase(result);
     return applyAppShellMode(result);
   }

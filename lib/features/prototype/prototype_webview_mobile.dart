@@ -50,7 +50,9 @@ class PrototypeWebViewState extends State<PrototypeWebView> {
   bool _ready = false;
   bool _bootstrapStarted = false;
   bool _fallbackLiteLoaded = false;
+  bool _webReadySignalReceived = false;
   Timer? _bootstrapWatchdog;
+  Timer? _emergencyUnlockTimer;
 
   void _trace(String message) {
     final uid = widget.userId ?? 0;
@@ -102,6 +104,7 @@ class PrototypeWebViewState extends State<PrototypeWebView> {
             if (mounted && !_ready) {
               setState(() => _ready = true);
             }
+            _scheduleEmergencyUnlock();
             unawaited(_injectBootstrap());
           },
           onWebResourceError: (error) {
@@ -118,6 +121,9 @@ class PrototypeWebViewState extends State<PrototypeWebView> {
   Future<void> _bootstrap() async {
     final sw = Stopwatch()..start();
     _trace('_bootstrap:start');
+    _webReadySignalReceived = false;
+    _emergencyUnlockTimer?.cancel();
+    _fallbackLiteLoaded = false;
     _bootstrapWatchdog?.cancel();
     _bootstrapWatchdog = Timer(_bootstrapTimeout, _markReady);
     final uid = widget.userId ?? 0;
@@ -200,6 +206,69 @@ class PrototypeWebViewState extends State<PrototypeWebView> {
       debugPrint('Prototype bootstrap failed: $error\n$stack');
     } finally {
       _markReady();
+    }
+  }
+
+  void _scheduleEmergencyUnlock() {
+    _emergencyUnlockTimer?.cancel();
+    _emergencyUnlockTimer = Timer(const Duration(seconds: 8), () {
+      if (!mounted || _webReadySignalReceived) return;
+      _trace('emergency-unlock:trigger');
+      unawaited(_emergencyUnlockWebView());
+    });
+  }
+
+  Future<void> _emergencyUnlockWebView() async {
+    try {
+      await _runJs('''
+        (function () {
+          try {
+            document.body.classList.add('flutter-app-mode');
+            var screens = document.querySelectorAll('.screen');
+            for (var i = 0; i < screens.length; i++) {
+              screens[i].classList.remove('dunes-screen-loading');
+            }
+            var masks = document.querySelectorAll('.dunes-screen-loading-mask');
+            for (var j = 0; j < masks.length; j++) {
+              masks[j].style.display = 'none';
+            }
+            var active = document.querySelector('.screen.active');
+            if (!active && typeof setScreen === 'function') {
+              setScreen('B2', false);
+              active = document.querySelector('.screen.active');
+            }
+            if (!active) {
+              var b2 = document.querySelector('.screen[data-screen="B2"]');
+              if (b2) {
+                for (var k = 0; k < screens.length; k++) {
+                  screens[k].classList.remove('active');
+                }
+                b2.classList.add('active');
+                active = b2;
+              }
+            }
+            if (active) {
+              var content = active.querySelector('.content');
+              if (content) {
+                content.style.visibility = '';
+                content.style.pointerEvents = '';
+              }
+              var stream = active.querySelector('.msg-stream');
+              if (stream) {
+                stream.style.visibility = '';
+                stream.style.pointerEvents = '';
+              }
+            }
+            if (window.DunesFlutterChannel && window.DunesFlutterChannel.postMessage) {
+              var sid = (active && active.dataset && active.dataset.screen) ? active.dataset.screen : 'B2';
+              window.DunesFlutterChannel.postMessage(JSON.stringify({ type: 'ready', id: sid }));
+            }
+          } catch (e) {}
+        })();
+      ''', timeout: const Duration(seconds: 6));
+      _trace('emergency-unlock:done');
+    } catch (error) {
+      _trace('emergency-unlock:fail error=$error');
     }
   }
 
@@ -290,6 +359,8 @@ class PrototypeWebViewState extends State<PrototypeWebView> {
         return;
       }
       if (type == 'screen' || type == 'ready') {
+        _webReadySignalReceived = true;
+        _emergencyUnlockTimer?.cancel();
         final id = data['id'] as String?;
         if (id != null) {
           widget.navigation.syncFromWebView(id);
@@ -322,9 +393,11 @@ class PrototypeWebViewState extends State<PrototypeWebView> {
   }
 
   Future<void> reloadPrototype() async {
+    _emergencyUnlockTimer?.cancel();
     setState(() {
       _ready = false;
       _bootstrapStarted = false;
+      _webReadySignalReceived = false;
     });
     await _bootstrap();
   }
@@ -332,6 +405,7 @@ class PrototypeWebViewState extends State<PrototypeWebView> {
   @override
   void dispose() {
     _bootstrapWatchdog?.cancel();
+    _emergencyUnlockTimer?.cancel();
     widget.navigation.removeListener(_onNavChanged);
     super.dispose();
   }

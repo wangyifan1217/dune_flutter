@@ -54,6 +54,10 @@ abstract final class MobileInjection {
 .flutter-app-mode .notch {
   display: none !important;
 }
+.flutter-app-mode .status-bar {
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
 .flutter-app-mode .phone-screen {
   border-radius: 0 !important;
 }
@@ -6527,9 +6531,7 @@ window.DunesGroupInfo = (function () {
 })();
 ''';
 
-  // Use non-https pseudo origin in WebView to avoid mixed-content fetch
-  // blocking when API base is http://host:6090.
-  static const prototypeBaseUrl = 'http://app.dunes.local/';
+  static const prototypeBaseUrl = 'https://app.dunes.local/';
 
   static String novaStorageBridgeScript() {
     return r'''

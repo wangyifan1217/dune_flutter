@@ -1,9 +1,13 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io' show Platform;
 
+import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:webview_flutter/webview_flutter.dart';
+import 'package:webview_flutter_android/webview_flutter_android.dart';
 import 'package:webview_flutter_wkwebview/webview_flutter_wkwebview.dart';
 
 import '../../core/navigation/navigation_controller.dart';
@@ -51,9 +55,11 @@ class PrototypeWebViewState extends State<PrototypeWebView> {
   bool _bootstrapStarted = false;
   bool _fallbackLiteLoaded = false;
   bool _webReadySignalReceived = false;
+  String? _nativeStatusMessage;
   Timer? _bootstrapWatchdog;
   Timer? _emergencyUnlockTimer;
   Timer? _diagnosticsTimer;
+  Timer? _nativeDiagnosticsTimer;
 
   void _trace(String message) {
     final uid = widget.userId ?? 0;
@@ -76,6 +82,7 @@ class PrototypeWebViewState extends State<PrototypeWebView> {
   void initState() {
     super.initState();
     _controller = _createController();
+    unawaited(_requestAndroidMediaPermissions());
     _bootstrap();
     widget.navigation.addListener(_onNavChanged);
   }
@@ -90,7 +97,12 @@ class PrototypeWebViewState extends State<PrototypeWebView> {
       return const PlatformWebViewControllerCreationParams();
     }();
 
-    final controller = WebViewController.fromPlatformCreationParams(params)
+    final controller = WebViewController.fromPlatformCreationParams(
+      params,
+      onPermissionRequest: (request) {
+        request.grant();
+      },
+    )
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..setBackgroundColor(const Color(0xFFFBFAF6))
       ..addJavaScriptChannel(
@@ -101,6 +113,8 @@ class PrototypeWebViewState extends State<PrototypeWebView> {
         NavigationDelegate(
           onPageFinished: (_) {
             _trace('onPageFinished');
+            _nativeDiagnosticsTimer?.cancel();
+            _setNativeStatus(null);
             // 仅以 HTML 首屏渲染为准收起全屏 loading，后续增强脚本后台继续注入。
             if (mounted && !_ready) {
               setState(() => _ready = true);
@@ -117,7 +131,48 @@ class PrototypeWebViewState extends State<PrototypeWebView> {
         ),
       );
 
+    if (controller.platform is AndroidWebViewController) {
+      final android = controller.platform as AndroidWebViewController;
+      unawaited(android.setMixedContentMode(MixedContentMode.alwaysAllow));
+      unawaited(android.setMediaPlaybackRequiresUserGesture(false));
+      unawaited(android.setOnPlatformPermissionRequest((request) {
+        request.grant();
+      }));
+      unawaited(android.setOnShowFileSelector((params) async {
+        final groups = _selectorGroupsFrom(params.acceptTypes);
+        if (params.mode == FileSelectorMode.openMultiple) {
+          final files = await openFiles(acceptedTypeGroups: groups);
+          return files.map((f) => f.path).toList(growable: false);
+        }
+        final file = await openFile(acceptedTypeGroups: groups);
+        return file == null ? <String>[] : <String>[file.path];
+      }));
+    }
+
     return controller;
+  }
+
+  List<XTypeGroup> _selectorGroupsFrom(List<String> accepts) {
+    final mimeTypes = accepts
+        .map((e) => e.trim())
+        .where((e) => e.isNotEmpty && e != '*/*' && !e.startsWith('.'))
+        .toList(growable: false);
+    if (mimeTypes.isEmpty) return const <XTypeGroup>[];
+    return <XTypeGroup>[
+      XTypeGroup(
+        label: 'upload',
+        mimeTypes: mimeTypes,
+      ),
+    ];
+  }
+
+  Future<void> _requestAndroidMediaPermissions() async {
+    if (!Platform.isAndroid) return;
+    await <Permission>[
+      Permission.camera,
+      Permission.microphone,
+      Permission.photos,
+    ].request();
   }
 
   Future<void> _bootstrap() async {
@@ -125,26 +180,53 @@ class PrototypeWebViewState extends State<PrototypeWebView> {
     _trace('_bootstrap:start');
     _webReadySignalReceived = false;
     _emergencyUnlockTimer?.cancel();
+    _diagnosticsTimer?.cancel();
+    _nativeDiagnosticsTimer?.cancel();
     _fallbackLiteLoaded = false;
+    _setNativeStatus(null);
     _bootstrapWatchdog?.cancel();
     _bootstrapWatchdog = Timer(_bootstrapTimeout, _markReady);
+    _scheduleNativeDiagnostics();
     final uid = widget.userId ?? 0;
     if (uid > 0) {
       _restoredNovaStorage = await NovaWebStorage.load(uid);
     }
     try {
-      await _measureStep('loadPrototype:full', () => _loadPrototype());
+      await _measureStep(
+        'loadPrototype:full',
+        () => _loadPrototype().timeout(const Duration(seconds: 15)),
+      );
     } catch (error, stack) {
       _trace('loadPrototype:full failed, retry lite mode');
       debugPrint('Prototype load failed, retry lite mode: $error\n$stack');
+      _setNativeStatus('iPhone WebView 首次加载超时，正在尝试轻量资源模式...');
       if (_fallbackLiteLoaded) rethrow;
       _fallbackLiteLoaded = true;
       await _measureStep(
         'loadPrototype:lite',
-        () => _loadPrototype(lightweightAssets: true),
+        () => _loadPrototype(lightweightAssets: true)
+            .timeout(const Duration(seconds: 15)),
       );
     }
     _trace('_bootstrap:done ${sw.elapsedMilliseconds}ms');
+  }
+
+  void _setNativeStatus(String? message) {
+    if (!mounted) return;
+    if (_nativeStatusMessage == message) return;
+    setState(() => _nativeStatusMessage = message);
+  }
+
+  void _scheduleNativeDiagnostics() {
+    _nativeDiagnosticsTimer?.cancel();
+    _nativeDiagnosticsTimer = Timer(const Duration(seconds: 10), () {
+      if (!mounted || _ready) return;
+      _setNativeStatus(
+        'iPhone 正在等待 WebView 首屏完成。\n'
+        '如果一直停在这里，说明还没进入页面 JS，'
+        '更像是 WKWebView 加载大 HTML/JS 超时或失败。',
+      );
+    });
   }
 
   Future<void> _loadPrototype({bool lightweightAssets = false}) async {
@@ -563,10 +645,12 @@ class PrototypeWebViewState extends State<PrototypeWebView> {
   Future<void> reloadPrototype() async {
     _emergencyUnlockTimer?.cancel();
     _diagnosticsTimer?.cancel();
+    _nativeDiagnosticsTimer?.cancel();
     setState(() {
       _ready = false;
       _bootstrapStarted = false;
       _webReadySignalReceived = false;
+      _nativeStatusMessage = null;
     });
     await _bootstrap();
   }
@@ -576,6 +660,7 @@ class PrototypeWebViewState extends State<PrototypeWebView> {
     _bootstrapWatchdog?.cancel();
     _emergencyUnlockTimer?.cancel();
     _diagnosticsTimer?.cancel();
+    _nativeDiagnosticsTimer?.cancel();
     widget.navigation.removeListener(_onNavChanged);
     super.dispose();
   }
@@ -587,9 +672,31 @@ class PrototypeWebViewState extends State<PrototypeWebView> {
       children: [
         WebViewWidget(controller: _controller),
         if (!_ready)
-          const ColoredBox(
-            color: Color(0xFFFBFAF6),
-            child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+          ColoredBox(
+            color: const Color(0xFFFBFAF6),
+            child: Center(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 28),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const CircularProgressIndicator(strokeWidth: 2),
+                    if (_nativeStatusMessage != null) ...[
+                      const SizedBox(height: 18),
+                      Text(
+                        _nativeStatusMessage!,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          color: Color(0xFF4B5563),
+                          fontSize: 13,
+                          height: 1.5,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
           ),
       ],
     );

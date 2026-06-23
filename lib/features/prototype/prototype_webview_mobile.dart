@@ -78,7 +78,13 @@ class PrototypeWebViewState extends State<PrototypeWebView> {
       )
       ..setNavigationDelegate(
         NavigationDelegate(
-          onPageFinished: (_) => unawaited(_injectBootstrap()),
+          onPageFinished: (_) {
+            // 仅以 HTML 首屏渲染为准收起全屏 loading，后续增强脚本后台继续注入。
+            if (mounted && !_ready) {
+              setState(() => _ready = true);
+            }
+            unawaited(_injectBootstrap());
+          },
           onWebResourceError: (error) {
             debugPrint(
               'WebView resource error: ${error.errorCode} ${error.description}',

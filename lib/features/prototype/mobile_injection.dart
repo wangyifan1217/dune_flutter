@@ -6060,7 +6060,12 @@ window.DunesGroupInfo = (function () {
     var active = document.querySelector('.screen.active');
     var sid = active && active.dataset ? active.dataset.screen : 'B2';
     if (sid === 'B2') {
-      if (typeof loadB2Workbench === 'function') loadB2Workbench();
+      if (typeof loadB2Workbench === 'function') {
+        Promise.race([
+          loadB2Workbench().catch(function () {}),
+          new Promise(function (resolve) { setTimeout(resolve, 12000); })
+        ]);
+      }
       else if (typeof window.__dunesRefreshRootTab === 'function') window.__dunesRefreshRootTab('B2');
     }
   })();
@@ -6202,10 +6207,22 @@ window.DunesGroupInfo = (function () {
       if (typeof window.__dunesResetB2SoonVisuals === 'function') window.__dunesResetB2SoonVisuals();
     }
     if (id === 'C1') {
-      if (window.DunesInbox && typeof DunesInbox.loadC1 === 'function') DunesInbox.loadC1();
-      else if (window.DunesApi && typeof DunesApi.loadConversations === 'function') DunesApi.loadConversations();
+      if (window.DunesInbox && typeof DunesInbox.loadC1 === 'function') {
+        Promise.race([
+          DunesInbox.loadC1().catch(function () {}),
+          new Promise(function (resolve) { setTimeout(resolve, 10000); })
+        ]);
+      } else if (window.DunesApi && typeof DunesApi.loadConversations === 'function') {
+        Promise.race([
+          DunesApi.loadConversations().catch(function () {}),
+          new Promise(function (resolve) { setTimeout(resolve, 10000); })
+        ]);
+      }
       if (window.DunesInbox && typeof DunesInbox.refreshCommBadgeFromServer === 'function') {
-        DunesInbox.refreshCommBadgeFromServer().catch(function () {});
+        Promise.race([
+          DunesInbox.refreshCommBadgeFromServer().catch(function () {}),
+          new Promise(function (resolve) { setTimeout(resolve, 8000); })
+        ]);
       }
     }
   }

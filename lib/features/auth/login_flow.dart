@@ -69,12 +69,10 @@ class _LoginFlowState extends State<LoginFlow> {
       }
       if (session.token.isNotEmpty) {
         try {
-          final resp = await http
-              .get(
-                Uri.parse('${session.apiBase}/users/me'),
-                headers: {'Authorization': 'Bearer ${session.token}'},
-              )
-              .timeout(const Duration(seconds: 8));
+          final resp = await http.get(
+            Uri.parse('${session.apiBase}/users/me'),
+            headers: {'Authorization': 'Bearer ${session.token}'},
+          );
           if (resp.statusCode == 401) {
             await _clearSession(userId: session.userId);
             if (mounted) setState(() => _hydrating = false);

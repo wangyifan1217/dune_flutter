@@ -57,6 +57,13 @@ abstract final class MobileInjection {
 .flutter-app-mode .phone-screen {
   border-radius: 0 !important;
 }
+.flutter-app-mode .app-bar .actions,
+.flutter-app-mode .app-bar .icon-btn {
+  display: none !important;
+}
+.flutter-app-mode .app-bar {
+  justify-content: flex-start !important;
+}
 .flutter-app-mode .tab-bar {
   padding-bottom: 8px !important;
 }
@@ -6520,7 +6527,9 @@ window.DunesGroupInfo = (function () {
 })();
 ''';
 
-  static const prototypeBaseUrl = 'https://app.dunes.local/';
+  // Use non-https pseudo origin in WebView to avoid mixed-content fetch
+  // blocking when API base is http://host:6090.
+  static const prototypeBaseUrl = 'http://app.dunes.local/';
 
   static String novaStorageBridgeScript() {
     return r'''

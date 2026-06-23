@@ -7,7 +7,6 @@ plugins {
 android {
     namespace = "com.dunes.dunes_app"
     compileSdk = flutter.compileSdkVersion
-    ndkVersion = flutter.ndkVersion
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17

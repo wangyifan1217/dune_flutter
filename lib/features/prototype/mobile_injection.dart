@@ -6192,6 +6192,10 @@ window.DunesGroupInfo = (function () {
       } else if (window.WorkbenchLive && typeof WorkbenchLive.refreshMyBadgeFromServer === 'function') {
         chain = WorkbenchLive.refreshMyBadgeFromServer().catch(function () {});
       }
+      chain = Promise.race([
+        chain,
+        new Promise(function (resolve) { setTimeout(resolve, 12000); })
+      ]);
       chain.finally(function () {
         if (window.DunesScreenLoader) window.DunesScreenLoader.hide('B2');
       });

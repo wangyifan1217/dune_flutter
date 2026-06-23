@@ -2,7 +2,7 @@ name: Flutter iOS Build
 
 on:
   push:
-    branches: [ main ]
+    branches: [ master ] # 请确保这里和你仓库的主分支名一致
   workflow_dispatch: 
 
 jobs:
@@ -12,14 +12,6 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Cache Flutter dependencies
-        uses: actions/cache@v4
-        with:
-          path: ~/.pub-cache
-          key: ${{ runner.os }}-pub-${{ hashFiles('**/pubspec.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-pub-
-
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
@@ -28,14 +20,13 @@ jobs:
 
       - name: Install dependencies
         run: |
+          # 对于 SPM 项目，只需要运行 pub get
           flutter pub get
-          cd ios
-          pod install --repo-update
-          cd ..
 
       - name: Build iOS
         run: |
           flutter clean
+          # SPM 项目通常不需要额外的 pod install，直接 build 即可
           flutter build ios --release --no-codesign --verbose
 
       - name: Package IPA

@@ -374,8 +374,10 @@ window.DunesNovaApi = (function () {
       var part;
       if (imagePartType === 'image_url') {
         part = { type: 'image_url', image_url: { url: dataUrl } };
+      } else if (imagePartType === 'input_image') {
+        part = { type: 'input_image', input_image: { url: dataUrl } };
       } else {
-        part = { type: 'image', image: dataUrl };
+        part = { type: 'image_url', image_url: { url: dataUrl } };
       }
       if (typeof slotIdx === 'number') parts[slotIdx] = part;
       else parts.push(part);
@@ -429,7 +431,7 @@ window.DunesNovaApi = (function () {
     opts = opts || {};
     var kind = String(opts.kind || 'TEXT').toUpperCase();
     var text = String(opts.text || opts.multimodalPrompt || '').trim();
-    var imagePartType = String(opts.imagePartType || localStorage.getItem('dunes_nova_image_part_type') || 'image').trim() || 'image';
+    var imagePartType = String(opts.imagePartType || localStorage.getItem('dunes_nova_image_part_type') || 'image_url').trim() || 'image_url';
     var files = [];
     if (opts.files && opts.files.length) files = Array.prototype.slice.call(opts.files);
     else if (opts.file) files = [opts.file];
@@ -643,8 +645,8 @@ window.DunesNovaApi = (function () {
     model = String(model || '');
     if (/gpt|nova_gpt/i.test(model)) return 'image_url';
     var stored = localStorage.getItem('dunes_nova_image_part_type');
-    if (stored) return stored;
-    return 'image';
+    if (stored === 'image_url' || stored === 'input_image') return stored;
+    return 'image_url';
   }
   function parseNovaHttpError(status, text) {
     var msg = 'Nova 请求失败 HTTP ' + status;

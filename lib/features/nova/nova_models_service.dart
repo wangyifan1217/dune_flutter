@@ -5,18 +5,33 @@ import 'package:http/http.dart' as http;
 import '../../core/config/nova_config.dart';
 import 'nova_model_utils.dart';
 
+class NovaModelCatalogEntry {
+  const NovaModelCatalogEntry({required this.modelId, required this.intro});
+
+  final String modelId;
+  final String intro;
+
+  factory NovaModelCatalogEntry.fromJson(Map<String, dynamic> json) {
+    final id = (json['modelId'] ?? json['model_id'] ?? '').toString().trim();
+    final intro = (json['intro'] ?? json['label'] ?? json['description'] ?? '').toString().trim();
+    return NovaModelCatalogEntry(modelId: id, intro: intro);
+  }
+}
+
 class NovaModelsPayload {
   const NovaModelsPayload({
     required this.chatModels,
     required this.allowedModels,
     required this.defaultModel,
     this.asrModel = NovaConfig.asrModel,
+    this.modelCatalog = const <NovaModelCatalogEntry>[],
   });
 
   final List<String> chatModels;
   final List<String> allowedModels;
   final String defaultModel;
   final String asrModel;
+  final List<NovaModelCatalogEntry> modelCatalog;
 
   factory NovaModelsPayload.fallback() {
     final chat = [NovaConfig.defaultChatModel];
@@ -42,6 +57,14 @@ class NovaModelsPayload {
     final allowed = listOf(data['allowedModels']);
     final merged = allowed.isNotEmpty ? allowed : mergeNovaAllowedModels(chat);
     final def = (data['defaultModel'] as String?)?.trim();
+    final catalogRaw = data['modelCatalog'];
+    final catalog = catalogRaw is List
+        ? catalogRaw
+            .whereType<Map>()
+            .map((e) => NovaModelCatalogEntry.fromJson(Map<String, dynamic>.from(e)))
+            .where((e) => e.modelId.isNotEmpty)
+            .toList(growable: false)
+        : const <NovaModelCatalogEntry>[];
     return NovaModelsPayload(
       chatModels: chat,
       allowedModels: merged,
@@ -49,8 +72,21 @@ class NovaModelsPayload {
       asrModel: (data['asrModel'] as String?)?.trim().isNotEmpty == true
           ? data['asrModel'] as String
           : NovaConfig.asrModel,
+      modelCatalog: catalog,
     );
   }
+}
+
+String novaModelDisplayIntro(String id, List<NovaModelCatalogEntry> catalog) {
+  final key = id.trim();
+  if (key.isEmpty) return '';
+  for (final row in catalog) {
+    if (row.modelId != key) continue;
+    final intro = row.intro.trim();
+    if (intro.isEmpty || intro.toUpperCase() == key.toUpperCase()) return '';
+    return intro;
+  }
+  return '';
 }
 
 class NovaModelsService {

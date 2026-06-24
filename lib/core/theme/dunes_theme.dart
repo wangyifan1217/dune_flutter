@@ -14,6 +14,7 @@ abstract final class DunesColors {
   static const accent = Color(0xFF2F5D62);
   static const accentSoft = Color(0xFFE4ECEB);
   static const accentDeep = Color(0xFF1B3A3F);
+  static const accentLine = Color(0xFFB8CECD);
   static const green = Color(0xFF5D8A4E);
   static const greenSoft = Color(0xFFEAEFDF);
   static const blue = Color(0xFF3B6E96);

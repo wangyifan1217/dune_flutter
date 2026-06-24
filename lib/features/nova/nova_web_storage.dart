@@ -45,6 +45,39 @@ abstract final class NovaWebStorage {
     } catch (_) {}
   }
 
+  /// 合并写入，供原生云枢会话缓存 dunes_nova_msgs_* 等键。
+  static Future<Map<String, String>> merge(int userId, Map<String, dynamic> patch) async {
+    if (userId <= 0 || patch.isEmpty) return load(userId);
+    final existing = await load(userId);
+    final merged = Map<String, String>.from(existing);
+    patch.forEach((key, value) {
+      if (value == null) return;
+      final text = value.toString();
+      if (!_shouldPersistKey(key)) return;
+      if (text.isEmpty) {
+        merged.remove(key);
+        return;
+      }
+      merged[key] = text;
+    });
+    await save(userId, Map<String, dynamic>.from(merged));
+    return merged;
+  }
+
+  /// 删除指定键，对齐 WebView `localStorage.removeItem`。
+  static Future<Map<String, String>> removeKeys(int userId, Iterable<String> keys) async {
+    if (userId <= 0) return load(userId);
+    final existing = await load(userId);
+    final merged = Map<String, String>.from(existing);
+    var changed = false;
+    for (final key in keys) {
+      if (merged.remove(key) != null) changed = true;
+    }
+    if (!changed) return merged;
+    await save(userId, Map<String, dynamic>.from(merged));
+    return merged;
+  }
+
   static Future<void> clear(int userId) async {
     if (userId <= 0) return;
     final prefs = await SharedPreferences.getInstance();
@@ -76,5 +109,7 @@ abstract final class NovaWebStorage {
   static const _prefixKeys = [
     'dunes_nova_msgs_',
     'dunes_kb_msgs_',
+    'dunes_nova_generating_',
+    'dunes_nova_stream_draft_',
   ];
 }

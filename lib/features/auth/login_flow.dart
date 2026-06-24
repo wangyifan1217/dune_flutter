@@ -9,6 +9,7 @@ import '../../core/config/dunes_defaults.dart';
 import '../../core/theme/dunes_theme.dart';
 import '../nova/nova_auth_service.dart';
 import '../nova/nova_web_storage.dart';
+import '../conversation/conversation_realtime_hub.dart';
 import '../shell/dunes_shell.dart';
 import 'auth_service.dart';
 import 'auth_session.dart';
@@ -114,6 +115,7 @@ class _LoginFlowState extends State<LoginFlow> {
   }
 
   Future<void> _clearSession({int userId = 0}) async {
+    await ConversationRealtimeHub.instance.dispose();
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_sessionStorageKey);
     if (userId > 0) {
@@ -417,18 +419,8 @@ class _CodeStepState extends State<_CodeStep> {
                     color: _authBlue,
                     backgroundColor: Color(0xFFE8EDF5),
                   )
-                : _error == null
+                : _error != null
                     ? Text(
-                        '开发环境固定验证码：66666',
-                        key: const ValueKey('hint'),
-                        textAlign: TextAlign.center,
-                        style: DunesTypography.sans(
-                          fontSize: 12,
-                          color: DunesColors.text3,
-                          height: 1.5,
-                        ),
-                      )
-                    : Text(
                         _error!,
                         key: const ValueKey('error'),
                         textAlign: TextAlign.center,
@@ -437,7 +429,8 @@ class _CodeStepState extends State<_CodeStep> {
                           color: DunesColors.coral,
                           height: 1.5,
                         ),
-                      ),
+                      )
+                    : const SizedBox.shrink(key: ValueKey('idle')),
           ),
         ],
       ),

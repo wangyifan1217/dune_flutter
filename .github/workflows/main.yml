@@ -23,7 +23,7 @@ jobs:
           # 对于 SPM 项目，只需要运行 pub get
           flutter pub get
 
-     # ---------- 修改的步骤：强制提升 iOS 最低部署版本到 15.0 ----------
+      # ---------- 新增：强制提升 iOS 最低部署版本到 15.0 ----------
       - name: Force Update iOS Deployment Target to 15.0
         run: |
           echo "Forcing IPHONEOS_DEPLOYMENT_TARGET to 15.0 in project.pbxproj..."

@@ -23,17 +23,20 @@ jobs:
           # 对于 SPM 项目，只需要运行 pub get
           flutter pub get
 
-      # ---------- 新增的步骤：强制提升 iOS 最低部署版本到 14.0 ----------
-      - name: Force Update iOS Deployment Target to 14.0
+     # ---------- 修改的步骤：强制提升 iOS 最低部署版本到 15.0 ----------
+      - name: Force Update iOS Deployment Target to 15.0
         run: |
-          echo "Forcing IPHONEOS_DEPLOYMENT_TARGET to 14.0 in project.pbxproj..."
-          sed -i '' 's/IPHONEOS_DEPLOYMENT_TARGET = .*;/IPHONEOS_DEPLOYMENT_TARGET = 14.0;/g' ios/Runner.xcodeproj/project.pbxproj
+          echo "Forcing IPHONEOS_DEPLOYMENT_TARGET to 15.0 in project.pbxproj..."
+          sed -i '' 's/IPHONEOS_DEPLOYMENT_TARGET = .*;/IPHONEOS_DEPLOYMENT_TARGET = 15.0;/g' ios/Runner.xcodeproj/project.pbxproj
           
           echo "Updating AppFrameworkInfo.plist if it exists..."
           if [ -f "ios/Flutter/AppFrameworkInfo.plist" ]; then
-            sed -i '' 's/<string>12.0<\/string>/<string>14.0<\/string>/g' ios/Flutter/AppFrameworkInfo.plist
-            sed -i '' 's/<string>11.0<\/string>/<string>14.0<\/string>/g' ios/Flutter/AppFrameworkInfo.plist
-            sed -i '' 's/<string>9.0<\/string>/<string>14.0<\/string>/g' ios/Flutter/AppFrameworkInfo.plist
+            # 把可能存在的旧版本号全部替换为 15.0
+            sed -i '' 's/<string>14.0<\/string>/<string>15.0<\/string>/g' ios/Flutter/AppFrameworkInfo.plist
+            sed -i '' 's/<string>13.0<\/string>/<string>15.0<\/string>/g' ios/Flutter/AppFrameworkInfo.plist
+            sed -i '' 's/<string>12.0<\/string>/<string>15.0<\/string>/g' ios/Flutter/AppFrameworkInfo.plist
+            sed -i '' 's/<string>11.0<\/string>/<string>15.0<\/string>/g' ios/Flutter/AppFrameworkInfo.plist
+            sed -i '' 's/<string>9.0<\/string>/<string>15.0<\/string>/g' ios/Flutter/AppFrameworkInfo.plist
           fi
       # -----------------------------------------------------------------
 

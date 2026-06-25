@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../core/theme/dunes_theme.dart';
+import '../../core/util/friendly_error.dart';
 import '../auth/auth_session.dart';
 import '../shell/dunes_toast.dart';
 import '../conversation/conversation_realtime_hub.dart';
@@ -91,7 +92,7 @@ class _NativeContactsPageState extends State<NativeContactsPage> {
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = e.toString();
+        _error = friendlyErrorText(e);
         _loading = false;
       });
     }
@@ -116,7 +117,7 @@ class _NativeContactsPageState extends State<NativeContactsPage> {
       widget.onStartPrivateChat(contact.userId);
     } catch (e) {
       if (!mounted) return;
-      showDunesToast(context, '创建私聊失败: $e', kind: DunesToastKind.error);
+      showDunesToast(context, '创建私聊失败：${friendlyErrorText(e)}', kind: DunesToastKind.error);
     }
   }
 

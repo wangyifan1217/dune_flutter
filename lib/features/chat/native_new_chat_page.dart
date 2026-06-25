@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../core/theme/dunes_theme.dart';
+import '../../core/util/friendly_error.dart';
 import '../auth/auth_session.dart';
 import '../contacts/contact_models.dart';
 import '../contacts/contact_service.dart';
@@ -95,7 +96,7 @@ class _NativeNewChatPageState extends State<NativeNewChatPage> {
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = e.toString();
+        _error = friendlyErrorText(e);
         _loading = false;
       });
     }
@@ -221,7 +222,7 @@ class _NativeNewChatPageState extends State<NativeNewChatPage> {
       widget.onOpenGroupChat(conversation);
     } catch (e) {
       if (mounted) {
-        showDunesToast(context, '创建会话失败: $e', kind: DunesToastKind.error);
+        showDunesToast(context, '创建会话失败：${friendlyErrorText(e)}', kind: DunesToastKind.error);
       }
     } finally {
       if (mounted) setState(() => _creating = false);

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/navigation/navigation_controller.dart';
 import '../../core/theme/dunes_theme.dart';
+import '../../core/util/friendly_error.dart';
 import '../auth/auth_session.dart';
 import '../shell/dunes_toast.dart';
 import 'xflow_detail_renderer.dart';
@@ -62,7 +63,7 @@ class _NativeB10PageState extends State<NativeB10Page> {
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _ccError = e.toString();
+        _ccError = friendlyErrorText(e);
         _ccLoading = false;
       });
     }
@@ -95,7 +96,7 @@ class _NativeB10PageState extends State<NativeB10Page> {
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = e.toString();
+        _error = friendlyErrorText(e);
         _loading = false;
       });
     }
@@ -162,7 +163,7 @@ class _NativeB10PageState extends State<NativeB10Page> {
       widget.navigation.back();
     } catch (e) {
       if (!mounted) return;
-      showDunesToast(context, '删除失败：$e', kind: DunesToastKind.error);
+      showDunesToast(context, '删除失败：${friendlyErrorText(e)}', kind: DunesToastKind.error);
     }
   }
 
@@ -176,7 +177,7 @@ class _NativeB10PageState extends State<NativeB10Page> {
       await _load();
     } catch (e) {
       if (!mounted) return;
-      showDunesToast(context, '发起失败：$e', kind: DunesToastKind.error);
+      showDunesToast(context, '发起失败：${friendlyErrorText(e)}', kind: DunesToastKind.error);
     }
   }
 
@@ -261,7 +262,7 @@ class _NativeB10PageState extends State<NativeB10Page> {
                               await _load();
                             } catch (e) {
                               if (!mounted) return;
-                              showDunesToast(context, '推送失败：$e', kind: DunesToastKind.error);
+                              showDunesToast(context, '推送失败：${friendlyErrorText(e)}', kind: DunesToastKind.error);
                             }
                           },
                     child: const Text('确认推送'),

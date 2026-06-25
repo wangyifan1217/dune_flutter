@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:mime/mime.dart';
 
 import '../../core/theme/dunes_theme.dart';
+import '../../core/util/friendly_error.dart';
 import '../shell/dunes_toast.dart';
 import 'xflow_models.dart';
 import 'xflow_service.dart';
@@ -161,7 +162,7 @@ class _XflowUploadFieldState extends State<XflowUploadField> {
     } catch (e) {
       item
         ..['status'] = 'error'
-        ..['error'] = e.toString().replaceFirst('Exception: ', '');
+        ..['error'] = friendlyErrorText(e, fallback: '上传失败，请稍后重试');
     }
     if (mounted) setState(() {});
     widget.onChanged(List<Map<String, dynamic>>.from(list));

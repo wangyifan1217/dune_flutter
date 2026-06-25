@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/navigation/navigation_controller.dart';
 import '../../core/theme/dunes_theme.dart';
+import '../../core/util/friendly_error.dart';
 import '../auth/auth_session.dart';
 import '../shell/dunes_toast.dart';
 import 'native_kb_models.dart';
@@ -70,7 +71,7 @@ class _NativeKbHomePageState extends State<NativeKbHomePage> {
       if (!mounted) return;
       if (!silent) {
         setState(() {
-          _error = e.toString();
+          _error = friendlyErrorText(e);
           _loading = false;
         });
       }
@@ -99,7 +100,7 @@ class _NativeKbHomePageState extends State<NativeKbHomePage> {
       setState(() => _syncStatus = '同步完成，已更新知识库状态');
     } catch (e) {
       if (!mounted) return;
-      setState(() => _syncStatus = e.toString());
+      setState(() => _syncStatus = friendlyErrorText(e, fallback: '同步失败，请稍后重试'));
     } finally {
       if (mounted) setState(() => _syncing = false);
     }
@@ -127,7 +128,7 @@ class _NativeKbHomePageState extends State<NativeKbHomePage> {
       _toast('上传成功，正在解析入库');
     } catch (e) {
       if (!mounted) return;
-      _toast('上传失败：$e', error: true);
+      _toast('上传失败：${friendlyErrorText(e)}', error: true);
     } finally {
       if (mounted) setState(() => _uploading = false);
     }
@@ -151,7 +152,7 @@ class _NativeKbHomePageState extends State<NativeKbHomePage> {
       await _load();
     } catch (e) {
       if (!mounted) return;
-      _toast('删除失败：$e', error: true);
+      _toast('删除失败：${friendlyErrorText(e)}', error: true);
     }
   }
 

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/theme/dunes_theme.dart';
+import '../../core/util/friendly_error.dart';
 import '../auth/auth_session.dart';
 import '../conversation/inbox_format.dart';
 import '../conversation/notification_service.dart';
@@ -52,7 +53,7 @@ class _NativeNotificationsPageState extends State<NativeNotificationsPage> {
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = e.toString();
+        _error = friendlyErrorText(e);
         _loading = false;
       });
     }
@@ -64,7 +65,7 @@ class _NativeNotificationsPageState extends State<NativeNotificationsPage> {
       await _load();
     } catch (e) {
       if (!mounted) return;
-      showDunesToast(context, '标记失败: $e', kind: DunesToastKind.error);
+      showDunesToast(context, '标记失败：${friendlyErrorText(e)}', kind: DunesToastKind.error);
     }
   }
 

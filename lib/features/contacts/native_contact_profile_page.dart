@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/theme/dunes_theme.dart';
+import '../../core/util/friendly_error.dart';
 import '../auth/auth_session.dart';
 import '../shell/dunes_toast.dart';
 import 'contact_models.dart';
@@ -72,7 +73,7 @@ class _NativeContactProfilePageState extends State<NativeContactProfilePage> {
       if (!mounted) return;
       setState(() {
         _contact = hint;
-        _error = e.toString();
+        _error = friendlyErrorText(e);
         _loading = false;
       });
     }

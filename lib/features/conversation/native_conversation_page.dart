@@ -8,6 +8,7 @@ import '../nova/nova_generating_storage.dart';
 import '../nova/nova_inbox_preview.dart';
 import '../nova/nova_web_storage.dart';
 import '../../core/theme/dunes_theme.dart';
+import '../../core/util/friendly_error.dart';
 import '../auth/auth_session.dart';
 import '../shell/dunes_main_tab_bar.dart';
 import '../shell/dunes_toast.dart';
@@ -277,7 +278,7 @@ class _NativeConversationPageState extends State<NativeConversationPage> {
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = e.toString();
+        _error = friendlyErrorText(e);
         _loading = false;
       });
     }

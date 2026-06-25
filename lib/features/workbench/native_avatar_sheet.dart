@@ -8,6 +8,7 @@ import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 
 import '../../core/theme/dunes_theme.dart';
+import '../../core/util/friendly_error.dart';
 import '../shell/dunes_toast.dart';
 import '../auth/auth_session.dart';
 import 'native_avatar_presets.dart';
@@ -118,7 +119,7 @@ class _NativeAvatarSheetState extends State<NativeAvatarSheet> {
       });
     } catch (e) {
       if (mounted) {
-        showDunesToast(context, '上传失败：$e', kind: DunesToastKind.error);
+        showDunesToast(context, '上传失败：${friendlyErrorText(e)}', kind: DunesToastKind.error);
       }
     } finally {
       if (mounted) setState(() => _uploading = false);
@@ -166,7 +167,7 @@ class _NativeAvatarSheetState extends State<NativeAvatarSheet> {
       Navigator.of(context).pop(data);
     } catch (e) {
       if (mounted) {
-        showDunesToast(context, '保存失败：$e', kind: DunesToastKind.error);
+        showDunesToast(context, '保存失败：${friendlyErrorText(e)}', kind: DunesToastKind.error);
       }
     } finally {
       if (mounted) setState(() => _saving = false);

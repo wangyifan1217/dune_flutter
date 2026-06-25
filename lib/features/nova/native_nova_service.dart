@@ -7,6 +7,7 @@ import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart' show MediaType;
 
 import '../../core/config/nova_config.dart';
+import '../../core/util/friendly_error.dart';
 import '../auth/auth_session.dart';
 import '../conversation/conversation_models.dart';
 import 'nova_draft.dart';
@@ -441,7 +442,7 @@ class NativeNovaService {
     if (msg.contains('HTTP 503')) return 'NOVA服务暂不可用，请稍后再试';
     if (msg.contains('凭证') || msg.contains('api_key')) return 'NOVA账号尚未就绪，请重新登录后再试';
     if (msg.contains('尚未开通')) return msg;
-    return msg;
+    return friendlyErrorText(msg, fallback: 'NOVA 请求失败，请稍后重试');
   }
 
   Future<({String avatarPreset, String avatarUrl})> fetchCurrentUserAvatar() async {

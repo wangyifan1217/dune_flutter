@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 
 import '../../core/theme/dunes_theme.dart';
+import '../../core/util/friendly_error.dart';
 import '../auth/auth_session.dart';
 import '../conversation/conversation_models.dart';
 import '../conversation/conversation_service.dart';
@@ -69,7 +70,7 @@ class _NativeGroupMediaPageState extends State<NativeGroupMediaPage> {
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = e.toString();
+        _error = friendlyErrorText(e);
         _loading = false;
       });
     }
@@ -109,7 +110,7 @@ class _NativeGroupMediaPageState extends State<NativeGroupMediaPage> {
       _toast('已开始下载');
     } catch (e) {
       if (!mounted) return;
-      _toast('下载失败: $e');
+      _toast('下载失败：${friendlyErrorText(e)}');
     }
   }
 
@@ -127,7 +128,7 @@ class _NativeGroupMediaPageState extends State<NativeGroupMediaPage> {
       );
     } catch (e) {
       if (!mounted) return;
-      _toast('预览失败: $e');
+      _toast('预览失败：${friendlyErrorText(e)}');
     }
   }
 

@@ -8,6 +8,7 @@ import 'package:mime/mime.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import '../../core/theme/dunes_theme.dart';
+import '../../core/util/friendly_error.dart';
 import '../auth/auth_session.dart';
 import '../chat/native_audio_recorder.dart';
 import '../chat/chat_widgets.dart';
@@ -635,6 +636,11 @@ class _NativeNovaPageState extends State<NativeNovaPage> {
   bool _hasActiveAssistantStream() {
     return _messages.any((m) => m.role == 'assistant' && m.streaming);
   }
+
+  /// 是否处于生成中（本地发送 / 服务端生成 / 本地流式任一为真）。
+  /// 与 `_flushOnLeave` 口径一致，确保退出重进后按钮仍按生成态禁用。
+  bool get _isGenerating =>
+      _sending || _serverGenerating || _hasActiveAssistantStream();
 
   bool _isStoppedStatus(String status) => status.trim().contains('停止');
 
@@ -1433,7 +1439,7 @@ class _NativeNovaPageState extends State<NativeNovaPage> {
   }
 
   Future<void> _startNewChat() async {
-    if (_sending && _hasActiveAssistantStream()) return;
+    if (_isGenerating) return;
     _stopGeneratingPoll();
     final prevConvId = _conversationId;
     final uid = widget.session.userId;
@@ -1516,7 +1522,7 @@ class _NativeNovaPageState extends State<NativeNovaPage> {
         }
       });
     } catch (e) {
-      _toast('录音启动失败: $e');
+      _toast('录音启动失败：${friendlyErrorText(e)}');
     }
   }
 
@@ -1575,7 +1581,7 @@ class _NativeNovaPageState extends State<NativeNovaPage> {
           }
         });
       }
-      _toast('语音识别失败: $e');
+      _toast('语音识别失败：${friendlyErrorText(e)}');
     }
   }
 
@@ -1671,14 +1677,14 @@ class _NativeNovaPageState extends State<NativeNovaPage> {
               onNewChat: _novaReady ? _startNewChat : null,
               onHistory: widget.onHistory,
               onOpenKb: widget.onOpenKb,
-              actionsEnabled: !(_sending && _hasActiveAssistantStream()),
+              actionsEnabled: !_isGenerating,
             ),
             NovaC4ModelPicker(
               models: _chatModels,
               selected: _selectedModel,
               modelCatalog: _modelCatalog,
               onTap: _pickModel,
-              enabled: !(_sending || _serverGenerating),
+              enabled: !_isGenerating,
             ),
             if (_loading)
               const Expanded(
@@ -1703,7 +1709,7 @@ class _NativeNovaPageState extends State<NativeNovaPage> {
             NovaC4BusyHint(text: _busyHint),
             NovaDraftTray(items: _drafts, onRemove: _removeDraft),
             NovaC4QuickActions(
-              enabled: inputEnabled && !(_sending && _hasActiveAssistantStream()),
+              enabled: inputEnabled && !_isGenerating,
               onCamera: _pickCamera,
               onAlbum: _pickAlbum,
               onNewChat: _startNewChat,

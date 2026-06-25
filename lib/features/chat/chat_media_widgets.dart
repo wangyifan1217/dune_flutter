@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 
 import '../../core/theme/dunes_theme.dart';
+import '../../core/util/friendly_error.dart';
 import '../conversation/conversation_service.dart';
 import '../shell/dunes_toast.dart';
 import 'chat_widgets.dart';
@@ -267,7 +268,7 @@ class _ImagePreviewDialogState extends State<_ImagePreviewDialog> {
         await file_dl.saveBytesAsFile(bytes, widget.fileName);
         _toast('已保存');
       } catch (_) {
-        _toast('保存失败: $e');
+        _toast('保存失败：${friendlyErrorText(e)}');
       }
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -280,7 +281,7 @@ class _ImagePreviewDialogState extends State<_ImagePreviewDialog> {
     try {
       await file_dl.openUrlAsFile(url, widget.fileName);
     } catch (e) {
-      _toast('保存失败: $e');
+      _toast('保存失败：${friendlyErrorText(e)}');
     } finally {
       if (mounted) setState(() => _saving = false);
     }

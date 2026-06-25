@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/theme/dunes_theme.dart';
+import '../../core/util/friendly_error.dart';
 import '../auth/auth_session.dart';
 import '../chat/chat_voice_player.dart';
 import '../chat/cors_safe_image.dart';
@@ -351,7 +352,7 @@ class _NovaImagePreviewDialog extends StatelessWidget {
           await saveBytesAsFile(bytes, fileName);
           if (context.mounted) _novaToast(context, '已保存');
         } catch (e) {
-          if (context.mounted) _novaToast(context, '保存失败: $e', error: true);
+          if (context.mounted) _novaToast(context, '保存失败：${friendlyErrorText(e)}', error: true);
         }
       }
       return;
@@ -474,7 +475,7 @@ class _NovaC4ImageCardState extends State<NovaC4ImageCard> {
           await saveBytesAsFile(bytes, _displayName);
           if (mounted) _novaToast(context, '已保存');
         } catch (e) {
-          if (mounted) _novaToast(context, '保存失败: $e', error: true);
+          if (mounted) _novaToast(context, '保存失败：${friendlyErrorText(e)}', error: true);
         }
       }
       return;

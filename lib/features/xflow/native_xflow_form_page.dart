@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/navigation/navigation_controller.dart';
 import '../../core/theme/dunes_theme.dart';
+import '../../core/util/friendly_error.dart';
 import '../auth/auth_session.dart';
 import '../shell/dunes_toast.dart';
 import 'xflow_form_renderer.dart';
@@ -85,7 +86,7 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage> {
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = e.toString();
+        _error = friendlyErrorText(e);
         _loading = false;
       });
     }
@@ -99,7 +100,7 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage> {
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _ccError = e.toString();
+        _ccError = friendlyErrorText(e);
         _ccLoading = false;
       });
     }
@@ -150,7 +151,7 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage> {
       if (pid > 0) widget.onSubmitted(pid);
     } catch (e) {
       if (!mounted) return;
-      showDunesToast(context, '提交失败：$e', kind: DunesToastKind.error);
+      showDunesToast(context, '提交失败：${friendlyErrorText(e)}', kind: DunesToastKind.error);
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
@@ -230,7 +231,7 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage> {
       await _showPushDialog(pid);
     } catch (e) {
       if (!mounted) return;
-      showDunesToast(context, '推送失败：$e', kind: DunesToastKind.error);
+      showDunesToast(context, '推送失败：${friendlyErrorText(e)}', kind: DunesToastKind.error);
     }
   }
 
@@ -315,7 +316,7 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage> {
                               showDunesToast(context, '已推送给同事，对方可代为填写并确认发起');
                             } catch (e) {
                               if (!mounted) return;
-                              showDunesToast(context, '推送失败：$e', kind: DunesToastKind.error);
+                              showDunesToast(context, '推送失败：${friendlyErrorText(e)}', kind: DunesToastKind.error);
                             }
                           },
                     child: const Text('确认推送'),

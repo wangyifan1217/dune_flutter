@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/navigation/navigation_controller.dart';
 import '../../core/theme/dunes_theme.dart';
+import '../../core/util/friendly_error.dart';
 import '../auth/auth_session.dart';
 import 'native_kb_models.dart';
 import 'native_kb_service.dart';
@@ -81,7 +82,7 @@ class _NativeKbChatPageState extends State<NativeKbChatPage> {
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = e.toString();
+        _error = friendlyErrorText(e);
         _loading = false;
       });
     }
@@ -139,7 +140,7 @@ class _NativeKbChatPageState extends State<NativeKbChatPage> {
         final idx = _messages.indexWhere((m) => m.id == assistantId);
         if (idx >= 0) {
           _messages[idx] = _messages[idx].copyWith(
-            text: e.toString(),
+            text: friendlyErrorText(e, fallback: '回复失败，请稍后重试'),
             streaming: false,
           );
         }

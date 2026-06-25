@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/theme/dunes_theme.dart';
+import '../../core/util/friendly_error.dart';
 import '../auth/auth_session.dart';
 import '../contacts/contact_models.dart';
 import '../contacts/contact_service.dart';
@@ -92,7 +93,7 @@ class _NativeGroupInfoPageState extends State<NativeGroupInfoPage> {
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = e.toString();
+        _error = friendlyErrorText(e);
         _loading = false;
       });
     }
@@ -194,7 +195,7 @@ class _NativeGroupInfoPageState extends State<NativeGroupInfoPage> {
       await _load();
     } catch (e) {
       if (!mounted) return;
-      _toast(context, e.toString());
+      _toast(context, friendlyErrorText(e));
     }
   }
 
@@ -227,7 +228,7 @@ class _NativeGroupInfoPageState extends State<NativeGroupInfoPage> {
       await _load();
     } catch (e) {
       if (!mounted) return;
-      _toast(context, e.toString());
+      _toast(context, friendlyErrorText(e));
     }
   }
 
@@ -264,7 +265,7 @@ class _NativeGroupInfoPageState extends State<NativeGroupInfoPage> {
       widget.onExitedGroup?.call();
     } catch (e) {
       if (!mounted) return;
-      _toast(context, e.toString());
+      _toast(context, friendlyErrorText(e));
     }
   }
 
@@ -295,7 +296,7 @@ class _NativeGroupInfoPageState extends State<NativeGroupInfoPage> {
       await _load();
     } catch (e) {
       if (!mounted) return;
-      _toast(context, e.toString());
+      _toast(context, friendlyErrorText(e));
     }
   }
 
@@ -332,7 +333,7 @@ class _NativeGroupInfoPageState extends State<NativeGroupInfoPage> {
       await _load();
     } catch (e) {
       if (!mounted) return;
-      _toast(context, e.toString());
+      _toast(context, friendlyErrorText(e));
     }
   }
 

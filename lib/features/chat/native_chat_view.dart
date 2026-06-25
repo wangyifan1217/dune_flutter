@@ -11,6 +11,7 @@ import 'package:mime/mime.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import '../../core/theme/dunes_theme.dart';
+import '../../core/util/friendly_error.dart';
 import '../auth/auth_session.dart';
 import '../contacts/contact_service.dart';
 import '../conversation/conversation_models.dart';
@@ -633,7 +634,7 @@ class _NativeChatViewState extends State<NativeChatView> {
       _forceLatestMode = false;
       if (!mounted) return;
       setState(() {
-        _error = e.toString();
+        _error = friendlyErrorText(e);
         _loading = false;
         _locating = false;
       });
@@ -665,7 +666,7 @@ class _NativeChatViewState extends State<NativeChatView> {
         }
       });
     } catch (e) {
-      _showToast('加载历史失败: $e');
+      _showToast('加载历史失败：${friendlyErrorText(e)}');
     } finally {
       if (mounted) setState(() => _loadingOlder = false);
     }
@@ -696,7 +697,7 @@ class _NativeChatViewState extends State<NativeChatView> {
         _recountPendingNewMessages();
       }
     } catch (e) {
-      _showToast('加载新消息失败: $e');
+      _showToast('加载新消息失败：${friendlyErrorText(e)}');
     } finally {
       if (mounted) setState(() => _loadingNewer = false);
     }
@@ -841,7 +842,7 @@ class _NativeChatViewState extends State<NativeChatView> {
         _scrollBottom(force: true);
       }
     } catch (e) {
-      _showToast('发送失败: $e');
+      _showToast('发送失败：${friendlyErrorText(e)}');
     } finally {
       if (mounted) setState(() => _sending = false);
     }
@@ -1007,7 +1008,7 @@ class _NativeChatViewState extends State<NativeChatView> {
         setState(() => _recordDurationMs += 120);
       });
     } catch (e) {
-      _showToast('录音启动失败: $e');
+      _showToast('录音启动失败：${friendlyErrorText(e)}');
     }
   }
 
@@ -1044,7 +1045,7 @@ class _NativeChatViewState extends State<NativeChatView> {
         );
       });
     } catch (e) {
-      _showToast('录音发送失败: $e');
+      _showToast('录音发送失败：${friendlyErrorText(e)}');
     }
   }
 
@@ -1136,7 +1137,7 @@ class _NativeChatViewState extends State<NativeChatView> {
       await task();
       await _load(silent: true);
     } catch (e) {
-      _showToast('发送失败: $e');
+      _showToast('发送失败：${friendlyErrorText(e)}');
     } finally {
       if (mounted) {
         setState(() {
@@ -1167,7 +1168,7 @@ class _NativeChatViewState extends State<NativeChatView> {
       await _service.recallMessage(conversationId: conv.id, messageId: m.id);
       await _load(silent: true);
     } catch (e) {
-      _showToast('撤回失败: $e');
+      _showToast('撤回失败：${friendlyErrorText(e)}');
     }
   }
 
@@ -1239,7 +1240,7 @@ class _NativeChatViewState extends State<NativeChatView> {
         },
       );
     } catch (e) {
-      _showToast('读取已读明细失败: $e');
+      _showToast('读取已读明细失败：${friendlyErrorText(e)}');
     }
   }
 
@@ -1320,7 +1321,7 @@ class _NativeChatViewState extends State<NativeChatView> {
       }
       _showToast('附件地址为空');
     } catch (e) {
-      _showToast('下载失败: $e');
+      _showToast('下载失败：${friendlyErrorText(e)}');
     }
   }
 
@@ -1571,7 +1572,7 @@ class _NativeChatViewState extends State<NativeChatView> {
         await _insertAtMentions(names);
       }
     } catch (e) {
-      _showToast('@ 成员加载失败: $e');
+      _showToast('@ 成员加载失败：${friendlyErrorText(e)}');
     } finally {
       _atSheetOpen = false;
       _atSheetOpening = false;

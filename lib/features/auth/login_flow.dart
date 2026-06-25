@@ -187,7 +187,11 @@ class _PhoneStepState extends State<_PhoneStep> {
       );
     }).catchError((e) {
       if (!mounted) return;
-      setState(() => _error = e.toString());
+      setState(() {
+        _error = e is AuthException
+            ? e.message
+            : '网络异常，请确认网关 ${widget.auth.apiBase} 可访问';
+      });
     });
   }
 

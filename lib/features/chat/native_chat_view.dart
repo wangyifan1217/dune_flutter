@@ -20,6 +20,7 @@ import '../conversation/conversation_realtime_service.dart';
 import '../conversation/conversation_service.dart';
 import '../conversation/inbox_format.dart';
 import '../shell/dunes_toast.dart';
+import 'chat_image_utils.dart';
 import 'chat_media_widgets.dart';
 import 'chat_voice_player.dart';
 import 'chat_widgets.dart';
@@ -88,6 +89,8 @@ class _NativeChatViewState extends State<NativeChatView> {
   bool _bootstrapped = false;
   bool _locating = false;
   bool _sending = false;
+  String? _uploadLabel;
+  double _uploadProgress = 0;
   bool _recording = false;
   bool _recordWillCancel = false;
   bool _loadingOlder = false;
@@ -271,7 +274,7 @@ class _NativeChatViewState extends State<NativeChatView> {
           final online = peerId > 0 && ids.contains(peerId);
           if (!mounted || _peerOnline == online) return;
           setState(() => _peerOnline = online);
-          if (online) _maybeAssumePeerReadInActiveChat();
+          if (online) unawaited(_refreshPeerReadFromServer());
         });
         unawaited(_realtime.refreshOnlinePresence());
       }
@@ -397,8 +400,17 @@ class _NativeChatViewState extends State<NativeChatView> {
         (event.raw['messageId'] as num?)?.toInt() ??
         0;
     if (lastRead <= 0) return true;
+    _applyPeerLastRead(lastRead);
+    return true;
+  }
+
+  /// 仅依据服务端返回的 peerLastReadMessageId 推进「已读」状态。
+  /// 不再因为对方仅仅在线（presence）就假设其已读，避免对方尚未进入会话
+  /// 却在发送方界面显示「已读」的 bug。
+  void _applyPeerLastRead(int lastRead) {
+    if (lastRead <= _peerLastReadMessageId) return;
     setState(() {
-      _peerLastReadMessageId = lastRead > _peerLastReadMessageId ? lastRead : _peerLastReadMessageId;
+      _peerLastReadMessageId = lastRead;
       _messages = _messages
           .map(
             (m) => NativeChatMessage(
@@ -414,46 +426,17 @@ class _NativeChatViewState extends State<NativeChatView> {
           )
           .toList(growable: false);
     });
-    return true;
   }
 
   Future<void> _refreshPeerReadFromServer() async {
     final conv = _conversation;
     if (conv == null || !_isPrivate) return;
     try {
-      final detail = await _service.fetchConversation(conv.id);
-      if (detail == null || !mounted) return;
-      // peerLastRead 在消息分页接口返回；详情接口若有则同步
-      _maybeAssumePeerReadInActiveChat();
+      final page = await _service.fetchMessagePage(conv.id, size: 1);
+      final lastRead = page.peerLastReadMessageId ?? 0;
+      if (!mounted || lastRead <= 0) return;
+      _applyPeerLastRead(lastRead);
     } catch (_) {}
-  }
-
-  void _maybeAssumePeerReadInActiveChat() {
-    if (!_isPrivate || !_peerOnline) return;
-    var maxId = _peerLastReadMessageId;
-    for (final m in _messages) {
-      if (m.senderUserId == widget.session.userId && m.id > maxId) {
-        maxId = m.id;
-      }
-    }
-    if (maxId <= _peerLastReadMessageId) return;
-    setState(() {
-      _peerLastReadMessageId = maxId;
-      _messages = _messages
-          .map(
-            (m) => NativeChatMessage(
-              id: m.id,
-              senderUserId: m.senderUserId,
-              senderName: m.senderName,
-              kind: m.kind,
-              bodyText: m.bodyText,
-              createdAt: m.createdAt,
-              payload: m.payload,
-              peerRead: m.id <= _peerLastReadMessageId || m.peerRead,
-            ),
-          )
-          .toList(growable: false);
-    });
   }
 
   Future<void> _markReadIfNeeded() async {
@@ -638,7 +621,6 @@ class _NativeChatViewState extends State<NativeChatView> {
         if (!silent) _error = null;
       });
       _forceLatestMode = false;
-      _maybeAssumePeerReadInActiveChat();
       if (focusId > 0) {
         _highlightAndScroll(focusId);
       } else if (_forceLatestMode || _isNearBottom) {
@@ -848,6 +830,7 @@ class _NativeChatViewState extends State<NativeChatView> {
     try {
       await _service.sendText(conv.id, text, payload: payload);
       _inputController.clear();
+      FocusManager.instance.primaryFocus?.unfocus();
       setState(() {
         _emojiOpen = false;
         _locatedMode = false;
@@ -899,6 +882,19 @@ class _NativeChatViewState extends State<NativeChatView> {
     return true;
   }
 
+  /// 单张图片原图大小上限（压缩后仍超过则拒绝）。
+  static const int _maxImageBytes = 30 * 1024 * 1024;
+
+  /// 普通文件大小上限。
+  static const int _maxFileBytes = 100 * 1024 * 1024;
+
+  bool _checkSizeLimit(int length, int maxBytes, String fileName) {
+    if (length <= maxBytes) return true;
+    final mb = (maxBytes / (1024 * 1024)).round();
+    _showToast('$fileName 超过 ${mb}MB 上限，无法发送');
+    return false;
+  }
+
   Future<void> _sendImageFrom(ImageSource source, String label) async {
     final conv = _conversation;
     if (conv == null || _sending) return;
@@ -907,14 +903,21 @@ class _NativeChatViewState extends State<NativeChatView> {
     if (picked == null) return;
     final bytes = await picked.readAsBytes();
     final fileName = picked.name.isNotEmpty ? picked.name : 'image-${DateTime.now().millisecondsSinceEpoch}.jpg';
+    if (!_checkSizeLimit(bytes.length, _maxImageBytes, fileName)) return;
     final mimeType = lookupMimeType(fileName) ?? 'image/*';
+    final preview = await buildChatImagePreview(bytes, fileName: fileName);
     await _guardSend(() async {
+      _beginUpload('上传图片');
       await _service.sendImage(
         conversationId: conv.id,
         bytes: bytes,
         fileName: fileName,
         mimeType: mimeType,
         sourceLabel: label,
+        previewBytes: preview?.bytes,
+        previewFileName: preview?.fileName,
+        previewMimeType: preview?.mimeType,
+        onProgress: (p) => _setUploadProgress(p),
       );
     });
   }
@@ -925,17 +928,34 @@ class _NativeChatViewState extends State<NativeChatView> {
     final picked = await _imagePicker.pickMultiImage();
     if (picked.isEmpty) return;
     await _guardSend(() async {
+      final total = picked.length;
+      var done = 0;
       for (final file in picked) {
         final bytes = await file.readAsBytes();
         final fileName = file.name.isNotEmpty ? file.name : 'image-${DateTime.now().millisecondsSinceEpoch}.jpg';
+        if (!_checkSizeLimit(bytes.length, _maxImageBytes, fileName)) {
+          done++;
+          continue;
+        }
         final mimeType = lookupMimeType(fileName) ?? 'image/*';
+        final preview = await buildChatImagePreview(bytes, fileName: fileName);
+        final baseDone = done;
+        _beginUpload(total > 1 ? '上传图片 (${baseDone + 1}/$total)' : '上传图片');
         await _service.sendImage(
           conversationId: conv.id,
           bytes: bytes,
           fileName: fileName,
           mimeType: mimeType,
           sourceLabel: '多图',
+          previewBytes: preview?.bytes,
+          previewFileName: preview?.fileName,
+          previewMimeType: preview?.mimeType,
+          onProgress: (p) => _setUploadProgress(
+            (baseDone + p) / total,
+            label: total > 1 ? '上传图片 (${baseDone + 1}/$total)' : '上传图片',
+          ),
         );
+        done++;
       }
     });
   }
@@ -947,13 +967,16 @@ class _NativeChatViewState extends State<NativeChatView> {
     if (file == null) return;
     final bytes = await file.readAsBytes();
     final fileName = file.name;
+    if (!_checkSizeLimit(bytes.length, _maxFileBytes, fileName)) return;
     final mimeType = lookupMimeType(fileName) ?? 'application/octet-stream';
     await _guardSend(() async {
+      _beginUpload('上传文件');
       await _service.sendFile(
         conversationId: conv.id,
         bytes: bytes,
         fileName: fileName,
         mimeType: mimeType,
+        onProgress: (p) => _setUploadProgress(p),
       );
     });
   }
@@ -1046,6 +1069,67 @@ class _NativeChatViewState extends State<NativeChatView> {
     setState(() => _recordWillCancel = shouldCancel);
   }
 
+  Widget _buildUploadOverlay() {
+    final label = _uploadLabel ?? '上传中';
+    final hasProgress = _uploadProgress > 0;
+    final pct = (_uploadProgress * 100).round();
+    return Positioned.fill(
+      child: IgnorePointer(
+        child: Container(
+          color: Colors.black26,
+          alignment: Alignment.center,
+          child: Container(
+            width: 220,
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+            decoration: BoxDecoration(
+              color: const Color(0xE61F2421),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  hasProgress ? '$label  $pct%' : '$label…',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(4),
+                  child: LinearProgressIndicator(
+                    value: hasProgress ? _uploadProgress : null,
+                    minHeight: 6,
+                    backgroundColor: Colors.white24,
+                    valueColor: const AlwaysStoppedAnimation<Color>(DunesColors.accentLine),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _beginUpload(String label) {
+    if (!mounted) return;
+    setState(() {
+      _uploadLabel = label;
+      _uploadProgress = 0;
+    });
+  }
+
+  void _setUploadProgress(double progress, {String? label}) {
+    if (!mounted) return;
+    setState(() {
+      _uploadProgress = progress.clamp(0.0, 1.0);
+      if (label != null) _uploadLabel = label;
+    });
+  }
+
   Future<void> _guardSend(Future<void> Function() task) async {
     setState(() => _sending = true);
     try {
@@ -1054,7 +1138,13 @@ class _NativeChatViewState extends State<NativeChatView> {
     } catch (e) {
       _showToast('发送失败: $e');
     } finally {
-      if (mounted) setState(() => _sending = false);
+      if (mounted) {
+        setState(() {
+          _sending = false;
+          _uploadLabel = null;
+          _uploadProgress = 0;
+        });
+      }
     }
   }
 
@@ -1540,7 +1630,13 @@ class _NativeChatViewState extends State<NativeChatView> {
       backgroundColor: DunesColors.bgApp,
       body: SafeArea(
         bottom: false,
-        child: Column(
+        child: GestureDetector(
+          behavior: HitTestBehavior.translucent,
+          onTap: () {
+            FocusScope.of(context).unfocus();
+            if (_emojiOpen) setState(() => _emojiOpen = false);
+          },
+          child: Column(
           children: [
             ChatConvHeader(
               title: title,
@@ -1803,6 +1899,7 @@ class _NativeChatViewState extends State<NativeChatView> {
                         ),
                       ),
                     ),
+                  if (_uploadLabel != null) _buildUploadOverlay(),
                 ],
               ),
             ),
@@ -1847,6 +1944,7 @@ class _NativeChatViewState extends State<NativeChatView> {
               onVoiceHoldCancel: () => _cancelHoldRecordInternal(showHint: false),
             ),
           ],
+          ),
         ),
       ),
     );

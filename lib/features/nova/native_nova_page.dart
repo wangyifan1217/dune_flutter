@@ -17,6 +17,7 @@ import 'nova_background_coordinator.dart';
 import 'nova_draft.dart';
 import 'nova_generating_storage.dart';
 import 'nova_history_utils.dart';
+import 'nova_image_utils.dart';
 import 'nova_media.dart';
 import 'nova_models_service.dart';
 import 'nova_web_storage.dart';
@@ -1058,6 +1059,7 @@ class _NativeNovaPageState extends State<NativeNovaPage> {
 
     final drafts = [..._drafts];
     _inputController.clear();
+    FocusManager.instance.primaryFocus?.unfocus();
     setState(() => _drafts = const <NovaDraftAttachment>[]);
     await _sendMessage(text: text, drafts: drafts);
   }
@@ -1196,10 +1198,24 @@ class _NativeNovaPageState extends State<NativeNovaPage> {
           d.uploading = true;
           d.uploadProgress = 1;
         });
+        // 图片上传前压缩（最长边 1568px / JPEG 82%），减小体积与流量；文件保持原样。
+        var uploadBytes = d.bytes;
+        var uploadName = d.fileName;
+        var uploadMime = d.mimeType;
+        if (d.isImage) {
+          try {
+            final normalized = await normalizeImageForVision(d.bytes, fileName: d.fileName);
+            if (normalized.bytes.isNotEmpty && normalized.bytes.length < d.bytes.length) {
+              uploadBytes = normalized.bytes;
+              uploadName = normalized.fileName;
+              uploadMime = normalized.mimeType;
+            }
+          } catch (_) {}
+        }
         final uploaded = await _service.uploadAttachment(
           conversationId: _conversationId,
-          bytes: d.bytes,
-          fileName: d.fileName,
+          bytes: uploadBytes,
+          fileName: uploadName,
           onProgress: (p) {
             if (mounted) setState(() => d.uploadProgress = p);
           },
@@ -1207,8 +1223,8 @@ class _NativeNovaPageState extends State<NativeNovaPage> {
         d.payload = _service.buildUploadedAttachmentPayload(
           url: uploaded.url,
           objectKey: uploaded.objectKey,
-          fileName: d.fileName,
-          mimeType: d.mimeType,
+          fileName: uploadName,
+          mimeType: uploadMime,
           kind: d.kind,
         );
         d.uploading = false;

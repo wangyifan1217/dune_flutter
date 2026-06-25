@@ -123,6 +123,7 @@ class _NativeScreenHostState extends State<NativeScreenHost> {
     _commBadgeRefreshDebounce?.cancel();
     _workbenchBadgeRefreshDebounce?.cancel();
     _commBadgeRtSub?.cancel();
+    dismissDunesActionToast();
     NovaBackgroundCoordinator.instance.removeListener(_onNovaCoordinatorUpdate);
     unawaited(unbindPushSession());
     _commUnread.dispose();
@@ -254,7 +255,16 @@ class _NativeScreenHostState extends State<NativeScreenHost> {
       if (delta > 0 && !notifyRejected) {
         showDunesToast(context, '您有 $delta 条新的待审批，请及时处理');
       } else if (notifyRejected) {
-        showDunesToast(context, '您有 1 条审批被驳回，请及时查看');
+        showDunesActionToast(
+          context,
+          '您有 1 条审批被驳回，请及时查看',
+          actionLabel: '去查看',
+          icon: Icons.warning_amber_rounded,
+          onTap: () {
+            if (!mounted) return;
+            widget.navigation.go('B14');
+          },
+        );
       }
     } catch (_) {
       // Workbench badge is best-effort.
@@ -346,11 +356,17 @@ class _NativeScreenHostState extends State<NativeScreenHost> {
             setState(() {
               _selectedPrivate = conv;
               _selectedPrivatePeerUserId = conv.peerUserId;
+              _focusMessageId = null;
+              _focusMessageHint = null;
             });
             widget.navigation.go('C5');
           },
           onOpenGroup: (conv) {
-            setState(() => _selectedGroup = conv);
+            setState(() {
+              _selectedGroup = conv;
+              _focusMessageId = null;
+              _focusMessageHint = null;
+            });
             widget.navigation.go('C2');
           },
           onOpenContacts: () => widget.navigation.go('C3'),
@@ -387,11 +403,17 @@ class _NativeScreenHostState extends State<NativeScreenHost> {
             setState(() {
               _selectedPrivate = null;
               _selectedPrivatePeerUserId = peerUserId;
+              _focusMessageId = null;
+              _focusMessageHint = null;
             });
             widget.navigation.go('C5');
           },
           onOpenGroupChat: (conversation) {
-            setState(() => _selectedGroup = conversation);
+            setState(() {
+              _selectedGroup = conversation;
+              _focusMessageId = null;
+              _focusMessageHint = null;
+            });
             widget.navigation.go('C2');
           },
         );
@@ -442,6 +464,8 @@ class _NativeScreenHostState extends State<NativeScreenHost> {
             setState(() {
               _selectedPrivate = null;
               _selectedPrivatePeerUserId = peerUserId;
+              _focusMessageId = null;
+              _focusMessageHint = null;
             });
             widget.navigation.go('C5');
           },
@@ -455,6 +479,8 @@ class _NativeScreenHostState extends State<NativeScreenHost> {
             setState(() {
               _selectedPrivate = null;
               _selectedPrivatePeerUserId = peerUserId;
+              _focusMessageId = null;
+              _focusMessageHint = null;
             });
             widget.navigation.go('C5');
           },
@@ -549,7 +575,8 @@ class _NativeScreenHostState extends State<NativeScreenHost> {
           onOpenConversation: (convId, messageId, title, preview) {
             setState(() {
               _novaFocusConversationId = convId;
-              _novaFocusMessageId = messageId > 0 ? messageId : null;
+              // 从历史列表进入会话时默认展示到最底部（最新消息），不跳到某条中间消息。
+              _novaFocusMessageId = null;
             });
             widget.navigation.go('C4');
           },
@@ -605,6 +632,8 @@ class _NativeScreenHostState extends State<NativeScreenHost> {
               _searchConversationId = convId;
               _searchTitle = _selectedGroup?.title ?? '群聊搜索';
               _searchReturnScreen = 'C2';
+              _focusMessageId = null;
+              _focusMessageHint = null;
             });
             widget.navigation.go('C12');
           },
@@ -648,6 +677,8 @@ class _NativeScreenHostState extends State<NativeScreenHost> {
               _searchConversationId = convId;
               _searchTitle = '${_selectedPrivate?.displayTitle ?? '私聊'} · 搜索';
               _searchReturnScreen = 'C5';
+              _focusMessageId = null;
+              _focusMessageHint = null;
             });
             widget.navigation.go('C12');
           },

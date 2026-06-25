@@ -289,23 +289,43 @@ class _CodeStep extends StatefulWidget {
 class _CodeStepState extends State<_CodeStep> {
   static const _codeLen = 6;
 
-  final _digits = List.generate(_codeLen, (_) => TextEditingController());
-  final _nodes = List.generate(_codeLen, (_) => FocusNode());
+  final _controller = TextEditingController();
+  final _focus = FocusNode();
   bool _loading = false;
   String? _error;
 
   @override
+  void initState() {
+    super.initState();
+    _controller.addListener(_onCodeChanged);
+    _focus.addListener(_onFocusChanged);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _focus.requestFocus();
+    });
+  }
+
+  @override
   void dispose() {
-    for (final c in _digits) {
-      c.dispose();
-    }
-    for (final n in _nodes) {
-      n.dispose();
-    }
+    _controller.removeListener(_onCodeChanged);
+    _focus.removeListener(_onFocusChanged);
+    _controller.dispose();
+    _focus.dispose();
     super.dispose();
   }
 
-  String get _code => _digits.map((c) => c.text).join();
+  String get _code => _controller.text;
+
+  void _onFocusChanged() {
+    if (mounted) setState(() {});
+  }
+
+  void _onCodeChanged() {
+    if (!mounted) return;
+    setState(() {
+      if (_error != null) _error = null;
+    });
+    if (_code.length == _codeLen) _trySubmit();
+  }
 
   Future<void> _trySubmit() async {
     if (_loading || _code.length != _codeLen) return;
@@ -349,20 +369,6 @@ class _CodeStepState extends State<_CodeStep> {
     }
   }
 
-  void _onChanged(int index, String value) {
-    if (value.length > 1) {
-      final chars = value.replaceAll(RegExp(r'\D'), '').split('');
-      for (var i = 0; i < _digits.length; i++) {
-        _digits[i].text = i < chars.length ? chars[i] : '';
-      }
-      _nodes[(chars.length.clamp(1, _codeLen) - 1).toInt()].requestFocus();
-    } else if (value.isNotEmpty && index < _nodes.length - 1) {
-      _nodes[index + 1].requestFocus();
-    }
-    if (_error != null) setState(() => _error = null);
-    _trySubmit();
-  }
-
   @override
   Widget build(BuildContext context) {
     final maskedPhone = widget.phone.replaceRange(3, 7, '****');
@@ -399,16 +405,12 @@ class _CodeStepState extends State<_CodeStep> {
             ),
           ),
           const SizedBox(height: 36),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              for (var i = 0; i < _codeLen; i++)
-                _CodeBox(
-                  controller: _digits[i],
-                  focusNode: _nodes[i],
-                  onChanged: (v) => _onChanged(i, v),
-                ),
-            ],
+          _CodeInput(
+            length: _codeLen,
+            controller: _controller,
+            focusNode: _focus,
+            hasError: _error != null,
+            onSubmitted: _trySubmit,
           ),
           const SizedBox(height: 24),
           AnimatedSwitcher(
@@ -510,44 +512,116 @@ class _AppLogo extends StatelessWidget {
   }
 }
 
-class _CodeBox extends StatelessWidget {
-  const _CodeBox({
+/// 验证码输入：单个隐藏的真实输入框叠在 6 个展示格子之上。
+/// 这样可原生支持复制、粘贴（一次粘贴 6 位自动铺满）以及 App 风格的删除回退。
+class _CodeInput extends StatelessWidget {
+  const _CodeInput({
+    required this.length,
     required this.controller,
     required this.focusNode,
-    required this.onChanged,
+    required this.hasError,
+    required this.onSubmitted,
   });
 
+  final int length;
   final TextEditingController controller;
   final FocusNode focusNode;
-  final ValueChanged<String> onChanged;
+  final bool hasError;
+  final VoidCallback onSubmitted;
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
+    final code = controller.text;
+    final focused = focusNode.hasFocus;
+    return Stack(
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            for (var i = 0; i < length; i++)
+              _CodeBox(
+                char: i < code.length ? code[i] : '',
+                active: focused && i == code.length && code.length < length,
+                hasError: hasError,
+              ),
+          ],
+        ),
+        Positioned.fill(
+          child: TextField(
+            controller: controller,
+            focusNode: focusNode,
+            autofocus: true,
+            showCursor: false,
+            cursorColor: Colors.transparent,
+            keyboardType: TextInputType.number,
+            textInputAction: TextInputAction.done,
+            enableInteractiveSelection: true,
+            autofillHints: const [AutofillHints.oneTimeCode],
+            style: const TextStyle(
+              color: Colors.transparent,
+              fontSize: 24,
+              height: 1.0,
+            ),
+            inputFormatters: [
+              FilteringTextInputFormatter.digitsOnly,
+              LengthLimitingTextInputFormatter(length),
+            ],
+            decoration: const InputDecoration(
+              counterText: '',
+              border: InputBorder.none,
+              enabledBorder: InputBorder.none,
+              focusedBorder: InputBorder.none,
+              errorBorder: InputBorder.none,
+              focusedErrorBorder: InputBorder.none,
+              filled: false,
+              contentPadding: EdgeInsets.zero,
+            ),
+            onSubmitted: (_) => onSubmitted(),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _CodeBox extends StatelessWidget {
+  const _CodeBox({
+    required this.char,
+    required this.active,
+    required this.hasError,
+  });
+
+  final String char;
+  final bool active;
+  final bool hasError;
+
+  @override
+  Widget build(BuildContext context) {
+    final Color borderColor = hasError
+        ? DunesColors.coral
+        : active
+            ? _authBlue
+            : const Color(0xFFE8ECF2);
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 120),
       width: 48,
       height: 56,
-      child: TextField(
-        controller: controller,
-        focusNode: focusNode,
-        textAlign: TextAlign.center,
-        keyboardType: TextInputType.number,
-        textInputAction: TextInputAction.next,
-        inputFormatters: [
-          FilteringTextInputFormatter.digitsOnly,
-          LengthLimitingTextInputFormatter(1),
-        ],
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: _authSurface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: borderColor,
+          width: active || hasError ? 1.5 : 1,
+        ),
+      ),
+      child: Text(
+        char,
         style: DunesTypography.sans(
           fontSize: 24,
           fontWeight: FontWeight.w600,
           color: DunesColors.text,
         ),
-        decoration: _inputDecoration().copyWith(
-          counterText: '',
-          contentPadding: EdgeInsets.zero,
-          filled: true,
-          fillColor: _authSurface,
-        ),
-        onChanged: onChanged,
       ),
     );
   }

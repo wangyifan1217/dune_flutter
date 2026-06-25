@@ -10,6 +10,7 @@ import '../auth/auth_session.dart';
 import '../chat/chat_voice_player.dart';
 import '../chat/cors_safe_image.dart';
 import '../chat/file_download.dart';
+import '../chat/gallery_save.dart' as gallery;
 import 'native_nova_service.dart';
 import 'nova_deliverable.dart';
 
@@ -171,7 +172,8 @@ Future<void> showNovaImagePreview(
     );
     return;
   }
-  final source = url.isNotEmpty ? url : objectKey;
+  // 优先用 objectKey 重新签名，避免重进会话后绝对 URL 失效。
+  final source = objectKey.isNotEmpty ? objectKey : url;
   if (source.isEmpty) {
     _novaToast(context, '图片加载中，请稍后再试');
     return;
@@ -233,7 +235,8 @@ Future<void> openNovaFileDownload(
   required String fileName,
   String bucket = 'im-attachments',
 }) async {
-  final source = url.isNotEmpty ? url : objectKey;
+  // 优先用 objectKey 重新签名，避免重进会话后绝对 URL 失效。
+  final source = objectKey.isNotEmpty ? objectKey : url;
   if (source.isEmpty) {
     _novaToast(context, '文件地址无效', error: true);
     return;
@@ -311,19 +314,38 @@ class _NovaImagePreviewDialog extends StatelessWidget {
               icon: const Icon(Icons.close_rounded, color: Colors.white),
             ),
           ),
-          if (memoryBytes == null)
-            Positioned(
-              top: 8,
-              left: 8,
-              child: IconButton(
-                onPressed: onDownload,
-                tooltip: '下载',
-                icon: const Icon(Icons.download_rounded, color: Colors.white),
-              ),
+          Positioned(
+            top: 8,
+            left: 8,
+            child: IconButton(
+              onPressed: () => _saveImage(context),
+              tooltip: '保存图片',
+              icon: const Icon(Icons.download_rounded, color: Colors.white),
             ),
+          ),
         ],
       ),
     );
+  }
+
+  Future<void> _saveImage(BuildContext context) async {
+    final bytes = memoryBytes;
+    // 有内存字节（含 NOVA 生成图、鉴权拉取图）时优先存到相册，失败回退普通保存。
+    if (bytes != null && bytes.isNotEmpty) {
+      try {
+        await gallery.saveImageToGallery(bytes, fileName);
+        if (context.mounted) _novaToast(context, '已保存到相册');
+      } catch (_) {
+        try {
+          await saveBytesAsFile(bytes, fileName);
+          if (context.mounted) _novaToast(context, '已保存');
+        } catch (e) {
+          if (context.mounted) _novaToast(context, '保存失败: $e', error: true);
+        }
+      }
+      return;
+    }
+    onDownload();
   }
 }
 
@@ -689,7 +711,9 @@ class NovaC4ImageThumb extends StatelessWidget {
       );
     }
 
-    final source = url.isNotEmpty ? url : objectKey;
+    // 优先用 objectKey 走 presigned-get 重新签名，避免依赖发送时猜测/临时的绝对 URL
+    // （重进会话后该 URL 可能失效，导致图片裂开）。
+    final source = objectKey.isNotEmpty ? objectKey : url;
     if (source.isEmpty) {
       return Icon(Icons.image_not_supported_outlined, color: DunesColors.text3, size: 32);
     }

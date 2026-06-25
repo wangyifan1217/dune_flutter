@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -6,6 +7,35 @@ import 'package:http/http.dart' as http;
 import '../auth/auth_session.dart';
 import '../nova/nova_history_utils.dart';
 import 'conversation_models.dart';
+
+/// 上传分块大小：把文件切成小块逐块写入，配合 socket 背压才能得到真实的
+/// 上传进度（直接用 fromBytes 会一次性吐出全部字节导致进度瞬间到 100%）。
+const int _uploadChunkSize = 64 * 1024;
+
+/// 构造一个按块上报进度的 multipart 文件部件。
+http.MultipartFile _progressMultipartFile(
+  String field,
+  Uint8List bytes,
+  String filename,
+  void Function(int sent, int total)? onProgress,
+) {
+  final total = bytes.length;
+  Stream<List<int>> chunked() async* {
+    var offset = 0;
+    if (total == 0) {
+      onProgress?.call(0, 0);
+      return;
+    }
+    while (offset < total) {
+      final end = (offset + _uploadChunkSize < total) ? offset + _uploadChunkSize : total;
+      yield bytes.sublist(offset, end);
+      offset = end;
+      onProgress?.call(offset, total);
+    }
+  }
+
+  return http.MultipartFile(field, http.ByteStream(chunked()), total, filename: filename);
+}
 
 class ConversationService {
   ConversationService({
@@ -317,22 +347,49 @@ class ConversationService {
     required String fileName,
     required String mimeType,
     required String sourceLabel,
+    Uint8List? previewBytes,
+    String? previewFileName,
+    String? previewMimeType,
+    void Function(double progress)? onProgress,
   }) async {
     final uploaded = await uploadAttachment(
       conversationId: conversationId,
       bytes: bytes,
       fileName: fileName,
       mimeType: mimeType,
+      onProgress: onProgress,
     );
     final url = uploaded.bestUrl;
+    final objectKey = _isPublicMediaUrl(url) ? '' : url;
+
+    // 默认预览即原图（兼容压缩失败/无预览的情况）。
+    var previewUrl = url;
+    var previewObjectKey = objectKey;
+    if (previewBytes != null && previewBytes.isNotEmpty) {
+      try {
+        final preview = await uploadAttachment(
+          conversationId: conversationId,
+          bytes: previewBytes,
+          fileName: previewFileName ?? fileName,
+          mimeType: previewMimeType ?? 'image/jpeg',
+        );
+        previewUrl = preview.bestUrl;
+        previewObjectKey = _isPublicMediaUrl(previewUrl) ? '' : previewUrl;
+      } catch (_) {
+        previewUrl = url;
+        previewObjectKey = objectKey;
+      }
+    }
+
     await _sendAttachment(
       conversationId: conversationId,
       kind: 'IMAGE',
       bodyText: '[$sourceLabel] $fileName',
       payload: <String, dynamic>{
         'url': url,
-        'objectKey': _isPublicMediaUrl(url) ? '' : url,
-        'previewUrl': url,
+        'objectKey': objectKey,
+        'previewUrl': previewUrl,
+        'previewObjectKey': previewObjectKey,
         'fileName': fileName,
         'mimeType': mimeType,
       },
@@ -344,12 +401,14 @@ class ConversationService {
     required Uint8List bytes,
     required String fileName,
     required String mimeType,
+    void Function(double progress)? onProgress,
   }) async {
     final uploaded = await uploadAttachment(
       conversationId: conversationId,
       bytes: bytes,
       fileName: fileName,
       mimeType: mimeType,
+      onProgress: onProgress,
     );
     final url = uploaded.bestUrl;
     await _sendAttachment(
@@ -400,6 +459,7 @@ class ConversationService {
     required Uint8List bytes,
     required String fileName,
     required String mimeType,
+    void Function(double progress)? onProgress,
   }) async {
     for (var attempt = 1; attempt <= _maxSendAttempts; attempt++) {
       try {
@@ -411,13 +471,18 @@ class ConversationService {
         req.fields['bucket'] = 'im-attachments';
         req.fields['conversationId'] = '$conversationId';
         req.files.add(
-          http.MultipartFile.fromBytes(
+          _progressMultipartFile(
             'file',
             bytes,
-            filename: fileName,
+            fileName,
+            onProgress == null
+                ? null
+                : (sent, total) {
+                    if (total > 0) onProgress((sent / total).clamp(0.0, 1.0));
+                  },
           ),
         );
-        final streamed = await req.send();
+        final streamed = await _client.send(req);
         final bodyText = await streamed.stream.bytesToString();
         if (streamed.statusCode < 200 || streamed.statusCode >= 300) {
           if (_isRetryableStatus(streamed.statusCode) && attempt < _maxSendAttempts) {
@@ -1043,12 +1108,21 @@ class ConversationService {
         .trim();
 
     if (rawText.isEmpty) return '';
-    if (_isSystemMsgKind(kind)) return _compactPreview(kind, rawText);
+    final effectiveKind = kind.isNotEmpty ? kind : _inferKindFromPreview(rawText);
+    if (_isSystemMsgKind(effectiveKind)) return _compactPreview(effectiveKind, rawText);
 
-    final compact = _compactPreview(kind, rawText);
-    final media = _isMediaPreviewBody(rawText, kind);
+    // 群聊预览里服务端通常会把发送者名字拼进去（如 "张三: [图片]"），先拆出来，
+    // 这样既能正确压缩媒体描述，又能在缺少结构化字段时回退用拆出的名字。
+    final parsed = isGroup ? _splitPreviewSender(rawText) : (sender: '', body: rawText);
+    final bodySource = parsed.body.isNotEmpty ? parsed.body : rawText;
+    final compact = _compactPreview(effectiveKind, bodySource);
+    final media = _isMediaPreviewBody(bodySource, effectiveKind);
     if ((isGroup || media) && compact.isNotEmpty) {
-      final sender = _resolvePreviewSenderName(raw, isPrivate: isPrivate);
+      final sender = _resolvePreviewSenderName(
+        raw,
+        isPrivate: isPrivate,
+        parsedSender: parsed.sender,
+      );
       if (sender.isEmpty) return compact;
       if (compact.startsWith('$sender:') || compact.startsWith('$sender：')) return compact;
       return '$sender: $compact';
@@ -1056,7 +1130,27 @@ class ConversationService {
     return compact;
   }
 
-  String _resolvePreviewSenderName(Map<String, dynamic> raw, {required bool isPrivate}) {
+  /// 从 "名字: 正文" 形式的预览中拆出发送者与正文。
+  ({String sender, String body}) _splitPreviewSender(String text) {
+    final s = text.trim();
+    final m = RegExp(r'^([^:：]{1,24})[:：]\s*(.+)$').firstMatch(s);
+    if (m == null) return (sender: '', body: s);
+    return (sender: m.group(1)!.trim(), body: m.group(2)!.trim());
+  }
+
+  String _inferKindFromPreview(String text) {
+    final s = text.trim();
+    if (RegExp(r'^\[(相册|拍照|图片)\]', caseSensitive: false).hasMatch(s)) return 'IMAGE';
+    if (RegExp(r'^\[文件\]').hasMatch(s)) return 'FILE';
+    if (RegExp(r'^\[语音\]').hasMatch(s)) return 'AUDIO';
+    return 'TEXT';
+  }
+
+  String _resolvePreviewSenderName(
+    Map<String, dynamic> raw, {
+    required bool isPrivate,
+    String parsedSender = '',
+  }) {
     final direct = (raw['lastMessageSenderDisplayName'] ??
             raw['lastSenderDisplayName'] ??
             raw['lastMessageSenderName'] ??
@@ -1094,6 +1188,7 @@ class ConversationService {
         if (name.isNotEmpty) return name;
       }
     }
+    if (parsedSender.isNotEmpty) return parsedSender;
     if (isPrivate && ((raw['unreadCount'] as num?)?.toInt() ?? 0) > 0) {
       final peerDisplayName = (raw['peerDisplayName'] ?? '').toString().trim();
       if (peerDisplayName.isNotEmpty) return peerDisplayName;
@@ -1214,6 +1309,40 @@ class ConversationService {
       throw Exception('请使用公网图片地址直接展示');
     }
     throw Exception('附件地址为空');
+  }
+
+  /// 加载完整原图字节（鉴权附件或公网直链均统一返回 bytes），
+  /// 供「查看原图 / 保存到相册」使用。
+  Future<Uint8List> loadFullImageBytes(Map<String, dynamic>? payload) async {
+    if (hasAuthMedia(payload)) {
+      return loadChatMediaBytes(payload);
+    }
+    final url = mediaDirectUrl(payload);
+    if (url.isNotEmpty) {
+      return downloadAttachmentBytes(
+        objectKey: url,
+        fileName: mediaFileName(payload),
+      );
+    }
+    throw Exception('图片地址为空');
+  }
+
+  /// 返回用于会话内联展示的「预览图」payload；旧消息或无预览时回退为原 payload。
+  static Map<String, dynamic>? previewMediaPayload(Map<String, dynamic>? payload) {
+    if (payload == null) return null;
+    final previewObjectKey = (payload['previewObjectKey'] ?? '').toString().trim();
+    final previewUrl = (payload['previewUrl'] ?? '').toString().trim();
+    if (previewObjectKey.isEmpty && previewUrl.isEmpty) return payload;
+    final objectKey = (payload['objectKey'] ?? '').toString().trim();
+    final url = (payload['url'] ?? '').toString().trim();
+    // 预览与原图一致（旧消息把 previewUrl 设为原图）则直接复用原 payload。
+    if (previewObjectKey == objectKey && previewUrl == url) return payload;
+    return <String, dynamic>{
+      'objectKey': previewObjectKey,
+      'url': previewUrl,
+      'fileName': payload['fileName'],
+      'mimeType': payload['mimeType'],
+    };
   }
 
   /// 公网 CDN 图片可直接展示；私有附件走鉴权下载。

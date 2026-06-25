@@ -146,14 +146,17 @@ class NovaPageHeader extends StatelessWidget {
               ),
             ),
           if (onOpenKb != null)
-            SizedBox(
-              width: 34,
-              height: 34,
-              child: IconButton(
-                padding: EdgeInsets.zero,
-                onPressed: onOpenKb,
-                icon: const Icon(Icons.menu_book_outlined, size: 20),
-                tooltip: '知识库',
+            Opacity(
+              opacity: actionOpacity,
+              child: SizedBox(
+                width: 34,
+                height: 34,
+                child: IconButton(
+                  padding: EdgeInsets.zero,
+                  onPressed: actionsEnabled ? onOpenKb : null,
+                  icon: const Icon(Icons.menu_book_outlined, size: 20),
+                  tooltip: actionsEnabled ? '知识库' : kNovaInputBusyHint,
+                ),
               ),
             ),
         ],
@@ -412,13 +415,8 @@ Future<void> showNovaModelSheet(
                   },
                 ),
               ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(18, 8, 18, 12),
-                child: Text(
-                  '模型介绍可在沙丘工作台 · NOVA模型管理中配置',
-                  style: DunesTypography.sans(fontSize: 10, color: DunesColors.text3, height: 1.5),
-                ),
-              ),
+              // 仅去掉底部说明文字，保留原有的占位空间，避免列表贴边。
+              const SizedBox(height: 35),
             ],
           ),
         ),

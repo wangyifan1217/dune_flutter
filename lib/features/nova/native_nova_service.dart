@@ -879,6 +879,11 @@ class NativeNovaService {
       msgs = localMsgs;
     }
 
+    // 修复：后台完成生成后重新进入会话时，服务端快照可能只回了用户消息而漏掉助手
+    // 回复（助手 turn 尚未在服务端落库/回显）。若不补齐，下面的持久化会用「仅用户
+    // 消息」覆盖本地缓存，导致已生成的回复永久丢失。这里用本地已保存的完整回复补齐。
+    msgs = _mergeTrailingAssistantFromLocal(msgs, localMsgs);
+
     if (_shouldRebuildFromTurns(msgs)) {
       final turns = await _fetchTurnRows(200, conversationId: conversationId);
       if (turns.isNotEmpty) {
@@ -941,6 +946,40 @@ class NativeNovaService {
       generatingStatus: genStatus,
       generatingAfterMessageId: genAfter,
     );
+  }
+
+  /// 当服务端快照缺失结尾的助手回复，但本地缓存已保存完整回复时，补齐该回复。
+  /// 保守判断：本地最后一条有效消息必须是非流式、有文本的助手消息；服务端最后一条
+  /// 有效消息必须是用户消息；且服务端尚未包含该回复文本。
+  List<NativeNovaMessage> _mergeTrailingAssistantFromLocal(
+    List<NativeNovaMessage> server,
+    List<NativeNovaMessage> local,
+  ) {
+    if (server.isEmpty || local.isEmpty) return server;
+    final localMeaningful = local
+        .where((m) => m.text.trim().isNotEmpty || m.attachments.isNotEmpty)
+        .toList(growable: false);
+    if (localMeaningful.isEmpty) return server;
+    final localReply = localMeaningful.last;
+    if (localReply.role != 'assistant' ||
+        localReply.streaming ||
+        localReply.text.trim().isEmpty) {
+      return server;
+    }
+    final serverMeaningful = server
+        .where((m) => m.text.trim().isNotEmpty || m.attachments.isNotEmpty)
+        .toList(growable: false);
+    if (serverMeaningful.isEmpty || serverMeaningful.last.role != 'user') {
+      return server;
+    }
+    final replyText = localReply.text.trim();
+    final alreadyHas =
+        server.any((m) => m.role == 'assistant' && m.text.trim() == replyText);
+    if (alreadyHas) return server;
+    if (kDebugMode) {
+      debugPrint('[NativeNova] 服务端缺失助手回复，使用本地缓存补齐');
+    }
+    return <NativeNovaMessage>[...server, localReply];
   }
 
   bool _shouldRebuildFromTurns(List<NativeNovaMessage> msgs) {

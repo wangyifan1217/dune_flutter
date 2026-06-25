@@ -9,8 +9,6 @@ import 'features/auth/login_flow.dart';
 import 'features/push/push_service.dart';
 import 'core/web/text_input_guard_stub.dart'
     if (dart.library.html) 'core/web/text_input_guard_web.dart';
-import 'features/prototype/webview_platform_init_stub.dart'
-    if (dart.library.html) 'features/prototype/webview_platform_init_web.dart';
 
 class DunesApp extends StatelessWidget {
   const DunesApp({super.key});
@@ -29,7 +27,6 @@ class DunesApp extends StatelessWidget {
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
   installWebTextInputGuard();
-  initWebViewPlatform();
   if (!kIsWeb) {
     SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(

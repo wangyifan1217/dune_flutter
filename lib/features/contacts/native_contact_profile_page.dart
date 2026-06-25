@@ -13,14 +13,12 @@ class NativeContactProfilePage extends StatefulWidget {
     required this.contactHint,
     required this.onBack,
     required this.onOpenPrivateChat,
-    required this.onFallback,
   });
 
   final AuthSession session;
   final NativeContact? contactHint;
   final VoidCallback onBack;
   final ValueChanged<int> onOpenPrivateChat;
-  final VoidCallback onFallback;
 
   @override
   State<NativeContactProfilePage> createState() => _NativeContactProfilePageState();
@@ -97,7 +95,7 @@ class _NativeContactProfilePageState extends State<NativeContactProfilePage> {
             children: [
               Text(_error ?? '联系人不存在', style: const TextStyle(color: DunesColors.text3)),
               const SizedBox(height: 10),
-              FilledButton(onPressed: widget.onFallback, child: const Text('切回 WebView')),
+              OutlinedButton(onPressed: widget.onBack, child: const Text('返回')),
             ],
           ),
         ),

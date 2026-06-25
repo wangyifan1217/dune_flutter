@@ -31,7 +31,6 @@ class NativeNovaPage extends StatefulWidget {
     this.onOpenKb,
     this.focusConversationId,
     this.focusMessageId,
-    this.onFallback,
     this.onClearHistoryFocus,
   });
 
@@ -41,7 +40,6 @@ class NativeNovaPage extends StatefulWidget {
   final VoidCallback? onOpenKb;
   final int? focusConversationId;
   final int? focusMessageId;
-  final VoidCallback? onFallback;
   final VoidCallback? onClearHistoryFocus;
 
   @override

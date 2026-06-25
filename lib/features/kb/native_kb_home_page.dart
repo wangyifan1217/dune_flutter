@@ -17,14 +17,12 @@ class NativeKbHomePage extends StatefulWidget {
     required this.navigation,
     required this.onBack,
     required this.onOpenChat,
-    required this.onFallback,
   });
 
   final AuthSession session;
   final DunesNavigationController navigation;
   final VoidCallback onBack;
   final VoidCallback onOpenChat;
-  final VoidCallback onFallback;
 
   @override
   State<NativeKbHomePage> createState() => _NativeKbHomePageState();
@@ -231,13 +229,7 @@ class _NativeKbHomePageState extends State<NativeKbHomePage> {
             const SizedBox(height: 8),
             Text(_error!, textAlign: TextAlign.center, style: const TextStyle(fontSize: 12, color: DunesColors.text3)),
             const SizedBox(height: 12),
-            Wrap(
-              spacing: 8,
-              children: [
-                OutlinedButton(onPressed: _load, child: const Text('重试')),
-                FilledButton(onPressed: widget.onFallback, child: const Text('切回 WebView')),
-              ],
-            ),
+            OutlinedButton(onPressed: _load, child: const Text('重试')),
           ],
         ),
       ),

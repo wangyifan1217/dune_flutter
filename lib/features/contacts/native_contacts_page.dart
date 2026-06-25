@@ -19,14 +19,12 @@ class NativeContactsPage extends StatefulWidget {
     required this.onBack,
     required this.onOpenContact,
     required this.onStartPrivateChat,
-    this.onFallback,
   });
 
   final AuthSession session;
   final VoidCallback onBack;
   final ValueChanged<NativeContact> onOpenContact;
   final ValueChanged<int> onStartPrivateChat;
-  final VoidCallback? onFallback;
 
   @override
   State<NativeContactsPage> createState() => _NativeContactsPageState();

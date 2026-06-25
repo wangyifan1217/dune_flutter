@@ -9,13 +9,11 @@ class NativeApprovalPage extends StatefulWidget {
     super.key,
     required this.session,
     required this.onOpenProposal,
-    required this.onFallback,
     this.onBack,
   });
 
   final AuthSession session;
   final void Function(XflowProposalItem item) onOpenProposal;
-  final VoidCallback onFallback;
   final VoidCallback? onBack;
 
   @override
@@ -28,7 +26,6 @@ class _NativeApprovalPageState extends State<NativeApprovalPage> {
     return NativeB13Page(
       session: widget.session,
       onOpenProposal: widget.onOpenProposal,
-      onFallback: widget.onFallback,
       onBack: widget.onBack,
     );
   }

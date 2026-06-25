@@ -13,14 +13,12 @@ class NativeKbChatPage extends StatefulWidget {
     required this.navigation,
     required this.chatKind,
     required this.docId,
-    required this.onFallback,
   });
 
   final AuthSession session;
   final DunesNavigationController navigation;
   final String chatKind;
   final String? docId;
-  final VoidCallback onFallback;
 
   @override
   State<NativeKbChatPage> createState() => _NativeKbChatPageState();
@@ -258,13 +256,7 @@ class _NativeKbChatPageState extends State<NativeKbChatPage> {
           children: [
             Text(_error!, textAlign: TextAlign.center),
             const SizedBox(height: 12),
-            Wrap(
-              spacing: 8,
-              children: [
-                OutlinedButton(onPressed: _bootstrap, child: const Text('重试')),
-                FilledButton(onPressed: widget.onFallback, child: const Text('切回 WebView')),
-              ],
-            ),
+            OutlinedButton(onPressed: _bootstrap, child: const Text('重试')),
           ],
         ),
       ),

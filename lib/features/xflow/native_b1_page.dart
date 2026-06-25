@@ -11,13 +11,11 @@ class NativeB1Page extends StatelessWidget {
     super.key,
     required this.session,
     required this.onOpenProposal,
-    required this.onFallback,
     this.onBack,
   });
 
   final AuthSession session;
   final void Function(XflowProposalItem item) onOpenProposal;
-  final VoidCallback onFallback;
   final VoidCallback? onBack;
 
   @override
@@ -25,7 +23,6 @@ class NativeB1Page extends StatelessWidget {
     return _NativeProposalListPage(
       session: session,
       onOpenProposal: onOpenProposal,
-      onFallback: onFallback,
       onBack: onBack,
       type: _ListType.b1,
     );
@@ -37,13 +34,11 @@ class NativeB14Page extends StatelessWidget {
     super.key,
     required this.session,
     required this.onOpenProposal,
-    required this.onFallback,
     this.onBack,
   });
 
   final AuthSession session;
   final void Function(XflowProposalItem item) onOpenProposal;
-  final VoidCallback onFallback;
   final VoidCallback? onBack;
 
   @override
@@ -51,7 +46,6 @@ class NativeB14Page extends StatelessWidget {
     return _NativeProposalListPage(
       session: session,
       onOpenProposal: onOpenProposal,
-      onFallback: onFallback,
       onBack: onBack,
       type: _ListType.b14,
     );
@@ -63,13 +57,11 @@ class NativeP1Page extends StatelessWidget {
     super.key,
     required this.session,
     required this.onOpenProposal,
-    required this.onFallback,
     this.onBack,
   });
 
   final AuthSession session;
   final void Function(XflowProposalItem item) onOpenProposal;
-  final VoidCallback onFallback;
   final VoidCallback? onBack;
 
   @override
@@ -77,7 +69,6 @@ class NativeP1Page extends StatelessWidget {
     return _NativeProposalListPage(
       session: session,
       onOpenProposal: onOpenProposal,
-      onFallback: onFallback,
       onBack: onBack,
       type: _ListType.p1,
     );
@@ -89,13 +80,11 @@ class NativeB13Page extends StatelessWidget {
     super.key,
     required this.session,
     required this.onOpenProposal,
-    required this.onFallback,
     this.onBack,
   });
 
   final AuthSession session;
   final void Function(XflowProposalItem item) onOpenProposal;
-  final VoidCallback onFallback;
   final VoidCallback? onBack;
 
   @override
@@ -103,7 +92,6 @@ class NativeB13Page extends StatelessWidget {
     return _NativeProposalListPage(
       session: session,
       onOpenProposal: onOpenProposal,
-      onFallback: onFallback,
       onBack: onBack,
       type: _ListType.b13,
     );
@@ -116,14 +104,12 @@ class _NativeProposalListPage extends StatefulWidget {
   const _NativeProposalListPage({
     required this.session,
     required this.onOpenProposal,
-    required this.onFallback,
     this.onBack,
     required this.type,
   });
 
   final AuthSession session;
   final void Function(XflowProposalItem item) onOpenProposal;
-  final VoidCallback onFallback;
   final VoidCallback? onBack;
   final _ListType type;
 
@@ -398,13 +384,7 @@ class _NativeProposalListPageState extends State<_NativeProposalListPage> {
           children: [
             Text(_error!, textAlign: TextAlign.center),
             const SizedBox(height: 10),
-            Wrap(
-              spacing: 8,
-              children: [
-                OutlinedButton(onPressed: _load, child: const Text('重试')),
-                FilledButton(onPressed: widget.onFallback, child: const Text('切回 WebView')),
-              ],
-            ),
+            OutlinedButton(onPressed: _load, child: const Text('重试')),
           ],
         ),
       ),

@@ -13,13 +13,11 @@ class NativeB3Page extends StatefulWidget {
     required this.session,
     required this.navigation,
     required this.onOpenForm,
-    required this.onFallback,
   });
 
   final AuthSession session;
   final DunesNavigationController navigation;
   final void Function(String templateKey) onOpenForm;
-  final VoidCallback onFallback;
 
   @override
   State<NativeB3Page> createState() => _NativeB3PageState();
@@ -70,7 +68,6 @@ class _NativeB3PageState extends State<NativeB3Page> {
               crumb: '我的 · 发起新审批',
               title: '新建销售提案',
               onBack: () => widget.navigation.go('B2'),
-              onMore: widget.onFallback,
             ),
             Expanded(
               child: _loading
@@ -237,13 +234,7 @@ class _NativeB3PageState extends State<NativeB3Page> {
           children: [
             Text(_error!, textAlign: TextAlign.center),
             const SizedBox(height: 10),
-            Wrap(
-              spacing: 8,
-              children: [
-                OutlinedButton(onPressed: _load, child: const Text('重试')),
-                FilledButton(onPressed: widget.onFallback, child: const Text('切回 WebView')),
-              ],
-            ),
+            OutlinedButton(onPressed: _load, child: const Text('重试')),
           ],
         ),
       ),

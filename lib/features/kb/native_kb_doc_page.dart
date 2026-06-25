@@ -14,14 +14,12 @@ class NativeKbDocPage extends StatefulWidget {
     required this.navigation,
     required this.docId,
     required this.onAskAi,
-    required this.onFallback,
   });
 
   final AuthSession session;
   final DunesNavigationController navigation;
   final String docId;
   final void Function(String docId) onAskAi;
-  final VoidCallback onFallback;
 
   @override
   State<NativeKbDocPage> createState() => _NativeKbDocPageState();
@@ -158,13 +156,7 @@ class _NativeKbDocPageState extends State<NativeKbDocPage> {
           children: [
             Text(_error!, textAlign: TextAlign.center),
             const SizedBox(height: 12),
-            Wrap(
-              spacing: 8,
-              children: [
-                OutlinedButton(onPressed: _load, child: const Text('重试')),
-                FilledButton(onPressed: widget.onFallback, child: const Text('切回 WebView')),
-              ],
-            ),
+            OutlinedButton(onPressed: _load, child: const Text('重试')),
           ],
         ),
       ),

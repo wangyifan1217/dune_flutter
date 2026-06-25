@@ -18,7 +18,6 @@ class NativeB10Page extends StatefulWidget {
     required this.todoHint,
     required this.backScreen,
     required this.onReedit,
-    required this.onFallback,
   });
 
   final AuthSession session;
@@ -27,7 +26,6 @@ class NativeB10Page extends StatefulWidget {
   final XflowTodoHint? todoHint;
   final String backScreen;
   final void Function(int proposalId) onReedit;
-  final VoidCallback onFallback;
 
   @override
   State<NativeB10Page> createState() => _NativeB10PageState();
@@ -340,13 +338,7 @@ class _NativeB10PageState extends State<NativeB10Page> {
           children: [
             Text(_error!, textAlign: TextAlign.center),
             const SizedBox(height: 10),
-            Wrap(
-              spacing: 8,
-              children: [
-                OutlinedButton(onPressed: _load, child: const Text('重试')),
-                FilledButton(onPressed: widget.onFallback, child: const Text('切回 WebView')),
-              ],
-            ),
+            OutlinedButton(onPressed: _load, child: const Text('重试')),
           ],
         ),
       ),

@@ -53,13 +53,11 @@ class NativeScreenHost extends StatefulWidget {
     super.key,
     required this.session,
     required this.navigation,
-    required this.onOpenWebView,
     this.onLogout,
   });
 
   final AuthSession session;
   final DunesNavigationController navigation;
-  final VoidCallback onOpenWebView;
   final VoidCallback? onLogout;
 
   @override
@@ -335,7 +333,6 @@ class _NativeScreenHostState extends State<NativeScreenHost> {
           navigation: widget.navigation,
           commUnread: _commUnread,
           workbenchBadge: _workbenchBadge,
-          onOpenWebView: widget.onOpenWebView,
           onLogout: widget.onLogout,
         );
       case 'C1':
@@ -369,7 +366,6 @@ class _NativeScreenHostState extends State<NativeScreenHost> {
             widget.navigation.go('C10');
           },
           onOpenNewChat: () => widget.navigation.go('C7'),
-          onOpenFallback: widget.onOpenWebView,
         );
       case 'Z2':
         return NativeNotificationsPage(
@@ -448,7 +444,6 @@ class _NativeScreenHostState extends State<NativeScreenHost> {
             });
             widget.navigation.go('C5');
           },
-          onFallback: widget.onOpenWebView,
         );
       case 'C9':
         return NativeContactProfilePage(
@@ -462,34 +457,29 @@ class _NativeScreenHostState extends State<NativeScreenHost> {
             });
             widget.navigation.go('C5');
           },
-          onFallback: widget.onOpenWebView,
         );
       case 'B13':
         return NativeApprovalPage(
           session: widget.session,
           onOpenProposal: (item) => _openProposalDetail(item, from: 'B13'),
-          onFallback: widget.onOpenWebView,
           onBack: widget.navigation.back,
         );
       case 'B1':
         return NativeMyApprovalWorkbenchPage(
           session: widget.session,
           onOpenProposal: (item) => _openProposalDetail(item, from: 'B1'),
-          onFallback: widget.onOpenWebView,
           onBack: widget.navigation.back,
         );
       case 'B14':
         return NativeMyInitiatedPage(
           session: widget.session,
           onOpenProposal: (item) => _openProposalDetail(item, from: 'B14'),
-          onFallback: widget.onOpenWebView,
           onBack: widget.navigation.back,
         );
       case 'P1':
         return NativeMyCcProposalPage(
           session: widget.session,
           onOpenProposal: (item) => _openProposalDetail(item, from: 'P1'),
-          onFallback: widget.onOpenWebView,
           onBack: widget.navigation.back,
         );
       case 'B3':
@@ -503,7 +493,6 @@ class _NativeScreenHostState extends State<NativeScreenHost> {
             });
             widget.navigation.go('XF');
           },
-          onFallback: widget.onOpenWebView,
         );
       case 'XF':
         return NativeXflowFormPage(
@@ -521,7 +510,6 @@ class _NativeScreenHostState extends State<NativeScreenHost> {
             });
             widget.navigation.go('B10');
           },
-          onFallback: widget.onOpenWebView,
         );
       case 'B10':
         return NativeB10Page(
@@ -537,7 +525,6 @@ class _NativeScreenHostState extends State<NativeScreenHost> {
             });
             widget.navigation.go('XF');
           },
-          onFallback: widget.onOpenWebView,
         );
       case 'C4':
         return NativeNovaPage(
@@ -553,7 +540,6 @@ class _NativeScreenHostState extends State<NativeScreenHost> {
               _novaFocusMessageId = null;
             });
           },
-          onFallback: widget.onOpenWebView,
         );
       case 'C11':
         return NativeNovaHistoryPage(
@@ -579,7 +565,6 @@ class _NativeScreenHostState extends State<NativeScreenHost> {
             });
             widget.navigation.go('K2');
           },
-          onFallback: widget.onOpenWebView,
         );
       case 'K3':
         return NativeKbDocPage(
@@ -593,7 +578,6 @@ class _NativeScreenHostState extends State<NativeScreenHost> {
             });
             widget.navigation.go('K2');
           },
-          onFallback: widget.onOpenWebView,
         );
       case 'K2':
         return NativeKbChatPage(
@@ -601,7 +585,6 @@ class _NativeScreenHostState extends State<NativeScreenHost> {
           navigation: widget.navigation,
           chatKind: _kbChatKind,
           docId: _kbChatDocId,
-          onFallback: widget.onOpenWebView,
         );
       case 'C2':
         return NativeGroupChatPage(
@@ -693,8 +676,8 @@ class _NativeScreenHostState extends State<NativeScreenHost> {
         final info = dunesScreenById(widget.navigation.currentScreen);
         return _NativeStubPage(
           title: info?.name ?? widget.navigation.currentScreen,
-          subtitle: '该页面暂未接入原生试点',
-          onOpenWebView: widget.onOpenWebView,
+          subtitle: '该页面暂未上线',
+          onBack: widget.navigation.canGoBack ? widget.navigation.back : null,
         );
     }
   }
@@ -715,7 +698,6 @@ class _NativeB2Page extends StatefulWidget {
     required this.navigation,
     required this.commUnread,
     required this.workbenchBadge,
-    required this.onOpenWebView,
     this.onLogout,
   });
 
@@ -723,7 +705,6 @@ class _NativeB2Page extends StatefulWidget {
   final DunesNavigationController navigation;
   final CommUnreadNotifier commUnread;
   final WorkbenchBadgeNotifier workbenchBadge;
-  final VoidCallback onOpenWebView;
   final VoidCallback? onLogout;
 
   @override
@@ -1659,12 +1640,12 @@ class _NativeStubPage extends StatelessWidget {
   const _NativeStubPage({
     required this.title,
     required this.subtitle,
-    required this.onOpenWebView,
+    this.onBack,
   });
 
   final String title;
   final String subtitle;
-  final VoidCallback onOpenWebView;
+  final VoidCallback? onBack;
 
   @override
   Widget build(BuildContext context) {
@@ -1672,11 +1653,12 @@ class _NativeStubPage extends StatelessWidget {
       title: title,
       body: [
         _InfoTile(label: '状态', value: subtitle),
-        _ActionTile(
-          title: '切换到 WebView',
-          subtitle: '继续使用现有页面',
-          onTap: onOpenWebView,
-        ),
+        if (onBack != null)
+          _ActionTile(
+            title: '返回',
+            subtitle: '回到上一页',
+            onTap: onBack,
+          ),
       ],
     );
   }

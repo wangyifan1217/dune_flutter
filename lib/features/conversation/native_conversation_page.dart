@@ -39,7 +39,6 @@ class NativeConversationPage extends StatefulWidget {
     required this.onOpenNotifications,
     required this.onOpenBroadcast,
     required this.onOpenNewChat,
-    required this.onOpenFallback,
   });
 
   final AuthSession session;
@@ -53,7 +52,6 @@ class NativeConversationPage extends StatefulWidget {
   final VoidCallback onOpenNotifications;
   final ValueChanged<NativeConversation> onOpenBroadcast;
   final VoidCallback onOpenNewChat;
-  final VoidCallback onOpenFallback;
 
   @override
   State<NativeConversationPage> createState() => _NativeConversationPageState();
@@ -662,7 +660,6 @@ class _NativeConversationPageState extends State<NativeConversationPage> {
       return _ErrorPanel(
         error: _error!,
         onRetry: _load,
-        onFallback: widget.onOpenFallback,
       );
     }
 
@@ -697,12 +694,10 @@ class _ErrorPanel extends StatelessWidget {
   const _ErrorPanel({
     required this.error,
     required this.onRetry,
-    required this.onFallback,
   });
 
   final String error;
   final VoidCallback onRetry;
-  final VoidCallback onFallback;
 
   @override
   Widget build(BuildContext context) {
@@ -716,13 +711,7 @@ class _ErrorPanel extends StatelessWidget {
             const SizedBox(height: 8),
             Text(error, style: const TextStyle(fontSize: 12, color: DunesColors.text3)),
             const SizedBox(height: 14),
-            Wrap(
-              spacing: 10,
-              children: [
-                OutlinedButton(onPressed: onRetry, child: const Text('重试')),
-                FilledButton(onPressed: onFallback, child: const Text('切回 WebView')),
-              ],
-            ),
+            OutlinedButton(onPressed: onRetry, child: const Text('重试')),
           ],
         ),
       ),

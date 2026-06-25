@@ -1,8 +1,3 @@
-const bool kEnableNativePilot = bool.fromEnvironment(
-  'ENABLE_NATIVE_PILOT',
-  defaultValue: false,
-);
-
 const Set<String> kNativePilotScreens = <String>{
   'B1',
   'B2',
@@ -31,6 +26,5 @@ const Set<String> kNativePilotScreens = <String>{
 };
 
 bool isNativePilotScreen(String screenId) {
-  if (!kEnableNativePilot) return false;
   return kNativePilotScreens.contains(screenId);
 }

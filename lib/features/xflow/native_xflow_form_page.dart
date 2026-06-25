@@ -17,7 +17,6 @@ class NativeXflowFormPage extends StatefulWidget {
     required this.templateKey,
     required this.editProposalId,
     required this.onSubmitted,
-    required this.onFallback,
   });
 
   final AuthSession session;
@@ -25,7 +24,6 @@ class NativeXflowFormPage extends StatefulWidget {
   final String templateKey;
   final int? editProposalId;
   final void Function(int proposalId) onSubmitted;
-  final VoidCallback onFallback;
 
   @override
   State<NativeXflowFormPage> createState() => _NativeXflowFormPageState();
@@ -366,7 +364,6 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage> {
               crumb: '销售提案 · PROPOSAL_3STEP',
               title: _isEditing ? '编辑销售提案' : '新建销售提案',
               onBack: () => widget.navigation.go('B3'),
-              onMore: widget.onFallback,
             ),
             Expanded(
               child: _loading
@@ -431,13 +428,7 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage> {
           children: [
             Text(_error!, textAlign: TextAlign.center),
             const SizedBox(height: 10),
-            Wrap(
-              spacing: 8,
-              children: [
-                OutlinedButton(onPressed: _load, child: const Text('重试')),
-                FilledButton(onPressed: widget.onFallback, child: const Text('切回 WebView')),
-              ],
-            ),
+            OutlinedButton(onPressed: _load, child: const Text('重试')),
           ],
         ),
       ),

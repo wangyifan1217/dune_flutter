@@ -23,18 +23,33 @@ jobs:
           # 对于 SPM 项目，只需要运行 pub get
           flutter pub get
 
-      # ---------- 新增的步骤：强制提升 iOS 最低部署版本到 14.0 ----------
-      - name: Force Update iOS Deployment Target to 14.0
+      # ---------- 强制提升 iOS 最低部署版本到 15.0 ----------
+      - name: Force Update iOS Deployment Target to 15.0
         run: |
-          echo "Forcing IPHONEOS_DEPLOYMENT_TARGET to 14.0 in project.pbxproj..."
-          sed -i '' 's/IPHONEOS_DEPLOYMENT_TARGET = .*;/IPHONEOS_DEPLOYMENT_TARGET = 14.0;/g' ios/Runner.xcodeproj/project.pbxproj
+          echo "Forcing IPHONEOS_DEPLOYMENT_TARGET to 15.0 in project.pbxproj..."
+          sed -i '' 's/IPHONEOS_DEPLOYMENT_TARGET = .*;/IPHONEOS_DEPLOYMENT_TARGET = 15.0;/g' ios/Runner.xcodeproj/project.pbxproj
           
           echo "Updating AppFrameworkInfo.plist if it exists..."
           if [ -f "ios/Flutter/AppFrameworkInfo.plist" ]; then
-            sed -i '' 's/<string>12.0<\/string>/<string>14.0<\/string>/g' ios/Flutter/AppFrameworkInfo.plist
-            sed -i '' 's/<string>11.0<\/string>/<string>14.0<\/string>/g' ios/Flutter/AppFrameworkInfo.plist
-            sed -i '' 's/<string>9.0<\/string>/<string>14.0<\/string>/g' ios/Flutter/AppFrameworkInfo.plist
+            sed -i '' 's/<string>14.0<\/string>/<string>15.0<\/string>/g' ios/Flutter/AppFrameworkInfo.plist
+            sed -i '' 's/<string>13.0<\/string>/<string>15.0<\/string>/g' ios/Flutter/AppFrameworkInfo.plist
+            sed -i '' 's/<string>12.0<\/string>/<string>15.0<\/string>/g' ios/Flutter/AppFrameworkInfo.plist
+            sed -i '' 's/<string>11.0<\/string>/<string>15.0<\/string>/g' ios/Flutter/AppFrameworkInfo.plist
+            sed -i '' 's/<string>9.0<\/string>/<string>15.0<\/string>/g' ios/Flutter/AppFrameworkInfo.plist
           fi
+      # -----------------------------------------------------------------
+
+      # ---------- 新增：在流水线中动态修复 AppDelegate.swift 的编译错误 ----------
+      - name: Patch AppDelegate Swift Error
+        run: |
+          echo "Patching binaryMessenger in AppDelegate.swift..."
+          # 动态将不支持的 binaryMessenger 替换为标准的 registrar 提取方式
+          sed -i '' 's/engineBridge.binaryMessenger/engineBridge.pluginRegistry.registrar(forPlugin: "CIPatchPlugin")!.messenger()/g' ios/Runner/AppDelegate.swift
+          
+          echo "Patching closure type inference in AppDelegate.swift..."
+          # 强制为 Flutter 闭包参数添加完整的类型注解，彻底消除 Swift 的类型推断报错
+          sed -i '' 's/(call, result) in/(call: FlutterMethodCall, result: @escaping FlutterResult) in/g' ios/Runner/AppDelegate.swift
+          sed -i '' 's/(call,result) in/(call: FlutterMethodCall, result: @escaping FlutterResult) in/g' ios/Runner/AppDelegate.swift
       # -----------------------------------------------------------------
 
       - name: Build iOS

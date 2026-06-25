@@ -229,9 +229,10 @@ class ChatInputBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final showStop = sending && onStop != null;
     final interactionLocked = !enabled || (sending && !showStop);
-    final bottomInset = MediaQuery.paddingOf(context).bottom;
+    // 输入区与安卓保持一致：底部固定 9px，不叠加 iOS home indicator 安全区，
+    // 直接贴到屏幕底边。
     return Container(
-      padding: EdgeInsets.fromLTRB(12, 9, 12, 9 + bottomInset),
+      padding: const EdgeInsets.fromLTRB(12, 9, 12, 9),
       decoration: const BoxDecoration(
         color: DunesColors.bgApp,
         border: Border(top: BorderSide(color: DunesColors.borderSoft)),

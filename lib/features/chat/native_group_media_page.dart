@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 
 import '../../core/theme/dunes_theme.dart';
@@ -9,6 +10,7 @@ import '../conversation/conversation_service.dart';
 import '../shell/dunes_toast.dart';
 import 'cors_safe_image.dart';
 import 'file_download.dart' as file_dl;
+import 'gallery_save.dart' as gallery;
 
 class NativeGroupMediaPage extends StatefulWidget {
   const NativeGroupMediaPage({
@@ -133,12 +135,55 @@ class _NativeGroupMediaPageState extends State<NativeGroupMediaPage> {
           imageUrl: publicUrl,
           fileName: fileName,
           onClose: () => Navigator.of(context).pop(),
-          onDownload: () => _downloadMedia(message),
+          onSave: () => _saveImageToGallery(message),
         ),
       );
     } catch (e) {
       if (!mounted) return;
       _toast('预览失败: $e');
+    }
+  }
+
+  /// 将放大查看的图片保存到系统相册（Web 回退为浏览器下载，其它平台回退为文件保存）。
+  Future<void> _saveImageToGallery(NativeChatMessage message) async {
+    final payload = message.payload;
+    if (payload == null) {
+      _toast('图片地址为空');
+      return;
+    }
+    final fileName = ConversationService.mediaFileName(payload, fallback: 'image.jpg');
+    if (kIsWeb && !ConversationService.hasAuthMedia(payload)) {
+      final url = ConversationService.mediaDirectUrl(payload);
+      if (url.isEmpty) {
+        _toast('图片地址为空');
+        return;
+      }
+      try {
+        await file_dl.openUrlAsFile(url, fileName);
+        if (!mounted) return;
+        _toast('已开始下载');
+      } catch (e) {
+        if (!mounted) return;
+        _toast('保存失败: $e');
+      }
+      return;
+    }
+    try {
+      final bytes = await _service.loadFullImageBytes(payload);
+      await gallery.saveImageToGallery(bytes, fileName);
+      if (!mounted) return;
+      _toast('已保存到相册');
+    } catch (e) {
+      // 不支持相册的平台（桌面/Web）回退为普通文件保存/下载。
+      try {
+        final bytes = await _service.loadFullImageBytes(payload);
+        await file_dl.saveBytesAsFile(bytes, fileName);
+        if (!mounted) return;
+        _toast('已保存');
+      } catch (_) {
+        if (!mounted) return;
+        _toast('保存失败: $e');
+      }
     }
   }
 
@@ -569,7 +614,7 @@ class _GroupImagePreviewOverlay extends StatelessWidget {
   const _GroupImagePreviewOverlay({
     required this.fileName,
     required this.onClose,
-    required this.onDownload,
+    required this.onSave,
     this.bytes,
     this.imageUrl,
   });
@@ -578,7 +623,7 @@ class _GroupImagePreviewOverlay extends StatelessWidget {
   final String? imageUrl;
   final String fileName;
   final VoidCallback onClose;
-  final VoidCallback onDownload;
+  final VoidCallback onSave;
 
   @override
   Widget build(BuildContext context) {
@@ -630,8 +675,8 @@ class _GroupImagePreviewOverlay extends StatelessWidget {
             top: 14,
             left: 14,
             child: _OverlayIconButton(
-              icon: Icons.download_rounded,
-              onTap: onDownload,
+              icon: Icons.save_alt_rounded,
+              onTap: onSave,
             ),
           ),
           Positioned(

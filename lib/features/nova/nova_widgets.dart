@@ -172,21 +172,27 @@ class NovaC4ModelPicker extends StatelessWidget {
     required this.selected,
     required this.onTap,
     this.modelCatalog = const <NovaModelCatalogEntry>[],
+    this.enabled = true,
   });
 
   final List<String> models;
   final String selected;
   final VoidCallback? onTap;
   final List<NovaModelCatalogEntry> modelCatalog;
+  final bool enabled;
 
   @override
   Widget build(BuildContext context) {
     if (models.isEmpty) return const SizedBox.shrink();
-    final multi = models.length > 1;
+    // 生成中禁止切换模型。
+    final multi = models.length > 1 && enabled;
     final label = novaModelDisplayName(selected.isNotEmpty ? selected : models.first);
     final intro = novaModelDisplayIntro(selected.isNotEmpty ? selected : models.first, modelCatalog);
+    final dimmed = !enabled && models.length > 1;
 
-    return Container(
+    return Opacity(
+      opacity: dimmed ? 0.55 : 1,
+      child: Container(
       padding: const EdgeInsets.fromLTRB(14, 10, 14, 8),
       decoration: const BoxDecoration(
         color: Colors.white,
@@ -264,6 +270,7 @@ class NovaC4ModelPicker extends StatelessWidget {
             ),
           ),
         ),
+      ),
       ),
     );
   }

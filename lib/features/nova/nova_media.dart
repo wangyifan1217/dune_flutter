@@ -329,8 +329,19 @@ class _NovaImagePreviewDialog extends StatelessWidget {
   }
 
   Future<void> _saveImage(BuildContext context) async {
-    final bytes = memoryBytes;
-    // 有内存字节（含 NOVA 生成图、鉴权拉取图）时优先存到相册，失败回退普通保存。
+    // 有内存字节（含 NOVA 生成图、鉴权拉取图）时直接用；否则尝试从 URL 拉取字节，
+    // 这样公共/预签名 http 链接（如 NOVA 生成图）也能存到相册，而不是只触发浏览器下载。
+    var bytes = memoryBytes;
+    if ((bytes == null || bytes.isEmpty) &&
+        imageUrl.isNotEmpty &&
+        RegExp(r'^https?:', caseSensitive: false).hasMatch(imageUrl)) {
+      try {
+        final resp = await http.get(Uri.parse(imageUrl));
+        if (resp.statusCode == 200 && resp.bodyBytes.isNotEmpty) {
+          bytes = resp.bodyBytes;
+        }
+      } catch (_) {}
+    }
     if (bytes != null && bytes.isNotEmpty) {
       try {
         await gallery.saveImageToGallery(bytes, fileName);

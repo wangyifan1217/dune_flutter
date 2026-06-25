@@ -951,6 +951,7 @@ class _NativeB2PageState extends State<_NativeB2Page> {
     return ColoredBox(
       color: DunesColors.bgApp,
       child: SafeArea(
+        bottom: false,
         child: Column(
           children: [
             _buildB2TopBar(),

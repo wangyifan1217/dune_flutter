@@ -63,7 +63,12 @@ class _DunesMainTabBarState extends State<DunesMainTabBar> {
 
   @override
   Widget build(BuildContext context) {
+    // 自行预留底部安全区（iOS home indicator），背景铺到屏幕底边，
+    // 内容固定高度居中。所有承载 Tab 栏的页面都用 SafeArea(bottom: false)，
+    // 由 Tab 栏统一处理底部内边距，避免「我的」与「通讯」高度不一致。
+    final bottomInset = MediaQuery.paddingOf(context).bottom;
     return Container(
+      padding: EdgeInsets.only(bottom: bottomInset),
       decoration: const BoxDecoration(
         color: DunesColors.bgApp,
         border: Border(top: BorderSide(color: DunesColors.borderSoft)),

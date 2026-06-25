@@ -1620,6 +1620,8 @@ class _NativeNovaPageState extends State<NativeNovaPage> {
 
   void _pickModel() {
     if (_chatModels.length <= 1) return;
+    // 生成中禁止切换模型。
+    if (_sending || _serverGenerating) return;
     showNovaModelSheet(
       context,
       models: _chatModels,
@@ -1676,6 +1678,7 @@ class _NativeNovaPageState extends State<NativeNovaPage> {
               selected: _selectedModel,
               modelCatalog: _modelCatalog,
               onTap: _pickModel,
+              enabled: !(_sending || _serverGenerating),
             ),
             if (_loading)
               const Expanded(

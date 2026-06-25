@@ -78,7 +78,7 @@ class _InboxSection {
 }
 
 class _NativeConversationPageState extends State<NativeConversationPage> {
-  static const _yunshuName = '云枢';
+  static const _yunshuName = 'NOVA';
 
   late final ConversationService _service;
   late final NotificationService _notificationService;

@@ -213,7 +213,7 @@ class _NativeNovaPageState extends State<NativeNovaPage> {
           _novaReady = false;
           _conversationId = 0;
           _messages = [_welcomeMessage()];
-          _busyHint = readiness.message ?? '云枢账号尚未开通，请稍后再试';
+          _busyHint = readiness.message ?? 'NOVA账号尚未开通，请稍后再试';
           _loading = false;
         });
         return;
@@ -1145,7 +1145,7 @@ class _NativeNovaPageState extends State<NativeNovaPage> {
     try {
       await _ensureConversationId();
       if (_conversationId <= 0) {
-        throw Exception('无法创建云枢会话，请稍后重试');
+        throw Exception('无法创建NOVA会话，请稍后重试');
       }
       final genStatus = drafts.isNotEmpty ? '正在分析…' : '正在生成…';
       if (!skipUserBubble) {
@@ -1492,6 +1492,12 @@ class _NativeNovaPageState extends State<NativeNovaPage> {
       _recordTicker = Timer.periodic(const Duration(milliseconds: 120), (_) {
         if (!mounted || !_recording) return;
         setState(() => _recordDurationMs += 120);
+        // glm-asr-2512 仅支持 ≤30 秒，到点自动结束并发送。
+        if (_recordDurationMs >= 30000) {
+          _recordTicker?.cancel();
+          _toast('已达最长 30 秒，自动发送');
+          unawaited(_finishHoldRecord());
+        }
       });
     } catch (e) {
       _toast('录音启动失败: $e');
@@ -1514,17 +1520,17 @@ class _NativeNovaPageState extends State<NativeNovaPage> {
         return;
       }
       final bytes = await XFile(recorded.path).readAsBytes();
-      final fileName = 'voice-${DateTime.now().millisecondsSinceEpoch}.m4a';
+      final fileName = 'voice-${DateTime.now().millisecondsSinceEpoch}.wav';
+      // 语音用于转写为文字（非语音消息），气泡直接以文本展示，避免出现不可播放的空语音气泡。
       setState(() {
         _messages = [
           ..._messages.where((m) => !m.isWelcome),
           NativeNovaMessage(
             id: DateTime.now().millisecondsSinceEpoch,
             role: 'user',
-            text: '[语音] ${(recorded.durationMs / 1000).toStringAsFixed(0)}s',
+            text: '正在识别语音…',
             createdAt: DateTime.now(),
-            kind: 'AUDIO',
-            durationSec: (recorded.durationMs / 1000).ceil().clamp(1, 999),
+            kind: 'TEXT',
           ),
         ];
       });
@@ -1535,12 +1541,24 @@ class _NativeNovaPageState extends State<NativeNovaPage> {
         final idx = _messages.lastIndexWhere((m) => m.role == 'user');
         if (idx >= 0) {
           final copy = [..._messages];
-          copy[idx] = copy[idx].copyWith(text: transcript);
+          copy[idx] = copy[idx].copyWith(text: transcript, kind: 'TEXT');
           _messages = copy;
         }
       });
       await _sendMessage(text: transcript, skipUserBubble: true);
     } catch (e) {
+      if (mounted) {
+        setState(() {
+          final idx = _messages.lastIndexWhere(
+            (m) => m.role == 'user' && m.text == '正在识别语音…',
+          );
+          if (idx >= 0) {
+            final copy = [..._messages];
+            copy.removeAt(idx);
+            _messages = copy;
+          }
+        });
+      }
       _toast('语音识别失败: $e');
     }
   }
@@ -1568,9 +1586,20 @@ class _NativeNovaPageState extends State<NativeNovaPage> {
 
   void _scrollBottom() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!_scrollController.hasClients) return;
+      if (!mounted || !_scrollController.hasClients) return;
       _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
     });
+    // 历史里的图片/富文本异步撑高后高度才稳定，单次跳转会停在中间；
+    // 入场后再做几次兜底贴底，确保展示到最底部（用户已主动上滑则不打扰）。
+    for (final ms in const [60, 120, 240, 480, 800, 1200]) {
+      Future.delayed(Duration(milliseconds: ms), () {
+        if (!mounted || !_scrollController.hasClients) return;
+        final max = _scrollController.position.maxScrollExtent;
+        if ((_scrollController.offset - max).abs() > 2) {
+          _scrollController.jumpTo(max);
+        }
+      });
+    }
   }
 
   void _pickModel() {
@@ -1601,7 +1630,7 @@ class _NativeNovaPageState extends State<NativeNovaPage> {
   @override
   Widget build(BuildContext context) {
     final inputEnabled = _novaReady;
-    final inputHint = !_novaReady ? '云枢尚未就绪' : kNovaInputPlaceholder;
+    final inputHint = !_novaReady ? 'NOVA尚未就绪' : kNovaInputPlaceholder;
 
     return PopScope(
       canPop: false,
@@ -1613,7 +1642,10 @@ class _NativeNovaPageState extends State<NativeNovaPage> {
       backgroundColor: DunesColors.bgApp,
       body: SafeArea(
         bottom: false,
-        child: Column(
+        child: GestureDetector(
+          behavior: HitTestBehavior.translucent,
+          onTap: () => FocusScope.of(context).unfocus(),
+          child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             NovaPageHeader(
@@ -1638,6 +1670,8 @@ class _NativeNovaPageState extends State<NativeNovaPage> {
                 child: NovaC4MessageStream(
                   child: ListView(
                     controller: _scrollController,
+                    keyboardDismissBehavior:
+                        ScrollViewKeyboardDismissBehavior.onDrag,
                     padding: const EdgeInsets.fromLTRB(14, 12, 14, 28),
                     children: [
                       if (_banner != null)
@@ -1675,6 +1709,7 @@ class _NativeNovaPageState extends State<NativeNovaPage> {
               onVoiceHoldCancel: () => _cancelHoldRecord(showHint: false),
             ),
           ],
+        ),
         ),
       ),
     ),

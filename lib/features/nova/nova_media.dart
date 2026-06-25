@@ -116,7 +116,7 @@ class NovaMediaResolver {
       } catch (_) {}
     }
     if (context.mounted) {
-      _novaToast(context, '文件下载失败：云枢未返回有效下载链接', error: true);
+      _novaToast(context, '文件下载失败：NOVA未返回有效下载链接', error: true);
     }
   }
 }

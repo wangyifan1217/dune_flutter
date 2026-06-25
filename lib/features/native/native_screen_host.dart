@@ -38,6 +38,7 @@ import '../xflow/native_b10_page.dart';
 import '../xflow/native_b3_page.dart';
 import '../xflow/native_xflow_form_page.dart';
 import '../xflow/xflow_models.dart';
+import '../xflow/xflow_service.dart';
 import '../nova/native_nova_history_page.dart';
 import '../nova/native_nova_page.dart';
 import '../nova/nova_background_coordinator.dart';
@@ -293,7 +294,7 @@ class _NativeScreenHostState extends State<NativeScreenHost> {
     await _refreshCommUnreadBadge();
     if (!mounted || !shouldBump || widget.navigation.currentScreen == 'C4') return;
     if (_commUnread.total == 0) _commUnread.bump();
-    showDunesToast(context, '云枢已回复，可返回查看');
+    showDunesToast(context, 'NOVA已回复，可返回查看');
   }
 
   Future<void> _refreshCommUnreadBadge() async {
@@ -785,12 +786,35 @@ class _NativeB2PageState extends State<_NativeB2Page> {
         _loading = false;
       });
       widget.workbenchBadge.update(_stats?.pendingForMe ?? 0);
+      unawaited(_reconcileRejectedCount());
     } catch (error) {
       if (!mounted) return;
       setState(() {
         _loading = false;
         _loadError = error.toString();
       });
+    }
+  }
+
+  /// `/workbench/my-stats` 的 `approvalRejected` 会把后来被作废 (VOIDED) /
+  /// 被替代 (SUPERSEDED) 的提案仍算进「已驳回」，导致「我的」页面横幅消不掉。
+  /// 这里用 B14「我发起的」真实提案状态重算一遍，只统计当前仍为 REJECTED 的，
+  /// 与 B14 列表口径保持一致。仅在后端返回值 > 0 时触发，避免无谓拉取。
+  Future<void> _reconcileRejectedCount() async {
+    final current = _stats;
+    if (current == null || current.approvalRejected <= 0) return;
+    try {
+      final rows = await XflowService(session: widget.session).fetchB14Initiated();
+      final rejected =
+          rows.where((it) => it.status.toUpperCase() == 'REJECTED').length;
+      if (!mounted) return;
+      if (rejected != current.approvalRejected) {
+        setState(() {
+          _stats = current.copyWith(approvalRejected: rejected);
+        });
+      }
+    } catch (_) {
+      // 兜底重算失败时保留后端值。
     }
   }
 
@@ -1572,6 +1596,18 @@ class _NativeMyStats {
   final int approvalRejected;
   final int ccProposalCount;
   final int ccProposalPending;
+
+  _NativeMyStats copyWith({int? approvalRejected}) {
+    return _NativeMyStats(
+      pendingForMe: pendingForMe,
+      initiatedByMe: initiatedByMe,
+      handledThisMonth: handledThisMonth,
+      outstandingInvoices: outstandingInvoices,
+      approvalRejected: approvalRejected ?? this.approvalRejected,
+      ccProposalCount: ccProposalCount,
+      ccProposalPending: ccProposalPending,
+    );
+  }
 
   factory _NativeMyStats.fromJson(Map<String, dynamic> json) {
     int readInt(List<String> keys) {

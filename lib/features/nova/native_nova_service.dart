@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart' show MediaType;
 
 import '../../core/config/nova_config.dart';
 import '../auth/auth_session.dart';
@@ -436,9 +437,9 @@ class NativeNovaService {
     if (msg.contains('rag_not_ready') || msg.contains('知识库账号')) {
       return '';
     }
-    if (msg.contains('HTTP 400')) return '云枢会话初始化异常，请发送一条消息或稍后重试';
-    if (msg.contains('HTTP 503')) return '云枢服务暂不可用，请稍后再试';
-    if (msg.contains('凭证') || msg.contains('api_key')) return '云枢账号尚未就绪，请重新登录后再试';
+    if (msg.contains('HTTP 400')) return 'NOVA会话初始化异常，请发送一条消息或稍后重试';
+    if (msg.contains('HTTP 503')) return 'NOVA服务暂不可用，请稍后再试';
+    if (msg.contains('凭证') || msg.contains('api_key')) return 'NOVA账号尚未就绪，请重新登录后再试';
     if (msg.contains('尚未开通')) return msg;
     return msg;
   }
@@ -489,7 +490,7 @@ class NativeNovaService {
         if (novaApiKey.isNotEmpty) return const NovaReadiness(ready: true);
         return const NovaReadiness(
           ready: false,
-          message: '云枢账号尚未开通，请稍后再试',
+          message: 'NOVA账号尚未开通，请稍后再试',
         );
       }
       final body = _decode(resp.body);
@@ -501,13 +502,13 @@ class NativeNovaService {
       if (key.isNotEmpty) _cachedApiKey = key;
       if (ready && key.isNotEmpty) return const NovaReadiness(ready: true);
       if (novaApiKey.isNotEmpty) return const NovaReadiness(ready: true);
-      final message = (data['lastError'] ?? data['message'] ?? '云枢账号尚未开通，请稍后再试')
+      final message = (data['lastError'] ?? data['message'] ?? 'NOVA账号尚未开通，请稍后再试')
           .toString()
           .trim();
       return NovaReadiness(ready: false, message: message);
     } catch (_) {
       if (novaApiKey.isNotEmpty) return const NovaReadiness(ready: true);
-      return const NovaReadiness(ready: false, message: '云枢服务暂不可用');
+      return const NovaReadiness(ready: false, message: 'NOVA服务暂不可用');
     }
   }
 
@@ -728,7 +729,7 @@ class NativeNovaService {
       }),
     );
     if (resp.statusCode < 200 || resp.statusCode >= 300) {
-      throw Exception(_parseApiError(resp, fallback: '云枢会话初始化失败'));
+      throw Exception(_parseApiError(resp, fallback: 'NOVA会话初始化失败'));
     }
     final snap = _parseConversationSnapshot(_decode(resp.body));
     _lastSessionSnapshot = snap;
@@ -751,7 +752,7 @@ class NativeNovaService {
       headers: _dunesHeaders,
     );
     if (resp.statusCode < 200 || resp.statusCode >= 300) {
-      throw Exception(_parseApiError(resp, fallback: '加载云枢会话失败'));
+      throw Exception(_parseApiError(resp, fallback: '加载NOVA会话失败'));
     }
     final snap = _parseConversationSnapshot(_decode(resp.body), fallbackConvId: conversationId);
     _lastSessionSnapshot = snap;
@@ -2016,11 +2017,23 @@ class NativeNovaService {
     );
   }
 
+  MediaType _audioMediaType(String fileName) {
+    final lower = fileName.toLowerCase();
+    if (lower.endsWith('.mp3')) return MediaType('audio', 'mpeg');
+    if (lower.endsWith('.m4a')) return MediaType('audio', 'mp4');
+    return MediaType('audio', 'wav');
+  }
+
   Future<String> transcribeAudio(Uint8List bytes, String fileName) async {
     final req = http.MultipartRequest('POST', Uri.parse('$novaBase/v1/audio/transcriptions'));
     req.headers.addAll(novaHeaders());
     req.fields['model'] = asrModel;
-    req.files.add(http.MultipartFile.fromBytes('file', bytes, filename: fileName));
+    req.files.add(http.MultipartFile.fromBytes(
+      'file',
+      bytes,
+      filename: fileName,
+      contentType: _audioMediaType(fileName),
+    ));
     final streamed = await _client.send(req);
     final bodyText = await streamed.stream.bytesToString();
     if (streamed.statusCode < 200 || streamed.statusCode >= 300) {
@@ -2106,7 +2119,7 @@ class NativeNovaService {
     final biz = novaBizUserId;
     if (name.isEmpty && uid.isEmpty && phone.isEmpty && biz.isEmpty) return null;
     final lines = <String>[
-      '你是沙丘 APP 内置的企业助手「云枢」。',
+      '你是沙丘 APP 内置的企业助手「NOVA」。',
       '以下「当前登录用户」信息来自沙丘账号系统，回答身份/称呼/手机号等问题时必须以此为准，不要臆造或使用其它昵称、历史测试名。',
     ];
     if (name.isNotEmpty) lines.add('姓名：$name');
@@ -2145,10 +2158,10 @@ class NativeNovaService {
   }) async {
     final readiness = await checkReadiness();
     if (!readiness.ready) {
-      throw Exception(readiness.message ?? '云枢账号尚未开通，请稍后再试');
+      throw Exception(readiness.message ?? 'NOVA账号尚未开通，请稍后再试');
     }
     if (novaApiKey.isEmpty) {
-      throw Exception('云枢账号尚未就绪，请重新登录后再试');
+      throw Exception('NOVA账号尚未就绪，请重新登录后再试');
     }
     var activeConvId = conversationId;
     final contentLabel = displayText ?? (userContent is String ? userContent : '[附件消息]');
@@ -2290,9 +2303,9 @@ class NativeNovaService {
       final finalParts = splitNovaStreamText(replyBuffer, finalPass: true);
       var reply = novaFinalReplyText(finalParts.reply, thinkBuffer, finalPass: true);
       if (reply.isEmpty && thinkBuffer.trim().isNotEmpty) reply = thinkBuffer.trim();
-      if (!hadOutput || reply.isEmpty) throw Exception('云枢未返回正文，请重试');
+      if (!hadOutput || reply.isEmpty) throw Exception('NOVA未返回正文，请重试');
       if (reply.trim() == userPrompt.trim()) {
-        throw Exception('云枢未返回正文，请重试');
+        throw Exception('NOVA未返回正文，请重试');
       }
       await _saveLocalMessage(
         activeConvId,
@@ -2333,10 +2346,10 @@ class NativeNovaService {
   }) async {
     final readiness = await checkReadiness();
     if (!readiness.ready) {
-      throw Exception(readiness.message ?? '云枢账号尚未开通，请稍后再试');
+      throw Exception(readiness.message ?? 'NOVA账号尚未开通，请稍后再试');
     }
     if (novaApiKey.isEmpty) {
-      throw Exception('云枢账号尚未就绪，请重新登录后再试');
+      throw Exception('NOVA账号尚未就绪，请重新登录后再试');
     }
     await _saveLocalMessage(conversationId, role: 'user', content: text, kind: 'TEXT');
     final requestMessages = buildNovaChatMessages(text);
@@ -2369,7 +2382,7 @@ class NativeNovaService {
         ? first['message'] as Map<String, dynamic>
         : const <String, dynamic>{};
     final reply = _extractAssistantText(message).trim();
-    if (reply.isEmpty) throw Exception('云枢未返回正文，请重试');
+    if (reply.isEmpty) throw Exception('NOVA未返回正文，请重试');
     await _saveLocalMessage(conversationId, role: 'assistant', content: reply, kind: 'AI_ASSISTANT');
     return reply;
   }
@@ -2477,8 +2490,8 @@ class NativeNovaService {
       if (msg.isNotEmpty) return msg;
       if (code.isNotEmpty) return '$fallback|code=$code';
     } catch (_) {}
-    if (resp.statusCode == 400) return '云枢会话初始化异常，请发送一条消息重试';
-    if (resp.statusCode == 503) return '云枢服务暂不可用';
+    if (resp.statusCode == 400) return 'NOVA会话初始化异常，请发送一条消息重试';
+    if (resp.statusCode == 503) return 'NOVA服务暂不可用';
     return '$fallback（HTTP ${resp.statusCode}）';
   }
 
@@ -2488,8 +2501,8 @@ class NativeNovaService {
       final msg = (body['error']?['message'] ?? body['message'] ?? '').toString().trim();
       if (msg.isNotEmpty) return msg;
     } catch (_) {}
-    if (status == 503) return '云枢服务暂不可用';
-    return '云枢回复失败（HTTP $status）';
+    if (status == 503) return 'NOVA服务暂不可用';
+    return 'NOVA回复失败（HTTP $status）';
   }
 
   Map<String, dynamic> _decode(String body) {

@@ -21,6 +21,9 @@ String novaTurnPreview(Map<String, dynamic> turn) {
       .toString()
       .trim();
   preview = stripHermesProgressLines(preview);
-  if (preview.startsWith('你好，我是你的云枢助手')) return '';
+  if (preview.startsWith('你好，我是你的NOVA助手') ||
+      preview.startsWith('你好，我是你的云枢助手')) {
+    return '';
+  }
   return preview;
 }

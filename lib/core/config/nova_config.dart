@@ -8,8 +8,8 @@ abstract final class NovaConfig {
   static const defaultChatModel = 'nova_deepseek';
   static const asrModel = 'glm-asr-2512';
 
-  /// 产品对外名称（原 NOVA）。
-  static const displayName = '云枢';
+  /// 产品对外名称。
+  static const displayName = 'NOVA';
 
   /// JS 注入占位符，由 [bindNovaBase] 在运行时替换为 [baseUrl]。
   static const baseUrlPlaceholder = '__NOVA_BASE_URL__';

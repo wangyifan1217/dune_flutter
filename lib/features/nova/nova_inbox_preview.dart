@@ -3,12 +3,16 @@ import 'dart:convert';
 
 import 'nova_web_storage.dart';
 
-const kNovaWelcomeIntro = '你好，我是你的云枢助手';
+const kNovaWelcomeIntro = '你好，我是你的NOVA助手';
+
+/// 历史/服务端可能仍是旧文案，匹配时一并兼容。
+const _kLegacyNovaWelcomeIntro = '你好，我是你的云枢助手';
 
 bool isNovaWelcomePreview(String text) {
   final s = text.trim();
   if (s.isEmpty) return true;
   if (s.startsWith(kNovaWelcomeIntro)) return true;
+  if (s.startsWith(_kLegacyNovaWelcomeIntro)) return true;
   if (s.contains('沙丘助手')) return true;
   return false;
 }

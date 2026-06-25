@@ -329,16 +329,6 @@ class ChatInputBar extends StatelessWidget {
                     color: interactionLocked && !showStop
                         ? DunesColors.text3.withValues(alpha: 0.35)
                         : null,
-                    boxShadow: interactionLocked && !showStop
-                        ? null
-                        : [
-                            BoxShadow(
-                              color: (showStop ? const Color(0xFF8A4A4A) : const Color(0xFF553B96))
-                                  .withValues(alpha: 0.42),
-                              blurRadius: 10,
-                              offset: const Offset(0, 3),
-                            ),
-                          ],
                   ),
                   child: showStop
                       ? const Icon(Icons.stop_rounded, size: 18, color: Colors.white)
@@ -347,7 +337,7 @@ class ChatInputBar extends StatelessWidget {
                               padding: EdgeInsets.all(8),
                               child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                             )
-                          : const Icon(Icons.send_rounded, size: 16, color: Colors.white),
+                          : const Icon(Icons.arrow_upward_rounded, size: 20, color: Colors.white),
                 ),
               ),
             ),

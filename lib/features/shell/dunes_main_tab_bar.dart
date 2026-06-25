@@ -25,17 +25,10 @@ class DunesMainTabBar extends StatefulWidget {
   State<DunesMainTabBar> createState() => _DunesMainTabBarState();
 }
 
-class _DunesMainTabBarState extends State<DunesMainTabBar>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _dotBlink;
-
+class _DunesMainTabBarState extends State<DunesMainTabBar> {
   @override
   void initState() {
     super.initState();
-    _dotBlink = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1100),
-    )..repeat(reverse: true);
     widget.commUnread?.addListener(_onBadgeChanged);
     widget.workbenchBadge?.addListener(_onBadgeChanged);
   }
@@ -57,7 +50,6 @@ class _DunesMainTabBarState extends State<DunesMainTabBar>
   void dispose() {
     widget.commUnread?.removeListener(_onBadgeChanged);
     widget.workbenchBadge?.removeListener(_onBadgeChanged);
-    _dotBlink.dispose();
     super.dispose();
   }
 
@@ -68,14 +60,6 @@ class _DunesMainTabBarState extends State<DunesMainTabBar>
   bool get _showCommDot => (widget.commUnread?.total ?? 0) > 0;
 
   bool get _showMyDot => (widget.workbenchBadge?.pendingForMe ?? 0) > 0;
-
-  int get _commUnreadCount => widget.commUnread?.total ?? 0;
-
-  String get _commBadgeLabel {
-    final n = _commUnreadCount;
-    if (n <= 0) return '';
-    return n > 99 ? '99+' : '$n';
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -91,7 +75,6 @@ class _DunesMainTabBarState extends State<DunesMainTabBar>
             label: '通讯',
             screen: 'C1',
             showRedDot: _showCommDot,
-            badgeLabel: _commBadgeLabel,
           ),
           _tab(
             icon: Icons.grid_view_rounded,
@@ -120,7 +103,6 @@ class _DunesMainTabBarState extends State<DunesMainTabBar>
     String? screen,
     VoidCallback? onTap,
     bool showRedDot = false,
-    String badgeLabel = '',
   }) {
     final active = screen != null && widget.activeScreen == screen;
     final color = active ? const Color(0xFF7B5CD8) : DunesColors.text3;
@@ -146,54 +128,81 @@ class _DunesMainTabBarState extends State<DunesMainTabBar>
                 ],
               ),
               if (showRedDot)
-                Positioned(
-                  top: 10,
-                  right: badgeLabel.isNotEmpty ? 14 : 22,
-                  child: badgeLabel.isNotEmpty
-                      ? Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                          constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
-                          decoration: BoxDecoration(
-                            color: DunesColors.coral,
-                            borderRadius: BorderRadius.circular(99),
-                            border: Border.all(color: DunesColors.bgApp, width: 1.5),
-                          ),
-                          alignment: Alignment.center,
-                          child: Text(
-                            badgeLabel,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 9.5,
-                              fontWeight: FontWeight.w700,
-                              height: 1.1,
-                            ),
-                          ),
-                        )
-                      : FadeTransition(
-                          opacity: Tween<double>(begin: 1, end: 0.2).animate(
-                            CurvedAnimation(parent: _dotBlink, curve: Curves.easeInOut),
-                          ),
-                          child: Container(
-                            width: 9,
-                            height: 9,
-                            decoration: BoxDecoration(
-                              color: DunesColors.coral,
-                              borderRadius: BorderRadius.circular(99),
-                              border: Border.all(color: DunesColors.bgApp, width: 2),
-                              boxShadow: const [
-                                BoxShadow(
-                                  color: Color(0x40C83C3C),
-                                  blurRadius: 0,
-                                  spreadRadius: 1,
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                ),
+                const Positioned(top: 10, right: 22, child: _PulseDot()),
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// 底部 Tab 脉冲小红点（对齐 index.html `.tab-bar .tab .red-dot`，叠加呼吸脉冲）。
+class _PulseDot extends StatefulWidget {
+  const _PulseDot();
+
+  @override
+  State<_PulseDot> createState() => _PulseDotState();
+}
+
+class _PulseDotState extends State<_PulseDot>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1400),
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 9,
+      height: 9,
+      child: Stack(
+        clipBehavior: Clip.none,
+        alignment: Alignment.center,
+        children: [
+          AnimatedBuilder(
+            animation: _controller,
+            builder: (context, child) {
+              final t = Curves.easeOut.transform(_controller.value);
+              return Opacity(
+                opacity: (1 - t) * 0.45,
+                child: Transform.scale(
+                  scale: 1 + t * 1.8,
+                  child: Container(
+                    width: 9,
+                    height: 9,
+                    decoration: const BoxDecoration(
+                      color: DunesColors.coral,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+          Container(
+            width: 9,
+            height: 9,
+            decoration: BoxDecoration(
+              color: DunesColors.coral,
+              shape: BoxShape.circle,
+              border: Border.all(color: DunesColors.bgApp, width: 2),
+            ),
+          ),
+        ],
       ),
     );
   }

@@ -668,25 +668,27 @@ class _SwipeableChatInboxRowState extends State<SwipeableChatInboxRow> {
     return Stack(
       clipBehavior: Clip.hardEdge,
       children: [
-        Positioned.fill(
-          child: Align(
-            alignment: Alignment.centerRight,
-            child: SizedBox(
-              width: _actionWidth,
-              child: Material(
-                color: DunesColors.coral,
-                child: InkWell(
-                  onTap: () {
-                    _close();
-                    widget.onDelete();
-                  },
-                  child: Center(
-                    child: Text(
-                      '删除',
-                      style: DunesTypography.sans(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.white,
+        if (_offset != 0)
+          Positioned.fill(
+            child: Align(
+              alignment: Alignment.centerRight,
+              child: SizedBox(
+                width: _actionWidth,
+                child: Material(
+                  color: DunesColors.coral,
+                  child: InkWell(
+                    onTap: () {
+                      _close();
+                      widget.onDelete();
+                    },
+                    child: Center(
+                      child: Text(
+                        '删除',
+                        style: DunesTypography.sans(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.white,
+                        ),
                       ),
                     ),
                   ),
@@ -694,7 +696,6 @@ class _SwipeableChatInboxRowState extends State<SwipeableChatInboxRow> {
               ),
             ),
           ),
-        ),
         GestureDetector(
           onHorizontalDragUpdate: (details) {
             setState(() {

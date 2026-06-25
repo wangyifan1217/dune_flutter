@@ -64,13 +64,17 @@ import AVFoundation
 
   private func startRecordImpl(result: @escaping FlutterResult) {
     stopInternal(deleteFile: true)
-    let path = "\(NSTemporaryDirectory())voice-\(Int(Date().timeIntervalSince1970 * 1000)).m4a"
+    let path = "\(NSTemporaryDirectory())voice-\(Int(Date().timeIntervalSince1970 * 1000)).wav"
     let url = URL(fileURLWithPath: path)
+    // glm-asr-2512 仅接受 wav/mp3，这里录成 16k/16bit/单声道 Linear PCM WAV。
     let settings: [String: Any] = [
-      AVFormatIDKey: Int(kAudioFormatMPEG4AAC),
-      AVSampleRateKey: 44100.0,
+      AVFormatIDKey: Int(kAudioFormatLinearPCM),
+      AVSampleRateKey: 16000.0,
       AVNumberOfChannelsKey: 1,
-      AVEncoderAudioQualityKey: AVAudioQuality.high.rawValue
+      AVLinearPCMBitDepthKey: 16,
+      AVLinearPCMIsBigEndianKey: false,
+      AVLinearPCMIsFloatKey: false,
+      AVLinearPCMIsNonInterleaved: false
     ]
     do {
       let session = AVAudioSession.sharedInstance()

@@ -8,11 +8,11 @@ import 'nova_markdown.dart';
 import 'nova_media.dart';
 import 'nova_models_service.dart';
 
-const kNovaName = '云枢';
+const kNovaName = 'NOVA';
 const kNovaIntro =
-    '你好，我是你的云枢助手。可以帮你查审批、找合同、对账单、读文档；直接问我即可。';
-const kNovaInputPlaceholder = '问云枢';
-const kNovaInputBusyHint = '云枢正在生成中，请稍候…';
+    '你好，我是你的NOVA助手。可以帮你查审批、找合同、对账单、读文档；直接问我即可。';
+const kNovaInputPlaceholder = '问NOVA';
+const kNovaInputBusyHint = 'NOVA正在生成中，请稍候…';
 
 String novaModelDisplayName(String id) => id.trim().toUpperCase();
 
@@ -127,7 +127,7 @@ class NovaPageHeader extends StatelessWidget {
                   padding: EdgeInsets.zero,
                   onPressed: actionsEnabled ? onNewChat : null,
                   icon: const Icon(Icons.add, size: 20),
-                  tooltip: actionsEnabled ? '新对话' : '云枢正在生成中，请稍候…',
+                  tooltip: actionsEnabled ? '新对话' : kNovaInputBusyHint,
                 ),
               ),
             ),
@@ -141,7 +141,7 @@ class NovaPageHeader extends StatelessWidget {
                   padding: EdgeInsets.zero,
                   onPressed: actionsEnabled ? onHistory : null,
                   icon: const Icon(Icons.history, size: 20),
-                  tooltip: actionsEnabled ? '对话历史' : '云枢正在生成中，请稍候…',
+                  tooltip: actionsEnabled ? '对话历史' : kNovaInputBusyHint,
                 ),
               ),
             ),
@@ -415,7 +415,7 @@ Future<void> showNovaModelSheet(
               Padding(
                 padding: const EdgeInsets.fromLTRB(18, 8, 18, 12),
                 child: Text(
-                  '模型介绍可在沙丘工作台 · 云枢模型管理中配置',
+                  '模型介绍可在沙丘工作台 · NOVA模型管理中配置',
                   style: DunesTypography.sans(fontSize: 10, color: DunesColors.text3, height: 1.5),
                 ),
               ),

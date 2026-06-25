@@ -1,15 +1,30 @@
 package com.dunes.dunes_app
 
+import android.media.AudioFormat
+import android.media.AudioRecord
 import android.media.MediaRecorder
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.plugin.common.MethodChannel
 import java.io.File
+import java.io.FileInputStream
+import java.io.FileOutputStream
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 
 class MainActivity : FlutterActivity() {
     private val voiceChannel = "dunes/audio_recorder"
-    private var recorder: MediaRecorder? = null
-    private var outputPath: String? = null
+
+    // glm-asr-2512 仅接受 wav/mp3，这里录成 16k/16bit/单声道 PCM 并封装为标准 WAV。
+    private val sampleRate = 16000
+    private val channelCount = 1
+    private val bitsPerSample = 16
+
+    private var audioRecord: AudioRecord? = null
+    private var recordThread: Thread? = null
+    @Volatile private var isRecording = false
+    private var pcmFile: File? = null
+    private var wavPath: String? = null
     private var startedAtMs: Long = 0L
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -30,19 +45,37 @@ class MainActivity : FlutterActivity() {
             stopInternal(deleteFile = true)
             val dir = File(cacheDir, "voice")
             if (!dir.exists()) dir.mkdirs()
-            val file = File(dir, "voice-${System.currentTimeMillis()}.m4a")
-            outputPath = file.absolutePath
-            val r = MediaRecorder()
-            r.setAudioSource(MediaRecorder.AudioSource.MIC)
-            r.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
-            r.setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
-            r.setAudioEncodingBitRate(96_000)
-            r.setAudioSamplingRate(44_100)
-            r.setOutputFile(file.absolutePath)
-            r.prepare()
-            r.start()
-            recorder = r
+            val stamp = System.currentTimeMillis()
+            val pcm = File(dir, "voice-$stamp.pcm")
+            val wav = File(dir, "voice-$stamp.wav")
+            pcmFile = pcm
+            wavPath = wav.absolutePath
+
+            val minBuf = AudioRecord.getMinBufferSize(
+                sampleRate,
+                AudioFormat.CHANNEL_IN_MONO,
+                AudioFormat.ENCODING_PCM_16BIT
+            )
+            val bufferSize = if (minBuf > 0) minBuf * 2 else sampleRate * 2
+
+            val record = AudioRecord(
+                MediaRecorder.AudioSource.MIC,
+                sampleRate,
+                AudioFormat.CHANNEL_IN_MONO,
+                AudioFormat.ENCODING_PCM_16BIT,
+                bufferSize
+            )
+            if (record.state != AudioRecord.STATE_INITIALIZED) {
+                record.release()
+                throw IllegalStateException("AudioRecord init failed")
+            }
+
+            record.startRecording()
+            audioRecord = record
+            isRecording = true
             startedAtMs = System.currentTimeMillis()
+
+            recordThread = Thread { writePcmLoop(pcm, bufferSize) }.also { it.start() }
             result.success(true)
         } catch (e: Exception) {
             stopInternal(deleteFile = true)
@@ -50,10 +83,26 @@ class MainActivity : FlutterActivity() {
         }
     }
 
+    private fun writePcmLoop(pcm: File, bufferSize: Int) {
+        val buf = ByteArray(bufferSize)
+        try {
+            FileOutputStream(pcm).use { out ->
+                while (isRecording) {
+                    val read = audioRecord?.read(buf, 0, buf.size) ?: -1
+                    if (read > 0) {
+                        out.write(buf, 0, read)
+                    }
+                }
+            }
+        } catch (_: Exception) {
+            // 录音线程异常时忽略，stop 时按已写入的数据处理。
+        }
+    }
+
     private fun stopRecord(result: MethodChannel.Result, deleteFile: Boolean) {
         try {
-            val path = outputPath
             val duration = stopInternal(deleteFile)
+            val path = wavPath
             if (deleteFile || path.isNullOrBlank()) {
                 result.success(null)
                 return
@@ -72,33 +121,95 @@ class MainActivity : FlutterActivity() {
 
     private fun stopInternal(deleteFile: Boolean): Long {
         val start = startedAtMs
-        val r = recorder
-        recorder = null
-        startedAtMs = 0L
-        if (r != null) {
+        isRecording = false
+        try {
+            recordThread?.join(1000)
+        } catch (_: InterruptedException) {
+        }
+        recordThread = null
+
+        val record = audioRecord
+        audioRecord = null
+        if (record != null) {
             try {
-                r.stop()
-            } catch (_: RuntimeException) {
-                deleteVoiceFile(outputPath)
-                outputPath = null
+                if (record.recordingState == AudioRecord.RECORDSTATE_RECORDING) {
+                    record.stop()
+                }
+            } catch (_: IllegalStateException) {
             } finally {
-                r.reset()
-                r.release()
+                record.release()
             }
         }
-        val path = outputPath
+
+        val pcm = pcmFile
+        val wav = wavPath
+        startedAtMs = 0L
+
         if (deleteFile) {
-            deleteVoiceFile(path)
-            outputPath = null
+            deleteQuietly(pcm)
+            deleteQuietly(wav?.let { File(it) })
+            pcmFile = null
+            wavPath = null
+            return 0L
+        }
+
+        // 由裸 PCM 一次性组装标准 WAV（头 + 数据）。
+        if (pcm != null && pcm.exists() && wav != null) {
+            try {
+                writeWavFromPcm(pcm, File(wav))
+            } catch (_: Exception) {
+                deleteQuietly(File(wav))
+                wavPath = null
+            } finally {
+                deleteQuietly(pcm)
+                pcmFile = null
+            }
         }
         if (start <= 0L) return 0L
         return (System.currentTimeMillis() - start).coerceAtLeast(0L)
     }
 
-    private fun deleteVoiceFile(path: String?) {
-        if (path.isNullOrBlank()) return
+    private fun writeWavFromPcm(pcm: File, wav: File) {
+        val dataLen = pcm.length()
+        FileOutputStream(wav).use { out ->
+            out.write(buildWavHeader(dataLen))
+            FileInputStream(pcm).use { input ->
+                val buf = ByteArray(8192)
+                while (true) {
+                    val n = input.read(buf)
+                    if (n <= 0) break
+                    out.write(buf, 0, n)
+                }
+            }
+        }
+    }
+
+    /** 标准 44 字节 PCM WAV 头。 */
+    private fun buildWavHeader(dataLen: Long): ByteArray {
+        val byteRate = sampleRate * channelCount * bitsPerSample / 8
+        val blockAlign = channelCount * bitsPerSample / 8
+        val header = ByteBuffer.allocate(44).order(ByteOrder.LITTLE_ENDIAN)
+        header.put("RIFF".toByteArray(Charsets.US_ASCII))
+        header.putInt((36 + dataLen).toInt())
+        header.put("WAVE".toByteArray(Charsets.US_ASCII))
+        header.put("fmt ".toByteArray(Charsets.US_ASCII))
+        header.putInt(16) // PCM fmt chunk size
+        header.putShort(1) // PCM format
+        header.putShort(channelCount.toShort())
+        header.putInt(sampleRate)
+        header.putInt(byteRate)
+        header.putShort(blockAlign.toShort())
+        header.putShort(bitsPerSample.toShort())
+        header.put("data".toByteArray(Charsets.US_ASCII))
+        header.putInt(dataLen.toInt())
+        return header.array()
+    }
+
+    private fun deleteQuietly(file: File?) {
+        if (file == null) return
         try {
-            File(path).delete()
-        } catch (_: Exception) {}
+            if (file.exists()) file.delete()
+        } catch (_: Exception) {
+        }
     }
 }

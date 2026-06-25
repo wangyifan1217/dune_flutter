@@ -444,22 +444,40 @@ class _NovaC4ImageCardState extends State<NovaC4ImageCard> {
   }
 
   Future<void> _download(_NovaResolvedImage image) async {
-    if (image.bytes != null && image.bytes!.isNotEmpty) {
-      await saveBytesAsFile(image.bytes!, _displayName);
-      return;
-    }
+    // 优先取到图片字节后保存到系统相册（与图片放大预览一致），拿不到字节再回退下载。
+    Uint8List? bytes = image.bytes;
     final u = image.publicUrl ?? widget.url;
-    if (u.isNotEmpty && novaImageUrlNeedsAuthFetch(u)) {
-      final bytes = await widget.resolver.loadNovaImageBytes(
-        url: u,
-        agentPath: widget.agentPath,
-        agentPathCandidates: widget.agentPathCandidates,
-        fileName: _displayName,
-      );
-      if (bytes != null && bytes.isNotEmpty) {
-        await saveBytesAsFile(bytes, _displayName);
-        return;
+    if (bytes == null || bytes.isEmpty) {
+      if (u.isNotEmpty && novaImageUrlNeedsAuthFetch(u)) {
+        bytes = await widget.resolver.loadNovaImageBytes(
+          url: u,
+          agentPath: widget.agentPath,
+          agentPathCandidates: widget.agentPathCandidates,
+          fileName: _displayName,
+        );
+      } else if (u.isNotEmpty && RegExp(r'^https?:', caseSensitive: false).hasMatch(u)) {
+        try {
+          final resp = await http.get(Uri.parse(u));
+          if (resp.statusCode == 200 && resp.bodyBytes.isNotEmpty) {
+            bytes = resp.bodyBytes;
+          }
+        } catch (_) {}
       }
+    }
+    if (bytes != null && bytes.isNotEmpty) {
+      try {
+        await gallery.saveImageToGallery(bytes, _displayName);
+        if (mounted) _novaToast(context, '已保存到相册');
+      } catch (_) {
+        // 桌面/Web 等不支持相册的平台回退为普通文件保存/下载。
+        try {
+          await saveBytesAsFile(bytes, _displayName);
+          if (mounted) _novaToast(context, '已保存');
+        } catch (e) {
+          if (mounted) _novaToast(context, '保存失败: $e', error: true);
+        }
+      }
+      return;
     }
     if (u.isNotEmpty) {
       await _openDownloadUrl(context, u, _displayName);

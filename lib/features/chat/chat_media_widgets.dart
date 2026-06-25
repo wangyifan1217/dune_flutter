@@ -67,14 +67,11 @@ class _ChatAuthImageBubbleState extends State<ChatAuthImageBubble> {
     if (!mounted) return;
     final fileName =
         ConversationService.mediaFileName(widget.payload, fallback: 'image.jpg');
-    await showDialog<void>(
-      context: context,
-      barrierColor: Colors.black87,
-      builder: (_) => _ImagePreviewDialog(
-        service: widget.service,
-        payload: widget.payload,
-        fileName: fileName,
-      ),
+    await showChatImagePreview(
+      context,
+      service: widget.service,
+      payload: widget.payload,
+      fileName: fileName,
     );
   }
 
@@ -191,6 +188,25 @@ class _ChatAuthImageBubbleState extends State<ChatAuthImageBubble> {
       ],
     );
   }
+}
+
+/// 打开会话风格的全屏图片预览（缩放 + 关闭 + 保存到相册）。
+/// 群媒体、会话气泡等共用同一套 UI 与保存逻辑。
+Future<void> showChatImagePreview(
+  BuildContext context, {
+  required ConversationService service,
+  required Map<String, dynamic>? payload,
+  required String fileName,
+}) {
+  return showDialog<void>(
+    context: context,
+    barrierColor: Colors.black87,
+    builder: (_) => _ImagePreviewDialog(
+      service: service,
+      payload: payload,
+      fileName: fileName,
+    ),
+  );
 }
 
 /// 全屏图片预览：加载并展示原图，支持缩放、保存到相册、下载。

@@ -139,36 +139,34 @@ class ChatQuickActions extends StatelessWidget {
       else if (onEmoji != null)
         _QaCell(icon: Icons.emoji_emotions_outlined, label: '表情', onTap: onEmoji!),
     ];
-    final cols = showAt && showVideo ? 6 : (showAt || showVideo ? 6 : 5);
-
     return Container(
       padding: const EdgeInsets.fromLTRB(14, 6, 14, 4),
       decoration: const BoxDecoration(
         color: DunesColors.bgApp,
         border: Border(top: BorderSide(color: DunesColors.borderSoft)),
       ),
-      child: GridView.count(
-        crossAxisCount: cols,
-        shrinkWrap: true,
-        physics: const NeverScrollableScrollPhysics(),
-        mainAxisSpacing: 2,
-        crossAxisSpacing: 2,
-        childAspectRatio: 1.35,
+      // 固定单行高度：避免在更宽的屏幕（如大屏 iPhone）上按宽高比把整排撑高。
+      child: Row(
         children: cells
             .map(
-              (c) => InkWell(
-                borderRadius: BorderRadius.circular(10),
-                onTap: c.onTap,
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(c.icon, size: 18, color: DunesColors.text2),
-                    const SizedBox(height: 3),
-                    Text(
-                      c.label,
-                      style: DunesTypography.sans(fontSize: 9.5, color: DunesColors.text3),
+              (c) => Expanded(
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(10),
+                  onTap: c.onTap,
+                  child: SizedBox(
+                    height: 46,
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(c.icon, size: 18, color: DunesColors.text2),
+                        const SizedBox(height: 3),
+                        Text(
+                          c.label,
+                          style: DunesTypography.sans(fontSize: 9.5, color: DunesColors.text3),
+                        ),
+                      ],
                     ),
-                  ],
+                  ),
                 ),
               ),
             )
@@ -229,10 +227,11 @@ class ChatInputBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final showStop = sending && onStop != null;
     final interactionLocked = !enabled || (sending && !showStop);
-    // 输入区与安卓保持一致：底部固定 9px，不叠加 iOS home indicator 安全区，
-    // 直接贴到屏幕底边。
+    // 发送按钮在最底部，必须避开 iOS home indicator，否则会被底部横条盖住。
+    // 有安全区时用安全区作为下内边距（刚好托起按钮、不额外叠加），安卓为 0 时回退 9px。
+    final bottomInset = MediaQuery.paddingOf(context).bottom;
     return Container(
-      padding: const EdgeInsets.fromLTRB(12, 9, 12, 9),
+      padding: EdgeInsets.fromLTRB(12, 9, 12, bottomInset > 0 ? bottomInset : 9),
       decoration: const BoxDecoration(
         color: DunesColors.bgApp,
         border: Border(top: BorderSide(color: DunesColors.borderSoft)),

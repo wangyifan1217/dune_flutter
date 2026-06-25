@@ -1,6 +1,5 @@
 import 'dart:typed_data';
 
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 
 import '../../core/theme/dunes_theme.dart';
@@ -8,9 +7,9 @@ import '../auth/auth_session.dart';
 import '../conversation/conversation_models.dart';
 import '../conversation/conversation_service.dart';
 import '../shell/dunes_toast.dart';
+import 'chat_media_widgets.dart';
 import 'cors_safe_image.dart';
 import 'file_download.dart' as file_dl;
-import 'gallery_save.dart' as gallery;
 
 class NativeGroupMediaPage extends StatefulWidget {
   const NativeGroupMediaPage({
@@ -118,72 +117,17 @@ class _NativeGroupMediaPageState extends State<NativeGroupMediaPage> {
     final payload = message.payload;
     if (payload == null) return;
     final fileName = ConversationService.mediaFileName(payload, fallback: 'image.jpg');
-    final publicUrl = ConversationService.mediaPublicImageUrl(payload);
     try {
-      Uint8List? bytes;
-      if (ConversationService.hasAuthMedia(payload)) {
-        bytes = await _imageBytesFor(message);
-      }
-      if (!mounted) return;
-      await showGeneralDialog<void>(
-        context: context,
-        barrierDismissible: true,
-        barrierLabel: 'preview',
-        barrierColor: Colors.black.withValues(alpha: 0.92),
-        pageBuilder: (_, _, _) => _GroupImagePreviewOverlay(
-          bytes: bytes,
-          imageUrl: publicUrl,
-          fileName: fileName,
-          onClose: () => Navigator.of(context).pop(),
-          onSave: () => _saveImageToGallery(message),
-        ),
+      // 与会话内图片点击放大完全一致的 UI 与「保存到相册」逻辑。
+      await showChatImagePreview(
+        context,
+        service: _service,
+        payload: payload,
+        fileName: fileName,
       );
     } catch (e) {
       if (!mounted) return;
       _toast('预览失败: $e');
-    }
-  }
-
-  /// 将放大查看的图片保存到系统相册（Web 回退为浏览器下载，其它平台回退为文件保存）。
-  Future<void> _saveImageToGallery(NativeChatMessage message) async {
-    final payload = message.payload;
-    if (payload == null) {
-      _toast('图片地址为空');
-      return;
-    }
-    final fileName = ConversationService.mediaFileName(payload, fallback: 'image.jpg');
-    if (kIsWeb && !ConversationService.hasAuthMedia(payload)) {
-      final url = ConversationService.mediaDirectUrl(payload);
-      if (url.isEmpty) {
-        _toast('图片地址为空');
-        return;
-      }
-      try {
-        await file_dl.openUrlAsFile(url, fileName);
-        if (!mounted) return;
-        _toast('已开始下载');
-      } catch (e) {
-        if (!mounted) return;
-        _toast('保存失败: $e');
-      }
-      return;
-    }
-    try {
-      final bytes = await _service.loadFullImageBytes(payload);
-      await gallery.saveImageToGallery(bytes, fileName);
-      if (!mounted) return;
-      _toast('已保存到相册');
-    } catch (e) {
-      // 不支持相册的平台（桌面/Web）回退为普通文件保存/下载。
-      try {
-        final bytes = await _service.loadFullImageBytes(payload);
-        await file_dl.saveBytesAsFile(bytes, fileName);
-        if (!mounted) return;
-        _toast('已保存');
-      } catch (_) {
-        if (!mounted) return;
-        _toast('保存失败: $e');
-      }
     }
   }
 
@@ -610,93 +554,6 @@ class _FileMediaRow extends StatelessWidget {
   }
 }
 
-class _GroupImagePreviewOverlay extends StatelessWidget {
-  const _GroupImagePreviewOverlay({
-    required this.fileName,
-    required this.onClose,
-    required this.onSave,
-    this.bytes,
-    this.imageUrl,
-  });
-
-  final Uint8List? bytes;
-  final String? imageUrl;
-  final String fileName;
-  final VoidCallback onClose;
-  final VoidCallback onSave;
-
-  @override
-  Widget build(BuildContext context) {
-    final Widget image;
-    if (bytes != null && bytes!.isNotEmpty) {
-      image = Image.memory(bytes!, fit: BoxFit.contain);
-    } else if ((imageUrl ?? '').isNotEmpty) {
-      image = buildCorsSafeImage(
-        url: imageUrl!,
-        width: 900,
-        height: 900,
-        fit: BoxFit.contain,
-      );
-    } else {
-      image = const Icon(Icons.broken_image_outlined, color: Colors.white54, size: 48);
-    }
-
-    return Material(
-      color: Colors.transparent,
-      child: Stack(
-        children: [
-          Positioned.fill(
-            child: GestureDetector(
-              onTap: onClose,
-              child: const SizedBox.expand(),
-            ),
-          ),
-          Positioned.fill(
-            child: Center(
-              child: InteractiveViewer(
-                minScale: 0.8,
-                maxScale: 4,
-                child: Padding(
-                  padding: const EdgeInsets.all(20),
-                  child: image,
-                ),
-              ),
-            ),
-          ),
-          Positioned(
-            top: 14,
-            right: 14,
-            child: _OverlayIconButton(
-              icon: Icons.close_rounded,
-              onTap: onClose,
-            ),
-          ),
-          Positioned(
-            top: 14,
-            left: 14,
-            child: _OverlayIconButton(
-              icon: Icons.save_alt_rounded,
-              onTap: onSave,
-            ),
-          ),
-          Positioned(
-            bottom: 18,
-            left: 18,
-            right: 18,
-            child: Text(
-              fileName,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.center,
-              style: DunesTypography.mono(fontSize: 10, color: Colors.white70),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _CircleHeaderButton extends StatelessWidget {
   const _CircleHeaderButton({
     required this.icon,
@@ -718,32 +575,6 @@ class _CircleHeaderButton extends StatelessWidget {
           customBorder: const CircleBorder(),
           onTap: onTap,
           child: Icon(icon, size: 18, color: DunesColors.text),
-        ),
-      ),
-    );
-  }
-}
-
-class _OverlayIconButton extends StatelessWidget {
-  const _OverlayIconButton({
-    required this.icon,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Colors.black45,
-      borderRadius: BorderRadius.circular(16),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(16),
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.all(8),
-          child: Icon(icon, color: Colors.white, size: 18),
         ),
       ),
     );

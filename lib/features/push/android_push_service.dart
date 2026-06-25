@@ -9,10 +9,12 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:http/http.dart' as http;
 import 'package:permission_handler/permission_handler.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 const _channelId = 'dunes_im_messages';
 const _channelName = '沙丘消息';
 const _notificationIdBase = 41000;
+const _badgePrefsKey = 'dunes_push_badge_count';
 
 final FlutterLocalNotificationsPlugin _notifications = FlutterLocalNotificationsPlugin();
 bool _localNotificationsReady = false;
@@ -88,12 +90,33 @@ void syncPushBadgeCountImpl(int count) {
   final n = count < 0 ? 0 : count;
   unawaited(() async {
     try {
+      // 持久化当前角标，供后台收到推送时在此基础上累加。
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt(_badgePrefsKey, n);
       if (!await AppBadgePlus.isSupported()) return;
       await AppBadgePlus.updateBadge(n);
     } catch (e) {
       debugPrint('[Push] 角标更新失败: $e');
     }
   }());
+}
+
+/// 后台收到通知时更新 App 图标角标数量：
+/// 优先用服务端在推送 data 里下发的 badge/unreadCount，否则在本地计数上累加。
+Future<void> _updateBadgeForNotification({int? explicitCount}) async {
+  if (!Platform.isAndroid) return;
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    final next = explicitCount != null && explicitCount >= 0
+        ? explicitCount
+        : (prefs.getInt(_badgePrefsKey) ?? 0) + 1;
+    await prefs.setInt(_badgePrefsKey, next);
+    if (await AppBadgePlus.isSupported()) {
+      await AppBadgePlus.updateBadge(next);
+    }
+  } catch (e) {
+    debugPrint('[Push] 后台角标更新失败: $e');
+  }
 }
 
 void notifyPushRealtimeMessageImpl({
@@ -106,6 +129,7 @@ void notifyPushRealtimeMessageImpl({
   final id = conversationId > 0
       ? _notificationIdBase + (conversationId % 1000)
       : _notificationIdBase + 1;
+  unawaited(_updateBadgeForNotification());
   unawaited(_showLocal(id: id, title: title, body: body));
 }
 
@@ -187,6 +211,10 @@ Future<void> _showRemoteMessage(RemoteMessage message) async {
   final title = notification?.title ?? message.data['title']?.toString() ?? '沙丘';
   final body = notification?.body ?? message.data['body']?.toString() ?? '您有新消息';
   final convId = int.tryParse(message.data['conversationId']?.toString() ?? '') ?? 0;
+  final badge = int.tryParse(
+    (message.data['badge'] ?? message.data['unreadCount'] ?? '').toString(),
+  );
+  await _updateBadgeForNotification(explicitCount: badge);
   await _showLocal(
     id: convId > 0 ? _notificationIdBase + (convId % 1000) : _notificationIdBase,
     title: title,

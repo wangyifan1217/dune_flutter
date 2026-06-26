@@ -367,9 +367,11 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
     final maxLines = field.type == 'textarea' ? 5 : 1;
     return _fieldWrap(
       field,
-      TextFormField(
-        key: ValueKey('field_${field.key}_${value.toString()}'),
-        initialValue: value?.toString() ?? '',
+      _XflowTextField(
+        // 稳定 key：仅随字段标识变化，绝不随输入值变化，
+        // 否则每输入一个字符都会重建输入框、丢失焦点（iOS 表现为键盘/输入框关闭）。
+        key: ValueKey('field_${field.key}'),
+        value: value?.toString() ?? '',
         keyboardType: keyboardType,
         minLines: 1,
         maxLines: maxLines,
@@ -1141,6 +1143,72 @@ class _XflowUserPickerState extends State<_XflowUserPicker> {
           if (_controller.text.trim() == q.trim()) _search(q);
         });
       },
+    );
+  }
+}
+
+/// 受控文本输入：内部持有 controller，避免父级在每次 onChanged 后重建
+/// 导致输入框丢焦点。仅当外部 value 与当前输入不一致（如导入/AI 填充）时同步。
+class _XflowTextField extends StatefulWidget {
+  const _XflowTextField({
+    super.key,
+    required this.value,
+    required this.keyboardType,
+    required this.minLines,
+    required this.maxLines,
+    required this.readOnly,
+    required this.style,
+    required this.decoration,
+    required this.onChanged,
+  });
+
+  final String value;
+  final TextInputType keyboardType;
+  final int minLines;
+  final int maxLines;
+  final bool readOnly;
+  final TextStyle style;
+  final InputDecoration decoration;
+  final ValueChanged<String> onChanged;
+
+  @override
+  State<_XflowTextField> createState() => _XflowTextFieldState();
+}
+
+class _XflowTextFieldState extends State<_XflowTextField> {
+  late final TextEditingController _controller =
+      TextEditingController(text: widget.value);
+
+  @override
+  void didUpdateWidget(covariant _XflowTextField oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // 外部值变化（导入 / AI 填充 / 重置）时同步到输入框；
+    // 用户自己输入时 value 已与 controller 一致，不会触发，故不会打断输入。
+    if (widget.value != _controller.text) {
+      _controller.value = TextEditingValue(
+        text: widget.value,
+        selection: TextSelection.collapsed(offset: widget.value.length),
+      );
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return TextFormField(
+      controller: _controller,
+      keyboardType: widget.keyboardType,
+      minLines: widget.minLines,
+      maxLines: widget.maxLines,
+      readOnly: widget.readOnly,
+      style: widget.style,
+      decoration: widget.decoration,
+      onChanged: widget.onChanged,
     );
   }
 }

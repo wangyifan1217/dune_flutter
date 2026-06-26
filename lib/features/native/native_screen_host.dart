@@ -68,6 +68,9 @@ class NativeScreenHost extends StatefulWidget {
 class _NativeScreenHostState extends State<NativeScreenHost> {
   final CommUnreadNotifier _commUnread = CommUnreadNotifier();
   final WorkbenchBadgeNotifier _workbenchBadge = WorkbenchBadgeNotifier();
+  final WorkbenchDataRefreshNotifier _workbenchRefresh = WorkbenchDataRefreshNotifier();
+  int _lastPendingInitiateForMe = 0;
+  bool _hasPendingInitiateBaseline = false;
   NativeConversation? _selectedPrivate;
   NativeConversation? _selectedGroup;
   NativeConversation? _selectedBroadcast;
@@ -90,6 +93,8 @@ class _NativeScreenHostState extends State<NativeScreenHost> {
   String _b10BackScreen = 'P1';
   String _xflowTemplateKey = 'sales-proposal';
   int? _xflowEditProposalId;
+  String _xflowFormBackScreen = 'B3';
+  String? _b14InitialFilter;
   final ConversationRealtimeDedup _commBadgeDedup = ConversationRealtimeDedup();
   StreamSubscription<ConversationRealtimeEvent>? _commBadgeRtSub;
   Timer? _commBadgeRefreshDebounce;
@@ -128,6 +133,7 @@ class _NativeScreenHostState extends State<NativeScreenHost> {
     unawaited(unbindPushSession());
     _commUnread.dispose();
     _workbenchBadge.dispose();
+    _workbenchRefresh.dispose();
     super.dispose();
   }
 
@@ -252,8 +258,31 @@ class _NativeScreenHostState extends State<NativeScreenHost> {
       final stats = _NativeMyStats.fromJson(raw);
       if (!mounted) return;
       final delta = _workbenchBadge.takeNewPendingDelta(stats.pendingForMe);
+      final pi = stats.pendingInitiateForMe;
+      var pendingInitiateDelta = 0;
+      if (!_hasPendingInitiateBaseline) {
+        _lastPendingInitiateForMe = pi;
+        _hasPendingInitiateBaseline = true;
+      } else if (pi > _lastPendingInitiateForMe) {
+        pendingInitiateDelta = pi - _lastPendingInitiateForMe;
+        _lastPendingInitiateForMe = pi;
+      } else {
+        _lastPendingInitiateForMe = pi;
+      }
+      _workbenchRefresh.bump();
       if (delta > 0 && !notifyRejected) {
         showDunesToast(context, '您有 $delta 条新的待审批，请及时处理');
+      } else if (pendingInitiateDelta > 0) {
+        showDunesActionToast(
+          context,
+          '有 $pendingInitiateDelta 条同事推送的提案待您确认发起',
+          actionLabel: '去查看',
+          icon: Icons.assignment_ind_outlined,
+          onTap: () {
+            if (!mounted) return;
+            _goB14(filter: 'PENDING_INITIATE');
+          },
+        );
       } else if (notifyRejected) {
         showDunesActionToast(
           context,
@@ -262,7 +291,7 @@ class _NativeScreenHostState extends State<NativeScreenHost> {
           icon: Icons.warning_amber_rounded,
           onTap: () {
             if (!mounted) return;
-            widget.navigation.go('B14');
+            _goB14();
           },
         );
       }
@@ -344,6 +373,8 @@ class _NativeScreenHostState extends State<NativeScreenHost> {
           navigation: widget.navigation,
           commUnread: _commUnread,
           workbenchBadge: _workbenchBadge,
+          workbenchRefresh: _workbenchRefresh,
+          onOpenB14: _goB14,
           onLogout: widget.onLogout,
         );
       case 'C1':
@@ -449,7 +480,7 @@ class _NativeScreenHostState extends State<NativeScreenHost> {
             });
             widget.navigation.go('C9');
           },
-          onOpenApproval: () => widget.navigation.go('B14'),
+          onOpenApproval: () => _goB14(),
           onExitedGroup: () => widget.navigation.go('C1'),
         );
       case 'C3':
@@ -490,24 +521,29 @@ class _NativeScreenHostState extends State<NativeScreenHost> {
           session: widget.session,
           onOpenProposal: (item) => _openProposalDetail(item, from: 'B13'),
           onBack: widget.navigation.back,
+          workbenchRefresh: _workbenchRefresh,
         );
       case 'B1':
         return NativeMyApprovalWorkbenchPage(
           session: widget.session,
           onOpenProposal: (item) => _openProposalDetail(item, from: 'B1'),
           onBack: widget.navigation.back,
+          workbenchRefresh: _workbenchRefresh,
         );
       case 'B14':
         return NativeMyInitiatedPage(
           session: widget.session,
           onOpenProposal: (item) => _openProposalDetail(item, from: 'B14'),
           onBack: widget.navigation.back,
+          initialStatusFilter: _b14InitialFilter,
+          workbenchRefresh: _workbenchRefresh,
         );
       case 'P1':
         return NativeMyCcProposalPage(
           session: widget.session,
           onOpenProposal: (item) => _openProposalDetail(item, from: 'P1'),
           onBack: widget.navigation.back,
+          workbenchRefresh: _workbenchRefresh,
         );
       case 'B3':
         return NativeB3Page(
@@ -517,6 +553,7 @@ class _NativeScreenHostState extends State<NativeScreenHost> {
             setState(() {
               _xflowTemplateKey = templateKey;
               _xflowEditProposalId = null;
+              _xflowFormBackScreen = 'B3';
             });
             widget.navigation.go('XF');
           },
@@ -527,6 +564,12 @@ class _NativeScreenHostState extends State<NativeScreenHost> {
           navigation: widget.navigation,
           templateKey: _xflowTemplateKey,
           editProposalId: _xflowEditProposalId,
+          backScreen: _xflowFormBackScreen,
+          onDeleted: () {
+            setState(() {
+              _xflowEditProposalId = null;
+            });
+          },
           onSubmitted: (proposalId) {
             setState(() {
               _selectedProposalId = proposalId;
@@ -549,6 +592,7 @@ class _NativeScreenHostState extends State<NativeScreenHost> {
             setState(() {
               _xflowTemplateKey = 'sales-proposal';
               _xflowEditProposalId = proposalId;
+              _xflowFormBackScreen = _b10BackScreen;
             });
             widget.navigation.go('XF');
           },
@@ -714,7 +758,23 @@ class _NativeScreenHostState extends State<NativeScreenHost> {
     }
   }
 
+  /// 进入「我发起的(B14)」并可选预置筛选（如「待发起」用于代发起人入口）。
+  void _goB14({String? filter}) {
+    setState(() => _b14InitialFilter = filter);
+    widget.navigation.go('B14');
+  }
+
   void _openProposalDetail(XflowProposalItem item, {required String from}) {
+    // 「我发起的」列表点击草稿 → 进入可继续填写的表单（与提交页一致），并可删除草稿。
+    if (from == 'B14' && item.status.toUpperCase() == 'DRAFT') {
+      setState(() {
+        _xflowTemplateKey = 'sales-proposal';
+        _xflowEditProposalId = item.id;
+        _xflowFormBackScreen = from;
+      });
+      widget.navigation.go('XF');
+      return;
+    }
     setState(() {
       _selectedProposalId = item.id;
       _selectedTodoHint = item.todoHint;
@@ -730,6 +790,8 @@ class _NativeB2Page extends StatefulWidget {
     required this.navigation,
     required this.commUnread,
     required this.workbenchBadge,
+    required this.workbenchRefresh,
+    required this.onOpenB14,
     this.onLogout,
   });
 
@@ -737,6 +799,8 @@ class _NativeB2Page extends StatefulWidget {
   final DunesNavigationController navigation;
   final CommUnreadNotifier commUnread;
   final WorkbenchBadgeNotifier workbenchBadge;
+  final WorkbenchDataRefreshNotifier workbenchRefresh;
+  final void Function({String? filter}) onOpenB14;
   final VoidCallback? onLogout;
 
   @override
@@ -754,8 +818,20 @@ class _NativeB2PageState extends State<_NativeB2Page> {
   @override
   void initState() {
     super.initState();
+    widget.workbenchRefresh.addListener(_onWorkbenchDataRefresh);
     _loadStats();
     _refreshCommBadge();
+  }
+
+  @override
+  void dispose() {
+    widget.workbenchRefresh.removeListener(_onWorkbenchDataRefresh);
+    super.dispose();
+  }
+
+  void _onWorkbenchDataRefresh() {
+    if (!mounted) return;
+    unawaited(_loadStats(silent: true));
   }
 
   Future<void> _refreshCommBadge() async {
@@ -786,11 +862,13 @@ class _NativeB2PageState extends State<_NativeB2Page> {
     }
   }
 
-  Future<void> _loadStats() async {
-    setState(() {
-      _loading = true;
-      _loadError = null;
-    });
+  Future<void> _loadStats({bool silent = false}) async {
+    if (!silent) {
+      setState(() {
+        _loading = true;
+        _loadError = null;
+      });
+    }
     try {
       final xflow = XflowService(session: widget.session);
       List<XflowProposalItem>? initiatedRows;
@@ -827,6 +905,7 @@ class _NativeB2PageState extends State<_NativeB2Page> {
       widget.workbenchBadge.update(_stats?.pendingForMe ?? 0);
     } catch (error) {
       if (!mounted) return;
+      if (silent) return;
       setState(() {
         _loading = false;
         _loadError = error.toString();
@@ -926,6 +1005,11 @@ class _NativeB2PageState extends State<_NativeB2Page> {
   @override
   Widget build(BuildContext context) {
     final stats = _stats ?? const _NativeMyStats.empty();
+    final initiatedTotal =
+        stats.initiatedByMe +
+        stats.pendingInitiateForMe +
+        stats.approvalPending +
+        stats.approvalRejected;
     final profile = _profile ?? _NativeB2Profile.fromSession(widget.session);
     final kb = _kbSummary;
     final kbDocCount = kb != null && kb.documents.isNotEmpty
@@ -963,10 +1047,20 @@ class _NativeB2PageState extends State<_NativeB2Page> {
                       _buildReminderBanner(
                         icon: Icons.warning_amber_rounded,
                         text: '您有 ${stats.approvalRejected} 条审批被驳回，点击进入「我发起的审批」',
-                        onTap: () => widget.navigation.go('B14'),
+                        onTap: () => widget.onOpenB14(),
                       ),
                     ],
-                    if (stats.pendingForMe > 0 || stats.approvalRejected > 0)
+                    if (stats.pendingInitiateForMe > 0) ...[
+                      const SizedBox(height: 8),
+                      _buildReminderBanner(
+                        icon: Icons.assignment_ind_outlined,
+                        text: '有 ${stats.pendingInitiateForMe} 条同事推送给您、待您确认发起的提案',
+                        onTap: () => widget.onOpenB14(filter: 'PENDING_INITIATE'),
+                      ),
+                    ],
+                    if (stats.pendingForMe > 0 ||
+                        stats.approvalRejected > 0 ||
+                        stats.pendingInitiateForMe > 0)
                       const SizedBox(height: 14),
                     _buildSectionLabel('我的事项 · 审批与穿透'),
                     const SizedBox(height: 8),
@@ -974,9 +1068,10 @@ class _NativeB2PageState extends State<_NativeB2Page> {
                       _buildMenuItem(
                         icon: Icons.send_outlined,
                         title: '我发起的审批',
-                        desc: '${stats.initiatedByMe} 条 · ${stats.approvalPending} 审批中 · ${stats.approvalRejected} 已驳回',
-                        badge: stats.initiatedByMe,
-                        onTap: () => widget.navigation.go('B14'),
+                        desc:
+                            '${initiatedTotal} 条总数 · ${stats.pendingInitiateForMe} 条代发起 · ${stats.approvalPending} 审批中',
+                        badge: initiatedTotal,
+                        onTap: () => widget.onOpenB14(),
                       ),
                       _buildMenuItem(
                         icon: Icons.assignment_outlined,
@@ -1252,6 +1347,11 @@ class _NativeB2PageState extends State<_NativeB2Page> {
   }
 
   Widget _buildQuickStats(_NativeMyStats stats) {
+    final initiatedTotal =
+        stats.initiatedByMe +
+        stats.pendingInitiateForMe +
+        stats.approvalPending +
+        stats.approvalRejected;
     Widget soonBadge() {
       return Container(
         padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
@@ -1338,8 +1438,8 @@ class _NativeB2PageState extends State<_NativeB2Page> {
               width: cellW,
               child: cell(
                 '我发起的',
-                '${stats.initiatedByMe}',
-                onTap: () => widget.navigation.go('B14'),
+                '$initiatedTotal',
+                onTap: () => widget.onOpenB14(),
               ),
             ),
             const SizedBox(width: gap),
@@ -1596,6 +1696,7 @@ class _NativeMyStats {
     required this.approvalRejected,
     required this.ccProposalCount,
     required this.ccProposalPending,
+    required this.pendingInitiateForMe,
   });
 
   const _NativeMyStats.empty()
@@ -1606,7 +1707,8 @@ class _NativeMyStats {
         outstandingInvoices = 0,
         approvalRejected = 0,
         ccProposalCount = 0,
-        ccProposalPending = 0;
+        ccProposalPending = 0,
+        pendingInitiateForMe = 0;
 
   final int pendingForMe;
   final int initiatedByMe;
@@ -1617,22 +1719,32 @@ class _NativeMyStats {
   final int ccProposalCount;
   final int ccProposalPending;
 
+  /// 待我发起：他人推送给我、待我确认发起的提案数。
+  final int pendingInitiateForMe;
+
   /// 与 B14「我发起的」列表口径对齐，避免 my-stats 历史 approval 行导致数字偏大/横幅闪烁。
   _NativeMyStats alignedWithInitiatedList(List<XflowProposalItem> rows) {
+    var initiated = 0;
     var pending = 0;
     var rejected = 0;
     for (final row in rows) {
       switch (row.status.toUpperCase()) {
+        case 'PENDING_INITIATE':
+          // 待我发起口径仅信任 my-stats.pendingInitiateForMe，这里不覆盖。
+          break;
         case 'PENDING':
           pending++;
           break;
         case 'REJECTED':
           rejected++;
           break;
+        default:
+          initiated++;
+          break;
       }
     }
     return copyWith(
-      initiatedByMe: rows.length,
+      initiatedByMe: initiated,
       approvalPending: pending,
       approvalRejected: rejected,
     );
@@ -1640,6 +1752,7 @@ class _NativeMyStats {
 
   _NativeMyStats copyWith({
     int? initiatedByMe,
+    int? pendingInitiateForMe,
     int? approvalPending,
     int? approvalRejected,
   }) {
@@ -1652,6 +1765,7 @@ class _NativeMyStats {
       approvalRejected: approvalRejected ?? this.approvalRejected,
       ccProposalCount: ccProposalCount,
       ccProposalPending: ccProposalPending,
+      pendingInitiateForMe: pendingInitiateForMe ?? this.pendingInitiateForMe,
     );
   }
 
@@ -1674,6 +1788,7 @@ class _NativeMyStats {
       approvalRejected: readInt(<String>['approvalRejected']),
       ccProposalCount: readInt(<String>['ccProposalCount']),
       ccProposalPending: readInt(<String>['ccProposalPending']),
+      pendingInitiateForMe: readInt(<String>['pendingInitiateForMe']),
     );
   }
 }

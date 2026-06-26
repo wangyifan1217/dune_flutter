@@ -20,6 +20,7 @@ class XflowFormRenderer extends StatefulWidget {
     this.service,
     this.onAction,
     this.embedded = true,
+    this.allowedActionKinds,
   });
 
   final List<XflowField> fields;
@@ -29,6 +30,7 @@ class XflowFormRenderer extends StatefulWidget {
   final XflowService? service;
   final XflowFormAction? onAction;
   final bool embedded;
+  final Set<String>? allowedActionKinds;
 
   @override
   State<XflowFormRenderer> createState() => _XflowFormRendererState();
@@ -170,6 +172,11 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
   Widget _actionBar(Set<String> actionKeys) {
     final actions = widget.fields
         .where((f) => actionKeys.contains(f.key))
+        .where((f) {
+          final kind = (f.raw['actionKind'] ?? f.key).toString();
+          final allowed = widget.allowedActionKinds;
+          return allowed == null || allowed.contains(kind);
+        })
         .toList(growable: false);
     if (actions.isEmpty) return const SizedBox.shrink();
     return Container(

@@ -18,6 +18,7 @@ class XflowDetailRenderer extends StatelessWidget {
     this.onInitiate,
     this.onReedit,
     this.onVoid,
+    this.onReturn,
   });
 
   final XflowDetailBundle bundle;
@@ -29,6 +30,7 @@ class XflowDetailRenderer extends StatelessWidget {
   final VoidCallback? onInitiate;
   final VoidCallback? onReedit;
   final VoidCallback? onVoid;
+  final VoidCallback? onReturn;
 
   @override
   Widget build(BuildContext context) {
@@ -54,11 +56,15 @@ class XflowDetailRenderer extends StatelessWidget {
         XfDetActions(
           detail: bundle.detail,
           canReedit: bundle.canReedit,
+          canDeleteDraft: bundle.canDeleteDraft,
           onDelete: onDelete,
           onPush: onPush,
           onInitiate: onInitiate,
           onReedit: onReedit,
           onVoid: onVoid,
+          onReturn: onReturn,
+          isDesignatedInitiator: bundle.isDesignatedInitiator,
+          isPusher: bundle.isPusher,
         ),
       ],
     );

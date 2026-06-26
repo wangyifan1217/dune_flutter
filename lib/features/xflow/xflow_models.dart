@@ -321,6 +321,9 @@ class XflowDetailBundle {
     this.ccList = const [],
     this.canReedit = false,
     this.layout = const {},
+    this.isDesignatedInitiator = false,
+    this.isPusher = false,
+    this.canDeleteDraft = false,
   });
 
   final XflowProposalDetail detail;
@@ -333,6 +336,15 @@ class XflowDetailBundle {
   final List<Map<String, dynamic>> ccList;
   final bool canReedit;
   final Map<String, dynamic> layout;
+
+  /// 「待发起」提案中，当前用户是被推送的代发起人（owner_id == me）。
+  final bool isDesignatedInitiator;
+
+  /// 「待发起」提案中，当前用户是推送人（创建人，已推送给他人代发起）。
+  final bool isPusher;
+
+  /// 创建人本人的草稿(DRAFT)可删除。
+  final bool canDeleteDraft;
 }
 
 extension XflowApprovalTrailExt on XflowApprovalTrail {

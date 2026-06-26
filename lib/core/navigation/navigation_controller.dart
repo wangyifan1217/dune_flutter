@@ -42,4 +42,18 @@ class DunesNavigationController extends ChangeNotifier {
       notifyListeners();
     }
   }
+
+  /// 返回到指定屏（如从「我的」进入的审批列表/详情统一回到 B2）。
+  /// 若历史栈中存在该屏则截断其后所有页面；否则直接跳转。
+  void popTo(String screenId) {
+    if (screenId.isEmpty) return;
+    final idx = _history.lastIndexOf(screenId);
+    if (idx >= 0) {
+      _history.removeRange(idx + 1, _history.length);
+      _currentScreen = screenId;
+      notifyListeners();
+      return;
+    }
+    go(screenId);
+  }
 }

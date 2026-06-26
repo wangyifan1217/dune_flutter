@@ -64,19 +64,78 @@ class XflowService {
   }
 
   Future<List<XflowProposalItem>> fetchB14Initiated() async {
+    final byId = <int, XflowProposalItem>{};
+    Object? err1;
+    Object? err2;
+    // `my-initiated`：我已正式发起、进入审批流的提案。
     try {
       final rows = await _requestList('/workbench/my-initiated');
-      final items = _dedupeById(
-        rows.whereType<Map<String, dynamic>>().map(_mapB14Item).toList(),
-      );
-      return Future.wait(items.map(_enrichB14Item));
-    } catch (_) {
-      final rows = await _requestList('/xflow/proposals/mine');
-      final items = _dedupeById(
-        rows.whereType<Map<String, dynamic>>().map(_mapProposalItem).toList(),
-      );
-      return Future.wait(items.map(_enrichB14Item));
+      for (final row in rows.whereType<Map<String, dynamic>>()) {
+        final it = _mapB14Item(row);
+        if (it.id > 0) byId[it.id] = it;
+      }
+    } catch (e) {
+      err1 = e;
     }
+    // `proposals/mine`：我名下的提案，含被同事「推送给我」、待我确认发起的提案
+    // （status=pending_initiate）。这类提案不在 my-initiated 中，必须并集补入，
+    // 否则在「我发起的」列表里看不到被推送过来的提案（与 WebView loadB14Initiated 对齐）。
+    try {
+      final rows = await _requestList('/xflow/proposals/mine');
+      for (final row in rows.whereType<Map<String, dynamic>>()) {
+        if (!_shouldIncludeMyInitiatedRow(row)) continue;
+        final it = _mapProposalItem(row);
+        if (it.id <= 0) continue;
+        final st = it.status.toUpperCase();
+        final prev = byId[it.id];
+        // mine 仅新增补入“草稿/待发起”，避免他人已提交审批混入“我发起的”。
+        if (prev == null && st != 'DRAFT' && st != 'PENDING_INITIATE') continue;
+        byId[it.id] = prev == null ? it : _fillB14Missing(prev, it);
+      }
+    } catch (e) {
+      err2 = e;
+    }
+    // 两个来源都失败且无数据时才视为错误，交给上层展示错误态。
+    if (byId.isEmpty && (err1 != null || err2 != null)) {
+      throw err1 ?? err2!;
+    }
+    final items = byId.values.toList(growable: true)
+      ..sort((a, b) {
+        final at = a.createdAt?.millisecondsSinceEpoch ?? 0;
+        final bt = b.createdAt?.millisecondsSinceEpoch ?? 0;
+        return bt.compareTo(at);
+      });
+    return Future.wait(items.map(_enrichB14Item));
+  }
+
+  bool _shouldIncludeMyInitiatedRow(Map<String, dynamic> row) {
+    final uid = session.userId;
+    if (uid <= 0) return false;
+    final createdById = _int(
+      row['createdById'] ??
+          row['created_by_id'] ??
+          row['creatorId'] ??
+          row['createdBy'],
+    );
+    final ownerId = _int(row['ownerId'] ?? row['owner_id']);
+    final st = (row['status'] ?? '').toString().toUpperCase();
+    if (createdById > 0 && createdById == uid) return true;
+    if (st == 'PENDING_INITIATE' && ownerId > 0 && ownerId == uid) return true;
+    return false;
+  }
+
+  /// 以 my-initiated 项为主，用 proposals/mine 补齐缺失字段。
+  XflowProposalItem _fillB14Missing(XflowProposalItem base, XflowProposalItem extra) {
+    return base.copyWith(
+      code: base.code.isEmpty || base.code.startsWith('#') ? extra.code : null,
+      title: base.title.isEmpty ? extra.title : null,
+      status: base.status.isEmpty ? extra.status : null,
+      createdByName: base.createdByName.isEmpty ? extra.createdByName : null,
+      createdAt: base.createdAt ?? extra.createdAt,
+      tag1: (base.tag1 == null || base.tag1!.isEmpty) ? extra.tag1 : null,
+      txType: (base.txType == null || base.txType!.isEmpty) ? extra.txType : null,
+      scaleWan: (base.scaleWan == null || base.scaleWan!.isEmpty) ? extra.scaleWan : null,
+    );
   }
 
   Future<List<XflowProposalItem>> fetchP1CcProposals() async {
@@ -149,9 +208,16 @@ class XflowService {
     final raw = await _request(
       '/xflow/templates/${Uri.encodeComponent(templateKey)}/detail-config',
     );
-    final cfg = raw['detailConfig'];
-    if (cfg is Map<String, dynamic>) return cfg;
-    return raw;
+    // 后端把 pushRules / ccRules / stages / dicts 放在响应顶层（与 detailConfig 同级）。
+    // 这里以内层 detailConfig 为基础，再并入这些顶层兄弟字段，
+    // 否则调用方读取 cfg['pushRules'] 永远为空（导致「推送给同事」无人可选）。
+    final merged = <String, dynamic>{};
+    final inner = raw['detailConfig'];
+    if (inner is Map) merged.addAll(Map<String, dynamic>.from(inner));
+    for (final key in const ['pushRules', 'ccRules', 'stages', 'dicts', 'templateKey']) {
+      if (raw[key] != null) merged[key] = raw[key];
+    }
+    return merged;
   }
 
   Future<Map<String, dynamic>> fetchCcRules({
@@ -251,6 +317,16 @@ class XflowService {
         (detail.createdById == uid || initiator == uid) &&
         st == 'rejected' &&
         st != 'voided';
+    // 「待发起」角色：owner_id 为代发起人（被推送人），created_by 为推送人。
+    final ownerId = _int(detail.raw['ownerId']);
+    final isPendingInitiate = st == 'pending_initiate';
+    final isDesignatedInitiator = isPendingInitiate && uid > 0 && ownerId == uid;
+    final isPusher = isPendingInitiate &&
+        uid > 0 &&
+        detail.createdById == uid &&
+        ownerId != uid;
+    final canDeleteDraft =
+        st == 'draft' && uid > 0 && detail.createdById == uid;
     return XflowDetailBundle(
       detail: detail,
       trail: trail,
@@ -262,6 +338,9 @@ class XflowService {
       ccList: ccList,
       canReedit: canReedit,
       layout: template.layout,
+      isDesignatedInitiator: isDesignatedInitiator,
+      isPusher: isPusher,
+      canDeleteDraft: canDeleteDraft,
     );
   }
 
@@ -350,6 +429,15 @@ class XflowService {
   Future<Map<String, dynamic>> initiateProposal(int proposalId) {
     return _request(
       '/xflow/proposals/$proposalId/initiate',
+      method: 'POST',
+      body: const <String, dynamic>{},
+    );
+  }
+
+  /// 代发起人把「待发起」提案退回给推送人（创建人）。退回后回到草稿状态。
+  Future<Map<String, dynamic>> returnProposal(int proposalId) {
+    return _request(
+      '/xflow/proposals/$proposalId/return',
       method: 'POST',
       body: const <String, dynamic>{},
     );

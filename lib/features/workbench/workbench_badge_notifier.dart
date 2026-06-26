@@ -33,3 +33,8 @@ class WorkbenchBadgeNotifier extends ChangeNotifier {
     return delta;
   }
 }
+
+/// 工作台业务数据变更（推送/退回/审批待办等），「我的」首页与审批列表监听后自动刷新。
+class WorkbenchDataRefreshNotifier extends ChangeNotifier {
+  void bump() => notifyListeners();
+}

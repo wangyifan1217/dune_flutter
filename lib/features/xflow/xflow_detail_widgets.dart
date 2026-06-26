@@ -392,7 +392,7 @@ class XfDetPendingHint extends StatelessWidget {
     if (st != 'pending' && st != 'pending_initiate') return const SizedBox.shrink();
     if (bundle.myTodo != null) return const SizedBox.shrink();
     var who = currentApproverLabel(bundle.trail, bundle.assigneeNames, bundle.stages);
-    if (who.isEmpty) who = '审批人';
+    if (who.isEmpty) who = '待分配';
     return XfDetCard(
       title: '审批进行中',
       icon: Icons.hourglass_empty,
@@ -422,27 +422,65 @@ class XfDetPushContext extends StatelessWidget {
     final pushMessage = (raw['pushMessage'] ?? '').toString();
     if (draftedBy == null && pushMessage.isEmpty) return const SizedBox.shrink();
     final by = draftedBy is Map ? Map<String, dynamic>.from(draftedBy) : <String, dynamic>{};
+    // 代发起人 = 被推送、待确认发起的同事（即我选择的运营部门同事）。
+    final designated = raw['designatedInitiator'];
+    final to = designated is Map ? Map<String, dynamic>.from(designated) : <String, dynamic>{};
+    final toName = (to['name'] ?? '').toString();
+    final toDept = (to['dept'] ?? '').toString();
     return XfDetCard(
       title: '运营推送上下文',
       icon: Icons.send_outlined,
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _pushRow('推送人', (by['name'] ?? '—').toString()),
-          _pushRow('部门', (by['dept'] ?? '—').toString()),
-          if ((by['at'] ?? '').toString().isNotEmpty)
-            _pushRow('时间', (by['at'] ?? '').toString()),
+          if (toName.isNotEmpty) ...[
+            _pushInfoRow('代发起人', toName, highlight: true),
+            if (toDept.isNotEmpty) _pushInfoRow('代发起人部门', toDept),
+            const SizedBox(height: 4),
+          ],
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: DunesColors.bgSoft,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: DunesColors.borderSoft),
+            ),
+            child: Column(
+              children: [
+                _pushInfoRow('推送人', (by['name'] ?? '—').toString()),
+                _pushInfoRow('部门', (by['dept'] ?? '—').toString()),
+                if ((by['at'] ?? '').toString().isNotEmpty)
+                  _pushInfoRow('推送时间', fmtDetailTime(by['at'])),
+              ],
+            ),
+          ),
           if (pushMessage.isNotEmpty)
             Container(
               width: double.infinity,
               margin: const EdgeInsets.only(top: 8),
-              padding: const EdgeInsets.all(8),
+              padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: DunesColors.bgSoft,
+                color: DunesColors.amberSoft.withValues(alpha: 0.35),
                 borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: DunesColors.amber.withValues(alpha: 0.35)),
               ),
-              child: Text(
-                pushMessage,
-                style: DunesTypography.sans(fontSize: 12, height: 1.5, color: DunesColors.text2),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '推送说明',
+                    style: DunesTypography.sans(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                      color: DunesColors.text3,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    pushMessage,
+                    style: DunesTypography.sans(fontSize: 12, height: 1.5, color: DunesColors.text2),
+                  ),
+                ],
               ),
             ),
         ],
@@ -450,17 +488,27 @@ class XfDetPushContext extends StatelessWidget {
     );
   }
 
-  Widget _pushRow(String k, String v) {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      decoration: BoxDecoration(
-        border: Border(bottom: BorderSide(color: DunesColors.borderSoft.withValues(alpha: 0.6))),
-      ),
+  Widget _pushInfoRow(String k, String v, {bool highlight = false}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(k, style: DunesTypography.sans(fontSize: 12, color: DunesColors.text2)),
-          Text(v, style: DunesTypography.sans(fontSize: 12, fontWeight: FontWeight.w600)),
+          SizedBox(
+            width: 72,
+            child: Text(k, style: DunesTypography.sans(fontSize: 11, color: DunesColors.text3)),
+          ),
+          Expanded(
+            child: Text(
+              v,
+              textAlign: TextAlign.right,
+              style: DunesTypography.sans(
+                fontSize: 12,
+                fontWeight: highlight ? FontWeight.w700 : FontWeight.w600,
+                color: highlight ? DunesColors.accent : DunesColors.text,
+              ),
+            ),
+          ),
         ],
       ),
     );
@@ -1036,6 +1084,9 @@ class XfDetTrackTimeline extends StatelessWidget {
       if (step.assigneeId > 0 && bundle.assigneeNames.containsKey(step.assigneeId)) {
         return '${bundle.assigneeNames[step.assigneeId]} · $fallback';
       }
+      if (step.assigneeName.isNotEmpty) {
+        return '${step.assigneeName} · $fallback';
+      }
       return fallback;
     }
 
@@ -1043,10 +1094,11 @@ class XfDetTrackTimeline extends StatelessWidget {
       _HistoryStep(
         kind: _HistoryKind.done,
         icon: Icons.flag_outlined,
-        who: (detail.raw['createdBy']?.toString() ?? '').ifEmpty(detail.ownerName.ifEmpty('发起人')),
+        who: trailSubmitterLabel(detail, trail, bundle.assigneeNames),
         role: '提交人',
         time: fmtDetailTime(trail?.createdAtRaw ?? detail.raw['createdAt']),
-        comment: '提交提案 · ${detail.code}',
+        comment: trailSubmitterComment(detail),
+        subComment: trailProxyInitiatorNote(detail),
       ),
     ];
 
@@ -1091,6 +1143,32 @@ class XfDetTrackTimeline extends StatelessWidget {
       );
     }
 
+    // 后端有时只返回已发生步骤，补齐模板后续节点，避免流程仅显示首节点。
+    final shownStepNos = steps.map((s) => s.stepNo).where((n) => n > 0).toSet();
+    for (var no = 1; no <= bundle.stages.length; no++) {
+      if (shownStepNos.contains(no)) continue;
+      final label = stageLabel(no, '', bundle.stages);
+      final stage = bundle.stages[no - 1];
+      final approverIds = stage['approverIds'];
+      var who = label;
+      if (approverIds is List && approverIds.isNotEmpty) {
+        final aid = int.tryParse('${approverIds.first}') ?? 0;
+        final name = bundle.assigneeNames[aid];
+        if (name != null && name.isNotEmpty) who = '$name · $label';
+      }
+      final isCurrent = st == 'pending' && no == curStep;
+      nodes.add(
+        _HistoryStep(
+          kind: isCurrent ? _HistoryKind.cur : _HistoryKind.todo,
+          icon: isCurrent ? Icons.schedule : Icons.circle_outlined,
+          who: who,
+          time: isCurrent ? '当前处理' : '待处理',
+          comment: isCurrent ? '审批进行中' : '待处理',
+          stepNo: isCurrent ? null : no,
+        ),
+      );
+    }
+
     if (st == 'approved') {
       nodes.add(
         _HistoryStep(
@@ -1131,6 +1209,7 @@ class _HistoryStep extends StatelessWidget {
     required this.comment,
     this.role,
     this.stepNo,
+    this.subComment,
   });
 
   final _HistoryKind kind;
@@ -1140,6 +1219,7 @@ class _HistoryStep extends StatelessWidget {
   final String comment;
   final String? role;
   final int? stepNo;
+  final String? subComment;
 
   @override
   Widget build(BuildContext context) {
@@ -1267,14 +1347,26 @@ class _HistoryStep extends StatelessWidget {
                     borderRadius: BorderRadius.circular(7),
                     border: Border(left: BorderSide(color: cmtBorder, width: 2)),
                   ),
-                  child: Text(
-                    comment,
-                    style: DunesTypography.mono(
-                      fontSize: 9.5,
-                      height: 1.5,
-                      color: cmtFg,
-                      fontWeight: kind == _HistoryKind.cur ? FontWeight.w500 : FontWeight.w400,
-                    ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        comment,
+                        style: DunesTypography.mono(
+                          fontSize: 9.5,
+                          height: 1.5,
+                          color: cmtFg,
+                          fontWeight: kind == _HistoryKind.cur ? FontWeight.w500 : FontWeight.w400,
+                        ),
+                      ),
+                      if (subComment != null && subComment!.isNotEmpty) ...[
+                        const SizedBox(height: 3),
+                        Text(
+                          subComment!,
+                          style: DunesTypography.sans(fontSize: 9, color: DunesColors.text3),
+                        ),
+                      ],
+                    ],
                   ),
                 ),
               ],
@@ -1532,36 +1624,51 @@ class XfDetActions extends StatelessWidget {
     super.key,
     required this.detail,
     required this.canReedit,
+    this.canDeleteDraft = false,
     this.onDelete,
     this.onPush,
     this.onInitiate,
     this.onReedit,
     this.onVoid,
+    this.onReturn,
+    this.isDesignatedInitiator = false,
+    this.isPusher = false,
   });
 
   final XflowProposalDetail detail;
   final bool canReedit;
+  final bool canDeleteDraft;
   final VoidCallback? onDelete;
   final VoidCallback? onPush;
   final VoidCallback? onInitiate;
   final VoidCallback? onReedit;
   final VoidCallback? onVoid;
+  final VoidCallback? onReturn;
+  final bool isDesignatedInitiator;
+  final bool isPusher;
 
   @override
   Widget build(BuildContext context) {
     final st = detail.status.toLowerCase();
     final buttons = <Widget>[];
 
-    if (st == 'draft' || st == 'pending_initiate') {
+    // 草稿：创建人可删除 / 推送给同事。
+    if (st == 'draft' && canDeleteDraft) {
       if (onDelete != null) {
         buttons.add(_ActBtn(label: '删除草稿', icon: Icons.delete_outline, danger: true, onPressed: onDelete!));
       }
+      if (onPush != null) {
+        buttons.add(_ActBtn(label: '推送给业务负责人', icon: Icons.send_outlined, onPressed: onPush!));
+      }
     }
-    if (st == 'draft' && onPush != null) {
-      buttons.add(_ActBtn(label: '推送给业务负责人', icon: Icons.send_outlined, onPressed: onPush!));
-    }
-    if (st == 'pending_initiate' && onInitiate != null) {
-      buttons.add(_ActBtn(label: '确认发起', icon: Icons.check, primary: true, onPressed: onInitiate!));
+    // 待发起：仅代发起人(被推送人)可继续填写 / 提交审批 / 退回；推送人只读等待。
+    if (st == 'pending_initiate' && isDesignatedInitiator) {
+      if (onReedit != null) {
+        buttons.add(_ActBtn(label: '继续填写', icon: Icons.edit_outlined, onPressed: onReedit!));
+      }
+      if (onReturn != null) {
+        buttons.add(_ActBtn(label: '退回给推送人', icon: Icons.undo, onPressed: onReturn!));
+      }
     }
     if (st == 'rejected' && canReedit) {
       if (onReedit != null) {
@@ -1572,7 +1679,25 @@ class XfDetActions extends StatelessWidget {
       }
     }
 
-    if (buttons.isEmpty) return const SizedBox.shrink();
+    if (buttons.isEmpty) {
+      // 推送人在「待发起」阶段只读：提示等待代发起人处理。
+      if (st == 'pending_initiate' && isPusher) {
+        return Container(
+          margin: const EdgeInsets.fromLTRB(0, 12, 0, 20),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: DunesColors.bgSoft,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: DunesColors.borderSoft),
+          ),
+          child: Text(
+            '已推送给代发起人，等待对方继续填写并提交审批；对方也可退回给你。',
+            style: DunesTypography.sans(fontSize: 12, height: 1.5, color: DunesColors.text2),
+          ),
+        );
+      }
+      return const SizedBox.shrink();
+    }
     return Padding(
       padding: const EdgeInsets.fromLTRB(0, 12, 0, 20),
       child: Row(

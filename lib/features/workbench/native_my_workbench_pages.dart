@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../auth/auth_session.dart';
+import '../workbench/workbench_badge_notifier.dart';
 import '../xflow/native_b1_page.dart';
 import '../xflow/xflow_models.dart';
 
@@ -9,11 +10,13 @@ class NativeMyApprovalWorkbenchPage extends StatelessWidget {
     required this.session,
     required this.onOpenProposal,
     this.onBack,
+    this.workbenchRefresh,
   });
 
   final AuthSession session;
   final void Function(XflowProposalItem item) onOpenProposal;
   final VoidCallback? onBack;
+  final WorkbenchDataRefreshNotifier? workbenchRefresh;
 
   @override
   Widget build(BuildContext context) {
@@ -21,6 +24,7 @@ class NativeMyApprovalWorkbenchPage extends StatelessWidget {
       session: session,
       onOpenProposal: onOpenProposal,
       onBack: onBack,
+      workbenchRefresh: workbenchRefresh,
     );
   }
 }
@@ -31,11 +35,15 @@ class NativeMyInitiatedPage extends StatelessWidget {
     required this.session,
     required this.onOpenProposal,
     this.onBack,
+    this.initialStatusFilter,
+    this.workbenchRefresh,
   });
 
   final AuthSession session;
   final void Function(XflowProposalItem item) onOpenProposal;
   final VoidCallback? onBack;
+  final String? initialStatusFilter;
+  final WorkbenchDataRefreshNotifier? workbenchRefresh;
 
   @override
   Widget build(BuildContext context) {
@@ -43,6 +51,8 @@ class NativeMyInitiatedPage extends StatelessWidget {
       session: session,
       onOpenProposal: onOpenProposal,
       onBack: onBack,
+      initialStatusFilter: initialStatusFilter,
+      workbenchRefresh: workbenchRefresh,
     );
   }
 }
@@ -53,11 +63,13 @@ class NativeMyCcProposalPage extends StatelessWidget {
     required this.session,
     required this.onOpenProposal,
     this.onBack,
+    this.workbenchRefresh,
   });
 
   final AuthSession session;
   final void Function(XflowProposalItem item) onOpenProposal;
   final VoidCallback? onBack;
+  final WorkbenchDataRefreshNotifier? workbenchRefresh;
 
   @override
   Widget build(BuildContext context) {
@@ -65,6 +77,7 @@ class NativeMyCcProposalPage extends StatelessWidget {
       session: session,
       onOpenProposal: onOpenProposal,
       onBack: onBack,
+      workbenchRefresh: workbenchRefresh,
     );
   }
 }

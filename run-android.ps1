@@ -19,6 +19,17 @@ $ErrorActionPreference = "Stop"
 # Key: ASCII-only pub cache path, avoids native build failures on non-ASCII paths
 $env:PUB_CACHE = "D:\pubcache"
 
+# jpush_flutter 3.4.6 still references jcenter(), which Gradle 9+ removed.
+$jpushGradle = Join-Path $env:PUB_CACHE "hosted\pub.dev\jpush_flutter-3.4.6\android\build.gradle"
+if (Test-Path $jpushGradle) {
+  $content = Get-Content $jpushGradle -Raw
+  if ($content -match 'jcenter\(\)') {
+    $content = $content -replace '\s*jcenter\(\)\r?\n', ''
+    Set-Content -Path $jpushGradle -Value $content -NoNewline
+    Write-Host "Patched jpush_flutter build.gradle (removed jcenter)" -ForegroundColor DarkGray
+  }
+}
+
 # Move to the script dir (Flutter project root, contains pubspec.yaml)
 Set-Location -Path $PSScriptRoot
 

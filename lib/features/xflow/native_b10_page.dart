@@ -160,7 +160,7 @@ class _NativeB10PageState extends State<NativeB10Page> {
       await _service.deleteProposal(id);
       if (!mounted) return;
       showDunesToast(context, '草稿已删除');
-      widget.navigation.back();
+      widget.navigation.popTo(widget.backScreen);
     } catch (e) {
       if (!mounted) return;
       showDunesToast(context, '删除失败：${friendlyErrorText(e)}', kind: DunesToastKind.error);
@@ -170,10 +170,16 @@ class _NativeB10PageState extends State<NativeB10Page> {
   Future<void> _initiate() async {
     final id = _bundle?.detail.id ?? 0;
     if (id <= 0) return;
+    final ok = await confirmInitiateProposal(context);
+    if (!ok || !mounted) return;
     try {
       await _service.initiateProposal(id);
       if (!mounted) return;
       showDunesToast(context, '已确认发起');
+      if (_bundle?.isDesignatedInitiator == true) {
+        widget.navigation.popTo('B2');
+        return;
+      }
       await _load();
     } catch (e) {
       if (!mounted) return;
@@ -181,11 +187,61 @@ class _NativeB10PageState extends State<NativeB10Page> {
     }
   }
 
+  Future<void> _return() async {
+    final id = _bundle?.detail.id ?? 0;
+    if (id <= 0) return;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('退回给推送人'),
+        content: const Text('确认退回此提案？退回后将回到推送人的草稿，由其继续提交或删除。'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('取消')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('确认退回')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    try {
+      await _service.returnProposal(id);
+      if (!mounted) return;
+      showDunesToast(context, '已退回给推送人');
+      widget.navigation.popTo(widget.backScreen);
+    } catch (e) {
+      if (!mounted) return;
+      showDunesToast(context, '退回失败：${friendlyErrorText(e)}', kind: DunesToastKind.error);
+    }
+  }
+
   Future<void> _push() async {
     final id = _bundle?.detail.id ?? 0;
     if (id <= 0) return;
     final cfg = _bundle?.detailConfig ?? const {};
-    final rules = cfg['pushRules'];
+    final suggested = _whitelistSuggestions(cfg['pushRules']);
+    if (!mounted) return;
+    final target = await showXflowPushSheet(
+      context: context,
+      service: _service,
+      subtitle: '在运营推送白名单同事中选择；不会直接进入审批链',
+      suggested: suggested,
+    );
+    if (target == null || !mounted) return;
+    try {
+      await _service.pushProposal(
+        proposalId: id,
+        initiatorUserId: target.userId,
+        message: target.message,
+      );
+      if (!mounted) return;
+      showDunesToast(context, '已推送给同事，对方可代为填写并确认发起');
+      await _load();
+    } catch (e) {
+      if (!mounted) return;
+      showDunesToast(context, '推送失败：${friendlyErrorText(e)}', kind: DunesToastKind.error);
+    }
+  }
+
+  List<Map<String, dynamic>> _whitelistSuggestions(dynamic rules) {
     final users = <Map<String, dynamic>>[];
     if (rules is List) {
       for (final rule in rules) {
@@ -200,80 +256,7 @@ class _NativeB10PageState extends State<NativeB10Page> {
         });
       }
     }
-    if (!mounted) return;
-    var selectedId = 0;
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: DunesColors.bgApp,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(14)),
-      ),
-      builder: (ctx) {
-        return StatefulBuilder(
-          builder: (context, setSheetState) {
-            return Padding(
-              padding: EdgeInsets.fromLTRB(16, 16, 16, MediaQuery.of(context).padding.bottom + 16),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Text('推送给同事', style: DunesTypography.sans(fontSize: 14, fontWeight: FontWeight.w600)),
-                  const SizedBox(height: 8),
-                  Text(
-                    '推送给业务负责人确认发起；不会直接进入审批链。',
-                    style: DunesTypography.sans(fontSize: 11, color: DunesColors.text3),
-                  ),
-                  const SizedBox(height: 12),
-                  if (users.isEmpty)
-                    Text('暂无可用同事', style: DunesTypography.sans(fontSize: 12, color: DunesColors.text3))
-                  else
-                    ConstrainedBox(
-                      constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.4),
-                      child: ListView(
-                        shrinkWrap: true,
-                        children: [
-                          for (final u in users)
-                            ListTile(
-                              dense: true,
-                              selected: selectedId == _int(u['userId']),
-                              title: Text(
-                                '${u['displayName']}${(u['departmentName'] ?? '').toString().isNotEmpty ? ' · ${u['departmentName']}' : ''}',
-                                style: DunesTypography.sans(fontSize: 12),
-                              ),
-                              onTap: () => setSheetState(() => selectedId = _int(u['userId'])),
-                            ),
-                        ],
-                      ),
-                    ),
-                  const SizedBox(height: 12),
-                  FilledButton(
-                    onPressed: selectedId <= 0
-                        ? null
-                        : () async {
-                            Navigator.pop(context);
-                            try {
-                              await _service.pushProposal(
-                                proposalId: id,
-                                initiatorUserId: selectedId,
-                              );
-                              if (!mounted) return;
-                              showDunesToast(context, '已推送给业务负责人');
-                              await _load();
-                            } catch (e) {
-                              if (!mounted) return;
-                              showDunesToast(context, '推送失败：${friendlyErrorText(e)}', kind: DunesToastKind.error);
-                            }
-                          },
-                    child: const Text('确认推送'),
-                  ),
-                ],
-              ),
-            );
-          },
-        );
-      },
-    );
+    return users;
   }
 
   int _int(dynamic v) {
@@ -292,7 +275,7 @@ class _NativeB10PageState extends State<NativeB10Page> {
             XflowDsBar(
               crumb: '提案详情 · 返回列表',
               title: detail?.code ?? 'PROP-${widget.proposalId}',
-              onBack: widget.navigation.back,
+              onBack: () => widget.navigation.popTo(widget.backScreen),
             ),
             Expanded(
               child: _loading
@@ -314,6 +297,7 @@ class _NativeB10PageState extends State<NativeB10Page> {
                                 onInitiate: _initiate,
                                 onReedit: () => widget.onReedit(_bundle!.detail.id),
                                 onVoid: _voidProposal,
+                                onReturn: _return,
                               ),
                               XflowCcRulesCard(
                                 rules: _ccRules,

@@ -5,10 +5,6 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
-if (file("google-services.json").exists()) {
-    apply(plugin = "com.google.gms.google-services")
-}
-
 android {
     namespace = "com.dunes.dunes_app"
     compileSdk = flutter.compileSdkVersion
@@ -29,6 +25,12 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+
+        // 极光推送（JPush）配置：JPUSH_APPKEY 替换为极光控制台分配的 AppKey，
+        // 并与 lib/features/push/android_push_service.dart 中的 _jpushAppKey 保持一致。
+        manifestPlaceholders["JPUSH_PKGNAME"] = "com.dunes.dunes_app"
+        manifestPlaceholders["JPUSH_APPKEY"] = "your_jpush_appkey"
+        manifestPlaceholders["JPUSH_CHANNEL"] = "developer-default"
     }
 
     buildTypes {

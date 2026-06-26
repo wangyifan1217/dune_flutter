@@ -1,7 +1,28 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../core/theme/dunes_theme.dart';
 import 'xflow_models.dart';
+import 'xflow_service.dart';
+
+/// 代发起人确认发起前的二次确认。
+Future<bool> confirmInitiateProposal(BuildContext context) async {
+  final ok = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: const Text('确认发起审批'),
+      content: const Text(
+        '确认后将进入推送人的审批流程，提案状态不可撤回。\n\n请再次核对表单内容是否完整准确。',
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('取消')),
+        FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('确认发起')),
+      ],
+    ),
+  );
+  return ok == true;
+}
 
 /// B1 / B14 / P1 暖紫居中 hero-stat（与 index.html 1:1）
 class XflowHeroStatCard extends StatelessWidget {
@@ -402,6 +423,7 @@ class XflowProposalListCard extends StatelessWidget {
     this.mode = XflowListCardMode.b1,
     this.showTrackButton = false,
     this.onTrackTap,
+    this.onDeleteDraft,
   });
 
   final XflowProposalItem item;
@@ -409,6 +431,7 @@ class XflowProposalListCard extends StatelessWidget {
   final XflowListCardMode mode;
   final bool showTrackButton;
   final VoidCallback? onTrackTap;
+  final VoidCallback? onDeleteDraft;
 
   @override
   Widget build(BuildContext context) {
@@ -566,6 +589,21 @@ class XflowProposalListCard extends StatelessWidget {
                         child: Text(
                           '流程追踪',
                           style: DunesTypography.sans(fontSize: 9.5, color: DunesColors.accent),
+                        ),
+                      ),
+                    ],
+                    if (onDeleteDraft != null) ...[
+                      const SizedBox(width: 4),
+                      TextButton(
+                        onPressed: onDeleteDraft,
+                        style: TextButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(horizontal: 6),
+                          minimumSize: Size.zero,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                        child: Text(
+                          '删除',
+                          style: DunesTypography.sans(fontSize: 9.5, color: DunesColors.coral),
                         ),
                       ),
                     ],
@@ -1098,61 +1136,89 @@ class XflowXfActionBar extends StatelessWidget {
     required this.label,
     required this.onPressed,
     this.loading = false,
+    this.secondaryLabel,
+    this.onSecondaryPressed,
+    this.secondaryDanger = false,
   });
 
   final String label;
   final VoidCallback? onPressed;
   final bool loading;
+  final String? secondaryLabel;
+  final VoidCallback? onSecondaryPressed;
+  final bool secondaryDanger;
 
   @override
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(14, 0, 14, 12),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: loading ? null : onPressed,
-          borderRadius: BorderRadius.circular(10),
-          child: Ink(
-            width: double.infinity,
-            decoration: BoxDecoration(
-              color: DunesColors.accent,
-              borderRadius: BorderRadius.circular(10),
-              boxShadow: [
-                BoxShadow(
-                  color: DunesColors.accent.withValues(alpha: 0.35),
-                  blurRadius: 12,
-                  offset: const Offset(0, 4),
-                  spreadRadius: -2,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (secondaryLabel != null && onSecondaryPressed != null) ...[
+            OutlinedButton(
+              onPressed: loading ? null : onSecondaryPressed,
+              style: OutlinedButton.styleFrom(
+                foregroundColor: secondaryDanger ? DunesColors.coral : DunesColors.text2,
+                side: BorderSide(
+                  color: secondaryDanger ? DunesColors.coral.withValues(alpha: 0.45) : DunesColors.border,
                 ),
-              ],
+                padding: const EdgeInsets.symmetric(vertical: 10),
+              ),
+              child: Text(
+                secondaryLabel!,
+                style: DunesTypography.sans(fontSize: 13, fontWeight: FontWeight.w600),
+              ),
             ),
-            padding: const EdgeInsets.symmetric(vertical: 12),
-            child: loading
-                ? const Center(
-                    child: SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+            const SizedBox(height: 8),
+          ],
+          Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: loading ? null : onPressed,
+              borderRadius: BorderRadius.circular(10),
+              child: Ink(
+                width: double.infinity,
+                decoration: BoxDecoration(
+                  color: DunesColors.accent,
+                  borderRadius: BorderRadius.circular(10),
+                  boxShadow: [
+                    BoxShadow(
+                      color: DunesColors.accent.withValues(alpha: 0.35),
+                      blurRadius: 12,
+                      offset: const Offset(0, 4),
+                      spreadRadius: -2,
                     ),
-                  )
-                : Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(Icons.send, size: 14, color: Colors.white),
-                      const SizedBox(width: 6),
-                      Text(
-                        label,
-                        style: DunesTypography.sans(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.white,
+                  ],
+                ),
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                child: loading
+                    ? const Center(
+                        child: SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                         ),
+                      )
+                    : Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(Icons.send, size: 14, color: Colors.white),
+                          const SizedBox(width: 6),
+                          Text(
+                            label,
+                            style: DunesTypography.sans(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ],
                       ),
-                    ],
-                  ),
+              ),
+            ),
           ),
-        ),
+        ],
       ),
     );
   }
@@ -1438,8 +1504,8 @@ class _ProgressFoot {
 _ProgressFoot _progressFoot(XflowProposalItem item) {
   final st = item.status.toUpperCase();
   var pct = 25;
-  var px = '草稿';
-  var hint = '查看详情';
+  var px = st == 'PENDING_INITIATE' ? '待发起' : '草稿';
+  var hint = st == 'DRAFT' ? '继续填写' : '查看详情';
   if (st == 'PENDING' && item.totalSteps > 0) {
     pct = ((item.currentStep / item.totalSteps) * 100).round().clamp(0, 95);
     px = '${item.currentStep}/${item.totalSteps} 步';
@@ -1484,4 +1550,241 @@ String _statusText(String status) {
   if (raw == 'DRAFT') return '草稿';
   if (raw == 'PENDING_INITIATE') return '待发起';
   return raw.isEmpty ? '未知状态' : raw;
+}
+
+/// 推送目标（确认推送后返回）。
+class XflowPushTarget {
+  const XflowPushTarget({
+    required this.userId,
+    required this.name,
+    required this.message,
+  });
+
+  final int userId;
+  final String name;
+  final String message;
+}
+
+/// 「推送给同事」选人弹窗：仅在运营推送白名单内选择（可本地搜索过滤）。
+/// 返回所选同事与附言；用户取消则返回 null。
+Future<XflowPushTarget?> showXflowPushSheet({
+  required BuildContext context,
+  required XflowService service,
+  String subtitle = '在运营推送白名单同事中选择，对方可代为填写并确认发起',
+  List<Map<String, dynamic>> suggested = const <Map<String, dynamic>>[],
+}) {
+  return showModalBottomSheet<XflowPushTarget>(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: DunesColors.bgApp,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(14)),
+    ),
+    builder: (ctx) => _XflowPushSheetBody(
+      service: service,
+      subtitle: subtitle,
+      suggested: suggested,
+    ),
+  );
+}
+
+class _XflowPushSheetBody extends StatefulWidget {
+  const _XflowPushSheetBody({
+    required this.service,
+    required this.subtitle,
+    required this.suggested,
+  });
+
+  final XflowService service;
+  final String subtitle;
+  final List<Map<String, dynamic>> suggested;
+
+  @override
+  State<_XflowPushSheetBody> createState() => _XflowPushSheetBodyState();
+}
+
+class _XflowPushSheetBodyState extends State<_XflowPushSheetBody> {
+  final _searchController = TextEditingController();
+  final _messageController = TextEditingController(text: '请确认后发起');
+  late final List<Map<String, dynamic>> _whitelist;
+  List<Map<String, dynamic>> _results = const <Map<String, dynamic>>[];
+  int _selectedId = 0;
+  String _selectedName = '';
+
+  @override
+  void initState() {
+    super.initState();
+    final selfId = widget.service.session.userId;
+    _whitelist = widget.suggested
+        .map(_normalizeUser)
+        .where((u) => (u['userId'] as int) > 0 && u['userId'] != selfId)
+        .toList(growable: false);
+    _results = _whitelist;
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    _messageController.dispose();
+    super.dispose();
+  }
+
+  Map<String, dynamic> _normalizeUser(Map<dynamic, dynamic> raw) {
+    final uid = _toInt(raw['userId'] ?? raw['id']);
+    final name = (raw['displayName'] ?? raw['userName'] ?? raw['name'] ?? '用户#$uid')
+        .toString();
+    final dept = (raw['departmentName'] ?? raw['department'] ?? raw['dept'] ?? '')
+        .toString();
+    return <String, dynamic>{'userId': uid, 'displayName': name, 'departmentName': dept};
+  }
+
+  int _toInt(dynamic v) {
+    if (v is num) return v.toInt();
+    return int.tryParse('$v') ?? 0;
+  }
+
+  void _onQueryChanged(String value) {
+    final q = value.trim().toLowerCase();
+    if (q.isEmpty) {
+      setState(() => _results = _whitelist);
+      return;
+    }
+    setState(() {
+      _results = _whitelist.where((u) {
+        final name = (u['displayName'] ?? '').toString().toLowerCase();
+        final dept = (u['departmentName'] ?? '').toString().toLowerCase();
+        return name.contains(q) || dept.contains(q);
+      }).toList(growable: false);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        16,
+        16,
+        16,
+        MediaQuery.of(context).viewInsets.bottom + MediaQuery.of(context).padding.bottom + 16,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text('推送给同事', style: DunesTypography.sans(fontSize: 14, fontWeight: FontWeight.w600)),
+          const SizedBox(height: 6),
+          Text(widget.subtitle, style: DunesTypography.sans(fontSize: 11, color: DunesColors.text3)),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _searchController,
+            onChanged: _onQueryChanged,
+            style: DunesTypography.sans(fontSize: 12.5, color: DunesColors.text),
+            decoration: InputDecoration(
+              hintText: '搜索白名单同事',
+              hintStyle: DunesTypography.sans(fontSize: 12.5, color: DunesColors.text3),
+              prefixIcon: const Icon(Icons.search, size: 18, color: DunesColors.text3),
+              isDense: true,
+              filled: true,
+              fillColor: DunesColors.bgSoft,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: BorderSide.none,
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+          ConstrainedBox(
+            constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.35),
+            child: _buildResults(),
+          ),
+          const SizedBox(height: 10),
+          TextField(
+            controller: _messageController,
+            minLines: 1,
+            maxLines: 3,
+            style: DunesTypography.sans(fontSize: 12.5, color: DunesColors.text),
+            decoration: InputDecoration(
+              labelText: '附言（可选）',
+              labelStyle: DunesTypography.sans(fontSize: 11, color: DunesColors.text3),
+              isDense: true,
+              filled: true,
+              fillColor: DunesColors.bgSoft,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: BorderSide.none,
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          FilledButton(
+            onPressed: _selectedId <= 0
+                ? null
+                : () {
+                    final msg = _messageController.text.trim();
+                    Navigator.pop(
+                      context,
+                      XflowPushTarget(
+                        userId: _selectedId,
+                        name: _selectedName,
+                        message: msg.isEmpty ? '请确认后发起' : msg,
+                      ),
+                    );
+                  },
+            child: Text(_selectedId <= 0 ? '请选择同事' : '确认推送给 $_selectedName'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildResults() {
+    if (_whitelist.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Text(
+            '运营推送白名单暂无人员，请先在管理台配置',
+            style: DunesTypography.sans(fontSize: 12, color: DunesColors.text3),
+            textAlign: TextAlign.center,
+          ),
+        ),
+      );
+    }
+    if (_results.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Text(
+            '白名单内无匹配同事',
+            style: DunesTypography.sans(fontSize: 12, color: DunesColors.text3),
+          ),
+        ),
+      );
+    }
+    return ListView.builder(
+      shrinkWrap: true,
+      itemCount: _results.length,
+      itemBuilder: (context, i) {
+        final u = _results[i];
+        final uid = u['userId'] as int;
+        final name = (u['displayName'] ?? '').toString();
+        final dept = (u['departmentName'] ?? '').toString();
+        return ListTile(
+          dense: true,
+          selected: _selectedId == uid,
+          title: Text(
+            dept.isNotEmpty ? '$name · $dept' : name,
+            style: DunesTypography.sans(fontSize: 12.5),
+          ),
+          trailing: _selectedId == uid
+              ? const Icon(Icons.check_circle, size: 18, color: DunesColors.accent)
+              : null,
+          onTap: () => setState(() {
+            _selectedId = uid;
+            _selectedName = name;
+          }),
+        );
+      },
+    );
+  }
 }

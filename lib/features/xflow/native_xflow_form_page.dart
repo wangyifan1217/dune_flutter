@@ -6,6 +6,7 @@ import '../../core/util/friendly_error.dart';
 import '../auth/auth_session.dart';
 import '../shell/dunes_toast.dart';
 import 'xflow_form_renderer.dart';
+import 'xflow_linkage.dart';
 import 'xflow_models.dart';
 import 'xflow_service.dart';
 import 'xflow_shared_widgets.dart';
@@ -18,6 +19,8 @@ class NativeXflowFormPage extends StatefulWidget {
     required this.templateKey,
     required this.editProposalId,
     required this.onSubmitted,
+    this.backScreen = 'B3',
+    this.onDeleted,
   });
 
   final AuthSession session;
@@ -25,6 +28,12 @@ class NativeXflowFormPage extends StatefulWidget {
   final String templateKey;
   final int? editProposalId;
   final void Function(int proposalId) onSubmitted;
+
+  /// 返回 / 删除后跳转的目标屏（新建来自 B3，编辑草稿来自 B14）。
+  final String backScreen;
+
+  /// 草稿删除成功后的回调（用于刷新来源列表）。
+  final VoidCallback? onDeleted;
 
   @override
   State<NativeXflowFormPage> createState() => _NativeXflowFormPageState();
@@ -45,6 +54,22 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage> {
   int? _draftProposalId;
 
   bool get _isEditing => widget.editProposalId != null && widget.editProposalId! > 0;
+  bool get _isDelegatedPendingInitiate =>
+      _isEditing && (_editingDetail?.status.toLowerCase() == 'pending_initiate');
+
+  bool _isDelegatedClearActionKind(String kind) {
+    final k = kind.trim().toLowerCase();
+    return k == 'clear-form' || k == 'clear_form' || k == 'clearform' || k == 'reset-form';
+  }
+
+  /// 仅创建人本人的草稿(DRAFT)可删除；已推送的「待发起」由代发起人处理，不在此删除。
+  bool get _canDeleteDraft {
+    if (!_isEditing) return false;
+    final st = _editingDetail?.status.toUpperCase() ?? '';
+    if (st != 'DRAFT') return false;
+    final createdBy = _editingDetail?.createdById ?? 0;
+    return createdBy > 0 && createdBy == widget.session.userId;
+  }
 
   @override
   void initState() {
@@ -76,6 +101,8 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage> {
       try {
         detailCfg = await _service.fetchDetailConfig(templateKey: widget.templateKey);
       } catch (_) {}
+      // 初次渲染前先重算计算字段（如印花税），避免编辑/草稿预填时显示为空。
+      XflowLinkage.recompute(template.fields, template.layout, _values);
       if (!mounted) return;
       setState(() {
         _template = template;
@@ -106,6 +133,13 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage> {
     }
   }
 
+  /// 重算计算只读字段（印花税等）与 layout 联动，需在 _values 变化后调用。
+  void _recompute() {
+    final template = _template;
+    if (template == null) return;
+    XflowLinkage.recompute(template.fields, template.layout, _values);
+  }
+
   void _mergeProposalToForm(XflowProposalDetail detail) {
     _values
       ..addAll(detail.formValues)
@@ -124,19 +158,28 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage> {
       );
       return;
     }
+    final status = _editingDetail?.status.toLowerCase() ?? '';
+    if (_isEditing && status == 'pending_initiate') {
+      final ok = await confirmInitiateProposal(context);
+      if (!ok) return;
+    }
     setState(() => _submitting = true);
     try {
       Map<String, dynamic> res;
-      final status = _editingDetail?.status.toLowerCase() ?? '';
       if (_isEditing && status == 'rejected') {
         res = await _service.resubmitProposal(
           proposalId: widget.editProposalId!,
           formValues: _values,
         );
       } else if (_isEditing && status == 'pending_initiate') {
+        await _service.submitDraft(
+          formValues: _values,
+          proposalId: widget.editProposalId,
+          templateKey: widget.templateKey,
+        );
         await _service.initiateProposal(widget.editProposalId!);
         if (!mounted) return;
-        showDunesToast(context, '已确认发起');
+        showDunesToast(context, '已提交审批');
         widget.onSubmitted(widget.editProposalId!);
         return;
       } else {
@@ -144,6 +187,13 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage> {
           formValues: _values,
           templateKey: widget.templateKey,
         );
+        // 继续填写的服务端草稿在提交后会生成新的正式提案，
+        // 删除原草稿以避免「我发起的」列表里残留重复的草稿项。
+        if (_isEditing && status == 'draft') {
+          try {
+            await _service.deleteProposal(widget.editProposalId!);
+          } catch (_) {}
+        }
       }
       final pid = _int(res['businessId'] ?? res['proposalId'] ?? res['id']);
       if (!mounted) return;
@@ -157,7 +207,43 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage> {
     }
   }
 
+  Future<void> _confirmDeleteDraft() async {
+    final id = widget.editProposalId;
+    if (id == null || id <= 0) return;
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('删除草稿'),
+        content: const Text('确认删除该草稿？删除后不可恢复。'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('取消')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('删除', style: TextStyle(color: DunesColors.coral)),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true) return;
+    try {
+      await _service.deleteProposal(id);
+      await _service.clearLocalDraft();
+      if (!mounted) return;
+      showDunesToast(context, '草稿已删除');
+      widget.onDeleted?.call();
+      widget.navigation.popTo(widget.backScreen);
+    } catch (e) {
+      if (!mounted) return;
+      showDunesToast(context, '删除失败：${friendlyErrorText(e)}', kind: DunesToastKind.error);
+    }
+  }
+
   Future<void> _handleAction(String kind) async {
+    if (_isDelegatedPendingInitiate &&
+        (kind == 'save-draft' || kind == 'load-draft' || kind == 'push-colleague')) {
+      showDunesToast(context, '代发起提案请直接继续填写并提交审批');
+      return;
+    }
     switch (kind) {
       case 'save-draft':
         await _saveDraft();
@@ -201,7 +287,12 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage> {
       );
       return;
     }
-    setState(() => _values..clear()..addAll(draft));
+    setState(() {
+      _values
+        ..clear()
+        ..addAll(draft);
+      _recompute();
+    });
     if (!mounted) return;
     showDunesToast(context, '已恢复本地草稿，请核对后继续填写');
   }
@@ -236,7 +327,30 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage> {
   }
 
   Future<void> _showPushDialog(int proposalId) async {
-    final rules = _detailConfig['pushRules'];
+    final suggested = _whitelistSuggestions(_detailConfig['pushRules']);
+    if (!mounted) return;
+    final target = await showXflowPushSheet(
+      context: context,
+      service: _service,
+      subtitle: '在运营推送白名单同事中选择；对方可代为填写并确认发起',
+      suggested: suggested,
+    );
+    if (target == null || !mounted) return;
+    try {
+      await _service.pushProposal(
+        proposalId: proposalId,
+        initiatorUserId: target.userId,
+        message: target.message,
+      );
+      if (!mounted) return;
+      showDunesToast(context, '已推送给同事，对方可代为填写并确认发起');
+    } catch (e) {
+      if (!mounted) return;
+      showDunesToast(context, '推送失败：${friendlyErrorText(e)}', kind: DunesToastKind.error);
+    }
+  }
+
+  List<Map<String, dynamic>> _whitelistSuggestions(dynamic rules) {
     final users = <Map<String, dynamic>>[];
     if (rules is List) {
       for (final rule in rules) {
@@ -246,88 +360,12 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage> {
         if (uid <= 0) continue;
         users.add(<String, dynamic>{
           'userId': uid,
-          'id': uid,
           'displayName': rule['displayName'] ?? rule['userName'] ?? rule['name'] ?? '用户#$uid',
           'departmentName': rule['department'] ?? rule['departmentName'] ?? '',
-          'title': rule['title'] ?? '',
         });
       }
     }
-    if (!mounted) return;
-    var selectedId = 0;
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: DunesColors.bgApp,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(14)),
-      ),
-      builder: (ctx) {
-        return StatefulBuilder(
-          builder: (context, setSheetState) {
-            return Padding(
-              padding: EdgeInsets.fromLTRB(16, 16, 16, MediaQuery.of(context).padding.bottom + 16),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Text('推送给同事', style: DunesTypography.sans(fontSize: 14, fontWeight: FontWeight.w600)),
-                  const SizedBox(height: 8),
-                  Text(
-                    '将先保存草稿，再从运营白名单选择同事推送',
-                    style: DunesTypography.sans(fontSize: 11, color: DunesColors.text3),
-                  ),
-                  const SizedBox(height: 12),
-                  if (users.isEmpty)
-                    Text('暂无可用同事', style: DunesTypography.sans(fontSize: 12, color: DunesColors.text3))
-                  else
-                    ConstrainedBox(
-                      constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.4),
-                      child: ListView(
-                        shrinkWrap: true,
-                        children: [
-                          for (final u in users)
-                            ListTile(
-                              dense: true,
-                              selected: selectedId == _int(u['userId'] ?? u['id']),
-                              title: Text(
-                                '${u['displayName'] ?? u['name'] ?? ''}${u['departmentName'] != null ? ' · ${u['departmentName']}' : ''}',
-                                style: DunesTypography.sans(fontSize: 12),
-                              ),
-                              onTap: () {
-                                setSheetState(() => selectedId = _int(u['userId'] ?? u['id']));
-                              },
-                            ),
-                        ],
-                      ),
-                    ),
-                  const SizedBox(height: 12),
-                  FilledButton(
-                    onPressed: selectedId <= 0
-                        ? null
-                        : () async {
-                            Navigator.pop(context);
-                            try {
-                              await _service.pushProposal(
-                                proposalId: proposalId,
-                                initiatorUserId: selectedId,
-                              );
-                              if (!mounted) return;
-                              showDunesToast(context, '已推送给同事，对方可代为填写并确认发起');
-                            } catch (e) {
-                              if (!mounted) return;
-                              showDunesToast(context, '推送失败：${friendlyErrorText(e)}', kind: DunesToastKind.error);
-                            }
-                          },
-                    child: const Text('确认推送'),
-                  ),
-                ],
-              ),
-            );
-          },
-        );
-      },
-    );
+    return users;
   }
 
   List<String> _missingRequired() {
@@ -350,7 +388,7 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage> {
   String get _submitLabel {
     final status = _editingDetail?.status.toLowerCase() ?? '';
     if (status == 'rejected') return '重新提交';
-    if (status == 'pending_initiate') return '确认发起';
+    if (status == 'pending_initiate') return '提交审批';
     return '提交审批';
   }
 
@@ -364,7 +402,8 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage> {
             XflowDsBar(
               crumb: '销售提案 · PROPOSAL_3STEP',
               title: _isEditing ? '编辑销售提案' : '新建销售提案',
-              onBack: () => widget.navigation.go('B3'),
+              onBack: () => widget.navigation.popTo(widget.backScreen),
+              onMore: _canDeleteDraft ? _confirmDeleteDraft : null,
             ),
             Expanded(
               child: _loading
@@ -380,13 +419,32 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage> {
                                 title: _isEditing ? '编辑销售提案' : '新建销售提案',
                                 tag: 'XFlow',
                                 child: XflowFormRenderer(
-                                  fields: _template!.fields,
+                                  fields: _isDelegatedPendingInitiate
+                                      ? _template!.fields.where((f) {
+                                          if (f.type != 'action') return true;
+                                          final kind =
+                                              (f.raw['actionKind'] ?? f.key).toString();
+                                          return _isDelegatedClearActionKind(kind);
+                                        }).toList(growable: false)
+                                      : _template!.fields,
                                   values: _values,
                                   layout: _template!.layout,
                                   service: _service,
                                   embedded: true,
+                                  allowedActionKinds:
+                                      _isDelegatedPendingInitiate
+                                          ? <String>{
+                                              'clear-form',
+                                              'clear_form',
+                                              'clearform',
+                                              'reset-form',
+                                            }
+                                          : null,
                                   onChanged: (key, value) {
-                                    setState(() => _values[key] = value);
+                                    setState(() {
+                                      _values[key] = value;
+                                      _recompute();
+                                    });
                                   },
                                   onAction: _handleAction,
                                 ),
@@ -413,6 +471,9 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage> {
               label: _submitLabel,
               loading: _submitting,
               onPressed: _submitting ? null : _submit,
+              secondaryLabel: _canDeleteDraft ? '删除草稿' : null,
+              secondaryDanger: true,
+              onSecondaryPressed: _canDeleteDraft && !_submitting ? _confirmDeleteDraft : null,
             ),
           ],
         ),

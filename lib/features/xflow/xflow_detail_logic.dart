@@ -396,11 +396,53 @@ String currentApproverLabel(
   if (trail == null) return '';
   final stepNo = trail.currentStep;
   final step = trail.steps.where((s) => s.stepNo == stepNo).firstOrNull;
-  if (step != null && step.assigneeId > 0 && assigneeNames.containsKey(step.assigneeId)) {
-    final stageName = stageLabel(stepNo, step.stepType, stages);
+  if (step == null) return stepNo > 0 ? '第$stepNo步' : '';
+  final stageName = stageLabel(stepNo, step.stepType, stages);
+  if (step.assigneeId > 0 && assigneeNames.containsKey(step.assigneeId)) {
     return '$stageName · ${assigneeNames[step.assigneeId]}';
   }
-  if (step != null && step.decision.isNotEmpty) return '第$stepNo步 · ${step.decision}';
+  if (step.assigneeName.isNotEmpty) {
+    return '$stageName · ${step.assigneeName}';
+  }
+  if (step.decision.isNotEmpty) return '第$stepNo步 · ${step.decision}';
+  return stageName.isNotEmpty ? stageName : '第$stepNo步';
+}
+
+/// 流程追踪首节点「提交人」：代发起场景仍展示推送人，审批链归属不变。
+String trailSubmitterLabel(XflowProposalDetail detail, XflowApprovalTrail? trail, Map<int, String> assigneeNames) {
+  final raw = detail.raw;
+  final draftedBy = raw['draftedBy'];
+  if (draftedBy is Map) {
+    final pusherName = (draftedBy['name'] ?? '').toString();
+    if (pusherName.isNotEmpty) return pusherName;
+  }
+
+  if (trail != null && trail.initiatorId > 0) {
+    final fromTrail = assigneeNames[trail.initiatorId];
+    if (fromTrail != null && fromTrail.isNotEmpty) return fromTrail;
+  }
+
+  final createdBy = (raw['createdBy'] ?? raw['createdByName'] ?? '').toString();
+  if (createdBy.isNotEmpty) return createdBy;
+  return detail.ownerName.ifEmpty('发起人');
+}
+
+String trailSubmitterComment(XflowProposalDetail detail) {
+  final code = detail.code.isEmpty ? '—' : detail.code;
+  return '提交提案 · $code';
+}
+
+String? trailProxyInitiatorNote(XflowProposalDetail detail) {
+  final raw = detail.raw;
+  if (raw['draftedBy'] == null) return null;
+  final name = _designatedInitiatorName(raw);
+  if (name.isEmpty) return null;
+  return '由 $name 代为确认发起';
+}
+
+String _designatedInitiatorName(Map<String, dynamic> raw) {
+  final designated = raw['designatedInitiator'];
+  if (designated is Map) return (designated['name'] ?? '').toString();
   return '';
 }
 
@@ -423,7 +465,12 @@ String stageLabel(int stepNo, String stepType, List<Map<String, dynamic>> stages
 
 String fmtDetailTime(dynamic v) {
   if (v == null || '$v'.isEmpty) return '';
-  final d = DateTime.tryParse(v.toString());
+  var s = v.toString().trim();
+  // 兼容 PostgreSQL 风格 `...+00` 时区，避免 parse 失败直接展示原始串。
+  if (RegExp(r'\+00:?00?$').hasMatch(s)) {
+    s = s.replaceFirst(RegExp(r'\+00:?00?$'), 'Z');
+  }
+  final d = DateTime.tryParse(s)?.toLocal();
   if (d == null) return v.toString();
   String p(int n) => n.toString().padLeft(2, '0');
   return '${d.year}-${p(d.month)}-${p(d.day)} ${p(d.hour)}:${p(d.minute)}:${p(d.second)}';

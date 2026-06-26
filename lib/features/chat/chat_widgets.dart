@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/theme/dunes_theme.dart';
+import 'chat_quote.dart';
 import '../conversation/conversation_models.dart';
 import '../conversation/inbox_format.dart';
 import 'chat_voice_player.dart';
@@ -279,6 +280,12 @@ class ChatInputBar extends StatelessWidget {
                     enabled: enabled && !showStop,
                     minLines: 1,
                     maxLines: 4,
+                    enableInteractiveSelection: true,
+                    contextMenuBuilder: (context, editableTextState) {
+                      return AdaptiveTextSelectionToolbar.editableText(
+                        editableTextState: editableTextState,
+                      );
+                    },
                     style: DunesTypography.sans(fontSize: 13.5, color: DunesColors.text),
                     decoration: InputDecoration(
                       hintText: hintText ?? '输入消息…',
@@ -448,10 +455,13 @@ class ChatMessageRow extends StatelessWidget {
                       ],
                     ),
                   ),
-                GestureDetector(
-                  onLongPress: onLongPress,
-                  child: content,
-                ),
+                if (onLongPress != null)
+                  GestureDetector(
+                    onLongPress: onLongPress,
+                    child: content,
+                  )
+                else
+                  content,
                 if (readLabel != null)
                   Padding(
                     padding: const EdgeInsets.only(top: 3, right: 2),
@@ -488,10 +498,18 @@ class ChatMessageRow extends StatelessWidget {
 }
 
 class ChatTextBubble extends StatelessWidget {
-  const ChatTextBubble({super.key, required this.text, required this.mine});
+  const ChatTextBubble({
+    super.key,
+    required this.text,
+    required this.mine,
+    this.quote,
+    this.onQuoteTap,
+  });
 
   final String text;
   final bool mine;
+  final ChatMessageQuote? quote;
+  final VoidCallback? onQuoteTap;
 
   @override
   Widget build(BuildContext context) {
@@ -524,13 +542,200 @@ class ChatTextBubble extends StatelessWidget {
               ]
             : null,
       ),
-      child: Text(
-        text,
-        style: DunesTypography.sans(
-          fontSize: 13,
-          height: 1.5,
-          color: mine ? Colors.white : DunesColors.text,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SelectableText(
+            text,
+            style: DunesTypography.sans(
+              fontSize: 13,
+              height: 1.5,
+              color: mine ? Colors.white : DunesColors.text,
+            ),
+            contextMenuBuilder: (context, editableTextState) {
+              return AdaptiveTextSelectionToolbar.editableText(
+                editableTextState: editableTextState,
+              );
+            },
+          ),
+          if (quote != null && !quote!.isEmpty) ...[
+            const SizedBox(height: 6),
+            ChatQuoteBlock(quote: quote!, mine: mine, onTap: onQuoteTap),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// 引用条（气泡内 / 输入框上方预览共用样式）。
+class ChatQuoteBlock extends StatelessWidget {
+  const ChatQuoteBlock({
+    super.key,
+    required this.quote,
+    required this.mine,
+    this.onTap,
+    this.compact = false,
+  });
+
+  final ChatMessageQuote quote;
+  final bool mine;
+  final VoidCallback? onTap;
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    if (compact) {
+      return _buildPreviewBar(context);
+    }
+    return _buildBelowText(context);
+  }
+
+  Widget _buildPreviewBar(BuildContext context) {
+    final child = Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      decoration: BoxDecoration(
+        color: DunesColors.bgSoft,
+        borderRadius: BorderRadius.circular(6),
+        border: Border(
+          left: BorderSide(color: DunesColors.accent, width: 2.5),
         ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            quote.senderName.isEmpty ? '消息' : quote.senderName,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: DunesTypography.sans(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: DunesColors.text2,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            quote.preview,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: DunesTypography.sans(
+              fontSize: 11,
+              height: 1.35,
+              color: DunesColors.text3,
+            ),
+          ),
+        ],
+      ),
+    );
+    if (onTap == null) return child;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(6),
+        child: child,
+      ),
+    );
+  }
+
+  Widget _buildBelowText(BuildContext context) {
+    final divider = mine
+        ? Colors.white.withValues(alpha: 0.28)
+        : DunesColors.borderSoft;
+    final accent = mine ? Colors.white.withValues(alpha: 0.92) : DunesColors.accent;
+    final textColor = mine ? Colors.white.withValues(alpha: 0.72) : DunesColors.text3;
+
+    final child = Container(
+      width: double.infinity,
+      padding: EdgeInsets.only(
+        top: compact ? 5 : 6,
+        left: compact ? 0 : 0,
+      ),
+      decoration: BoxDecoration(
+        border: Border(top: BorderSide(color: divider, width: 0.5)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            quote.senderName.isEmpty ? '消息' : quote.senderName,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: DunesTypography.sans(
+              fontSize: compact ? 11 : 11,
+              fontWeight: FontWeight.w600,
+              color: accent,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            quote.preview,
+            maxLines: compact ? 1 : 2,
+            overflow: TextOverflow.ellipsis,
+            style: DunesTypography.sans(
+              fontSize: compact ? 11 : 12,
+              height: 1.35,
+              color: textColor,
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (onTap == null) return child;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        child: child,
+      ),
+    );
+  }
+}
+
+/// 输入框上方：当前待发送的引用预览（微信式）。
+class ChatQuotePreviewBar extends StatelessWidget {
+  const ChatQuotePreviewBar({
+    super.key,
+    required this.quote,
+    required this.onCancel,
+  });
+
+  final ChatMessageQuote quote;
+  final VoidCallback onCancel;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 8, 8, 0),
+      decoration: const BoxDecoration(
+        color: DunesColors.bgApp,
+        border: Border(top: BorderSide(color: DunesColors.borderSoft)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: ChatQuoteBlock(
+              quote: quote,
+              mine: false,
+              compact: true,
+            ),
+          ),
+          IconButton(
+            visualDensity: VisualDensity.compact,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+            onPressed: onCancel,
+            icon: const Icon(Icons.close_rounded, size: 18, color: DunesColors.text3),
+          ),
+        ],
       ),
     );
   }

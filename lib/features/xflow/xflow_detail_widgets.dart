@@ -758,10 +758,16 @@ class _ExpandBody extends StatelessWidget {
 }
 
 class XfDetTable extends StatelessWidget {
-  const XfDetTable({super.key, required this.field, required this.rows});
+  const XfDetTable({
+    super.key,
+    required this.field,
+    required this.rows,
+    this.nested = false,
+  });
 
   final XflowField field;
   final List<Map<String, dynamic>> rows;
+  final bool nested;
 
   @override
   Widget build(BuildContext context) {
@@ -791,72 +797,100 @@ class XfDetTable extends StatelessWidget {
             .toList(growable: false)
         : const <Map<String, dynamic>>[];
 
+    final content = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _headerRow(cols),
+        for (final row in rows) ...[
+          _dataRow(cols, row),
+          if (row[nestedKey] is List && (row[nestedKey] as List).isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 4, 4, 8),
+              child: XfDetTable(
+                nested: true,
+                field: XflowField(
+                  key: field.key,
+                  type: 'dynamicList',
+                  label: '',
+                  placeholder: '',
+                  required: false,
+                  readonly: true,
+                  options: const [],
+                  children: const [],
+                  raw: {'columns': nestedCols},
+                ),
+                rows: (row[nestedKey] as List)
+                    .whereType<Map>()
+                    .map((e) => Map<String, dynamic>.from(e))
+                    .toList(growable: false),
+              ),
+            ),
+        ],
+      ],
+    );
+
+    if (nested) return content;
     return Container(
+      width: double.infinity,
       decoration: BoxDecoration(
         border: Border.all(color: DunesColors.borderSoft),
         borderRadius: BorderRadius.circular(8),
       ),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: DataTable(
-          headingRowHeight: 36,
-          dataRowMinHeight: 36,
-          dataRowMaxHeight: 120,
-          columnSpacing: 16,
-          horizontalMargin: 10,
-          headingTextStyle: DunesTypography.sans(
-            fontSize: 10.5,
-            fontWeight: FontWeight.w500,
-            color: DunesColors.text3,
-          ),
-          dataTextStyle: DunesTypography.sans(fontSize: 11.5, color: DunesColors.text2, height: 1.45),
-          columns: [
-            for (final col in cols)
-              DataColumn(label: Text((col['label'] ?? col['key'] ?? '').toString())),
-          ],
-          rows: [
-            for (final row in rows) ...[
-              DataRow(
-                cells: [
-                  for (final col in cols)
-                    DataCell(
-                      Text(formatCellDisplay(row[col['key']], col, row)),
-                    ),
-                ],
-              ),
-              if (row[nestedKey] is List && (row[nestedKey] as List).isNotEmpty)
-                DataRow(
-                  cells: [
-                    DataCell(
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          XfDetTable(
-                            field: XflowField(
-                              key: field.key,
-                              type: 'dynamicList',
-                              label: '',
-                              placeholder: '',
-                              required: false,
-                              readonly: true,
-                              options: const [],
-                              children: const [],
-                              raw: {'columns': nestedCols},
-                            ),
-                            rows: (row[nestedKey] as List)
-                                .whereType<Map>()
-                                .map((e) => Map<String, dynamic>.from(e))
-                                .toList(growable: false),
-                          ),
-                        ],
-                      ),
-                    ),
-                    for (var i = 1; i < cols.length; i++) const DataCell(SizedBox.shrink()),
-                  ],
+      clipBehavior: Clip.antiAlias,
+      child: content,
+    );
+  }
+
+  Widget _headerRow(List<Map<String, dynamic>> cols) {
+    return Container(
+      color: DunesColors.bgSoft,
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          for (final col in cols)
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: Text(
+                  (col['label'] ?? col['key'] ?? '').toString(),
+                  style: DunesTypography.sans(
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w500,
+                    color: DunesColors.text3,
+                  ),
                 ),
-            ],
-          ],
-        ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _dataRow(List<Map<String, dynamic>> cols, Map<String, dynamic> row) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      decoration: BoxDecoration(
+        border: Border(top: BorderSide(color: DunesColors.borderSoft.withValues(alpha: 0.7))),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          for (final col in cols)
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: Text(
+                  formatCellDisplay(row[col['key']], col, row),
+                  style: DunesTypography.sans(
+                    fontSize: 11.5,
+                    color: DunesColors.text2,
+                    height: 1.45,
+                  ),
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }

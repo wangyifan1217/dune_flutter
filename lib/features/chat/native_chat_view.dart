@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:mime/mime.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -23,6 +24,7 @@ import '../conversation/inbox_format.dart';
 import '../shell/dunes_toast.dart';
 import 'chat_image_utils.dart';
 import 'chat_media_widgets.dart';
+import 'chat_quote.dart';
 import 'chat_voice_player.dart';
 import 'chat_widgets.dart';
 import 'file_download.dart' as file_dl;
@@ -122,9 +124,11 @@ class _NativeChatViewState extends State<NativeChatView> {
   ValueNotifier<String>? _atFilterNotifier;
   bool _syncingAtFilter = false;
   bool _insertingAtMentions = false;
+  String _lastComposeText = '';
   Map<int, int> _groupReadMap = const <int, int>{};
   final Map<int, GlobalKey> _messageKeys = <int, GlobalKey>{};
   final Map<String, Future<String>> _mediaUrlCache = <String, Future<String>>{};
+  ChatMessageQuote? _quoteDraft;
 
   bool get _isPrivate => widget.kind == NativeChatKind.private;
 
@@ -824,17 +828,24 @@ class _NativeChatViewState extends State<NativeChatView> {
     final text = _inputController.text.trim();
     if (conv == null || text.isEmpty || _sending || conv.dissolved) return;
     final mentionIds = _parseMentionUserIds(text);
-    final payload = mentionIds.isEmpty
-        ? null
-        : <String, dynamic>{'mentionUserIds': mentionIds};
+    final payload = <String, dynamic>{};
+    if (mentionIds.isNotEmpty) {
+      payload['mentionUserIds'] = mentionIds;
+    }
+    final quote = _quoteDraft;
+    if (quote != null && !quote.isEmpty) {
+      payload['quote'] = quote.toPayloadMap();
+    }
+    final payloadOrNull = payload.isEmpty ? null : payload;
     setState(() => _sending = true);
     try {
-      await _service.sendText(conv.id, text, payload: payload);
+      await _service.sendText(conv.id, text, payload: payloadOrNull);
       _inputController.clear();
       FocusManager.instance.primaryFocus?.unfocus();
       setState(() {
         _emojiOpen = false;
         _locatedMode = false;
+        _quoteDraft = null;
       });
       await _load(silent: true);
       if (mounted) {
@@ -1253,7 +1264,9 @@ class _NativeChatViewState extends State<NativeChatView> {
     return parts.join(' · ');
   }
 
-  Future<void> _onMineMessageLongPress(NativeChatMessage m) async {
+  Future<void> _onMessageActions(NativeChatMessage m, bool mine) async {
+    if (_isSystemKind(m.kind)) return;
+    final copyText = _messageCopyText(m);
     final action = await showModalBottomSheet<String>(
       context: context,
       showDragHandle: true,
@@ -1262,24 +1275,80 @@ class _NativeChatViewState extends State<NativeChatView> {
           mainAxisSize: MainAxisSize.min,
           children: [
             ListTile(
-              leading: const Icon(Icons.done_all_outlined),
-              title: const Text('查看已读明细'),
-              onTap: () => Navigator.of(context).pop('read'),
+              leading: const Icon(Icons.format_quote_outlined),
+              title: const Text('引用'),
+              onTap: () => Navigator.of(context).pop('quote'),
             ),
-            ListTile(
-              leading: const Icon(Icons.undo_rounded),
-              title: const Text('撤回消息'),
-              onTap: () => Navigator.of(context).pop('recall'),
-            ),
+            if (copyText.isNotEmpty)
+              ListTile(
+                leading: const Icon(Icons.copy_rounded),
+                title: const Text('复制'),
+                onTap: () => Navigator.of(context).pop('copy'),
+              ),
           ],
         ),
       ),
     );
-    if (action == 'read') {
-      await _showReadReceipts(m);
-    } else if (action == 'recall') {
-      await _tryRecallMessage(m);
+    switch (action) {
+      case 'quote':
+        _startQuote(m);
+        break;
+      case 'copy':
+        await Clipboard.setData(ClipboardData(text: copyText));
+        if (mounted) _showToast('已复制');
+        break;
     }
+  }
+
+  void _startQuote(NativeChatMessage message) {
+    setState(() {
+      _quoteDraft = ChatMessageQuote.fromMessage(message);
+      _voiceMode = false;
+      _emojiOpen = false;
+    });
+  }
+
+  void _clearQuoteDraft() {
+    if (_quoteDraft == null) return;
+    setState(() => _quoteDraft = null);
+  }
+
+  String _messageCopyText(NativeChatMessage message) {
+    if (message.kind.toUpperCase() == 'TEXT') {
+      return message.bodyText.trim();
+    }
+    return ChatMessageQuote.previewForMessage(message);
+  }
+
+  void _jumpToQuotedMessage(int messageId) {
+    if (messageId <= 0) return;
+    final exists = _messages.any((m) => m.id == messageId);
+    if (exists) {
+      _highlightAndScroll(messageId);
+      return;
+    }
+    _showToast('原消息不在当前列表');
+  }
+
+  Widget _wrapQuotedContent(NativeChatMessage m, bool mine, Widget child) {
+    final quote = ChatMessageQuote.fromPayload(m.payload);
+    if (quote.isEmpty) return child;
+    return Column(
+      crossAxisAlignment: mine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        child,
+        const SizedBox(height: 6),
+        ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 280),
+          child: ChatQuoteBlock(
+            quote: quote,
+            mine: mine,
+            onTap: () => _jumpToQuotedMessage(quote.messageId),
+          ),
+        ),
+      ],
+    );
   }
 
   void _showToast(String message, {bool error = false}) {
@@ -1367,12 +1436,19 @@ class _NativeChatViewState extends State<NativeChatView> {
     if (_isSystemKind(kind)) {
       return ChatSystemPill(text: m.bodyText.isEmpty ? '[系统消息]' : m.bodyText);
     }
+    final quote = ChatMessageQuote.fromPayload(m.payload);
+    final onQuoteTap =
+        quote.isEmpty ? null : () => _jumpToQuotedMessage(quote.messageId);
     if (kind == 'IMAGE') {
-      return ChatAuthImageBubble(
-        service: _service,
-        payload: m.payload,
-        mine: mine,
-        bodyFallback: m.bodyText.isEmpty ? '[图片]' : m.bodyText,
+      return _wrapQuotedContent(
+        m,
+        mine,
+        ChatAuthImageBubble(
+          service: _service,
+          payload: m.payload,
+          mine: mine,
+          bodyFallback: m.bodyText.isEmpty ? '[图片]' : m.bodyText,
+        ),
       );
     }
     if (kind == 'FILE') {
@@ -1380,23 +1456,36 @@ class _NativeChatViewState extends State<NativeChatView> {
         m.payload,
         fallback: m.bodyText.isEmpty ? '文件' : m.bodyText.replaceAll(RegExp(r'^\[[^\]]+\]\s*'), ''),
       );
-      return ChatFileAttach(
-        fileName: fileName,
-        mine: mine,
-        onTap: () => _downloadFile(m.payload, fileName),
+      return _wrapQuotedContent(
+        m,
+        mine,
+        ChatFileAttach(
+          fileName: fileName,
+          mine: mine,
+          onTap: () => _downloadFile(m.payload, fileName),
+        ),
       );
     }
     if (kind == 'AUDIO') {
       final sec = (m.payload?['durationSec'] as num?)?.toInt() ?? 0;
       final source = _mediaSource(m.payload);
-      return ChatVoiceBubble(
-        playKey: 'msg-${m.id}',
-        durationSec: sec,
-        mine: mine,
-        resolveUrl: () => _resolveMediaUrl(source),
+      return _wrapQuotedContent(
+        m,
+        mine,
+        ChatVoiceBubble(
+          playKey: 'msg-${m.id}',
+          durationSec: sec,
+          mine: mine,
+          resolveUrl: () => _resolveMediaUrl(source),
+        ),
       );
     }
-    return ChatTextBubble(text: m.bodyText.isEmpty ? '[${m.kind}]' : m.bodyText, mine: mine);
+    return ChatTextBubble(
+      text: m.bodyText.isEmpty ? '[${m.kind}]' : m.bodyText,
+      mine: mine,
+      quote: quote.isEmpty ? null : quote,
+      onQuoteTap: onQuoteTap,
+    );
   }
 
   void _scrollBottom({bool animated = false, bool force = false, bool gentle = false}) {
@@ -1487,16 +1576,21 @@ class _NativeChatViewState extends State<NativeChatView> {
   }
 
   void _onComposeInputChanged() {
+    final text = _inputController.text;
+    final previousText = _lastComposeText;
+    _lastComposeText = text;
     if (_syncingAtFilter || _insertingAtMentions || _isPrivate || _conversation?.dissolved == true) {
       return;
     }
-    final filter = _partialAtFilter(_inputController.text);
+    final filter = _partialAtFilter(text);
     if (filter != null) {
       if (_atSheetOpen) {
         _syncingAtFilter = true;
         _atFilterNotifier?.value = filter;
         _syncingAtFilter = false;
-      } else if (!_atSheetOpening) {
+      } else if (!_atSheetOpening && text.length > previousText.length) {
+        // 仅在用户主动输入（文本变长）时唤出选择器；删除已选 @ 成员
+        // 退回到 `@张三` 这类完整提及时不应再次弹出。
         unawaited(_openAtMentionPicker(filter: filter));
       }
     } else if (_atSheetOpen && mounted) {
@@ -1755,7 +1849,9 @@ class _NativeChatViewState extends State<NativeChatView> {
                           showTimeForMine: mine,
                           timeLabel: timeLabel,
                           readLabel: mine && _isPrivate ? (peerRead ? '已读' : '未读') : null,
-                          onLongPress: mine ? () => _onMineMessageLongPress(m) : null,
+                          onLongPress: !_isSystemKind(m.kind)
+                              ? () => _onMessageActions(m, mine)
+                              : null,
                           onReadTap: mine && !_isPrivate ? () => _showReadReceipts(m) : null,
                           readTapLabel: _groupReadLabelForMessage(m, mine: mine),
                           avatar: !mine ? rowAvatar : null,
@@ -1921,6 +2017,11 @@ class _NativeChatViewState extends State<NativeChatView> {
                   _inputController.text = '${_inputController.text}$emoji';
                   _inputController.selection = TextSelection.collapsed(offset: _inputController.text.length);
                 },
+              ),
+            if (_quoteDraft != null && !_quoteDraft!.isEmpty && !locked)
+              ChatQuotePreviewBar(
+                quote: _quoteDraft!,
+                onCancel: _clearQuoteDraft,
               ),
             ChatInputBar(
               controller: _inputController,

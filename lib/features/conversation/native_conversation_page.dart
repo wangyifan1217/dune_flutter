@@ -494,9 +494,12 @@ class _NativeConversationPageState extends State<NativeConversationPage> {
 
     final gen = c.isAiAssistant ? _novaGeneratingFor(c) : (generating: false, status: '');
 
-    return SwipeableChatInboxRow(
-      onDelete: () => _hideConversation(c),
-      child: ChatInboxRow(
+    // 暂时屏蔽私聊/群聊的左滑删除功能。
+    final allowSwipeDelete = !(rowKind == ChatInboxRowKind.private ||
+        rowKind == ChatInboxRowKind.group ||
+        rowKind == ChatInboxRowKind.workgroupApproval);
+
+    final row = ChatInboxRow(
         kind: rowKind,
         title: c.isAiAssistant ? _yunshuName : title,
         subtitle: c.isPrivate ? _privateSubtitle(c) : null,
@@ -527,7 +530,15 @@ class _NativeConversationPageState extends State<NativeConversationPage> {
         sysTag: c.businessType,
         showDivider: true,
         onTap: onTap,
-      ),
+      );
+
+    if (!allowSwipeDelete) {
+      return row;
+    }
+
+    return SwipeableChatInboxRow(
+      onDelete: () => _hideConversation(c),
+      child: row,
     );
   }
 

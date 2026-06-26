@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../core/theme/dunes_theme.dart';
+import '../shell/dunes_toast.dart';
 import '../chat/user_avatar_widget.dart';
 import 'native_nova_service.dart';
 import 'nova_icon.dart';
@@ -1218,6 +1220,42 @@ class NovaC4MessageRow extends StatelessWidget {
     );
   }
 
+  /// 长按文字气泡弹出「复制」。媒体/思考中等无文本内容时返回原气泡。
+  Widget _wrapCopyable(BuildContext context, Widget bubble, String copyText) {
+    if (copyText.trim().isEmpty) return bubble;
+    return GestureDetector(
+      onLongPress: () async {
+        final action = await showModalBottomSheet<String>(
+          context: context,
+          showDragHandle: true,
+          builder: (_) => SafeArea(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ListTile(
+                  leading: const Icon(Icons.copy_rounded),
+                  title: const Text('复制'),
+                  onTap: () => Navigator.of(context).pop('copy'),
+                ),
+              ],
+            ),
+          ),
+        );
+        if (action != 'copy' || !context.mounted) return;
+        await Clipboard.setData(ClipboardData(text: copyText));
+        if (!context.mounted) return;
+        showDunesToast(context, '已复制');
+      },
+      child: bubble,
+    );
+  }
+
+  String get _userCopyText =>
+      kind.toUpperCase() == 'TEXT' && _shouldShowUserText(text, attachments) ? text : '';
+
+  String get _aiCopyText =>
+      !thinking && kind.toUpperCase() == 'TEXT' ? text : '';
+
   @override
   Widget build(BuildContext context) {
     if (mine) {
@@ -1252,7 +1290,7 @@ class NovaC4MessageRow extends StatelessWidget {
                         ],
                       ),
                     ),
-                  _buildUserBubbleContent(),
+                  _wrapCopyable(context, _buildUserBubbleContent(), _userCopyText),
                   if (messageId > 0)
                     Padding(
                       padding: const EdgeInsets.only(top: 2, right: 4),
@@ -1327,7 +1365,11 @@ class NovaC4MessageRow extends StatelessWidget {
                           ],
                         )
                       : null,
-                  child: NovaC4AiBubble(child: _buildAiBubbleContent()),
+                  child: _wrapCopyable(
+                    context,
+                    NovaC4AiBubble(child: _buildAiBubbleContent()),
+                    _aiCopyText,
+                  ),
                 ),
               ],
             ),

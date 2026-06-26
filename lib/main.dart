@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 
 import 'core/theme/dunes_theme.dart';
 import 'features/auth/login_flow.dart';
@@ -19,6 +20,16 @@ class DunesApp extends StatelessWidget {
       title: '沙丘 · 统一审批',
       debugShowCheckedModeBanner: false,
       theme: DunesTheme.light(),
+      locale: const Locale('zh', 'CN'),
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      supportedLocales: const [
+        Locale('zh', 'CN'),
+        Locale('en', 'US'),
+      ],
       home: const LoginFlow(),
     );
   }

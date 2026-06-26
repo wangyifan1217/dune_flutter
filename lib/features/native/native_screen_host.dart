@@ -792,14 +792,18 @@ class _NativeB2PageState extends State<_NativeB2Page> {
       _loadError = null;
     });
     try {
+      final xflow = XflowService(session: widget.session);
+      List<XflowProposalItem>? initiatedRows;
       final results = await Future.wait<Object?>(<Future<Object?>>[
         dunesHttpGet(widget.session, '/workbench/my-stats'),
         _fetchKbSummary(),
         _loadProfile(),
+        xflow.fetchB14Initiated().then<List<XflowProposalItem>?>((v) => v).catchError((_) => null),
       ]);
       final resp = results[0] as http.Response;
       final kbSummary = results[1] as NativeKbSummary?;
       final profile = results[2] as _NativeB2Profile;
+      initiatedRows = results[3] as List<XflowProposalItem>?;
       if (resp.statusCode < 200 || resp.statusCode >= 300) {
         throw Exception('HTTP ${resp.statusCode}');
       }
@@ -810,42 +814,23 @@ class _NativeB2PageState extends State<_NativeB2Page> {
               : body)
           : const <String, dynamic>{};
       if (!mounted) return;
+      var stats = _NativeMyStats.fromJson(raw);
+      if (initiatedRows != null) {
+        stats = stats.alignedWithInitiatedList(initiatedRows);
+      }
       setState(() {
-        _stats = _NativeMyStats.fromJson(raw);
+        _stats = stats;
         _kbSummary = kbSummary;
         _profile = profile;
         _loading = false;
       });
       widget.workbenchBadge.update(_stats?.pendingForMe ?? 0);
-      unawaited(_reconcileRejectedCount());
     } catch (error) {
       if (!mounted) return;
       setState(() {
         _loading = false;
         _loadError = error.toString();
       });
-    }
-  }
-
-  /// `/workbench/my-stats` 的 `approvalRejected` 会把后来被作废 (VOIDED) /
-  /// 被替代 (SUPERSEDED) 的提案仍算进「已驳回」，导致「我的」页面横幅消不掉。
-  /// 这里用 B14「我发起的」真实提案状态重算一遍，只统计当前仍为 REJECTED 的，
-  /// 与 B14 列表口径保持一致。仅在后端返回值 > 0 时触发，避免无谓拉取。
-  Future<void> _reconcileRejectedCount() async {
-    final current = _stats;
-    if (current == null || current.approvalRejected <= 0) return;
-    try {
-      final rows = await XflowService(session: widget.session).fetchB14Initiated();
-      final rejected =
-          rows.where((it) => it.status.toUpperCase() == 'REJECTED').length;
-      if (!mounted) return;
-      if (rejected != current.approvalRejected) {
-        setState(() {
-          _stats = current.copyWith(approvalRejected: rejected);
-        });
-      }
-    } catch (_) {
-      // 兜底重算失败时保留后端值。
     }
   }
 
@@ -989,7 +974,7 @@ class _NativeB2PageState extends State<_NativeB2Page> {
                       _buildMenuItem(
                         icon: Icons.send_outlined,
                         title: '我发起的审批',
-                        desc: '${stats.initiatedByMe} 条 · ${stats.pendingForMe} 审批中 · ${stats.approvalRejected} 已驳回',
+                        desc: '${stats.initiatedByMe} 条 · ${stats.approvalPending} 审批中 · ${stats.approvalRejected} 已驳回',
                         badge: stats.initiatedByMe,
                         onTap: () => widget.navigation.go('B14'),
                       ),
@@ -1337,7 +1322,7 @@ class _NativeB2PageState extends State<_NativeB2Page> {
     return LayoutBuilder(
       builder: (context, constraints) {
         const gap = 6.0;
-        final cellW = (constraints.maxWidth - gap * 3) / 4;
+        final cellW = ((constraints.maxWidth - gap * 3) / 4).clamp(0.0, double.infinity);
         return Row(
           children: [
             SizedBox(
@@ -1605,6 +1590,7 @@ class _NativeMyStats {
   const _NativeMyStats({
     required this.pendingForMe,
     required this.initiatedByMe,
+    required this.approvalPending,
     required this.handledThisMonth,
     required this.outstandingInvoices,
     required this.approvalRejected,
@@ -1615,6 +1601,7 @@ class _NativeMyStats {
   const _NativeMyStats.empty()
       : pendingForMe = 0,
         initiatedByMe = 0,
+        approvalPending = 0,
         handledThisMonth = 0,
         outstandingInvoices = 0,
         approvalRejected = 0,
@@ -1623,16 +1610,43 @@ class _NativeMyStats {
 
   final int pendingForMe;
   final int initiatedByMe;
+  final int approvalPending;
   final int handledThisMonth;
   final int outstandingInvoices;
   final int approvalRejected;
   final int ccProposalCount;
   final int ccProposalPending;
 
-  _NativeMyStats copyWith({int? approvalRejected}) {
+  /// 与 B14「我发起的」列表口径对齐，避免 my-stats 历史 approval 行导致数字偏大/横幅闪烁。
+  _NativeMyStats alignedWithInitiatedList(List<XflowProposalItem> rows) {
+    var pending = 0;
+    var rejected = 0;
+    for (final row in rows) {
+      switch (row.status.toUpperCase()) {
+        case 'PENDING':
+          pending++;
+          break;
+        case 'REJECTED':
+          rejected++;
+          break;
+      }
+    }
+    return copyWith(
+      initiatedByMe: rows.length,
+      approvalPending: pending,
+      approvalRejected: rejected,
+    );
+  }
+
+  _NativeMyStats copyWith({
+    int? initiatedByMe,
+    int? approvalPending,
+    int? approvalRejected,
+  }) {
     return _NativeMyStats(
       pendingForMe: pendingForMe,
-      initiatedByMe: initiatedByMe,
+      initiatedByMe: initiatedByMe ?? this.initiatedByMe,
+      approvalPending: approvalPending ?? this.approvalPending,
       handledThisMonth: handledThisMonth,
       outstandingInvoices: outstandingInvoices,
       approvalRejected: approvalRejected ?? this.approvalRejected,
@@ -1653,6 +1667,7 @@ class _NativeMyStats {
     return _NativeMyStats(
       pendingForMe: readInt(<String>['pendingForMe', 'openTodos']),
       initiatedByMe: readInt(<String>['initiatedByMe', 'initiated']),
+      approvalPending: readInt(<String>['approvalPending']),
       handledThisMonth:
           readInt(<String>['approvalHandled', 'handledThisMonth', 'approved']),
       outstandingInvoices: readInt(<String>['outstandingInvoices']),

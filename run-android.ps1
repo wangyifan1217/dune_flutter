@@ -1,12 +1,13 @@
 <#
-  启动安卓调试（PowerShell）
-  用法：
-    .\run-android.ps1                # 自动选择第一台安卓真机/模拟器
-    .\run-android.ps1 253408e4       # 指定设备 id
-    .\run-android.ps1 -Release       # 以 release 模式运行
+  Launch Android debugging (PowerShell)
+  Usage:
+    .\run-android.ps1                # auto-pick first Android device/emulator
+    .\run-android.ps1 253408e4       # target a specific device id
+    .\run-android.ps1 -Release       # run in release mode
 
-  说明：本机 pub cache 默认路径含中文，会导致 jni 等插件的原生(CMake/Ninja)构建失败，
-  这里强制把 PUB_CACHE 指到纯英文路径 D:\pubcache 规避该问题。
+  Note: the default pub cache path contains non-ASCII chars (Chinese username),
+  which breaks native (CMake/Ninja) builds of plugins like jni. We force
+  PUB_CACHE to a pure-ASCII path (D:\pubcache) to avoid that.
 #>
 param(
   [string]$Device = "",
@@ -15,13 +16,13 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-# 关键：英文 pub cache 路径，避免原生构建因中文路径失败
+# Key: ASCII-only pub cache path, avoids native build failures on non-ASCII paths
 $env:PUB_CACHE = "D:\pubcache"
 
-# 切到脚本所在目录（Flutter 工程根，含 pubspec.yaml）
+# Move to the script dir (Flutter project root, contains pubspec.yaml)
 Set-Location -Path $PSScriptRoot
 
-# 未指定设备时，自动挑选一台非 web 的设备
+# When no device is given, auto-pick a non-web device
 if (-not $Device) {
   $json = flutter devices --machine | Out-String
   try {
@@ -35,13 +36,13 @@ if (-not $Device) {
 }
 
 if (-not $Device) {
-  Write-Host "未找到可用设备，请先连接安卓设备或启动模拟器。" -ForegroundColor Red
+  Write-Host "No usable device found. Connect an Android device or start an emulator first." -ForegroundColor Red
   flutter devices
   exit 1
 }
 
 $mode = if ($Release) { "--release" } else { "--debug" }
 Write-Host "PUB_CACHE = $env:PUB_CACHE" -ForegroundColor DarkGray
-Write-Host "启动调试：设备=$Device 模式=$mode" -ForegroundColor Cyan
+Write-Host "Launching: device=$Device mode=$mode" -ForegroundColor Cyan
 
 flutter run -d $Device $mode

@@ -2,7 +2,6 @@ import Flutter
 import UIKit
 import AVFoundation
 import UserNotifications
-import XGPush
 
 @main
 @objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate, XGPushDelegate {

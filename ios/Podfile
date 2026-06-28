@@ -27,11 +27,12 @@ require File.expand_path(File.join('packages', 'flutter_tools', 'bin', 'podhelpe
 flutter_ios_podfile_setup
 
 target 'Runner' do
-  use_frameworks!
+  use_frameworks! :linkage => :static
   use_modular_headers!
 
   flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
-  pod 'TPNS-iOS', '1.4.0.8'
+  # TPNS 为 Objective-C SDK，必须显式开启 modular_headers 才能在 Swift 中 import XGPush
+  pod 'TPNS-iOS', '1.4.0.8', :modular_headers => true
 end
 
 post_install do |installer|
@@ -43,6 +44,12 @@ post_install do |installer|
         '$(inherited)',
         'PERMISSION_NOTIFICATIONS=1',
       ]
+
+      # 确保 TPNS / XGPush 相关 Pod 生成 Clang Module
+      if target.name.include?('TPNS') || target.name.include?('XGPush') || target.name.include?('XGMTA')
+        config.build_settings['DEFINES_MODULE'] = 'YES'
+        config.build_settings['CLANG_ENABLE_MODULES'] = 'YES'
+      end
     end
   end
 end

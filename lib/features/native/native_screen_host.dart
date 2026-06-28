@@ -774,7 +774,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
               _focusMessageHint = null;
             });
             _markUserLeftChat();
-            widget.navigation.go('C1');
+            widget.navigation.popTo('C1');
           },
           onOpenSearch: (convId) {
             setState(() {
@@ -810,7 +810,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
               _focusMessageHint = null;
             });
             _markUserLeftChat();
-            widget.navigation.go('C1');
+            widget.navigation.popTo('C1');
           },
           onOpenProfile: () {
             final peerId =
@@ -854,7 +854,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
             if (_searchReturnScreen == 'C5' || _searchReturnScreen == 'C2') {
               _markUserEnteredChat();
             }
-            widget.navigation.go(_searchReturnScreen);
+            // 从历史定位回会话时弹出 C12，避免返回键回到「查找聊天内容」。
+            widget.navigation.popTo(_searchReturnScreen);
           },
         );
       case 'C13':

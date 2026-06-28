@@ -6,8 +6,9 @@
 /// tpns.accessKey=你的ACCESS_KEY
 /// ```
 ///
-/// iOS 需在 TPNS 控制台单独创建 iOS 应用，上传 APNs 推送证书（p12 或 p8），
-/// 并使用该 iOS 应用的 AccessID / AccessKey（可与 Android 不同）。
+/// iOS 需在 TPNS 控制台单独创建 iOS 应用，Bundle ID 为 `nova.dunes.dunes-app`
+/// （iOS 不允许 Bundle ID 含下划线；Android 仍为 `nova.dunes.dunes_app`），
+/// 上传 APNs 推送证书（p12 或 p8），并使用该 iOS 应用的 AccessID / AccessKey。
 ///
 /// 运行时也可通过 `--dart-define` 覆盖：
 /// `--dart-define=TPNS_ACCESS_ID=... --dart-define=TPNS_ACCESS_KEY=...`

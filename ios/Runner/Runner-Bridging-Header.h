@@ -1,4 +1,4 @@
 #import "GeneratedPluginRegistrant.h"
 
-// TPNS (XGPush) 为 Objective-C SDK，通过 Bridging Header 暴露给 Swift
-#import <XGPush/XGPush.h>
+// TPNS Pod 名为 TPNS-iOS，公开头文件路径为 <TPNS-iOS/XGPush.h>
+#import <TPNS-iOS/XGPush.h>

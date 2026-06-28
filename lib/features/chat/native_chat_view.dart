@@ -1449,14 +1449,63 @@ class _NativeChatViewState extends State<NativeChatView> {
     return ChatMessageQuote.previewForMessage(message);
   }
 
-  void _jumpToQuotedMessage(int messageId) {
+  NativeChatMessage? _quoteHintMessage(ChatMessageQuote quote) {
+    if (quote.isEmpty) return null;
+    return NativeChatMessage(
+      id: quote.messageId,
+      senderUserId: quote.senderUserId,
+      senderName: quote.senderName,
+      kind: quote.kind,
+      bodyText: quote.bodyText,
+      createdAt: null,
+    );
+  }
+
+  Future<void> _jumpToQuotedMessage(
+    int messageId, {
+    ChatMessageQuote? quote,
+  }) async {
     if (messageId <= 0) return;
-    final exists = _messages.any((m) => m.id == messageId);
-    if (exists) {
+    if (_messages.any((m) => m.id == messageId)) {
       _highlightAndScroll(messageId);
       return;
     }
-    _showToast('原消息不在当前列表');
+    final conv = _conversation;
+    if (conv == null || conv.id <= 0) {
+      _showToast('找不到原消息');
+      return;
+    }
+    if (_locating) return;
+    setState(() => _locating = true);
+    try {
+      final page = await _service.fetchMessagesAround(
+        conv.id,
+        messageId,
+        hint: quote != null ? _quoteHintMessage(quote) : null,
+      );
+      if (!mounted) return;
+      final msgs = page.items..sort((a, b) => a.id.compareTo(b.id));
+      if (!msgs.any((m) => m.id == messageId)) {
+        setState(() => _locating = false);
+        _showToast('找不到原消息');
+        return;
+      }
+      setState(() {
+        _messages = msgs;
+        _hasMore = page.hasMore;
+        _hasNewer = page.hasNewer;
+        _locatedMode = true;
+        _locating = false;
+        if (page.peerLastReadMessageId != null) {
+          _peerLastReadMessageId = page.peerLastReadMessageId!;
+        }
+      });
+      _highlightAndScroll(messageId);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _locating = false);
+      _showToast('定位消息失败：${friendlyErrorText(e)}');
+    }
   }
 
   Widget _wrapQuotedContent(NativeChatMessage m, bool mine, Widget child) {
@@ -1475,7 +1524,7 @@ class _NativeChatViewState extends State<NativeChatView> {
           child: ChatQuoteBlock(
             quote: quote,
             mine: mine,
-            onTap: () => _jumpToQuotedMessage(quote.messageId),
+            onTap: () => _jumpToQuotedMessage(quote.messageId, quote: quote),
           ),
         ),
       ],
@@ -1579,7 +1628,7 @@ class _NativeChatViewState extends State<NativeChatView> {
     final quote = ChatMessageQuote.fromPayload(m.payload);
     final onQuoteTap = quote.isEmpty
         ? null
-        : () => _jumpToQuotedMessage(quote.messageId);
+        : () => _jumpToQuotedMessage(quote.messageId, quote: quote);
     if (kind == 'IMAGE') {
       return _wrapQuotedContent(
         m,

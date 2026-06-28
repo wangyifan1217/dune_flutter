@@ -53,6 +53,9 @@ flutter_launcher_icons:
     image_path: assets/images/app_logo.png
 
 flutter:
+  config:
+    # TPNS-iOS 仅支持 CocoaPods，必须关闭 SPM 才能正确链接 XGPush
+    enable-swift-package-manager: false
   uses-material-design: true
   assets:
     - assets/images/app_logo.png

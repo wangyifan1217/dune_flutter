@@ -18,6 +18,9 @@ jobs:
           flutter-version: '3.44.3'
           channel: 'stable'
 
+      - name: Disable Swift Package Manager
+        run: flutter config --no-enable-swift-package-manager
+
       - name: Install dependencies
         run: flutter pub get
 
@@ -41,11 +44,14 @@ jobs:
           fi
       # -----------------------------------------------------------------
 
-      # Flutter 3.44 默认用 SPM 管理插件，但 TPNS-iOS 仍走 CocoaPods，必须显式 pod install
+      # TPNS-iOS 依赖 CocoaPods，必须 pod install 后才能找到 XGPush 模块
       - name: Install CocoaPods dependencies
         run: |
           cd ios
           pod install --repo-update
+          echo "Verify Pods xcconfig was generated:"
+          ls -la "Pods/Target Support Files/Pods-Runner/" || true
+          grep -n "XGPush\|TPNS" Podfile.lock || true
 
       - name: Build iOS
         run: flutter build ios --release --no-codesign --verbose

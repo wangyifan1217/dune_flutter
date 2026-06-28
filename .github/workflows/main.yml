@@ -2,8 +2,8 @@ name: Flutter iOS Build
 
 on:
   push:
-    branches: [ master ] # 请确保这里你仓库的主分支名一致
-  workflow_dispatch: 
+    branches: [ master ] # 请确保这里和你仓库的主分支名一致
+  workflow_dispatch:
 
 jobs:
   build:
@@ -18,38 +18,38 @@ jobs:
           flutter-version: '3.44.3'
           channel: 'stable'
 
+      # TPNS-iOS 仅支持 CocoaPods，关闭 SPM 才能正确链接 XGPush（与 pubspec.yaml 中配置保持一致）
       - name: Disable Swift Package Manager
         run: flutter config --no-enable-swift-package-manager
 
-      - name: Install dependencies
+      - name: Install Flutter dependencies
         run: flutter pub get
 
-      # ---------- 强制提升 iOS 最低部署版本到 15.0 ----------
-      - name: Force Update iOS Deployment Target to 15.0
+      # ---------- 统一 iOS 最低部署版本到 15.0（安全网，防止本地与 CI 不一致）----------
+      - name: Force iOS Deployment Target 15.0
         run: |
-          echo "Forcing IPHONEOS_DEPLOYMENT_TARGET to 15.0 in project.pbxproj..."
+          echo "Updating project.pbxproj..."
           sed -i '' 's/IPHONEOS_DEPLOYMENT_TARGET = .*;/IPHONEOS_DEPLOYMENT_TARGET = 15.0;/g' ios/Runner.xcodeproj/project.pbxproj
 
-          echo "Updating Podfile deployment target..."
+          echo "Updating Podfile..."
           sed -i '' "s/platform :ios, '.*'/platform :ios, '15.0'/g" ios/Podfile
-          sed -i '' "s/IPHONEOS_DEPLOYMENT_TARGET'] = '.*'/IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'/g" ios/Podfile
+          sed -i '' "s/IPHONEOS_DEPLOYMENT_TARGET'\] = '.*'/IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'/g" ios/Podfile
 
-          echo "Updating AppFrameworkInfo.plist if it exists..."
+          echo "Updating AppFrameworkInfo.plist..."
           if [ -f "ios/Flutter/AppFrameworkInfo.plist" ]; then
-            sed -i '' 's/<string>14.0<\/string>/<string>15.0<\/string>/g' ios/Flutter/AppFrameworkInfo.plist
-            sed -i '' 's/<string>13.0<\/string>/<string>15.0<\/string>/g' ios/Flutter/AppFrameworkInfo.plist
-            sed -i '' 's/<string>12.0<\/string>/<string>15.0<\/string>/g' ios/Flutter/AppFrameworkInfo.plist
-            sed -i '' 's/<string>11.0<\/string>/<string>15.0<\/string>/g' ios/Flutter/AppFrameworkInfo.plist
-            sed -i '' 's/<string>9.0<\/string>/<string>15.0<\/string>/g' ios/Flutter/AppFrameworkInfo.plist
+            sed -i '' 's/<string>1[0-4]\.0<\/string>/<string>15.0<\/string>/g' ios/Flutter/AppFrameworkInfo.plist
+            sed -i '' 's/<string>9\.0<\/string>/<string>15.0<\/string>/g' ios/Flutter/AppFrameworkInfo.plist
           fi
-      # -----------------------------------------------------------------
+      # -----------------------------------------------------------------------------
 
       - name: Install CocoaPods dependencies
         run: |
           cd ios
           pod install --repo-update
+          echo "Verify TPNS pod was installed:"
+          grep -n "TPNS-iOS" Podfile.lock || (echo "TPNS-iOS not found in Podfile.lock" && exit 1)
 
-      - name: Build iOS
+      - name: Build iOS (no codesign)
         run: flutter build ios --release --no-codesign --verbose
 
       - name: Package IPA

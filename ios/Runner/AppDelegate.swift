@@ -22,16 +22,17 @@ import UserNotifications
 
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
+    let messenger = engineBridge.applicationRegistrar.messenger()
     tpnsBridge = TpnsPushBridge(
       application: UIApplication.shared,
-      messenger: engineBridge.binaryMessenger,
-      pushDelegate: self,
+      messenger: messenger,
+      pushDelegate: self
     )
     tpnsBridge?.attach()
 
     let channel = FlutterMethodChannel(
       name: voiceChannelName,
-      binaryMessenger: engineBridge.binaryMessenger
+      binaryMessenger: messenger
     )
     channel.setMethodCallHandler { [weak self] call, result in
       guard let self = self else { return result(nil) }
@@ -243,7 +244,7 @@ final class TpnsPushBridge {
       accessKey = key
     }
     if let cluster = args["clusterDomain"] as? String, !cluster.isEmpty {
-      XGPush.default().configureClusterDomainName(cluster)
+      XGPush.defaultManager().configureClusterDomainName(cluster)
     }
     guard accessId > 0, !accessKey.isEmpty else {
       result(
@@ -257,13 +258,13 @@ final class TpnsPushBridge {
     }
     if !isStarted {
       if let launchOptions = Self.launchOptions {
-        XGPush.default().launchOptions = launchOptions
+        XGPush.defaultManager().launchOptions = launchOptions
       }
       guard let delegate = pushDelegate else {
         result(FlutterError(code: "NO_DELEGATE", message: "missing push delegate", details: nil))
         return
       }
-      XGPush.default().startXG(withAccessID: accessId, accessKey: accessKey, delegate: delegate)
+      XGPush.defaultManager().startXG(withAccessID: accessId, accessKey: accessKey, delegate: delegate)
       isStarted = true
       NSLog("[DunesTpns] TPNS startXG invoked accessId=\(accessId)")
     }

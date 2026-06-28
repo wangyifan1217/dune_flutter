@@ -81,7 +81,9 @@ class _NativeContactsPageState extends State<NativeContactsPage> {
       _error = null;
     });
     try {
-      final data = await _service.fetchOrgContacts(keyword: _searchController.text);
+      final data = await _service.fetchOrgContacts(
+        keyword: _searchController.text,
+      );
       if (!mounted) return;
       setState(() {
         _total = data.total;
@@ -110,14 +112,20 @@ class _NativeContactsPageState extends State<NativeContactsPage> {
       return;
     }
     try {
-      final convId = await _convService.ensurePrivateConversationForPeer(contact.userId);
+      final convId = await _convService.ensurePrivateConversationForPeer(
+        contact.userId,
+      );
       if (convId == null || convId <= 0) {
         throw Exception('创建私聊失败');
       }
       widget.onStartPrivateChat(contact.userId);
     } catch (e) {
       if (!mounted) return;
-      showDunesToast(context, '创建私聊失败：${friendlyErrorText(e)}', kind: DunesToastKind.error);
+      showDunesToast(
+        context,
+        '创建私聊失败：${friendlyErrorText(e)}',
+        kind: DunesToastKind.error,
+      );
     }
   }
 
@@ -140,14 +148,21 @@ class _NativeContactsPageState extends State<NativeContactsPage> {
               Padding(
                 padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
                   decoration: BoxDecoration(
                     color: DunesColors.bgSoft,
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Row(
                     children: [
-                      const Icon(Icons.search, size: 15, color: DunesColors.text3),
+                      const Icon(
+                        Icons.search,
+                        size: 15,
+                        color: DunesColors.text3,
+                      ),
                       const SizedBox(width: 9),
                       Expanded(
                         child: TextField(
@@ -158,7 +173,10 @@ class _NativeContactsPageState extends State<NativeContactsPage> {
                             isDense: true,
                             border: InputBorder.none,
                             hintText: '搜索同事 · 姓名 / 部门',
-                            hintStyle: DunesTypography.sans(fontSize: 13, color: DunesColors.text3),
+                            hintStyle: DunesTypography.sans(
+                              fontSize: 13,
+                              color: DunesColors.text3,
+                            ),
                           ),
                         ),
                       ),
@@ -182,9 +200,21 @@ class _NativeContactsPageState extends State<NativeContactsPage> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text('通讯录加载失败', style: DunesTypography.sans(fontSize: 15, color: DunesColors.text2)),
+            Text(
+              '通讯录加载失败',
+              style: DunesTypography.sans(
+                fontSize: 15,
+                color: DunesColors.text2,
+              ),
+            ),
             const SizedBox(height: 8),
-            Text(_error!, style: DunesTypography.sans(fontSize: 12, color: DunesColors.text3)),
+            Text(
+              _error!,
+              style: DunesTypography.sans(
+                fontSize: 12,
+                color: DunesColors.text3,
+              ),
+            ),
             const SizedBox(height: 10),
             OutlinedButton(onPressed: _load, child: const Text('重试')),
           ],
@@ -203,7 +233,12 @@ class _NativeContactsPageState extends State<NativeContactsPage> {
             if (_searchItems.isEmpty)
               const Padding(
                 padding: EdgeInsets.all(24),
-                child: Center(child: Text('无匹配联系人', style: TextStyle(color: DunesColors.text3))),
+                child: Center(
+                  child: Text(
+                    '无匹配联系人',
+                    style: TextStyle(color: DunesColors.text3),
+                  ),
+                ),
               )
             else
               Padding(
@@ -217,6 +252,7 @@ class _NativeContactsPageState extends State<NativeContactsPage> {
                           showOnline: _onlineUsers.contains(c.userId),
                           onOpenProfile: () => widget.onOpenContact(c),
                           onMessage: () => _startPrivateChat(c),
+                          avatarService: _convService,
                         ),
                       )
                       .toList(),
@@ -225,7 +261,12 @@ class _NativeContactsPageState extends State<NativeContactsPage> {
           ] else if (_departments.isEmpty)
             const Padding(
               padding: EdgeInsets.all(24),
-              child: Center(child: Text('暂无组织数据', style: TextStyle(color: DunesColors.text3))),
+              child: Center(
+                child: Text(
+                  '暂无组织数据',
+                  style: TextStyle(color: DunesColors.text3),
+                ),
+              ),
             )
           else
             Padding(
@@ -239,6 +280,7 @@ class _NativeContactsPageState extends State<NativeContactsPage> {
                         onlineUsers: _onlineUsers,
                         onOpenContact: widget.onOpenContact,
                         onMessageContact: _startPrivateChat,
+                        avatarService: _convService,
                       ),
                     )
                     .toList(),

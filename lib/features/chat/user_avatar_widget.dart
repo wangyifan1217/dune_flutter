@@ -33,23 +33,40 @@ class ImUserAvatar extends StatelessWidget {
   Widget build(BuildContext context) {
     final preset = (avatarPreset ?? '').trim();
     final presetSvg = preset.isNotEmpty ? nativeAvatarPresetSvg(preset) : null;
-    final objectKey = (avatarObjectKey ?? '').trim();
+    final rawObjectKey = (avatarObjectKey ?? '').trim();
     final directUrl = (avatarUrl ?? '').trim();
+    final objectKey = rawObjectKey;
+    final objectKeyAsUrl = _looksLikeUrl(rawObjectKey) ? rawObjectKey : '';
+    final effectiveDirectUrl = directUrl.isNotEmpty
+        ? directUrl
+        : objectKeyAsUrl;
 
     Widget core;
-    if (presetSvg != null) {
+    // 优先使用后端已解析出的直链，避免 objectKey 滞后时仍展示旧头像。
+    if (effectiveDirectUrl.isNotEmpty) {
+      final directImageUrl = avatarService != null
+          ? avatarService!.mediaProxyUrl(
+              effectiveDirectUrl,
+              bucket: 'user-avatars',
+            )
+          : effectiveDirectUrl;
       core = ClipRRect(
         borderRadius: BorderRadius.circular(size / 2),
-        child: SvgPicture.string(
-          presetSvg,
+        child: Image.network(
+          directImageUrl,
           width: size,
           height: size,
           fit: BoxFit.cover,
+          gaplessPlayback: true,
+          errorBuilder: (_, _, _) => _initialAvatar(),
         ),
       );
     } else if (objectKey.isNotEmpty && avatarService != null) {
       core = FutureBuilder<String>(
-        future: avatarService!.resolveMediaUrl(objectKey, bucket: 'user-avatars'),
+        future: avatarService!.resolveMediaUrl(
+          objectKey,
+          bucket: 'user-avatars',
+        ),
         builder: (_, snap) {
           if (snap.hasData && snap.data!.isNotEmpty) {
             return ClipRRect(
@@ -67,16 +84,14 @@ class ImUserAvatar extends StatelessWidget {
           return _initialAvatar();
         },
       );
-    } else if (directUrl.isNotEmpty) {
+    } else if (presetSvg != null) {
       core = ClipRRect(
         borderRadius: BorderRadius.circular(size / 2),
-        child: Image.network(
-          directUrl,
+        child: SvgPicture.string(
+          presetSvg,
           width: size,
           height: size,
           fit: BoxFit.cover,
-          gaplessPlayback: true,
-          errorBuilder: (_, _, _) => _initialAvatar(),
         ),
       );
     } else {
@@ -137,5 +152,10 @@ class ImUserAvatar extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  bool _looksLikeUrl(String value) {
+    final v = value.toLowerCase();
+    return v.startsWith('http://') || v.startsWith('https://');
   }
 }

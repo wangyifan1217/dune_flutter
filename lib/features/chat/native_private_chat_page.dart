@@ -14,7 +14,9 @@ class NativePrivateChatPage extends StatelessWidget {
     this.focusMessageHint,
     required this.onBack,
     required this.onOpenProfile,
-    required this.onOpenSearch,
+    required     this.onOpenSearch,
+    this.onConversationRead,
+    this.autoMarkRead = false,
   });
 
   final AuthSession session;
@@ -25,6 +27,8 @@ class NativePrivateChatPage extends StatelessWidget {
   final VoidCallback onBack;
   final VoidCallback onOpenProfile;
   final ValueChanged<int> onOpenSearch;
+  final ValueChanged<int>? onConversationRead;
+  final bool autoMarkRead;
 
   @override
   Widget build(BuildContext context) {
@@ -38,6 +42,8 @@ class NativePrivateChatPage extends StatelessWidget {
       onBack: onBack,
       onOpenProfile: onOpenProfile,
       onOpenSearch: onOpenSearch,
+      onConversationRead: onConversationRead,
+      autoMarkRead: autoMarkRead,
     );
   }
 }

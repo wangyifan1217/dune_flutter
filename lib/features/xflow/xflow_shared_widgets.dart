@@ -399,6 +399,7 @@ class XflowWfListSearch extends StatelessWidget {
           Expanded(
             child: TextField(
               controller: controller,
+              onTapOutside: (_) => FocusManager.instance.primaryFocus?.unfocus(),
               style: DunesTypography.sans(fontSize: 11, color: DunesColors.text),
               decoration: InputDecoration(
                 hintText: hint,
@@ -1678,6 +1679,7 @@ class _XflowPushSheetBodyState extends State<_XflowPushSheetBody> {
           TextField(
             controller: _searchController,
             onChanged: _onQueryChanged,
+            onTapOutside: (_) => FocusManager.instance.primaryFocus?.unfocus(),
             style: DunesTypography.sans(fontSize: 12.5, color: DunesColors.text),
             decoration: InputDecoration(
               hintText: '搜索白名单同事',
@@ -1702,6 +1704,7 @@ class _XflowPushSheetBodyState extends State<_XflowPushSheetBody> {
             controller: _messageController,
             minLines: 1,
             maxLines: 3,
+            onTapOutside: (_) => FocusManager.instance.primaryFocus?.unfocus(),
             style: DunesTypography.sans(fontSize: 12.5, color: DunesColors.text),
             decoration: InputDecoration(
               labelText: '附言（可选）',

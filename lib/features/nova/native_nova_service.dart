@@ -34,6 +34,7 @@ class NovaMessageAttachment {
   final String fileName;
   final String mimeType;
   final String kind;
+
   /// 发送中本地预览（对齐 WebView 上传前即显示缩略图）。
   final Uint8List? previewBytes;
 
@@ -57,7 +58,13 @@ class NovaMessageAttachment {
 
   factory NovaMessageAttachment.fromJson(Map<String, dynamic> json) {
     return NovaMessageAttachment(
-      url: (json['url'] ?? json['accessUrl'] ?? json['publicUrl'] ?? json['previewUrl'] ?? '').toString(),
+      url:
+          (json['url'] ??
+                  json['accessUrl'] ??
+                  json['publicUrl'] ??
+                  json['previewUrl'] ??
+                  '')
+              .toString(),
       objectKey: (json['objectKey'] ?? '').toString(),
       fileName: (json['fileName'] ?? 'file').toString(),
       mimeType: (json['mimeType'] ?? 'application/octet-stream').toString(),
@@ -170,10 +177,16 @@ List<NativeNovaMessage> sortNovaMessages(List<NativeNovaMessage> items) {
 
 /// 去掉 AI 回声（assistant 正文与用户提问完全一致），并按问答轮次重排。
 /// 解决服务端忽略 createdAt、用户消息晚落库导致 id 大于 AI 回复的问题。
-List<NativeNovaMessage> repairNovaConversationMessages(List<NativeNovaMessage> raw) {
+List<NativeNovaMessage> repairNovaConversationMessages(
+  List<NativeNovaMessage> raw,
+) {
   final welcome = raw.where((m) => m.isWelcome).toList(growable: false);
   var items = raw
-      .where((m) => !m.isWelcome && !(m.role == 'assistant' && m.streaming && m.text.trim().isEmpty))
+      .where(
+        (m) =>
+            !m.isWelcome &&
+            !(m.role == 'assistant' && m.streaming && m.text.trim().isEmpty),
+      )
       .toList(growable: false);
   if (items.isEmpty) return welcome;
 
@@ -201,10 +214,11 @@ List<NativeNovaMessage> repairNovaConversationMessages(List<NativeNovaMessage> r
 
   final users = items.where((m) => m.role == 'user').toList()
     ..sort((a, b) => a.id.compareTo(b.id));
-  final assistants = items
-      .where((m) => m.role == 'assistant' && m.text.trim().isNotEmpty)
-      .toList()
-    ..sort((a, b) => a.id.compareTo(b.id));
+  final assistants =
+      items
+          .where((m) => m.role == 'assistant' && m.text.trim().isNotEmpty)
+          .toList()
+        ..sort((a, b) => a.id.compareTo(b.id));
 
   if (users.isEmpty) {
     return sortNovaMessages([...welcome, ...items]);
@@ -227,7 +241,8 @@ List<NativeNovaMessage> repairNovaConversationMessages(List<NativeNovaMessage> r
 
   final out = <NativeNovaMessage>[];
   for (final u in users) {
-    final userAt = u.createdAt ??
+    final userAt =
+        u.createdAt ??
         (u.id > 0 ? DateTime.fromMillisecondsSinceEpoch(u.id) : DateTime.now());
     out.add(u.copyWith(createdAt: userAt));
     final turnAssistants = buckets[u.id] ?? const <NativeNovaMessage>[];
@@ -303,20 +318,14 @@ class NovaStreamUpdate {
 }
 
 class NovaReadiness {
-  const NovaReadiness({
-    required this.ready,
-    this.message,
-  });
+  const NovaReadiness({required this.ready, this.message});
 
   final bool ready;
   final String? message;
 }
 
 class NovaHistoryPageResult {
-  const NovaHistoryPageResult({
-    required this.items,
-    required this.hasMore,
-  });
+  const NovaHistoryPageResult({required this.items, required this.hasMore});
 
   final List<NovaHistoryTurn> items;
   final bool hasMore;
@@ -339,10 +348,8 @@ class NovaHistoryTurn {
 }
 
 class NativeNovaService {
-  NativeNovaService({
-    required this.session,
-    http.Client? client,
-  }) : _client = client ?? http.Client();
+  NativeNovaService({required this.session, http.Client? client})
+    : _client = client ?? http.Client();
 
   final AuthSession session;
   final http.Client _client;
@@ -360,13 +367,15 @@ class NativeNovaService {
   NovaHistorySync? _historySync;
 
   NovaHistorySync get _history => _historySync ??= NovaHistorySync(
-        session: session,
-        client: _client,
-        selectedModel: selectedModel,
-        novaBizUserId: novaBizUserId,
-        novaProfileSessionId: novaProfileSessionId,
-        displayName: (session.displayName ?? '').trim().isNotEmpty ? session.displayName!.trim() : '我',
-      );
+    session: session,
+    client: _client,
+    selectedModel: selectedModel,
+    novaBizUserId: novaBizUserId,
+    novaProfileSessionId: novaProfileSessionId,
+    displayName: (session.displayName ?? '').trim().isNotEmpty
+        ? session.displayName!.trim()
+        : '我',
+  );
 
   Uri _dunesUri(String path) => Uri.parse('${session.apiBase}$path');
 
@@ -376,9 +385,11 @@ class NativeNovaService {
   };
 
   String get novaBase =>
-      (session.novaLocalStorage?['dunes_nova_base'] ?? NovaConfig.baseUrl).replaceAll(RegExp(r'/$'), '');
+      (session.novaLocalStorage?['dunes_nova_base'] ?? NovaConfig.baseUrl)
+          .replaceAll(RegExp(r'/$'), '');
   String get novaApiKey =>
-      (_cachedApiKey ?? session.novaLocalStorage?['dunes_nova_api_key'] ?? '').trim();
+      (_cachedApiKey ?? session.novaLocalStorage?['dunes_nova_api_key'] ?? '')
+          .trim();
   String get selectedModel {
     final override = _selectedModelOverride?.trim() ?? '';
     if (override.isNotEmpty) return override;
@@ -408,55 +419,72 @@ class NativeNovaService {
     String? lastMessagePreview,
     String? lastMessageAt,
     Map<String, dynamic>? userPayload,
-  }) =>
-      _history.registerHistoryTurn(
-        conversationId: conversationId,
-        messageId: messageId,
-        userMessage: userMessage,
-        assistantMessage: assistantMessage,
-        title: title,
-        lastMessagePreview: lastMessagePreview,
-        lastMessageAt: lastMessageAt,
-        model: selectedModel,
-        userPayload: userPayload,
-      );
+  }) => _history.registerHistoryTurn(
+    conversationId: conversationId,
+    messageId: messageId,
+    userMessage: userMessage,
+    assistantMessage: assistantMessage,
+    title: title,
+    lastMessagePreview: lastMessagePreview,
+    lastMessageAt: lastMessageAt,
+    model: selectedModel,
+    userPayload: userPayload,
+  );
 
   /// 离开 C4 / 新对话前刷新本地历史预览。
   Future<void> flushConvToLocalHistory(
     int conversationId,
     List<NativeNovaMessage> messages,
-  ) =>
-      _history.flushConvToLocalHistory(conversationId, messages);
+  ) => _history.flushConvToLocalHistory(conversationId, messages);
 
   Future<void> persistActiveConversationId(int conversationId) =>
       _history.persistActiveConversationId(conversationId);
 
   static String friendlyError(Object error) {
     final raw = error.toString();
-    var msg = raw.startsWith('Exception: ') ? raw.substring('Exception: '.length) : raw;
+    var msg = raw.startsWith('Exception: ')
+        ? raw.substring('Exception: '.length)
+        : raw;
     // 云枢 C4 不阻断知识库/RAG 状态（对齐 WebView：创建会话失败静默降级）。
     if (msg.contains('rag_not_ready') || msg.contains('知识库账号')) {
       return '';
     }
     if (msg.contains('HTTP 400')) return 'NOVA会话初始化异常，请发送一条消息或稍后重试';
     if (msg.contains('HTTP 503')) return 'NOVA服务暂不可用，请稍后再试';
-    if (msg.contains('凭证') || msg.contains('api_key')) return 'NOVA账号尚未就绪，请重新登录后再试';
+    if (msg.contains('凭证') || msg.contains('api_key'))
+      return 'NOVA账号尚未就绪，请重新登录后再试';
     if (msg.contains('尚未开通')) return msg;
     return friendlyErrorText(msg, fallback: 'NOVA 请求失败，请稍后重试');
   }
 
-  Future<({String avatarPreset, String avatarUrl})> fetchCurrentUserAvatar() async {
+  Future<({String avatarPreset, String avatarUrl})>
+  fetchCurrentUserAvatar() async {
     try {
-      final resp = await _client.get(_dunesUri('/users/me'), headers: _dunesHeaders);
+      final resp = await _client.get(
+        _dunesUri('/users/me'),
+        headers: _dunesHeaders,
+      );
       if (resp.statusCode < 200 || resp.statusCode >= 300) {
         return (avatarPreset: '', avatarUrl: '');
       }
       final body = _decode(resp.body);
-      final data = body['data'] is Map<String, dynamic> ? body['data'] as Map<String, dynamic> : body;
-      final preset = (data['avatarPreset'] ?? data['peerAvatarPreset'] ?? '').toString();
-      var url = (data['avatarUrl'] ?? data['avatar'] ?? '').toString();
+      final data = body['data'] is Map<String, dynamic>
+          ? body['data'] as Map<String, dynamic>
+          : body;
+      final preset = (data['avatarPreset'] ?? data['peerAvatarPreset'] ?? '')
+          .toString();
+      var url =
+          (data['avatarUrl'] ??
+                  data['avatarFullUrl'] ??
+                  data['avatarImageUrl'] ??
+                  data['avatar'] ??
+                  '')
+              .toString();
       final objectKey = (data['avatarObjectKey'] ?? '').toString();
-      if (url.isEmpty && objectKey.isNotEmpty) {
+      if (url.isEmpty && _isHttpUrl(objectKey)) {
+        url = objectKey;
+      }
+      if (url.isEmpty && objectKey.isNotEmpty && !_isHttpUrl(objectKey)) {
         try {
           final pre = await _client.get(
             _dunesUri(
@@ -483,29 +511,37 @@ class NativeNovaService {
     return _refreshNovaCredentials();
   }
 
+  bool _isHttpUrl(String value) {
+    final v = value.toLowerCase();
+    return v.startsWith('http://') || v.startsWith('https://');
+  }
+
   /// 对齐 admin-web `refreshNovaCredentials`：每次进入/发消息前拉最新凭证。
   Future<NovaReadiness> _refreshNovaCredentials() async {
     try {
-      final resp = await _client.get(_dunesUri('/me/nova-credentials'), headers: _dunesHeaders);
+      final resp = await _client.get(
+        _dunesUri('/me/nova-credentials'),
+        headers: _dunesHeaders,
+      );
       if (resp.statusCode < 200 || resp.statusCode >= 300) {
         if (novaApiKey.isNotEmpty) return const NovaReadiness(ready: true);
-        return const NovaReadiness(
-          ready: false,
-          message: 'NOVA账号尚未开通，请稍后再试',
-        );
+        return const NovaReadiness(ready: false, message: 'NOVA账号尚未开通，请稍后再试');
       }
       final body = _decode(resp.body);
       final data = body['data'] is Map<String, dynamic>
           ? body['data'] as Map<String, dynamic>
           : body;
       final ready = data['ready'] == true;
-      final key = ((data['api_token'] ?? data['apiKey']) ?? '').toString().trim();
+      final key = ((data['api_token'] ?? data['apiKey']) ?? '')
+          .toString()
+          .trim();
       if (key.isNotEmpty) _cachedApiKey = key;
       if (ready && key.isNotEmpty) return const NovaReadiness(ready: true);
       if (novaApiKey.isNotEmpty) return const NovaReadiness(ready: true);
-      final message = (data['lastError'] ?? data['message'] ?? 'NOVA账号尚未开通，请稍后再试')
-          .toString()
-          .trim();
+      final message =
+          (data['lastError'] ?? data['message'] ?? 'NOVA账号尚未开通，请稍后再试')
+              .toString()
+              .trim();
       return NovaReadiness(ready: false, message: message);
     } catch (_) {
       if (novaApiKey.isNotEmpty) return const NovaReadiness(ready: true);
@@ -552,8 +588,14 @@ class NativeNovaService {
     int previousConversationId = 0,
   }) async {
     if (previousConversationId > 0 && userId > 0) {
-      await clearNovaGeneratingState(userId: userId, conversationId: previousConversationId);
-      await clearNovaStreamDraftState(userId: userId, conversationId: previousConversationId);
+      await clearNovaGeneratingState(
+        userId: userId,
+        conversationId: previousConversationId,
+      );
+      await clearNovaStreamDraftState(
+        userId: userId,
+        conversationId: previousConversationId,
+      );
     }
     if (userId <= 0) return;
     await NovaWebStorage.merge(userId, <String, dynamic>{
@@ -572,7 +614,8 @@ class NativeNovaService {
       'dunes_nova_conv_id': conversationId.toString(),
       'dunes_nova_msgs_$conversationId': '[]',
     };
-    if (previousConversationId > 0 && previousConversationId == conversationId) {
+    if (previousConversationId > 0 &&
+        previousConversationId == conversationId) {
       patch['dunes_nova_view_since'] = '';
     } else {
       patch['dunes_nova_view_since'] = DateTime.now().toUtc().toIso8601String();
@@ -598,7 +641,10 @@ class NativeNovaService {
   /// 对齐 WebView `startNewConversation`：创建失败静默降级，不抛知识库相关错误。
   Future<int> beginNewConversation({int previousConversationId = 0}) async {
     final uid = session.userId;
-    await resetNovaNewChatPlaceholder(userId: uid, previousConversationId: previousConversationId);
+    await resetNovaNewChatPlaceholder(
+      userId: uid,
+      previousConversationId: previousConversationId,
+    );
     final id = await ensureConversation();
     if (id > 0) {
       await applyNovaNewChatStorage(
@@ -618,11 +664,13 @@ class NativeNovaService {
   }
 
   String _storagePublicBase() {
-    final fromStorage = (session.novaLocalStorage?['dunes_storage_public_base'] ??
-            session.novaLocalStorage?['dunes_ftp_public_base'] ??
-            '')
-        .trim();
-    if (fromStorage.isNotEmpty) return fromStorage.replaceAll(RegExp(r'/$'), '');
+    final fromStorage =
+        (session.novaLocalStorage?['dunes_storage_public_base'] ??
+                session.novaLocalStorage?['dunes_ftp_public_base'] ??
+                '')
+            .trim();
+    if (fromStorage.isNotEmpty)
+      return fromStorage.replaceAll(RegExp(r'/$'), '');
     return 'https://image.heunion.com/zdfiles';
   }
 
@@ -633,7 +681,8 @@ class NativeNovaService {
     String backend = '',
   }) {
     final direct = url.trim();
-    if (direct.startsWith('http://') || direct.startsWith('https://')) return direct;
+    if (direct.startsWith('http://') || direct.startsWith('https://'))
+      return direct;
     final key = objectKey.trim().isNotEmpty ? objectKey.trim() : direct;
     if (key.startsWith('http://') || key.startsWith('https://')) return key;
     if (key.isEmpty) return '';
@@ -661,7 +710,9 @@ class NativeNovaService {
       bucket: bucket,
       backend: backend,
     );
-    final resolved = accessUrl.isNotEmpty ? accessUrl : (url.isNotEmpty ? url : objectKey);
+    final resolved = accessUrl.isNotEmpty
+        ? accessUrl
+        : (url.isNotEmpty ? url : objectKey);
     return <String, dynamic>{
       'url': resolved,
       'objectKey': objectKey,
@@ -703,10 +754,13 @@ class NativeNovaService {
       if (raw != null && raw.isNotEmpty) {
         final decoded = jsonDecode(raw);
         if (decoded is List) {
-          final kept = decoded.whereType<Map>().where((item) {
-            final cid = (item['conversationId'] as num?)?.toInt() ?? 0;
-            return cid != conversationId;
-          }).toList(growable: false);
+          final kept = decoded
+              .whereType<Map>()
+              .where((item) {
+                final cid = (item['conversationId'] as num?)?.toInt() ?? 0;
+                return cid != conversationId;
+              })
+              .toList(growable: false);
           patch['dunes_nova_local_history'] = jsonEncode(kept);
         }
       }
@@ -744,7 +798,9 @@ class NativeNovaService {
   }
 
   /// `GET /ai/conversations/{id}?all=true`
-  Future<NovaConversationSnapshot> fetchConversationAll(int conversationId) async {
+  Future<NovaConversationSnapshot> fetchConversationAll(
+    int conversationId,
+  ) async {
     if (conversationId <= 0) {
       return const NovaConversationSnapshot(conversationId: 0);
     }
@@ -755,7 +811,10 @@ class NativeNovaService {
     if (resp.statusCode < 200 || resp.statusCode >= 300) {
       throw Exception(_parseApiError(resp, fallback: '加载NOVA会话失败'));
     }
-    final snap = _parseConversationSnapshot(_decode(resp.body), fallbackConvId: conversationId);
+    final snap = _parseConversationSnapshot(
+      _decode(resp.body),
+      fallbackConvId: conversationId,
+    );
     _lastSessionSnapshot = snap;
     return snap;
   }
@@ -793,7 +852,8 @@ class NativeNovaService {
     }
     return (
       d['assistantGenerating'] == true,
-      (d['assistantGeneratingStatus'] ?? d['assistant_generating_status'] ?? '').toString(),
+      (d['assistantGeneratingStatus'] ?? d['assistant_generating_status'] ?? '')
+          .toString(),
       (d['assistantGeneratingAfterMessageId'] as num?)?.toInt() ??
           (d['assistant_generating_after_message_id'] as num?)?.toInt() ??
           0,
@@ -829,7 +889,10 @@ class NativeNovaService {
     }
   }
 
-  Future<List<NativeNovaMessage>> fetchHistory(int conversationId, {int size = 80}) async {
+  Future<List<NativeNovaMessage>> fetchHistory(
+    int conversationId, {
+    int size = 80,
+  }) async {
     final full = await fetchFullHistory(conversationId);
     return full.messages;
   }
@@ -868,7 +931,8 @@ class NativeNovaService {
 
     final localMsgs = await _loadPersistedSessionMessages(conversationId);
     var msgs = server.messages;
-    final shouldUseLocalFallback = generating ||
+    final shouldUseLocalFallback =
+        generating ||
         server.assistantGenerating ||
         isStreamInFlight ||
         shouldPersistNovaGenerating(
@@ -888,7 +952,10 @@ class NativeNovaService {
     if (_shouldRebuildFromTurns(msgs)) {
       final turns = await _fetchTurnRows(200, conversationId: conversationId);
       if (turns.isNotEmpty) {
-        final turnMsgs = _novaMsgsFromTurns(_dedupeNovaTurns(turns), conversationId);
+        final turnMsgs = _novaMsgsFromTurns(
+          _dedupeNovaTurns(turns),
+          conversationId,
+        );
         if (turnMsgs.isNotEmpty) {
           if (kDebugMode) {
             debugPrint(
@@ -923,17 +990,21 @@ class NativeNovaService {
         if (genStatus.isEmpty) genStatus = '正在生成…';
         genAfter = localGen?.afterMessageId ?? streamDraft?.afterMessageId ?? 0;
       } else if (localGen != null) {
-        unawaited(clearNovaGeneratingState(
-          userId: session.userId,
-          conversationId: conversationId,
-        ));
+        unawaited(
+          clearNovaGeneratingState(
+            userId: session.userId,
+            conversationId: conversationId,
+          ),
+        );
       }
     } else if (hasReplyAfter) {
       generating = false;
-      unawaited(clearNovaGeneratingState(
-        userId: session.userId,
-        conversationId: conversationId,
-      ));
+      unawaited(
+        clearNovaGeneratingState(
+          userId: session.userId,
+          conversationId: conversationId,
+        ),
+      );
     }
 
     if (msgs.isNotEmpty && !generating) {
@@ -974,8 +1045,9 @@ class NativeNovaService {
       return server;
     }
     final replyText = localReply.text.trim();
-    final alreadyHas =
-        server.any((m) => m.role == 'assistant' && m.text.trim() == replyText);
+    final alreadyHas = server.any(
+      (m) => m.role == 'assistant' && m.text.trim() == replyText,
+    );
     if (alreadyHas) return server;
     if (kDebugMode) {
       debugPrint('[NativeNova] 服务端缺失助手回复，使用本地缓存补齐');
@@ -986,11 +1058,14 @@ class NativeNovaService {
   bool _shouldRebuildFromTurns(List<NativeNovaMessage> msgs) {
     if (msgs.isEmpty) return true;
     final hasUser = msgs.any((m) => m.role == 'user');
-    final hasAssistant = msgs.any((m) => m.role == 'assistant' && m.text.trim().isNotEmpty);
+    final hasAssistant = msgs.any(
+      (m) => m.role == 'assistant' && m.text.trim().isNotEmpty,
+    );
     if (!hasAssistant) return false;
     if (!hasUser) return true;
     final firstFew = msgs.take(6).toList(growable: false);
-    final assistantOnlyPrefix = firstFew.isNotEmpty && firstFew.every((m) => m.role == 'assistant');
+    final assistantOnlyPrefix =
+        firstFew.isNotEmpty && firstFew.every((m) => m.role == 'assistant');
     return assistantOnlyPrefix;
   }
 
@@ -1058,13 +1133,15 @@ class NativeNovaService {
         if (t.role != loc.role || t.attachments.isNotEmpty) continue;
         final tText = t.text.trim();
         final lText = loc.text.trim();
-        final textMatch = tText == lText ||
+        final textMatch =
+            tText == lText ||
             (tText.isEmpty && lText.isEmpty) ||
             (lText.isNotEmpty && tText.contains(lText)) ||
             (tText.isNotEmpty && lText.contains(tText));
         if (!textMatch &&
             !(lText.isEmpty && loc.attachments.isNotEmpty) &&
-            !(_isNovaImagePlaceholderText(tText) && loc.attachments.isNotEmpty)) continue;
+            !(_isNovaImagePlaceholderText(tText) && loc.attachments.isNotEmpty))
+          continue;
         if (!_novaMsgNearTime(t.createdAt, loc.createdAt)) continue;
         idx = i;
         break;
@@ -1079,7 +1156,9 @@ class NativeNovaService {
     return out;
   }
 
-  Future<List<NativeNovaMessage>> _applyViewSinceFilter(List<NativeNovaMessage> msgs) async {
+  Future<List<NativeNovaMessage>> _applyViewSinceFilter(
+    List<NativeNovaMessage> msgs,
+  ) async {
     if (msgs.isEmpty || session.userId <= 0) return msgs;
     final storage = await NovaWebStorage.load(session.userId);
     final raw = (storage['dunes_nova_view_since'] ?? '').trim();
@@ -1087,17 +1166,22 @@ class NativeNovaService {
     final since = DateTime.tryParse(raw);
     if (since == null) return msgs;
     final threshold = since.subtract(const Duration(seconds: 5));
-    final filtered = msgs.where((m) {
-      final at = m.createdAt;
-      if (at == null) return true;
-      return !at.isBefore(threshold);
-    }).toList(growable: false);
+    final filtered = msgs
+        .where((m) {
+          final at = m.createdAt;
+          if (at == null) return true;
+          return !at.isBefore(threshold);
+        })
+        .toList(growable: false);
     // 对齐 WebView filterNovaViewMessages：view-since 生效时，过滤为空则视为新对话空白页。
     return filtered;
   }
 
-  Future<List<NativeNovaMessage>> _loadPersistedSessionMessages(int conversationId) async {
-    if (conversationId <= 0 || session.userId <= 0) return const <NativeNovaMessage>[];
+  Future<List<NativeNovaMessage>> _loadPersistedSessionMessages(
+    int conversationId,
+  ) async {
+    if (conversationId <= 0 || session.userId <= 0)
+      return const <NativeNovaMessage>[];
     final storage = await NovaWebStorage.load(session.userId);
     final raw = storage['dunes_nova_msgs_$conversationId'];
     if (raw == null || raw.isEmpty) return const <NativeNovaMessage>[];
@@ -1120,7 +1204,10 @@ class NativeNovaService {
         final attList = map['attachments'] ?? payload?['attachments'];
         if (attList is List) {
           for (final a in attList) {
-            if (a is Map) attachments.add(NovaMessageAttachment.fromJson(Map<String, dynamic>.from(a)));
+            if (a is Map)
+              attachments.add(
+                NovaMessageAttachment.fromJson(Map<String, dynamic>.from(a)),
+              );
           }
         }
         final kind = (map['kind'] ?? 'TEXT').toString().toUpperCase();
@@ -1133,8 +1220,13 @@ class NativeNovaService {
         final thinkText = (map['thinkText'] ?? '').toString();
         final thinkStatus = (map['thinkStatus'] ?? '').toString();
         final isPendingAssistant = streaming && role == 'assistant';
-        if (isPendingAssistant && text.trim().isEmpty && !isStreamInFlight) continue;
-        if (text.isEmpty && attachments.isEmpty && kind == 'TEXT' && !isPendingAssistant) continue;
+        if (isPendingAssistant && text.trim().isEmpty && !isStreamInFlight)
+          continue;
+        if (text.isEmpty &&
+            attachments.isEmpty &&
+            kind == 'TEXT' &&
+            !isPendingAssistant)
+          continue;
         out.add(
           NativeNovaMessage(
             id: (map['id'] as num?)?.toInt() ?? 0,
@@ -1181,7 +1273,10 @@ class NativeNovaService {
   }
 
   /// 去掉「assistant 正文与用户提问完全一致」的误落库回声。
-  bool _isEchoAssistantOfUser(List<NativeNovaMessage> prior, NativeNovaMessage candidate) {
+  bool _isEchoAssistantOfUser(
+    List<NativeNovaMessage> prior,
+    NativeNovaMessage candidate,
+  ) {
     if (candidate.role != 'assistant') return false;
     final reply = candidate.text.trim();
     if (reply.isEmpty) return false;
@@ -1215,7 +1310,8 @@ class NativeNovaService {
     if (a.role != b.role) return false;
     final ta = a.createdAt;
     final tb = b.createdAt;
-    if (ta != null && tb != null && ta.difference(tb).inMinutes.abs() > 5) return false;
+    if (ta != null && tb != null && ta.difference(tb).inMinutes.abs() > 5)
+      return false;
     final at = a.text.trim();
     final bt = b.text.trim();
     if (at.isNotEmpty && bt.isNotEmpty) {
@@ -1234,12 +1330,18 @@ class NativeNovaService {
     return false;
   }
 
-  List<Map<String, dynamic>> _dedupeNovaTurns(List<Map<String, dynamic>> turns) {
+  List<Map<String, dynamic>> _dedupeNovaTurns(
+    List<Map<String, dynamic>> turns,
+  ) {
     final seen = <String>{};
     final sorted = [...turns];
     sorted.sort((a, b) {
-      final atA = parseNovaDateTime(_novaTurnAt(a)) ?? DateTime.fromMillisecondsSinceEpoch(0);
-      final atB = parseNovaDateTime(_novaTurnAt(b)) ?? DateTime.fromMillisecondsSinceEpoch(0);
+      final atA =
+          parseNovaDateTime(_novaTurnAt(a)) ??
+          DateTime.fromMillisecondsSinceEpoch(0);
+      final atB =
+          parseNovaDateTime(_novaTurnAt(b)) ??
+          DateTime.fromMillisecondsSinceEpoch(0);
       return atA.compareTo(atB);
     });
     final out = <Map<String, dynamic>>[];
@@ -1248,7 +1350,9 @@ class NativeNovaService {
         _novaTurnConvId(t),
         _novaTurnMessageId(t),
         _novaTurnUserText(t),
-        _novaTurnAssistantText(t).isNotEmpty ? _novaTurnAssistantText(t) : _novaTurnPreviewText(t),
+        _novaTurnAssistantText(t).isNotEmpty
+            ? _novaTurnAssistantText(t)
+            : _novaTurnPreviewText(t),
         _novaTurnAt(t),
       ].join('\x1e');
       if (seen.contains(key)) continue;
@@ -1259,7 +1363,11 @@ class NativeNovaService {
   }
 
   String _novaTurnAt(Map<String, dynamic> turn) =>
-      (turn['lastMessageAt'] ?? turn['last_message_at'] ?? turn['createdAt'] ?? turn['created_at'] ?? '')
+      (turn['lastMessageAt'] ??
+              turn['last_message_at'] ??
+              turn['createdAt'] ??
+              turn['created_at'] ??
+              '')
           .toString();
 
   int _novaTurnConvId(Map<String, dynamic> turn) =>
@@ -1268,37 +1376,47 @@ class NativeNovaService {
       0;
 
   int _novaTurnMessageId(Map<String, dynamic> turn) =>
-      (turn['messageId'] as num?)?.toInt() ?? (turn['message_id'] as num?)?.toInt() ?? 0;
+      (turn['messageId'] as num?)?.toInt() ??
+      (turn['message_id'] as num?)?.toInt() ??
+      0;
 
-  String _novaTurnUserText(Map<String, dynamic> turn) => (turn['userMessage'] ??
-          turn['user_message'] ??
-          turn['prompt'] ??
-          turn['question'] ??
-          turn['userText'] ??
-          '')
-      .toString()
-      .trim();
+  String _novaTurnUserText(Map<String, dynamic> turn) =>
+      (turn['userMessage'] ??
+              turn['user_message'] ??
+              turn['prompt'] ??
+              turn['question'] ??
+              turn['userText'] ??
+              '')
+          .toString()
+          .trim();
 
-  String _novaTurnAssistantText(Map<String, dynamic> turn) => (turn['assistantMessage'] ??
-          turn['assistant_message'] ??
-          turn['answer'] ??
-          turn['response'] ??
-          turn['assistantText'] ??
-          '')
-      .toString()
-      .trim();
+  String _novaTurnAssistantText(Map<String, dynamic> turn) =>
+      (turn['assistantMessage'] ??
+              turn['assistant_message'] ??
+              turn['answer'] ??
+              turn['response'] ??
+              turn['assistantText'] ??
+              '')
+          .toString()
+          .trim();
 
-  String _novaTurnPreviewText(Map<String, dynamic> turn) => (turn['lastMessagePreview'] ??
-          turn['last_message_preview'] ??
-          turn['preview'] ??
-          '')
-      .toString()
-      .trim();
+  String _novaTurnPreviewText(Map<String, dynamic> turn) =>
+      (turn['lastMessagePreview'] ??
+              turn['last_message_preview'] ??
+              turn['preview'] ??
+              '')
+          .toString()
+          .trim();
 
   String _novaTurnTitleText(Map<String, dynamic> turn) =>
-      (turn['title'] ?? turn['name'] ?? turn['subject'] ?? '').toString().trim();
+      (turn['title'] ?? turn['name'] ?? turn['subject'] ?? '')
+          .toString()
+          .trim();
 
-  List<NativeNovaMessage> _novaMsgsFromTurns(List<Map<String, dynamic>> turns, int conversationId) {
+  List<NativeNovaMessage> _novaMsgsFromTurns(
+    List<Map<String, dynamic>> turns,
+    int conversationId,
+  ) {
     final out = <NativeNovaMessage>[];
     final usedMsgIds = <int>{};
 
@@ -1316,14 +1434,19 @@ class NativeNovaService {
       final t = turns[idx];
       final at = parseNovaDateTime(_novaTurnAt(t));
       final turnMid = _novaTurnMessageId(t);
-      final fallbackBase = (conversationId > 0 ? conversationId : 1) * 1000000 + (idx * 10 + 1);
+      final fallbackBase =
+          (conversationId > 0 ? conversationId : 1) * 1000000 + (idx * 10 + 1);
       final userMsgId = allocMsgId(turnMid, fallbackBase);
       final aiMsgId = allocMsgId(turnMid > 0 ? turnMid + 1 : 0, userMsgId + 1);
 
       var userText = _novaTurnUserText(t);
       if (userText.isEmpty) userText = _novaTurnTitleText(t);
       Map<String, dynamic>? userPayload;
-      final payloadRaw = t['userPayload'] ?? t['userMetadata'] ?? t['user_payload'] ?? t['metadata'];
+      final payloadRaw =
+          t['userPayload'] ??
+          t['userMetadata'] ??
+          t['user_payload'] ??
+          t['metadata'];
       if (payloadRaw is Map) {
         userPayload = Map<String, dynamic>.from(payloadRaw);
       }
@@ -1335,7 +1458,8 @@ class NativeNovaService {
       var userKind = 'TEXT';
       if (attachments.isNotEmpty) {
         final allImages = attachments.every(_attachmentIsImage);
-        if (allImages && (userText.isEmpty || _isNovaImagePlaceholderText(userText))) {
+        if (allImages &&
+            (userText.isEmpty || _isNovaImagePlaceholderText(userText))) {
           userKind = 'IMAGE';
         }
       }
@@ -1379,24 +1503,41 @@ class NativeNovaService {
     return sortNovaMessages(out);
   }
 
-  Future<List<Map<String, dynamic>>> _fetchAllTurnsForConversation(int conversationId, {int pageSize = 100}) async {
+  Future<List<Map<String, dynamic>>> _fetchAllTurnsForConversation(
+    int conversationId, {
+    int pageSize = 100,
+  }) async {
     final all = <Map<String, dynamic>>[];
     var before = '';
     for (var i = 0; i < 15; i++) {
-      final rows = await _fetchTurnRows(pageSize, before: before, conversationId: conversationId);
+      final rows = await _fetchTurnRows(
+        pageSize,
+        before: before,
+        conversationId: conversationId,
+      );
       if (rows.isEmpty) break;
       all.addAll(rows);
       if (rows.length < pageSize) break;
-      final oldestAt = (rows.last['lastMessageAt'] ?? rows.last['createdAt'] ?? '').toString();
+      final oldestAt =
+          (rows.last['lastMessageAt'] ?? rows.last['createdAt'] ?? '')
+              .toString();
       if (oldestAt.isEmpty || oldestAt == before) break;
       before = oldestAt;
     }
     return all;
   }
 
-  Future<List<Map<String, dynamic>>> _fetchTurnRows(int size, {String before = '', int? conversationId}) async {
-    final convQ = conversationId != null && conversationId > 0 ? '&conversationId=$conversationId' : '';
-    final beforeQ = before.trim().isEmpty ? '' : '&before=${Uri.encodeQueryComponent(before.trim())}';
+  Future<List<Map<String, dynamic>>> _fetchTurnRows(
+    int size, {
+    String before = '',
+    int? conversationId,
+  }) async {
+    final convQ = conversationId != null && conversationId > 0
+        ? '&conversationId=$conversationId'
+        : '';
+    final beforeQ = before.trim().isEmpty
+        ? ''
+        : '&before=${Uri.encodeQueryComponent(before.trim())}';
     try {
       final resp = await _client.get(
         _dunesUri('/ai/history/turns?size=$size$beforeQ$convQ'),
@@ -1419,12 +1560,19 @@ class NativeNovaService {
     return const <Map<String, dynamic>>[];
   }
 
-  Future<void> persistSession(int conversationId, List<NativeNovaMessage> messages) =>
-      _persistSessionMessages(conversationId, messages);
+  Future<void> persistSession(
+    int conversationId,
+    List<NativeNovaMessage> messages,
+  ) => _persistSessionMessages(conversationId, messages);
 
-  List<NativeNovaMessage> _stripIncompleteStreamingMessages(List<NativeNovaMessage> messages) {
+  List<NativeNovaMessage> _stripIncompleteStreamingMessages(
+    List<NativeNovaMessage> messages,
+  ) {
     return messages
-        .where((m) => !(m.role == 'assistant' && m.streaming && m.text.trim().isEmpty))
+        .where(
+          (m) =>
+              !(m.role == 'assistant' && m.streaming && m.text.trim().isEmpty),
+        )
         .toList();
   }
 
@@ -1435,7 +1583,9 @@ class NativeNovaService {
     final cleaned = _stripIncompleteStreamingMessages(local);
     if (cleaned.length == local.length) return;
     if (cleaned.isEmpty) {
-      await NovaWebStorage.removeKeys(session.userId, ['dunes_nova_msgs_$conversationId']);
+      await NovaWebStorage.removeKeys(session.userId, [
+        'dunes_nova_msgs_$conversationId',
+      ]);
       return;
     }
     await _persistSessionMessages(conversationId, cleaned);
@@ -1449,16 +1599,22 @@ class NativeNovaService {
   }) async {
     final text = replyText.trim();
     if (conversationId <= 0 || text.isEmpty) return;
-    var rows = _stripIncompleteStreamingMessages(await _loadPersistedSessionMessages(conversationId));
+    var rows = _stripIncompleteStreamingMessages(
+      await _loadPersistedSessionMessages(conversationId),
+    );
     for (var i = rows.length - 1; i >= 0; i--) {
       if (rows[i].role == 'user' && rows[i].text.trim() == text) {
         if (kDebugMode) {
-          debugPrint('[NativeNova] skip echo assistant in session conv=$conversationId');
+          debugPrint(
+            '[NativeNova] skip echo assistant in session conv=$conversationId',
+          );
         }
         return;
       }
     }
-    if (rows.any((m) => m.role == 'assistant' && !m.streaming && m.text.trim() == text)) {
+    if (rows.any(
+      (m) => m.role == 'assistant' && !m.streaming && m.text.trim() == text,
+    )) {
       return;
     }
     var replaced = false;
@@ -1469,7 +1625,8 @@ class NativeNovaService {
           text: text,
           thinkText: thinkText.isNotEmpty ? thinkText : m.thinkText,
           streaming: false,
-          thinkStatus: (thinkText.isNotEmpty ? thinkText : m.thinkText).trim().isNotEmpty
+          thinkStatus:
+              (thinkText.isNotEmpty ? thinkText : m.thinkText).trim().isNotEmpty
               ? '已完成思考'
               : m.thinkStatus,
           kind: 'AI_ASSISTANT',
@@ -1500,8 +1657,13 @@ class NativeNovaService {
     return DateTime.now();
   }
 
-  Future<void> _upsertLocalSessionMessage(int conversationId, NativeNovaMessage message) async {
-    if (conversationId <= 0 || message.text.trim().isEmpty && message.attachments.isEmpty) return;
+  Future<void> _upsertLocalSessionMessage(
+    int conversationId,
+    NativeNovaMessage message,
+  ) async {
+    if (conversationId <= 0 ||
+        message.text.trim().isEmpty && message.attachments.isEmpty)
+      return;
     var rows = await _loadPersistedSessionMessages(conversationId);
     final idx = rows.indexWhere((m) => m.id == message.id);
     if (idx >= 0) {
@@ -1520,10 +1682,12 @@ class NativeNovaService {
     Map<String, dynamic>? metadata,
   }) async {
     final text = content.trim();
-    if (conversationId <= 0 || (text.isEmpty && (metadata == null || metadata.isEmpty))) {
+    if (conversationId <= 0 ||
+        (text.isEmpty && (metadata == null || metadata.isEmpty))) {
       return conversationId;
     }
-    final hasAttachments = metadata != null &&
+    final hasAttachments =
+        metadata != null &&
         metadata['attachments'] is List &&
         (metadata['attachments'] as List).isNotEmpty;
     final createdAt = messageId > 0
@@ -1578,7 +1742,9 @@ class NativeNovaService {
       return;
     }
 
-    final serverRows = existingMessages.where((m) => !m.isWelcome).toList(growable: false);
+    final serverRows = existingMessages
+        .where((m) => !m.isWelcome)
+        .toList(growable: false);
     final localRows = await _loadPersistedSessionMessages(conversationId);
     final knownRows = <NativeNovaMessage>[...serverRows, ...localRows];
     final hasAssistant = knownRows.any(
@@ -1622,7 +1788,9 @@ class NativeNovaService {
     }
     if (effectiveUser.isEmpty) {
       if (kDebugMode) {
-        debugPrint('[NativeNova] skip history sync: no user conv=$activeConvId');
+        debugPrint(
+          '[NativeNova] skip history sync: no user conv=$activeConvId',
+        );
       }
       return;
     }
@@ -1649,26 +1817,43 @@ class NativeNovaService {
   }) async {
     final trimmedUser = userText.trim();
     final trimmedReply = assistantText.trim();
-    if (conversationId <= 0 || (trimmedUser.isEmpty && trimmedReply.isEmpty)) return;
+    if (conversationId <= 0 || (trimmedUser.isEmpty && trimmedReply.isEmpty))
+      return;
 
-    final serverRows = existingMessages.where((m) => !m.isWelcome).toList(growable: false);
+    final serverRows = existingMessages
+        .where((m) => !m.isWelcome)
+        .toList(growable: false);
     final trackedUserAt = _userMessageAtByConv[conversationId];
-    final hasUser = trimmedUser.isNotEmpty &&
-        (serverRows.any((m) => m.role == 'user' && m.text.trim() == trimmedUser) ||
+    final hasUser =
+        trimmedUser.isNotEmpty &&
+        (serverRows.any(
+              (m) => m.role == 'user' && m.text.trim() == trimmedUser,
+            ) ||
             trackedUserAt != null);
-    final hasAssistant = trimmedReply.isNotEmpty &&
-        serverRows.any((m) => m.role == 'assistant' && m.text.trim() == trimmedReply);
+    final hasAssistant =
+        trimmedReply.isNotEmpty &&
+        serverRows.any(
+          (m) => m.role == 'assistant' && m.text.trim() == trimmedReply,
+        );
 
     final activeConvId = conversationId;
     if (!hasUser && trimmedUser.isNotEmpty) {
       if (kDebugMode) {
-        debugPrint('[NativeNova] finalize persist missing user conv=$conversationId');
+        debugPrint(
+          '[NativeNova] finalize persist missing user conv=$conversationId',
+        );
       }
-      final recovered = await resolveLatestUserMessage(conversationId, fallbackText: trimmedUser);
+      final recovered = await resolveLatestUserMessage(
+        conversationId,
+        fallbackText: trimmedUser,
+      );
       final userId = recovered?.id ?? 0;
-      final userAt = trackedUserAt ??
+      final userAt =
+          trackedUserAt ??
           recovered?.createdAt ??
-          (userId > 0 ? DateTime.fromMillisecondsSinceEpoch(userId) : DateTime.now());
+          (userId > 0
+              ? DateTime.fromMillisecondsSinceEpoch(userId)
+              : DateTime.now());
       await _saveLocalMessage(
         activeConvId,
         role: 'user',
@@ -1679,9 +1864,13 @@ class NativeNovaService {
       );
       _userMessageAtByConv[conversationId] = userAt;
     }
-    if (!hasAssistant && trimmedReply.isNotEmpty && trimmedReply != trimmedUser) {
+    if (!hasAssistant &&
+        trimmedReply.isNotEmpty &&
+        trimmedReply != trimmedUser) {
       if (kDebugMode) {
-        debugPrint('[NativeNova] finalize persist missing assistant conv=$conversationId');
+        debugPrint(
+          '[NativeNova] finalize persist missing assistant conv=$conversationId',
+        );
       }
       await _saveLocalMessage(
         activeConvId,
@@ -1728,12 +1917,18 @@ class NativeNovaService {
       id: draft?.afterMessageId ?? fallbackId,
       role: 'user',
       text: text,
-      createdAt: _userMessageAtByConv[conversationId] ??
-          (fallbackId > 0 ? DateTime.fromMillisecondsSinceEpoch(fallbackId) : DateTime.now()),
+      createdAt:
+          _userMessageAtByConv[conversationId] ??
+          (fallbackId > 0
+              ? DateTime.fromMillisecondsSinceEpoch(fallbackId)
+              : DateTime.now()),
     );
   }
 
-  Future<void> _persistSessionMessages(int conversationId, List<NativeNovaMessage> messages) async {
+  Future<void> _persistSessionMessages(
+    int conversationId,
+    List<NativeNovaMessage> messages,
+  ) async {
     final uid = session.userId;
     if (uid <= 0 || conversationId <= 0 || messages.isEmpty) return;
     final rows = _stripIncompleteStreamingMessages(messages)
@@ -1742,10 +1937,14 @@ class NativeNovaService {
           (m) => <String, dynamic>{
             'id': m.id,
             'role': m.role,
-            'kind': m.streaming && m.role == 'assistant' ? 'AI_ASSISTANT' : m.kind,
+            'kind': m.streaming && m.role == 'assistant'
+                ? 'AI_ASSISTANT'
+                : m.kind,
             'bodyText': m.text,
             'content': m.text,
-            'createdAt': (m.createdAt ?? DateTime.now()).toUtc().toIso8601String(),
+            'createdAt': (m.createdAt ?? DateTime.now())
+                .toUtc()
+                .toIso8601String(),
             if (m.streaming) 'streaming': true,
             if (m.thinkText.isNotEmpty) 'thinkText': m.thinkText,
             if (m.thinkStatus.isNotEmpty) 'thinkStatus': m.thinkStatus,
@@ -1753,10 +1952,14 @@ class NativeNovaService {
               'payload': m.payload
             else if (m.attachments.isNotEmpty)
               'payload': <String, dynamic>{
-                'attachments': m.attachments.map((a) => a.toJson()).toList(growable: false),
+                'attachments': m.attachments
+                    .map((a) => a.toJson())
+                    .toList(growable: false),
               },
             if (m.attachments.isNotEmpty)
-              'attachments': m.attachments.map((a) => a.toJson()).toList(growable: false),
+              'attachments': m.attachments
+                  .map((a) => a.toJson())
+                  .toList(growable: false),
           },
         )
         .toList(growable: false);
@@ -1797,30 +2000,44 @@ class NativeNovaService {
     return senderUid > 0 ? 'user' : 'assistant';
   }
 
-  List<Map<String, dynamic>> _filterNovaMsgsForSelf(List<Map<String, dynamic>> rows) {
+  List<Map<String, dynamic>> _filterNovaMsgsForSelf(
+    List<Map<String, dynamic>> rows,
+  ) {
     final self = session.userId;
     if (self <= 0) return rows;
-    return rows.where((m) {
-      final kind = (m['kind'] ?? 'TEXT').toString().toUpperCase();
-      if (kind == 'AI_ASSISTANT' || kind == 'AI_TOOL_CALL') return true;
-      final role = (m['role'] ?? '').toString().toLowerCase();
-      if (role == 'assistant' || role == 'system') return true;
-      if (role == 'user') return true;
-      final sender = m['sender'] is Map ? m['sender'] as Map : const {};
-      final sid = (sender['userId'] as num?)?.toInt() ??
-          (m['senderUserId'] as num?)?.toInt() ??
-          (m['userId'] as num?)?.toInt() ??
-          0;
-      return sid <= 0 || sid == self;
-    }).toList(growable: false);
+    return rows
+        .where((m) {
+          final kind = (m['kind'] ?? 'TEXT').toString().toUpperCase();
+          if (kind == 'AI_ASSISTANT' || kind == 'AI_TOOL_CALL') return true;
+          final role = (m['role'] ?? '').toString().toLowerCase();
+          if (role == 'assistant' || role == 'system') return true;
+          if (role == 'user') return true;
+          final sender = m['sender'] is Map ? m['sender'] as Map : const {};
+          final sid =
+              (sender['userId'] as num?)?.toInt() ??
+              (m['senderUserId'] as num?)?.toInt() ??
+              (m['userId'] as num?)?.toInt() ??
+              0;
+          return sid <= 0 || sid == self;
+        })
+        .toList(growable: false);
   }
 
   NativeNovaMessage _mapRawMessage(Map<String, dynamic> raw) {
     final kind = (raw['kind'] ?? 'TEXT').toString().toUpperCase();
-    final sender = raw['sender'] is Map ? Map<String, dynamic>.from(raw['sender'] as Map) : <String, dynamic>{};
+    final sender = raw['sender'] is Map
+        ? Map<String, dynamic>.from(raw['sender'] as Map)
+        : <String, dynamic>{};
     final senderUid = _novaSenderUid(raw, sender);
-    final senderName = (sender['displayName'] ?? raw['senderDisplayName'] ?? '').toString().trim();
-    final role = _novaMessageRole(raw, kind: kind, senderUid: senderUid, senderName: senderName);
+    final senderName = (sender['displayName'] ?? raw['senderDisplayName'] ?? '')
+        .toString()
+        .trim();
+    final role = _novaMessageRole(
+      raw,
+      kind: kind,
+      senderUid: senderUid,
+      senderName: senderName,
+    );
     var text = (raw['bodyText'] ?? raw['content'] ?? '').toString();
     final payloadRaw = raw['payload'];
     final metadataRaw = raw['metadata'];
@@ -1844,18 +2061,24 @@ class NativeNovaService {
     }
     var durationSec = 0;
     if (effectiveKind == 'AUDIO' && payload != null) {
-      durationSec = (payload['durationSec'] as num?)?.toInt() ??
+      durationSec =
+          (payload['durationSec'] as num?)?.toInt() ??
           int.tryParse(text.replaceAll(RegExp(r'\D'), '')) ??
           1;
       if (text.isEmpty) text = "[语音] ${durationSec}s";
     }
-    if (effectiveKind == 'IMAGE' && (text.isEmpty || _isNovaImagePlaceholderText(text))) {
-      text = (payload?['fileName'] ??
-              (attachments.isNotEmpty ? attachments.first.fileName : null) ??
-              '图片')
-          .toString();
+    if (effectiveKind == 'IMAGE' &&
+        (text.isEmpty || _isNovaImagePlaceholderText(text))) {
+      text =
+          (payload?['fileName'] ??
+                  (attachments.isNotEmpty
+                      ? attachments.first.fileName
+                      : null) ??
+                  '图片')
+              .toString();
     }
-    if (effectiveKind == 'FILE' && text.isEmpty) text = (payload?['fileName'] ?? '文件').toString();
+    if (effectiveKind == 'FILE' && text.isEmpty)
+      text = (payload?['fileName'] ?? '文件').toString();
     if (role == 'assistant') {
       text = stripHermesProgressLines(text);
     }
@@ -1881,7 +2104,9 @@ class NativeNovaService {
       if (source is! List) continue;
       for (final row in source) {
         if (row is Map) {
-          out.add(NovaMessageAttachment.fromJson(Map<String, dynamic>.from(row)));
+          out.add(
+            NovaMessageAttachment.fromJson(Map<String, dynamic>.from(row)),
+          );
         }
       }
     }
@@ -1895,7 +2120,12 @@ class NativeNovaService {
     if (a.kind.toUpperCase() == 'IMAGE') return true;
     if (a.mimeType.startsWith('image/')) return true;
     final ext = a.fileName.split('.').last.toLowerCase();
-    return ext == 'jpg' || ext == 'jpeg' || ext == 'png' || ext == 'gif' || ext == 'webp' || ext == 'heic';
+    return ext == 'jpg' ||
+        ext == 'jpeg' ||
+        ext == 'png' ||
+        ext == 'gif' ||
+        ext == 'webp' ||
+        ext == 'heic';
   }
 
   bool _isNovaImagePlaceholderText(String text) {
@@ -1903,18 +2133,28 @@ class NativeNovaService {
     return t == '[图片]' || t.startsWith('[图片]');
   }
 
-  List<NovaMessageAttachment> _attachmentsFromPayload(Map<String, dynamic>? payload, String kind) {
+  List<NovaMessageAttachment> _attachmentsFromPayload(
+    Map<String, dynamic>? payload,
+    String kind,
+  ) {
     if (payload == null) return const <NovaMessageAttachment>[];
     final list = payload['attachments'];
     if (list is List) {
       return list
           .whereType<Map>()
-          .map((e) => NovaMessageAttachment.fromJson(Map<String, dynamic>.from(e)))
+          .map(
+            (e) => NovaMessageAttachment.fromJson(Map<String, dynamic>.from(e)),
+          )
           .toList();
     }
     if (kind == 'IMAGE' || kind == 'FILE' || kind == 'AUDIO') {
       if (payload['url'] != null || payload['objectKey'] != null) {
-        return [NovaMessageAttachment.fromJson(<String, dynamic>{...payload, 'kind': kind})];
+        return [
+          NovaMessageAttachment.fromJson(<String, dynamic>{
+            ...payload,
+            'kind': kind,
+          }),
+        ];
       }
     }
     return const <NovaMessageAttachment>[];
@@ -1925,10 +2165,16 @@ class NativeNovaService {
     return data[key] == true;
   }
 
-  Future<String> resolveMediaUrl(String source, {String bucket = 'im-attachments'}) async {
-    if (source.startsWith('http://') || source.startsWith('https://')) return source;
+  Future<String> resolveMediaUrl(
+    String source, {
+    String bucket = 'im-attachments',
+  }) async {
+    if (source.startsWith('http://') || source.startsWith('https://'))
+      return source;
     final resp = await _client.get(
-      _dunesUri('/storage/presigned-get?bucket=$bucket&objectKey=${Uri.encodeQueryComponent(source)}'),
+      _dunesUri(
+        '/storage/presigned-get?bucket=$bucket&objectKey=${Uri.encodeQueryComponent(source)}',
+      ),
       headers: _dunesHeaders,
     );
     if (resp.statusCode < 200 || resp.statusCode >= 300) {
@@ -1947,7 +2193,9 @@ class NativeNovaService {
     int size = 20,
     String before = '',
   }) async {
-    final beforeQ = before.trim().isEmpty ? '' : '&before=${Uri.encodeQueryComponent(before.trim())}';
+    final beforeQ = before.trim().isEmpty
+        ? ''
+        : '&before=${Uri.encodeQueryComponent(before.trim())}';
     var turns = await _fetchTurnRows(size, before: before.trim());
     if (turns.isEmpty && before.trim().isEmpty) {
       try {
@@ -1960,7 +2208,10 @@ class NativeNovaService {
         }
       } catch (_) {}
     }
-    final items = turns.map(_mapHistoryTurn).where((t) => t.conversationId > 0).toList();
+    final items = turns
+        .map(_mapHistoryTurn)
+        .where((t) => t.conversationId > 0)
+        .toList();
     return NovaHistoryPageResult(items: items, hasMore: turns.length >= size);
   }
 
@@ -1968,13 +2219,17 @@ class NativeNovaService {
     final preview = novaTurnPreview(raw);
     return NovaHistoryTurn(
       conversationId: _turnConvId(raw),
-      messageId: (raw['messageId'] as num?)?.toInt() ??
+      messageId:
+          (raw['messageId'] as num?)?.toInt() ??
           (raw['message_id'] as num?)?.toInt() ??
           0,
       title: novaTurnTitle(raw),
       preview: preview,
       lastMessageAt: parseNovaDateTime(
-        raw['lastMessageAt'] ?? raw['last_message_at'] ?? raw['createdAt'] ?? raw['created_at'],
+        raw['lastMessageAt'] ??
+            raw['last_message_at'] ??
+            raw['createdAt'] ??
+            raw['created_at'],
       ),
     );
   }
@@ -1986,7 +2241,8 @@ class NativeNovaService {
   }
 
   String get novaBizUserId {
-    final stored = (session.novaLocalStorage?['dunes_nova_biz_user_id'] ?? '').trim();
+    final stored = (session.novaLocalStorage?['dunes_nova_biz_user_id'] ?? '')
+        .trim();
     if (stored.isNotEmpty) return stored;
     return 'dune_${session.userId}';
   }
@@ -1994,12 +2250,15 @@ class NativeNovaService {
   String get novaProfileSessionId => 'profile-$novaBizUserId';
 
   String get asrModel =>
-      (session.novaLocalStorage?['dunes_nova_asr_model'] ?? NovaConfig.asrModel).trim();
+      (session.novaLocalStorage?['dunes_nova_asr_model'] ?? NovaConfig.asrModel)
+          .trim();
 
   String imagePartTypeForModel(String model) {
-    final stored = (session.novaLocalStorage?['dunes_nova_image_part_type'] ?? '').trim();
+    final stored =
+        (session.novaLocalStorage?['dunes_nova_image_part_type'] ?? '').trim();
     if (stored == 'image_url' || stored == 'input_image') return stored;
-    if (RegExp(r'gpt|nova_gpt', caseSensitive: false).hasMatch(model)) return 'image_url';
+    if (RegExp(r'gpt|nova_gpt', caseSensitive: false).hasMatch(model))
+      return 'image_url';
     // 云枢 completions 仅支持 image_url / input_image，不再发送 type=image。
     return 'image_url';
   }
@@ -2028,7 +2287,9 @@ class NativeNovaService {
     req.headers['Authorization'] = 'Bearer ${session.token}';
     req.fields['bucket'] = 'im-attachments';
     req.fields['conversationId'] = '$conversationId';
-    req.files.add(http.MultipartFile.fromBytes('file', bytes, filename: fileName));
+    req.files.add(
+      http.MultipartFile.fromBytes('file', bytes, filename: fileName),
+    );
     onProgress?.call(40);
     final streamed = await req.send();
     final bodyText = await streamed.stream.bytesToString();
@@ -2065,15 +2326,20 @@ class NativeNovaService {
   }
 
   Future<String> transcribeAudio(Uint8List bytes, String fileName) async {
-    final req = http.MultipartRequest('POST', Uri.parse('$novaBase/v1/audio/transcriptions'));
+    final req = http.MultipartRequest(
+      'POST',
+      Uri.parse('$novaBase/v1/audio/transcriptions'),
+    );
     req.headers.addAll(novaHeaders());
     req.fields['model'] = asrModel;
-    req.files.add(http.MultipartFile.fromBytes(
-      'file',
-      bytes,
-      filename: fileName,
-      contentType: _audioMediaType(fileName),
-    ));
+    req.files.add(
+      http.MultipartFile.fromBytes(
+        'file',
+        bytes,
+        filename: fileName,
+        contentType: _audioMediaType(fileName),
+      ),
+    );
     final streamed = await _client.send(req);
     final bodyText = await streamed.stream.bytesToString();
     if (streamed.statusCode < 200 || streamed.statusCode >= 300) {
@@ -2086,7 +2352,10 @@ class NativeNovaService {
       body['transcript']?.toString().trim(),
       body['result']?.toString().trim(),
       if (data is String) data.trim(),
-      if (data is Map) (data['text'] ?? data['transcript'] ?? data['result'])?.toString().trim(),
+      if (data is Map)
+        (data['text'] ?? data['transcript'] ?? data['result'])
+            ?.toString()
+            .trim(),
     ];
     for (final c in candidates) {
       if (c != null && c.isNotEmpty) return c;
@@ -2108,10 +2377,14 @@ class NativeNovaService {
     final imagePartType = imagePartTypeForModel(model ?? selectedModel);
     final parts = <Map<String, dynamic>>[];
     final trimmed = text.trim();
-    if (trimmed.isNotEmpty) parts.add(<String, dynamic>{'type': 'text', 'text': trimmed});
+    if (trimmed.isNotEmpty)
+      parts.add(<String, dynamic>{'type': 'text', 'text': trimmed});
     for (final a in attachments) {
       if (a.isImage) {
-        final normalized = await normalizeImageForVision(a.bytes, fileName: a.fileName);
+        final normalized = await normalizeImageForVision(
+          a.bytes,
+          fileName: a.fileName,
+        );
         final b64 = base64Encode(normalized.bytes);
         final dataUrl = 'data:${normalized.mimeType};base64,$b64';
         // 优先用已上传的公网/签名 URL（对齐 WebView resolveMultimodalFile），否则 data URL。
@@ -2127,7 +2400,8 @@ class NativeNovaService {
       }
     }
     if (parts.isEmpty) return '';
-    if (parts.length == 1 && parts.first['type'] == 'text') return parts.first['text'];
+    if (parts.length == 1 && parts.first['type'] == 'text')
+      return parts.first['text'];
     return parts;
   }
 
@@ -2146,9 +2420,11 @@ class NativeNovaService {
     final out = <Map<String, dynamic>>[];
     final sys = _buildNovaUserSystemMessage();
     if (sys != null) out.add(sys);
-    final hasLatest = latestContent != null &&
+    final hasLatest =
+        latestContent != null &&
         !(latestContent is String && latestContent.toString().trim().isEmpty);
-    if (hasLatest) out.add(<String, dynamic>{'role': 'user', 'content': latestContent});
+    if (hasLatest)
+      out.add(<String, dynamic>{'role': 'user', 'content': latestContent});
     return out;
   }
 
@@ -2157,7 +2433,8 @@ class NativeNovaService {
     final uid = session.userId > 0 ? '${session.userId}' : '';
     final phone = session.phone.trim();
     final biz = novaBizUserId;
-    if (name.isEmpty && uid.isEmpty && phone.isEmpty && biz.isEmpty) return null;
+    if (name.isEmpty && uid.isEmpty && phone.isEmpty && biz.isEmpty)
+      return null;
     final lines = <String>[
       '你是沙丘 APP 内置的企业助手「NOVA」。',
       '以下「当前登录用户」信息来自沙丘账号系统，回答身份/称呼/手机号等问题时必须以此为准，不要臆造或使用其它昵称、历史测试名。',
@@ -2170,8 +2447,12 @@ class NativeNovaService {
     return <String, dynamic>{'role': 'system', 'content': lines.join('\n')};
   }
 
-  String _extractUserPromptText(dynamic userContent, {required String displayText}) {
-    if (userContent is String && userContent.trim().isNotEmpty) return userContent.trim();
+  String _extractUserPromptText(
+    dynamic userContent, {
+    required String displayText,
+  }) {
+    if (userContent is String && userContent.trim().isNotEmpty)
+      return userContent.trim();
     if (displayText.trim().isNotEmpty) return displayText.trim();
     if (userContent is List) {
       final parts = <String>[];
@@ -2204,8 +2485,12 @@ class NativeNovaService {
       throw Exception('NOVA账号尚未就绪，请重新登录后再试');
     }
     var activeConvId = conversationId;
-    final contentLabel = displayText ?? (userContent is String ? userContent : '[附件消息]');
-    final userPrompt = _extractUserPromptText(userContent, displayText: contentLabel.toString());
+    final contentLabel =
+        displayText ?? (userContent is String ? userContent : '[附件消息]');
+    final userPrompt = _extractUserPromptText(
+      userContent,
+      displayText: contentLabel.toString(),
+    );
     userStoppedStream = false;
     if (!skipUserPersist) {
       final fallbackId = userMessageId ?? DateTime.now().millisecondsSinceEpoch;
@@ -2221,7 +2506,9 @@ class NativeNovaService {
     _streamClient = http.Client();
     final streamClient = _streamClient!;
 
-    final model = selectedModel.isEmpty ? NovaConfig.defaultChatModel : selectedModel;
+    final model = selectedModel.isEmpty
+        ? NovaConfig.defaultChatModel
+        : selectedModel;
 
     var replyBuffer = '';
     var thinkBuffer = '';
@@ -2236,28 +2523,34 @@ class NativeNovaService {
       if (event.think.isNotEmpty) {
         hadOutput = true;
         thinkBuffer += event.think;
-        onUpdate(NovaStreamUpdate(
-          replyText: replyBuffer,
-          thinkText: thinkBuffer.trim(),
-          thinkStatus: event.status.isNotEmpty ? event.status : '思考中…',
-        ));
+        onUpdate(
+          NovaStreamUpdate(
+            replyText: replyBuffer,
+            thinkText: thinkBuffer.trim(),
+            thinkStatus: event.status.isNotEmpty ? event.status : '思考中…',
+          ),
+        );
       }
       if (event.text.isNotEmpty) {
         hadOutput = true;
         if (isHermesThinkLine(event.text)) {
           thinkBuffer += event.text;
-          onUpdate(NovaStreamUpdate(
-            replyText: replyBuffer,
-            thinkText: thinkBuffer.trim(),
-            thinkStatus: event.status.isNotEmpty ? event.status : '思考中…',
-          ));
+          onUpdate(
+            NovaStreamUpdate(
+              replyText: replyBuffer,
+              thinkText: thinkBuffer.trim(),
+              thinkStatus: event.status.isNotEmpty ? event.status : '思考中…',
+            ),
+          );
         } else {
           replyBuffer += event.text;
-          onUpdate(NovaStreamUpdate(
-            replyText: replyBuffer,
-            thinkText: thinkBuffer.trim(),
-            thinkStatus: event.status,
-          ));
+          onUpdate(
+            NovaStreamUpdate(
+              replyText: replyBuffer,
+              thinkText: thinkBuffer.trim(),
+              thinkStatus: event.status,
+            ),
+          );
         }
       }
     }
@@ -2318,7 +2611,11 @@ class NativeNovaService {
       }
 
       if (userStoppedStream) {
-        final partial = novaFinalReplyText(replyBuffer, thinkBuffer, finalPass: true);
+        final partial = novaFinalReplyText(
+          replyBuffer,
+          thinkBuffer,
+          finalPass: true,
+        );
         if (partial.isNotEmpty &&
             partial != '已停止生成' &&
             partial.trim() != userPrompt.trim()) {
@@ -2341,8 +2638,13 @@ class NativeNovaService {
       }
 
       final finalParts = splitNovaStreamText(replyBuffer, finalPass: true);
-      var reply = novaFinalReplyText(finalParts.reply, thinkBuffer, finalPass: true);
-      if (reply.isEmpty && thinkBuffer.trim().isNotEmpty) reply = thinkBuffer.trim();
+      var reply = novaFinalReplyText(
+        finalParts.reply,
+        thinkBuffer,
+        finalPass: true,
+      );
+      if (reply.isEmpty && thinkBuffer.trim().isNotEmpty)
+        reply = thinkBuffer.trim();
       if (!hadOutput || reply.isEmpty) throw Exception('NOVA未返回正文，请重试');
       if (reply.trim() == userPrompt.trim()) {
         throw Exception('NOVA未返回正文，请重试');
@@ -2391,7 +2693,12 @@ class NativeNovaService {
     if (novaApiKey.isEmpty) {
       throw Exception('NOVA账号尚未就绪，请重新登录后再试');
     }
-    await _saveLocalMessage(conversationId, role: 'user', content: text, kind: 'TEXT');
+    await _saveLocalMessage(
+      conversationId,
+      role: 'user',
+      content: text,
+      kind: 'TEXT',
+    );
     final requestMessages = buildNovaChatMessages(text);
     final headers = novaHeaders(<String, String>{
       'Content-Type': 'application/json',
@@ -2399,7 +2706,9 @@ class NativeNovaService {
     final sessionId = novaProfileSessionId.trim();
     if (sessionId.isNotEmpty) headers['X-Nova-Chat-Session-Id'] = sessionId;
     final requestBody = <String, dynamic>{
-      'model': selectedModel.isEmpty ? NovaConfig.defaultChatModel : selectedModel,
+      'model': selectedModel.isEmpty
+          ? NovaConfig.defaultChatModel
+          : selectedModel,
       'stream': false,
       'messages': requestMessages,
     };
@@ -2423,7 +2732,12 @@ class NativeNovaService {
         : const <String, dynamic>{};
     final reply = _extractAssistantText(message).trim();
     if (reply.isEmpty) throw Exception('NOVA未返回正文，请重试');
-    await _saveLocalMessage(conversationId, role: 'assistant', content: reply, kind: 'AI_ASSISTANT');
+    await _saveLocalMessage(
+      conversationId,
+      role: 'assistant',
+      content: reply,
+      kind: 'AI_ASSISTANT',
+    );
     return reply;
   }
 
@@ -2443,7 +2757,9 @@ class NativeNovaService {
     return '';
   }
 
-  Future<void> _clearGeneratingMarkersForConversation(int conversationId) async {
+  Future<void> _clearGeneratingMarkersForConversation(
+    int conversationId,
+  ) async {
     final uid = session.userId;
     if (uid <= 0 || conversationId <= 0) return;
     await clearNovaGeneratingState(userId: uid, conversationId: conversationId);
@@ -2471,7 +2787,8 @@ class NativeNovaService {
       body['id'] = messageId;
       body['messageId'] = messageId;
     }
-    final at = createdAt ??
+    final at =
+        createdAt ??
         ((messageId != null && messageId > 0)
             ? DateTime.fromMillisecondsSinceEpoch(messageId)
             : null);
@@ -2494,8 +2811,12 @@ class NativeNovaService {
     return _postLocalMessage(newId, body);
   }
 
-  Future<bool> _postLocalMessage(int conversationId, Map<String, dynamic> body) async {
-    if (conversationId <= 0 || await isImInboxPlaceholderConvId(conversationId)) return false;
+  Future<bool> _postLocalMessage(
+    int conversationId,
+    Map<String, dynamic> body,
+  ) async {
+    if (conversationId <= 0 || await isImInboxPlaceholderConvId(conversationId))
+      return false;
     try {
       final resp = await _client.post(
         _dunesUri('/ai/conversations/$conversationId/messages/local'),
@@ -2510,7 +2831,10 @@ class NativeNovaService {
         );
       }
     } catch (e) {
-      if (kDebugMode) debugPrint('[NativeNova] messages/local error conv=$conversationId: $e');
+      if (kDebugMode)
+        debugPrint(
+          '[NativeNova] messages/local error conv=$conversationId: $e',
+        );
     }
     return false;
   }
@@ -2538,7 +2862,9 @@ class NativeNovaService {
   String _parseNovaHttpError(int status, String bodyText) {
     try {
       final body = _decode(bodyText);
-      final msg = (body['error']?['message'] ?? body['message'] ?? '').toString().trim();
+      final msg = (body['error']?['message'] ?? body['message'] ?? '')
+          .toString()
+          .trim();
       if (msg.isNotEmpty) return msg;
     } catch (_) {}
     if (status == 503) return 'NOVA服务暂不可用';
@@ -2554,12 +2880,15 @@ class NativeNovaService {
 
   List<Map<String, dynamic>> _extractTurns(Map<String, dynamic> body) {
     final data = body['data'];
-    if (data is List) return data.whereType<Map<String, dynamic>>().toList(growable: false);
+    if (data is List)
+      return data.whereType<Map<String, dynamic>>().toList(growable: false);
     if (data is Map<String, dynamic>) {
       final items = data['items'];
-      if (items is List) return items.whereType<Map<String, dynamic>>().toList(growable: false);
+      if (items is List)
+        return items.whereType<Map<String, dynamic>>().toList(growable: false);
       final turns = data['turns'];
-      if (turns is List) return turns.whereType<Map<String, dynamic>>().toList(growable: false);
+      if (turns is List)
+        return turns.whereType<Map<String, dynamic>>().toList(growable: false);
     }
     return const <Map<String, dynamic>>[];
   }

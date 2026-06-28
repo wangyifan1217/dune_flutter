@@ -13,10 +13,12 @@ class NativeNotificationsPage extends StatefulWidget {
     super.key,
     required this.session,
     required this.onBack,
+    this.onNotificationsRead,
   });
 
   final AuthSession session;
   final VoidCallback onBack;
+  final VoidCallback? onNotificationsRead;
 
   @override
   State<NativeNotificationsPage> createState() => _NativeNotificationsPageState();
@@ -62,6 +64,8 @@ class _NativeNotificationsPageState extends State<NativeNotificationsPage> {
   Future<void> _markAllRead() async {
     try {
       await _service.markAllRead();
+      // 通知 host 刷新角标并清理残留通知，避免桌面角标按通知条数虚高。
+      widget.onNotificationsRead?.call();
       await _load();
     } catch (e) {
       if (!mounted) return;

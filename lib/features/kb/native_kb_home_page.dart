@@ -100,7 +100,9 @@ class _NativeKbHomePageState extends State<NativeKbHomePage> {
       setState(() => _syncStatus = '同步完成，已更新知识库状态');
     } catch (e) {
       if (!mounted) return;
-      setState(() => _syncStatus = friendlyErrorText(e, fallback: '同步失败，请稍后重试'));
+      setState(
+        () => _syncStatus = friendlyErrorText(e, fallback: '同步失败，请稍后重试'),
+      );
     } finally {
       if (mounted) setState(() => _syncing = false);
     }
@@ -118,11 +120,20 @@ class _NativeKbHomePageState extends State<NativeKbHomePage> {
         extensions: <String>['pdf', 'doc', 'docx', 'xlsx', 'xls', 'md'],
       ),
     ];
-    final file = await openFile(acceptedTypeGroups: types);
+    final file = await _openDocumentFileWithFallback(types);
     if (file == null) return;
+    final ext = file.name.split('.').last.toLowerCase().trim();
+    const allowed = <String>{'pdf', 'doc', 'docx', 'xlsx', 'xls', 'md'};
+    if (!allowed.contains(ext)) {
+      _toast('仅支持 PDF / Word / Excel / Markdown', error: true);
+      return;
+    }
     setState(() => _uploading = true);
     try {
-      await _service.uploadDocument(bytes: await file.readAsBytes(), fileName: file.name);
+      await _service.uploadDocument(
+        bytes: await file.readAsBytes(),
+        fileName: file.name,
+      );
       await _load();
       if (!mounted) return;
       _toast('上传成功，正在解析入库');
@@ -134,6 +145,15 @@ class _NativeKbHomePageState extends State<NativeKbHomePage> {
     }
   }
 
+  Future<XFile?> _openDocumentFileWithFallback(List<XTypeGroup> types) async {
+    try {
+      return await openFile(acceptedTypeGroups: types);
+    } catch (_) {
+      // iOS 某些系统版本在带类型过滤时不会弹起选择器，降级后再尝试一次。
+      return openFile();
+    }
+  }
+
   Future<void> _deleteDoc(NativeKbDocument doc) async {
     final ok = await showDialog<bool>(
       context: context,
@@ -141,8 +161,14 @@ class _NativeKbHomePageState extends State<NativeKbHomePage> {
         title: const Text('删除文档'),
         content: Text('确定删除「${doc.title}」？将从知识库中移除。'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('取消')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('删除')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('删除'),
+          ),
         ],
       ),
     );
@@ -158,7 +184,9 @@ class _NativeKbHomePageState extends State<NativeKbHomePage> {
 
   Future<void> _enterChat() async {
     final summary = _summary;
-    if (summary != null && !summary.ready && summary.documents.every((d) => !d.indexed)) {
+    if (summary != null &&
+        !summary.ready &&
+        summary.documents.every((d) => !d.indexed)) {
       _toast('请先上传文档并等待解析完成');
       return;
     }
@@ -184,37 +212,44 @@ class _NativeKbHomePageState extends State<NativeKbHomePage> {
         child: _loading
             ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
             : _error != null
-                ? _buildError()
-                : RefreshIndicator(
-                    onRefresh: _load,
-                    child: ListView(
-                      padding: EdgeInsets.zero,
-                      children: [
-                        _buildHero(),
-                        _buildSyncRow(),
-                        Padding(
-                          padding: const EdgeInsets.fromLTRB(12, 10, 12, 20),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              _sectionLabel('上传', '知识库文档'),
-                              const SizedBox(height: 8),
-                              _buildUploadPanel(),
-                              const SizedBox(height: 14),
-                              _sectionLabel('分类', '知识库目录',
-                                  count: '${_summary?.categoryCount ?? 0} 个'),
-                              const SizedBox(height: 8),
-                              _buildCategoryGrid(),
-                              const SizedBox(height: 14),
-                              _sectionLabel('我的', '文档', count: '${_summary?.documentCount ?? 0} 篇'),
-                              const SizedBox(height: 8),
-                              _buildDocList(),
-                            ],
+            ? _buildError()
+            : RefreshIndicator(
+                onRefresh: _load,
+                child: ListView(
+                  padding: EdgeInsets.zero,
+                  children: [
+                    _buildHero(),
+                    _buildSyncRow(),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(12, 10, 12, 20),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          _sectionLabel('上传', '知识库文档'),
+                          const SizedBox(height: 8),
+                          _buildUploadPanel(),
+                          const SizedBox(height: 14),
+                          _sectionLabel(
+                            '分类',
+                            '知识库目录',
+                            count: '${_summary?.categoryCount ?? 0} 个',
                           ),
-                        ),
-                      ],
+                          const SizedBox(height: 8),
+                          _buildCategoryGrid(),
+                          const SizedBox(height: 14),
+                          _sectionLabel(
+                            '我的',
+                            '文档',
+                            count: '${_summary?.documentCount ?? 0} 篇',
+                          ),
+                          const SizedBox(height: 8),
+                          _buildDocList(),
+                        ],
+                      ),
                     ),
-                  ),
+                  ],
+                ),
+              ),
       ),
     );
   }
@@ -228,7 +263,11 @@ class _NativeKbHomePageState extends State<NativeKbHomePage> {
           children: [
             const Text('知识库加载失败', style: TextStyle(fontSize: 15)),
             const SizedBox(height: 8),
-            Text(_error!, textAlign: TextAlign.center, style: const TextStyle(fontSize: 12, color: DunesColors.text3)),
+            Text(
+              _error!,
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 12, color: DunesColors.text3),
+            ),
             const SizedBox(height: 12),
             OutlinedButton(onPressed: _load, child: const Text('重试')),
           ],
@@ -265,19 +304,37 @@ class _NativeKbHomePageState extends State<NativeKbHomePage> {
           ),
           const Text(
             'DUNES KNOWLEDGE · 企业知识库',
-            style: TextStyle(color: Colors.white70, fontSize: 9, letterSpacing: 0.6, fontWeight: FontWeight.w600),
+            style: TextStyle(
+              color: Colors.white70,
+              fontSize: 9,
+              letterSpacing: 0.6,
+              fontWeight: FontWeight.w600,
+            ),
           ),
-          const Text('知识库', style: TextStyle(color: Colors.white, fontSize: 21, fontWeight: FontWeight.w600)),
+          const Text(
+            '知识库',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 21,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
           const SizedBox(height: 5),
           const Text(
             '公司制度 / 流程 SOP / 合同模板 / 法务条款 / 财务规则 — 一处查全',
-            style: TextStyle(color: Colors.white70, fontSize: 10.5, height: 1.45),
+            style: TextStyle(
+              color: Colors.white70,
+              fontSize: 10.5,
+              height: 1.45,
+            ),
           ),
           const SizedBox(height: 11),
           Container(
             padding: const EdgeInsets.only(top: 10),
             decoration: BoxDecoration(
-              border: Border(top: BorderSide(color: Colors.white.withValues(alpha: 0.13))),
+              border: Border(
+                top: BorderSide(color: Colors.white.withValues(alpha: 0.13)),
+              ),
             ),
             child: Row(
               children: [
@@ -293,7 +350,10 @@ class _NativeKbHomePageState extends State<NativeKbHomePage> {
             const SizedBox(height: 8),
             Text(
               '我的知识库（$phone）',
-              style: TextStyle(color: Colors.white.withValues(alpha: 0.65), fontSize: 10),
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.65),
+                fontSize: 10,
+              ),
             ),
           ],
         ],
@@ -305,8 +365,22 @@ class _NativeKbHomePageState extends State<NativeKbHomePage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(value, style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600)),
-        Text(label.toUpperCase(), style: TextStyle(color: Colors.white.withValues(alpha: 0.55), fontSize: 8, letterSpacing: 0.5)),
+        Text(
+          value,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        Text(
+          label.toUpperCase(),
+          style: TextStyle(
+            color: Colors.white.withValues(alpha: 0.55),
+            fontSize: 8,
+            letterSpacing: 0.5,
+          ),
+        ),
       ],
     );
   }
@@ -319,13 +393,20 @@ class _NativeKbHomePageState extends State<NativeKbHomePage> {
           OutlinedButton.icon(
             onPressed: _syncing ? null : _sync,
             icon: _syncing
-                ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
+                ? const SizedBox(
+                    width: 14,
+                    height: 14,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
                 : const Icon(Icons.refresh, size: 16),
             label: const Text('同步 RAGFlow', style: TextStyle(fontSize: 11)),
           ),
           const SizedBox(width: 8),
           Expanded(
-            child: Text(_syncStatus, style: const TextStyle(fontSize: 10, color: DunesColors.text3)),
+            child: Text(
+              _syncStatus,
+              style: const TextStyle(fontSize: 10, color: DunesColors.text3),
+            ),
           ),
         ],
       ),
@@ -335,10 +416,30 @@ class _NativeKbHomePageState extends State<NativeKbHomePage> {
   Widget _sectionLabel(String accent, String title, {String? count}) {
     return Row(
       children: [
-        Text(accent, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: DunesColors.accentDeep)),
-        Text(' · $title', style: const TextStyle(fontSize: 11, color: DunesColors.text2)),
-        const Expanded(child: Divider(indent: 8, endIndent: 8, color: DunesColors.borderSoft)),
-        if (count != null) Text(count, style: const TextStyle(fontSize: 10, color: DunesColors.text3)),
+        Text(
+          accent,
+          style: const TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+            color: DunesColors.accentDeep,
+          ),
+        ),
+        Text(
+          ' · $title',
+          style: const TextStyle(fontSize: 11, color: DunesColors.text2),
+        ),
+        const Expanded(
+          child: Divider(
+            indent: 8,
+            endIndent: 8,
+            color: DunesColors.borderSoft,
+          ),
+        ),
+        if (count != null)
+          Text(
+            count,
+            style: const TextStyle(fontSize: 10, color: DunesColors.text3),
+          ),
       ],
     );
   }
@@ -367,13 +468,25 @@ class _NativeKbHomePageState extends State<NativeKbHomePage> {
               ),
               child: Column(
                 children: [
-                  Icon(Icons.upload_file, color: ready ? DunesColors.accentDeep : DunesColors.text3, size: 28),
+                  Icon(
+                    Icons.upload_file,
+                    color: ready ? DunesColors.accentDeep : DunesColors.text3,
+                    size: 28,
+                  ),
                   const SizedBox(height: 6),
-                  const Text('点击选择 PDF / Word / Excel / Markdown', style: TextStyle(fontSize: 11.5)),
+                  const Text(
+                    '点击选择 PDF / Word / Excel / Markdown',
+                    style: TextStyle(fontSize: 11.5),
+                  ),
                   const SizedBox(height: 4),
                   Text(
-                    ready ? '支持 PDF / Word / Excel / Markdown · 上传后自动解析' : 'Nova 知识库未就绪，请稍后重试',
-                    style: const TextStyle(fontSize: 10, color: DunesColors.text3),
+                    ready
+                        ? '支持 PDF / Word / Excel / Markdown · 上传后自动解析'
+                        : 'Nova 知识库未就绪，请稍后重试',
+                    style: const TextStyle(
+                      fontSize: 10,
+                      color: DunesColors.text3,
+                    ),
                   ),
                 ],
               ),
@@ -383,7 +496,10 @@ class _NativeKbHomePageState extends State<NativeKbHomePage> {
             const SizedBox(height: 10),
             const LinearProgressIndicator(minHeight: 2),
             const SizedBox(height: 6),
-            const Text('正在上传并解析…', style: TextStyle(fontSize: 10, color: DunesColors.text3)),
+            const Text(
+              '正在上传并解析…',
+              style: TextStyle(fontSize: 10, color: DunesColors.text3),
+            ),
           ],
         ],
       ),
@@ -409,7 +525,10 @@ class _NativeKbHomePageState extends State<NativeKbHomePage> {
               color: DunesColors.accentSoft,
               borderRadius: BorderRadius.circular(10),
             ),
-            child: const Icon(Icons.folder_outlined, color: DunesColors.accentDeep),
+            child: const Icon(
+              Icons.folder_outlined,
+              color: DunesColors.accentDeep,
+            ),
           ),
           const SizedBox(width: 10),
           Expanded(
@@ -418,9 +537,18 @@ class _NativeKbHomePageState extends State<NativeKbHomePage> {
               children: [
                 Text(
                   '我的知识库${phone.isNotEmpty ? '（$phone）' : ''}',
-                  style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w500),
+                  style: const TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w500,
+                  ),
                 ),
-                Text('$count 篇', style: const TextStyle(fontSize: 10, color: DunesColors.text3)),
+                Text(
+                  '$count 篇',
+                  style: const TextStyle(
+                    fontSize: 10,
+                    color: DunesColors.text3,
+                  ),
+                ),
               ],
             ),
           ),
@@ -448,7 +576,12 @@ class _NativeKbHomePageState extends State<NativeKbHomePage> {
           children: [
             Icon(Icons.info_outline, size: 16, color: DunesColors.text3),
             SizedBox(width: 8),
-            Expanded(child: Text('暂无文档，请先上传', style: TextStyle(fontSize: 11, color: DunesColors.text3))),
+            Expanded(
+              child: Text(
+                '暂无文档，请先上传',
+                style: TextStyle(fontSize: 11, color: DunesColors.text3),
+              ),
+            ),
           ],
         ),
       );
@@ -474,7 +607,11 @@ class _NativeKbHomePageState extends State<NativeKbHomePage> {
                     color: const Color(0xFFF0EEE8),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: const Icon(Icons.description_outlined, size: 18, color: DunesColors.text2),
+                  child: const Icon(
+                    Icons.description_outlined,
+                    size: 18,
+                    color: DunesColors.text2,
+                  ),
                 ),
                 const SizedBox(width: 10),
                 Expanded(
@@ -485,24 +622,42 @@ class _NativeKbHomePageState extends State<NativeKbHomePage> {
                         doc.title,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w500),
+                        style: const TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w500,
+                        ),
                       ),
                       const SizedBox(height: 3),
                       Row(
                         children: [
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 5,
+                              vertical: 1,
+                            ),
                             decoration: BoxDecoration(
                               color: const Color(0xFFF0EEE8),
                               borderRadius: BorderRadius.circular(4),
                             ),
                             child: Text(
-                              (doc.fileExtension.isEmpty ? 'DOC' : doc.fileExtension).toUpperCase(),
-                              style: const TextStyle(fontSize: 8.5, fontWeight: FontWeight.w600),
+                              (doc.fileExtension.isEmpty
+                                      ? 'DOC'
+                                      : doc.fileExtension)
+                                  .toUpperCase(),
+                              style: const TextStyle(
+                                fontSize: 8.5,
+                                fontWeight: FontWeight.w600,
+                              ),
                             ),
                           ),
                           const SizedBox(width: 6),
-                          Text(doc.statusLabel, style: const TextStyle(fontSize: 10, color: DunesColors.text3)),
+                          Text(
+                            doc.statusLabel,
+                            style: const TextStyle(
+                              fontSize: 10,
+                              color: DunesColors.text3,
+                            ),
+                          ),
                         ],
                       ),
                     ],
@@ -517,7 +672,11 @@ class _NativeKbHomePageState extends State<NativeKbHomePage> {
                     child: const SizedBox(
                       width: 30,
                       height: 30,
-                      child: Icon(Icons.delete_outline, size: 16, color: DunesColors.coral),
+                      child: Icon(
+                        Icons.delete_outline,
+                        size: 16,
+                        color: DunesColors.coral,
+                      ),
                     ),
                   ),
                 ),

@@ -19,17 +19,6 @@ $ErrorActionPreference = "Stop"
 # Key: ASCII-only pub cache path, avoids native build failures on non-ASCII paths
 $env:PUB_CACHE = "D:\pubcache"
 
-# jpush_flutter 3.4.6 still references jcenter(), which Gradle 9+ removed.
-$jpushGradle = Join-Path $env:PUB_CACHE "hosted\pub.dev\jpush_flutter-3.4.6\android\build.gradle"
-if (Test-Path $jpushGradle) {
-  $content = Get-Content $jpushGradle -Raw
-  if ($content -match 'jcenter\(\)') {
-    $content = $content -replace '\s*jcenter\(\)\r?\n', ''
-    Set-Content -Path $jpushGradle -Value $content -NoNewline
-    Write-Host "Patched jpush_flutter build.gradle (removed jcenter)" -ForegroundColor DarkGray
-  }
-}
-
 # Move to the script dir (Flutter project root, contains pubspec.yaml)
 Set-Location -Path $PSScriptRoot
 
@@ -53,7 +42,28 @@ if (-not $Device) {
 }
 
 $mode = if ($Release) { "--release" } else { "--debug" }
+$dartDefines = @()
+$localProps = Join-Path $PSScriptRoot "android\local.properties"
+if (Test-Path $localProps) {
+  foreach ($line in Get-Content $localProps) {
+    if ($line -match '^\s*tpns\.accessId=(.+)$') {
+      $dartDefines += "--dart-define=TPNS_ACCESS_ID=$($matches[1].Trim())"
+    }
+    if ($line -match '^\s*tpns\.accessKey=(.+)$') {
+      $dartDefines += "--dart-define=TPNS_ACCESS_KEY=$($matches[1].Trim())"
+    }
+    if ($line -match '^\s*tpns\.miAppId=(.+)$') {
+      $dartDefines += "--dart-define=TPNS_MI_APP_ID=$($matches[1].Trim())"
+    }
+    if ($line -match '^\s*tpns\.miAppKey=(.+)$') {
+      $dartDefines += "--dart-define=TPNS_MI_APP_KEY=$($matches[1].Trim())"
+    }
+    if ($line -match '^\s*tpns\.cluster=(.+)$') {
+      $dartDefines += "--dart-define=TPNS_CLUSTER=$($matches[1].Trim())"
+    }
+  }
+}
 Write-Host "PUB_CACHE = $env:PUB_CACHE" -ForegroundColor DarkGray
 Write-Host "Launching: device=$Device mode=$mode" -ForegroundColor Cyan
 
-flutter run -d $Device $mode
+flutter run -d $Device $mode @dartDefines

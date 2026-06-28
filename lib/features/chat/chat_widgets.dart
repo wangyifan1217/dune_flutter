@@ -132,13 +132,21 @@ class ChatQuickActions extends StatelessWidget {
       _QaCell(icon: Icons.photo_camera_outlined, label: '拍照', onTap: onCamera),
       _QaCell(icon: Icons.photo_library_outlined, label: '相册', onTap: onAlbum),
       _QaCell(icon: Icons.attach_file, label: '文件', onTap: onFile),
-      _QaCell(icon: Icons.assignment_outlined, label: '转发审批', onTap: onApproval),
+      _QaCell(
+        icon: Icons.assignment_outlined,
+        label: '转发审批',
+        onTap: onApproval,
+      ),
       if (showAt && onAt != null)
         _QaCell(icon: Icons.alternate_email, label: '@', onTap: onAt!),
       if (showVideo && onVideo != null)
         _QaCell(icon: Icons.videocam_outlined, label: '视频', onTap: onVideo!)
       else if (onEmoji != null)
-        _QaCell(icon: Icons.emoji_emotions_outlined, label: '表情', onTap: onEmoji!),
+        _QaCell(
+          icon: Icons.emoji_emotions_outlined,
+          label: '表情',
+          onTap: onEmoji!,
+        ),
     ];
     return Container(
       padding: const EdgeInsets.fromLTRB(14, 6, 14, 4),
@@ -163,7 +171,10 @@ class ChatQuickActions extends StatelessWidget {
                         const SizedBox(height: 3),
                         Text(
                           c.label,
-                          style: DunesTypography.sans(fontSize: 9.5, color: DunesColors.text3),
+                          style: DunesTypography.sans(
+                            fontSize: 9.5,
+                            color: DunesColors.text3,
+                          ),
                         ),
                       ],
                     ),
@@ -232,7 +243,12 @@ class ChatInputBar extends StatelessWidget {
     // 有安全区时用安全区作为下内边距（刚好托起按钮、不额外叠加），安卓为 0 时回退 9px。
     final bottomInset = MediaQuery.paddingOf(context).bottom;
     return Container(
-      padding: EdgeInsets.fromLTRB(12, 9, 12, bottomInset > 0 ? bottomInset : 9),
+      padding: EdgeInsets.fromLTRB(
+        12,
+        9,
+        12,
+        bottomInset > 0 ? bottomInset : 9,
+      ),
       decoration: const BoxDecoration(
         color: DunesColors.bgApp,
         border: Border(top: BorderSide(color: DunesColors.borderSoft)),
@@ -248,24 +264,32 @@ class ChatInputBar extends StatelessWidget {
           Expanded(
             child: voiceMode
                 ? GestureDetector(
-                    onLongPressStart: interactionLocked ? null : onVoiceHoldStart,
-                    onLongPressMoveUpdate: interactionLocked ? null : onVoiceHoldMove,
+                    onLongPressStart: interactionLocked
+                        ? null
+                        : onVoiceHoldStart,
+                    onLongPressMoveUpdate: interactionLocked
+                        ? null
+                        : onVoiceHoldMove,
                     onLongPressEnd: interactionLocked ? null : onVoiceHoldEnd,
-                    onLongPressCancel: interactionLocked ? null : onVoiceHoldCancel,
+                    onLongPressCancel: interactionLocked
+                        ? null
+                        : onVoiceHoldCancel,
                     child: Container(
                       height: 40,
                       alignment: Alignment.center,
                       decoration: BoxDecoration(
                         color: recording
-                            ? (recordWillCancel ? DunesColors.coral : const Color(0xFF7E64BD))
+                            ? (recordWillCancel
+                                  ? DunesColors.coral
+                                  : const Color(0xFF7E64BD))
                             : DunesColors.bgSoft,
                         borderRadius: BorderRadius.circular(18),
                       ),
                       child: Text(
                         recording
                             ? (recordWillCancel
-                                ? '松开取消'
-                                : '松开发送 ${(recordDurationMs / 1000).toStringAsFixed(1)}s')
+                                  ? '松开取消'
+                                  : '松开发送 ${(recordDurationMs / 1000).toStringAsFixed(1)}s')
                             : '按住 说话',
                         style: DunesTypography.sans(
                           fontSize: 13.5,
@@ -286,17 +310,26 @@ class ChatInputBar extends StatelessWidget {
                         editableTextState: editableTextState,
                       );
                     },
-                    style: DunesTypography.sans(fontSize: 13.5, color: DunesColors.text),
+                    style: DunesTypography.sans(
+                      fontSize: 13.5,
+                      color: DunesColors.text,
+                    ),
                     decoration: InputDecoration(
                       hintText: hintText ?? '输入消息…',
-                      hintStyle: DunesTypography.sans(fontSize: 13.5, color: DunesColors.text3),
+                      hintStyle: DunesTypography.sans(
+                        fontSize: 13.5,
+                        color: DunesColors.text3,
+                      ),
                       filled: true,
                       fillColor: DunesColors.bgSoft,
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(18),
                         borderSide: BorderSide.none,
                       ),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 10,
+                      ),
                       isDense: true,
                     ),
                     onSubmitted: interactionLocked ? null : (_) => onSend(),
@@ -327,24 +360,35 @@ class ChatInputBar extends StatelessWidget {
                             colors: [Color(0xFF8A4A4A), Color(0xFF6A3333)],
                           )
                         : interactionLocked
-                            ? null
-                            : const LinearGradient(
-                                begin: Alignment.topLeft,
-                                end: Alignment.bottomRight,
-                                colors: [Color(0xFF7E64BD), Color(0xFF553B96)],
-                              ),
+                        ? null
+                        : const LinearGradient(
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                            colors: [Color(0xFF7E64BD), Color(0xFF553B96)],
+                          ),
                     color: interactionLocked && !showStop
                         ? DunesColors.text3.withValues(alpha: 0.35)
                         : null,
                   ),
                   child: showStop
-                      ? const Icon(Icons.stop_rounded, size: 18, color: Colors.white)
+                      ? const Icon(
+                          Icons.stop_rounded,
+                          size: 18,
+                          color: Colors.white,
+                        )
                       : sending
-                          ? const Padding(
-                              padding: EdgeInsets.all(8),
-                              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                            )
-                          : const Icon(Icons.arrow_upward_rounded, size: 20, color: Colors.white),
+                      ? const Padding(
+                          padding: EdgeInsets.all(8),
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Icon(
+                          Icons.arrow_upward_rounded,
+                          size: 20,
+                          color: Colors.white,
+                        ),
                 ),
               ),
             ),
@@ -410,13 +454,18 @@ class ChatMessageRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final time = (timeLabel ?? '').trim();
-    final showMeta = showSenderMeta || (mine && showTimeForMine && time.isNotEmpty) || (!mine && time.isNotEmpty);
+    final showMeta =
+        showSenderMeta ||
+        (mine && showTimeForMine && time.isNotEmpty) ||
+        (!mine && time.isNotEmpty);
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: mine ? MainAxisAlignment.end : MainAxisAlignment.start,
+        mainAxisAlignment: mine
+            ? MainAxisAlignment.end
+            : MainAxisAlignment.start,
         children: [
           if (!mine) ...[
             avatar ?? const SizedBox(width: 32),
@@ -424,11 +473,17 @@ class ChatMessageRow extends StatelessWidget {
           ],
           Flexible(
             child: Column(
-              crossAxisAlignment: mine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+              crossAxisAlignment: mine
+                  ? CrossAxisAlignment.end
+                  : CrossAxisAlignment.start,
               children: [
                 if (showMeta)
                   Padding(
-                    padding: const EdgeInsets.only(bottom: 3, left: 2, right: 2),
+                    padding: const EdgeInsets.only(
+                      bottom: 3,
+                      left: 2,
+                      right: 2,
+                    ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
@@ -438,28 +493,44 @@ class ChatMessageRow extends StatelessWidget {
                               message.senderName,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: DunesTypography.mono(fontSize: 9.5, color: DunesColors.text3),
+                              style: DunesTypography.mono(
+                                fontSize: 9.5,
+                                color: DunesColors.text3,
+                              ),
                             ),
                           ),
-                        if (showSenderMeta && !mine && time.isNotEmpty) const SizedBox(width: 6),
+                        if (showSenderMeta && !mine && time.isNotEmpty)
+                          const SizedBox(width: 6),
                         if (!mine && time.isNotEmpty)
-                          Text(time, style: DunesTypography.mono(fontSize: 9.5, color: DunesColors.text3)),
+                          Text(
+                            time,
+                            style: DunesTypography.mono(
+                              fontSize: 9.5,
+                              color: DunesColors.text3,
+                            ),
+                          ),
                         if (mine && showTimeForMine && time.isNotEmpty) ...[
-                          Text(time, style: DunesTypography.mono(fontSize: 9.5, color: DunesColors.text3)),
+                          Text(
+                            time,
+                            style: DunesTypography.mono(
+                              fontSize: 9.5,
+                              color: DunesColors.text3,
+                            ),
+                          ),
                           const SizedBox(width: 6),
                           Text(
                             message.senderName,
-                            style: DunesTypography.mono(fontSize: 9.5, color: DunesColors.text3),
+                            style: DunesTypography.mono(
+                              fontSize: 9.5,
+                              color: DunesColors.text3,
+                            ),
                           ),
                         ],
                       ],
                     ),
                   ),
                 if (onLongPress != null)
-                  GestureDetector(
-                    onLongPress: onLongPress,
-                    child: content,
-                  )
+                  GestureDetector(onLongPress: onLongPress, child: content)
                 else
                   content,
                 if (readLabel != null)
@@ -469,7 +540,9 @@ class ChatMessageRow extends StatelessWidget {
                       readLabel!,
                       style: DunesTypography.mono(
                         fontSize: 9,
-                        color: message.peerRead ? DunesColors.accent : DunesColors.text3,
+                        color: message.peerRead
+                            ? DunesColors.accent
+                            : DunesColors.text3,
                       ),
                     ),
                   )
@@ -480,7 +553,10 @@ class ChatMessageRow extends StatelessWidget {
                       onTap: onReadTap,
                       child: Text(
                         (readTapLabel ?? '查看已读').trim(),
-                        style: DunesTypography.mono(fontSize: 9, color: DunesColors.text3),
+                        style: DunesTypography.mono(
+                          fontSize: 9,
+                          color: DunesColors.text3,
+                        ),
                       ),
                     ),
                   ),
@@ -510,6 +586,37 @@ class ChatTextBubble extends StatelessWidget {
   final bool mine;
   final ChatMessageQuote? quote;
   final VoidCallback? onQuoteTap;
+
+  TextSpan _buildMentionTextSpan() {
+    final baseStyle = DunesTypography.sans(
+      fontSize: 13,
+      height: 1.5,
+      color: mine ? Colors.white : DunesColors.text,
+    );
+    final mentionStyle = baseStyle.copyWith(
+      color: mine ? Colors.white : const Color(0xFF3B5BDB),
+      fontWeight: FontWeight.w600,
+    );
+    final spans = <InlineSpan>[];
+    final regex = RegExp(r'@[^@\s]+');
+    var start = 0;
+    for (final match in regex.allMatches(text)) {
+      if (match.start > start) {
+        spans.add(
+          TextSpan(text: text.substring(start, match.start), style: baseStyle),
+        );
+      }
+      spans.add(TextSpan(text: match.group(0), style: mentionStyle));
+      start = match.end;
+    }
+    if (start < text.length) {
+      spans.add(TextSpan(text: text.substring(start), style: baseStyle));
+    }
+    if (spans.isEmpty) {
+      spans.add(TextSpan(text: text, style: baseStyle));
+    }
+    return TextSpan(children: spans);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -546,13 +653,8 @@ class ChatTextBubble extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          SelectableText(
-            text,
-            style: DunesTypography.sans(
-              fontSize: 13,
-              height: 1.5,
-              color: mine ? Colors.white : DunesColors.text,
-            ),
+          SelectableText.rich(
+            _buildMentionTextSpan(),
             contextMenuBuilder: (context, editableTextState) {
               return AdaptiveTextSelectionToolbar.editableText(
                 editableTextState: editableTextState,
@@ -599,9 +701,7 @@ class ChatQuoteBlock extends StatelessWidget {
       decoration: BoxDecoration(
         color: DunesColors.bgSoft,
         borderRadius: BorderRadius.circular(6),
-        border: Border(
-          left: BorderSide(color: DunesColors.accent, width: 2.5),
-        ),
+        border: Border(left: BorderSide(color: DunesColors.accent, width: 2.5)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -646,15 +746,16 @@ class ChatQuoteBlock extends StatelessWidget {
     final divider = mine
         ? Colors.white.withValues(alpha: 0.28)
         : DunesColors.borderSoft;
-    final accent = mine ? Colors.white.withValues(alpha: 0.92) : DunesColors.accent;
-    final textColor = mine ? Colors.white.withValues(alpha: 0.72) : DunesColors.text3;
+    final accent = mine
+        ? Colors.white.withValues(alpha: 0.92)
+        : DunesColors.accent;
+    final textColor = mine
+        ? Colors.white.withValues(alpha: 0.72)
+        : DunesColors.text3;
 
     final child = Container(
       width: double.infinity,
-      padding: EdgeInsets.only(
-        top: compact ? 5 : 6,
-        left: compact ? 0 : 0,
-      ),
+      padding: EdgeInsets.only(top: compact ? 5 : 6, left: compact ? 0 : 0),
       decoration: BoxDecoration(
         border: Border(top: BorderSide(color: divider, width: 0.5)),
       ),
@@ -722,18 +823,18 @@ class ChatQuotePreviewBar extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Expanded(
-            child: ChatQuoteBlock(
-              quote: quote,
-              mine: false,
-              compact: true,
-            ),
+            child: ChatQuoteBlock(quote: quote, mine: false, compact: true),
           ),
           IconButton(
             visualDensity: VisualDensity.compact,
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
             onPressed: onCancel,
-            icon: const Icon(Icons.close_rounded, size: 18, color: DunesColors.text3),
+            icon: const Icon(
+              Icons.close_rounded,
+              size: 18,
+              color: DunesColors.text3,
+            ),
           ),
         ],
       ),
@@ -752,7 +853,9 @@ class ChatDateDivider extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(0, 14, 0, 8),
       child: Row(
         children: [
-          const Expanded(child: Divider(height: 1, color: DunesColors.borderSoft)),
+          const Expanded(
+            child: Divider(height: 1, color: DunesColors.borderSoft),
+          ),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 11),
             child: Text(
@@ -765,7 +868,9 @@ class ChatDateDivider extends StatelessWidget {
               ),
             ),
           ),
-          const Expanded(child: Divider(height: 1, color: DunesColors.borderSoft)),
+          const Expanded(
+            child: Divider(height: 1, color: DunesColors.borderSoft),
+          ),
         ],
       ),
     );
@@ -841,14 +946,20 @@ class _ChatVoiceBubbleState extends State<ChatVoiceBubble> {
     return GestureDetector(
       onTap: _toggle,
       child: Container(
-        constraints: BoxConstraints(minWidth: 80 + (widget.durationSec * 4).clamp(0, 80).toDouble()),
+        constraints: BoxConstraints(
+          minWidth: 80 + (widget.durationSec * 4).clamp(0, 80).toDouble(),
+        ),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
         decoration: BoxDecoration(
           gradient: widget.mine
-              ? const LinearGradient(colors: [Color(0xFF7E64BD), Color(0xFF553B96)])
+              ? const LinearGradient(
+                  colors: [Color(0xFF7E64BD), Color(0xFF553B96)],
+                )
               : null,
           color: widget.mine ? null : DunesColors.bgApp,
-          border: widget.mine ? null : Border.all(color: DunesColors.borderSoft),
+          border: widget.mine
+              ? null
+              : Border.all(color: DunesColors.borderSoft),
           borderRadius: BorderRadius.circular(16),
         ),
         child: Row(
@@ -866,7 +977,8 @@ class _ChatVoiceBubbleState extends State<ChatVoiceBubble> {
                 height: playing ? 8.0 + (i * 3) : 6.0 + i,
                 margin: const EdgeInsets.symmetric(horizontal: 1),
                 decoration: BoxDecoration(
-                  color: (widget.mine ? Colors.white : DunesColors.accent).withValues(alpha: 0.75),
+                  color: (widget.mine ? Colors.white : DunesColors.accent)
+                      .withValues(alpha: 0.75),
                   borderRadius: BorderRadius.circular(2),
                 ),
               );
@@ -919,7 +1031,11 @@ class ChatFileAttach extends StatelessWidget {
                 color: DunesColors.bgSoft,
                 borderRadius: BorderRadius.circular(9),
               ),
-              child: const Icon(Icons.insert_drive_file_outlined, size: 16, color: DunesColors.text2),
+              child: const Icon(
+                Icons.insert_drive_file_outlined,
+                size: 16,
+                color: DunesColors.text2,
+              ),
             ),
             const SizedBox(width: 11),
             Expanded(
@@ -927,7 +1043,10 @@ class ChatFileAttach extends StatelessWidget {
                 fileName,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: DunesTypography.sans(fontSize: 12, fontWeight: FontWeight.w500),
+                style: DunesTypography.sans(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                ),
               ),
             ),
           ],
@@ -967,7 +1086,11 @@ class ChatPersonAvatar extends StatelessWidget {
           ),
           child: Text(
             initial.isEmpty ? '?' : initial,
-            style: TextStyle(color: style.textColor, fontSize: size * 0.38, fontWeight: FontWeight.w500),
+            style: TextStyle(
+              color: style.textColor,
+              fontSize: size * 0.38,
+              fontWeight: FontWeight.w500,
+            ),
           ),
         ),
         if (showOnline)
@@ -995,9 +1118,30 @@ class ChatEmojiPanel extends StatelessWidget {
   final ValueChanged<String> onPick;
 
   static const _emojis = <String>[
-    '😀', '😁', '😂', '🤣', '😊', '😍', '😘', '😎',
-    '🙂', '😉', '😢', '😭', '😡', '👍', '👏', '🙏',
-    '❤️', '🔥', '✅', '❌', '💯', '🎉', '🤔', '😅',
+    '😀',
+    '😁',
+    '😂',
+    '🤣',
+    '😊',
+    '😍',
+    '😘',
+    '😎',
+    '🙂',
+    '😉',
+    '😢',
+    '😭',
+    '😡',
+    '👍',
+    '👏',
+    '🙏',
+    '❤️',
+    '🔥',
+    '✅',
+    '❌',
+    '💯',
+    '🎉',
+    '🤔',
+    '😅',
   ];
 
   @override
@@ -1018,7 +1162,9 @@ class ChatEmojiPanel extends StatelessWidget {
         itemCount: _emojis.length,
         itemBuilder: (_, i) => InkWell(
           onTap: () => onPick(_emojis[i]),
-          child: Center(child: Text(_emojis[i], style: const TextStyle(fontSize: 22))),
+          child: Center(
+            child: Text(_emojis[i], style: const TextStyle(fontSize: 22)),
+          ),
         ),
       ),
     );
@@ -1052,7 +1198,9 @@ class CommBackScaffold extends StatelessWidget {
             Container(
               padding: const EdgeInsets.fromLTRB(4, 6, 12, 10),
               decoration: const BoxDecoration(
-                border: Border(bottom: BorderSide(color: DunesColors.borderSoft)),
+                border: Border(
+                  bottom: BorderSide(color: DunesColors.borderSoft),
+                ),
               ),
               child: Row(
                 children: [
@@ -1066,7 +1214,10 @@ class CommBackScaffold extends StatelessWidget {
                       children: [
                         Text(
                           crumb,
-                          style: DunesTypography.mono(fontSize: 9.5, color: DunesColors.text3),
+                          style: DunesTypography.mono(
+                            fontSize: 9.5,
+                            color: DunesColors.text3,
+                          ),
                         ),
                         Text(
                           title,
@@ -1099,6 +1250,9 @@ class NotiCard extends StatelessWidget {
     required this.timeLabel,
     this.tag,
     this.unread = false,
+    this.onTap,
+    this.read = false,
+    this.showReadMark = false,
   });
 
   final String title;
@@ -1107,15 +1261,30 @@ class NotiCard extends StatelessWidget {
   final String? tag;
   final bool unread;
 
+  /// 点击回调；非空时整张卡片可点。
+  final VoidCallback? onTap;
+
+  /// 是否已读（用于显示勾选标记与淡化样式）。
+  final bool read;
+
+  /// 是否展示右侧"已读/点击已读"勾选标记。
+  final bool showReadMark;
+
   @override
   Widget build(BuildContext context) {
-    return Container(
+    final card = Container(
       margin: const EdgeInsets.fromLTRB(12, 0, 12, 8),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: DunesColors.bgApp,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: unread ? DunesColors.coral.withValues(alpha: 0.35) : DunesColors.borderSoft),
+        border: Border.all(
+          color: read
+              ? DunesColors.borderSoft
+              : (unread
+                    ? DunesColors.coral.withValues(alpha: 0.35)
+                    : DunesColors.borderSoft),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1125,16 +1294,40 @@ class NotiCard extends StatelessWidget {
               Expanded(
                 child: Text(
                   title,
-                  style: DunesTypography.sans(fontSize: 13.5, fontWeight: FontWeight.w600),
+                  style: DunesTypography.sans(
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ),
               if (timeLabel.isNotEmpty)
-                Text(timeLabel, style: DunesTypography.mono(fontSize: 9.5, color: DunesColors.text3)),
+                Text(
+                  timeLabel,
+                  style: DunesTypography.mono(
+                    fontSize: 9.5,
+                    color: DunesColors.text3,
+                  ),
+                ),
+              if (showReadMark) ...[
+                const SizedBox(width: 8),
+                Icon(
+                  read ? Icons.check_circle : Icons.radio_button_unchecked,
+                  size: 16,
+                  color: read ? DunesColors.accent : DunesColors.text3,
+                ),
+              ],
             ],
           ),
           if (body.isNotEmpty) ...[
             const SizedBox(height: 6),
-            Text(body, style: DunesTypography.sans(fontSize: 12.5, color: DunesColors.text2, height: 1.45)),
+            Text(
+              body,
+              style: DunesTypography.sans(
+                fontSize: 12.5,
+                color: DunesColors.text2,
+                height: 1.45,
+              ),
+            ),
           ],
           if (tag != null && tag!.isNotEmpty) ...[
             const SizedBox(height: 8),
@@ -1146,12 +1339,21 @@ class NotiCard extends StatelessWidget {
               ),
               child: Text(
                 tag!,
-                style: DunesTypography.mono(fontSize: 9, color: DunesColors.accentDeep),
+                style: DunesTypography.mono(
+                  fontSize: 9,
+                  color: DunesColors.accentDeep,
+                ),
               ),
             ),
           ],
         ],
       ),
+    );
+    if (onTap == null) return card;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: card,
     );
   }
 }

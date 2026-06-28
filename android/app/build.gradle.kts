@@ -1,3 +1,6 @@
+import java.io.FileInputStream
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -5,8 +8,17 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+val localProperties = Properties()
+val localPropertiesFile = rootProject.file("local.properties")
+if (localPropertiesFile.exists()) {
+    localProperties.load(FileInputStream(localPropertiesFile))
+}
+
+fun localProp(key: String, fallback: String): String =
+    localProperties.getProperty(key)?.trim()?.takeIf { it.isNotEmpty() } ?: fallback
+
 android {
-    namespace = "com.dunes.dunes_app"
+    namespace = "nova.dunes.dunes_app"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -17,27 +29,27 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.dunes.dunes_app"
-        // You can update the following values to match your application needs.
-        // For more information, see: https://flutter.dev/to/review-gradle-config.
+        applicationId = "nova.dunes.dunes_app"
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
 
-        // 极光推送（JPush）配置：JPUSH_APPKEY 替换为极光控制台分配的 AppKey，
-        // 并与 lib/features/push/android_push_service.dart 中的 _jpushAppKey 保持一致。
-        manifestPlaceholders["JPUSH_PKGNAME"] = "com.dunes.dunes_app"
-        manifestPlaceholders["JPUSH_APPKEY"] = "your_jpush_appkey"
-        manifestPlaceholders["JPUSH_CHANNEL"] = "developer-default"
+        // 腾讯云 TPNS：在 android/local.properties 配置 tpns.accessId / tpns.accessKey。
+        // run-android.ps1 会自动读取并注入 --dart-define。
+        manifestPlaceholders["XG_ACCESS_ID"] =
+            localProp("tpns.accessId", "your_tpns_access_id")
+        manifestPlaceholders["XG_ACCESS_KEY"] =
+            localProp("tpns.accessKey", "your_tpns_access_key")
     }
 
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
             signingConfig = signingConfigs.getByName("debug")
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
         }
     }
 }
@@ -54,4 +66,6 @@ flutter {
 
 dependencies {
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
+    implementation("com.tencent.tpns:tpns:1.4.4.6-release")
+    implementation("me.leolin:ShortcutBadger:1.1.22@aar")
 }

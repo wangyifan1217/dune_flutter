@@ -6,8 +6,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
 import 'core/theme/dunes_theme.dart';
-import 'features/auth/login_flow.dart';
 import 'features/push/push_service.dart';
+import 'features/shell/splash_screen.dart';
 import 'core/web/text_input_guard_stub.dart'
     if (dart.library.html) 'core/web/text_input_guard_web.dart';
 
@@ -30,7 +30,7 @@ class DunesApp extends StatelessWidget {
         Locale('zh', 'CN'),
         Locale('en', 'US'),
       ],
-      home: const LoginFlow(),
+      home: const AppBootGate(),
     );
   }
 }

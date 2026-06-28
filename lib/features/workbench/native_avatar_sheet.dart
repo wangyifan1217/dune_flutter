@@ -59,6 +59,7 @@ class _NativeAvatarSheetState extends State<NativeAvatarSheet> {
   final _picker = ImagePicker();
   late String _selectedPreset;
   String _uploadedObjectKey = '';
+  String _uploadedAvatarUrl = '';
   String _uploadPreviewPath = '';
   bool _uploading = false;
   bool _saving = false;
@@ -67,11 +68,17 @@ class _NativeAvatarSheetState extends State<NativeAvatarSheet> {
   void initState() {
     super.initState();
     _selectedPreset = widget.initialPreset;
-    _uploadedObjectKey = widget.initialObjectKey;
+    _uploadedObjectKey = widget.initialObjectKey.trim();
+    _uploadedAvatarUrl = widget.initialAvatarUrl.trim();
+    if (_uploadedObjectKey.isEmpty && !_looksLikeUrl(_uploadedAvatarUrl)) {
+      _uploadedAvatarUrl = '';
+    }
   }
 
   bool get _hasSelection =>
-      _uploadedObjectKey.isNotEmpty || _selectedPreset.isNotEmpty;
+      _uploadedObjectKey.isNotEmpty ||
+      _uploadedAvatarUrl.isNotEmpty ||
+      _selectedPreset.isNotEmpty;
 
   Future<void> _pickAndUpload() async {
     try {
@@ -104,22 +111,36 @@ class _NativeAvatarSheetState extends State<NativeAvatarSheet> {
       final uploadBody = jsonDecode(uploadResp.body);
       final uploadData = uploadBody is Map<String, dynamic>
           ? (uploadBody['data'] is Map<String, dynamic>
-              ? uploadBody['data'] as Map<String, dynamic>
-              : uploadBody)
+                ? uploadBody['data'] as Map<String, dynamic>
+                : uploadBody)
           : const <String, dynamic>{};
-      final objectKey = (uploadData['objectKey'] ?? '').toString();
-      if (objectKey.isEmpty) {
-        throw Exception('上传失败: 未返回 objectKey');
+      final objectKey = (uploadData['objectKey'] ?? '').toString().trim();
+      final avatarUrl =
+          (uploadData['url'] ??
+                  uploadData['publicUrl'] ??
+                  uploadData['accessUrl'] ??
+                  uploadData['downloadUrl'] ??
+                  '')
+              .toString()
+              .trim();
+      if (objectKey.isEmpty && avatarUrl.isEmpty) {
+        throw Exception('上传失败: 未返回 objectKey 或 url');
       }
       if (!mounted) return;
       setState(() {
+        // 兼容两种后端：存储服务返回 objectKey，FTP 直链返回 avatarUrl。
         _uploadedObjectKey = objectKey;
+        _uploadedAvatarUrl = avatarUrl;
         _selectedPreset = '';
         _uploadPreviewPath = x.path;
       });
     } catch (e) {
       if (mounted) {
-        showDunesToast(context, '上传失败：${friendlyErrorText(e)}', kind: DunesToastKind.error);
+        showDunesToast(
+          context,
+          '上传失败：${friendlyErrorText(e)}',
+          kind: DunesToastKind.error,
+        );
       }
     } finally {
       if (mounted) setState(() => _uploading = false);
@@ -136,6 +157,8 @@ class _NativeAvatarSheetState extends State<NativeAvatarSheet> {
       final body = <String, dynamic>{};
       if (_uploadedObjectKey.isNotEmpty) {
         body['avatarObjectKey'] = _uploadedObjectKey;
+      } else if (_uploadedAvatarUrl.isNotEmpty) {
+        body['avatarUrl'] = _uploadedAvatarUrl;
       } else if (_selectedPreset.isNotEmpty) {
         body['avatarPreset'] = _selectedPreset;
       }
@@ -167,7 +190,11 @@ class _NativeAvatarSheetState extends State<NativeAvatarSheet> {
       Navigator.of(context).pop(data);
     } catch (e) {
       if (mounted) {
-        showDunesToast(context, '保存失败：${friendlyErrorText(e)}', kind: DunesToastKind.error);
+        showDunesToast(
+          context,
+          '保存失败：${friendlyErrorText(e)}',
+          kind: DunesToastKind.error,
+        );
       }
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -228,12 +255,14 @@ class _NativeAvatarSheetState extends State<NativeAvatarSheet> {
                 _PresetTile(
                   presetId: preset.id,
                   svg: preset.svg,
-                  selected: _selectedPreset == preset.id &&
+                  selected:
+                      _selectedPreset == preset.id &&
                       _uploadedObjectKey.isEmpty,
                   onTap: () {
                     setState(() {
                       _selectedPreset = preset.id;
                       _uploadedObjectKey = '';
+                      _uploadedAvatarUrl = '';
                       _uploadPreviewPath = '';
                     });
                   },
@@ -297,6 +326,11 @@ class _NativeAvatarSheetState extends State<NativeAvatarSheet> {
       ),
     );
   }
+
+  bool _looksLikeUrl(String value) {
+    final v = value.toLowerCase();
+    return v.startsWith('http://') || v.startsWith('https://');
+  }
 }
 
 class _PresetTile extends StatelessWidget {
@@ -354,12 +388,8 @@ class NativeAvatarCircle extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     Widget inner;
-    if (avatarPreset.isNotEmpty) {
-      final svg = nativeAvatarPresetSvg(avatarPreset);
-      inner = svg != null
-          ? SvgPicture.string(svg, fit: BoxFit.cover)
-          : _letter(fallbackText);
-    } else if (avatarUrl.isNotEmpty) {
+    // 自定义头像优先于预设头像，避免后端同时返回旧 preset 时仍显示卡通头像。
+    if (avatarUrl.isNotEmpty) {
       inner = Image.network(
         avatarUrl,
         width: size,
@@ -367,6 +397,11 @@ class NativeAvatarCircle extends StatelessWidget {
         fit: BoxFit.cover,
         errorBuilder: (_, _, _) => _letter(fallbackText),
       );
+    } else if (avatarPreset.isNotEmpty) {
+      final svg = nativeAvatarPresetSvg(avatarPreset);
+      inner = svg != null
+          ? SvgPicture.string(svg, fit: BoxFit.cover)
+          : _letter(fallbackText);
     } else {
       inner = _letter(fallbackText);
     }

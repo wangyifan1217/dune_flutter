@@ -63,7 +63,17 @@ class NativeConversation {
     if (id <= 0) return false;
     if (dissolved) return false;
     final st = (membershipStatus ?? '').toUpperCase();
-    if (st == 'LEFT' || st == 'REMOVED') return false;
+    if (st == 'LEFT' ||
+        st == 'LEAVE' ||
+        st == 'LEAVED' ||
+        st == 'REMOVED' ||
+        st == 'EXITED' ||
+        st == 'QUIT' ||
+        st == 'QUITED' ||
+        st == 'KICKED' ||
+        st == 'KICK_OUT') {
+      return false;
+    }
     return true;
   }
 
@@ -111,10 +121,7 @@ class NativeMessagePage {
 }
 
 class NativeSearchMessagePage {
-  const NativeSearchMessagePage({
-    required this.items,
-    this.hasMore = false,
-  });
+  const NativeSearchMessagePage({required this.items, this.hasMore = false});
 
   final List<NativeChatMessage> items;
   final bool hasMore;
@@ -133,7 +140,8 @@ class NativeGroupMember {
   final String? role;
   final String? roleLabel;
 
-  bool get isOwner => (role ?? '').toUpperCase() == 'OWNER' || (roleLabel ?? '').contains('主');
+  bool get isOwner =>
+      (role ?? '').toUpperCase() == 'OWNER' || (roleLabel ?? '').contains('主');
 }
 
 class NativeGroupInfo {
@@ -195,10 +203,7 @@ class NovaHistoryTurn {
 }
 
 class UploadedAttachment {
-  const UploadedAttachment({
-    required this.url,
-    required this.objectKey,
-  });
+  const UploadedAttachment({required this.url, required this.objectKey});
 
   final String url;
   final String objectKey;

@@ -3,12 +3,14 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/http/session_http.dart';
 import '../../core/navigation/navigation_controller.dart';
 import '../../core/navigation/generated/screen_registry.dart';
 import '../../core/theme/dunes_theme.dart';
 import '../approval/native_approval_page.dart';
 import '../auth/auth_session.dart';
+import '../auth/qr_login_scan_page.dart';
 import '../chat/native_broadcast_page.dart';
 import '../chat/native_chat_search_page.dart';
 import '../chat/native_group_chat_page.dart';
@@ -27,6 +29,7 @@ import '../conversation/conversation_realtime_dedup.dart';
 import '../conversation/conversation_realtime_hub.dart';
 import '../conversation/conversation_realtime_service.dart';
 import '../conversation/conversation_service.dart';
+import '../conversation/inbox_hidden_storage.dart';
 import '../conversation/native_conversation_page.dart';
 import '../conversation/notification_service.dart';
 import '../kb/native_kb_chat_page.dart';
@@ -42,6 +45,7 @@ import '../xflow/xflow_service.dart';
 import '../nova/native_nova_history_page.dart';
 import '../nova/native_nova_page.dart';
 import '../nova/nova_background_coordinator.dart';
+import '../nova/nova_web_storage.dart';
 import '../push/push_service.dart';
 import '../shell/dunes_main_tab_bar.dart';
 import '../shell/dunes_toast.dart';
@@ -65,10 +69,12 @@ class NativeScreenHost extends StatefulWidget {
   State<NativeScreenHost> createState() => _NativeScreenHostState();
 }
 
-class _NativeScreenHostState extends State<NativeScreenHost> {
+class _NativeScreenHostState extends State<NativeScreenHost>
+    with WidgetsBindingObserver {
   final CommUnreadNotifier _commUnread = CommUnreadNotifier();
   final WorkbenchBadgeNotifier _workbenchBadge = WorkbenchBadgeNotifier();
-  final WorkbenchDataRefreshNotifier _workbenchRefresh = WorkbenchDataRefreshNotifier();
+  final WorkbenchDataRefreshNotifier _workbenchRefresh =
+      WorkbenchDataRefreshNotifier();
   int _lastPendingInitiateForMe = 0;
   bool _hasPendingInitiateBaseline = false;
   NativeConversation? _selectedPrivate;
@@ -98,39 +104,72 @@ class _NativeScreenHostState extends State<NativeScreenHost> {
   final ConversationRealtimeDedup _commBadgeDedup = ConversationRealtimeDedup();
   StreamSubscription<ConversationRealtimeEvent>? _commBadgeRtSub;
   Timer? _commBadgeRefreshDebounce;
+  Timer? _commBadgeRecorrectTimer;
   Timer? _workbenchBadgeRefreshDebounce;
   final Map<int, bool> _mutedConvIds = <int, bool>{};
+  /// 仅在一次 markConversationRead 成功后允许把桌面角标同步为 0。
+  bool _pendingBadgeZeroSync = false;
+  /// 用户本次前台会话内主动点进聊天；切后台后清零，避免 resume 误触已读。
+  bool _userActivelyInChat = false;
+
+  void _markUserEnteredChat() {
+    _userActivelyInChat = true;
+  }
+
+  void _markUserLeftChat() {
+    _userActivelyInChat = false;
+  }
 
   @override
   void initState() {
     super.initState();
-    _commUnread.addListener(_onCommUnreadChanged);
+    WidgetsBinding.instance.addObserver(this);
+    _pendingBadgeZeroSync = false;
     unawaited(ConversationRealtimeHub.instance.of(widget.session).connect());
     NovaBackgroundCoordinator.instance.addListener(_onNovaCoordinatorUpdate);
     unawaited(_bootCommBadgeRealtime());
     unawaited(_refreshCommUnreadBadge());
     unawaited(_refreshWorkbenchBadge());
-    unawaited(bindPushSession(
-      userId: widget.session.userId,
-      token: widget.session.token,
-      apiBase: widget.session.apiBase,
-    ));
+    setPushBadgeRefreshHandler(_requestCommBadgeRefreshFromServer);
+    unawaited(
+      bindPushSession(
+        userId: widget.session.userId,
+        token: widget.session.token,
+        apiBase: widget.session.apiBase,
+      ),
+    );
     registerPushLifecycleObserver();
   }
 
-  void _onCommUnreadChanged() {
-    syncPushBadgeCount(_commUnread.total);
+  void _requestCommBadgeRefreshFromServer() {
+    _scheduleCommBadgeRefresh();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    print('[Badge] lifecycle=$state activelyInChat=$_userActivelyInChat');
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.hidden) {
+      if (_userActivelyInChat && mounted) {
+        print('[Badge] app backgrounded -> clear activelyInChat');
+        setState(() => _userActivelyInChat = false);
+      } else {
+        _userActivelyInChat = false;
+      }
+    }
   }
 
   @override
   void dispose() {
-    _commUnread.removeListener(_onCommUnreadChanged);
+    WidgetsBinding.instance.removeObserver(this);
+    setPushBadgeRefreshHandler(null);
     _commBadgeRefreshDebounce?.cancel();
+    _commBadgeRecorrectTimer?.cancel();
     _workbenchBadgeRefreshDebounce?.cancel();
     _commBadgeRtSub?.cancel();
     dismissDunesActionToast();
     NovaBackgroundCoordinator.instance.removeListener(_onNovaCoordinatorUpdate);
-    unawaited(unbindPushSession());
     _commUnread.dispose();
     _workbenchBadge.dispose();
     _workbenchRefresh.dispose();
@@ -166,11 +205,6 @@ class _NativeScreenHostState extends State<NativeScreenHost> {
     if (!_commBadgeDedup.consume(event)) return;
 
     if (event.type == 'read') {
-      final userId = (event.raw['userId'] as num?)?.toInt() ?? 0;
-      final convId = event.conversationId ?? 0;
-      if (userId == widget.session.userId && convId > 0) {
-        _commUnread.clearMutedMention(convId);
-      }
       _scheduleCommBadgeRefresh();
       return;
     }
@@ -187,17 +221,13 @@ class _NativeScreenHostState extends State<NativeScreenHost> {
       );
       final isMuted = _mutedConvIds[convId] == true;
 
-      if (mentionHit && convId > 0) {
+      if (mentionHit && isMuted && convId > 0) {
         _commUnread.recordMutedMention(convId);
-        return;
       }
       if (!isMuted) {
-        if (widget.navigation.currentScreen != 'C1') {
-          _commUnread.bump();
-        }
         _notifyAndroidPushForEvent(event);
-        _scheduleCommBadgeRefresh();
       }
+      _scheduleCommBadgeRefresh();
       return;
     }
 
@@ -214,14 +244,18 @@ class _NativeScreenHostState extends State<NativeScreenHost> {
     var body = '您有新消息';
     if (event.type == 'notification') {
       title = (event.raw['title'] ?? '系统通知').toString();
-      body = (event.raw['body'] ?? event.raw['content'] ?? '您有新的系统通知').toString();
+      body = (event.raw['body'] ?? event.raw['content'] ?? '您有新的系统通知')
+          .toString();
     } else {
       final msg = event.raw['message'];
       if (msg is Map) {
-        body = (msg['bodyText'] ?? msg['content'] ?? msg['text'] ?? body).toString();
+        body = (msg['bodyText'] ?? msg['content'] ?? msg['text'] ?? body)
+            .toString();
         final sender = msg['sender'];
         if (sender is Map) {
-          final name = (sender['displayName'] ?? sender['name'] ?? '').toString().trim();
+          final name = (sender['displayName'] ?? sender['name'] ?? '')
+              .toString()
+              .trim();
           if (name.isNotEmpty) title = name;
         }
       }
@@ -235,14 +269,39 @@ class _NativeScreenHostState extends State<NativeScreenHost> {
       if (!mounted) return;
       unawaited(_refreshCommUnreadBadge());
     });
+    _commBadgeRecorrectTimer?.cancel();
+    _commBadgeRecorrectTimer = Timer(const Duration(milliseconds: 1500), () {
+      if (!mounted) return;
+      unawaited(_refreshCommUnreadBadge());
+    });
+  }
+
+  void _handleConversationRead(int conversationId) {
+    if (conversationId > 0) {
+      _pendingBadgeZeroSync = true;
+      _commUnread.clearMutedMention(conversationId);
+    }
+    print(
+      '[Badge] handleConversationRead conv=$conversationId pendingZero=$_pendingBadgeZeroSync',
+    );
+    unawaited(_refreshCommUnreadBadge());
+  }
+
+  void _handleNotificationsRead() {
+    _pendingBadgeZeroSync = true;
+    print('[Badge] handleNotificationsRead pendingZero=true');
+    unawaited(_refreshCommUnreadBadge());
   }
 
   void _scheduleWorkbenchBadgeRefresh({bool rejected = false}) {
     _workbenchBadgeRefreshDebounce?.cancel();
-    _workbenchBadgeRefreshDebounce = Timer(const Duration(milliseconds: 350), () {
-      if (!mounted) return;
-      unawaited(_refreshWorkbenchBadge(notifyRejected: rejected));
-    });
+    _workbenchBadgeRefreshDebounce = Timer(
+      const Duration(milliseconds: 350),
+      () {
+        if (!mounted) return;
+        unawaited(_refreshWorkbenchBadge(notifyRejected: rejected));
+      },
+    );
   }
 
   Future<void> _refreshWorkbenchBadge({bool notifyRejected = false}) async {
@@ -252,8 +311,8 @@ class _NativeScreenHostState extends State<NativeScreenHost> {
       final body = jsonDecode(resp.body);
       final raw = body is Map<String, dynamic>
           ? (body['data'] is Map<String, dynamic>
-              ? body['data'] as Map<String, dynamic>
-              : body)
+                ? body['data'] as Map<String, dynamic>
+                : body)
           : const <String, dynamic>{};
       final stats = _NativeMyStats.fromJson(raw);
       if (!mounted) return;
@@ -324,15 +383,17 @@ class _NativeScreenHostState extends State<NativeScreenHost> {
   }
 
   void _onNovaCoordinatorUpdate() {
-    final shouldBump = NovaBackgroundCoordinator.instance.takePendingCommBadgeBump();
+    final shouldBump = NovaBackgroundCoordinator.instance
+        .takePendingCommBadgeBump();
     final notOnC4 = widget.navigation.currentScreen != 'C4';
     unawaited(_handleNovaCoordinatorBadge(shouldBump: shouldBump && notOnC4));
   }
 
   Future<void> _handleNovaCoordinatorBadge({required bool shouldBump}) async {
     await _refreshCommUnreadBadge();
-    if (!mounted || !shouldBump || widget.navigation.currentScreen == 'C4') return;
-    if (_commUnread.total == 0) _commUnread.bump();
+    if (!mounted || !shouldBump || widget.navigation.currentScreen == 'C4') {
+      return;
+    }
     showDunesToast(context, 'NOVA已回复，可返回查看');
   }
 
@@ -343,9 +404,16 @@ class _NativeScreenHostState extends State<NativeScreenHost> {
       final results = await Future.wait(<Future<Object?>>[
         convService.fetchConversations(),
         notifService.fetchSummary(),
+        InboxHiddenStorage.load(),
+        convService.fetchTotalUnread(),
       ]);
-      final rows = results[0] as List<NativeConversation>;
+      final allRows = results[0] as List<NativeConversation>;
       final notif = results[1] as NativeNotificationSummary;
+      final hidden = results[2] as Map<String, InboxHiddenEntry>;
+      final apiTotal = results[3] as int?;
+      final rows = allRows
+          .where((c) => c.isVisible && !isConversationHidden(hidden, c.id))
+          .toList(growable: false);
       _mutedConvIds
         ..clear()
         ..addEntries(
@@ -354,13 +422,37 @@ class _NativeScreenHostState extends State<NativeScreenHost> {
               .map((c) => MapEntry(c.id, true)),
         );
       if (mounted) {
-        _commUnread.update(
-          _commUnread.sumConversationUnread(rows: rows, notifUnread: notif.unreadCount),
+        final summedTotal = _commUnread.sumConversationUnread(
+          rows: rows,
+          notifUnread: notif.unreadCount,
         );
-        syncPushBadgeCount(_commUnread.total);
+        // 取服务端总数与本地汇总的较大值：服务端 /comm/unread-total 会漏算
+        // 广播等场景（返回 0），若盲信它的 0 会在仍有未读时误清角标。
+        final apiVal = apiTotal ?? 0;
+        final serverTotal = apiVal > summedTotal ? apiVal : summedTotal;
+        final localBadge = await readPushBadgeCount();
+        final unreadRows = rows
+            .where((c) => c.unreadCount > 0)
+            .map((c) => 'id=${c.id} kind=${c.kind} unread=${c.unreadCount}')
+            .join('; ');
+        print(
+          '[Badge] refresh apiTotal=$apiTotal summed=$summedTotal notif=${notif.unreadCount} '
+          'next=$serverTotal local=$localBadge pendingZero=$_pendingBadgeZeroSync '
+          'unreadRows=[$unreadRows]',
+        );
+        _commUnread.update(serverTotal);
+        if (serverTotal == 0) {
+          if (!_pendingBadgeZeroSync) {
+            print('[Badge] skip sync 0 (no read ack)');
+            return;
+          }
+          _pendingBadgeZeroSync = false;
+          print('[Badge] sync 0 after read ack');
+        }
+        syncPushBadgeCount(serverTotal);
       }
-    } catch (_) {
-      // Tab badge is best-effort.
+    } catch (e, st) {
+      print('[Badge] refresh failed: $e\n$st');
     }
   }
 
@@ -390,6 +482,7 @@ class _NativeScreenHostState extends State<NativeScreenHost> {
               _focusMessageId = null;
               _focusMessageHint = null;
             });
+            _markUserEnteredChat();
             widget.navigation.go('C5');
           },
           onOpenGroup: (conv) {
@@ -398,6 +491,7 @@ class _NativeScreenHostState extends State<NativeScreenHost> {
               _focusMessageId = null;
               _focusMessageHint = null;
             });
+            _markUserEnteredChat();
             widget.navigation.go('C2');
           },
           onOpenContacts: () => widget.navigation.go('C3'),
@@ -419,12 +513,14 @@ class _NativeScreenHostState extends State<NativeScreenHost> {
         return NativeNotificationsPage(
           session: widget.session,
           onBack: widget.navigation.back,
+          onNotificationsRead: _handleNotificationsRead,
         );
       case 'C10':
         return NativeBroadcastPage(
           session: widget.session,
           conversationHint: _selectedBroadcast,
           onBack: widget.navigation.back,
+          onConversationRead: _handleConversationRead,
         );
       case 'C7':
         return NativeNewChatPage(
@@ -437,6 +533,7 @@ class _NativeScreenHostState extends State<NativeScreenHost> {
               _focusMessageId = null;
               _focusMessageHint = null;
             });
+            _markUserEnteredChat();
             widget.navigation.go('C5');
           },
           onOpenGroupChat: (conversation) {
@@ -445,6 +542,7 @@ class _NativeScreenHostState extends State<NativeScreenHost> {
               _focusMessageId = null;
               _focusMessageHint = null;
             });
+            _markUserEnteredChat();
             widget.navigation.go('C2');
           },
         );
@@ -476,7 +574,10 @@ class _NativeScreenHostState extends State<NativeScreenHost> {
           },
           onOpenMember: (userId, displayName) {
             setState(() {
-              _selectedContact = NativeContact(userId: userId, displayName: displayName);
+              _selectedContact = NativeContact(
+                userId: userId,
+                displayName: displayName,
+              );
             });
             widget.navigation.go('C9');
           },
@@ -498,6 +599,7 @@ class _NativeScreenHostState extends State<NativeScreenHost> {
               _focusMessageId = null;
               _focusMessageHint = null;
             });
+            _markUserEnteredChat();
             widget.navigation.go('C5');
           },
         );
@@ -513,6 +615,7 @@ class _NativeScreenHostState extends State<NativeScreenHost> {
               _focusMessageId = null;
               _focusMessageHint = null;
             });
+            _markUserEnteredChat();
             widget.navigation.go('C5');
           },
         );
@@ -600,7 +703,7 @@ class _NativeScreenHostState extends State<NativeScreenHost> {
       case 'C4':
         return NativeNovaPage(
           session: widget.session,
-          onBack: widget.navigation.back,
+          onBack: () => widget.navigation.go('C1'),
           onHistory: () => widget.navigation.go('C11'),
           onOpenKb: () => widget.navigation.go('K1'),
           focusConversationId: _novaFocusConversationId,
@@ -664,12 +767,14 @@ class _NativeScreenHostState extends State<NativeScreenHost> {
           conversationHint: _selectedGroup,
           focusMessageId: _focusMessageId,
           focusMessageHint: _focusMessageHint,
+          autoMarkRead: _userActivelyInChat,
           onBack: () {
             setState(() {
               _focusMessageId = null;
               _focusMessageHint = null;
             });
-            widget.navigation.back();
+            _markUserLeftChat();
+            widget.navigation.go('C1');
           },
           onOpenSearch: (convId) {
             setState(() {
@@ -689,6 +794,7 @@ class _NativeScreenHostState extends State<NativeScreenHost> {
             widget.navigation.go('C13');
           },
           onOpenGroupInfo: () => widget.navigation.go('C6'),
+          onConversationRead: _handleConversationRead,
         );
       case 'C5':
         return NativePrivateChatPage(
@@ -697,20 +803,26 @@ class _NativeScreenHostState extends State<NativeScreenHost> {
           peerUserIdHint: _selectedPrivatePeerUserId,
           focusMessageId: _focusMessageId,
           focusMessageHint: _focusMessageHint,
+          autoMarkRead: _userActivelyInChat,
           onBack: () {
             setState(() {
               _focusMessageId = null;
               _focusMessageHint = null;
             });
-            widget.navigation.back();
+            _markUserLeftChat();
+            widget.navigation.go('C1');
           },
           onOpenProfile: () {
-            final peerId = _selectedPrivate?.peerUserId ?? _selectedPrivatePeerUserId;
+            final peerId =
+                _selectedPrivate?.peerUserId ?? _selectedPrivatePeerUserId;
             if (peerId != null && peerId > 0) {
               setState(() {
                 _selectedContact = NativeContact(
                   userId: peerId,
-                  displayName: _selectedPrivate?.peerDisplayName ?? _selectedPrivate?.title ?? '',
+                  displayName:
+                      _selectedPrivate?.peerDisplayName ??
+                      _selectedPrivate?.title ??
+                      '',
                 );
               });
             }
@@ -726,6 +838,7 @@ class _NativeScreenHostState extends State<NativeScreenHost> {
             });
             widget.navigation.go('C12');
           },
+          onConversationRead: _handleConversationRead,
         );
       case 'C12':
         return NativeChatSearchPage(
@@ -738,6 +851,9 @@ class _NativeScreenHostState extends State<NativeScreenHost> {
               _focusMessageId = message.id;
               _focusMessageHint = message;
             });
+            if (_searchReturnScreen == 'C5' || _searchReturnScreen == 'C2') {
+              _markUserEnteredChat();
+            }
             widget.navigation.go(_searchReturnScreen);
           },
         );
@@ -814,6 +930,7 @@ class _NativeB2PageState extends State<_NativeB2Page> {
   bool _loading = true;
   String? _loadError;
   bool _avatarSheetOpen = false;
+  bool _qrLoginOpening = false;
 
   @override
   void initState() {
@@ -841,12 +958,20 @@ class _NativeB2PageState extends State<_NativeB2Page> {
       final results = await Future.wait(<Future<Object?>>[
         convService.fetchConversations(),
         notifService.fetchSummary(),
+        InboxHiddenStorage.load(),
       ]);
-      final rows = results[0] as List<NativeConversation>;
+      final allRows = results[0] as List<NativeConversation>;
       final notif = results[1] as NativeNotificationSummary;
+      final hidden = results[2] as Map<String, InboxHiddenEntry>;
+      final rows = allRows
+          .where((c) => c.isVisible && !isConversationHidden(hidden, c.id))
+          .toList(growable: false);
       if (mounted) {
         widget.commUnread.update(
-          widget.commUnread.sumConversationUnread(rows: rows, notifUnread: notif.unreadCount),
+          widget.commUnread.sumConversationUnread(
+            rows: rows,
+            notifUnread: notif.unreadCount,
+          ),
         );
       }
     } catch (_) {
@@ -876,7 +1001,10 @@ class _NativeB2PageState extends State<_NativeB2Page> {
         dunesHttpGet(widget.session, '/workbench/my-stats'),
         _fetchKbSummary(),
         _loadProfile(),
-        xflow.fetchB14Initiated().then<List<XflowProposalItem>?>((v) => v).catchError((_) => null),
+        xflow
+            .fetchB14Initiated()
+            .then<List<XflowProposalItem>?>((v) => v)
+            .catchError((_) => null),
       ]);
       final resp = results[0] as http.Response;
       final kbSummary = results[1] as NativeKbSummary?;
@@ -888,8 +1016,8 @@ class _NativeB2PageState extends State<_NativeB2Page> {
       final body = jsonDecode(resp.body);
       final raw = body is Map<String, dynamic>
           ? (body['data'] is Map<String, dynamic>
-              ? body['data'] as Map<String, dynamic>
-              : body)
+                ? body['data'] as Map<String, dynamic>
+                : body)
           : const <String, dynamic>{};
       if (!mounted) return;
       var stats = _NativeMyStats.fromJson(raw);
@@ -917,6 +1045,20 @@ class _NativeB2PageState extends State<_NativeB2Page> {
     showDunesSoonToast(context, label);
   }
 
+  Future<void> _openQrLoginScanner() async {
+    if (_qrLoginOpening) return;
+    setState(() => _qrLoginOpening = true);
+    try {
+      await Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => QrLoginScanPage(session: widget.session),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _qrLoginOpening = false);
+    }
+  }
+
   Future<_NativeB2Profile> _loadProfile() async {
     try {
       final meResp = await dunesHttpGet(widget.session, '/users/me');
@@ -926,22 +1068,29 @@ class _NativeB2PageState extends State<_NativeB2Page> {
       final body = jsonDecode(meResp.body);
       final data = body is Map<String, dynamic>
           ? (body['data'] is Map<String, dynamic>
-              ? body['data'] as Map<String, dynamic>
-              : body)
+                ? body['data'] as Map<String, dynamic>
+                : body)
           : const <String, dynamic>{};
       final avatarPreset =
           (data['avatarPreset'] ?? data['peerAvatarPreset'] ?? '').toString();
-      final objectKey = (data['avatarObjectKey'] ?? data['peerAvatarObjectKey'] ?? '')
-          .toString();
-      String avatarUrl = (data['avatarUrl'] ??
-              data['avatar'] ??
-              data['avatarSrc'] ??
-              data['avatarImage'] ??
-              '')
-          .toString();
-      if (avatarPreset.isEmpty &&
-          objectKey.isNotEmpty &&
-          avatarUrl.isEmpty) {
+      final objectKey =
+          (data['avatarObjectKey'] ?? data['peerAvatarObjectKey'] ?? '')
+              .toString();
+      String avatarUrl =
+          (data['avatarUrl'] ??
+                  data['avatarFullUrl'] ??
+                  data['avatarImageUrl'] ??
+                  data['avatar'] ??
+                  data['avatarSrc'] ??
+                  data['avatarImage'] ??
+                  '')
+              .toString();
+      if (avatarUrl.isEmpty && _looksLikeUrl(objectKey)) {
+        avatarUrl = objectKey;
+      }
+      if (objectKey.isNotEmpty &&
+          avatarUrl.isEmpty &&
+          !_looksLikeUrl(objectKey)) {
         try {
           final preResp = await dunesHttpGet(
             widget.session,
@@ -952,8 +1101,8 @@ class _NativeB2PageState extends State<_NativeB2Page> {
             if (preBody is Map<String, dynamic>) {
               final preData = preBody['data'];
               if (preData is Map<String, dynamic>) {
-                avatarUrl =
-                    (preData['url'] ?? preData['downloadUrl'] ?? '').toString();
+                avatarUrl = (preData['url'] ?? preData['downloadUrl'] ?? '')
+                    .toString();
               } else {
                 avatarUrl = (preBody['url'] ?? preBody['downloadUrl'] ?? '')
                     .toString();
@@ -962,9 +1111,17 @@ class _NativeB2PageState extends State<_NativeB2Page> {
           }
         } catch (_) {}
       }
+      if (avatarUrl.isNotEmpty) {
+        avatarUrl = _avatarProxyUrl(avatarUrl);
+      } else if (objectKey.isNotEmpty) {
+        avatarUrl = _avatarProxyUrl(objectKey);
+      }
       return _NativeB2Profile(
         displayName:
-            (data['displayName'] ?? data['name'] ?? widget.session.displayName ?? '')
+            (data['displayName'] ??
+                    data['name'] ??
+                    widget.session.displayName ??
+                    '')
                 .toString(),
         phone: (data['phone'] ?? widget.session.phone).toString(),
         departmentName: (data['departmentName'] ?? data['department'] ?? '')
@@ -999,6 +1156,21 @@ class _NativeB2PageState extends State<_NativeB2Page> {
       showDunesToast(context, '头像已更新');
     } finally {
       if (mounted) setState(() => _avatarSheetOpen = false);
+    }
+  }
+
+  Future<bool> _clearLocalCache() async {
+    try {
+      await InboxHiddenStorage.save(const <String, InboxHiddenEntry>{});
+      await NovaWebStorage.clear(widget.session.userId);
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('xflow_draft_sales-proposal');
+      if (!mounted) return true;
+      await _refreshCommBadge();
+      await _loadStats(silent: true);
+      return true;
+    } catch (_) {
+      return false;
     }
   }
 
@@ -1046,7 +1218,8 @@ class _NativeB2PageState extends State<_NativeB2Page> {
                       const SizedBox(height: 8),
                       _buildReminderBanner(
                         icon: Icons.warning_amber_rounded,
-                        text: '您有 ${stats.approvalRejected} 条审批被驳回，点击进入「我发起的审批」',
+                        text:
+                            '您有 ${stats.approvalRejected} 条审批被驳回，点击进入「我发起的审批」',
                         onTap: () => widget.onOpenB14(),
                       ),
                     ],
@@ -1054,8 +1227,10 @@ class _NativeB2PageState extends State<_NativeB2Page> {
                       const SizedBox(height: 8),
                       _buildReminderBanner(
                         icon: Icons.assignment_ind_outlined,
-                        text: '有 ${stats.pendingInitiateForMe} 条同事推送给您、待您确认发起的提案',
-                        onTap: () => widget.onOpenB14(filter: 'PENDING_INITIATE'),
+                        text:
+                            '有 ${stats.pendingInitiateForMe} 条同事推送给您、待您确认发起的提案',
+                        onTap: () =>
+                            widget.onOpenB14(filter: 'PENDING_INITIATE'),
                       ),
                     ],
                     if (stats.pendingForMe > 0 ||
@@ -1069,21 +1244,23 @@ class _NativeB2PageState extends State<_NativeB2Page> {
                         icon: Icons.send_outlined,
                         title: '我发起的审批',
                         desc:
-                            '${initiatedTotal} 条总数 · ${stats.pendingInitiateForMe} 条代发起 · ${stats.approvalPending} 审批中',
+                            '$initiatedTotal 条总数 · ${stats.pendingInitiateForMe} 条代发起 · ${stats.approvalPending} 审批中',
                         badge: initiatedTotal,
                         onTap: () => widget.onOpenB14(),
                       ),
                       _buildMenuItem(
                         icon: Icons.assignment_outlined,
                         title: '抄送我的提案',
-                        desc: '${stats.ccProposalCount} 份抄送 · ${stats.ccProposalPending} 审批中',
+                        desc:
+                            '${stats.ccProposalCount} 份抄送 · ${stats.ccProposalPending} 审批中',
                         badge: stats.ccProposalCount,
                         onTap: () => widget.navigation.go('P1'),
                       ),
                       _buildMenuItem(
                         icon: Icons.fact_check_outlined,
                         title: '我审批的',
-                        desc: '${stats.pendingForMe} 待我审 · ${stats.handledThisMonth} 已审核',
+                        desc:
+                            '${stats.pendingForMe} 待我审 · ${stats.handledThisMonth} 已审核',
                         badge: stats.pendingForMe,
                         tint: const Color(0xFFDFF1E8),
                         onTap: () => widget.navigation.go('B1'),
@@ -1091,7 +1268,8 @@ class _NativeB2PageState extends State<_NativeB2Page> {
                       _buildMenuItem(
                         icon: Icons.menu_book_outlined,
                         title: '知识库',
-                        desc: '$kbDocCount 文档 · $kbCategoryCount 分类 · $kbUnreadCount 未读',
+                        desc:
+                            '$kbDocCount 文档 · $kbCategoryCount 分类 · $kbUnreadCount 未读',
                         badge: kbUnreadCount,
                         onTap: () => widget.navigation.go('K1'),
                       ),
@@ -1180,6 +1358,19 @@ class _NativeB2PageState extends State<_NativeB2Page> {
     );
   }
 
+  bool _looksLikeUrl(String value) {
+    final v = value.toLowerCase();
+    return v.startsWith('http://') || v.startsWith('https://');
+  }
+
+  String _avatarProxyUrl(String source) {
+    final raw = source.trim();
+    if (raw.isEmpty) return raw;
+    final apiBase = widget.session.apiBase;
+    if (raw.startsWith(apiBase)) return raw;
+    return '$apiBase/storage/download?bucket=user-avatars&objectKey=${Uri.encodeQueryComponent(raw)}&proxy=1';
+  }
+
   Widget _buildLogoutButton() {
     return Padding(
       padding: const EdgeInsets.fromLTRB(0, 20, 0, 28),
@@ -1200,7 +1391,9 @@ class _NativeB2PageState extends State<_NativeB2Page> {
             padding: const EdgeInsets.symmetric(vertical: 12),
             side: BorderSide(color: DunesColors.coral.withValues(alpha: 0.28)),
             backgroundColor: DunesColors.coral.withValues(alpha: 0.08),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
           ),
         ),
       ),
@@ -1241,6 +1434,56 @@ class _NativeB2PageState extends State<_NativeB2Page> {
             ),
           ),
           const Spacer(),
+          Tooltip(
+            message: '扫码登录工作台',
+            child: InkWell(
+              borderRadius: BorderRadius.circular(14),
+              onTap: _qrLoginOpening ? null : _openQrLoginScanner,
+              child: Container(
+                margin: const EdgeInsets.only(right: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 6,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: DunesColors.borderSoft),
+                ),
+                child: Icon(
+                  _qrLoginOpening
+                      ? Icons.hourglass_top
+                      : Icons.qr_code_scanner_rounded,
+                  size: 16,
+                  color: DunesColors.text2,
+                ),
+              ),
+            ),
+          ),
+          Tooltip(
+            message: '清除本地缓存',
+            child: InkWell(
+              borderRadius: BorderRadius.circular(14),
+              onTap: _clearLocalCache,
+              child: Container(
+                margin: const EdgeInsets.only(right: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 6,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: DunesColors.borderSoft),
+                ),
+                child: const Icon(
+                  Icons.cleaning_services_outlined,
+                  size: 16,
+                  color: DunesColors.text2,
+                ),
+              ),
+            ),
+          ),
           InkWell(
             borderRadius: BorderRadius.circular(14),
             onTap: () => widget.navigation.go('B3'),
@@ -1329,14 +1572,20 @@ class _NativeB2PageState extends State<_NativeB2Page> {
                   name.isEmpty ? '未命名用户' : name,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w500,
+                  ),
                 ),
                 const SizedBox(height: 3),
                 Text(
                   profile.subtitleLine,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 10, color: DunesColors.text2),
+                  style: const TextStyle(
+                    fontSize: 10,
+                    color: DunesColors.text2,
+                  ),
                 ),
               ],
             ),
@@ -1370,7 +1619,12 @@ class _NativeB2PageState extends State<_NativeB2Page> {
       );
     }
 
-    Widget cell(String title, String value, {bool soon = false, VoidCallback? onTap}) {
+    Widget cell(
+      String title,
+      String value, {
+      bool soon = false,
+      VoidCallback? onTap,
+    }) {
       return InkWell(
         borderRadius: BorderRadius.circular(10),
         onTap: onTap,
@@ -1391,7 +1645,10 @@ class _NativeB2PageState extends State<_NativeB2Page> {
                       title,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontSize: 8.5, color: DunesColors.text3),
+                      style: const TextStyle(
+                        fontSize: 8.5,
+                        color: DunesColors.text3,
+                      ),
                     ),
                     const SizedBox(height: 5),
                     Text(
@@ -1407,12 +1664,7 @@ class _NativeB2PageState extends State<_NativeB2Page> {
                   ],
                 ),
               ),
-              if (soon)
-                Positioned(
-                  top: 3,
-                  right: 3,
-                  child: soonBadge(),
-                ),
+              if (soon) Positioned(top: 3, right: 3, child: soonBadge()),
             ],
           ),
         ),
@@ -1422,7 +1674,10 @@ class _NativeB2PageState extends State<_NativeB2Page> {
     return LayoutBuilder(
       builder: (context, constraints) {
         const gap = 6.0;
-        final cellW = ((constraints.maxWidth - gap * 3) / 4).clamp(0.0, double.infinity);
+        final cellW = ((constraints.maxWidth - gap * 3) / 4).clamp(
+          0.0,
+          double.infinity,
+        );
         return Row(
           children: [
             SizedBox(
@@ -1474,14 +1729,14 @@ class _NativeB2PageState extends State<_NativeB2Page> {
       children: [
         Row(
           children: [
-            const Text('快速发起', style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w500)),
+            const Text(
+              '快速发起',
+              style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w500),
+            ),
             const Spacer(),
             TextButton(
               onPressed: () => widget.navigation.go('B3'),
-              child: const Text(
-                '销售提案  →',
-                style: TextStyle(fontSize: 10),
-              ),
+              child: const Text('销售提案  →', style: TextStyle(fontSize: 10)),
             ),
           ],
         ),
@@ -1519,21 +1774,30 @@ class _NativeB2PageState extends State<_NativeB2Page> {
                       right: -4,
                       top: -4,
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 4,
+                          vertical: 1,
+                        ),
                         decoration: BoxDecoration(
                           color: const Color(0xFFEFEAFF),
                           borderRadius: BorderRadius.circular(99),
                         ),
                         child: const Text(
                           '新建',
-                          style: TextStyle(fontSize: 7.5, color: Color(0xFF7058D8)),
+                          style: TextStyle(
+                            fontSize: 7.5,
+                            color: Color(0xFF7058D8),
+                          ),
                         ),
                       ),
                     ),
                   ],
                 ),
                 const SizedBox(height: 8),
-                const Text('销售提案', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w500)),
+                const Text(
+                  '销售提案',
+                  style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w500),
+                ),
               ],
             ),
           ),
@@ -1573,10 +1837,17 @@ class _NativeB2PageState extends State<_NativeB2Page> {
               Expanded(
                 child: Text(
                   text,
-                  style: const TextStyle(fontSize: 10.5, color: Color(0xFF6E4A11)),
+                  style: const TextStyle(
+                    fontSize: 10.5,
+                    color: Color(0xFF6E4A11),
+                  ),
                 ),
               ),
-              const Icon(Icons.chevron_right_rounded, size: 16, color: Color(0xFF8A5A14)),
+              const Icon(
+                Icons.chevron_right_rounded,
+                size: 16,
+                color: Color(0xFF8A5A14),
+              ),
             ],
           ),
         ),
@@ -1615,7 +1886,10 @@ class _NativeB2PageState extends State<_NativeB2Page> {
               Container(
                 width: 28,
                 height: 28,
-                decoration: BoxDecoration(color: tint, borderRadius: BorderRadius.circular(8)),
+                decoration: BoxDecoration(
+                  color: tint,
+                  borderRadius: BorderRadius.circular(8),
+                ),
                 child: Icon(icon, size: 15, color: DunesColors.accentDeep),
               ),
               const SizedBox(width: 11),
@@ -1624,23 +1898,42 @@ class _NativeB2PageState extends State<_NativeB2Page> {
                   mainAxisAlignment: MainAxisAlignment.center,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(title, style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w500)),
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
                     const SizedBox(height: 2),
-                    Text(desc, style: const TextStyle(fontSize: 10, color: DunesColors.text3)),
+                    Text(
+                      desc,
+                      style: const TextStyle(
+                        fontSize: 10,
+                        color: DunesColors.text3,
+                      ),
+                    ),
                   ],
                 ),
               ),
               if (badge != null)
                 Container(
                   margin: const EdgeInsets.only(right: 8),
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 1,
+                  ),
                   decoration: BoxDecoration(
                     color: const Color(0xFFC6C2B8),
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: Text(
                     '$badge',
-                    style: const TextStyle(fontSize: 9, color: Colors.white, fontWeight: FontWeight.w700),
+                    style: const TextStyle(
+                      fontSize: 9,
+                      color: Colors.white,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                 ),
               const Icon(Icons.chevron_right_rounded, color: DunesColors.text3),
@@ -1675,7 +1968,11 @@ class _NativeB2PageState extends State<_NativeB2Page> {
                 ),
                 child: const Text(
                   '敬请期待',
-                  style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w600),
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ),
             ),
@@ -1700,15 +1997,15 @@ class _NativeMyStats {
   });
 
   const _NativeMyStats.empty()
-      : pendingForMe = 0,
-        initiatedByMe = 0,
-        approvalPending = 0,
-        handledThisMonth = 0,
-        outstandingInvoices = 0,
-        approvalRejected = 0,
-        ccProposalCount = 0,
-        ccProposalPending = 0,
-        pendingInitiateForMe = 0;
+    : pendingForMe = 0,
+      initiatedByMe = 0,
+      approvalPending = 0,
+      handledThisMonth = 0,
+      outstandingInvoices = 0,
+      approvalRejected = 0,
+      ccProposalCount = 0,
+      ccProposalPending = 0,
+      pendingInitiateForMe = 0;
 
   final int pendingForMe;
   final int initiatedByMe;
@@ -1782,8 +2079,11 @@ class _NativeMyStats {
       pendingForMe: readInt(<String>['pendingForMe', 'openTodos']),
       initiatedByMe: readInt(<String>['initiatedByMe', 'initiated']),
       approvalPending: readInt(<String>['approvalPending']),
-      handledThisMonth:
-          readInt(<String>['approvalHandled', 'handledThisMonth', 'approved']),
+      handledThisMonth: readInt(<String>[
+        'approvalHandled',
+        'handledThisMonth',
+        'approved',
+      ]),
       outstandingInvoices: readInt(<String>['outstandingInvoices']),
       approvalRejected: readInt(<String>['approvalRejected']),
       ccProposalCount: readInt(<String>['ccProposalCount']),
@@ -1852,21 +2152,14 @@ class _NativeStubPage extends StatelessWidget {
       body: [
         _InfoTile(label: '状态', value: subtitle),
         if (onBack != null)
-          _ActionTile(
-            title: '返回',
-            subtitle: '回到上一页',
-            onTap: onBack,
-          ),
+          _ActionTile(title: '返回', subtitle: '回到上一页', onTap: onBack),
       ],
     );
   }
 }
 
 class _NativeScaffold extends StatelessWidget {
-  const _NativeScaffold({
-    required this.title,
-    required this.body,
-  });
+  const _NativeScaffold({required this.title, required this.body});
 
   final String title;
   final List<Widget> body;
@@ -1886,16 +2179,16 @@ class _NativeScaffold extends StatelessWidget {
                     child: Text(
                       title,
                       style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                            fontWeight: FontWeight.w600,
-                          ),
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
                   Text(
                     'NATIVE PILOT',
                     style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                          color: DunesColors.text3,
-                          letterSpacing: 0.8,
-                        ),
+                      color: DunesColors.text3,
+                      letterSpacing: 0.8,
+                    ),
                   ),
                 ],
               ),
@@ -1917,11 +2210,7 @@ class _NativeScaffold extends StatelessWidget {
 }
 
 class _ActionTile extends StatelessWidget {
-  const _ActionTile({
-    required this.title,
-    required this.subtitle,
-    this.onTap,
-  });
+  const _ActionTile({required this.title, required this.subtitle, this.onTap});
 
   final String title;
   final String subtitle;
@@ -1932,19 +2221,19 @@ class _ActionTile extends StatelessWidget {
     return ClipRRect(
       borderRadius: BorderRadius.circular(12),
       child: Material(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(12),
-      child: InkWell(
+        color: Colors.white,
         borderRadius: BorderRadius.circular(12),
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.all(14),
-          child: Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
                       Text(
                         title,
                         style: const TextStyle(
@@ -1952,7 +2241,7 @@ class _ActionTile extends StatelessWidget {
                           fontWeight: FontWeight.w600,
                         ),
                       ),
-                    const SizedBox(height: 4),
+                      const SizedBox(height: 4),
                       Text(
                         subtitle,
                         style: const TextStyle(
@@ -1960,14 +2249,14 @@ class _ActionTile extends StatelessWidget {
                           color: DunesColors.text3,
                         ),
                       ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
                 const Icon(
                   Icons.chevron_right_rounded,
                   color: DunesColors.text3,
                 ),
-            ],
+              ],
             ),
           ),
         ),
@@ -1994,7 +2283,10 @@ class _InfoTile extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label, style: const TextStyle(fontSize: 12, color: DunesColors.text3)),
+          Text(
+            label,
+            style: const TextStyle(fontSize: 12, color: DunesColors.text3),
+          ),
           const SizedBox(height: 6),
           Text(value, style: const TextStyle(fontSize: 14)),
         ],

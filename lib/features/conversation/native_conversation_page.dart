@@ -420,10 +420,8 @@ class _NativeConversationPageState extends State<NativeConversationPage> {
     return ChatInboxRow(
       kind: ChatInboxRowKind.systemNotification,
       title: '系统通知',
-      subtitle: 'DUNES · SYS',
       preview: preview,
       timeLabel: InboxFormat.formatTime(latest?.createdAt),
-      sysTag: latest?.kind,
       unreadCount: _notif.unreadCount,
       showDivider: true,
       onTap: widget.onOpenNotifications,
@@ -618,11 +616,16 @@ class _NativeConversationPageState extends State<NativeConversationPage> {
         ),
     ];
 
-    final dynamicSections = sections.where((s) => s.key != 'ai').toList()
-      ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
+    // NOVA 固定置顶；系统消息（系统通知·公司广播）固定紧随其后；其余按时间倒序。
+    final aiSection = sections.firstWhere((s) => s.key == 'ai');
+    final systemSection = sections.firstWhere((s) => s.key == 'system');
+    final dynamicSections =
+        sections.where((s) => s.key != 'ai' && s.key != 'system').toList()
+          ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
 
     return [
-      sections.first,
+      aiSection,
+      systemSection,
       ...dynamicSections,
     ];
   }

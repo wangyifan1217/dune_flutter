@@ -89,12 +89,7 @@ class _XflowUploadFieldState extends State<XflowUploadField> {
     try {
       final meta = _uploadMeta;
       final exts = (meta['extensions'] as List).cast<String>();
-      final typeGroup = XTypeGroup(
-        label: 'files',
-        extensions: exts,
-        mimeTypes: _mimeTypesFor(exts),
-      );
-      final picked = await openFiles(acceptedTypeGroups: [typeGroup]);
+      final picked = await _openFilesWithFallback(exts);
       if (picked.isEmpty) return;
       final next = List<Map<String, dynamic>>.from(widget.items);
       for (final file in picked.take(room)) {
@@ -118,8 +113,25 @@ class _XflowUploadFieldState extends State<XflowUploadField> {
         widget.onChanged(next);
         await _uploadOne(next, item, bytes, name);
       }
+    } catch (e) {
+      _toast('选择文件失败：${friendlyErrorText(e, fallback: '请检查相册/文件权限')}');
     } finally {
       if (mounted) setState(() => _picking = false);
+    }
+  }
+
+  Future<List<XFile>> _openFilesWithFallback(List<String> exts) async {
+    final typeGroup = XTypeGroup(
+      label: 'files',
+      extensions: exts,
+      mimeTypes: _mimeTypesFor(exts),
+    );
+    try {
+      return await openFiles(acceptedTypeGroups: [typeGroup]);
+    } catch (_) {
+      // iOS 上部分类型组合会触发平台层异常，降级到仅后缀过滤可提升兼容性。
+      final fallback = XTypeGroup(label: 'files', extensions: exts);
+      return openFiles(acceptedTypeGroups: [fallback]);
     }
   }
 
@@ -132,9 +144,13 @@ class _XflowUploadFieldState extends State<XflowUploadField> {
       'heif': 'image/heif',
       'pdf': 'application/pdf',
       'doc': 'application/msword',
-      'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'docx':
+          'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
     };
-    return exts.map((e) => map[e.toLowerCase()] ?? '').where((e) => e.isNotEmpty).toList();
+    return exts
+        .map((e) => map[e.toLowerCase()] ?? '')
+        .where((e) => e.isNotEmpty)
+        .toList();
   }
 
   Future<void> _uploadOne(
@@ -169,7 +185,9 @@ class _XflowUploadFieldState extends State<XflowUploadField> {
   }
 
   void _remove(String id) {
-    final next = widget.items.where((it) => it['id']?.toString() != id).toList(growable: false);
+    final next = widget.items
+        .where((it) => it['id']?.toString() != id)
+        .toList(growable: false);
     widget.onChanged(next);
     setState(() {});
   }
@@ -198,11 +216,19 @@ class _XflowUploadFieldState extends State<XflowUploadField> {
           child: Text.rich(
             TextSpan(
               text: _label,
-              style: DunesTypography.sans(fontSize: 11.5, fontWeight: FontWeight.w600, color: DunesColors.text),
+              style: DunesTypography.sans(
+                fontSize: 11.5,
+                fontWeight: FontWeight.w600,
+                color: DunesColors.text,
+              ),
               children: [
                 TextSpan(
                   text: ' ${meta['hint']}',
-                  style: DunesTypography.sans(fontSize: 10, fontWeight: FontWeight.w500, color: DunesColors.text3),
+                  style: DunesTypography.sans(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w500,
+                    color: DunesColors.text3,
+                  ),
                 ),
               ],
             ),
@@ -226,12 +252,18 @@ class _XflowUploadFieldState extends State<XflowUploadField> {
                 ),
                 borderRadius: BorderRadius.circular(14),
                 border: Border.all(
-                  color: isContract ? const Color(0x6BBE965A) : const Color(0x59A0825A),
+                  color: isContract
+                      ? const Color(0x6BBE965A)
+                      : const Color(0x59A0825A),
                 ),
               ),
               child: Column(
                 children: [
-                  Icon(meta['icon'] as IconData, size: 30, color: DunesColors.text3),
+                  Icon(
+                    meta['icon'] as IconData,
+                    size: 30,
+                    color: DunesColors.text3,
+                  ),
                   const SizedBox(height: 10),
                   Text(
                     meta['title'] as String,
@@ -278,7 +310,9 @@ class _XflowUploadFieldState extends State<XflowUploadField> {
   Widget _fileRow(Map<String, dynamic> item) {
     final status = (item['status'] ?? 'done').toString();
     final name = (item['fileName'] ?? '未命名文件').toString();
-    final progress = item['progress'] is num ? (item['progress'] as num).toInt() : 0;
+    final progress = item['progress'] is num
+        ? (item['progress'] as num).toInt()
+        : 0;
     final metaText = switch (status) {
       'uploading' => '上传中 $progress%',
       'error' => (item['error'] ?? '上传失败').toString(),
@@ -322,12 +356,19 @@ class _XflowUploadFieldState extends State<XflowUploadField> {
                   name,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: DunesTypography.sans(fontSize: 11.5, fontWeight: FontWeight.w600, color: DunesColors.text),
+                  style: DunesTypography.sans(
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w600,
+                    color: DunesColors.text,
+                  ),
                 ),
                 const SizedBox(height: 2),
                 Text(
                   metaText,
-                  style: DunesTypography.mono(fontSize: 9.5, color: DunesColors.text3),
+                  style: DunesTypography.mono(
+                    fontSize: 9.5,
+                    color: DunesColors.text3,
+                  ),
                 ),
                 if (status == 'uploading' || status == 'error')
                   Padding(
@@ -338,7 +379,9 @@ class _XflowUploadFieldState extends State<XflowUploadField> {
                         value: status == 'error' ? 1 : progress / 100,
                         minHeight: 3,
                         backgroundColor: DunesColors.borderSoft,
-                        color: status == 'error' ? DunesColors.coral : DunesColors.accent,
+                        color: status == 'error'
+                            ? DunesColors.coral
+                            : DunesColors.accent,
                       ),
                     ),
                   ),
@@ -379,14 +422,22 @@ class _XflowUploadFieldState extends State<XflowUploadField> {
 List<Map<String, dynamic>> normalizeUploadItems(dynamic val) {
   if (val == null || val == '') return [];
   if (val is List) {
-    return val.map((it) {
-      if (it is Map<String, dynamic>) return Map<String, dynamic>.from(it);
-      if (it is Map) return Map<String, dynamic>.from(it);
-      if (it is String && it.trim().isNotEmpty) {
-        return {'id': 'uf-${it.hashCode}', 'fileName': it, 'status': 'done', 'progress': 100};
-      }
-      return <String, dynamic>{};
-    }).where((m) => m.isNotEmpty).toList(growable: true);
+    return val
+        .map((it) {
+          if (it is Map<String, dynamic>) return Map<String, dynamic>.from(it);
+          if (it is Map) return Map<String, dynamic>.from(it);
+          if (it is String && it.trim().isNotEmpty) {
+            return {
+              'id': 'uf-${it.hashCode}',
+              'fileName': it,
+              'status': 'done',
+              'progress': 100,
+            };
+          }
+          return <String, dynamic>{};
+        })
+        .where((m) => m.isNotEmpty)
+        .toList(growable: true);
   }
   return [];
 }

@@ -14,7 +14,9 @@ class NativeGroupChatPage extends StatelessWidget {
     required this.onBack,
     required this.onOpenSearch,
     required this.onOpenMedia,
-    required this.onOpenGroupInfo,
+    required     this.onOpenGroupInfo,
+    this.onConversationRead,
+    this.autoMarkRead = false,
   });
 
   final AuthSession session;
@@ -25,6 +27,8 @@ class NativeGroupChatPage extends StatelessWidget {
   final ValueChanged<int> onOpenSearch;
   final ValueChanged<int> onOpenMedia;
   final VoidCallback onOpenGroupInfo;
+  final ValueChanged<int>? onConversationRead;
+  final bool autoMarkRead;
 
   @override
   Widget build(BuildContext context) {
@@ -38,6 +42,8 @@ class NativeGroupChatPage extends StatelessWidget {
       onOpenSearch: onOpenSearch,
       onOpenMedia: onOpenMedia,
       onOpenGroupInfo: onOpenGroupInfo,
+      onConversationRead: onConversationRead,
+      autoMarkRead: autoMarkRead,
     );
   }
 }

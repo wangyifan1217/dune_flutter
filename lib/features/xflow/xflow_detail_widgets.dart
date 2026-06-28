@@ -1516,6 +1516,7 @@ class _XfDetApproveCardState extends State<XfDetApproveCard> {
             controller: _comment,
             minLines: 2,
             maxLines: 4,
+            onTapOutside: (_) => FocusManager.instance.primaryFocus?.unfocus(),
             decoration: InputDecoration(
               hintText: '请填写审批意见（必填）',
               hintStyle: DunesTypography.sans(fontSize: 12, color: DunesColors.text3),

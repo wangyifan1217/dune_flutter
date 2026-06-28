@@ -27,24 +27,26 @@ http.MultipartFile _progressMultipartFile(
       return;
     }
     while (offset < total) {
-      final end = (offset + _uploadChunkSize < total) ? offset + _uploadChunkSize : total;
+      final end = (offset + _uploadChunkSize < total)
+          ? offset + _uploadChunkSize
+          : total;
       yield bytes.sublist(offset, end);
       offset = end;
       onProgress?.call(offset, total);
     }
   }
 
-  return http.MultipartFile(field, http.ByteStream(chunked()), total, filename: filename);
+  return http.MultipartFile(
+    field,
+    http.ByteStream(chunked()),
+    total,
+    filename: filename,
+  );
 }
 
 class ConversationService {
-  ConversationService({
-    required AuthSession session,
-    http.Client? client,
-  }) : this._(
-         session,
-         client ?? http.Client(),
-       );
+  ConversationService({required AuthSession session, http.Client? client})
+    : this._(session, client ?? http.Client());
 
   ConversationService._(this._session, this._client);
 
@@ -75,12 +77,34 @@ class ConversationService {
         .toList(growable: false);
   }
 
+  /// 服务端统一未读总数（与 TPNS 推送 badgeCount 口径一致）。
+  Future<int?> fetchTotalUnread() async {
+    final uri = _uri('/comm/unread-total');
+    final resp = await _client.get(uri, headers: _headers);
+    print(
+      '[BadgeAPI] GET $uri status=${resp.statusCode} body=${resp.body}',
+    );
+    if (resp.statusCode == 404) return null;
+    if (resp.statusCode < 200 || resp.statusCode >= 300) {
+      throw Exception('未读总数加载失败: HTTP ${resp.statusCode} ${resp.body}');
+    }
+    final body = _decode(resp.body);
+    if (body['success'] == false) {
+      throw Exception((body['message'] ?? '未读总数加载失败').toString());
+    }
+    final data = body['data'];
+    if (data is Map<String, dynamic>) {
+      return (data['totalUnread'] as num?)?.toInt();
+    }
+    return (body['totalUnread'] as num?)?.toInt();
+  }
+
   Future<int?> ensurePrivateConversationForPeer(int peerUserId) async {
     if (peerUserId <= 0 || peerUserId == _session.userId) return null;
     final rows = await fetchConversations();
     for (final c in rows) {
       if (c.kind != 'PRIVATE') continue;
-      if ((c.peerUserId ?? 0) == peerUserId) return c.id;
+      if ((c.peerUserId ?? 0) == peerUserId && c.isVisible) return c.id;
     }
     final resp = await _client.post(
       _uri('/conversations'),
@@ -100,7 +124,8 @@ class ConversationService {
     }
     final data = body['data'];
     if (data is Map<String, dynamic>) {
-      return (data['conversationId'] as num?)?.toInt() ?? (data['id'] as num?)?.toInt();
+      return (data['conversationId'] as num?)?.toInt() ??
+          (data['id'] as num?)?.toInt();
     }
     return null;
   }
@@ -110,14 +135,19 @@ class ConversationService {
     required List<int> memberUserIds,
     String? title,
   }) async {
-    final ids = memberUserIds.where((id) => id > 0 && id != _session.userId).toSet().toList(growable: false);
+    final ids = memberUserIds
+        .where((id) => id > 0 && id != _session.userId)
+        .toSet()
+        .toList(growable: false);
     if (ids.isEmpty) return null;
     final resp = await _client.post(
       _uri('/conversations'),
       headers: _headers,
       body: jsonEncode(<String, dynamic>{
         'kind': kind,
-        'title': (title ?? '').trim().isEmpty ? (kind == 'PRIVATE' ? '私聊' : '群聊') : title!.trim(),
+        'title': (title ?? '').trim().isEmpty
+            ? (kind == 'PRIVATE' ? '私聊' : '群聊')
+            : title!.trim(),
         'memberUserIds': ids,
       }),
     );
@@ -130,10 +160,15 @@ class ConversationService {
     }
     final data = body['data'];
     if (data is Map<String, dynamic>) {
-      if (data.containsKey('kind') || data.containsKey('title') || data.containsKey('peer')) {
+      if (data.containsKey('kind') ||
+          data.containsKey('title') ||
+          data.containsKey('peer')) {
         return _mapConversation(data);
       }
-      final convId = (data['conversationId'] as num?)?.toInt() ?? (data['id'] as num?)?.toInt() ?? 0;
+      final convId =
+          (data['conversationId'] as num?)?.toInt() ??
+          (data['id'] as num?)?.toInt() ??
+          0;
       if (convId > 0) {
         return fetchConversation(convId);
       }
@@ -219,7 +254,11 @@ class ConversationService {
     if (messageId <= 0) {
       return fetchMessagePage(conversationId, size: 20);
     }
-    var page = await fetchMessagePage(conversationId, size: 40, around: messageId);
+    var page = await fetchMessagePage(
+      conversationId,
+      size: 40,
+      around: messageId,
+    );
     if (page.items.any((m) => m.id == messageId)) {
       return page;
     }
@@ -232,8 +271,16 @@ class ConversationService {
         peerLastReadMessageId: page.peerLastReadMessageId,
       );
     }
-    final older = await fetchMessagePage(conversationId, size: 25, before: messageId);
-    final newer = await fetchMessagePage(conversationId, size: 25, after: messageId);
+    final older = await fetchMessagePage(
+      conversationId,
+      size: 25,
+      before: messageId,
+    );
+    final newer = await fetchMessagePage(
+      conversationId,
+      size: 25,
+      after: messageId,
+    );
     var merged = _mergeMessages(older.items, newer.items);
     if (!merged.any((m) => m.id == messageId)) {
       final hit = hint ?? await _findMessageInSearch(conversationId, messageId);
@@ -246,22 +293,31 @@ class ConversationService {
       items: merged,
       hasMore: older.hasMore || older.items.isNotEmpty,
       hasNewer: newer.hasNewer || newer.items.isNotEmpty,
-      peerLastReadMessageId: page.peerLastReadMessageId ?? newer.peerLastReadMessageId,
+      peerLastReadMessageId:
+          page.peerLastReadMessageId ?? newer.peerLastReadMessageId,
     );
   }
 
-  Future<NativeChatMessage?> _findMessageInSearch(int conversationId, int messageId) async {
+  Future<NativeChatMessage?> _findMessageInSearch(
+    int conversationId,
+    int messageId,
+  ) async {
     var before = messageId + 1;
     for (var i = 0; i < 12; i++) {
       final resp = await _client.get(
-        _uri('/conversations/$conversationId/messages/search?q=&size=50&before=$before'),
+        _uri(
+          '/conversations/$conversationId/messages/search?q=&size=50&before=$before',
+        ),
         headers: _headers,
       );
       if (resp.statusCode < 200 || resp.statusCode >= 300) break;
       final body = _decode(resp.body);
       final data = body['data'];
       final rows = _rowsFromData(data);
-      final items = rows.whereType<Map<String, dynamic>>().map(_mapMessage).toList();
+      final items = rows
+          .whereType<Map<String, dynamic>>()
+          .map(_mapMessage)
+          .toList();
       for (final m in items) {
         if (m.id == messageId) return m;
       }
@@ -315,7 +371,8 @@ class ConversationService {
           }),
         );
         if (resp.statusCode < 200 || resp.statusCode >= 300) {
-          if (_isRetryableStatus(resp.statusCode) && attempt < _maxSendAttempts) {
+          if (_isRetryableStatus(resp.statusCode) &&
+              attempt < _maxSendAttempts) {
             await _delayForRetry(attempt);
             continue;
           }
@@ -463,10 +520,7 @@ class ConversationService {
   }) async {
     for (var attempt = 1; attempt <= _maxSendAttempts; attempt++) {
       try {
-        final req = http.MultipartRequest(
-          'POST',
-          _uri('/storage/upload'),
-        );
+        final req = http.MultipartRequest('POST', _uri('/storage/upload'));
         req.headers['Authorization'] = 'Bearer ${_session.token}';
         req.fields['bucket'] = 'im-attachments';
         req.fields['conversationId'] = '$conversationId';
@@ -485,7 +539,8 @@ class ConversationService {
         final streamed = await _client.send(req);
         final bodyText = await streamed.stream.bytesToString();
         if (streamed.statusCode < 200 || streamed.statusCode >= 300) {
-          if (_isRetryableStatus(streamed.statusCode) && attempt < _maxSendAttempts) {
+          if (_isRetryableStatus(streamed.statusCode) &&
+              attempt < _maxSendAttempts) {
             await _delayForRetry(attempt);
             continue;
           }
@@ -531,7 +586,8 @@ class ConversationService {
           }),
         );
         if (resp.statusCode < 200 || resp.statusCode >= 300) {
-          if (_isRetryableStatus(resp.statusCode) && attempt < _maxSendAttempts) {
+          if (_isRetryableStatus(resp.statusCode) &&
+              attempt < _maxSendAttempts) {
             await _delayForRetry(attempt);
             continue;
           }
@@ -601,7 +657,9 @@ class ConversationService {
     final q = Uri.encodeQueryComponent(query.trim());
     final beforeQ = before != null && before > 0 ? '&before=$before' : '';
     final resp = await _client.get(
-      _uri('/conversations/$conversationId/messages/search?q=$q&size=$size&page=$page$beforeQ'),
+      _uri(
+        '/conversations/$conversationId/messages/search?q=$q&size=$size&page=$page$beforeQ',
+      ),
       headers: _headers,
     );
     if (resp.statusCode < 200 || resp.statusCode >= 300) {
@@ -668,7 +726,9 @@ class ConversationService {
         .toList(growable: false);
   }
 
-  Future<List<Map<String, dynamic>>> fetchGroupReadStatus(int conversationId) async {
+  Future<List<Map<String, dynamic>>> fetchGroupReadStatus(
+    int conversationId,
+  ) async {
     final resp = await _client.get(
       _uri('/conversations/$conversationId/read-status'),
       headers: _headers,
@@ -794,7 +854,8 @@ class ConversationService {
       throw Exception((body['message'] ?? '添加成员失败').toString());
     }
     final data = body['data'];
-    if (data is Map && data['added'] is num) return (data['added'] as num).toInt();
+    if (data is Map && data['added'] is num)
+      return (data['added'] as num).toInt();
     return userIds.length;
   }
 
@@ -827,7 +888,10 @@ class ConversationService {
   }
 
   /// 与 WebView `exitGroupMembership` 对齐：优先 leave，失败时尝试删除自己的成员关系。
-  Future<bool> exitGroupMembership(int conversationId, {bool dissolved = false}) async {
+  Future<bool> exitGroupMembership(
+    int conversationId, {
+    bool dissolved = false,
+  }) async {
     try {
       final resp = await _client.post(
         _uri('/conversations/$conversationId/leave'),
@@ -866,7 +930,8 @@ class ConversationService {
               .map(
                 (m) => NativeGroupMember(
                   userId: (m['userId'] as num?)?.toInt() ?? 0,
-                  displayName: (m['displayName'] ?? m['name'] ?? '成员').toString(),
+                  displayName: (m['displayName'] ?? m['name'] ?? '成员')
+                      .toString(),
                   role: m['role']?.toString(),
                   roleLabel: (m['roleLabel'] ?? m['title'])?.toString(),
                 ),
@@ -874,7 +939,8 @@ class ConversationService {
               .where((m) => m.userId > 0)
               .toList(growable: false)
         : const <NativeGroupMember>[];
-    final dissolved = raw['dissolved'] == true ||
+    final dissolved =
+        raw['dissolved'] == true ||
         raw['isDissolved'] == true ||
         raw['status']?.toString() == 'DISSOLVED' ||
         raw['frozen'] == true;
@@ -894,7 +960,10 @@ class ConversationService {
     );
   }
 
-  Future<Map<String, dynamic>?> fetchApprovalTrail(String businessType, String businessId) async {
+  Future<Map<String, dynamic>?> fetchApprovalTrail(
+    String businessType,
+    String businessId,
+  ) async {
     final resp = await _client.get(
       _uri('/approvals/${Uri.encodeComponent(businessType)}/$businessId'),
       headers: _headers,
@@ -908,7 +977,9 @@ class ConversationService {
     return null;
   }
 
-  Future<List<Map<String, dynamic>>> fetchConversationMembers(int conversationId) async {
+  Future<List<Map<String, dynamic>>> fetchConversationMembers(
+    int conversationId,
+  ) async {
     if (conversationId <= 0) return const <Map<String, dynamic>>[];
 
     // 对齐 WebView loadChat：优先 /info，回退 GET /conversations/:id
@@ -991,7 +1062,9 @@ class ConversationService {
 
   NativeConversation _mapConversation(Map<String, dynamic> raw) {
     final peer = raw['peer'];
-    var peerMap = peer is Map<String, dynamic> ? peer : const <String, dynamic>{};
+    var peerMap = peer is Map<String, dynamic>
+        ? peer
+        : const <String, dynamic>{};
     final membersRaw = raw['members'];
     if (peerMap.isEmpty && membersRaw is List) {
       for (final m in membersRaw) {
@@ -1003,7 +1076,10 @@ class ConversationService {
         }
       }
     } else {
-      final peerId = (peerMap['userId'] as num?)?.toInt() ?? (raw['peerUserId'] as num?)?.toInt() ?? 0;
+      final peerId =
+          (peerMap['userId'] as num?)?.toInt() ??
+          (raw['peerUserId'] as num?)?.toInt() ??
+          0;
       if (peerId > 0 && peerId == _session.userId && membersRaw is List) {
         for (final m in membersRaw) {
           if (m is! Map<String, dynamic>) continue;
@@ -1017,15 +1093,17 @@ class ConversationService {
     }
     final preview = _previewFrom(raw);
     final kind = (raw['kind'] ?? '').toString();
-    final peerName = (raw['peerDisplayName'] ?? peerMap['displayName'])?.toString().trim();
+    final peerName = (raw['peerDisplayName'] ?? peerMap['displayName'])
+        ?.toString()
+        .trim();
     final rawTitle = (raw['title'] ?? '').toString().trim();
     final title = kind == 'PRIVATE' && peerName != null && peerName.isNotEmpty
         ? peerName
         : rawTitle.isNotEmpty
-            ? rawTitle
-            : (peerName?.isNotEmpty ?? false)
-                ? peerName!
-                : '会话';
+        ? rawTitle
+        : (peerName?.isNotEmpty ?? false)
+        ? peerName!
+        : '会话';
     return NativeConversation(
       id: (raw['id'] as num?)?.toInt() ?? 0,
       kind: (raw['kind'] ?? '').toString(),
@@ -1033,36 +1111,55 @@ class ConversationService {
       unreadCount: (raw['unreadCount'] as num?)?.toInt() ?? 0,
       preview: preview,
       updatedAt: parseNovaDateTime(raw['updatedAt'] ?? raw['lastMessageAt']),
-      peerUserId: (peerMap['userId'] as num?)?.toInt() ?? (raw['peerUserId'] as num?)?.toInt(),
+      peerUserId:
+          (peerMap['userId'] as num?)?.toInt() ??
+          (raw['peerUserId'] as num?)?.toInt(),
       peerDisplayName: peerName,
       memberCount: (raw['memberCount'] as num?)?.toInt() ?? 0,
       muted: raw['muted'] == true,
       pinned: raw['pinned'] == true,
       businessType: raw['businessType']?.toString(),
-      peerDepartment: (raw['peerDepartment'] ?? peerMap['department'] ?? peerMap['departmentName'])?.toString(),
-      peerRoleLabel: (raw['peerRoleLabel'] ?? raw['peerTitle'] ?? peerMap['title'] ?? peerMap['roleLabel'])?.toString(),
-      peerAvatarPreset: (raw['peerAvatarPreset'] ?? peerMap['avatarPreset'])?.toString(),
-      peerAvatarObjectKey: (raw['peerAvatarObjectKey'] ?? peerMap['avatarObjectKey'])?.toString(),
-      dissolved: raw['dissolved'] == true ||
+      peerDepartment:
+          (raw['peerDepartment'] ??
+                  peerMap['department'] ??
+                  peerMap['departmentName'])
+              ?.toString(),
+      peerRoleLabel:
+          (raw['peerRoleLabel'] ??
+                  raw['peerTitle'] ??
+                  peerMap['title'] ??
+                  peerMap['roleLabel'])
+              ?.toString(),
+      peerAvatarPreset: (raw['peerAvatarPreset'] ?? peerMap['avatarPreset'])
+          ?.toString(),
+      peerAvatarObjectKey:
+          (raw['peerAvatarObjectKey'] ?? peerMap['avatarObjectKey'])
+              ?.toString(),
+      dissolved:
+          raw['dissolved'] == true ||
           raw['isDissolved'] == true ||
           raw['status']?.toString() == 'DISSOLVED' ||
           raw['frozen'] == true,
-      membershipStatus: (raw['membershipStatus'] ?? raw['memberStatus'])?.toString(),
+      membershipStatus: (raw['membershipStatus'] ?? raw['memberStatus'])
+          ?.toString(),
       assistantGenerating: raw['assistantGenerating'] == true,
-      assistantGeneratingStatus: (raw['assistantGeneratingStatus'] ?? '').toString(),
+      assistantGeneratingStatus: (raw['assistantGeneratingStatus'] ?? '')
+          .toString(),
     );
   }
 
   NativeChatMessage _mapMessage(Map<String, dynamic> raw) {
     final sender = raw['sender'];
-    final senderMap = sender is Map<String, dynamic> ? sender : const <String, dynamic>{};
+    final senderMap = sender is Map<String, dynamic>
+        ? sender
+        : const <String, dynamic>{};
     final senderName = (senderMap['displayName'] ?? '').toString().trim();
     final payloadRaw = raw['payload'];
     final payload = payloadRaw is Map<String, dynamic>
         ? payloadRaw
         : payloadRaw is Map
-            ? Map<String, dynamic>.from(payloadRaw)
-            : null;
+        ? Map<String, dynamic>.from(payloadRaw)
+        : null;
     return NativeChatMessage(
       id: (raw['id'] as num?)?.toInt() ?? 0,
       senderUserId: (senderMap['userId'] as num?)?.toInt() ?? 0,
@@ -1072,48 +1169,61 @@ class ConversationService {
       createdAt: DateTime.tryParse((raw['createdAt'] ?? '').toString()),
       payload: payload,
       peerRead: raw['peerRead'] == true || raw['isPeerRead'] == true,
-      senderAvatarPreset: (senderMap['avatarPreset'] ?? raw['senderAvatarPreset'])?.toString(),
-      senderAvatarObjectKey: (senderMap['avatarObjectKey'] ?? raw['senderAvatarObjectKey'])?.toString(),
+      senderAvatarPreset:
+          (senderMap['avatarPreset'] ?? raw['senderAvatarPreset'])?.toString(),
+      senderAvatarObjectKey:
+          (senderMap['avatarObjectKey'] ?? raw['senderAvatarObjectKey'])
+              ?.toString(),
     );
   }
 
   String _previewFrom(Map<String, dynamic> raw) {
     final convKind = (raw['kind'] ?? '').toString().toUpperCase();
-    final isGroup = convKind == 'GROUP' || convKind == 'WORKGROUP' || convKind == 'WORKGROUP_APPROVAL';
+    final isGroup =
+        convKind == 'GROUP' ||
+        convKind == 'WORKGROUP' ||
+        convKind == 'WORKGROUP_APPROVAL';
     final isPrivate = convKind == 'PRIVATE';
 
     final last = raw['lastMessage'];
     final lastMap = last is Map<String, dynamic>
         ? last
         : last is Map
-            ? Map<String, dynamic>.from(last)
-            : null;
+        ? Map<String, dynamic>.from(last)
+        : null;
 
-    final kind = (raw['lastMessageKind'] ??
-            raw['lastKind'] ??
-            raw['messageKind'] ??
-            lastMap?['kind'] ??
-            '')
-        .toString()
-        .toUpperCase();
+    final kind =
+        (raw['lastMessageKind'] ??
+                raw['lastKind'] ??
+                raw['messageKind'] ??
+                lastMap?['kind'] ??
+                '')
+            .toString()
+            .toUpperCase();
 
-    final rawText = (raw['lastMessagePreview'] ??
-            raw['preview'] ??
-            raw['lastMessageBodyText'] ??
-            raw['lastMessageText'] ??
-            lastMap?['bodyText'] ??
-            (last is String ? last : '') ??
-            '')
-        .toString()
-        .trim();
+    final rawText =
+        (raw['lastMessagePreview'] ??
+                raw['preview'] ??
+                raw['lastMessageBodyText'] ??
+                raw['lastMessageText'] ??
+                lastMap?['bodyText'] ??
+                (last is String ? last : '') ??
+                '')
+            .toString()
+            .trim();
 
     if (rawText.isEmpty) return '';
-    final effectiveKind = kind.isNotEmpty ? kind : _inferKindFromPreview(rawText);
-    if (_isSystemMsgKind(effectiveKind)) return _compactPreview(effectiveKind, rawText);
+    final effectiveKind = kind.isNotEmpty
+        ? kind
+        : _inferKindFromPreview(rawText);
+    if (_isSystemMsgKind(effectiveKind))
+      return _compactPreview(effectiveKind, rawText);
 
     // 群聊预览里服务端通常会把发送者名字拼进去（如 "张三: [图片]"），先拆出来，
     // 这样既能正确压缩媒体描述，又能在缺少结构化字段时回退用拆出的名字。
-    final parsed = isGroup ? _splitPreviewSender(rawText) : (sender: '', body: rawText);
+    final parsed = isGroup
+        ? _splitPreviewSender(rawText)
+        : (sender: '', body: rawText);
     final bodySource = parsed.body.isNotEmpty ? parsed.body : rawText;
     final compact = _compactPreview(effectiveKind, bodySource);
     final media = _isMediaPreviewBody(bodySource, effectiveKind);
@@ -1124,7 +1234,8 @@ class ConversationService {
         parsedSender: parsed.sender,
       );
       if (sender.isEmpty) return compact;
-      if (compact.startsWith('$sender:') || compact.startsWith('$sender：')) return compact;
+      if (compact.startsWith('$sender:') || compact.startsWith('$sender：'))
+        return compact;
       return '$sender: $compact';
     }
     return compact;
@@ -1140,7 +1251,8 @@ class ConversationService {
 
   String _inferKindFromPreview(String text) {
     final s = text.trim();
-    if (RegExp(r'^\[(相册|拍照|图片)\]', caseSensitive: false).hasMatch(s)) return 'IMAGE';
+    if (RegExp(r'^\[(相册|拍照|图片)\]', caseSensitive: false).hasMatch(s))
+      return 'IMAGE';
     if (RegExp(r'^\[文件\]').hasMatch(s)) return 'FILE';
     if (RegExp(r'^\[语音\]').hasMatch(s)) return 'AUDIO';
     return 'TEXT';
@@ -1151,26 +1263,35 @@ class ConversationService {
     required bool isPrivate,
     String parsedSender = '',
   }) {
-    final direct = (raw['lastMessageSenderDisplayName'] ??
-            raw['lastSenderDisplayName'] ??
-            raw['lastMessageSenderName'] ??
-            raw['lastSenderName'] ??
-            raw['senderName'] ??
-            '')
-        .toString()
-        .trim();
+    final direct =
+        (raw['lastMessageSenderDisplayName'] ??
+                raw['lastSenderDisplayName'] ??
+                raw['lastMessageSenderName'] ??
+                raw['lastSenderName'] ??
+                raw['senderName'] ??
+                '')
+            .toString()
+            .trim();
     if (direct.isNotEmpty) return direct;
 
-    final senderId = (raw['lastMessageSenderUserId'] as num?)?.toInt() ??
+    final senderId =
+        (raw['lastMessageSenderUserId'] as num?)?.toInt() ??
         (raw['lastSenderUserId'] as num?)?.toInt() ??
-        ((raw['lastMessage'] is Map && (raw['lastMessage'] as Map)['sender'] is Map)
-            ? (((raw['lastMessage'] as Map)['sender'] as Map)['userId'] as num?)?.toInt()
+        ((raw['lastMessage'] is Map &&
+                (raw['lastMessage'] as Map)['sender'] is Map)
+            ? (((raw['lastMessage'] as Map)['sender'] as Map)['userId'] as num?)
+                  ?.toInt()
             : null);
     if (senderId != null && senderId > 0) {
-      if (senderId == _session.userId) return _session.displayName?.trim().isNotEmpty == true ? _session.displayName!.trim() : '我';
+      if (senderId == _session.userId)
+        return _session.displayName?.trim().isNotEmpty == true
+            ? _session.displayName!.trim()
+            : '我';
       final peerDisplayName = (raw['peerDisplayName'] ?? '').toString().trim();
       final peerUserId = (raw['peerUserId'] as num?)?.toInt();
-      if (peerUserId != null && peerUserId == senderId && peerDisplayName.isNotEmpty) {
+      if (peerUserId != null &&
+          peerUserId == senderId &&
+          peerDisplayName.isNotEmpty) {
         return peerDisplayName;
       }
     }
@@ -1179,12 +1300,13 @@ class ConversationService {
     if (last is Map) {
       final sender = last['sender'];
       if (sender is Map) {
-        final name = (sender['displayName'] ??
-                sender['name'] ??
-                sender['username'] ??
-                '')
-            .toString()
-            .trim();
+        final name =
+            (sender['displayName'] ??
+                    sender['name'] ??
+                    sender['username'] ??
+                    '')
+                .toString()
+                .trim();
         if (name.isNotEmpty) return name;
       }
     }
@@ -1198,7 +1320,8 @@ class ConversationService {
 
   String _compactPreview(String kind, String text) {
     final trimmed = text.trim();
-    if (kind == 'IMAGE' || RegExp(r'^\[(相册|拍照|图片)\]', caseSensitive: false).hasMatch(trimmed)) {
+    if (kind == 'IMAGE' ||
+        RegExp(r'^\[(相册|拍照|图片)\]', caseSensitive: false).hasMatch(trimmed)) {
       return '发送了一张图片';
     }
     if (kind == 'AUDIO' || RegExp(r'^\[语音\]').hasMatch(trimmed)) {
@@ -1207,11 +1330,16 @@ class ConversationService {
     if (kind == 'FILE' || RegExp(r'^\[文件\]').hasMatch(trimmed)) {
       return '发送了一个文件';
     }
-    if (RegExp(r'\.(png|jpe?g|gif|webp|bmp|heic|heif)$', caseSensitive: false).hasMatch(trimmed)) {
+    if (RegExp(
+      r'\.(png|jpe?g|gif|webp|bmp|heic|heif)$',
+      caseSensitive: false,
+    ).hasMatch(trimmed)) {
       return '发送了一张图片';
     }
-    if (RegExp(r'\.(pdf|docx?|xlsx?|pptx?|zip|rar|7z|txt|csv|md|pages|numbers|key)$', caseSensitive: false)
-        .hasMatch(trimmed)) {
+    if (RegExp(
+      r'\.(pdf|docx?|xlsx?|pptx?|zip|rar|7z|txt|csv|md|pages|numbers|key)$',
+      caseSensitive: false,
+    ).hasMatch(trimmed)) {
       return '发送了一个文件';
     }
     if (kind == 'SYSTEM_FLOW') return text.isNotEmpty ? text : '[系统消息]';
@@ -1233,29 +1361,81 @@ class ConversationService {
 
   bool _isPublicMediaUrl(String value) {
     final v = value.toLowerCase();
-    return v.startsWith('http://') || v.startsWith('https://') || v.startsWith('blob:');
+    return v.startsWith('http://') ||
+        v.startsWith('https://') ||
+        v.startsWith('blob:');
   }
 
   Future<String> resolveMediaUrl(
     String source, {
     String bucket = 'im-attachments',
   }) async {
-    if (_isPublicMediaUrl(source)) return source;
-    final resp = await _client.get(
-      _uri('/storage/presigned-get?bucket=$bucket&objectKey=${Uri.encodeQueryComponent(source)}'),
-      headers: _headers,
-    );
-    if (resp.statusCode < 200 || resp.statusCode >= 300) {
-      throw Exception('媒体地址解析失败: HTTP ${resp.statusCode}');
+    if (bucket == 'user-avatars') {
+      final raw = source.trim();
+      if (raw.isEmpty) {
+        throw Exception('媒体地址解析失败: objectKey 为空');
+      }
+      return mediaProxyUrl(raw, bucket: bucket);
     }
-    final body = _decode(resp.body);
-    final data = body['data'];
-    if (data is! Map<String, dynamic>) {
-      throw Exception('媒体地址解析失败: data 为空');
+    if (_isPublicMediaUrl(source)) {
+      return _normalizeBucketPathInUrl(source.trim(), bucket: bucket);
     }
-    final url = (data['url'] ?? '').toString();
-    if (url.isEmpty) throw Exception('媒体地址解析失败: url 为空');
-    return url;
+    final raw = source.trim();
+    if (raw.isEmpty) {
+      throw Exception('媒体地址解析失败: objectKey 为空');
+    }
+    final candidates = <String>[raw];
+    final prefixed = '$bucket/';
+    if (raw.startsWith(prefixed) && raw.length > prefixed.length) {
+      candidates.add(raw.substring(prefixed.length));
+    }
+    if (raw.startsWith('/')) {
+      candidates.add(raw.substring(1));
+    }
+
+    Exception? lastError;
+    for (final key in candidates.toSet()) {
+      try {
+        final resp = await _client.get(
+          _uri(
+            '/storage/presigned-get?bucket=$bucket&objectKey=${Uri.encodeQueryComponent(key)}',
+          ),
+          headers: _headers,
+        );
+        if (resp.statusCode < 200 || resp.statusCode >= 300) {
+          throw Exception('媒体地址解析失败: HTTP ${resp.statusCode}');
+        }
+        final body = _decode(resp.body);
+        final data = body['data'];
+        if (data is! Map<String, dynamic>) {
+          throw Exception('媒体地址解析失败: data 为空');
+        }
+        final url = (data['url'] ?? '').toString().trim();
+        if (url.isEmpty) throw Exception('媒体地址解析失败: url 为空');
+        return _normalizeBucketPathInUrl(url, bucket: bucket);
+      } catch (e) {
+        lastError = e is Exception ? e : Exception(e.toString());
+      }
+    }
+    throw lastError ?? Exception('媒体地址解析失败');
+  }
+
+  String mediaProxyUrl(
+    String source, {
+    String bucket = 'im-attachments',
+  }) {
+    final raw = source.trim();
+    if (raw.isEmpty) return raw;
+    return _uri(
+      '/storage/download?bucket=$bucket&objectKey=${Uri.encodeQueryComponent(raw)}&proxy=1',
+    ).toString();
+  }
+
+  String _normalizeBucketPathInUrl(String url, {required String bucket}) {
+    if (url.isEmpty) return url;
+    final repeated = '/$bucket/$bucket/';
+    if (!url.contains(repeated)) return url;
+    return url.replaceAll(repeated, '/$bucket/');
   }
 
   Uri downloadUri({
@@ -1263,10 +1443,7 @@ class ConversationService {
     String bucket = 'im-attachments',
     String? fileName,
   }) {
-    final q = <String, String>{
-      'bucket': bucket,
-      'objectKey': objectKey,
-    };
+    final q = <String, String>{'bucket': bucket, 'objectKey': objectKey};
     if (fileName != null && fileName.isNotEmpty) {
       q['fileName'] = fileName;
     }
@@ -1328,9 +1505,13 @@ class ConversationService {
   }
 
   /// 返回用于会话内联展示的「预览图」payload；旧消息或无预览时回退为原 payload。
-  static Map<String, dynamic>? previewMediaPayload(Map<String, dynamic>? payload) {
+  static Map<String, dynamic>? previewMediaPayload(
+    Map<String, dynamic>? payload,
+  ) {
     if (payload == null) return null;
-    final previewObjectKey = (payload['previewObjectKey'] ?? '').toString().trim();
+    final previewObjectKey = (payload['previewObjectKey'] ?? '')
+        .toString()
+        .trim();
     final previewUrl = (payload['previewUrl'] ?? '').toString().trim();
     if (previewObjectKey.isEmpty && previewUrl.isEmpty) return payload;
     final objectKey = (payload['objectKey'] ?? '').toString().trim();
@@ -1370,13 +1551,19 @@ class ConversationService {
   static String mediaDirectUrl(Map<String, dynamic>? payload) {
     if (payload == null) return '';
     final objectKey = (payload['objectKey'] ?? '').toString().trim();
-    if (objectKey.isNotEmpty && _isPublicMediaUrlStatic(objectKey)) return objectKey;
-    final url = (payload['url'] ?? payload['previewUrl'] ?? '').toString().trim();
+    if (objectKey.isNotEmpty && _isPublicMediaUrlStatic(objectKey))
+      return objectKey;
+    final url = (payload['url'] ?? payload['previewUrl'] ?? '')
+        .toString()
+        .trim();
     if (url.isNotEmpty && _isPublicMediaUrlStatic(url)) return url;
     return '';
   }
 
-  static String mediaFileName(Map<String, dynamic>? payload, {String fallback = 'download'}) {
+  static String mediaFileName(
+    Map<String, dynamic>? payload, {
+    String fallback = 'download',
+  }) {
     if (payload == null) return fallback;
     final name = (payload['fileName'] ?? '').toString().trim();
     return name.isNotEmpty ? name : fallback;
@@ -1384,6 +1571,8 @@ class ConversationService {
 
   static bool _isPublicMediaUrlStatic(String value) {
     final v = value.toLowerCase();
-    return v.startsWith('http://') || v.startsWith('https://') || v.startsWith('blob:');
+    return v.startsWith('http://') ||
+        v.startsWith('https://') ||
+        v.startsWith('blob:');
   }
 }

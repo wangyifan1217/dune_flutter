@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../../core/theme/dunes_theme.dart';
-import '../chat/chat_widgets.dart';
+import '../chat/user_avatar_widget.dart';
+import '../conversation/conversation_service.dart';
 import 'contact_models.dart';
 
 class ContactsHeader extends StatelessWidget {
@@ -54,7 +55,11 @@ class ContactsHeader extends StatelessWidget {
             ),
           ),
           const Spacer(),
-          _HeaderIconBtn(icon: Icons.arrow_back_rounded, onTap: onBack, tooltip: '返回消息'),
+          _HeaderIconBtn(
+            icon: Icons.arrow_back_rounded,
+            onTap: onBack,
+            tooltip: '返回消息',
+          ),
           _HeaderIconBtn(
             icon: Icons.search,
             onTap: onToggleSearch,
@@ -95,7 +100,10 @@ class OrgSectionLabel extends StatelessWidget {
           ),
           Text(
             '$total 人',
-            style: DunesTypography.mono(fontSize: 9.5, color: DunesColors.text3),
+            style: DunesTypography.mono(
+              fontSize: 9.5,
+              color: DunesColors.text3,
+            ),
           ),
         ],
       ),
@@ -111,6 +119,7 @@ class ContactRowTile extends StatelessWidget {
     required this.onOpenProfile,
     required this.onMessage,
     this.showOnline = false,
+    this.avatarService,
   });
 
   final NativeContact contact;
@@ -118,6 +127,7 @@ class ContactRowTile extends StatelessWidget {
   final VoidCallback onOpenProfile;
   final VoidCallback onMessage;
   final bool showOnline;
+  final ConversationService? avatarService;
 
   @override
   Widget build(BuildContext context) {
@@ -138,11 +148,16 @@ class ContactRowTile extends StatelessWidget {
             ),
             child: Row(
               children: [
-                ChatPersonAvatar(
-                  initial: contact.displayLabel.isNotEmpty ? contact.displayLabel.substring(0, 1) : '?',
+                ImUserAvatar(
+                  initial: contact.displayLabel.isNotEmpty
+                      ? contact.displayLabel.substring(0, 1)
+                      : '?',
                   seed: contact.userId,
                   size: 34,
                   showOnline: showOnline,
+                  avatarPreset: contact.avatarPreset,
+                  avatarObjectKey: contact.avatarObjectKey,
+                  avatarService: avatarService,
                 ),
                 const SizedBox(width: 9),
                 Expanded(
@@ -157,7 +172,9 @@ class ContactRowTile extends StatelessWidget {
                               style: DunesTypography.sans(
                                 fontSize: 11.5,
                                 fontWeight: FontWeight.w500,
-                                color: disabled ? DunesColors.text3 : DunesColors.text,
+                                color: disabled
+                                    ? DunesColors.text3
+                                    : DunesColors.text,
                               ),
                               overflow: TextOverflow.ellipsis,
                             ),
@@ -165,7 +182,10 @@ class ContactRowTile extends StatelessWidget {
                           if (isMe) ...[
                             const SizedBox(width: 5),
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 4,
+                                vertical: 1,
+                              ),
                               decoration: BoxDecoration(
                                 color: DunesColors.accent,
                                 borderRadius: BorderRadius.circular(3),
@@ -193,7 +213,10 @@ class ContactRowTile extends StatelessWidget {
                           if ((contact.department ?? '').trim().isNotEmpty)
                             Text(
                               contact.department!.trim(),
-                              style: DunesTypography.mono(fontSize: 9, color: DunesColors.text3),
+                              style: DunesTypography.mono(
+                                fontSize: 9,
+                                color: DunesColors.text3,
+                              ),
                             ),
                         ],
                       ),
@@ -207,7 +230,10 @@ class ContactRowTile extends StatelessWidget {
                     onTap: onMessage,
                   ),
                 ] else if (isMe) ...[
-                  _ActionIconBtn(icon: Icons.person_outline, onTap: onOpenProfile),
+                  _ActionIconBtn(
+                    icon: Icons.person_outline,
+                    onTap: onOpenProfile,
+                  ),
                 ],
               ],
             ),
@@ -226,6 +252,7 @@ class DeptBlockTile extends StatefulWidget {
     required this.onOpenContact,
     required this.onMessageContact,
     this.onlineUsers = const <int>{},
+    this.avatarService,
   });
 
   final NativeDepartment department;
@@ -233,6 +260,7 @@ class DeptBlockTile extends StatefulWidget {
   final ValueChanged<NativeContact> onOpenContact;
   final ValueChanged<NativeContact> onMessageContact;
   final Set<int> onlineUsers;
+  final ConversationService? avatarService;
 
   @override
   State<DeptBlockTile> createState() => _DeptBlockTileState();
@@ -263,7 +291,10 @@ class _DeptBlockTileState extends State<DeptBlockTile> {
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
               decoration: BoxDecoration(
                 gradient: LinearGradient(
-                  colors: [DunesColors.bgSoft, DunesColors.bgApp.withValues(alpha: 0.2)],
+                  colors: [
+                    DunesColors.bgSoft,
+                    DunesColors.bgApp.withValues(alpha: 0.2),
+                  ],
                 ),
                 border: Border.all(color: DunesColors.border),
                 borderRadius: BorderRadius.circular(9),
@@ -273,7 +304,11 @@ class _DeptBlockTileState extends State<DeptBlockTile> {
                   AnimatedRotation(
                     turns: _expanded ? 0.25 : 0,
                     duration: const Duration(milliseconds: 200),
-                    child: Icon(Icons.chevron_right, size: 13, color: DunesColors.text3),
+                    child: Icon(
+                      Icons.chevron_right,
+                      size: 13,
+                      color: DunesColors.text3,
+                    ),
                   ),
                   const SizedBox(width: 7),
                   Container(
@@ -284,7 +319,11 @@ class _DeptBlockTileState extends State<DeptBlockTile> {
                       borderRadius: BorderRadius.circular(7),
                       border: Border.all(color: DunesColors.borderSoft),
                     ),
-                    child: const Icon(Icons.business_outlined, size: 13, color: DunesColors.accentDeep),
+                    child: const Icon(
+                      Icons.business_outlined,
+                      size: 13,
+                      color: DunesColors.accentDeep,
+                    ),
                   ),
                   const SizedBox(width: 8),
                   Expanded(
@@ -293,19 +332,28 @@ class _DeptBlockTileState extends State<DeptBlockTile> {
                       children: [
                         Text(
                           dep.name,
-                          style: DunesTypography.sans(fontSize: 11.5, fontWeight: FontWeight.w600),
+                          style: DunesTypography.sans(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                         if ((dep.subtitle ?? '').isNotEmpty)
                           Text(
                             dep.subtitle!,
-                            style: DunesTypography.mono(fontSize: 9, color: DunesColors.text3),
+                            style: DunesTypography.mono(
+                              fontSize: 9,
+                              color: DunesColors.text3,
+                            ),
                           ),
                       ],
                     ),
                   ),
                   Text(
                     '${dep.userCount}',
-                    style: DunesTypography.mono(fontSize: 9, color: DunesColors.text3),
+                    style: DunesTypography.mono(
+                      fontSize: 9,
+                      color: DunesColors.text3,
+                    ),
                   ),
                 ],
               ),
@@ -324,6 +372,7 @@ class _DeptBlockTileState extends State<DeptBlockTile> {
                     showOnline: widget.onlineUsers.contains(c.userId),
                     onOpenProfile: () => widget.onOpenContact(c),
                     onMessage: () => widget.onMessageContact(c),
+                    avatarService: widget.avatarService,
                   ),
                 ),
                 ...dep.children.map(
@@ -333,6 +382,7 @@ class _DeptBlockTileState extends State<DeptBlockTile> {
                     onOpenContact: widget.onOpenContact,
                     onMessageContact: widget.onMessageContact,
                     onlineUsers: widget.onlineUsers,
+                    avatarService: widget.avatarService,
                   ),
                 ),
               ],
@@ -359,7 +409,11 @@ class _RoleChip extends StatelessWidget {
       ),
       child: Text(
         label,
-        style: DunesTypography.mono(fontSize: 9, fontWeight: FontWeight.w600, color: DunesColors.text3),
+        style: DunesTypography.mono(
+          fontSize: 9,
+          fontWeight: FontWeight.w600,
+          color: DunesColors.text3,
+        ),
       ),
     );
   }
@@ -423,9 +477,15 @@ class _ActionIconBtn extends StatelessWidget {
           height: 28,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            border: Border.all(color: primary ? DunesColors.accent : DunesColors.borderSoft),
+            border: Border.all(
+              color: primary ? DunesColors.accent : DunesColors.borderSoft,
+            ),
           ),
-          child: Icon(icon, size: 13, color: primary ? DunesColors.accentDeep : DunesColors.text2),
+          child: Icon(
+            icon,
+            size: 13,
+            color: primary ? DunesColors.accentDeep : DunesColors.text2,
+          ),
         ),
       ),
     );

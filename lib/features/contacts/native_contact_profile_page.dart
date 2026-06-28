@@ -3,7 +3,9 @@ import 'package:flutter/material.dart';
 import '../../core/theme/dunes_theme.dart';
 import '../../core/util/friendly_error.dart';
 import '../auth/auth_session.dart';
+import '../conversation/conversation_service.dart';
 import '../shell/dunes_toast.dart';
+import '../chat/user_avatar_widget.dart';
 import 'contact_models.dart';
 import 'contact_service.dart';
 
@@ -22,11 +24,13 @@ class NativeContactProfilePage extends StatefulWidget {
   final ValueChanged<int> onOpenPrivateChat;
 
   @override
-  State<NativeContactProfilePage> createState() => _NativeContactProfilePageState();
+  State<NativeContactProfilePage> createState() =>
+      _NativeContactProfilePageState();
 }
 
 class _NativeContactProfilePageState extends State<NativeContactProfilePage> {
   late final ContactService _service;
+  late final ConversationService _avatarService;
   NativeContact? _contact;
   bool _loading = true;
   String? _error;
@@ -35,6 +39,7 @@ class _NativeContactProfilePageState extends State<NativeContactProfilePage> {
   void initState() {
     super.initState();
     _service = ContactService(session: widget.session);
+    _avatarService = ConversationService(session: widget.session);
     _load();
   }
 
@@ -94,7 +99,10 @@ class _NativeContactProfilePageState extends State<NativeContactProfilePage> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(_error ?? '联系人不存在', style: const TextStyle(color: DunesColors.text3)),
+              Text(
+                _error ?? '联系人不存在',
+                style: const TextStyle(color: DunesColors.text3),
+              ),
               const SizedBox(height: 10),
               OutlinedButton(onPressed: widget.onBack, child: const Text('返回')),
             ],
@@ -121,9 +129,13 @@ class _NativeContactProfilePageState extends State<NativeContactProfilePage> {
           children: [
             _ContactHero(
               initial: name.substring(0, 1),
+              seed: c.userId,
               name: name,
               department: department,
               roleTag: title,
+              avatarPreset: c.avatarPreset,
+              avatarObjectKey: c.avatarObjectKey,
+              avatarService: _avatarService,
               onBack: widget.onBack,
             ),
             _ActionBar(
@@ -144,16 +156,24 @@ class _NativeContactProfilePageState extends State<NativeContactProfilePage> {
 class _ContactHero extends StatelessWidget {
   const _ContactHero({
     required this.initial,
+    required this.seed,
     required this.name,
     required this.department,
     required this.roleTag,
+    this.avatarPreset,
+    this.avatarObjectKey,
+    this.avatarService,
     required this.onBack,
   });
 
   final String initial;
+  final int seed;
   final String name;
   final String department;
   final String roleTag;
+  final String? avatarPreset;
+  final String? avatarObjectKey;
+  final ConversationService? avatarService;
   final VoidCallback onBack;
 
   @override
@@ -226,7 +246,7 @@ class _ContactHero extends StatelessWidget {
                 Container(
                   width: 84,
                   height: 84,
-                  alignment: Alignment.center,
+                  padding: const EdgeInsets.all(2),
                   decoration: BoxDecoration(
                     gradient: const LinearGradient(
                       begin: Alignment.topLeft,
@@ -234,7 +254,10 @@ class _ContactHero extends StatelessWidget {
                       colors: [Colors.white, Color(0xFFE9DEFF)],
                     ),
                     borderRadius: BorderRadius.circular(24),
-                    border: Border.all(color: Colors.white.withValues(alpha: 0.4), width: 2),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.4),
+                      width: 2,
+                    ),
                     boxShadow: const [
                       BoxShadow(
                         color: Color.fromRGBO(47, 93, 98, 0.6),
@@ -244,14 +267,13 @@ class _ContactHero extends StatelessWidget {
                       ),
                     ],
                   ),
-                  child: Text(
-                    initial,
-                    style: DunesTypography.sans(
-                      fontSize: 32,
-                      fontWeight: FontWeight.w600,
-                      color: DunesColors.accentDeep,
-                      height: 1,
-                    ),
+                  child: ImUserAvatar(
+                    initial: initial,
+                    seed: seed,
+                    size: 80,
+                    avatarPreset: avatarPreset,
+                    avatarObjectKey: avatarObjectKey,
+                    avatarService: avatarService,
                   ),
                 ),
                 const SizedBox(height: 11),
@@ -274,7 +296,10 @@ class _ContactHero extends StatelessWidget {
                     ),
                     if (roleTag.isNotEmpty)
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 7,
+                          vertical: 2,
+                        ),
                         decoration: BoxDecoration(
                           borderRadius: BorderRadius.circular(4),
                           gradient: const LinearGradient(
@@ -319,10 +344,7 @@ class _ContactHero extends StatelessWidget {
 }
 
 class _HeroButton extends StatelessWidget {
-  const _HeroButton({
-    required this.icon,
-    required this.onTap,
-  });
+  const _HeroButton({required this.icon, required this.onTap});
 
   final IconData icon;
   final VoidCallback onTap;
@@ -429,7 +451,9 @@ class _ActionCard extends StatelessWidget {
                   )
                 : null,
             borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: primary ? DunesColors.accentDeep : DunesColors.borderSoft),
+            border: Border.all(
+              color: primary ? DunesColors.accentDeep : DunesColors.borderSoft,
+            ),
             boxShadow: primary
                 ? const [
                     BoxShadow(
@@ -443,7 +467,11 @@ class _ActionCard extends StatelessWidget {
           ),
           child: Column(
             children: [
-              Icon(icon, size: 18, color: primary ? Colors.white : DunesColors.text2),
+              Icon(
+                icon,
+                size: 18,
+                color: primary ? Colors.white : DunesColors.text2,
+              ),
               const SizedBox(height: 5),
               Text(
                 label,
@@ -494,10 +522,7 @@ class _SectionLabel extends StatelessWidget {
 }
 
 class _InfoRow extends StatelessWidget {
-  const _InfoRow({
-    required this.label,
-    required this.value,
-  });
+  const _InfoRow({required this.label, required this.value});
 
   final String label;
   final String value;

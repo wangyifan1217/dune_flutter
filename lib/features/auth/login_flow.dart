@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/config/dunes_defaults.dart';
@@ -10,7 +11,9 @@ import '../../core/theme/dunes_theme.dart';
 import '../nova/nova_auth_service.dart';
 import '../nova/nova_web_storage.dart';
 import '../conversation/conversation_realtime_hub.dart';
+import '../push/push_service.dart';
 import '../shell/dunes_shell.dart';
+import '../shell/splash_screen.dart';
 import 'auth_service.dart';
 import 'auth_session.dart';
 
@@ -20,7 +23,10 @@ const _authBg = Color(0xFFF7F8FA);
 const _authSurface = Colors.white;
 
 class LoginFlow extends StatefulWidget {
-  const LoginFlow({super.key});
+  const LoginFlow({super.key, this.onHydrated});
+
+  /// 会话校验（hydration）完成后回调一次，供启屏门控决定关闭时机。
+  final VoidCallback? onHydrated;
 
   @override
   State<LoginFlow> createState() => _LoginFlowState();
@@ -31,15 +37,31 @@ class _LoginFlowState extends State<LoginFlow> {
   final _auth = AuthService();
   AuthSession? _session;
   bool _hydrating = true;
+  bool _notifiedHydrated = false;
+  bool _showPostLoginSplash = false;
+  String _appVersion = '';
 
   @override
   void initState() {
     super.initState();
+    _loadAppVersion();
     _restoreSession();
   }
 
+  Future<void> _loadAppVersion() async {
+    try {
+      final info = await PackageInfo.fromPlatform();
+      final build = info.buildNumber.trim();
+      final version = build.isEmpty ? info.version : '${info.version} ($build)';
+      if (mounted) setState(() => _appVersion = version);
+    } catch (_) {}
+  }
+
   void _onSignedIn(AuthSession session) {
-    setState(() => _session = session);
+    setState(() {
+      _session = session;
+      _showPostLoginSplash = true;
+    });
     _persistSession(session);
   }
 
@@ -116,6 +138,8 @@ class _LoginFlowState extends State<LoginFlow> {
 
   Future<void> _clearSession({int userId = 0}) async {
     await ConversationRealtimeHub.instance.dispose();
+    await unbindPushSession();
+    syncPushBadgeCount(0);
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_sessionStorageKey);
     if (userId > 0) {
@@ -125,23 +149,37 @@ class _LoginFlowState extends State<LoginFlow> {
 
   @override
   Widget build(BuildContext context) {
+    if (!_hydrating && !_notifiedHydrated) {
+      _notifiedHydrated = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        widget.onHydrated?.call();
+      });
+    }
     if (_hydrating) {
       return const Scaffold(
         backgroundColor: _authBg,
         body: Center(
-          child: CircularProgressIndicator(
-            strokeWidth: 2,
-            color: _authBlue,
-          ),
+          child: CircularProgressIndicator(strokeWidth: 2, color: _authBlue),
         ),
       );
     }
     final session = _session;
     if (session != null) {
-      return DunesShell(
-        session: session,
-        initialScreen: session.landingScreen,
-        onLogout: _onSignedOut,
+      return Stack(
+        children: [
+          DunesShell(
+            session: session,
+            initialScreen: session.landingScreen,
+            onLogout: _onSignedOut,
+          ),
+          if (_showPostLoginSplash)
+            PostLoginSplashOverlay(
+              version: _appVersion,
+              onDismiss: () {
+                if (mounted) setState(() => _showPostLoginSplash = false);
+              },
+            ),
+        ],
       );
     }
     return _PhoneStep(auth: _auth, onSignedIn: _onSignedIn);
@@ -174,25 +212,28 @@ class _PhoneStepState extends State<_PhoneStep> {
       setState(() => _error = '请输入 11 位手机号');
       return;
     }
-    widget.auth.requestSmsCode(phone: phone).then((_) {
-      if (!mounted) return;
-      Navigator.of(context).push(
-        MaterialPageRoute<void>(
-          builder: (_) => _CodeStep(
-            auth: widget.auth,
-            phone: phone,
-            onSignedIn: widget.onSignedIn,
-          ),
-        ),
-      );
-    }).catchError((e) {
-      if (!mounted) return;
-      setState(() {
-        _error = e is AuthException
-            ? e.message
-            : '网络异常，请确认网关 ${widget.auth.apiBase} 可访问';
-      });
-    });
+    widget.auth
+        .requestSmsCode(phone: phone)
+        .then((_) {
+          if (!mounted) return;
+          Navigator.of(context).push(
+            MaterialPageRoute<void>(
+              builder: (_) => _CodeStep(
+                auth: widget.auth,
+                phone: phone,
+                onSignedIn: widget.onSignedIn,
+              ),
+            ),
+          );
+        })
+        .catchError((e) {
+          if (!mounted) return;
+          setState(() {
+            _error = e is AuthException
+                ? e.message
+                : '网络异常，请确认网关 ${widget.auth.apiBase} 可访问';
+          });
+        });
   }
 
   @override
@@ -247,14 +288,15 @@ class _PhoneStepState extends State<_PhoneStep> {
               color: DunesColors.text,
               letterSpacing: 1.2,
             ),
-            decoration: _inputDecoration(
-              hintText: '请输入手机号',
-              errorText: _error,
-            ).copyWith(
-              prefixIcon: const _PhonePrefix(),
-              prefixIconConstraints: const BoxConstraints(minWidth: 0, minHeight: 0),
-              contentPadding: const EdgeInsets.fromLTRB(0, 16, 16, 16),
-            ),
+            decoration: _inputDecoration(hintText: '请输入手机号', errorText: _error)
+                .copyWith(
+                  prefixIcon: const _PhonePrefix(),
+                  prefixIconConstraints: const BoxConstraints(
+                    minWidth: 0,
+                    minHeight: 0,
+                  ),
+                  contentPadding: const EdgeInsets.fromLTRB(0, 16, 16, 16),
+                ),
             onChanged: (_) {
               if (_error != null) setState(() => _error = null);
             },
@@ -360,8 +402,10 @@ class _CodeStepState extends State<_CodeStep> {
         );
       } catch (_) {}
       if (!mounted) return;
-      Navigator.of(context).popUntil((route) => route.isFirst);
       widget.onSignedIn(session);
+      if (mounted) {
+        Navigator.of(context).popUntil((route) => route.isFirst);
+      }
     } on AuthException catch (e) {
       if (mounted) setState(() => _error = e.message);
     } catch (e) {
@@ -426,17 +470,17 @@ class _CodeStepState extends State<_CodeStep> {
                     backgroundColor: Color(0xFFE8EDF5),
                   )
                 : _error != null
-                    ? Text(
-                        _error!,
-                        key: const ValueKey('error'),
-                        textAlign: TextAlign.center,
-                        style: DunesTypography.sans(
-                          fontSize: 13,
-                          color: DunesColors.coral,
-                          height: 1.5,
-                        ),
-                      )
-                    : const SizedBox.shrink(key: ValueKey('idle')),
+                ? Text(
+                    _error!,
+                    key: const ValueKey('error'),
+                    textAlign: TextAlign.center,
+                    style: DunesTypography.sans(
+                      fontSize: 13,
+                      color: DunesColors.coral,
+                      height: 1.5,
+                    ),
+                  )
+                : const SizedBox.shrink(key: ValueKey('idle')),
           ),
         ],
       ),
@@ -463,11 +507,7 @@ class _PhonePrefix extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 12),
-          Container(
-            width: 1,
-            height: 22,
-            color: const Color(0xFFE8ECF2),
-          ),
+          Container(width: 1, height: 22, color: const Color(0xFFE8ECF2)),
           const SizedBox(width: 12),
         ],
       ),
@@ -604,8 +644,8 @@ class _CodeBox extends StatelessWidget {
     final Color borderColor = hasError
         ? DunesColors.coral
         : active
-            ? _authBlue
-            : const Color(0xFFE8ECF2);
+        ? _authBlue
+        : const Color(0xFFE8ECF2);
     return AnimatedContainer(
       duration: const Duration(milliseconds: 120),
       width: 48,
@@ -632,10 +672,7 @@ class _CodeBox extends StatelessWidget {
 }
 
 class _AuthScaffold extends StatelessWidget {
-  const _AuthScaffold({
-    required this.child,
-    this.showLogo = true,
-  });
+  const _AuthScaffold({required this.child, this.showLogo = true});
 
   final Widget child;
   final bool showLogo;
@@ -649,7 +686,12 @@ class _AuthScaffold extends StatelessWidget {
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
-            padding: EdgeInsets.fromLTRB(32, showLogo ? 48 : 24, 32, 24 + bottomInset),
+            padding: EdgeInsets.fromLTRB(
+              32,
+              showLogo ? 48 : 24,
+              32,
+              24 + bottomInset,
+            ),
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 400),
               child: child,
@@ -673,9 +715,7 @@ class _BackButton extends StatelessWidget {
       style: IconButton.styleFrom(
         backgroundColor: _authSurface,
         foregroundColor: DunesColors.text,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         side: const BorderSide(color: Color(0xFFE8ECF2)),
       ),
       icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18),
@@ -683,39 +723,32 @@ class _BackButton extends StatelessWidget {
   }
 }
 
-final ButtonStyle _authPrimaryButtonStyle = FilledButton.styleFrom(
-  backgroundColor: _authBlue,
-  foregroundColor: Colors.white,
-  disabledBackgroundColor: _authBlue.withValues(alpha: 0.45),
-  elevation: 0,
-  textStyle: DunesTypography.sans(
-    fontSize: 16,
-    fontWeight: FontWeight.w600,
-    letterSpacing: -0.01 * 16,
-  ),
-  shape: RoundedRectangleBorder(
-    borderRadius: BorderRadius.circular(14),
-  ),
-).copyWith(
-  overlayColor: WidgetStateProperty.resolveWith((states) {
-    if (states.contains(WidgetState.pressed)) {
-      return _authBlueDeep.withValues(alpha: 0.12);
-    }
-    return null;
-  }),
-);
+final ButtonStyle _authPrimaryButtonStyle =
+    FilledButton.styleFrom(
+      backgroundColor: _authBlue,
+      foregroundColor: Colors.white,
+      disabledBackgroundColor: _authBlue.withValues(alpha: 0.45),
+      elevation: 0,
+      textStyle: DunesTypography.sans(
+        fontSize: 16,
+        fontWeight: FontWeight.w600,
+        letterSpacing: -0.01 * 16,
+      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+    ).copyWith(
+      overlayColor: WidgetStateProperty.resolveWith((states) {
+        if (states.contains(WidgetState.pressed)) {
+          return _authBlueDeep.withValues(alpha: 0.12);
+        }
+        return null;
+      }),
+    );
 
-InputDecoration _inputDecoration({
-  String? hintText,
-  String? errorText,
-}) {
+InputDecoration _inputDecoration({String? hintText, String? errorText}) {
   return InputDecoration(
     hintText: hintText,
     errorText: errorText,
-    hintStyle: DunesTypography.sans(
-      fontSize: 16,
-      color: DunesColors.text3,
-    ),
+    hintStyle: DunesTypography.sans(fontSize: 16, color: DunesColors.text3),
     filled: true,
     fillColor: _authSurface,
     contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),

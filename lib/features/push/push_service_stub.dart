@@ -8,6 +8,8 @@ Future<void> unbindPushSessionImpl() async {}
 
 void syncPushBadgeCountImpl(int count) {}
 
+Future<int> readPushBadgeCountImpl() async => 0;
+
 void notifyPushRealtimeMessageImpl({
   required String title,
   required String body,
@@ -15,5 +17,7 @@ void notifyPushRealtimeMessageImpl({
 }) {}
 
 void registerPushLifecycleObserverImpl() {}
+
+void setPushBadgeRefreshHandlerImpl(void Function()? handler) {}
 
 Future<void> ensurePushInitializedImpl() async {}

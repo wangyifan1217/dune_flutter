@@ -14,11 +14,16 @@ class InboxHiddenEntry {
     }
     if (raw is Map) {
       return InboxHiddenEntry(
-        at: (raw['at'] as num?)?.toInt() ?? DateTime.now().millisecondsSinceEpoch,
+        at:
+            (raw['at'] as num?)?.toInt() ??
+            DateTime.now().millisecondsSinceEpoch,
         permanent: raw['permanent'] == true,
       );
     }
-    return InboxHiddenEntry(at: DateTime.now().millisecondsSinceEpoch, permanent: false);
+    return InboxHiddenEntry(
+      at: DateTime.now().millisecondsSinceEpoch,
+      permanent: false,
+    );
   }
 
   Map<String, dynamic> toJson() => <String, dynamic>{
@@ -90,18 +95,24 @@ abstract final class InboxHiddenStorage {
   }
 }
 
-bool isConversationHidden(Map<String, InboxHiddenEntry> map, int conversationId) {
+bool isConversationHidden(
+  Map<String, InboxHiddenEntry> map,
+  int conversationId,
+) {
   return map.containsKey(conversationId.toString());
 }
 
-bool isConversationPermanentlyHidden(Map<String, InboxHiddenEntry> map, int conversationId) {
+bool isConversationPermanentlyHidden(
+  Map<String, InboxHiddenEntry> map,
+  int conversationId,
+) {
   return map[conversationId.toString()]?.permanent ?? false;
 }
 
 bool shouldUnhideFromRealtimeEvent(
   ConversationRealtimeEventLike event,
   Map<String, InboxHiddenEntry> hidden,
-  int selfUserId,
+  int _,
 ) {
   if (event.type != 'message' && event.type != 'system_flow') return false;
   final convId = event.conversationId ?? 0;
@@ -112,7 +123,8 @@ bool shouldUnhideFromRealtimeEvent(
   final kind = (msg['kind'] ?? '').toString().toUpperCase();
   if (kind.startsWith('SYSTEM')) return false;
   final senderId = _senderUserId(msg);
-  return senderId > 0 && senderId != selfUserId;
+  // 自己重新在该会话发言时，也应自动恢复到通讯列表，避免“会话仍被本地隐藏”。
+  return senderId > 0;
 }
 
 int _senderUserId(Map<String, dynamic> msg) {

@@ -53,6 +53,15 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage> {
   bool _submitting = false;
   int? _draftProposalId;
 
+  void _dismissKeyboard() {
+    final focus = FocusManager.instance.primaryFocus;
+    if (focus != null && !focus.hasPrimaryFocus) {
+      focus.unfocus();
+      return;
+    }
+    focus?.unfocus();
+  }
+
   bool get _isEditing => widget.editProposalId != null && widget.editProposalId! > 0;
   bool get _isDelegatedPendingInitiate =>
       _isEditing && (_editingDetail?.status.toLowerCase() == 'pending_initiate');
@@ -410,60 +419,64 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage> {
                   ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
                   : _error != null
                       ? _errorView()
-                      : RefreshIndicator(
-                          onRefresh: _load,
-                          child: ListView(
-                            padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
-                            children: [
-                              XflowFormCard(
-                                title: _isEditing ? '编辑销售提案' : '新建销售提案',
-                                tag: 'XFlow',
-                                child: XflowFormRenderer(
-                                  fields: _isDelegatedPendingInitiate
-                                      ? _template!.fields.where((f) {
-                                          if (f.type != 'action') return true;
-                                          final kind =
-                                              (f.raw['actionKind'] ?? f.key).toString();
-                                          return _isDelegatedClearActionKind(kind);
-                                        }).toList(growable: false)
-                                      : _template!.fields,
-                                  values: _values,
-                                  layout: _template!.layout,
-                                  service: _service,
-                                  embedded: true,
-                                  allowedActionKinds:
-                                      _isDelegatedPendingInitiate
-                                          ? <String>{
-                                              'clear-form',
-                                              'clear_form',
-                                              'clearform',
-                                              'reset-form',
-                                            }
-                                          : null,
-                                  onChanged: (key, value) {
-                                    setState(() {
-                                      _values[key] = value;
-                                      _recompute();
-                                    });
-                                  },
-                                  onAction: _handleAction,
+                      : GestureDetector(
+                          behavior: HitTestBehavior.translucent,
+                          onTap: _dismissKeyboard,
+                          child: RefreshIndicator(
+                            onRefresh: _load,
+                            child: ListView(
+                              padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
+                              children: [
+                                XflowFormCard(
+                                  title: _isEditing ? '编辑销售提案' : '新建销售提案',
+                                  tag: 'XFlow',
+                                  child: XflowFormRenderer(
+                                    fields: _isDelegatedPendingInitiate
+                                        ? _template!.fields.where((f) {
+                                            if (f.type != 'action') return true;
+                                            final kind =
+                                                (f.raw['actionKind'] ?? f.key).toString();
+                                            return _isDelegatedClearActionKind(kind);
+                                          }).toList(growable: false)
+                                        : _template!.fields,
+                                    values: _values,
+                                    layout: _template!.layout,
+                                    service: _service,
+                                    embedded: true,
+                                    allowedActionKinds:
+                                        _isDelegatedPendingInitiate
+                                            ? <String>{
+                                                'clear-form',
+                                                'clear_form',
+                                                'clearform',
+                                                'reset-form',
+                                              }
+                                            : null,
+                                    onChanged: (key, value) {
+                                      setState(() {
+                                        _values[key] = value;
+                                        _recompute();
+                                      });
+                                    },
+                                    onAction: _handleAction,
+                                  ),
                                 ),
-                              ),
-                              XflowFormCard(
-                                title: '审批流程',
-                                child: XflowStageList(
-                                  stages: _template!.stages,
-                                  layout: _template!.layout,
+                                XflowFormCard(
+                                  title: '审批流程',
+                                  child: XflowStageList(
+                                    stages: _template!.stages,
+                                    layout: _template!.layout,
+                                  ),
                                 ),
-                              ),
-                              XflowCcRulesCard(
-                                rules: _ccRules,
-                                loading: _ccLoading,
-                                error: _ccError,
-                                hideWhenEmpty: true,
-                              ),
-                              const SizedBox(height: 4),
-                            ],
+                                XflowCcRulesCard(
+                                  rules: _ccRules,
+                                  loading: _ccLoading,
+                                  error: _ccError,
+                                  hideWhenEmpty: true,
+                                ),
+                                const SizedBox(height: 4),
+                              ],
+                            ),
                           ),
                         ),
             ),

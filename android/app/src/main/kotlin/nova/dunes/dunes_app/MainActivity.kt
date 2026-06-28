@@ -1,4 +1,4 @@
-package com.dunes.dunes_app
+package nova.dunes.dunes_app
 
 import android.media.AudioFormat
 import android.media.AudioRecord
@@ -14,6 +14,7 @@ import java.nio.ByteOrder
 
 class MainActivity : FlutterActivity() {
     private val voiceChannel = "dunes/audio_recorder"
+    private var tpnsBridge: TpnsPushBridge? = null
 
     // glm-asr-2512 仅接受 wav/mp3，这里录成 16k/16bit/单声道 PCM 并封装为标准 WAV。
     private val sampleRate = 16000
@@ -29,6 +30,9 @@ class MainActivity : FlutterActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        tpnsBridge = TpnsPushBridge(applicationContext).also {
+            it.attach(flutterEngine)
+        }
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, voiceChannel)
             .setMethodCallHandler { call, result ->
                 when (call.method) {

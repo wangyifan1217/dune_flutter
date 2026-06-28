@@ -37,6 +37,10 @@ class XflowFormRenderer extends StatefulWidget {
 }
 
 class _XflowFormRendererState extends State<XflowFormRenderer> {
+  void _dismissKeyboardOnTapOutside(PointerDownEvent _) {
+    FocusManager.instance.primaryFocus?.unfocus();
+  }
+
   @override
   Widget build(BuildContext context) {
     final hiddenKeys = <String>{};
@@ -754,6 +758,7 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
       initialValue: value,
       style: DunesTypography.sans(fontSize: 11, color: DunesColors.text),
       decoration: xfMatrixCellDecoration(hint: col['placeholder']?.toString()),
+      onTapOutside: _dismissKeyboardOnTapOutside,
       onChanged: (v) {
         rows[ri][colKey] = v;
         widget.onChanged(fieldKey, rows);
@@ -854,6 +859,7 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
             initialValue: value,
             decoration: decoration,
             style: matrix ? DunesTypography.sans(fontSize: 11, color: DunesColors.text) : xfDynInputTextStyle(),
+            onTapOutside: _dismissKeyboardOnTapOutside,
             onChanged: setVal,
           );
 
@@ -1136,6 +1142,7 @@ class _XflowUserPickerState extends State<_XflowUserPicker> {
       controller: _controller,
       focusNode: _focus,
       readOnly: widget.readonly,
+      onTapOutside: (_) => FocusManager.instance.primaryFocus?.unfocus(),
       decoration: xfInputDecoration(hint: widget.placeholder).copyWith(
         suffixIcon: _loading
             ? const Padding(
@@ -1215,6 +1222,7 @@ class _XflowTextFieldState extends State<_XflowTextField> {
       readOnly: widget.readOnly,
       style: widget.style,
       decoration: widget.decoration,
+      onTapOutside: (_) => FocusManager.instance.primaryFocus?.unfocus(),
       onChanged: widget.onChanged,
     );
   }

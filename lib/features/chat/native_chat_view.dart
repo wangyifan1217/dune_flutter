@@ -56,6 +56,8 @@ class NativeChatView extends StatefulWidget {
     this.onOpenSearch,
     this.onOpenMedia,
     this.onOpenCall,
+    this.onConversationRead,
+    this.autoMarkRead = false,
   });
 
   final AuthSession session;
@@ -70,6 +72,8 @@ class NativeChatView extends StatefulWidget {
   final ValueChanged<int>? onOpenSearch;
   final ValueChanged<int>? onOpenMedia;
   final VoidCallback? onOpenCall;
+  final ValueChanged<int>? onConversationRead;
+  final bool autoMarkRead;
 
   @override
   State<NativeChatView> createState() => _NativeChatViewState();
@@ -103,7 +107,9 @@ class _NativeChatViewState extends State<NativeChatView> {
   int _scrollBottomGen = 0;
   int _bottomAnchorMessageId = 0;
   int _pendingNewMessageCount = 0;
+  int _lastMarkedReadNewestId = 0;
   bool _wasNearBottom = true;
+  bool _userInteractedWithScroll = false;
   bool _hasMore = false;
   bool _hasNewer = false;
   int? _highlightMessageId;
@@ -159,13 +165,17 @@ class _NativeChatViewState extends State<NativeChatView> {
       if (resp.statusCode < 200 || resp.statusCode >= 300 || !mounted) return;
       final body = jsonDecode(resp.body);
       final data = body is Map<String, dynamic>
-          ? (body['data'] is Map<String, dynamic> ? body['data'] as Map<String, dynamic> : body)
+          ? (body['data'] is Map<String, dynamic>
+                ? body['data'] as Map<String, dynamic>
+                : body)
           : const <String, dynamic>{};
       setState(() {
-        _selfAvatarPreset = (data['avatarPreset'] ?? '').toString().trim().isEmpty
+        _selfAvatarPreset =
+            (data['avatarPreset'] ?? '').toString().trim().isEmpty
             ? null
             : (data['avatarPreset'] ?? '').toString();
-        _selfAvatarObjectKey = (data['avatarObjectKey'] ?? '').toString().trim().isEmpty
+        _selfAvatarObjectKey =
+            (data['avatarObjectKey'] ?? '').toString().trim().isEmpty
             ? null
             : (data['avatarObjectKey'] ?? '').toString();
       });
@@ -180,6 +190,12 @@ class _NativeChatViewState extends State<NativeChatView> {
     if (newFocus > 0 && newFocus != oldFocus) {
       _forceLatestMode = false;
       unawaited(_load(silent: _bootstrapped));
+    }
+    if (!oldWidget.autoMarkRead && widget.autoMarkRead) {
+      _userInteractedWithScroll = false;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        unawaited(_markReadIfNeeded());
+      });
     }
   }
 
@@ -203,14 +219,14 @@ class _NativeChatViewState extends State<NativeChatView> {
 
   void _onScroll() {
     if (!_scrollController.hasClients || _loadingOlder) return;
-    if (_scrollController.position.pixels <= 48) {
+    final pos = _scrollController.position;
+    // 历史消息在顶部：接近 minScrollExtent 时加载更早的消息。
+    if (pos.pixels <= 48) {
       unawaited(_loadOlder());
     }
-    if (_locatedMode && _hasNewer && !_loadingNewer) {
-      final pos = _scrollController.position;
-      if (pos.maxScrollExtent - pos.pixels <= 72) {
-        unawaited(_loadNewer());
-      }
+    if (_locatedMode && _hasNewer && !_loadingNewer &&
+        pos.maxScrollExtent - pos.pixels <= 72) {
+      unawaited(_loadNewer());
     }
     _updateStickBottomState();
   }
@@ -267,6 +283,7 @@ class _NativeChatViewState extends State<NativeChatView> {
     }
     setState(_clearPendingNewMessages);
     _scrollBottom(animated: true, force: true);
+    _userInteractedWithScroll = true;
     unawaited(_markReadIfNeeded());
   }
 
@@ -312,7 +329,10 @@ class _NativeChatViewState extends State<NativeChatView> {
     }
   }
 
-  bool _appendRealtimeMessage(ConversationRealtimeEvent event, {required bool allowDup}) {
+  bool _appendRealtimeMessage(
+    ConversationRealtimeEvent event, {
+    required bool allowDup,
+  }) {
     final raw = event.raw['message'];
     if (raw is! Map<String, dynamic>) return false;
     final msg = _service.mapMessage(raw);
@@ -330,14 +350,15 @@ class _NativeChatViewState extends State<NativeChatView> {
         if (_bottomAnchorMessageId <= 0) {
           _bottomAnchorMessageId = prevNewestId;
         }
-        _pendingNewMessageCount =
-            _messages.where((m) => m.id > _bottomAnchorMessageId).length;
+        _pendingNewMessageCount = _messages
+            .where((m) => m.id > _bottomAnchorMessageId)
+            .length;
       }
     });
     if (stickBottom) {
       _scrollBottom(gentle: true);
-      unawaited(_markReadIfNeeded());
     }
+    unawaited(_markReadIfNeeded());
     if (_isPrivate && msg.senderUserId != widget.session.userId) {
       unawaited(_refreshPeerReadFromServer());
     }
@@ -345,9 +366,11 @@ class _NativeChatViewState extends State<NativeChatView> {
   }
 
   bool _patchRecalledMessage(ConversationRealtimeEvent event) {
-    final recallId = (event.raw['messageId'] as num?)?.toInt() ??
+    final recallId =
+        (event.raw['messageId'] as num?)?.toInt() ??
         ((event.raw['message'] is Map<String, dynamic>)
-            ? ((event.raw['message'] as Map<String, dynamic>)['id'] as num?)?.toInt()
+            ? ((event.raw['message'] as Map<String, dynamic>)['id'] as num?)
+                  ?.toInt()
             : null);
     if (recallId == null || recallId <= 0) return false;
     final index = _messages.indexWhere((m) => m.id == recallId);
@@ -387,9 +410,11 @@ class _NativeChatViewState extends State<NativeChatView> {
   }
 
   bool _removeDeletedMessage(ConversationRealtimeEvent event) {
-    final mid = (event.raw['messageId'] as num?)?.toInt() ??
+    final mid =
+        (event.raw['messageId'] as num?)?.toInt() ??
         ((event.raw['message'] is Map<String, dynamic>)
-            ? ((event.raw['message'] as Map<String, dynamic>)['id'] as num?)?.toInt()
+            ? ((event.raw['message'] as Map<String, dynamic>)['id'] as num?)
+                  ?.toInt()
             : null);
     if (mid == null || mid <= 0) return false;
     if (!_messages.any((m) => m.id == mid)) return false;
@@ -400,7 +425,8 @@ class _NativeChatViewState extends State<NativeChatView> {
   bool _handleReadEvent(ConversationRealtimeEvent event) {
     final userId = (event.raw['userId'] as num?)?.toInt() ?? 0;
     if (userId <= 0 || userId == widget.session.userId) return true;
-    final lastRead = (event.raw['lastReadMessageId'] as num?)?.toInt() ??
+    final lastRead =
+        (event.raw['lastReadMessageId'] as num?)?.toInt() ??
         (event.raw['readMessageId'] as num?)?.toInt() ??
         (event.raw['messageId'] as num?)?.toInt() ??
         0;
@@ -445,15 +471,39 @@ class _NativeChatViewState extends State<NativeChatView> {
   }
 
   Future<void> _markReadIfNeeded() async {
+    if (!_canMarkReadNow) return;
     final conv = _conversation;
     if (conv == null) return;
+    final newest = _newestMessageId;
+    if (newest <= 0 || newest <= _lastMarkedReadNewestId) return;
+    print(
+      '[ChatRead] mark conv=${conv.id} newest=$newest '
+      'auto=${widget.autoMarkRead} scroll=$_userInteractedWithScroll',
+    );
     await _service.markConversationRead(conv.id);
+    _lastMarkedReadNewestId = newest;
+    widget.onConversationRead?.call(conv.id);
+  }
+
+  bool get _canMarkReadNow => widget.autoMarkRead || _userInteractedWithScroll;
+
+  bool _onMessageListScroll(ScrollNotification notification) {
+    if (notification is UserScrollNotification ||
+        (notification is ScrollUpdateNotification &&
+            notification.dragDetails != null)) {
+      _userInteractedWithScroll = true;
+    }
+    if (_canMarkReadNow && _isNearBottom) {
+      unawaited(_markReadIfNeeded());
+    }
+    return false;
   }
 
   bool get _isNearBottom {
     if (!_scrollController.hasClients) return true;
-    final pos = _scrollController.position;
-    return pos.maxScrollExtent - pos.pixels <= 72;
+    return _scrollController.position.maxScrollExtent -
+            _scrollController.position.pixels <=
+        72;
   }
 
   bool _messagePeerRead(NativeChatMessage m) {
@@ -470,7 +520,8 @@ class _NativeChatViewState extends State<NativeChatView> {
       final next = <int, int>{};
       for (final row in rows) {
         final uid = (row['userId'] as num?)?.toInt() ?? 0;
-        final lastRead = (row['lastReadMessageId'] as num?)?.toInt() ??
+        final lastRead =
+            (row['lastReadMessageId'] as num?)?.toInt() ??
             (row['readMessageId'] as num?)?.toInt() ??
             (row['lastRead'] as num?)?.toInt() ??
             0;
@@ -485,10 +536,12 @@ class _NativeChatViewState extends State<NativeChatView> {
   }
 
   List<Map<String, dynamic>> _groupReadPeers() {
-    return _groupMembers.where((m) {
-      final uid = (m['userId'] as num?)?.toInt() ?? 0;
-      return uid > 0 && uid != widget.session.userId;
-    }).toList(growable: false);
+    return _groupMembers
+        .where((m) {
+          final uid = (m['userId'] as num?)?.toInt() ?? 0;
+          return uid > 0 && uid != widget.session.userId;
+        })
+        .toList(growable: false);
   }
 
   int _groupReadCountForMessage(int messageId) {
@@ -501,7 +554,10 @@ class _NativeChatViewState extends State<NativeChatView> {
     return count;
   }
 
-  String? _groupReadLabelForMessage(NativeChatMessage message, {required bool mine}) {
+  String? _groupReadLabelForMessage(
+    NativeChatMessage message, {
+    required bool mine,
+  }) {
     if (_isPrivate || !mine || message.id <= 0) return null;
     final peers = _groupReadPeers();
     if (peers.isEmpty) return null;
@@ -574,7 +630,10 @@ class _NativeChatViewState extends State<NativeChatView> {
           hint: widget.focusMessageHint,
         );
       } else {
-        page = await _service.fetchMessagePage(conv.id, size: _isPrivate ? 20 : 20);
+        page = await _service.fetchMessagePage(
+          conv.id,
+          size: _isPrivate ? 20 : 20,
+        );
       }
       if (!_isPrivate) {
         try {
@@ -598,7 +657,6 @@ class _NativeChatViewState extends State<NativeChatView> {
         }
         unawaited(_refreshGroupReadMap(conv.id));
       }
-      await _service.markConversationRead(conv.id);
       unawaited(_realtime.ensureConversationSubscription(conv.id));
       if (_isPrivate) {
         _realtime.setPresenceContext(
@@ -606,14 +664,21 @@ class _NativeChatViewState extends State<NativeChatView> {
           peerUserId: conv.peerUserId ?? 0,
         );
         final peerId = conv.peerUserId ?? 0;
-        final online = peerId > 0 && _realtime.currentOnlineUsers.contains(peerId);
+        final online =
+            peerId > 0 && _realtime.currentOnlineUsers.contains(peerId);
         if (mounted && _peerOnline != online) {
           setState(() => _peerOnline = online);
         }
       }
       final msgs = page.items..sort((a, b) => a.id.compareTo(b.id));
       if (!mounted) return;
+      final conversationChanged = _conversation?.id != conv.id;
       setState(() {
+        if (conversationChanged) {
+          _lastMarkedReadNewestId = 0;
+          _userInteractedWithScroll = false;
+          _clearPendingNewMessages();
+        }
         _conversation = conv;
         _messages = msgs;
         _hasMore = page.hasMore;
@@ -622,17 +687,27 @@ class _NativeChatViewState extends State<NativeChatView> {
         _loading = false;
         _locating = false;
         _bootstrapped = true;
-        _peerLastReadMessageId = page.peerLastReadMessageId ?? _peerLastReadMessageId;
+        _peerLastReadMessageId =
+            page.peerLastReadMessageId ?? _peerLastReadMessageId;
         if (!silent) _error = null;
       });
+      final shouldStickBottom =
+          _forceLatestMode || conversationChanged || _isNearBottom;
       _forceLatestMode = false;
       if (focusId > 0) {
         _highlightAndScroll(focusId);
-      } else if (_forceLatestMode || _isNearBottom) {
-        setState(_clearPendingNewMessages);
+      } else if (shouldStickBottom) {
+        if (!conversationChanged) {
+          setState(_clearPendingNewMessages);
+        }
         _scrollBottom(force: true);
       } else {
         _recountPendingNewMessages();
+      }
+      if (focusId <= 0 && widget.autoMarkRead) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          unawaited(_markReadIfNeeded());
+        });
       }
     } catch (e) {
       _forceLatestMode = false;
@@ -651,22 +726,31 @@ class _NativeChatViewState extends State<NativeChatView> {
     final oldestId = _messages.first.id;
     if (oldestId <= 0) return;
     setState(() => _loadingOlder = true);
-    final prevExtent = _scrollController.hasClients ? _scrollController.position.maxScrollExtent : 0.0;
-    final prevPixels = _scrollController.hasClients ? _scrollController.position.pixels : 0.0;
     try {
-      final page = await _service.fetchMessagePage(conv.id, size: 30, before: oldestId);
+      final page = await _service.fetchMessagePage(
+        conv.id,
+        size: 30,
+        before: oldestId,
+      );
       if (!mounted || page.items.isEmpty) return;
       final merged = _mergeMessages(page.items, _messages);
       if (!mounted) return;
+      final oldMax = _scrollController.hasClients
+          ? _scrollController.position.maxScrollExtent
+          : 0.0;
+      final oldPixels = _scrollController.hasClients
+          ? _scrollController.position.pixels
+          : 0.0;
       setState(() {
         _messages = merged;
         _hasMore = page.hasMore;
       });
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!_scrollController.hasClients) return;
-        final delta = _scrollController.position.maxScrollExtent - prevExtent;
+        final delta =
+            _scrollController.position.maxScrollExtent - oldMax;
         if (delta > 0) {
-          _scrollController.jumpTo(prevPixels + delta);
+          _scrollController.jumpTo(oldPixels + delta);
         }
       });
     } catch (e) {
@@ -678,12 +762,17 @@ class _NativeChatViewState extends State<NativeChatView> {
 
   Future<void> _loadNewer() async {
     final conv = _conversation;
-    if (conv == null || _loadingNewer || _messages.isEmpty || !_hasNewer) return;
+    if (conv == null || _loadingNewer || _messages.isEmpty || !_hasNewer)
+      return;
     final newestId = _messages.last.id;
     if (newestId <= 0) return;
     setState(() => _loadingNewer = true);
     try {
-      final page = await _service.fetchMessagePage(conv.id, size: 25, after: newestId);
+      final page = await _service.fetchMessagePage(
+        conv.id,
+        size: 25,
+        after: newestId,
+      );
       if (!mounted || page.items.isEmpty) {
         if (mounted) setState(() => _hasNewer = false);
         return;
@@ -736,7 +825,9 @@ class _NativeChatViewState extends State<NativeChatView> {
     _highlightTimer = Timer(const Duration(seconds: 2), () {
       if (mounted) setState(() => _highlightMessageId = null);
     });
-    WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToMessage(messageId));
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => _scrollToMessage(messageId),
+    );
   }
 
   void _scrollToMessage(int messageId) {
@@ -745,6 +836,7 @@ class _NativeChatViewState extends State<NativeChatView> {
     if (ctx == null) return;
     Scrollable.ensureVisible(
       ctx,
+      // 正序列表：将目标消息滚到视口偏上位置，便于上下文浏览。
       alignment: 0.35,
       duration: const Duration(milliseconds: 280),
       curve: Curves.easeOutCubic,
@@ -771,7 +863,10 @@ class _NativeChatViewState extends State<NativeChatView> {
           conv = c;
           break;
         }
-        if (!_isPrivate && (c.kind == 'GROUP' || c.kind == 'WORKGROUP' || c.kind == 'WORKGROUP_APPROVAL')) {
+        if (!_isPrivate &&
+            (c.kind == 'GROUP' ||
+                c.kind == 'WORKGROUP' ||
+                c.kind == 'WORKGROUP_APPROVAL')) {
           conv = c;
           break;
         }
@@ -786,18 +881,23 @@ class _NativeChatViewState extends State<NativeChatView> {
     return conv;
   }
 
-  Future<NativeConversation> _enrichPrivateConversation(NativeConversation conv) async {
+  Future<NativeConversation> _enrichPrivateConversation(
+    NativeConversation conv,
+  ) async {
     var peerId = conv.peerUserId ?? widget.peerUserIdHint ?? 0;
     if (peerId <= 0 || peerId == widget.session.userId) {
       peerId = widget.peerUserIdHint ?? 0;
     }
     if (peerId <= 0 || peerId == widget.session.userId) return conv;
-    final needsContact = conv.peerUserId == null ||
+    final needsContact =
+        conv.peerUserId == null ||
         conv.peerUserId == widget.session.userId ||
         (conv.peerDisplayName ?? '').trim().isEmpty ||
         conv.displayTitle == widget.session.displayName;
     if (!needsContact) return conv;
-    final contact = await ContactService(session: widget.session).fetchContact(peerId);
+    final contact = await ContactService(
+      session: widget.session,
+    ).fetchContact(peerId);
     if (contact == null) return conv;
     return NativeConversation(
       id: conv.id,
@@ -812,8 +912,12 @@ class _NativeChatViewState extends State<NativeChatView> {
       muted: conv.muted,
       pinned: conv.pinned,
       businessType: conv.businessType,
-      peerDepartment: (contact.department ?? '').trim().isNotEmpty ? contact.department : conv.peerDepartment,
-      peerRoleLabel: (contact.title ?? '').trim().isNotEmpty ? contact.title : conv.peerRoleLabel,
+      peerDepartment: (contact.department ?? '').trim().isNotEmpty
+          ? contact.department
+          : conv.peerDepartment,
+      peerRoleLabel: (contact.title ?? '').trim().isNotEmpty
+          ? contact.title
+          : conv.peerRoleLabel,
       peerAvatarPreset: contact.avatarPreset ?? conv.peerAvatarPreset,
       peerAvatarObjectKey: contact.avatarObjectKey ?? conv.peerAvatarObjectKey,
       dissolved: conv.dissolved,
@@ -867,7 +971,8 @@ class _NativeChatViewState extends State<NativeChatView> {
     if (text.contains('@$atAll')) {
       for (final m in _groupMembers) {
         final uid = (m['userId'] as num?)?.toInt() ?? 0;
-        if (uid <= 0 || uid == widget.session.userId || seen.contains(uid)) continue;
+        if (uid <= 0 || uid == widget.session.userId || seen.contains(uid))
+          continue;
         seen.add(uid);
         ids.add(uid);
       }
@@ -910,11 +1015,14 @@ class _NativeChatViewState extends State<NativeChatView> {
   Future<void> _sendImageFrom(ImageSource source, String label) async {
     final conv = _conversation;
     if (conv == null || _sending) return;
-    if (source == ImageSource.camera && !await _ensureCameraPermission()) return;
+    if (source == ImageSource.camera && !await _ensureCameraPermission())
+      return;
     final picked = await _imagePicker.pickImage(source: source);
     if (picked == null) return;
     final bytes = await picked.readAsBytes();
-    final fileName = picked.name.isNotEmpty ? picked.name : 'image-${DateTime.now().millisecondsSinceEpoch}.jpg';
+    final fileName = picked.name.isNotEmpty
+        ? picked.name
+        : 'image-${DateTime.now().millisecondsSinceEpoch}.jpg';
     if (!_checkSizeLimit(bytes.length, _maxImageBytes, fileName)) return;
     final mimeType = lookupMimeType(fileName) ?? 'image/*';
     final preview = await buildChatImagePreview(bytes, fileName: fileName);
@@ -944,7 +1052,9 @@ class _NativeChatViewState extends State<NativeChatView> {
       var done = 0;
       for (final file in picked) {
         final bytes = await file.readAsBytes();
-        final fileName = file.name.isNotEmpty ? file.name : 'image-${DateTime.now().millisecondsSinceEpoch}.jpg';
+        final fileName = file.name.isNotEmpty
+            ? file.name
+            : 'image-${DateTime.now().millisecondsSinceEpoch}.jpg';
         if (!_checkSizeLimit(bytes.length, _maxImageBytes, fileName)) {
           done++;
           continue;
@@ -1115,7 +1225,9 @@ class _NativeChatViewState extends State<NativeChatView> {
                     value: hasProgress ? _uploadProgress : null,
                     minHeight: 6,
                     backgroundColor: Colors.white24,
-                    valueColor: const AlwaysStoppedAnimation<Color>(DunesColors.accentLine),
+                    valueColor: const AlwaysStoppedAnimation<Color>(
+                      DunesColors.accentLine,
+                    ),
                   ),
                 ),
               ],
@@ -1162,15 +1274,22 @@ class _NativeChatViewState extends State<NativeChatView> {
 
   Future<void> _tryRecallMessage(NativeChatMessage m) async {
     final conv = _conversation;
-    if (conv == null || m.id <= 0 || m.senderUserId != widget.session.userId) return;
+    if (conv == null || m.id <= 0 || m.senderUserId != widget.session.userId)
+      return;
     final ok = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
         title: const Text('撤回消息'),
         content: const Text('确认撤回这条消息吗？'),
         actions: [
-          TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('取消')),
-          FilledButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('撤回')),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('撤回'),
+          ),
         ],
       ),
     );
@@ -1187,7 +1306,9 @@ class _NativeChatViewState extends State<NativeChatView> {
     final conv = _conversation;
     if (conv == null || m.id <= 0) return;
     try {
-      final members = _groupMembers.isNotEmpty ? _groupMembers : await _service.fetchConversationMembers(conv.id);
+      final members = _groupMembers.isNotEmpty
+          ? _groupMembers
+          : await _service.fetchConversationMembers(conv.id);
       if (_groupMembers.isEmpty) _groupMembers = members;
       final statusRows = await _service.fetchGroupReadStatus(conv.id);
       final receiptRows = await _service.fetchMessageReadReceipts(
@@ -1197,7 +1318,8 @@ class _NativeChatViewState extends State<NativeChatView> {
       final reads = <int, int>{};
       for (final row in statusRows) {
         final uid = (row['userId'] as num?)?.toInt() ?? 0;
-        final lastRead = (row['lastReadMessageId'] as num?)?.toInt() ??
+        final lastRead =
+            (row['lastReadMessageId'] as num?)?.toInt() ??
             (row['readMessageId'] as num?)?.toInt() ??
             (row['lastRead'] as num?)?.toInt() ??
             0;
@@ -1207,7 +1329,8 @@ class _NativeChatViewState extends State<NativeChatView> {
       }
       for (final row in receiptRows) {
         final uid = (row['userId'] as num?)?.toInt() ?? 0;
-        final lastRead = (row['lastReadMessageId'] as num?)?.toInt() ??
+        final lastRead =
+            (row['lastReadMessageId'] as num?)?.toInt() ??
             (row['readMessageId'] as num?)?.toInt() ??
             (row['lastRead'] as num?)?.toInt() ??
             m.id;
@@ -1226,7 +1349,8 @@ class _NativeChatViewState extends State<NativeChatView> {
         if (uid <= 0 || uid == widget.session.userId) continue;
         final person = _GroupReadPerson(
           uid: uid,
-          name: (member['displayName'] ?? member['name'] ?? '用户$uid').toString(),
+          name: (member['displayName'] ?? member['name'] ?? '用户$uid')
+              .toString(),
           sub: _memberDeptTitle(member),
           avatarPreset: _memberAvatarPreset(member),
           avatarObjectKey: _memberAvatarObjectKey(member),
@@ -1257,8 +1381,13 @@ class _NativeChatViewState extends State<NativeChatView> {
 
   String _memberDeptTitle(Map<String, dynamic> member) {
     final parts = <String>[];
-    final dept = (member['department'] ?? member['departmentName'] ?? '').toString().trim();
-    final title = (member['title'] ?? member['roleLabel'] ?? member['role'] ?? '').toString().trim();
+    final dept = (member['department'] ?? member['departmentName'] ?? '')
+        .toString()
+        .trim();
+    final title =
+        (member['title'] ?? member['roleLabel'] ?? member['role'] ?? '')
+            .toString()
+            .trim();
     if (dept.isNotEmpty) parts.add(dept);
     if (title.isNotEmpty) parts.add(title);
     return parts.join(' · ');
@@ -1334,7 +1463,9 @@ class _NativeChatViewState extends State<NativeChatView> {
     final quote = ChatMessageQuote.fromPayload(m.payload);
     if (quote.isEmpty) return child;
     return Column(
-      crossAxisAlignment: mine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+      crossAxisAlignment: mine
+          ? CrossAxisAlignment.end
+          : CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
         child,
@@ -1376,7 +1507,10 @@ class _NativeChatViewState extends State<NativeChatView> {
     return (payload['objectKey'] ?? '').toString().trim();
   }
 
-  Future<void> _downloadFile(Map<String, dynamic>? payload, String fileName) async {
+  Future<void> _downloadFile(
+    Map<String, dynamic>? payload,
+    String fileName,
+  ) async {
     try {
       if (ConversationService.hasAuthMedia(payload)) {
         final bytes = await _service.loadChatMediaBytes(payload);
@@ -1398,7 +1532,9 @@ class _NativeChatViewState extends State<NativeChatView> {
     final conv = _conversation;
     if (mine) {
       final self = widget.session.displayName?.trim();
-      final initial = self != null && self.isNotEmpty ? self.substring(0, 1) : '我';
+      final initial = self != null && self.isNotEmpty
+          ? self.substring(0, 1)
+          : '我';
       return ImUserAvatar(
         initial: initial,
         seed: widget.session.userId,
@@ -1408,8 +1544,12 @@ class _NativeChatViewState extends State<NativeChatView> {
         avatarService: _service,
       );
     }
-    final name = m.senderName.isNotEmpty ? m.senderName : (conv?.displayTitle ?? '?');
-    final seed = m.senderUserId > 0 ? m.senderUserId : (conv?.peerUserId ?? conv?.id ?? 0);
+    final name = m.senderName.isNotEmpty
+        ? m.senderName
+        : (conv?.displayTitle ?? '?');
+    final seed = m.senderUserId > 0
+        ? m.senderUserId
+        : (conv?.peerUserId ?? conv?.id ?? 0);
     final preset = m.senderAvatarPreset ?? conv?.peerAvatarPreset;
     final objectKey = m.senderAvatarObjectKey ?? conv?.peerAvatarObjectKey;
     return ImUserAvatar(
@@ -1437,8 +1577,9 @@ class _NativeChatViewState extends State<NativeChatView> {
       return ChatSystemPill(text: m.bodyText.isEmpty ? '[系统消息]' : m.bodyText);
     }
     final quote = ChatMessageQuote.fromPayload(m.payload);
-    final onQuoteTap =
-        quote.isEmpty ? null : () => _jumpToQuotedMessage(quote.messageId);
+    final onQuoteTap = quote.isEmpty
+        ? null
+        : () => _jumpToQuotedMessage(quote.messageId);
     if (kind == 'IMAGE') {
       return _wrapQuotedContent(
         m,
@@ -1454,7 +1595,9 @@ class _NativeChatViewState extends State<NativeChatView> {
     if (kind == 'FILE') {
       final fileName = ConversationService.mediaFileName(
         m.payload,
-        fallback: m.bodyText.isEmpty ? '文件' : m.bodyText.replaceAll(RegExp(r'^\[[^\]]+\]\s*'), ''),
+        fallback: m.bodyText.isEmpty
+            ? '文件'
+            : m.bodyText.replaceAll(RegExp(r'^\[[^\]]+\]\s*'), ''),
       );
       return _wrapQuotedContent(
         m,
@@ -1488,24 +1631,28 @@ class _NativeChatViewState extends State<NativeChatView> {
     );
   }
 
-  void _scrollBottom({bool animated = false, bool force = false, bool gentle = false}) {
+  void _scrollBottom({
+    bool animated = false,
+    bool force = false,
+    bool gentle = false,
+  }) {
     if (_locatedMode && !force) return;
     final gen = ++_scrollBottomGen;
 
     void doScroll() {
       if (!mounted || gen != _scrollBottomGen) return;
       if (!_scrollController.hasClients) return;
-      final max = _scrollController.position.maxScrollExtent;
+      final bottom = _scrollController.position.maxScrollExtent;
       if (animated) {
         unawaited(
           _scrollController.animateTo(
-            max,
+            bottom,
             duration: const Duration(milliseconds: 280),
             curve: Curves.easeOutCubic,
           ),
         );
       } else {
-        _scrollController.jumpTo(max);
+        _scrollController.jumpTo(bottom);
       }
     }
 
@@ -1543,7 +1690,10 @@ class _NativeChatViewState extends State<NativeChatView> {
   }
 
   Future<void> _insertAtMentions(List<String> names) async {
-    final picked = names.map((n) => n.trim()).where((n) => n.isNotEmpty).toList(growable: false);
+    final picked = names
+        .map((n) => n.trim())
+        .where((n) => n.isNotEmpty)
+        .toList(growable: false);
     if (picked.isEmpty) return;
     final text = _inputController.text;
     final partial = RegExp(r'^(.*)@[^@\s]*$').firstMatch(text);
@@ -1553,7 +1703,9 @@ class _NativeChatViewState extends State<NativeChatView> {
     final tail = '${picked.map((n) => '@$n').join(' ')} ';
     _insertingAtMentions = true;
     _inputController.text = '$prefix$tail';
-    _inputController.selection = TextSelection.collapsed(offset: _inputController.text.length);
+    _inputController.selection = TextSelection.collapsed(
+      offset: _inputController.text.length,
+    );
     _insertingAtMentions = false;
     setState(() => _emojiOpen = false);
   }
@@ -1579,7 +1731,10 @@ class _NativeChatViewState extends State<NativeChatView> {
     final text = _inputController.text;
     final previousText = _lastComposeText;
     _lastComposeText = text;
-    if (_syncingAtFilter || _insertingAtMentions || _isPrivate || _conversation?.dissolved == true) {
+    if (_syncingAtFilter ||
+        _insertingAtMentions ||
+        _isPrivate ||
+        _conversation?.dissolved == true) {
       return;
     }
     final filter = _partialAtFilter(text);
@@ -1614,7 +1769,9 @@ class _NativeChatViewState extends State<NativeChatView> {
         final needsSpace = text.isNotEmpty && !RegExp(r'\s$').hasMatch(text);
         final newText = '$text${needsSpace ? ' ' : ''}@';
         _inputController.text = newText;
-        _inputController.selection = TextSelection.collapsed(offset: newText.length);
+        _inputController.selection = TextSelection.collapsed(
+          offset: newText.length,
+        );
       }
     }
     await _openAtMentionPicker(
@@ -1623,7 +1780,10 @@ class _NativeChatViewState extends State<NativeChatView> {
     );
   }
 
-  Future<void> _openAtMentionPicker({String filter = '', bool focusSearch = false}) async {
+  Future<void> _openAtMentionPicker({
+    String filter = '',
+    bool focusSearch = false,
+  }) async {
     final conv = _conversation;
     if (conv == null || _isPrivate) return;
     if (_atSheetOpen || _atSheetOpening) {
@@ -1632,11 +1792,16 @@ class _NativeChatViewState extends State<NativeChatView> {
     }
     _atSheetOpening = true;
     try {
-      final members = (_groupMembers.isNotEmpty
-          ? _groupMembers
-          : await _service.fetchConversationMembers(conv.id))
-          .where((m) => ((m['userId'] as num?)?.toInt() ?? 0) != widget.session.userId)
-          .toList(growable: false);
+      final members =
+          (_groupMembers.isNotEmpty
+                  ? _groupMembers
+                  : await _service.fetchConversationMembers(conv.id))
+              .where(
+                (m) =>
+                    ((m['userId'] as num?)?.toInt() ?? 0) !=
+                    widget.session.userId,
+              )
+              .toList(growable: false);
       if (_groupMembers.isEmpty) _groupMembers = members;
       if (members.isEmpty) {
         _showToast('暂无可 @ 成员');
@@ -1712,14 +1877,14 @@ class _NativeChatViewState extends State<NativeChatView> {
     final subtitle = _isPrivate
         ? _privateHeaderSubtitle(conv)
         : memberLabel.isEmpty
-            ? '群聊'
-            : memberLabel;
+        ? '群聊'
+        : memberLabel;
     final listEntries = _buildListEntries();
     final inputHint = locked
         ? '群聊已解散，无法发送消息'
         : _isPrivate
-            ? (title.isNotEmpty ? '给$title发消息…' : '输入消息…')
-            : '输入消息 · @人时唤出选择器';
+        ? (title.isNotEmpty ? '给$title发消息…' : '输入消息…')
+        : '输入消息 · @人时唤出选择器';
 
     return Scaffold(
       backgroundColor: DunesColors.bgApp,
@@ -1732,242 +1897,225 @@ class _NativeChatViewState extends State<NativeChatView> {
             if (_emojiOpen) setState(() => _emojiOpen = false);
           },
           child: Column(
-          children: [
-            ChatConvHeader(
-              title: title,
-              subtitle: subtitle,
-              onBack: widget.onBack,
-              onTapTitle: _isPrivate ? widget.onOpenProfile : widget.onOpenGroupInfo,
-              showOnlineDot: _isPrivate && _peerOnline,
-              leadingAvatar: _isPrivate
-                  ? ImUserAvatar(
-                      initial: title.isNotEmpty ? title.substring(0, 1) : '?',
-                      seed: conv.peerUserId ?? conv.id,
-                      showOnline: _peerOnline,
-                      avatarPreset: conv.peerAvatarPreset,
-                      avatarObjectKey: conv.peerAvatarObjectKey,
-                      avatarService: _service,
-                    )
-                  : null,
-              actions: [
-                if (widget.onOpenSearch != null)
+            children: [
+              ChatConvHeader(
+                title: title,
+                subtitle: subtitle,
+                onBack: widget.onBack,
+                onTapTitle: _isPrivate
+                    ? widget.onOpenProfile
+                    : widget.onOpenGroupInfo,
+                showOnlineDot: _isPrivate && _peerOnline,
+                leadingAvatar: _isPrivate
+                    ? ImUserAvatar(
+                        initial: title.isNotEmpty ? title.substring(0, 1) : '?',
+                        seed: conv.peerUserId ?? conv.id,
+                        showOnline: _peerOnline,
+                        avatarPreset: conv.peerAvatarPreset,
+                        avatarObjectKey: conv.peerAvatarObjectKey,
+                        avatarService: _service,
+                      )
+                    : null,
+                actions: [
+                  if (widget.onOpenSearch != null)
+                    IconButton(
+                      tooltip: '聊天记录',
+                      onPressed: () => widget.onOpenSearch!(conv.id),
+                      icon: const Icon(Icons.history, size: 20),
+                    ),
                   IconButton(
-                    tooltip: '聊天记录',
-                    onPressed: () => widget.onOpenSearch!(conv.id),
-                    icon: const Icon(Icons.history, size: 20),
+                    tooltip: '语音通话',
+                    onPressed:
+                        widget.onOpenCall ??
+                        () => showDunesSoonToast(context, '通话功能敬请期待'),
+                    icon: const Icon(Icons.phone_outlined, size: 20),
                   ),
-                IconButton(
-                  tooltip: '语音通话',
-                  onPressed: widget.onOpenCall ?? () => showDunesSoonToast(context, '通话功能敬请期待'),
-                  icon: const Icon(Icons.phone_outlined, size: 20),
-                ),
-                IconButton(
-                  tooltip: '视频通话',
-                  onPressed: () => showDunesSoonToast(context, '视频通话敬请期待'),
-                  icon: const Icon(Icons.videocam_outlined, size: 20),
-                ),
-                if (!_isPrivate && widget.onOpenMedia != null)
                   IconButton(
-                    tooltip: '媒体',
-                    onPressed: () => widget.onOpenMedia!(conv.id),
-                    icon: const Icon(Icons.perm_media_outlined, size: 20),
+                    tooltip: '视频通话',
+                    onPressed: () => showDunesSoonToast(context, '视频通话敬请期待'),
+                    icon: const Icon(Icons.videocam_outlined, size: 20),
                   ),
-                if (!_isPrivate && widget.onOpenGroupInfo != null)
-                  IconButton(
-                    tooltip: '群信息',
-                    onPressed: widget.onOpenGroupInfo,
-                    icon: const Icon(Icons.more_vert, size: 20),
-                  ),
-              ],
-            ),
-            Expanded(
-              child: Stack(
-                children: [
-                  if (!_bootstrapped && _loading)
-                    const Center(child: CircularProgressIndicator(strokeWidth: 2))
-                  else
-                  ListView.builder(
-                    controller: _scrollController,
-                    physics: const ClampingScrollPhysics(),
-                    cacheExtent: 640,
-                    padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-                    itemCount: listEntries.length +
-                        (_loadingOlder ? 1 : 0) +
-                        (_locatedMode && _hasNewer ? 1 : 0),
-                    itemBuilder: (_, index) {
-                      if (_loadingOlder && index == 0) {
-                        return const Padding(
-                          padding: EdgeInsets.symmetric(vertical: 8),
-                          child: Center(
+                  if (!_isPrivate && widget.onOpenMedia != null)
+                    IconButton(
+                      tooltip: '媒体',
+                      onPressed: () => widget.onOpenMedia!(conv.id),
+                      icon: const Icon(Icons.perm_media_outlined, size: 20),
+                    ),
+                  if (!_isPrivate && widget.onOpenGroupInfo != null)
+                    IconButton(
+                      tooltip: '群信息',
+                      onPressed: widget.onOpenGroupInfo,
+                      icon: const Icon(Icons.more_vert, size: 20),
+                    ),
+                ],
+              ),
+              Expanded(
+                child: Stack(
+                  children: [
+                    if (!_bootstrapped && _loading)
+                      const Center(
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    else
+                      NotificationListener<ScrollNotification>(
+                        onNotification: _onMessageListScroll,
+                        child: ListView.builder(
+                          controller: _scrollController,
+                          reverse: false,
+                          physics: const ClampingScrollPhysics(),
+                          cacheExtent: 640,
+                          padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+                          itemCount:
+                              listEntries.length +
+                              (_locatedMode && _hasNewer ? 1 : 0),
+                          itemBuilder: (_, index) {
+                            final hasNewerFooter = _locatedMode && _hasNewer;
+                            if (hasNewerFooter && index == listEntries.length) {
+                              return Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 10,
+                                ),
+                                child: Center(
+                                  child: _loadingNewer
+                                      ? const SizedBox(
+                                          width: 18,
+                                          height: 18,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                          ),
+                                        )
+                                      : TextButton(
+                                          onPressed: _loadNewer,
+                                          child: const Text('加载更新消息'),
+                                        ),
+                                ),
+                              );
+                            }
+                            final entry = listEntries[index];
+                            if (entry.dividerLabel != null) {
+                              return ChatDateDivider(
+                                label: entry.dividerLabel!,
+                              );
+                            }
+                            final m = entry.message!;
+                            final mine =
+                                m.senderUserId == widget.session.userId;
+                            final key = _messageKeys.putIfAbsent(
+                              m.id,
+                              GlobalKey.new,
+                            );
+                            final highlighted = _highlightMessageId == m.id;
+                            final timeLabel = InboxFormat.msgTimeLabel(
+                              m.createdAt,
+                            );
+                            final rowAvatar = _avatarForMessage(m, mine: mine);
+                            Widget row;
+                            if (_isSystemKind(m.kind)) {
+                              row = _buildMessageWidget(m, mine);
+                            } else {
+                              final prevMsg = _previousMessage(
+                                index,
+                                listEntries,
+                              );
+                              final showMeta =
+                                  !_isPrivate &&
+                                  (prevMsg == null ||
+                                      prevMsg.senderUserId != m.senderUserId);
+                              final peerRead = mine && _isPrivate
+                                  ? _messagePeerRead(m)
+                                  : false;
+                              row = ChatMessageRow(
+                                message: m,
+                                mine: mine,
+                                showSenderMeta:
+                                    showMeta || (_isPrivate && !mine),
+                                showTimeForMine: mine,
+                                timeLabel: timeLabel,
+                                readLabel: mine && _isPrivate
+                                    ? (peerRead ? '已读' : '未读')
+                                    : null,
+                                onLongPress: !_isSystemKind(m.kind)
+                                    ? () => _onMessageActions(m, mine)
+                                    : null,
+                                onReadTap: mine && !_isPrivate
+                                    ? () => _showReadReceipts(m)
+                                    : null,
+                                readTapLabel: _groupReadLabelForMessage(
+                                  m,
+                                  mine: mine,
+                                ),
+                                avatar: !mine ? rowAvatar : null,
+                                trailingAvatar: mine ? rowAvatar : null,
+                                content: _buildMessageWidget(m, mine),
+                              );
+                            }
+                            return AnimatedContainer(
+                              key: key,
+                              duration: const Duration(milliseconds: 200),
+                              decoration: BoxDecoration(
+                                color: highlighted
+                                    ? DunesColors.accentSoft.withValues(
+                                        alpha: 0.45,
+                                      )
+                                    : Colors.transparent,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              padding: highlighted
+                                  ? const EdgeInsets.symmetric(vertical: 2)
+                                  : EdgeInsets.zero,
+                              child: row,
+                            );
+                          },
+                        ),
+                      ),
+                    if (_loadingOlder)
+                      const Positioned(
+                        top: 8,
+                        left: 0,
+                        right: 0,
+                        child: Center(
+                          child: Material(
+                            color: Colors.transparent,
                             child: SizedBox(
                               width: 18,
                               height: 18,
                               child: CircularProgressIndicator(strokeWidth: 2),
                             ),
                           ),
-                        );
-                      }
-                      var entryIndex = _loadingOlder ? index - 1 : index;
-                      if (_locatedMode && _hasNewer && entryIndex == listEntries.length) {
-                        return Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 10),
-                          child: Center(
-                            child: _loadingNewer
-                                ? const SizedBox(
-                                    width: 18,
-                                    height: 18,
-                                    child: CircularProgressIndicator(strokeWidth: 2),
-                                  )
-                                : TextButton(
-                                    onPressed: _loadNewer,
-                                    child: const Text('加载更新消息'),
-                                  ),
-                          ),
-                        );
-                      }
-                      final entry = listEntries[entryIndex];
-                      if (entry.dividerLabel != null) {
-                        return ChatDateDivider(label: entry.dividerLabel!);
-                      }
-                      final m = entry.message!;
-                      final mine = m.senderUserId == widget.session.userId;
-                      final key = _messageKeys.putIfAbsent(m.id, GlobalKey.new);
-                      final highlighted = _highlightMessageId == m.id;
-                      final timeLabel = InboxFormat.msgTimeLabel(m.createdAt);
-                      final rowAvatar = _avatarForMessage(m, mine: mine);
-                      Widget row;
-                      if (_isSystemKind(m.kind)) {
-                        row = _buildMessageWidget(m, mine);
-                      } else {
-                        final prevMsg = _previousMessage(entryIndex, listEntries);
-                        final showMeta = !_isPrivate && (prevMsg == null || prevMsg.senderUserId != m.senderUserId);
-                        final peerRead = mine && _isPrivate ? _messagePeerRead(m) : false;
-                        row = ChatMessageRow(
-                          message: m,
-                          mine: mine,
-                          showSenderMeta: showMeta || (_isPrivate && !mine),
-                          showTimeForMine: mine,
-                          timeLabel: timeLabel,
-                          readLabel: mine && _isPrivate ? (peerRead ? '已读' : '未读') : null,
-                          onLongPress: !_isSystemKind(m.kind)
-                              ? () => _onMessageActions(m, mine)
-                              : null,
-                          onReadTap: mine && !_isPrivate ? () => _showReadReceipts(m) : null,
-                          readTapLabel: _groupReadLabelForMessage(m, mine: mine),
-                          avatar: !mine ? rowAvatar : null,
-                          trailingAvatar: mine ? rowAvatar : null,
-                          content: _buildMessageWidget(m, mine),
-                        );
-                      }
-                      return AnimatedContainer(
-                        key: key,
-                        duration: const Duration(milliseconds: 200),
-                        decoration: BoxDecoration(
-                          color: highlighted ? DunesColors.accentSoft.withValues(alpha: 0.45) : Colors.transparent,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        padding: highlighted ? const EdgeInsets.symmetric(vertical: 2) : EdgeInsets.zero,
-                        child: row,
-                      );
-                    },
-                  ),
-                  if (_locating)
-                    Positioned(
-                      top: 8,
-                      left: 0,
-                      right: 0,
-                      child: Center(
-                        child: Material(
-                          elevation: 1,
-                          borderRadius: BorderRadius.circular(16),
-                          color: DunesColors.bgApp,
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const SizedBox(
-                                  width: 12,
-                                  height: 12,
-                                  child: CircularProgressIndicator(strokeWidth: 1.5),
-                                ),
-                                const SizedBox(width: 8),
-                                Text(
-                                  '定位中…',
-                                  style: DunesTypography.sans(fontSize: 11, color: DunesColors.text3),
-                                ),
-                              ],
-                            ),
-                          ),
                         ),
                       ),
-                    ),
-                  if (_pendingNewMessageCount > 0 && !_locatedMode)
-                    Positioned(
-                      left: 0,
-                      right: 0,
-                      bottom: 12,
-                      child: Center(
-                        child: Material(
-                          color: Colors.transparent,
-                          elevation: 4,
-                          borderRadius: BorderRadius.circular(999),
-                          child: InkWell(
-                            onTap: _jumpToPendingMessages,
-                            borderRadius: BorderRadius.circular(999),
-                            child: Ink(
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(999),
-                                gradient: const LinearGradient(
-                                  begin: Alignment.topLeft,
-                                  end: Alignment.bottomRight,
-                                  colors: [Color(0xFF7E64BD), Color(0xFF553B96)],
-                                ),
-                                boxShadow: const [
-                                  BoxShadow(
-                                    color: Color(0x59553B96),
-                                    blurRadius: 12,
-                                    offset: Offset(0, 4),
-                                  ),
-                                ],
-                              ),
-                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                              child: Text(
-                                '${_pendingNewMessageCount > 99 ? '99+' : _pendingNewMessageCount} 条新消息 ↓',
-                                style: DunesTypography.sans(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.white,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  if (_locatedMode)
-                    Positioned(
-                      left: 0,
-                      right: 0,
-                      bottom: 8,
-                      child: Center(
-                        child: Material(
-                          elevation: 2,
-                          borderRadius: BorderRadius.circular(20),
-                          color: DunesColors.bgApp,
-                          child: InkWell(
-                            onTap: _jumpToLatest,
-                            borderRadius: BorderRadius.circular(20),
+                    if (_locating)
+                      Positioned(
+                        top: 8,
+                        left: 0,
+                        right: 0,
+                        child: Center(
+                          child: Material(
+                            elevation: 1,
+                            borderRadius: BorderRadius.circular(16),
+                            color: DunesColors.bgApp,
                             child: Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 6,
+                              ),
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  const Icon(Icons.arrow_downward, size: 14, color: DunesColors.accentDeep),
-                                  const SizedBox(width: 6),
+                                  const SizedBox(
+                                    width: 12,
+                                    height: 12,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 1.5,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
                                   Text(
-                                    '回到最新消息',
-                                    style: DunesTypography.sans(fontSize: 12, color: DunesColors.accentDeep),
+                                    '定位中…',
+                                    style: DunesTypography.sans(
+                                      fontSize: 11,
+                                      color: DunesColors.text3,
+                                    ),
                                   ),
                                 ],
                               ),
@@ -1975,84 +2123,195 @@ class _NativeChatViewState extends State<NativeChatView> {
                           ),
                         ),
                       ),
-                    ),
-                  if (_recording)
-                    Positioned.fill(
-                      child: IgnorePointer(
-                        child: Container(
-                          color: Colors.black26,
-                          alignment: Alignment.center,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-                            decoration: BoxDecoration(
-                              color: _recordWillCancel ? DunesColors.coral : const Color(0xE61F2421),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Text(
-                              _recordWillCancel ? '松开取消' : '松开发送',
-                              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+                    if (_pendingNewMessageCount > 0 && !_locatedMode)
+                      Positioned(
+                        left: 0,
+                        right: 0,
+                        bottom: 12,
+                        child: Center(
+                          child: Material(
+                            color: Colors.transparent,
+                            elevation: 4,
+                            borderRadius: BorderRadius.circular(999),
+                            child: InkWell(
+                              onTap: _jumpToPendingMessages,
+                              borderRadius: BorderRadius.circular(999),
+                              child: Ink(
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(999),
+                                  gradient: const LinearGradient(
+                                    begin: Alignment.topLeft,
+                                    end: Alignment.bottomRight,
+                                    colors: [
+                                      Color(0xFF7E64BD),
+                                      Color(0xFF553B96),
+                                    ],
+                                  ),
+                                  boxShadow: const [
+                                    BoxShadow(
+                                      color: Color(0x59553B96),
+                                      blurRadius: 12,
+                                      offset: Offset(0, 4),
+                                    ),
+                                  ],
+                                ),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 14,
+                                  vertical: 8,
+                                ),
+                                child: Text(
+                                  '${_pendingNewMessageCount > 99 ? '99+' : _pendingNewMessageCount} 条新消息 ↓',
+                                  style: DunesTypography.sans(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ),
                             ),
                           ),
                         ),
                       ),
-                    ),
-                  if (_uploadLabel != null) _buildUploadOverlay(),
-                ],
+                    if (_locatedMode)
+                      Positioned(
+                        left: 0,
+                        right: 0,
+                        bottom: 8,
+                        child: Center(
+                          child: Material(
+                            elevation: 2,
+                            borderRadius: BorderRadius.circular(20),
+                            color: DunesColors.bgApp,
+                            child: InkWell(
+                              onTap: _jumpToLatest,
+                              borderRadius: BorderRadius.circular(20),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 14,
+                                  vertical: 8,
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(
+                                      Icons.arrow_downward,
+                                      size: 14,
+                                      color: DunesColors.accentDeep,
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      '回到最新消息',
+                                      style: DunesTypography.sans(
+                                        fontSize: 12,
+                                        color: DunesColors.accentDeep,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    if (_recording)
+                      Positioned.fill(
+                        child: IgnorePointer(
+                          child: Container(
+                            color: Colors.black26,
+                            alignment: Alignment.center,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 20,
+                                vertical: 14,
+                              ),
+                              decoration: BoxDecoration(
+                                color: _recordWillCancel
+                                    ? DunesColors.coral
+                                    : const Color(0xE61F2421),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Text(
+                                _recordWillCancel ? '松开取消' : '松开发送',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    if (_uploadLabel != null) _buildUploadOverlay(),
+                  ],
+                ),
               ),
-            ),
-            ChatQuickActions(
-              onCamera: locked || _sending ? () {} : () => _sendImageFrom(ImageSource.camera, '拍照'),
-              onAlbum: locked || _sending ? () {} : _sendMultiImagesFromGallery,
-              onFile: locked || _sending ? () {} : _sendFile,
-              onApproval: () => showDunesSoonToast(context),
-              onAt: locked ? null : _pickAtMember,
-              onEmoji: locked ? null : () => setState(() => _emojiOpen = !_emojiOpen),
-              onVideo: () => showDunesSoonToast(context, '视频通话敬请期待'),
-              showAt: !_isPrivate,
-              showVideo: !_isPrivate,
-            ),
-            if (_emojiOpen && !locked)
-              ChatEmojiPanel(
-                onPick: (emoji) {
-                  _inputController.text = '${_inputController.text}$emoji';
-                  _inputController.selection = TextSelection.collapsed(offset: _inputController.text.length);
-                },
+              ChatQuickActions(
+                onCamera: locked || _sending
+                    ? () {}
+                    : () => _sendImageFrom(ImageSource.camera, '拍照'),
+                onAlbum: locked || _sending
+                    ? () {}
+                    : _sendMultiImagesFromGallery,
+                onFile: locked || _sending ? () {} : _sendFile,
+                onApproval: () => showDunesSoonToast(context),
+                onAt: locked ? null : _pickAtMember,
+                onEmoji: locked
+                    ? null
+                    : () => setState(() => _emojiOpen = !_emojiOpen),
+                onVideo: () => showDunesSoonToast(context, '视频通话敬请期待'),
+                showAt: !_isPrivate,
+                showVideo: !_isPrivate,
               ),
-            if (_quoteDraft != null && !_quoteDraft!.isEmpty && !locked)
-              ChatQuotePreviewBar(
-                quote: _quoteDraft!,
-                onCancel: _clearQuoteDraft,
+              if (_emojiOpen && !locked)
+                ChatEmojiPanel(
+                  onPick: (emoji) {
+                    _inputController.text = '${_inputController.text}$emoji';
+                    _inputController.selection = TextSelection.collapsed(
+                      offset: _inputController.text.length,
+                    );
+                  },
+                ),
+              if (_quoteDraft != null && !_quoteDraft!.isEmpty && !locked)
+                ChatQuotePreviewBar(
+                  quote: _quoteDraft!,
+                  onCancel: _clearQuoteDraft,
+                ),
+              ChatInputBar(
+                controller: _inputController,
+                voiceMode: _voiceMode,
+                sending: _sending,
+                enabled: !locked,
+                hintText: inputHint,
+                onToggleVoice: locked
+                    ? () {}
+                    : () => setState(() {
+                        _voiceMode = !_voiceMode;
+                        _emojiOpen = false;
+                      }),
+                onSend: _send,
+                onEmoji: locked
+                    ? null
+                    : () => setState(() => _emojiOpen = !_emojiOpen),
+                recording: _recording,
+                recordWillCancel: _recordWillCancel,
+                recordDurationMs: _recordDurationMs,
+                onVoiceHoldStart: locked ? null : (_) => _startHoldRecord(),
+                onVoiceHoldMove: _onRecordMove,
+                onVoiceHoldEnd: (_) => _finishHoldRecord(),
+                onVoiceHoldCancel: () =>
+                    _cancelHoldRecordInternal(showHint: false),
               ),
-            ChatInputBar(
-              controller: _inputController,
-              voiceMode: _voiceMode,
-              sending: _sending,
-              enabled: !locked,
-              hintText: inputHint,
-              onToggleVoice: locked
-                  ? () {}
-                  : () => setState(() {
-                      _voiceMode = !_voiceMode;
-                      _emojiOpen = false;
-                    }),
-              onSend: _send,
-              onEmoji: locked ? null : () => setState(() => _emojiOpen = !_emojiOpen),
-              recording: _recording,
-              recordWillCancel: _recordWillCancel,
-              recordDurationMs: _recordDurationMs,
-              onVoiceHoldStart: locked ? null : (_) => _startHoldRecord(),
-              onVoiceHoldMove: _onRecordMove,
-              onVoiceHoldEnd: (_) => _finishHoldRecord(),
-              onVoiceHoldCancel: () => _cancelHoldRecordInternal(showHint: false),
-            ),
-          ],
+            ],
           ),
         ),
       ),
     );
   }
 
-  NativeChatMessage? _previousMessage(int entryIndex, List<_ChatListEntry> entries) {
+  NativeChatMessage? _previousMessage(
+    int entryIndex,
+    List<_ChatListEntry> entries,
+  ) {
     for (var i = entryIndex - 1; i >= 0; i--) {
       final msg = entries[i].message;
       if (msg != null) return msg;
@@ -2202,9 +2461,15 @@ class _AtMentionSheetState extends State<_AtMentionSheet> {
   bool _matchesMember(Map<String, dynamic> member, String query) {
     if (query.isEmpty) return true;
     final q = query.toLowerCase();
-    final name = (member['displayName'] ?? member['name'] ?? '').toString().toLowerCase();
-    final dept = (member['departmentName'] ?? member['department'] ?? '').toString().toLowerCase();
-    final title = (member['title'] ?? member['roleLabel'] ?? '').toString().toLowerCase();
+    final name = (member['displayName'] ?? member['name'] ?? '')
+        .toString()
+        .toLowerCase();
+    final dept = (member['departmentName'] ?? member['department'] ?? '')
+        .toString()
+        .toLowerCase();
+    final title = (member['title'] ?? member['roleLabel'] ?? '')
+        .toString()
+        .toLowerCase();
     return name.contains(q) || dept.contains(q) || title.contains(q);
   }
 
@@ -2217,8 +2482,13 @@ class _AtMentionSheetState extends State<_AtMentionSheet> {
 
   String _memberDeptTitle(Map<String, dynamic> member) {
     final parts = <String>[];
-    final dept = (member['department'] ?? member['departmentName'] ?? '').toString().trim();
-    final title = (member['title'] ?? member['roleLabel'] ?? member['role'] ?? '').toString().trim();
+    final dept = (member['department'] ?? member['departmentName'] ?? '')
+        .toString()
+        .trim();
+    final title =
+        (member['title'] ?? member['roleLabel'] ?? member['role'] ?? '')
+            .toString()
+            .trim();
     if (dept.isNotEmpty) parts.add(dept);
     if (title.isNotEmpty) parts.add(title);
     return parts.join(' · ');
@@ -2247,7 +2517,10 @@ class _AtMentionSheetState extends State<_AtMentionSheet> {
   }
 
   void _confirm() {
-    final names = _selected.entries.where((e) => e.value).map((e) => e.key).toList(growable: false);
+    final names = _selected.entries
+        .where((e) => e.value)
+        .map((e) => e.key)
+        .toList(growable: false);
     if (names.isEmpty) return;
     final picked = names.contains(_AtMentionSheet._atAllLabel)
         ? const [_AtMentionSheet._atAllLabel]
@@ -2258,7 +2531,9 @@ class _AtMentionSheetState extends State<_AtMentionSheet> {
   @override
   Widget build(BuildContext context) {
     final query = _search.text.trim();
-    final filtered = widget.members.where((m) => _matchesMember(m, query)).toList(growable: false);
+    final filtered = widget.members
+        .where((m) => _matchesMember(m, query))
+        .toList(growable: false);
     final showAll = _showAtAllRow(query);
     final maxHeight = MediaQuery.sizeOf(context).height * 0.72;
     final sheetHeight = maxHeight.clamp(320.0, 520.0);
@@ -2289,7 +2564,10 @@ class _AtMentionSheetState extends State<_AtMentionSheet> {
                   alignment: Alignment.centerLeft,
                   child: Text(
                     '选择提醒的人',
-                    style: DunesTypography.sans(fontSize: 14, fontWeight: FontWeight.w700),
+                    style: DunesTypography.sans(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                 ),
               ),
@@ -2299,22 +2577,34 @@ class _AtMentionSheetState extends State<_AtMentionSheet> {
                   alignment: Alignment.centerLeft,
                   child: Text(
                     '可多选成员，支持按姓名、部门、职位搜索',
-                    style: DunesTypography.sans(fontSize: 11, color: DunesColors.text3),
+                    style: DunesTypography.sans(
+                      fontSize: 11,
+                      color: DunesColors.text3,
+                    ),
                   ),
                 ),
               ),
               Padding(
                 padding: const EdgeInsets.fromLTRB(14, 0, 14, 10),
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 10,
+                  ),
                   decoration: BoxDecoration(
                     color: DunesColors.bgSoft,
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.black.withValues(alpha: 0.06)),
+                    border: Border.all(
+                      color: Colors.black.withValues(alpha: 0.06),
+                    ),
                   ),
                   child: Row(
                     children: [
-                      const Icon(Icons.search, size: 16, color: DunesColors.text3),
+                      const Icon(
+                        Icons.search,
+                        size: 16,
+                        color: DunesColors.text3,
+                      ),
                       const SizedBox(width: 8),
                       Expanded(
                         child: TextField(
@@ -2326,7 +2616,10 @@ class _AtMentionSheetState extends State<_AtMentionSheet> {
                             isDense: true,
                             border: InputBorder.none,
                             hintText: '搜索姓名 / 部门 / 职位',
-                            hintStyle: DunesTypography.sans(fontSize: 14, color: DunesColors.text3),
+                            hintStyle: DunesTypography.sans(
+                              fontSize: 14,
+                              color: DunesColors.text3,
+                            ),
                             contentPadding: EdgeInsets.zero,
                           ),
                         ),
@@ -2346,7 +2639,10 @@ class _AtMentionSheetState extends State<_AtMentionSheet> {
                         child: Center(
                           child: Text(
                             '未找到匹配成员',
-                            style: DunesTypography.sans(fontSize: 13, color: DunesColors.text3),
+                            style: DunesTypography.sans(
+                              fontSize: 13,
+                              color: DunesColors.text3,
+                            ),
                           ),
                         ),
                       )
@@ -2358,7 +2654,11 @@ class _AtMentionSheetState extends State<_AtMentionSheet> {
               Container(
                 padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
                 decoration: BoxDecoration(
-                  border: Border(top: BorderSide(color: Colors.black.withValues(alpha: 0.06))),
+                  border: Border(
+                    top: BorderSide(
+                      color: Colors.black.withValues(alpha: 0.06),
+                    ),
+                  ),
                 ),
                 child: SizedBox(
                   width: double.infinity,
@@ -2370,7 +2670,10 @@ class _AtMentionSheetState extends State<_AtMentionSheet> {
                         end: Alignment.bottomRight,
                         colors: _selectedCount > 0
                             ? const [Color(0xFF7E64BD), Color(0xFF553B96)]
-                            : [DunesColors.text3.withValues(alpha: 0.35), DunesColors.text3.withValues(alpha: 0.35)],
+                            : [
+                                DunesColors.text3.withValues(alpha: 0.35),
+                                DunesColors.text3.withValues(alpha: 0.35),
+                              ],
                       ),
                     ),
                     child: Material(
@@ -2422,7 +2725,11 @@ class _AtMentionSheetState extends State<_AtMentionSheet> {
         ),
         child: Text(
           '@',
-          style: DunesTypography.sans(fontSize: 13, fontWeight: FontWeight.w700, color: Colors.white),
+          style: DunesTypography.sans(
+            fontSize: 13,
+            fontWeight: FontWeight.w700,
+            color: Colors.white,
+          ),
         ),
       ),
       name: '@${_AtMentionSheet._atAllLabel}',
@@ -2444,7 +2751,8 @@ class _AtMentionSheetState extends State<_AtMentionSheet> {
         avatarPreset: (member['avatarPreset'] ?? '').toString().trim().isEmpty
             ? null
             : (member['avatarPreset'] ?? '').toString(),
-        avatarObjectKey: (member['avatarObjectKey'] ?? '').toString().trim().isEmpty
+        avatarObjectKey:
+            (member['avatarObjectKey'] ?? '').toString().trim().isEmpty
             ? null
             : (member['avatarObjectKey'] ?? '').toString(),
         avatarService: widget.avatarService,
@@ -2484,7 +2792,9 @@ class _AtMentionSheetRow extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(14),
-              border: selected ? Border.all(color: const Color(0x29553B96)) : null,
+              border: selected
+                  ? Border.all(color: const Color(0x29553B96))
+                  : null,
             ),
             child: Row(
               children: [
@@ -2500,14 +2810,20 @@ class _AtMentionSheetRow extends StatelessWidget {
                         name,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: DunesTypography.sans(fontSize: 14, fontWeight: FontWeight.w600),
+                        style: DunesTypography.sans(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                       const SizedBox(height: 2),
                       Text(
                         subtitle,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: DunesTypography.sans(fontSize: 11, color: DunesColors.text3),
+                        style: DunesTypography.sans(
+                          fontSize: 11,
+                          color: DunesColors.text3,
+                        ),
                       ),
                     ],
                   ),
@@ -2534,7 +2850,12 @@ class _AtMentionCheck extends StatelessWidget {
       alignment: Alignment.center,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        border: selected ? null : Border.all(color: Colors.black.withValues(alpha: 0.18), width: 1.5),
+        border: selected
+            ? null
+            : Border.all(
+                color: Colors.black.withValues(alpha: 0.18),
+                width: 1.5,
+              ),
         gradient: selected
             ? const LinearGradient(
                 begin: Alignment.topLeft,
@@ -2543,7 +2864,9 @@ class _AtMentionCheck extends StatelessWidget {
               )
             : null,
       ),
-      child: selected ? const Icon(Icons.check, size: 12, color: Colors.white) : null,
+      child: selected
+          ? const Icon(Icons.check, size: 12, color: Colors.white)
+          : null,
     );
   }
 }
@@ -2580,7 +2903,10 @@ class _GroupReadSheet extends StatelessWidget {
                 alignment: Alignment.centerLeft,
                 child: Text(
                   '${readRows.length}人已读 · ${unreadRows.length}人未读',
-                  style: DunesTypography.sans(fontSize: 14, fontWeight: FontWeight.w700),
+                  style: DunesTypography.sans(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
               ),
             ),
@@ -2644,15 +2970,16 @@ class _GroupReadSheetSection extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
             child: Text(
               emptyText,
-              style: DunesTypography.sans(fontSize: 11, color: DunesColors.text3),
+              style: DunesTypography.sans(
+                fontSize: 11,
+                color: DunesColors.text3,
+              ),
             ),
           )
         else
           ...rows.map(
-            (row) => _GroupReadSheetRow(
-              person: row,
-              avatarService: avatarService,
-            ),
+            (row) =>
+                _GroupReadSheetRow(person: row, avatarService: avatarService),
           ),
       ],
     );
@@ -2660,10 +2987,7 @@ class _GroupReadSheetSection extends StatelessWidget {
 }
 
 class _GroupReadSheetRow extends StatelessWidget {
-  const _GroupReadSheetRow({
-    required this.person,
-    required this.avatarService,
-  });
+  const _GroupReadSheetRow({required this.person, required this.avatarService});
 
   final _GroupReadPerson person;
   final ConversationService avatarService;
@@ -2674,13 +2998,13 @@ class _GroupReadSheetRow extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 1),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(12),
-        ),
+        decoration: BoxDecoration(borderRadius: BorderRadius.circular(12)),
         child: Row(
           children: [
             _SheetAvatar(
-              initial: person.name.isNotEmpty ? person.name.substring(0, 1) : '?',
+              initial: person.name.isNotEmpty
+                  ? person.name.substring(0, 1)
+                  : '?',
               seed: person.uid,
               avatarPreset: person.avatarPreset,
               avatarObjectKey: person.avatarObjectKey,
@@ -2695,7 +3019,10 @@ class _GroupReadSheetRow extends StatelessWidget {
                     person.name,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: DunesTypography.sans(fontSize: 13, fontWeight: FontWeight.w600),
+                    style: DunesTypography.sans(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                   if (person.sub.isNotEmpty)
                     Padding(
@@ -2704,7 +3031,10 @@ class _GroupReadSheetRow extends StatelessWidget {
                         person.sub,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: DunesTypography.sans(fontSize: 11, color: DunesColors.text3),
+                        style: DunesTypography.sans(
+                          fontSize: 11,
+                          color: DunesColors.text3,
+                        ),
                       ),
                     ),
                 ],

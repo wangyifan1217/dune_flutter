@@ -44,17 +44,10 @@ jobs:
           fi
       # -----------------------------------------------------------------
 
-      # TPNS-iOS 依赖 CocoaPods，必须 pod install 后才能找到 XGPush 模块
-      - name: Install CocoaPods dependencies
-        run: |
-          cd ios
-          pod install --repo-update
-          echo "Verify Pods xcconfig was generated:"
-          ls -la "Pods/Target Support Files/Pods-Runner/" || true
-          grep -n "XGPush\|TPNS" Podfile.lock || true
-
       - name: Build iOS
-        run: flutter build ios --release --no-codesign --verbose
+        run: |
+          flutter clean
+          flutter build ios --release --no-codesign --verbose
 
       - name: Package IPA
         run: |

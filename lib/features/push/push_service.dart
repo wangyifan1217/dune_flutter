@@ -2,7 +2,7 @@
 library;
 
 import 'push_service_stub.dart'
-    if (dart.library.io) 'android_push_service.dart' as push_impl;
+    if (dart.library.io) 'push_service_mobile.dart' as push_impl;
 
 Future<void> bindPushSession({
   required int userId,

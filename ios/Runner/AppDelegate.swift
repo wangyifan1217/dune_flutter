@@ -1,23 +1,35 @@
 import Flutter
 import UIKit
 import AVFoundation
+import UserNotifications
+import XGPush
 
 @main
-@objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
+@objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate, XGPushDelegate {
   private let voiceChannelName = "dunes/audio_recorder"
   private var recorder: AVAudioRecorder?
   private var recordStartedAt: Date?
   private var outputPath: String?
+  private var tpnsBridge: TpnsPushBridge?
 
   override func application(
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
+    TpnsPushBridge.launchOptions = launchOptions
+    UNUserNotificationCenter.current().delegate = self
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }
 
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
+    tpnsBridge = TpnsPushBridge(
+      application: UIApplication.shared,
+      messenger: engineBridge.binaryMessenger,
+      pushDelegate: self,
+    )
+    tpnsBridge?.attach()
+
     let channel = FlutterMethodChannel(
       name: voiceChannelName,
       binaryMessenger: engineBridge.binaryMessenger
@@ -36,6 +48,39 @@ import AVFoundation
       }
     }
   }
+
+  // MARK: - XGPushDelegate
+
+  func xgPushDidRegisteredDeviceToken(
+    _ deviceToken: String?,
+    xgToken: String?,
+    error: Error?
+  ) {
+    tpnsBridge?.handleRegisteredToken(xgToken: xgToken, error: error)
+  }
+
+  func xgPushDidReceiveRemoteNotification(
+    _ notification: Any,
+    withCompletionHandler completionHandler: ((UInt) -> Void)? = nil
+  ) {
+    tpnsBridge?.handleNotificationShown()
+    guard let completionHandler = completionHandler else { return }
+    if #available(iOS 14.0, *) {
+      completionHandler(
+        UNNotificationPresentationOptions.banner.rawValue
+          | UNNotificationPresentationOptions.sound.rawValue
+          | UNNotificationPresentationOptions.badge.rawValue
+      )
+    } else {
+      completionHandler(
+        UNNotificationPresentationOptions.alert.rawValue
+          | UNNotificationPresentationOptions.sound.rawValue
+          | UNNotificationPresentationOptions.badge.rawValue
+      )
+    }
+  }
+
+  // MARK: - Voice recorder
 
   private func startRecord(result: @escaping FlutterResult) {
     let session = AVAudioSession.sharedInstance()
@@ -66,7 +111,6 @@ import AVFoundation
     stopInternal(deleteFile: true)
     let path = "\(NSTemporaryDirectory())voice-\(Int(Date().timeIntervalSince1970 * 1000)).wav"
     let url = URL(fileURLWithPath: path)
-    // glm-asr-2512 仅接受 wav/mp3，这里录成 16k/16bit/单声道 Linear PCM WAV。
     let settings: [String: Any] = [
       AVFormatIDKey: Int(kAudioFormatLinearPCM),
       AVSampleRateKey: 16000.0,
@@ -123,5 +167,166 @@ import AVFoundation
       outputPath = nil
     }
     return durationMs
+  }
+}
+
+final class TpnsPushBridge {
+  static let channelName = "dunes/tpns_push"
+  static var launchOptions: [UIApplication.LaunchOptionsKey: Any]?
+
+  private weak var application: UIApplication?
+  private weak var pushDelegate: XGPushDelegate?
+  private var channel: FlutterMethodChannel?
+  private var accessId: UInt32 = 0
+  private var accessKey = ""
+  private var isStarted = false
+
+  init(
+    application: UIApplication,
+    messenger: FlutterBinaryMessenger,
+    pushDelegate: XGPushDelegate
+  ) {
+    self.application = application
+    self.pushDelegate = pushDelegate
+    channel = FlutterMethodChannel(name: Self.channelName, binaryMessenger: messenger)
+  }
+
+  func attach() {
+    channel?.setMethodCallHandler { [weak self] call, result in
+      self?.handle(call, result: result)
+    }
+  }
+
+  func handleRegisteredToken(xgToken: String?, error: Error?) {
+    if let error = error {
+      NSLog("[DunesTpns] TPNS register failed: \(error.localizedDescription)")
+      return
+    }
+    guard let token = xgToken, !token.isEmpty else { return }
+    NSLog("[DunesTpns] TPNS register success")
+    channel?.invokeMethod("onToken", arguments: token)
+  }
+
+  func handleNotificationShown() {
+    channel?.invokeMethod("onNotificationShown", arguments: nil)
+  }
+
+  private func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+    switch call.method {
+    case "init":
+      initPush(call, result: result)
+    case "getToken":
+      result(XGPushTokenManager.default().xgTokenString ?? "")
+    case "bindAccount":
+      bindAccount(call, result: result)
+    case "unbindAccount":
+      unbindAccount(call, result: result)
+    case "setBadge":
+      setBadge(call, result: result)
+    case "requestAuthorization":
+      requestAuthorization(result: result)
+    case "isMiuiDevice":
+      result(false)
+    default:
+      result(FlutterMethodNotImplemented)
+    }
+  }
+
+  private func initPush(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+    guard let args = call.arguments as? [String: Any] else {
+      result(FlutterError(code: "INVALID", message: "missing args", details: nil))
+      return
+    }
+    if let idStr = args["accessId"] as? String, let id = UInt32(idStr) {
+      accessId = id
+    }
+    if let key = args["accessKey"] as? String {
+      accessKey = key
+    }
+    if let cluster = args["clusterDomain"] as? String, !cluster.isEmpty {
+      XGPush.default().configureClusterDomainName(cluster)
+    }
+    guard accessId > 0, !accessKey.isEmpty else {
+      result(
+        FlutterError(
+          code: "NOT_CONFIGURED",
+          message: "TPNS accessId/accessKey missing",
+          details: nil
+        )
+      )
+      return
+    }
+    if !isStarted {
+      if let launchOptions = Self.launchOptions {
+        XGPush.default().launchOptions = launchOptions
+      }
+      guard let delegate = pushDelegate else {
+        result(FlutterError(code: "NO_DELEGATE", message: "missing push delegate", details: nil))
+        return
+      }
+      XGPush.default().startXG(withAccessID: accessId, accessKey: accessKey, delegate: delegate)
+      isStarted = true
+      NSLog("[DunesTpns] TPNS startXG invoked accessId=\(accessId)")
+    }
+    result(true)
+  }
+
+  private func requestAuthorization(result: @escaping FlutterResult) {
+    UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .badge, .sound]) {
+      granted,
+      error in
+      DispatchQueue.main.async {
+        if let error = error {
+          result(
+            FlutterError(code: "AUTH_FAILED", message: error.localizedDescription, details: nil)
+          )
+          return
+        }
+        if granted {
+          self.application?.registerForRemoteNotifications()
+        }
+        result(granted)
+      }
+    }
+  }
+
+  private func bindAccount(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+    guard let args = call.arguments as? [String: Any] else {
+      result(FlutterError(code: "INVALID", message: "missing args", details: nil))
+      return
+    }
+    let account = (args["account"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    if account.isEmpty {
+      result(FlutterError(code: "INVALID", message: "account is empty", details: nil))
+      return
+    }
+    XGPushTokenManager.default().bind(withIdentifier: account, type: .account)
+    result(true)
+  }
+
+  private func unbindAccount(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+    guard let args = call.arguments as? [String: Any] else {
+      result(true)
+      return
+    }
+    let account = (args["account"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    if account.isEmpty {
+      result(true)
+      return
+    }
+    XGPushTokenManager.default().unbind(withIdentifer: account, type: .account)
+    result(true)
+  }
+
+  private func setBadge(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+    guard let args = call.arguments as? [String: Any] else {
+      result(true)
+      return
+    }
+    let count = (args["count"] as? NSNumber)?.intValue ?? 0
+    DispatchQueue.main.async {
+      UIApplication.shared.applicationIconBadgeNumber = max(0, count)
+      result(true)
+    }
   }
 }

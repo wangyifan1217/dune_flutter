@@ -244,7 +244,11 @@ final class TpnsPushBridge {
       accessKey = key
     }
     if let cluster = args["clusterDomain"] as? String, !cluster.isEmpty {
-      XGPush.defaultManager().configureClusterDomainName(cluster)
+      // configureClusterDomainName 在部分 TPNS 版本不存在，用 selector 动态调用以兼容
+      let selector = NSSelectorFromString("configureClusterDomainName:")
+      if XGPush.defaultManager().responds(to: selector) {
+        XGPush.defaultManager().perform(selector, with: cluster)
+      }
     }
     guard accessId > 0, !accessKey.isEmpty else {
       result(
@@ -258,7 +262,7 @@ final class TpnsPushBridge {
     }
     if !isStarted {
       if let launchOptions = Self.launchOptions {
-        XGPush.defaultManager().launchOptions = launchOptions
+        XGPush.defaultManager().launchOptions = NSMutableDictionary(dictionary: launchOptions)
       }
       guard let delegate = pushDelegate else {
         result(FlutterError(code: "NO_DELEGATE", message: "missing push delegate", details: nil))

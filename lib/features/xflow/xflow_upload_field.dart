@@ -1,11 +1,15 @@
+import 'dart:io';
+
 import 'dart:typed_data';
 
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:mime/mime.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 import '../../core/theme/dunes_theme.dart';
 import '../../core/util/friendly_error.dart';
+import '../../core/util/native_permissions.dart';
 import '../shell/dunes_toast.dart';
 import 'xflow_models.dart';
 import 'xflow_service.dart';
@@ -89,6 +93,11 @@ class _XflowUploadFieldState extends State<XflowUploadField> {
     try {
       final meta = _uploadMeta;
       final exts = (meta['extensions'] as List).cast<String>();
+      if (_needsPhotosPermission(exts) && !await ensurePhotosPermission()) {
+        final status = await Permission.photos.status;
+        _toast(photosPermissionHint(status));
+        return;
+      }
       final picked = await _openFilesWithFallback(exts);
       if (picked.isEmpty) return;
       final next = List<Map<String, dynamic>>.from(widget.items);
@@ -114,7 +123,7 @@ class _XflowUploadFieldState extends State<XflowUploadField> {
         await _uploadOne(next, item, bytes, name);
       }
     } catch (e) {
-      _toast('选择文件失败：${friendlyErrorText(e, fallback: '请检查相册/文件权限')}');
+      _toast('选择文件失败：${friendlyErrorText(e, fallback: '无法打开文件选择器，请重试')}');
     } finally {
       if (mounted) setState(() => _picking = false);
     }
@@ -130,9 +139,20 @@ class _XflowUploadFieldState extends State<XflowUploadField> {
       return await openFiles(acceptedTypeGroups: [typeGroup]);
     } catch (_) {
       // iOS 上部分类型组合会触发平台层异常，降级到仅后缀过滤可提升兼容性。
-      final fallback = XTypeGroup(label: 'files', extensions: exts);
-      return openFiles(acceptedTypeGroups: [fallback]);
+      try {
+        final fallback = XTypeGroup(label: 'files', extensions: exts);
+        return await openFiles(acceptedTypeGroups: [fallback]);
+      } catch (_) {
+        // 最后兜底：不带过滤，避免 iOS 因类型声明导致选择器无法弹出。
+        return openFiles();
+      }
     }
+  }
+
+  bool _needsPhotosPermission(List<String> exts) {
+    if (!Platform.isIOS) return false;
+    const imageExts = {'jpg', 'jpeg', 'png', 'heic', 'heif', 'gif', 'webp'};
+    return exts.any((ext) => imageExts.contains(ext.toLowerCase()));
   }
 
   List<String> _mimeTypesFor(List<String> exts) {

@@ -13,6 +13,7 @@ import 'package:permission_handler/permission_handler.dart';
 
 import '../../core/theme/dunes_theme.dart';
 import '../../core/util/friendly_error.dart';
+import '../../core/util/native_permissions.dart';
 import '../auth/auth_session.dart';
 import '../contacts/contact_service.dart';
 import '../conversation/conversation_models.dart';
@@ -991,12 +992,16 @@ class _NativeChatViewState extends State<NativeChatView> {
 
   Future<bool> _ensureCameraPermission() async {
     if (kIsWeb) return true;
-    final cam = await Permission.camera.request();
-    if (!cam.isGranted) {
-      _showToast('请先允许相机权限');
-      return false;
-    }
-    return true;
+    if (await ensureCameraPermission()) return true;
+    _showToast(cameraPermissionHint(await Permission.camera.status));
+    return false;
+  }
+
+  Future<bool> _ensurePhotosPermission() async {
+    if (kIsWeb) return true;
+    if (await ensurePhotosPermission()) return true;
+    _showToast(photosPermissionHint(await Permission.photos.status));
+    return false;
   }
 
   /// 单张图片原图大小上限（压缩后仍超过则拒绝）。
@@ -1017,6 +1022,7 @@ class _NativeChatViewState extends State<NativeChatView> {
     if (conv == null || _sending) return;
     if (source == ImageSource.camera && !await _ensureCameraPermission())
       return;
+    if (source == ImageSource.gallery && !await _ensurePhotosPermission()) return;
     final picked = await _imagePicker.pickImage(source: source);
     if (picked == null) return;
     final bytes = await picked.readAsBytes();
@@ -1045,6 +1051,7 @@ class _NativeChatViewState extends State<NativeChatView> {
   Future<void> _sendMultiImagesFromGallery() async {
     final conv = _conversation;
     if (conv == null || _sending) return;
+    if (!await _ensurePhotosPermission()) return;
     final picked = await _imagePicker.pickMultiImage();
     if (picked.isEmpty) return;
     await _guardSend(() async {
@@ -1110,8 +1117,8 @@ class _NativeChatViewState extends State<NativeChatView> {
       return;
     }
     if (!kIsWeb) {
-      final mic = await Permission.microphone.request();
-      if (!mic.isGranted) {
+      final mic = await ensureMicrophonePermission();
+      if (!mic) {
         _showToast('请先允许麦克风权限');
         return;
       }

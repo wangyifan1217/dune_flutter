@@ -6,6 +6,7 @@ import 'package:permission_handler/permission_handler.dart';
 
 import '../../core/http/session_http.dart';
 import '../../core/theme/dunes_theme.dart';
+import '../../core/util/native_permissions.dart';
 import 'auth_session.dart';
 
 class QrLoginScanPage extends StatefulWidget {
@@ -51,8 +52,7 @@ class _QrLoginScanPageState extends State<QrLoginScanPage> {
   }
 
   Future<void> _prepareCamera() async {
-    final status = await Permission.camera.status;
-    if (status.isGranted) {
+    if (await ensureCameraPermission()) {
       if (!mounted) return;
       setState(() {
         _checkingPermission = false;
@@ -60,14 +60,12 @@ class _QrLoginScanPageState extends State<QrLoginScanPage> {
       });
       return;
     }
-    final granted = await Permission.camera.request();
+    final status = await Permission.camera.status;
     if (!mounted) return;
     setState(() {
       _checkingPermission = false;
-      _cameraGranted = granted.isGranted;
-      if (!_cameraGranted) {
-        _tip = '未获得相机权限，请授权后再扫码';
-      }
+      _cameraGranted = false;
+      _tip = cameraPermissionHint(status);
     });
   }
 

@@ -1142,6 +1142,12 @@ class _XflowUserPickerState extends State<_XflowUserPicker> {
       controller: _controller,
       focusNode: _focus,
       readOnly: widget.readonly,
+      enableInteractiveSelection: true,
+      contextMenuBuilder: (context, editableTextState) {
+        return AdaptiveTextSelectionToolbar.editableText(
+          editableTextState: editableTextState,
+        );
+      },
       onTapOutside: (_) => FocusManager.instance.primaryFocus?.unfocus(),
       decoration: xfInputDecoration(hint: widget.placeholder).copyWith(
         suffixIcon: _loading
@@ -1220,6 +1226,12 @@ class _XflowTextFieldState extends State<_XflowTextField> {
       minLines: widget.minLines,
       maxLines: widget.maxLines,
       readOnly: widget.readOnly,
+      enableInteractiveSelection: true,
+      contextMenuBuilder: (context, editableTextState) {
+        return AdaptiveTextSelectionToolbar.editableText(
+          editableTextState: editableTextState,
+        );
+      },
       style: widget.style,
       decoration: widget.decoration,
       onTapOutside: (_) => FocusManager.instance.primaryFocus?.unfocus(),

@@ -9,6 +9,7 @@ import 'package:permission_handler/permission_handler.dart';
 
 import '../../core/theme/dunes_theme.dart';
 import '../../core/util/friendly_error.dart';
+import '../../core/util/native_permissions.dart';
 import '../auth/auth_session.dart';
 import '../chat/native_audio_recorder.dart';
 import '../chat/chat_widgets.dart';
@@ -1002,9 +1003,8 @@ class _NativeNovaPageState extends State<NativeNovaPage> {
   Future<void> _pickCamera() async {
     if (!_novaReady || _sending) return;
     if (!kIsWeb) {
-      final cam = await Permission.camera.request();
-      if (!cam.isGranted) {
-        _toast('请先允许相机权限');
+      if (!await ensureCameraPermission()) {
+        _toast(cameraPermissionHint(await Permission.camera.status));
         return;
       }
     }
@@ -1023,6 +1023,10 @@ class _NativeNovaPageState extends State<NativeNovaPage> {
 
   Future<void> _pickAlbum() async {
     if (!_novaReady || _sending) return;
+    if (!kIsWeb && !await ensurePhotosPermission()) {
+      _toast(photosPermissionHint(await Permission.photos.status));
+      return;
+    }
     final picked = await _imagePicker.pickMultiImage();
     if (picked.isEmpty) return;
     for (final file in picked) {
@@ -1497,8 +1501,8 @@ class _NativeNovaPageState extends State<NativeNovaPage> {
       return;
     }
     if (!kIsWeb) {
-      final mic = await Permission.microphone.request();
-      if (!mic.isGranted) {
+      final mic = await ensureMicrophonePermission();
+      if (!mic) {
         _toast('请先允许麦克风权限');
         return;
       }

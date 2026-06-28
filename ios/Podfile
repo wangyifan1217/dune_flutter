@@ -30,7 +30,7 @@ target 'Runner' do
   use_frameworks!
   use_modular_headers!
 
-  flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
+  # 插件已由 SPM 管理（FlutterGeneratedPluginSwiftPackage），此处只保留原生 CocoaPods 依赖
   pod 'TPNS-iOS', '1.4.0.8'
 end
 

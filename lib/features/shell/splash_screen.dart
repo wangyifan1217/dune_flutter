@@ -41,8 +41,7 @@ class _AppBootGateState extends State<AppBootGate> {
     var version = '';
     try {
       final info = await PackageInfo.fromPlatform();
-      final build = info.buildNumber.trim();
-      version = build.isEmpty ? info.version : '${info.version} ($build)';
+      version = info.version.trim();
     } catch (_) {}
     if (mounted) setState(() => _version = version);
   }

@@ -51,9 +51,7 @@ class _LoginFlowState extends State<LoginFlow> {
   Future<void> _loadAppVersion() async {
     try {
       final info = await PackageInfo.fromPlatform();
-      final build = info.buildNumber.trim();
-      final version = build.isEmpty ? info.version : '${info.version} ($build)';
-      if (mounted) setState(() => _appVersion = version);
+      if (mounted) setState(() => _appVersion = info.version.trim());
     } catch (_) {}
   }
 

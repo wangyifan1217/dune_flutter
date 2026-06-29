@@ -86,27 +86,43 @@ jobs:
         run: |
           python3 <<'PY'
           import os
+          import re
           from pathlib import Path
 
           team_id = os.environ["IOS_TEAM_ID"]
+          runner_bundle = "nova.dunes.dunes-app"
           pbx = Path("ios/Runner.xcodeproj/project.pbxproj")
           text = pbx.read_text(encoding="utf-8")
+
+          # 兼容 GitHub 上仍为旧 Bundle ID（含下划线）的情况
+          text = text.replace("nova.dunes.dunes_app", runner_bundle)
+
           text = text.replace(
               "CODE_SIGN_STYLE = Automatic;",
               "CODE_SIGN_STYLE = Manual;",
           )
-          old = "PRODUCT_BUNDLE_IDENTIFIER = nova.dunes.dunes-app;"
-          new = (
-              "PRODUCT_BUNDLE_IDENTIFIER = nova.dunes.dunes-app;\n"
+
+          signing_lines = (
               f"\t\t\t\tDEVELOPMENT_TEAM = {team_id};\n"
               '\t\t\t\t"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "Apple Distribution";\n'
-              "\t\t\t\tPROVISIONING_PROFILE_SPECIFIER = Nova-Dunes-AdHoc;"
+              "\t\t\t\tPROVISIONING_PROFILE_SPECIFIER = Nova-Dunes-AdHoc;\n"
           )
-          if old not in text:
-              raise SystemExit("Runner bundle id not found in project.pbxproj")
-          text = text.replace(old, new)
+
+          pattern = re.compile(
+              rf'(\t\t\t\tPRODUCT_BUNDLE_IDENTIFIER = {re.escape(runner_bundle)};\n)'
+              rf'(?!\t\t\t\tDEVELOPMENT_TEAM = )'
+          )
+          text, count = pattern.subn(rf'\1{signing_lines}', text)
+
+          if count == 0:
+              ids = re.findall(r"PRODUCT_BUNDLE_IDENTIFIER = ([^;]+);", text)
+              raise SystemExit(
+                  "Runner bundle id not found in project.pbxproj. "
+                  f"Found identifiers: {ids}"
+              )
+
           pbx.write_text(text, encoding="utf-8")
-          print("Manual signing configured for nova.dunes.dunes-app")
+          print(f"Manual signing configured for {runner_bundle} ({count} configs)")
           PY
 
       - name: Build signed Ad Hoc IPA

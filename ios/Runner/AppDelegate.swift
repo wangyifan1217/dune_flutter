@@ -220,7 +220,7 @@ final class TpnsPushBridge {
     let n = max(0, count)
     DispatchQueue.main.async {
       UIApplication.shared.applicationIconBadgeNumber = n
-      XGPush.defaultManager().setBadge(UInt32(n))
+      XGPush.defaultManager().setBadge(n)
     }
   }
 

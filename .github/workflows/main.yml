@@ -94,7 +94,8 @@ jobs:
           pbx = Path("ios/Runner.xcodeproj/project.pbxproj")
           text = pbx.read_text(encoding="utf-8")
 
-          # 兼容 GitHub 上仍为旧 Bundle ID（含下划线）的情况
+          # 兼容旧 Bundle ID（含下划线）及带引号写法
+          text = text.replace('"nova.dunes.dunes_app"', f'"{runner_bundle}"')
           text = text.replace("nova.dunes.dunes_app", runner_bundle)
 
           text = text.replace(
@@ -102,17 +103,23 @@ jobs:
               "CODE_SIGN_STYLE = Manual;",
           )
 
-          signing_lines = (
-              f"\t\t\t\tDEVELOPMENT_TEAM = {team_id};\n"
-              '\t\t\t\t"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "Apple Distribution";\n'
-              "\t\t\t\tPROVISIONING_PROFILE_SPECIFIER = Nova-Dunes-AdHoc;\n"
+          bundle_line = re.compile(
+              rf'^(\t+)PRODUCT_BUNDLE_IDENTIFIER = "?{re.escape(runner_bundle)}"?;\n'
+              rf'(?!\1DEVELOPMENT_TEAM = )',
+              re.MULTILINE,
           )
 
-          pattern = re.compile(
-              rf'(\t\t\t\tPRODUCT_BUNDLE_IDENTIFIER = {re.escape(runner_bundle)};\n)'
-              rf'(?!\t\t\t\tDEVELOPMENT_TEAM = )'
-          )
-          text, count = pattern.subn(rf'\1{signing_lines}', text)
+          def inject_signing(match: re.Match) -> str:
+              indent = match.group(1)
+              line = match.group(0)
+              return (
+                  line
+                  + f"{indent}DEVELOPMENT_TEAM = {team_id};\n"
+                  + f'{indent}"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "Apple Distribution";\n'
+                  + f"{indent}PROVISIONING_PROFILE_SPECIFIER = Nova-Dunes-AdHoc;\n"
+              )
+
+          text, count = bundle_line.subn(inject_signing, text)
 
           if count == 0:
               ids = re.findall(r"PRODUCT_BUNDLE_IDENTIFIER = ([^;]+);", text)

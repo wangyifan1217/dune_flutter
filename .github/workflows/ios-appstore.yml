@@ -7,10 +7,25 @@ on:
 
 jobs:
   build-and-upload:
-    runs-on: macos-latest
+    # App Store 自 2026 起要求 iOS 26 SDK（Xcode 26+）；macos-latest 可能仍为 Xcode 16.4。
+    runs-on: macos-26
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
+
+      - name: Select Xcode 26
+        run: |
+          if [ -d /Applications/Xcode_26.5.app ]; then
+            sudo xcode-select -s /Applications/Xcode_26.5.app/Contents/Developer
+          elif [ -d /Applications/Xcode_26.4.app ]; then
+            sudo xcode-select -s /Applications/Xcode_26.4.app/Contents/Developer
+          else
+            ls /Applications | grep -i Xcode
+            echo "::error::No Xcode 26 found on runner"
+            exit 1
+          fi
+          xcodebuild -version
+          xcodebuild -showsdks | grep iphoneos || true
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2

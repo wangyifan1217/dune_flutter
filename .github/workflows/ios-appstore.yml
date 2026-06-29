@@ -1,0 +1,155 @@
+# App Store / TestFlight：云端 Mac 打包并上传，Windows 本地无需 Mac。
+# 在 GitHub → Actions →「iOS App Store Upload」→ Run workflow 手动触发。
+name: iOS App Store Upload
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-and-upload:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.44.3'
+          channel: 'stable'
+
+      - name: Disable Swift Package Manager
+        run: flutter config --no-enable-swift-package-manager
+
+      - name: Install Flutter dependencies
+        run: flutter pub get
+
+      - name: Force iOS Deployment Target 15.0
+        run: |
+          sed -i '' 's/IPHONEOS_DEPLOYMENT_TARGET = .*;/IPHONEOS_DEPLOYMENT_TARGET = 15.0;/g' ios/Runner.xcodeproj/project.pbxproj
+          sed -i '' "s/platform :ios, '.*'/platform :ios, '15.0'/g" ios/Podfile
+          sed -i '' "s/IPHONEOS_DEPLOYMENT_TARGET'\] = '.*'/IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'/g" ios/Podfile
+          if [ -f "ios/Flutter/AppFrameworkInfo.plist" ]; then
+            sed -i '' 's/<string>1[0-4]\.0<\/string>/<string>15.0<\/string>/g' ios/Flutter/AppFrameworkInfo.plist
+            sed -i '' 's/<string>9\.0<\/string>/<string>15.0<\/string>/g' ios/Flutter/AppFrameworkInfo.plist
+          fi
+
+      - name: Install CocoaPods dependencies
+        run: |
+          cd ios
+          pod install --repo-update
+          grep -n "TPNS-iOS" Podfile.lock || (echo "TPNS-iOS not found in Podfile.lock" && exit 1)
+
+      - name: Install Apple certificate
+        env:
+          BUILD_CERTIFICATE_BASE64: ${{ secrets.IOS_P12_BASE64 }}
+          P12_PASSWORD: ${{ secrets.IOS_P12_PASSWORD }}
+          KEYCHAIN_PASSWORD: actions
+        run: |
+          CERTIFICATE_PATH=$RUNNER_TEMP/build_certificate.p12
+          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+
+          echo -n "$BUILD_CERTIFICATE_BASE64" | base64 --decode -o "$CERTIFICATE_PATH"
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          security import "$CERTIFICATE_PATH" -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security list-keychain -d user -s "$KEYCHAIN_PATH"
+
+      - name: Install App Store provisioning profile
+        env:
+          BUILD_PROVISION_PROFILE_BASE64: ${{ secrets.IOS_PROVISION_PROFILE_APPSTORE_BASE64 }}
+        run: |
+          PP_PATH=$RUNNER_TEMP/build_pp_appstore.mobileprovision
+          echo -n "$BUILD_PROVISION_PROFILE_BASE64" | base64 --decode -o "$PP_PATH"
+
+          PP_UUID=$(security cms -D -i "$PP_PATH" | plutil -extract UUID raw -)
+          PP_NAME=$(security cms -D -i "$PP_PATH" | plutil -extract Name raw -)
+          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+          cp "$PP_PATH" ~/Library/MobileDevice/Provisioning\ Profiles/"$PP_UUID.mobileprovision"
+          echo "Installed App Store profile: $PP_NAME ($PP_UUID)"
+          if [ "$PP_NAME" != "Nova-Dunes-AppStore" ]; then
+            echo "::warning::Profile name is '$PP_NAME', expected 'Nova-Dunes-AppStore'. Update ios/ExportOptions.appstore.plist if needed."
+          fi
+
+      - name: Configure manual code signing (App Store)
+        env:
+          IOS_TEAM_ID: ${{ secrets.IOS_TEAM_ID }}
+        run: |
+          python3 <<'PY'
+          import os
+          import re
+          from pathlib import Path
+
+          team_id = os.environ["IOS_TEAM_ID"]
+          profile = "Nova-Dunes-AppStore"
+          runner_bundle = "nova.dunes.dunes-app"
+          pbx = Path("ios/Runner.xcodeproj/project.pbxproj")
+          text = pbx.read_text(encoding="utf-8")
+
+          text = text.replace('"nova.dunes.dunes_app"', f'"{runner_bundle}"')
+          text = text.replace("nova.dunes.dunes_app", runner_bundle)
+          text = text.replace("CODE_SIGN_STYLE = Automatic;", "CODE_SIGN_STYLE = Manual;")
+          text = text.replace("PROVISIONING_PROFILE_SPECIFIER = Nova-Dunes-AdHoc;", f"PROVISIONING_PROFILE_SPECIFIER = {profile};")
+
+          bundle_line = re.compile(
+              rf'^(\t+)PRODUCT_BUNDLE_IDENTIFIER = "?{re.escape(runner_bundle)}"?;\n'
+              rf'(?!\1DEVELOPMENT_TEAM = )',
+              re.MULTILINE,
+          )
+
+          def inject_signing(match: re.Match) -> str:
+              indent = match.group(1)
+              line = match.group(0)
+              return (
+                  line
+                  + f"{indent}DEVELOPMENT_TEAM = {team_id};\n"
+                  + f'{indent}"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "Apple Distribution";\n'
+                  + f"{indent}PROVISIONING_PROFILE_SPECIFIER = {profile};\n"
+              )
+
+          text, count = bundle_line.subn(inject_signing, text)
+          if count == 0:
+              ids = re.findall(r"PRODUCT_BUNDLE_IDENTIFIER = ([^;]+);", text)
+              raise SystemExit(f"Runner bundle id not found. Found: {ids}")
+
+          pbx.write_text(text, encoding="utf-8")
+          print(f"App Store signing configured for {runner_bundle} ({count} configs)")
+          PY
+
+      - name: Build App Store IPA
+        env:
+          TPNS_ACCESS_ID: ${{ secrets.TPNS_ACCESS_ID }}
+          TPNS_ACCESS_KEY: ${{ secrets.TPNS_ACCESS_KEY }}
+        run: |
+          flutter build ipa --release \
+            --export-options-plist=ios/ExportOptions.appstore.plist \
+            --dart-define=TPNS_ACCESS_ID="$TPNS_ACCESS_ID" \
+            --dart-define=TPNS_ACCESS_KEY="$TPNS_ACCESS_KEY"
+
+      - name: Resolve IPA path
+        run: |
+          IPA_PATH=$(find build/ios/ipa -name "*.ipa" | head -1)
+          if [ -z "$IPA_PATH" ]; then
+            echo "No IPA found under build/ios/ipa"
+            exit 1
+          fi
+          echo "IPA_PATH=$IPA_PATH" >> "$GITHUB_ENV"
+          ls -lh "$IPA_PATH"
+
+      - name: Upload to TestFlight (App Store Connect)
+        uses: apple-actions/upload-testflight-build@v3
+        with:
+          app-path: ${{ env.IPA_PATH }}
+          issuer-id: ${{ secrets.APPSTORE_ISSUER_ID }}
+          api-key-id: ${{ secrets.APPSTORE_KEY_ID }}
+          api-private-key: ${{ secrets.APPSTORE_API_PRIVATE_KEY }}
+
+      - name: Upload IPA artifact (backup download)
+        uses: actions/upload-artifact@v4
+        with:
+          name: DunesAppStoreIpa
+          path: build/ios/ipa/*.ipa

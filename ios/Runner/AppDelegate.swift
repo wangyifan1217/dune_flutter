@@ -63,7 +63,12 @@ import UserNotifications
     _ notification: Any,
     withCompletionHandler completionHandler: ((UInt) -> Void)? = nil
   ) {
-    tpnsBridge?.handleNotificationShown()
+    let userInfo = TpnsPushBridge.extractUserInfo(from: notification)
+    let badge = TpnsPushBridge.parseBadgeCount(from: userInfo)
+    if let badge = badge {
+      tpnsBridge?.applyBadgeCount(badge)
+    }
+    tpnsBridge?.handleNotificationShown(badgeCount: badge)
     guard let completionHandler = completionHandler else { return }
     if #available(iOS 14.0, *) {
       completionHandler(
@@ -207,8 +212,69 @@ final class TpnsPushBridge {
     channel?.invokeMethod("onToken", arguments: token)
   }
 
-  func handleNotificationShown() {
-    channel?.invokeMethod("onNotificationShown", arguments: nil)
+  func handleNotificationShown(badgeCount: Int? = nil) {
+    channel?.invokeMethod("onNotificationShown", arguments: badgeCount)
+  }
+
+  func applyBadgeCount(_ count: Int) {
+    let n = max(0, count)
+    DispatchQueue.main.async {
+      UIApplication.shared.applicationIconBadgeNumber = n
+      XGPush.defaultManager().setBadge(UInt32(n))
+    }
+  }
+
+  static func extractUserInfo(from notification: Any) -> [AnyHashable: Any] {
+    if #available(iOS 10.0, *), let un = notification as? UNNotification {
+      return un.request.content.userInfo
+    }
+    if let dict = notification as? [AnyHashable: Any] {
+      return dict
+    }
+    if let dict = notification as? NSDictionary {
+      return dict as? [AnyHashable: Any] ?? [:]
+    }
+    return [:]
+  }
+
+  static func parseBadgeCount(from userInfo: [AnyHashable: Any]) -> Int? {
+    if let aps = userInfo["aps"] as? [AnyHashable: Any] {
+      if let badge = aps["badge"] as? Int, badge >= 0 {
+        return badge
+      }
+      if let badge = aps["badge"] as? NSNumber, badge.intValue >= 0 {
+        return badge.intValue
+      }
+    }
+    for key in ["custom", "custom_content"] {
+      if let raw = userInfo[key] as? String, let badge = parseBadgeJSON(raw) {
+        return badge
+      }
+    }
+    return nil
+  }
+
+  private static func parseBadgeJSON(_ raw: String) -> Int? {
+    let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty,
+      let data = trimmed.data(using: .utf8),
+      let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+    else {
+      return nil
+    }
+    if let badge = json["badgeCount"] as? Int, badge >= 0 {
+      return badge
+    }
+    if let badge = json["badgeCount"] as? NSNumber, badge.intValue >= 0 {
+      return badge.intValue
+    }
+    if let badge = json["badge"] as? Int, badge >= 0 {
+      return badge
+    }
+    if let badge = json["badge"] as? NSNumber, badge.intValue >= 0 {
+      return badge.intValue
+    }
+    return nil
   }
 
   private func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
@@ -328,9 +394,7 @@ final class TpnsPushBridge {
       return
     }
     let count = (args["count"] as? NSNumber)?.intValue ?? 0
-    DispatchQueue.main.async {
-      UIApplication.shared.applicationIconBadgeNumber = max(0, count)
-      result(true)
-    }
+    applyBadgeCount(count)
+    result(true)
   }
 }

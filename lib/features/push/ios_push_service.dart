@@ -129,6 +129,12 @@ Future<void> _initTpns() async {
         return;
       }
       if (call.method == 'onNotificationShown') {
+        final badge = call.arguments;
+        if (badge is int && badge >= 0) {
+          syncPushBadgeCountImpl(badge);
+        } else if (badge is num && badge >= 0) {
+          syncPushBadgeCountImpl(badge.toInt());
+        }
         _badgeRefreshHandler?.call();
       }
     });

@@ -14,12 +14,14 @@ class DunesMainTabBar extends StatefulWidget {
     required this.activeScreen,
     this.commUnread,
     this.workbenchBadge,
+    this.lighthouseAccess = false,
   });
 
   final DunesNavigationController navigation;
   final String activeScreen;
   final CommUnreadNotifier? commUnread;
   final WorkbenchBadgeNotifier? workbenchBadge;
+  final bool lighthouseAccess;
 
   @override
   State<DunesMainTabBar> createState() => _DunesMainTabBarState();
@@ -86,7 +88,13 @@ class _DunesMainTabBarState extends State<DunesMainTabBar> {
           _tab(
             icon: Icons.location_city_outlined,
             label: '灯塔',
-            onTap: () => showDunesSoonToast(context),
+            onTap: () {
+              if (widget.lighthouseAccess) {
+                showDunesSoonToast(context, '灯塔对接中');
+              } else {
+                showDunesSoonToast(context);
+              }
+            },
           ),
           _tab(
             icon: Icons.person_outline_rounded,

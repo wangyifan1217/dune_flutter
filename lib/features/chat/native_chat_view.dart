@@ -86,6 +86,7 @@ class _NativeChatViewState extends State<NativeChatView> {
   final ConversationRealtimeDedup _realtimeDedup = ConversationRealtimeDedup();
   final ImagePicker _imagePicker = ImagePicker();
   final TextEditingController _inputController = TextEditingController();
+  final FocusNode _inputFocusNode = FocusNode();
   final ScrollController _scrollController = ScrollController();
 
   StreamSubscription<ConversationRealtimeEvent>? _rtSub;
@@ -146,6 +147,7 @@ class _NativeChatViewState extends State<NativeChatView> {
     _realtime = ConversationRealtimeHub.instance.of(widget.session);
     _scrollController.addListener(_onScroll);
     _inputController.addListener(_onComposeInputChanged);
+    _inputFocusNode.addListener(_onInputFocusChanged);
     if (widget.conversationHint != null) {
       _conversation = widget.conversationHint;
     }
@@ -208,6 +210,8 @@ class _NativeChatViewState extends State<NativeChatView> {
     _recordTicker?.cancel();
     _highlightTimer?.cancel();
     _inputController.removeListener(_onComposeInputChanged);
+    _inputFocusNode.removeListener(_onInputFocusChanged);
+    _inputFocusNode.dispose();
     _atFilterNotifier?.dispose();
     if (_recording) {
       unawaited(NativeAudioRecorder.instance.cancel());
@@ -928,6 +932,21 @@ class _NativeChatViewState extends State<NativeChatView> {
     );
   }
 
+  void _onInputFocusChanged() {
+    if (!_inputFocusNode.hasFocus) return;
+    _scrollToLatestAfterKeyboard();
+  }
+
+  void _scrollToLatestAfterKeyboard() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _scrollBottom(force: true);
+      Future<void>.delayed(const Duration(milliseconds: 280), () {
+        if (mounted) _scrollBottom(force: true);
+      });
+    });
+  }
+
   Future<void> _send() async {
     final conv = _conversation;
     final text = _inputController.text.trim();
@@ -946,7 +965,6 @@ class _NativeChatViewState extends State<NativeChatView> {
     try {
       await _service.sendText(conv.id, text, payload: payloadOrNull);
       _inputController.clear();
-      FocusManager.instance.primaryFocus?.unfocus();
       setState(() {
         _emojiOpen = false;
         _locatedMode = false;
@@ -2334,6 +2352,8 @@ class _NativeChatViewState extends State<NativeChatView> {
                 ),
               ChatInputBar(
                 controller: _inputController,
+                focusNode: _inputFocusNode,
+                onInputFocused: _scrollToLatestAfterKeyboard,
                 voiceMode: _voiceMode,
                 sending: _sending,
                 enabled: !locked,

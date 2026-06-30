@@ -256,6 +256,128 @@ List<NativeNovaMessage> repairNovaConversationMessages(
   return sortNovaMessages([...welcome, ...out]);
 }
 
+int novaHistoryRichness(NativeNovaMessage m) {
+  var score = 0;
+  if (m.streaming) score += 20;
+  if (m.thinkText.trim().isNotEmpty) score += 15;
+  if (m.thinkStatus.isNotEmpty) score += 3;
+  if (m.attachments.isNotEmpty) score += 10;
+  final k = m.kind.toUpperCase();
+  if (k == 'IMAGE' || k == 'FILE' || k == 'AUDIO') score += 8;
+  if (m.payload != null && m.payload!.isNotEmpty) score += 5;
+  if (m.text.trim().isNotEmpty) score += 1;
+  return score;
+}
+
+bool isEchoAssistantOfUserMessage(
+  List<NativeNovaMessage> prior,
+  NativeNovaMessage candidate,
+) {
+  if (candidate.role != 'assistant') return false;
+  final reply = candidate.text.trim();
+  if (reply.isEmpty) return false;
+  for (final m in prior) {
+    if (m.role != 'user') continue;
+    final user = m.text.trim();
+    if (user.isEmpty || user != reply) continue;
+    final ta = m.createdAt;
+    final tb = candidate.createdAt;
+    if (ta == null || tb == null) return true;
+    if (ta.difference(tb).inMinutes.abs() <= 5) return true;
+  }
+  return false;
+}
+
+bool isDuplicateNovaHistoryMessage(NativeNovaMessage a, NativeNovaMessage b) {
+  if (a.id > 0 && b.id > 0 && a.id == b.id) return true;
+  if (a.role != b.role) return false;
+  final ta = a.createdAt;
+  final tb = b.createdAt;
+  if (ta != null && tb != null && ta.difference(tb).inMinutes.abs() > 5)
+    return false;
+  final at = a.text.trim();
+  final bt = b.text.trim();
+  if (at.isNotEmpty && bt.isNotEmpty) {
+    if (at == bt) return true;
+    if (a.role == 'assistant' && at.length > 40 && bt.length > 40) {
+      if (at.substring(0, 40) == bt.substring(0, 40)) return true;
+    }
+  }
+  if (a.role == 'user' &&
+      ta != null &&
+      tb != null &&
+      ta.difference(tb).inSeconds.abs() < 90 &&
+      ((a.attachments.isNotEmpty) != (b.attachments.isNotEmpty))) {
+    return true;
+  }
+  return false;
+}
+
+List<NativeNovaMessage> dedupeNovaHistoryMessages(List<NativeNovaMessage> items) {
+  if (items.isEmpty) return items;
+  final sorted = [...items]
+    ..sort((a, b) {
+      final ta = a.createdAt?.millisecondsSinceEpoch ?? a.id;
+      final tb = b.createdAt?.millisecondsSinceEpoch ?? b.id;
+      return ta.compareTo(tb);
+    });
+  final out = <NativeNovaMessage>[];
+  for (final m in sorted) {
+    final dup = out.indexWhere((e) => isDuplicateNovaHistoryMessage(e, m));
+    if (dup >= 0) {
+      if (novaHistoryRichness(m) > novaHistoryRichness(out[dup])) {
+        out[dup] = m;
+      }
+    } else if (isEchoAssistantOfUserMessage(out, m)) {
+      continue;
+    } else {
+      out.add(m);
+    }
+  }
+  return out;
+}
+
+/// draft 合并时：服务端已落库的用户消息 id 可能与本地 afterMessageId 不一致。
+bool novaHasMatchingUserMessage(
+  List<NativeNovaMessage> rows, {
+  required int afterMessageId,
+  required String userText,
+}) {
+  if (afterMessageId > 0 && rows.any((m) => m.id == afterMessageId)) {
+    return true;
+  }
+  final text = userText.trim();
+  if (text.isEmpty) return false;
+  final draftAt = DateTime.fromMillisecondsSinceEpoch(afterMessageId);
+  return rows.any((m) {
+    if (m.role != 'user') return false;
+    if (m.text.trim() != text) return false;
+    final at = m.createdAt;
+    if (at == null) return true;
+    return at.difference(draftAt).inSeconds.abs() <= 180;
+  });
+}
+
+/// kb-go `messages/local` 曾忽略 role、一律落库为 assistant，导致历史回放时
+/// 用户消息被当成 AI 回复而左对齐。当列表中完全没有 user 时，按问答轮次恢复 role。
+List<NativeNovaMessage> reconcileMisclassifiedNovaRoles(
+  List<NativeNovaMessage> raw,
+) {
+  if (raw.length < 2) return raw;
+  final items = raw.where((m) => !m.isWelcome).toList(growable: false);
+  if (items.length < 2) return raw;
+  if (items.any((m) => m.role == 'user')) return raw;
+
+  final sorted = sortNovaMessages(items);
+  final fixed = <NativeNovaMessage>[];
+  for (var i = 0; i < sorted.length; i++) {
+    final m = sorted[i];
+    fixed.add(i.isEven ? m.copyWith(role: 'user') : m);
+  }
+  final welcome = raw.where((m) => m.isWelcome).toList(growable: false);
+  return sortNovaMessages([...welcome, ...fixed]);
+}
+
 bool _novaHasAiReplyAfter(List<NativeNovaMessage> rows, int afterMessageId) {
   if (afterMessageId <= 0) return false;
   var seen = false;
@@ -877,7 +999,7 @@ class NativeNovaService {
       }
       return a.id.compareTo(b.id);
     });
-    return repairNovaConversationMessages(out);
+    return repairNovaConversationMessages(reconcileMisclassifiedNovaRoles(out));
   }
 
   Future<int> _postAiConversationSessionEnsure() async {
@@ -1085,17 +1207,8 @@ class NativeNovaService {
         map[m.id] = m;
         continue;
       }
-      if (_novaHistoryRichness(m) > _novaHistoryRichness(prev)) {
-        map[m.id] = m;
-        continue;
-      }
-      if (m.attachments.isNotEmpty && prev.attachments.isEmpty) {
-        map[m.id] = prev.copyWith(
-          attachments: m.attachments,
-          payload: m.payload ?? prev.payload,
-          kind: m.kind != 'TEXT' ? m.kind : prev.kind,
-        );
-      }
+      map[m.id] = _mergeNovaHistoryById(prev, m);
+      continue;
     }
     for (final m in local) {
       if (m.id <= 0 || map.containsKey(m.id)) continue;
@@ -1248,86 +1361,37 @@ class NativeNovaService {
     }
   }
 
-  List<NativeNovaMessage> _dedupeNovaHistory(List<NativeNovaMessage> items) {
-    if (items.isEmpty) return items;
-    final sorted = [...items]
-      ..sort((a, b) {
-        final ta = a.createdAt?.millisecondsSinceEpoch ?? a.id;
-        final tb = b.createdAt?.millisecondsSinceEpoch ?? b.id;
-        return ta.compareTo(tb);
-      });
-    final out = <NativeNovaMessage>[];
-    for (final m in sorted) {
-      final dup = out.indexWhere((e) => _isDuplicateNovaHistory(e, m));
-      if (dup >= 0) {
-        if (_novaHistoryRichness(m) > _novaHistoryRichness(out[dup])) {
-          out[dup] = m;
-        }
-      } else if (_isEchoAssistantOfUser(out, m)) {
-        continue;
-      } else {
-        out.add(m);
-      }
-    }
-    return out;
-  }
+  List<NativeNovaMessage> _dedupeNovaHistory(List<NativeNovaMessage> items) =>
+      dedupeNovaHistoryMessages(items);
 
-  /// 去掉「assistant 正文与用户提问完全一致」的误落库回声。
-  bool _isEchoAssistantOfUser(
-    List<NativeNovaMessage> prior,
-    NativeNovaMessage candidate,
+  NativeNovaMessage _mergeNovaHistoryById(
+    NativeNovaMessage base,
+    NativeNovaMessage incoming,
   ) {
-    if (candidate.role != 'assistant') return false;
-    final reply = candidate.text.trim();
-    if (reply.isEmpty) return false;
-    for (final m in prior) {
-      if (m.role != 'user') continue;
-      final user = m.text.trim();
-      if (user.isEmpty || user != reply) continue;
-      final ta = m.createdAt;
-      final tb = candidate.createdAt;
-      if (ta == null || tb == null) return true;
-      if (ta.difference(tb).inMinutes.abs() <= 5) return true;
+    final preferIncoming =
+        novaHistoryRichness(incoming) > novaHistoryRichness(base);
+    final rich = preferIncoming ? incoming : base;
+    final plain = preferIncoming ? base : incoming;
+    var role = rich.role;
+    if (base.role != incoming.role &&
+        (base.role == 'user' || incoming.role == 'user')) {
+      role = 'user';
     }
-    return false;
-  }
-
-  int _novaHistoryRichness(NativeNovaMessage m) {
-    var score = 0;
-    if (m.streaming) score += 20;
-    if (m.thinkText.trim().isNotEmpty) score += 15;
-    if (m.thinkStatus.isNotEmpty) score += 3;
-    if (m.attachments.isNotEmpty) score += 10;
-    final k = m.kind.toUpperCase();
-    if (k == 'IMAGE' || k == 'FILE' || k == 'AUDIO') score += 8;
-    if (m.payload != null && m.payload!.isNotEmpty) score += 5;
-    if (m.text.trim().isNotEmpty) score += 1;
-    return score;
-  }
-
-  bool _isDuplicateNovaHistory(NativeNovaMessage a, NativeNovaMessage b) {
-    if (a.id > 0 && b.id > 0 && a.id == b.id) return true;
-    if (a.role != b.role) return false;
-    final ta = a.createdAt;
-    final tb = b.createdAt;
-    if (ta != null && tb != null && ta.difference(tb).inMinutes.abs() > 5)
-      return false;
-    final at = a.text.trim();
-    final bt = b.text.trim();
-    if (at.isNotEmpty && bt.isNotEmpty) {
-      if (at == bt) return true;
-      if (a.role == 'assistant' && at.length > 40 && bt.length > 40) {
-        if (at.substring(0, 40) == bt.substring(0, 40)) return true;
-      }
-    }
-    if (a.role == 'user' &&
-        ta != null &&
-        tb != null &&
-        ta.difference(tb).inSeconds.abs() < 90 &&
-        ((a.attachments.isNotEmpty) != (b.attachments.isNotEmpty))) {
-      return true;
-    }
-    return false;
+    return rich.copyWith(
+      role: role,
+      text: rich.text.trim().isNotEmpty ? rich.text : plain.text,
+      attachments: rich.attachments.isNotEmpty
+          ? rich.attachments
+          : plain.attachments,
+      payload: rich.payload ?? plain.payload,
+      kind: rich.kind != 'TEXT' ? rich.kind : plain.kind,
+      thinkText: rich.thinkText.trim().isNotEmpty
+          ? rich.thinkText
+          : plain.thinkText,
+      thinkStatus: rich.thinkStatus.isNotEmpty
+          ? rich.thinkStatus
+          : plain.thinkStatus,
+    );
   }
 
   List<Map<String, dynamic>> _dedupeNovaTurns(

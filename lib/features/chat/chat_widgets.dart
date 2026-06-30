@@ -215,6 +215,8 @@ class ChatInputBar extends StatelessWidget {
     this.recordDurationMs = 0,
     this.enabled = true,
     this.hintText,
+    this.focusNode,
+    this.onInputFocused,
   });
 
   final TextEditingController controller;
@@ -234,6 +236,8 @@ class ChatInputBar extends StatelessWidget {
   final int recordDurationMs;
   final bool enabled;
   final String? hintText;
+  final FocusNode? focusNode;
+  final VoidCallback? onInputFocused;
 
   @override
   Widget build(BuildContext context) {
@@ -301,10 +305,12 @@ class ChatInputBar extends StatelessWidget {
                   )
                 : TextField(
                     controller: controller,
+                    focusNode: focusNode,
                     enabled: enabled && !showStop,
                     minLines: 1,
                     maxLines: 4,
                     enableInteractiveSelection: true,
+                    onTap: onInputFocused,
                     contextMenuBuilder: (context, editableTextState) {
                       return AdaptiveTextSelectionToolbar.editableText(
                         editableTextState: editableTextState,
@@ -540,8 +546,8 @@ class ChatMessageRow extends StatelessWidget {
                       readLabel!,
                       style: DunesTypography.mono(
                         fontSize: 9,
-                        color: message.peerRead
-                            ? DunesColors.accent
+                        color: readLabel == '已读'
+                            ? DunesColors.readReceipt
                             : DunesColors.text3,
                       ),
                     ),
@@ -555,7 +561,9 @@ class ChatMessageRow extends StatelessWidget {
                         (readTapLabel ?? '查看已读').trim(),
                         style: DunesTypography.mono(
                           fontSize: 9,
-                          color: DunesColors.text3,
+                          color: (readTapLabel ?? '').trim() != '未读'
+                              ? DunesColors.readReceipt
+                              : DunesColors.text3,
                         ),
                       ),
                     ),

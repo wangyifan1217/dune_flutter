@@ -8,6 +8,7 @@ import '../../core/http/session_http.dart';
 import '../../core/navigation/navigation_controller.dart';
 import '../../core/navigation/generated/screen_registry.dart';
 import '../../core/theme/dunes_theme.dart';
+import '../../core/widgets/cached_network_image.dart';
 import '../approval/native_approval_page.dart';
 import '../auth/auth_session.dart';
 import '../auth/qr_login_scan_page.dart';
@@ -936,9 +937,45 @@ class _NativeB2PageState extends State<_NativeB2Page> {
   @override
   void initState() {
     super.initState();
+    _profile = _restoreCachedProfile();
     widget.workbenchRefresh.addListener(_onWorkbenchDataRefresh);
-    _loadStats();
+    _loadStats(silent: _profile != null);
     _refreshCommBadge();
+  }
+
+  _NativeB2Profile? _restoreCachedProfile() {
+    final cached = getCachedMyPageProfile(widget.session.userId);
+    if (cached == null) return null;
+    return _NativeB2Profile(
+      displayName: cached.displayName,
+      phone: cached.phone,
+      departmentName: cached.departmentName,
+      title: cached.title,
+      avatarPreset: cached.avatarPreset,
+      avatarObjectKey: cached.avatarObjectKey,
+      avatarUrl: cached.avatarUrl,
+    );
+  }
+
+  void _persistProfileCache(_NativeB2Profile profile) {
+    final signature = avatarSourceSignature(
+      preset: profile.avatarPreset,
+      objectKey: profile.avatarObjectKey,
+      directUrl: profile.avatarUrl,
+    );
+    cacheMyPageProfile(
+      widget.session.userId,
+      CachedMyPageProfile(
+        displayName: profile.displayName,
+        phone: profile.phone,
+        departmentName: profile.departmentName,
+        title: profile.title,
+        avatarPreset: profile.avatarPreset,
+        avatarObjectKey: profile.avatarObjectKey,
+        avatarUrl: profile.avatarUrl,
+        signature: signature,
+      ),
+    );
   }
 
   @override
@@ -1031,6 +1068,7 @@ class _NativeB2PageState extends State<_NativeB2Page> {
         _profile = profile;
         _loading = false;
       });
+      _persistProfileCache(profile);
       widget.workbenchBadge.update(_stats?.pendingForMe ?? 0);
     } catch (error) {
       if (!mounted) return;
@@ -1077,47 +1115,55 @@ class _NativeB2PageState extends State<_NativeB2Page> {
       final objectKey =
           (data['avatarObjectKey'] ?? data['peerAvatarObjectKey'] ?? '')
               .toString();
+      final signature = avatarSourceSignature(
+        preset: avatarPreset,
+        objectKey: objectKey,
+      );
       String avatarUrl =
-          (data['avatarUrl'] ??
-                  data['avatarFullUrl'] ??
-                  data['avatarImageUrl'] ??
-                  data['avatar'] ??
-                  data['avatarSrc'] ??
-                  data['avatarImage'] ??
-                  '')
-              .toString();
-      if (avatarUrl.isEmpty && _looksLikeUrl(objectKey)) {
-        avatarUrl = objectKey;
-      }
-      if (objectKey.isNotEmpty &&
-          avatarUrl.isEmpty &&
-          !_looksLikeUrl(objectKey)) {
-        try {
-          final preResp = await dunesHttpGet(
-            widget.session,
-            '/storage/presigned-get?bucket=user-avatars&objectKey=${Uri.encodeQueryComponent(objectKey)}',
-          );
-          if (preResp.statusCode >= 200 && preResp.statusCode < 300) {
-            final preBody = jsonDecode(preResp.body);
-            if (preBody is Map<String, dynamic>) {
-              final preData = preBody['data'];
-              if (preData is Map<String, dynamic>) {
-                avatarUrl = (preData['url'] ?? preData['downloadUrl'] ?? '')
-                    .toString();
-              } else {
-                avatarUrl = (preBody['url'] ?? preBody['downloadUrl'] ?? '')
-                    .toString();
+          cachedMyPageAvatarUrl(widget.session.userId, signature) ?? '';
+      if (avatarUrl.isEmpty) {
+        avatarUrl =
+            (data['avatarUrl'] ??
+                    data['avatarFullUrl'] ??
+                    data['avatarImageUrl'] ??
+                    data['avatar'] ??
+                    data['avatarSrc'] ??
+                    data['avatarImage'] ??
+                    '')
+                .toString();
+        if (avatarUrl.isEmpty && _looksLikeUrl(objectKey)) {
+          avatarUrl = objectKey;
+        }
+        if (objectKey.isNotEmpty &&
+            avatarUrl.isEmpty &&
+            !_looksLikeUrl(objectKey)) {
+          try {
+            final preResp = await dunesHttpGet(
+              widget.session,
+              '/storage/presigned-get?bucket=user-avatars&objectKey=${Uri.encodeQueryComponent(objectKey)}',
+            );
+            if (preResp.statusCode >= 200 && preResp.statusCode < 300) {
+              final preBody = jsonDecode(preResp.body);
+              if (preBody is Map<String, dynamic>) {
+                final preData = preBody['data'];
+                if (preData is Map<String, dynamic>) {
+                  avatarUrl = (preData['url'] ?? preData['downloadUrl'] ?? '')
+                      .toString();
+                } else {
+                  avatarUrl = (preBody['url'] ?? preBody['downloadUrl'] ?? '')
+                      .toString();
+                }
               }
             }
-          }
-        } catch (_) {}
+          } catch (_) {}
+        }
+        if (avatarUrl.isNotEmpty) {
+          avatarUrl = _avatarProxyUrl(avatarUrl);
+        } else if (objectKey.isNotEmpty) {
+          avatarUrl = _avatarProxyUrl(objectKey);
+        }
       }
-      if (avatarUrl.isNotEmpty) {
-        avatarUrl = _avatarProxyUrl(avatarUrl);
-      } else if (objectKey.isNotEmpty) {
-        avatarUrl = _avatarProxyUrl(objectKey);
-      }
-      return _NativeB2Profile(
+      final profile = _NativeB2Profile(
         displayName:
             (data['displayName'] ??
                     data['name'] ??
@@ -1133,6 +1179,8 @@ class _NativeB2PageState extends State<_NativeB2Page> {
         avatarObjectKey: objectKey,
         avatarUrl: avatarUrl,
       );
+      _persistProfileCache(profile);
+      return profile;
     } catch (_) {
       return _NativeB2Profile.fromSession(widget.session);
     }
@@ -1151,6 +1199,7 @@ class _NativeB2PageState extends State<_NativeB2Page> {
         initialAvatarUrl: profile.avatarUrl,
       );
       if (updated == null || !mounted) return;
+      invalidateMyPageProfile(widget.session.userId);
       final refreshed = await _loadProfile();
       if (!mounted) return;
       setState(() => _profile = refreshed);
@@ -1352,6 +1401,7 @@ class _NativeB2PageState extends State<_NativeB2Page> {
               activeScreen: 'B2',
               commUnread: widget.commUnread,
               workbenchBadge: widget.workbenchBadge,
+              lighthouseAccess: widget.session.lighthouseAccess,
             ),
           ],
         ),

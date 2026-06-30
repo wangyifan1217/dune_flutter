@@ -660,6 +660,7 @@ class _NativeConversationPageState extends State<NativeConversationPage> {
               activeScreen: 'C1',
               commUnread: widget.commUnread,
               workbenchBadge: widget.workbenchBadge,
+              lighthouseAccess: widget.session.lighthouseAccess,
             ),
           ],
         ),

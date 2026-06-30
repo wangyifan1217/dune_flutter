@@ -9,6 +9,7 @@ import 'package:image_picker/image_picker.dart';
 
 import '../../core/theme/dunes_theme.dart';
 import '../../core/util/friendly_error.dart';
+import '../../core/widgets/cached_network_image.dart';
 import '../shell/dunes_toast.dart';
 import '../auth/auth_session.dart';
 import 'native_avatar_presets.dart';
@@ -390,12 +391,12 @@ class NativeAvatarCircle extends StatelessWidget {
     Widget inner;
     // 自定义头像优先于预设头像，避免后端同时返回旧 preset 时仍显示卡通头像。
     if (avatarUrl.isNotEmpty) {
-      inner = Image.network(
-        avatarUrl,
+      inner = CachedDunesNetworkImage(
+        url: avatarUrl,
         width: size,
         height: size,
         fit: BoxFit.cover,
-        errorBuilder: (_, _, _) => _letter(fallbackText),
+        errorBuilder: () => _letter(fallbackText),
       );
     } else if (avatarPreset.isNotEmpty) {
       final svg = nativeAvatarPresetSvg(avatarPreset);

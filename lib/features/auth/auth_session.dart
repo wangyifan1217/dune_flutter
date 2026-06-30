@@ -10,6 +10,7 @@ class AuthSession {
     this.displayName,
     this.departmentId,
     this.novaLocalStorage,
+    this.lighthouseAccess = false,
   });
 
   final String phone;
@@ -19,14 +20,50 @@ class AuthSession {
   final List<String> roles;
   final String? displayName;
   final int? departmentId;
+  final bool lighthouseAccess;
 
   /// Nova Provisioning 结果，注入 WebView localStorage（与 dunes JWT 分离）。
   final Map<String, String>? novaLocalStorage;
 
-  String get landingScreen => 'B2';
+  String get landingScreen => 'C1';
 
   bool get canUseApproval =>
       roles.any((r) => {'BUSINESS', 'INITIATOR', 'FINANCE', 'ADMIN'}.contains(r));
+
+  AuthSession copyWith({
+    String? phone,
+    int? userId,
+    String? token,
+    String? apiBase,
+    List<String>? roles,
+    String? displayName,
+    int? departmentId,
+    Map<String, String>? novaLocalStorage,
+    bool? lighthouseAccess,
+  }) {
+    return AuthSession(
+      phone: phone ?? this.phone,
+      userId: userId ?? this.userId,
+      token: token ?? this.token,
+      apiBase: apiBase ?? this.apiBase,
+      roles: roles ?? this.roles,
+      displayName: displayName ?? this.displayName,
+      departmentId: departmentId ?? this.departmentId,
+      novaLocalStorage: novaLocalStorage ?? this.novaLocalStorage,
+      lighthouseAccess: lighthouseAccess ?? this.lighthouseAccess,
+    );
+  }
+
+  static AuthSession enrichFromUsersMe(
+    AuthSession session,
+    Map<String, dynamic> data,
+  ) {
+    return session.copyWith(
+      displayName: (data['displayName'] ?? session.displayName)?.toString(),
+      departmentId: (data['departmentId'] as num?)?.toInt() ?? session.departmentId,
+      lighthouseAccess: data['lighthouseAccess'] == true,
+    );
+  }
 
   factory AuthSession.fromJwt({
     required String phone,
@@ -69,6 +106,7 @@ class AuthSession {
       'departmentId': departmentId,
       if (novaLocalStorage != null && novaLocalStorage!.isNotEmpty)
         'novaLocalStorage': novaLocalStorage,
+      'lighthouseAccess': lighthouseAccess,
     };
   }
 
@@ -85,6 +123,7 @@ class AuthSession {
       displayName: json['displayName'] as String?,
       departmentId: (json['departmentId'] as num?)?.toInt(),
       novaLocalStorage: _parseNovaStorage(json['novaLocalStorage']),
+      lighthouseAccess: json['lighthouseAccess'] == true,
     );
   }
 

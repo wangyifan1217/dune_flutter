@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
+import '../../core/widgets/cached_network_image.dart';
 import '../../core/theme/dunes_theme.dart';
 import '../conversation/conversation_service.dart';
 import '../conversation/inbox_format.dart';
@@ -50,35 +51,30 @@ class ImUserAvatar extends StatelessWidget {
               bucket: 'user-avatars',
             )
           : effectiveDirectUrl;
-      core = ClipRRect(
+      core = CachedDunesNetworkImage(
+        url: directImageUrl,
+        width: size,
+        height: size,
         borderRadius: BorderRadius.circular(size / 2),
-        child: Image.network(
-          directImageUrl,
-          width: size,
-          height: size,
-          fit: BoxFit.cover,
-          gaplessPlayback: true,
-          errorBuilder: (_, _, _) => _initialAvatar(),
-        ),
+        errorBuilder: _initialAvatar,
       );
     } else if (objectKey.isNotEmpty && avatarService != null) {
       core = FutureBuilder<String>(
-        future: avatarService!.resolveMediaUrl(
+        future: resolveCachedAvatarUrl(
+          () => avatarService!.resolveMediaUrl(
+            objectKey,
+            bucket: 'user-avatars',
+          ),
           objectKey,
-          bucket: 'user-avatars',
         ),
         builder: (_, snap) {
           if (snap.hasData && snap.data!.isNotEmpty) {
-            return ClipRRect(
+            return CachedDunesNetworkImage(
+              url: snap.data!,
+              width: size,
+              height: size,
               borderRadius: BorderRadius.circular(size / 2),
-              child: Image.network(
-                snap.data!,
-                width: size,
-                height: size,
-                fit: BoxFit.cover,
-                gaplessPlayback: true,
-                errorBuilder: (_, _, _) => _initialAvatar(),
-              ),
+              errorBuilder: _initialAvatar,
             );
           }
           return _initialAvatar();

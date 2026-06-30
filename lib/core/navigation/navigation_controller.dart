@@ -4,7 +4,7 @@ import 'generated/screen_registry.dart';
 
 /// 与 HTML 原型 history_ / setScreen / go / back 同步的导航状态。
 class DunesNavigationController extends ChangeNotifier {
-  DunesNavigationController({String initialScreen = 'B2'})
+  DunesNavigationController({String initialScreen = 'C1'})
       : _history = [initialScreen],
         _currentScreen = initialScreen;
 

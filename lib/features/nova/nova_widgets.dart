@@ -1296,7 +1296,11 @@ class NovaC4MessageRow extends StatelessWidget {
                       padding: const EdgeInsets.only(top: 2, right: 4),
                       child: Text(
                         '已读',
-                        style: DunesTypography.mono(fontSize: 9, color: DunesColors.text3, letterSpacing: 0.02 * 9),
+                        style: DunesTypography.mono(
+                          fontSize: 9,
+                          color: DunesColors.readReceipt,
+                          letterSpacing: 0.02 * 9,
+                        ),
                       ),
                     ),
                 ],

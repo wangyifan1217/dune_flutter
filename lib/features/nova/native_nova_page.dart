@@ -54,6 +54,7 @@ class _NativeNovaPageState extends State<NativeNovaPage> {
   late final NovaMediaResolver _mediaResolver;
   final ImagePicker _imagePicker = ImagePicker();
   final TextEditingController _inputController = TextEditingController();
+  final FocusNode _inputFocusNode = FocusNode();
   final ScrollController _scrollController = ScrollController();
   final Map<int, GlobalKey> _messageKeys = <int, GlobalKey>{};
 
@@ -98,6 +99,7 @@ class _NativeNovaPageState extends State<NativeNovaPage> {
     super.initState();
     _service = NovaBackgroundCoordinator.instance.serviceFor(widget.session);
     _mediaResolver = NovaMediaResolver(widget.session, service: _service);
+    _inputFocusNode.addListener(_onInputFocusChanged);
     _load();
   }
 
@@ -126,6 +128,8 @@ class _NativeNovaPageState extends State<NativeNovaPage> {
     _recordTicker?.cancel();
     unawaited(_flushOnLeave());
     unawaited(NativeAudioRecorder.instance.cancel());
+    _inputFocusNode.removeListener(_onInputFocusChanged);
+    _inputFocusNode.dispose();
     _inputController.dispose();
     _scrollController.dispose();
     super.dispose();
@@ -398,6 +402,14 @@ class _NativeNovaPageState extends State<NativeNovaPage> {
     );
   }
 
+  List<NativeNovaMessage> _finalizeMergedMessages(
+    List<NativeNovaMessage> rows, {
+    bool repair = false,
+  }) {
+    final deduped = sortNovaMessages(dedupeNovaHistoryMessages(rows));
+    return repair ? repairNovaConversationMessages(deduped) : deduped;
+  }
+
   List<NativeNovaMessage> _mergeGeneratingAndDraft({
     required List<NativeNovaMessage> rows,
     required bool generating,
@@ -410,7 +422,11 @@ class _NativeNovaPageState extends State<NativeNovaPage> {
     final draftUserText = (draft?.userText ?? '').trim();
 
     if (draftUserText.isNotEmpty && effectiveAfter > 0) {
-      final hasUser = out.any((m) => m.id == effectiveAfter);
+      final hasUser = novaHasMatchingUserMessage(
+        out,
+        afterMessageId: effectiveAfter,
+        userText: draftUserText,
+      );
       if (!hasUser) {
         final userMsg = NativeNovaMessage(
           id: effectiveAfter,
@@ -433,7 +449,7 @@ class _NativeNovaPageState extends State<NativeNovaPage> {
       }
     }
 
-    if (!generating) return repairNovaConversationMessages(sortNovaMessages(out));
+    if (!generating) return _finalizeMergedMessages(out, repair: true);
 
     final draftText = draft?.text ?? '';
     final draftThink = draft?.thinkText ?? '';
@@ -451,11 +467,11 @@ class _NativeNovaPageState extends State<NativeNovaPage> {
         thinkStatus: thinkStatus,
         streaming: true,
       );
-      return sortNovaMessages(out);
+      return _finalizeMergedMessages(out);
     }
 
     if (effectiveAfter > 0 && _hasAiReplyAfter(out, effectiveAfter)) {
-      return repairNovaConversationMessages(sortNovaMessages(out));
+      return _finalizeMergedMessages(out, repair: true);
     }
 
     final pendingId = draft != null && draft.text.isNotEmpty
@@ -473,7 +489,7 @@ class _NativeNovaPageState extends State<NativeNovaPage> {
         kind: 'AI_ASSISTANT',
       ),
     );
-    return sortNovaMessages(out);
+    return _finalizeMergedMessages(out);
   }
 
   bool _hasAiReplyAfter(List<NativeNovaMessage> rows, int afterMessageId) {
@@ -539,7 +555,9 @@ class _NativeNovaPageState extends State<NativeNovaPage> {
             text: replyText.isNotEmpty ? replyText : cur.text,
             thinkStatus: doneThink ? '已完成思考' : cur.thinkStatus,
           );
-          _messages = repairNovaConversationMessages(copy);
+          _messages = repairNovaConversationMessages(
+            sortNovaMessages(dedupeNovaHistoryMessages(copy)),
+          );
         }
       });
       _releaseGeneratingUi(clearStreamingFlags: false);
@@ -1069,9 +1087,23 @@ class _NativeNovaPageState extends State<NativeNovaPage> {
 
     final drafts = [..._drafts];
     _inputController.clear();
-    FocusManager.instance.primaryFocus?.unfocus();
     setState(() => _drafts = const <NovaDraftAttachment>[]);
     await _sendMessage(text: text, drafts: drafts);
+  }
+
+  void _onInputFocusChanged() {
+    if (!_inputFocusNode.hasFocus) return;
+    _scrollToLatestAfterKeyboard();
+  }
+
+  void _scrollToLatestAfterKeyboard() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _scrollBottom();
+      Future<void>.delayed(const Duration(milliseconds: 280), () {
+        if (mounted) _scrollBottom();
+      });
+    });
   }
 
   Future<void> _sendMessage({
@@ -1720,6 +1752,8 @@ class _NativeNovaPageState extends State<NativeNovaPage> {
             ),
             ChatInputBar(
               controller: _inputController,
+              focusNode: _inputFocusNode,
+              onInputFocused: _scrollToLatestAfterKeyboard,
               voiceMode: _voiceMode,
               sending: _sending,
               enabled: inputEnabled,

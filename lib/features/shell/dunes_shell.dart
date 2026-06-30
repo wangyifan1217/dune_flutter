@@ -13,7 +13,7 @@ class DunesShell extends StatefulWidget {
   const DunesShell({
     super.key,
     required this.session,
-    this.initialScreen = 'B2',
+    this.initialScreen = 'C1',
     this.onLogout,
   });
 

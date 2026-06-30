@@ -15,6 +15,7 @@ import '../push/push_service.dart';
 import '../shell/dunes_shell.dart';
 import '../shell/splash_screen.dart';
 import 'auth_service.dart';
+import 'auth_profile.dart';
 import 'auth_session.dart';
 
 const _authBlue = Color(0xFF1A6FDB);
@@ -99,6 +100,16 @@ class _LoginFlowState extends State<LoginFlow> {
             if (mounted) setState(() => _hydrating = false);
             return;
           }
+          if (resp.statusCode >= 200 && resp.statusCode < 300) {
+            final body = jsonDecode(resp.body);
+            final data = body is Map<String, dynamic>
+                ? (body['data'] is Map<String, dynamic>
+                      ? body['data'] as Map<String, dynamic>
+                      : body)
+                : const <String, dynamic>{};
+            session = AuthSession.enrichFromUsersMe(session, data);
+            await _persistSession(session);
+          }
         } catch (_) {}
         if (mounted) {
           setState(() {
@@ -126,6 +137,7 @@ class _LoginFlowState extends State<LoginFlow> {
       displayName: session.displayName,
       departmentId: session.departmentId,
       novaLocalStorage: session.novaLocalStorage,
+      lighthouseAccess: session.lighthouseAccess,
     );
   }
 
@@ -274,7 +286,6 @@ class _PhoneStepState extends State<_PhoneStep> {
           const SizedBox(height: 12),
           TextField(
             controller: _phone,
-            autofocus: true,
             keyboardType: TextInputType.phone,
             inputFormatters: [
               FilteringTextInputFormatter.digitsOnly,
@@ -298,6 +309,7 @@ class _PhoneStepState extends State<_PhoneStep> {
             onChanged: (_) {
               if (_error != null) setState(() => _error = null);
             },
+            onTapOutside: (_) => FocusManager.instance.primaryFocus?.unfocus(),
             onSubmitted: (_) => _next(),
           ),
           const SizedBox(height: 28),
@@ -399,6 +411,7 @@ class _CodeStepState extends State<_CodeStep> {
           novaLocalStorage: nova.toLocalStorageEntries(),
         );
       } catch (_) {}
+      session = await enrichSessionFromUsersMe(session);
       if (!mounted) return;
       widget.onSignedIn(session);
       if (mounted) {
@@ -682,17 +695,22 @@ class _AuthScaffold extends StatelessWidget {
     return Scaffold(
       backgroundColor: _authBg,
       body: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            padding: EdgeInsets.fromLTRB(
-              32,
-              showLogo ? 48 : 24,
-              32,
-              24 + bottomInset,
-            ),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 400),
-              child: child,
+        child: GestureDetector(
+          behavior: HitTestBehavior.translucent,
+          onTap: () => FocusScope.of(context).unfocus(),
+          child: Center(
+            child: SingleChildScrollView(
+              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+              padding: EdgeInsets.fromLTRB(
+                32,
+                showLogo ? 48 : 24,
+                32,
+                24 + bottomInset,
+              ),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 400),
+                child: child,
+              ),
             ),
           ),
         ),

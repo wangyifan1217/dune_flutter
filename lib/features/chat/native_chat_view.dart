@@ -35,11 +35,16 @@ import 'native_audio_recorder.dart';
 enum NativeChatKind { private, group }
 
 class _ChatListEntry {
-  const _ChatListEntry.divider(this.dividerLabel) : message = null;
-  const _ChatListEntry.message(this.message) : dividerLabel = null;
+  const _ChatListEntry.divider(this.dividerLabel)
+    : message = null,
+      showSenderMeta = false;
+
+  const _ChatListEntry.message(this.message, {this.showSenderMeta = false})
+    : dividerLabel = null;
 
   final String? dividerLabel;
   final NativeChatMessage? message;
+  final bool showSenderMeta;
 }
 
 class NativeChatView extends StatefulWidget {
@@ -80,7 +85,8 @@ class NativeChatView extends StatefulWidget {
   State<NativeChatView> createState() => _NativeChatViewState();
 }
 
-class _NativeChatViewState extends State<NativeChatView> {
+class _NativeChatViewState extends State<NativeChatView>
+    with WidgetsBindingObserver {
   late final ConversationService _service;
   late final ConversationRealtimeService _realtime;
   final ConversationRealtimeDedup _realtimeDedup = ConversationRealtimeDedup();
@@ -137,12 +143,14 @@ class _NativeChatViewState extends State<NativeChatView> {
   final Map<int, GlobalKey> _messageKeys = <int, GlobalKey>{};
   final Map<String, Future<String>> _mediaUrlCache = <String, Future<String>>{};
   ChatMessageQuote? _quoteDraft;
+  double _lastKeyboardInset = 0;
 
   bool get _isPrivate => widget.kind == NativeChatKind.private;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _service = ConversationService(session: widget.session);
     _realtime = ConversationRealtimeHub.instance.of(widget.session);
     _scrollController.addListener(_onScroll);
@@ -203,7 +211,21 @@ class _NativeChatViewState extends State<NativeChatView> {
   }
 
   @override
+  void didChangeMetrics() {
+    super.didChangeMetrics();
+    if (!mounted) return;
+    final inset = View.of(context).viewInsets.bottom;
+    final keyboardOpening =
+        _inputFocusNode.hasFocus && inset > _lastKeyboardInset + 1;
+    _lastKeyboardInset = inset;
+    if (keyboardOpening && _isNearBottom) {
+      _scheduleKeyboardScroll();
+    }
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _rtRefreshDebounce?.cancel();
     _rtSub?.cancel();
     _onlineSub?.cancel();
@@ -225,12 +247,11 @@ class _NativeChatViewState extends State<NativeChatView> {
   void _onScroll() {
     if (!_scrollController.hasClients || _loadingOlder) return;
     final pos = _scrollController.position;
-    // 历史消息在顶部：接近 minScrollExtent 时加载更早的消息。
-    if (pos.pixels <= 48) {
+    // reverse 列表：底部为最新消息（pixels≈0），顶部为历史（pixels≈maxScrollExtent）。
+    if (pos.maxScrollExtent - pos.pixels <= 48) {
       unawaited(_loadOlder());
     }
-    if (_locatedMode && _hasNewer && !_loadingNewer &&
-        pos.maxScrollExtent - pos.pixels <= 72) {
+    if (_locatedMode && _hasNewer && !_loadingNewer && pos.pixels <= 72) {
       unawaited(_loadNewer());
     }
     _updateStickBottomState();
@@ -506,9 +527,7 @@ class _NativeChatViewState extends State<NativeChatView> {
 
   bool get _isNearBottom {
     if (!_scrollController.hasClients) return true;
-    return _scrollController.position.maxScrollExtent -
-            _scrollController.position.pixels <=
-        72;
+    return _scrollController.position.pixels <= 72;
   }
 
   bool _messagePeerRead(NativeChatMessage m) {
@@ -574,13 +593,24 @@ class _NativeChatViewState extends State<NativeChatView> {
   List<_ChatListEntry> _buildListEntries() {
     final entries = <_ChatListEntry>[];
     String? lastDivider;
+    NativeChatMessage? prevMsg;
     for (final m in _messages) {
       final label = InboxFormat.dayDividerLabel(m.createdAt);
       if (label != null && label != lastDivider) {
         entries.add(_ChatListEntry.divider(label));
         lastDivider = label;
       }
-      entries.add(_ChatListEntry.message(m));
+      final mine = m.senderUserId == widget.session.userId;
+      final showMeta =
+          !_isPrivate &&
+          (prevMsg == null || prevMsg.senderUserId != m.senderUserId);
+      entries.add(
+        _ChatListEntry.message(
+          m,
+          showSenderMeta: showMeta || (_isPrivate && !mine),
+        ),
+      );
+      prevMsg = m;
     }
     return entries;
   }
@@ -841,8 +871,7 @@ class _NativeChatViewState extends State<NativeChatView> {
     if (ctx == null) return;
     Scrollable.ensureVisible(
       ctx,
-      // 正序列表：将目标消息滚到视口偏上位置，便于上下文浏览。
-      alignment: 0.35,
+      alignment: 0.72,
       duration: const Duration(milliseconds: 280),
       curve: Curves.easeOutCubic,
     );
@@ -934,17 +963,19 @@ class _NativeChatViewState extends State<NativeChatView> {
 
   void _onInputFocusChanged() {
     if (!_inputFocusNode.hasFocus) return;
-    _scrollToLatestAfterKeyboard();
+    _scheduleKeyboardScroll();
+  }
+
+  void _scheduleKeyboardScroll() {
+    if (!_isNearBottom) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _scrollBottom(force: true, gentle: true);
+    });
   }
 
   void _scrollToLatestAfterKeyboard() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      _scrollBottom(force: true);
-      Future<void>.delayed(const Duration(milliseconds: 280), () {
-        if (mounted) _scrollBottom(force: true);
-      });
-    });
+    _scheduleKeyboardScroll();
   }
 
   Future<void> _send() async {
@@ -1716,7 +1747,7 @@ class _NativeChatViewState extends State<NativeChatView> {
     void doScroll() {
       if (!mounted || gen != _scrollBottomGen) return;
       if (!_scrollController.hasClients) return;
-      final bottom = _scrollController.position.maxScrollExtent;
+      const bottom = 0.0;
       if (animated) {
         unawaited(
           _scrollController.animateTo(
@@ -1730,13 +1761,10 @@ class _NativeChatViewState extends State<NativeChatView> {
       }
     }
 
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      doScroll();
-      WidgetsBinding.instance.addPostFrameCallback((_) => doScroll());
-    });
+    WidgetsBinding.instance.addPostFrameCallback((_) => doScroll());
 
     if (!gentle) {
-      for (final ms in const <int>[0, 50, 150, 320]) {
+      for (final ms in const <int>[50, 150]) {
         Future<void>.delayed(Duration(milliseconds: ms), doScroll);
       }
     }
@@ -1953,7 +1981,7 @@ class _NativeChatViewState extends State<NativeChatView> {
         : memberLabel.isEmpty
         ? '群聊'
         : memberLabel;
-    final listEntries = _buildListEntries();
+    final listEntries = _buildListEntries().reversed.toList(growable: false);
     final inputHint = locked
         ? '群聊已解散，无法发送消息'
         : _isPrivate
@@ -1961,6 +1989,7 @@ class _NativeChatViewState extends State<NativeChatView> {
         : '输入消息 · @人时唤出选择器';
 
     return Scaffold(
+      resizeToAvoidBottomInset: true,
       backgroundColor: DunesColors.bgApp,
       body: SafeArea(
         bottom: false,
@@ -2035,16 +2064,20 @@ class _NativeChatViewState extends State<NativeChatView> {
                         onNotification: _onMessageListScroll,
                         child: ListView.builder(
                           controller: _scrollController,
-                          reverse: false,
+                          reverse: true,
                           physics: const ClampingScrollPhysics(),
                           cacheExtent: 640,
+                          addAutomaticKeepAlives: false,
+                          addRepaintBoundaries: false,
+                          keyboardDismissBehavior:
+                              ScrollViewKeyboardDismissBehavior.onDrag,
                           padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
                           itemCount:
                               listEntries.length +
                               (_locatedMode && _hasNewer ? 1 : 0),
                           itemBuilder: (_, index) {
                             final hasNewerFooter = _locatedMode && _hasNewer;
-                            if (hasNewerFooter && index == listEntries.length) {
+                            if (hasNewerFooter && index == 0) {
                               return Padding(
                                 padding: const EdgeInsets.symmetric(
                                   vertical: 10,
@@ -2065,7 +2098,8 @@ class _NativeChatViewState extends State<NativeChatView> {
                                 ),
                               );
                             }
-                            final entry = listEntries[index];
+                            final entryIndex = hasNewerFooter ? index - 1 : index;
+                            final entry = listEntries[entryIndex];
                             if (entry.dividerLabel != null) {
                               return ChatDateDivider(
                                 label: entry.dividerLabel!,
@@ -2087,22 +2121,13 @@ class _NativeChatViewState extends State<NativeChatView> {
                             if (_isSystemKind(m.kind)) {
                               row = _buildMessageWidget(m, mine);
                             } else {
-                              final prevMsg = _previousMessage(
-                                index,
-                                listEntries,
-                              );
-                              final showMeta =
-                                  !_isPrivate &&
-                                  (prevMsg == null ||
-                                      prevMsg.senderUserId != m.senderUserId);
                               final peerRead = mine && _isPrivate
                                   ? _messagePeerRead(m)
                                   : false;
                               row = ChatMessageRow(
                                 message: m,
                                 mine: mine,
-                                showSenderMeta:
-                                    showMeta || (_isPrivate && !mine),
+                                showSenderMeta: entry.showSenderMeta,
                                 showTimeForMine: mine,
                                 timeLabel: timeLabel,
                                 readLabel: mine && _isPrivate
@@ -2123,22 +2148,23 @@ class _NativeChatViewState extends State<NativeChatView> {
                                 content: _buildMessageWidget(m, mine),
                               );
                             }
-                            return AnimatedContainer(
-                              key: key,
-                              duration: const Duration(milliseconds: 200),
-                              decoration: BoxDecoration(
-                                color: highlighted
-                                    ? DunesColors.accentSoft.withValues(
+                            final rowWidget = highlighted
+                                ? AnimatedContainer(
+                                    key: key,
+                                    duration: const Duration(milliseconds: 200),
+                                    decoration: BoxDecoration(
+                                      color: DunesColors.accentSoft.withValues(
                                         alpha: 0.45,
-                                      )
-                                    : Colors.transparent,
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              padding: highlighted
-                                  ? const EdgeInsets.symmetric(vertical: 2)
-                                  : EdgeInsets.zero,
-                              child: row,
-                            );
+                                      ),
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 2,
+                                    ),
+                                    child: row,
+                                  )
+                                : KeyedSubtree(key: key, child: row);
+                            return RepaintBoundary(child: rowWidget);
                           },
                         ),
                       ),
@@ -2382,17 +2408,6 @@ class _NativeChatViewState extends State<NativeChatView> {
         ),
       ),
     );
-  }
-
-  NativeChatMessage? _previousMessage(
-    int entryIndex,
-    List<_ChatListEntry> entries,
-  ) {
-    for (var i = entryIndex - 1; i >= 0; i--) {
-      final msg = entries[i].message;
-      if (msg != null) return msg;
-    }
-    return null;
   }
 }
 

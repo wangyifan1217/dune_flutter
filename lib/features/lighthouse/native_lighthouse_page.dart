@@ -2,6 +2,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/navigation/navigation_controller.dart';
@@ -989,7 +990,6 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   bool _cubeShowSupplyLabels = false;   // 供给方轴名 + Y 轴刻度名（默认关）
   bool _cubeShowChannelLabels = false;  // 渠道轴名 + Z 轴刻度名（默认关）
   bool _cubeShowOwnerInitials = true;   // owner 质心圆里的首字
-  bool _cubeTextPanelOpen = false;      // 文字下拉是否展开
   DateTime? _lastSyncedAt;
   bool _refreshing = false; // 手动点击「数据同步」刷新中
   // ── 周期实例筛选（哪一天 / 哪个周 / 月 / 季 / 年）──
@@ -2296,6 +2296,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       },
       child: Scaffold(
       backgroundColor: LhColors.cream,
+      // 键盘弹出时不顶起底部 Column —— SKU 搜索时
+      // 通讯/千机/灯塔/我的 这条主 tab bar 保持在屏幕底部，
+      // 不会被怼到键盘正上方。搜索框本身在页面中上部，
+      // 不会被键盘遮挡。
+      resizeToAvoidBottomInset: false,
       body: SafeArea(
         bottom: false,
         child: Column(
@@ -4665,100 +4670,16 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       );
     }
 
-    final dimMatched = cube.lit.where(_cubeDimMatch).toList();
     final matchedPoints = cube.lit.where(_cubeMatch).toList();
     final matchedSet = matchedPoints.map(_cubePointKey).toSet();
     final litShown = matchedPoints.length;
 
-    // ── 第 4 维度: 负责人聚合 — 基于 5 维过滤后的 dimMatched（不含 owner 过滤），
-    //    让 strip 始终展示全部 owner 供对比；立方体本身再按选中 owner 硬过滤。
-    final ownerStats = <String, _OwnerStat>{};
-    for (final c in dimMatched) {
-      final s = ownerStats.putIfAbsent(c.owner, () => _OwnerStat());
-      s.count++;
-      s.totalValue += c.value.abs();
-    }
-    final sortedOwners = ownerStats.entries.toList()
-      ..sort((a, b) => b.value.count.compareTo(a.value.count));
-
+    // 主页一律走极简：cube + 单个"放大"按钮。
+    // 负责人 strip / 筛选 chips / 文字开关 全部收进全屏 dialog 里的"筛选"面板，
+    // 主分析页保持干净的 preview 形态。
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // ── 负责人 strip（替代旧数字 strip，第 4 维度入口）──
-        if (sortedOwners.isNotEmpty) ...[
-          Padding(
-            padding: const EdgeInsets.fromLTRB(14, 6, 14, 0),
-            child: Row(
-              children: [
-                Text(
-                  '负责人',
-                  style: LhTypography.mono(
-                    size: 9,
-                    color: LhColors.mute2,
-                    weight: FontWeight.w700,
-                    letterSpacing: 1.6,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  '${sortedOwners.length} 人 · ${matchedPoints.length} 坐标',
-                  style: LhTypography.mono(
-                    size: 9,
-                    color: LhColors.mute,
-                    weight: FontWeight.w600,
-                    letterSpacing: 0.3,
-                  ),
-                ),
-                const Spacer(),
-                if (_cubeSelectedOwner != null)
-                  GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTap: () => setState(() => _cubeSelectedOwner = null),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.close_rounded, size: 12, color: LhColors.copper),
-                        const SizedBox(width: 2),
-                        Text(
-                          '清除',
-                          style: LhTypography.mono(
-                            size: 10,
-                            color: LhColors.copper,
-                            weight: FontWeight.w600,
-                            letterSpacing: 0.4,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-              ],
-            ),
-          ),
-          SizedBox(
-            height: 36,
-            child: Builder(
-              builder: (ctx) {
-                final ownerColors = _CubePainter.ownerColorMap(cube.lit);
-                return ListView.builder(
-                  padding: const EdgeInsets.fromLTRB(14, 4, 14, 0),
-                  scrollDirection: Axis.horizontal,
-                  itemCount: sortedOwners.length,
-                  itemBuilder: (ctx, i) {
-                    final e = sortedOwners[i];
-                    final col = ownerColors[e.key] ?? LhColors.mute;
-                    return _buildOwnerChip(e.key, e.value, matchedPoints.length, col);
-                  },
-                );
-              },
-            ),
-          ),
-        ],
-        // Filter chip 行
-        Padding(
-          padding: const EdgeInsets.fromLTRB(14, 10, 14, 0),
-          child: _buildCubeFilterChips(cube),
-        ),
-        const SizedBox(height: 4),
         // 立方体 — 走全宽，高度随屏宽/屏高自适应（分析 tab 主视觉区尽量占满）
         LayoutBuilder(
           builder: (ctx, constraints) {
@@ -4958,13 +4879,23 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
 
   /// 共享的 cube 交互层 — 主页和全屏视图都用这个
   /// onExternalChange: 全屏 dialog 调用时传入 setDlg，让 dialog 也跟随重绘
+  ///
+  /// 使用 RawGestureDetector + _CubeEagerScaleRecognizer，
+  /// 让 cube 区域的指针手势在 arena 中立即胜出，
+  /// 父级 ListView 不会再抢走单指拖动 —— 旋转 cube 时整页不再上下滑动。
+  ///
+  /// 交互规则（主页 / 全屏一致）：
+  ///   · 短促轻点 → 选中坐标点（再点同一点取消）
+  ///   · 单指拖动 → 旋转视角
+  ///   · 双指捏合 → 缩放（上限 1.8x，避免高倍渲染开销过大导致闪退）
+  ///   · 双指拖动 → 平移
+  /// 全屏 dialog 只通过左上角的 × 按钮关闭，不再因为轻点空白处或左滑而关闭。
   Widget _buildCubeInteractive(
     _CubeData cube,
     Size size, {
     required Set<String> matched,
     required bool dimUnmatched,
     VoidCallback? onExternalChange,
-    VoidCallback? onRequestDismiss,
   }) {
     void mut(VoidCallback fn) {
       setState(fn);
@@ -4972,103 +4903,100 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     }
 
     return ClipRect(
-      child: GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onScaleStart: (d) {
-        _cubeGestureStartFocal = d.localFocalPoint;
-        _cubeGestureLastFocal = d.localFocalPoint;
-        _cubeGestureStartTime = DateTime.now();
-        _cubeGestureBaseScale = _cubeScale;
-        _cubeGestureMaxMove = 0;
-      },
-      onScaleUpdate: (d) {
-        if (_cubeGestureStartFocal != null) {
-          final m = (d.localFocalPoint - _cubeGestureStartFocal!).distance;
-          if (m > _cubeGestureMaxMove) _cubeGestureMaxMove = m;
-        }
-        final last = _cubeGestureLastFocal ?? d.localFocalPoint;
-        final delta = d.localFocalPoint - last;
-        _cubeGestureLastFocal = d.localFocalPoint;
-        mut(() {
-          if (d.pointerCount <= 1) {
-            // 单指 → 旋转
-            _cubeYaw += delta.dx * 0.012;
-            _cubePitch = (_cubePitch - delta.dy * 0.012)
-                .clamp(-math.pi / 2 + 0.05, math.pi / 2 - 0.05);
-          } else {
-            // 多指 → 缩放 + 平移
-            _cubeScale =
-                (_cubeGestureBaseScale * d.scale).clamp(0.5, 3.0);
-            _cubePan += delta;
-            // 限制平移，放大后不把图形拖出白色容器太多
-            final maxPanX = size.width * 0.28 * _cubeScale;
-            final maxPanY = size.height * 0.28 * _cubeScale;
-            _cubePan = Offset(
-              _cubePan.dx.clamp(-maxPanX, maxPanX),
-              _cubePan.dy.clamp(-maxPanY, maxPanY),
-            );
-          }
-        });
-      },
-      onScaleEnd: (d) {
-        final start = _cubeGestureStartFocal;
-        final startedAt = _cubeGestureStartTime;
-        if (start != null && startedAt != null) {
-          final dt = DateTime.now().difference(startedAt).inMilliseconds;
-          if (onRequestDismiss != null && _cubeGestureMaxMove >= 24) {
-            final end = _cubeGestureLastFocal ?? start;
-            final dx = end.dx - start.dx;
-            final dy = end.dy - start.dy;
-            if (dx < -52 && dx.abs() > dy.abs() * 1.25) {
-              onRequestDismiss();
-              _cubeGestureStartFocal = null;
-              _cubeGestureLastFocal = null;
-              _cubeGestureStartTime = null;
-              _cubeGestureMaxMove = 0;
-              return;
-            }
-          }
-          if (dt < 280 && _cubeGestureMaxMove < 8) {
-            if (onRequestDismiss != null) {
-              onRequestDismiss();
-            } else {
-              _handleCubeTap(start, cube, size);
-              onExternalChange?.call();
-            }
-          }
-        }
-        _cubeGestureStartFocal = null;
-        _cubeGestureLastFocal = null;
-        _cubeGestureStartTime = null;
-        _cubeGestureMaxMove = 0;
-      },
-      child: CustomPaint(
-        size: size,
-        painter: _CubePainter(
-          data: cube,
-          matched: matched,
-          dimUnmatched: dimUnmatched,
-          selectedKey: _cubeSelectedKey,
-          selectedOwner: _cubeSelectedOwner,
-          yaw: _cubeYaw,
-          pitch: _cubePitch,
-          scale: _cubeScale,
-          pan: _cubePan,
-          showAxisNames: _cubeShowAxisNames,
-          showProductTicks: _cubeShowProductTicks,
-          showSupplyLabels: _cubeShowSupplyLabels,
-          showChannelLabels: _cubeShowChannelLabels,
-          showOwnerInitials: _cubeShowOwnerInitials,
+      child: RawGestureDetector(
+        behavior: HitTestBehavior.opaque,
+        gestures: <Type, GestureRecognizerFactory>{
+          _CubeEagerScaleRecognizer:
+              GestureRecognizerFactoryWithHandlers<_CubeEagerScaleRecognizer>(
+            () => _CubeEagerScaleRecognizer(debugOwner: this),
+            (instance) {
+              instance
+                ..onStart = (d) {
+                  _cubeGestureStartFocal = d.localFocalPoint;
+                  _cubeGestureLastFocal = d.localFocalPoint;
+                  _cubeGestureStartTime = DateTime.now();
+                  _cubeGestureBaseScale = _cubeScale;
+                  _cubeGestureMaxMove = 0;
+                }
+                ..onUpdate = (d) {
+                  if (_cubeGestureStartFocal != null) {
+                    final m = (d.localFocalPoint - _cubeGestureStartFocal!).distance;
+                    if (m > _cubeGestureMaxMove) _cubeGestureMaxMove = m;
+                  }
+                  final last = _cubeGestureLastFocal ?? d.localFocalPoint;
+                  final delta = d.localFocalPoint - last;
+                  _cubeGestureLastFocal = d.localFocalPoint;
+                  mut(() {
+                    if (d.pointerCount <= 1) {
+                      // 单指 → 旋转
+                      _cubeYaw += delta.dx * 0.012;
+                      _cubePitch = (_cubePitch - delta.dy * 0.012)
+                          .clamp(-math.pi / 2 + 0.05, math.pi / 2 - 0.05);
+                    } else {
+                      // 多指 → 缩放 + 平移
+                      // 上限从 3.0 收到 1.8 —— 高倍 + 全标签开启时 Skia
+                      // 渲染压力过大，是之前放大闪退的主因。
+                      _cubeScale =
+                          (_cubeGestureBaseScale * d.scale).clamp(0.6, 1.8);
+                      _cubePan += delta;
+                      // 限制平移，放大后不把图形拖出白色容器太多
+                      final maxPanX = size.width * 0.28 * _cubeScale;
+                      final maxPanY = size.height * 0.28 * _cubeScale;
+                      _cubePan = Offset(
+                        _cubePan.dx.clamp(-maxPanX, maxPanX),
+                        _cubePan.dy.clamp(-maxPanY, maxPanY),
+                      );
+                    }
+                  });
+                }
+                ..onEnd = (d) {
+                  final start = _cubeGestureStartFocal;
+                  final startedAt = _cubeGestureStartTime;
+                  // 只剩一种"轻点"判定：短时间 + 几乎没移动 → 选中坐标。
+                  // 全屏 dialog 只能通过 × 关闭，不再因为轻点空白或左滑而关闭。
+                  if (start != null && startedAt != null) {
+                    final dt = DateTime.now().difference(startedAt).inMilliseconds;
+                    if (dt < 280 && _cubeGestureMaxMove < 8) {
+                      _handleCubeTap(start, cube, size);
+                      onExternalChange?.call();
+                    }
+                  }
+                  _cubeGestureStartFocal = null;
+                  _cubeGestureLastFocal = null;
+                  _cubeGestureStartTime = null;
+                  _cubeGestureMaxMove = 0;
+                };
+            },
+          ),
+        },
+        child: CustomPaint(
+          size: size,
+          painter: _CubePainter(
+            data: cube,
+            matched: matched,
+            dimUnmatched: dimUnmatched,
+            selectedKey: _cubeSelectedKey,
+            selectedOwner: _cubeSelectedOwner,
+            yaw: _cubeYaw,
+            pitch: _cubePitch,
+            scale: _cubeScale,
+            pan: _cubePan,
+            showAxisNames: _cubeShowAxisNames,
+            showProductTicks: _cubeShowProductTicks,
+            showSupplyLabels: _cubeShowSupplyLabels,
+            showChannelLabels: _cubeShowChannelLabels,
+            showOwnerInitials: _cubeShowOwnerInitials,
+          ),
         ),
       ),
-    ),
     );
   }
 
-  /// 缩放 helper — +/− 按钮和键盘都用这个
-  void _zoomCube(double factor, {VoidCallback? onExternalChange}) {
+  /// 设置 cube 缩放到指定绝对值（按上下限 clamp）。
+  /// 按钮用绝对值更安全 —— 之前 _zoomCube 是乘法叠加，多次点击会超过上限。
+  void _setCubeScale(double target, {VoidCallback? onExternalChange}) {
     setState(() {
-      _cubeScale = (_cubeScale * factor).clamp(0.5, 3.0);
+      _cubeScale = target.clamp(0.6, 1.8);
     });
     onExternalChange?.call();
   }
@@ -5089,64 +5017,14 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       (_cubeScale - 1.0).abs() < 0.01 &&
       _cubePan == Offset.zero;
 
-  /// 主页右上角的视角控制栏：[文字▾] [放大查看] [重置]
-  /// + 文字按钮按下时下方展开 popup
+  /// 主页 cube 右上角：只剩一个"放大查看"按钮。
+  /// 所有筛选 / 文字开关 / 重置都收进全屏 dialog 里。
   Widget _buildCubeViewControls(_CubeData cube) {
-    final shownCount = (_cubeShowAxisNames ? 1 : 0) +
-        (_cubeShowProductTicks ? 1 : 0) +
-        (_cubeShowSupplyLabels ? 1 : 0) +
-        (_cubeShowChannelLabels ? 1 : 0) +
-        (_cubeShowOwnerInitials ? 1 : 0);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.end,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          reverse: true,
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-            // 文字开关
-            _CubeChipButton(
-              icon: _cubeTextPanelOpen
-                  ? Icons.expand_less_rounded
-                  : Icons.text_fields_rounded,
-              label: '文字 $shownCount/5',
-              color: shownCount == 5 ? LhColors.copper : LhColors.ink,
-              onTap: () => setState(() {
-                _cubeTextPanelOpen = !_cubeTextPanelOpen;
-              }),
-            ),
-            const SizedBox(width: 6),
-            // 放大查看按钮 — 一直可见，主功能
-            _CubeChipButton(
-              icon: Icons.zoom_out_map_rounded,
-              label: '放大查看',
-              color: LhColors.ink,
-              onTap: () => _openCubeFullscreen(cube),
-            ),
-            const SizedBox(width: 6),
-            // 重置 — 仅在视角偏离时高亮
-            AnimatedOpacity(
-              duration: const Duration(milliseconds: 180),
-              opacity: _cubeViewIsDefault ? 0.35 : 1.0,
-              child: _CubeChipButton(
-                icon: Icons.refresh_rounded,
-                label: '重置',
-                color: LhColors.ink,
-                onTap: _cubeViewIsDefault ? null : () => _resetCubeView(),
-              ),
-            ),
-          ],
-        ),
-        ),
-        // 文字下拉面板（独立 Row 下方，紧贴对齐）
-        if (_cubeTextPanelOpen) ...[
-          const SizedBox(height: 6),
-          _buildCubeTextPanel(),
-        ],
-      ],
+    return _CubeChipButton(
+      icon: Icons.zoom_out_map_rounded,
+      label: '放大',
+      color: LhColors.ink,
+      onTap: () => _openCubeFullscreen(cube),
     );
   }
 
@@ -5329,8 +5207,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     });
 
     // 局部状态：右上角面板用 — 不污染主页
+    // 主页已经没有 owner strip / filter chips / 文字面板了，
+    // 全部在全屏里这一个"筛选"面板下面统一展开。
     bool filterOpen = false;
-    bool textOpen = false;
 
     showDialog<void>(
       context: context,
@@ -5340,8 +5219,20 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           builder: (ctx, setDlg) {
             void resync() => setDlg(() {});
 
+            final dimMatched = cube.lit.where(_cubeDimMatch).toList();
             final matchedPoints = cube.lit.where(_cubeMatch).toList();
             final matchedSet = matchedPoints.map(_cubePointKey).toSet();
+
+            // 负责人聚合 — 基于 5 维过滤后（不含 owner 过滤），
+            // strip 始终展示全部 owner 供对比，cube 再按选中 owner 硬过滤。
+            final ownerStats = <String, _OwnerStat>{};
+            for (final c in dimMatched) {
+              final s = ownerStats.putIfAbsent(c.owner, () => _OwnerStat());
+              s.count++;
+              s.totalValue += c.value.abs();
+            }
+            final sortedOwners = ownerStats.entries.toList()
+              ..sort((a, b) => b.value.count.compareTo(a.value.count));
 
             return Dialog(
               insetPadding: EdgeInsets.zero,
@@ -5354,7 +5245,8 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 child: Column(
                   mainAxisSize: MainAxisSize.max,
                   children: [
-                    // ── Top bar：极简 — 关闭 + 坐标数 + 文字 + 筛选 + 重置 ──
+                    // ── Top bar：极简 — × + 坐标数 + 筛选 + 重置 ──
+                    // "文字"开关已并入"筛选"面板，顶栏少一个 button。
                     Container(
                       padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
                       decoration: BoxDecoration(
@@ -5387,20 +5279,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                             ),
                           ),
                           const Spacer(),
-                          // 文字开关
-                          _CubeChipButton(
-                            icon: textOpen
-                                ? Icons.expand_less_rounded
-                                : Icons.text_fields_rounded,
-                            label: '文字',
-                            color: textOpen ? LhColors.copper : LhColors.ink,
-                            onTap: () => setDlg(() {
-                              textOpen = !textOpen;
-                              if (textOpen) filterOpen = false;
-                            }),
-                          ),
-                          const SizedBox(width: 5),
-                          // 筛选
+                          // 统一的"筛选"按钮 — 点开展开"负责人 + 产品/供给/渠道 + 文字"
                           _CubeChipButton(
                             icon: filterOpen
                                 ? Icons.expand_less_rounded
@@ -5408,12 +5287,12 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                             label: '筛选',
                             color: filterOpen
                                 ? LhColors.copper
-                                : (_cubeHasActiveFilter
+                                : (_cubeHasActiveFilter ||
+                                        _cubeSelectedOwner != null
                                     ? LhColors.copper
                                     : LhColors.ink),
                             onTap: () => setDlg(() {
                               filterOpen = !filterOpen;
-                              if (filterOpen) textOpen = false;
                             }),
                           ),
                           const SizedBox(width: 5),
@@ -5434,14 +5313,17 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                       ),
                     ),
 
-                    // ── 可折叠 — 筛选 / 文字面板 ──
+                    // ── 可折叠 — 统一"筛选"面板：负责人 + 维度筛选 + 文字开关 ──
                     if (filterOpen)
                       Listener(
                         onPointerUp: (_) =>
                             Future<void>.microtask(() => setDlg(() {})),
                         child: Container(
                           width: double.infinity,
-                          padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
+                          constraints: BoxConstraints(
+                            maxHeight:
+                                MediaQuery.sizeOf(context).height * 0.48,
+                          ),
                           decoration: BoxDecoration(
                             color: LhColors.paper,
                             border: Border(
@@ -5451,26 +5333,136 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                               ),
                             ),
                           ),
-                          child: _buildCubeFilterChips(cube),
-                        ),
-                      ),
-                    if (textOpen)
-                      Listener(
-                        onPointerUp: (_) =>
-                            Future<void>.microtask(() => setDlg(() {})),
-                        child: Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.fromLTRB(14, 6, 14, 6),
-                          decoration: BoxDecoration(
-                            color: LhColors.paper,
-                            border: Border(
-                              bottom: BorderSide(
-                                color: LhColors.line2.withAlpha(140),
-                                width: 0.5,
-                              ),
+                          child: SingleChildScrollView(
+                            padding:
+                                const EdgeInsets.fromLTRB(14, 12, 14, 12),
+                            child: Column(
+                              crossAxisAlignment:
+                                  CrossAxisAlignment.start,
+                              children: [
+                                // ── 负责人 section ──
+                                if (sortedOwners.isNotEmpty) ...[
+                                  Row(
+                                    children: [
+                                      Text(
+                                        '负责人',
+                                        style: LhTypography.mono(
+                                          size: 9,
+                                          color: LhColors.mute2,
+                                          weight: FontWeight.w700,
+                                          letterSpacing: 1.6,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        '${sortedOwners.length} 人 · ${matchedPoints.length} 坐标',
+                                        style: LhTypography.mono(
+                                          size: 9,
+                                          color: LhColors.mute,
+                                          weight: FontWeight.w600,
+                                          letterSpacing: 0.3,
+                                        ),
+                                      ),
+                                      const Spacer(),
+                                      if (_cubeSelectedOwner != null)
+                                        GestureDetector(
+                                          behavior:
+                                              HitTestBehavior.opaque,
+                                          onTap: () {
+                                            setState(() =>
+                                                _cubeSelectedOwner =
+                                                    null);
+                                            resync();
+                                          },
+                                          child: Row(
+                                            mainAxisSize:
+                                                MainAxisSize.min,
+                                            children: [
+                                              Icon(
+                                                  Icons.close_rounded,
+                                                  size: 12,
+                                                  color: LhColors
+                                                      .copper),
+                                              const SizedBox(
+                                                  width: 2),
+                                              Text(
+                                                '清除',
+                                                style:
+                                                    LhTypography.mono(
+                                                  size: 10,
+                                                  color: LhColors
+                                                      .copper,
+                                                  weight: FontWeight
+                                                      .w600,
+                                                  letterSpacing: 0.4,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 6),
+                                  SizedBox(
+                                    height: 36,
+                                    child: Builder(
+                                      builder: (ctx) {
+                                        final ownerColors =
+                                            _CubePainter
+                                                .ownerColorMap(
+                                                    cube.lit);
+                                        return ListView.builder(
+                                          scrollDirection:
+                                              Axis.horizontal,
+                                          itemCount:
+                                              sortedOwners.length,
+                                          itemBuilder: (ctx, i) {
+                                            final e =
+                                                sortedOwners[i];
+                                            final col = ownerColors[
+                                                    e.key] ??
+                                                LhColors.mute;
+                                            return _buildOwnerChip(
+                                              e.key,
+                                              e.value,
+                                              matchedPoints.length,
+                                              col,
+                                            );
+                                          },
+                                        );
+                                      },
+                                    ),
+                                  ),
+                                  const SizedBox(height: 14),
+                                ],
+                                // ── 维度筛选 section（产品/供给/渠道）──
+                                Text(
+                                  '维度',
+                                  style: LhTypography.mono(
+                                    size: 9,
+                                    color: LhColors.mute2,
+                                    weight: FontWeight.w700,
+                                    letterSpacing: 1.6,
+                                  ),
+                                ),
+                                const SizedBox(height: 6),
+                                _buildCubeFilterChips(cube),
+                                const SizedBox(height: 14),
+                                // ── 文字开关 section ──
+                                Text(
+                                  '文字',
+                                  style: LhTypography.mono(
+                                    size: 9,
+                                    color: LhColors.mute2,
+                                    weight: FontWeight.w700,
+                                    letterSpacing: 1.6,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                _buildCubeTextPanel(),
+                              ],
                             ),
                           ),
-                          child: _buildCubeTextPanel(),
                         ),
                       ),
 
@@ -5489,20 +5481,21 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                                   matched: matchedSet,
                                   dimUnmatched: _cubeHasActiveFilter,
                                   onExternalChange: resync,
-                                  onRequestDismiss: () =>
-                                      Navigator.of(dialogCtx).pop(),
                                 ),
-                                // 单个小缩放按钮 — 循环 1x → 1.5x → 2.25x → 1x
+                                // 缩放按钮 — 两段 toggle：1.0x ↔ 1.5x。
+                                // 原本的 1x → 1.5x → 2.25x 三段循环会越过新的
+                                // 1.8x 上限，且在高倍 + 全标签开启时容易闪退。
                                 Positioned(
                                   right: 14,
                                   bottom: 14,
                                   child: GestureDetector(
                                     behavior: HitTestBehavior.opaque,
                                     onTap: () {
-                                      final next = _cubeScale >= 2.0
-                                          ? 1.0 / _cubeScale
-                                          : 1.5;
-                                      _zoomCube(next, onExternalChange: resync);
+                                      final atZoomIn = _cubeScale > 1.05;
+                                      _setCubeScale(
+                                        atZoomIn ? 1.0 : 1.5,
+                                        onExternalChange: resync,
+                                      );
                                     },
                                     child: Container(
                                       width: 36,
@@ -5524,7 +5517,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                                       ),
                                       alignment: Alignment.center,
                                       child: Icon(
-                                        _cubeScale >= 2.0
+                                        _cubeScale > 1.05
                                             ? Icons.zoom_out_rounded
                                             : Icons.zoom_in_rounded,
                                         size: 18,
@@ -8993,6 +8986,21 @@ class _CubePainter extends CustomPainter {
 }
 
 enum _TA { left, center, right }
+
+/// 立方体专用的 scale 手势识别器：
+/// 一旦有指针落在 cube 区域，立即接受手势所有权，
+/// 这样外层 ListView 的 VerticalDrag 就不会再抢走单指拖动，
+/// 用户单指旋转 cube 时整个页面不会再跟着上下滚动。
+class _CubeEagerScaleRecognizer extends ScaleGestureRecognizer {
+  _CubeEagerScaleRecognizer({Object? debugOwner}) : super(debugOwner: debugOwner);
+
+  @override
+  void addAllowedPointer(PointerDownEvent event) {
+    super.addAllowedPointer(event);
+    // 立即在 gesture arena 中胜出，阻止父级 scrollable 抢手势。
+    resolve(GestureDisposition.accepted);
+  }
+}
 
 /// Cube 视角控制栏的胶囊按钮（图标 + 文字 + 铜色描边）
 /// onTap 为 null 时按钮整体置灰且不响应。

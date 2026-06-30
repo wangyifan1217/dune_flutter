@@ -6,7 +6,7 @@ abstract final class DunesDefaults {
   /// 联调/生产服务器 IP 或域名。留空则本机用 localhost，局域网访问时自动用页面 host。
   ///
   /// 也可启动时覆盖：`--dart-define=DUNES_API_HOST=1.2.3.4`
-  static const devServerHost = '';
+  static const devServerHost = '124.221.216.24';
 
   static const _hostFromDefine = String.fromEnvironment(
     'DUNES_API_HOST',

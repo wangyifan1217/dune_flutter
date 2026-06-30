@@ -83,6 +83,7 @@ class AuthSession {
       roles: roles,
       displayName: claims['displayName'] as String?,
       departmentId: (claims['departmentId'] as num?)?.toInt(),
+      lighthouseAccess: claims['lighthouseAccess'] == true,
     );
   }
 

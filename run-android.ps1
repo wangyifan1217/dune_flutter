@@ -61,6 +61,12 @@ if (Test-Path $localProps) {
     if ($line -match '^\s*tpns\.cluster=(.+)$') {
       $dartDefines += "--dart-define=TPNS_CLUSTER=$($matches[1].Trim())"
     }
+    if ($line -match '^\s*dunes\.apiHost=(.+)$') {
+      $dartDefines += "--dart-define=DUNES_API_HOST=$($matches[1].Trim())"
+    }
+    if ($line -match '^\s*nova\.baseUrl=(.+)$') {
+      $dartDefines += "--dart-define=NOVA_BASE_URL=$($matches[1].Trim())"
+    }
   }
 }
 Write-Host "PUB_CACHE = $env:PUB_CACHE" -ForegroundColor DarkGray

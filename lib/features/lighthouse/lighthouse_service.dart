@@ -55,6 +55,9 @@ class LighthouseService {
       }),
       headers: _headers,
     );
+    if (resp.statusCode == 403) {
+      throw Exception('暂无权限');
+    }
     if (resp.statusCode < 200 || resp.statusCode >= 300) {
       throw Exception('灯塔数据加载失败: HTTP ${resp.statusCode}');
     }
@@ -91,6 +94,9 @@ class LighthouseService {
       }),
       headers: _headers,
     );
+    if (resp.statusCode == 403) {
+      throw Exception('暂无权限');
+    }
     if (resp.statusCode < 200 || resp.statusCode >= 300) {
       throw Exception('分析数据加载失败: HTTP ${resp.statusCode}');
     }

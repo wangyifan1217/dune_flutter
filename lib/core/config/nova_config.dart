@@ -2,7 +2,7 @@
 abstract final class NovaConfig {
   static const baseUrl = String.fromEnvironment(
     'NOVA_BASE_URL',
-    defaultValue: 'http://localhost:3000',
+    defaultValue: 'http://124.221.216.24:3000',
   );
 
   static const defaultChatModel = 'nova_deepseek';

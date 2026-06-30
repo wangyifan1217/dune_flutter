@@ -979,7 +979,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   @override
   void initState() {
     super.initState();
-    _load();
+    if (widget.session.lighthouseAccess) {
+      _load();
+    } else {
+      _loading = false;
+    }
   }
 
   @override
@@ -1859,6 +1863,50 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     return _getGroups(_tab, rows);
   }
 
+  bool get _hasAccess => widget.session.lighthouseAccess;
+
+  bool _isNoPermissionError(Object? error) {
+    if (error == null) return false;
+    final msg = error.toString();
+    return msg.contains('暂无权限') ||
+        msg.contains('无权限') ||
+        msg.contains('403');
+  }
+
+  Widget _buildNoAccessView() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              width: 56,
+              height: 56,
+              decoration: BoxDecoration(
+                color: LhColors.line2,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: LhColors.line),
+              ),
+              child: const Icon(Icons.lock_outline_rounded, size: 28, color: LhColors.mute),
+            ),
+            const SizedBox(height: 18),
+            Text(
+              '暂无权限',
+              style: LhTypography.sans(size: 16, weight: FontWeight.w600, color: LhColors.ink),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              '当前账号未开通灯塔访问权限，如需使用请联系管理员。',
+              textAlign: TextAlign.center,
+              style: LhTypography.sans(size: 12, color: LhColors.mute, height: 1.5),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -1869,15 +1917,16 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           children: [
             _buildAppBar(),
             Expanded(
-              child: _detailKey != null
-                  ? _buildDetailView()
-                  : _buildMainView(),
+              child: !_hasAccess
+                  ? _buildNoAccessView()
+                  : (_detailKey != null ? _buildDetailView() : _buildMainView()),
             ),
             DunesMainTabBar(
               navigation: widget.navigation,
               activeScreen: 'LH',
               commUnread: widget.commUnread,
               workbenchBadge: widget.workbenchBadge,
+              lighthouseAccess: widget.session.lighthouseAccess,
             ),
           ],
         ),
@@ -2947,6 +2996,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       );
     }
     if (_loadError != null) {
+      if (_isNoPermissionError(_loadError)) {
+        return _buildNoAccessView();
+      }
       return Padding(
         padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 40),
         child: Column(

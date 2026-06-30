@@ -189,6 +189,9 @@ class _NativeChatViewState extends State<NativeChatView>
             (data['avatarObjectKey'] ?? '').toString().trim().isEmpty
             ? null
             : (data['avatarObjectKey'] ?? '').toString();
+        if (_messages.isNotEmpty) {
+          _messages = _enrichMessages(_messages);
+        }
       });
     } catch (_) {}
   }
@@ -640,24 +643,18 @@ class _NativeChatViewState extends State<NativeChatView>
   List<_ChatListEntry> _buildListEntries() {
     final entries = <_ChatListEntry>[];
     String? lastDivider;
-    NativeChatMessage? prevMsg;
     for (final m in _messages) {
       final label = InboxFormat.dayDividerLabel(m.createdAt);
       if (label != null && label != lastDivider) {
         entries.add(_ChatListEntry.divider(label));
         lastDivider = label;
       }
-      final mine = m.senderUserId == widget.session.userId;
-      final showMeta =
-          !_isPrivate &&
-          (prevMsg == null || prevMsg.senderUserId != m.senderUserId);
       entries.add(
         _ChatListEntry.message(
           m,
-          showSenderMeta: showMeta || (_isPrivate && !mine),
+          showSenderMeta: !_isSystemKind(m.kind),
         ),
       );
-      prevMsg = m;
     }
     return entries;
   }
@@ -732,6 +729,8 @@ class _NativeChatViewState extends State<NativeChatView>
                     'role': m.role,
                     'roleLabel': m.roleLabel,
                     'title': m.roleLabel,
+                    'avatarPreset': m.avatarPreset,
+                    'avatarObjectKey': m.avatarObjectKey,
                   },
                 )
                 .toList(growable: false);
@@ -752,7 +751,8 @@ class _NativeChatViewState extends State<NativeChatView>
           setState(() => _peerOnline = online);
         }
       }
-      final msgs = page.items..sort((a, b) => a.id.compareTo(b.id));
+      final msgs = _enrichMessages(page.items, conv)
+        ..sort((a, b) => a.id.compareTo(b.id));
       if (!mounted) return;
       final conversationChanged = _conversation?.id != conv.id;
       setState(() {
@@ -815,7 +815,7 @@ class _NativeChatViewState extends State<NativeChatView>
         before: oldestId,
       );
       if (!mounted || page.items.isEmpty) return;
-      final merged = _mergeMessages(page.items, _messages);
+      final merged = _enrichMessages(_mergeMessages(page.items, _messages));
       if (!mounted) return;
       final oldMax = _scrollController.hasClients
           ? _scrollController.position.maxScrollExtent
@@ -859,7 +859,7 @@ class _NativeChatViewState extends State<NativeChatView>
         if (mounted) setState(() => _hasNewer = false);
         return;
       }
-      final merged = _mergeMessages(_messages, page.items);
+      final merged = _enrichMessages(_mergeMessages(_messages, page.items));
       if (!mounted) return;
       setState(() {
         _messages = merged;
@@ -1020,7 +1020,10 @@ class _NativeChatViewState extends State<NativeChatView>
         conv.peerUserId == widget.session.userId ||
         (conv.peerDisplayName ?? '').trim().isEmpty ||
         conv.displayTitle == widget.session.displayName;
-    if (!needsContact) return conv;
+    final needsAvatar =
+        (conv.peerAvatarPreset ?? '').trim().isEmpty &&
+        (conv.peerAvatarObjectKey ?? '').trim().isEmpty;
+    if (!needsContact && !needsAvatar) return conv;
     final contact = await ContactService(
       session: widget.session,
     ).fetchContact(peerId);
@@ -1643,7 +1646,8 @@ class _NativeChatViewState extends State<NativeChatView>
         hint: quote != null ? _quoteHintMessage(quote) : null,
       );
       if (!mounted) return;
-      final msgs = page.items..sort((a, b) => a.id.compareTo(b.id));
+      final msgs = _enrichMessages(page.items, conv)
+        ..sort((a, b) => a.id.compareTo(b.id));
       if (!msgs.any((m) => m.id == messageId)) {
         setState(() => _locating = false);
         _showToast('找不到原消息');
@@ -1736,6 +1740,26 @@ class _NativeChatViewState extends State<NativeChatView>
     }
   }
 
+  Map<int, ({String? preset, String? objectKey})> get _memberAvatarMap =>
+      _service.avatarMapFromMembers(_groupMembers);
+
+  List<NativeChatMessage> _enrichMessages(
+    List<NativeChatMessage> msgs, [
+    NativeConversation? conv,
+  ]) {
+    final c = conv ?? _conversation;
+    return _service.enrichMessagesWithAvatars(
+      msgs,
+      avatarByUserId: _memberAvatarMap,
+      peerAvatarPreset: c?.peerAvatarPreset,
+      peerAvatarObjectKey: c?.peerAvatarObjectKey,
+      peerUserId: c?.peerUserId,
+      selfUserId: widget.session.userId,
+      selfAvatarPreset: _selfAvatarPreset,
+      selfAvatarObjectKey: _selfAvatarObjectKey,
+    );
+  }
+
   ImUserAvatar _avatarForMessage(NativeChatMessage m, {required bool mine}) {
     final conv = _conversation;
     if (mine) {
@@ -1758,8 +1782,14 @@ class _NativeChatViewState extends State<NativeChatView>
     final seed = m.senderUserId > 0
         ? m.senderUserId
         : (conv?.peerUserId ?? conv?.id ?? 0);
-    final preset = m.senderAvatarPreset ?? conv?.peerAvatarPreset;
-    final objectKey = m.senderAvatarObjectKey ?? conv?.peerAvatarObjectKey;
+    final memberAvatars =
+        !_isPrivate && m.senderUserId > 0 ? _memberAvatarMap[m.senderUserId] : null;
+    final preset = m.senderAvatarPreset ??
+        memberAvatars?.preset ??
+        conv?.peerAvatarPreset;
+    final objectKey = m.senderAvatarObjectKey ??
+        memberAvatars?.objectKey ??
+        conv?.peerAvatarObjectKey;
     return ImUserAvatar(
       initial: name.isNotEmpty ? name.substring(0, 1) : '?',
       seed: seed,
@@ -2018,15 +2048,34 @@ class _NativeChatViewState extends State<NativeChatView>
       final names = await showModalBottomSheet<List<String>>(
         context: context,
         isScrollControlled: true,
+        isDismissible: true,
+        enableDrag: true,
         backgroundColor: Colors.transparent,
-        builder: (_) => _AtMentionSheet(
-          members: members,
-          showAtAll: _isGroupOwner(),
-          avatarService: _service,
-          initialFilter: filter,
-          filterListenable: _atFilterNotifier!,
-          focusSearch: focusSearch,
-          onFilterChanged: _syncInputAtFilter,
+        builder: (sheetContext) => GestureDetector(
+          onTap: () => Navigator.pop(sheetContext),
+          behavior: HitTestBehavior.opaque,
+          child: Stack(
+            children: [
+              Positioned.fill(
+                child: Container(color: Colors.black.withValues(alpha: 0.35)),
+              ),
+              Align(
+                alignment: Alignment.bottomCenter,
+                child: GestureDetector(
+                  onTap: () {},
+                  child: _AtMentionSheet(
+                    members: members,
+                    showAtAll: _isGroupOwner(),
+                    avatarService: _service,
+                    initialFilter: filter,
+                    filterListenable: _atFilterNotifier!,
+                    focusSearch: focusSearch,
+                    onFilterChanged: _syncInputAtFilter,
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       );
       _atSheetOpen = false;

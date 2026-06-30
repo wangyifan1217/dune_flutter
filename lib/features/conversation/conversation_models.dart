@@ -104,6 +104,24 @@ class NativeChatMessage {
   final bool peerRead;
   final String? senderAvatarPreset;
   final String? senderAvatarObjectKey;
+
+  NativeChatMessage copyWith({
+    String? senderAvatarPreset,
+    String? senderAvatarObjectKey,
+  }) {
+    return NativeChatMessage(
+      id: id,
+      senderUserId: senderUserId,
+      senderName: senderName,
+      kind: kind,
+      bodyText: bodyText,
+      createdAt: createdAt,
+      payload: payload,
+      peerRead: peerRead,
+      senderAvatarPreset: senderAvatarPreset ?? this.senderAvatarPreset,
+      senderAvatarObjectKey: senderAvatarObjectKey ?? this.senderAvatarObjectKey,
+    );
+  }
 }
 
 class NativeMessagePage {
@@ -133,12 +151,16 @@ class NativeGroupMember {
     required this.displayName,
     this.role,
     this.roleLabel,
+    this.avatarPreset,
+    this.avatarObjectKey,
   });
 
   final int userId;
   final String displayName;
   final String? role;
   final String? roleLabel;
+  final String? avatarPreset;
+  final String? avatarObjectKey;
 
   bool get isOwner =>
       (role ?? '').toUpperCase() == 'OWNER' || (roleLabel ?? '').contains('主');

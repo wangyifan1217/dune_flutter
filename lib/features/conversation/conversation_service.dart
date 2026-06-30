@@ -934,6 +934,14 @@ class ConversationService {
                       .toString(),
                   role: m['role']?.toString(),
                   roleLabel: (m['roleLabel'] ?? m['title'])?.toString(),
+                  avatarPreset:
+                      (m['avatarPreset'] ?? '').toString().trim().isEmpty
+                      ? null
+                      : (m['avatarPreset'] ?? '').toString(),
+                  avatarObjectKey:
+                      (m['avatarObjectKey'] ?? '').toString().trim().isEmpty
+                      ? null
+                      : (m['avatarObjectKey'] ?? '').toString(),
                 ),
               )
               .where((m) => m.userId > 0)
@@ -1152,8 +1160,12 @@ class ConversationService {
     final sender = raw['sender'];
     final senderMap = sender is Map<String, dynamic>
         ? sender
+        : sender is Map
+        ? Map<String, dynamic>.from(sender)
         : const <String, dynamic>{};
-    final senderName = (senderMap['displayName'] ?? '').toString().trim();
+    final senderName = (senderMap['displayName'] ?? raw['senderName'] ?? '')
+        .toString()
+        .trim();
     final payloadRaw = raw['payload'];
     final payload = payloadRaw is Map<String, dynamic>
         ? payloadRaw
@@ -1162,19 +1174,97 @@ class ConversationService {
         : null;
     return NativeChatMessage(
       id: (raw['id'] as num?)?.toInt() ?? 0,
-      senderUserId: (senderMap['userId'] as num?)?.toInt() ?? 0,
+      senderUserId:
+          (senderMap['userId'] as num?)?.toInt() ??
+          (raw['senderId'] as num?)?.toInt() ??
+          (raw['senderUserId'] as num?)?.toInt() ??
+          0,
       senderName: senderName.isEmpty ? '系统' : senderName,
       kind: (raw['kind'] ?? 'TEXT').toString(),
       bodyText: (raw['bodyText'] ?? '').toString(),
       createdAt: DateTime.tryParse((raw['createdAt'] ?? '').toString()),
       payload: payload,
       peerRead: raw['peerRead'] == true || raw['isPeerRead'] == true,
-      senderAvatarPreset:
-          (senderMap['avatarPreset'] ?? raw['senderAvatarPreset'])?.toString(),
-      senderAvatarObjectKey:
-          (senderMap['avatarObjectKey'] ?? raw['senderAvatarObjectKey'])
-              ?.toString(),
+      senderAvatarPreset: _avatarField(
+        senderMap['avatarPreset'] ?? raw['senderAvatarPreset'],
+      ),
+      senderAvatarObjectKey: _avatarField(
+        senderMap['avatarObjectKey'] ?? raw['senderAvatarObjectKey'],
+      ),
     );
+  }
+
+  String? _avatarField(dynamic raw) {
+    final value = (raw ?? '').toString().trim();
+    return value.isEmpty ? null : value;
+  }
+
+  /// 从群成员列表构建 userId -> 头像字段，供历史消息回填。
+  Map<int, ({String? preset, String? objectKey})> avatarMapFromMembers(
+    List<Map<String, dynamic>> members,
+  ) {
+    final out = <int, ({String? preset, String? objectKey})>{};
+    for (final member in members) {
+      final uid = (member['userId'] as num?)?.toInt() ?? 0;
+      if (uid <= 0) continue;
+      out[uid] = (
+        preset: _avatarField(member['avatarPreset']),
+        objectKey: _avatarField(member['avatarObjectKey']),
+      );
+    }
+    return out;
+  }
+
+  List<NativeChatMessage> enrichMessagesWithAvatars(
+    List<NativeChatMessage> messages, {
+    required Map<int, ({String? preset, String? objectKey})> avatarByUserId,
+    String? peerAvatarPreset,
+    String? peerAvatarObjectKey,
+    int? peerUserId,
+    int selfUserId = 0,
+    String? selfAvatarPreset,
+    String? selfAvatarObjectKey,
+  }) {
+    return messages
+        .map((m) {
+          if (_hasAvatar(m.senderAvatarPreset, m.senderAvatarObjectKey)) {
+            return m;
+          }
+          if (m.senderUserId > 0) {
+            final member = avatarByUserId[m.senderUserId];
+            if (member != null &&
+                _hasAvatar(member.preset, member.objectKey)) {
+              return m.copyWith(
+                senderAvatarPreset: member.preset,
+                senderAvatarObjectKey: member.objectKey,
+              );
+            }
+          }
+          if (peerUserId != null &&
+              peerUserId > 0 &&
+              m.senderUserId == peerUserId &&
+              _hasAvatar(peerAvatarPreset, peerAvatarObjectKey)) {
+            return m.copyWith(
+              senderAvatarPreset: peerAvatarPreset,
+              senderAvatarObjectKey: peerAvatarObjectKey,
+            );
+          }
+          if (selfUserId > 0 &&
+              m.senderUserId == selfUserId &&
+              _hasAvatar(selfAvatarPreset, selfAvatarObjectKey)) {
+            return m.copyWith(
+              senderAvatarPreset: selfAvatarPreset,
+              senderAvatarObjectKey: selfAvatarObjectKey,
+            );
+          }
+          return m;
+        })
+        .toList(growable: false);
+  }
+
+  bool _hasAvatar(String? preset, String? objectKey) {
+    return (preset ?? '').trim().isNotEmpty ||
+        (objectKey ?? '').trim().isNotEmpty;
   }
 
   String _previewFrom(Map<String, dynamic> raw) {

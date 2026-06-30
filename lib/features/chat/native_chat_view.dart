@@ -247,11 +247,14 @@ class _NativeChatViewState extends State<NativeChatView>
   void _onScroll() {
     if (!_scrollController.hasClients || _loadingOlder) return;
     final pos = _scrollController.position;
-    // reverse 列表：底部为最新消息（pixels≈0），顶部为历史（pixels≈maxScrollExtent）。
-    if (pos.maxScrollExtent - pos.pixels <= 48) {
+    // 正序列表：历史在顶部，最新消息在底部。
+    if (pos.pixels <= 48) {
       unawaited(_loadOlder());
     }
-    if (_locatedMode && _hasNewer && !_loadingNewer && pos.pixels <= 72) {
+    if (_locatedMode &&
+        _hasNewer &&
+        !_loadingNewer &&
+        pos.maxScrollExtent - pos.pixels <= 72) {
       unawaited(_loadNewer());
     }
     _updateStickBottomState();
@@ -382,7 +385,7 @@ class _NativeChatViewState extends State<NativeChatView>
       }
     });
     if (stickBottom) {
-      _scrollBottom(gentle: true);
+      _scrollToPreferredAnchor(gentle: true);
     }
     unawaited(_markReadIfNeeded());
     if (_isPrivate && msg.senderUserId != widget.session.userId) {
@@ -527,7 +530,51 @@ class _NativeChatViewState extends State<NativeChatView>
 
   bool get _isNearBottom {
     if (!_scrollController.hasClients) return true;
-    return _scrollController.position.pixels <= 72;
+    return _scrollController.position.maxScrollExtent -
+            _scrollController.position.pixels <=
+        72;
+  }
+
+  /// 消息较少、未撑满一屏时，从顶部往下排（新对话首条消息在输入框上方区域顶部）。
+  bool get _shouldAnchorMessagesAtTop {
+    if (_messages.length <= 1) return true;
+    if (!_scrollController.hasClients) return _messages.length <= 1;
+    return _scrollController.position.maxScrollExtent < 72;
+  }
+
+  void _scrollToPreferredAnchor({
+    bool animated = false,
+    bool force = false,
+    bool gentle = false,
+  }) {
+    if (_shouldAnchorMessagesAtTop) {
+      _scrollTop(animated: animated, force: force);
+    } else {
+      _scrollBottom(animated: animated, force: force, gentle: gentle);
+    }
+  }
+
+  void _scrollTop({bool animated = false, bool force = false}) {
+    if (_locatedMode && !force) return;
+    final gen = ++_scrollBottomGen;
+
+    void doScroll() {
+      if (!mounted || gen != _scrollBottomGen) return;
+      if (!_scrollController.hasClients) return;
+      if (animated) {
+        unawaited(
+          _scrollController.animateTo(
+            0,
+            duration: const Duration(milliseconds: 280),
+            curve: Curves.easeOutCubic,
+          ),
+        );
+      } else {
+        _scrollController.jumpTo(0);
+      }
+    }
+
+    WidgetsBinding.instance.addPostFrameCallback((_) => doScroll());
   }
 
   bool _messagePeerRead(NativeChatMessage m) {
@@ -735,7 +782,7 @@ class _NativeChatViewState extends State<NativeChatView>
         if (!conversationChanged) {
           setState(_clearPendingNewMessages);
         }
-        _scrollBottom(force: true);
+        _scrollToPreferredAnchor(force: true);
       } else {
         _recountPendingNewMessages();
       }
@@ -871,7 +918,7 @@ class _NativeChatViewState extends State<NativeChatView>
     if (ctx == null) return;
     Scrollable.ensureVisible(
       ctx,
-      alignment: 0.72,
+      alignment: 0.35,
       duration: const Duration(milliseconds: 280),
       curve: Curves.easeOutCubic,
     );
@@ -967,7 +1014,7 @@ class _NativeChatViewState extends State<NativeChatView>
   }
 
   void _scheduleKeyboardScroll() {
-    if (!_isNearBottom) return;
+    if (!_isNearBottom || _shouldAnchorMessagesAtTop) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       _scrollBottom(force: true, gentle: true);
@@ -1004,7 +1051,7 @@ class _NativeChatViewState extends State<NativeChatView>
       await _load(silent: true);
       if (mounted) {
         setState(_clearPendingNewMessages);
-        _scrollBottom(force: true);
+        _scrollToPreferredAnchor(force: true);
       }
     } catch (e) {
       _showToast('发送失败：${friendlyErrorText(e)}');
@@ -1747,7 +1794,7 @@ class _NativeChatViewState extends State<NativeChatView>
     void doScroll() {
       if (!mounted || gen != _scrollBottomGen) return;
       if (!_scrollController.hasClients) return;
-      const bottom = 0.0;
+      final bottom = _scrollController.position.maxScrollExtent;
       if (animated) {
         unawaited(
           _scrollController.animateTo(
@@ -1981,7 +2028,7 @@ class _NativeChatViewState extends State<NativeChatView>
         : memberLabel.isEmpty
         ? '群聊'
         : memberLabel;
-    final listEntries = _buildListEntries().reversed.toList(growable: false);
+    final listEntries = _buildListEntries();
     final inputHint = locked
         ? '群聊已解散，无法发送消息'
         : _isPrivate
@@ -2064,7 +2111,7 @@ class _NativeChatViewState extends State<NativeChatView>
                         onNotification: _onMessageListScroll,
                         child: ListView.builder(
                           controller: _scrollController,
-                          reverse: true,
+                          reverse: false,
                           physics: const ClampingScrollPhysics(),
                           cacheExtent: 640,
                           addAutomaticKeepAlives: false,
@@ -2077,7 +2124,7 @@ class _NativeChatViewState extends State<NativeChatView>
                               (_locatedMode && _hasNewer ? 1 : 0),
                           itemBuilder: (_, index) {
                             final hasNewerFooter = _locatedMode && _hasNewer;
-                            if (hasNewerFooter && index == 0) {
+                            if (hasNewerFooter && index == listEntries.length) {
                               return Padding(
                                 padding: const EdgeInsets.symmetric(
                                   vertical: 10,
@@ -2098,8 +2145,7 @@ class _NativeChatViewState extends State<NativeChatView>
                                 ),
                               );
                             }
-                            final entryIndex = hasNewerFooter ? index - 1 : index;
-                            final entry = listEntries[entryIndex];
+                            final entry = listEntries[index];
                             if (entry.dividerLabel != null) {
                               return ChatDateDivider(
                                 label: entry.dividerLabel!,

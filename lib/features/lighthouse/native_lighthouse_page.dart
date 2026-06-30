@@ -85,16 +85,7 @@ class _HeroMetric {
   final Color cellColor;
 }
 
-// ── HUN 配色 ────────────────────────────────────────────────────────────────
-// U = 正规公司高分成（45% / 近免税）→ 用 product navy，沉稳感
-// N = 简码区域低分成（10% / 6% 税）→ 用 copper，民营/地方感
-// H = 预留口径，未启用 → mute2 灰
-// Mixed = U+N 并存 → ink2 中性
-const Color _kHunColorU = LhColors.product;
-const Color _kHunColorN = LhColors.copper;
-const Color _kHunColorH = LhColors.mute2;
-const Color _kHunColorMixed = LhColors.ink2;
-
+// HUN 行内分类 — primary 算法；颜色/标签读 metrics.ui.hunOptions
 class _HunInfo {
   const _HunInfo({required this.u, required this.n, required this.h});
   final double u, n, h;
@@ -116,66 +107,149 @@ class _HunInfo {
     if (hasU && hasN && uShare > 0.30 && uShare < 0.70) return 'mixed';
     return u >= n ? 'U' : 'N';
   }
+}
 
-  Color get primaryColor {
-    switch (primary) {
-      case 'U': return _kHunColorU;
-      case 'N': return _kHunColorN;
-      case 'H': return _kHunColorH;
-      case 'mixed': return _kHunColorMixed;
-    }
-    return LhColors.mute2;
-  }
-
-  /// 行内 tag 用的短标签
-  String get primaryLabel {
-    switch (primary) {
-      case 'U': return 'U';
-      case 'N': return 'N';
-      case 'H': return 'H';
-      case 'mixed': return 'U·N';
-    }
-    return '';
+Color _lhColorFromKey(String? key) {
+  switch (key) {
+    case 'pos':
+      return LhColors.pos;
+    case 'neg':
+      return LhColors.neg;
+    case 'product':
+      return LhColors.product;
+    case 'copper':
+      return LhColors.copper;
+    case 'cnpc':
+      return LhColors.cnpc;
+    case 'pingan':
+      return LhColors.pingan;
+    case 'ink2':
+      return LhColors.ink2;
+    case 'ink':
+      return LhColors.ink;
+    default:
+      return LhColors.mute;
   }
 }
 
-const _kHeroMetrics = {
-  'product': <_HeroMetric>[
-    _HeroMetric(key: 'profit', label: '毛利润', isRate: false, cellColor: LhColors.pos),
-    _HeroMetric(key: 'gmv', label: '引流GMV', isRate: false, cellColor: LhColors.product),
-    _HeroMetric(key: 'rate', label: '毛利率', isRate: true, cellColor: LhColors.copper),
-    _HeroMetric(key: 'revenue', label: '收入', isRate: false, cellColor: LhColors.cnpc),
-    _HeroMetric(key: 'cost', label: '成本', isRate: false, cellColor: LhColors.neg),
-    _HeroMetric(key: 'tax', label: '税务成本', isRate: false, cellColor: LhColors.mute),
-  ],
-  'supply': <_HeroMetric>[
-    _HeroMetric(key: 'sales', label: '规模', isRate: false, cellColor: LhColors.pingan),
-    _HeroMetric(key: 'revenue', label: '收入', isRate: false, cellColor: LhColors.cnpc),
-    _HeroMetric(key: 'cost', label: '成本', isRate: false, cellColor: LhColors.neg),
-    _HeroMetric(key: 'profit', label: '毛利润', isRate: false, cellColor: LhColors.pos),
-    _HeroMetric(key: 'rate', label: '毛利率', isRate: true, cellColor: LhColors.copper),
-  ],
-  'channel': <_HeroMetric>[
-    _HeroMetric(key: 'profit', label: '利润', isRate: false, cellColor: LhColors.pos),
-    _HeroMetric(key: 'revenue', label: '收入', isRate: false, cellColor: LhColors.cnpc),
-    _HeroMetric(key: 'cost', label: '成本', isRate: false, cellColor: LhColors.neg),
-    _HeroMetric(key: 'rate', label: '毛利率', isRate: true, cellColor: LhColors.copper),
-  ],
-};
+/// 后端尚未返回 metrics.ui 时的本地兜底（与 ui_schema.go 保持一致）。
+Map<String, dynamic> _fallbackUiRoot() {
+  Map<String, dynamic> metric(String key, String label, String short, String colorKey, {bool listDefault = true, bool sortable = true, bool hero = false, bool isRate = false}) =>
+      {'key': key, 'label': label, 'short': short, 'colorKey': colorKey, 'listDefault': listDefault, 'sortable': sortable, 'hero': hero, 'isRate': isRate};
 
-// Category groups per tab
-const _kCategoryOverride = {
-  'product': ['全部', '能源', '出行', '运营商', 'Fintech'],
-};
+  final hunOptions = [
+    {'value': '全部', 'label': '全部', 'colorKey': 'ink', 'match': '', 'cubeValue': '全部'},
+    {'value': 'U', 'label': 'U', 'colorKey': 'product', 'match': 'U', 'cubeValue': 'U', 'badge': 'U'},
+    {'value': 'N', 'label': 'N', 'colorKey': 'copper', 'match': 'N', 'cubeValue': 'N', 'badge': 'N'},
+    {'value': '混合', 'label': '混合', 'colorKey': 'ink2', 'match': 'mixed', 'cubeValue': 'mixed', 'badge': 'U·N'},
+    {'value': 'H', 'label': 'H', 'colorKey': 'mute2', 'match': 'H', 'cubeValue': 'H', 'badge': 'H'},
+  ];
 
-List<String> _getGroups(String tab, List<Map<String, dynamic>> rows) {
-  if (_kCategoryOverride.containsKey(tab)) return _kCategoryOverride[tab]!;
+  Map<String, dynamic> tab(String name, List<Map<String, dynamic>> metrics, List<String> defaultMetrics, List<String> heroMetrics, {List<String>? categories, List<Map<String, dynamic>>? filters}) => {
+        'metrics': metrics,
+        'defaultMetrics': defaultMetrics,
+        if (categories != null) 'categories': categories,
+        if (filters != null) 'filters': filters,
+        'heroMetrics': heroMetrics,
+      };
+
+  return {
+    'tabs': {
+      'product': tab(
+        'product',
+        [
+          metric('sales', '销售额', '销售', 'pingan'),
+          metric('gmv', '引流GMV', '引流', 'product'),
+          metric('gmv2', 'GMV', 'GMV', 'product'),
+          metric('its', 'ITS', 'ITS', 'mute'),
+          metric('itsAfter', '折后ITS', '折ITS', 'mute'),
+          metric('spread', '利差', '利差', 'copper'),
+          metric('woa', 'WOA', 'WOA', 'mute'),
+          metric('revenue', '收入', '收入', 'cnpc'),
+          metric('totalCost', '成本', '成本', 'neg'),
+          metric('cost', '业务成本', '业务', 'neg'),
+          metric('tax', '税务成本', '税务', 'mute'),
+          metric('profit', '毛利润', '毛利', 'pos', listDefault: false, hero: true),
+          metric('rate', '毛利率', '毛利率', 'copper', listDefault: false, hero: true, isRate: true),
+        ],
+        ['sales', 'gmv', 'gmv2', 'its', 'itsAfter', 'spread', 'woa', 'revenue', 'totalCost', 'cost', 'tax'],
+        ['profit', 'gmv', 'rate', 'revenue', 'cost', 'tax'],
+        categories: ['全部', '能源', '出行', '运营商', 'Fintech'],
+      ),
+      'supply': tab(
+        'supply',
+        [
+          metric('sales', '销售额', '销售', 'pingan'),
+          metric('gmv', '引流GMV', '引流', 'product'),
+          metric('cost', '业务成本', '业务', 'neg'),
+          metric('tax', '税务成本', '税务', 'mute'),
+          metric('spread', '利差', '利差', 'copper'),
+          metric('saasFee', 'SAAS服务费', 'SAAS', 'mute'),
+          metric('woa', 'WOA', 'WOA', 'mute'),
+          metric('projectCost', '项目成本', '项目', 'mute'),
+          metric('deferred', '抵扣延期分润', '延期', 'mute'),
+          metric('discount', '折扣返点', '折扣', 'copper', sortable: false),
+          metric('profit', '毛利润', '毛利', 'pos', listDefault: false, hero: true),
+          metric('rate', '毛利率', '毛利率', 'copper', listDefault: false, hero: true, isRate: true),
+        ],
+        ['sales', 'gmv', 'cost', 'tax', 'spread', 'saasFee', 'woa', 'projectCost', 'deferred', 'discount'],
+        ['sales', 'revenue', 'cost', 'profit', 'rate'],
+        filters: [
+          {'key': 'fuel', 'label': '筛选', 'options': [{'value': '全部', 'label': '全部'}, {'value': '汽油', 'label': '汽油'}]},
+          {'key': 'hun', 'label': 'U/N', 'options': hunOptions},
+        ],
+      ),
+      'channel': tab(
+        'channel',
+        [
+          metric('sales', '销售额', '销售', 'pingan'),
+          metric('gmv', '引流GMV', '引流', 'product'),
+          metric('cost', '业务成本', '业务', 'neg'),
+          metric('tax', '税务成本', '税务', 'mute'),
+          metric('spread', '利差', '利差', 'copper'),
+          metric('saasFee', 'SAAS服务费', 'SAAS', 'mute'),
+          metric('woa', 'WOA', 'WOA', 'mute'),
+          metric('projectCost', '项目成本', '项目', 'mute'),
+          metric('deferred', '抵扣延期分润', '延期', 'mute'),
+          metric('profit', '毛利润', '毛利', 'pos', listDefault: false, hero: true),
+          metric('rate', '毛利率', '毛利率', 'copper', listDefault: false, hero: true, isRate: true),
+        ],
+        ['sales', 'gmv', 'cost', 'tax', 'spread', 'saasFee', 'woa', 'projectCost', 'deferred'],
+        ['profit', 'revenue', 'cost', 'rate'],
+        filters: [
+          {'key': 'hun', 'label': 'U/N', 'options': hunOptions},
+        ],
+      ),
+    },
+    'defaultSort': {'field': 'profit', 'desc': true},
+    'resetMetrics': ['sales', 'cost', 'gmv'],
+    'resetSort': {'field': 'sales', 'desc': true},
+    'hunOptions': hunOptions,
+    'cubeFilters': [
+      {'key': 'product', 'label': '产品'},
+      {'key': 'supply', 'label': '供给'},
+      {'key': 'supplyHun', 'label': '供U/N', 'hun': true},
+      {'key': 'channel', 'label': '渠道'},
+      {'key': 'channelHun', 'label': '渠U/N', 'hun': true},
+    ],
+  };
+}
+
+// Category groups: loaded from backend metrics.ui (see _categoryOptions).
+List<String> _getGroups(String tab, List<Map<String, dynamic>> rows, {List<String>? override}) {
+  if (override != null && override.isNotEmpty) return override;
   final groups = <String>{'全部'};
   for (final r in rows) {
     final g = r['group']?.toString();
-    if (g != null) groups.add(g);
+    if (g != null && g.isNotEmpty) groups.add(g);
   }
-  return groups.toList();
+  final list = groups.toList();
+  list.sort((a, b) {
+    if (a == '全部') return -1;
+    if (b == '全部') return 1;
+    return a.compareTo(b);
+  });
+  return list;
 }
 
 // Formatting
@@ -855,38 +929,6 @@ class NativeLighthousePage extends StatefulWidget {
   State<NativeLighthousePage> createState() => _NativeLighthousePageState();
 }
 
-// METRIC_BY_TAB mirrors the HTML constant
-const _kMetricByTab = {
-  'product': ['sales', 'gmv', 'gmv2', 'its', 'itsAfter', 'spread', 'woa', 'revenue', 'totalCost', 'cost', 'tax'],
-  'supply':  ['sales', 'gmv', 'cost', 'tax', 'spread', 'saasFee', 'woa', 'projectCost', 'deferred', 'discount'],
-  'channel': ['sales', 'gmv', 'cost', 'tax', 'spread', 'saasFee', 'woa', 'projectCost', 'deferred'],
-};
-
-const _kMetricFull = {
-  'profit': '毛利润', 'sales': '销售额', 'gmv': '引流GMV', 'gmv2': 'GMV',
-  'its': 'ITS', 'itsAfter': '折后ITS', 'revenue': '收入', 'totalCost': '成本',
-  'cost': '业务成本', 'tax': '税务成本', 'woa': 'WOA', 'spread': '利差',
-  'projectCost': '项目成本', 'saasFee': 'SAAS服务费', 'deferred': '抵扣延期分润', 'discount': '折扣返点',
-};
-
-const _kMetricShort = {
-  'profit': '毛利', 'sales': '销售', 'gmv': '引流', 'gmv2': 'GMV',
-  'its': 'ITS', 'itsAfter': '折ITS', 'revenue': '收入', 'totalCost': '成本',
-  'cost': '业务', 'tax': '税务', 'woa': 'WOA', 'spread': '利差',
-  'projectCost': '项目', 'saasFee': 'SAAS', 'deferred': '延期', 'discount': '折扣',
-};
-
-// Initial metrics per tab (HTML state.metrics default = all available)
-const _kInitialMetrics = {
-  'product': ['sales', 'gmv', 'gmv2', 'its', 'itsAfter', 'spread', 'woa', 'revenue', 'totalCost', 'cost', 'tax'],
-  'supply':  ['sales', 'gmv', 'cost', 'tax', 'spread', 'saasFee', 'woa', 'projectCost', 'deferred', 'discount'],
-  'channel': ['sales', 'gmv', 'cost', 'tax', 'spread', 'saasFee', 'woa', 'projectCost', 'deferred'],
-};
-
-// Reset target when clicking「默认」(HTML ddReset)
-const _kResetMetrics = ['sales', 'cost', 'gmv'];
-
-// ignore: unused_field
 enum _DdMode { none, category, metric, filter, hun }
 
 class _NativeLighthousePageState extends State<NativeLighthousePage> {
@@ -949,19 +991,28 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   bool _cubeShowOwnerInitials = true;   // owner 质心圆里的首字
   bool _cubeTextPanelOpen = false;      // 文字下拉是否展开
   DateTime? _lastSyncedAt;
+  bool _refreshing = false; // 手动点击「数据同步」刷新中
+  // ── 周期实例筛选（哪一天 / 哪个周 / 月 / 季 / 年）──
+  // 0 = 当前实例（今日/本周/本月/本季/今年），-1 = 上一个，以此类推。
+  int _periodOffset = 0;
+  bool _periodPickerOpen = false;
+  // 点击 hero 小格 → 进入指标分析页（per-metric drill-down）
+  String? _metricPageKey;
   String? _detailKey; // non-null when detail view is open
   String? _detailType;
   String _detailSubTab = '';
+  String _detailSkuQuery = '';
+  final TextEditingController _detailSkuSearchCtrl = TextEditingController();
 
   // Sort state
   String _sortField = 'profit';
   bool _sortDesc = true;
 
-  // Per-tab selected metrics (shared by main list + detail list)
-  late final Map<String, List<String>> _metrics = {
-    'product': List.from(_kInitialMetrics['product']!),
-    'supply':  List.from(_kInitialMetrics['supply']!),
-    'channel': List.from(_kInitialMetrics['channel']!),
+  // Per-tab selected metrics (labels/keys from backend metrics.ui)
+  final Map<String, List<String>> _metrics = {
+    'product': <String>[],
+    'supply': <String>[],
+    'channel': <String>[],
   };
 
   // Dropdown — per-button GlobalKey so panel anchors to the specific tapped button,
@@ -976,6 +1027,196 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   /// Metrics/sort context tab — detail page uses detail type (same as outer tab).
   String get _metricsTab => _detailType ?? _tab;
 
+  bool get _isPageBusy => _loading || _cubeLoading;
+
+  Map<String, dynamic>? get _uiRoot {
+    final raw = _bundle?.metrics['ui'];
+    if (raw is Map && raw.isNotEmpty) {
+      return raw.cast<String, dynamic>();
+    }
+    if (_bundle != null) return _fallbackUiRoot();
+    return null;
+  }
+
+  Map<String, dynamic>? _uiTab(String tab) =>
+      (_uiRoot?['tabs'] as Map?)?[tab] as Map<String, dynamic>?;
+
+  List<Map<String, dynamic>> _uiMetricDefs(String tab) {
+    final raw = _uiTab(tab)?['metrics'];
+    if (raw is List) {
+      return raw.whereType<Map>().map((e) => e.cast<String, dynamic>()).toList();
+    }
+    return const [];
+  }
+
+  Map<String, Map<String, dynamic>> _uiMetricDefMap(String tab) {
+    return {for (final d in _uiMetricDefs(tab)) d['key'] as String: d};
+  }
+
+  String _metricLabel(String key, {String tab = ''}) {
+    final t = tab.isEmpty ? _metricsTab : tab;
+    return _uiMetricDefMap(t)[key]?['label'] as String? ?? key;
+  }
+
+  String _metricShort(String key, {String tab = ''}) {
+    final t = tab.isEmpty ? _metricsTab : tab;
+    return _uiMetricDefMap(t)[key]?['short'] as String? ?? key;
+  }
+
+  List<String> _uiDefaultMetrics(String tab) {
+    final raw = _uiTab(tab)?['defaultMetrics'];
+    if (raw is List) return raw.cast<String>();
+    return _uiMetricDefs(tab)
+        .where((d) => d['listDefault'] == true)
+        .map((d) => d['key'] as String)
+        .toList();
+  }
+
+  List<String> _uiResetMetrics() {
+    final raw = _uiRoot?['resetMetrics'];
+    if (raw is List && raw.isNotEmpty) return raw.cast<String>();
+    return const ['sales', 'cost', 'gmv'];
+  }
+
+  String _uiResetSortField() {
+    final reset = _uiRoot?['resetSort'];
+    if (reset is Map && reset['field'] is String) return reset['field'] as String;
+    return 'sales';
+  }
+
+  List<_HeroMetric> _heroMetricsFor(String tab) {
+    final order = (_uiTab(tab)?['heroMetrics'] as List?)?.cast<String>() ??
+        const ['profit', 'rate'];
+    final defs = _uiMetricDefMap(tab);
+    final out = <_HeroMetric>[];
+    for (final key in order) {
+      final d = defs[key];
+      if (d == null) continue;
+      out.add(_HeroMetric(
+        key: key,
+        label: d['label'] as String? ?? key,
+        isRate: d['isRate'] == true,
+        cellColor: _lhColorFromKey(d['colorKey'] as String?),
+      ));
+    }
+    return out;
+  }
+
+  List<Map<String, dynamic>> _uiFilters(String tab) {
+    final raw = _uiTab(tab)?['filters'];
+    if (raw is List) {
+      return raw.whereType<Map>().map((e) => e.cast<String, dynamic>()).toList();
+    }
+    return const [];
+  }
+
+  Map<String, dynamic>? _uiFilterDef(String tab, String key) {
+    for (final f in _uiFilters(tab)) {
+      if (f['key'] == key) return f;
+    }
+    return null;
+  }
+
+  bool _hasUiFilter(String tab, String key) => _uiFilterDef(tab, key) != null;
+
+  List<Map<String, dynamic>> _uiFilterOptions(String tab, String key) {
+    final raw = _uiFilterDef(tab, key)?['options'];
+    if (raw is List) {
+      return raw.whereType<Map>().map((e) => e.cast<String, dynamic>()).toList();
+    }
+    return const [];
+  }
+
+  List<Map<String, dynamic>> get _hunOptions {
+    final raw = _uiRoot?['hunOptions'];
+    if (raw is List) {
+      return raw.whereType<Map>().map((e) => e.cast<String, dynamic>()).toList();
+    }
+    return _uiFilterOptions('supply', 'hun');
+  }
+
+  List<Map<String, dynamic>> get _cubeFilterDefs {
+    final raw = _uiRoot?['cubeFilters'];
+    if (raw is List) {
+      return raw.whereType<Map>().map((e) => e.cast<String, dynamic>()).toList();
+    }
+    return const [];
+  }
+
+  Map<String, dynamic>? _hunOptionByToken(String token) {
+    if (token.isEmpty || token == 'none') return null;
+    for (final o in _hunOptions) {
+      if (o['value'] == token || o['match'] == token || o['cubeValue'] == token) {
+        return o;
+      }
+    }
+    return null;
+  }
+
+  String _hunMatchFor(String filterValue) {
+    final o = _hunOptionByToken(filterValue);
+    return o?['match'] as String? ?? (filterValue == '全部' ? '' : filterValue);
+  }
+
+  Color _hunColorFor(String token) =>
+      _lhColorFromKey(_hunOptionByToken(token)?['colorKey'] as String?);
+
+  String _hunBadgeFor(String token) {
+    final o = _hunOptionByToken(token);
+    return o?['badge'] as String? ?? o?['label'] as String? ?? token;
+  }
+
+  String _hunLabelFor(String token) {
+    final o = _hunOptionByToken(token);
+    return o?['label'] as String? ?? token;
+  }
+
+  String _cubeFilterLabel(String key) {
+    for (final d in _cubeFilterDefs) {
+      if (d['key'] == key) return d['label'] as String? ?? key;
+    }
+    return key;
+  }
+
+  List<Map<String, String>> _cubeHunOptionPairs() {
+    final out = <Map<String, String>>[];
+    for (final o in _hunOptions) {
+      final value = o['value'] as String? ?? '';
+      if (value == '全部') {
+        out.add({'value': '全部', 'label': '全部'});
+        continue;
+      }
+      final cubeValue = o['cubeValue'] as String? ?? o['match'] as String? ?? value;
+      out.add({
+        'value': cubeValue,
+        'label': o['label'] as String? ?? cubeValue,
+      });
+    }
+    if (out.isEmpty) return const [{'value': '全部', 'label': '全部'}];
+    return out;
+  }
+
+  String _hunBarTitle() =>
+      (_uiFilterDef('supply', 'hun')?['label'] as String?) ?? 'U/N';
+
+  List<String> _categoryOptions(String tab) {
+    final raw = _uiTab(tab)?['categories'];
+    if (raw is List && raw.isNotEmpty) return raw.cast<String>();
+    if (_bundle == null) return const ['全部'];
+    return _getGroups(tab, _bundle!.rowsOf(tab));
+  }
+
+  void _syncMetricsFromUI() {
+    for (final tab in const ['product', 'supply', 'channel']) {
+      final defaults = _uiDefaultMetrics(tab);
+      if (defaults.isEmpty) continue;
+      final valid = defaults.toSet();
+      final current = _metrics[tab] ?? const [];
+      final pruned = current.where(valid.contains).toList();
+      _metrics[tab] = pruned.isEmpty ? List<String>.from(defaults) : List<String>.from(pruned);
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -989,18 +1230,105 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   @override
   void dispose() {
     _ddEntry?.remove();
+    _detailSkuSearchCtrl.dispose();
     super.dispose();
+  }
+
+  void _resetDetailSkuSearch() {
+    _detailSkuQuery = '';
+    if (_detailSkuSearchCtrl.text.isNotEmpty) {
+      _detailSkuSearchCtrl.clear();
+    }
+  }
+
+  String _normalizeSearchText(String raw) =>
+      raw.trim().toLowerCase().replaceAll(RegExp(r'\s+'), '');
+
+  /// SKU 模糊匹配：名称/分组包含关键词，或关键词字符按序出现（子序列）。
+  bool _skuRowMatchesQuery(Map<String, dynamic> row, String query) {
+    final q = _normalizeSearchText(query);
+    if (q.isEmpty) return true;
+    final name = _normalizeSearchText(row['name']?.toString() ?? '');
+    final group = _normalizeSearchText(row['group']?.toString() ?? '');
+    if (name.contains(q) || group.contains(q)) return true;
+    bool subseq(String text) {
+      var ti = 0;
+      for (var i = 0; i < q.length; i++) {
+        final idx = text.indexOf(q[i], ti);
+        if (idx < 0) return false;
+        ti = idx + 1;
+      }
+      return true;
+    }
+    return subseq(name) || subseq(group);
+  }
+
+  Widget _buildDetailSkuSearchBar() {
+    final active = _detailSkuQuery.trim().isNotEmpty;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(22, 10, 22, 0),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+        decoration: BoxDecoration(
+          color: LhColors.paper,
+          border: Border.all(color: active ? LhColors.ink2 : LhColors.line, width: 1),
+          borderRadius: BorderRadius.circular(5),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.search_rounded, size: 15, color: active ? LhColors.ink : LhColors.mute),
+            const SizedBox(width: 8),
+            Expanded(
+              child: TextField(
+                controller: _detailSkuSearchCtrl,
+                style: LhTypography.sans(size: 12, color: LhColors.ink, weight: FontWeight.w500),
+                decoration: InputDecoration(
+                  isDense: true,
+                  hintText: '搜索 SKU 名称…',
+                  hintStyle: LhTypography.sans(size: 12, color: LhColors.mute2, weight: FontWeight.w400),
+                  border: InputBorder.none,
+                  contentPadding: const EdgeInsets.symmetric(vertical: 8),
+                ),
+                textInputAction: TextInputAction.search,
+                onChanged: (v) => setState(() {
+                  _detailSkuQuery = v;
+                  _detailPage = 1;
+                }),
+              ),
+            ),
+            if (active)
+              GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () => setState(() {
+                  _resetDetailSkuSearch();
+                  _detailPage = 1;
+                }),
+                child: Padding(
+                  padding: const EdgeInsets.all(4),
+                  child: Icon(Icons.close_rounded, size: 14, color: LhColors.mute),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
   }
 
   Future<void> _load() async {
     final requestedPeriod = _period;
     final requestedFuel = _supplyFuelFilter;
+    final requestedOffset = _periodOffset;
     try {
       final bundle = await LighthouseService(session: widget.session)
-          .fetchOverview(period: requestedPeriod, fuel: requestedFuel);
+          .fetchOverview(
+        period: requestedPeriod,
+        fuel: requestedFuel,
+        offset: requestedOffset,
+      );
       if (mounted &&
           requestedPeriod == _period &&
-          requestedFuel == _supplyFuelFilter) {
+          requestedFuel == _supplyFuelFilter &&
+          requestedOffset == _periodOffset) {
         setState(() {
           _bundle = bundle;
           _loading = false;
@@ -1012,19 +1340,37 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           _cubeError = false;
           // 「数据已同步」展示前端拉取数据的当前时刻（强制中国时间 UTC+8，不依赖设备时区）。
           _lastSyncedAt = _nowCST();
-          _pruneDeadMetrics();
+          _syncMetricsFromUI();
         });
       }
     } catch (e) {
       if (mounted &&
           requestedPeriod == _period &&
-          requestedFuel == _supplyFuelFilter) {
+          requestedFuel == _supplyFuelFilter &&
+          requestedOffset == _periodOffset) {
         setState(() {
           _loading = false;
           _loadError = e.toString().replaceFirst('Exception: ', '');
         });
       }
     }
+  }
+
+  /// 手动刷新 — 点击顶部「数据已同步」胶囊触发，重新拉取概览 + 立方体。
+  /// 不清空当前页面（保留视图），只在胶囊上转小圈，完成后更新同步时间。
+  Future<void> _refresh() async {
+    if (_refreshing || _loading) return;
+    setState(() {
+      _refreshing = true;
+      _rowsCacheKey = '';
+      _rowsCache = null;
+      _cubeCacheKey = '';
+      _cubeData = null;
+      _cubeError = false;
+    });
+    await _load();
+    if (_tab == 'analysis') await _loadAnalysisCube();
+    if (mounted) setState(() => _refreshing = false);
   }
 
   /// 切换油品筛选 → 带 `fuel` 重新请求（后端真过滤，而非前端乘系数）。
@@ -1036,6 +1382,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       _loadError = null;
       _detailKey = null;
       _detailType = null;
+      _resetDetailSkuSearch();
       _rowsCacheKey = '';
       _rowsCache = null;
       _cubeCacheKey = '';
@@ -1047,7 +1394,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   }
 
   Future<void> _loadAnalysisCube() async {
-    final key = '$_period|$_supplyFuelFilter';
+    final key = '$_period|$_periodOffset|$_supplyFuelFilter';
     if (_cubeLoading) return;
     if (_cubeCacheKey == key && _cubeData != null) return;
 
@@ -1055,6 +1402,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     try {
       final data = await LighthouseService(session: widget.session).fetchAnalysisCube(
         period: _period,
+        offset: _periodOffset,
         fuel: _supplyFuelFilter != '全部' ? _supplyFuelFilter : null,
       );
       if (!mounted) return;
@@ -1199,14 +1547,12 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     return '$mo-$dd $hh:$mm';
   }
 
-  // 指标选择恢复为固定白名单（与原版一致，不做运行时非零过滤）
   Set<String> _liveMetrics(String tab) {
-    final whitelist = _kMetricByTab[tab] ?? const <String>[];
-    return whitelist.toSet();
-  }
-
-  void _pruneDeadMetrics() {
-    // 保留方法签名，恢复原版行为：不主动裁剪已选指标。
+    final keys = _uiMetricDefs(tab)
+        .where((d) => d['listDefault'] == true)
+        .map((d) => d['key'] as String);
+    final set = keys.toSet();
+    return set.isEmpty ? _uiDefaultMetrics(tab).toSet() : set;
   }
 
   // Cached sorted/filtered rows — re-computed only when the source state changes.
@@ -1227,20 +1573,8 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     }
     // HUN 过滤（仅 supply / channel）
     if (_hunFilter != '全部' && (_tab == 'supply' || _tab == 'channel')) {
-      rows = rows.where((r) {
-        final h = _hunOf(r);
-        switch (_hunFilter) {
-          case 'U':
-            return h.primary == 'U';
-          case 'N':
-            return h.primary == 'N';
-          case 'H':
-            return h.primary == 'H';
-          case '混合':
-            return h.primary == 'mixed';
-        }
-        return true;
-      }).toList();
+      final match = _hunMatchFor(_hunFilter);
+      rows = rows.where((r) => _hunOf(r).primary == match).toList();
     }
     final result = List<Map<String, dynamic>>.from(rows)
       ..sort((a, b) {
@@ -1345,6 +1679,38 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       _mainFilterActive ||
       ((_tab == 'supply' || _tab == 'channel') && _hunFilter != '全部');
 
+  /// 当前 hero 上方激活的所有筛选 → 返回 (label, value) 列表用于渲染 pills
+  /// 顺序按重要性：tab group → fuel → HUN
+  List<({String label, String value, VoidCallback onClear})> _activeHeroFilters() {
+    final list = <({String label, String value, VoidCallback onClear})>[];
+    const tabName = {'product': '产品', 'supply': '供给', 'channel': '渠道'};
+    if (_groupFilter != '全部') {
+      list.add((
+        label: tabName[_tab] ?? '分类',
+        value: _groupFilter,
+        onClear: () => setState(() {
+          _groupFilter = '全部';
+          if (_tab == 'supply') _supplyFuelFilter = '全部';
+        }),
+      ));
+    }
+    if (_tab == 'supply' && _supplyFuelFilter != '全部') {
+      list.add((
+        label: '油品',
+        value: _supplyFuelFilter,
+        onClear: () => setState(() => _supplyFuelFilter = '全部'),
+      ));
+    }
+    if ((_tab == 'supply' || _tab == 'channel') && _hunFilter != '全部') {
+      list.add((
+        label: _uiFilterDef(_tab, 'hun')?['label'] as String? ?? 'U/N',
+        value: _hunLabelFor(_hunFilter),
+        onClear: () => setState(() => _hunFilter = '全部'),
+      ));
+    }
+    return list;
+  }
+
   // ── Dropdown helpers ──────────────────────────────────────────────────────
   // 浮层使用 per-button GlobalKey 锚定到具体按钮，配合屏幕边界避让 + 入场动画
   void _closeDropdown() {
@@ -1405,47 +1771,46 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     if (rb == null || !rb.attached) return;
     final btnTopLeft = rb.localToGlobal(Offset.zero);
     final btnSize = rb.size;
-    final screen = MediaQuery.of(context).size;
-    final panelW = _panelWidthFor(mode);
+    final mq = MediaQuery.of(context);
+    final screen = mq.size;
+    final panelW = math.min(_panelWidthFor(mode), screen.width - 16);
 
-    // 垂直：默认贴按钮下沿；如果空间不够，翻到按钮上方
     const gap = 6.0;
-    const maxPanelH = 360.0;
-    final spaceBelow = screen.height - (btnTopLeft.dy + btnSize.height) - 12;
-    final placeBelow = spaceBelow >= 180; // 至少留 180 才放下方
+    const absoluteMaxH = 360.0;
+    final topInset = mq.padding.top + 8;
+    final bottomInset = mq.padding.bottom + 12;
+    final spaceBelow = screen.height - (btnTopLeft.dy + btnSize.height) - gap - bottomInset;
+    final spaceAbove = btnTopLeft.dy - gap - topInset;
+    // 优先在按钮下方展开，避免面板「往上飘」脱离触发按钮
+    final placeBelow = spaceBelow >= 88 || spaceBelow >= spaceAbove;
+    final panelMaxH = math.min(absoluteMaxH, math.max(120.0, placeBelow ? spaceBelow : spaceAbove));
     final top = placeBelow
-        ? (btnTopLeft.dy + btnSize.height + gap)
-        : (btnTopLeft.dy - gap - math.min(maxPanelH, spaceBelow + 200));
+        ? btnTopLeft.dy + btnSize.height + gap
+        : math.max(topInset, btnTopLeft.dy - gap - panelMaxH);
 
-    // 水平：默认右边沿对齐按钮右边沿；不够就左对齐按钮左边沿；都不行就贴屏幕边
     double left = btnTopLeft.dx + btnSize.width - panelW;
-    if (left < 8) {
-      left = btnTopLeft.dx; // 左对齐按钮
-    }
-    if (left + panelW > screen.width - 8) {
-      left = screen.width - 8 - panelW;
-    }
+    if (left < 8) left = btnTopLeft.dx;
+    if (left + panelW > screen.width - 8) left = screen.width - 8 - panelW;
     if (left < 8) left = 8;
 
     _ddEntry = OverlayEntry(
       builder: (overlayCtx) {
         return Stack(
           children: [
-            // 透明遮罩：点击空白处关闭
+            // 全屏遮罩：点外部收起（Web 上用 Listener 比 GestureDetector 更可靠）
             Positioned.fill(
-              child: GestureDetector(
+              child: Listener(
                 behavior: HitTestBehavior.opaque,
-                onTap: _closeDropdown,
-                child: const ColoredBox(color: Colors.transparent),
+                onPointerDown: (_) => _closeDropdown(),
+                child: ColoredBox(color: Colors.black.withAlpha(18)),
               ),
             ),
             Positioned(
               left: left,
               top: top,
               width: panelW,
-              child: GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTap: () {},
+              child: TapRegion(
+                onTapOutside: (_) => _closeDropdown(),
                 child: TweenAnimationBuilder<double>(
                   duration: const Duration(milliseconds: 140),
                   curve: Curves.easeOutCubic,
@@ -1463,6 +1828,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                     color: Colors.transparent,
                     child: _LhDropdownPanel(
                       width: panelW,
+                      maxHeight: panelMaxH,
                       child: _buildDropdownContent(mode),
                     ),
                   ),
@@ -1565,9 +1931,23 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     });
   }
 
-  // ── Supply fuel filter dropdown ───────────────────────────────────────────
   Widget _buildSupplyFilterDropdown() {
-    const options = ['全部', '汽油'];
+    return _buildUiFilterDropdown('fuel', currentValue: _supplyFuelFilter, onPick: (v) {
+      _closeDropdown();
+      _applyFuelFilter(v);
+    });
+  }
+
+  Widget _buildUiFilterDropdown(
+    String filterKey, {
+    required String currentValue,
+    required ValueChanged<String> onPick,
+  }) {
+    final def = _uiFilterDef(_tab, filterKey);
+    if (def == null) return const SizedBox.shrink();
+    final title = def['label'] as String? ?? filterKey;
+    final options = _uiFilterOptions(_tab, filterKey);
+
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1575,94 +1955,27 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text('筛选', style: LhTypography.mono(size: 9, color: LhColors.mute, weight: FontWeight.w600, letterSpacing: 1.5)),
+            Text(title, style: LhTypography.mono(size: 9, color: LhColors.mute, weight: FontWeight.w600, letterSpacing: 1.5)),
             GestureDetector(
-              onTap: () {
-                _closeDropdown();
-                _applyFuelFilter('全部');
-              },
+              onTap: () => onPick('全部'),
               child: Text('全部', style: LhTypography.sans(size: 10, color: LhColors.copper, weight: FontWeight.w500)),
             ),
           ],
         ),
         Container(height: 1, color: LhColors.line2, margin: const EdgeInsets.symmetric(vertical: 7)),
-        Wrap(
-          spacing: 4,
-          runSpacing: 4,
-          children: options.map((v) {
-            final isOn = _supplyFuelFilter == v;
-            return GestureDetector(
-              onTap: () {
-                _closeDropdown();
-                _applyFuelFilter(v);
-              },
-              child: Container(
-                padding: const EdgeInsets.fromLTRB(8, 3, 8, 3),
-                decoration: BoxDecoration(
-                  color: isOn ? LhColors.ink.withAlpha(13) : Colors.transparent,
-                  border: Border.all(color: isOn ? LhColors.ink : LhColors.line, width: 1),
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: Text(
-                  v,
-                  style: LhTypography.sans(
-                    size: 10,
-                    color: isOn ? LhColors.ink : LhColors.ink2,
-                    weight: isOn ? FontWeight.w600 : FontWeight.w500,
-                  ),
-                ),
-              ),
-            );
-          }).toList(),
-        ),
-      ],
-    );
-  }
-
-  // ── HUN dropdown — U/N/H 主分类筛选（仅 supply / channel） ─────────────────
-  Widget _buildHunDropdown() {
-    const options = <(String, String, Color)>[
-      ('全部', '全部', LhColors.ink),
-      ('U', 'U', _kHunColorU),
-      ('N', 'N', _kHunColorN),
-      ('混合', '混合', _kHunColorMixed),
-      ('H', 'H', _kHunColorH),
-    ];
-    return StatefulBuilder(builder: (ctx, setLocal) {
-      return Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Header
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text('U / N / H 分类', style: LhTypography.mono(size: 9, color: LhColors.mute, weight: FontWeight.w600, letterSpacing: 1.5)),
-              GestureDetector(
-                onTap: () {
-                  setState(() => _hunFilter = '全部');
-                  _closeDropdown();
-                },
-                child: Text('全部', style: LhTypography.sans(size: 10, color: LhColors.copper, weight: FontWeight.w500)),
-              ),
-            ],
-          ),
-          Container(height: 1, color: LhColors.line2, margin: const EdgeInsets.symmetric(vertical: 7)),
+        if (filterKey == 'hun')
           Column(
             children: options.map((opt) {
-              final value = opt.$1;
-              final label = opt.$2;
-              final color = opt.$3;
-              final isOn = _hunFilter == value;
+              final value = opt['value'] as String? ?? '';
+              final label = opt['label'] as String? ?? value;
+              final color = _lhColorFromKey(opt['colorKey'] as String?);
+              final isOn = currentValue == value;
               return GestureDetector(
-                onTap: () {
-                  setState(() => _hunFilter = value);
-                  _closeDropdown();
-                },
+                onTap: () => onPick(value),
                 behavior: HitTestBehavior.opaque,
                 child: Container(
                   margin: const EdgeInsets.only(bottom: 4),
-                  padding: const EdgeInsets.fromLTRB(8, 7, 8, 7),
+                  padding: const EdgeInsets.fromLTRB(8, 5, 8, 5),
                   decoration: BoxDecoration(
                     color: isOn ? color.withAlpha(14) : Colors.transparent,
                     border: Border.all(color: isOn ? color : LhColors.line, width: 1),
@@ -1671,20 +1984,25 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                   child: Row(
                     children: [
                       Container(
-                        width: 22,
-                        height: 22,
+                        width: 20,
+                        height: 20,
                         alignment: Alignment.center,
                         decoration: BoxDecoration(
                           color: isOn ? color : color.withAlpha(22),
                           borderRadius: BorderRadius.circular(4),
                         ),
                         child: Text(
-                          value == '全部' ? '∗' : (value == '混合' ? 'U·N' : value),
+                          value == '全部'
+                              ? '∗'
+                              : (_hunOptionByToken(value)?['badge'] as String? ??
+                                  _hunLabelFor(value)),
                           style: LhTypography.mono(
-                            size: value == '混合' ? 8.5 : 11,
-                            color: isOn ? Colors.white : color,
+                            size: (() {
+                              final badge = _hunOptionByToken(value)?['badge'] as String? ?? value;
+                              return badge.length > 2 ? 8.5 : 11.0;
+                            })(),
+                            color: isOn ? Colors.white : _hunColorFor(value),
                             weight: FontWeight.w700,
-                            letterSpacing: 0,
                           ),
                         ),
                       ),
@@ -1699,16 +2017,50 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                           ),
                         ),
                       ),
-                      if (isOn)
-                        Icon(Icons.check_rounded, size: 14, color: color),
+                      if (isOn) Icon(Icons.check_rounded, size: 14, color: color),
                     ],
                   ),
                 ),
               );
             }).toList(),
+          )
+        else
+          Wrap(
+            spacing: 4,
+            runSpacing: 4,
+            children: options.map((opt) {
+              final v = opt['value'] as String? ?? '';
+              final label = opt['label'] as String? ?? v;
+              final isOn = currentValue == v;
+              return GestureDetector(
+                onTap: () => onPick(v),
+                child: Container(
+                  padding: const EdgeInsets.fromLTRB(8, 3, 8, 3),
+                  decoration: BoxDecoration(
+                    color: isOn ? LhColors.ink.withAlpha(13) : Colors.transparent,
+                    border: Border.all(color: isOn ? LhColors.ink : LhColors.line, width: 1),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    label,
+                    style: LhTypography.sans(
+                      size: 10,
+                      color: isOn ? LhColors.ink : LhColors.ink2,
+                      weight: isOn ? FontWeight.w600 : FontWeight.w500,
+                    ),
+                  ),
+                ),
+              );
+            }).toList(),
           ),
-        ],
-      );
+      ],
+    );
+  }
+
+  Widget _buildHunDropdown() {
+    return _buildUiFilterDropdown('hun', currentValue: _hunFilter, onPick: (v) {
+      setState(() => _hunFilter = v);
+      _closeDropdown();
     });
   }
 
@@ -1724,11 +2076,18 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   // ── Metric + sort dropdown ────────────────────────────────────────────────
   Widget _buildMetricDropdown() {
     final tab = _metricsTab;
-    final live = _liveMetrics(tab);
-    final available = (_kMetricByTab[tab] ?? const <String>[])
-        .where(live.contains)
+    final defs = _uiMetricDefs(tab);
+    final available = defs
+        .where((d) => d['listDefault'] == true)
+        .map((d) => d['key'] as String)
         .toList();
-    final sortable = ['profit', ...available.where((k) => k != 'discount')];
+    var sortable = [
+      for (final d in defs)
+        if (d['sortable'] != false) d['key'] as String,
+    ];
+    if (sortable.isEmpty) {
+      sortable = ['profit', ...available.where((k) => k != 'discount')];
+    }
 
     return StatefulBuilder(builder: (ctx, setLocal) {
       final selected = _metrics[tab] ?? [];
@@ -1742,7 +2101,6 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -1750,8 +2108,8 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               GestureDetector(
                 onTap: () {
                   setState(() {
-                    _metrics[tab] = List.from(_kResetMetrics);
-                    _sortField = 'sales';
+                    _metrics[tab] = List.from(_uiResetMetrics());
+                    _sortField = _uiResetSortField();
                     _sortDesc = true;
                   });
                   refresh();
@@ -1761,12 +2119,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             ],
           ),
           Container(height: 1, color: LhColors.line2, margin: const EdgeInsets.symmetric(vertical: 7)),
-
-          // Sort section
-          Text('按 ${_kMetricFull[_sortField] ?? _sortField} 排序',
+          Text('按 ${_metricLabel(_sortField, tab: tab)} 排序',
             style: LhTypography.sans(size: 10.5, color: LhColors.mute)),
           const SizedBox(height: 7),
-          // Sort chips
           Wrap(
             spacing: 4, runSpacing: 4,
             children: sortable.map((k) {
@@ -1783,7 +2138,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                     border: Border.all(color: isOn ? LhColors.ink : LhColors.line, width: 1),
                     borderRadius: BorderRadius.circular(4),
                   ),
-                  child: Text(_kMetricFull[k] ?? k, style: LhTypography.sans(size: 10, color: isOn ? Colors.white : LhColors.mute, weight: isOn ? FontWeight.w600 : FontWeight.w500)),
+                  child: Text(_metricLabel(k, tab: tab), style: LhTypography.sans(size: 10, color: isOn ? Colors.white : LhColors.mute, weight: isOn ? FontWeight.w600 : FontWeight.w500)),
                 ),
               );
             }).toList(),
@@ -1826,7 +2181,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                     border: Border.all(color: isOn ? LhColors.ink : LhColors.line, width: 1),
                     borderRadius: BorderRadius.circular(4),
                   ),
-                  child: Text(_kMetricFull[k] ?? k, style: LhTypography.sans(size: 10, color: isOn ? LhColors.ink : LhColors.ink2, weight: isOn ? FontWeight.w600 : FontWeight.w500)),
+                  child: Text(_metricLabel(k, tab: tab), style: LhTypography.sans(size: 10, color: isOn ? LhColors.ink : LhColors.ink2, weight: isOn ? FontWeight.w600 : FontWeight.w500)),
                 ),
               );
             }).toList(),
@@ -1858,9 +2213,8 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   }
 
   List<String> get _groups {
-    if (_bundle == null) return ['全部'];
-    final rows = _bundle!.rowsOf(_tab);
-    return _getGroups(_tab, rows);
+    if (_bundle == null) return const ['全部'];
+    return _categoryOptions(_tab);
   }
 
   bool get _hasAccess => widget.session.lighthouseAccess;
@@ -1919,7 +2273,14 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             Expanded(
               child: !_hasAccess
                   ? _buildNoAccessView()
-                  : (_detailKey != null ? _buildDetailView() : _buildMainView()),
+                  : Stack(
+                      children: [
+                        _detailKey != null
+                            ? _buildDetailView()
+                            : _buildMainView(),
+                        if (_isPageBusy) _buildLoadingOverlay(),
+                      ],
+                    ),
             ),
             DunesMainTabBar(
               navigation: widget.navigation,
@@ -1973,22 +2334,62 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               Text('LIGHTHOUSE', style: LhTypography.mono(size: 8.5, color: LhColors.mute, letterSpacing: 1.5)),
             ],
           ),
+          if (_isPageBusy) ...[
+            const Spacer(),
+            const _LhBrandLoader(size: 22),
+          ],
         ],
+      ),
+    );
+  }
+
+  Widget _buildLoadingOverlay() {
+    final label = _cubeLoading && !_loading ? '分析加载中' : '数据同步中';
+    return Positioned.fill(
+      child: ColoredBox(
+        color: LhColors.cream.withAlpha(210),
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const _LhBrandLoader(size: 48),
+              const SizedBox(height: 14),
+              Text(
+                label,
+                style: LhTypography.mono(
+                  size: 10,
+                  color: LhColors.mute,
+                  weight: FontWeight.w600,
+                  letterSpacing: 1.6,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
 
   // ───── Main View ──────────────────────────────────────────────────────────
   Widget _buildMainView() {
-    return ListView(
-      padding: const EdgeInsets.only(bottom: 16),
-      children: [
-        _buildGreeting(),
-        _buildPanel(),
-        if (_tab == 'supply') _buildDiscountSection(),
-        if (_tab == 'analysis') _buildAnalysisView() else _buildList(),
-        _buildFooter(),
-      ],
+    if (_metricPageKey != null) return _buildMetricAnalysisPage(_metricPageKey!);
+    return NotificationListener<ScrollNotification>(
+      onNotification: (n) {
+        if (_ddMode != _DdMode.none && n is ScrollStartNotification) {
+          _closeDropdown();
+        }
+        return false;
+      },
+      child: ListView(
+        padding: const EdgeInsets.only(bottom: 16),
+        children: [
+          _buildGreeting(),
+          _buildPanel(),
+          if (_tab == 'supply') _buildDiscountSection(),
+          if (_tab == 'analysis') _buildAnalysisView() else _buildList(),
+          _buildFooter(),
+        ],
+      ),
     );
   }
 
@@ -2023,27 +2424,52 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   }
 
   Widget _buildPill() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
-      decoration: BoxDecoration(
-        color: LhColors.paper,
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: LhColors.line, width: 1),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 5, height: 5,
-            decoration: BoxDecoration(
-              color: LhColors.pos,
-              shape: BoxShape.circle,
-              boxShadow: [BoxShadow(color: LhColors.pos.withAlpha(46), blurRadius: 0, spreadRadius: 3)],
+    final busy = _refreshing || _loading;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: busy ? null : _refresh,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
+        decoration: BoxDecoration(
+          color: LhColors.paper,
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(color: LhColors.line, width: 1),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (busy)
+              SizedBox(
+                width: 9,
+                height: 9,
+                child: CircularProgressIndicator(
+                  strokeWidth: 1.5,
+                  valueColor: AlwaysStoppedAnimation<Color>(LhColors.copper),
+                ),
+              )
+            else
+              Container(
+                width: 5,
+                height: 5,
+                decoration: BoxDecoration(
+                  color: LhColors.pos,
+                  shape: BoxShape.circle,
+                  boxShadow: [BoxShadow(color: LhColors.pos.withAlpha(46), blurRadius: 0, spreadRadius: 3)],
+                ),
+              ),
+            const SizedBox(width: 6),
+            Text(
+              busy ? '数据同步中…' : '数据已同步 · ${_syncedAtLabel()}',
+              style: LhTypography.sans(size: 11, color: LhColors.ink2, weight: FontWeight.w500),
             ),
-          ),
-          const SizedBox(width: 5),
-          Text('数据已同步 · ${_syncedAtLabel()}', style: LhTypography.sans(size: 11, color: LhColors.ink2, weight: FontWeight.w500)),
-        ],
+            const SizedBox(width: 5),
+            Icon(
+              Icons.refresh_rounded,
+              size: 12,
+              color: busy ? LhColors.mute2 : LhColors.copper,
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -2084,7 +2510,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     final isUp = p.deltaDir == 'up';
     final deltaColor = isUp ? LhColors.pos : LhColors.neg;
     final deltaArrow = isUp ? '↑' : '↓';
-    final metrics = _kHeroMetrics[_tab] ?? _kHeroMetrics['product']!;
+    final metrics = _heroMetricsFor(_tab);
 
     // Compute totals from data
     final rows = _currentRows;
@@ -2112,7 +2538,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Period bar
+          // Period bar — 日/周/月/季/年（下划线 tab 风格，含实例选择）
           _buildPeriodBar(),
           const SizedBox(height: 10),
           // Label + delta inline (saves a row of vertical real-estate)
@@ -2133,20 +2559,39 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             ],
           ),
           const SizedBox(height: 6),
-          // Big number
+          // Big number + 右侧板报式筛选角标
           Row(
-            crossAxisAlignment: CrossAxisAlignment.baseline,
-            textBaseline: TextBaseline.alphabetic,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(bigV, style: LhTypography.number(size: 30, color: LhColors.ink)),
-              const SizedBox(width: 1),
-              Text(bigU, style: LhTypography.sans(size: 14, color: LhColors.mute, weight: FontWeight.w500)),
+              // 数字组 (baseline 对齐)
+              Expanded(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.baseline,
+                  textBaseline: TextBaseline.alphabetic,
+                  children: [
+                    Flexible(
+                      child: Text(
+                        bigV,
+                        style: LhTypography.number(size: 30, color: LhColors.ink),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    const SizedBox(width: 1),
+                    Text(bigU, style: LhTypography.sans(size: 14, color: LhColors.mute, weight: FontWeight.w500)),
+                  ],
+                ),
+              ),
+              // 板报角标 — 仅在有筛选时显示
+              _buildFilterPosterCard(),
             ],
           ),
           const SizedBox(height: 4),
           // Context line (vs … · period)
-          Text('${p.deltaVs} · ${p.label}${filterActive ? ' · 已筛选' : ''}',
-            style: LhTypography.sans(size: 10.5, color: LhColors.mute)),
+          Text(
+            '${p.deltaVs} · ${p.label}',
+            style: LhTypography.sans(size: 10.5, color: LhColors.mute),
+          ),
           const SizedBox(height: 12),
           // Compose bar
           _buildComposeBar(p),
@@ -2163,54 +2608,431 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     );
   }
 
+  /// 板报式筛选角标 — 贴在销售额右侧
+  /// 视觉：copper 实色上沿 + cream 内填 + copper 厚边框 + 倾斜 -2° 像贴纸
+  /// 单击整个板报清掉所有筛选
+  Widget _buildFilterPosterCard() {
+    final filters = _activeHeroFilters();
+    if (filters.isEmpty) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.only(left: 10, top: 2),
+      child: Transform.rotate(
+        angle: -0.025, // 约 -1.4° 贴纸感
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () {
+            // 点角标 → 一键清掉所有筛选
+            setState(() {
+              _groupFilter = '全部';
+              _supplyFuelFilter = '全部';
+              _hunFilter = '全部';
+            });
+          },
+          child: Container(
+            constraints: const BoxConstraints(minWidth: 78, maxWidth: 130),
+            decoration: BoxDecoration(
+              color: LhColors.copperSoft,
+              border: Border.all(color: LhColors.copper, width: 1.5),
+              borderRadius: BorderRadius.circular(3),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // 顶部 copper 实色 stripe
+                Container(
+                  color: LhColors.copper,
+                  padding: const EdgeInsets.fromLTRB(7, 3, 7, 3),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        '筛选',
+                        style: LhTypography.sans(
+                          size: 9,
+                          color: Colors.white,
+                          weight: FontWeight.w700,
+                          letterSpacing: 1.5,
+                        ),
+                      ),
+                      const Spacer(),
+                      if (filters.length > 1)
+                        Text(
+                          '×${filters.length}',
+                          style: LhTypography.mono(
+                            size: 9,
+                            color: Colors.white.withAlpha(220),
+                            weight: FontWeight.w700,
+                            letterSpacing: 0.3,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                // 内容区 — 每个筛选 value 一行大字
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(8, 6, 8, 7),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      for (int i = 0; i < filters.length; i++) ...[
+                        if (i > 0) const SizedBox(height: 3),
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.baseline,
+                          textBaseline: TextBaseline.alphabetic,
+                          children: [
+                            // 小前缀 (产品/供给/HUN/油品)
+                            Text(
+                              filters[i].label,
+                              style: LhTypography.sans(
+                                size: 8,
+                                color: LhColors.copper.withAlpha(180),
+                                weight: FontWeight.w600,
+                                letterSpacing: 0.4,
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            // value — 大号 bold
+                            Flexible(
+                              child: Text(
+                                filters[i].value,
+                                style: LhTypography.sans(
+                                  size: 14,
+                                  color: LhColors.ink,
+                                  weight: FontWeight.w700,
+                                  letterSpacing: 0.1,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                                maxLines: 1,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                      const SizedBox(height: 4),
+                      // 底部提示行 — 点击清除
+                      Row(
+                        children: [
+                          Icon(Icons.close_rounded, size: 9, color: LhColors.copper.withAlpha(160)),
+                          const SizedBox(width: 2),
+                          Text(
+                            '点击清除',
+                            style: LhTypography.mono(
+                              size: 8,
+                              color: LhColors.copper.withAlpha(160),
+                              weight: FontWeight.w500,
+                              letterSpacing: 0.4,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // 页面级周期筛选：粒度（日/周/月/季/年）+ 实例（哪一天/周/月/季/年）
+  // offset 0 = 当前实例，-1 = 上一个，依此类推。所有数据仍走后端真实库，
+  // offset 透传给 fetchOverview / fetchAnalysisCube。
+  // ═══════════════════════════════════════════════════════════════════════
+
+  String _two(int v) => v.toString().padLeft(2, '0');
+
+  /// 给定粒度 + offset 的锚点日期（实例起点）。
+  DateTime _periodAnchor(String period, int offset) {
+    final now = _nowCST();
+    switch (period) {
+      case 'day':
+        return DateTime(now.year, now.month, now.day)
+            .add(Duration(days: offset));
+      case 'week':
+        final mon = DateTime(now.year, now.month, now.day)
+            .subtract(Duration(days: now.weekday - 1));
+        return mon.add(Duration(days: offset * 7));
+      case 'month':
+        return DateTime(now.year, now.month + offset, 1);
+      case 'quarter':
+        final q0 = (now.month - 1) ~/ 3; // 0..3
+        final idx = now.year * 4 + q0 + offset;
+        return DateTime(idx ~/ 4, (idx % 4) * 3 + 1, 1);
+      case 'year':
+        return DateTime(now.year + offset, 1, 1);
+      default:
+        return now;
+    }
+  }
+
+  /// 实例主标签（按钮 + 列表）。
+  String _periodInstanceLabel(String period, int offset) {
+    final a = _periodAnchor(period, offset);
+    switch (period) {
+      case 'day':
+        if (offset == 0) return '今日';
+        if (offset == -1) return '昨日';
+        if (offset == -2) return '前日';
+        return '${_two(a.month)}.${_two(a.day)}';
+      case 'week':
+        if (offset == 0) return '本周';
+        if (offset == -1) return '上周';
+        return '${-offset}周前';
+      case 'month':
+        if (offset == 0) return '本月';
+        if (offset == -1) return '上月';
+        return '${a.year}.${_two(a.month)}';
+      case 'quarter':
+        final q = (a.month - 1) ~/ 3 + 1;
+        if (offset == 0) return '本季';
+        if (offset == -1) return '上季';
+        return '${a.year} Q$q';
+      case 'year':
+        if (offset == 0) return '今年';
+        if (offset == -1) return '去年';
+        return '${a.year}';
+      default:
+        return '';
+    }
+  }
+
+  /// 实例副标签（小字日期范围 / 精确值）。
+  String _periodInstanceDetail(String period, int offset) {
+    final a = _periodAnchor(period, offset);
+    switch (period) {
+      case 'day':
+        const wk = ['一', '二', '三', '四', '五', '六', '日'];
+        return '${a.year}.${_two(a.month)}.${_two(a.day)} 周${wk[a.weekday - 1]}';
+      case 'week':
+        final end = a.add(const Duration(days: 6));
+        return '${_two(a.month)}.${_two(a.day)}–${_two(end.month)}.${_two(end.day)}';
+      case 'month':
+        return '${a.year}.${_two(a.month)}';
+      case 'quarter':
+        final q = (a.month - 1) ~/ 3 + 1;
+        return '${a.year} 第$q季度';
+      case 'year':
+        return '${a.year} 年度';
+      default:
+        return '';
+    }
+  }
+
+  /// 每种粒度展示的实例数量（offset 0..-(n-1)）。
+  int _periodInstanceCount(String period) {
+    switch (period) {
+      case 'day':
+        return 14;
+      case 'week':
+        return 12;
+      case 'month':
+        return 12;
+      case 'quarter':
+        return 8;
+      case 'year':
+        return 5;
+      default:
+        return 6;
+    }
+  }
+
+  /// 统一切换粒度 / 实例 → 清缓存 + 重新拉取（真实库数据）。
+  void _applyPeriod({String? period, int? offset}) {
+    final newPeriod = period ?? _period;
+    final newOffset = offset ?? _periodOffset;
+    if (newPeriod == _period && newOffset == _periodOffset) {
+      setState(() => _periodPickerOpen = false);
+      return;
+    }
+    setState(() {
+      _period = newPeriod;
+      _periodOffset = newOffset;
+      _periodPickerOpen = false;
+      _loading = true;
+      _loadError = null;
+      _detailKey = null;
+      _detailType = null;
+      _resetDetailSkuSearch();
+      _rowsCacheKey = '';
+      _rowsCache = null;
+      _cubeCacheKey = '';
+      _cubeData = null;
+      _cubeError = false;
+    });
+    _load();
+    if (_tab == 'analysis') _loadAnalysisCube();
+  }
+
+  /// 还原版下划线 tab 风格：日/周/月/季/年。
+  /// 选中那一项右边多一个小 ▾ — 点它（或再点选中项）展开实例选择条。
+  /// 非选中项：点 → 切粒度并把 offset 重置为 0。
   Widget _buildPeriodBar() {
-    return Row(
-      children: _kPeriodKeys.map((k) {
-        final shortLabel = k == _period
-            ? (_heroInfo.short.isNotEmpty ? _heroInfo.short : (_kPeriodShort[k] ?? ''))
-            : (_kPeriodShort[k] ?? '');
-        final isOn = k == _period;
-        return Expanded(
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: () {
-              if (k == _period) return;
-              setState(() {
-                _period = k;
-                _loading = true;
-                _loadError = null;
-                _detailKey = null;
-                _detailType = null;
-                _rowsCacheKey = '';
-                _rowsCache = null;
-              });
-              _load();
-              if (_tab == 'analysis') _loadAnalysisCube();
-            },
-            child: Container(
-              padding: const EdgeInsets.symmetric(vertical: 7),
-              decoration: BoxDecoration(
-                border: Border(
-                  bottom: BorderSide(
-                    color: isOn ? LhColors.copper : Colors.transparent,
-                    width: 1.5,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Row(
+          children: _kPeriodKeys.map((k) {
+            final isOn = k == _period;
+            final shortLabel = _kPeriodShort[k] ?? '';
+            return Expanded(
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () {
+                  if (k == _period) {
+                    // 再点选中项 → 展开/收起实例选择
+                    setState(() => _periodPickerOpen = !_periodPickerOpen);
+                  } else {
+                    // 切粒度 → offset 回到 0
+                    setState(() => _periodPickerOpen = false);
+                    _applyPeriod(period: k, offset: 0);
+                  }
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(vertical: 7),
+                  decoration: BoxDecoration(
+                    border: Border(
+                      bottom: BorderSide(
+                        color: isOn ? LhColors.copper : Colors.transparent,
+                        width: 1.5,
+                      ),
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        shortLabel,
+                        textAlign: TextAlign.center,
+                        style: LhTypography.sans(
+                          size: 13.5,
+                          color: isOn ? LhColors.ink : LhColors.mute,
+                          weight: isOn ? FontWeight.w700 : FontWeight.w500,
+                          letterSpacing: isOn ? 1.5 : 1,
+                        ),
+                      ),
+                      if (isOn) ...[
+                        const SizedBox(width: 2),
+                        Icon(
+                          _periodPickerOpen
+                              ? Icons.keyboard_arrow_up_rounded
+                              : Icons.keyboard_arrow_down_rounded,
+                          size: 14,
+                          color: LhColors.copper,
+                        ),
+                      ],
+                    ],
                   ),
                 ),
               ),
-              child: Text(
-                shortLabel,
-                textAlign: TextAlign.center,
-                style: LhTypography.sans(
-                  size: 13.5,
-                  color: isOn ? LhColors.ink : LhColors.mute,
-                  weight: isOn ? FontWeight.w700 : FontWeight.w500,
-                  letterSpacing: isOn ? 1.5 : 1,
+            );
+          }).toList(),
+        ),
+        // 非默认实例时，下面贴一行淡色提示：当前看的是哪一期
+        if (_periodOffset != 0 && !_periodPickerOpen)
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Row(
+              children: [
+                Icon(Icons.history_rounded, size: 10, color: LhColors.copper),
+                const SizedBox(width: 4),
+                Text(
+                  '${_periodInstanceLabel(_period, _periodOffset)} · ${_periodInstanceDetail(_period, _periodOffset)}',
+                  style: LhTypography.mono(
+                    size: 9.5,
+                    color: LhColors.copper,
+                    weight: FontWeight.w600,
+                    letterSpacing: 0.3,
+                  ),
                 ),
+                const Spacer(),
+                GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => _applyPeriod(offset: 0),
+                  child: Text(
+                    '回到当前',
+                    style: LhTypography.mono(
+                      size: 9,
+                      color: LhColors.mute,
+                      weight: FontWeight.w600,
+                      letterSpacing: 0.3,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        // 实例选择条 — 横滑选具体哪一天/周/月/季/年
+        if (_periodPickerOpen) ...[
+          const SizedBox(height: 6),
+          SizedBox(
+            height: 38,
+            child: ListView.builder(
+              scrollDirection: Axis.horizontal,
+              padding: EdgeInsets.zero,
+              itemCount: _periodInstanceCount(_period),
+              itemBuilder: (ctx, i) => _periodInstanceChip(-i),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  /// 实例选择条上的单个芯片 — 极简：纵向两行文案 + 选中态下划线。
+  Widget _periodInstanceChip(int off) {
+    final on = off == _periodOffset;
+    return Padding(
+      padding: const EdgeInsets.only(right: 14),
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () => _applyPeriod(offset: off),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          decoration: BoxDecoration(
+            border: Border(
+              bottom: BorderSide(
+                color: on ? LhColors.copper : Colors.transparent,
+                width: 1.2,
               ),
             ),
           ),
-        );
-      }).toList(),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                _periodInstanceLabel(_period, off),
+                style: LhTypography.sans(
+                  size: 11,
+                  color: on ? LhColors.ink : LhColors.mute,
+                  weight: on ? FontWeight.w700 : FontWeight.w500,
+                  height: 1.2,
+                  letterSpacing: 0.2,
+                ),
+              ),
+              Text(
+                _periodInstanceDetail(_period, off),
+                style: LhTypography.mono(
+                  size: 8.5,
+                  color: on ? LhColors.copper : LhColors.mute2,
+                  weight: FontWeight.w500,
+                  height: 1.2,
+                  letterSpacing: 0.2,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -2272,9 +3094,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     final nPct = (sumN / total * 100);
     final hPct = (sumH / total * 100);
 
-    String segLabel(String tag, double pct, int count) {
+    String segLabel(String token, double pct, int count) {
       if (pct < 0.5) return '';
-      return '$tag ${pct.round()}%';
+      return '${_hunBadgeFor(token)} ${pct.round()}%';
     }
 
     final partsBuf = <String>[];
@@ -2284,12 +3106,12 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     if (uTxt.isNotEmpty) partsBuf.add(uTxt);
     if (nTxt.isNotEmpty) partsBuf.add(nTxt);
     if (hTxt.isNotEmpty) partsBuf.add(hTxt);
-    if (countMixed > 0) partsBuf.add('混合 $countMixed');
+    if (countMixed > 0) partsBuf.add('${_hunLabelFor('mixed')} $countMixed');
     final label = partsBuf.join(' · ');
 
     return Row(
       children: [
-        Text('U/N 占比', style: LhTypography.sans(size: 9.5, color: LhColors.mute, weight: FontWeight.w600, letterSpacing: 0.6)),
+        Text('${_hunBarTitle()} 占比', style: LhTypography.sans(size: 9.5, color: LhColors.mute, weight: FontWeight.w600, letterSpacing: 0.6)),
         const SizedBox(width: 8),
         Expanded(
           child: ClipRRect(
@@ -2299,11 +3121,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               child: Row(
                 children: [
                   if (uPct > 0.5)
-                    Expanded(flex: uPct.round().clamp(1, 100), child: Container(color: _kHunColorU)),
+                    Expanded(flex: uPct.round().clamp(1, 100), child: Container(color: _hunColorFor('U'))),
                   if (nPct > 0.5)
-                    Expanded(flex: nPct.round().clamp(1, 100), child: Container(color: _kHunColorN)),
+                    Expanded(flex: nPct.round().clamp(1, 100), child: Container(color: _hunColorFor('N'))),
                   if (hPct > 0.5)
-                    Expanded(flex: hPct.round().clamp(1, 100), child: Container(color: _kHunColorH)),
+                    Expanded(flex: hPct.round().clamp(1, 100), child: Container(color: _hunColorFor('H'))),
                   if (uPct < 0.5 && nPct < 0.5 && hPct < 0.5)
                     Expanded(child: Container(color: LhColors.line2)),
                 ],
@@ -2345,7 +3167,12 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           }
           if (c < cols - 1) rowCells.add(const SizedBox(width: colGap));
         }
-        widgets.add(Row(crossAxisAlignment: CrossAxisAlignment.start, children: rowCells));
+        widgets.add(IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: rowCells,
+          ),
+        ));
         // Hairline divider between rows (editorial 杂志感)
         if (r < rows.length - 1) {
           widgets.add(Container(
@@ -2393,49 +3220,576 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
 
     return SizedBox(
       width: width,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () => setState(() => _metricPageKey = m.key),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              m.label.toUpperCase(),
+              style: LhTypography.mono(
+                size: 8.5,
+                color: LhColors.mute2,
+                weight: FontWeight.w600,
+                letterSpacing: 0.8,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Expanded(child: valueRow),
+                const SizedBox(width: 5),
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 4),
+                  child: Container(
+                    width: 4,
+                    height: 4,
+                    decoration: BoxDecoration(color: m.cellColor, shape: BoxShape.circle),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Row(
+              children: [
+                Text(
+                  d == null ? '—' : '${d.isUp ? '↑' : '↓'} ${d.pct.toStringAsFixed(1)}$deltaUnit',
+                  style: LhTypography.mono(
+                    size: 9.5,
+                    color: d == null ? LhColors.mute2 : (d.isUp ? LhColors.pos : LhColors.neg),
+                    weight: FontWeight.w600,
+                    letterSpacing: 0.2,
+                  ),
+                ),
+                const Spacer(),
+                Icon(Icons.chevron_right_rounded,
+                    size: 12, color: LhColors.mute2),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // 指标分析页（per-metric drill-down）
+  //   点 hero 小格 → 进入这个页面：单指标视角，三维度拆解 + 完整列表
+  //   六个指标：profit / gmv / rate / revenue / cost (or totalCost) / tax
+  // ═══════════════════════════════════════════════════════════════════════
+
+  /// 指标 → 中文标签
+  String _metricPageLabel(String key) {
+    const labels = {
+      'profit': '毛利润',
+      'gmv': '引流GMV',
+      'rate': '毛利率',
+      'revenue': '收入',
+      'cost': '业务成本',
+      'totalCost': '成本',
+      'tax': '税务成本',
+    };
+    return labels[key] ?? key;
+  }
+
+  /// 指标 → 该维度强调色
+  Color _metricPageAccent(String key) {
+    switch (key) {
+      case 'profit':
+        return LhColors.pos;
+      case 'rate':
+        return LhColors.copper;
+      case 'gmv':
+        return LhColors.product;
+      case 'revenue':
+        return LhColors.cnpc;
+      case 'cost':
+      case 'totalCost':
+      case 'tax':
+        return LhColors.neg;
+      default:
+        return LhColors.ink;
+    }
+  }
+
+  /// 顶部胶囊（hero 数字）格式化 — 复用现有渲染器
+  Widget _metricPageHeroNumber(String key) {
+    final mtr = _bundle?.metrics ?? const <String, dynamic>{};
+    if (key == 'rate') {
+      final rate = (mtr['rate'] as num?)?.toDouble();
+      if (rate == null) {
+        return Text('—', style: LhTypography.sans(size: 34, weight: FontWeight.w700, color: LhColors.mute2));
+      }
+      return RichText(
+        text: TextSpan(children: [
+          TextSpan(text: rate.toStringAsFixed(2), style: LhTypography.sans(size: 34, weight: FontWeight.w700, color: LhColors.ink, letterSpacing: -0.6, height: 1.0)),
+          TextSpan(text: ' %', style: LhTypography.mono(size: 14, color: LhColors.mute, weight: FontWeight.w500)),
+        ]),
+      );
+    }
+    if (mtr.containsKey('${key}V')) {
+      final raw = (mtr['${key}V'] as num?)?.toDouble() ?? 0;
+      final unit = mtr['${key}U']?.toString() ?? '';
+      final isNeg = raw < 0;
+      final v = raw.abs().toString().replaceAll(RegExp(r'\.0$'), '');
+      return RichText(
+        text: TextSpan(children: [
+          if (isNeg) TextSpan(text: '-', style: LhTypography.sans(size: 34, weight: FontWeight.w700, color: LhColors.neg, letterSpacing: -0.6, height: 1.0)),
+          TextSpan(text: v, style: LhTypography.sans(size: 34, weight: FontWeight.w700, color: isNeg ? LhColors.neg : LhColors.ink, letterSpacing: -0.6, height: 1.0)),
+          if (unit.isNotEmpty) TextSpan(text: ' $unit', style: LhTypography.mono(size: 13, color: LhColors.mute, weight: FontWeight.w500)),
+        ]),
+      );
+    }
+    // 后端没给 metricV/U → 用前端各行汇总
+    double sum = 0;
+    for (final r in _bundle?.rowsOf(_tab) ?? const []) {
+      sum += (r[key] as num?)?.toDouble() ?? 0;
+    }
+    final isNeg = sum < 0;
+    return RichText(
+      text: TextSpan(children: [
+        if (isNeg) TextSpan(text: '-', style: LhTypography.sans(size: 34, weight: FontWeight.w700, color: LhColors.neg, letterSpacing: -0.6, height: 1.0)),
+        TextSpan(text: _fmt(sum.abs()), style: LhTypography.sans(size: 34, weight: FontWeight.w700, color: isNeg ? LhColors.neg : LhColors.ink, letterSpacing: -0.6, height: 1.0)),
+        TextSpan(text: ' ${_unit(sum.abs())}元', style: LhTypography.mono(size: 13, color: LhColors.mute, weight: FontWeight.w500)),
+      ]),
+    );
+  }
+
+  /// 某一行在该指标上的值 — 对于 rate 等需要派生的指标做兜底
+  double _rowMetricValue(Map<String, dynamic> r, String key) {
+    if (key == 'rate') {
+      final sales = (r['sales'] as num?)?.toDouble() ?? 0;
+      final profit = (r['profit'] as num?)?.toDouble() ?? 0;
+      return sales > 0 ? profit / sales * 100 : 0;
+    }
+    return (r[key] as num?)?.toDouble() ?? 0;
+  }
+
+  /// 某行的"权重值" — rate 页用 profit 做排序权重（避免低销量小行被高 rate 排前）
+  double _rowWeightForMetric(Map<String, dynamic> r, String key) {
+    if (key == 'rate') return (r['profit'] as num?)?.toDouble() ?? 0;
+    return _rowMetricValue(r, key).abs();
+  }
+
+  /// 指标分析页主体
+  Widget _buildMetricAnalysisPage(String key) {
+    final label = _metricPageLabel(key);
+    final accent = _metricPageAccent(key);
+    final delta = _deltaForMetric(key);
+    final deltaUnit = key == 'rate' ? 'pp' : '%';
+
+    return SafeArea(
+      bottom: false,
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
         children: [
-          // Label — mono uppercase, 杂志感
-          Text(
-            m.label.toUpperCase(),
-            style: LhTypography.mono(
-              size: 8.5,
-              color: LhColors.mute2,
-              weight: FontWeight.w600,
-              letterSpacing: 0.8,
+          // ── Top bar ──
+          Container(
+            padding: const EdgeInsets.fromLTRB(12, 8, 14, 10),
+            decoration: BoxDecoration(
+              color: LhColors.paper,
+              border: Border(
+                bottom: BorderSide(color: LhColors.line2, width: 1),
+              ),
+            ),
+            child: Row(
+              children: [
+                GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => setState(() => _metricPageKey = null),
+                  child: Padding(
+                    padding: const EdgeInsets.all(4),
+                    child: Icon(Icons.arrow_back_rounded, size: 20, color: LhColors.ink),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Container(
+                  width: 4,
+                  height: 16,
+                  decoration: BoxDecoration(
+                    color: accent,
+                    borderRadius: BorderRadius.circular(1),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  label,
+                  style: LhTypography.sans(
+                    size: 16,
+                    color: LhColors.ink,
+                    weight: FontWeight.w700,
+                    letterSpacing: 0.3,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  _periodInstanceLabel(_period, _periodOffset),
+                  style: LhTypography.mono(
+                    size: 10,
+                    color: LhColors.mute,
+                    weight: FontWeight.w600,
+                    letterSpacing: 0.4,
+                  ),
+                ),
+                const Spacer(),
+                _buildPill(),
+              ],
             ),
           ),
-          const SizedBox(height: 6),
-          // Value + 唯一的色彩 accent: 右侧 4px 小圆点
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Flexible(child: valueRow),
-              const SizedBox(width: 5),
-              Container(
-                width: 4,
-                height: 4,
-                decoration: BoxDecoration(color: m.cellColor, shape: BoxShape.circle),
-              ),
-            ],
-          ),
-          const SizedBox(height: 4),
-          // 环比小标签
-          Text(
-            d == null ? '—' : '${d.isUp ? '↑' : '↓'} ${d.pct.toStringAsFixed(1)}$deltaUnit',
-            style: LhTypography.mono(
-              size: 9.5,
-              color: d == null ? LhColors.mute2 : (d.isUp ? LhColors.pos : LhColors.neg),
-              weight: FontWeight.w600,
-              letterSpacing: 0.2,
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.only(bottom: 24),
+              children: [
+                // ── Hero card ──
+                Container(
+                  margin: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+                  padding: const EdgeInsets.fromLTRB(18, 18, 18, 16),
+                  decoration: BoxDecoration(
+                    color: LhColors.paper,
+                    border: Border.all(color: LhColors.line2, width: 1),
+                    borderRadius: BorderRadius.circular(14),
+                    boxShadow: [
+                      BoxShadow(color: accent.withAlpha(10), blurRadius: 16, offset: const Offset(0, 4)),
+                    ],
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        label.toUpperCase(),
+                        style: LhTypography.mono(size: 9, color: LhColors.mute2, weight: FontWeight.w700, letterSpacing: 1.8),
+                      ),
+                      const SizedBox(height: 10),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.baseline,
+                        textBaseline: TextBaseline.alphabetic,
+                        children: [
+                          Expanded(child: _metricPageHeroNumber(key)),
+                          if (delta != null)
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: (delta.isUp ? LhColors.pos : LhColors.neg).withAlpha(18),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                '${delta.isUp ? '↑' : '↓'} ${delta.pct.toStringAsFixed(1)}$deltaUnit',
+                                style: LhTypography.mono(
+                                  size: 11,
+                                  color: delta.isUp ? LhColors.pos : LhColors.neg,
+                                  weight: FontWeight.w700,
+                                  letterSpacing: 0.3,
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        '${_heroInfo.deltaVs} · ${_heroInfo.label}',
+                        style: LhTypography.sans(size: 10.5, color: LhColors.mute),
+                      ),
+                      const SizedBox(height: 12),
+                      _metricPageSecondaryRow(key),
+                    ],
+                  ),
+                ),
+                // ── 三维度 TOP 5 ──
+                _metricPageSection('按维度', '产品 × 供给 × 渠道'),
+                _metricDimensionBreakdown(key, 'product', '产品', accent),
+                _metricDimensionBreakdown(key, 'supply', '供给方', accent),
+                _metricDimensionBreakdown(key, 'channel', '渠道', accent),
+                // ── 完整列表（按当前 tab） ──
+                _metricPageSection(
+                  '完整列表',
+                  '当前${{'product': '产品', 'supply': '供给', 'channel': '渠道', 'analysis': '产品'}[_tab]} · 按$label降序',
+                ),
+                _metricFullList(key, accent),
+              ],
             ),
           ),
         ],
       ),
     );
   }
+
+  /// hero 卡里第二行：补充关联指标（毛利率 page 显示绝对毛利，反之亦然）
+  Widget _metricPageSecondaryRow(String key) {
+    final mtr = _bundle?.metrics ?? const <String, dynamic>{};
+    final pairs = <(String, String)>[];
+    switch (key) {
+      case 'profit':
+        final r = (mtr['rate'] as num?)?.toDouble();
+        if (r != null) pairs.add(('毛利率', '${r.toStringAsFixed(2)}%'));
+        break;
+      case 'rate':
+        final p = (mtr['profitV'] as num?)?.toDouble();
+        final pu = mtr['profitU']?.toString() ?? '';
+        if (p != null) pairs.add(('绝对毛利', '¥${p.toStringAsFixed(2)}$pu'));
+        break;
+      case 'gmv':
+        final s = (mtr['salesV'] as num?)?.toDouble();
+        final g = (mtr['gmvV'] as num?)?.toDouble();
+        if (s != null && g != null && s > 0) {
+          pairs.add(('销售/GMV', '${(s / g * 100).toStringAsFixed(1)}%'));
+        }
+        break;
+      case 'revenue':
+        final s = (mtr['salesV'] as num?)?.toDouble();
+        final r = (mtr['revenueV'] as num?)?.toDouble();
+        if (s != null && r != null && s > 0) {
+          pairs.add(('收入率', '${(r / s * 100).toStringAsFixed(1)}%'));
+        }
+        break;
+      case 'cost':
+      case 'totalCost':
+        final s = (mtr['salesV'] as num?)?.toDouble();
+        final c = (mtr['${key}V'] as num?)?.toDouble();
+        if (s != null && c != null && s > 0) {
+          pairs.add(('成本率', '${(c / s * 100).toStringAsFixed(1)}%'));
+        }
+        break;
+      case 'tax':
+        final r = (mtr['revenueV'] as num?)?.toDouble();
+        final t = (mtr['taxV'] as num?)?.toDouble();
+        if (r != null && t != null && r > 0) {
+          pairs.add(('税负率', '${(t / r * 100).toStringAsFixed(1)}%'));
+        }
+        break;
+    }
+    if (pairs.isEmpty) return const SizedBox.shrink();
+    return Wrap(
+      spacing: 16,
+      runSpacing: 6,
+      children: pairs.map((p) => Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(p.$1, style: LhTypography.mono(size: 9.5, color: LhColors.mute2, weight: FontWeight.w600, letterSpacing: 0.6)),
+          const SizedBox(width: 5),
+          Text(p.$2, style: LhTypography.sans(size: 13, color: LhColors.ink2, weight: FontWeight.w600)),
+        ],
+      )).toList(),
+    );
+  }
+
+  /// 段落标题（"§ 维度" 之类）
+  Widget _metricPageSection(String title, String sub) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 14, 20, 10),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          Text(
+            title,
+            style: LhTypography.sans(size: 14, color: LhColors.ink, weight: FontWeight.w700, letterSpacing: 0.4),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.only(bottom: 3),
+              child: Container(height: 1, color: LhColors.line2),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            sub,
+            style: LhTypography.mono(size: 9.5, color: LhColors.mute2, weight: FontWeight.w600, letterSpacing: 0.4),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 单维度 TOP 5 区块
+  Widget _metricDimensionBreakdown(String key, String dim, String dimLabel, Color accent) {
+    final rows = _bundle?.rowsOf(dim) ?? const [];
+    if (rows.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(20, 0, 20, 14),
+        child: Text('$dimLabel：无数据', style: LhTypography.mono(size: 10, color: LhColors.mute2)),
+      );
+    }
+    final sorted = List<Map<String, dynamic>>.from(rows)
+      ..sort((a, b) => _rowWeightForMetric(b, key).compareTo(_rowWeightForMetric(a, key)));
+    final top = sorted.take(5).toList();
+
+    // 计算 bar 比例的分母（top 之和 or 全部之和）
+    double maxAbs = 0;
+    for (final r in top) {
+      final v = _rowMetricValue(r, key).abs();
+      if (v > maxAbs) maxAbs = v;
+    }
+    if (maxAbs == 0) maxAbs = 1;
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 8),
+      decoration: BoxDecoration(
+        color: LhColors.paper,
+        border: Border.all(color: LhColors.line2, width: 1),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text(
+                dimLabel,
+                style: LhTypography.mono(size: 9.5, color: LhColors.mute, weight: FontWeight.w700, letterSpacing: 1.6),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                'TOP ${top.length} / 共 ${rows.length}',
+                style: LhTypography.mono(size: 9, color: LhColors.mute2, weight: FontWeight.w500, letterSpacing: 0.3),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          for (int i = 0; i < top.length; i++)
+            _metricBreakdownRow(top[i], key, i + 1, maxAbs, accent),
+        ],
+      ),
+    );
+  }
+
+  /// 单行 bar：rank + name + group chip + 条形 + 数值
+  Widget _metricBreakdownRow(Map<String, dynamic> r, String key, int rank, double maxAbs, Color accent) {
+    final name = r['name']?.toString() ?? '—';
+    final group = r['group']?.toString() ?? '';
+    final v = _rowMetricValue(r, key);
+    final isRate = key == 'rate';
+    final isNeg = v < 0;
+    final ratio = (v.abs() / maxAbs).clamp(0.0, 1.0);
+    final groupColor = group.isEmpty ? LhColors.mute2 : lhGroupColor(group);
+
+    final valueStr = isRate
+        ? '${v.toStringAsFixed(2)}%'
+        : '${isNeg ? '-' : ''}¥${_fmt(v.abs())}${_unit(v.abs())}';
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 5),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          SizedBox(
+            width: 16,
+            child: Text(
+              '$rank',
+              style: LhTypography.mono(size: 10, color: LhColors.mute2, weight: FontWeight.w700, letterSpacing: 0.3),
+            ),
+          ),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        name,
+                        style: LhTypography.sans(size: 12, color: LhColors.ink, weight: FontWeight.w600, letterSpacing: 0.1),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    if (group.isNotEmpty) ...[
+                      const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                        decoration: BoxDecoration(
+                          color: groupColor.withAlpha(20),
+                          border: Border.all(color: groupColor.withAlpha(80), width: 0.6),
+                          borderRadius: BorderRadius.circular(3),
+                        ),
+                        child: Text(
+                          group,
+                          style: LhTypography.mono(size: 8.5, color: groupColor, weight: FontWeight.w700),
+                        ),
+                      ),
+                    ],
+                    const SizedBox(width: 8),
+                    Text(
+                      valueStr,
+                      style: LhTypography.sans(
+                        size: 12,
+                        color: isNeg ? LhColors.neg : LhColors.ink,
+                        weight: FontWeight.w700,
+                        letterSpacing: 0.1,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Container(
+                  height: 3,
+                  decoration: BoxDecoration(
+                    color: LhColors.line2.withAlpha(160),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                  child: FractionallySizedBox(
+                    alignment: Alignment.centerLeft,
+                    widthFactor: ratio,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: isNeg ? LhColors.neg.withAlpha(180) : accent.withAlpha(190),
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 完整列表 — 当前 tab 全部行按此指标降序
+  Widget _metricFullList(String key, Color accent) {
+    final rows = _bundle?.rowsOf(_tab == 'analysis' ? 'product' : _tab) ?? const [];
+    if (rows.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
+        child: Text('无数据', style: LhTypography.mono(size: 11, color: LhColors.mute2)),
+      );
+    }
+    final sorted = List<Map<String, dynamic>>.from(rows)
+      ..sort((a, b) => _rowWeightForMetric(b, key).compareTo(_rowWeightForMetric(a, key)));
+
+    double maxAbs = 0;
+    for (final r in sorted) {
+      final v = _rowMetricValue(r, key).abs();
+      if (v > maxAbs) maxAbs = v;
+    }
+    if (maxAbs == 0) maxAbs = 1;
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+      padding: const EdgeInsets.fromLTRB(14, 8, 14, 8),
+      decoration: BoxDecoration(
+        color: LhColors.paper,
+        border: Border.all(color: LhColors.line2, width: 1),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          for (int i = 0; i < sorted.length; i++) ...[
+            if (i > 0)
+              Container(height: 0.5, color: LhColors.line2.withAlpha(140)),
+            _metricBreakdownRow(sorted[i], key, i + 1, maxAbs, accent),
+          ],
+        ],
+      ),
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // 指标分析页 END
+  // ═══════════════════════════════════════════════════════════════════════
 
   Widget _heroRateText(double rate) {
     return RichText(
@@ -2507,6 +3861,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     };
 
     return Container(
+      clipBehavior: Clip.hardEdge,
       decoration: BoxDecoration(
         border: Border.symmetric(
           horizontal: BorderSide(color: LhColors.line2, width: 1),
@@ -2526,16 +3881,20 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             return Expanded(
               child: GestureDetector(
                 onTap: () {
+                  if (key == _tab) return;
+                  _closeDropdown();
                   setState(() {
                     _tab = key;
                     _groupFilter = '全部';
                     if (key != 'supply') _supplyFuelFilter = '全部';
                     if (key != 'supply' && key != 'channel') _hunFilter = '全部';
+                    _listPage = 1;
                   });
                   if (key == 'analysis') _loadAnalysisCube();
                 },
                 behavior: HitTestBehavior.opaque,
                 child: Stack(
+                  clipBehavior: Clip.hardEdge,
                   alignment: Alignment.bottomCenter,
                   children: [
                     if (isOn)
@@ -2566,10 +3925,8 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                               letterSpacing: 1,
                             ),
                           ),
-                          const SizedBox(width: 5),
-                          if (isAnalysis)
-                            Icon(Icons.auto_awesome, size: 11, color: isOn ? accent : LhColors.mute2)
-                          else
+                          if (!isAnalysis) ...[
+                            const SizedBox(width: 5),
                             Text(
                               '$count',
                               style: LhTypography.mono(
@@ -2579,15 +3936,16 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                                 letterSpacing: 0.3,
                               ),
                             ),
+                          ],
                         ],
                       ),
                     ),
                     if (isOn)
                       Positioned(
-                        bottom: -1,
+                        bottom: 0,
                         left: 0,
                         right: 0,
-                        child: Container(height: 3, color: accent),
+                        child: Container(height: 2.5, color: accent),
                       ),
                   ],
                 ),
@@ -2616,23 +3974,58 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              totalStr,
-              style: LhTypography.mono(size: 9, color: LhColors.mute, letterSpacing: 0.2),
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          const SizedBox(width: 8),
-          _buildDropdownActions(
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final actions = _buildDropdownActions(
             showCategory: true,
             showMetric: true,
-            showFilter: _tab == 'supply',
-            showHun: _tab == 'supply' || _tab == 'channel',
-          ),
-        ],
+            showFilter: _hasUiFilter(_tab, 'fuel'),
+            showHun: _hasUiFilter(_tab, 'hun'),
+          );
+          final narrow = constraints.maxWidth < 340;
+          if (narrow) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  totalStr,
+                  style: LhTypography.mono(size: 9, color: LhColors.mute, letterSpacing: 0.2),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 8),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    reverse: true,
+                    child: actions,
+                  ),
+                ),
+              ],
+            );
+          }
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Expanded(
+                child: Text(
+                  totalStr,
+                  style: LhTypography.mono(size: 9, color: LhColors.mute, letterSpacing: 0.2),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Flexible(
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  reverse: true,
+                  child: actions,
+                ),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -2686,7 +4079,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             key: _btnKeyFilter,
             child: _buildSortBtn(
               icon: Icons.filter_list_rounded,
-              label: filterActive ? _supplyFuelFilter : '筛选',
+              label: filterActive
+                  ? _supplyFuelFilter
+                  : (_uiFilterDef(_tab, 'fuel')?['label'] as String? ?? '筛选'),
               active: filterActive || (_ddMode == _DdMode.filter),
               onTap: () => _toggleDropdown(_DdMode.filter),
             ),
@@ -2698,7 +4093,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             key: _btnKeyHun,
             child: _buildSortBtn(
               icon: Icons.scatter_plot_rounded,
-              label: hunActive ? _hunFilter : 'U/N',
+              label: hunActive
+                  ? _hunFilter
+                  : (_uiFilterDef(_tab, 'hun')?['label'] as String? ?? 'U/N'),
               active: hunActive || (_ddMode == _DdMode.hun),
               onTap: () => _toggleDropdown(_DdMode.hun),
             ),
@@ -2719,14 +4116,16 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+        constraints: const BoxConstraints(minHeight: 28),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
         decoration: BoxDecoration(
-          color: active ? LhColors.ink.withAlpha(8) : Colors.transparent,
+          color: active ? LhColors.ink.withAlpha(8) : LhColors.paper,
           border: Border.all(color: active ? LhColors.ink2 : LhColors.line, width: 1),
           borderRadius: BorderRadius.circular(5),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(icon, size: 11, color: active ? LhColors.ink : LhColors.mute),
             const SizedBox(width: 4),
@@ -2990,10 +4389,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   // ───── List ───────────────────────────────────────────────────────────────
   Widget _buildList() {
     if (_loading) {
-      return const Padding(
-        padding: EdgeInsets.all(40),
-        child: Center(child: CircularProgressIndicator(color: LhColors.purple, strokeWidth: 1.5)),
-      );
+      return const SizedBox(height: 240);
     }
     if (_loadError != null) {
       if (_isNoPermissionError(_loadError)) {
@@ -3076,10 +4472,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
 
   Widget _buildAnalysisView() {
     if (_cubeLoading && _cubeData == null) {
-      return const Padding(
-        padding: EdgeInsets.all(40),
-        child: Center(child: CircularProgressIndicator(color: LhColors.ink2, strokeWidth: 1.5)),
-      );
+      return const SizedBox(height: 420);
     }
     if (_cubeError && _cubeData == null) {
       return Padding(
@@ -3334,10 +4727,12 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           child: _buildCubeFilterChips(cube),
         ),
         const SizedBox(height: 4),
-        // 立方体 — 走全宽，高度随屏宽自适应；支持旋转/拖动/缩放，点击亮点选中
+        // 立方体 — 走全宽，高度随屏宽/屏高自适应（分析 tab 主视觉区尽量占满）
         LayoutBuilder(
           builder: (ctx, constraints) {
-            final cubeH = (constraints.maxWidth * 0.88).clamp(260.0, 380.0);
+            final viewH = MediaQuery.sizeOf(ctx).height;
+            final cubeH = (constraints.maxWidth * 1.08)
+                .clamp(340.0, viewH * 0.52);
             final size = Size(constraints.maxWidth, cubeH);
             return SizedBox(
               height: cubeH,
@@ -3410,10 +4805,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           decoration: BoxDecoration(
             color: selected ? accent.withAlpha(18) : LhColors.paper,
             border: Border.all(
-              color: selected ? accent : LhColors.line2,
-              width: 0.5,
+              color: selected ? accent : LhColors.line,
+              width: 1,
             ),
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(5),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
@@ -3496,7 +4891,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
 
   /// 点击 cube 时：用 painter 的投影函数算出每个亮点的屏幕坐标，
   /// 找最近的，距离 ≤ 22px 视为命中；同一点再点 = 取消选中
-  void _handleCubeTap(Offset tap, _CubeData cube, Size size) {
+  String? _cubeTapHitKey(Offset tap, _CubeData cube, Size size) {
     final positions = _CubePainter.projectLitPoints(
       cube, size,
       yaw: _cubeYaw,
@@ -3505,7 +4900,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       pan: _cubePan,
     );
     String? hitKey;
-    double bestDist = 22.0; // 命中半径
+    var bestDist = 22.0;
     positions.forEach((key, pos) {
       final d = (pos - tap).distance;
       if (d < bestDist) {
@@ -3513,6 +4908,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         hitKey = key;
       }
     });
+    return hitKey;
+  }
+
+  void _handleCubeTap(Offset tap, _CubeData cube, Size size) {
+    final hitKey = _cubeTapHitKey(tap, cube, size);
     setState(() {
       if (hitKey == null) {
         _cubeSelectedKey = null;
@@ -3532,6 +4932,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     required Set<String> matched,
     required bool dimUnmatched,
     VoidCallback? onExternalChange,
+    VoidCallback? onRequestDismiss,
   }) {
     void mut(VoidCallback fn) {
       setState(fn);
@@ -3582,9 +4983,26 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         final startedAt = _cubeGestureStartTime;
         if (start != null && startedAt != null) {
           final dt = DateTime.now().difference(startedAt).inMilliseconds;
+          if (onRequestDismiss != null && _cubeGestureMaxMove >= 24) {
+            final end = _cubeGestureLastFocal ?? start;
+            final dx = end.dx - start.dx;
+            final dy = end.dy - start.dy;
+            if (dx < -52 && dx.abs() > dy.abs() * 1.25) {
+              onRequestDismiss();
+              _cubeGestureStartFocal = null;
+              _cubeGestureLastFocal = null;
+              _cubeGestureStartTime = null;
+              _cubeGestureMaxMove = 0;
+              return;
+            }
+          }
           if (dt < 280 && _cubeGestureMaxMove < 8) {
-            _handleCubeTap(start, cube, size);
-            onExternalChange?.call();
+            if (onRequestDismiss != null) {
+              onRequestDismiss();
+            } else {
+              _handleCubeTap(start, cube, size);
+              onExternalChange?.call();
+            }
           }
         }
         _cubeGestureStartFocal = null;
@@ -3861,205 +5279,268 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
 
   /// 全屏 dialog — 大尺寸 cube + +/- 按钮 + 详情卡
   void _openCubeFullscreen(_CubeData cube) {
+    // 保存进入前的文字开关状态 — 关闭时还原
+    final saved = <bool>[
+      _cubeShowAxisNames,
+      _cubeShowProductTicks,
+      _cubeShowSupplyLabels,
+      _cubeShowChannelLabels,
+      _cubeShowOwnerInitials,
+    ];
+    // 默认放大后所有坐标标签全开
+    setState(() {
+      _cubeShowAxisNames = true;
+      _cubeShowProductTicks = true;
+      _cubeShowSupplyLabels = true;
+      _cubeShowChannelLabels = true;
+      _cubeShowOwnerInitials = true;
+    });
+
+    // 局部状态：右上角面板用 — 不污染主页
+    bool filterOpen = false;
+    bool textOpen = false;
+
     showDialog<void>(
       context: context,
-      barrierColor: Colors.black.withAlpha(180),
+      barrierColor: Colors.black.withAlpha(200),
       builder: (dialogCtx) {
         return StatefulBuilder(
           builder: (ctx, setDlg) {
             void resync() => setDlg(() {});
 
-            // 算 matched/dimUnmatched —— 与主页 _buildCubeBody 一致
             final matchedPoints = cube.lit.where(_cubeMatch).toList();
             final matchedSet = matchedPoints.map(_cubePointKey).toSet();
 
             return Dialog(
-              insetPadding: const EdgeInsets.all(8),
+              insetPadding: EdgeInsets.zero,
               backgroundColor: LhColors.paper,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(14),
+              shape: const RoundedRectangleBorder(
+                borderRadius: BorderRadius.zero,
               ),
               clipBehavior: Clip.antiAlias,
               child: SafeArea(
-                child: LayoutBuilder(
-                  builder: (ctx, constraints) {
-                    return Column(
-                      mainAxisSize: MainAxisSize.max,
-                      children: [
-                        // ── Top bar：关闭 / 标题 / 重置 ──
-                        Container(
-                          padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+                child: Column(
+                  mainAxisSize: MainAxisSize.max,
+                  children: [
+                    // ── Top bar：极简 — 关闭 + 坐标数 + 文字 + 筛选 + 重置 ──
+                    Container(
+                      padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
+                      decoration: BoxDecoration(
+                        border: Border(
+                          bottom: BorderSide(
+                            color: LhColors.line2.withAlpha(140),
+                            width: 0.5,
+                          ),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          GestureDetector(
+                            behavior: HitTestBehavior.opaque,
+                            onTap: () => Navigator.of(dialogCtx).pop(),
+                            child: Padding(
+                              padding: const EdgeInsets.all(6),
+                              child: Icon(Icons.close_rounded,
+                                  size: 18, color: LhColors.ink),
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            '${matchedPoints.length} 坐标',
+                            style: LhTypography.mono(
+                              size: 10,
+                              color: LhColors.mute,
+                              weight: FontWeight.w600,
+                              letterSpacing: 0.4,
+                            ),
+                          ),
+                          const Spacer(),
+                          // 文字开关
+                          _CubeChipButton(
+                            icon: textOpen
+                                ? Icons.expand_less_rounded
+                                : Icons.text_fields_rounded,
+                            label: '文字',
+                            color: textOpen ? LhColors.copper : LhColors.ink,
+                            onTap: () => setDlg(() {
+                              textOpen = !textOpen;
+                              if (textOpen) filterOpen = false;
+                            }),
+                          ),
+                          const SizedBox(width: 5),
+                          // 筛选
+                          _CubeChipButton(
+                            icon: filterOpen
+                                ? Icons.expand_less_rounded
+                                : Icons.tune_rounded,
+                            label: '筛选',
+                            color: filterOpen
+                                ? LhColors.copper
+                                : (_cubeHasActiveFilter
+                                    ? LhColors.copper
+                                    : LhColors.ink),
+                            onTap: () => setDlg(() {
+                              filterOpen = !filterOpen;
+                              if (filterOpen) textOpen = false;
+                            }),
+                          ),
+                          const SizedBox(width: 5),
+                          // 重置视角
+                          AnimatedOpacity(
+                            duration: const Duration(milliseconds: 180),
+                            opacity: _cubeViewIsDefault ? 0.35 : 1.0,
+                            child: _CubeChipButton(
+                              icon: Icons.refresh_rounded,
+                              label: '重置',
+                              color: LhColors.ink,
+                              onTap: _cubeViewIsDefault
+                                  ? null
+                                  : () => _resetCubeView(onExternalChange: resync),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    // ── 可折叠 — 筛选 / 文字面板 ──
+                    if (filterOpen)
+                      Listener(
+                        onPointerUp: (_) =>
+                            Future<void>.microtask(() => setDlg(() {})),
+                        child: Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
                           decoration: BoxDecoration(
+                            color: LhColors.paper,
                             border: Border(
                               bottom: BorderSide(
-                                color: LhColors.line.withAlpha(140),
-                                width: 0.6,
+                                color: LhColors.line2.withAlpha(140),
+                                width: 0.5,
                               ),
                             ),
                           ),
-                          child: Row(
-                            children: [
-                              GestureDetector(
-                                behavior: HitTestBehavior.opaque,
-                                onTap: () => Navigator.of(dialogCtx).pop(),
-                                child: Padding(
-                                  padding: const EdgeInsets.all(4),
-                                  child: Icon(
-                                    Icons.close_rounded,
-                                    size: 18,
-                                    color: LhColors.ink,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 6),
-                              Text(
-                                '立方体详视',
-                                style: LhTypography.mono(
-                                  size: 12,
-                                  color: LhColors.ink,
-                                  weight: FontWeight.w700,
-                                  letterSpacing: 0.8,
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              Text(
-                                '${matchedPoints.length} 坐标',
-                                style: LhTypography.mono(
-                                  size: 9,
-                                  color: LhColors.mute,
-                                  weight: FontWeight.w600,
-                                  letterSpacing: 0.4,
-                                ),
-                              ),
-                              const Spacer(),
-                              AnimatedOpacity(
-                                duration: const Duration(milliseconds: 180),
-                                opacity: _cubeViewIsDefault ? 0.35 : 1.0,
-                                child: _CubeChipButton(
-                                  icon: Icons.refresh_rounded,
-                                  label: '重置视角',
-                                  color: LhColors.ink,
-                                  onTap: _cubeViewIsDefault
-                                      ? null
-                                      : () => _resetCubeView(onExternalChange: resync),
-                                ),
-                              ),
-                            ],
-                          ),
+                          child: _buildCubeFilterChips(cube),
                         ),
+                      ),
+                    if (textOpen)
+                      Listener(
+                        onPointerUp: (_) =>
+                            Future<void>.microtask(() => setDlg(() {})),
+                        child: Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.fromLTRB(14, 6, 14, 6),
+                          decoration: BoxDecoration(
+                            color: LhColors.paper,
+                            border: Border(
+                              bottom: BorderSide(
+                                color: LhColors.line2.withAlpha(140),
+                                width: 0.5,
+                              ),
+                            ),
+                          ),
+                          child: _buildCubeTextPanel(),
+                        ),
+                      ),
 
-                        // ── Cube 主体 ──
-                        Expanded(
-                          child: ClipRect(
-                            child: LayoutBuilder(
-                            builder: (ctx, c) {
-                              final size = Size(c.maxWidth, c.maxHeight);
-                              return Stack(
-                                clipBehavior: Clip.hardEdge,
-                                children: [
-                                  _buildCubeInteractive(
-                                    cube,
-                                    size,
-                                    matched: matchedSet,
-                                    dimUnmatched: _cubeHasActiveFilter,
-                                    onExternalChange: resync,
-                                  ),
-                                  // ── 右下角 +/- 按钮 + 缩放比例显示 ──
-                                  Positioned(
-                                    right: 12,
-                                    bottom: 12,
-                                    child: Column(
-                                      mainAxisSize: MainAxisSize.min,
-                                      crossAxisAlignment: CrossAxisAlignment.center,
-                                      children: [
-                                        _CubeZoomIconButton(
-                                          icon: Icons.add_rounded,
-                                          enabled: _cubeScale < 3.0 - 0.001,
-                                          onTap: () => _zoomCube(1.25, onExternalChange: resync),
-                                        ),
-                                        Container(
-                                          margin: const EdgeInsets.symmetric(vertical: 4),
-                                          padding: const EdgeInsets.symmetric(
-                                              horizontal: 6, vertical: 3),
-                                          decoration: BoxDecoration(
-                                            color: LhColors.paper,
-                                            border: Border.all(
-                                              color: LhColors.copper.withAlpha(110),
-                                              width: 0.8,
-                                            ),
-                                            borderRadius: BorderRadius.circular(10),
-                                          ),
-                                          child: Text(
-                                            '${(_cubeScale * 100).toStringAsFixed(0)}%',
-                                            style: LhTypography.mono(
-                                              size: 9,
-                                              color: LhColors.copper,
-                                              weight: FontWeight.w700,
-                                              letterSpacing: 0.4,
-                                            ),
-                                          ),
-                                        ),
-                                        _CubeZoomIconButton(
-                                          icon: Icons.remove_rounded,
-                                          enabled: _cubeScale > 0.5 + 0.001,
-                                          onTap: () => _zoomCube(1 / 1.25, onExternalChange: resync),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  // ── 左下角小提示 ──
-                                  Positioned(
-                                    left: 12,
-                                    bottom: 12,
+                    // ── Cube 主体 ──
+                    Expanded(
+                      child: ClipRect(
+                        child: LayoutBuilder(
+                          builder: (ctx, c) {
+                            final size = Size(c.maxWidth, c.maxHeight);
+                            return Stack(
+                              clipBehavior: Clip.hardEdge,
+                              children: [
+                                _buildCubeInteractive(
+                                  cube,
+                                  size,
+                                  matched: matchedSet,
+                                  dimUnmatched: _cubeHasActiveFilter,
+                                  onExternalChange: resync,
+                                  onRequestDismiss: () =>
+                                      Navigator.of(dialogCtx).pop(),
+                                ),
+                                // 单个小缩放按钮 — 循环 1x → 1.5x → 2.25x → 1x
+                                Positioned(
+                                  right: 14,
+                                  bottom: 14,
+                                  child: GestureDetector(
+                                    behavior: HitTestBehavior.opaque,
+                                    onTap: () {
+                                      final next = _cubeScale >= 2.0
+                                          ? 1.0 / _cubeScale
+                                          : 1.5;
+                                      _zoomCube(next, onExternalChange: resync);
+                                    },
                                     child: Container(
-                                      padding: const EdgeInsets.symmetric(
-                                          horizontal: 7, vertical: 4),
+                                      width: 36,
+                                      height: 36,
                                       decoration: BoxDecoration(
-                                        color: LhColors.paper.withAlpha(200),
-                                        borderRadius: BorderRadius.circular(8),
-                                      ),
-                                      child: Text(
-                                        '单指旋转 · 双指捏合/平移 · 点击亮点',
-                                        style: LhTypography.mono(
-                                          size: 8.5,
-                                          color: LhColors.mute,
-                                          weight: FontWeight.w500,
-                                          letterSpacing: 0.4,
+                                        color: LhColors.paper,
+                                        border: Border.all(
+                                          color: LhColors.line,
+                                          width: 1,
                                         ),
+                                        borderRadius: BorderRadius.circular(18),
+                                        boxShadow: const [
+                                          BoxShadow(
+                                            color: Color(0x14000000),
+                                            blurRadius: 6,
+                                            offset: Offset(0, 2),
+                                          ),
+                                        ],
+                                      ),
+                                      alignment: Alignment.center,
+                                      child: Icon(
+                                        _cubeScale >= 2.0
+                                            ? Icons.zoom_out_rounded
+                                            : Icons.zoom_in_rounded,
+                                        size: 18,
+                                        color: LhColors.ink,
                                       ),
                                     ),
                                   ),
-                                ],
-                              );
-                            },
-                          ),
+                                ),
+                              ],
+                            );
+                          },
+                        ),
+                      ),
+                    ),
+
+                    // ── 选中亮点详情卡（如有） ──
+                    if (_cubeSelectedKey != null)
+                      Container(
+                        padding: const EdgeInsets.fromLTRB(8, 4, 8, 8),
+                        decoration: BoxDecoration(
+                          border: Border(
+                            top: BorderSide(
+                              color: LhColors.line2.withAlpha(140),
+                              width: 0.5,
+                            ),
                           ),
                         ),
-
-                        // ── 选中亮点详情卡（如有） ──
-                        if (_cubeSelectedKey != null)
-                          Container(
-                            padding: const EdgeInsets.fromLTRB(8, 4, 8, 8),
-                            decoration: BoxDecoration(
-                              border: Border(
-                                top: BorderSide(
-                                  color: LhColors.line.withAlpha(140),
-                                  width: 0.6,
-                                ),
-                              ),
-                            ),
-                            child: _buildSelectedCubePointCard(cube),
-                          ),
-                      ],
-                    );
-                  },
+                        child: _buildSelectedCubePointCard(cube),
+                      ),
+                  ],
                 ),
               ),
             );
           },
         );
       },
-    );
+    ).then((_) {
+      // 关闭全屏 → 还原标签开关 + 收起 cube filter chip 下拉
+      if (!mounted) return;
+      setState(() {
+        _cubeShowAxisNames = saved[0];
+        _cubeShowProductTicks = saved[1];
+        _cubeShowSupplyLabels = saved[2];
+        _cubeShowChannelLabels = saved[3];
+        _cubeShowOwnerInitials = saved[4];
+        _cubeFilterOpen = null;
+      });
+    });
   }
 
   /// 选中亮点的详情卡 — 显示该坐标的 (产品, 供给方, 渠道) + 毛利
@@ -4088,32 +5569,32 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     String fmtUnit(double v) => v.abs() >= 10000 ? '万' : '';
 
     return Container(
-      margin: const EdgeInsets.fromLTRB(14, 6, 14, 0),
+      margin: const EdgeInsets.fromLTRB(14, 5, 14, 0),
       decoration: BoxDecoration(
         color: LhColors.paper,
         border: Border.all(color: accent.withAlpha(70), width: 1),
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(8),
         boxShadow: [
           BoxShadow(
-            color: accent.withAlpha(18),
-            blurRadius: 12,
-            offset: const Offset(0, 3),
+            color: accent.withAlpha(16),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
           ),
         ],
       ),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(9),
+        borderRadius: BorderRadius.circular(7),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
                     // ── Header：坐标 + 负责人 + 关闭 ──
                     Padding(
-                      padding: const EdgeInsets.fromLTRB(12, 10, 6, 8),
+                      padding: const EdgeInsets.fromLTRB(10, 8, 5, 6),
                       child: Row(
                         children: [
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
                             decoration: BoxDecoration(
                               color: accent.withAlpha(18),
                               borderRadius: BorderRadius.circular(4),
@@ -4121,18 +5602,18 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                             child: Text(
                               '坐标 ${p.xi}·${p.yi}·${p.zi}',
                               style: LhTypography.mono(
-                                size: 9,
+                                size: 8.5,
                                 color: accent,
                                 weight: FontWeight.w600,
                                 letterSpacing: 0.4,
                               ),
                             ),
                           ),
-                          const SizedBox(width: 8),
+                          const SizedBox(width: 7),
                           if (p.owner.isNotEmpty) ...[
                             Container(
-                              width: 15,
-                              height: 15,
+                              width: 13,
+                              height: 13,
                               alignment: Alignment.center,
                               decoration: BoxDecoration(
                                 color: accent,
@@ -4141,7 +5622,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                               child: Text(
                                 p.owner.substring(0, 1),
                                 style: LhTypography.sans(
-                                  size: 9,
+                                  size: 8,
                                   color: Colors.white,
                                   weight: FontWeight.w600,
                                   height: 1.0,
@@ -4152,7 +5633,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                             Text(
                               p.owner,
                               style: LhTypography.sans(
-                                size: 11,
+                                size: 10,
                                 color: LhColors.ink2,
                                 weight: FontWeight.w500,
                               ),
@@ -4166,7 +5647,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                               padding: const EdgeInsets.all(4),
                               child: Icon(
                                 Icons.close_rounded,
-                                size: 15,
+                                size: 13,
                                 color: LhColors.mute2,
                               ),
                             ),
@@ -4177,7 +5658,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
 
                     // ── 毛利 ──
                     Padding(
-                      padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+                      padding: const EdgeInsets.fromLTRB(10, 0, 10, 8),
                       child: Row(
                         crossAxisAlignment: CrossAxisAlignment.baseline,
                         textBaseline: TextBaseline.alphabetic,
@@ -4185,19 +5666,19 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                           Text(
                             '毛利',
                             style: LhTypography.mono(
-                              size: 9,
+                              size: 8.5,
                               color: LhColors.mute2,
                               weight: FontWeight.w500,
                               letterSpacing: 0.6,
                             ),
                           ),
-                          const SizedBox(width: 8),
+                          const SizedBox(width: 7),
                           RichText(
                             text: TextSpan(children: [
                               TextSpan(
                                 text: '¥',
                                 style: LhTypography.mono(
-                                  size: 12,
+                                  size: 11,
                                   color: LhColors.mute,
                                   weight: FontWeight.w500,
                                 ),
@@ -4206,7 +5687,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                               TextSpan(
                                 text: fmtValue(p.value),
                                 style: LhTypography.number(
-                                  size: 20,
+                                  size: 16,
                                   color: LhColors.ink,
                                 ),
                               ),
@@ -4214,7 +5695,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                                 TextSpan(
                                   text: ' ${fmtUnit(p.value)}',
                                   style: LhTypography.mono(
-                                    size: 10,
+                                    size: 9,
                                     color: LhColors.mute,
                                     weight: FontWeight.w500,
                                   ),
@@ -4228,20 +5709,20 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                     // ── 分隔线 ──
                     Container(
                       height: 1,
-                      margin: const EdgeInsets.symmetric(horizontal: 12),
+                      margin: const EdgeInsets.symmetric(horizontal: 10),
                       color: LhColors.line2.withAlpha(160),
                     ),
 
                     // ── 三维度信息 ──
                     Padding(
-                      padding: const EdgeInsets.fromLTRB(12, 10, 12, 11),
+                      padding: const EdgeInsets.fromLTRB(10, 8, 10, 9),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           _cubeDetailRow('产品', p.x, p.productGroup, null),
-                          const SizedBox(height: 8),
+                          const SizedBox(height: 6),
                           _cubeDetailRow('供给', p.y, p.supplyGroup, p.supplyHun),
-                          const SizedBox(height: 8),
+                          const SizedBox(height: 6),
                           _cubeDetailRow('渠道', p.z, p.channelGroup, p.channelHun),
                         ],
                       ),
@@ -4276,7 +5757,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           child: Text(
             name,
             style: LhTypography.sans(
-              size: 13,
+              size: 11.5,
               color: LhColors.ink,
               weight: FontWeight.w500,
             ),
@@ -4305,30 +5786,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         // HUN chip
         if (hun != null && hun.isNotEmpty && hun != 'none') ...[
           const SizedBox(width: 4),
-          () {
-            Color hunColor;
-            String hunLabel;
-            switch (hun) {
-              case 'U':
-                hunColor = _kHunColorU;
-                hunLabel = 'U';
-                break;
-              case 'N':
-                hunColor = _kHunColorN;
-                hunLabel = 'N';
-                break;
-              case 'H':
-                hunColor = _kHunColorH;
-                hunLabel = 'H';
-                break;
-              case 'mixed':
-                hunColor = _kHunColorMixed;
-                hunLabel = 'U·N';
-                break;
-              default:
-                hunColor = LhColors.mute2;
-                hunLabel = hun;
-            }
+          Builder(builder: (_) {
+            final hunColor = _hunColorFor(hun);
+            final hunLabel = _hunBadgeFor(hun);
             return Container(
               padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
               decoration: BoxDecoration(
@@ -4344,7 +5804,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 ),
               ),
             );
-          }(),
+          }),
         ],
       ],
     );
@@ -4489,7 +5949,13 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     final productGroups = distinct(cube.products.map((p) => p.group).toList());
     final supplyGroups = distinct(cube.supplies.map((s) => s.group).toList());
     final channelGroups = distinct(cube.channels.map((c) => c.group).toList());
-    const hunOpts = <String>['全部', 'U', 'N', 'H', 'mixed'];
+    final hunPairs = _cubeHunOptionPairs();
+    final hunValues = hunPairs.map((e) => e['value']!).toList();
+
+    String displayCubeValue(String dim, String current) {
+      if (!dim.contains('Hun') || current == '全部') return current;
+      return _hunLabelFor(current);
+    }
 
     Widget filterChip({
       required String dim,
@@ -4521,7 +5987,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               ),
               const SizedBox(width: 5),
               Text(
-                current,
+                displayCubeValue(dim, current),
                 style: LhTypography.sans(size: 10.5, color: accent, weight: FontWeight.w600, letterSpacing: 0.1),
               ),
               Icon(
@@ -4552,7 +6018,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           onPick = (v) => _cubeSupplyGroup = v;
           break;
         case 'supplyHun':
-          options = hunOpts;
+          options = hunValues;
           current = _cubeSupplyHun;
           onPick = (v) => _cubeSupplyHun = v;
           break;
@@ -4562,7 +6028,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           onPick = (v) => _cubeChannelGroup = v;
           break;
         case 'channelHun':
-          options = hunOpts;
+          options = hunValues;
           current = _cubeChannelHun;
           onPick = (v) => _cubeChannelHun = v;
           break;
@@ -4598,7 +6064,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                           borderRadius: BorderRadius.circular(5),
                         ),
                         child: Text(
-                          opt,
+                          (_cubeFilterOpen?.contains('Hun') ?? false)
+                              ? _hunLabelFor(opt)
+                              : opt,
                           style: LhTypography.sans(
                             size: 10.5,
                             color: on ? LhColors.copper : LhColors.ink2,
@@ -4624,15 +6092,15 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           scrollDirection: Axis.horizontal,
           child: Row(
             children: [
-              filterChip(dim: 'product', current: _cubeProductGroup, label: '产品'),
+              filterChip(dim: 'product', current: _cubeProductGroup, label: _cubeFilterLabel('product')),
               const SizedBox(width: 5),
-              filterChip(dim: 'supply', current: _cubeSupplyGroup, label: '供给'),
+              filterChip(dim: 'supply', current: _cubeSupplyGroup, label: _cubeFilterLabel('supply')),
               const SizedBox(width: 5),
-              filterChip(dim: 'supplyHun', current: _cubeSupplyHun, label: '供HUN'),
+              filterChip(dim: 'supplyHun', current: _cubeSupplyHun, label: _cubeFilterLabel('supplyHun')),
               const SizedBox(width: 5),
-              filterChip(dim: 'channel', current: _cubeChannelGroup, label: '渠道'),
+              filterChip(dim: 'channel', current: _cubeChannelGroup, label: _cubeFilterLabel('channel')),
               const SizedBox(width: 5),
-              filterChip(dim: 'channelHun', current: _cubeChannelHun, label: '渠HUN'),
+              filterChip(dim: 'channelHun', current: _cubeChannelHun, label: _cubeFilterLabel('channelHun')),
               if (_cubeHasActiveFilter || _cubeHasOwnerFilter) ...[
                 const SizedBox(width: 5),
                 GestureDetector(
@@ -4793,13 +6261,18 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     final metaItems = <_MetaItem>[];
     for (final k in selectedMetricKeys) {
       final v = (r[k] as num?)?.toDouble() ?? 0;
-      final label = _kMetricShort[k] ?? k;
+      final label = _metricShort(k);
       metaItems.add(_MetaItem(label, '${_fmt(v.abs())}${_unit(v.abs())}'));
     }
 
     void openDetail() {
       final detKey = _tab == 'channel' ? '$name::$group' : name;
-      setState(() { _detailKey = detKey; _detailType = _tab; _detailPage = 1; });
+      setState(() {
+        _detailKey = detKey;
+        _detailType = _tab;
+        _detailPage = 1;
+        _resetDetailSkuSearch();
+      });
     }
 
     return Container(
@@ -4873,11 +6346,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                             Builder(builder: (_) {
                               final h = _hunOf(r);
                               if (!h.hasAny) return const SizedBox.shrink();
-                              final col = h.primaryColor;
-                              final lbl = h.primaryLabel;
+                              final col = _hunColorFor(h.primary);
+                              final lbl = _hunBadgeFor(h.primary);
                               return Container(
                                 padding: EdgeInsets.symmetric(
-                                  horizontal: lbl == 'U·N' ? 4 : 5,
+                                  horizontal: lbl.length > 2 ? 4 : 5,
                                   vertical: 1,
                                 ),
                                 decoration: BoxDecoration(
@@ -4888,7 +6361,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                                 child: Text(
                                   lbl,
                                   style: LhTypography.mono(
-                                    size: lbl == 'U·N' ? 8 : 9,
+                                    size: lbl.length > 2 ? 8 : 9,
                                     color: col,
                                     weight: FontWeight.w700,
                                     letterSpacing: 0.3,
@@ -5136,29 +6609,6 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     ],
   };
 
-  // Mini metric cells for detail page (hero metrics minus 'profit', since profit shows big)
-  static const _kDetailMiniMetrics = {
-    'product': <_HeroMetric>[
-      _HeroMetric(key: 'gmv',     label: '引流GMV', isRate: false, cellColor: LhColors.product),
-      _HeroMetric(key: 'rate',    label: '毛利率',  isRate: true,  cellColor: LhColors.copper),
-      _HeroMetric(key: 'revenue', label: '收入',    isRate: false, cellColor: LhColors.cnpc),
-      _HeroMetric(key: 'cost',    label: '成本',    isRate: false, cellColor: LhColors.neg),
-      _HeroMetric(key: 'sales',   label: '销售额',  isRate: false, cellColor: LhColors.pingan),
-      _HeroMetric(key: 'tax',     label: '税务成本', isRate: false, cellColor: LhColors.mute),
-    ],
-    'supply': <_HeroMetric>[
-      _HeroMetric(key: 'sales',   label: '规模',   isRate: false, cellColor: LhColors.pingan),
-      _HeroMetric(key: 'revenue', label: '收入',   isRate: false, cellColor: LhColors.cnpc),
-      _HeroMetric(key: 'cost',    label: '成本',   isRate: false, cellColor: LhColors.neg),
-      _HeroMetric(key: 'rate',    label: '毛利率', isRate: true,  cellColor: LhColors.copper),
-    ],
-    'channel': <_HeroMetric>[
-      _HeroMetric(key: 'revenue', label: '收入',   isRate: false, cellColor: LhColors.cnpc),
-      _HeroMetric(key: 'cost',    label: '成本',   isRate: false, cellColor: LhColors.neg),
-      _HeroMetric(key: 'rate',    label: '毛利率', isRate: true,  cellColor: LhColors.copper),
-    ],
-  };
-
   Widget _buildDetailView() {
     final key = _detailKey ?? '';
     final type = _detailType ?? 'product';
@@ -5176,7 +6626,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     }
     if (detailDict == null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        setState(() { _detailKey = null; _detailType = null; });
+        setState(() { _detailKey = null; _detailType = null; _resetDetailSkuSearch(); });
       });
       return const SizedBox();
     }
@@ -5236,9 +6686,14 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       });
     }
 
+    final isSkuTab = _detailSubTab == 'productName';
+    final filteredSubRows = isSkuTab && _detailSkuQuery.trim().isNotEmpty
+        ? subRows.where((r) => _skuRowMatchesQuery(r, _detailSkuQuery)).toList()
+        : subRows;
+
     // Totals for sub rows
     double sumSales = 0, sumGmv = 0, sumCost = 0;
-    for (final r in subRows) {
+    for (final r in filteredSubRows) {
       sumSales += (r['sales'] as num?)?.toDouble() ?? 0;
       sumGmv += (r['gmv'] as num?)?.toDouble() ?? 0;
       sumCost += (r['cost'] as num?)?.toDouble() ?? 0;
@@ -5251,7 +6706,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     final entityRate = entitySales > 0 ? entityProfit / entitySales * 100 : 0.0;
 
     // Mini metrics
-    final miniMetrics = _kDetailMiniMetrics[type] ?? _kDetailMiniMetrics['product']!;
+    final miniMetrics = _heroMetricsFor(type).where((m) => m.key != 'profit').toList();
     final miniTotals = <String, double>{};
     for (final m in miniMetrics) {
       if (m.isRate) {
@@ -5284,7 +6739,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 behavior: HitTestBehavior.opaque,
                 onTap: () {
                   _closeDropdown();
-                  setState(() { _detailKey = null; _detailType = null; });
+                  setState(() { _detailKey = null; _detailType = null; _resetDetailSkuSearch(); });
                 },
                 child: Padding(
                   padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 2),
@@ -5415,6 +6870,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                           onTap: () => setState(() {
                             _detailSubTab = t.key;
                             _detailPage = 1;
+                            if (t.key != 'productName') _resetDetailSkuSearch();
                           }),
                           behavior: HitTestBehavior.opaque,
                           child: Stack(
@@ -5479,14 +6935,18 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
 
               const SizedBox(height: 0),
 
+              if (isSkuTab) _buildDetailSkuSearchBar(),
+
               // ── dt-totals row ─────────────────────────────────────────
               Padding(
-                padding: const EdgeInsets.fromLTRB(22, 8, 22, 4),
+                padding: EdgeInsets.fromLTRB(22, isSkuTab ? 8 : 8, 22, 4),
                 child: Row(
                   children: [
                     Expanded(
                       child: Text(
-                        '${subRows.length} 项 · 销售 ¥${_fmt(sumSales)}${_unit(sumSales)} · 引流 ¥${_fmt(sumGmv)}${_unit(sumGmv)} · 业务 ¥${_fmt(sumCost)}${_unit(sumCost)}',
+                        isSkuTab && _detailSkuQuery.trim().isNotEmpty
+                            ? '${filteredSubRows.length}/${subRows.length} 项 · 销售 ¥${_fmt(sumSales)}${_unit(sumSales)} · 引流 ¥${_fmt(sumGmv)}${_unit(sumGmv)} · 业务 ¥${_fmt(sumCost)}${_unit(sumCost)}'
+                            : '${filteredSubRows.length} 项 · 销售 ¥${_fmt(sumSales)}${_unit(sumSales)} · 引流 ¥${_fmt(sumGmv)}${_unit(sumGmv)} · 业务 ¥${_fmt(sumCost)}${_unit(sumCost)}',
                         style: LhTypography.mono(size: 9, color: LhColors.mute, letterSpacing: 0.2),
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -5498,19 +6958,24 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               ),
 
               // ── Sub list ───────────────────────────────────────────────
-              if (subRows.isEmpty)
+              if (filteredSubRows.isEmpty)
                 Padding(
                   padding: const EdgeInsets.symmetric(vertical: 40),
-                  child: Center(child: Text('暂无数据', style: LhTypography.sans(size: 12, color: LhColors.mute))),
+                  child: Center(
+                    child: Text(
+                      isSkuTab && _detailSkuQuery.trim().isNotEmpty ? '无匹配 SKU' : '暂无数据',
+                      style: LhTypography.sans(size: 12, color: LhColors.mute),
+                    ),
+                  ),
                 )
               else
                 Builder(
                   builder: (context) {
-                    final totalPages = _totalPages(subRows.length);
+                    final totalPages = _totalPages(filteredSubRows.length);
                     final page = _detailPage.clamp(1, totalPages);
                     final start = (page - 1) * _pageSize;
-                    final end = (start + _pageSize).clamp(0, subRows.length);
-                    final visible = subRows.sublist(start, end);
+                    final end = (start + _pageSize).clamp(0, filteredSubRows.length);
+                    final visible = filteredSubRows.sublist(start, end);
                     return Padding(
                       padding: const EdgeInsets.fromLTRB(22, 4, 22, 0),
                       child: Column(
@@ -6219,7 +7684,12 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           }
           if (c < cols - 1) rowCells.add(const SizedBox(width: colGap));
         }
-        widgets.add(Row(crossAxisAlignment: CrossAxisAlignment.start, children: rowCells));
+        widgets.add(IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: rowCells,
+          ),
+        ));
         if (r < rows.length - 1) {
           widgets.add(Container(
             height: 1,
@@ -6251,7 +7721,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     final metaItems = <_MetaItem>[];
     for (final k in (_metrics[type] ?? []).where((key) => key != 'discount')) {
       final v = (r[k] as num?)?.toDouble() ?? 0;
-      metaItems.add(_MetaItem(_kMetricShort[k] ?? k, '${_fmt(v.abs())}${_unit(v.abs())}'));
+      metaItems.add(_MetaItem(_metricShort(k, tab: type), '${_fmt(v.abs())}${_unit(v.abs())}'));
     }
 
     final tagColors = _groupTagColors(group);
@@ -6393,32 +7863,146 @@ class _SubTabInfo {
   final Color color;
 }
 
+// ── Brand refresh loader（灯塔 logo + 铜色旋转环）────────────────────────────
+class _LhBrandLoader extends StatefulWidget {
+  const _LhBrandLoader({this.size = 40});
+
+  final double size;
+
+  @override
+  State<_LhBrandLoader> createState() => _LhBrandLoaderState();
+}
+
+class _LhBrandLoaderState extends State<_LhBrandLoader>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _spin;
+
+  @override
+  void initState() {
+    super.initState();
+    _spin = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1100),
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _spin.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final s = widget.size;
+    final mark = s * 0.52;
+    return SizedBox(
+      width: s,
+      height: s,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          RotationTransition(
+            turns: _spin,
+            child: SizedBox(
+              width: s,
+              height: s,
+              child: CustomPaint(
+                painter: _LhLoaderRingPainter(stroke: math.max(1.5, s * 0.05)),
+              ),
+            ),
+          ),
+          Container(
+            width: mark,
+            height: mark,
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [Color(0xFF1A1816), Color(0xFF3A342C)],
+              ),
+              borderRadius: BorderRadius.circular(mark * 0.28),
+              border: Border.all(color: LhColors.copper.withAlpha(72), width: 1),
+            ),
+            child: Center(
+              child: Container(
+                width: mark * 0.22,
+                height: mark * 0.22,
+                decoration: BoxDecoration(
+                  color: LhColors.copper,
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(color: LhColors.copper.withAlpha(150), blurRadius: mark * 0.18),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _LhLoaderRingPainter extends CustomPainter {
+  const _LhLoaderRingPainter({required this.stroke});
+
+  final double stroke;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rect = Offset.zero & size;
+    final paint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = stroke
+      ..strokeCap = StrokeCap.round
+      ..color = LhColors.copper;
+    canvas.drawArc(rect.deflate(stroke), -math.pi / 2, math.pi * 1.35, false, paint);
+    final track = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = stroke
+      ..color = LhColors.line2.withAlpha(160);
+    canvas.drawArc(rect.deflate(stroke), math.pi * 0.55, math.pi * 1.55, false, track);
+  }
+
+  @override
+  bool shouldRepaint(covariant _LhLoaderRingPainter oldDelegate) =>
+      oldDelegate.stroke != stroke;
+}
+
 // ── Dropdown panel (HTML `.dropdown`) ───────────────────────────────────────
 class _LhDropdownPanel extends StatelessWidget {
-  const _LhDropdownPanel({this.width = 220, required this.child});
+  const _LhDropdownPanel({
+    this.width = 220,
+    this.maxHeight = 360,
+    required this.child,
+  });
 
   final double width;
+  final double maxHeight;
   final Widget child;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: width,
-      constraints: const BoxConstraints(maxHeight: 360),
-      decoration: BoxDecoration(
-        color: LhColors.paper,
-        border: Border.all(color: LhColors.line, width: 1),
-        borderRadius: BorderRadius.circular(10),
-        boxShadow: const [
-          BoxShadow(color: Color(0x23140A00), blurRadius: 28, offset: Offset(0, 12)),
-          BoxShadow(color: Color(0x0D140A00), blurRadius: 6, offset: Offset(0, 2)),
-        ],
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(10),
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(11, 9, 11, 11),
-          child: child,
+    return ConstrainedBox(
+      constraints: BoxConstraints(maxWidth: width, maxHeight: maxHeight),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: LhColors.paper,
+          border: Border.all(color: LhColors.line, width: 1),
+          borderRadius: BorderRadius.circular(10),
+          boxShadow: const [
+            BoxShadow(color: Color(0x23140A00), blurRadius: 28, offset: Offset(0, 12)),
+            BoxShadow(color: Color(0x0D140A00), blurRadius: 6, offset: Offset(0, 2)),
+          ],
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(10),
+          child: SingleChildScrollView(
+            physics: const ClampingScrollPhysics(),
+            padding: const EdgeInsets.fromLTRB(11, 9, 11, 11),
+            child: child,
+          ),
         ),
       ),
     );
@@ -7394,28 +8978,37 @@ class _CubeChipButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // 与「产品 / 供给」排序栏（_buildSortBtn）一致的灰色框框：
+    //   resting = paper 底 + line 灰边；active(传入 copper)= 微灰底 + ink2 边。
+    final active = color == LhColors.copper;
+    final fg = active ? LhColors.ink : LhColors.mute;
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
       child: Container(
+        constraints: const BoxConstraints(minHeight: 28),
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
         decoration: BoxDecoration(
-          color: LhColors.paper.withAlpha(220),
-          border: Border.all(color: color.withAlpha(110), width: 0.8),
-          borderRadius: BorderRadius.circular(12),
+          color: active ? LhColors.ink.withAlpha(8) : LhColors.paper,
+          border: Border.all(
+            color: active ? LhColors.ink2 : LhColors.line,
+            width: 1,
+          ),
+          borderRadius: BorderRadius.circular(5),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, size: 11, color: color),
-            const SizedBox(width: 3),
+            Icon(icon, size: 11, color: fg),
+            const SizedBox(width: 4),
             Text(
               label,
-              style: LhTypography.mono(
-                size: 9,
-                color: color,
-                weight: FontWeight.w700,
-                letterSpacing: 0.4,
+              style: LhTypography.sans(
+                size: 10,
+                color: fg,
+                weight: FontWeight.w500,
+                letterSpacing: 0.2,
               ),
             ),
           ],
@@ -7425,44 +9018,3 @@ class _CubeChipButton extends StatelessWidget {
   }
 }
 
-/// 全屏 cube 右下角的 + / − 圆形图标按钮
-class _CubeZoomIconButton extends StatelessWidget {
-  const _CubeZoomIconButton({
-    required this.icon,
-    required this.enabled,
-    required this.onTap,
-  });
-  final IconData icon;
-  final bool enabled;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: enabled ? onTap : null,
-      child: AnimatedOpacity(
-        duration: const Duration(milliseconds: 150),
-        opacity: enabled ? 1.0 : 0.35,
-        child: Container(
-          width: 38,
-          height: 38,
-          decoration: BoxDecoration(
-            color: LhColors.paper,
-            border: Border.all(color: LhColors.copper.withAlpha(140), width: 0.9),
-            borderRadius: BorderRadius.circular(19),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withAlpha(18),
-                blurRadius: 6,
-                offset: const Offset(0, 2),
-              ),
-            ],
-          ),
-          alignment: Alignment.center,
-          child: Icon(icon, size: 18, color: LhColors.copper),
-        ),
-      ),
-    );
-  }
-}

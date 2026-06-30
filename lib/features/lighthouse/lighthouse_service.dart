@@ -46,12 +46,14 @@ class LighthouseService {
     String? period,
     String? date,
     String? fuel,
+    int? offset,
   }) async {
     final resp = await _client.get(
       _uri('/lighthouse/overview', {
         if (period != null && period.isNotEmpty) 'period': period,
         if (date != null && date.isNotEmpty) 'date': date,
         if (fuel != null && fuel.isNotEmpty && fuel != '全部') 'fuel': fuel,
+        if (offset != null && offset != 0) 'offset': '$offset',
       }),
       headers: _headers,
     );
@@ -77,6 +79,7 @@ class LighthouseService {
     String? period,
     String? date,
     String? fuel,
+    int? offset,
     int topP = 12,
     int topS = 10,
     int topC = 10,
@@ -87,6 +90,7 @@ class LighthouseService {
         if (period != null && period.isNotEmpty) 'period': period,
         if (date != null && date.isNotEmpty) 'date': date,
         if (fuel != null && fuel.isNotEmpty && fuel != '全部') 'fuel': fuel,
+        if (offset != null && offset != 0) 'offset': '$offset',
         'top_p': '$topP',
         'top_s': '$topS',
         'top_c': '$topC',

@@ -44,6 +44,7 @@ abstract final class LhTypography {
     Color color = LhColors.mute,
     double? letterSpacing,
     FontWeight weight = FontWeight.w500,
+    double? height,
   }) =>
       TextStyle(
         fontFamily: 'Geist Mono',
@@ -52,6 +53,7 @@ abstract final class LhTypography {
         color: color,
         letterSpacing: letterSpacing,
         fontWeight: weight,
+        height: height,
         fontFeatures: const [FontFeature.tabularFigures()],
       );
 

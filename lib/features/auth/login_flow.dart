@@ -14,6 +14,8 @@ import '../conversation/conversation_realtime_hub.dart';
 import '../push/push_service.dart';
 import '../shell/dunes_shell.dart';
 import '../shell/splash_screen.dart';
+import '../update/app_update_dialog.dart';
+import '../update/app_update_service.dart';
 import 'auth_service.dart';
 import 'auth_profile.dart';
 import 'auth_session.dart';
@@ -39,6 +41,7 @@ class _LoginFlowState extends State<LoginFlow> {
   AuthSession? _session;
   bool _hydrating = true;
   bool _notifiedHydrated = false;
+  bool _updateChecked = false;
   bool _showPostLoginSplash = false;
   String _appVersion = '';
 
@@ -157,6 +160,14 @@ class _LoginFlowState extends State<LoginFlow> {
     }
   }
 
+  Future<void> _checkAppUpdate() async {
+    if (_updateChecked || !mounted) return;
+    _updateChecked = true;
+    final result = await AppUpdateService.instance.checkAndroidUpdate();
+    if (!mounted || result == null || !result.updateAvailable) return;
+    await showAppUpdateDialog(context, result);
+  }
+
   @override
   Widget build(BuildContext context) {
     if (!_hydrating && !_notifiedHydrated) {
@@ -164,6 +175,9 @@ class _LoginFlowState extends State<LoginFlow> {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         widget.onHydrated?.call();
       });
+    }
+    if (!_hydrating && !_updateChecked) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _checkAppUpdate());
     }
     if (_hydrating) {
       return const Scaffold(

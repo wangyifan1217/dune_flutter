@@ -24,9 +24,10 @@ class ConversationRealtimeEvent {
 
 class ConversationRealtimeService {
   ConversationRealtimeService({
-    required this._session,
+    required AuthSession session,
     http.Client? client,
-  }) : _http = client ?? http.Client();
+  })  : _session = session,
+        _http = client ?? http.Client();
 
   final AuthSession _session;
   final http.Client _http;

@@ -53,6 +53,7 @@ import '../shell/dunes_toast.dart';
 import '../workbench/native_avatar_sheet.dart';
 import '../workbench/native_my_workbench_pages.dart';
 import '../workbench/workbench_badge_notifier.dart';
+import '../lighthouse/native_lighthouse_page.dart';
 
 class NativeScreenHost extends StatefulWidget {
   const NativeScreenHost({
@@ -460,6 +461,13 @@ class _NativeScreenHostState extends State<NativeScreenHost>
   @override
   Widget build(BuildContext context) {
     switch (widget.navigation.currentScreen) {
+      case 'LH':
+        return NativeLighthousePage(
+          session: widget.session,
+          navigation: widget.navigation,
+          commUnread: _commUnread,
+          workbenchBadge: _workbenchBadge,
+        );
       case 'B2':
         return _NativeB2Page(
           session: widget.session,

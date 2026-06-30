@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
+import 'core/layout/mobile_viewport_shell.dart';
 import 'core/theme/dunes_theme.dart';
 import 'features/push/push_service.dart';
 import 'features/shell/splash_screen.dart';
@@ -30,6 +31,9 @@ class DunesApp extends StatelessWidget {
         Locale('zh', 'CN'),
         Locale('en', 'US'),
       ],
+      builder: (context, child) => MobileViewportShell(
+        child: child ?? const SizedBox.shrink(),
+      ),
       home: const AppBootGate(),
     );
   }

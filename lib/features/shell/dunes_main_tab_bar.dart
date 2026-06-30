@@ -85,17 +85,7 @@ class _DunesMainTabBarState extends State<DunesMainTabBar> {
             label: '千机',
             onTap: () => showDunesSoonToast(context),
           ),
-          _tab(
-            icon: Icons.location_city_outlined,
-            label: '灯塔',
-            onTap: () {
-              if (widget.lighthouseAccess) {
-                showDunesSoonToast(context, '灯塔对接中');
-              } else {
-                showDunesSoonToast(context);
-              }
-            },
-          ),
+          _tab(icon: Icons.location_city_outlined, label: '灯塔', screen: 'LH'),
           _tab(
             icon: Icons.person_outline_rounded,
             label: '我的',
@@ -131,10 +121,7 @@ class _DunesMainTabBarState extends State<DunesMainTabBar> {
                 children: [
                   Icon(icon, size: 21, color: color),
                   const SizedBox(height: 2),
-                  Text(
-                    label,
-                    style: TextStyle(fontSize: 10.5, color: color),
-                  ),
+                  Text(label, style: TextStyle(fontSize: 10.5, color: color)),
                 ],
               ),
               if (showRedDot)

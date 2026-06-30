@@ -640,29 +640,35 @@ class _NativeConversationPageState extends State<NativeConversationPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: DunesColors.bgApp,
+      // 搜索聚焦时键盘不顶起底部 Tab，与灯塔页一致。
+      resizeToAvoidBottomInset: false,
       body: SafeArea(
         bottom: false,
-        child: Column(
-          children: [
-            ChatInboxHeader(
-              visibleCount: _visibleCount,
-              onOpenContacts: widget.onOpenContacts,
-              onNewChat: widget.onOpenNewChat,
-              onScan: () => showDunesSoonToast(context),
-            ),
-            ChatInboxSearchBar(
-              controller: _searchController,
-              onChanged: _onSearchChanged,
-            ),
-            Expanded(child: _buildBody()),
-            DunesMainTabBar(
-              navigation: widget.navigation,
-              activeScreen: 'C1',
-              commUnread: widget.commUnread,
-              workbenchBadge: widget.workbenchBadge,
-              lighthouseAccess: widget.session.lighthouseAccess,
-            ),
-          ],
+        child: GestureDetector(
+          onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
+          behavior: HitTestBehavior.translucent,
+          child: Column(
+            children: [
+              ChatInboxHeader(
+                visibleCount: _visibleCount,
+                onOpenContacts: widget.onOpenContacts,
+                onNewChat: widget.onOpenNewChat,
+                onScan: () => showDunesSoonToast(context),
+              ),
+              ChatInboxSearchBar(
+                controller: _searchController,
+                onChanged: _onSearchChanged,
+              ),
+              Expanded(child: _buildBody()),
+              DunesMainTabBar(
+                navigation: widget.navigation,
+                activeScreen: 'C1',
+                commUnread: widget.commUnread,
+                workbenchBadge: widget.workbenchBadge,
+                lighthouseAccess: widget.session.lighthouseAccess,
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -697,6 +703,7 @@ class _NativeConversationPageState extends State<NativeConversationPage> {
     return RefreshIndicator(
       onRefresh: _load,
       child: ListView(
+        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
         physics: const AlwaysScrollableScrollPhysics(),
         clipBehavior: Clip.none,
         padding: EdgeInsets.zero,

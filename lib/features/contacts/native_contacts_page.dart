@@ -133,59 +133,73 @@ class _NativeContactsPageState extends State<NativeContactsPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: DunesColors.bgApp,
+      resizeToAvoidBottomInset: false,
       body: SafeArea(
         bottom: false,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            ContactsHeader(
-              total: _total,
-              onBack: widget.onBack,
-              searchOpen: _searchOpen,
-              onToggleSearch: () => setState(() => _searchOpen = !_searchOpen),
-            ),
-            if (_searchOpen)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 8,
-                  ),
-                  decoration: BoxDecoration(
-                    color: DunesColors.bgSoft,
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(
-                        Icons.search,
-                        size: 15,
-                        color: DunesColors.text3,
-                      ),
-                      const SizedBox(width: 9),
-                      Expanded(
-                        child: TextField(
-                          controller: _searchController,
-                          onChanged: _onSearchChanged,
-                          style: DunesTypography.sans(fontSize: 13),
-                          decoration: InputDecoration(
-                            isDense: true,
-                            border: InputBorder.none,
-                            hintText: '搜索同事 · 姓名 / 部门',
-                            hintStyle: DunesTypography.sans(
-                              fontSize: 13,
-                              color: DunesColors.text3,
+        child: GestureDetector(
+          onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
+          behavior: HitTestBehavior.translucent,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              ContactsHeader(
+                total: _total,
+                onBack: widget.onBack,
+                searchOpen: _searchOpen,
+                onToggleSearch: () {
+                setState(() {
+                  _searchOpen = !_searchOpen;
+                  if (!_searchOpen) {
+                    FocusManager.instance.primaryFocus?.unfocus();
+                  }
+                });
+              },
+              ),
+              if (_searchOpen)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
+                    decoration: BoxDecoration(
+                      color: DunesColors.bgSoft,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.search,
+                          size: 15,
+                          color: DunesColors.text3,
+                        ),
+                        const SizedBox(width: 9),
+                        Expanded(
+                          child: TextField(
+                            controller: _searchController,
+                            onChanged: _onSearchChanged,
+                            autofocus: true,
+                            style: DunesTypography.sans(fontSize: 13),
+                            textInputAction: TextInputAction.search,
+                            decoration: InputDecoration(
+                              isDense: true,
+                              border: InputBorder.none,
+                              hintText: '搜索同事 · 姓名 / 部门',
+                              hintStyle: DunesTypography.sans(
+                                fontSize: 13,
+                                color: DunesColors.text3,
+                              ),
                             ),
                           ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
-              ),
-            Expanded(child: _buildBody()),
-          ],
+              Expanded(child: _buildBody()),
+            ],
+          ),
         ),
       ),
     );
@@ -226,6 +240,7 @@ class _NativeContactsPageState extends State<NativeContactsPage> {
     return RefreshIndicator(
       onRefresh: _load,
       child: ListView(
+        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
         padding: const EdgeInsets.only(bottom: 16),
         children: [
           OrgSectionLabel(total: _total),

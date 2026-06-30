@@ -94,6 +94,7 @@ class ChatInboxSearchBar extends StatelessWidget {
                 controller: controller,
                 onChanged: onChanged,
                 style: DunesTypography.sans(fontSize: 13, color: DunesColors.text),
+                textInputAction: TextInputAction.search,
                 decoration: InputDecoration(
                   isDense: true,
                   border: InputBorder.none,

@@ -218,8 +218,8 @@ class _NativeChatViewState extends State<NativeChatView>
     final keyboardOpening =
         _inputFocusNode.hasFocus && inset > _lastKeyboardInset + 1;
     _lastKeyboardInset = inset;
-    if (keyboardOpening && _isNearBottom) {
-      _scheduleKeyboardScroll();
+    if (keyboardOpening && !_shouldAnchorMessagesAtTop) {
+      _scrollBottom(force: true, gentle: true);
     }
   }
 
@@ -901,27 +901,72 @@ class _NativeChatViewState extends State<NativeChatView>
     _scrollBottom(animated: true, force: true);
   }
 
+  int? _entryIndexForMessage(int messageId) {
+    final entries = _buildListEntries();
+    for (var i = 0; i < entries.length; i++) {
+      if (entries[i].message?.id == messageId) return i;
+    }
+    return null;
+  }
+
+  int get _listItemCount {
+    final footer = _locatedMode && _hasNewer ? 1 : 0;
+    return _buildListEntries().length + footer;
+  }
+
+  void _preScrollTowardMessage(int messageId) {
+    if (!_scrollController.hasClients) return;
+    final msgIndex = _messages.indexWhere((m) => m.id == messageId);
+    if (msgIndex < 0) return;
+    // 今天的最新消息在列表底部；懒加载列表默认 scroll=0 时底部 item 未构建。
+    if (msgIndex >= _messages.length - 2) {
+      _scrollBottom(force: true);
+      return;
+    }
+    final entryIndex = _entryIndexForMessage(messageId);
+    if (entryIndex == null) return;
+    final total = _listItemCount;
+    if (total <= 1) return;
+    final max = _scrollController.position.maxScrollExtent;
+    final ratio = entryIndex / (total - 1);
+    _scrollController.jumpTo((max * ratio).clamp(0.0, max));
+  }
+
   void _highlightAndScroll(int messageId) {
     setState(() => _highlightMessageId = messageId);
     _highlightTimer?.cancel();
     _highlightTimer = Timer(const Duration(seconds: 2), () {
       if (mounted) setState(() => _highlightMessageId = null);
     });
-    WidgetsBinding.instance.addPostFrameCallback(
-      (_) => _scrollToMessage(messageId),
-    );
+    _ensureMessageVisible(messageId);
   }
 
-  void _scrollToMessage(int messageId) {
-    final key = _messageKeys[messageId];
-    final ctx = key?.currentContext;
-    if (ctx == null) return;
-    Scrollable.ensureVisible(
-      ctx,
-      alignment: 0.35,
-      duration: const Duration(milliseconds: 280),
-      curve: Curves.easeOutCubic,
-    );
+  void _ensureMessageVisible(int messageId, {int attempt = 0}) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (attempt == 0) {
+        _preScrollTowardMessage(messageId);
+      }
+      final key = _messageKeys[messageId];
+      final ctx = key?.currentContext;
+      if (ctx != null) {
+        Scrollable.ensureVisible(
+          ctx,
+          alignment: 0.35,
+          duration: const Duration(milliseconds: 280),
+          curve: Curves.easeOutCubic,
+        );
+        return;
+      }
+      if (attempt < 8) {
+        _ensureMessageVisible(messageId, attempt: attempt + 1);
+        return;
+      }
+      // 兜底：仍找不到渲染节点时，至少滚到列表底部（今日消息常见于此）。
+      if (_messages.any((m) => m.id == messageId)) {
+        _scrollBottom(force: true);
+      }
+    });
   }
 
   Future<NativeConversation?> _resolveConversation() async {
@@ -1010,19 +1055,30 @@ class _NativeChatViewState extends State<NativeChatView>
 
   void _onInputFocusChanged() {
     if (!_inputFocusNode.hasFocus) return;
-    _scheduleKeyboardScroll();
+    unawaited(_scrollToLatestForInput());
   }
 
-  void _scheduleKeyboardScroll() {
-    if (!_isNearBottom || _shouldAnchorMessagesAtTop) return;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+  Future<void> _scrollToLatestForInput() async {
+    if (_locatedMode) {
+      await _jumpToLatest();
+      return;
+    }
+    if (_shouldAnchorMessagesAtTop) return;
+    setState(_clearPendingNewMessages);
+    _wasNearBottom = true;
+    void snap({bool animated = false}) {
       if (!mounted) return;
-      _scrollBottom(force: true, gentle: true);
+      _scrollBottom(force: true, animated: animated, gentle: true);
+    }
+    snap(animated: true);
+    WidgetsBinding.instance.addPostFrameCallback((_) => snap());
+    Future<void>.delayed(const Duration(milliseconds: 280), () {
+      if (mounted && _inputFocusNode.hasFocus) snap();
     });
   }
 
   void _scrollToLatestAfterKeyboard() {
-    _scheduleKeyboardScroll();
+    unawaited(_scrollToLatestForInput());
   }
 
   Future<void> _send() async {

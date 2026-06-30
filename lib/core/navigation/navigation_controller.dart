@@ -15,6 +15,25 @@ class DunesNavigationController extends ChangeNotifier {
   List<String> get history => List.unmodifiable(_history);
   bool get canGoBack => _history.length > 1;
 
+  /// 当前屏内子页面（如灯塔详情）优先消费返回；返回 true 表示已处理。
+  bool Function()? backInterceptor;
+
+  /// 是否存在可消费的屏内返回（用于 iOS 边缘滑动等）。
+  bool Function()? canBackInterceptor;
+
+  bool get canHandleBack =>
+      (canBackInterceptor?.call() ?? false) || canGoBack;
+
+  /// 先尝试屏内返回，再弹出全局导航栈。
+  bool handleBack() {
+    if (backInterceptor?.call() == true) return true;
+    if (canGoBack) {
+      back();
+      return true;
+    }
+    return false;
+  }
+
   DunesScreenInfo? get currentInfo => dunesScreenById(_currentScreen);
 
   void syncFromWebView(String screenId) {

@@ -1220,6 +1220,8 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   @override
   void initState() {
     super.initState();
+    widget.navigation.canBackInterceptor = _hasInternalBackStack;
+    widget.navigation.backInterceptor = _handleInternalBack;
     if (widget.session.lighthouseAccess) {
       _load();
     } else {
@@ -1229,9 +1231,32 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
 
   @override
   void dispose() {
+    widget.navigation.canBackInterceptor = null;
+    widget.navigation.backInterceptor = null;
     _ddEntry?.remove();
     _detailSkuSearchCtrl.dispose();
     super.dispose();
+  }
+
+  bool _hasInternalBackStack() =>
+      _detailKey != null || _metricPageKey != null;
+
+  bool _handleInternalBack() {
+    if (_detailKey != null) {
+      _closeDropdown();
+      setState(() {
+        _detailKey = null;
+        _detailType = null;
+        _resetDetailSkuSearch();
+      });
+      return true;
+    }
+    if (_metricPageKey != null) {
+      _closeDropdown();
+      setState(() => _metricPageKey = null);
+      return true;
+    }
+    return false;
   }
 
   void _resetDetailSkuSearch() {
@@ -2263,7 +2288,13 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return PopScope(
+      canPop: !_hasInternalBackStack(),
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        _handleInternalBack();
+      },
+      child: Scaffold(
       backgroundColor: LhColors.cream,
       body: SafeArea(
         bottom: false,
@@ -2292,6 +2323,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           ],
         ),
       ),
+    ),
     );
   }
 

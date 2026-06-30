@@ -51,9 +51,7 @@ class _DunesShellState extends State<DunesShell> {
             canPop: false,
             onPopInvokedWithResult: (didPop, _) async {
               if (didPop) return;
-              if (_navigation.canGoBack) {
-                _navigation.back();
-              } else {
+              if (!_navigation.handleBack()) {
                 SystemNavigator.pop();
               }
             },
@@ -67,7 +65,7 @@ class _DunesShellState extends State<DunesShell> {
                     onLogout: widget.onLogout,
                   ),
                   // iOS：从屏幕左边缘向右滑动当作返回（应用为自定义导航栈，需手动实现）。
-                  if (_enableEdgeBack && _navigation.canGoBack)
+                  if (_enableEdgeBack && _navigation.canHandleBack)
                     Positioned(
                       left: 0,
                       top: 0,
@@ -79,8 +77,9 @@ class _DunesShellState extends State<DunesShell> {
                         onHorizontalDragUpdate: (d) => _edgeDragDx += d.delta.dx,
                         onHorizontalDragEnd: (d) {
                           final v = d.primaryVelocity ?? 0;
-                          if (_navigation.canGoBack && (_edgeDragDx > 40 || v > 300)) {
-                            _navigation.back();
+                          if (_navigation.canHandleBack &&
+                              (_edgeDragDx > 40 || v > 300)) {
+                            _navigation.handleBack();
                           }
                           _edgeDragDx = 0;
                         },

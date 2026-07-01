@@ -57,6 +57,7 @@ import '../lighthouse/native_lighthouse_page.dart';
 import '../meeting/native_meeting_create_page.dart';
 import '../meeting/native_meeting_detail_page.dart';
 import '../meeting/native_meeting_list_page.dart';
+import '../meeting/native_meeting_service.dart';
 
 class NativeScreenHost extends StatefulWidget {
   const NativeScreenHost({
@@ -783,7 +784,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           onCreate: () => widget.navigation.go('MM0'),
           onOpenDetail: (meetingId) {
             if (meetingId <= 0) return;
-            _meetingId = meetingId;
+            setState(() => _meetingId = meetingId);
             widget.navigation.go('MM');
           },
         );
@@ -793,7 +794,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           onBack: widget.navigation.back,
           onCreated: (meetingId) {
             if (meetingId <= 0) return;
-            _meetingId = meetingId;
+            setState(() => _meetingId = meetingId);
             widget.navigation.go('MM');
           },
         );
@@ -808,6 +809,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           );
         }
         return NativeMeetingDetailPage(
+          key: ValueKey<int>(_meetingId),
           session: widget.session,
           meetingId: _meetingId,
           onBack: widget.navigation.back,
@@ -979,6 +981,7 @@ class _NativeB2PageState extends State<_NativeB2Page> {
   _NativeMyStats? _stats;
   NativeKbSummary? _kbSummary;
   _NativeB2Profile? _profile;
+  int _meetingCount = 0;
   bool _loading = true;
   String? _loadError;
   bool _avatarSheetOpen = false;
@@ -1093,11 +1096,15 @@ class _NativeB2PageState extends State<_NativeB2Page> {
             .fetchB14Initiated()
             .then<List<XflowProposalItem>?>((v) => v)
             .catchError((_) => null),
+        NativeMeetingService(session: widget.session)
+            .fetchMyCount()
+            .catchError((_) => 0),
       ]);
       final resp = results[0] as http.Response;
       final kbSummary = results[1] as NativeKbSummary?;
       final profile = results[2] as _NativeB2Profile;
       initiatedRows = results[3] as List<XflowProposalItem>?;
+      final meetingCount = results[4] as int;
       if (resp.statusCode < 200 || resp.statusCode >= 300) {
         throw Exception('HTTP ${resp.statusCode}');
       }
@@ -1116,6 +1123,7 @@ class _NativeB2PageState extends State<_NativeB2Page> {
         _stats = stats;
         _kbSummary = kbSummary;
         _profile = profile;
+        _meetingCount = meetingCount;
         _loading = false;
       });
       _persistProfileCache(profile);
@@ -1384,8 +1392,9 @@ class _NativeB2PageState extends State<_NativeB2Page> {
                       _buildMenuItem(
                         icon: Icons.mic_none_rounded,
                         title: '会议纪要',
-                        desc: 'Beta · 录音转写 · 纪要生成',
-                        badge: 0,
+                        desc:
+                            '$_meetingCount 场 · 录音转写 · 纪要生成',
+                        badge: _meetingCount,
                         onTap: () => widget.navigation.go('MM-L'),
                       ),
                     ]),

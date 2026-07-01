@@ -42,11 +42,37 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
   @override
   void initState() {
     super.initState();
+    if (widget.meetingId <= 0) {
+      _loading = false;
+      _error = '无效的会议 ID';
+      return;
+    }
     _load();
     _poller = Timer.periodic(
       const Duration(seconds: 5),
       (_) => _load(silent: true),
     );
+  }
+
+  @override
+  void didUpdateWidget(NativeMeetingDetailPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.meetingId == widget.meetingId) return;
+    if (widget.meetingId <= 0) {
+      setState(() {
+        _detail = null;
+        _loading = false;
+        _error = '无效的会议 ID';
+      });
+      return;
+    }
+    setState(() {
+      _detail = null;
+      _loading = true;
+      _error = null;
+      _segmentVisibleCount = _segmentPageSize;
+    });
+    unawaited(_load());
   }
 
   @override
@@ -74,8 +100,10 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
         );
       });
     } catch (e) {
-      if (!mounted || silent) return;
-      setState(() => _error = e.toString());
+      if (!mounted) return;
+      if (!silent) {
+        setState(() => _error = e.toString());
+      }
     } finally {
       if (mounted && !silent) setState(() => _loading = false);
     }
@@ -207,12 +235,14 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
           ? const Center(child: CircularProgressIndicator())
           : _error != null && d == null
           ? _buildErrorState()
+          : d == null
+          ? _buildEmptyState()
           : ListView(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
               children: [
                 _buildHero(d),
                 const SizedBox(height: 16),
-                if (d?.audioPlayUrl.isNotEmpty == true) ...[
+                if (d.audioPlayUrl.isNotEmpty) ...[
                   _buildAudioCard(),
                   const SizedBox(height: 16),
                 ],
@@ -220,8 +250,8 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
                   title: '会议摘要',
                   icon: Icons.auto_awesome_outlined,
                   child: Text(
-                    d?.summary.isNotEmpty == true
-                        ? d!.summary
+                    d.summary.isNotEmpty
+                        ? d.summary
                         : '正在智能生成会议摘要，请稍候...',
                     style: DunesTypography.sans(
                       fontSize: 14,
@@ -234,9 +264,9 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
                 _buildSection(
                   title: '原始逐句转写',
                   icon: Icons.article_outlined,
-                  child: d?.transcriptSegments.isNotEmpty == true
+                  child: d.transcriptSegments.isNotEmpty
                       ? Column(
-                          children: d!.transcriptSegments
+                          children: d.transcriptSegments
                               .take(_segmentVisibleCount)
                               .map<Widget>(
                                 (seg) => Container(
@@ -319,6 +349,47 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
                 ),
               ],
             ),
+    );
+  }
+
+  Widget _buildEmptyState() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.event_note_outlined, size: 48, color: DunesColors.text3),
+            const SizedBox(height: 12),
+            Text(
+              '暂无会议详情',
+              style: DunesTypography.sans(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                color: DunesColors.text,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              '请返回列表重新进入，或下拉刷新重试',
+              textAlign: TextAlign.center,
+              style: DunesTypography.sans(
+                fontSize: 13,
+                color: DunesColors.text3,
+              ),
+            ),
+            const SizedBox(height: 16),
+            FilledButton(
+              onPressed: _load,
+              style: FilledButton.styleFrom(
+                backgroundColor: DunesColors.accent,
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('重新加载'),
+            ),
+          ],
+        ),
+      ),
     );
   }
 

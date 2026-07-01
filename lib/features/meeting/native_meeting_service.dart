@@ -22,6 +22,14 @@ class NativeMeetingService {
     int page = 0,
     int size = 20,
   }) async {
+    final result = await fetchListPage(page: page, size: size);
+    return result.items;
+  }
+
+  Future<NativeMeetingListPageResult> fetchListPage({
+    int page = 0,
+    int size = 20,
+  }) async {
     final q = <String, String>{
       'owner': 'me',
       'page': page.toString(),
@@ -35,10 +43,23 @@ class NativeMeetingService {
     final data = _unwrapData(resp.body);
     final content =
         (data['content'] as List?) ?? (data['items'] as List?) ?? const [];
-    return content
+    final items = content
         .whereType<Map>()
         .map((e) => NativeMeetingSummary.fromJson(Map<String, dynamic>.from(e)))
         .toList(growable: false);
+    return NativeMeetingListPageResult(
+      items: items,
+      totalCount: _readTotalCount(data, fallback: items.length),
+    );
+  }
+
+  Future<int> fetchMyCount() async {
+    try {
+      final result = await fetchListPage(page: 0, size: 1);
+      return result.totalCount;
+    } catch (_) {
+      return 0;
+    }
   }
 
   Future<int> createMeeting({
@@ -129,7 +150,7 @@ class NativeMeetingService {
   Future<NativeMeetingDetail> fetchDetail(int meetingId) async {
     final resp = await _requestMeeting('GET', '/$meetingId');
     _ensureSuccess(resp);
-    final data = _unwrapData(resp.body);
+    final data = _normalizeMeetingPayload(_unwrapData(resp.body));
     return NativeMeetingDetail.fromJson(data);
   }
 
@@ -236,4 +257,67 @@ class NativeMeetingService {
       if (candidate != resolved) yield candidate;
     }
   }
+}
+
+class NativeMeetingListPageResult {
+  const NativeMeetingListPageResult({
+    required this.items,
+    required this.totalCount,
+  });
+
+  final List<NativeMeetingSummary> items;
+  final int totalCount;
+}
+
+int _readTotalCount(Map<String, dynamic> data, {required int fallback}) {
+  for (final key in const [
+    'totalElements',
+    'total',
+    'totalCount',
+    'count',
+    'totalItems',
+  ]) {
+    final raw = data[key];
+    if (raw is num && raw >= 0) return raw.toInt();
+    if (raw is String) {
+      final parsed = int.tryParse(raw);
+      if (parsed != null && parsed >= 0) return parsed;
+    }
+  }
+  return fallback;
+}
+
+Map<String, dynamic> _normalizeMeetingPayload(Map<String, dynamic> json) {
+  final meeting = json['meeting'];
+  if (meeting is Map) {
+    final merged = Map<String, dynamic>.from(meeting);
+    for (final key in const [
+      'transcript',
+      'minutes',
+      'actionItems',
+      'audioPlayUrl',
+      'audioUrl',
+      'summary',
+      'status',
+      'asrProgress',
+      'title',
+      'meetingDate',
+      'createdAt',
+      'updatedAt',
+    ]) {
+      if (!merged.containsKey(key) && json.containsKey(key)) {
+        merged[key] = json[key];
+      }
+    }
+    if (!merged.containsKey('meetingId')) {
+      for (final key in const ['meetingId', 'id', 'meeting_id']) {
+        if (json.containsKey(key)) {
+          merged[key] = json[key];
+          break;
+        }
+      }
+    }
+    return merged;
+  }
+  return json;
 }

@@ -49,30 +49,19 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
   void initState() {
     super.initState();
     // 若已有正在进行的实时转写，进入页面默认切到该模式，回显进度。
+    // 注意：不自动回填上一次录制的文件，避免上传区出现“莫名其妙的默认文件”。
     if (_live.active.value) {
       _mode = _CreateMode.live;
-    }
-    final existing = _live.recordedFilePath.value;
-    if (existing != null && existing.isNotEmpty) {
-      _filePath = existing;
     }
     _live.active.addListener(_onLiveChanged);
     _live.paused.addListener(_onLiveChanged);
     _live.lines.addListener(_onLiveChanged);
     _live.partial.addListener(_onLiveChanged);
-    _live.recordedFilePath.addListener(_onRecordedFile);
     _recordingCtrl.state.addListener(_onLiveChanged);
   }
 
   void _onLiveChanged() {
     if (mounted) setState(() {});
-  }
-
-  void _onRecordedFile() {
-    final path = _live.recordedFilePath.value;
-    if (path != null && path.isNotEmpty && mounted) {
-      setState(() => _filePath = path);
-    }
   }
 
   @override
@@ -82,7 +71,6 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
     _live.paused.removeListener(_onLiveChanged);
     _live.lines.removeListener(_onLiveChanged);
     _live.partial.removeListener(_onLiveChanged);
-    _live.recordedFilePath.removeListener(_onRecordedFile);
     _recordingCtrl.state.removeListener(_onLiveChanged);
     _titleCtrl.dispose();
     super.dispose();

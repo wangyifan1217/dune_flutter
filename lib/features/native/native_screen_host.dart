@@ -1710,7 +1710,7 @@ class _NativeB2PageState extends State<_NativeB2Page> {
         children: [
           InkWell(
             onTap: _avatarSheetOpen ? null : _openAvatarEditor,
-            borderRadius: BorderRadius.circular(99),
+            borderRadius: BorderRadius.circular(52 * 0.18),
             child: Stack(
               children: [
                 NativeAvatarCircle(

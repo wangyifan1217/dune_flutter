@@ -367,7 +367,7 @@ class _PresetTile extends StatelessWidget {
   }
 }
 
-/// 圆形头像：优先 preset SVG，其次网络图，最后首字。
+/// 「我的」/profile 圆角方形头像：与通讯列表 [ImUserAvatar.commBorderRadius] 一致。
 class NativeAvatarCircle extends StatelessWidget {
   const NativeAvatarCircle({
     super.key,
@@ -386,6 +386,8 @@ class NativeAvatarCircle extends StatelessWidget {
   final Color borderColor;
   final double borderWidth;
 
+  BorderRadius get _radius => BorderRadius.circular(size * 0.18);
+
   @override
   Widget build(BuildContext context) {
     Widget inner;
@@ -396,12 +398,21 @@ class NativeAvatarCircle extends StatelessWidget {
         width: size,
         height: size,
         fit: BoxFit.cover,
+        borderRadius: _radius,
         errorBuilder: () => _letter(fallbackText),
       );
     } else if (avatarPreset.isNotEmpty) {
       final svg = nativeAvatarPresetSvg(avatarPreset);
       inner = svg != null
-          ? SvgPicture.string(svg, fit: BoxFit.cover)
+          ? ClipRRect(
+              borderRadius: _radius,
+              child: SvgPicture.string(
+                svg,
+                width: size,
+                height: size,
+                fit: BoxFit.cover,
+              ),
+            )
           : _letter(fallbackText);
     } else {
       inner = _letter(fallbackText);
@@ -411,7 +422,7 @@ class NativeAvatarCircle extends StatelessWidget {
       width: size,
       height: size,
       decoration: BoxDecoration(
-        shape: BoxShape.circle,
+        borderRadius: _radius,
         border: Border.all(color: borderColor, width: borderWidth),
         color: const Color(0xFFF9DE7A),
       ),
@@ -422,12 +433,25 @@ class NativeAvatarCircle extends StatelessWidget {
   }
 
   Widget _letter(String text) {
-    return Text(
-      text,
-      style: const TextStyle(
-        fontSize: 18,
-        fontWeight: FontWeight.w500,
-        color: Color(0xFF6B4E1C),
+    return Container(
+      width: size,
+      height: size,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        borderRadius: _radius,
+        gradient: const LinearGradient(
+          colors: [Color(0xFF9377C9), Color(0xFF553B96)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+      ),
+      child: Text(
+        text,
+        style: TextStyle(
+          fontSize: size * 0.35,
+          fontWeight: FontWeight.w500,
+          color: Colors.white,
+        ),
       ),
     );
   }

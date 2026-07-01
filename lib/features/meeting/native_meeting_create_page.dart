@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
@@ -8,9 +6,7 @@ import 'package:permission_handler/permission_handler.dart';
 
 import '../../core/theme/dunes_theme.dart';
 import '../auth/auth_session.dart';
-import '../chat/native_audio_recorder.dart';
-import 'native_meeting_realtime_models.dart';
-import 'native_meeting_realtime_transcript.dart';
+import 'meeting_live_controller.dart';
 import 'native_meeting_recording_controller.dart';
 import 'native_meeting_service.dart';
 
@@ -38,18 +34,11 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
   );
   final MeetingRecordingController _recordingCtrl =
       MeetingRecordingController.instance;
+  final MeetingLiveController _live = MeetingLiveController.instance;
   final TextEditingController _titleCtrl = TextEditingController();
-  late final NativeMeetingRealtimeTranscript _realtime =
-      NativeMeetingRealtimeTranscript(session: widget.session);
-  StreamSubscription<RealtimeTranscriptUpdate>? _realtimeSub;
-  StreamSubscription<Uint8List>? _pcmSub;
   String _filePath = '';
   bool _submitting = false;
-  bool _liveWorking = false;
-  bool _livePaused = false;
   String? _error;
-  final List<String> _liveLines = <String>[];
-  String _livePartial = '';
   _CreateMode _mode = _CreateMode.upload;
   late final AnimationController _pulseController = AnimationController(
     vsync: this,
@@ -59,35 +48,43 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
   @override
   void initState() {
     super.initState();
-    _recordingCtrl.attach();
-    _realtimeSub = _realtime.updates.listen((update) {
-      if (!mounted) return;
-      setState(() {
-        if (update.isFinal) {
-          _livePartial = '';
-          if (update.text.startsWith('[状态]') ||
-              update.text.startsWith('[错误]') ||
-              update.text.startsWith('已连接')) {
-            _liveLines.insert(0, update.text);
-            return;
-          }
-          if (_liveLines.isNotEmpty && _liveLines.first == update.text) return;
-          _liveLines.insert(0, update.text);
-        } else {
-          _livePartial = update.text;
-        }
-      });
-    });
+    // 若已有正在进行的实时转写，进入页面默认切到该模式，回显进度。
+    if (_live.active.value) {
+      _mode = _CreateMode.live;
+    }
+    final existing = _live.recordedFilePath.value;
+    if (existing != null && existing.isNotEmpty) {
+      _filePath = existing;
+    }
+    _live.active.addListener(_onLiveChanged);
+    _live.paused.addListener(_onLiveChanged);
+    _live.lines.addListener(_onLiveChanged);
+    _live.partial.addListener(_onLiveChanged);
+    _live.recordedFilePath.addListener(_onRecordedFile);
+    _recordingCtrl.state.addListener(_onLiveChanged);
+  }
+
+  void _onLiveChanged() {
+    if (mounted) setState(() {});
+  }
+
+  void _onRecordedFile() {
+    final path = _live.recordedFilePath.value;
+    if (path != null && path.isNotEmpty && mounted) {
+      setState(() => _filePath = path);
+    }
   }
 
   @override
   void dispose() {
     _pulseController.dispose();
-    _recordingCtrl.detach();
+    _live.active.removeListener(_onLiveChanged);
+    _live.paused.removeListener(_onLiveChanged);
+    _live.lines.removeListener(_onLiveChanged);
+    _live.partial.removeListener(_onLiveChanged);
+    _live.recordedFilePath.removeListener(_onRecordedFile);
+    _recordingCtrl.state.removeListener(_onLiveChanged);
     _titleCtrl.dispose();
-    unawaited(_pcmSub?.cancel());
-    unawaited(_realtimeSub?.cancel());
-    unawaited(_realtime.dispose());
     super.dispose();
   }
 
@@ -139,46 +136,23 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
     try {
       final ok = await _ensureMicPermission();
       if (!ok) return;
-      setState(() {
-        _liveLines.clear();
-        _livePartial = '';
-      });
-      await _realtime.connect();
-      await _pcmSub?.cancel();
-      _pcmSub = NativeAudioRecorder.instance.pcmStream().listen((chunk) {
-        _realtime.sendAudioChunk(chunk);
-      });
-      await _recordingCtrl.start();
-      if (!mounted) return;
-      setState(() {
-        _liveWorking = true;
-        _livePaused = false;
-        _error = null;
-      });
+      setState(() => _error = null);
+      await _live.start(widget.session);
     } catch (e) {
       try {
-        await _realtime.stop();
+        await _live.end();
       } catch (_) {}
       if (!mounted) return;
-      setState(() {
-        _liveWorking = false;
-        _livePaused = false;
-        _error = _mapRecordError(e);
-      });
+      setState(() => _error = _mapRecordError(e));
     }
   }
 
   Future<void> _endLive() async {
     try {
-      final audio = await _recordingCtrl.stop();
-      await _pcmSub?.cancel();
-      _pcmSub = null;
-      await _realtime.stop();
+      final path = await _live.end();
       if (!mounted) return;
       setState(() {
-        if (audio != null && audio.path.isNotEmpty) _filePath = audio.path;
-        _liveWorking = false;
-        _livePaused = false;
+        if (path != null && path.isNotEmpty) _filePath = path;
         _error = null;
       });
     } catch (e) {
@@ -188,18 +162,11 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
   }
 
   Future<void> _pauseLive() async {
-    await _realtime.pause();
-    if (!mounted) return;
-    setState(() {
-      _livePaused = true;
-      _livePartial = '';
-    });
+    await _live.pause();
   }
 
   Future<void> _resumeLive() async {
-    await _realtime.resume();
-    if (!mounted) return;
-    setState(() => _livePaused = false);
+    await _live.resume();
   }
 
   Future<void> _submit() async {
@@ -235,7 +202,11 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
   @override
   Widget build(BuildContext context) {
     final state = _recordingCtrl.state.value;
-    final recording = state != MeetingRecordingState.idle;
+    final liveWorking = _live.active.value;
+    final livePaused = _live.paused.value;
+    final liveLines = _live.lines.value;
+    final livePartial = _live.partial.value;
+    final recording = liveWorking;
     final canSubmit = !_submitting &&
         _titleCtrl.text.trim().isNotEmpty &&
         _filePath.isNotEmpty;
@@ -482,7 +453,7 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
                       AnimatedBuilder(
                         animation: _pulseController,
                         builder: (context, child) {
-                          final active = recording && !_livePaused;
+                          final active = recording && !livePaused;
                           final scale = active ? 0.9 + _pulseController.value * 0.3 : 1.0;
                           return Transform.scale(
                             scale: scale,
@@ -508,8 +479,8 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
                       ),
                       const SizedBox(width: 8),
                       Text(
-                        _liveWorking
-                            ? (_livePaused ? '实时转写已暂停' : '实时转写进行中')
+                        liveWorking
+                            ? (livePaused ? '实时转写已暂停' : '实时转写进行中')
                             : statusText,
                         style: DunesTypography.sans(
                           fontSize: 13,
@@ -541,13 +512,13 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
                       children: [
                         Expanded(
                           child: OutlinedButton.icon(
-                            onPressed: _livePaused ? _resumeLive : _pauseLive,
+                            onPressed: livePaused ? _resumeLive : _pauseLive,
                             icon: Icon(
-                              _livePaused
+                              livePaused
                                   ? Icons.play_arrow_rounded
                                   : Icons.pause_rounded,
                             ),
-                            label: Text(_livePaused ? '继续转写' : '暂停转写'),
+                            label: Text(livePaused ? '继续转写' : '暂停转写'),
                             style: OutlinedButton.styleFrom(
                               foregroundColor: DunesColors.accentDeep,
                               side: const BorderSide(color: DunesColors.accentLine),
@@ -583,11 +554,11 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
             _sectionCard(
               title: '实时转写预览',
               icon: Icons.record_voice_over_outlined,
-              child: _liveLines.isEmpty && _livePartial.isEmpty
+              child: liveLines.isEmpty && livePartial.isEmpty
                   ? Text(
-                      liveRecording && !_livePaused
+                      liveRecording && !livePaused
                           ? '正在监听语音，请开始发言...'
-                          : (liveRecording && _livePaused)
+                          : (liveRecording && livePaused)
                           ? '已暂停，点击“继续转写”后恢复实时识别'
                           : '点击“开始实时转写”后，这里会实时显示文字',
                       style: DunesTypography.sans(
@@ -598,11 +569,11 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
                   : Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        if (_livePartial.isNotEmpty)
+                        if (livePartial.isNotEmpty)
                           Padding(
                             padding: const EdgeInsets.only(bottom: 8),
                             child: Text(
-                              _livePartial,
+                              livePartial,
                               style: DunesTypography.sans(
                                 fontSize: 13,
                                 color: DunesColors.accent,
@@ -610,7 +581,7 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
                               ).copyWith(fontStyle: FontStyle.italic),
                             ),
                           ),
-                        ..._liveLines
+                        ...liveLines
                             .take(8)
                             .map(
                               (line) => Padding(

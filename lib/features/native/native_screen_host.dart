@@ -54,6 +54,7 @@ import '../workbench/native_avatar_sheet.dart';
 import '../workbench/native_my_workbench_pages.dart';
 import '../workbench/workbench_badge_notifier.dart';
 import '../lighthouse/native_lighthouse_page.dart';
+import '../meeting/meeting_live_controller.dart';
 import '../meeting/native_meeting_create_page.dart';
 import '../meeting/native_meeting_detail_page.dart';
 import '../meeting/native_meeting_list_page.dart';
@@ -986,14 +987,20 @@ class _NativeB2PageState extends State<_NativeB2Page> {
   String? _loadError;
   bool _avatarSheetOpen = false;
   bool _qrLoginOpening = false;
+  final MeetingLiveController _live = MeetingLiveController.instance;
 
   @override
   void initState() {
     super.initState();
     _profile = _restoreCachedProfile();
     widget.workbenchRefresh.addListener(_onWorkbenchDataRefresh);
+    _live.active.addListener(_onLiveActiveChanged);
     _loadStats(silent: _profile != null);
     _refreshCommBadge();
+  }
+
+  void _onLiveActiveChanged() {
+    if (mounted) setState(() {});
   }
 
   _NativeB2Profile? _restoreCachedProfile() {
@@ -1034,6 +1041,7 @@ class _NativeB2PageState extends State<_NativeB2Page> {
   @override
   void dispose() {
     widget.workbenchRefresh.removeListener(_onWorkbenchDataRefresh);
+    _live.active.removeListener(_onLiveActiveChanged);
     super.dispose();
   }
 
@@ -1301,7 +1309,9 @@ class _NativeB2PageState extends State<_NativeB2Page> {
       color: DunesColors.bgApp,
       child: SafeArea(
         bottom: false,
-        child: Column(
+        child: Stack(
+          children: [
+            Column(
           children: [
             _buildB2TopBar(),
             Expanded(
@@ -1462,6 +1472,60 @@ class _NativeB2PageState extends State<_NativeB2Page> {
               lighthouseAccess: widget.session.lighthouseAccess,
             ),
           ],
+            ),
+            if (_live.active.value)
+              Positioned(
+                right: 16,
+                bottom: 80,
+                child: _buildLiveTranscribeFab(),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLiveTranscribeFab() {
+    final paused = _live.paused.value;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(24),
+        onTap: () => widget.navigation.go('MM0'),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          decoration: BoxDecoration(
+            color: paused ? DunesColors.text3 : DunesColors.coral,
+            borderRadius: BorderRadius.circular(24),
+            boxShadow: [
+              BoxShadow(
+                color: (paused ? DunesColors.text3 : DunesColors.coral)
+                    .withValues(alpha: 0.4),
+                blurRadius: 12,
+                spreadRadius: 1,
+                offset: const Offset(0, 3),
+              ),
+            ],
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                paused ? Icons.pause_rounded : Icons.mic_rounded,
+                color: Colors.white,
+                size: 18,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                paused ? '转写已暂停' : '实时转写中',
+                style: DunesTypography.sans(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

@@ -43,6 +43,14 @@ class NativeMeetingService {
     final data = _unwrapData(resp.body);
     final content =
         (data['content'] as List?) ?? (data['items'] as List?) ?? const [];
+    if (content.isNotEmpty && content.first is Map) {
+      final first = Map<String, dynamic>.from(content.first as Map);
+      // ignore: avoid_print
+      print('[MeetingTime] base=$_resolvedMeetingBasePath '
+          'meetingDate=${first['meetingDate']} '
+          'createdAt=${first['createdAt']} '
+          'updatedAt=${first['updatedAt']}');
+    }
     final items = content
         .whereType<Map>()
         .map((e) => NativeMeetingSummary.fromJson(Map<String, dynamic>.from(e)))

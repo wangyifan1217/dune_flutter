@@ -23,12 +23,14 @@ class NativeMeetingTime {
     String? updatedAt,
     String? meetingDate,
   }) {
+    final latest = _pickLatest(createdAt, updatedAt);
+    if (latest != null) return _formatDateTime(latest.toLocal());
     final created = formatDisplay(createdAt);
     final updated = formatDisplay(updatedAt);
-    if (_hasRealClock(created)) return created;
     if (_hasRealClock(updated)) return updated;
-    if (createdAt != null && createdAt.trim().isNotEmpty) return created;
+    if (_hasRealClock(created)) return created;
     if (updatedAt != null && updatedAt.trim().isNotEmpty) return updated;
+    if (createdAt != null && createdAt.trim().isNotEmpty) return created;
     return formatDisplay(meetingDate);
   }
 
@@ -60,6 +62,26 @@ class NativeMeetingTime {
       return '$y-${_two(mo)}-${_two(d)}';
     }
     return '$y-${_two(mo)}-${_two(d)} ${_two(hh)}:${_two(mm)}:${_two(ss)}';
+  }
+
+  static DateTime? _pickLatest(String? createdAt, String? updatedAt) {
+    final created = _parseToDateTime(createdAt);
+    final updated = _parseToDateTime(updatedAt);
+    if (created == null) return updated;
+    if (updated == null) return created;
+    return updated.isAfter(created) ? updated : created;
+  }
+
+  static DateTime? _parseToDateTime(String? raw) {
+    if (raw == null || raw.trim().isEmpty) return null;
+    final value = raw.trim();
+    final epoch = int.tryParse(value);
+    if (epoch != null && epoch > 0) {
+      final ms = epoch >= 1000000000000 ? epoch : epoch * 1000;
+      return DateTime.fromMillisecondsSinceEpoch(ms);
+    }
+    final normalized = value.contains(' ') ? value.replaceFirst(' ', 'T') : value;
+    return DateTime.tryParse(normalized);
   }
 
   static String _two(int value) => value.toString().padLeft(2, '0');

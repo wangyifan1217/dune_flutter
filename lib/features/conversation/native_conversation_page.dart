@@ -78,7 +78,8 @@ class _InboxSection {
   final List<Widget> rows;
 }
 
-class _NativeConversationPageState extends State<NativeConversationPage> {
+class _NativeConversationPageState extends State<NativeConversationPage>
+    with WidgetsBindingObserver {
   static const _yunshuName = 'NOVA';
 
   late final ConversationService _service;
@@ -108,9 +109,21 @@ class _NativeConversationPageState extends State<NativeConversationPage> {
     _service = ConversationService(session: widget.session);
     _notificationService = NotificationService(session: widget.session);
     _realtime = ConversationRealtimeHub.instance.of(widget.session);
+    WidgetsBinding.instance.addObserver(this);
     _load();
     _bootRealtime();
     NovaBackgroundCoordinator.instance.addListener(_onNovaBackgroundUpdate);
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) return;
+    // 从后台（含点击推送通知）回到前台时，重连实时通道并刷新未读，
+    // 避免会话列表未读条数图标停留在旧状态。
+    unawaited(_realtime.connect());
+    if (mounted && !_loading) {
+      _load(silent: true);
+    }
   }
 
   void _onNovaBackgroundUpdate() {
@@ -120,6 +133,7 @@ class _NativeConversationPageState extends State<NativeConversationPage> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     NovaBackgroundCoordinator.instance.removeListener(_onNovaBackgroundUpdate);
     _rtRefreshDebounce?.cancel();
     _searchDebounce?.cancel();

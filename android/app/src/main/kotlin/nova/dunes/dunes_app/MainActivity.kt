@@ -66,6 +66,8 @@ class MainActivity : FlutterActivity() {
     private fun startRecord(result: MethodChannel.Result) {
         try {
             stopInternal(deleteFile = true)
+            // 先拉起麦克风前台服务，保证切后台/锁屏后系统不会静音麦克风。
+            MeetingRecordingService.start(this)
             val dir = File(cacheDir, "voice")
             if (!dir.exists()) dir.mkdirs()
             val stamp = System.currentTimeMillis()
@@ -178,6 +180,7 @@ class MainActivity : FlutterActivity() {
         val wav = wavPath
         startedAtMs = 0L
         releaseWakeLock()
+        MeetingRecordingService.stop(this)
 
         if (deleteFile) {
             deleteQuietly(pcm)

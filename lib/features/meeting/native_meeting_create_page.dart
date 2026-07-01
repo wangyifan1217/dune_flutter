@@ -77,14 +77,43 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
   }
 
   Future<void> _pickFile() async {
-    final file = await openFile(
-      acceptedTypeGroups: const <XTypeGroup>[
-        XTypeGroup(label: 'audio', extensions: ['wav', 'mp3', 'm4a']),
-      ],
-    );
-    if (!mounted || file == null) return;
+    XFile? file;
+    try {
+      file = await openFile(
+        acceptedTypeGroups: const <XTypeGroup>[
+          XTypeGroup(
+            label: 'audio',
+            extensions: ['wav', 'mp3', 'm4a'],
+            mimeTypes: [
+              'audio/wav',
+              'audio/x-wav',
+              'audio/mpeg',
+              'audio/mp4',
+              'audio/m4a',
+            ],
+            // iOS 必须提供 UTI，否则选择器无法选中音频文件。
+            uniformTypeIdentifiers: [
+              'public.audio',
+              'com.microsoft.waveform-audio',
+              'public.mp3',
+              'public.mpeg-4-audio',
+              'com.apple.m4a-audio',
+            ],
+          ),
+        ],
+      );
+    } catch (_) {
+      // iOS 上类型声明异常时兜底：不加过滤，避免选择器弹不出来。
+      try {
+        file = await openFile();
+      } catch (_) {
+        file = null;
+      }
+    }
+    final picked = file;
+    if (!mounted || picked == null) return;
     setState(() {
-      _filePath = file.path;
+      _filePath = picked.path;
       _error = null;
     });
   }

@@ -48,6 +48,10 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
+        <service
+            android:name=".MeetingRecordingService"
+            android:exported="false"
+            android:foregroundServiceType="microphone" />
         <receiver
             android:name=".DunesTpnsReceiver"
             android:exported="true">

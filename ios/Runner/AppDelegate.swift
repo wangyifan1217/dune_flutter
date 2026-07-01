@@ -18,6 +18,13 @@ import UserNotifications
   private var streamSink: FlutterEventSink?
   private let streamLock = NSLock()
   private var tpnsBridge: TpnsPushBridge?
+  private var audioConverter: AVAudioConverter?
+  private let targetFormat = AVAudioFormat(
+    commonFormat: .pcmFormatInt16,
+    sampleRate: 16000,
+    channels: 1,
+    interleaved: true
+  )!
 
   override func application(
     _ application: UIApplication,
@@ -63,6 +70,64 @@ import UserNotifications
       binaryMessenger: messenger
     )
     streamChannel.setStreamHandler(self)
+
+    NotificationCenter.default.addObserver(
+      self,
+      selector: #selector(handleAudioInterruption(_:)),
+      name: AVAudioSession.interruptionNotification,
+      object: nil
+    )
+    NotificationCenter.default.addObserver(
+      self,
+      selector: #selector(handleMediaServicesReset(_:)),
+      name: AVAudioSession.mediaServicesWereResetNotification,
+      object: nil
+    )
+  }
+
+  // MARK: - Audio interruption recovery
+
+  @objc private func handleAudioInterruption(_ note: Notification) {
+    guard isRecording,
+      let info = note.userInfo,
+      let typeRaw = info[AVAudioSessionInterruptionTypeKey] as? UInt,
+      let type = AVAudioSession.InterruptionType(rawValue: typeRaw)
+    else {
+      return
+    }
+    switch type {
+    case .began:
+      // 系统已暂停音频输入（来电/Siri/闹钟等），保持状态，等待中断结束后恢复。
+      audioEngine?.pause()
+    case .ended:
+      var shouldResume = true
+      if let optRaw = info[AVAudioSessionInterruptionOptionKey] as? UInt {
+        shouldResume = AVAudioSession.InterruptionOptions(rawValue: optRaw)
+          .contains(.shouldResume)
+      }
+      if shouldResume {
+        resumeEngineAfterInterruption()
+      }
+    @unknown default:
+      break
+    }
+  }
+
+  @objc private func handleMediaServicesReset(_ note: Notification) {
+    // 媒体服务被重置后，音频引擎会失效，需要重新激活会话并启动引擎。
+    resumeEngineAfterInterruption()
+  }
+
+  private func resumeEngineAfterInterruption() {
+    guard isRecording else { return }
+    do {
+      try AVAudioSession.sharedInstance().setActive(true)
+      if let engine = audioEngine, !engine.isRunning {
+        try engine.start()
+      }
+    } catch {
+      // best-effort：无法恢复时保持已录部分，stop 时按已有数据处理。
+    }
   }
 
   // MARK: - XGPushDelegate
@@ -153,6 +218,9 @@ import UserNotifications
       let engine = AVAudioEngine()
       let input = engine.inputNode
       let format = input.inputFormat(forBus: 0)
+      // 麦克风硬件通常是 44.1k/48k 浮点，需重采样为 16k 单声道 Int16，
+      // 否则 ASR 按 16k 解析高采样率音频会变速、识别率极低。
+      audioConverter = AVAudioConverter(from: format, to: targetFormat)
       input.removeTap(onBus: 0)
       input.installTap(onBus: 0, bufferSize: 2048, format: format) { [weak self] buffer, _ in
         self?.consumeAudioBuffer(buffer)
@@ -197,6 +265,7 @@ import UserNotifications
       engine.stop()
     }
     audioEngine = nil
+    audioConverter = nil
     streamLock.lock()
     let handle = pcmFileHandle
     pcmFileHandle = nil
@@ -230,7 +299,13 @@ import UserNotifications
   }
 
   private func consumeAudioBuffer(_ buffer: AVAudioPCMBuffer) {
-    guard let data = pcmData(from: buffer), !data.isEmpty else { return }
+    let resampled: Data?
+    if let converter = audioConverter {
+      resampled = convertToTargetData(buffer: buffer, converter: converter)
+    } else {
+      resampled = pcmData(from: buffer)
+    }
+    guard let data = resampled, !data.isEmpty else { return }
     streamLock.lock()
     let handle = pcmFileHandle
     let sink = streamSink
@@ -246,6 +321,36 @@ import UserNotifications
         sink(FlutterStandardTypedData(bytes: data))
       }
     }
+  }
+
+  private func convertToTargetData(
+    buffer: AVAudioPCMBuffer,
+    converter: AVAudioConverter
+  ) -> Data? {
+    let ratio = targetFormat.sampleRate / buffer.format.sampleRate
+    let capacity = AVAudioFrameCount(Double(buffer.frameLength) * ratio) + 1024
+    guard capacity > 0,
+      let outBuffer = AVAudioPCMBuffer(pcmFormat: targetFormat, frameCapacity: capacity)
+    else {
+      return nil
+    }
+    var fed = false
+    var convError: NSError?
+    let status = converter.convert(to: outBuffer, error: &convError) { _, outStatus in
+      if fed {
+        outStatus.pointee = .noDataNow
+        return nil
+      }
+      fed = true
+      outStatus.pointee = .haveData
+      return buffer
+    }
+    if status == .error || convError != nil {
+      return nil
+    }
+    let frames = Int(outBuffer.frameLength)
+    guard frames > 0, let channel = outBuffer.int16ChannelData else { return nil }
+    return Data(bytes: channel[0], count: frames * MemoryLayout<Int16>.size)
   }
 
   private func pcmData(from buffer: AVAudioPCMBuffer) -> Data? {

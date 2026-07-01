@@ -23,7 +23,15 @@ class CachedDunesNetworkImage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final dpr = MediaQuery.devicePixelRatioOf(context);
+    // 仅头像类小图（cover + ≤128）做内存缩略解码；聊天 contain 大图保持原样。
+    final useAvatarMemCache = fit == BoxFit.cover &&
+        width > 0 &&
+        height > 0 &&
+        width <= 128 &&
+        height <= 128;
+    final dpr = useAvatarMemCache
+        ? MediaQuery.devicePixelRatioOf(context)
+        : null;
     final image = Image.network(
       url,
       key: ValueKey<String>(url),
@@ -31,13 +39,20 @@ class CachedDunesNetworkImage extends StatelessWidget {
       height: height,
       fit: fit,
       gaplessPlayback: true,
-      filterQuality: FilterQuality.low,
-      cacheWidth: (width * dpr).round(),
-      cacheHeight: (height * dpr).round(),
-      frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
-        if (wasSynchronouslyLoaded || frame != null) return child;
-        return placeholder?.call() ?? const SizedBox.shrink();
-      },
+      filterQuality:
+          useAvatarMemCache ? FilterQuality.low : FilterQuality.medium,
+      cacheWidth: useAvatarMemCache && dpr != null
+          ? (width * dpr).round()
+          : null,
+      cacheHeight: useAvatarMemCache && dpr != null
+          ? (height * dpr).round()
+          : null,
+      frameBuilder: placeholder == null
+          ? null
+          : (context, child, frame, wasSynchronouslyLoaded) {
+              if (wasSynchronouslyLoaded || frame != null) return child;
+              return placeholder!.call();
+            },
       errorBuilder: (_, _, _) =>
           errorBuilder?.call() ?? placeholder?.call() ?? const SizedBox.shrink(),
     );

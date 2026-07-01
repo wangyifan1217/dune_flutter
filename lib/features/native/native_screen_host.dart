@@ -54,6 +54,9 @@ import '../workbench/native_avatar_sheet.dart';
 import '../workbench/native_my_workbench_pages.dart';
 import '../workbench/workbench_badge_notifier.dart';
 import '../lighthouse/native_lighthouse_page.dart';
+import '../meeting/native_meeting_create_page.dart';
+import '../meeting/native_meeting_detail_page.dart';
+import '../meeting/native_meeting_list_page.dart';
 
 class NativeScreenHost extends StatefulWidget {
   const NativeScreenHost({
@@ -103,14 +106,17 @@ class _NativeScreenHostState extends State<NativeScreenHost>
   int? _xflowEditProposalId;
   String _xflowFormBackScreen = 'B3';
   String? _b14InitialFilter;
+  int _meetingId = 0;
   final ConversationRealtimeDedup _commBadgeDedup = ConversationRealtimeDedup();
   StreamSubscription<ConversationRealtimeEvent>? _commBadgeRtSub;
   Timer? _commBadgeRefreshDebounce;
   Timer? _commBadgeRecorrectTimer;
   Timer? _workbenchBadgeRefreshDebounce;
   final Map<int, bool> _mutedConvIds = <int, bool>{};
+
   /// 仅在一次 markConversationRead 成功后允许把桌面角标同步为 0。
   bool _pendingBadgeZeroSync = false;
+
   /// 用户本次前台会话内主动点进聊天；切后台后清零，避免 resume 误触已读。
   bool _userActivelyInChat = false;
 
@@ -770,6 +776,42 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           chatKind: _kbChatKind,
           docId: _kbChatDocId,
         );
+      case 'MM-L':
+        return NativeMeetingListPage(
+          session: widget.session,
+          onBack: widget.navigation.back,
+          onCreate: () => widget.navigation.go('MM0'),
+          onOpenDetail: (meetingId) {
+            if (meetingId <= 0) return;
+            _meetingId = meetingId;
+            widget.navigation.go('MM');
+          },
+        );
+      case 'MM0':
+        return NativeMeetingCreatePage(
+          session: widget.session,
+          onBack: widget.navigation.back,
+          onCreated: (meetingId) {
+            if (meetingId <= 0) return;
+            _meetingId = meetingId;
+            widget.navigation.go('MM');
+          },
+        );
+      case 'MM':
+        if (_meetingId <= 0) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) widget.navigation.go('MM-L');
+          });
+          return const Scaffold(
+            backgroundColor: DunesColors.bgApp,
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+        return NativeMeetingDetailPage(
+          session: widget.session,
+          meetingId: _meetingId,
+          onBack: widget.navigation.back,
+        );
       case 'C2':
         return NativeGroupChatPage(
           session: widget.session,
@@ -1342,10 +1384,9 @@ class _NativeB2PageState extends State<_NativeB2Page> {
                       _buildMenuItem(
                         icon: Icons.mic_none_rounded,
                         title: '会议纪要',
-                        desc: '0 条 · 0 已生成 · 0 转写中',
+                        desc: 'Beta · 录音转写 · 纪要生成',
                         badge: 0,
-                        comingSoon: true,
-                        onTap: () => _showSoonToast(),
+                        onTap: () => widget.navigation.go('MM-L'),
                       ),
                     ]),
                     const SizedBox(height: 10),

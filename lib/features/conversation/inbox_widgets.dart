@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../chat/user_avatar_widget.dart';
+import '../chat/group_composite_avatar.dart';
+import '../conversation/conversation_models.dart';
 import '../conversation/conversation_service.dart';
 import '../../core/theme/dunes_theme.dart';
 import '../nova/nova_icon.dart';
@@ -196,6 +198,7 @@ class ChatInboxRow extends StatelessWidget {
     this.avatarPreset,
     this.avatarObjectKey,
     this.avatarService,
+    this.groupAvatarMembers = const <ConversationAvatarMember>[],
     this.sysTag,
     this.showDivider = true,
     this.previewGenerating = false,
@@ -217,6 +220,7 @@ class ChatInboxRow extends StatelessWidget {
   final String? avatarPreset;
   final String? avatarObjectKey;
   final ConversationService? avatarService;
+  final List<ConversationAvatarMember> groupAvatarMembers;
   final String? sysTag;
   final bool showDivider;
   final bool previewGenerating;
@@ -249,6 +253,7 @@ class ChatInboxRow extends StatelessWidget {
                         avatarPreset: avatarPreset,
                         avatarObjectKey: avatarObjectKey,
                         avatarService: avatarService,
+                        groupAvatarMembers: groupAvatarMembers,
                       ),
                     ),
                   ),
@@ -488,6 +493,7 @@ class _Avatar extends StatelessWidget {
     this.avatarPreset,
     this.avatarObjectKey,
     this.avatarService,
+    this.groupAvatarMembers = const <ConversationAvatarMember>[],
   });
 
   final ChatInboxRowKind kind;
@@ -497,12 +503,14 @@ class _Avatar extends StatelessWidget {
   final String? avatarPreset;
   final String? avatarObjectKey;
   final ConversationService? avatarService;
+  final List<ConversationAvatarMember> groupAvatarMembers;
+
+  static const _inboxAvatarSize = 44.0;
+  static const _inboxAvatarRadius = _inboxAvatarSize * 0.18;
 
   @override
   Widget build(BuildContext context) {
-    final borderRadius = kind == ChatInboxRowKind.private
-        ? BorderRadius.circular(22)
-        : BorderRadius.circular(12);
+    final borderRadius = BorderRadius.circular(_inboxAvatarRadius);
 
     BoxDecoration decoration;
     Widget child;
@@ -526,22 +534,32 @@ class _Avatar extends StatelessWidget {
           ),
         );
         child = const Icon(Icons.campaign_outlined, color: Colors.white, size: 17);
-      case ChatInboxRowKind.workgroupApproval:
-        decoration = BoxDecoration(
-          borderRadius: borderRadius,
-          gradient: const LinearGradient(
-            colors: [Color(0xFF9079C2), Color(0xFF6A4FA0)],
-          ),
-        );
-        child = const Icon(Icons.assignment_outlined, color: Colors.white, size: 17);
       case ChatInboxRowKind.group:
-        decoration = BoxDecoration(
-          borderRadius: borderRadius,
-          gradient: const LinearGradient(
-            colors: [Color(0xFFCABCEB), Color(0xFFA88CD8)],
-          ),
-        );
-        child = const Icon(Icons.groups_outlined, color: Colors.white, size: 17);
+      case ChatInboxRowKind.workgroupApproval:
+        if (groupAvatarMembers.isNotEmpty) {
+          return GroupCompositeAvatar(
+            members: groupAvatarMembers,
+            size: 44,
+            avatarService: avatarService,
+          );
+        }
+        if (kind == ChatInboxRowKind.workgroupApproval) {
+          decoration = BoxDecoration(
+            borderRadius: borderRadius,
+            gradient: const LinearGradient(
+              colors: [Color(0xFF9079C2), Color(0xFF6A4FA0)],
+            ),
+          );
+          child = const Icon(Icons.assignment_outlined, color: Colors.white, size: 17);
+        } else {
+          decoration = BoxDecoration(
+            borderRadius: borderRadius,
+            gradient: const LinearGradient(
+              colors: [Color(0xFFCABCEB), Color(0xFFA88CD8)],
+            ),
+          );
+          child = const Icon(Icons.groups_outlined, color: Colors.white, size: 17);
+        }
       case ChatInboxRowKind.private:
         final letter = (initial == null || initial!.isEmpty) ? '?' : initial!;
         if (avatarService != null ||
@@ -550,11 +568,12 @@ class _Avatar extends StatelessWidget {
           return ImUserAvatar(
             initial: letter,
             seed: seed,
-            size: 44,
+            size: _inboxAvatarSize,
             showOnline: showOnlineDot,
             avatarPreset: avatarPreset,
             avatarObjectKey: avatarObjectKey,
             avatarService: avatarService,
+            borderRadius: _inboxAvatarRadius,
           );
         }
         final style = InboxFormat.personStyle(seed);
@@ -576,8 +595,8 @@ class _Avatar extends StatelessWidget {
       clipBehavior: Clip.none,
       children: [
         Container(
-          width: 44,
-          height: 44,
+          width: _inboxAvatarSize,
+          height: _inboxAvatarSize,
           decoration: decoration,
           alignment: Alignment.center,
           child: child,

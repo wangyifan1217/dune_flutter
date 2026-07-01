@@ -4,11 +4,19 @@ import AVFoundation
 import UserNotifications
 
 @main
-@objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate, XGPushDelegate {
+@objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate, XGPushDelegate,
+  FlutterStreamHandler
+{
   private let voiceChannelName = "dunes/audio_recorder"
-  private var recorder: AVAudioRecorder?
+  private let voiceStreamChannelName = "dunes/audio_recorder_stream"
+  private var audioEngine: AVAudioEngine?
+  private var pcmFileHandle: FileHandle?
+  private var pcmPath: String?
   private var recordStartedAt: Date?
   private var outputPath: String?
+  private var isRecording = false
+  private var streamSink: FlutterEventSink?
+  private let streamLock = NSLock()
   private var tpnsBridge: TpnsPushBridge?
 
   override func application(
@@ -43,10 +51,18 @@ import UserNotifications
         self.stopRecord(result: result, deleteFile: false)
       case "cancel":
         self.stopRecord(result: result, deleteFile: true)
+      case "status":
+        result(["isRecording": self.isRecording])
       default:
         result(FlutterMethodNotImplemented)
       }
     }
+
+    let streamChannel = FlutterEventChannel(
+      name: voiceStreamChannelName,
+      binaryMessenger: messenger
+    )
+    streamChannel.setStreamHandler(self)
   }
 
   // MARK: - XGPushDelegate
@@ -114,27 +130,38 @@ import UserNotifications
 
   private func startRecordImpl(result: @escaping FlutterResult) {
     stopInternal(deleteFile: true)
-    let path = "\(NSTemporaryDirectory())voice-\(Int(Date().timeIntervalSince1970 * 1000)).wav"
-    let url = URL(fileURLWithPath: path)
-    let settings: [String: Any] = [
-      AVFormatIDKey: Int(kAudioFormatLinearPCM),
-      AVSampleRateKey: 16000.0,
-      AVNumberOfChannelsKey: 1,
-      AVLinearPCMBitDepthKey: 16,
-      AVLinearPCMIsBigEndianKey: false,
-      AVLinearPCMIsFloatKey: false,
-      AVLinearPCMIsNonInterleaved: false
-    ]
+    let stamp = Int(Date().timeIntervalSince1970 * 1000)
+    let pcm = "\(NSTemporaryDirectory())voice-\(stamp).pcm"
+    let wav = "\(NSTemporaryDirectory())voice-\(stamp).wav"
     do {
       let session = AVAudioSession.sharedInstance()
-      try session.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker])
+      try session.setCategory(
+        .playAndRecord,
+        mode: .spokenAudio,
+        options: [.defaultToSpeaker, .allowBluetooth, .allowBluetoothA2DP, .mixWithOthers]
+      )
+      try session.setPreferredSampleRate(16000)
       try session.setActive(true)
-      let r = try AVAudioRecorder(url: url, settings: settings)
-      r.prepareToRecord()
-      r.record()
-      recorder = r
-      outputPath = path
+
+      FileManager.default.createFile(atPath: pcm, contents: nil)
+      streamLock.lock()
+      pcmFileHandle = try FileHandle(forWritingTo: URL(fileURLWithPath: pcm))
+      streamLock.unlock()
+      pcmPath = pcm
+      outputPath = wav
+
+      let engine = AVAudioEngine()
+      let input = engine.inputNode
+      let format = input.inputFormat(forBus: 0)
+      input.removeTap(onBus: 0)
+      input.installTap(onBus: 0, bufferSize: 2048, format: format) { [weak self] buffer, _ in
+        self?.consumeAudioBuffer(buffer)
+      }
+      try engine.start()
+      audioEngine = engine
+
       recordStartedAt = Date()
+      isRecording = true
       result(true)
     } catch {
       stopInternal(deleteFile: true)
@@ -164,14 +191,156 @@ import UserNotifications
     if let started = recordStartedAt {
       durationMs = max(0, Int(Date().timeIntervalSince(started) * 1000))
     }
-    recorder?.stop()
-    recorder = nil
+    isRecording = false
+    if let engine = audioEngine {
+      engine.inputNode.removeTap(onBus: 0)
+      engine.stop()
+    }
+    audioEngine = nil
+    streamLock.lock()
+    let handle = pcmFileHandle
+    pcmFileHandle = nil
+    streamLock.unlock()
+    try? handle?.close()
     recordStartedAt = nil
+
+    let localPcmPath = pcmPath
+    pcmPath = nil
+
     if deleteFile, let path = outputPath {
+      if let localPcmPath {
+        try? FileManager.default.removeItem(atPath: localPcmPath)
+      }
       try? FileManager.default.removeItem(atPath: path)
       outputPath = nil
+      return durationMs
+    }
+
+    if let localPcmPath, let localWavPath = outputPath {
+      do {
+        try writeWavFromPcm(pcmPath: localPcmPath, wavPath: localWavPath)
+        try? FileManager.default.removeItem(atPath: localPcmPath)
+      } catch {
+        try? FileManager.default.removeItem(atPath: localPcmPath)
+        try? FileManager.default.removeItem(atPath: localWavPath)
+        outputPath = nil
+      }
     }
     return durationMs
+  }
+
+  private func consumeAudioBuffer(_ buffer: AVAudioPCMBuffer) {
+    guard let data = pcmData(from: buffer), !data.isEmpty else { return }
+    streamLock.lock()
+    let handle = pcmFileHandle
+    let sink = streamSink
+    streamLock.unlock()
+
+    do {
+      try handle?.write(contentsOf: data)
+    } catch {
+      // Keep streaming best-effort; stop() will clean up.
+    }
+    if let sink {
+      DispatchQueue.main.async {
+        sink(FlutterStandardTypedData(bytes: data))
+      }
+    }
+  }
+
+  private func pcmData(from buffer: AVAudioPCMBuffer) -> Data? {
+    let frames = Int(buffer.frameLength)
+    guard frames > 0 else { return nil }
+    let channels = Int(buffer.format.channelCount)
+
+    if let int16 = buffer.int16ChannelData {
+      var data = Data(capacity: frames * 2)
+      for i in 0..<frames {
+        let sample: Int32
+        if channels > 1 {
+          sample = (Int32(int16[0][i]) + Int32(int16[1][i])) / 2
+        } else {
+          sample = Int32(int16[0][i])
+        }
+        var s = Int16(max(Int32(Int16.min), min(Int32(Int16.max), sample)))
+        data.append(Data(bytes: &s, count: MemoryLayout<Int16>.size))
+      }
+      return data
+    }
+
+    if let floats = buffer.floatChannelData {
+      var data = Data(capacity: frames * 2)
+      for i in 0..<frames {
+        let mono: Float
+        if channels > 1 {
+          mono = (floats[0][i] + floats[1][i]) * 0.5
+        } else {
+          mono = floats[0][i]
+        }
+        let clamped = max(-1.0, min(1.0, mono))
+        var s = Int16(clamped * Float(Int16.max))
+        data.append(Data(bytes: &s, count: MemoryLayout<Int16>.size))
+      }
+      return data
+    }
+    return nil
+  }
+
+  private func writeWavFromPcm(pcmPath: String, wavPath: String) throws {
+    let pcmData = try Data(contentsOf: URL(fileURLWithPath: pcmPath))
+    var wav = Data()
+    wav.append(wavHeader(dataLength: pcmData.count))
+    wav.append(pcmData)
+    try wav.write(to: URL(fileURLWithPath: wavPath), options: .atomic)
+  }
+
+  private func wavHeader(dataLength: Int) -> Data {
+    let sampleRate: UInt32 = 16_000
+    let channels: UInt16 = 1
+    let bitsPerSample: UInt16 = 16
+    let byteRate: UInt32 = sampleRate * UInt32(channels) * UInt32(bitsPerSample / 8)
+    let blockAlign: UInt16 = channels * (bitsPerSample / 8)
+    let riffSize: UInt32 = 36 + UInt32(dataLength)
+
+    var data = Data()
+    data.append("RIFF".data(using: .ascii)!)
+    data.append(riffSize.leData)
+    data.append("WAVE".data(using: .ascii)!)
+    data.append("fmt ".data(using: .ascii)!)
+    data.append(UInt32(16).leData)
+    data.append(UInt16(1).leData)
+    data.append(channels.leData)
+    data.append(sampleRate.leData)
+    data.append(byteRate.leData)
+    data.append(blockAlign.leData)
+    data.append(bitsPerSample.leData)
+    data.append("data".data(using: .ascii)!)
+    data.append(UInt32(dataLength).leData)
+    return data
+  }
+
+  // MARK: - FlutterStreamHandler
+
+  func onListen(withArguments arguments: Any?, eventSink events: @escaping FlutterEventSink) -> FlutterError?
+  {
+    streamLock.lock()
+    streamSink = events
+    streamLock.unlock()
+    return nil
+  }
+
+  func onCancel(withArguments arguments: Any?) -> FlutterError? {
+    streamLock.lock()
+    streamSink = nil
+    streamLock.unlock()
+    return nil
+  }
+}
+
+private extension FixedWidthInteger {
+  var leData: Data {
+    var v = self.littleEndian
+    return Data(bytes: &v, count: MemoryLayout<Self>.size)
   }
 }
 

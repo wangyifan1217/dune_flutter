@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart';
 
 import '../auth/auth_session.dart';
 import '../nova/nova_history_utils.dart';
@@ -17,8 +18,9 @@ http.MultipartFile _progressMultipartFile(
   String field,
   Uint8List bytes,
   String filename,
-  void Function(int sent, int total)? onProgress,
-) {
+  void Function(int sent, int total)? onProgress, {
+  String? mimeType,
+}) {
   final total = bytes.length;
   Stream<List<int>> chunked() async* {
     var offset = 0;
@@ -41,6 +43,9 @@ http.MultipartFile _progressMultipartFile(
     http.ByteStream(chunked()),
     total,
     filename: filename,
+    contentType: mimeType != null && mimeType.contains('/')
+        ? MediaType.parse(mimeType)
+        : null,
   );
 }
 
@@ -407,22 +412,52 @@ class ConversationService {
     Uint8List? previewBytes,
     String? previewFileName,
     String? previewMimeType,
+    Future<
+            ({
+              Uint8List bytes,
+              String fileName,
+              String mimeType,
+            })?>?
+        Function()?
+    preparePreview,
     void Function(double progress)? onProgress,
   }) async {
+    final previewFuture = preparePreview?.call();
     final uploaded = await uploadAttachment(
       conversationId: conversationId,
       bytes: bytes,
       fileName: fileName,
       mimeType: mimeType,
-      onProgress: onProgress,
+      onProgress: (p) {
+        if (onProgress == null) return;
+        onProgress(previewFuture == null ? p : p * 0.88);
+      },
     );
     final url = uploaded.bestUrl;
-    final objectKey = _isPublicMediaUrl(url) ? '' : url;
+    final objectKey = uploaded.objectKey.trim();
 
     // 默认预览即原图（兼容压缩失败/无预览的情况）。
     var previewUrl = url;
     var previewObjectKey = objectKey;
-    if (previewBytes != null && previewBytes.isNotEmpty) {
+    if (previewFuture != null) {
+      try {
+        final preview = await previewFuture;
+        if (preview != null && preview.bytes.isNotEmpty) {
+          final previewUploaded = await uploadAttachment(
+            conversationId: conversationId,
+            bytes: preview.bytes,
+            fileName: preview.fileName,
+            mimeType: preview.mimeType,
+          );
+          previewUrl = previewUploaded.bestUrl;
+          previewObjectKey = previewUploaded.objectKey.trim();
+        }
+      } catch (_) {
+        previewUrl = url;
+        previewObjectKey = objectKey;
+      }
+      onProgress?.call(0.96);
+    } else if (previewBytes != null && previewBytes.isNotEmpty) {
       try {
         final preview = await uploadAttachment(
           conversationId: conversationId,
@@ -431,13 +466,14 @@ class ConversationService {
           mimeType: previewMimeType ?? 'image/jpeg',
         );
         previewUrl = preview.bestUrl;
-        previewObjectKey = _isPublicMediaUrl(previewUrl) ? '' : previewUrl;
+        previewObjectKey = preview.objectKey.trim();
       } catch (_) {
         previewUrl = url;
         previewObjectKey = objectKey;
       }
     }
 
+    onProgress?.call(1.0);
     await _sendAttachment(
       conversationId: conversationId,
       kind: 'IMAGE',
@@ -468,13 +504,14 @@ class ConversationService {
       onProgress: onProgress,
     );
     final url = uploaded.bestUrl;
+    final objectKey = uploaded.objectKey.trim();
     await _sendAttachment(
       conversationId: conversationId,
       kind: 'FILE',
       bodyText: fileName,
       payload: <String, dynamic>{
         'url': url,
-        'objectKey': _isPublicMediaUrl(url) ? '' : url,
+        'objectKey': objectKey,
         'mimeType': mimeType,
         'fileName': fileName,
         'size': bytes.length,
@@ -496,13 +533,14 @@ class ConversationService {
       mimeType: mimeType,
     );
     final url = uploaded.bestUrl;
+    final objectKey = uploaded.objectKey.trim();
     await _sendAttachment(
       conversationId: conversationId,
       kind: 'AUDIO',
       bodyText: '[语音] ${durationSec}s',
       payload: <String, dynamic>{
         'url': url,
-        'objectKey': _isPublicMediaUrl(url) ? '' : url,
+        'objectKey': objectKey,
         'mimeType': mimeType,
         'durationSec': durationSec,
         'fileName': fileName,
@@ -534,6 +572,7 @@ class ConversationService {
                 : (sent, total) {
                     if (total > 0) onProgress((sent / total).clamp(0.0, 1.0));
                   },
+            mimeType: mimeType,
           ),
         );
         final streamed = await _client.send(req);
@@ -1143,6 +1182,7 @@ class ConversationService {
       peerAvatarObjectKey:
           (raw['peerAvatarObjectKey'] ?? peerMap['avatarObjectKey'])
               ?.toString(),
+      avatarMembers: _mapAvatarMembers(raw['avatarMembers']),
       dissolved:
           raw['dissolved'] == true ||
           raw['isDissolved'] == true ||
@@ -1197,6 +1237,30 @@ class ConversationService {
   String? _avatarField(dynamic raw) {
     final value = (raw ?? '').toString().trim();
     return value.isEmpty ? null : value;
+  }
+
+  List<ConversationAvatarMember> _mapAvatarMembers(dynamic raw) {
+    if (raw is! List) return const <ConversationAvatarMember>[];
+    final out = <ConversationAvatarMember>[];
+    for (final item in raw) {
+      if (item is! Map) continue;
+      final map = item is Map<String, dynamic>
+          ? item
+          : Map<String, dynamic>.from(item);
+      final uid = (map['userId'] as num?)?.toInt() ?? 0;
+      if (uid <= 0) continue;
+      final name = (map['displayName'] ?? '').toString().trim();
+      out.add(
+        ConversationAvatarMember(
+          userId: uid,
+          displayName: name.isEmpty ? '用户$uid' : name,
+          avatarPreset: _avatarField(map['avatarPreset']),
+          avatarObjectKey: _avatarField(map['avatarObjectKey']),
+        ),
+      );
+      if (out.length >= 6) break;
+    }
+    return out;
   }
 
   /// 从群成员列表构建 userId -> 头像字段，供历史消息回填。
@@ -1456,6 +1520,51 @@ class ConversationService {
         v.startsWith('blob:');
   }
 
+  String _storagePublicBase() {
+    final fromStorage =
+        (_session.novaLocalStorage?['dunes_storage_public_base'] ??
+                _session.novaLocalStorage?['dunes_ftp_public_base'] ??
+                '')
+            .trim();
+    if (fromStorage.isNotEmpty) {
+      return fromStorage.replaceAll(RegExp(r'/$'), '');
+    }
+    return 'https://image.heunion.com/zdfiles';
+  }
+
+  /// 解析 im/、proposals/ 等公网 CDN 路径（与 Nova 附件逻辑对齐）。
+  String resolvePublicAttachmentUrl({
+    required String url,
+    required String objectKey,
+    String bucket = 'im-attachments',
+  }) {
+    return ConversationService.resolvePublicStorageUrl(
+      url,
+      objectKey,
+      bucket: bucket,
+      publicBase: _storagePublicBase(),
+    );
+  }
+
+  /// 会话内联展示用公网图片 URL；鉴权附件返回 null。
+  String? publicImageUrlForPayload(Map<String, dynamic>? payload) {
+    if (payload == null) return null;
+    final preview = ConversationService.previewMediaPayload(payload);
+    for (final candidate in <Map<String, dynamic>>[
+      if (preview != null) preview,
+      payload,
+    ]) {
+      final resolved = resolvePublicAttachmentUrl(
+        url: (candidate['url'] ?? candidate['previewUrl'] ?? '').toString(),
+        objectKey: (candidate['objectKey'] ?? candidate['previewObjectKey'] ?? '')
+            .toString(),
+      );
+      if (resolved.isNotEmpty) return resolved;
+    }
+    final direct = ConversationService.mediaDirectUrl(payload);
+    return direct.isNotEmpty ? direct : null;
+  }
+
   Future<String> resolveMediaUrl(
     String source, {
     String bucket = 'im-attachments',
@@ -1544,36 +1653,78 @@ class ConversationService {
     required String objectKey,
     String bucket = 'im-attachments',
     String? fileName,
+    void Function(double progress)? onProgress,
   }) async {
     if (objectKey.isEmpty) throw Exception('附件地址为空');
-    if (_isPublicMediaUrl(objectKey)) {
-      final resp = await _client.get(Uri.parse(objectKey));
-      if (resp.statusCode < 200 || resp.statusCode >= 300) {
-        throw Exception('下载失败: HTTP ${resp.statusCode}');
+    final uri = _isPublicMediaUrl(objectKey)
+        ? Uri.parse(objectKey)
+        : downloadUri(
+            objectKey: _normalizeObjectKeyForBucket(objectKey, bucket: bucket),
+            bucket: bucket,
+            fileName: fileName,
+          );
+    final req = http.Request('GET', uri);
+    if (!_isPublicMediaUrl(objectKey)) {
+      req.headers.addAll(_headers);
+    }
+    final streamed = await _client.send(req);
+    if (streamed.statusCode < 200 || streamed.statusCode >= 300) {
+      throw Exception('下载失败: HTTP ${streamed.statusCode}');
+    }
+    final total = streamed.contentLength ?? 0;
+    var received = 0;
+    final chunks = <int>[];
+    await for (final chunk in streamed.stream) {
+      chunks.addAll(chunk);
+      if (total > 0) {
+        received += chunk.length;
+        onProgress?.call((received / total).clamp(0.0, 1.0));
       }
-      return resp.bodyBytes;
     }
-    final resp = await _client.get(
-      downloadUri(objectKey: objectKey, bucket: bucket, fileName: fileName),
-      headers: _headers,
-    );
-    if (resp.statusCode < 200 || resp.statusCode >= 300) {
-      throw Exception('下载失败: HTTP ${resp.statusCode}');
+    if (total <= 0) {
+      onProgress?.call(1.0);
     }
-    return resp.bodyBytes;
+    return Uint8List.fromList(chunks);
   }
 
-  Future<Uint8List> loadChatMediaBytes(Map<String, dynamic>? payload) async {
-    final objectKey = mediaObjectKey(payload);
+  Future<Uint8List> loadChatMediaBytes(
+    Map<String, dynamic>? payload, {
+    void Function(double progress)? onProgress,
+  }) async {
+    final objectKey = ConversationService.mediaAuthObjectKey(payload);
     if (objectKey.isNotEmpty) {
       return downloadAttachmentBytes(
         objectKey: objectKey,
         fileName: mediaFileName(payload),
+        onProgress: onProgress,
       );
     }
     final url = mediaDirectUrl(payload);
     if (url.isNotEmpty) {
       throw Exception('请使用公网图片地址直接展示');
+    }
+    throw Exception('附件地址为空');
+  }
+
+  /// 预览图失败时回退原图（鉴权下载）。
+  Future<Uint8List> loadChatMediaBytesWithFallback({
+    Map<String, dynamic>? previewPayload,
+    Map<String, dynamic>? originalPayload,
+  }) async {
+    Object? lastError;
+    for (final payload in <Map<String, dynamic>?>[
+      previewPayload,
+      if (originalPayload != previewPayload) originalPayload,
+    ]) {
+      if (payload == null || !ConversationService.hasAuthMedia(payload)) continue;
+      try {
+        return await loadChatMediaBytes(payload);
+      } catch (e) {
+        lastError = e;
+      }
+    }
+    if (lastError != null) {
+      throw lastError is Exception ? lastError : Exception('$lastError');
     }
     throw Exception('附件地址为空');
   }
@@ -1592,6 +1743,36 @@ class ConversationService {
       );
     }
     throw Exception('图片地址为空');
+  }
+
+  /// 公网 CDN 相对路径（im/、proposals/ 等），无需鉴权下载。
+  static bool isPublicStorageKey(String key) {
+    final k = key.replaceFirst(RegExp(r'^/'), '');
+    return k.startsWith('im/') || k.startsWith('proposals/');
+  }
+
+  static String resolvePublicStorageUrl(
+    String url,
+    String objectKey, {
+    String bucket = 'im-attachments',
+    String publicBase = 'https://image.heunion.com/zdfiles',
+  }) {
+    final direct = url.trim();
+    if (_isPublicMediaUrlStatic(direct)) {
+      final extracted = _extractObjectKeyFromUrl(direct);
+      // 临时签名 URL（含 objectKey）优先走鉴权下载，避免首进可见、再进过期。
+      if (extracted.isNotEmpty && !isPublicStorageKey(extracted)) return '';
+      return direct;
+    }
+    final key = objectKey.trim().isNotEmpty ? objectKey.trim() : direct;
+    if (_isPublicMediaUrlStatic(key)) return key;
+    if (key.isEmpty) return '';
+    if (bucket == 'im-attachments' ||
+        bucket == 'ftp' ||
+        isPublicStorageKey(key)) {
+      return '$publicBase/${key.replaceFirst(RegExp(r'^/'), '')}';
+    }
+    return '';
   }
 
   /// 返回用于会话内联展示的「预览图」payload；旧消息或无预览时回退为原 payload。
@@ -1617,15 +1798,37 @@ class ConversationService {
   }
 
   /// 公网 CDN 图片可直接展示；私有附件走鉴权下载。
-  static String? mediaPublicImageUrl(Map<String, dynamic>? payload) {
+  static String? mediaPublicImageUrl(
+    Map<String, dynamic>? payload, {
+    String publicBase = 'https://image.heunion.com/zdfiles',
+  }) {
     if (payload == null) return null;
-    if (mediaObjectKey(payload).isNotEmpty) return null;
-    final url = mediaDirectUrl(payload);
-    return url.isNotEmpty ? url : null;
+    final preview = previewMediaPayload(payload);
+    for (final candidate in <Map<String, dynamic>>[
+      if (preview != null) preview,
+      payload,
+    ]) {
+      final resolved = resolvePublicStorageUrl(
+        (candidate['url'] ?? candidate['previewUrl'] ?? '').toString(),
+        (candidate['objectKey'] ?? candidate['previewObjectKey'] ?? '')
+            .toString(),
+        publicBase: publicBase,
+      );
+      if (resolved.isNotEmpty) return resolved;
+    }
+    final direct = mediaDirectUrl(payload);
+    return direct.isNotEmpty ? direct : null;
   }
 
   static bool hasAuthMedia(Map<String, dynamic>? payload) =>
-      mediaObjectKey(payload).isNotEmpty;
+      mediaAuthObjectKey(previewMediaPayload(payload) ?? payload).isNotEmpty;
+
+  /// 需要走 /storage/download 鉴权下载的 objectKey（排除公网 CDN 相对路径）。
+  static String mediaAuthObjectKey(Map<String, dynamic>? payload) {
+    final key = mediaObjectKey(payload);
+    if (key.isEmpty || isPublicStorageKey(key)) return '';
+    return key;
+  }
 
   static String mediaObjectKey(Map<String, dynamic>? payload) {
     if (payload == null) return '';
@@ -1635,6 +1838,10 @@ class ConversationService {
     if (url.isNotEmpty && !_isPublicMediaUrlStatic(url)) return url;
     final preview = (payload['previewUrl'] ?? '').toString().trim();
     if (preview.isNotEmpty && !_isPublicMediaUrlStatic(preview)) return preview;
+    final fromUrl = _extractObjectKeyFromUrl(url);
+    if (fromUrl.isNotEmpty) return fromUrl;
+    final fromPreview = _extractObjectKeyFromUrl(preview);
+    if (fromPreview.isNotEmpty) return fromPreview;
     return '';
   }
 
@@ -1664,5 +1871,38 @@ class ConversationService {
     return v.startsWith('http://') ||
         v.startsWith('https://') ||
         v.startsWith('blob:');
+  }
+
+  static String _normalizeObjectKeyForBucket(
+    String key, {
+    required String bucket,
+  }) {
+    var out = key.trim().replaceFirst(RegExp(r'^/'), '');
+    final prefixed = '$bucket/';
+    if (out.startsWith(prefixed)) {
+      out = out.substring(prefixed.length);
+    }
+    return out;
+  }
+
+  /// 从 URL 反推 objectKey（支持 /storage/download 与 bucket 路径）。
+  static String _extractObjectKeyFromUrl(String value) {
+    final raw = value.trim();
+    if (raw.isEmpty || !_isPublicMediaUrlStatic(raw)) return '';
+    final uri = Uri.tryParse(raw);
+    if (uri == null) return '';
+    final qKey = uri.queryParameters['objectKey']?.trim() ?? '';
+    if (qKey.isNotEmpty) return qKey;
+    final segments = uri.pathSegments;
+    if (segments.isEmpty) return '';
+    final bucketIdx = segments.indexOf('im-attachments');
+    if (bucketIdx >= 0 && bucketIdx + 1 < segments.length) {
+      return segments.sublist(bucketIdx + 1).join('/');
+    }
+    final zdfilesIdx = segments.indexOf('zdfiles');
+    if (zdfilesIdx >= 0 && zdfilesIdx + 1 < segments.length) {
+      return segments.sublist(zdfilesIdx + 1).join('/');
+    }
+    return '';
   }
 }

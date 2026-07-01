@@ -44,12 +44,12 @@ void main() {
   installWebTextInputGuard();
   if (!kIsWeb) {
     SystemChrome.setSystemUIOverlayStyle(
-    const SystemUiOverlayStyle(
-      statusBarColor: Colors.transparent,
-      statusBarIconBrightness: Brightness.dark,
-      systemNavigationBarColor: Color(0xFFFBFAF6),
-      systemNavigationBarIconBrightness: Brightness.dark,
-    ),
+      const SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        statusBarIconBrightness: Brightness.dark,
+        systemNavigationBarColor: Color(0xFFFBFAF6),
+        systemNavigationBarIconBrightness: Brightness.dark,
+      ),
     );
     unawaited(ensurePushInitialized());
   }

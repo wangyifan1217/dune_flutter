@@ -3,8 +3,12 @@ package nova.dunes.dunes_app
 import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaRecorder
+import android.os.Handler
+import android.os.Looper
+import android.os.PowerManager
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.embedding.android.FlutterActivity
+import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodChannel
 import java.io.File
 import java.io.FileInputStream
@@ -14,7 +18,10 @@ import java.nio.ByteOrder
 
 class MainActivity : FlutterActivity() {
     private val voiceChannel = "dunes/audio_recorder"
+    private val voiceStreamChannel = "dunes/audio_recorder_stream"
+    private val mainHandler = Handler(Looper.getMainLooper())
     private var tpnsBridge: TpnsPushBridge? = null
+    private var voiceStreamSink: EventChannel.EventSink? = null
 
     // glm-asr-2512 仅接受 wav/mp3，这里录成 16k/16bit/单声道 PCM 并封装为标准 WAV。
     private val sampleRate = 16000
@@ -27,6 +34,7 @@ class MainActivity : FlutterActivity() {
     private var pcmFile: File? = null
     private var wavPath: String? = null
     private var startedAtMs: Long = 0L
+    private var wakeLock: PowerManager.WakeLock? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -39,9 +47,20 @@ class MainActivity : FlutterActivity() {
                     "start" -> startRecord(result)
                     "stop" -> stopRecord(result, deleteFile = false)
                     "cancel" -> stopRecord(result, deleteFile = true)
+                    "status" -> result.success(mapOf("isRecording" to isRecording))
                     else -> result.notImplemented()
                 }
             }
+        EventChannel(flutterEngine.dartExecutor.binaryMessenger, voiceStreamChannel)
+            .setStreamHandler(object : EventChannel.StreamHandler {
+                override fun onListen(arguments: Any?, events: EventChannel.EventSink?) {
+                    voiceStreamSink = events
+                }
+
+                override fun onCancel(arguments: Any?) {
+                    voiceStreamSink = null
+                }
+            })
     }
 
     private fun startRecord(result: MethodChannel.Result) {
@@ -78,6 +97,7 @@ class MainActivity : FlutterActivity() {
             audioRecord = record
             isRecording = true
             startedAtMs = System.currentTimeMillis()
+            ensureWakeLock()
 
             recordThread = Thread { writePcmLoop(pcm, bufferSize) }.also { it.start() }
             result.success(true)
@@ -95,11 +115,20 @@ class MainActivity : FlutterActivity() {
                     val read = audioRecord?.read(buf, 0, buf.size) ?: -1
                     if (read > 0) {
                         out.write(buf, 0, read)
+                        emitAudioChunk(buf, read)
                     }
                 }
             }
         } catch (_: Exception) {
             // 录音线程异常时忽略，stop 时按已写入的数据处理。
+        }
+    }
+
+    private fun emitAudioChunk(buffer: ByteArray, size: Int) {
+        val sink = voiceStreamSink ?: return
+        val copy = buffer.copyOf(size)
+        mainHandler.post {
+            sink.success(copy)
         }
     }
 
@@ -148,6 +177,7 @@ class MainActivity : FlutterActivity() {
         val pcm = pcmFile
         val wav = wavPath
         startedAtMs = 0L
+        releaseWakeLock()
 
         if (deleteFile) {
             deleteQuietly(pcm)
@@ -214,6 +244,24 @@ class MainActivity : FlutterActivity() {
         try {
             if (file.exists()) file.delete()
         } catch (_: Exception) {
+        }
+    }
+
+    private fun ensureWakeLock() {
+        if (wakeLock?.isHeld == true) return
+        val pm = getSystemService(POWER_SERVICE) as? PowerManager ?: return
+        wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "dunes:meeting-recorder").apply {
+            setReferenceCounted(false)
+            acquire(10 * 60 * 1000L)
+        }
+    }
+
+    private fun releaseWakeLock() {
+        try {
+            if (wakeLock?.isHeld == true) wakeLock?.release()
+        } catch (_: Exception) {
+        } finally {
+            wakeLock = null
         }
     }
 }

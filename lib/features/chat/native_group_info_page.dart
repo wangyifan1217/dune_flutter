@@ -687,6 +687,7 @@ class _MemberPickerSheetState extends State<_MemberPickerSheet> {
                 avatarPreset: c.avatarPreset,
                 avatarObjectKey: c.avatarObjectKey,
                 avatarService: widget.avatarService,
+                borderRadius: 34 * 0.18,
               ),
               const SizedBox(width: 10),
               Expanded(
@@ -979,6 +980,7 @@ class _MemberPickRow extends StatelessWidget {
                 avatarPreset: contact.avatarPreset,
                 avatarObjectKey: contact.avatarObjectKey,
                 avatarService: avatarService,
+                borderRadius: 34 * 0.18,
               ),
               const SizedBox(width: 10),
               Expanded(

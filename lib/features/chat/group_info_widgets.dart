@@ -368,6 +368,7 @@ class _MemberCell extends StatelessWidget {
             avatarPreset: avatarPreset,
             avatarObjectKey: avatarObjectKey,
             avatarService: avatarService,
+            borderRadius: 38 * 0.18,
           ),
           const SizedBox(height: 4),
           SizedBox(

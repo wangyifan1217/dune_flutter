@@ -16,6 +16,7 @@ class NativeConversation {
     this.peerRoleLabel,
     this.peerAvatarPreset,
     this.peerAvatarObjectKey,
+    this.avatarMembers = const <ConversationAvatarMember>[],
     this.dissolved = false,
     this.membershipStatus,
     this.assistantGenerating = false,
@@ -38,6 +39,7 @@ class NativeConversation {
   final String? peerRoleLabel;
   final String? peerAvatarPreset;
   final String? peerAvatarObjectKey;
+  final List<ConversationAvatarMember> avatarMembers;
   final bool dissolved;
   final String? membershipStatus;
   final bool assistantGenerating;
@@ -78,6 +80,20 @@ class NativeConversation {
   }
 
   int get sortTimestamp => updatedAt?.millisecondsSinceEpoch ?? 0;
+}
+
+class ConversationAvatarMember {
+  const ConversationAvatarMember({
+    required this.userId,
+    required this.displayName,
+    this.avatarPreset,
+    this.avatarObjectKey,
+  });
+
+  final int userId;
+  final String displayName;
+  final String? avatarPreset;
+  final String? avatarObjectKey;
 }
 
 class NativeChatMessage {

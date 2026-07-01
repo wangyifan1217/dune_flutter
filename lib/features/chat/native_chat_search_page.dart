@@ -360,6 +360,7 @@ class _NativeChatSearchPageState extends State<NativeChatSearchPage> {
             avatarPreset: m.senderAvatarPreset,
             avatarObjectKey: m.senderAvatarObjectKey,
             avatarService: _service,
+            borderRadius: 34 * 0.18,
           ),
           onTap: () => widget.onLocateMessage(m),
         );

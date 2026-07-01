@@ -17,8 +17,8 @@ abstract final class DunesColors {
   static const accentLine = Color(0xFFB8CECD);
   static const green = Color(0xFF5D8A4E);
   static const greenSoft = Color(0xFFEAEFDF);
-  /// 会话/消息已读提示色（淡绿）
-  static const readReceipt = Color(0xFF8BC9A0);
+  /// 会话/消息已读提示色
+  static const readReceipt = Color(0xFF2E7544);
   static const blue = Color(0xFF3B6E96);
   static const blueSoft = Color(0xFFE2ECF4);
   static const amber = Color(0xFFB07A2B);

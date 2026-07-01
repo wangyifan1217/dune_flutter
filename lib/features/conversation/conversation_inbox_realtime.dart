@@ -199,6 +199,7 @@ abstract final class ConversationInboxRealtime {
       peerRoleLabel: c.peerRoleLabel,
       peerAvatarPreset: c.peerAvatarPreset,
       peerAvatarObjectKey: c.peerAvatarObjectKey,
+      avatarMembers: c.avatarMembers,
       dissolved: c.dissolved,
       membershipStatus: c.membershipStatus,
       assistantGenerating: c.assistantGenerating,

@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../core/theme/dunes_theme.dart';
+import '../../core/util/friendly_error.dart';
 import 'chat_quote.dart';
 import '../conversation/conversation_models.dart';
 import '../conversation/inbox_format.dart';
@@ -202,8 +205,9 @@ class ChatInputBar extends StatelessWidget {
     required this.voiceMode,
     required this.sending,
     required this.onToggleVoice,
-    required this.onSend,
+    required     this.onSend,
     this.onEmoji,
+    this.emojiPicker,
     this.secondaryIcon,
     this.onStop,
     this.onVoiceHoldStart,
@@ -225,6 +229,7 @@ class ChatInputBar extends StatelessWidget {
   final VoidCallback onToggleVoice;
   final VoidCallback onSend;
   final VoidCallback? onEmoji;
+  final Widget? emojiPicker;
   final IconData? secondaryIcon;
   final VoidCallback? onStop;
   final GestureLongPressStartCallback? onVoiceHoldStart;
@@ -343,7 +348,9 @@ class ChatInputBar extends StatelessWidget {
           ),
           if (!voiceMode) ...[
             const SizedBox(width: 8),
-            if (onEmoji != null)
+            if (emojiPicker != null)
+              emojiPicker!
+            else if (onEmoji != null)
               _RoundIconBtn(
                 icon: secondaryIcon ?? Icons.emoji_emotions_outlined,
                 onTap: interactionLocked ? null : onEmoji,
@@ -467,77 +474,76 @@ class ChatMessageRow extends StatelessWidget {
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: mine
-            ? MainAxisAlignment.end
-            : MainAxisAlignment.start,
-        children: [
-          if (!mine) ...[
-            avatar ?? const SizedBox(width: 32),
-            const SizedBox(width: 8),
-          ],
-          Flexible(
-            child: Column(
-              crossAxisAlignment: mine
-                  ? CrossAxisAlignment.end
-                  : CrossAxisAlignment.start,
-              children: [
-                if (showMeta)
-                  Padding(
-                    padding: const EdgeInsets.only(
-                      bottom: 3,
-                      left: 2,
-                      right: 2,
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        if (showSenderMeta && !mine)
-                          Flexible(
-                            child: Text(
-                              message.senderName,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
+      child: GestureDetector(
+        onLongPress: onLongPress,
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: mine
+              ? MainAxisAlignment.end
+              : MainAxisAlignment.start,
+          children: [
+            if (!mine) ...[
+              avatar ?? const SizedBox(width: 32),
+              const SizedBox(width: 8),
+            ],
+            Flexible(
+              child: Column(
+                crossAxisAlignment: mine
+                    ? CrossAxisAlignment.end
+                    : CrossAxisAlignment.start,
+                children: [
+                  if (showMeta)
+                    Padding(
+                      padding: const EdgeInsets.only(
+                        bottom: 3,
+                        left: 2,
+                        right: 2,
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (showSenderMeta && !mine)
+                            Flexible(
+                              child: Text(
+                                message.senderName,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: DunesTypography.mono(
+                                  fontSize: 9.5,
+                                  color: DunesColors.text3,
+                                ),
+                              ),
+                            ),
+                          if (showSenderMeta && !mine && time.isNotEmpty)
+                            const SizedBox(width: 6),
+                          if (!mine && time.isNotEmpty)
+                            Text(
+                              time,
                               style: DunesTypography.mono(
                                 fontSize: 9.5,
                                 color: DunesColors.text3,
                               ),
                             ),
-                          ),
-                        if (showSenderMeta && !mine && time.isNotEmpty)
-                          const SizedBox(width: 6),
-                        if (!mine && time.isNotEmpty)
-                          Text(
-                            time,
-                            style: DunesTypography.mono(
-                              fontSize: 9.5,
-                              color: DunesColors.text3,
+                          if (mine && showTimeForMine && time.isNotEmpty) ...[
+                            Text(
+                              time,
+                              style: DunesTypography.mono(
+                                fontSize: 9.5,
+                                color: DunesColors.text3,
+                              ),
                             ),
-                          ),
-                        if (mine && showTimeForMine && time.isNotEmpty) ...[
-                          Text(
-                            time,
-                            style: DunesTypography.mono(
-                              fontSize: 9.5,
-                              color: DunesColors.text3,
+                            const SizedBox(width: 6),
+                            Text(
+                              message.senderName,
+                              style: DunesTypography.mono(
+                                fontSize: 9.5,
+                                color: DunesColors.text3,
+                              ),
                             ),
-                          ),
-                          const SizedBox(width: 6),
-                          Text(
-                            message.senderName,
-                            style: DunesTypography.mono(
-                              fontSize: 9.5,
-                              color: DunesColors.text3,
-                            ),
-                          ),
+                          ],
                         ],
-                      ],
+                      ),
                     ),
-                  ),
-                if (onLongPress != null)
-                  GestureDetector(onLongPress: onLongPress, child: content)
-                else
                   content,
                 if (readLabel != null)
                   Padding(
@@ -545,7 +551,8 @@ class ChatMessageRow extends StatelessWidget {
                     child: Text(
                       readLabel!,
                       style: DunesTypography.mono(
-                        fontSize: 9,
+                        fontSize: 10.5,
+                        fontWeight: FontWeight.w500,
                         color: readLabel == '已读'
                             ? DunesColors.readReceipt
                             : DunesColors.text3,
@@ -560,7 +567,8 @@ class ChatMessageRow extends StatelessWidget {
                       child: Text(
                         (readTapLabel ?? '查看已读').trim(),
                         style: DunesTypography.mono(
-                          fontSize: 9,
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w500,
                           color: (readTapLabel ?? '').trim() != '未读'
                               ? DunesColors.readReceipt
                               : DunesColors.text3,
@@ -576,6 +584,7 @@ class ChatMessageRow extends StatelessWidget {
             trailingAvatar ?? avatar ?? const SizedBox(width: 32),
           ],
         ],
+        ),
       ),
     );
   }
@@ -917,12 +926,14 @@ class ChatVoiceBubble extends StatefulWidget {
     required this.durationSec,
     required this.mine,
     required this.resolveUrl,
+    this.onPlayError,
   });
 
   final String playKey;
   final int durationSec;
   final bool mine;
   final Future<String> Function() resolveUrl;
+  final ValueChanged<String>? onPlayError;
 
   @override
   State<ChatVoiceBubble> createState() => _ChatVoiceBubbleState();
@@ -944,15 +955,23 @@ class _ChatVoiceBubbleState extends State<ChatVoiceBubble> {
   void _onPlayerChanged() => setState(() {});
 
   Future<void> _toggle() async {
-    final url = await widget.resolveUrl();
-    await ChatVoicePlayer.instance.toggle(widget.playKey, url);
+    try {
+      final url = await widget.resolveUrl();
+      if (url.trim().isEmpty) {
+        widget.onPlayError?.call('语音地址为空');
+        return;
+      }
+      await ChatVoicePlayer.instance.toggle(widget.playKey, url);
+    } catch (e) {
+      widget.onPlayError?.call('播放失败：${friendlyErrorText(e)}');
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final playing = ChatVoicePlayer.instance.playingKey == widget.playKey;
     return GestureDetector(
-      onTap: _toggle,
+      onTap: () => unawaited(_toggle()),
       child: Container(
         constraints: BoxConstraints(
           minWidth: 80 + (widget.durationSec * 4).clamp(0, 80).toDouble(),

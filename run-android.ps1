@@ -42,33 +42,8 @@ if (-not $Device) {
 }
 
 $mode = if ($Release) { "--release" } else { "--debug" }
-$dartDefines = @()
-$localProps = Join-Path $PSScriptRoot "android\local.properties"
-if (Test-Path $localProps) {
-  foreach ($line in Get-Content $localProps) {
-    if ($line -match '^\s*tpns\.accessId=(.+)$') {
-      $dartDefines += "--dart-define=TPNS_ACCESS_ID=$($matches[1].Trim())"
-    }
-    if ($line -match '^\s*tpns\.accessKey=(.+)$') {
-      $dartDefines += "--dart-define=TPNS_ACCESS_KEY=$($matches[1].Trim())"
-    }
-    if ($line -match '^\s*tpns\.miAppId=(.+)$') {
-      $dartDefines += "--dart-define=TPNS_MI_APP_ID=$($matches[1].Trim())"
-    }
-    if ($line -match '^\s*tpns\.miAppKey=(.+)$') {
-      $dartDefines += "--dart-define=TPNS_MI_APP_KEY=$($matches[1].Trim())"
-    }
-    if ($line -match '^\s*tpns\.cluster=(.+)$') {
-      $dartDefines += "--dart-define=TPNS_CLUSTER=$($matches[1].Trim())"
-    }
-    if ($line -match '^\s*dunes\.apiHost=(.+)$') {
-      $dartDefines += "--dart-define=DUNES_API_HOST=$($matches[1].Trim())"
-    }
-    if ($line -match '^\s*nova\.baseUrl=(.+)$') {
-      $dartDefines += "--dart-define=NOVA_BASE_URL=$($matches[1].Trim())"
-    }
-  }
-}
+. (Join-Path $PSScriptRoot "scripts\resolve-dart-defines.ps1")
+$dartDefines = Get-DunesDartDefines -FlutterRoot $PSScriptRoot
 Write-Host "PUB_CACHE = $env:PUB_CACHE" -ForegroundColor DarkGray
 Write-Host "Launching: device=$Device mode=$mode" -ForegroundColor Cyan
 

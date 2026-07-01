@@ -2,6 +2,8 @@ class NativeMeetingTime {
   static String formatDisplay(String? raw) {
     if (raw == null || raw.trim().isEmpty) return '未设置时间';
     final value = raw.trim();
+    final extracted = _extractDateTime(value);
+    if (extracted != null) return extracted;
     final epoch = int.tryParse(value);
     if (epoch != null && epoch > 0) {
       final ms = epoch >= 1000000000000 ? epoch : epoch * 1000;
@@ -39,6 +41,25 @@ class NativeMeetingTime {
     final m = RegExp(r' (\d{2}):(\d{2}):(\d{2})$').firstMatch(text);
     if (m == null) return false;
     return m.group(1) != '00' || m.group(2) != '00' || m.group(3) != '00';
+  }
+
+  static String? _extractDateTime(String value) {
+    final m = RegExp(
+      r'(\d{4})[-/](\d{1,2})[-/](\d{1,2})(?:[T\s]+(\d{1,2}):(\d{2})(?::(\d{2}))?)?',
+    ).firstMatch(value);
+    if (m == null) return null;
+    final y = int.tryParse(m.group(1) ?? '');
+    final mo = int.tryParse(m.group(2) ?? '');
+    final d = int.tryParse(m.group(3) ?? '');
+    if (y == null || mo == null || d == null) return null;
+    final hh = int.tryParse(m.group(4) ?? '');
+    final mm = int.tryParse(m.group(5) ?? '');
+    final ss = int.tryParse(m.group(6) ?? '0') ?? 0;
+    if (hh == null || mm == null) {
+      // Keep date-only values readable, avoid fake 00:00:00.
+      return '$y-${_two(mo)}-${_two(d)}';
+    }
+    return '$y-${_two(mo)}-${_two(d)} ${_two(hh)}:${_two(mm)}:${_two(ss)}';
   }
 
   static String _two(int value) => value.toString().padLeft(2, '0');

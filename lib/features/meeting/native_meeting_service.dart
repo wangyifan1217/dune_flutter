@@ -172,6 +172,36 @@ class NativeMeetingService {
     _ensureSuccess(resp);
   }
 
+  /// Resolves a downloadable URL for meeting audio (play URL or fresh presign).
+  Future<String> resolveAudioDownloadUrl(NativeMeetingDetail detail) async {
+    final playUrl = detail.audioPlayUrl.trim();
+    if (playUrl.isNotEmpty) return playUrl;
+
+    final objectKey = detail.audioObjectKey.trim();
+    if (objectKey.isEmpty) return '';
+
+    final resp = await dunesHttpGet(
+      session,
+      '/storage/presigned-get?bucket=meeting-audio&objectKey=${Uri.encodeQueryComponent(objectKey)}',
+    );
+    _ensureSuccess(resp);
+    final data = _unwrapData(resp.body);
+    return (data['url'] ?? data['downloadUrl'] ?? '').toString().trim();
+  }
+
+  String audioDownloadFileName(NativeMeetingDetail detail) {
+    final key = detail.audioObjectKey.trim();
+    if (key.isNotEmpty) {
+      final name = key.split('/').last.trim();
+      if (name.isNotEmpty) return name;
+    }
+    final title = detail.title.trim();
+    final base = title.isNotEmpty
+        ? title.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_')
+        : 'meeting-${detail.meetingId}';
+    return '$base.m4a';
+  }
+
   String filenameFromPath(String path) {
     final p = path.replaceAll('\\', '/');
     final idx = p.lastIndexOf('/');
@@ -211,8 +241,26 @@ class NativeMeetingService {
   }
 
   void _ensureSuccess(http.Response resp) {
-    if (resp.statusCode >= 200 && resp.statusCode < 300) return;
+    if (resp.statusCode >= 200 && resp.statusCode < 300) {
+      final body = _decodeJsonMap(resp.body);
+      if (body is Map<String, dynamic> && body['success'] == false) {
+        final msg = _readErrorMessage(body);
+        if (msg.isNotEmpty) throw Exception(msg);
+      }
+      return;
+    }
+    final body = _decodeJsonMap(resp.body);
+    if (body is Map<String, dynamic>) {
+      final msg = _readErrorMessage(body);
+      if (msg.isNotEmpty) throw Exception(msg);
+    }
     throw Exception('请求失败(${resp.statusCode})');
+  }
+
+  String _readErrorMessage(Map<String, dynamic> body) {
+    return (body['message'] ?? body['msg'] ?? body['error'] ?? '')
+        .toString()
+        .trim();
   }
 
   Future<http.Response> _requestMeeting(
@@ -297,6 +345,7 @@ Map<String, dynamic> _normalizeMeetingPayload(Map<String, dynamic> json) {
       'actionItems',
       'audioPlayUrl',
       'audioUrl',
+      'audioObjectKey',
       'summary',
       'status',
       'asrProgress',

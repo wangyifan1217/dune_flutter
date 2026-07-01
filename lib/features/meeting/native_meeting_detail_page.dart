@@ -6,6 +6,7 @@ import 'package:just_audio/just_audio.dart';
 
 import '../../core/theme/dunes_theme.dart';
 import '../auth/auth_session.dart';
+import '../chat/file_download.dart' as file_dl;
 import 'native_meeting_models.dart';
 import 'native_meeting_service.dart';
 
@@ -35,6 +36,10 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
   Timer? _poller;
   bool _loading = true;
   bool _regenerating = false;
+  bool _downloadingAudio = false;
+  double _downloadProgress = 0;
+  String? _downloadLabel;
+  bool _transcriptExpanded = false;
   int _segmentVisibleCount = 30;
   static const int _segmentPageSize = 30;
   String? _error;
@@ -70,6 +75,7 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
       _detail = null;
       _loading = true;
       _error = null;
+      _transcriptExpanded = false;
       _segmentVisibleCount = _segmentPageSize;
     });
     unawaited(_load());
@@ -94,6 +100,7 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
       if (!mounted) return;
       setState(() {
         _detail = detail;
+        _transcriptExpanded = false;
         _segmentVisibleCount = math.min(
           _segmentPageSize,
           detail.transcriptSegments.length,
@@ -109,8 +116,74 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
     }
   }
 
+  Future<void> _downloadAudio() async {
+    final detail = _detail;
+    if (detail == null || _downloadingAudio) return;
+
+    setState(() {
+      _downloadingAudio = true;
+      _downloadProgress = 0;
+      _downloadLabel = '下载录音';
+    });
+
+    try {
+      final url = await _service.resolveAudioDownloadUrl(detail);
+      if (url.isEmpty) {
+        throw Exception('暂无可下载的录音文件');
+      }
+      final fileName = _service.audioDownloadFileName(detail);
+      final savedPath = await file_dl.openUrlAsFile(
+        url,
+        fileName,
+        onProgress: (p) {
+          if (!mounted) return;
+          setState(() => _downloadProgress = p.clamp(0.0, 1.0));
+        },
+      );
+      if (!mounted) return;
+      if (savedPath == null || savedPath.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('已保存 $fileName')),
+        );
+        return;
+      }
+      final displayPath = savedPath.replaceFirst('/storage/emulated/0', '内部存储');
+      await showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('下载完成'),
+          content: Text('文件：$fileName\n保存位置：\n$displayPath'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('知道了'),
+            ),
+          ],
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('下载失败：$e')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _downloadingAudio = false;
+          _downloadProgress = 0;
+          _downloadLabel = null;
+        });
+      }
+    }
+  }
+
   Future<void> _playAudio() async {
-    final url = _detail?.audioPlayUrl ?? '';
+    final detail = _detail;
+    if (detail == null) return;
+    var url = detail.audioPlayUrl.trim();
+    if (url.isEmpty) {
+      url = await _service.resolveAudioDownloadUrl(detail);
+    }
     if (url.isEmpty) return;
 
     if (_player.playing) {
@@ -231,18 +304,28 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
           ),
         ],
       ),
-      body: _loading && d == null
-          ? const Center(child: CircularProgressIndicator())
-          : _error != null && d == null
-          ? _buildErrorState()
-          : d == null
-          ? _buildEmptyState()
-          : ListView(
+      body: Stack(
+        children: [
+          _buildBody(d),
+          if (_downloadingAudio) _buildDownloadOverlay(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBody(NativeMeetingDetail? d) {
+    return _loading && d == null
+        ? const Center(child: CircularProgressIndicator())
+        : _error != null && d == null
+        ? _buildErrorState()
+        : d == null
+        ? _buildEmptyState()
+        : ListView(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
               children: [
                 _buildHero(d),
                 const SizedBox(height: 16),
-                if (d.audioPlayUrl.isNotEmpty) ...[
+                if (d.audioPlayUrl.isNotEmpty || d.audioObjectKey.isNotEmpty) ...[
                   _buildAudioCard(),
                   const SizedBox(height: 16),
                 ],
@@ -264,68 +347,98 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
                 _buildSection(
                   title: '原始逐句转写',
                   icon: Icons.article_outlined,
-                  child: d.transcriptSegments.isNotEmpty
-                      ? Column(
-                          children: d.transcriptSegments
-                              .take(_segmentVisibleCount)
-                              .map<Widget>(
-                                (seg) => Container(
-                                  width: double.infinity,
-                                  margin: const EdgeInsets.only(bottom: 8),
-                                  padding: const EdgeInsets.all(10),
-                                  decoration: BoxDecoration(
-                                    color: DunesColors.bgSoft,
-                                    borderRadius: BorderRadius.circular(10),
-                                  ),
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        '${seg.speaker} · ${_formatMillis(seg.startMs)}',
-                                        style: DunesTypography.sans(
-                                          fontSize: 11,
-                                          color: DunesColors.text3,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        seg.text,
-                                        style: DunesTypography.sans(
-                                          fontSize: 13,
-                                          color: DunesColors.text2,
-                                          height: 1.45,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              )
-                              .toList(growable: false)
-                            ..addAll(
-                              _segmentVisibleCount < d.transcriptSegments.length
-                                  ? <Widget>[
-                                      Padding(
-                                        padding: const EdgeInsets.only(top: 4),
-                                        child: OutlinedButton.icon(
-                                          onPressed: _loadMoreSegments,
-                                          icon: const Icon(Icons.expand_more_rounded),
-                                          label: Text(
-                                            '加载更多（$_segmentVisibleCount/${d.transcriptSegments.length}）',
-                                          ),
-                                        ),
-                                      ),
-                                    ]
-                                  : const <Widget>[],
-                            ),
+                  trailing: d.transcriptSegments.isNotEmpty
+                      ? TextButton.icon(
+                          onPressed: () {
+                            setState(() => _transcriptExpanded = !_transcriptExpanded);
+                          },
+                          icon: Icon(
+                            _transcriptExpanded
+                                ? Icons.keyboard_arrow_up_rounded
+                                : Icons.keyboard_arrow_down_rounded,
+                            size: 18,
+                          ),
+                          label: Text(_transcriptExpanded ? '收起' : '展开'),
                         )
-                      : Text(
+                      : null,
+                  child: d.transcriptSegments.isEmpty
+                      ? Text(
                           '当前会议暂无逐句转写内容（可能仍在处理中）',
                           style: DunesTypography.sans(
                             fontSize: 13,
                             color: DunesColors.text3,
                           ),
-                        ),
+                        )
+                      : _transcriptExpanded
+                          ? Column(
+                              children: d.transcriptSegments
+                                  .take(_segmentVisibleCount)
+                                  .map<Widget>(
+                                    (seg) => Container(
+                                      width: double.infinity,
+                                      margin: const EdgeInsets.only(bottom: 8),
+                                      padding: const EdgeInsets.all(10),
+                                      decoration: BoxDecoration(
+                                        color: DunesColors.bgSoft,
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            '${seg.speaker} · ${_formatMillis(seg.startMs)}',
+                                            style: DunesTypography.sans(
+                                              fontSize: 11,
+                                              color: DunesColors.text3,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 4),
+                                          Text(
+                                            seg.text,
+                                            style: DunesTypography.sans(
+                                              fontSize: 13,
+                                              color: DunesColors.text2,
+                                              height: 1.45,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  )
+                                  .toList()
+                                ..addAll(
+                                  _segmentVisibleCount < d.transcriptSegments.length
+                                      ? <Widget>[
+                                          Padding(
+                                            padding: const EdgeInsets.only(top: 4),
+                                            child: OutlinedButton.icon(
+                                              onPressed: _loadMoreSegments,
+                                              icon: const Icon(Icons.expand_more_rounded),
+                                              label: Text(
+                                                '加载更多（$_segmentVisibleCount/${d.transcriptSegments.length}）',
+                                              ),
+                                            ),
+                                          ),
+                                        ]
+                                      : const <Widget>[],
+                                ),
+                            )
+                          : Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                color: DunesColors.bgSoft,
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Text(
+                                '共 ${d.transcriptSegments.length} 条逐句转写，点击右上角展开查看',
+                                style: DunesTypography.sans(
+                                  fontSize: 13,
+                                  color: DunesColors.text3,
+                                ),
+                              ),
+                            ),
                 ),
                 const SizedBox(height: 20),
                 OutlinedButton.icon(
@@ -348,7 +461,53 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
                   ),
                 ),
               ],
+            );
+  }
+
+  Widget _buildDownloadOverlay() {
+    final label = _downloadLabel ?? '下载中';
+    final hasProgress = _downloadProgress > 0;
+    final pct = (_downloadProgress * 100).round();
+    return Positioned.fill(
+      child: IgnorePointer(
+        child: Container(
+          color: Colors.black26,
+          alignment: Alignment.center,
+          child: Container(
+            width: 240,
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+            decoration: BoxDecoration(
+              color: const Color(0xE61F2421),
+              borderRadius: BorderRadius.circular(12),
             ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  hasProgress ? '$label  $pct%' : '$label…',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(4),
+                  child: LinearProgressIndicator(
+                    value: hasProgress ? _downloadProgress : null,
+                    minHeight: 6,
+                    backgroundColor: Colors.white24,
+                    valueColor: const AlwaysStoppedAnimation<Color>(
+                      DunesColors.accentLine,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 
@@ -574,41 +733,61 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
                   ),
                 ),
                 const SizedBox(height: 4),
-                StreamBuilder<Duration>(
-                  stream: _player.positionStream,
+                StreamBuilder<Duration?>(
+                  stream: _player.durationStream,
                   builder: (context, snapshot) {
-                    final position = snapshot.data ?? Duration.zero;
-                    final total = _player.duration ?? Duration.zero;
-                    final value = total.inMilliseconds > 0
-                        ? (position.inMilliseconds / total.inMilliseconds)
-                              .clamp(0.0, 1.0)
-                        : 0.0;
-                    return Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          '${_formatDuration(position)} / ${_formatDuration(total)}',
-                          style: DunesTypography.sans(
-                            fontSize: 12,
-                            color: DunesColors.text3,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(999),
-                          child: LinearProgressIndicator(
-                            value: total.inMilliseconds > 0 ? value : null,
-                            minHeight: 5,
-                            backgroundColor: DunesColors.bgSoft,
-                            color: DunesColors.accent,
-                          ),
-                        ),
-                      ],
+                    final detail = _detail;
+                    final fallbackTotal = Duration(
+                      seconds: (detail?.audioDurationSeconds ?? 0).clamp(0, 24 * 60 * 60),
+                    );
+                    final total = (snapshot.data ?? _player.duration ?? fallbackTotal);
+                    final totalMs = total.inMilliseconds;
+                    return StreamBuilder<Duration>(
+                      stream: _player.positionStream,
+                      builder: (context, posSnap) {
+                        final position = posSnap.data ?? Duration.zero;
+                        final posMs = position.inMilliseconds.clamp(0, totalMs > 0 ? totalMs : 0);
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              '${_formatDuration(position)} / ${_formatDuration(total)}',
+                              style: DunesTypography.sans(
+                                fontSize: 12,
+                                color: DunesColors.text3,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            SliderTheme(
+                              data: SliderTheme.of(context).copyWith(
+                                trackHeight: 4,
+                                thumbShape: const RoundSliderThumbShape(
+                                  enabledThumbRadius: 7,
+                                ),
+                              ),
+                              child: Slider(
+                                value: posMs.toDouble(),
+                                min: 0,
+                                max: totalMs > 0 ? totalMs.toDouble() : 1,
+                                onChanged: totalMs > 0
+                                    ? (v) => _player.seek(Duration(milliseconds: v.round()))
+                                    : null,
+                              ),
+                            ),
+                          ],
+                        );
+                      },
                     );
                   },
                 ),
               ],
             ),
+          ),
+          IconButton(
+            onPressed: _downloadingAudio ? null : _downloadAudio,
+            icon: const Icon(Icons.download_rounded),
+            color: DunesColors.accent,
+            tooltip: '下载录音',
           ),
         ],
       ),

@@ -50,7 +50,9 @@ class NativeMeetingDetail {
     required this.updatedAt,
     required this.status,
     required this.asrProgress,
+    required this.audioDurationSeconds,
     required this.audioPlayUrl,
+    required this.audioObjectKey,
     required this.summary,
     required this.actionItems,
     required this.transcriptSegments,
@@ -63,7 +65,9 @@ class NativeMeetingDetail {
   final String updatedAt;
   final String status;
   final int asrProgress;
+  final int audioDurationSeconds;
   final String audioPlayUrl;
+  final String audioObjectKey;
   final String summary;
   final List<String> actionItems;
   final List<NativeTranscriptSegment> transcriptSegments;
@@ -86,7 +90,9 @@ class NativeMeetingDetail {
       updatedAt: (json['updatedAt'] ?? '').toString(),
       status: (json['status'] ?? '').toString(),
       asrProgress: (json['asrProgress'] as num?)?.toInt() ?? 0,
+      audioDurationSeconds: (json['audioDurationSeconds'] as num?)?.toInt() ?? 0,
       audioPlayUrl: (json['audioPlayUrl'] ?? json['audioUrl'] ?? '').toString(),
+      audioObjectKey: (json['audioObjectKey'] ?? '').toString(),
       summary: _readSummary(json, minutes, transcript),
       actionItems: _readActionItems(action, minutes),
       transcriptSegments: _readTranscriptSegments(transcript),

@@ -17,7 +17,7 @@ Future<AuthSession> enrichSessionFromUsersMe(AuthSession session) async {
               ? body['data'] as Map<String, dynamic>
               : body)
         : const <String, dynamic>{};
-    return AuthSession.enrichFromUsersMe(session, data);
+    return AuthSession.enrichFromUsersMe(session, data).withLocalDevGrants();
   } catch (_) {
     return session;
   }

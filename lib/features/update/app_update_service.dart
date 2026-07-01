@@ -1,6 +1,6 @@
 import 'dart:convert';
-import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:package_info_plus/package_info_plus.dart';
 
@@ -28,7 +28,7 @@ class AppUpdateService {
   static const instance = AppUpdateService._();
 
   Future<AppReleaseCheckResult?> checkAndroidUpdate() async {
-    if (!Platform.isAndroid) return null;
+    if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) return null;
     try {
       final info = await PackageInfo.fromPlatform();
       final versionName = info.version.trim();

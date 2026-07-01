@@ -60,6 +60,7 @@ class _LoginFlowState extends State<LoginFlow> {
   }
 
   void _onSignedIn(AuthSession session) {
+    session = session.withLocalDevGrants();
     setState(() {
       _session = session;
       _showPostLoginSplash = true;
@@ -86,7 +87,7 @@ class _LoginFlowState extends State<LoginFlow> {
         if (mounted) setState(() => _hydrating = false);
         return;
       }
-      var session = AuthSession.fromJson(decoded);
+      var session = AuthSession.fromJson(decoded).withLocalDevGrants();
       final normalized = _normalizeApiHost(session);
       if (normalized.apiBase != session.apiBase) {
         session = normalized;
@@ -110,7 +111,7 @@ class _LoginFlowState extends State<LoginFlow> {
                       ? body['data'] as Map<String, dynamic>
                       : body)
                 : const <String, dynamic>{};
-            session = AuthSession.enrichFromUsersMe(session, data);
+            session = AuthSession.enrichFromUsersMe(session, data).withLocalDevGrants();
             await _persistSession(session);
           }
         } catch (_) {}
@@ -128,20 +129,24 @@ class _LoginFlowState extends State<LoginFlow> {
 
   AuthSession _normalizeApiHost(AuthSession session) {
     final expected = DunesDefaults.resolveGatewayHost();
-    if (expected.isEmpty || session.apiBase.isEmpty) return session;
-    final uri = Uri.tryParse(session.apiBase);
-    if (uri == null || uri.host == expected) return session;
-    return AuthSession(
-      phone: session.phone,
-      userId: session.userId,
-      token: session.token,
-      apiBase: DunesDefaults.apiBase,
-      roles: session.roles,
-      displayName: session.displayName,
-      departmentId: session.departmentId,
-      novaLocalStorage: session.novaLocalStorage,
-      lighthouseAccess: session.lighthouseAccess,
-    );
+    AuthSession next = session;
+    if (expected.isNotEmpty && session.apiBase.isNotEmpty) {
+      final uri = Uri.tryParse(session.apiBase);
+      if (uri != null && uri.host != expected) {
+        next = AuthSession(
+          phone: session.phone,
+          userId: session.userId,
+          token: session.token,
+          apiBase: DunesDefaults.apiBase,
+          roles: session.roles,
+          displayName: session.displayName,
+          departmentId: session.departmentId,
+          novaLocalStorage: session.novaLocalStorage,
+          lighthouseAccess: session.lighthouseAccess,
+        );
+      }
+    }
+    return next.withLocalDevGrants();
   }
 
   Future<void> _persistSession(AuthSession session) async {

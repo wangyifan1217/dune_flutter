@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import '../../core/config/dunes_defaults.dart';
+
 class AuthSession {
   const AuthSession({
     required this.phone,
@@ -21,6 +23,17 @@ class AuthSession {
   final String? displayName;
   final int? departmentId;
   final bool lighthouseAccess;
+
+  /// 本地联调网关时自动视为已开通灯塔（见 [DunesDefaults.localLighthouseAccessBypass]）。
+  bool get effectiveLighthouseAccess =>
+      lighthouseAccess || DunesDefaults.localLighthouseAccessBypass;
+
+  AuthSession withLocalDevGrants() {
+    if (!DunesDefaults.localLighthouseAccessBypass || lighthouseAccess) {
+      return this;
+    }
+    return copyWith(lighthouseAccess: true);
+  }
 
   /// Nova Provisioning 结果，注入 WebView localStorage（与 dunes JWT 分离）。
   final Map<String, String>? novaLocalStorage;

@@ -5,8 +5,12 @@ abstract final class DunesDefaults {
 
   /// 联调/生产服务器 IP 或域名。留空则本机用 localhost，局域网访问时自动用页面 host。
   ///
-  /// 也可启动时覆盖：`--dart-define=DUNES_API_HOST=1.2.3.4`
-  static const devServerHost = '124.221.216.24';
+  /// 也可启动时覆盖：`--dart-define=DUNES_API_HOST=127.0.0.1`（本地 lighthouse 三级下钻）
+  /// 或 `--dart-define=DUNES_API_HOST=192.168.x.x`（真机连本机 Docker 网关）
+  static const devServerHost = String.fromEnvironment(
+    'DUNES_DEV_SERVER_HOST',
+    defaultValue: '124.221.216.24',
+  );
 
   static const _hostFromDefine = String.fromEnvironment(
     'DUNES_API_HOST',
@@ -26,6 +30,12 @@ abstract final class DunesDefaults {
       return pageHost;
     }
     return 'localhost';
+  }
+
+  /// 本地联调（127.0.0.1 / localhost）时跳过灯塔账号权限校验。
+  static bool get localLighthouseAccessBypass {
+    final host = resolveGatewayHost();
+    return host == '127.0.0.1' || host == 'localhost';
   }
 
   static String get apiBase =>

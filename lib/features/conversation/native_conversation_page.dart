@@ -14,6 +14,7 @@ import '../shell/dunes_main_tab_bar.dart';
 import '../shell/dunes_toast.dart';
 import '../workbench/workbench_badge_notifier.dart';
 import 'comm_unread_notifier.dart';
+import 'conversation_inbox_merge.dart';
 import 'conversation_inbox_realtime.dart';
 import 'conversation_mention_utils.dart';
 import 'conversation_models.dart';
@@ -279,16 +280,26 @@ class _NativeConversationPageState extends State<NativeConversationPage>
       final novaStorage = results[2] as Map<String, String>;
       final refreshedHidden = await InboxHiddenStorage.load();
       if (!mounted) return;
+      final merged = silent
+          ? mergeInboxConversations(_items, rows)
+          : rows;
+      warmConversationAvatarCache(merged);
       setState(() {
-        _items = rows;
+        _items = merged;
         _notif = notif;
         _novaStorage = novaStorage;
         _hiddenConversations = refreshedHidden;
         _loading = false;
         if (!silent) _error = null;
       });
-      _syncNovaInboxPoll(rows, novaStorage);
-      _updateCommBadge(rows, notif.unreadCount);
+      _syncNovaInboxPoll(merged, novaStorage);
+      _updateCommBadge(merged, notif.unreadCount);
+      if (mounted) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          unawaited(prefetchConversationAvatars(context, merged));
+        });
+      }
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -538,6 +549,7 @@ class _NativeConversationPageState extends State<NativeConversationPage>
         avatarSeed: _peerUserId(c) ?? c.id,
         avatarPreset: c.isPrivate ? c.peerAvatarPreset : null,
         avatarObjectKey: c.isPrivate ? c.peerAvatarObjectKey : null,
+        avatarUrl: c.isPrivate ? c.peerAvatarUrl : null,
         avatarService: c.isPrivate || c.isGroup || c.isWorkgroupApproval ? _service : null,
         groupAvatarMembers: c.isPrivate ? const <ConversationAvatarMember>[] : c.avatarMembers,
         sysTag: c.businessType,
@@ -546,12 +558,18 @@ class _NativeConversationPageState extends State<NativeConversationPage>
       );
 
     if (!allowSwipeDelete) {
-      return row;
+      return KeyedSubtree(
+        key: ValueKey<int>(c.id),
+        child: row,
+      );
     }
 
-    return SwipeableChatInboxRow(
-      onDelete: () => _hideConversation(c),
-      child: row,
+    return KeyedSubtree(
+      key: ValueKey<int>(c.id),
+      child: SwipeableChatInboxRow(
+        onDelete: () => _hideConversation(c),
+        child: row,
+      ),
     );
   }
 

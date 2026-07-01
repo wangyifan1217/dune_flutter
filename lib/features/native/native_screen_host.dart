@@ -48,6 +48,7 @@ import '../nova/native_nova_page.dart';
 import '../nova/nova_background_coordinator.dart';
 import '../nova/nova_web_storage.dart';
 import '../push/push_service.dart';
+import '../conversation/message_preview_text.dart';
 import '../shell/dunes_main_tab_bar.dart';
 import '../shell/dunes_toast.dart';
 import '../workbench/native_avatar_sheet.dart';
@@ -259,8 +260,10 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     } else {
       final msg = event.raw['message'];
       if (msg is Map) {
-        body = (msg['bodyText'] ?? msg['content'] ?? msg['text'] ?? body)
+        final kind = (msg['kind'] ?? '').toString();
+        final rawBody = (msg['bodyText'] ?? msg['content'] ?? msg['text'] ?? body)
             .toString();
+        body = compactMessagePushPreview(kind: kind, body: rawBody);
         final sender = msg['sender'];
         if (sender is Map) {
           final name = (sender['displayName'] ?? sender['name'] ?? '')

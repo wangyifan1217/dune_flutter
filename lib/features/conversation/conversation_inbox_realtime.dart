@@ -51,9 +51,11 @@ abstract final class ConversationInboxRealtime {
       selfUserId: selfUserId,
       selfDisplayName: selfDisplayName,
     );
-    if (preview == null) return items;
-
     final at = _timestampForEvent(event);
+    if (preview == null && at == null && event.type != 'conversation_updated') {
+      return items;
+    }
+
     final fromPeer = _isFromPeer(event, selfUserId);
     final conv = items[index];
     final mentionHit = ConversationMentionUtils.eventMentionsMe(
@@ -71,9 +73,10 @@ abstract final class ConversationInboxRealtime {
     final old = copy[index];
     copy[index] = _copyConversation(
       old,
-      preview: preview.text,
+      preview: preview?.text,
       updatedAt: at ?? old.updatedAt,
       unreadCount: bumpUnread ? old.unreadCount + 1 : old.unreadCount,
+      title: _titleForEvent(event, old),
     );
 
     copy.sort((a, b) {
@@ -89,7 +92,17 @@ abstract final class ConversationInboxRealtime {
     final convId = event.conversationId ?? 0;
     if (convId <= 0) return true;
     if (items.every((c) => c.id != convId)) return true;
-    if (event.type == 'conversation_updated') return true;
+    if (event.type == 'conversation_updated') {
+      final raw = event.raw;
+      if (raw['dissolved'] == true || raw['isDissolved'] == true) return true;
+      if (raw['avatarMembers'] != null) return true;
+      if (raw['peerAvatarUrl'] != null ||
+          raw['peerAvatarObjectKey'] != null ||
+          raw['peerAvatarPreset'] != null) {
+        return true;
+      }
+      return false;
+    }
     return false;
   }
 
@@ -122,7 +135,11 @@ abstract final class ConversationInboxRealtime {
       case 'message_deleted':
         return const _PreviewPatch('消息已删除');
       case 'conversation_updated':
-        final body = (event.raw['lastMessageBodyText'] ?? event.raw['preview'] ?? '').toString();
+        final body = (event.raw['lastMessageBodyText'] ??
+                event.raw['lastMessagePreview'] ??
+                event.raw['preview'] ??
+                '')
+            .toString();
         if (body.isNotEmpty) return _PreviewPatch(body);
         return null;
       default:
@@ -176,16 +193,23 @@ abstract final class ConversationInboxRealtime {
     return sid > 0 && sid != selfUserId;
   }
 
+  static String? _titleForEvent(ConversationRealtimeEventLike event, NativeConversation current) {
+    if (event.type != 'conversation_updated') return null;
+    final title = (event.raw['title'] ?? event.raw['peerDisplayName'] ?? '').toString().trim();
+    return title.isEmpty ? null : title;
+  }
+
   static NativeConversation _copyConversation(
     NativeConversation c, {
     String? preview,
     DateTime? updatedAt,
     int? unreadCount,
+    String? title,
   }) {
     return NativeConversation(
       id: c.id,
       kind: c.kind,
-      title: c.title,
+      title: title ?? c.title,
       unreadCount: unreadCount ?? c.unreadCount,
       preview: preview ?? c.preview,
       updatedAt: updatedAt ?? c.updatedAt,
@@ -199,6 +223,7 @@ abstract final class ConversationInboxRealtime {
       peerRoleLabel: c.peerRoleLabel,
       peerAvatarPreset: c.peerAvatarPreset,
       peerAvatarObjectKey: c.peerAvatarObjectKey,
+      peerAvatarUrl: c.peerAvatarUrl,
       avatarMembers: c.avatarMembers,
       dissolved: c.dissolved,
       membershipStatus: c.membershipStatus,

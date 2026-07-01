@@ -78,7 +78,7 @@ class _NativeGroupMediaPageState extends State<NativeGroupMediaPage> {
 
   Future<Uint8List> _imageBytesFor(NativeChatMessage message) {
     final key = message.id > 0 ? message.id : Object.hash(message.kind, message.bodyText, message.createdAt);
-    return _imageBytesCache.putIfAbsent(key, () => _service.loadChatMediaBytes(message.payload));
+    return _imageBytesCache.putIfAbsent(key, () => _service.loadCachedChatMediaBytes(message.payload));
   }
 
   Future<void> _downloadMedia(NativeChatMessage message) async {

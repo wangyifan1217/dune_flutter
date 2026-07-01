@@ -57,7 +57,8 @@ class ImUserAvatar extends StatelessWidget {
     Widget core;
     // 优先使用后端已解析出的直链，避免 objectKey 滞后时仍展示旧头像。
     if (effectiveDirectUrl.isNotEmpty) {
-      final directImageUrl = avatarService != null
+      final directImageUrl = avatarService != null &&
+              !_looksLikeUrl(effectiveDirectUrl)
           ? avatarService!.mediaProxyUrl(
               effectiveDirectUrl,
               bucket: 'user-avatars',
@@ -68,30 +69,20 @@ class ImUserAvatar extends StatelessWidget {
         width: size,
         height: size,
         borderRadius: radius,
+        placeholder: _initialAvatar,
         errorBuilder: _initialAvatar,
       );
     } else if (objectKey.isNotEmpty && avatarService != null) {
-      core = FutureBuilder<String>(
-        future: resolveCachedAvatarUrl(
-          () => avatarService!.resolveMediaUrl(
-            objectKey,
-            bucket: 'user-avatars',
-          ),
-          objectKey,
-        ),
-        builder: (_, snap) {
-          if (snap.hasData && snap.data!.isNotEmpty) {
-            return CachedDunesNetworkImage(
-              url: snap.data!,
-              width: size,
-              height: size,
-              borderRadius: radius,
-              errorBuilder: _initialAvatar,
-            );
-          }
-          return _initialAvatar();
-        },
-      );
+      // user-avatars 走 mediaProxyUrl 同步拼接，无需 FutureBuilder，避免列表刷新时
+      // 先闪首字头像、再异步出图的一帧滞后。
+      final cached = dunesAvatarResolvedUrlCache[objectKey];
+      final imageUrl = (cached != null && cached.isNotEmpty)
+          ? cached
+          : avatarService!.mediaProxyUrl(objectKey, bucket: 'user-avatars');
+      if (cached == null || cached.isEmpty) {
+        dunesAvatarResolvedUrlCache[objectKey] = imageUrl;
+      }
+      core = _stackedNetworkAvatar(imageUrl, radius);
     } else if (presetSvg != null) {
       core = ClipRRect(
         borderRadius: radius,
@@ -134,6 +125,29 @@ class ImUserAvatar extends StatelessWidget {
               color: Color(0x22000000),
               blurRadius: 2,
               offset: Offset(0, 1),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _stackedNetworkAvatar(String url, BorderRadius radius) {
+    return ClipRRect(
+      borderRadius: radius,
+      child: SizedBox(
+        width: size,
+        height: size,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            _initialAvatar(),
+            CachedDunesNetworkImage(
+              url: url,
+              width: size,
+              height: size,
+              fit: BoxFit.cover,
+              errorBuilder: () => const SizedBox.shrink(),
             ),
           ],
         ),

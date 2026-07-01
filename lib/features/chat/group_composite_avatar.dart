@@ -36,6 +36,7 @@ class GroupCompositeAvatar extends StatelessWidget {
         size: size,
         avatarPreset: m.avatarPreset,
         avatarObjectKey: m.avatarObjectKey,
+        avatarUrl: m.avatarUrl,
         avatarService: avatarService,
         borderRadius: size * 0.18,
       );
@@ -144,6 +145,7 @@ class GroupCompositeAvatar extends StatelessWidget {
       size: avatarSize,
       avatarPreset: m.avatarPreset,
       avatarObjectKey: m.avatarObjectKey,
+      avatarUrl: m.avatarUrl,
       avatarService: avatarService,
       borderRadius: _cellRadius,
     );

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/theme/dunes_theme.dart';
 import '../../core/util/friendly_error.dart';
+import '../../core/widgets/cached_network_image.dart';
 import '../conversation/conversation_service.dart';
 import '../shell/dunes_toast.dart';
 import 'chat_image_utils.dart';
@@ -34,7 +35,9 @@ class _ChatAuthImageBubbleState extends State<ChatAuthImageBubble> {
   /// 用于内联展示的预览 payload（旧消息无预览时回退为原图）。
   Map<String, dynamic>? _previewPayload;
   String? _publicUrl;
+  Future<String>? _authUrlFuture;
   Future<Uint8List>? _bytesFuture;
+  bool _useBytesFallback = false;
   bool _isGif = false;
   int _loadGeneration = 0;
 
@@ -61,26 +64,44 @@ class _ChatAuthImageBubbleState extends State<ChatAuthImageBubble> {
         : ConversationService.previewMediaPayload(widget.payload);
     _loadGeneration++;
     final gen = _loadGeneration;
+    _useBytesFallback = false;
+    _authUrlFuture = null;
+    _bytesFuture = null;
 
     _publicUrl = widget.service.publicImageUrlForPayload(_previewPayload) ??
         widget.service.publicImageUrlForPayload(widget.payload);
 
     if (_publicUrl != null && _publicUrl!.isNotEmpty) {
-      _bytesFuture = null;
       return;
     }
 
     if (ConversationService.hasAuthMedia(_previewPayload) ||
         ConversationService.hasAuthMedia(widget.payload)) {
-      _bytesFuture = widget.service.loadChatMediaBytesWithFallback(
+      _authUrlFuture = widget.service.resolveAuthImageDisplayUrl(
         previewPayload: _previewPayload,
         originalPayload: widget.payload,
       );
-    } else {
-      _bytesFuture = null;
     }
     // Prevent stale async updates if bind called again quickly.
     if (gen != _loadGeneration) return;
+  }
+
+  void _fallbackToBytes() {
+    if (_useBytesFallback || !mounted) return;
+    setState(() {
+      _useBytesFallback = true;
+      _bytesFuture = widget.service.loadCachedChatMediaBytesWithFallback(
+        previewPayload: _previewPayload,
+        originalPayload: widget.payload,
+      );
+    });
+  }
+
+  void _onAuthUrlFailed() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _useBytesFallback) return;
+      _fallbackToBytes();
+    });
   }
 
   Future<void> _openPreview() async {
@@ -109,11 +130,41 @@ class _ChatAuthImageBubbleState extends State<ChatAuthImageBubble> {
       );
     }
 
-    final future = _bytesFuture;
-    if (future == null) return _errorBubble();
+    if (!_useBytesFallback) {
+      final urlFuture = _authUrlFuture;
+      if (urlFuture != null) {
+        return FutureBuilder<String>(
+          future: urlFuture,
+          builder: (_, snap) {
+            if (snap.connectionState != ConnectionState.done) {
+              return _isGif ? _gifPlaceholder() : _staticPlaceholder();
+            }
+            if (snap.hasError || snap.data == null || snap.data!.isEmpty) {
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                _fallbackToBytes();
+              });
+              return _isGif ? _gifPlaceholder() : _staticPlaceholder();
+            }
+            return _ChatInlineImage(
+              url: snap.data!,
+              isGif: _isGif,
+              mine: widget.mine,
+              onTap: _openPreview,
+              error: () => _errorBubble(),
+              placeholder: () => _isGif ? _gifPlaceholder() : _staticPlaceholder(),
+              onUrlError: _onAuthUrlFailed,
+            );
+          },
+        );
+      }
+      return _errorBubble();
+    }
+
+    final bytesFuture = _bytesFuture;
+    if (bytesFuture == null) return _errorBubble();
 
     return FutureBuilder<Uint8List>(
-      future: future,
+      future: bytesFuture,
       builder: (_, snap) {
         if (snap.connectionState != ConnectionState.done) {
           return _isGif ? _gifPlaceholder() : _staticPlaceholder();
@@ -218,6 +269,7 @@ class _ChatInlineImage extends StatefulWidget {
     required this.placeholder,
     this.url,
     this.bytes,
+    this.onUrlError,
   });
 
   final String? url;
@@ -227,6 +279,7 @@ class _ChatInlineImage extends StatefulWidget {
   final VoidCallback onTap;
   final Widget Function() error;
   final Widget Function() placeholder;
+  final VoidCallback? onUrlError;
 
   @override
   State<_ChatInlineImage> createState() => _ChatInlineImageState();
@@ -250,7 +303,7 @@ class _ChatInlineImageState extends State<_ChatInlineImage> {
         errorBuilder: (_, _, _) => widget.error(),
       );
     } else if (url != null) {
-      // Web 上公网图走 CORS-safe 通道；其余平台用 Image.network（自带缓存与自适应尺寸）。
+      // Web 上跨域图走 CORS-safe 通道；App 用 CachedDunesNetworkImage 渐进解码。
       if (kIsWeb) {
         image = buildCorsSafeImage(
           url: url,
@@ -259,15 +312,18 @@ class _ChatInlineImageState extends State<_ChatInlineImage> {
           fit: BoxFit.contain,
         );
       } else {
-        image = Image.network(
-          url,
+        image = CachedDunesNetworkImage(
+          url: url,
+          width: box.width,
+          height: box.height,
           fit: BoxFit.contain,
-          gaplessPlayback: true,
-          loadingBuilder: (ctx, child, progress) {
-            if (progress == null) return child;
-            return widget.placeholder();
+          placeholder: widget.placeholder,
+          errorBuilder: () {
+            widget.onUrlError?.call();
+            return widget.onUrlError != null
+                ? widget.placeholder()
+                : widget.error();
           },
-          errorBuilder: (_, _, _) => widget.error(),
         );
       }
     } else {

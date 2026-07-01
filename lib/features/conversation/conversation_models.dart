@@ -16,6 +16,7 @@ class NativeConversation {
     this.peerRoleLabel,
     this.peerAvatarPreset,
     this.peerAvatarObjectKey,
+    this.peerAvatarUrl,
     this.avatarMembers = const <ConversationAvatarMember>[],
     this.dissolved = false,
     this.membershipStatus,
@@ -39,6 +40,7 @@ class NativeConversation {
   final String? peerRoleLabel;
   final String? peerAvatarPreset;
   final String? peerAvatarObjectKey;
+  final String? peerAvatarUrl;
   final List<ConversationAvatarMember> avatarMembers;
   final bool dissolved;
   final String? membershipStatus;
@@ -88,12 +90,14 @@ class ConversationAvatarMember {
     required this.displayName,
     this.avatarPreset,
     this.avatarObjectKey,
+    this.avatarUrl,
   });
 
   final int userId;
   final String displayName;
   final String? avatarPreset;
   final String? avatarObjectKey;
+  final String? avatarUrl;
 }
 
 class NativeChatMessage {

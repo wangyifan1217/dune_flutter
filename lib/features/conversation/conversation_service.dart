@@ -7,6 +7,8 @@ import 'package:http_parser/http_parser.dart';
 
 import '../auth/auth_session.dart';
 import '../nova/nova_history_utils.dart';
+import '../../core/widgets/cached_network_image.dart';
+import '../chat/chat_media_cache.dart';
 import 'conversation_models.dart';
 
 /// 上传分块大小：把文件切成小块逐块写入，配合 socket 背压才能得到真实的
@@ -76,10 +78,20 @@ class ConversationService {
       throw Exception((body['message'] ?? '会话列表加载失败').toString());
     }
     final data = (body['data'] as List<dynamic>? ?? const <dynamic>[]);
-    return data
+    final rows = data
         .whereType<Map<String, dynamic>>()
         .map(_mapConversation)
         .toList(growable: false);
+    for (final c in rows) {
+      warmConversationAvatarUrls(
+        peerAvatarObjectKey: c.peerAvatarObjectKey,
+        peerAvatarUrl: c.peerAvatarUrl,
+        members: c.avatarMembers.map(
+          (m) => (objectKey: m.avatarObjectKey, url: m.avatarUrl),
+        ),
+      );
+    }
+    return rows;
   }
 
   /// 服务端统一未读总数（与 TPNS 推送 badgeCount 口径一致）。
@@ -1182,6 +1194,7 @@ class ConversationService {
       peerAvatarObjectKey:
           (raw['peerAvatarObjectKey'] ?? peerMap['avatarObjectKey'])
               ?.toString(),
+      peerAvatarUrl: (raw['peerAvatarUrl'] ?? peerMap['avatarUrl'])?.toString(),
       avatarMembers: _mapAvatarMembers(raw['avatarMembers']),
       dissolved:
           raw['dissolved'] == true ||
@@ -1256,6 +1269,7 @@ class ConversationService {
           displayName: name.isEmpty ? '用户$uid' : name,
           avatarPreset: _avatarField(map['avatarPreset']),
           avatarObjectKey: _avatarField(map['avatarObjectKey']),
+          avatarUrl: _avatarField(map['avatarUrl']),
         ),
       );
       if (out.length >= 6) break;
@@ -1405,7 +1419,7 @@ class ConversationService {
 
   String _inferKindFromPreview(String text) {
     final s = text.trim();
-    if (RegExp(r'^\[(相册|拍照|图片)\]', caseSensitive: false).hasMatch(s))
+    if (RegExp(r'^\[(相册|拍照|图片|GIF)\]', caseSensitive: false).hasMatch(s))
       return 'IMAGE';
     if (RegExp(r'^\[文件\]').hasMatch(s)) return 'FILE';
     if (RegExp(r'^\[语音\]').hasMatch(s)) return 'AUDIO';
@@ -1475,7 +1489,8 @@ class ConversationService {
   String _compactPreview(String kind, String text) {
     final trimmed = text.trim();
     if (kind == 'IMAGE' ||
-        RegExp(r'^\[(相册|拍照|图片)\]', caseSensitive: false).hasMatch(trimmed)) {
+        RegExp(r'^\[(相册|拍照|图片|GIF)\]', caseSensitive: false)
+            .hasMatch(trimmed)) {
       return '发送了一张图片';
     }
     if (kind == 'AUDIO' || RegExp(r'^\[语音\]').hasMatch(trimmed)) {
@@ -1706,6 +1721,17 @@ class ConversationService {
     throw Exception('附件地址为空');
   }
 
+  Future<Uint8List> loadCachedChatMediaBytes(
+    Map<String, dynamic>? payload, {
+    void Function(double progress)? onProgress,
+  }) {
+    final objectKey = ConversationService.mediaAuthObjectKey(payload);
+    return cachedChatMediaBytes(
+      objectKey,
+      () => loadChatMediaBytes(payload, onProgress: onProgress),
+    );
+  }
+
   /// 预览图失败时回退原图（鉴权下载）。
   Future<Uint8List> loadChatMediaBytesWithFallback({
     Map<String, dynamic>? previewPayload,
@@ -1729,11 +1755,67 @@ class ConversationService {
     throw Exception('附件地址为空');
   }
 
+  /// 带会话级 bytes 缓存；URL 展示失败时回退使用。
+  Future<Uint8List> loadCachedChatMediaBytesWithFallback({
+    Map<String, dynamic>? previewPayload,
+    Map<String, dynamic>? originalPayload,
+  }) async {
+    Object? lastError;
+    for (final payload in <Map<String, dynamic>?>[
+      previewPayload,
+      if (originalPayload != previewPayload) originalPayload,
+    ]) {
+      if (payload == null || !ConversationService.hasAuthMedia(payload)) continue;
+      try {
+        return await loadCachedChatMediaBytes(payload);
+      } catch (e) {
+        lastError = e;
+      }
+    }
+    if (lastError != null) {
+      throw lastError is Exception ? lastError : Exception('$lastError');
+    }
+    throw Exception('附件地址为空');
+  }
+
+  /// 鉴权附件内联展示 URL：优先 presigned，失败则 mediaProxy（与头像一致）。
+  Future<String> resolveAuthImageDisplayUrl({
+    Map<String, dynamic>? previewPayload,
+    Map<String, dynamic>? originalPayload,
+  }) async {
+    Object? lastError;
+    for (final payload in <Map<String, dynamic>?>[
+      previewPayload,
+      if (originalPayload != previewPayload) originalPayload,
+    ]) {
+      if (payload == null || !ConversationService.hasAuthMedia(payload)) continue;
+      final objectKey = ConversationService.mediaAuthObjectKey(payload);
+      if (objectKey.isEmpty) continue;
+      try {
+        return await cachedChatMediaUrl(objectKey, () async {
+          try {
+            return await resolveMediaUrl(objectKey);
+          } catch (e) {
+            final proxy = mediaProxyUrl(objectKey);
+            if (proxy.isNotEmpty) return proxy;
+            rethrow;
+          }
+        });
+      } catch (e) {
+        lastError = e;
+      }
+    }
+    if (lastError != null) {
+      throw lastError is Exception ? lastError : Exception('$lastError');
+    }
+    throw Exception('附件地址为空');
+  }
+
   /// 加载完整原图字节（鉴权附件或公网直链均统一返回 bytes），
   /// 供「查看原图 / 保存到相册」使用。
   Future<Uint8List> loadFullImageBytes(Map<String, dynamic>? payload) async {
     if (hasAuthMedia(payload)) {
-      return loadChatMediaBytes(payload);
+      return loadCachedChatMediaBytes(payload);
     }
     final url = mediaDirectUrl(payload);
     if (url.isNotEmpty) {

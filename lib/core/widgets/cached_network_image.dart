@@ -9,6 +9,7 @@ class CachedDunesNetworkImage extends StatelessWidget {
     required this.height,
     this.borderRadius,
     this.fit = BoxFit.cover,
+    this.placeholder,
     this.errorBuilder,
   });
 
@@ -17,10 +18,12 @@ class CachedDunesNetworkImage extends StatelessWidget {
   final double height;
   final BorderRadius? borderRadius;
   final BoxFit fit;
+  final Widget Function()? placeholder;
   final Widget Function()? errorBuilder;
 
   @override
   Widget build(BuildContext context) {
+    final dpr = MediaQuery.devicePixelRatioOf(context);
     final image = Image.network(
       url,
       key: ValueKey<String>(url),
@@ -28,8 +31,15 @@ class CachedDunesNetworkImage extends StatelessWidget {
       height: height,
       fit: fit,
       gaplessPlayback: true,
+      filterQuality: FilterQuality.low,
+      cacheWidth: (width * dpr).round(),
+      cacheHeight: (height * dpr).round(),
+      frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
+        if (wasSynchronouslyLoaded || frame != null) return child;
+        return placeholder?.call() ?? const SizedBox.shrink();
+      },
       errorBuilder: (_, _, _) =>
-          errorBuilder?.call() ?? const SizedBox.shrink(),
+          errorBuilder?.call() ?? placeholder?.call() ?? const SizedBox.shrink(),
     );
     if (borderRadius == null) return image;
     return ClipRRect(borderRadius: borderRadius!, child: image);
@@ -117,6 +127,26 @@ void invalidateMyPageProfile(int userId) {
       objectKey: prev.avatarObjectKey,
       url: prev.avatarUrl,
     );
+  }
+}
+
+/// 会话列表拉取后预热 objectKey → URL 内存映射。
+void warmConversationAvatarUrls({
+  String? peerAvatarObjectKey,
+  String? peerAvatarUrl,
+  Iterable<({String? objectKey, String? url})> members = const [],
+}) {
+  _rememberAvatarUrl(peerAvatarObjectKey, peerAvatarUrl);
+  for (final m in members) {
+    _rememberAvatarUrl(m.objectKey, m.url);
+  }
+}
+
+void _rememberAvatarUrl(String? objectKey, String? url) {
+  final key = (objectKey ?? '').trim();
+  final resolved = (url ?? '').trim();
+  if (key.isNotEmpty && resolved.isNotEmpty) {
+    dunesAvatarResolvedUrlCache[key] = resolved;
   }
 }
 

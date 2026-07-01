@@ -197,6 +197,7 @@ class ChatInboxRow extends StatelessWidget {
     this.avatarSeed = 0,
     this.avatarPreset,
     this.avatarObjectKey,
+    this.avatarUrl,
     this.avatarService,
     this.groupAvatarMembers = const <ConversationAvatarMember>[],
     this.sysTag,
@@ -219,6 +220,7 @@ class ChatInboxRow extends StatelessWidget {
   final int avatarSeed;
   final String? avatarPreset;
   final String? avatarObjectKey;
+  final String? avatarUrl;
   final ConversationService? avatarService;
   final List<ConversationAvatarMember> groupAvatarMembers;
   final String? sysTag;
@@ -241,19 +243,22 @@ class ChatInboxRow extends StatelessWidget {
                   SizedBox(
                     width: 44,
                     height: 44,
-                    child: OverflowBox(
-                      alignment: Alignment.center,
-                      maxWidth: 50,
-                      maxHeight: 50,
-                      child: _Avatar(
-                        kind: kind,
-                        initial: avatarInitial,
-                        seed: avatarSeed,
-                        showOnlineDot: showOnlineDot,
-                        avatarPreset: avatarPreset,
-                        avatarObjectKey: avatarObjectKey,
-                        avatarService: avatarService,
-                        groupAvatarMembers: groupAvatarMembers,
+                    child: RepaintBoundary(
+                      child: OverflowBox(
+                        alignment: Alignment.center,
+                        maxWidth: 50,
+                        maxHeight: 50,
+                        child: _Avatar(
+                          kind: kind,
+                          initial: avatarInitial,
+                          seed: avatarSeed,
+                          showOnlineDot: showOnlineDot,
+                          avatarPreset: avatarPreset,
+                          avatarObjectKey: avatarObjectKey,
+                          avatarUrl: avatarUrl,
+                          avatarService: avatarService,
+                          groupAvatarMembers: groupAvatarMembers,
+                        ),
                       ),
                     ),
                   ),
@@ -492,6 +497,7 @@ class _Avatar extends StatelessWidget {
     this.showOnlineDot = false,
     this.avatarPreset,
     this.avatarObjectKey,
+    this.avatarUrl,
     this.avatarService,
     this.groupAvatarMembers = const <ConversationAvatarMember>[],
   });
@@ -502,6 +508,7 @@ class _Avatar extends StatelessWidget {
   final bool showOnlineDot;
   final String? avatarPreset;
   final String? avatarObjectKey;
+  final String? avatarUrl;
   final ConversationService? avatarService;
   final List<ConversationAvatarMember> groupAvatarMembers;
 
@@ -564,7 +571,8 @@ class _Avatar extends StatelessWidget {
         final letter = (initial == null || initial!.isEmpty) ? '?' : initial!;
         if (avatarService != null ||
             (avatarPreset != null && avatarPreset!.isNotEmpty) ||
-            (avatarObjectKey != null && avatarObjectKey!.isNotEmpty)) {
+            (avatarObjectKey != null && avatarObjectKey!.isNotEmpty) ||
+            (avatarUrl != null && avatarUrl!.isNotEmpty)) {
           return ImUserAvatar(
             initial: letter,
             seed: seed,
@@ -572,6 +580,7 @@ class _Avatar extends StatelessWidget {
             showOnline: showOnlineDot,
             avatarPreset: avatarPreset,
             avatarObjectKey: avatarObjectKey,
+            avatarUrl: avatarUrl,
             avatarService: avatarService,
             borderRadius: _inboxAvatarRadius,
           );

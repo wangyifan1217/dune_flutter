@@ -109,7 +109,11 @@ class _DunesMainTabBarState extends State<DunesMainTabBar> {
 
     return Expanded(
       child: InkWell(
-        onTap: onTap ?? () => widget.navigation.go(screen!),
+        onTap: onTap ??
+            () {
+              FocusManager.instance.primaryFocus?.unfocus();
+              widget.navigation.go(screen!);
+            },
         child: SizedBox(
           height: 72,
           child: Stack(

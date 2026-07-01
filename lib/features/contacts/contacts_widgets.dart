@@ -158,6 +158,7 @@ class ContactRowTile extends StatelessWidget {
                   avatarPreset: contact.avatarPreset,
                   avatarObjectKey: contact.avatarObjectKey,
                   avatarService: avatarService,
+                  borderRadius: 34 * 0.18,
                 ),
                 const SizedBox(width: 9),
                 Expanded(

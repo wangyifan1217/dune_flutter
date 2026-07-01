@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../../core/theme/dunes_theme.dart';
 import '../conversation/conversation_models.dart';
-import 'chat_widgets.dart';
+import '../conversation/conversation_service.dart';
+import 'user_avatar_widget.dart';
 
 const _bgSunken = Color(0xFFE8E4D9);
 
@@ -267,6 +268,7 @@ class GroupInfoMemberGrid extends StatelessWidget {
     super.key,
     required this.members,
     required this.selfUserId,
+    required this.avatarService,
     this.showAdd = false,
     this.showRemove = false,
     this.onMemberTap,
@@ -276,6 +278,7 @@ class GroupInfoMemberGrid extends StatelessWidget {
 
   final List<NativeGroupMember> members;
   final int selfUserId;
+  final ConversationService avatarService;
   final bool showAdd;
   final bool showRemove;
   final ValueChanged<NativeGroupMember>? onMemberTap;
@@ -307,6 +310,9 @@ class GroupInfoMemberGrid extends StatelessWidget {
             return _MemberCell(
               label: m.displayName,
               seed: m.userId,
+              avatarPreset: m.avatarPreset,
+              avatarObjectKey: m.avatarObjectKey,
+              avatarService: avatarService,
               suffix: m.userId == selfUserId ? '·我' : null,
               onTap: onMemberTap == null ? null : () => onMemberTap!(m),
             );
@@ -332,12 +338,18 @@ class _MemberCell extends StatelessWidget {
   const _MemberCell({
     required this.label,
     required this.seed,
+    required this.avatarService,
+    this.avatarPreset,
+    this.avatarObjectKey,
     this.suffix,
     this.onTap,
   });
 
   final String label;
   final int seed;
+  final ConversationService avatarService;
+  final String? avatarPreset;
+  final String? avatarObjectKey;
   final String? suffix;
   final VoidCallback? onTap;
 
@@ -349,7 +361,15 @@ class _MemberCell extends StatelessWidget {
       behavior: HitTestBehavior.opaque,
       child: Column(
         children: [
-          ChatPersonAvatar(initial: initial, seed: seed, size: 38),
+          ImUserAvatar(
+            initial: initial,
+            seed: seed,
+            size: 38,
+            avatarPreset: avatarPreset,
+            avatarObjectKey: avatarObjectKey,
+            avatarService: avatarService,
+            borderRadius: 38 * 0.18,
+          ),
           const SizedBox(height: 4),
           SizedBox(
             width: 48,

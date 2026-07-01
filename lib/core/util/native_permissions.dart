@@ -12,13 +12,30 @@ Future<bool> ensureCameraPermission() async {
   return result.isGranted;
 }
 
+bool _photosAccessGranted(PermissionStatus status) =>
+    status.isGranted || status.isLimited;
+
 Future<bool> ensurePhotosPermission() async {
   if (kIsWeb) return true;
-  if (!Platform.isIOS && !Platform.isAndroid) return true;
-  final status = await Permission.photos.status;
-  if (status.isGranted || status.isLimited) return true;
-  final result = await Permission.photos.request();
-  return result.isGranted || result.isLimited;
+  if (Platform.isIOS) {
+    final status = await Permission.photos.status;
+    if (_photosAccessGranted(status)) return true;
+    final result = await Permission.photos.request();
+    return _photosAccessGranted(result);
+  }
+  if (Platform.isAndroid) {
+    // Android 12 及以下走 READ_EXTERNAL_STORAGE；13+ 走 READ_MEDIA_IMAGES。
+    final storage = await Permission.storage.status;
+    if (storage.isGranted) return true;
+    final photos = await Permission.photos.status;
+    if (photos.isGranted) return true;
+
+    var result = await Permission.storage.request();
+    if (result.isGranted) return true;
+    result = await Permission.photos.request();
+    return result.isGranted;
+  }
+  return true;
 }
 
 Future<bool> ensureMicrophonePermission() async {

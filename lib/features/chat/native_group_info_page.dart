@@ -11,6 +11,7 @@ import '../conversation/inbox_hidden_storage.dart';
 import '../shell/dunes_toast.dart';
 import 'chat_widgets.dart';
 import 'group_info_widgets.dart';
+import 'user_avatar_widget.dart';
 
 void _toast(BuildContext context, String message) {
   showDunesToast(
@@ -282,6 +283,7 @@ class _NativeGroupInfoPageState extends State<NativeGroupInfoPage> {
       backgroundColor: Colors.transparent,
       builder: (_) => _MemberPickerSheet(
         contacts: _contacts,
+        avatarService: _service,
         session: widget.session,
         excludeIds: exclude,
         title: '从通讯录选择成员',
@@ -317,6 +319,7 @@ class _NativeGroupInfoPageState extends State<NativeGroupInfoPage> {
       backgroundColor: Colors.transparent,
       builder: (_) => _MemberPickerSheet(
         contacts: _contacts,
+        avatarService: _service,
         session: widget.session,
         candidates: candidates,
         title: '选择要移除的成员',
@@ -395,6 +398,7 @@ class _NativeGroupInfoPageState extends State<NativeGroupInfoPage> {
         GroupInfoMemberGrid(
           members: members,
           selfUserId: widget.session.userId,
+          avatarService: _service,
           showAdd: showOwnerActions,
           showRemove: showOwnerActions,
           onMemberTap: widget.onOpenMember == null
@@ -528,6 +532,7 @@ class _NativeGroupInfoPageState extends State<NativeGroupInfoPage> {
 class _MemberPickerSheet extends StatefulWidget {
   const _MemberPickerSheet({
     required this.contacts,
+    required this.avatarService,
     required this.session,
     required this.title,
     required this.multi,
@@ -536,6 +541,7 @@ class _MemberPickerSheet extends StatefulWidget {
   });
 
   final ContactService contacts;
+  final ConversationService avatarService;
   final AuthSession session;
   final String title;
   final bool multi;
@@ -551,14 +557,33 @@ class _MemberPickerSheetState extends State<_MemberPickerSheet> {
   final _selected = <int>{};
   bool _loading = true;
   List<NativeContact> _rows = const <NativeContact>[];
+  List<NativeDepartment> _departments = const <NativeDepartment>[];
+
+  bool _isEligible(NativeContact c) {
+    if (c.userId <= 0 || c.userId == widget.session.userId || c.enabled == false) {
+      return false;
+    }
+    final exclude = widget.excludeIds;
+    if (exclude != null && exclude.contains(c.userId)) return false;
+    return true;
+  }
+
+  NativeContact _contactFromMember(NativeGroupMember m) {
+    return NativeContact(
+      userId: m.userId,
+      displayName: m.displayName,
+      title: m.role,
+      roleLabel: m.roleLabel,
+      avatarPreset: m.avatarPreset,
+      avatarObjectKey: m.avatarObjectKey,
+    );
+  }
 
   @override
   void initState() {
     super.initState();
     if (widget.candidates != null) {
-      _rows = widget.candidates!
-          .map((m) => NativeContact(userId: m.userId, displayName: m.displayName, title: m.role))
-          .toList();
+      _rows = widget.candidates!.map(_contactFromMember).toList();
       _loading = false;
     } else {
       _load('');
@@ -578,30 +603,46 @@ class _MemberPickerSheetState extends State<_MemberPickerSheet> {
       setState(() {
         _rows = widget.candidates!
             .where((m) => query.isEmpty || m.displayName.toLowerCase().contains(query))
-            .map((m) => NativeContact(userId: m.userId, displayName: m.displayName, title: m.role))
+            .map(_contactFromMember)
             .toList();
       });
       return;
     }
     setState(() => _loading = true);
     try {
-      final items = await widget.contacts.fetchContacts(keyword: q);
-      final exclude = widget.excludeIds ?? const <int>{};
-      final me = widget.session.userId;
+      final org = await widget.contacts.fetchOrgContacts(keyword: q);
       if (!mounted) return;
-      setState(() {
-        _rows = items
-            .where((c) => c.userId > 0 && c.userId != me && !exclude.contains(c.userId) && c.enabled != false)
-            .toList();
-        _loading = false;
-      });
+      if (q.isNotEmpty) {
+        setState(() {
+          _rows = org.searchItems.where(_isEligible).toList();
+          _departments = const <NativeDepartment>[];
+          _loading = false;
+        });
+      } else {
+        setState(() {
+          _departments = org.departments
+              .where((d) => _countEligibleInDept(d) > 0)
+              .toList(growable: false);
+          _rows = const <NativeContact>[];
+          _loading = false;
+        });
+      }
     } catch (_) {
       if (!mounted) return;
       setState(() {
         _rows = const <NativeContact>[];
+        _departments = const <NativeDepartment>[];
         _loading = false;
       });
     }
+  }
+
+  int _countEligibleInDept(NativeDepartment dep) {
+    var n = dep.users.where(_isEligible).length;
+    for (final child in dep.children) {
+      n += _countEligibleInDept(child);
+    }
+    return n;
   }
 
   void _toggle(int userId) {
@@ -620,132 +661,355 @@ class _MemberPickerSheetState extends State<_MemberPickerSheet> {
     });
   }
 
+  Widget _buildContactRow(NativeContact c) {
+    final on = _selected.contains(c.userId);
+    return Material(
+      color: DunesColors.bgApp,
+      child: InkWell(
+        onTap: () {
+          if (widget.multi) {
+            _toggle(c.userId);
+          } else {
+            Navigator.pop(context, c.userId);
+          }
+        },
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(12, 9, 12, 9),
+          decoration: const BoxDecoration(
+            border: Border(bottom: BorderSide(color: DunesColors.borderSoft)),
+          ),
+          child: Row(
+            children: [
+              ImUserAvatar(
+                initial: c.displayName.isNotEmpty ? c.displayName.substring(0, 1) : '?',
+                seed: c.userId,
+                size: 34,
+                avatarPreset: c.avatarPreset,
+                avatarObjectKey: c.avatarObjectKey,
+                avatarService: widget.avatarService,
+                borderRadius: 34 * 0.18,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      c.displayName,
+                      style: DunesTypography.sans(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w500,
+                        color: DunesColors.text,
+                      ),
+                    ),
+                    if ((c.title ?? c.department ?? '').trim().isNotEmpty)
+                      Text(
+                        (c.title ?? c.department)!.trim(),
+                        style: DunesTypography.mono(
+                          fontSize: 9,
+                          color: DunesColors.text3,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              if (widget.multi)
+                Icon(
+                  on ? Icons.check_circle : Icons.circle_outlined,
+                  color: DunesColors.accent,
+                  size: 20,
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildListBody() {
+    if (_loading) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(24),
+          child: CircularProgressIndicator(strokeWidth: 2),
+        ),
+      );
+    }
+    final searching = _search.text.trim().isNotEmpty || widget.candidates != null;
+    if (searching) {
+      if (_rows.isEmpty) {
+        return const Padding(
+          padding: EdgeInsets.all(24),
+          child: Text('无匹配联系人', style: TextStyle(color: DunesColors.text3)),
+        );
+      }
+      return ListView.builder(
+        shrinkWrap: true,
+        itemCount: _rows.length,
+        itemBuilder: (_, i) => _buildContactRow(_rows[i]),
+      );
+    }
+    if (_departments.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.all(24),
+        child: Text('暂无可添加的同事', style: TextStyle(color: DunesColors.text3)),
+      );
+    }
+    return ListView(
+      shrinkWrap: true,
+      children: _departments
+          .map(
+            (dep) => _MemberPickDeptBlock(
+              key: ValueKey('dept-${dep.id}'),
+              department: dep,
+              isEligible: _isEligible,
+              countEligibleInDept: _countEligibleInDept,
+              selected: _selected,
+              avatarService: widget.avatarService,
+              onToggle: _toggle,
+            ),
+          )
+          .toList(growable: false),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final bottom = MediaQuery.viewInsetsOf(context).bottom;
     return Container(
-      margin: EdgeInsets.only(top: MediaQuery.sizeOf(context).height * 0.2),
+      margin: EdgeInsets.only(top: MediaQuery.sizeOf(context).height * 0.12),
       decoration: const BoxDecoration(
         color: DunesColors.bgApp,
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
       child: Padding(
         padding: EdgeInsets.only(bottom: bottom),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 12, 8),
+        child: SizedBox(
+          height: MediaQuery.sizeOf(context).height * 0.72,
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 12, 8),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        widget.title,
+                        style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+                      ),
+                    ),
+                    IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close)),
+                  ],
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: TextField(
+                  controller: _search,
+                  decoration: InputDecoration(
+                    hintText: '搜索姓名 / 部门',
+                    prefixIcon: const Icon(Icons.search, size: 20),
+                    filled: true,
+                    fillColor: DunesColors.bgSoft,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: BorderSide.none,
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(vertical: 8),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Expanded(child: _buildListBody()),
+              if (widget.multi)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 8, 12, 16),
+                  child: SizedBox(
+                    width: double.infinity,
+                    child: FilledButton(
+                      onPressed: _selected.isEmpty ? null : () => Navigator.pop(context, _selected.toList()),
+                      child: Text('确定${_selected.isEmpty ? '' : ' (${_selected.length})'}'),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _MemberPickDeptBlock extends StatefulWidget {
+  const _MemberPickDeptBlock({
+    super.key,
+    required this.department,
+    required this.isEligible,
+    required this.countEligibleInDept,
+    required this.selected,
+    required this.avatarService,
+    required this.onToggle,
+  });
+
+  final NativeDepartment department;
+  final bool Function(NativeContact) isEligible;
+  final int Function(NativeDepartment) countEligibleInDept;
+  final Set<int> selected;
+  final ConversationService avatarService;
+  final ValueChanged<int> onToggle;
+
+  @override
+  State<_MemberPickDeptBlock> createState() => _MemberPickDeptBlockState();
+}
+
+class _MemberPickDeptBlockState extends State<_MemberPickDeptBlock> {
+  late bool _expanded;
+
+  @override
+  void initState() {
+    super.initState();
+    _expanded = widget.department.expanded;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final dep = widget.department;
+    final members = dep.users.where(widget.isEligible).toList();
+    final count = widget.countEligibleInDept(dep);
+    if (count <= 0) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: () => setState(() => _expanded = !_expanded),
+            child: Container(
+              margin: const EdgeInsets.fromLTRB(10, 0, 10, 4),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+              decoration: BoxDecoration(
+                color: DunesColors.bgSoft,
+                borderRadius: BorderRadius.circular(9),
+                border: Border.all(color: DunesColors.borderSoft),
+              ),
               child: Row(
                 children: [
-                  Expanded(
-                    child: Text(widget.title, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
+                  AnimatedRotation(
+                    turns: _expanded ? 0.25 : 0,
+                    duration: const Duration(milliseconds: 200),
+                    child: const Icon(Icons.chevron_right, size: 13, color: DunesColors.text3),
                   ),
-                  IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close)),
+                  const SizedBox(width: 7),
+                  const Icon(Icons.business_outlined, size: 14, color: DunesColors.accentDeep),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      dep.name,
+                      style: DunesTypography.sans(fontSize: 11.5, fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                  Text('$count', style: DunesTypography.mono(fontSize: 9, color: DunesColors.text3)),
                 ],
               ),
             ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              child: TextField(
-                controller: _search,
-                decoration: InputDecoration(
-                  hintText: '搜索姓名 / 部门',
-                  prefixIcon: const Icon(Icons.search, size: 20),
-                  filled: true,
-                  fillColor: DunesColors.bgSoft,
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
-                  contentPadding: const EdgeInsets.symmetric(vertical: 8),
+          ),
+        ),
+        if (_expanded)
+          Padding(
+            padding: const EdgeInsets.only(left: 8),
+            child: Column(
+              children: [
+                ...members.map((c) => _MemberPickRow(
+                      contact: c,
+                      selected: widget.selected.contains(c.userId),
+                      avatarService: widget.avatarService,
+                      onTap: () => widget.onToggle(c.userId),
+                    )),
+                ...dep.children
+                    .where((child) => widget.countEligibleInDept(child) > 0)
+                    .map(
+                      (child) => _MemberPickDeptBlock(
+                        key: ValueKey('dept-${child.id}'),
+                        department: child,
+                        isEligible: widget.isEligible,
+                        countEligibleInDept: widget.countEligibleInDept,
+                        selected: widget.selected,
+                        avatarService: widget.avatarService,
+                        onToggle: widget.onToggle,
+                      ),
+                    ),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class _MemberPickRow extends StatelessWidget {
+  const _MemberPickRow({
+    required this.contact,
+    required this.selected,
+    required this.avatarService,
+    required this.onTap,
+  });
+
+  final NativeContact contact;
+  final bool selected;
+  final ConversationService avatarService;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: DunesColors.bgApp,
+      child: InkWell(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(12, 9, 12, 9),
+          decoration: const BoxDecoration(
+            border: Border(bottom: BorderSide(color: DunesColors.borderSoft)),
+          ),
+          child: Row(
+            children: [
+              ImUserAvatar(
+                initial: contact.displayName.isNotEmpty ? contact.displayName.substring(0, 1) : '?',
+                seed: contact.userId,
+                size: 34,
+                avatarPreset: contact.avatarPreset,
+                avatarObjectKey: contact.avatarObjectKey,
+                avatarService: avatarService,
+                borderRadius: 34 * 0.18,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      contact.displayName,
+                      style: DunesTypography.sans(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w500,
+                        color: DunesColors.text,
+                      ),
+                    ),
+                    if ((contact.title ?? contact.department ?? '').trim().isNotEmpty)
+                      Text(
+                        (contact.title ?? contact.department)!.trim(),
+                        style: DunesTypography.mono(fontSize: 9, color: DunesColors.text3),
+                      ),
+                  ],
                 ),
               ),
-            ),
-            const SizedBox(height: 8),
-            Flexible(
-              child: _loading
-                  ? const Center(child: Padding(padding: EdgeInsets.all(24), child: CircularProgressIndicator(strokeWidth: 2)))
-                  : _rows.isEmpty
-                      ? const Padding(
-                          padding: EdgeInsets.all(24),
-                          child: Text('无匹配联系人', style: TextStyle(color: DunesColors.text3)),
-                        )
-                      : ListView.builder(
-                          shrinkWrap: true,
-                          itemCount: _rows.length,
-                          itemBuilder: (_, i) {
-                            final c = _rows[i];
-                            final on = _selected.contains(c.userId);
-                            return Material(
-                              color: DunesColors.bgApp,
-                              child: InkWell(
-                                onTap: () {
-                                  if (widget.multi) {
-                                    _toggle(c.userId);
-                                  } else {
-                                    Navigator.pop(context, c.userId);
-                                  }
-                                },
-                                child: Container(
-                                  padding: const EdgeInsets.fromLTRB(12, 9, 12, 9),
-                                  decoration: const BoxDecoration(
-                                    border: Border(bottom: BorderSide(color: DunesColors.borderSoft)),
-                                  ),
-                                  child: Row(
-                                    children: [
-                                      ChatPersonAvatar(
-                                        initial: c.displayName.isNotEmpty ? c.displayName.substring(0, 1) : '?',
-                                        seed: c.userId,
-                                        size: 34,
-                                      ),
-                                      const SizedBox(width: 10),
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
-                                          children: [
-                                            Text(
-                                              c.displayName,
-                                              style: DunesTypography.sans(
-                                                fontSize: 11.5,
-                                                fontWeight: FontWeight.w500,
-                                                color: DunesColors.text,
-                                              ),
-                                            ),
-                                            if ((c.title ?? c.department ?? '').trim().isNotEmpty)
-                                              Text(
-                                                (c.title ?? c.department)!.trim(),
-                                                style: DunesTypography.mono(
-                                                  fontSize: 9,
-                                                  color: DunesColors.text3,
-                                                ),
-                                              ),
-                                          ],
-                                        ),
-                                      ),
-                                      if (widget.multi)
-                                        Icon(
-                                          on ? Icons.check_circle : Icons.circle_outlined,
-                                          color: DunesColors.accent,
-                                          size: 20,
-                                        ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            );
-                          },
-                        ),
-            ),
-            if (widget.multi)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(12, 8, 12, 16),
-                child: SizedBox(
-                  width: double.infinity,
-                  child: FilledButton(
-                    onPressed: _selected.isEmpty ? null : () => Navigator.pop(context, _selected.toList()),
-                    child: Text('确定${_selected.isEmpty ? '' : ' (${_selected.length})'}'),
-                  ),
-                ),
+              Icon(
+                selected ? Icons.check_circle : Icons.circle_outlined,
+                color: DunesColors.accent,
+                size: 20,
               ),
-          ],
+            ],
+          ),
         ),
       ),
     );

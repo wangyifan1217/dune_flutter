@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../core/theme/dunes_theme.dart';
 import '../../core/util/friendly_error.dart';
 import '../auth/auth_session.dart';
+import '../contacts/contact_service.dart';
 import '../conversation/conversation_models.dart';
 import '../conversation/conversation_service.dart';
 import '../conversation/inbox_format.dart';
@@ -52,6 +53,13 @@ class _NativeChatSearchPageState extends State<NativeChatSearchPage> {
   String? _error;
   int _oldestId = 0;
   List<NativeChatMessage> _items = const <NativeChatMessage>[];
+  Map<int, ({String? preset, String? objectKey})> _avatarByUserId =
+      const <int, ({String? preset, String? objectKey})>{};
+  String? _peerAvatarPreset;
+  String? _peerAvatarObjectKey;
+  int? _peerUserId;
+  String? _selfAvatarPreset;
+  String? _selfAvatarObjectKey;
 
   @override
   void initState() {
@@ -61,11 +69,73 @@ class _NativeChatSearchPageState extends State<NativeChatSearchPage> {
     _queryController.addListener(() {
       if (mounted) setState(() {});
     });
+    unawaited(_loadAvatarContext());
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         _search();
       }
     });
+  }
+
+  Future<void> _loadAvatarContext() async {
+    try {
+      final conv = await _service.fetchConversation(widget.conversationId);
+      if (conv == null || !mounted) return;
+      _peerAvatarPreset = conv.peerAvatarPreset;
+      _peerAvatarObjectKey = conv.peerAvatarObjectKey;
+      _peerUserId = conv.peerUserId;
+      final isPrivate = conv.kind.toUpperCase() == 'PRIVATE';
+      if (isPrivate) {
+        final peerId = conv.peerUserId ?? 0;
+        if (peerId > 0) {
+          final contact = await ContactService(session: widget.session).fetchContact(peerId);
+          if (contact != null) {
+            _peerAvatarPreset ??= contact.avatarPreset;
+            _peerAvatarObjectKey ??= contact.avatarObjectKey;
+          }
+        }
+      } else {
+        try {
+          final members = await _service.fetchConversationMembers(widget.conversationId);
+          if (mounted) {
+            _avatarByUserId = _service.avatarMapFromMembers(members);
+          }
+        } catch (_) {
+          try {
+            final info = await _service.fetchGroupInfo(widget.conversationId);
+            if (mounted) {
+              _avatarByUserId = {
+                for (final m in info.members)
+                  m.userId: (preset: m.avatarPreset, objectKey: m.avatarObjectKey),
+              };
+            }
+          } catch (_) {}
+        }
+      }
+      final meResp = await ContactService(session: widget.session).fetchContact(widget.session.userId);
+      if (meResp != null && mounted) {
+        _selfAvatarPreset = meResp.avatarPreset;
+        _selfAvatarObjectKey = meResp.avatarObjectKey;
+      }
+    } catch (_) {}
+    if (mounted && _items.isNotEmpty) {
+      setState(() {
+        _items = _enrichItems(_items);
+      });
+    }
+  }
+
+  List<NativeChatMessage> _enrichItems(List<NativeChatMessage> items) {
+    return _service.enrichMessagesWithAvatars(
+      items,
+      avatarByUserId: _avatarByUserId,
+      peerAvatarPreset: _peerAvatarPreset,
+      peerAvatarObjectKey: _peerAvatarObjectKey,
+      peerUserId: _peerUserId,
+      selfUserId: widget.session.userId,
+      selfAvatarPreset: _selfAvatarPreset,
+      selfAvatarObjectKey: _selfAvatarObjectKey,
+    );
   }
 
   @override
@@ -115,9 +185,9 @@ class _NativeChatSearchPageState extends State<NativeChatSearchPage> {
       if (!mounted) return;
       setState(() {
         if (append) {
-          _items = _merge(_items, page.items);
+          _items = _enrichItems(_merge(_items, page.items));
         } else {
-          _items = page.items;
+          _items = _enrichItems(page.items);
         }
         _oldestId = _oldestMessageId(_items);
         _hasMore = page.hasMore && page.items.isNotEmpty;
@@ -290,6 +360,7 @@ class _NativeChatSearchPageState extends State<NativeChatSearchPage> {
             avatarPreset: m.senderAvatarPreset,
             avatarObjectKey: m.senderAvatarObjectKey,
             avatarService: _service,
+            borderRadius: 34 * 0.18,
           ),
           onTap: () => widget.onLocateMessage(m),
         );

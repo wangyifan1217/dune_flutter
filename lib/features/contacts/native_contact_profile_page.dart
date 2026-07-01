@@ -274,6 +274,7 @@ class _ContactHero extends StatelessWidget {
                     avatarPreset: avatarPreset,
                     avatarObjectKey: avatarObjectKey,
                     avatarService: avatarService,
+                    borderRadius: 80 * 0.18,
                   ),
                 ),
                 const SizedBox(height: 11),

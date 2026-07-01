@@ -23,7 +23,11 @@ import '../conversation/conversation_realtime_service.dart';
 import '../conversation/conversation_service.dart';
 import '../conversation/inbox_format.dart';
 import '../shell/dunes_toast.dart';
+import 'chat_emoji_gif_panel.dart';
+import 'chat_image_batch_preview.dart';
+import 'chat_image_editor.dart';
 import 'chat_image_utils.dart';
+import 'giphy_proxy_service.dart';
 import 'chat_media_widgets.dart';
 import 'chat_quote.dart';
 import 'chat_voice_player.dart';
@@ -35,11 +39,16 @@ import 'native_audio_recorder.dart';
 enum NativeChatKind { private, group }
 
 class _ChatListEntry {
-  const _ChatListEntry.divider(this.dividerLabel) : message = null;
-  const _ChatListEntry.message(this.message) : dividerLabel = null;
+  const _ChatListEntry.divider(this.dividerLabel)
+    : message = null,
+      showSenderMeta = false;
+
+  const _ChatListEntry.message(this.message, {this.showSenderMeta = false})
+    : dividerLabel = null;
 
   final String? dividerLabel;
   final NativeChatMessage? message;
+  final bool showSenderMeta;
 }
 
 class NativeChatView extends StatefulWidget {
@@ -80,8 +89,10 @@ class NativeChatView extends StatefulWidget {
   State<NativeChatView> createState() => _NativeChatViewState();
 }
 
-class _NativeChatViewState extends State<NativeChatView> {
+class _NativeChatViewState extends State<NativeChatView>
+    with WidgetsBindingObserver {
   late final ConversationService _service;
+  late final GiphyProxyService _giphyService;
   late final ConversationRealtimeService _realtime;
   final ConversationRealtimeDedup _realtimeDedup = ConversationRealtimeDedup();
   final ImagePicker _imagePicker = ImagePicker();
@@ -101,11 +112,16 @@ class _NativeChatViewState extends State<NativeChatView> {
   String? _uploadLabel;
   double _uploadProgress = 0;
   bool _recording = false;
+  bool _downloadingMedia = false;
+  double _downloadProgress = 0;
+  String? _downloadLabel;
   bool _recordWillCancel = false;
   bool _loadingOlder = false;
   bool _loadingNewer = false;
   bool _locatedMode = false;
   bool _forceLatestMode = false;
+  /// 进入会话后需持续尝试滚到底，直到成功或用户手动滚动（解决 ListView/图片懒加载竞态）。
+  bool _enterStickBottomPending = true;
   int _scrollBottomGen = 0;
   int _bottomAnchorMessageId = 0;
   int _pendingNewMessageCount = 0;
@@ -137,13 +153,16 @@ class _NativeChatViewState extends State<NativeChatView> {
   final Map<int, GlobalKey> _messageKeys = <int, GlobalKey>{};
   final Map<String, Future<String>> _mediaUrlCache = <String, Future<String>>{};
   ChatMessageQuote? _quoteDraft;
+  double _lastKeyboardInset = 0;
 
   bool get _isPrivate => widget.kind == NativeChatKind.private;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _service = ConversationService(session: widget.session);
+    _giphyService = GiphyProxyService(session: widget.session);
     _realtime = ConversationRealtimeHub.instance.of(widget.session);
     _scrollController.addListener(_onScroll);
     _inputController.addListener(_onComposeInputChanged);
@@ -154,6 +173,19 @@ class _NativeChatViewState extends State<NativeChatView> {
     _load();
     _bootRealtime();
     unawaited(_loadSelfAvatar());
+  }
+
+  void _toggleEmojiPicker() {
+    if (_emojiOpen) {
+      setState(() => _emojiOpen = false);
+      return;
+    }
+    FocusManager.instance.primaryFocus?.unfocus();
+    setState(() => _emojiOpen = true);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_emojiOpen || _shouldAnchorMessagesAtTop) return;
+      _scrollBottom(force: true, animated: true, gentle: false);
+    });
   }
 
   Future<void> _loadSelfAvatar() async {
@@ -181,6 +213,9 @@ class _NativeChatViewState extends State<NativeChatView> {
             (data['avatarObjectKey'] ?? '').toString().trim().isEmpty
             ? null
             : (data['avatarObjectKey'] ?? '').toString();
+        if (_messages.isNotEmpty) {
+          _messages = _enrichMessages(_messages);
+        }
       });
     } catch (_) {}
   }
@@ -192,6 +227,16 @@ class _NativeChatViewState extends State<NativeChatView> {
     final oldFocus = oldWidget.focusMessageId ?? 0;
     if (newFocus > 0 && newFocus != oldFocus) {
       _forceLatestMode = false;
+      _enterStickBottomPending = false;
+      unawaited(_load(silent: _bootstrapped));
+    }
+    final oldConvId = oldWidget.conversationHint?.id ?? 0;
+    final newConvId = widget.conversationHint?.id ?? 0;
+    if (newConvId > 0 && newConvId != oldConvId) {
+      _enterStickBottomPending = true;
+      _userInteractedWithScroll = false;
+      _locatedMode = false;
+      _forceLatestMode = true;
       unawaited(_load(silent: _bootstrapped));
     }
     if (!oldWidget.autoMarkRead && widget.autoMarkRead) {
@@ -203,7 +248,27 @@ class _NativeChatViewState extends State<NativeChatView> {
   }
 
   @override
+  void didChangeMetrics() {
+    super.didChangeMetrics();
+    if (!mounted) return;
+    final inset = View.of(context).viewInsets.bottom;
+    final keyboardOpening =
+        _inputFocusNode.hasFocus && inset > _lastKeyboardInset + 1;
+    _lastKeyboardInset = inset;
+    if (keyboardOpening && !_shouldAnchorMessagesAtTop) {
+      _scrollBottom(force: true, gentle: true);
+    } else if (_emojiOpen && !_shouldAnchorMessagesAtTop) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _emojiOpen) {
+          _scrollBottom(force: true, animated: true, gentle: false);
+        }
+      });
+    }
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _rtRefreshDebounce?.cancel();
     _rtSub?.cancel();
     _onlineSub?.cancel();
@@ -225,12 +290,14 @@ class _NativeChatViewState extends State<NativeChatView> {
   void _onScroll() {
     if (!_scrollController.hasClients || _loadingOlder) return;
     final pos = _scrollController.position;
-    // 历史消息在顶部：接近 minScrollExtent 时加载更早的消息。
-    if (pos.pixels <= 48) {
+    // reverse 列表：scroll≈0 为最新消息（靠近输入框），maxScrollExtent 为历史方向。
+    if (pos.pixels >= pos.maxScrollExtent - 48) {
       unawaited(_loadOlder());
     }
-    if (_locatedMode && _hasNewer && !_loadingNewer &&
-        pos.maxScrollExtent - pos.pixels <= 72) {
+    if (_locatedMode &&
+        _hasNewer &&
+        !_loadingNewer &&
+        pos.pixels <= 72) {
       unawaited(_loadNewer());
     }
     _updateStickBottomState();
@@ -361,7 +428,7 @@ class _NativeChatViewState extends State<NativeChatView> {
       }
     });
     if (stickBottom) {
-      _scrollBottom(gentle: true);
+      _scrollToPreferredAnchor(gentle: true);
     }
     unawaited(_markReadIfNeeded());
     if (_isPrivate && msg.senderUserId != widget.session.userId) {
@@ -497,6 +564,7 @@ class _NativeChatViewState extends State<NativeChatView> {
         (notification is ScrollUpdateNotification &&
             notification.dragDetails != null)) {
       _userInteractedWithScroll = true;
+      _enterStickBottomPending = false;
     }
     if (_canMarkReadNow && _isNearBottom) {
       unawaited(_markReadIfNeeded());
@@ -506,9 +574,98 @@ class _NativeChatViewState extends State<NativeChatView> {
 
   bool get _isNearBottom {
     if (!_scrollController.hasClients) return true;
-    return _scrollController.position.maxScrollExtent -
-            _scrollController.position.pixels <=
-        72;
+    // reverse 列表：pixels 接近 0 即在最新消息端。
+    return _scrollController.position.pixels <= 72;
+  }
+
+  int get _listFooterCount => (_locatedMode && _hasNewer) ? 1 : 0;
+
+  _ChatListEntry? _entryForListIndex(int index, List<_ChatListEntry> entries) {
+    final footer = _listFooterCount;
+    if (footer > 0 && index == 0) return null;
+    final adj = index - footer;
+    final entryIndex = entries.length - 1 - adj;
+    if (entryIndex < 0 || entryIndex >= entries.length) return null;
+    return entries[entryIndex];
+  }
+
+  /// reverse 列表下默认最新消息贴底，无需再滚到 maxScrollExtent。
+  bool get _shouldAnchorMessagesAtTop => false;
+
+  bool get _shouldStickToLatestOnLoad {
+    if (_locatedMode) return false;
+    if ((widget.focusMessageId ?? 0) > 0) return false;
+    return _enterStickBottomPending ||
+        !_userInteractedWithScroll ||
+        _isNearBottom;
+  }
+
+  void _scrollToLatestOnEnter() {
+    if (_locatedMode) return;
+    setState(_clearPendingNewMessages);
+    _ensureScrolledToBottom(attempt: 0);
+  }
+
+  /// reverse 列表进入时 scroll=0 即最新；仅图片/GIF 撑高后再补一次。
+  void _ensureScrolledToBottom({required int attempt}) {
+    if (!mounted || _locatedMode) return;
+    if (_userInteractedWithScroll && attempt > 0) {
+      _enterStickBottomPending = false;
+      return;
+    }
+    _scrollBottom(force: true, gentle: false);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _locatedMode) return;
+      if (_userInteractedWithScroll && attempt > 0) {
+        _enterStickBottomPending = false;
+        return;
+      }
+      if (_isNearBottom || attempt >= 6) {
+        _enterStickBottomPending = false;
+        return;
+      }
+      final next = attempt + 1;
+      final ms = next <= 2 ? 80 : 220;
+      Future<void>.delayed(Duration(milliseconds: ms), () {
+        if (!mounted || _locatedMode) return;
+        _ensureScrolledToBottom(attempt: next);
+      });
+    });
+  }
+
+  void _scrollToPreferredAnchor({
+    bool animated = false,
+    bool force = false,
+    bool gentle = false,
+  }) {
+    if (_shouldAnchorMessagesAtTop) {
+      _scrollTop(animated: animated, force: force);
+    } else {
+      _scrollBottom(animated: animated, force: force, gentle: gentle);
+    }
+  }
+
+  void _scrollTop({bool animated = false, bool force = false}) {
+    if (_locatedMode && !force) return;
+    final gen = ++_scrollBottomGen;
+
+    void doScroll() {
+      if (!mounted || gen != _scrollBottomGen) return;
+      if (!_scrollController.hasClients) return;
+      if (animated) {
+        unawaited(
+          _scrollController.animateTo(
+            0,
+            duration: const Duration(milliseconds: 280),
+            curve: Curves.easeOutCubic,
+          ),
+        );
+      } else {
+        _scrollController.jumpTo(0);
+      }
+    }
+
+    WidgetsBinding.instance.addPostFrameCallback((_) => doScroll());
   }
 
   bool _messagePeerRead(NativeChatMessage m) {
@@ -580,7 +737,12 @@ class _NativeChatViewState extends State<NativeChatView> {
         entries.add(_ChatListEntry.divider(label));
         lastDivider = label;
       }
-      entries.add(_ChatListEntry.message(m));
+      entries.add(
+        _ChatListEntry.message(
+          m,
+          showSenderMeta: !_isSystemKind(m.kind),
+        ),
+      );
     }
     return entries;
   }
@@ -655,6 +817,8 @@ class _NativeChatViewState extends State<NativeChatView> {
                     'role': m.role,
                     'roleLabel': m.roleLabel,
                     'title': m.roleLabel,
+                    'avatarPreset': m.avatarPreset,
+                    'avatarObjectKey': m.avatarObjectKey,
                   },
                 )
                 .toList(growable: false);
@@ -675,13 +839,15 @@ class _NativeChatViewState extends State<NativeChatView> {
           setState(() => _peerOnline = online);
         }
       }
-      final msgs = page.items..sort((a, b) => a.id.compareTo(b.id));
+      final msgs = _enrichMessages(page.items, conv)
+        ..sort((a, b) => a.id.compareTo(b.id));
       if (!mounted) return;
       final conversationChanged = _conversation?.id != conv.id;
       setState(() {
         if (conversationChanged) {
           _lastMarkedReadNewestId = 0;
           _userInteractedWithScroll = false;
+          _enterStickBottomPending = true;
           _clearPendingNewMessages();
         }
         _conversation = conv;
@@ -696,16 +862,12 @@ class _NativeChatViewState extends State<NativeChatView> {
             page.peerLastReadMessageId ?? _peerLastReadMessageId;
         if (!silent) _error = null;
       });
-      final shouldStickBottom =
-          _forceLatestMode || conversationChanged || _isNearBottom;
+      final stickLatest = focusId <= 0 && _shouldStickToLatestOnLoad;
       _forceLatestMode = false;
       if (focusId > 0) {
         _highlightAndScroll(focusId);
-      } else if (shouldStickBottom) {
-        if (!conversationChanged) {
-          setState(_clearPendingNewMessages);
-        }
-        _scrollBottom(force: true);
+      } else if (stickLatest) {
+        _scrollToLatestOnEnter();
       } else {
         _recountPendingNewMessages();
       }
@@ -738,7 +900,7 @@ class _NativeChatViewState extends State<NativeChatView> {
         before: oldestId,
       );
       if (!mounted || page.items.isEmpty) return;
-      final merged = _mergeMessages(page.items, _messages);
+      final merged = _enrichMessages(_mergeMessages(page.items, _messages));
       if (!mounted) return;
       final oldMax = _scrollController.hasClients
           ? _scrollController.position.maxScrollExtent
@@ -782,7 +944,7 @@ class _NativeChatViewState extends State<NativeChatView> {
         if (mounted) setState(() => _hasNewer = false);
         return;
       }
-      final merged = _mergeMessages(_messages, page.items);
+      final merged = _enrichMessages(_mergeMessages(_messages, page.items));
       if (!mounted) return;
       setState(() {
         _messages = merged;
@@ -818,10 +980,45 @@ class _NativeChatViewState extends State<NativeChatView> {
       _highlightMessageId = null;
       _hasNewer = false;
       _forceLatestMode = true;
+      _enterStickBottomPending = true;
+      _userInteractedWithScroll = false;
     });
     await _load(silent: _bootstrapped);
     if (!mounted) return;
-    _scrollBottom(animated: true, force: true);
+    _scrollToLatestOnEnter();
+  }
+
+  int? _entryIndexForMessage(int messageId) {
+    final entries = _buildListEntries();
+    for (var i = 0; i < entries.length; i++) {
+      if (entries[i].message?.id == messageId) return i;
+    }
+    return null;
+  }
+
+  void _preScrollTowardMessage(int messageId) {
+    if (!_scrollController.hasClients) return;
+    final msgIndex = _messages.indexWhere((m) => m.id == messageId);
+    if (msgIndex < 0) return;
+    if (msgIndex >= _messages.length - 2) {
+      _scrollBottom(force: true);
+      return;
+    }
+    final key = _messageKeys[messageId];
+    final ctx = key?.currentContext;
+    if (ctx != null) {
+      Scrollable.ensureVisible(ctx, alignment: 0.35);
+      return;
+    }
+    final entryIndex = _entryIndexForMessage(messageId);
+    if (entryIndex == null) return;
+    final entries = _buildListEntries();
+    final total = entries.length + _listFooterCount;
+    if (total <= 1) return;
+    final listIndex = _listFooterCount + (entries.length - 1 - entryIndex);
+    final max = _scrollController.position.maxScrollExtent;
+    final ratio = listIndex / (total - 1);
+    _scrollController.jumpTo((max * ratio).clamp(0.0, max));
   }
 
   void _highlightAndScroll(int messageId) {
@@ -830,22 +1027,35 @@ class _NativeChatViewState extends State<NativeChatView> {
     _highlightTimer = Timer(const Duration(seconds: 2), () {
       if (mounted) setState(() => _highlightMessageId = null);
     });
-    WidgetsBinding.instance.addPostFrameCallback(
-      (_) => _scrollToMessage(messageId),
-    );
+    _ensureMessageVisible(messageId);
   }
 
-  void _scrollToMessage(int messageId) {
-    final key = _messageKeys[messageId];
-    final ctx = key?.currentContext;
-    if (ctx == null) return;
-    Scrollable.ensureVisible(
-      ctx,
-      // 正序列表：将目标消息滚到视口偏上位置，便于上下文浏览。
-      alignment: 0.35,
-      duration: const Duration(milliseconds: 280),
-      curve: Curves.easeOutCubic,
-    );
+  void _ensureMessageVisible(int messageId, {int attempt = 0}) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (attempt == 0) {
+        _preScrollTowardMessage(messageId);
+      }
+      final key = _messageKeys[messageId];
+      final ctx = key?.currentContext;
+      if (ctx != null) {
+        Scrollable.ensureVisible(
+          ctx,
+          alignment: 0.35,
+          duration: const Duration(milliseconds: 280),
+          curve: Curves.easeOutCubic,
+        );
+        return;
+      }
+      if (attempt < 8) {
+        _ensureMessageVisible(messageId, attempt: attempt + 1);
+        return;
+      }
+      // 兜底：仍找不到渲染节点时，至少滚到列表底部（今日消息常见于此）。
+      if (_messages.any((m) => m.id == messageId)) {
+        _scrollBottom(force: true);
+      }
+    });
   }
 
   Future<NativeConversation?> _resolveConversation() async {
@@ -899,7 +1109,10 @@ class _NativeChatViewState extends State<NativeChatView> {
         conv.peerUserId == widget.session.userId ||
         (conv.peerDisplayName ?? '').trim().isEmpty ||
         conv.displayTitle == widget.session.displayName;
-    if (!needsContact) return conv;
+    final needsAvatar =
+        (conv.peerAvatarPreset ?? '').trim().isEmpty &&
+        (conv.peerAvatarObjectKey ?? '').trim().isEmpty;
+    if (!needsContact && !needsAvatar) return conv;
     final contact = await ContactService(
       session: widget.session,
     ).fetchContact(peerId);
@@ -934,17 +1147,33 @@ class _NativeChatViewState extends State<NativeChatView> {
 
   void _onInputFocusChanged() {
     if (!_inputFocusNode.hasFocus) return;
-    _scrollToLatestAfterKeyboard();
+    if (_emojiOpen) {
+      setState(() => _emojiOpen = false);
+    }
+    unawaited(_scrollToLatestForInput());
+  }
+
+  Future<void> _scrollToLatestForInput() async {
+    if (_locatedMode) {
+      await _jumpToLatest();
+      return;
+    }
+    if (_shouldAnchorMessagesAtTop) return;
+    setState(_clearPendingNewMessages);
+    _wasNearBottom = true;
+    void snap({bool animated = false}) {
+      if (!mounted) return;
+      _scrollBottom(force: true, animated: animated, gentle: true);
+    }
+    snap(animated: true);
+    WidgetsBinding.instance.addPostFrameCallback((_) => snap());
+    Future<void>.delayed(const Duration(milliseconds: 280), () {
+      if (mounted && _inputFocusNode.hasFocus) snap();
+    });
   }
 
   void _scrollToLatestAfterKeyboard() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      _scrollBottom(force: true);
-      Future<void>.delayed(const Duration(milliseconds: 280), () {
-        if (mounted) _scrollBottom(force: true);
-      });
-    });
+    unawaited(_scrollToLatestForInput());
   }
 
   Future<void> _send() async {
@@ -973,7 +1202,7 @@ class _NativeChatViewState extends State<NativeChatView> {
       await _load(silent: true);
       if (mounted) {
         setState(_clearPendingNewMessages);
-        _scrollBottom(force: true);
+        _scrollToPreferredAnchor(force: true);
       }
     } catch (e) {
       _showToast('发送失败：${friendlyErrorText(e)}');
@@ -1035,21 +1264,51 @@ class _NativeChatViewState extends State<NativeChatView> {
     return false;
   }
 
+  Future<
+      ({
+        Uint8List bytes,
+        String fileName,
+        String mimeType,
+      })?> _prepareChatImagePreview(
+    Uint8List bytes,
+    String fileName,
+  ) async {
+    final preview = await buildChatImagePreview(bytes, fileName: fileName);
+    if (preview == null) return null;
+    return (
+      bytes: preview.bytes,
+      fileName: preview.fileName,
+      mimeType: preview.mimeType,
+    );
+  }
+
   Future<void> _sendImageFrom(ImageSource source, String label) async {
     final conv = _conversation;
     if (conv == null || _sending) return;
     if (source == ImageSource.camera && !await _ensureCameraPermission())
       return;
     if (source == ImageSource.gallery && !await _ensurePhotosPermission()) return;
-    final picked = await _imagePicker.pickImage(source: source);
+    final picked = await _imagePicker.pickImage(
+      source: source,
+      maxWidth: kChatImagePickMaxEdge,
+      maxHeight: kChatImagePickMaxEdge,
+      imageQuality: kChatImagePickQuality,
+    );
     if (picked == null) return;
-    final bytes = await picked.readAsBytes();
-    final fileName = picked.name.isNotEmpty
+    var bytes = await picked.readAsBytes();
+    var fileName = picked.name.isNotEmpty
         ? picked.name
         : 'image-${DateTime.now().millisecondsSinceEpoch}.jpg';
+    var mimeType = lookupMimeType(fileName) ?? 'image/*';
+    if (!chatImageShouldSkipEditor(fileName: fileName, mimeType: mimeType)) {
+      if (!mounted) return;
+      final edited = await openChatImageEditor(context, bytes: bytes);
+      if (edited == null) return;
+      bytes = edited;
+      fileName = chatImageEditedFileName(fileName);
+      mimeType = lookupMimeType(fileName) ?? 'image/jpeg';
+    }
     if (!_checkSizeLimit(bytes.length, _maxImageBytes, fileName)) return;
-    final mimeType = lookupMimeType(fileName) ?? 'image/*';
-    final preview = await buildChatImagePreview(bytes, fileName: fileName);
     await _guardSend(() async {
       _beginUpload('上传图片');
       await _service.sendImage(
@@ -1058,9 +1317,7 @@ class _NativeChatViewState extends State<NativeChatView> {
         fileName: fileName,
         mimeType: mimeType,
         sourceLabel: label,
-        previewBytes: preview?.bytes,
-        previewFileName: preview?.fileName,
-        previewMimeType: preview?.mimeType,
+        preparePreview: () => _prepareChatImagePreview(bytes, fileName),
         onProgress: (p) => _setUploadProgress(p),
       );
     });
@@ -1070,22 +1327,51 @@ class _NativeChatViewState extends State<NativeChatView> {
     final conv = _conversation;
     if (conv == null || _sending) return;
     if (!await _ensurePhotosPermission()) return;
-    final picked = await _imagePicker.pickMultiImage();
+    final picked = await _imagePicker.pickMultiImage(
+      maxWidth: kChatImagePickMaxEdge,
+      maxHeight: kChatImagePickMaxEdge,
+      imageQuality: kChatImagePickQuality,
+    );
     if (picked.isEmpty) return;
+
+    final drafts = <ChatImageDraft>[];
+    for (final file in picked) {
+      final bytes = await file.readAsBytes();
+      final fileName = file.name.isNotEmpty
+          ? file.name
+          : 'image-${DateTime.now().millisecondsSinceEpoch}.jpg';
+      if (!_checkSizeLimit(bytes.length, _maxImageBytes, fileName)) continue;
+      drafts.add(ChatImageDraft(bytes: bytes, fileName: fileName));
+    }
+    if (drafts.isEmpty) return;
+    if (!mounted) return;
+
+    List<ChatImageDraft> toSend;
+    if (drafts.length == 1 &&
+        !chatImageShouldSkipEditor(fileName: drafts.first.fileName)) {
+      final edited =
+          await openChatImageEditor(context, bytes: drafts.first.bytes);
+      if (edited == null) return;
+      drafts.first.bytes = edited;
+      drafts.first.fileName = chatImageEditedFileName(drafts.first.fileName);
+      toSend = drafts;
+    } else {
+      final confirmed = await openChatImageBatchPreview(context, drafts: drafts);
+      if (confirmed == null || confirmed.isEmpty) return;
+      toSend = confirmed;
+    }
+
     await _guardSend(() async {
-      final total = picked.length;
+      final total = toSend.length;
       var done = 0;
-      for (final file in picked) {
-        final bytes = await file.readAsBytes();
-        final fileName = file.name.isNotEmpty
-            ? file.name
-            : 'image-${DateTime.now().millisecondsSinceEpoch}.jpg';
+      for (final draft in toSend) {
+        final bytes = draft.bytes;
+        final fileName = draft.fileName;
         if (!_checkSizeLimit(bytes.length, _maxImageBytes, fileName)) {
           done++;
           continue;
         }
-        final mimeType = lookupMimeType(fileName) ?? 'image/*';
-        final preview = await buildChatImagePreview(bytes, fileName: fileName);
+        final mimeType = lookupMimeType(fileName) ?? 'image/jpeg';
         final baseDone = done;
         _beginUpload(total > 1 ? '上传图片 (${baseDone + 1}/$total)' : '上传图片');
         await _service.sendImage(
@@ -1094,9 +1380,7 @@ class _NativeChatViewState extends State<NativeChatView> {
           fileName: fileName,
           mimeType: mimeType,
           sourceLabel: '多图',
-          previewBytes: preview?.bytes,
-          previewFileName: preview?.fileName,
-          previewMimeType: preview?.mimeType,
+          preparePreview: () => _prepareChatImagePreview(bytes, fileName),
           onProgress: (p) => _setUploadProgress(
             (baseDone + p) / total,
             label: total > 1 ? '上传图片 (${baseDone + 1}/$total)' : '上传图片',
@@ -1261,6 +1545,78 @@ class _NativeChatViewState extends State<NativeChatView> {
         ),
       ),
     );
+  }
+
+  Widget _buildDownloadOverlay() {
+    final label = _downloadLabel ?? '下载中';
+    final hasProgress = _downloadProgress > 0;
+    final pct = (_downloadProgress * 100).round();
+    return Positioned.fill(
+      child: IgnorePointer(
+        child: Container(
+          color: Colors.black26,
+          alignment: Alignment.center,
+          child: Container(
+            width: 240,
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+            decoration: BoxDecoration(
+              color: const Color(0xE61F2421),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  hasProgress ? '$label  $pct%' : '$label…',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(4),
+                  child: LinearProgressIndicator(
+                    value: hasProgress ? _downloadProgress : null,
+                    minHeight: 6,
+                    backgroundColor: Colors.white24,
+                    valueColor: const AlwaysStoppedAnimation<Color>(
+                      DunesColors.accentLine,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _beginDownload(String label) {
+    if (!mounted) return;
+    setState(() {
+      _downloadingMedia = true;
+      _downloadLabel = label;
+      _downloadProgress = 0;
+    });
+  }
+
+  void _setDownloadProgress(double progress) {
+    if (!mounted) return;
+    setState(() {
+      _downloadProgress = progress.clamp(0.0, 1.0);
+    });
+  }
+
+  void _endDownload() {
+    if (!mounted) return;
+    setState(() {
+      _downloadingMedia = false;
+      _downloadLabel = null;
+      _downloadProgress = 0;
+    });
   }
 
   void _beginUpload(String label) {
@@ -1439,6 +1795,12 @@ class _NativeChatViewState extends State<NativeChatView> {
                 title: const Text('复制'),
                 onTap: () => Navigator.of(context).pop('copy'),
               ),
+            if (_canDownloadMessage(m))
+              ListTile(
+                leading: const Icon(Icons.download_rounded),
+                title: const Text('下载'),
+                onTap: () => Navigator.of(context).pop('download'),
+              ),
           ],
         ),
       ),
@@ -1451,6 +1813,9 @@ class _NativeChatViewState extends State<NativeChatView> {
         await Clipboard.setData(ClipboardData(text: copyText));
         if (mounted) _showToast('已复制');
         break;
+      case 'download':
+        await _downloadFile(m.payload, _mediaDownloadFileName(m));
+        break;
     }
   }
 
@@ -1459,6 +1824,102 @@ class _NativeChatViewState extends State<NativeChatView> {
       _quoteDraft = ChatMessageQuote.fromMessage(message);
       _voiceMode = false;
       _emojiOpen = false;
+    });
+  }
+
+  void _closeEmojiPicker() {
+    if (!_emojiOpen) return;
+    setState(() => _emojiOpen = false);
+  }
+
+  Widget _buildComposerDock({
+    required bool locked,
+    required String inputHint,
+  }) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        ChatQuickActions(
+          onCamera: locked || _sending
+              ? () {}
+              : () => _sendImageFrom(ImageSource.camera, '拍照'),
+          onAlbum: locked || _sending
+              ? () {}
+              : _sendMultiImagesFromGallery,
+          onFile: locked || _sending ? () {} : _sendFile,
+          onApproval: () => showDunesSoonToast(context),
+          onAt: locked ? null : _pickAtMember,
+          onEmoji: locked ? null : _toggleEmojiPicker,
+          onVideo: () => showDunesSoonToast(context, '视频通话敬请期待'),
+          showAt: !_isPrivate,
+          showVideo: !_isPrivate,
+        ),
+        if (_quoteDraft != null && !_quoteDraft!.isEmpty && !locked)
+          ChatQuotePreviewBar(
+            quote: _quoteDraft!,
+            onCancel: _clearQuoteDraft,
+          ),
+        ChatInputBar(
+          controller: _inputController,
+          focusNode: _inputFocusNode,
+          onInputFocused: _scrollToLatestAfterKeyboard,
+          voiceMode: _voiceMode,
+          sending: _sending,
+          enabled: !locked,
+          hintText: inputHint,
+          onToggleVoice: locked
+              ? () {}
+              : () => setState(() {
+                  _voiceMode = !_voiceMode;
+                  _emojiOpen = false;
+                }),
+          onSend: _send,
+          onEmoji: locked ? null : _toggleEmojiPicker,
+          recording: _recording,
+          recordWillCancel: _recordWillCancel,
+          recordDurationMs: _recordDurationMs,
+          onVoiceHoldStart: locked ? null : (_) => _startHoldRecord(),
+          onVoiceHoldMove: _onRecordMove,
+          onVoiceHoldEnd: (_) => _finishHoldRecord(),
+          onVoiceHoldCancel: () => _cancelHoldRecordInternal(showHint: false),
+        ),
+        if (_emojiOpen && !locked)
+          ChatEmojiGifPanel(
+            controller: _inputController,
+            giphyService: _giphyService,
+            onGifSelected: _onGifSelected,
+          ),
+      ],
+    );
+  }
+
+  Future<void> _onGifSelected(GiphyListItem gif) async {
+    final conv = _conversation;
+    if (!gif.isValid || conv == null || _sending || conv.dissolved) return;
+
+    setState(() => _emojiOpen = false);
+
+    await _guardSend(() async {
+      _beginUpload('发送 GIF');
+      final bytes = await _giphyService.downloadGifBytes(gif);
+      if (!_checkSizeLimit(bytes.length, _maxImageBytes, 'giphy_${gif.id}.gif')) {
+        return;
+      }
+      final fileName = gif.id.isNotEmpty
+          ? 'giphy_${gif.id}.gif'
+          : 'giphy_${DateTime.now().millisecondsSinceEpoch}.gif';
+      await _service.sendImage(
+        conversationId: conv.id,
+        bytes: bytes,
+        fileName: fileName,
+        mimeType: 'image/gif',
+        sourceLabel: 'GIF',
+        onProgress: (p) => _setUploadProgress(p, label: '发送 GIF'),
+      );
+      if (mounted) {
+        setState(_clearPendingNewMessages);
+        _scrollToPreferredAnchor(force: true);
+      }
     });
   }
 
@@ -1492,6 +1953,11 @@ class _NativeChatViewState extends State<NativeChatView> {
   }) async {
     if (messageId <= 0) return;
     if (_messages.any((m) => m.id == messageId)) {
+      final hasNewerLocal = _messages.any((m) => m.id > messageId);
+      setState(() {
+        _locatedMode = true;
+        if (hasNewerLocal) _hasNewer = true;
+      });
       _highlightAndScroll(messageId);
       return;
     }
@@ -1509,7 +1975,8 @@ class _NativeChatViewState extends State<NativeChatView> {
         hint: quote != null ? _quoteHintMessage(quote) : null,
       );
       if (!mounted) return;
-      final msgs = page.items..sort((a, b) => a.id.compareTo(b.id));
+      final msgs = _enrichMessages(page.items, conv)
+        ..sort((a, b) => a.id.compareTo(b.id));
       if (!msgs.any((m) => m.id == messageId)) {
         setState(() => _locating = false);
         _showToast('找不到原消息');
@@ -1585,21 +2052,109 @@ class _NativeChatViewState extends State<NativeChatView> {
     Map<String, dynamic>? payload,
     String fileName,
   ) async {
-    try {
-      if (ConversationService.hasAuthMedia(payload)) {
-        final bytes = await _service.loadChatMediaBytes(payload);
-        await file_dl.saveBytesAsFile(bytes, fileName);
-        return;
-      }
-      final url = ConversationService.mediaDirectUrl(payload);
-      if (url.isNotEmpty) {
-        await file_dl.openUrlAsFile(url, fileName);
-        return;
-      }
-      _showToast('附件地址为空');
-    } catch (e) {
-      _showToast('下载失败：${friendlyErrorText(e)}');
+    if (_downloadingMedia) {
+      _showToast('正在下载，请稍候…');
+      return;
     }
+    _beginDownload('下载 $fileName');
+    try {
+      String? savedPath;
+      if (ConversationService.hasAuthMedia(payload)) {
+        final bytes = await _service.loadChatMediaBytes(
+          payload,
+          onProgress: _setDownloadProgress,
+        );
+        savedPath = await file_dl.saveBytesAsFile(bytes, fileName);
+      } else {
+        final url = ConversationService.mediaDirectUrl(payload);
+        if (url.isEmpty) {
+          _showToast('附件地址为空', error: true);
+          return;
+        }
+        savedPath = await file_dl.openUrlAsFile(
+          url,
+          fileName,
+          onProgress: _setDownloadProgress,
+        );
+      }
+      if (!mounted) return;
+      if (savedPath == null || savedPath.isEmpty) {
+        _showToast('已保存 $fileName');
+        return;
+      }
+      _showDownloadSuccessDialog(savedPath, fileName);
+    } catch (e) {
+      _showToast('下载失败：${friendlyErrorText(e)}', error: true);
+    } finally {
+      _endDownload();
+    }
+  }
+
+  String _formatSavedPath(String path) {
+    return path.replaceFirst('/storage/emulated/0', '内部存储');
+  }
+
+  void _showDownloadSuccessDialog(String savedPath, String fileName) {
+    if (!mounted) return;
+    final displayPath = _formatSavedPath(savedPath);
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('下载完成'),
+        content: Text('文件：$fileName\n保存位置：\n$displayPath'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('知道了'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _mediaDownloadFileName(NativeChatMessage m) {
+    final payload = m.payload;
+    final fromPayload = ConversationService.mediaFileName(payload);
+    if (fromPayload.isNotEmpty && fromPayload != 'download') return fromPayload;
+    final kind = m.kind.toUpperCase();
+    if (kind == 'AUDIO') return 'voice-${m.id}.m4a';
+    if (kind == 'FILE') {
+      final stripped =
+          m.bodyText.replaceAll(RegExp(r'^\[[^\]]+\]\s*'), '').trim();
+      if (stripped.isNotEmpty) return stripped;
+      return 'file-${m.id}';
+    }
+    if (kind == 'IMAGE') return 'image-${m.id}.jpg';
+    return 'download';
+  }
+
+  bool _canDownloadMessage(NativeChatMessage m) {
+    final kind = m.kind.toUpperCase();
+    if (kind != 'FILE' && kind != 'AUDIO' && kind != 'IMAGE') return false;
+    final payload = m.payload;
+    if (payload == null) return false;
+    return ConversationService.hasAuthMedia(payload) ||
+        ConversationService.mediaDirectUrl(payload).isNotEmpty;
+  }
+
+  Map<int, ({String? preset, String? objectKey})> get _memberAvatarMap =>
+      _service.avatarMapFromMembers(_groupMembers);
+
+  List<NativeChatMessage> _enrichMessages(
+    List<NativeChatMessage> msgs, [
+    NativeConversation? conv,
+  ]) {
+    final c = conv ?? _conversation;
+    return _service.enrichMessagesWithAvatars(
+      msgs,
+      avatarByUserId: _memberAvatarMap,
+      peerAvatarPreset: c?.peerAvatarPreset,
+      peerAvatarObjectKey: c?.peerAvatarObjectKey,
+      peerUserId: c?.peerUserId,
+      selfUserId: widget.session.userId,
+      selfAvatarPreset: _selfAvatarPreset,
+      selfAvatarObjectKey: _selfAvatarObjectKey,
+    );
   }
 
   ImUserAvatar _avatarForMessage(NativeChatMessage m, {required bool mine}) {
@@ -1616,6 +2171,7 @@ class _NativeChatViewState extends State<NativeChatView> {
         avatarPreset: m.senderAvatarPreset ?? _selfAvatarPreset,
         avatarObjectKey: m.senderAvatarObjectKey ?? _selfAvatarObjectKey,
         avatarService: _service,
+        borderRadius: 32 * 0.18,
       );
     }
     final name = m.senderName.isNotEmpty
@@ -1624,8 +2180,14 @@ class _NativeChatViewState extends State<NativeChatView> {
     final seed = m.senderUserId > 0
         ? m.senderUserId
         : (conv?.peerUserId ?? conv?.id ?? 0);
-    final preset = m.senderAvatarPreset ?? conv?.peerAvatarPreset;
-    final objectKey = m.senderAvatarObjectKey ?? conv?.peerAvatarObjectKey;
+    final memberAvatars =
+        !_isPrivate && m.senderUserId > 0 ? _memberAvatarMap[m.senderUserId] : null;
+    final preset = m.senderAvatarPreset ??
+        memberAvatars?.preset ??
+        conv?.peerAvatarPreset;
+    final objectKey = m.senderAvatarObjectKey ??
+        memberAvatars?.objectKey ??
+        conv?.peerAvatarObjectKey;
     return ImUserAvatar(
       initial: name.isNotEmpty ? name.substring(0, 1) : '?',
       seed: seed,
@@ -1634,6 +2196,7 @@ class _NativeChatViewState extends State<NativeChatView> {
       avatarPreset: preset,
       avatarObjectKey: objectKey,
       avatarService: _service,
+      borderRadius: 32 * 0.18,
     );
   }
 
@@ -1662,7 +2225,6 @@ class _NativeChatViewState extends State<NativeChatView> {
           service: _service,
           payload: m.payload,
           mine: mine,
-          bodyFallback: m.bodyText.isEmpty ? '[图片]' : m.bodyText,
         ),
       );
     }
@@ -1694,6 +2256,7 @@ class _NativeChatViewState extends State<NativeChatView> {
           durationSec: sec,
           mine: mine,
           resolveUrl: () => _resolveMediaUrl(source),
+          onPlayError: (message) => _showToast(message, error: true),
         ),
       );
     }
@@ -1716,27 +2279,40 @@ class _NativeChatViewState extends State<NativeChatView> {
     void doScroll() {
       if (!mounted || gen != _scrollBottomGen) return;
       if (!_scrollController.hasClients) return;
-      final bottom = _scrollController.position.maxScrollExtent;
+      // reverse 列表：0 = 最新消息端（靠近输入框）
+      const target = 0.0;
       if (animated) {
         unawaited(
           _scrollController.animateTo(
-            bottom,
+            target,
             duration: const Duration(milliseconds: 280),
             curve: Curves.easeOutCubic,
           ),
         );
       } else {
-        _scrollController.jumpTo(bottom);
+        _scrollController.jumpTo(target);
+      }
+      // 优先滚到最新一条消息，避免仅 jumpTo(0) 时末条仍被输入栏遮挡
+      final newestId = _newestMessageId;
+      if (newestId > 0) {
+        final ctx = _messageKeys[newestId]?.currentContext;
+        if (ctx != null) {
+          Scrollable.ensureVisible(
+            ctx,
+            alignment: 1.0,
+            duration: animated
+                ? const Duration(milliseconds: 280)
+                : Duration.zero,
+            curve: Curves.easeOutCubic,
+          );
+        }
       }
     }
 
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      doScroll();
-      WidgetsBinding.instance.addPostFrameCallback((_) => doScroll());
-    });
+    WidgetsBinding.instance.addPostFrameCallback((_) => doScroll());
 
     if (!gentle) {
-      for (final ms in const <int>[0, 50, 150, 320]) {
+      for (final ms in const <int>[50, 150, 350]) {
         Future<void>.delayed(Duration(milliseconds: ms), doScroll);
       }
     }
@@ -1781,7 +2357,7 @@ class _NativeChatViewState extends State<NativeChatView> {
       offset: _inputController.text.length,
     );
     _insertingAtMentions = false;
-    setState(() => _emojiOpen = false);
+    _closeEmojiPicker();
   }
 
   String? _partialAtFilter(String text) {
@@ -1887,15 +2463,34 @@ class _NativeChatViewState extends State<NativeChatView> {
       final names = await showModalBottomSheet<List<String>>(
         context: context,
         isScrollControlled: true,
+        isDismissible: true,
+        enableDrag: true,
         backgroundColor: Colors.transparent,
-        builder: (_) => _AtMentionSheet(
-          members: members,
-          showAtAll: _isGroupOwner(),
-          avatarService: _service,
-          initialFilter: filter,
-          filterListenable: _atFilterNotifier!,
-          focusSearch: focusSearch,
-          onFilterChanged: _syncInputAtFilter,
+        builder: (sheetContext) => GestureDetector(
+          onTap: () => Navigator.pop(sheetContext),
+          behavior: HitTestBehavior.opaque,
+          child: Stack(
+            children: [
+              Positioned.fill(
+                child: Container(color: Colors.black.withValues(alpha: 0.35)),
+              ),
+              Align(
+                alignment: Alignment.bottomCenter,
+                child: GestureDetector(
+                  onTap: () {},
+                  child: _AtMentionSheet(
+                    members: members,
+                    showAtAll: _isGroupOwner(),
+                    avatarService: _service,
+                    initialFilter: filter,
+                    filterListenable: _atFilterNotifier!,
+                    focusSearch: focusSearch,
+                    onFilterChanged: _syncInputAtFilter,
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       );
       _atSheetOpen = false;
@@ -1961,6 +2556,7 @@ class _NativeChatViewState extends State<NativeChatView> {
         : '输入消息 · @人时唤出选择器';
 
     return Scaffold(
+      resizeToAvoidBottomInset: true,
       backgroundColor: DunesColors.bgApp,
       body: SafeArea(
         bottom: false,
@@ -1968,7 +2564,7 @@ class _NativeChatViewState extends State<NativeChatView> {
           behavior: HitTestBehavior.translucent,
           onTap: () {
             FocusScope.of(context).unfocus();
-            if (_emojiOpen) setState(() => _emojiOpen = false);
+            _closeEmojiPicker();
           },
           child: Column(
             children: [
@@ -1988,6 +2584,7 @@ class _NativeChatViewState extends State<NativeChatView> {
                         avatarPreset: conv.peerAvatarPreset,
                         avatarObjectKey: conv.peerAvatarObjectKey,
                         avatarService: _service,
+                        borderRadius: 32 * 0.18,
                       )
                     : null,
                 actions: [
@@ -2035,16 +2632,26 @@ class _NativeChatViewState extends State<NativeChatView> {
                         onNotification: _onMessageListScroll,
                         child: ListView.builder(
                           controller: _scrollController,
-                          reverse: false,
+                          reverse: true,
                           physics: const ClampingScrollPhysics(),
                           cacheExtent: 640,
-                          padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+                          addAutomaticKeepAlives: false,
+                          addRepaintBoundaries: false,
+                          keyboardDismissBehavior:
+                              ScrollViewKeyboardDismissBehavior.onDrag,
+                          padding: EdgeInsets.fromLTRB(
+                            12,
+                            (_locatedMode || _pendingNewMessageCount > 0)
+                                ? 52
+                                : 12,
+                            12,
+                            10,
+                          ),
                           itemCount:
-                              listEntries.length +
-                              (_locatedMode && _hasNewer ? 1 : 0),
+                              listEntries.length + _listFooterCount,
                           itemBuilder: (_, index) {
                             final hasNewerFooter = _locatedMode && _hasNewer;
-                            if (hasNewerFooter && index == listEntries.length) {
+                            if (hasNewerFooter && index == 0) {
                               return Padding(
                                 padding: const EdgeInsets.symmetric(
                                   vertical: 10,
@@ -2065,7 +2672,8 @@ class _NativeChatViewState extends State<NativeChatView> {
                                 ),
                               );
                             }
-                            final entry = listEntries[index];
+                            final entry = _entryForListIndex(index, listEntries);
+                            if (entry == null) return const SizedBox.shrink();
                             if (entry.dividerLabel != null) {
                               return ChatDateDivider(
                                 label: entry.dividerLabel!,
@@ -2087,22 +2695,13 @@ class _NativeChatViewState extends State<NativeChatView> {
                             if (_isSystemKind(m.kind)) {
                               row = _buildMessageWidget(m, mine);
                             } else {
-                              final prevMsg = _previousMessage(
-                                index,
-                                listEntries,
-                              );
-                              final showMeta =
-                                  !_isPrivate &&
-                                  (prevMsg == null ||
-                                      prevMsg.senderUserId != m.senderUserId);
                               final peerRead = mine && _isPrivate
                                   ? _messagePeerRead(m)
                                   : false;
                               row = ChatMessageRow(
                                 message: m,
                                 mine: mine,
-                                showSenderMeta:
-                                    showMeta || (_isPrivate && !mine),
+                                showSenderMeta: entry.showSenderMeta,
                                 showTimeForMine: mine,
                                 timeLabel: timeLabel,
                                 readLabel: mine && _isPrivate
@@ -2123,22 +2722,23 @@ class _NativeChatViewState extends State<NativeChatView> {
                                 content: _buildMessageWidget(m, mine),
                               );
                             }
-                            return AnimatedContainer(
-                              key: key,
-                              duration: const Duration(milliseconds: 200),
-                              decoration: BoxDecoration(
-                                color: highlighted
-                                    ? DunesColors.accentSoft.withValues(
+                            final rowWidget = highlighted
+                                ? AnimatedContainer(
+                                    key: key,
+                                    duration: const Duration(milliseconds: 200),
+                                    decoration: BoxDecoration(
+                                      color: DunesColors.accentSoft.withValues(
                                         alpha: 0.45,
-                                      )
-                                    : Colors.transparent,
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              padding: highlighted
-                                  ? const EdgeInsets.symmetric(vertical: 2)
-                                  : EdgeInsets.zero,
-                              child: row,
-                            );
+                                      ),
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 2,
+                                    ),
+                                    child: row,
+                                  )
+                                : KeyedSubtree(key: key, child: row);
+                            return RepaintBoundary(child: rowWidget);
                           },
                         ),
                       ),
@@ -2316,83 +2916,22 @@ class _NativeChatViewState extends State<NativeChatView> {
                         ),
                       ),
                     if (_uploadLabel != null) _buildUploadOverlay(),
+                    if (_downloadingMedia) _buildDownloadOverlay(),
                   ],
                 ),
               ),
-              ChatQuickActions(
-                onCamera: locked || _sending
-                    ? () {}
-                    : () => _sendImageFrom(ImageSource.camera, '拍照'),
-                onAlbum: locked || _sending
-                    ? () {}
-                    : _sendMultiImagesFromGallery,
-                onFile: locked || _sending ? () {} : _sendFile,
-                onApproval: () => showDunesSoonToast(context),
-                onAt: locked ? null : _pickAtMember,
-                onEmoji: locked
-                    ? null
-                    : () => setState(() => _emojiOpen = !_emojiOpen),
-                onVideo: () => showDunesSoonToast(context, '视频通话敬请期待'),
-                showAt: !_isPrivate,
-                showVideo: !_isPrivate,
-              ),
-              if (_emojiOpen && !locked)
-                ChatEmojiPanel(
-                  onPick: (emoji) {
-                    _inputController.text = '${_inputController.text}$emoji';
-                    _inputController.selection = TextSelection.collapsed(
-                      offset: _inputController.text.length,
-                    );
-                  },
+              SafeArea(
+                top: false,
+                child: _buildComposerDock(
+                  locked: locked,
+                  inputHint: inputHint,
                 ),
-              if (_quoteDraft != null && !_quoteDraft!.isEmpty && !locked)
-                ChatQuotePreviewBar(
-                  quote: _quoteDraft!,
-                  onCancel: _clearQuoteDraft,
-                ),
-              ChatInputBar(
-                controller: _inputController,
-                focusNode: _inputFocusNode,
-                onInputFocused: _scrollToLatestAfterKeyboard,
-                voiceMode: _voiceMode,
-                sending: _sending,
-                enabled: !locked,
-                hintText: inputHint,
-                onToggleVoice: locked
-                    ? () {}
-                    : () => setState(() {
-                        _voiceMode = !_voiceMode;
-                        _emojiOpen = false;
-                      }),
-                onSend: _send,
-                onEmoji: locked
-                    ? null
-                    : () => setState(() => _emojiOpen = !_emojiOpen),
-                recording: _recording,
-                recordWillCancel: _recordWillCancel,
-                recordDurationMs: _recordDurationMs,
-                onVoiceHoldStart: locked ? null : (_) => _startHoldRecord(),
-                onVoiceHoldMove: _onRecordMove,
-                onVoiceHoldEnd: (_) => _finishHoldRecord(),
-                onVoiceHoldCancel: () =>
-                    _cancelHoldRecordInternal(showHint: false),
               ),
             ],
           ),
         ),
       ),
     );
-  }
-
-  NativeChatMessage? _previousMessage(
-    int entryIndex,
-    List<_ChatListEntry> entries,
-  ) {
-    for (var i = entryIndex - 1; i >= 0; i--) {
-      final msg = entries[i].message;
-      if (msg != null) return msg;
-    }
-    return null;
   }
 }
 
@@ -2448,16 +2987,14 @@ class _SheetAvatar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(12),
-      child: ImUserAvatar(
-        initial: initial,
-        seed: seed,
-        size: 40,
-        avatarPreset: avatarPreset,
-        avatarObjectKey: avatarObjectKey,
-        avatarService: avatarService,
-      ),
+    return ImUserAvatar(
+      initial: initial,
+      seed: seed,
+      size: 40,
+      avatarPreset: avatarPreset,
+      avatarObjectKey: avatarObjectKey,
+      avatarService: avatarService,
+      borderRadius: 40 * 0.18,
     );
   }
 }

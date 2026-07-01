@@ -19,6 +19,7 @@ class ImUserAvatar extends StatelessWidget {
     this.avatarObjectKey,
     this.avatarUrl,
     this.avatarService,
+    this.borderRadius,
   });
 
   final String initial;
@@ -30,8 +31,19 @@ class ImUserAvatar extends StatelessWidget {
   final String? avatarUrl;
   final ConversationService? avatarService;
 
+  /// 为空时圆形；通讯板块统一用 [commBorderRadius]。
+  final double? borderRadius;
+
+  /// 通讯列表/群聊拼贴用的圆角方形（与 [GroupCompositeAvatar] 外框一致）。
+  static BorderRadius commBorderRadius(double size) =>
+      BorderRadius.circular(size * 0.18);
+
+  BorderRadius get _effectiveBorderRadius => borderRadius != null
+      ? BorderRadius.circular(borderRadius!)
+      : BorderRadius.circular(size / 2);
   @override
   Widget build(BuildContext context) {
+    final radius = _effectiveBorderRadius;
     final preset = (avatarPreset ?? '').trim();
     final presetSvg = preset.isNotEmpty ? nativeAvatarPresetSvg(preset) : null;
     final rawObjectKey = (avatarObjectKey ?? '').trim();
@@ -55,7 +67,7 @@ class ImUserAvatar extends StatelessWidget {
         url: directImageUrl,
         width: size,
         height: size,
-        borderRadius: BorderRadius.circular(size / 2),
+        borderRadius: radius,
         errorBuilder: _initialAvatar,
       );
     } else if (objectKey.isNotEmpty && avatarService != null) {
@@ -73,7 +85,7 @@ class ImUserAvatar extends StatelessWidget {
               url: snap.data!,
               width: size,
               height: size,
-              borderRadius: BorderRadius.circular(size / 2),
+              borderRadius: radius,
               errorBuilder: _initialAvatar,
             );
           }
@@ -82,7 +94,7 @@ class ImUserAvatar extends StatelessWidget {
       );
     } else if (presetSvg != null) {
       core = ClipRRect(
-        borderRadius: BorderRadius.circular(size / 2),
+        borderRadius: radius,
         child: SvgPicture.string(
           presetSvg,
           width: size,
@@ -137,7 +149,7 @@ class ImUserAvatar extends StatelessWidget {
       alignment: Alignment.center,
       decoration: BoxDecoration(
         gradient: LinearGradient(colors: style.gradient),
-        borderRadius: BorderRadius.circular(size / 2),
+        borderRadius: _effectiveBorderRadius,
       ),
       child: Text(
         initial.isEmpty ? '?' : initial,

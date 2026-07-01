@@ -7,40 +7,36 @@ import '../../core/theme/dunes_theme.dart';
 import '../../core/util/friendly_error.dart';
 import '../conversation/conversation_service.dart';
 import '../shell/dunes_toast.dart';
-import 'chat_widgets.dart';
+import 'chat_image_utils.dart';
 import 'cors_safe_image.dart';
 import 'file_download.dart' as file_dl;
 import 'gallery_save.dart' as gallery;
 
 /// 与 WebView `hydrateMediaUrls` 对齐：公网图直链、私有附件鉴权拉取，支持点击放大。
-/// 会话内联展示压缩预览图，点击后在全屏弹层加载原图，并可保存到相册。
+/// 会话内按原图比例完整展示（不裁切），点击可全屏查看/保存。
 class ChatAuthImageBubble extends StatefulWidget {
   const ChatAuthImageBubble({
     super.key,
     required this.service,
     required this.payload,
     required this.mine,
-    this.bodyFallback = '[图片]',
   });
 
   final ConversationService service;
   final Map<String, dynamic>? payload;
   final bool mine;
-  final String bodyFallback;
 
   @override
   State<ChatAuthImageBubble> createState() => _ChatAuthImageBubbleState();
 }
 
 class _ChatAuthImageBubbleState extends State<ChatAuthImageBubble> {
-  static const _maxThumbWidth = 240.0;
-  static const _maxThumbHeight = 280.0;
-  static const _coverThumbHeight = 180.0;
-
   /// 用于内联展示的预览 payload（旧消息无预览时回退为原图）。
   Map<String, dynamic>? _previewPayload;
   String? _publicUrl;
   Future<Uint8List>? _bytesFuture;
+  bool _isGif = false;
+  int _loadGeneration = 0;
 
   @override
   void initState() {
@@ -57,11 +53,34 @@ class _ChatAuthImageBubbleState extends State<ChatAuthImageBubble> {
   }
 
   void _bindMedia() {
-    _previewPayload = ConversationService.previewMediaPayload(widget.payload);
-    _publicUrl = ConversationService.mediaPublicImageUrl(_previewPayload);
-    _bytesFuture = ConversationService.hasAuthMedia(_previewPayload)
-        ? widget.service.loadChatMediaBytes(_previewPayload)
-        : null;
+    final mime = (widget.payload?['mimeType'] ?? '').toString().toLowerCase();
+    final fileName = ConversationService.mediaFileName(widget.payload).toLowerCase();
+    _isGif = mime.contains('gif') || fileName.endsWith('.gif');
+    _previewPayload = _isGif
+        ? widget.payload
+        : ConversationService.previewMediaPayload(widget.payload);
+    _loadGeneration++;
+    final gen = _loadGeneration;
+
+    _publicUrl = widget.service.publicImageUrlForPayload(_previewPayload) ??
+        widget.service.publicImageUrlForPayload(widget.payload);
+
+    if (_publicUrl != null && _publicUrl!.isNotEmpty) {
+      _bytesFuture = null;
+      return;
+    }
+
+    if (ConversationService.hasAuthMedia(_previewPayload) ||
+        ConversationService.hasAuthMedia(widget.payload)) {
+      _bytesFuture = widget.service.loadChatMediaBytesWithFallback(
+        previewPayload: _previewPayload,
+        originalPayload: widget.payload,
+      );
+    } else {
+      _bytesFuture = null;
+    }
+    // Prevent stale async updates if bind called again quickly.
+    if (gen != _loadGeneration) return;
   }
 
   Future<void> _openPreview() async {
@@ -80,20 +99,13 @@ class _ChatAuthImageBubbleState extends State<ChatAuthImageBubble> {
   Widget build(BuildContext context) {
     final publicUrl = _publicUrl;
     if (publicUrl != null) {
-      // 公网图：固定比例缩略框 + cover 填充，避免两侧留白导致"错位/偏移"。
-      return GestureDetector(
+      return _ChatInlineImage(
+        url: publicUrl,
+        isGif: _isGif,
+        mine: widget.mine,
         onTap: _openPreview,
-        child: _thumbWithOverlay(
-          ClipRRect(
-            borderRadius: BorderRadius.circular(12),
-            child: buildCorsSafeImage(
-              url: publicUrl,
-              width: _maxThumbWidth,
-              height: _coverThumbHeight,
-              fit: BoxFit.cover,
-            ),
-          ),
-        ),
+        error: () => _errorBubble(),
+        placeholder: () => _isGif ? _gifPlaceholder() : _staticPlaceholder(),
       );
     }
 
@@ -104,52 +116,87 @@ class _ChatAuthImageBubbleState extends State<ChatAuthImageBubble> {
       future: future,
       builder: (_, snap) {
         if (snap.connectionState != ConnectionState.done) {
-          return _placeholder(
-            child: const SizedBox(
-              width: 22,
-              height: 22,
-              child: CircularProgressIndicator(strokeWidth: 2, color: DunesColors.text3),
-            ),
-          );
+          return _isGif ? _gifPlaceholder() : _staticPlaceholder();
         }
         if (snap.hasError || snap.data == null || snap.data!.isEmpty) {
           return _errorBubble();
         }
-        final bytes = snap.data!;
-        // 私有图：按图片真实比例自适应（最大 240×280），气泡紧贴图片，
-        // 不再被强制撑成固定宽度而出现向左偏移的留白。
-        return GestureDetector(
+        return _ChatInlineImage(
+          bytes: snap.data!,
+          isGif: _isGif,
+          mine: widget.mine,
           onTap: _openPreview,
-          child: _thumbWithOverlay(
-            ConstrainedBox(
-              constraints: const BoxConstraints(
-                maxWidth: _maxThumbWidth,
-                maxHeight: _maxThumbHeight,
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: Image.memory(
-                  bytes,
-                  fit: BoxFit.contain,
-                  gaplessPlayback: true,
-                ),
-              ),
-            ),
-          ),
+          error: () => _errorBubble(),
+          placeholder: () => _isGif ? _gifPlaceholder() : _staticPlaceholder(),
         );
       },
     );
   }
 
-  Widget _errorBubble() => ChatTextBubble(
-        text: widget.bodyFallback.isEmpty ? '[图片加载失败]' : widget.bodyFallback,
-        mine: widget.mine,
-      );
+  Widget _errorBubble() {
+    return GestureDetector(
+      onTap: () => setState(_bindMedia),
+      child: _placeholder(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.image_outlined,
+              size: 28,
+              color: widget.mine ? Colors.white70 : DunesColors.text3,
+            ),
+            const SizedBox(height: 6),
+            Text(
+              '[图片]',
+              style: DunesTypography.sans(
+                fontSize: 13,
+                color: widget.mine ? Colors.white : DunesColors.text2,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              '点击重试',
+              style: DunesTypography.sans(
+                fontSize: 11,
+                color: widget.mine ? Colors.white60 : DunesColors.text3,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
-  Widget _placeholder({required Widget child}) {
+  Widget _staticPlaceholder() {
+    final box = chatImageBubbleMaxSize(context);
+    return _placeholder(
+      width: box.width,
+      height: box.width * 0.72,
+      child: const SizedBox(
+        width: 20,
+        height: 20,
+        child: CircularProgressIndicator(strokeWidth: 2, color: DunesColors.text3),
+      ),
+    );
+  }
+
+  Widget _gifPlaceholder() {
+    final box = chatImageBubbleMaxSize(context);
+    return _placeholder(
+      width: box.width * 0.72,
+      height: box.width * 0.54,
+      child: const SizedBox(
+        width: 20,
+        height: 20,
+        child: CircularProgressIndicator(strokeWidth: 2, color: DunesColors.text3),
+      ),
+    );
+  }
+
+  Widget _placeholder({required Widget child, double width = 120, double height = 90}) {
     return Container(
-      width: 160,
-      height: 120,
+      width: width,
+      height: height,
       alignment: Alignment.center,
       decoration: BoxDecoration(
         color: widget.mine ? const Color(0x33FFFFFF) : DunesColors.bgSoft,
@@ -159,34 +206,86 @@ class _ChatAuthImageBubbleState extends State<ChatAuthImageBubble> {
       child: child,
     );
   }
+}
 
-  Widget _thumbWithOverlay(Widget image) {
-    return Stack(
-      children: [
-        image,
-        Positioned(
-          right: 8,
-          bottom: 8,
-          child: Material(
-            color: Colors.black45,
-            borderRadius: BorderRadius.circular(14),
-            child: const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.open_in_full, size: 12, color: Colors.white),
-                  SizedBox(width: 4),
-                  Text(
-                    '查看原图',
-                    style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w500),
-                  ),
-                ],
-              ),
-            ),
+/// 会话内图片：解析原图比例后在气泡框内完整展示（BoxFit.contain 语义）。
+class _ChatInlineImage extends StatefulWidget {
+  const _ChatInlineImage({
+    required this.isGif,
+    required this.mine,
+    required this.onTap,
+    required this.error,
+    required this.placeholder,
+    this.url,
+    this.bytes,
+  });
+
+  final String? url;
+  final Uint8List? bytes;
+  final bool isGif;
+  final bool mine;
+  final VoidCallback onTap;
+  final Widget Function() error;
+  final Widget Function() placeholder;
+
+  @override
+  State<_ChatInlineImage> createState() => _ChatInlineImageState();
+}
+
+class _ChatInlineImageState extends State<_ChatInlineImage> {
+  Size get _maxBox => chatImageBubbleMaxSize(context);
+
+  @override
+  Widget build(BuildContext context) {
+    final box = _maxBox;
+    final bytes = widget.bytes;
+    final url = widget.url;
+
+    Widget image;
+    if (bytes != null) {
+      image = Image.memory(
+        bytes,
+        fit: BoxFit.contain,
+        gaplessPlayback: true,
+        errorBuilder: (_, _, _) => widget.error(),
+      );
+    } else if (url != null) {
+      // Web 上公网图走 CORS-safe 通道；其余平台用 Image.network（自带缓存与自适应尺寸）。
+      if (kIsWeb) {
+        image = buildCorsSafeImage(
+          url: url,
+          width: box.width,
+          height: box.width * 0.72,
+          fit: BoxFit.contain,
+        );
+      } else {
+        image = Image.network(
+          url,
+          fit: BoxFit.contain,
+          gaplessPlayback: true,
+          loadingBuilder: (ctx, child, progress) {
+            if (progress == null) return child;
+            return widget.placeholder();
+          },
+          errorBuilder: (_, _, _) => widget.error(),
+        );
+      }
+    } else {
+      return widget.error();
+    }
+
+    return GestureDetector(
+      onTap: widget.onTap,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxWidth: box.width,
+            maxHeight: box.height,
           ),
+          child: image,
         ),
-      ],
+      ),
     );
   }
 }

@@ -10,9 +10,12 @@ import 'package:permission_handler/permission_handler.dart';
 import '../../core/theme/dunes_theme.dart';
 import '../../core/util/friendly_error.dart';
 import '../../core/util/native_permissions.dart';
+import '../../core/widgets/cached_network_image.dart';
 import '../auth/auth_session.dart';
 import '../chat/native_audio_recorder.dart';
 import '../chat/chat_widgets.dart';
+import '../meeting/meeting_live_controller.dart';
+import '../conversation/conversation_service.dart';
 import '../shell/dunes_toast.dart';
 import 'native_nova_service.dart';
 import 'nova_background_coordinator.dart';
@@ -49,8 +52,9 @@ class NativeNovaPage extends StatefulWidget {
   State<NativeNovaPage> createState() => _NativeNovaPageState();
 }
 
-class _NativeNovaPageState extends State<NativeNovaPage> {
+class _NativeNovaPageState extends State<NativeNovaPage> with WidgetsBindingObserver {
   late final NativeNovaService _service;
+  late final ConversationService _avatarService;
   late final NovaMediaResolver _mediaResolver;
   final ImagePicker _imagePicker = ImagePicker();
   final TextEditingController _inputController = TextEditingController();
@@ -82,7 +86,10 @@ class _NativeNovaPageState extends State<NativeNovaPage> {
   List<NovaDraftAttachment> _drafts = const <NovaDraftAttachment>[];
   int _draftSeq = 0;
   String _userAvatarPreset = '';
+  String _userAvatarObjectKey = '';
   String _userAvatarUrl = '';
+  String _userAvatarSignature = '';
+  int _userAvatarRefreshVersion = 0;
 
   String get _userName => (widget.session.displayName ?? '').trim().isNotEmpty
       ? widget.session.displayName!.trim()
@@ -97,10 +104,21 @@ class _NativeNovaPageState extends State<NativeNovaPage> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _service = NovaBackgroundCoordinator.instance.serviceFor(widget.session);
+    _avatarService = ConversationService(session: widget.session);
     _mediaResolver = NovaMediaResolver(widget.session, service: _service);
     _inputFocusNode.addListener(_onInputFocusChanged);
+    userAvatarRefresh.addListener(_onSelfAvatarUpdated);
     _load();
+    MeetingLiveController.instance.active.addListener(_onMeetingLiveActiveChanged);
+  }
+
+  void _onMeetingLiveActiveChanged() {
+    if (!MeetingLiveController.instance.isActive || !_voiceMode || !mounted) {
+      return;
+    }
+    setState(() => _voiceMode = false);
   }
 
   @override
@@ -123,11 +141,16 @@ class _NativeNovaPageState extends State<NativeNovaPage> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    userAvatarRefresh.removeListener(_onSelfAvatarUpdated);
+    MeetingLiveController.instance.active.removeListener(_onMeetingLiveActiveChanged);
     _streamDraftTimer?.cancel();
     _genPollTimer?.cancel();
     _recordTicker?.cancel();
     unawaited(_flushOnLeave());
-    unawaited(NativeAudioRecorder.instance.cancel());
+    if (_recording) {
+      unawaited(NativeAudioRecorder.instance.cancel());
+    }
     _inputFocusNode.removeListener(_onInputFocusChanged);
     _inputFocusNode.dispose();
     _inputController.dispose();
@@ -152,14 +175,215 @@ class _NativeNovaPageState extends State<NativeNovaPage> {
   }
 
   Future<void> _loadUserAvatar() async {
+    final cached = userAvatarRefresh.snapshotFor(widget.session.userId);
+    if (cached != null && mounted) {
+      _applyAvatarSnapshot(cached);
+    }
     try {
       final avatar = await _service.fetchCurrentUserAvatar();
       if (!mounted) return;
-      setState(() {
-        _userAvatarPreset = avatar.avatarPreset;
-        _userAvatarUrl = avatar.avatarUrl;
-      });
+      final snapshot = UserAvatarSnapshot(
+        userId: widget.session.userId,
+        avatarPreset: avatar.avatarPreset,
+        avatarObjectKey: avatar.avatarObjectKey,
+        avatarUrl: avatar.avatarUrl,
+      );
+      userAvatarRefresh.remember(snapshot);
+      _applyAvatarSnapshot(snapshot);
     } catch (_) {}
+  }
+
+  void _onSelfAvatarUpdated() {
+    final snap = userAvatarRefresh.snapshotFor(widget.session.userId);
+    if (snap == null || !mounted) return;
+    _applyAvatarSnapshot(snap, forceRefresh: true);
+  }
+
+  void _applyAvatarSnapshot(
+    UserAvatarSnapshot snap, {
+    bool forceRefresh = false,
+  }) {
+    var url = snap.avatarUrl.trim();
+    final objectKey = snap.avatarObjectKey.trim();
+    if (url.isEmpty && objectKey.isNotEmpty) {
+      url = _avatarService.mediaProxyUrl(objectKey, bucket: 'user-avatars');
+    }
+    final signature = snap.sourceSignature;
+    if (forceRefresh || signature != _userAvatarSignature) {
+      _userAvatarRefreshVersion += 1;
+    }
+    if (url.isNotEmpty) {
+      url = _withAvatarRefreshToken(url, _userAvatarRefreshVersion);
+    }
+    setState(() {
+      _userAvatarPreset = snap.avatarPreset;
+      _userAvatarObjectKey = objectKey;
+      _userAvatarUrl = url;
+      _userAvatarSignature = signature;
+    });
+  }
+
+  String _withAvatarRefreshToken(String url, int version) {
+    if (url.isEmpty) return url;
+    final sep = url.contains('?') ? '&' : '?';
+    return '$url${sep}dunes_avatar_v=$version';
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.hidden) {
+      unawaited(_flushOnAppBackground());
+      return;
+    }
+    if (state != AppLifecycleState.resumed) return;
+    unawaited(_onAppResumed());
+  }
+
+  Future<void> _flushOnAppBackground() async {
+    if (_conversationId <= 0) return;
+    final stopped = _service.userStoppedStream || _isStoppedStatus(_busyHint);
+    if (stopped) return;
+    final active =
+        _sending || _serverGenerating || _hasActiveAssistantStream() || _service.isStreamInFlight;
+    if (!active) return;
+
+    final status = _busyHint.isNotEmpty ? _busyHint : kNovaInputBusyHint;
+    if (_genAfterMessageId <= 0) {
+      final user = _messages.cast<NativeNovaMessage?>().lastWhere(
+            (m) => m?.role == 'user',
+            orElse: () => null,
+          );
+      if (user != null && user.id > 0) _genAfterMessageId = user.id;
+    }
+    await _markGenerating(status: status, afterMessageId: _genAfterMessageId);
+    final assistant = _messages.cast<NativeNovaMessage?>().lastWhere(
+          (m) => m?.role == 'assistant' && (m?.streaming ?? false),
+          orElse: () => null,
+        );
+    if (assistant != null) {
+      await persistNovaStreamDraftState(
+        userId: widget.session.userId,
+        conversationId: _conversationId,
+        status: status,
+        afterMessageId: _genAfterMessageId,
+        userText: _lastUserDisplayText,
+        thinkText: assistant.thinkText,
+        text: assistant.text,
+        streaming: assistant.streaming,
+      );
+    } else if (_lastUserDisplayText.trim().isNotEmpty) {
+      await persistNovaStreamDraftState(
+        userId: widget.session.userId,
+        conversationId: _conversationId,
+        status: status,
+        afterMessageId: _genAfterMessageId,
+        userText: _lastUserDisplayText,
+        streaming: true,
+      );
+    }
+    NovaBackgroundCoordinator.instance.ensurePoll(
+      widget.session,
+      conversationId: _conversationId,
+    );
+  }
+
+  Future<void> _onAppResumed() async {
+    if (!mounted || _conversationId <= 0) return;
+    final storage = await NovaWebStorage.load(widget.session.userId);
+    final draft = readNovaStreamDraftFromStorage(storage, _conversationId);
+    final localGen = readNovaGeneratingFromStorage(
+      storage,
+      convId: _conversationId,
+      activeConvId: _conversationId,
+    );
+    final hadActiveGeneration = _isGenerating || _service.isStreamInFlight;
+    final draftRecoverable =
+        draft != null && novaStreamDraftHasContent(draft) && !_hasAiReplyAfter(_messages, draft.afterMessageId);
+
+    if (!hadActiveGeneration && !draftRecoverable && localGen == null) return;
+
+    try {
+      final history = await _service.fetchFullHistory(_conversationId);
+      if (!mounted) return;
+      final resolved = _resolveGeneratingState(
+        msgs: history.messages,
+        serverGenerating: history.assistantGenerating,
+        generatingStatus: history.generatingStatus,
+        generatingAfter: history.generatingAfterMessageId,
+        localGen: localGen,
+        draft: draft,
+      );
+      var generating = resolved.generating;
+      if (!generating && draftRecoverable) {
+        generating = true;
+      }
+      if (generating) {
+        NovaBackgroundCoordinator.instance.ensurePoll(
+          widget.session,
+          conversationId: _conversationId,
+        );
+        _startGeneratingPoll();
+      }
+      setState(() {
+        _genAfterMessageId = resolved.afterMessageId > 0
+            ? resolved.afterMessageId
+            : (draft?.afterMessageId ?? _genAfterMessageId);
+        _messages = _mergeGeneratingAndDraft(
+          rows: _withWelcome(history.messages),
+          generating: generating,
+          status: resolved.status.isNotEmpty
+              ? resolved.status
+              : (draft?.status ?? kNovaInputBusyHint),
+          afterMessageId: _genAfterMessageId,
+          draft: draft,
+        );
+        _serverGenerating = generating;
+        _sending = generating;
+        _busyHint = generating
+            ? (resolved.status.isNotEmpty
+                ? resolved.status
+                : (draft?.status ?? kNovaInputBusyHint))
+            : '';
+      });
+      if (generating) {
+        if (_service.isStreamInFlight) {
+          _startStreamDraftWatcher();
+        } else {
+          unawaited(_pollGenerating());
+        }
+      } else if (draftRecoverable) {
+        final msgs = await _recoverMessagesIfNeeded(
+          _withWelcome(history.messages),
+          draft: draft,
+        );
+        if (!mounted) return;
+        setState(() => _messages = msgs);
+      }
+    } catch (_) {
+      if (!mounted || !draftRecoverable || draft == null) return;
+      final recoverDraft = draft;
+      setState(() {
+        _messages = _mergeGeneratingAndDraft(
+          rows: _messages,
+          generating: true,
+          status: recoverDraft.status.isNotEmpty
+              ? recoverDraft.status
+              : kNovaInputBusyHint,
+          afterMessageId: recoverDraft.afterMessageId > 0
+              ? recoverDraft.afterMessageId
+              : _genAfterMessageId,
+          draft: recoverDraft,
+        );
+        _serverGenerating = true;
+        _sending = true;
+        _busyHint = recoverDraft.status.isNotEmpty
+            ? recoverDraft.status
+            : kNovaInputBusyHint;
+      });
+      _startGeneratingPoll();
+    }
   }
 
   Future<void> _loadModels() async {
@@ -169,10 +393,16 @@ class _NativeNovaPageState extends State<NativeNovaPage> {
         token: widget.session.token,
       );
       if (!mounted) return;
-      final stored = widget.session.novaLocalStorage?['dunes_nova_chat_model']?.trim();
-      final selected = (stored != null && stored.isNotEmpty && payload.chatModels.contains(stored))
-          ? stored
-          : payload.defaultModel;
+      final uid = widget.session.userId;
+      final webStorage =
+          uid > 0 ? await NovaWebStorage.load(uid) : const <String, String>{};
+      final stored = (webStorage['dunes_nova_chat_model'] ??
+              widget.session.novaLocalStorage?['dunes_nova_chat_model'])
+          ?.trim();
+      final selected =
+          (stored != null && stored.isNotEmpty && payload.chatModels.contains(stored))
+              ? stored
+              : payload.defaultModel;
       _service.setSelectedChatModel(selected);
       setState(() {
         _chatModels = payload.chatModels;
@@ -318,7 +548,9 @@ class _NativeNovaPageState extends State<NativeNovaPage> {
         NovaBackgroundCoordinator.instance.stopPoll();
         _startGeneratingPoll();
         unawaited(_pollGenerating());
-        if (_service.isStreamInFlight) _startStreamDraftWatcher();
+        if (_service.isStreamInFlight || streamDraft != null) {
+          _startStreamDraftWatcher();
+        }
       }
       final focusId = widget.focusMessageId;
       if (focusId != null && focusId > 0) {
@@ -392,6 +624,13 @@ class _NativeNovaPageState extends State<NativeNovaPage> {
       }
       if (!clearLocal && after <= 0) after = afterId;
       }
+    } else if (!generating &&
+        draft != null &&
+        novaStreamDraftHasContent(draft) &&
+        !_hasAiReplyAfter(msgs, draft.afterMessageId)) {
+      generating = true;
+      status = draft.status;
+      after = draft.afterMessageId;
     }
 
     return (
@@ -449,7 +688,41 @@ class _NativeNovaPageState extends State<NativeNovaPage> {
       }
     }
 
-    if (!generating) return _finalizeMergedMessages(out, repair: true);
+    if (!generating) {
+      if (draft != null &&
+          novaStreamDraftHasContent(draft) &&
+          effectiveAfter > 0 &&
+          !_hasAiReplyAfter(out, effectiveAfter)) {
+        final draftText = draft.text;
+        final draftThink = draft.thinkText;
+        final draftStatus = draft.status.trim();
+        final thinkStatus = draftStatus.isNotEmpty ? draftStatus : '正在生成…';
+        final streamingIdx = out.indexWhere((m) => m.role == 'assistant' && m.streaming);
+        if (streamingIdx >= 0) {
+          final current = out[streamingIdx];
+          out[streamingIdx] = current.copyWith(
+            text: draftText.isNotEmpty ? draftText : current.text,
+            thinkText: draftThink.isNotEmpty ? draftThink : current.thinkText,
+            thinkStatus: thinkStatus,
+            streaming: draft.streaming,
+          );
+        } else {
+          out.add(
+            NativeNovaMessage(
+              id: draft.text.isNotEmpty ? effectiveAfter + 1 : DateTime.now().millisecondsSinceEpoch + 1,
+              role: 'assistant',
+              text: draftText,
+              thinkText: draftThink,
+              createdAt: DateTime.now(),
+              streaming: draft.streaming,
+              thinkStatus: thinkStatus,
+              kind: 'AI_ASSISTANT',
+            ),
+          );
+        }
+      }
+      return _finalizeMergedMessages(out, repair: true);
+    }
 
     final draftText = draft?.text ?? '';
     final draftThink = draft?.thinkText ?? '';
@@ -867,13 +1140,22 @@ class _NativeNovaPageState extends State<NativeNovaPage> {
 
   Future<void> _syncStreamDraftFromStorage() async {
     if (!mounted || _conversationId <= 0) return;
-    if (!_service.isStreamInFlight) {
+    final storage = await NovaWebStorage.load(widget.session.userId);
+    final draft = readNovaStreamDraftFromStorage(storage, _conversationId);
+    if (draft == null || !novaStreamDraftHasContent(draft)) {
+      if (!_service.isStreamInFlight && !_serverGenerating) {
+        _stopStreamDraftWatcher();
+      }
+      return;
+    }
+    final after = draft.afterMessageId > 0 ? draft.afterMessageId : _genAfterMessageId;
+    if (!_service.isStreamInFlight &&
+        !_serverGenerating &&
+        after > 0 &&
+        _hasAiReplyAfter(_messages, after)) {
       _stopStreamDraftWatcher();
       return;
     }
-    final storage = await NovaWebStorage.load(widget.session.userId);
-    final draft = readNovaStreamDraftFromStorage(storage, _conversationId);
-    if (draft == null || !novaStreamDraftHasContent(draft)) return;
     setState(() {
       _busyHint = draft.status.isNotEmpty ? draft.status : kNovaInputBusyHint;
       _messages = _mergeGeneratingAndDraft(
@@ -882,7 +1164,7 @@ class _NativeNovaPageState extends State<NativeNovaPage> {
         ),
         generating: true,
         status: draft.status,
-        afterMessageId: draft.afterMessageId > 0 ? draft.afterMessageId : _genAfterMessageId,
+        afterMessageId: after,
         draft: draft,
       );
     });
@@ -1413,6 +1695,32 @@ class _NativeNovaPageState extends State<NativeNovaPage> {
           await _clearGeneratingMarkers();
           await _service.stripStreamingFromSession(convId);
         }
+      } else if (mounted && convId > 0) {
+        final storage = await NovaWebStorage.load(widget.session.userId);
+        final draft = readNovaStreamDraftFromStorage(storage, convId);
+        if (draft != null && novaStreamDraftHasContent(draft)) {
+          setState(() {
+            _messages = _mergeGeneratingAndDraft(
+              rows: _messages,
+              generating: true,
+              status: draft.status.isNotEmpty ? draft.status : kNovaInputBusyHint,
+              afterMessageId:
+                  draft.afterMessageId > 0 ? draft.afterMessageId : _genAfterMessageId,
+              draft: draft,
+            );
+            _serverGenerating = true;
+            _sending = true;
+            _busyHint = draft.status.isNotEmpty ? draft.status : kNovaInputBusyHint;
+          });
+          _startGeneratingPoll();
+          NovaBackgroundCoordinator.instance.ensurePoll(
+            widget.session,
+            conversationId: convId,
+          );
+        } else {
+          setState(() => _banner = NativeNovaService.friendlyError(e));
+          _releaseGeneratingUi();
+        }
       } else {
         if (mounted) {
           setState(() => _banner = NativeNovaService.friendlyError(e));
@@ -1528,6 +1836,10 @@ class _NativeNovaPageState extends State<NativeNovaPage> {
 
   Future<void> _startHoldRecord() async {
     if (_sending || _recording || !_novaReady) return;
+    if (MeetingLiveController.instance.isActive) {
+      _toast('会议录音进行中，暂无法发送语音');
+      return;
+    }
     if (!NativeAudioRecorder.isSupported) {
       _toast('当前环境不支持录音');
       return;
@@ -1558,6 +1870,10 @@ class _NativeNovaPageState extends State<NativeNovaPage> {
         }
       });
     } catch (e) {
+      if (e is NativeAudioRecorderBusyException) {
+        _toast(e.message);
+        return;
+      }
       _toast('录音启动失败：${friendlyErrorText(e)}');
     }
   }
@@ -1670,7 +1986,7 @@ class _NativeNovaPageState extends State<NativeNovaPage> {
       selected: _selectedModel,
       modelCatalog: _modelCatalog,
       onPick: (id) {
-        _service.setSelectedChatModel(id);
+        _service.setSelectedChatModel(id, persist: true);
         setState(() => _selectedModel = id);
       },
     );
@@ -1750,26 +2066,40 @@ class _NativeNovaPageState extends State<NativeNovaPage> {
               onAlbum: _pickAlbum,
               onNewChat: _startNewChat,
             ),
-            ChatInputBar(
-              controller: _inputController,
-              focusNode: _inputFocusNode,
-              onInputFocused: _scrollToLatestAfterKeyboard,
-              voiceMode: _voiceMode,
-              sending: _sending,
-              enabled: inputEnabled,
-              hintText: inputHint,
-              onToggleVoice: () => setState(() => _voiceMode = !_voiceMode),
-              onSend: _submitInput,
-              onStop: _stopGeneration,
-              onEmoji: inputEnabled ? _pickFile : null,
-              secondaryIcon: Icons.attach_file,
-              recording: _recording,
-              recordWillCancel: _recordWillCancel,
-              recordDurationMs: _recordDurationMs,
-              onVoiceHoldStart: (_) => _startHoldRecord(),
-              onVoiceHoldMove: _onRecordMove,
-              onVoiceHoldEnd: (_) => _finishHoldRecord(),
-              onVoiceHoldCancel: () => _cancelHoldRecord(showHint: false),
+            ValueListenableBuilder<bool>(
+              valueListenable: MeetingLiveController.instance.active,
+              builder: (context, meetingLive, _) {
+                final voiceBlocked = !inputEnabled || meetingLive;
+                final effectiveVoiceMode = voiceBlocked ? false : _voiceMode;
+                return ChatInputBar(
+                  controller: _inputController,
+                  focusNode: _inputFocusNode,
+                  onInputFocused: _scrollToLatestAfterKeyboard,
+                  voiceMode: effectiveVoiceMode,
+                  sending: _sending,
+                  enabled: inputEnabled,
+                  hintText: inputHint,
+                  onToggleVoice: voiceBlocked
+                      ? () {
+                          if (meetingLive) {
+                            _toast('会议录音进行中，暂无法发送语音');
+                          }
+                        }
+                      : () => setState(() => _voiceMode = !_voiceMode),
+                  onSend: _submitInput,
+                  onStop: _stopGeneration,
+                  onEmoji: inputEnabled ? _pickFile : null,
+                  secondaryIcon: Icons.attach_file,
+                  recording: _recording,
+                  recordWillCancel: _recordWillCancel,
+                  recordDurationMs: _recordDurationMs,
+                  onVoiceHoldStart:
+                      voiceBlocked ? null : (_) => _startHoldRecord(),
+                  onVoiceHoldMove: _onRecordMove,
+                  onVoiceHoldEnd: (_) => _finishHoldRecord(),
+                  onVoiceHoldCancel: () => _cancelHoldRecord(showHint: false),
+                );
+              },
             ),
           ],
         ),
@@ -1814,7 +2144,9 @@ class _NativeNovaPageState extends State<NativeNovaPage> {
         userInitial: _userInitial,
         userSeed: widget.session.userId,
         userAvatarPreset: _userAvatarPreset,
+        userAvatarObjectKey: _userAvatarObjectKey,
         userAvatarUrl: _userAvatarUrl,
+        avatarService: _avatarService,
         thinking: thinking,
         showAiBadge: true,
         thinkText: m.thinkText,

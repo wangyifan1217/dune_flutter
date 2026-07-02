@@ -30,13 +30,15 @@ class MeetingLiveController {
       ValueNotifier<List<String>>(const <String>[]);
   final ValueNotifier<String> partial = ValueNotifier<String>('');
   final ValueNotifier<String?> recordedFilePath = ValueNotifier<String?>(null);
+  final ValueNotifier<String> meetingTitle = ValueNotifier<String>('');
 
   final List<String> _lines = <String>[];
 
   bool get isActive => active.value;
 
-  Future<void> start(AuthSession session) async {
+  Future<void> start(AuthSession session, {required String title}) async {
     if (active.value) return;
+    meetingTitle.value = title.trim();
     _realtime ??= NativeMeetingRealtimeTranscript(session: session);
     _rtSub ??= _realtime!.updates.listen(_onUpdate);
     _lines.clear();
@@ -53,17 +55,20 @@ class MeetingLiveController {
     await _recording.start();
     paused.value = false;
     active.value = true;
+    NativeAudioRecorder.isStartBlocked = () => active.value;
   }
 
   Future<void> pause() async {
-    if (!active.value) return;
+    if (!active.value || paused.value) return;
+    await _recording.pause();
     await _realtime?.pause();
     paused.value = true;
     partial.value = '';
   }
 
   Future<void> resume() async {
-    if (!active.value) return;
+    if (!active.value || !paused.value) return;
+    await _recording.resume();
     await _realtime?.resume();
     paused.value = false;
   }
@@ -84,16 +89,25 @@ class MeetingLiveController {
     } catch (_) {}
     active.value = false;
     paused.value = false;
-    partial.value = '';
+    NativeAudioRecorder.isStartBlocked = null;
+    clearPreview();
     if (path != null && path.isNotEmpty) {
       recordedFilePath.value = path;
     }
     return path;
   }
 
+  /// 清空实时转写预览（新会话或录音结束后调用）。
+  void clearPreview() {
+    _lines.clear();
+    lines.value = const <String>[];
+    partial.value = '';
+  }
+
   /// 页面消费掉「已保存文件」后调用，避免重复回填。
   void consumeRecordedFile() {
     recordedFilePath.value = null;
+    meetingTitle.value = '';
   }
 
   void _onUpdate(RealtimeTranscriptUpdate update) {

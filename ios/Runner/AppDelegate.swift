@@ -13,8 +13,11 @@ import UserNotifications
   private var pcmFileHandle: FileHandle?
   private var pcmPath: String?
   private var recordStartedAt: Date?
+  private var activeSegmentStartedAt: Date?
+  private var accumulatedDurationMs: Int = 0
   private var outputPath: String?
   private var isRecording = false
+  private var isPaused = false
   private var streamSink: FlutterEventSink?
   private let streamLock = NSLock()
   private var tpnsBridge: TpnsPushBridge?
@@ -54,12 +57,19 @@ import UserNotifications
       switch call.method {
       case "start":
         self.startRecord(result: result)
+      case "pause":
+        self.pauseRecord(result: result)
+      case "resume":
+        self.resumeRecord(result: result)
       case "stop":
         self.stopRecord(result: result, deleteFile: false)
       case "cancel":
         self.stopRecord(result: result, deleteFile: true)
       case "status":
-        result(["isRecording": self.isRecording])
+        result([
+          "isRecording": self.isRecording,
+          "isPaused": self.isPaused,
+        ])
       default:
         result(FlutterMethodNotImplemented)
       }
@@ -119,7 +129,7 @@ import UserNotifications
   }
 
   private func resumeEngineAfterInterruption() {
-    guard isRecording else { return }
+    guard isRecording, !isPaused else { return }
     do {
       try AVAudioSession.sharedInstance().setActive(true)
       if let engine = audioEngine, !engine.isRunning {
@@ -229,7 +239,10 @@ import UserNotifications
       audioEngine = engine
 
       recordStartedAt = Date()
+      activeSegmentStartedAt = Date()
+      accumulatedDurationMs = 0
       isRecording = true
+      isPaused = false
       result(true)
     } catch {
       stopInternal(deleteFile: true)
@@ -253,13 +266,66 @@ import UserNotifications
     ])
   }
 
+  private func pauseRecord(result: @escaping FlutterResult) {
+    guard isRecording, !isPaused else {
+      result(false)
+      return
+    }
+    accumulatedDurationMs += currentSegmentDurationMs()
+    activeSegmentStartedAt = nil
+    isPaused = true
+    audioEngine?.pause()
+    result(true)
+  }
+
+  private func resumeRecord(result: @escaping FlutterResult) {
+    guard isRecording, isPaused else {
+      result(false)
+      return
+    }
+    do {
+      try AVAudioSession.sharedInstance().setActive(true)
+      if let engine = audioEngine {
+        if !engine.isRunning {
+          try engine.start()
+        }
+      } else {
+        throw NSError(
+          domain: "dunes.audio",
+          code: 1,
+          userInfo: [NSLocalizedDescriptionKey: "audio engine unavailable"]
+        )
+      }
+      isPaused = false
+      activeSegmentStartedAt = Date()
+      result(true)
+    } catch {
+      result(
+        FlutterError(
+          code: "AUDIO_RESUME_FAILED",
+          message: error.localizedDescription,
+          details: nil
+        )
+      )
+    }
+  }
+
+  private func currentSegmentDurationMs() -> Int {
+    guard isRecording, !isPaused, let started = activeSegmentStartedAt else {
+      return 0
+    }
+    return max(0, Int(Date().timeIntervalSince(started) * 1000))
+  }
+
+  private func currentDurationMs() -> Int {
+    return max(0, accumulatedDurationMs + currentSegmentDurationMs())
+  }
+
   @discardableResult
   private func stopInternal(deleteFile: Bool) -> Int {
-    var durationMs = 0
-    if let started = recordStartedAt {
-      durationMs = max(0, Int(Date().timeIntervalSince(started) * 1000))
-    }
+    let durationMs = currentDurationMs()
     isRecording = false
+    isPaused = false
     if let engine = audioEngine {
       engine.inputNode.removeTap(onBus: 0)
       engine.stop()
@@ -272,6 +338,8 @@ import UserNotifications
     streamLock.unlock()
     try? handle?.close()
     recordStartedAt = nil
+    activeSegmentStartedAt = nil
+    accumulatedDurationMs = 0
 
     let localPcmPath = pcmPath
     pcmPath = nil
@@ -299,6 +367,7 @@ import UserNotifications
   }
 
   private func consumeAudioBuffer(_ buffer: AVAudioPCMBuffer) {
+    guard isRecording, !isPaused else { return }
     let resampled: Data?
     if let converter = audioConverter {
       resampled = convertToTargetData(buffer: buffer, converter: converter)

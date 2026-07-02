@@ -112,7 +112,7 @@ class _DunesMainTabBarState extends State<DunesMainTabBar> {
         onTap: onTap ??
             () {
               FocusManager.instance.primaryFocus?.unfocus();
-              widget.navigation.go(screen!);
+              widget.navigation.switchMainTab(screen!);
             },
         child: SizedBox(
           height: 72,

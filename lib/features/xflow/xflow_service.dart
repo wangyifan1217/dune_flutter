@@ -146,14 +146,15 @@ class XflowService {
     return Future.wait(items.map(_enrichP1Item));
   }
 
-  Future<List<XflowTemplateCard>> fetchB3Templates() async {
-    final rows = await _requestList('/xflow/templates?category=biz');
+  Future<List<XflowTemplateCard>> fetchTemplatesByCategory(String category) async {
+    final cat = category.trim().isEmpty ? 'biz' : category.trim();
+    final rows = await _requestList('/xflow/templates?category=$cat');
     final out = <XflowTemplateCard>[];
     for (final row in rows.whereType<Map<String, dynamic>>()) {
       final item = XflowTemplateCard.fromJson(row);
-      if (item.templateKey == salesTemplateKey) out.add(item);
+      if (item.templateKey.isNotEmpty) out.add(item);
     }
-    if (out.isEmpty) {
+    if (cat == 'biz' && out.isEmpty) {
       out.add(
         const XflowTemplateCard(
           templateKey: salesTemplateKey,
@@ -166,6 +167,15 @@ class XflowService {
       );
     }
     return out;
+  }
+
+  Future<List<XflowTemplateCard>> fetchB3Templates() async {
+    final rows = await fetchTemplatesByCategory('biz');
+    final sales = rows
+        .where((item) => item.templateKey == salesTemplateKey)
+        .toList(growable: false);
+    if (sales.isNotEmpty) return sales;
+    return rows;
   }
 
   Future<XflowTemplateDetail> fetchTemplateDetail({

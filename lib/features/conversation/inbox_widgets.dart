@@ -229,6 +229,11 @@ class ChatInboxRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final unreadText = unreadCount > 99 ? '99+' : '$unreadCount';
+    final unreadColor =
+        kind == ChatInboxRowKind.private || kind == ChatInboxRowKind.aiAssistant
+        ? const Color(0xFF7B5CD8)
+        : DunesColors.coral;
     return Column(
       children: [
         Material(
@@ -243,23 +248,38 @@ class ChatInboxRow extends StatelessWidget {
                   SizedBox(
                     width: 44,
                     height: 44,
-                    child: RepaintBoundary(
-                      child: OverflowBox(
-                        alignment: Alignment.center,
-                        maxWidth: 50,
-                        maxHeight: 50,
-                        child: _Avatar(
-                          kind: kind,
-                          initial: avatarInitial,
-                          seed: avatarSeed,
-                          showOnlineDot: showOnlineDot,
-                          avatarPreset: avatarPreset,
-                          avatarObjectKey: avatarObjectKey,
-                          avatarUrl: avatarUrl,
-                          avatarService: avatarService,
-                          groupAvatarMembers: groupAvatarMembers,
+                    child: Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        RepaintBoundary(
+                          child: OverflowBox(
+                            alignment: Alignment.center,
+                            maxWidth: 50,
+                            maxHeight: 50,
+                            child: _Avatar(
+                              kind: kind,
+                              initial: avatarInitial,
+                              seed: avatarSeed,
+                              showOnlineDot: showOnlineDot,
+                              avatarPreset: avatarPreset,
+                              avatarObjectKey: avatarObjectKey,
+                              avatarUrl: avatarUrl,
+                              avatarService: avatarService,
+                              groupAvatarMembers: groupAvatarMembers,
+                            ),
+                          ),
                         ),
-                      ),
+                        if (unreadCount > 0)
+                          Positioned(
+                            right: -4,
+                            top: -5,
+                            child: _UnreadBadge(
+                              text: unreadText,
+                              color: unreadColor,
+                              mini: true,
+                            ),
+                          ),
+                      ],
                     ),
                   ),
                   const SizedBox(width: 11),
@@ -347,22 +367,17 @@ class ChatInboxRow extends StatelessWidget {
                       ],
                     ),
                   ),
-                  if (unreadCount > 0 || muted)
+                  if (muted)
                     Padding(
                       padding: const EdgeInsets.only(left: 8),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.end,
                         children: [
-                          if (muted)
-                            const Icon(Icons.notifications_off_outlined, size: 14, color: DunesColors.text3),
-                          if (unreadCount > 0)
-                            _UnreadBadge(
-                              text: unreadCount > 99 ? '99+' : '$unreadCount',
-                              color: kind == ChatInboxRowKind.private ||
-                                      kind == ChatInboxRowKind.aiAssistant
-                                  ? const Color(0xFF7B5CD8)
-                                  : DunesColors.coral,
-                            ),
+                          const Icon(
+                            Icons.notifications_off_outlined,
+                            size: 14,
+                            color: DunesColors.text3,
+                          ),
                         ],
                       ),
                     ),
@@ -385,35 +400,44 @@ class _UnreadBadge extends StatelessWidget {
   const _UnreadBadge({
     required this.text,
     required this.color,
+    this.mini = false,
   });
 
   final String text;
   final Color color;
+  final bool mini;
 
   @override
   Widget build(BuildContext context) {
     final isSingle = text.length == 1;
     return Container(
-      margin: const EdgeInsets.only(top: 4),
+      margin: mini ? EdgeInsets.zero : const EdgeInsets.only(top: 4),
       constraints: BoxConstraints(
-        minWidth: isSingle ? 24 : 26,
-        minHeight: 24,
+        minWidth: mini
+            ? (isSingle ? 16 : 20)
+            : (isSingle ? 24 : 26),
+        minHeight: mini ? 16 : 24,
       ),
       padding: EdgeInsets.symmetric(
-        horizontal: isSingle ? 0 : 8,
+        horizontal: mini
+            ? (isSingle ? 0 : 5)
+            : (isSingle ? 0 : 8),
         vertical: 0,
       ),
       alignment: Alignment.center,
       decoration: BoxDecoration(
         color: color,
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.9), width: 1.5),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.9),
+          width: mini ? 1.0 : 1.5,
+        ),
         boxShadow: [
           BoxShadow(
             color: color.withValues(alpha: 0.22),
-            blurRadius: 12,
+            blurRadius: mini ? 8 : 12,
             spreadRadius: 0,
-            offset: const Offset(0, 3),
+            offset: Offset(0, mini ? 2 : 3),
           ),
         ],
       ),
@@ -421,10 +445,10 @@ class _UnreadBadge extends StatelessWidget {
         text,
         textAlign: TextAlign.center,
         style: DunesTypography.sans(
-          fontSize: 11,
+          fontSize: mini ? 9 : 11,
           color: Colors.white,
           fontWeight: FontWeight.w700,
-          letterSpacing: -0.02 * 11,
+          letterSpacing: mini ? 0 : -0.02 * 11,
           height: 1,
         ),
       ),

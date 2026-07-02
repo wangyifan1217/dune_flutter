@@ -407,6 +407,27 @@ class ConversationService {
     }
   }
 
+  Future<void> sendMessageRaw({
+    required int conversationId,
+    required String kind,
+    required String bodyText,
+    Map<String, dynamic>? payload,
+  }) async {
+    final msgKind = kind.trim().isEmpty ? 'TEXT' : kind.trim().toUpperCase();
+    final msgText = bodyText.trim();
+    final msgPayload = payload == null ? null : Map<String, dynamic>.from(payload);
+    if (msgKind == 'TEXT') {
+      await sendText(conversationId, msgText, payload: msgPayload);
+      return;
+    }
+    await _sendAttachment(
+      conversationId: conversationId,
+      kind: msgKind,
+      bodyText: msgText.isEmpty ? '[$msgKind]' : msgText,
+      payload: msgPayload ?? <String, dynamic>{},
+    );
+  }
+
   Future<void> markConversationRead(int conversationId) async {
     final resp = await _client.post(
       _uri('/conversations/$conversationId/read'),
@@ -672,13 +693,44 @@ class ConversationService {
       _uri('/conversations/$conversationId/messages/$messageId/recall'),
       headers: _headers,
     );
+    final body = _decode(resp.body);
     if (resp.statusCode < 200 || resp.statusCode >= 300) {
+      final message = _localizeRecallError(
+        (body['message'] ?? '').toString().trim(),
+      );
+      if (message.isNotEmpty) {
+        throw Exception(message);
+      }
       throw Exception('撤回失败: HTTP ${resp.statusCode}');
     }
-    final body = _decode(resp.body);
     if (body['success'] == false) {
-      throw Exception((body['message'] ?? '撤回失败').toString());
+      final message = _localizeRecallError(
+        (body['message'] ?? '').toString().trim(),
+      );
+      throw Exception(message.isNotEmpty ? message : '撤回失败');
     }
+  }
+
+  String _localizeRecallError(String raw) {
+    final msg = raw.trim();
+    if (msg.isEmpty) return '';
+    final lower = msg.toLowerCase();
+    if (lower.contains('recall window expired')) {
+      return '撤回失败：已超过可撤回时间';
+    }
+    if (lower.contains('already recalled')) {
+      return '撤回失败：该消息已被撤回';
+    }
+    if (lower.contains('only sender can recall')) {
+      return '撤回失败：仅发送者本人可撤回';
+    }
+    if (lower.contains('message not found')) {
+      return '撤回失败：消息不存在或已删除';
+    }
+    if (lower.contains('forbidden')) {
+      return '撤回失败：无权限撤回该消息';
+    }
+    return msg;
   }
 
   Future<List<NativeChatMessage>> searchMessages({
@@ -1225,6 +1277,31 @@ class ConversationService {
         : payloadRaw is Map
         ? Map<String, dynamic>.from(payloadRaw)
         : null;
+    final recalled = raw['recalled'] == true || raw['isRecalled'] == true;
+    final effectiveSenderName = senderName.isEmpty ? '系统' : senderName;
+    if (recalled) {
+      final mine =
+          ((senderMap['userId'] as num?)?.toInt() ??
+              (raw['senderId'] as num?)?.toInt() ??
+              (raw['senderUserId'] as num?)?.toInt() ??
+              0) ==
+          _session.userId;
+      final who = mine ? '你' : effectiveSenderName;
+      return NativeChatMessage(
+        id: (raw['id'] as num?)?.toInt() ?? 0,
+        senderUserId:
+            (senderMap['userId'] as num?)?.toInt() ??
+            (raw['senderId'] as num?)?.toInt() ??
+            (raw['senderUserId'] as num?)?.toInt() ??
+            0,
+        senderName: effectiveSenderName,
+        kind: 'SYSTEM',
+        bodyText: '$who撤回了一条消息',
+        createdAt: DateTime.tryParse((raw['createdAt'] ?? '').toString()),
+        payload: payload,
+        peerRead: raw['peerRead'] == true || raw['isPeerRead'] == true,
+      );
+    }
     return NativeChatMessage(
       id: (raw['id'] as num?)?.toInt() ?? 0,
       senderUserId:
@@ -1232,7 +1309,7 @@ class ConversationService {
           (raw['senderId'] as num?)?.toInt() ??
           (raw['senderUserId'] as num?)?.toInt() ??
           0,
-      senderName: senderName.isEmpty ? '系统' : senderName,
+      senderName: effectiveSenderName,
       kind: (raw['kind'] ?? 'TEXT').toString(),
       bodyText: (raw['bodyText'] ?? '').toString(),
       createdAt: DateTime.tryParse((raw['createdAt'] ?? '').toString()),

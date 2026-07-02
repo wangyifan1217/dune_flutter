@@ -15,7 +15,6 @@ class NativeMeetingService {
   String? _resolvedMeetingBasePath;
   static const List<String> _meetingBasePathCandidates = <String>[
     '/ai/meeting-minutes',
-    '/meeting-beta/ai/meeting-minutes',
   ];
 
   Future<List<NativeMeetingSummary>> fetchList({
@@ -147,6 +146,163 @@ class NativeMeetingService {
     _ensureSuccess(resp);
   }
 
+  Future<void> saveDraftAudio({
+    required int meetingId,
+    required String audioObjectKey,
+    required String audioUrl,
+    required String contentType,
+    required int durationSeconds,
+  }) async {
+    await _attachDraftAudio(
+      meetingId: meetingId,
+      audioObjectKey: audioObjectKey,
+      audioUrl: audioUrl,
+      contentType: contentType,
+      durationSeconds: durationSeconds,
+    );
+  }
+
+  Future<void> _attachDraftAudio({
+    required int meetingId,
+    required String audioObjectKey,
+    required String audioUrl,
+    required String contentType,
+    required int durationSeconds,
+  }) async {
+    final audioPayload = <String, dynamic>{
+      'audioObjectKey': audioObjectKey,
+      'audioUrl': audioUrl,
+      'audioContentType': contentType,
+      'audioDurationSeconds': durationSeconds,
+    };
+    final errors = <String>[];
+
+    Future<bool> tryDraftEndpoint({
+      required String label,
+      required String suffix,
+      required Map<String, dynamic> body,
+    }) async {
+      try {
+        final resp = await _requestMeeting(
+          'POST',
+          suffix,
+          body: jsonEncode(body),
+        );
+        if (resp.statusCode == 404) {
+          errors.add('$label 接口不存在(404)');
+          return false;
+        }
+        _ensureSuccess(resp);
+        final status = _readMeetingStatus(resp.body);
+        if (_isDraftLikeStatus(status)) return true;
+        if (status == 'TRANSCRIBING' || status == 'GENERATING') {
+          errors.add('$label 已开始转写($status)');
+        } else if (status.isNotEmpty) {
+          errors.add('$label 返回状态异常($status)');
+        } else {
+          errors.add('$label 未返回草稿状态');
+        }
+      } on Exception catch (e) {
+        errors.add('$label：${_stripExceptionPrefix(e)}');
+      }
+      return false;
+    }
+
+    // 优先 draft-audio；旧版 /upload 会忽略 saveAsDraft 并直接开始转写。
+    if (await tryDraftEndpoint(
+      label: 'draft-audio',
+      suffix: '/$meetingId/draft-audio',
+      body: audioPayload,
+    )) {
+      return;
+    }
+    if (await tryDraftEndpoint(
+      label: 'upload',
+      suffix: '/$meetingId/upload',
+      body: <String, dynamic>{...audioPayload, 'saveAsDraft': true},
+    )) {
+      return;
+    }
+
+    final detail = errors.join('；');
+    if (detail.contains('已开始转写') || detail.contains('TRANSCRIBING')) {
+      throw Exception('会议纪要服务未更新，无法存草稿（已开始转写）');
+    }
+    throw Exception(
+      detail.isEmpty ? '草稿保存失败，请稍后重试' : '草稿保存失败：$detail',
+    );
+  }
+
+  String _stripExceptionPrefix(Exception e) {
+    return e.toString().replaceFirst(RegExp(r'^Exception:\s*'), '').trim();
+  }
+
+  String _readMeetingStatus(String rawBody) {
+    final data = _unwrapData(rawBody);
+    final direct = (data['status'] ?? '').toString().trim();
+    if (direct.isNotEmpty) return direct.toUpperCase();
+    final meeting = data['meeting'];
+    if (meeting is Map) {
+      return (meeting['status'] ?? '').toString().trim().toUpperCase();
+    }
+    return '';
+  }
+
+  bool _isDraftLikeStatus(String status) {
+    return status.isEmpty || status == 'DRAFT';
+  }
+
+  Future<int> saveMeetingDraft({
+    required String title,
+    required String meetingDate,
+    required String filePath,
+  }) async {
+    final meetingId = await createMeeting(title: title, meetingDate: meetingDate);
+    if (meetingId <= 0) {
+      throw Exception('创建会议记录失败，请重试');
+    }
+    final filename = filenameFromPath(filePath);
+    final upload = await uploadAudioFile(filePath: filePath, fileName: filename);
+    final audioObjectKey = (upload['objectKey'] ?? '').toString().trim();
+    if (audioObjectKey.isEmpty) {
+      throw Exception('录音上传失败，未获得文件标识');
+    }
+    final audioUrl = _readUploadUrl(upload, audioObjectKey);
+    final contentType = (upload['contentType'] ?? 'audio/wav').toString();
+    await _attachDraftAudio(
+      meetingId: meetingId,
+      audioObjectKey: audioObjectKey,
+      audioUrl: audioUrl,
+      contentType: contentType,
+      durationSeconds: guessDurationSeconds(filePath),
+    );
+    return meetingId;
+  }
+
+  String _readUploadUrl(Map<String, dynamic> upload, String objectKey) {
+    final url = (upload['url'] ?? '').toString().trim();
+    if (url.isNotEmpty) return url;
+    final key = objectKey.trim();
+    if (key.startsWith('http://') || key.startsWith('https://')) return key;
+    return key;
+  }
+
+  Future<void> startTranscriptionForDraft(NativeMeetingDetail detail) async {
+    final objectKey = detail.audioObjectKey.trim();
+    if (objectKey.isEmpty) {
+      throw Exception('草稿尚未关联录音文件');
+    }
+    await confirmUpload(
+      meetingId: detail.meetingId,
+      audioObjectKey: objectKey,
+      audioUrl: detail.audioPlayUrl.trim().isNotEmpty
+          ? detail.audioPlayUrl.trim()
+          : objectKey,
+      contentType: 'audio/wav',
+      durationSeconds: detail.audioDurationSeconds,
+    );
+  }
+
   Future<NativeMeetingDetail> fetchDetail(int meetingId) async {
     final resp = await _requestMeeting('GET', '/$meetingId');
     _ensureSuccess(resp);
@@ -165,9 +321,9 @@ class NativeMeetingService {
 
   Future<void> deleteMeeting(int meetingId) async {
     final resp = await _requestMeeting('DELETE', '/$meetingId');
-    if (resp.statusCode == 204 ||
-        (resp.statusCode >= 200 && resp.statusCode < 300)) {
-      return;
+    if (resp.statusCode == 204) return;
+    if (resp.statusCode >= 200 && resp.statusCode < 300) {
+      if (resp.body.trim().isEmpty) return;
     }
     _ensureSuccess(resp);
   }

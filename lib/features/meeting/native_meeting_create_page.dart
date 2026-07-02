@@ -1,11 +1,16 @@
+import 'dart:async';
+
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:permission_handler/permission_handler.dart';
 
+import '../../core/navigation/navigation_controller.dart';
 import '../../core/theme/dunes_theme.dart';
+import '../../core/util/friendly_error.dart';
 import '../auth/auth_session.dart';
+import '../shell/dunes_toast.dart';
 import 'meeting_live_controller.dart';
 import 'native_meeting_recording_controller.dart';
 import 'native_meeting_service.dart';
@@ -14,13 +19,15 @@ class NativeMeetingCreatePage extends StatefulWidget {
   const NativeMeetingCreatePage({
     super.key,
     required this.session,
+    required this.navigation,
     required this.onBack,
     required this.onCreated,
   });
 
   final AuthSession session;
+  final DunesNavigationController navigation;
   final VoidCallback onBack;
-  final ValueChanged<int> onCreated;
+  final void Function(int meetingId, {required bool isDraft}) onCreated;
 
   @override
   State<NativeMeetingCreatePage> createState() =>
@@ -38,6 +45,11 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
   final TextEditingController _titleCtrl = TextEditingController();
   String _filePath = '';
   bool _submitting = false;
+  bool _persistingAfterEnd = false;
+  bool? _persistGenerate;
+  bool _pendingPersistAfterEnd = false;
+  String _pendingDraftTitle = '';
+  bool _handlingBack = false;
   String? _error;
   _CreateMode _mode = _CreateMode.upload;
   late final AnimationController _pulseController = AnimationController(
@@ -48,10 +60,28 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
   @override
   void initState() {
     super.initState();
-    // 若已有正在进行的实时转写，进入页面默认切到该模式，回显进度。
-    // 注意：不自动回填上一次录制的文件，避免上传区出现“莫名其妙的默认文件”。
+    widget.navigation.backInterceptor = _navigationBackInterceptor;
     if (_live.active.value) {
       _mode = _CreateMode.live;
+      final savedTitle = _live.meetingTitle.value.trim();
+      if (savedTitle.isNotEmpty && _titleCtrl.text.trim().isEmpty) {
+        _titleCtrl.text = savedTitle;
+      }
+    } else {
+      _live.clearPreview();
+      final pendingPath = _live.recordedFilePath.value?.trim() ?? '';
+      if (pendingPath.isNotEmpty) {
+        _filePath = pendingPath;
+        _pendingPersistAfterEnd = true;
+        _pendingDraftTitle = _live.meetingTitle.value.trim();
+        if (_pendingDraftTitle.isNotEmpty && _titleCtrl.text.trim().isEmpty) {
+          _titleCtrl.text = _pendingDraftTitle;
+        }
+      } else {
+        _live.consumeRecordedFile();
+        _filePath = '';
+        _pendingDraftTitle = '';
+      }
     }
     _live.active.addListener(_onLiveChanged);
     _live.paused.addListener(_onLiveChanged);
@@ -66,6 +96,7 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
 
   @override
   void dispose() {
+    widget.navigation.backInterceptor = null;
     _pulseController.dispose();
     _live.active.removeListener(_onLiveChanged);
     _live.paused.removeListener(_onLiveChanged);
@@ -149,12 +180,39 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
     return '录音失败：$e';
   }
 
+  bool get _hasMeetingTitle => _titleCtrl.text.trim().isNotEmpty;
+
+  String _defaultDraftTitle() {
+    final now = DateTime.now();
+    final month = now.month.toString().padLeft(2, '0');
+    final day = now.day.toString().padLeft(2, '0');
+    final hour = now.hour.toString().padLeft(2, '0');
+    final minute = now.minute.toString().padLeft(2, '0');
+    return '会议录音 $now.year-$month-$day $hour:$minute';
+  }
+
+  String _resolvedPersistTitle() {
+    final fromField = _titleCtrl.text.trim();
+    if (fromField.isNotEmpty) return fromField;
+    final fromLive = _live.meetingTitle.value.trim();
+    if (fromLive.isNotEmpty) return fromLive;
+    final pending = _pendingDraftTitle.trim();
+    if (pending.isNotEmpty) return pending;
+    return _defaultDraftTitle();
+  }
+
   Future<void> _startLive() async {
+    if (!_hasMeetingTitle) {
+      const msg = '请先填写会议标题后再开始实时转写';
+      setState(() => _error = msg);
+      showDunesToast(context, msg, kind: DunesToastKind.error);
+      return;
+    }
     try {
       final ok = await _ensureMicPermission();
       if (!ok) return;
       setState(() => _error = null);
-      await _live.start(widget.session);
+      await _live.start(widget.session, title: _titleCtrl.text.trim());
     } catch (e) {
       try {
         await _live.end();
@@ -164,18 +222,327 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
     }
   }
 
+  Future<void> _confirmEndLive() async {
+    if (!_live.active.value || _persistingAfterEnd) return;
+    _dismissKeyboard();
+    final title = _resolvedPersistTitle();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: const Text('结束并保存？'),
+        content: Text(
+          '确定要结束录音「$title」吗？\n\n'
+          '结束后将无法继续追加录音，接下来可选择存为草稿或立即生成纪要。',
+          style: DunesTypography.sans(fontSize: 13.5, height: 1.55),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('继续录音'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('结束并保存'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    await _endLive();
+  }
+
   Future<void> _endLive() async {
     try {
       final path = await _live.end();
       if (!mounted) return;
+      final resolvedTitle = _resolvedPersistTitle();
       setState(() {
-        if (path != null && path.isNotEmpty) _filePath = path;
+        if (path != null && path.isNotEmpty) {
+          _filePath = path;
+          _pendingPersistAfterEnd = true;
+          _pendingDraftTitle = resolvedTitle;
+          if (_titleCtrl.text.trim().isEmpty) {
+            _titleCtrl.text = resolvedTitle;
+          }
+        }
         _error = null;
       });
+      if (path == null || path.isEmpty) {
+        setState(() => _error = '录音文件保存失败，请重试');
+        return;
+      }
+      await _promptPersistAfterEnd(filePath: path);
     } catch (e) {
       if (!mounted) return;
       setState(() => _error = _mapRecordError(e));
     }
+  }
+
+  void _dismissKeyboard() {
+    FocusManager.instance.primaryFocus?.unfocus();
+  }
+
+  bool _navigationBackInterceptor() {
+    if (_handlingBack) return true;
+    unawaited(_handleBack());
+    return true;
+  }
+
+  Future<void> _promptPersistAfterEnd({
+    required String filePath,
+  }) async {
+    _dismissKeyboard();
+    final displayTitle = _resolvedPersistTitle();
+    final generate = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: const Text('是否生成会议纪要？'),
+        content: Text(
+          '录音「$displayTitle」已结束。\n\n'
+          '选择「立即生成」将上传录音并开始转写；'
+          '选择「存为草稿」会保存到列表，稍后可进详情页生成。',
+          style: DunesTypography.sans(fontSize: 13.5, height: 1.55),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              _dismissKeyboard();
+              Navigator.of(ctx).pop(false);
+            },
+            child: const Text('存为草稿'),
+          ),
+          FilledButton(
+            onPressed: () {
+              _dismissKeyboard();
+              Navigator.of(ctx).pop(true);
+            },
+            child: const Text('立即生成'),
+          ),
+        ],
+      ),
+    );
+    if (!mounted) return;
+    final title = _resolvedPersistTitle();
+    if (generate == null) {
+      // 系统返回键关闭弹窗时，自动存为草稿。
+      await _persistAfterEnd(
+        title: title,
+        filePath: filePath,
+        generate: false,
+      );
+      return;
+    }
+    await _persistAfterEnd(
+      title: title,
+      filePath: filePath,
+      generate: generate,
+    );
+  }
+
+  Future<bool> _confirmLeaveWhileProcessing() async {
+    _dismissKeyboard();
+    final leave = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: const Text('正在处理中'),
+        content: Text(
+          _persistingAfterEnd
+              ? '会议纪要正在保存，现在离开可能导致保存失败。确定离开吗？'
+              : '录音正在上传并提交转写，现在离开可能导致提交失败。\n\n'
+                  '上传完成后服务端会继续在后台生成纪要，建议等待处理完成。',
+          style: DunesTypography.sans(fontSize: 13.5, height: 1.55),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('继续等待'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('仍要离开'),
+          ),
+        ],
+      ),
+    );
+    return leave == true;
+  }
+
+  Future<void> _handleBack() async {
+    if (_handlingBack) return;
+    _handlingBack = true;
+    try {
+      if (_submitting || _persistingAfterEnd) {
+        final leave = await _confirmLeaveWhileProcessing();
+        if (!leave || !mounted) return;
+        widget.onBack();
+        return;
+      }
+      // 录音进行中：允许离开页面，后台继续录音（其它板块有悬浮入口可返回）。
+      if (_live.active.value) {
+        widget.onBack();
+        return;
+      }
+      // 仅「结束并保存」后、尚未提交时，滑动返回自动存草稿。
+      if (_pendingPersistAfterEnd && _filePath.trim().isNotEmpty) {
+        final saved = await _tryAutoSaveDraftOnLeave();
+        if (saved || !mounted) return;
+      }
+      widget.onBack();
+    } finally {
+      _handlingBack = false;
+    }
+  }
+
+  Future<bool> _tryAutoSaveDraftOnLeave() async {
+    final filePath = _filePath.trim();
+    if (filePath.isEmpty || !_pendingPersistAfterEnd) return false;
+    final title = _resolvedPersistTitle();
+
+    try {
+      await _persistAfterEnd(
+        title: title,
+        filePath: filePath,
+        generate: false,
+      );
+      return true;
+    } catch (e) {
+      if (!mounted) return false;
+      final msg = friendlyErrorText(
+        e,
+        fallback: '自动存草稿失败，请稍后重试',
+      );
+      setState(() => _error = '自动存草稿失败：$msg');
+      showDunesToast(context, msg, kind: DunesToastKind.error);
+      return false;
+    }
+  }
+
+  Future<void> _persistAfterEnd({
+    required String title,
+    required String filePath,
+    required bool generate,
+  }) async {
+    _dismissKeyboard();
+    setState(() {
+      _persistingAfterEnd = true;
+      _persistGenerate = generate;
+      _error = null;
+    });
+    try {
+      final meetingDate = DateTime.now().toIso8601String().substring(0, 10);
+      final meetingId = generate
+          ? await _service.createByMeetingDoc(
+              title: title,
+              meetingDate: meetingDate,
+              filePath: filePath,
+            )
+          : await _service.saveMeetingDraft(
+              title: title,
+              meetingDate: meetingDate,
+              filePath: filePath,
+            );
+      if (!mounted) return;
+      showDunesToast(
+        context,
+        generate ? '已开始转写并生成会议纪要' : '已存为草稿，可在详情页生成纪要',
+      );
+      _live.clearPreview();
+      _live.consumeRecordedFile();
+      setState(() {
+        _filePath = '';
+        _pendingPersistAfterEnd = false;
+        _pendingDraftTitle = '';
+      });
+      widget.onCreated(meetingId, isDraft: !generate);
+    } catch (e) {
+      if (!mounted) return;
+      final msg = friendlyErrorText(
+        e,
+        fallback: generate ? '生成失败，请稍后重试' : '草稿保存失败，请稍后重试',
+      );
+      setState(() => _error = generate ? '生成失败：$msg' : '草稿保存失败：$msg');
+      showDunesToast(
+        context,
+        msg,
+        kind: DunesToastKind.error,
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _persistingAfterEnd = false;
+          _persistGenerate = null;
+        });
+      }
+    }
+  }
+
+  bool get _showBusyOverlay => _submitting || _persistingAfterEnd;
+
+  String get _busyOverlayMessage {
+    if (_submitting) return '正在上传并开始转写...';
+    if (_persistGenerate == true) return '正在上传并开始转写...';
+    return '正在上传并保存草稿...';
+  }
+
+  Widget _buildBusyOverlay() {
+    return Positioned.fill(
+      child: AbsorbPointer(
+        child: ColoredBox(
+          color: Colors.black.withValues(alpha: 0.32),
+          child: Center(
+            child: Container(
+              margin: const EdgeInsets.symmetric(horizontal: 40),
+              padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.12),
+                    blurRadius: 24,
+                    offset: const Offset(0, 8),
+                  ),
+                ],
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const SizedBox(
+                    width: 32,
+                    height: 32,
+                    child: CircularProgressIndicator(strokeWidth: 3),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    _busyOverlayMessage,
+                    textAlign: TextAlign.center,
+                    style: DunesTypography.sans(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: DunesColors.text,
+                      height: 1.45,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    '请勿离开页面，上传完成后会自动跳转',
+                    textAlign: TextAlign.center,
+                    style: DunesTypography.sans(
+                      fontSize: 12,
+                      color: DunesColors.text3,
+                      height: 1.4,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   Future<void> _pauseLive() async {
@@ -199,10 +566,10 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
         filePath: _filePath,
       );
       if (!mounted) return;
-      widget.onCreated(meetingId);
+      widget.onCreated(meetingId, isDraft: false);
     } catch (e) {
       if (!mounted) return;
-      setState(() => _error = '提交失败：$e');
+      setState(() => _error = '提交失败：${friendlyErrorText(e)}');
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
@@ -225,8 +592,12 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
     final livePartial = _live.partial.value;
     final recording = liveWorking;
     final canSubmit = !_submitting &&
+        !_persistingAfterEnd &&
         _titleCtrl.text.trim().isNotEmpty &&
-        _filePath.isNotEmpty;
+        _filePath.isNotEmpty &&
+        (_mode != _CreateMode.live || !_live.active.value);
+    final canEndLive = recording && !_persistingAfterEnd;
+    final canStartLive = !recording && _hasMeetingTitle;
     final liveRecording = _mode == _CreateMode.live && recording;
     final statusText = switch (state) {
       MeetingRecordingState.recordingForeground => '正在录音（前台）',
@@ -235,13 +606,19 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
       MeetingRecordingState.idle => '待开始',
     };
 
-    return Scaffold(
+    return GestureDetector(
+      onTap: () => FocusScope.of(context).unfocus(),
+      behavior: HitTestBehavior.translucent,
+      child: Stack(
+        children: [
+          Scaffold(
       backgroundColor: DunesColors.bgApp,
       appBar: AppBar(
-        leading: BackButton(onPressed: widget.onBack),
+        leading: BackButton(onPressed: _handleBack),
         title: const Text('新建会议纪要'),
       ),
       body: ListView(
+        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
         padding: const EdgeInsets.fromLTRB(16, 10, 16, 24),
         children: [
           Container(
@@ -357,10 +734,26 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
             icon: Icons.title_rounded,
             child: TextField(
               controller: _titleCtrl,
-              onChanged: (_) => setState(() => _error = null),
+              readOnly: _showBusyOverlay,
+              onChanged: (value) {
+                final title = value.trim();
+                if (_live.active.value) {
+                  _live.meetingTitle.value = title;
+                } else if (_pendingPersistAfterEnd) {
+                  _pendingDraftTitle = title;
+                }
+                setState(() => _error = null);
+              },
               style: DunesTypography.sans(fontSize: 14, color: DunesColors.text),
               decoration: InputDecoration(
                 hintText: '请输入会议标题，例如：周例会-销售复盘',
+                helperText: _mode == _CreateMode.live && !recording && !_hasMeetingTitle
+                    ? '开始实时转写前必须填写会议标题'
+                    : null,
+                helperStyle: DunesTypography.sans(
+                  fontSize: 11,
+                  color: DunesColors.coral,
+                ),
                 filled: true,
                 fillColor: DunesColors.bgSoft,
                 border: OutlineInputBorder(
@@ -497,7 +890,7 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
                       const SizedBox(width: 8),
                       Text(
                         liveWorking
-                            ? (livePaused ? '实时转写已暂停' : '实时转写进行中')
+                            ? (livePaused ? '录音已暂停' : '录音进行中')
                             : statusText,
                         style: DunesTypography.sans(
                           fontSize: 13,
@@ -511,7 +904,7 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
                     SizedBox(
                       width: double.infinity,
                       child: OutlinedButton.icon(
-                        onPressed: _startLive,
+                        onPressed: canStartLive ? _startLive : null,
                         icon: const Icon(Icons.mic_rounded),
                         label: const Text('开始实时转写'),
                         style: OutlinedButton.styleFrom(
@@ -535,7 +928,7 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
                                   ? Icons.play_arrow_rounded
                                   : Icons.pause_rounded,
                             ),
-                            label: Text(livePaused ? '继续转写' : '暂停转写'),
+                            label: Text(livePaused ? '继续录音' : '暂停录音'),
                             style: OutlinedButton.styleFrom(
                               foregroundColor: DunesColors.accentDeep,
                               side: const BorderSide(color: DunesColors.accentLine),
@@ -549,12 +942,27 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
                         const SizedBox(width: 8),
                         Expanded(
                           child: FilledButton.icon(
-                            onPressed: _endLive,
-                            icon: const Icon(Icons.stop_rounded),
-                            label: const Text('结束并保存'),
+                            onPressed: canEndLive ? _confirmEndLive : null,
+                            icon: _persistingAfterEnd
+                                ? const SizedBox(
+                                    width: 16,
+                                    height: 16,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: Colors.white,
+                                    ),
+                                  )
+                                : const Icon(Icons.stop_rounded),
+                            label: Text(
+                              _persistingAfterEnd ? '保存中...' : '结束并保存',
+                            ),
                             style: FilledButton.styleFrom(
                               backgroundColor: DunesColors.coral,
+                              disabledBackgroundColor:
+                                  DunesColors.coral.withValues(alpha: 0.35),
                               foregroundColor: Colors.white,
+                              disabledForegroundColor:
+                                  Colors.white.withValues(alpha: 0.75),
                               padding: const EdgeInsets.symmetric(vertical: 12),
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(12),
@@ -576,7 +984,7 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
                       liveRecording && !livePaused
                           ? '正在监听语音，请开始发言...'
                           : (liveRecording && livePaused)
-                          ? '已暂停，点击“继续转写”后恢复实时识别'
+                          ? '已暂停，点击“继续录音”后恢复录音与实时转写'
                           : '点击“开始实时转写”后，这里会实时显示文字',
                       style: DunesTypography.sans(
                         fontSize: 13,
@@ -649,13 +1057,14 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
           ],
         ],
       ),
-      bottomNavigationBar: SafeArea(
+      bottomNavigationBar: _mode == _CreateMode.upload
+          ? SafeArea(
         top: false,
         child: Padding(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
           child: FilledButton.icon(
             onPressed: canSubmit ? _submit : null,
-            icon: _submitting
+            icon: (_submitting || _persistingAfterEnd)
                 ? const SizedBox(
                     width: 16,
                     height: 16,
@@ -663,9 +1072,9 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
                   )
                 : const Icon(Icons.auto_awesome_rounded),
             label: Text(
-              _submitting
+              (_submitting || _persistingAfterEnd)
                   ? '处理中...'
-                  : (_mode == _CreateMode.live ? '结束后生成会议纪要' : '开始转写并生成纪要'),
+                  : '开始转写并生成纪要',
             ),
             style: FilledButton.styleFrom(
               backgroundColor: DunesColors.accent,
@@ -677,6 +1086,11 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
             ),
           ),
         ),
+      )
+          : null,
+          ),
+          if (_showBusyOverlay) _buildBusyOverlay(),
+        ],
       ),
     );
   }

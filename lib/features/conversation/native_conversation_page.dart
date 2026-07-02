@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../core/navigation/navigation_controller.dart';
+import '../../core/widgets/cached_network_image.dart';
 import '../nova/nova_background_coordinator.dart';
 import '../nova/nova_generating_storage.dart';
 import '../nova/nova_inbox_preview.dart';
@@ -111,9 +112,20 @@ class _NativeConversationPageState extends State<NativeConversationPage>
     _notificationService = NotificationService(session: widget.session);
     _realtime = ConversationRealtimeHub.instance.of(widget.session);
     WidgetsBinding.instance.addObserver(this);
+    userAvatarRefresh.addListener(_onSelfAvatarUpdated);
     _load();
     _bootRealtime();
     NovaBackgroundCoordinator.instance.addListener(_onNovaBackgroundUpdate);
+  }
+
+  void _onSelfAvatarUpdated() {
+    if (!mounted || _loading) return;
+    final snap = userAvatarRefresh.snapshotFor(widget.session.userId);
+    if (snap == null) return;
+    setState(() {
+      _items = applySelfAvatarToConversations(_items, snap);
+    });
+    unawaited(_load(silent: true, skipAvatarMerge: true));
   }
 
   @override
@@ -135,6 +147,7 @@ class _NativeConversationPageState extends State<NativeConversationPage>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    userAvatarRefresh.removeListener(_onSelfAvatarUpdated);
     NovaBackgroundCoordinator.instance.removeListener(_onNovaBackgroundUpdate);
     _rtRefreshDebounce?.cancel();
     _searchDebounce?.cancel();
@@ -252,7 +265,7 @@ class _NativeConversationPageState extends State<NativeConversationPage>
     });
   }
 
-  Future<void> _load({bool silent = false}) async {
+  Future<void> _load({bool silent = false, bool skipAvatarMerge = false}) async {
     if (!silent) {
       setState(() {
         _loading = true;
@@ -280,9 +293,14 @@ class _NativeConversationPageState extends State<NativeConversationPage>
       final novaStorage = results[2] as Map<String, String>;
       final refreshedHidden = await InboxHiddenStorage.load();
       if (!mounted) return;
-      final merged = silent
-          ? mergeInboxConversations(_items, rows)
-          : rows;
+      final selfAvatar = userAvatarRefresh.snapshotFor(widget.session.userId);
+      final merged = silent && !skipAvatarMerge
+          ? mergeInboxConversations(
+              _items,
+              rows,
+              selfAvatar: selfAvatar,
+            )
+          : applySelfAvatarToConversations(rows, selfAvatar);
       warmConversationAvatarCache(merged);
       setState(() {
         _items = merged;

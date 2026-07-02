@@ -1,12 +1,17 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:math' as math;
+import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:just_audio/just_audio.dart';
 
 import '../../core/theme/dunes_theme.dart';
+import '../../core/util/friendly_error.dart';
 import '../auth/auth_session.dart';
 import '../chat/file_download.dart' as file_dl;
+import 'meeting_minutes_export.dart';
 import 'native_meeting_models.dart';
 import 'native_meeting_service.dart';
 
@@ -36,6 +41,7 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
   Timer? _poller;
   bool _loading = true;
   bool _regenerating = false;
+  bool _startingTranscription = false;
   bool _downloadingAudio = false;
   double _downloadProgress = 0;
   String? _downloadLabel;
@@ -109,7 +115,7 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
     } catch (e) {
       if (!mounted) return;
       if (!silent) {
-        setState(() => _error = e.toString());
+        setState(() => _error = friendlyErrorText(e));
       }
     } finally {
       if (mounted && !silent) setState(() => _loading = false);
@@ -141,30 +147,14 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
         },
       );
       if (!mounted) return;
-      if (savedPath == null || savedPath.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('已保存 $fileName')),
-        );
-        return;
-      }
-      final displayPath = savedPath.replaceFirst('/storage/emulated/0', '内部存储');
-      await showDialog<void>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text('下载完成'),
-          content: Text('文件：$fileName\n保存位置：\n$displayPath'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('知道了'),
-            ),
-          ],
-        ),
+      await _showSaveSuccessDialog(
+        fileName: fileName,
+        savedPath: savedPath,
       );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('下载失败：$e')),
+        SnackBar(content: Text(friendlyErrorText(e, fallback: '下载失败，请稍后重试'))),
       );
     } finally {
       if (mounted) {
@@ -175,6 +165,114 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
         });
       }
     }
+  }
+
+  Future<void> _exportSummary(MeetingExportFormat format) async {
+    final detail = _detail;
+    if (detail == null || _downloadingAudio) return;
+    if (!MeetingMinutesExport.canExport(detail)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('纪要尚未生成，暂无法导出')),
+      );
+      return;
+    }
+
+    setState(() {
+      _downloadingAudio = true;
+      _downloadProgress = 0;
+      _downloadLabel = '导出${format.label}';
+    });
+
+    try {
+      final content = format == MeetingExportFormat.markdown
+          ? MeetingMinutesExport.buildMarkdown(detail)
+          : MeetingMinutesExport.buildPlainText(detail);
+      final fileName = MeetingMinutesExport.fileName(detail, format);
+      final savedPath = await file_dl.saveBytesAsFile(
+        Uint8List.fromList(utf8.encode(content)),
+        fileName,
+      );
+      if (!mounted) return;
+      setState(() => _downloadProgress = 1);
+      await _showSaveSuccessDialog(
+        fileName: fileName,
+        savedPath: savedPath,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(friendlyErrorText(e, fallback: '导出失败，请稍后重试'))),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _downloadingAudio = false;
+          _downloadProgress = 0;
+          _downloadLabel = null;
+        });
+      }
+    }
+  }
+
+  String _formatSavedLocation(String? savedPath) {
+    if (savedPath == null || savedPath.isEmpty) {
+      return defaultTargetPlatform == TargetPlatform.iOS
+          ? '可在「文件」App → 本应用 中查看'
+          : '下载文件夹';
+    }
+    if (defaultTargetPlatform == TargetPlatform.iOS) {
+      return '已保存至应用文档目录\n可在「文件」App → 本应用 中查看\n\n$savedPath';
+    }
+    return savedPath.replaceFirst('/storage/emulated/0', '内部存储');
+  }
+
+  Future<void> _showSaveSuccessDialog({
+    required String fileName,
+    String? savedPath,
+  }) async {
+    if (!mounted) return;
+    if (savedPath == null || savedPath.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('已保存 $fileName')),
+      );
+      return;
+    }
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('保存完成'),
+        content: Text(
+          '文件：$fileName\n保存位置：\n${_formatSavedLocation(savedPath)}',
+          style: DunesTypography.sans(fontSize: 13.5, height: 1.55),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('知道了'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget? _buildSummaryExportMenu(NativeMeetingDetail d) {
+    if (!MeetingMinutesExport.canExport(d)) return null;
+    return PopupMenuButton<MeetingExportFormat>(
+      tooltip: '导出纪要',
+      enabled: !_downloadingAudio,
+      icon: const Icon(Icons.download_outlined, size: 20),
+      onSelected: _exportSummary,
+      itemBuilder: (ctx) => const [
+        PopupMenuItem(
+          value: MeetingExportFormat.markdown,
+          child: Text('下载 Markdown (.md)'),
+        ),
+        PopupMenuItem(
+          value: MeetingExportFormat.plainText,
+          child: Text('下载文本 (.txt)'),
+        ),
+      ],
+    );
   }
 
   Future<void> _playAudio() async {
@@ -199,22 +297,85 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
   }
 
   Future<void> _regenerate() async {
+    final detail = _detail;
+    if (detail == null) return;
     try {
       setState(() => _regenerating = true);
       await _service.regenerate(widget.meetingId);
       await _load();
       if (!mounted) return;
+      final refreshed = _detail;
+      final restarted = refreshed != null &&
+          refreshed.transcriptSegments.isEmpty &&
+          refreshed.status.toUpperCase() == 'TRANSCRIBING';
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('已重新生成纪要')),
+        SnackBar(
+          content: Text(
+            restarted ? '已开始重新转写，请稍候查看进度' : '已重新生成纪要',
+          ),
+        ),
       );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('重新生成失败：$e')),
+        SnackBar(
+          content: Text(
+            friendlyErrorText(e, fallback: '重新生成失败，请稍后重试'),
+          ),
+        ),
       );
     } finally {
       if (mounted) setState(() => _regenerating = false);
     }
+  }
+
+  Future<void> _startTranscriptionFromDraft() async {
+    final detail = _detail;
+    if (detail == null) return;
+    try {
+      setState(() => _startingTranscription = true);
+      await _service.startTranscriptionForDraft(detail);
+      await _load();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('已开始转写并生成会议纪要')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            friendlyErrorText(e, fallback: '开始转写失败，请稍后重试'),
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _startingTranscription = false);
+    }
+  }
+
+  bool _isDraftWithAudio(NativeMeetingDetail detail) {
+    return detail.status.toUpperCase() == 'DRAFT' &&
+        detail.audioObjectKey.trim().isNotEmpty;
+  }
+
+  bool _canRegenerate(NativeMeetingDetail detail) {
+    final status = detail.status.toUpperCase();
+    if (status == 'DRAFT' ||
+        status == 'TRANSCRIBING' ||
+        status == 'GENERATING') {
+      return false;
+    }
+    return detail.transcriptSegments.isNotEmpty ||
+        detail.audioObjectKey.trim().isNotEmpty;
+  }
+
+  String _regenerateLabel(NativeMeetingDetail detail) {
+    if (detail.transcriptSegments.isEmpty &&
+        detail.audioObjectKey.trim().isNotEmpty) {
+      return '重新转写并生成纪要';
+    }
+    return '重新生成纪要';
   }
 
   Future<void> _delete() async {
@@ -238,14 +399,11 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
     try {
       await _service.deleteMeeting(widget.meetingId);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('已删除会议纪要')),
-      );
       widget.onBack();
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('删除失败：$e')),
+        SnackBar(content: Text(friendlyErrorText(e, fallback: '删除失败，请稍后重试'))),
       );
     }
   }
@@ -255,6 +413,26 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
     final minutes = twoDigits(duration.inMinutes.remainder(60));
     final seconds = twoDigits(duration.inSeconds.remainder(60));
     return '${twoDigits(duration.inHours)}:$minutes:$seconds';
+  }
+
+  String _summaryText(NativeMeetingDetail d) {
+    if (d.summary.isNotEmpty) return d.summary;
+    return switch (d.status.toUpperCase()) {
+      'DRAFT' => d.audioObjectKey.trim().isNotEmpty
+          ? '录音已保存为草稿，尚未开始转写。请点击下方「开始转写并生成纪要」，系统将自动生成会议摘要与待办事项。'
+          : '草稿尚未关联录音文件，请返回补充录音后再开始转写。',
+      'TRANSCRIBING' || 'GENERATING' => '正在智能生成会议摘要，请稍候...',
+      'FAILED' => '纪要生成失败，可尝试重新转写或重新生成。',
+      _ => '暂无会议摘要',
+    };
+  }
+
+  String _transcriptEmptyText(NativeMeetingDetail d) {
+    return switch (d.status.toUpperCase()) {
+      'DRAFT' => '尚未开始转写。开始转写后，原始逐句内容将显示在这里。',
+      'TRANSCRIBING' || 'GENERATING' => '当前会议暂无逐句转写内容（可能仍在处理中）',
+      _ => '当前会议暂无逐句转写内容',
+    };
   }
 
   String _statusLabel(String status) {
@@ -332,13 +510,15 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
                 _buildSection(
                   title: '会议摘要',
                   icon: Icons.auto_awesome_outlined,
+                  trailing: _buildSummaryExportMenu(d),
                   child: Text(
-                    d.summary.isNotEmpty
-                        ? d.summary
-                        : '正在智能生成会议摘要，请稍候...',
+                    _summaryText(d),
                     style: DunesTypography.sans(
                       fontSize: 14,
-                      color: DunesColors.text2,
+                      color: d.status.toUpperCase() == 'DRAFT' &&
+                              d.summary.isEmpty
+                          ? DunesColors.accentDeep
+                          : DunesColors.text2,
                       height: 1.7,
                     ),
                   ),
@@ -363,7 +543,7 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
                       : null,
                   child: d.transcriptSegments.isEmpty
                       ? Text(
-                          '当前会议暂无逐句转写内容（可能仍在处理中）',
+                          _transcriptEmptyText(d),
                           style: DunesTypography.sans(
                             fontSize: 13,
                             color: DunesColors.text3,
@@ -441,25 +621,58 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
                             ),
                 ),
                 const SizedBox(height: 20),
-                OutlinedButton.icon(
-                  onPressed: _regenerating ? null : _regenerate,
-                  icon: _regenerating
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.refresh_rounded),
-                  label: Text(_regenerating ? '生成中...' : '重新生成纪要'),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: DunesColors.accentDeep,
-                    side: const BorderSide(color: DunesColors.accentLine),
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
+                if (_isDraftWithAudio(d)) ...[
+                  FilledButton.icon(
+                    onPressed: _startingTranscription
+                        ? null
+                        : _startTranscriptionFromDraft,
+                    icon: _startingTranscription
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Icon(Icons.play_arrow_rounded),
+                    label: Text(
+                      _startingTranscription ? '启动中...' : '开始转写并生成纪要',
+                    ),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: DunesColors.accent,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
                     ),
                   ),
-                ),
+                  const SizedBox(height: 10),
+                ],
+                if (_canRegenerate(d)) ...[
+                  OutlinedButton.icon(
+                    onPressed: _regenerating ? null : _regenerate,
+                    icon: _regenerating
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.refresh_rounded),
+                    label: Text(
+                      _regenerating ? '处理中...' : _regenerateLabel(d),
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: DunesColors.accentDeep,
+                      side: const BorderSide(color: DunesColors.accentLine),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                  ),
+                ],
               ],
             );
   }

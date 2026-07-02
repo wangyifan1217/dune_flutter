@@ -123,12 +123,26 @@ bool shouldPersistNovaGenerating({
   bool hasAiReplyAfter = false,
 }) {
   if (streamInFlight) return true;
-  if (localGen == null) return false;
-  if (localGen.expired) return false;
-  if (isNovaStoppedGeneratingStatus(localGen.status)) return false;
   if (hasAiReplyAfter) return false;
-  if (draft == null || draft.expired) return false;
-  return draft.text.trim().isNotEmpty || draft.userText.trim().isNotEmpty;
+  if (draft == null || draft.expired) {
+    if (localGen == null) return false;
+    if (localGen.expired) return false;
+    if (isNovaStoppedGeneratingStatus(localGen.status)) return false;
+    return false;
+  }
+  final hasDraftContent =
+      draft.text.trim().isNotEmpty || draft.userText.trim().isNotEmpty;
+  if (!hasDraftContent) {
+    if (localGen == null) return false;
+    if (localGen.expired) return false;
+    if (isNovaStoppedGeneratingStatus(localGen.status)) return false;
+    return false;
+  }
+  // SSE 中断后 generating 标记可能被清掉，但草稿仍在：仍需恢复/轮询。
+  if (localGen == null) return draft.text.trim().isNotEmpty;
+  if (localGen.expired) return draft.text.trim().isNotEmpty;
+  if (isNovaStoppedGeneratingStatus(localGen.status)) return false;
+  return true;
 }
 
 NovaStreamDraft? readNovaStreamDraftFromStorage(Map<String, String> storage, int convId) {

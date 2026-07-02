@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/painting.dart';
 
 /// 按 URL 缓存网络头像，URL 未变时不重复触发加载动画。
 class CachedDunesNetworkImage extends StatelessWidget {
@@ -130,8 +133,8 @@ CachedMyPageProfile? getCachedMyPageProfile(int userId) {
 
 void cacheMyPageProfile(int userId, CachedMyPageProfile profile) {
   _myPageProfileByUser[userId] = profile;
-  if (profile.avatarUrl.isNotEmpty) {
-    dunesAvatarResolvedUrlCache[profile.signature] = profile.avatarUrl;
+  if (profile.avatarObjectKey.isNotEmpty && profile.avatarUrl.isNotEmpty) {
+    dunesAvatarResolvedUrlCache[profile.avatarObjectKey] = profile.avatarUrl;
   }
 }
 
@@ -165,10 +168,96 @@ void _rememberAvatarUrl(String? objectKey, String? url) {
   }
 }
 
-String? cachedMyPageAvatarUrl(int userId, String signature) {
+String? cachedMyPageAvatarUrl(
+  int userId, {
+  String preset = '',
+  String objectKey = '',
+}) {
   final cached = _myPageProfileByUser[userId];
-  if (cached != null && cached.signature == signature && cached.avatarUrl.isNotEmpty) {
-    return cached.avatarUrl;
+  final lookupSig = avatarSourceSignature(preset: preset, objectKey: objectKey);
+  if (cached != null) {
+    final cachedSig = avatarSourceSignature(
+      preset: cached.avatarPreset,
+      objectKey: cached.avatarObjectKey,
+    );
+    if (cachedSig == lookupSig && cached.avatarUrl.isNotEmpty) {
+      return cached.avatarUrl;
+    }
   }
-  return dunesAvatarResolvedUrlCache[signature];
+  final key = objectKey.trim();
+  if (key.isNotEmpty) {
+    return dunesAvatarResolvedUrlCache[key];
+  }
+  return null;
+}
+
+/// 当前登录用户最新头像（「我的」保存 / /users/me 拉取后同步）。
+class UserAvatarSnapshot {
+  const UserAvatarSnapshot({
+    required this.userId,
+    this.avatarPreset = '',
+    this.avatarObjectKey = '',
+    this.avatarUrl = '',
+  });
+
+  final int userId;
+  final String avatarPreset;
+  final String avatarObjectKey;
+  final String avatarUrl;
+
+  String get sourceSignature => avatarSourceSignature(
+        preset: avatarPreset,
+        objectKey: avatarObjectKey,
+        directUrl: avatarUrl,
+      );
+}
+
+class UserAvatarRefreshNotifier extends ChangeNotifier {
+  UserAvatarSnapshot? snapshotFor(int userId) {
+    final snap = _latest;
+    if (snap == null || snap.userId != userId) return null;
+    return snap;
+  }
+
+  void remember(UserAvatarSnapshot snapshot, {bool notify = false}) {
+    if (snapshot.userId <= 0) return;
+    _latest = snapshot;
+    if (notify) notifyListeners();
+  }
+
+  UserAvatarSnapshot? _latest;
+}
+
+final UserAvatarRefreshNotifier userAvatarRefresh = UserAvatarRefreshNotifier();
+
+Future<void> evictAvatarNetworkImage(String? url) async {
+  final raw = (url ?? '').trim();
+  if (raw.isEmpty || !raw.startsWith('http')) return;
+  await imageCache.evict(NetworkImage(raw));
+}
+
+/// 头像变更后：失效旧缓存、驱逐 Flutter 图片缓存，并通知通讯列表等刷新。
+Future<void> publishUserAvatarUpdated({
+  required int userId,
+  String? oldObjectKey,
+  String? oldAvatarUrl,
+  required String avatarPreset,
+  required String avatarObjectKey,
+  required String avatarUrl,
+}) async {
+  invalidateMyPageProfile(userId);
+  invalidateAvatarUrlCache(objectKey: oldObjectKey, url: oldAvatarUrl);
+  invalidateAvatarUrlCache(objectKey: avatarObjectKey, url: avatarUrl);
+  await evictAvatarNetworkImage(oldAvatarUrl);
+  await evictAvatarNetworkImage(avatarUrl);
+  final snapshot = UserAvatarSnapshot(
+    userId: userId,
+    avatarPreset: avatarPreset,
+    avatarObjectKey: avatarObjectKey,
+    avatarUrl: avatarUrl,
+  );
+  if (avatarObjectKey.isNotEmpty && avatarUrl.isNotEmpty) {
+    dunesAvatarResolvedUrlCache[avatarObjectKey] = avatarUrl;
+  }
+  userAvatarRefresh.remember(snapshot, notify: true);
 }

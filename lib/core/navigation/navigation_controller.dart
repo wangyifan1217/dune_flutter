@@ -75,4 +75,39 @@ class DunesNavigationController extends ChangeNotifier {
     }
     go(screenId);
   }
+
+  /// 底部 Tab 切到主屏根页面，清除其上叠加的二级页面（如 MM-L、MM0）。
+  void switchMainTab(String screenId) => popTo(screenId);
+
+  /// 用新页面替换栈顶，避免 MM0 提交后仍留在历史栈中。
+  void replaceTop(String screenId) {
+    if (screenId.isEmpty) return;
+    if (_history.isEmpty) {
+      _history.add(screenId);
+    } else {
+      _history[_history.length - 1] = screenId;
+    }
+    _currentScreen = screenId;
+    notifyListeners();
+  }
+
+  /// 离开会议上传页：有列表则回列表，否则回「我的」。
+  void leaveMeetingCreate() {
+    if (_history.contains('MM-L')) {
+      popTo('MM-L');
+    } else if (_history.contains('B2')) {
+      popTo('B2');
+    } else {
+      back();
+    }
+  }
+
+  /// 离开会议列表：回到「我的」或栈内上一屏。
+  void leaveMeetingList() {
+    if (_history.contains('B2')) {
+      popTo('B2');
+    } else {
+      back();
+    }
+  }
 }

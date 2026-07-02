@@ -37,6 +37,23 @@ class MeetingRecordingController with WidgetsBindingObserver {
     state.value = MeetingRecordingState.recordingForeground;
   }
 
+  Future<void> pause() async {
+    if (state.value == MeetingRecordingState.idle ||
+        state.value == MeetingRecordingState.stopping) {
+      return;
+    }
+    await NativeAudioRecorder.instance.pause();
+  }
+
+  Future<void> resume() async {
+    if (state.value == MeetingRecordingState.idle ||
+        state.value == MeetingRecordingState.stopping) {
+      return;
+    }
+    await NativeAudioRecorder.instance.resume();
+    state.value = MeetingRecordingState.recordingForeground;
+  }
+
   Future<NativeRecordedAudio?> stop() async {
     state.value = MeetingRecordingState.stopping;
     final audio = await NativeAudioRecorder.instance.stop();

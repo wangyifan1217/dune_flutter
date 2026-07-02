@@ -25,30 +25,109 @@ String conversationAvatarSignature(NativeConversation c) {
 }
 
 /// 静默拉取列表时合并：预览/未读等用服务端，头像未变则保留旧引用，减少重建闪烁。
+/// [selfAvatar] 不为空时，群拼贴里当前用户头像始终用最新资料，避免 merge 留住旧图。
 List<NativeConversation> mergeInboxConversations(
   List<NativeConversation> current,
-  List<NativeConversation> fetched,
-) {
-  if (current.isEmpty) return fetched;
+  List<NativeConversation> fetched, {
+  UserAvatarSnapshot? selfAvatar,
+}) {
+  if (current.isEmpty) {
+    return applySelfAvatarToConversations(fetched, selfAvatar);
+  }
   final prevById = {for (final c in current) c.id: c};
-  return fetched
+  final merged = fetched
       .map((server) {
         final prev = prevById[server.id];
         if (prev == null) return server;
         if (conversationAvatarSignature(prev) ==
             conversationAvatarSignature(server)) {
-          return _mergeKeepingAvatars(prev, server);
+          return _mergeKeepingAvatars(prev, server, selfAvatar: selfAvatar);
         }
         return server;
       })
       .toList(growable: false);
+  return applySelfAvatarToConversations(merged, selfAvatar);
+}
+
+List<NativeConversation> applySelfAvatarToConversations(
+  List<NativeConversation> rows,
+  UserAvatarSnapshot? selfAvatar,
+) {
+  if (selfAvatar == null || selfAvatar.userId <= 0) return rows;
+  return rows
+      .map((c) => applySelfAvatarToConversation(c, selfAvatar))
+      .toList(growable: false);
+}
+
+NativeConversation applySelfAvatarToConversation(
+  NativeConversation c,
+  UserAvatarSnapshot selfAvatar,
+) {
+  if (c.avatarMembers.isEmpty) return c;
+  var changed = false;
+  final members = c.avatarMembers.map((m) {
+    if (m.userId != selfAvatar.userId) return m;
+    if (!_selfAvatarDiffers(m, selfAvatar)) return m;
+    changed = true;
+    return ConversationAvatarMember(
+      userId: m.userId,
+      displayName: m.displayName,
+      avatarPreset: selfAvatar.avatarPreset.isNotEmpty
+          ? selfAvatar.avatarPreset
+          : m.avatarPreset,
+      avatarObjectKey: selfAvatar.avatarObjectKey.isNotEmpty
+          ? selfAvatar.avatarObjectKey
+          : m.avatarObjectKey,
+      avatarUrl: selfAvatar.avatarUrl.isNotEmpty
+          ? selfAvatar.avatarUrl
+          : m.avatarUrl,
+    );
+  }).toList(growable: false);
+  if (!changed) return c;
+  return NativeConversation(
+    id: c.id,
+    kind: c.kind,
+    title: c.title,
+    unreadCount: c.unreadCount,
+    preview: c.preview,
+    updatedAt: c.updatedAt,
+    peerUserId: c.peerUserId,
+    peerDisplayName: c.peerDisplayName,
+    memberCount: c.memberCount,
+    muted: c.muted,
+    pinned: c.pinned,
+    businessType: c.businessType,
+    peerDepartment: c.peerDepartment,
+    peerRoleLabel: c.peerRoleLabel,
+    peerAvatarPreset: c.peerAvatarPreset,
+    peerAvatarObjectKey: c.peerAvatarObjectKey,
+    peerAvatarUrl: c.peerAvatarUrl,
+    avatarMembers: members,
+    dissolved: c.dissolved,
+    membershipStatus: c.membershipStatus,
+    assistantGenerating: c.assistantGenerating,
+    assistantGeneratingStatus: c.assistantGeneratingStatus,
+  );
+}
+
+bool _selfAvatarDiffers(
+  ConversationAvatarMember member,
+  UserAvatarSnapshot selfAvatar,
+) {
+  return avatarSourceSignature(
+        preset: member.avatarPreset ?? '',
+        objectKey: member.avatarObjectKey ?? '',
+        directUrl: member.avatarUrl ?? '',
+      ) !=
+      selfAvatar.sourceSignature;
 }
 
 NativeConversation _mergeKeepingAvatars(
   NativeConversation prev,
-  NativeConversation server,
-) {
-  return NativeConversation(
+  NativeConversation server, {
+  UserAvatarSnapshot? selfAvatar,
+}) {
+  final merged = NativeConversation(
     id: server.id,
     kind: server.kind,
     title: server.title,
@@ -72,6 +151,10 @@ NativeConversation _mergeKeepingAvatars(
     assistantGenerating: server.assistantGenerating,
     assistantGeneratingStatus: server.assistantGeneratingStatus,
   );
+  if (selfAvatar != null && selfAvatar.userId > 0) {
+    return applySelfAvatarToConversation(merged, selfAvatar);
+  }
+  return merged;
 }
 
 void warmConversationAvatarCache(List<NativeConversation> rows) {

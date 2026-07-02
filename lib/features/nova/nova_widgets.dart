@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../../core/theme/dunes_theme.dart';
 import '../shell/dunes_toast.dart';
 import '../chat/user_avatar_widget.dart';
+import '../conversation/conversation_service.dart';
 import 'native_nova_service.dart';
 import 'nova_icon.dart';
 import 'nova_markdown.dart';
@@ -1017,7 +1018,9 @@ class NovaC4MessageRow extends StatelessWidget {
     this.userInitial = '?',
     this.userSeed = 0,
     this.userAvatarPreset = '',
+    this.userAvatarObjectKey = '',
     this.userAvatarUrl = '',
+    this.avatarService,
     this.thinking = false,
     this.showAiBadge = true,
     this.thinkText = '',
@@ -1039,7 +1042,9 @@ class NovaC4MessageRow extends StatelessWidget {
   final String userInitial;
   final int userSeed;
   final String userAvatarPreset;
+  final String userAvatarObjectKey;
   final String userAvatarUrl;
+  final ConversationService? avatarService;
   final bool thinking;
   final bool showAiBadge;
   final String thinkText;
@@ -1312,7 +1317,10 @@ class NovaC4MessageRow extends StatelessWidget {
               seed: userSeed,
               size: 32,
               avatarPreset: userAvatarPreset.isEmpty ? null : userAvatarPreset,
+              avatarObjectKey:
+                  userAvatarObjectKey.isEmpty ? null : userAvatarObjectKey,
               avatarUrl: userAvatarUrl.isEmpty ? null : userAvatarUrl,
+              avatarService: avatarService,
             ),
           ],
         ),

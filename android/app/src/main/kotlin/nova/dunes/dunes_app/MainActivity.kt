@@ -31,9 +31,11 @@ class MainActivity : FlutterActivity() {
     private var audioRecord: AudioRecord? = null
     private var recordThread: Thread? = null
     @Volatile private var isRecording = false
+    @Volatile private var isPaused = false
     private var pcmFile: File? = null
     private var wavPath: String? = null
     private var startedAtMs: Long = 0L
+    private var accumulatedDurationMs: Long = 0L
     private var wakeLock: PowerManager.WakeLock? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -45,9 +47,16 @@ class MainActivity : FlutterActivity() {
             .setMethodCallHandler { call, result ->
                 when (call.method) {
                     "start" -> startRecord(result)
+                    "pause" -> pauseRecord(result)
+                    "resume" -> resumeRecord(result)
                     "stop" -> stopRecord(result, deleteFile = false)
                     "cancel" -> stopRecord(result, deleteFile = true)
-                    "status" -> result.success(mapOf("isRecording" to isRecording))
+                    "status" -> result.success(
+                        mapOf(
+                            "isRecording" to isRecording,
+                            "isPaused" to isPaused,
+                        )
+                    )
                     else -> result.notImplemented()
                 }
             }
@@ -98,6 +107,8 @@ class MainActivity : FlutterActivity() {
             record.startRecording()
             audioRecord = record
             isRecording = true
+            isPaused = false
+            accumulatedDurationMs = 0L
             startedAtMs = System.currentTimeMillis()
             ensureWakeLock()
 
@@ -109,11 +120,54 @@ class MainActivity : FlutterActivity() {
         }
     }
 
+    private fun pauseRecord(result: MethodChannel.Result) {
+        if (!isRecording || isPaused) {
+            result.success(false)
+            return
+        }
+        try {
+            accumulatedDurationMs += currentSegmentDurationMs()
+            isPaused = true
+            val record = audioRecord
+            if (record != null &&
+                record.recordingState == AudioRecord.RECORDSTATE_RECORDING
+            ) {
+                record.stop()
+            }
+            result.success(true)
+        } catch (e: Exception) {
+            result.error("AUDIO_PAUSE_FAILED", e.message, null)
+        }
+    }
+
+    private fun resumeRecord(result: MethodChannel.Result) {
+        if (!isRecording || !isPaused) {
+            result.success(false)
+            return
+        }
+        try {
+            val record = audioRecord
+            if (record == null) {
+                throw IllegalStateException("AudioRecord unavailable")
+            }
+            record.startRecording()
+            isPaused = false
+            startedAtMs = System.currentTimeMillis()
+            result.success(true)
+        } catch (e: Exception) {
+            result.error("AUDIO_RESUME_FAILED", e.message, null)
+        }
+    }
+
     private fun writePcmLoop(pcm: File, bufferSize: Int) {
         val buf = ByteArray(bufferSize)
         try {
             FileOutputStream(pcm).use { out ->
                 while (isRecording) {
+                    if (isPaused) {
+                        Thread.sleep(50)
+                        continue
+                    }
                     val read = audioRecord?.read(buf, 0, buf.size) ?: -1
                     if (read > 0) {
                         out.write(buf, 0, read)
@@ -154,9 +208,22 @@ class MainActivity : FlutterActivity() {
         }
     }
 
+    private fun currentSegmentDurationMs(): Long {
+        if (!isRecording || isPaused || startedAtMs <= 0L) return 0L
+        return (System.currentTimeMillis() - startedAtMs).coerceAtLeast(0L)
+    }
+
+    private fun currentDurationMs(): Long {
+        return (accumulatedDurationMs + currentSegmentDurationMs()).coerceAtLeast(0L)
+    }
+
     private fun stopInternal(deleteFile: Boolean): Long {
-        val start = startedAtMs
+        if (isRecording && !isPaused) {
+            accumulatedDurationMs += currentSegmentDurationMs()
+        }
+        val duration = accumulatedDurationMs
         isRecording = false
+        isPaused = false
         try {
             recordThread?.join(1000)
         } catch (_: InterruptedException) {
@@ -179,6 +246,7 @@ class MainActivity : FlutterActivity() {
         val pcm = pcmFile
         val wav = wavPath
         startedAtMs = 0L
+        accumulatedDurationMs = 0L
         releaseWakeLock()
         MeetingRecordingService.stop(this)
 
@@ -202,8 +270,7 @@ class MainActivity : FlutterActivity() {
                 pcmFile = null
             }
         }
-        if (start <= 0L) return 0L
-        return (System.currentTimeMillis() - start).coerceAtLeast(0L)
+        return duration
     }
 
     private fun writeWavFromPcm(pcm: File, wav: File) {

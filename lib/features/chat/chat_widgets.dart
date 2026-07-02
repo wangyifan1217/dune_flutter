@@ -443,6 +443,7 @@ class ChatMessageRow extends StatelessWidget {
     required this.readLabel,
     required this.content,
     this.onLongPress,
+    this.onLongPressStart,
     this.onReadTap,
     this.readTapLabel,
     this.avatar,
@@ -457,6 +458,7 @@ class ChatMessageRow extends StatelessWidget {
   final String? readLabel;
   final Widget content;
   final VoidCallback? onLongPress;
+  final GestureLongPressStartCallback? onLongPressStart;
   final VoidCallback? onReadTap;
   final String? readTapLabel;
   final Widget? avatar;
@@ -476,6 +478,7 @@ class ChatMessageRow extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 12),
       child: GestureDetector(
         onLongPress: onLongPress,
+        onLongPressStart: onLongPressStart,
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisAlignment: mine
@@ -597,12 +600,31 @@ class ChatTextBubble extends StatelessWidget {
     required this.mine,
     this.quote,
     this.onQuoteTap,
+    this.onSelectionQuote,
+    this.onSelectionForward,
+    this.onSelectionMulti,
+    this.onSelectionRecall,
+    this.enableSelection = true,
   });
 
   final String text;
   final bool mine;
   final ChatMessageQuote? quote;
   final VoidCallback? onQuoteTap;
+  final ValueChanged<String>? onSelectionQuote;
+  final ValueChanged<String>? onSelectionForward;
+  final ValueChanged<String>? onSelectionMulti;
+  final VoidCallback? onSelectionRecall;
+  final bool enableSelection;
+
+  String _selectedText(TextEditingValue value) {
+    final selection = value.selection;
+    if (!selection.isValid || selection.isCollapsed) return '';
+    final start = selection.start;
+    final end = selection.end;
+    if (start < 0 || end <= start || end > value.text.length) return '';
+    return value.text.substring(start, end).trim();
+  }
 
   TextSpan _buildMentionTextSpan() {
     final baseStyle = DunesTypography.sans(
@@ -670,14 +692,68 @@ class ChatTextBubble extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          SelectableText.rich(
-            _buildMentionTextSpan(),
-            contextMenuBuilder: (context, editableTextState) {
-              return AdaptiveTextSelectionToolbar.editableText(
-                editableTextState: editableTextState,
-              );
-            },
-          ),
+          if (enableSelection)
+            SelectableText.rich(
+              _buildMentionTextSpan(),
+              contextMenuBuilder: (context, editableTextState) {
+                final selected = _selectedText(editableTextState.textEditingValue);
+                return AdaptiveTextSelectionToolbar.buttonItems(
+                  anchors: editableTextState.contextMenuAnchors,
+                  buttonItems: <ContextMenuButtonItem>[
+                    ContextMenuButtonItem(
+                      label: '复制',
+                      onPressed: () {
+                        editableTextState.copySelection(
+                          SelectionChangedCause.toolbar,
+                        );
+                        editableTextState.hideToolbar();
+                      },
+                    ),
+                    ContextMenuButtonItem(
+                      label: '引用',
+                      onPressed: () {
+                        if (selected.isNotEmpty) onSelectionQuote?.call(selected);
+                        editableTextState.hideToolbar();
+                      },
+                    ),
+                    ContextMenuButtonItem(
+                      label: '转发',
+                      onPressed: () {
+                        if (selected.isNotEmpty) {
+                          onSelectionForward?.call(selected);
+                        }
+                        editableTextState.hideToolbar();
+                      },
+                    ),
+                    ContextMenuButtonItem(
+                      label: '多选',
+                      onPressed: () {
+                        if (selected.isNotEmpty) onSelectionMulti?.call(selected);
+                        editableTextState.hideToolbar();
+                      },
+                    ),
+                    ContextMenuButtonItem(
+                      label: '全选',
+                      onPressed: () {
+                        editableTextState.selectAll(SelectionChangedCause.toolbar);
+                      },
+                    ),
+                    if (onSelectionRecall != null)
+                      ContextMenuButtonItem(
+                        label: '撤回',
+                        onPressed: () {
+                          onSelectionRecall?.call();
+                          editableTextState.hideToolbar();
+                        },
+                      ),
+                  ],
+                );
+              },
+            )
+          else
+            RichText(
+              text: _buildMentionTextSpan(),
+            ),
           if (quote != null && !quote!.isEmpty) ...[
             const SizedBox(height: 6),
             ChatQuoteBlock(quote: quote!, mine: mine, onTap: onQuoteTap),

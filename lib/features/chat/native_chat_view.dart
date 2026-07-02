@@ -1,11 +1,13 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math' as math;
 
 import 'package:http/http.dart' as http;
 
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show ScrollDirection;
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:mime/mime.dart';
@@ -14,8 +16,10 @@ import 'package:permission_handler/permission_handler.dart';
 import '../../core/theme/dunes_theme.dart';
 import '../../core/util/friendly_error.dart';
 import '../../core/util/native_permissions.dart';
+import '../../core/widgets/cached_network_image.dart';
 import '../auth/auth_session.dart';
 import '../contacts/contact_service.dart';
+import '../meeting/meeting_live_controller.dart';
 import '../conversation/conversation_models.dart';
 import '../conversation/conversation_realtime_dedup.dart';
 import '../conversation/conversation_realtime_hub.dart';
@@ -33,6 +37,7 @@ import 'chat_quote.dart';
 import 'chat_voice_player.dart';
 import 'chat_widgets.dart';
 import 'file_download.dart' as file_dl;
+import 'group_composite_avatar.dart';
 import 'user_avatar_widget.dart';
 import 'native_audio_recorder.dart';
 
@@ -49,6 +54,59 @@ class _ChatListEntry {
   final String? dividerLabel;
   final NativeChatMessage? message;
   final bool showSenderMeta;
+}
+
+class _MessageQuickAction {
+  const _MessageQuickAction({
+    required this.id,
+    required this.label,
+    required this.icon,
+  });
+
+  final String id;
+  final String label;
+  final IconData icon;
+}
+
+typedef _ForwardUnit =
+    ({
+      String senderName,
+      String timeLabel,
+      String text,
+      String kind,
+      Map<String, dynamic>? payload,
+      String? avatarPreset,
+      String? avatarObjectKey,
+    });
+
+class _ForwardBundle {
+  const _ForwardBundle({
+    required this.title,
+    required this.entries,
+  });
+
+  final String title;
+  final List<_ForwardEntry> entries;
+}
+
+class _ForwardEntry {
+  const _ForwardEntry({
+    required this.senderName,
+    required this.timeLabel,
+    required this.text,
+    required this.kind,
+    this.payload,
+    this.avatarPreset,
+    this.avatarObjectKey,
+  });
+
+  final String senderName;
+  final String timeLabel;
+  final String text;
+  final String kind;
+  final Map<String, dynamic>? payload;
+  final String? avatarPreset;
+  final String? avatarObjectKey;
 }
 
 class NativeChatView extends StatefulWidget {
@@ -117,6 +175,8 @@ class _NativeChatViewState extends State<NativeChatView>
   String? _downloadLabel;
   bool _recordWillCancel = false;
   bool _loadingOlder = false;
+  ///  prepend 历史消息后正在恢复滚动位置，避免仍停在 maxScrollExtent 连续拉完全部历史。
+  bool _olderScrollRestorePending = false;
   bool _loadingNewer = false;
   bool _locatedMode = false;
   bool _forceLatestMode = false;
@@ -128,6 +188,8 @@ class _NativeChatViewState extends State<NativeChatView>
   int _lastMarkedReadNewestId = 0;
   bool _wasNearBottom = true;
   bool _userInteractedWithScroll = false;
+  bool _manualScrollInProgress = false;
+  int _lastManualScrollAtMs = 0;
   bool _hasMore = false;
   bool _hasNewer = false;
   int? _highlightMessageId;
@@ -140,6 +202,7 @@ class _NativeChatViewState extends State<NativeChatView>
   String? _error;
   String? _selfAvatarPreset;
   String? _selfAvatarObjectKey;
+  String? _selfAvatarUrl;
   NativeConversation? _conversation;
   List<NativeChatMessage> _messages = const <NativeChatMessage>[];
   List<Map<String, dynamic>> _groupMembers = const <Map<String, dynamic>>[];
@@ -153,6 +216,8 @@ class _NativeChatViewState extends State<NativeChatView>
   final Map<int, GlobalKey> _messageKeys = <int, GlobalKey>{};
   final Map<String, Future<String>> _mediaUrlCache = <String, Future<String>>{};
   ChatMessageQuote? _quoteDraft;
+  bool _messageMultiSelectMode = false;
+  final Set<int> _multiSelectedMessageIds = <int>{};
   double _lastKeyboardInset = 0;
 
   bool get _isPrivate => widget.kind == NativeChatKind.private;
@@ -173,6 +238,29 @@ class _NativeChatViewState extends State<NativeChatView>
     _load();
     _bootRealtime();
     unawaited(_loadSelfAvatar());
+    userAvatarRefresh.addListener(_onSelfAvatarUpdated);
+    MeetingLiveController.instance.active.addListener(_onMeetingLiveActiveChanged);
+  }
+
+  void _onMeetingLiveActiveChanged() {
+    if (!MeetingLiveController.instance.isActive || !_voiceMode || !mounted) {
+      return;
+    }
+    setState(() => _voiceMode = false);
+  }
+
+  void _onSelfAvatarUpdated() {
+    final snap = userAvatarRefresh.snapshotFor(widget.session.userId);
+    if (snap == null || !mounted) return;
+    setState(() {
+      _selfAvatarPreset = snap.avatarPreset.isEmpty ? null : snap.avatarPreset;
+      _selfAvatarObjectKey =
+          snap.avatarObjectKey.isEmpty ? null : snap.avatarObjectKey;
+      _selfAvatarUrl = snap.avatarUrl.isEmpty ? null : snap.avatarUrl;
+      if (_messages.isNotEmpty) {
+        _messages = _enrichMessages(_messages);
+      }
+    });
   }
 
   void _toggleEmojiPicker() {
@@ -189,6 +277,16 @@ class _NativeChatViewState extends State<NativeChatView>
   }
 
   Future<void> _loadSelfAvatar() async {
+    final cached = userAvatarRefresh.snapshotFor(widget.session.userId);
+    if (cached != null && mounted) {
+      setState(() {
+        _selfAvatarPreset =
+            cached.avatarPreset.isEmpty ? null : cached.avatarPreset;
+        _selfAvatarObjectKey =
+            cached.avatarObjectKey.isEmpty ? null : cached.avatarObjectKey;
+        _selfAvatarUrl = cached.avatarUrl.isEmpty ? null : cached.avatarUrl;
+      });
+    }
     try {
       final resp = await http.get(
         Uri.parse('${widget.session.apiBase}/users/me'),
@@ -204,15 +302,24 @@ class _NativeChatViewState extends State<NativeChatView>
                 ? body['data'] as Map<String, dynamic>
                 : body)
           : const <String, dynamic>{};
+      final preset = (data['avatarPreset'] ?? '').toString().trim();
+      final objectKey = (data['avatarObjectKey'] ?? '').toString().trim();
+      var avatarUrl = (data['avatarUrl'] ?? '').toString().trim();
+      if (avatarUrl.isEmpty && objectKey.isNotEmpty) {
+        avatarUrl = _service.mediaProxyUrl(objectKey, bucket: 'user-avatars');
+      }
+      final snapshot = UserAvatarSnapshot(
+        userId: widget.session.userId,
+        avatarPreset: preset,
+        avatarObjectKey: objectKey,
+        avatarUrl: avatarUrl,
+      );
+      userAvatarRefresh.remember(snapshot);
+      if (!mounted) return;
       setState(() {
-        _selfAvatarPreset =
-            (data['avatarPreset'] ?? '').toString().trim().isEmpty
-            ? null
-            : (data['avatarPreset'] ?? '').toString();
-        _selfAvatarObjectKey =
-            (data['avatarObjectKey'] ?? '').toString().trim().isEmpty
-            ? null
-            : (data['avatarObjectKey'] ?? '').toString();
+        _selfAvatarPreset = preset.isEmpty ? null : preset;
+        _selfAvatarObjectKey = objectKey.isEmpty ? null : objectKey;
+        _selfAvatarUrl = avatarUrl.isEmpty ? null : avatarUrl;
         if (_messages.isNotEmpty) {
           _messages = _enrichMessages(_messages);
         }
@@ -269,6 +376,8 @@ class _NativeChatViewState extends State<NativeChatView>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    userAvatarRefresh.removeListener(_onSelfAvatarUpdated);
+    MeetingLiveController.instance.active.removeListener(_onMeetingLiveActiveChanged);
     _rtRefreshDebounce?.cancel();
     _rtSub?.cancel();
     _onlineSub?.cancel();
@@ -288,10 +397,17 @@ class _NativeChatViewState extends State<NativeChatView>
   }
 
   void _onScroll() {
-    if (!_scrollController.hasClients || _loadingOlder) return;
+    if (!_scrollController.hasClients ||
+        _loadingOlder ||
+        _olderScrollRestorePending) {
+      return;
+    }
     final pos = _scrollController.position;
     // reverse 列表：scroll≈0 为最新消息（靠近输入框），maxScrollExtent 为历史方向。
-    if (pos.pixels >= pos.maxScrollExtent - 48) {
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    final recentlyManualScroll = nowMs - _lastManualScrollAtMs <= 1500;
+    if ((_manualScrollInProgress || recentlyManualScroll) &&
+        pos.pixels >= pos.maxScrollExtent - 220) {
       unawaited(_loadOlder());
     }
     if (_locatedMode &&
@@ -447,8 +563,21 @@ class _NativeChatViewState extends State<NativeChatView>
     if (recallId == null || recallId <= 0) return false;
     final index = _messages.indexWhere((m) => m.id == recallId);
     if (index < 0) return false;
-    final preview = (event.raw['preview'] ?? '消息已撤回').toString();
+    final preview = (event.raw['preview'] ?? '').toString();
+    final recalledByName =
+        (event.raw['recalledByDisplayName'] ??
+                event.raw['recalledByName'] ??
+                '')
+            .toString()
+            .trim();
     final old = _messages[index];
+    final mine = old.senderUserId == widget.session.userId;
+    final who = mine
+        ? '你'
+        : (recalledByName.isNotEmpty ? recalledByName : old.senderName);
+    final text = preview.contains('撤回')
+        ? preview
+        : '${who.isEmpty ? '对方' : who}撤回了一条消息';
     setState(() {
       final next = List<NativeChatMessage>.from(_messages);
       next[index] = NativeChatMessage(
@@ -456,7 +585,7 @@ class _NativeChatViewState extends State<NativeChatView>
         senderUserId: old.senderUserId,
         senderName: old.senderName,
         kind: 'SYSTEM',
-        bodyText: preview,
+        bodyText: text,
         createdAt: old.createdAt,
         payload: old.payload,
         peerRead: old.peerRead,
@@ -565,6 +694,22 @@ class _NativeChatViewState extends State<NativeChatView>
             notification.dragDetails != null)) {
       _userInteractedWithScroll = true;
       _enterStickBottomPending = false;
+    }
+    if (notification is ScrollStartNotification) {
+      _manualScrollInProgress = notification.dragDetails != null;
+      if (_manualScrollInProgress) {
+        _lastManualScrollAtMs = DateTime.now().millisecondsSinceEpoch;
+      }
+    } else if (notification is ScrollUpdateNotification) {
+      if (notification.dragDetails != null) {
+        _manualScrollInProgress = true;
+        _lastManualScrollAtMs = DateTime.now().millisecondsSinceEpoch;
+      }
+    } else if (notification is UserScrollNotification &&
+        notification.direction == ScrollDirection.idle) {
+      _manualScrollInProgress = false;
+    } else if (notification is ScrollEndNotification) {
+      _manualScrollInProgress = false;
     }
     if (_canMarkReadNow && _isNearBottom) {
       unawaited(_markReadIfNeeded());
@@ -843,6 +988,16 @@ class _NativeChatViewState extends State<NativeChatView>
         ..sort((a, b) => a.id.compareTo(b.id));
       if (!mounted) return;
       final conversationChanged = _conversation?.id != conv.id;
+      final preservePaginatedHistory = silent &&
+          _bootstrapped &&
+          !conversationChanged &&
+          focusId <= 0 &&
+          !_isNearBottom &&
+          _messages.length > msgs.length;
+      final nextMessages = preservePaginatedHistory
+          ? (_enrichMessages(_mergeMessages(_messages, msgs), conv)
+            ..sort((a, b) => a.id.compareTo(b.id)))
+          : msgs;
       setState(() {
         if (conversationChanged) {
           _lastMarkedReadNewestId = 0;
@@ -851,9 +1006,11 @@ class _NativeChatViewState extends State<NativeChatView>
           _clearPendingNewMessages();
         }
         _conversation = conv;
-        _messages = msgs;
-        _hasMore = page.hasMore;
-        _hasNewer = page.hasNewer;
+        _messages = nextMessages;
+        if (!preservePaginatedHistory) {
+          _hasMore = page.hasMore;
+          _hasNewer = page.hasNewer;
+        }
         _locatedMode = focusId > 0;
         _loading = false;
         _locating = false;
@@ -889,42 +1046,105 @@ class _NativeChatViewState extends State<NativeChatView>
 
   Future<void> _loadOlder() async {
     final conv = _conversation;
-    if (conv == null || _loadingOlder || _messages.isEmpty || !_hasMore) return;
+    if (conv == null ||
+        _loadingOlder ||
+        _olderScrollRestorePending ||
+        _messages.isEmpty ||
+        !_hasMore) {
+      return;
+    }
     final oldestId = _messages.first.id;
     if (oldestId <= 0) return;
+    final anchorMessageId = oldestId;
+    final oldMax = _scrollController.hasClients
+        ? _scrollController.position.maxScrollExtent
+        : 0.0;
+    final oldPixels = _scrollController.hasClients
+        ? _scrollController.position.pixels
+        : 0.0;
     setState(() => _loadingOlder = true);
     try {
       final page = await _service.fetchMessagePage(
         conv.id,
-        size: 30,
+        size: 18,
         before: oldestId,
       );
-      if (!mounted || page.items.isEmpty) return;
+      if (!mounted) return;
+      if (page.items.isEmpty) {
+        setState(() => _hasMore = false);
+        return;
+      }
       final merged = _enrichMessages(_mergeMessages(page.items, _messages));
       if (!mounted) return;
-      final oldMax = _scrollController.hasClients
-          ? _scrollController.position.maxScrollExtent
-          : 0.0;
-      final oldPixels = _scrollController.hasClients
-          ? _scrollController.position.pixels
-          : 0.0;
       setState(() {
         _messages = merged;
         _hasMore = page.hasMore;
       });
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!_scrollController.hasClients) return;
-        final delta =
-            _scrollController.position.maxScrollExtent - oldMax;
-        if (delta > 0) {
-          _scrollController.jumpTo(oldPixels + delta);
-        }
-      });
+      _olderScrollRestorePending = true;
+      _scheduleRestoreScrollAfterOlderLoad(
+        anchorMessageId: anchorMessageId,
+        oldPixels: oldPixels,
+        oldMax: oldMax,
+      );
     } catch (e) {
       _showToast('加载历史失败：${friendlyErrorText(e)}');
     } finally {
       if (mounted) setState(() => _loadingOlder = false);
     }
+  }
+
+  void _releaseOlderScrollRestoreGate() {
+    Future<void>.delayed(const Duration(milliseconds: 60), () {
+      if (mounted) _olderScrollRestorePending = false;
+    });
+  }
+
+  void _scheduleRestoreScrollAfterOlderLoad({
+    required int anchorMessageId,
+    required double oldPixels,
+    required double oldMax,
+    int attempt = 0,
+  }) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_scrollController.hasClients) {
+        _olderScrollRestorePending = false;
+        return;
+      }
+      final pos = _scrollController.position;
+      final delta = pos.maxScrollExtent - oldMax;
+      if (delta > 0.5) {
+        final target = (oldPixels + delta).clamp(0.0, pos.maxScrollExtent);
+        if ((pos.pixels - target).abs() > 0.5) {
+          _scrollController.jumpTo(target);
+        }
+      }
+
+      final stillAtHistoryEdge =
+          _scrollController.position.pixels >=
+          _scrollController.position.maxScrollExtent - 48;
+      final layoutPending = attempt < 10 && delta <= 0.5;
+      if (layoutPending || (stillAtHistoryEdge && attempt < 6 && delta > 0.5)) {
+        _scheduleRestoreScrollAfterOlderLoad(
+          anchorMessageId: anchorMessageId,
+          oldPixels: oldPixels,
+          oldMax: oldMax,
+          attempt: attempt + 1,
+        );
+        return;
+      }
+
+      if (stillAtHistoryEdge && anchorMessageId > 0) {
+        final ctx = _messageKeys[anchorMessageId]?.currentContext;
+        if (ctx != null) {
+          Scrollable.ensureVisible(
+            ctx,
+            alignment: 0.05,
+            duration: Duration.zero,
+          );
+        }
+      }
+      _releaseOlderScrollRestoreGate();
+    });
   }
 
   Future<void> _loadNewer() async {
@@ -1414,6 +1634,10 @@ class _NativeChatViewState extends State<NativeChatView>
 
   Future<void> _startHoldRecord() async {
     if (_sending || _recording) return;
+    if (MeetingLiveController.instance.isActive) {
+      _showToast('会议录音进行中，暂无法发送语音');
+      return;
+    }
     if (!NativeAudioRecorder.isSupported) {
       _showToast('当前环境不支持录音');
       return;
@@ -1438,6 +1662,10 @@ class _NativeChatViewState extends State<NativeChatView>
         setState(() => _recordDurationMs += 120);
       });
     } catch (e) {
+      if (e is NativeAudioRecorderBusyException) {
+        _showToast(e.message);
+        return;
+      }
       _showToast('录音启动失败：${friendlyErrorText(e)}');
     }
   }
@@ -1774,37 +2002,45 @@ class _NativeChatViewState extends State<NativeChatView>
     return parts.join(' · ');
   }
 
-  Future<void> _onMessageActions(NativeChatMessage m, bool mine) async {
+  Future<void> _onMessageActions(
+    NativeChatMessage m,
+    bool mine, {
+    Offset? anchor,
+  }) async {
     if (_isSystemKind(m.kind)) return;
     final copyText = _messageCopyText(m);
-    final action = await showModalBottomSheet<String>(
-      context: context,
-      showDragHandle: true,
-      builder: (_) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.format_quote_outlined),
-              title: const Text('引用'),
-              onTap: () => Navigator.of(context).pop('quote'),
-            ),
-            if (copyText.isNotEmpty)
-              ListTile(
-                leading: const Icon(Icons.copy_rounded),
-                title: const Text('复制'),
-                onTap: () => Navigator.of(context).pop('copy'),
-              ),
-            if (_canDownloadMessage(m))
-              ListTile(
-                leading: const Icon(Icons.download_rounded),
-                title: const Text('下载'),
-                onTap: () => Navigator.of(context).pop('download'),
-              ),
-          ],
-        ),
+    final actions = <_MessageQuickAction>[
+      const _MessageQuickAction(
+        id: 'quote',
+        label: '引用',
+        icon: Icons.format_quote_outlined,
       ),
-    );
+      if (copyText.isNotEmpty)
+        const _MessageQuickAction(
+          id: 'copy',
+          label: '复制',
+          icon: Icons.copy_rounded,
+        ),
+      if (_canDownloadMessage(m))
+        const _MessageQuickAction(
+          id: 'download',
+          label: '下载',
+          icon: Icons.download_rounded,
+        ),
+      if (_canSelectMessageForMulti(m))
+        const _MessageQuickAction(
+          id: 'multi_msg',
+          label: '多选',
+          icon: Icons.checklist_rounded,
+        ),
+      if (mine && m.id > 0)
+        const _MessageQuickAction(
+          id: 'recall',
+          label: '撤回',
+          icon: Icons.undo_rounded,
+        ),
+    ];
+    final action = await _showMessageActionsMenu(actions, anchor: anchor);
     switch (action) {
       case 'quote':
         _startQuote(m);
@@ -1816,7 +2052,119 @@ class _NativeChatViewState extends State<NativeChatView>
       case 'download':
         await _downloadFile(m.payload, _mediaDownloadFileName(m));
         break;
+      case 'multi_msg':
+        _enterMessageMultiSelect(initialMessageId: m.id);
+        break;
+      case 'recall':
+        await _tryRecallMessage(m);
+        break;
     }
+  }
+
+  Future<String?> _showMessageActionsMenu(
+    List<_MessageQuickAction> actions, {
+    Offset? anchor,
+  }) async {
+    if (actions.isEmpty) return null;
+    return showGeneralDialog<String>(
+      context: context,
+      barrierLabel: 'message_actions',
+      barrierDismissible: true,
+      barrierColor: Colors.transparent,
+      transitionDuration: const Duration(milliseconds: 140),
+      pageBuilder: (ctx, _, _) {
+        final media = MediaQuery.of(ctx);
+        final size = media.size;
+        final safeTop = media.padding.top + 8;
+        final safeBottom = size.height - media.padding.bottom - 8;
+        final menuWidth = math.min(size.width - 24, 324.0).toDouble();
+        final left = (anchor == null
+            ? (size.width - menuWidth) / 2
+            : (anchor.dx - menuWidth / 2).clamp(12.0, size.width - menuWidth - 12))
+            .toDouble();
+        final preferredTop = anchor == null ? size.height * 0.35 : anchor.dy - 136;
+        final top = preferredTop
+            .clamp(
+          safeTop,
+          math.max(safeTop, safeBottom - 190),
+        )
+            .toDouble();
+        return SafeArea(
+          child: Stack(
+            children: [
+              Positioned.fill(
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => Navigator.of(ctx).pop(),
+                ),
+              ),
+              Positioned(
+                left: left,
+                top: top,
+                child: Material(
+                  color: const Color(0xF0303030),
+                  borderRadius: BorderRadius.circular(12),
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(maxWidth: menuWidth),
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
+                      child: Wrap(
+                        spacing: 6,
+                        runSpacing: 8,
+                        children: actions
+                            .map(
+                              (item) => SizedBox(
+                                width: 54,
+                                child: InkWell(
+                                  borderRadius: BorderRadius.circular(8),
+                                  onTap: () => Navigator.of(ctx).pop(item.id),
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(vertical: 4),
+                                    child: Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(
+                                          item.icon,
+                                          size: 19,
+                                          color: Colors.white,
+                                        ),
+                                        const SizedBox(height: 5),
+                                        Text(
+                                          item.label,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: DunesTypography.sans(
+                                            fontSize: 11,
+                                            color: Colors.white,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            )
+                            .toList(growable: false),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+      transitionBuilder: (context, animation, _, child) {
+        final curve = CurvedAnimation(parent: animation, curve: Curves.easeOutCubic);
+        return FadeTransition(
+          opacity: curve,
+          child: ScaleTransition(
+            scale: Tween<double>(begin: 0.96, end: 1).animate(curve),
+            child: child,
+          ),
+        );
+      },
+    );
   }
 
   void _startQuote(NativeChatMessage message) {
@@ -1830,6 +2178,189 @@ class _NativeChatViewState extends State<NativeChatView>
   void _closeEmojiPicker() {
     if (!_emojiOpen) return;
     setState(() => _emojiOpen = false);
+  }
+
+  Widget _buildMultiSelectHeader() {
+    final selectedCount = _multiSelectedMessageIds.length;
+    return Container(
+      height: 52,
+      padding: const EdgeInsets.symmetric(horizontal: 10),
+      decoration: const BoxDecoration(
+        color: DunesColors.bgApp,
+        border: Border(bottom: BorderSide(color: DunesColors.borderSoft)),
+      ),
+      child: Row(
+        children: [
+          TextButton(
+            onPressed: _exitMessageMultiSelect,
+            child: const Text('取消'),
+          ),
+          Expanded(
+            child: Center(
+              child: Text(
+                selectedCount > 0 ? '已选择 $selectedCount 条消息' : '多选消息',
+                style: DunesTypography.sans(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ),
+          TextButton(
+            onPressed: selectedCount > 0 ? _forwardSelectedMessages : null,
+            child: const Text('转发'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMultiSelectBottomBar() {
+    final selectedCount = _multiSelectedMessageIds.length;
+    return Container(
+      padding: EdgeInsets.fromLTRB(
+        8,
+        6,
+        8,
+        (MediaQuery.paddingOf(context).bottom > 0
+                ? MediaQuery.paddingOf(context).bottom
+                : 8) +
+            2,
+      ),
+      decoration: const BoxDecoration(
+        color: DunesColors.bgApp,
+        border: Border(top: BorderSide(color: DunesColors.borderSoft)),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        children: [
+          _multiBarAction(
+            icon: Icons.reply_outlined,
+            label: '转发',
+            enabled: selectedCount > 0,
+            onTap: _forwardSelectedMessages,
+          ),
+          _multiBarAction(
+            icon: Icons.bookmark_border_rounded,
+            label: '收藏',
+            enabled: selectedCount > 0,
+            onTap: _collectSelectedMessages,
+          ),
+          _multiBarAction(
+            icon: Icons.delete_outline_rounded,
+            label: '删除',
+            enabled: selectedCount > 0,
+            onTap: _deleteSelectedMessages,
+          ),
+          _multiBarAction(
+            icon: Icons.more_horiz_rounded,
+            label: '更多',
+            enabled: true,
+            onTap: _showMultiMoreActions,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _multiBarAction({
+    required IconData icon,
+    required String label,
+    required bool enabled,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(8),
+      onTap: enabled ? onTap : null,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              size: 22,
+              color: enabled ? DunesColors.text2 : DunesColors.text3,
+            ),
+            const SizedBox(height: 2),
+            Text(
+              label,
+              style: DunesTypography.sans(
+                fontSize: 11,
+                color: enabled ? DunesColors.text2 : DunesColors.text3,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _collectSelectedMessages() {
+    final count = _multiSelectedMessageIds.length;
+    if (count <= 0) return;
+    _showToast('已收藏$count条消息（占位）');
+  }
+
+  Future<void> _deleteSelectedMessages() async {
+    final picked = _multiSelectedMessages;
+    if (picked.isEmpty) return;
+    final allMine = picked.every((m) => m.senderUserId == widget.session.userId);
+    if (!allMine) {
+      _showToast('仅支持删除自己发送的消息');
+      return;
+    }
+    var success = 0;
+    for (final m in picked) {
+      try {
+        await _tryRecallMessage(m);
+        success += 1;
+      } catch (_) {}
+    }
+    if (success > 0) {
+      _showToast('已删除$success条消息');
+    }
+    _exitMessageMultiSelect();
+  }
+
+  Future<void> _showMultiMoreActions() async {
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      builder: (_) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.copy_all_rounded),
+              title: const Text('复制'),
+              onTap: () => Navigator.of(context).pop('copy'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.clear_all_rounded),
+              title: const Text('清空选择'),
+              onTap: () => Navigator.of(context).pop('clear'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.done_rounded),
+              title: const Text('完成'),
+              onTap: () => Navigator.of(context).pop('done'),
+            ),
+          ],
+        ),
+      ),
+    );
+    switch (action) {
+      case 'copy':
+        await _copySelectedMessages();
+        break;
+      case 'clear':
+        if (mounted) setState(_multiSelectedMessageIds.clear);
+        break;
+      case 'done':
+        _exitMessageMultiSelect();
+        break;
+    }
   }
 
   Widget _buildComposerDock({
@@ -1859,29 +2390,42 @@ class _NativeChatViewState extends State<NativeChatView>
             quote: _quoteDraft!,
             onCancel: _clearQuoteDraft,
           ),
-        ChatInputBar(
-          controller: _inputController,
-          focusNode: _inputFocusNode,
-          onInputFocused: _scrollToLatestAfterKeyboard,
-          voiceMode: _voiceMode,
-          sending: _sending,
-          enabled: !locked,
-          hintText: inputHint,
-          onToggleVoice: locked
-              ? () {}
-              : () => setState(() {
-                  _voiceMode = !_voiceMode;
-                  _emojiOpen = false;
-                }),
-          onSend: _send,
-          onEmoji: locked ? null : _toggleEmojiPicker,
-          recording: _recording,
-          recordWillCancel: _recordWillCancel,
-          recordDurationMs: _recordDurationMs,
-          onVoiceHoldStart: locked ? null : (_) => _startHoldRecord(),
-          onVoiceHoldMove: _onRecordMove,
-          onVoiceHoldEnd: (_) => _finishHoldRecord(),
-          onVoiceHoldCancel: () => _cancelHoldRecordInternal(showHint: false),
+        ValueListenableBuilder<bool>(
+          valueListenable: MeetingLiveController.instance.active,
+          builder: (context, meetingLive, _) {
+            final voiceBlocked = locked || meetingLive;
+            final effectiveVoiceMode = voiceBlocked ? false : _voiceMode;
+            return ChatInputBar(
+              controller: _inputController,
+              focusNode: _inputFocusNode,
+              onInputFocused: _scrollToLatestAfterKeyboard,
+              voiceMode: effectiveVoiceMode,
+              sending: _sending,
+              enabled: !locked,
+              hintText: inputHint,
+              onToggleVoice: voiceBlocked
+                  ? () {
+                      if (meetingLive) {
+                        _showToast('会议录音进行中，暂无法发送语音');
+                      }
+                    }
+                  : () => setState(() {
+                      _voiceMode = !_voiceMode;
+                      _emojiOpen = false;
+                    }),
+              onSend: _send,
+              onEmoji: locked ? null : _toggleEmojiPicker,
+              recording: _recording,
+              recordWillCancel: _recordWillCancel,
+              recordDurationMs: _recordDurationMs,
+              onVoiceHoldStart:
+                  voiceBlocked ? null : (_) => _startHoldRecord(),
+              onVoiceHoldMove: _onRecordMove,
+              onVoiceHoldEnd: (_) => _finishHoldRecord(),
+              onVoiceHoldCancel: () =>
+                  _cancelHoldRecordInternal(showHint: false),
+            );
+          },
         ),
         if (_emojiOpen && !locked)
           ChatEmojiGifPanel(
@@ -1933,6 +2477,525 @@ class _NativeChatViewState extends State<NativeChatView>
       return message.bodyText.trim();
     }
     return ChatMessageQuote.previewForMessage(message);
+  }
+
+  void _quoteFromSelectedText(NativeChatMessage message, String selectedText) {
+    final text = selectedText.trim();
+    if (text.isEmpty) return;
+    _startQuote(message);
+    final current = _inputController.text.trim();
+    final next = current.isEmpty ? text : '$current\n$text';
+    _inputController.text = next;
+    _inputController.selection = TextSelection.collapsed(offset: next.length);
+    _inputFocusNode.requestFocus();
+  }
+
+  bool _canSelectMessageForMulti(NativeChatMessage message) {
+    if (message.id <= 0) return false;
+    return !_isSystemKind(message.kind);
+  }
+
+  void _setMessageMultiSelectMode(
+    bool enabled, {
+    int? initialMessageId,
+    bool clearSelection = false,
+  }) {
+    if (!mounted) return;
+    final keepPixels = _scrollController.hasClients
+        ? _scrollController.position.pixels
+        : null;
+    setState(() {
+      _messageMultiSelectMode = enabled;
+      if (enabled) {
+        if (initialMessageId != null && initialMessageId > 0) {
+          _multiSelectedMessageIds.add(initialMessageId);
+        }
+      } else {
+        _multiSelectedMessageIds.clear();
+      }
+      if (clearSelection) {
+        _multiSelectedMessageIds.clear();
+      }
+    });
+    if (keepPixels != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || !_scrollController.hasClients) return;
+        final pos = _scrollController.position;
+        final target = keepPixels.clamp(0.0, pos.maxScrollExtent);
+        if ((pos.pixels - target).abs() > 0.5) {
+          _scrollController.jumpTo(target);
+        }
+      });
+    }
+  }
+
+  void _enterMessageMultiSelect({int? initialMessageId}) {
+    _setMessageMultiSelectMode(true, initialMessageId: initialMessageId);
+  }
+
+  void _exitMessageMultiSelect() {
+    _setMessageMultiSelectMode(false, clearSelection: true);
+  }
+
+  void _toggleMessageMultiSelected(int messageId) {
+    if (messageId <= 0 || !mounted) return;
+    setState(() {
+      if (_multiSelectedMessageIds.contains(messageId)) {
+        _multiSelectedMessageIds.remove(messageId);
+      } else {
+        _multiSelectedMessageIds.add(messageId);
+      }
+    });
+  }
+
+  List<NativeChatMessage> get _multiSelectedMessages {
+    if (_multiSelectedMessageIds.isEmpty) return const <NativeChatMessage>[];
+    final picked = _messages
+        .where((m) => _multiSelectedMessageIds.contains(m.id))
+        .toList(growable: false)
+      ..sort((a, b) => a.id.compareTo(b.id));
+    return picked;
+  }
+
+  String _messageForwardText(NativeChatMessage message) {
+    if (message.kind.toUpperCase() == 'TEXT') return message.bodyText.trim();
+    return ChatMessageQuote.previewForMessage(message);
+  }
+
+  void _forwardFromSelectedText(
+    NativeChatMessage message,
+    String selectedText,
+  ) {
+    final text = selectedText.trim();
+    if (text.isEmpty) return;
+    final unit = (
+      senderName: message.senderName.trim().isEmpty
+          ? '用户${message.senderUserId}'
+          : message.senderName.trim(),
+      timeLabel: InboxFormat.msgTimeLabel(message.createdAt),
+      text: text,
+      kind: 'TEXT',
+      payload: null,
+      avatarPreset: message.senderAvatarPreset,
+      avatarObjectKey: message.senderAvatarObjectKey,
+    );
+    unawaited(_startForwardFlow(<_ForwardUnit>[unit], fromMultiSelect: false));
+  }
+
+  void _multiFromSelectedText(NativeChatMessage message, String selectedText) {
+    if (!_canSelectMessageForMulti(message)) return;
+    _enterMessageMultiSelect(initialMessageId: message.id);
+  }
+
+  List<_ForwardUnit> _forwardUnitsFromMessages(List<NativeChatMessage> messages) {
+    return messages
+        .map((m) {
+          final text = _messageForwardText(m).trim();
+          if (text.isEmpty) return null;
+          final kind = m.kind.toUpperCase();
+          Map<String, dynamic>? payload;
+          if (m.payload != null && kind != 'TEXT') {
+            payload = Map<String, dynamic>.from(m.payload!);
+          } else if (m.payload?['forward'] is Map) {
+            payload = <String, dynamic>{
+              'forward': Map<String, dynamic>.from(m.payload!['forward'] as Map),
+            };
+          }
+          return (
+            senderName: m.senderName.trim().isEmpty
+                ? '用户${m.senderUserId}'
+                : m.senderName.trim(),
+            timeLabel: InboxFormat.msgTimeLabel(m.createdAt),
+            text: text,
+            kind: kind,
+            payload: payload,
+            avatarPreset: m.senderAvatarPreset,
+            avatarObjectKey: m.senderAvatarObjectKey,
+          );
+        })
+        .whereType<_ForwardUnit>()
+        .toList(growable: false);
+  }
+
+  Future<String?> _pickForwardMode() async {
+    return showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (_) => SafeArea(
+        child: Container(
+          margin: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+          padding: const EdgeInsets.fromLTRB(10, 10, 10, 6),
+          decoration: BoxDecoration(
+            color: DunesColors.bgApp,
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x24000000),
+                blurRadius: 20,
+                offset: Offset(0, 8),
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: _forwardModeCard(
+                      icon: Icons.splitscreen_outlined,
+                      title: '逐条转发',
+                      subtitle: '每条消息独立发送',
+                      onTap: () => Navigator.of(context).pop('separate'),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _forwardModeCard(
+                      icon: Icons.view_agenda_outlined,
+                      title: '合并转发',
+                      subtitle: '打包为聊天记录卡片',
+                      onTap: () => Navigator.of(context).pop('merged'),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              SizedBox(
+                width: double.infinity,
+                child: TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('取消'),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _forwardModeCard({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      color: DunesColors.bgSoft,
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(10, 10, 10, 12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(icon, size: 20, color: DunesColors.accentDeep),
+              const SizedBox(height: 8),
+              Text(
+                title,
+                style: DunesTypography.sans(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: DunesColors.text,
+                ),
+              ),
+              const SizedBox(height: 3),
+              Text(
+                subtitle,
+                style: DunesTypography.sans(
+                  fontSize: 11,
+                  color: DunesColors.text3,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _conversationPickerAvatar(NativeConversation c) {
+    const size = 36.0;
+    const radius = size * 0.18;
+    if (!c.isPrivate) {
+      if (c.avatarMembers.isNotEmpty) {
+        return GroupCompositeAvatar(
+          members: c.avatarMembers,
+          size: size,
+          avatarService: _service,
+        );
+      }
+      if (c.isWorkgroupApproval) {
+        return Container(
+          width: size,
+          height: size,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(radius),
+            gradient: const LinearGradient(
+              colors: [Color(0xFF9079C2), Color(0xFF6A4FA0)],
+            ),
+          ),
+          child: Icon(
+            Icons.assignment_outlined,
+            color: Colors.white,
+            size: size * 0.39,
+          ),
+        );
+      }
+      return Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(radius),
+          gradient: const LinearGradient(
+            colors: [Color(0xFFCABCEB), Color(0xFFA88CD8)],
+          ),
+        ),
+        child: Icon(
+          Icons.groups_outlined,
+          color: Colors.white,
+          size: size * 0.39,
+        ),
+      );
+    }
+    final initial = c.displayTitle.trim().isNotEmpty
+        ? c.displayTitle.trim().substring(0, 1)
+        : '?';
+    return ImUserAvatar(
+      initial: initial,
+      seed: c.peerUserId ?? c.id,
+      size: size,
+      avatarPreset: c.peerAvatarPreset,
+      avatarObjectKey: c.peerAvatarObjectKey,
+      avatarUrl: c.peerAvatarUrl,
+      avatarService: _service,
+      borderRadius: radius,
+    );
+  }
+
+  Future<int?> _pickForwardConversationId() async {
+    final current = _conversation;
+    final currentId = current?.id ?? 0;
+    List<NativeConversation> rows;
+    try {
+      rows = await _service.fetchConversations();
+    } catch (e) {
+      _showToast('会话列表加载失败：${friendlyErrorText(e)}');
+      return null;
+    }
+    if (!mounted) return null;
+    final allowedKinds = <String>{
+      'PRIVATE',
+      'GROUP',
+      'WORKGROUP',
+      'WORKGROUP_APPROVAL',
+    };
+    final candidates = rows
+        .where(
+          (c) =>
+              c.isVisible &&
+              c.id > 0 &&
+              allowedKinds.contains(c.kind.toUpperCase()),
+        )
+        .toList(growable: false);
+    final searchController = TextEditingController();
+    var keyword = '';
+    return showModalBottomSheet<int>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (_) => SafeArea(
+        child: StatefulBuilder(
+          builder: (context, setModalState) {
+            final q = keyword.trim().toLowerCase();
+            final filtered = q.isEmpty
+                ? candidates
+                : candidates.where((c) {
+                    final t = c.displayTitle.toLowerCase();
+                    final p = c.preview.toLowerCase();
+                    return t.contains(q) || p.contains(q);
+                  }).toList(growable: false);
+            return ConstrainedBox(
+              constraints: BoxConstraints(
+                maxHeight: MediaQuery.of(context).size.height * 0.72,
+              ),
+              child: Column(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                    child: Text(
+                      '选择会话',
+                      style: DunesTypography.sans(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+                    child: TextField(
+                      controller: searchController,
+                      onChanged: (value) {
+                        setModalState(() => keyword = value);
+                      },
+                      decoration: InputDecoration(
+                        hintText: '搜索',
+                        prefixIcon: const Icon(Icons.search_rounded, size: 20),
+                        filled: true,
+                        fillColor: DunesColors.bgSoft,
+                        contentPadding: const EdgeInsets.symmetric(vertical: 0),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: BorderSide.none,
+                        ),
+                      ),
+                    ),
+                  ),
+                  Expanded(
+                    child: ListView.separated(
+                      itemCount: filtered.length,
+                      separatorBuilder: (_, _) => const Divider(
+                        height: 1,
+                        color: DunesColors.borderSoft,
+                      ),
+                      itemBuilder: (context, index) {
+                        final c = filtered[index];
+                        final subtitle = c.preview.trim();
+                        return ListTile(
+                          leading: _conversationPickerAvatar(c),
+                          title: Text(
+                            c.displayTitle,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          subtitle: subtitle.isEmpty
+                              ? null
+                              : Text(
+                                  subtitle,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                          trailing: c.id == currentId
+                              ? const Text(
+                                  '当前',
+                                  style: TextStyle(color: DunesColors.text3),
+                                )
+                              : null,
+                          onTap: () => Navigator.of(context).pop(c.id),
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        ),
+      ),
+    ).whenComplete(searchController.dispose);
+  }
+
+  Map<String, dynamic> _buildForwardPayload(List<_ForwardUnit> units) {
+    final titleName = units.isNotEmpty && units.first.senderName.trim().isNotEmpty
+        ? units.first.senderName.trim()
+        : '聊天';
+    return <String, dynamic>{
+      'forward': <String, dynamic>{
+        'title': '$titleName的聊天记录',
+        'items': units
+            .map(
+              (u) => <String, dynamic>{
+                'senderName': u.senderName,
+                'timeLabel': u.timeLabel,
+                'text': u.text,
+                'kind': u.kind,
+                'avatarPreset': u.avatarPreset,
+                'avatarObjectKey': u.avatarObjectKey,
+                if (u.payload != null) 'payload': u.payload,
+              },
+            )
+            .toList(growable: false),
+      },
+    };
+  }
+
+  Future<void> _sendForwardToConversation({
+    required int conversationId,
+    required List<_ForwardUnit> units,
+    required bool merged,
+  }) async {
+    if (conversationId <= 0 || units.isEmpty) return;
+    await _guardSend(() async {
+      if (merged) {
+        await _service.sendText(
+          conversationId,
+          '[聊天记录]',
+          payload: _buildForwardPayload(units),
+        );
+      } else {
+        for (final unit in units) {
+          final text = unit.text.trim();
+          if (text.isEmpty) continue;
+          final kind = unit.kind.trim().isEmpty ? 'TEXT' : unit.kind.trim();
+          await _service.sendMessageRaw(
+            conversationId: conversationId,
+            kind: kind,
+            bodyText: text,
+            payload: unit.payload,
+          );
+        }
+      }
+    });
+    if (_messageMultiSelectMode) _exitMessageMultiSelect();
+    if (mounted) {
+      _showToast('已转发${units.length}条');
+      setState(_clearPendingNewMessages);
+      _scrollToPreferredAnchor(force: true);
+    }
+  }
+
+  Future<void> _startForwardFlow(
+    List<_ForwardUnit> units, {
+    required bool fromMultiSelect,
+  }) async {
+    if (units.isEmpty) {
+      _showToast('请先选择消息');
+      return;
+    }
+    final mode = await _pickForwardMode();
+    if (mode == null) return;
+    final targetConversationId = await _pickForwardConversationId();
+    if (targetConversationId == null || targetConversationId <= 0) return;
+    final merged = mode == 'merged';
+    await _sendForwardToConversation(
+      conversationId: targetConversationId,
+      units: units,
+      merged: merged,
+    );
+    if (fromMultiSelect && _messageMultiSelectMode) {
+      _exitMessageMultiSelect();
+    }
+  }
+
+  Future<void> _forwardSelectedMessages() async {
+    final units = _forwardUnitsFromMessages(_multiSelectedMessages);
+    await _startForwardFlow(units, fromMultiSelect: true);
+  }
+
+  Future<void> _copySelectedMessages() async {
+    final texts = _multiSelectedMessages
+        .map(_messageForwardText)
+        .where((e) => e.trim().isNotEmpty)
+        .toList(growable: false);
+    if (texts.isEmpty) {
+      _showToast('请先选择消息');
+      return;
+    }
+    await Clipboard.setData(ClipboardData(text: texts.join('\n')));
+    if (mounted) _showToast('已复制${texts.length}条消息');
   }
 
   NativeChatMessage? _quoteHintMessage(ChatMessageQuote quote) {
@@ -2170,6 +3233,7 @@ class _NativeChatViewState extends State<NativeChatView>
         size: 32,
         avatarPreset: m.senderAvatarPreset ?? _selfAvatarPreset,
         avatarObjectKey: m.senderAvatarObjectKey ?? _selfAvatarObjectKey,
+        avatarUrl: _selfAvatarUrl,
         avatarService: _service,
         borderRadius: 32 * 0.18,
       );
@@ -2212,6 +3276,10 @@ class _NativeChatViewState extends State<NativeChatView>
     final kind = m.kind.toUpperCase();
     if (_isSystemKind(kind)) {
       return ChatSystemPill(text: m.bodyText.isEmpty ? '[系统消息]' : m.bodyText);
+    }
+    final forward = _forwardBundleFromPayload(m.payload);
+    if (forward != null) {
+      return _buildForwardRecordCard(forward, mine: mine);
     }
     final quote = ChatMessageQuote.fromPayload(m.payload);
     final onQuoteTap = quote.isEmpty
@@ -2265,6 +3333,281 @@ class _NativeChatViewState extends State<NativeChatView>
       mine: mine,
       quote: quote.isEmpty ? null : quote,
       onQuoteTap: onQuoteTap,
+      onSelectionQuote: (text) => _quoteFromSelectedText(m, text),
+      onSelectionForward: (text) => _forwardFromSelectedText(m, text),
+      onSelectionMulti: (text) => _multiFromSelectedText(m, text),
+      onSelectionRecall: mine && m.id > 0
+          ? () => unawaited(_tryRecallMessage(m))
+          : null,
+      enableSelection: !_messageMultiSelectMode,
+    );
+  }
+
+  _ForwardBundle? _forwardBundleFromPayload(Map<String, dynamic>? payload) {
+    if (payload == null) return null;
+    final raw = payload['forward'];
+    if (raw is! Map) return null;
+    final map = Map<String, dynamic>.from(raw);
+    final itemsRaw = map['items'];
+    if (itemsRaw is! List) return null;
+    final entries = itemsRaw
+        .whereType<Map>()
+        .map((e) => Map<String, dynamic>.from(e))
+        .map(
+          (e) => _ForwardEntry(
+            senderName: (e['senderName'] ?? '').toString().trim(),
+            timeLabel: (e['timeLabel'] ?? '').toString().trim(),
+            text: (e['text'] ?? '').toString().trim(),
+            kind: (e['kind'] ?? 'TEXT').toString().trim().toUpperCase(),
+            payload: e['payload'] is Map
+                ? Map<String, dynamic>.from(e['payload'] as Map)
+                : null,
+            avatarPreset: (e['avatarPreset'] ?? '').toString().trim().isEmpty
+                ? null
+                : (e['avatarPreset'] ?? '').toString().trim(),
+            avatarObjectKey: (e['avatarObjectKey'] ?? '').toString().trim().isEmpty
+                ? null
+                : (e['avatarObjectKey'] ?? '').toString().trim(),
+          ),
+        )
+        .where((e) {
+          if (e.text.isNotEmpty) return true;
+          final k = e.kind.toUpperCase();
+          if (k == 'IMAGE' || k == 'FILE' || k == 'AUDIO') {
+            return e.payload != null;
+          }
+          return e.payload?['forward'] is Map;
+        })
+        .toList(growable: false);
+    if (entries.isEmpty) return null;
+    final title = (map['title'] ?? '').toString().trim();
+    return _ForwardBundle(
+      title: title.isEmpty ? '聊天记录' : title,
+      entries: entries,
+    );
+  }
+
+  Widget _buildForwardEntryContent(_ForwardEntry e, {required bool mine}) {
+    final nested = _forwardBundleFromPayload(e.payload);
+    if (nested != null) {
+      return _buildForwardRecordCard(nested, mine: false);
+    }
+    final kind = e.kind.toUpperCase();
+    if (kind == 'IMAGE') {
+      return ChatAuthImageBubble(
+        service: _service,
+        payload: e.payload,
+        mine: mine,
+      );
+    }
+    if (kind == 'FILE') {
+      final fileName = ConversationService.mediaFileName(
+        e.payload,
+        fallback: e.text.replaceAll(RegExp(r'^\[[^\]]+\]\s*'), '').trim().isEmpty
+            ? '文件'
+            : e.text.replaceAll(RegExp(r'^\[[^\]]+\]\s*'), ''),
+      );
+      return ChatFileAttach(
+        fileName: fileName,
+        mine: mine,
+        onTap: () => _downloadFile(e.payload, fileName),
+      );
+    }
+    if (kind == 'AUDIO') {
+      final sec = (e.payload?['durationSec'] as num?)?.toInt() ?? 0;
+      final source = _mediaSource(e.payload);
+      return ChatVoiceBubble(
+        playKey: 'forward-${e.senderName}-$sec-${source.hashCode}',
+        durationSec: sec,
+        mine: mine,
+        resolveUrl: () => _resolveMediaUrl(source),
+        onPlayError: (message) => _showToast(message, error: true),
+      );
+    }
+    return Text(
+      e.text.isEmpty ? '[消息]' : e.text,
+      style: DunesTypography.sans(
+        fontSize: 13,
+        color: DunesColors.text,
+        height: 1.45,
+      ),
+    );
+  }
+
+  Widget _buildForwardRecordCard(_ForwardBundle bundle, {required bool mine}) {
+    final preview = bundle.entries.take(2).toList(growable: false);
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(9),
+        onTap: () => unawaited(_showForwardBundleDetail(bundle)),
+        child: Container(
+          constraints: const BoxConstraints(maxWidth: 280),
+          padding: const EdgeInsets.fromLTRB(11, 9, 11, 8),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(9),
+            border: Border.all(color: const Color(0xFFE9E9E9)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                bundle.title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: DunesTypography.sans(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                  color: DunesColors.text,
+                ),
+              ),
+              const SizedBox(height: 5),
+              ...preview.map(
+                (e) => Padding(
+                  padding: const EdgeInsets.only(bottom: 3),
+                  child: Text(
+                    '${e.senderName.isEmpty ? '用户' : e.senderName}: ${e.text}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: DunesTypography.sans(
+                      fontSize: 13,
+                      color: DunesColors.text3,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 6),
+              const Divider(height: 1, color: Color(0xFFEFEFEF)),
+              const SizedBox(height: 5),
+              Text(
+                '聊天记录',
+                style: DunesTypography.sans(
+                  fontSize: 11,
+                  color: DunesColors.text3,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showForwardBundleDetail(_ForwardBundle bundle) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: const Color(0xFFF3F3F3),
+      builder: (_) => SafeArea(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(context).size.height * 0.92,
+          ),
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+                child: Row(
+                  children: [
+                    TextButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      child: const Text('关闭'),
+                    ),
+                    Expanded(
+                      child: Center(
+                        child: Text(
+                          bundle.title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: DunesTypography.sans(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 56),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: ListView.builder(
+                  padding: const EdgeInsets.fromLTRB(10, 6, 10, 14),
+                  itemCount: bundle.entries.length,
+                  itemBuilder: (context, index) {
+                    final e = bundle.entries[index];
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 10),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          ImUserAvatar(
+                            initial: e.senderName.trim().isEmpty
+                                ? '用'
+                                : e.senderName.trim().substring(0, 1),
+                            seed: index + 1,
+                            size: 32,
+                            avatarPreset: e.avatarPreset,
+                            avatarObjectKey: e.avatarObjectKey,
+                            avatarService: _service,
+                            borderRadius: 7,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        e.senderName.isEmpty ? '用户' : e.senderName,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: DunesTypography.sans(
+                                          fontSize: 12,
+                                          color: DunesColors.text2,
+                                        ),
+                                      ),
+                                    ),
+                                    if (e.timeLabel.isNotEmpty)
+                                      Text(
+                                        e.timeLabel,
+                                        style: DunesTypography.sans(
+                                          fontSize: 10.5,
+                                          color: DunesColors.text3,
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                                const SizedBox(height: 4),
+                                Container(
+                                  width: double.infinity,
+                                  padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(color: const Color(0xFFE8E8E8)),
+                                  ),
+                                  child: _buildForwardEntryContent(
+                                    e,
+                                    mine: false,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -2549,6 +3892,7 @@ class _NativeChatViewState extends State<NativeChatView>
         ? '群聊'
         : memberLabel;
     final listEntries = _buildListEntries();
+    final selecting = _messageMultiSelectMode;
     final inputHint = locked
         ? '群聊已解散，无法发送消息'
         : _isPrivate
@@ -2568,58 +3912,61 @@ class _NativeChatViewState extends State<NativeChatView>
           },
           child: Column(
             children: [
-              ChatConvHeader(
-                title: title,
-                subtitle: subtitle,
-                onBack: widget.onBack,
-                onTapTitle: _isPrivate
-                    ? widget.onOpenProfile
-                    : widget.onOpenGroupInfo,
-                showOnlineDot: _isPrivate && _peerOnline,
-                leadingAvatar: _isPrivate
-                    ? ImUserAvatar(
-                        initial: title.isNotEmpty ? title.substring(0, 1) : '?',
-                        seed: conv.peerUserId ?? conv.id,
-                        showOnline: _peerOnline,
-                        avatarPreset: conv.peerAvatarPreset,
-                        avatarObjectKey: conv.peerAvatarObjectKey,
-                        avatarService: _service,
-                        borderRadius: 32 * 0.18,
-                      )
-                    : null,
-                actions: [
-                  if (widget.onOpenSearch != null)
+              if (selecting)
+                _buildMultiSelectHeader()
+              else
+                ChatConvHeader(
+                  title: title,
+                  subtitle: subtitle,
+                  onBack: widget.onBack,
+                  onTapTitle: _isPrivate
+                      ? widget.onOpenProfile
+                      : widget.onOpenGroupInfo,
+                  showOnlineDot: _isPrivate && _peerOnline,
+                  leadingAvatar: _isPrivate
+                      ? ImUserAvatar(
+                          initial: title.isNotEmpty ? title.substring(0, 1) : '?',
+                          seed: conv.peerUserId ?? conv.id,
+                          showOnline: _peerOnline,
+                          avatarPreset: conv.peerAvatarPreset,
+                          avatarObjectKey: conv.peerAvatarObjectKey,
+                          avatarService: _service,
+                          borderRadius: 32 * 0.18,
+                        )
+                      : null,
+                  actions: [
+                    if (widget.onOpenSearch != null)
+                      IconButton(
+                        tooltip: '聊天记录',
+                        onPressed: () => widget.onOpenSearch!(conv.id),
+                        icon: const Icon(Icons.history, size: 20),
+                      ),
                     IconButton(
-                      tooltip: '聊天记录',
-                      onPressed: () => widget.onOpenSearch!(conv.id),
-                      icon: const Icon(Icons.history, size: 20),
+                      tooltip: '语音通话',
+                      onPressed:
+                          widget.onOpenCall ??
+                          () => showDunesSoonToast(context, '通话功能敬请期待'),
+                      icon: const Icon(Icons.phone_outlined, size: 20),
                     ),
-                  IconButton(
-                    tooltip: '语音通话',
-                    onPressed:
-                        widget.onOpenCall ??
-                        () => showDunesSoonToast(context, '通话功能敬请期待'),
-                    icon: const Icon(Icons.phone_outlined, size: 20),
-                  ),
-                  IconButton(
-                    tooltip: '视频通话',
-                    onPressed: () => showDunesSoonToast(context, '视频通话敬请期待'),
-                    icon: const Icon(Icons.videocam_outlined, size: 20),
-                  ),
-                  if (!_isPrivate && widget.onOpenMedia != null)
                     IconButton(
-                      tooltip: '媒体',
-                      onPressed: () => widget.onOpenMedia!(conv.id),
-                      icon: const Icon(Icons.perm_media_outlined, size: 20),
+                      tooltip: '视频通话',
+                      onPressed: () => showDunesSoonToast(context, '视频通话敬请期待'),
+                      icon: const Icon(Icons.videocam_outlined, size: 20),
                     ),
-                  if (!_isPrivate && widget.onOpenGroupInfo != null)
-                    IconButton(
-                      tooltip: '群信息',
-                      onPressed: widget.onOpenGroupInfo,
-                      icon: const Icon(Icons.more_vert, size: 20),
-                    ),
-                ],
-              ),
+                    if (!_isPrivate && widget.onOpenMedia != null)
+                      IconButton(
+                        tooltip: '媒体',
+                        onPressed: () => widget.onOpenMedia!(conv.id),
+                        icon: const Icon(Icons.perm_media_outlined, size: 20),
+                      ),
+                    if (!_isPrivate && widget.onOpenGroupInfo != null)
+                      IconButton(
+                        tooltip: '群信息',
+                        onPressed: widget.onOpenGroupInfo,
+                        icon: const Icon(Icons.more_vert, size: 20),
+                      ),
+                  ],
+                ),
               Expanded(
                 child: Stack(
                   children: [
@@ -2698,6 +4045,11 @@ class _NativeChatViewState extends State<NativeChatView>
                               final peerRead = mine && _isPrivate
                                   ? _messagePeerRead(m)
                                   : false;
+                              final textMessage =
+                                  m.kind.toUpperCase() == 'TEXT';
+                              final hasQuote =
+                                  textMessage &&
+                                  !ChatMessageQuote.fromPayload(m.payload).isEmpty;
                               row = ChatMessageRow(
                                 message: m,
                                 mine: mine,
@@ -2707,8 +4059,16 @@ class _NativeChatViewState extends State<NativeChatView>
                                 readLabel: mine && _isPrivate
                                     ? (peerRead ? '已读' : '未读')
                                     : null,
-                                onLongPress: !_isSystemKind(m.kind)
-                                    ? () => _onMessageActions(m, mine)
+                                onLongPress: null,
+                                onLongPressStart:
+                                    !_messageMultiSelectMode &&
+                                    !_isSystemKind(m.kind) &&
+                                    (!textMessage || hasQuote)
+                                    ? (details) => _onMessageActions(
+                                        m,
+                                        mine,
+                                        anchor: details.globalPosition,
+                                      )
                                     : null,
                                 onReadTap: mine && !_isPrivate
                                     ? () => _showReadReceipts(m)
@@ -2722,7 +4082,7 @@ class _NativeChatViewState extends State<NativeChatView>
                                 content: _buildMessageWidget(m, mine),
                               );
                             }
-                            final rowWidget = highlighted
+                            var rowWidget = highlighted
                                 ? AnimatedContainer(
                                     key: key,
                                     duration: const Duration(milliseconds: 200),
@@ -2738,6 +4098,43 @@ class _NativeChatViewState extends State<NativeChatView>
                                     child: row,
                                   )
                                 : KeyedSubtree(key: key, child: row);
+                            if (_messageMultiSelectMode &&
+                                _canSelectMessageForMulti(m)) {
+                              final selected =
+                                  _multiSelectedMessageIds.contains(m.id);
+                              rowWidget = Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Padding(
+                                    padding: const EdgeInsets.only(
+                                      left: 2,
+                                      right: 6,
+                                      top: 8,
+                                    ),
+                                    child: GestureDetector(
+                                      behavior: HitTestBehavior.opaque,
+                                      onTap: () => _toggleMessageMultiSelected(m.id),
+                                      child: Icon(
+                                        selected
+                                            ? Icons.check_circle
+                                            : Icons.radio_button_unchecked,
+                                        size: 22,
+                                        color: selected
+                                            ? DunesColors.accent
+                                            : DunesColors.text3,
+                                      ),
+                                    ),
+                                  ),
+                                  Expanded(
+                                    child: GestureDetector(
+                                      behavior: HitTestBehavior.opaque,
+                                      onTap: () => _toggleMessageMultiSelected(m.id),
+                                      child: rowWidget,
+                                    ),
+                                  ),
+                                ],
+                              );
+                            }
                             return RepaintBoundary(child: rowWidget);
                           },
                         ),
@@ -2920,13 +4317,16 @@ class _NativeChatViewState extends State<NativeChatView>
                   ],
                 ),
               ),
-              SafeArea(
-                top: false,
-                child: _buildComposerDock(
-                  locked: locked,
-                  inputHint: inputHint,
+              if (selecting)
+                _buildMultiSelectBottomBar()
+              else
+                SafeArea(
+                  top: false,
+                  child: _buildComposerDock(
+                    locked: locked,
+                    inputHint: inputHint,
+                  ),
                 ),
-              ),
             ],
           ),
         ),

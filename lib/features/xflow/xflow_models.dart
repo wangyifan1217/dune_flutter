@@ -8,6 +8,7 @@ class XflowTemplateCard {
     required this.endpoint,
     required this.tagLabel,
     required this.category,
+    this.enabled = true,
   });
 
   final String templateKey;
@@ -16,8 +17,13 @@ class XflowTemplateCard {
   final String endpoint;
   final String tagLabel;
   final String category;
+  final bool enabled;
 
   factory XflowTemplateCard.fromJson(Map<String, dynamic> json) {
+    final enabledRaw = json['enabled'];
+    final enabled = enabledRaw is bool
+        ? enabledRaw
+        : enabledRaw?.toString().toLowerCase() != 'false';
     return XflowTemplateCard(
       templateKey: (json['templateKey'] ?? '').toString(),
       title: (json['title'] ?? '销售提案').toString(),
@@ -25,6 +31,7 @@ class XflowTemplateCard {
       endpoint: (json['endpoint'] ?? '').toString(),
       tagLabel: (json['tagLabel'] ?? '新建').toString(),
       category: (json['category'] ?? 'biz').toString(),
+      enabled: enabled,
     );
   }
 }

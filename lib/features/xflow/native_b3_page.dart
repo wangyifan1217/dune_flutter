@@ -4,6 +4,7 @@ import '../../core/navigation/navigation_controller.dart';
 import '../../core/theme/dunes_theme.dart';
 import '../../core/util/friendly_error.dart';
 import '../auth/auth_session.dart';
+import 'proposal_launch_config.dart';
 import 'xflow_models.dart';
 import 'xflow_service.dart';
 import 'xflow_shared_widgets.dart';
@@ -14,11 +15,13 @@ class NativeB3Page extends StatefulWidget {
     required this.session,
     required this.navigation,
     required this.onOpenForm,
+    this.initialCategory = 'biz',
   });
 
   final AuthSession session;
   final DunesNavigationController navigation;
   final void Function(String templateKey) onOpenForm;
+  final String initialCategory;
 
   @override
   State<NativeB3Page> createState() => _NativeB3PageState();
@@ -26,14 +29,19 @@ class NativeB3Page extends StatefulWidget {
 
 class _NativeB3PageState extends State<NativeB3Page> {
   late final XflowService _service;
+  late String _category;
   bool _loading = true;
   String? _error;
-  List<XflowTemplateCard> _templates = const <XflowTemplateCard>[];
+  List<XflowTemplateCard> _bizTemplates = const <XflowTemplateCard>[];
+  List<XflowTemplateCard> _admTemplates = const <XflowTemplateCard>[];
 
   @override
   void initState() {
     super.initState();
     _service = XflowService(session: widget.session);
+    _category = widget.initialCategory.trim().toLowerCase() == 'adm'
+        ? 'adm'
+        : 'biz';
     _load();
   }
 
@@ -43,10 +51,14 @@ class _NativeB3PageState extends State<NativeB3Page> {
       _error = null;
     });
     try {
-      final rows = await _service.fetchB3Templates();
+      final results = await Future.wait([
+        _service.fetchTemplatesByCategory('biz'),
+        _service.fetchTemplatesByCategory('adm'),
+      ]);
       if (!mounted) return;
       setState(() {
-        _templates = rows;
+        _bizTemplates = results[0];
+        _admTemplates = results[1];
         _loading = false;
       });
     } catch (e) {
@@ -58,6 +70,9 @@ class _NativeB3PageState extends State<NativeB3Page> {
     }
   }
 
+  List<XflowTemplateCard> get _activeTemplates =>
+      _category == 'adm' ? _admTemplates : _bizTemplates;
+
   @override
   Widget build(BuildContext context) {
     return ColoredBox(
@@ -66,8 +81,8 @@ class _NativeB3PageState extends State<NativeB3Page> {
         child: Column(
           children: [
             XflowDsBar(
-              crumb: '我的 · 发起新审批',
-              title: '新建销售提案',
+              crumb: '我的 · 更多提案',
+              title: '发起新审批',
               onBack: () => widget.navigation.go('B2'),
             ),
             Expanded(
@@ -80,55 +95,31 @@ class _NativeB3PageState extends State<NativeB3Page> {
                           child: ListView(
                             padding: const EdgeInsets.fromLTRB(12, 10, 12, 14),
                             children: [
-                              Container(
-                                padding: const EdgeInsets.all(12),
-                                decoration: BoxDecoration(
-                                  color: Colors.white,
-                                  borderRadius: BorderRadius.circular(12),
-                                  border: Border.all(color: DunesColors.borderSoft),
-                                ),
-                                child: Row(
-                                  children: [
-                                    Container(
-                                      width: 34,
-                                      height: 34,
-                                      decoration: BoxDecoration(
-                                        color: DunesColors.accentSoft,
-                                        borderRadius: BorderRadius.circular(9),
-                                      ),
-                                      child: const Icon(Icons.assignment_outlined, color: DunesColors.accentDeep),
-                                    ),
-                                    const SizedBox(width: 10),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            '新建销售提案',
-                                            style: DunesTypography.sans(fontSize: 12, fontWeight: FontWeight.w600),
-                                          ),
-                                          const SizedBox(height: 2),
-                                          Text(
-                                            '业务元数据 · 财务 · 四流 · 方案叙事 · 提交后按规则自动抄送知会。',
-                                            style: DunesTypography.sans(fontSize: 10.5, color: DunesColors.text3),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
+                              _buildCategoryTabs(),
                               const SizedBox(height: 10),
-                              const XflowSectionLabel(
-                                accent: '销售提案',
-                                title: 'XFlow 模板',
-                                trailing: '1 类',
+                              XflowSectionLabel(
+                                accent: _category == 'adm' ? '非业务类' : '业务类',
+                                title: '提案模板',
+                                trailing: '${_activeTemplates.length} 类',
                               ),
                               const SizedBox(height: 8),
-                              ..._templates.map((template) => Padding(
+                              if (_activeTemplates.isEmpty)
+                                _emptyTemplates()
+                              else
+                                ..._activeTemplates.map(
+                                  (template) => Padding(
                                     padding: const EdgeInsets.only(bottom: 8),
-                                    child: _templateCard(template),
-                                  )),
+                                    child: ProposalTemplateListTile(
+                                      template: template,
+                                      isAdm: _category == 'adm',
+                                      onTap: template.enabled
+                                          ? () => widget.onOpenForm(
+                                                template.templateKey,
+                                              )
+                                          : null,
+                                    ),
+                                  ),
+                                ),
                             ],
                           ),
                         ),
@@ -139,89 +130,90 @@ class _NativeB3PageState extends State<NativeB3Page> {
     );
   }
 
-  Widget _templateCard(XflowTemplateCard template) {
-    return Material(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(12),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onTap: () => widget.onOpenForm(template.templateKey),
-        child: Container(
-          padding: const EdgeInsets.fromLTRB(12, 11, 12, 11),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: DunesColors.border),
+  Widget _buildCategoryTabs() {
+    return Container(
+      padding: const EdgeInsets.all(3),
+      decoration: BoxDecoration(
+        color: DunesColors.bgSoft,
+        borderRadius: BorderRadius.circular(9),
+      ),
+      child: Row(
+        children: [
+          _categoryTab(
+            label: '业务类提案',
+            count: _bizTemplates.length,
+            selected: _category == 'biz',
+            accent: DunesColors.accentDeep,
+            onTap: () => setState(() => _category = 'biz'),
           ),
-          child: Row(
-            children: [
-              Stack(
-                clipBehavior: Clip.none,
-                children: [
-                  Container(
-                    width: 42,
-                    height: 42,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF6F5BC9),
-                      borderRadius: BorderRadius.circular(11),
-                    ),
-                    child: const Icon(Icons.assignment_outlined, color: Colors.white, size: 22),
+          _categoryTab(
+            label: '非业务类提案',
+            count: _admTemplates.length,
+            selected: _category == 'adm',
+            accent: const Color(0xFF9D5F1A),
+            onTap: () => setState(() => _category = 'adm'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _categoryTab({
+    required String label,
+    required int count,
+    required bool selected,
+    required Color accent,
+    required VoidCallback onTap,
+  }) {
+    return Expanded(
+      child: Material(
+        color: selected ? Colors.white : Colors.transparent,
+        borderRadius: BorderRadius.circular(7),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(7),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  label,
+                  style: DunesTypography.sans(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: selected ? accent : DunesColors.text2,
                   ),
-                  Positioned(
-                    right: -4,
-                    top: -4,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFEFEAFF),
-                        borderRadius: BorderRadius.circular(99),
-                      ),
-                      child: Text(
-                        template.tagLabel,
-                        style: const TextStyle(
-                          fontSize: 7.5,
-                          color: Color(0xFF7058D8),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      template.title,
-                      style: const TextStyle(
-                        fontSize: 12.5,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(height: 3),
-                    Text(
-                      template.subtitle,
-                      style: const TextStyle(
-                        fontSize: 10.5,
-                        color: DunesColors.text3,
-                        height: 1.3,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      template.endpoint,
-                      style: const TextStyle(
-                        fontSize: 9.2,
-                        color: DunesColors.text3,
-                      ),
-                    ),
-                  ],
                 ),
-              ),
-              const Icon(Icons.chevron_right_rounded, color: DunesColors.text3),
-            ],
+                const SizedBox(width: 4),
+                Text(
+                  '$count',
+                  style: DunesTypography.sans(
+                    fontSize: 10,
+                    color: selected ? accent : DunesColors.text3,
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _emptyTemplates() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: DunesColors.borderSoft),
+      ),
+      child: Text(
+        _category == 'adm' ? '暂无非业务类模板' : '暂无业务类模板',
+        textAlign: TextAlign.center,
+        style: DunesTypography.sans(fontSize: 12, color: DunesColors.text3),
       ),
     );
   }

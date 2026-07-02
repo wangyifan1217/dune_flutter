@@ -501,6 +501,17 @@ class NativeNovaService {
 
   Uri _dunesUri(String path) => Uri.parse('${session.apiBase}$path');
 
+  String mediaProxyUrl(
+    String source, {
+    String bucket = 'im-attachments',
+  }) {
+    final raw = source.trim();
+    if (raw.isEmpty) return raw;
+    return _dunesUri(
+      '/storage/download?bucket=$bucket&objectKey=${Uri.encodeQueryComponent(raw)}&proxy=1',
+    ).toString();
+  }
+
   Map<String, String> get _dunesHeaders => <String, String>{
     'Authorization': 'Bearer ${session.token}',
     'Content-Type': 'application/json',
@@ -521,11 +532,18 @@ class NativeNovaService {
         .trim();
   }
 
-  void setSelectedChatModel(String model) {
+  void setSelectedChatModel(String model, {bool persist = false}) {
     final trimmed = model.trim();
     if (trimmed.isEmpty) return;
     _selectedModelOverride = trimmed;
     _historySync = null;
+    if (!persist) return;
+    final uid = session.userId;
+    if (uid > 0) {
+      unawaited(
+        NovaWebStorage.merge(uid, {'dunes_nova_chat_model': trimmed}),
+      );
+    }
   }
 
   /// 进入 C4 时重试失败的历史同步队列。
@@ -579,7 +597,7 @@ class NativeNovaService {
     return friendlyErrorText(msg, fallback: 'NOVA 请求失败，请稍后重试');
   }
 
-  Future<({String avatarPreset, String avatarUrl})>
+  Future<({String avatarPreset, String avatarObjectKey, String avatarUrl})>
   fetchCurrentUserAvatar() async {
     try {
       final resp = await _client.get(
@@ -587,7 +605,7 @@ class NativeNovaService {
         headers: _dunesHeaders,
       );
       if (resp.statusCode < 200 || resp.statusCode >= 300) {
-        return (avatarPreset: '', avatarUrl: '');
+        return (avatarPreset: '', avatarObjectKey: '', avatarUrl: '');
       }
       final body = _decode(resp.body);
       final data = body['data'] is Map<String, dynamic>
@@ -607,25 +625,11 @@ class NativeNovaService {
         url = objectKey;
       }
       if (url.isEmpty && objectKey.isNotEmpty && !_isHttpUrl(objectKey)) {
-        try {
-          final pre = await _client.get(
-            _dunesUri(
-              '/storage/presigned-get?bucket=user-avatars&objectKey=${Uri.encodeQueryComponent(objectKey)}',
-            ),
-            headers: _dunesHeaders,
-          );
-          if (pre.statusCode >= 200 && pre.statusCode < 300) {
-            final preBody = _decode(pre.body);
-            final preData = preBody['data'] is Map<String, dynamic>
-                ? preBody['data'] as Map<String, dynamic>
-                : preBody;
-            url = (preData['url'] ?? '').toString();
-          }
-        } catch (_) {}
+        url = mediaProxyUrl(objectKey, bucket: 'user-avatars');
       }
-      return (avatarPreset: preset, avatarUrl: url);
+      return (avatarPreset: preset, avatarObjectKey: objectKey, avatarUrl: url);
     } catch (_) {
-      return (avatarPreset: '', avatarUrl: '');
+      return (avatarPreset: '', avatarObjectKey: '', avatarUrl: '');
     }
   }
 
@@ -2664,7 +2668,7 @@ class NativeNovaService {
         if (!userStoppedStream) sseAcc.flush(applySseEvent);
       } on http.ClientException {
         if (!userStoppedStream) {
-          await _clearGeneratingMarkersForConversation(activeConvId);
+          // 后台/断网时保留 generating 与草稿，由页面 resume 或后台轮询恢复。
           await stripStreamingFromSession(activeConvId);
           rethrow;
         }

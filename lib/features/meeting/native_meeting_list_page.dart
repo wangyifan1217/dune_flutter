@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../core/theme/dunes_theme.dart';
+import '../../core/util/friendly_error.dart';
 import '../auth/auth_session.dart';
 import 'native_meeting_models.dart';
 import 'native_meeting_service.dart';
@@ -129,13 +130,10 @@ class _NativeMeetingListPageState extends State<NativeMeetingListPage> {
       await _service.deleteMeeting(row.meetingId);
       if (!mounted) return;
       setState(() => _rows = _rows.where((e) => e.meetingId != row.meetingId).toList());
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('已删除会议纪要')),
-      );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('删除失败：$e')),
+        SnackBar(content: Text(friendlyErrorText(e, fallback: '删除失败，请稍后重试'))),
       );
     }
   }

@@ -17,57 +17,16 @@ class NativeMeetingRealtimeTranscript {
       StreamController<RealtimeTranscriptUpdate>.broadcast();
   WebSocket? _socket;
   bool _paused = false;
+  DateTime? _pausedAt;
   String _lastFinalLine = '';
   static const String _sessionPath = '/meeting-beta/session';
+  static const Duration _resumeReconnectThreshold = Duration(seconds: 15);
 
   Stream<RealtimeTranscriptUpdate> get updates => _updates.stream;
 
   Future<void> connect() async {
-    if (_socket != null) return;
-    final sessResp = await _createSession();
-    if (sessResp.statusCode < 200 || sessResp.statusCode >= 300) {
-      throw Exception('meeting session unavailable(${sessResp.statusCode})');
-    }
-    final body = jsonDecode(sessResp.body) as Map<String, dynamic>;
-    final data =
-        (body['data'] as Map?)?.cast<String, dynamic>() ?? <String, dynamic>{};
-    final baseUrl = (data['baseUrl'] ?? '').toString();
-    final cookie = (data['wsCookie'] ?? '').toString();
-    if (baseUrl.isEmpty || cookie.isEmpty) {
-      throw Exception('meeting session unavailable');
-    }
-    final wsUrl = _toWsUrl(baseUrl);
-    _updates.add(
-      const RealtimeTranscriptUpdate(
-        text: '已连接实时转写服务，等待语音...',
-        isFinal: true,
-      ),
-    );
-    final ws = await WebSocket.connect(
-      wsUrl,
-      headers: <String, dynamic>{'Cookie': cookie},
-    );
-    _socket = ws;
-    _socket?.listen(
-      (event) {
-        if (event is String) {
-          _handleServerEvent(event);
-        }
-      },
-      onDone: () => _socket = null,
-      onError: (_) => _socket = null,
-    );
-    _socket?.add(
-      jsonEncode(<String, dynamic>{
-        'action': 'start',
-        'sampleRate': 16000,
-        'profile': 'meeting_notes',
-        'resetTranscript': false,
-        'vadSilenceTime': 600,
-        'filterPunc': 0,
-        'needvad': '1',
-      }),
-    );
+    if (_isSocketUsable(_socket)) return;
+    await _connectSocket();
   }
 
   Future<void> stop() async {
@@ -75,28 +34,38 @@ class NativeMeetingRealtimeTranscript {
     await _socket?.close();
     _socket = null;
     _paused = false;
+    _pausedAt = null;
     _lastFinalLine = '';
   }
 
   Future<void> pause() async {
     if (_socket == null) return;
     _paused = true;
+    _pausedAt = DateTime.now();
     _updates.add(
-      const RealtimeTranscriptUpdate(text: '[状态] 已暂停实时转写', isFinal: true),
+      const RealtimeTranscriptUpdate(text: '[状态] 已暂停录音', isFinal: true),
     );
   }
 
   Future<void> resume() async {
-    if (_socket == null) return;
+    final pausedAt = _pausedAt;
+    final pausedTooLong = pausedAt != null &&
+        DateTime.now().difference(pausedAt) >= _resumeReconnectThreshold;
+    if (pausedTooLong || !_isSocketUsable(_socket)) {
+      await _reconnectSocket();
+    }
+    _pausedAt = null;
     _paused = false;
     _updates.add(
-      const RealtimeTranscriptUpdate(text: '[状态] 已继续实时转写', isFinal: true),
+      const RealtimeTranscriptUpdate(text: '[状态] 已继续录音', isFinal: true),
     );
   }
 
   void sendAudioChunk(Uint8List chunk) {
     final ws = _socket;
-    if (ws == null || _paused || chunk.isEmpty) return;
+    if (ws == null || ws.readyState != WebSocket.open || _paused || chunk.isEmpty) {
+      return;
+    }
     const maxFrameBytes = 3200;
     if (chunk.length <= maxFrameBytes) {
       ws.add(chunk);
@@ -119,6 +88,75 @@ class NativeMeetingRealtimeTranscript {
 
   Future<http.Response> _createSession() async {
     return dunesHttpPost(session, _sessionPath, body: '{}');
+  }
+
+  Future<void> _reconnectSocket() async {
+    final oldSocket = _socket;
+    _socket = null;
+    if (oldSocket != null) {
+      try {
+        oldSocket.add(jsonEncode(<String, dynamic>{'action': 'stop'}));
+      } catch (_) {}
+      try {
+        await oldSocket.close();
+      } catch (_) {}
+    }
+    await _connectSocket();
+  }
+
+  Future<void> _connectSocket() async {
+    final sessResp = await _createSession();
+    if (sessResp.statusCode < 200 || sessResp.statusCode >= 300) {
+      throw Exception('meeting session unavailable(${sessResp.statusCode})');
+    }
+    final body = jsonDecode(sessResp.body) as Map<String, dynamic>;
+    final data =
+        (body['data'] as Map?)?.cast<String, dynamic>() ?? <String, dynamic>{};
+    final baseUrl = (data['baseUrl'] ?? '').toString();
+    final cookie = (data['wsCookie'] ?? '').toString();
+    if (baseUrl.isEmpty || cookie.isEmpty) {
+      throw Exception('meeting session unavailable');
+    }
+    final wsUrl = _toWsUrl(baseUrl);
+    final ws = await WebSocket.connect(
+      wsUrl,
+      headers: <String, dynamic>{'Cookie': cookie},
+    );
+    _socket = ws;
+    _updates.add(
+      const RealtimeTranscriptUpdate(
+        text: '已连接实时转写服务，等待语音...',
+        isFinal: true,
+      ),
+    );
+    ws.listen(
+      (event) {
+        if (event is String) {
+          _handleServerEvent(event);
+        }
+      },
+      onDone: () {
+        if (identical(_socket, ws)) _socket = null;
+      },
+      onError: (_) {
+        if (identical(_socket, ws)) _socket = null;
+      },
+    );
+    ws.add(
+      jsonEncode(<String, dynamic>{
+        'action': 'start',
+        'sampleRate': 16000,
+        'profile': 'meeting_notes',
+        'resetTranscript': false,
+        'vadSilenceTime': 600,
+        'filterPunc': 0,
+        'needvad': '1',
+      }),
+    );
+  }
+
+  bool _isSocketUsable(WebSocket? socket) {
+    return socket != null && socket.readyState == WebSocket.open;
   }
 
   void _handleServerEvent(String event) {

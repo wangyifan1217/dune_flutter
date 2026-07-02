@@ -41,6 +41,7 @@ import '../kb/native_kb_service.dart';
 import '../xflow/native_b10_page.dart';
 import '../xflow/native_b3_page.dart';
 import '../xflow/native_xflow_form_page.dart';
+import '../xflow/proposal_launch_config.dart';
 import '../xflow/xflow_models.dart';
 import '../xflow/xflow_service.dart';
 import '../nova/native_nova_history_page.dart';
@@ -106,6 +107,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
   XflowTodoHint? _selectedTodoHint;
   String _b10BackScreen = 'P1';
   String _xflowTemplateKey = 'sales-proposal';
+  String _b3InitialCategory = 'biz';
   int? _xflowEditProposalId;
   String _xflowFormBackScreen = 'B3';
   String? _b14InitialFilter;
@@ -487,6 +489,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           workbenchBadge: _workbenchBadge,
           workbenchRefresh: _workbenchRefresh,
           onOpenB14: _goB14,
+          onOpenB3: _goB3,
+          onOpenXflowForm: _openXflowFormFromB2,
           onLogout: widget.onLogout,
         );
       case 'C1':
@@ -672,6 +676,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         return NativeB3Page(
           session: widget.session,
           navigation: widget.navigation,
+          initialCategory: _b3InitialCategory,
           onOpenForm: (templateKey) {
             setState(() {
               _xflowTemplateKey = templateKey;
@@ -784,7 +789,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       case 'MM-L':
         return NativeMeetingListPage(
           session: widget.session,
-          onBack: widget.navigation.back,
+          onBack: widget.navigation.leaveMeetingList,
           onCreate: () => widget.navigation.go('MM0'),
           onOpenDetail: (meetingId) {
             if (meetingId <= 0) return;
@@ -795,11 +800,21 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       case 'MM0':
         return NativeMeetingCreatePage(
           session: widget.session,
-          onBack: widget.navigation.back,
-          onCreated: (meetingId) {
+          navigation: widget.navigation,
+          onBack: widget.navigation.leaveMeetingCreate,
+          onCreated: (meetingId, {required isDraft}) {
             if (meetingId <= 0) return;
             setState(() => _meetingId = meetingId);
-            widget.navigation.go('MM');
+            final nav = widget.navigation;
+            if (isDraft) {
+              if (nav.history.contains('MM-L')) {
+                nav.popTo('MM-L');
+              } else {
+                nav.replaceTop('MM-L');
+              }
+            } else {
+              nav.replaceTop('MM');
+            }
           },
         );
       case 'MM':
@@ -816,7 +831,14 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           key: ValueKey<int>(_meetingId),
           session: widget.session,
           meetingId: _meetingId,
-          onBack: widget.navigation.back,
+          onBack: () {
+            final nav = widget.navigation;
+            if (nav.history.contains('MM-L')) {
+              nav.popTo('MM-L');
+            } else {
+              nav.back();
+            }
+          },
         );
       case 'C2':
         return NativeGroupChatPage(
@@ -938,6 +960,20 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     widget.navigation.go('B14');
   }
 
+  void _goB3({String category = 'biz'}) {
+    setState(() => _b3InitialCategory = category);
+    widget.navigation.go('B3');
+  }
+
+  void _openXflowFormFromB2(String templateKey) {
+    setState(() {
+      _xflowTemplateKey = templateKey;
+      _xflowEditProposalId = null;
+      _xflowFormBackScreen = 'B2';
+    });
+    widget.navigation.go('XF');
+  }
+
   void _openProposalDetail(XflowProposalItem item, {required String from}) {
     // 「我发起的」列表点击草稿 → 进入可继续填写的表单（与提交页一致），并可删除草稿。
     if (from == 'B14' && item.status.toUpperCase() == 'DRAFT') {
@@ -966,6 +1002,8 @@ class _NativeB2Page extends StatefulWidget {
     required this.workbenchBadge,
     required this.workbenchRefresh,
     required this.onOpenB14,
+    required this.onOpenB3,
+    required this.onOpenXflowForm,
     this.onLogout,
   });
 
@@ -975,6 +1013,8 @@ class _NativeB2Page extends StatefulWidget {
   final WorkbenchBadgeNotifier workbenchBadge;
   final WorkbenchDataRefreshNotifier workbenchRefresh;
   final void Function({String? filter}) onOpenB14;
+  final void Function({String category}) onOpenB3;
+  final void Function(String templateKey) onOpenXflowForm;
   final VoidCallback? onLogout;
 
   @override
@@ -990,6 +1030,8 @@ class _NativeB2PageState extends State<_NativeB2Page> {
   String? _loadError;
   bool _avatarSheetOpen = false;
   bool _qrLoginOpening = false;
+  int _avatarRefreshVersion = 0;
+  List<ProposalLaunchItem> _quickLaunchItems = const <ProposalLaunchItem>[];
   final MeetingLiveController _live = MeetingLiveController.instance;
 
   @override
@@ -1110,12 +1152,16 @@ class _NativeB2PageState extends State<_NativeB2Page> {
         NativeMeetingService(session: widget.session)
             .fetchMyCount()
             .catchError((_) => 0),
+        xflow.fetchTemplatesByCategory('biz').catchError((_) => const <XflowTemplateCard>[]),
+        xflow.fetchTemplatesByCategory('adm').catchError((_) => const <XflowTemplateCard>[]),
       ]);
       final resp = results[0] as http.Response;
       final kbSummary = results[1] as NativeKbSummary?;
       final profile = results[2] as _NativeB2Profile;
       initiatedRows = results[3] as List<XflowProposalItem>?;
       final meetingCount = results[4] as int;
+      final bizTemplates = results[5] as List<XflowTemplateCard>;
+      final admTemplates = results[6] as List<XflowTemplateCard>;
       if (resp.statusCode < 200 || resp.statusCode >= 300) {
         throw Exception('HTTP ${resp.statusCode}');
       }
@@ -1135,6 +1181,11 @@ class _NativeB2PageState extends State<_NativeB2Page> {
         _kbSummary = kbSummary;
         _profile = profile;
         _meetingCount = meetingCount;
+        _quickLaunchItems = buildQuickLaunchItems(
+          bizTemplates: bizTemplates,
+          admTemplates: admTemplates,
+          maxItems: 4,
+        );
         _loading = false;
       });
       _persistProfileCache(profile);
@@ -1184,53 +1235,53 @@ class _NativeB2PageState extends State<_NativeB2Page> {
       final objectKey =
           (data['avatarObjectKey'] ?? data['peerAvatarObjectKey'] ?? '')
               .toString();
-      final signature = avatarSourceSignature(
-        preset: avatarPreset,
-        objectKey: objectKey,
-      );
-      String avatarUrl =
-          cachedMyPageAvatarUrl(widget.session.userId, signature) ?? '';
+      String avatarUrl = (data['avatarUrl'] ??
+              data['avatarFullUrl'] ??
+              data['avatarImageUrl'] ??
+              data['avatar'] ??
+              data['avatarSrc'] ??
+              data['avatarImage'] ??
+              '')
+          .toString()
+          .trim();
       if (avatarUrl.isEmpty) {
-        avatarUrl =
-            (data['avatarUrl'] ??
-                    data['avatarFullUrl'] ??
-                    data['avatarImageUrl'] ??
-                    data['avatar'] ??
-                    data['avatarSrc'] ??
-                    data['avatarImage'] ??
-                    '')
-                .toString();
-        if (avatarUrl.isEmpty && _looksLikeUrl(objectKey)) {
-          avatarUrl = objectKey;
-        }
-        if (objectKey.isNotEmpty &&
-            avatarUrl.isEmpty &&
-            !_looksLikeUrl(objectKey)) {
-          try {
-            final preResp = await dunesHttpGet(
-              widget.session,
-              '/storage/presigned-get?bucket=user-avatars&objectKey=${Uri.encodeQueryComponent(objectKey)}',
-            );
-            if (preResp.statusCode >= 200 && preResp.statusCode < 300) {
-              final preBody = jsonDecode(preResp.body);
-              if (preBody is Map<String, dynamic>) {
-                final preData = preBody['data'];
-                if (preData is Map<String, dynamic>) {
-                  avatarUrl = (preData['url'] ?? preData['downloadUrl'] ?? '')
-                      .toString();
-                } else {
-                  avatarUrl = (preBody['url'] ?? preBody['downloadUrl'] ?? '')
-                      .toString();
-                }
+        avatarUrl = cachedMyPageAvatarUrl(
+              widget.session.userId,
+              preset: avatarPreset,
+              objectKey: objectKey,
+            ) ??
+            '';
+      }
+      if (avatarUrl.isEmpty && _looksLikeUrl(objectKey)) {
+        avatarUrl = objectKey;
+      }
+      if (objectKey.isNotEmpty &&
+          avatarUrl.isEmpty &&
+          !_looksLikeUrl(objectKey)) {
+        try {
+          final preResp = await dunesHttpGet(
+            widget.session,
+            '/storage/presigned-get?bucket=user-avatars&objectKey=${Uri.encodeQueryComponent(objectKey)}',
+          );
+          if (preResp.statusCode >= 200 && preResp.statusCode < 300) {
+            final preBody = jsonDecode(preResp.body);
+            if (preBody is Map<String, dynamic>) {
+              final preData = preBody['data'];
+              if (preData is Map<String, dynamic>) {
+                avatarUrl = (preData['url'] ?? preData['downloadUrl'] ?? '')
+                    .toString();
+              } else {
+                avatarUrl = (preBody['url'] ?? preBody['downloadUrl'] ?? '')
+                    .toString();
               }
             }
-          } catch (_) {}
-        }
-        if (avatarUrl.isNotEmpty) {
-          avatarUrl = _avatarProxyUrl(avatarUrl);
-        } else if (objectKey.isNotEmpty) {
-          avatarUrl = _avatarProxyUrl(objectKey);
-        }
+          }
+        } catch (_) {}
+      }
+      if (avatarUrl.isNotEmpty) {
+        avatarUrl = _avatarProxyUrl(avatarUrl);
+      } else if (objectKey.isNotEmpty) {
+        avatarUrl = _avatarProxyUrl(objectKey);
       }
       final profile = _NativeB2Profile(
         displayName:
@@ -1249,6 +1300,14 @@ class _NativeB2PageState extends State<_NativeB2Page> {
         avatarUrl: avatarUrl,
       );
       _persistProfileCache(profile);
+      userAvatarRefresh.remember(
+        UserAvatarSnapshot(
+          userId: widget.session.userId,
+          avatarPreset: avatarPreset,
+          avatarObjectKey: objectKey,
+          avatarUrl: avatarUrl,
+        ),
+      );
       return profile;
     } catch (_) {
       return _NativeB2Profile.fromSession(widget.session);
@@ -1258,6 +1317,8 @@ class _NativeB2PageState extends State<_NativeB2Page> {
   Future<void> _openAvatarEditor() async {
     if (_avatarSheetOpen) return;
     final profile = _profile ?? _NativeB2Profile.fromSession(widget.session);
+    final oldObjectKey = profile.avatarObjectKey;
+    final oldAvatarUrl = profile.avatarUrl;
     setState(() => _avatarSheetOpen = true);
     try {
       final updated = await NativeAvatarSheet.show(
@@ -1268,14 +1329,78 @@ class _NativeB2PageState extends State<_NativeB2Page> {
         initialAvatarUrl: profile.avatarUrl,
       );
       if (updated == null || !mounted) return;
-      invalidateMyPageProfile(widget.session.userId);
-      final refreshed = await _loadProfile();
+      final optimistic = _profileFromAvatarPayload(profile, updated);
+      setState(() {
+        _profile = optimistic;
+        _avatarRefreshVersion += 1;
+      });
+      await publishUserAvatarUpdated(
+        userId: widget.session.userId,
+        oldObjectKey: oldObjectKey,
+        oldAvatarUrl: oldAvatarUrl,
+        avatarPreset: optimistic.avatarPreset,
+        avatarObjectKey: optimistic.avatarObjectKey,
+        avatarUrl: optimistic.avatarUrl,
+      );
       if (!mounted) return;
-      setState(() => _profile = refreshed);
       showDunesToast(context, '头像已更新');
+      unawaited(() async {
+        final refreshed = await _loadProfile();
+        if (!mounted) return;
+        final changed =
+            refreshed.avatarPreset != optimistic.avatarPreset ||
+            refreshed.avatarObjectKey != optimistic.avatarObjectKey ||
+            refreshed.avatarUrl != optimistic.avatarUrl;
+        setState(() {
+          _profile = refreshed;
+          if (changed) _avatarRefreshVersion += 1;
+        });
+        if (!changed) return;
+        await publishUserAvatarUpdated(
+          userId: widget.session.userId,
+          oldObjectKey: optimistic.avatarObjectKey,
+          oldAvatarUrl: optimistic.avatarUrl,
+          avatarPreset: refreshed.avatarPreset,
+          avatarObjectKey: refreshed.avatarObjectKey,
+          avatarUrl: refreshed.avatarUrl,
+        );
+      }());
     } finally {
       if (mounted) setState(() => _avatarSheetOpen = false);
     }
+  }
+
+  _NativeB2Profile _profileFromAvatarPayload(
+    _NativeB2Profile base,
+    Map<String, dynamic> payload,
+  ) {
+    final preset = (payload['avatarPreset'] ?? payload['peerAvatarPreset'] ?? '')
+        .toString()
+        .trim();
+    final objectKey = (payload['avatarObjectKey'] ??
+            payload['peerAvatarObjectKey'] ??
+            '')
+        .toString()
+        .trim();
+    var avatarUrl = (payload['avatarUrl'] ??
+            payload['avatarFullUrl'] ??
+            payload['avatarImageUrl'] ??
+            payload['avatar'] ??
+            payload['avatarSrc'] ??
+            payload['avatarImage'] ??
+            '')
+        .toString()
+        .trim();
+    if (avatarUrl.isNotEmpty) {
+      avatarUrl = _avatarProxyUrl(avatarUrl);
+    } else if (objectKey.isNotEmpty) {
+      avatarUrl = _avatarProxyUrl(objectKey);
+    }
+    return base.copyWith(
+      avatarPreset: preset.isNotEmpty ? preset : base.avatarPreset,
+      avatarObjectKey: objectKey.isNotEmpty ? objectKey : base.avatarObjectKey,
+      avatarUrl: avatarUrl.isNotEmpty ? avatarUrl : base.avatarUrl,
+    );
   }
 
   Future<bool> _clearLocalCache() async {
@@ -1520,7 +1645,7 @@ class _NativeB2PageState extends State<_NativeB2Page> {
               ),
               const SizedBox(width: 6),
               Text(
-                paused ? '转写已暂停' : '实时转写中',
+                paused ? '录音已暂停' : '录音进行中',
                 style: DunesTypography.sans(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
@@ -1545,6 +1670,13 @@ class _NativeB2PageState extends State<_NativeB2Page> {
     final apiBase = widget.session.apiBase;
     if (raw.startsWith(apiBase)) return raw;
     return '$apiBase/storage/download?bucket=user-avatars&objectKey=${Uri.encodeQueryComponent(raw)}&proxy=1';
+  }
+
+  String _avatarUrlWithVersion(String rawUrl) {
+    final url = rawUrl.trim();
+    if (url.isEmpty) return url;
+    final sep = url.contains('?') ? '&' : '?';
+    return '$url${sep}dunes_avatar_v=$_avatarRefreshVersion';
   }
 
   Widget _buildLogoutButton() {
@@ -1662,7 +1794,7 @@ class _NativeB2PageState extends State<_NativeB2Page> {
           ),
           InkWell(
             borderRadius: BorderRadius.circular(14),
-            onTap: () => widget.navigation.go('B3'),
+            onTap: () => widget.onOpenB3(),
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
               decoration: BoxDecoration(
@@ -1696,6 +1828,7 @@ class _NativeB2PageState extends State<_NativeB2Page> {
         ? (widget.session.displayName ?? widget.session.phone).trim()
         : profile.displayName.trim();
     final avatarText = name.isEmpty ? '我' : name.characters.first;
+    final displayAvatarUrl = _avatarUrlWithVersion(profile.avatarUrl);
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -1714,9 +1847,12 @@ class _NativeB2PageState extends State<_NativeB2Page> {
             child: Stack(
               children: [
                 NativeAvatarCircle(
+                  key: ValueKey<String>(
+                    '${profile.avatarPreset}|${profile.avatarObjectKey}|${profile.avatarUrl}|$_avatarRefreshVersion',
+                  ),
                   size: 52,
                   avatarPreset: profile.avatarPreset,
-                  avatarUrl: profile.avatarUrl,
+                  avatarUrl: displayAvatarUrl,
                   fallbackText: avatarText,
                 ),
                 Positioned(
@@ -1900,6 +2036,13 @@ class _NativeB2PageState extends State<_NativeB2Page> {
   }
 
   Widget _buildQuickLaunch() {
+    final items = _quickLaunchItems.isEmpty
+        ? buildQuickLaunchItems(
+            bizTemplates: const <XflowTemplateCard>[],
+            admTemplates: const <XflowTemplateCard>[],
+            maxItems: 4,
+          )
+        : _quickLaunchItems;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1911,75 +2054,50 @@ class _NativeB2PageState extends State<_NativeB2Page> {
             ),
             const Spacer(),
             TextButton(
-              onPressed: () => widget.navigation.go('B3'),
-              child: const Text('销售提案  →', style: TextStyle(fontSize: 10)),
+              onPressed: () => widget.onOpenB3(),
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 6),
+                minimumSize: Size.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              child: const Text('更多提案  →', style: TextStyle(fontSize: 10)),
             ),
           ],
         ),
         const SizedBox(height: 6),
-        InkWell(
-          onTap: () => widget.navigation.go('B3'),
-          borderRadius: BorderRadius.circular(12),
-          child: Container(
-            width: 136,
-            height: 112,
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: DunesColors.border),
-            ),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Stack(
-                  children: [
-                    Container(
-                      width: 42,
-                      height: 42,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF6F5BC9),
-                        borderRadius: BorderRadius.circular(11),
-                      ),
-                      child: const Icon(
-                        Icons.assignment_outlined,
-                        color: Colors.white,
-                        size: 22,
-                      ),
-                    ),
-                    Positioned(
-                      right: -4,
-                      top: -4,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 4,
-                          vertical: 1,
-                        ),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFEFEAFF),
-                          borderRadius: BorderRadius.circular(99),
-                        ),
-                        child: const Text(
-                          '新建',
-                          style: TextStyle(
-                            fontSize: 7.5,
-                            color: Color(0xFF7058D8),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
+        Row(
+          children: [
+            for (var i = 0; i < items.length; i++)
+              Expanded(
+                child: Padding(
+                  padding: EdgeInsets.only(right: i < items.length - 1 ? 7 : 0),
+                  child: ProposalQuickLaunchCell(
+                    item: items[i],
+                    onTap: items[i].enabled && !items[i].isPlaceholder
+                        ? () => _onQuickLaunchTap(items[i])
+                        : null,
+                  ),
                 ),
-                const SizedBox(height: 8),
-                const Text(
-                  '销售提案',
-                  style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w500),
-                ),
-              ],
-            ),
-          ),
+              ),
+          ],
         ),
       ],
     );
+  }
+
+  void _onQuickLaunchTap(ProposalLaunchItem item) {
+    if (!item.enabled || item.isPlaceholder) return;
+    final templateKey = item.templateKey?.trim();
+    if (templateKey != null && templateKey.isNotEmpty) {
+      widget.onOpenXflowForm(templateKey);
+      return;
+    }
+    final screenId = item.screenId?.trim();
+    if (screenId != null && screenId.isNotEmpty) {
+      widget.navigation.go(screenId);
+      return;
+    }
+    widget.onOpenB3();
   }
 
   Widget _buildSectionLabel(String text) {
@@ -2287,6 +2405,26 @@ class _NativeB2Profile {
   final String avatarPreset;
   final String avatarObjectKey;
   final String avatarUrl;
+
+  _NativeB2Profile copyWith({
+    String? displayName,
+    String? phone,
+    String? departmentName,
+    String? title,
+    String? avatarPreset,
+    String? avatarObjectKey,
+    String? avatarUrl,
+  }) {
+    return _NativeB2Profile(
+      displayName: displayName ?? this.displayName,
+      phone: phone ?? this.phone,
+      departmentName: departmentName ?? this.departmentName,
+      title: title ?? this.title,
+      avatarPreset: avatarPreset ?? this.avatarPreset,
+      avatarObjectKey: avatarObjectKey ?? this.avatarObjectKey,
+      avatarUrl: avatarUrl ?? this.avatarUrl,
+    );
+  }
 
   String get subtitleLine {
     final parts = <String>[

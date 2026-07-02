@@ -638,6 +638,10 @@ class _TrendChartState extends State<_TrendChart> {
   late List<String> _xLabels;
   late List<int> _xAnchors;
   double _totRev = 0, _totCost = 0, _totProf = 0;
+  Offset? _pointerDown;
+  bool _pointerMoved = false;
+  bool _pointerHorizontal = false;
+  static const double _kChartSlop = 12;
 
   int get _n => _series.profit.length;
 
@@ -832,11 +836,39 @@ class _TrendChartState extends State<_TrendChart> {
         // 双 Painter Stack：折线层用 RepaintBoundary 隔离
         LayoutBuilder(builder: (ctx, c) {
           final w = c.maxWidth;
-          return GestureDetector(
+          return Listener(
             behavior: HitTestBehavior.opaque,
-            onTapDown: (d) => _setSelectionFromX(d.localPosition.dx, w),
-            onHorizontalDragStart: (d) => _setSelectionFromX(d.localPosition.dx, w),
-            onHorizontalDragUpdate: (d) => _setSelectionFromX(d.localPosition.dx, w),
+            onPointerDown: (e) {
+              _pointerDown = e.localPosition;
+              _pointerMoved = false;
+              _pointerHorizontal = false;
+            },
+            onPointerMove: (e) {
+              final start = _pointerDown;
+              if (start == null) return;
+              final delta = e.localPosition - start;
+              if (delta.distance <= _kChartSlop) return;
+              _pointerMoved = true;
+              if (delta.dx.abs() > delta.dy.abs()) {
+                _pointerHorizontal = true;
+                _setSelectionFromX(e.localPosition.dx, w);
+              }
+            },
+            onPointerUp: (e) {
+              final start = _pointerDown;
+              if (start == null) return;
+              if (!_pointerMoved || _pointerHorizontal) {
+                _setSelectionFromX(e.localPosition.dx, w);
+              }
+              _pointerDown = null;
+              _pointerMoved = false;
+              _pointerHorizontal = false;
+            },
+            onPointerCancel: (_) {
+              _pointerDown = null;
+              _pointerMoved = false;
+              _pointerHorizontal = false;
+            },
             child: SizedBox(
               height: 76,
               child: Stack(
@@ -910,6 +942,55 @@ class _TrendChartState extends State<_TrendChart> {
   }
 }
 
+/// 仅在手指几乎未移动时触发点击，避免列表滑动/拖动误触进入指标页。
+class _LhScrollSafeTap extends StatefulWidget {
+  const _LhScrollSafeTap({required this.onTap, required this.child});
+
+  final VoidCallback onTap;
+  final Widget child;
+
+  @override
+  State<_LhScrollSafeTap> createState() => _LhScrollSafeTapState();
+}
+
+class _LhScrollSafeTapState extends State<_LhScrollSafeTap> {
+  Offset? _down;
+  bool _moved = false;
+  int? _pointer;
+
+  void _reset() {
+    _down = null;
+    _moved = false;
+    _pointer = null;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Listener(
+      behavior: HitTestBehavior.translucent,
+      onPointerDown: (e) {
+        if (_pointer != null) return;
+        _pointer = e.pointer;
+        _down = e.position;
+        _moved = false;
+      },
+      onPointerMove: (e) {
+        if (e.pointer != _pointer || _down == null || _moved) return;
+        if ((e.position - _down!).distance > 16) _moved = true;
+      },
+      onPointerUp: (e) {
+        if (e.pointer != _pointer) return;
+        if (!_moved && _down != null) widget.onTap();
+        _reset();
+      },
+      onPointerCancel: (e) {
+        if (e.pointer == _pointer) _reset();
+      },
+      child: widget.child,
+    );
+  }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Main page widget
 // ─────────────────────────────────────────────────────────────────────────────
@@ -948,7 +1029,8 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   String _supplyFuelFilter = '全部';
   String _hunFilter = '全部'; // '全部' | 'U' | 'N' | 'H' | '混合' — 仅 supply/channel
   final Set<String> _expanded = {};
-  final Set<String> _metaExpanded = {}; // 列表行的 meta 指标（销售/税/成本等）默认收起，点"指标"按钮展开
+  final Set<String> _metaCollapsed = {}; // 列表行的 meta 指标（销售/税/成本等）默认展开，点"指标"按钮可收起
+  String? _metaHighlightKey; // 跨行"列聚焦"：点某个 meta 指标 → 所有行同一指标高亮成色块，便于纵向比较
   bool _discountExpanded = false;
   static const int _discountPreviewCount = 3;
 
@@ -1004,6 +1086,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   bool _periodPickerOpen = false;
   // 点击 hero 小格 → 进入指标分析页（per-metric drill-down）
   String? _metricPageKey;
+  final List<String> _metricPageStack = [];
   String? _detailKey; // non-null when detail view is open
   String? _detailType;
   String _detailSubTab = '';
@@ -1305,6 +1388,35 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   bool _hasInternalBackStack() =>
       _detailKey != null || _metricPageKey != null;
 
+  void _enterMetricPage(String key) {
+    _metricPageKey = key;
+    _metricPageStack
+      ..clear()
+      ..add(key);
+  }
+
+  void _switchMetricPage(String key) {
+    if (_metricPageKey == key) return;
+    _metricPageKey = key;
+    _metricPageStack.add(key);
+  }
+
+  /// 指标页内返回上一级；栈空则回到主页列表。
+  bool _popMetricPage() {
+    if (_metricPageStack.length > 1) {
+      _metricPageStack.removeLast();
+      _metricPageKey = _metricPageStack.last;
+      return true;
+    }
+    _closeMetricPage();
+    return false;
+  }
+
+  void _closeMetricPage() {
+    _metricPageKey = null;
+    _metricPageStack.clear();
+  }
+
   bool _handleInternalBack() {
     if (_detailKey != null) {
       _closeDropdown();
@@ -1329,12 +1441,13 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         _resetDetailSkuSearch();
         _resetDetailDrill();
         _resetCodeDrill();
+        _closeMetricPage();
       });
       return true;
     }
     if (_metricPageKey != null) {
       _closeDropdown();
-      setState(() => _metricPageKey = null);
+      setState(_popMetricPage);
       return true;
     }
     return false;
@@ -1705,6 +1818,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       _detailType = null;
       _resetDetailSkuSearch();
       _resetDetailDrill();
+      _closeMetricPage();
       _rowsCacheKey = '';
       _rowsCache = null;
       _cubeCacheKey = '';
@@ -2614,31 +2728,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       padding: const EdgeInsets.fromLTRB(22, 4, 22, 2),
       child: Row(
         children: [
-          // Brand mark
-          Container(
-            width: 28,
-            height: 28,
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [Color(0xFF1A1816), Color(0xFF3A342C)],
-              ),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: LhColors.copper.withAlpha(64), width: 1),
-            ),
-            child: Center(
-              child: Container(
-                width: 5.5,
-                height: 5.5,
-                decoration: BoxDecoration(
-                  color: LhColors.copper,
-                  shape: BoxShape.circle,
-                  boxShadow: [BoxShadow(color: LhColors.copper.withAlpha(140), blurRadius: 7)],
-                ),
-              ),
-            ),
-          ),
+          _LhBrandMark(size: 42),
           const SizedBox(width: 9),
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -2649,7 +2739,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           ),
           if (_isPageBusy) ...[
             const Spacer(),
-            const _LhBrandLoader(size: 22),
+            const _LhBrandLoader(size: 33),
           ],
         ],
       ),
@@ -2665,7 +2755,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const _LhBrandLoader(size: 48),
+              const _LhBrandLoader(size: 72),
               const SizedBox(height: 14),
               Text(
                 label,
@@ -2782,13 +2872,6 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 22),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          transform: GradientRotation(2.97), // ~170deg
-          colors: [Colors.white, Color(0xFFFCFAF5), Color(0xFFF7F4EC), Color(0xFFF2EEE3)],
-          stops: [0, 0.35, 0.75, 1],
-        ),
         border: Border.all(color: LhColors.line2, width: 1),
         borderRadius: BorderRadius.circular(14),
         boxShadow: [
@@ -2796,13 +2879,62 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           BoxShadow(color: const Color(0x10140A00), blurRadius: 20, spreadRadius: -10, offset: const Offset(0, 6)),
         ],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _buildHero(),
-          _buildTabSegment(),
-          if (_tab != 'analysis') _buildSortbar(),
-        ],
+      // 渐变分两层：base 暖 cream 对角 + 铜色 radial 高光。ClipRRect 裁圆角。
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(13),
+        child: Stack(
+          children: [
+            // ── Layer 1：base 暖 cream 对角渐变 —────────────────────────────
+            //    4 stop，起点用 warm off-white（不是纯白，避免暖色调里的冷点），
+            //    终点比原来略深 1 档（#EBE2CC vs 原 #F2EEE3），
+            //    只在肉眼几乎察觉的程度上加深，为的是让高光有对比、而不是变深
+            Positioned.fill(
+              child: Container(
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment(-0.9, -1.0),
+                    end: Alignment(0.5, 1.0),
+                    colors: [
+                      Color(0xFFFFFDF7), // warm off-white（取代纯白）
+                      Color(0xFFFCF8EC),
+                      Color(0xFFF5EEDA),
+                      Color(0xFFEBE2CC), // 略深于原 #F2EEE3，给高光留对比空间
+                    ],
+                    stops: [0, 0.32, 0.7, 1],
+                  ),
+                ),
+              ),
+            ),
+            // ── Layer 2：右上角铜色高光 —──────────────────────────────────
+            //    模拟暖光源从右上照下来。alpha ~6%，肉眼几乎察觉不到"这是铜"，
+            //    但视觉上会感觉纸面被暖光点亮——高端印刷品的常见手法
+            Positioned.fill(
+              child: Container(
+                decoration: BoxDecoration(
+                  gradient: RadialGradient(
+                    center: const Alignment(0.95, -0.85),
+                    radius: 1.1,
+                    colors: [
+                      LhColors.copper.withAlpha(0x10), // ~6%
+                      LhColors.copper.withAlpha(0x06), // ~2%
+                      LhColors.copper.withAlpha(0),    // 完全消失
+                    ],
+                    stops: const [0, 0.35, 0.7],
+                  ),
+                ),
+              ),
+            ),
+            // ── Layer 3：内容 —────────────────────────────────────────────
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildHero(),
+                _buildTabSegment(),
+                if (_tab != 'analysis') _buildSortbar(),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -3164,6 +3296,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       _detailType = null;
       _resetDetailSkuSearch();
       _resetDetailDrill();
+      _closeMetricPage();
       _rowsCacheKey = '';
       _rowsCache = null;
       _cubeCacheKey = '';
@@ -3501,8 +3634,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     final on = off == _periodOffset;
     return Padding(
       padding: const EdgeInsets.only(right: 14),
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
+      child: _LhScrollSafeTap(
         onTap: () => _applyPeriod(offset: off),
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 4),
@@ -3729,9 +3861,8 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
 
     return SizedBox(
       width: width,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: () => setState(() => _metricPageKey = m.key),
+      child: _LhScrollSafeTap(
+        onTap: () => setState(() => _enterMetricPage(m.key)),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -3793,6 +3924,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   /// 指标 → 中文标签
   String _metricPageLabel(String key) {
     const labels = {
+      'sales': '销售额',
       'profit': '毛利润',
       'gmv': '引流GMV',
       'rate': '毛利率',
@@ -3807,6 +3939,8 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   /// 指标 → 该维度强调色
   Color _metricPageAccent(String key) {
     switch (key) {
+      case 'sales':
+        return LhColors.ink2;
       case 'profit':
         return LhColors.pos;
       case 'rate':
@@ -3824,18 +3958,23 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     }
   }
 
-  /// 顶部胶囊（hero 数字）格式化 — 复用现有渲染器
+  /// Hero 数字 — 与外部主 hero (_buildHero) 同 size：LhTypography.number 25pt。
+  /// 单位 sans 12pt mute。正负色由数字自身承担（'-' 前缀 + neg 色）。
   Widget _metricPageHeroNumber(String key) {
     final mtr = _bundle?.metrics ?? const <String, dynamic>{};
+    const numSize = 25.0;
+    const unitSize = 12.0;
     if (key == 'rate') {
       final rate = (mtr['rate'] as num?)?.toDouble();
       if (rate == null) {
-        return Text('—', style: LhTypography.sans(size: 34, weight: FontWeight.w700, color: LhColors.mute2));
+        return Text('—', style: LhTypography.number(size: numSize, color: LhColors.mute2));
       }
+      final isNeg = rate < 0;
       return RichText(
         text: TextSpan(children: [
-          TextSpan(text: rate.toStringAsFixed(2), style: LhTypography.sans(size: 34, weight: FontWeight.w700, color: LhColors.ink, letterSpacing: -0.6, height: 1.0)),
-          TextSpan(text: ' %', style: LhTypography.mono(size: 14, color: LhColors.mute, weight: FontWeight.w500)),
+          if (isNeg) TextSpan(text: '-', style: LhTypography.number(size: numSize, color: LhColors.neg)),
+          TextSpan(text: rate.abs().toStringAsFixed(2), style: LhTypography.number(size: numSize, color: isNeg ? LhColors.neg : LhColors.ink)),
+          TextSpan(text: ' %', style: LhTypography.sans(size: unitSize, color: LhColors.mute, weight: FontWeight.w500)),
         ]),
       );
     }
@@ -3846,9 +3985,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       final v = raw.abs().toString().replaceAll(RegExp(r'\.0$'), '');
       return RichText(
         text: TextSpan(children: [
-          if (isNeg) TextSpan(text: '-', style: LhTypography.sans(size: 34, weight: FontWeight.w700, color: LhColors.neg, letterSpacing: -0.6, height: 1.0)),
-          TextSpan(text: v, style: LhTypography.sans(size: 34, weight: FontWeight.w700, color: isNeg ? LhColors.neg : LhColors.ink, letterSpacing: -0.6, height: 1.0)),
-          if (unit.isNotEmpty) TextSpan(text: ' $unit', style: LhTypography.mono(size: 13, color: LhColors.mute, weight: FontWeight.w500)),
+          if (isNeg) TextSpan(text: '-', style: LhTypography.number(size: numSize, color: LhColors.neg)),
+          TextSpan(text: v, style: LhTypography.number(size: numSize, color: isNeg ? LhColors.neg : LhColors.ink)),
+          if (unit.isNotEmpty) TextSpan(text: ' $unit', style: LhTypography.sans(size: unitSize, color: LhColors.mute, weight: FontWeight.w500)),
         ]),
       );
     }
@@ -3860,11 +3999,42 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     final isNeg = sum < 0;
     return RichText(
       text: TextSpan(children: [
-        if (isNeg) TextSpan(text: '-', style: LhTypography.sans(size: 34, weight: FontWeight.w700, color: LhColors.neg, letterSpacing: -0.6, height: 1.0)),
-        TextSpan(text: _fmt(sum.abs()), style: LhTypography.sans(size: 34, weight: FontWeight.w700, color: isNeg ? LhColors.neg : LhColors.ink, letterSpacing: -0.6, height: 1.0)),
-        TextSpan(text: ' ${_unit(sum.abs())}元', style: LhTypography.mono(size: 13, color: LhColors.mute, weight: FontWeight.w500)),
+        if (isNeg) TextSpan(text: '-', style: LhTypography.number(size: numSize, color: LhColors.neg)),
+        TextSpan(text: _fmt(sum.abs()), style: LhTypography.number(size: numSize, color: isNeg ? LhColors.neg : LhColors.ink)),
+        TextSpan(text: ' ${_unit(sum.abs())}元', style: LhTypography.sans(size: unitSize, color: LhColors.mute, weight: FontWeight.w500)),
       ]),
     );
+  }
+
+  /// 指标 → 英文全大写副名（用于 kicker '毛利润 · GROSS PROFIT'）
+  String _metricPageLabelEn(String key) {
+    const en = {
+      'sales': 'GROSS SALES',
+      'profit': 'GROSS PROFIT',
+      'gmv': 'TRAFFIC GMV',
+      'rate': 'GROSS MARGIN',
+      'revenue': 'REVENUE',
+      'cost': 'BUSINESS COST',
+      'totalCost': 'TOTAL COST',
+      'tax': 'TAX COST',
+    };
+    return en[key] ?? key.toUpperCase();
+  }
+
+  /// 每个指标在 hero secondary row 里对应的"相关指标"下钻链接（最多 2 个）。
+  /// 用户在指标页 hero 卡里点击相关指标 → 横向切换到该指标的 drill-down 页。
+  List<String> _metricPageRelatedKeys(String key) {
+    const rel = {
+      'sales':     ['profit', 'rate'],
+      'profit':    ['rate', 'sales'],
+      'rate':      ['profit', 'sales'],
+      'gmv':       ['sales', 'profit'],
+      'revenue':   ['sales', 'profit'],
+      'cost':      ['sales', 'profit'],
+      'totalCost': ['sales', 'profit'],
+      'tax':       ['revenue', 'sales'],
+    };
+    return rel[key] ?? const [];
   }
 
   /// 某一行在该指标上的值 — 对于 rate 等需要派生的指标做兜底
@@ -3883,416 +4053,634 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     return _rowMetricValue(r, key).abs();
   }
 
-  /// 指标分析页主体
+  // ── 每个 dim 下 pager 里显示哪 5 个指标 ─────────────────────────
+  List<String> _pagerKeysForDim(String dim) {
+    switch (dim) {
+      case 'supply':
+        return const ['sales', 'profit', 'rate', 'cost', 'spread'];
+      case 'channel':
+        return const ['sales', 'profit', 'rate', 'gmv', 'cost'];
+      case 'product':
+      default:
+        return const ['sales', 'profit', 'rate', 'gmv', 'cost'];
+    }
+  }
+
+  // ── dim → 顶部条 3px 强调色 ─────────────────────────────────────
+  Color _dimAccent(String dim) {
+    switch (dim) {
+      case 'supply':
+        return LhColors.sinopec;
+      case 'channel':
+        return LhColors.carrier;
+      case 'product':
+      default:
+        return LhColors.product;
+    }
+  }
+
+  // ── dim → 顶部条中文标题 ────────────────────────────────────────
+  String _dimLabel(String dim) {
+    switch (dim) {
+      case 'supply':
+        return '供给方分析';
+      case 'channel':
+        return '渠道分析';
+      case 'product':
+      default:
+        return '产品分析';
+    }
+  }
+
+  // ── dim → 列表头 kicker 英文名 ──────────────────────────────────
+  String _dimLabelEn(String dim) {
+    switch (dim) {
+      case 'supply':
+        return 'SUPPLY';
+      case 'channel':
+        return 'CHANNEL';
+      case 'product':
+      default:
+        return 'PRODUCT';
+    }
+  }
+
+  /// 指标分析页 — 横向 PageView 骨架
+  ///   顶部：dim 标题条（静态）
+  ///   中间：指标 pager (TabBar 5 tab · 铜色 2px underline)
+  ///   底部：TabBarView，每屏一个指标的全量列表
   Widget _buildMetricAnalysisPage(String key) {
+    final dim = _tab == 'analysis' ? 'product' : _tab;
+    final pagerKeys = _pagerKeysForDim(dim);
+    final initialIdx = pagerKeys.indexOf(key).clamp(0, pagerKeys.length - 1);
+    final dimAccent = _dimAccent(dim);
+    final dimLabel = _dimLabel(dim);
+    final dimLabelEn = _dimLabelEn(dim);
+    final rowsCount = _bundle?.rowsOf(dim).length ?? 0;
+
+    return DefaultTabController(
+      length: pagerKeys.length,
+      initialIndex: initialIdx,
+      child: SafeArea(
+        bottom: false,
+        child: Column(
+          children: [
+            _metricPageTopBar(dimLabel, dimAccent),
+            _metricPageStrip(pagerKeys),
+            Expanded(
+              child: TabBarView(
+                physics: const BouncingScrollPhysics(),
+                children: [
+                  for (final k in pagerKeys)
+                    _metricPageBody(k, dim, dimLabelEn, rowsCount),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// 顶部条 — dim label + 期间；不随 pager 切页变化
+  Widget _metricPageTopBar(String dimLabel, Color dimAccent) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 8, 14, 10),
+      decoration: BoxDecoration(
+        color: LhColors.paper,
+        border: Border(
+          bottom: BorderSide(color: LhColors.line2, width: 1),
+        ),
+      ),
+      child: Row(
+        children: [
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => setState(_popMetricPage),
+            child: Padding(
+              padding: const EdgeInsets.all(4),
+              child: Icon(Icons.arrow_back_rounded, size: 20, color: LhColors.ink),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Container(width: 3, height: 14, color: dimAccent),
+          const SizedBox(width: 8),
+          Text(
+            dimLabel,
+            style: LhTypography.sans(
+              size: 16,
+              color: LhColors.ink,
+              weight: FontWeight.w700,
+              letterSpacing: 0.3,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            _periodInstanceLabel(_period, _periodOffset),
+            style: LhTypography.mono(
+              size: 10,
+              color: LhColors.mute,
+              weight: FontWeight.w600,
+              letterSpacing: 0.4,
+            ),
+          ),
+          const Spacer(),
+          _buildPill(),
+        ],
+      ),
+    );
+  }
+
+  /// 指标 pager 条 — 财报级 stat 比较条：每个 tab 展示 label + 数字 + 环比，
+  /// 都是真实数据、真实颜色（pos/neg）。选中态靠 2px 铜色 underline，
+  /// 不再用"灰色文字 vs 黑色文字"表达选中——避免整条看起来像"底下一排灰指标名"。
+  Widget _metricPageStrip(List<String> pagerKeys) {
+    return Container(
+      color: LhColors.paper,
+      child: TabBar(
+        isScrollable: true,
+        tabAlignment: TabAlignment.start,
+        padding: const EdgeInsets.symmetric(horizontal: 6),
+        labelPadding: const EdgeInsets.symmetric(horizontal: 12),
+        indicator: UnderlineTabIndicator(
+          borderSide: BorderSide(color: LhColors.copper, width: 2),
+          insets: const EdgeInsets.symmetric(horizontal: 8),
+        ),
+        indicatorSize: TabBarIndicatorSize.label,
+        dividerColor: LhColors.line2,
+        dividerHeight: 1,
+        splashFactory: NoSplash.splashFactory,
+        overlayColor: WidgetStateProperty.all(Colors.transparent),
+        tabs: [
+          for (final k in pagerKeys)
+            Tab(
+              height: 72,
+              child: _metricPageStripTabContent(k),
+            ),
+        ],
+      ),
+    );
+  }
+
+  /// 单个 tab 的内容（label 上、数字中、环比下——三行左对齐 stacked）
+  Widget _metricPageStripTabContent(String key) {
     final label = _metricPageLabel(key);
-    final accent = _metricPageAccent(key);
     final delta = _deltaForMetric(key);
     final deltaUnit = key == 'rate' ? 'pp' : '%';
 
-    return SafeArea(
-      bottom: false,
-      child: Column(
-        children: [
-          // ── Top bar ──
-          Container(
-            padding: const EdgeInsets.fromLTRB(12, 8, 14, 10),
-            decoration: BoxDecoration(
-              color: LhColors.paper,
-              border: Border(
-                bottom: BorderSide(color: LhColors.line2, width: 1),
-              ),
-            ),
-            child: Row(
-              children: [
-                GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTap: () => setState(() => _metricPageKey = null),
-                  child: Padding(
-                    padding: const EdgeInsets.all(4),
-                    child: Icon(Icons.arrow_back_rounded, size: 20, color: LhColors.ink),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Container(
-                  width: 4,
-                  height: 16,
-                  decoration: BoxDecoration(
-                    color: accent,
-                    borderRadius: BorderRadius.circular(1),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  label,
-                  style: LhTypography.sans(
-                    size: 16,
-                    color: LhColors.ink,
-                    weight: FontWeight.w700,
-                    letterSpacing: 0.3,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  _periodInstanceLabel(_period, _periodOffset),
-                  style: LhTypography.mono(
-                    size: 10,
-                    color: LhColors.mute,
-                    weight: FontWeight.w600,
-                    letterSpacing: 0.4,
-                  ),
-                ),
-                const Spacer(),
-                _buildPill(),
-              ],
-            ),
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          label,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: LhTypography.sans(
+            size: 10,
+            height: 1.0,
+            color: LhColors.ink2,       // 不再用 mute2；ink2 = 主文字副色，够黑
+            weight: FontWeight.w600,
+            letterSpacing: 0.2,
           ),
-          Expanded(
-            child: ListView(
-              padding: const EdgeInsets.only(bottom: 24),
-              children: [
-                // ── Hero card ──
-                Container(
-                  margin: const EdgeInsets.fromLTRB(16, 16, 16, 12),
-                  padding: const EdgeInsets.fromLTRB(18, 18, 18, 16),
-                  decoration: BoxDecoration(
-                    color: LhColors.paper,
-                    border: Border.all(color: LhColors.line2, width: 1),
-                    borderRadius: BorderRadius.circular(14),
-                    boxShadow: [
-                      BoxShadow(color: accent.withAlpha(10), blurRadius: 16, offset: const Offset(0, 4)),
-                    ],
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        label.toUpperCase(),
-                        style: LhTypography.mono(size: 9, color: LhColors.mute2, weight: FontWeight.w700, letterSpacing: 1.8),
-                      ),
-                      const SizedBox(height: 10),
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.baseline,
-                        textBaseline: TextBaseline.alphabetic,
-                        children: [
-                          Expanded(child: _metricPageHeroNumber(key)),
-                          if (delta != null)
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-                              decoration: BoxDecoration(
-                                color: (delta.isUp ? LhColors.pos : LhColors.neg).withAlpha(18),
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              child: Text(
-                                '${delta.isUp ? '↑' : '↓'} ${delta.pct.toStringAsFixed(1)}$deltaUnit',
-                                style: LhTypography.mono(
-                                  size: 11,
-                                  color: delta.isUp ? LhColors.pos : LhColors.neg,
-                                  weight: FontWeight.w700,
-                                  letterSpacing: 0.3,
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        '${_heroInfo.deltaVs} · ${_heroInfo.label}',
-                        style: LhTypography.sans(size: 10.5, color: LhColors.mute),
-                      ),
-                      const SizedBox(height: 12),
-                      _metricPageSecondaryRow(key),
-                    ],
-                  ),
-                ),
-                // ── 三维度 TOP 5 ──
-                _metricPageSection('按维度', '产品 × 供给 × 渠道'),
-                _metricDimensionBreakdown(key, 'product', '产品', accent),
-                _metricDimensionBreakdown(key, 'supply', '供给方', accent),
-                _metricDimensionBreakdown(key, 'channel', '渠道', accent),
-                // ── 完整列表（按当前 tab） ──
-                _metricPageSection(
-                  '完整列表',
-                  '当前${{'product': '产品', 'supply': '供给', 'channel': '渠道', 'analysis': '产品'}[_tab]} · 按$label降序',
-                ),
-                _metricFullList(key, accent),
-              ],
-            ),
+        ),
+        const SizedBox(height: 3),
+        _metricPageStripValue(key),
+        const SizedBox(height: 2),
+        Text(
+          delta == null
+              ? '—'
+              : '${delta.isUp ? '▲' : '▼'} ${delta.pct.toStringAsFixed(1)}$deltaUnit',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: LhTypography.mono(
+            size: 8.8,
+            height: 1.0,
+            color: delta == null
+                ? LhColors.mute2
+                : (delta.isUp ? LhColors.pos : LhColors.neg),
+            weight: FontWeight.w700,
+            letterSpacing: 0.2,
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 
-  /// hero 卡里第二行：补充关联指标（毛利率 page 显示绝对毛利，反之亦然）
-  Widget _metricPageSecondaryRow(String key) {
+  /// tab 里的数字——比 hero masthead 的 25pt 小一档，给 strip 用 14pt。
+  /// 直接读 mtr['${key}V']/['${key}U']，跟 _metricPageHeroNumber 同源。
+  Widget _metricPageStripValue(String key) {
     final mtr = _bundle?.metrics ?? const <String, dynamic>{};
-    final pairs = <(String, String)>[];
-    switch (key) {
-      case 'profit':
-        final r = (mtr['rate'] as num?)?.toDouble();
-        if (r != null) pairs.add(('毛利率', '${r.toStringAsFixed(2)}%'));
-        break;
-      case 'rate':
-        final p = (mtr['profitV'] as num?)?.toDouble();
-        final pu = mtr['profitU']?.toString() ?? '';
-        if (p != null) pairs.add(('绝对毛利', '¥${p.toStringAsFixed(2)}$pu'));
-        break;
-      case 'gmv':
-        final s = (mtr['salesV'] as num?)?.toDouble();
-        final g = (mtr['gmvV'] as num?)?.toDouble();
-        if (s != null && g != null && s > 0) {
-          pairs.add(('销售/GMV', '${(s / g * 100).toStringAsFixed(1)}%'));
-        }
-        break;
-      case 'revenue':
-        final s = (mtr['salesV'] as num?)?.toDouble();
-        final r = (mtr['revenueV'] as num?)?.toDouble();
-        if (s != null && r != null && s > 0) {
-          pairs.add(('收入率', '${(r / s * 100).toStringAsFixed(1)}%'));
-        }
-        break;
-      case 'cost':
-      case 'totalCost':
-        final s = (mtr['salesV'] as num?)?.toDouble();
-        final c = (mtr['${key}V'] as num?)?.toDouble();
-        if (s != null && c != null && s > 0) {
-          pairs.add(('成本率', '${(c / s * 100).toStringAsFixed(1)}%'));
-        }
-        break;
-      case 'tax':
-        final r = (mtr['revenueV'] as num?)?.toDouble();
-        final t = (mtr['taxV'] as num?)?.toDouble();
-        if (r != null && t != null && r > 0) {
-          pairs.add(('税负率', '${(t / r * 100).toStringAsFixed(1)}%'));
-        }
-        break;
+    const numSize = 14.0;
+    const unitSize = 8.5;
+    TextStyle numStyle(Color color) =>
+        LhTypography.number(size: numSize, color: color).copyWith(height: 1.0);
+    TextStyle unitStyle() =>
+        LhTypography.sans(size: unitSize, color: LhColors.mute, weight: FontWeight.w500)
+            .copyWith(height: 1.0);
+    Widget stripRich(List<InlineSpan> spans) => SizedBox(
+          height: numSize,
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: RichText(
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              text: TextSpan(children: spans),
+            ),
+          ),
+        );
+
+    if (key == 'rate') {
+      final rate = (mtr['rate'] as num?)?.toDouble();
+      if (rate == null) {
+        return Text('—', style: numStyle(LhColors.mute2));
+      }
+      final isNeg = rate < 0;
+      return stripRich([
+        if (isNeg) TextSpan(text: '-', style: numStyle(LhColors.neg)),
+        TextSpan(text: rate.abs().toStringAsFixed(2), style: numStyle(isNeg ? LhColors.neg : LhColors.ink)),
+        TextSpan(text: ' %', style: unitStyle()),
+      ]);
     }
-    if (pairs.isEmpty) return const SizedBox.shrink();
-    return Wrap(
-      spacing: 16,
-      runSpacing: 6,
-      children: pairs.map((p) => Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(p.$1, style: LhTypography.mono(size: 9.5, color: LhColors.mute2, weight: FontWeight.w600, letterSpacing: 0.6)),
-          const SizedBox(width: 5),
-          Text(p.$2, style: LhTypography.sans(size: 13, color: LhColors.ink2, weight: FontWeight.w600)),
-        ],
-      )).toList(),
+    if (mtr.containsKey('${key}V')) {
+      final raw = (mtr['${key}V'] as num?)?.toDouble() ?? 0;
+      final unit = mtr['${key}U']?.toString() ?? '';
+      final isNeg = raw < 0;
+      final v = raw.abs().toString().replaceAll(RegExp(r'\.0$'), '');
+      return stripRich([
+        if (isNeg) TextSpan(text: '-', style: numStyle(LhColors.neg)),
+        TextSpan(text: v, style: numStyle(isNeg ? LhColors.neg : LhColors.ink)),
+        if (unit.isNotEmpty) TextSpan(text: ' $unit', style: unitStyle()),
+      ]);
+    }
+    // fallback：从当前 tab 的 rows 汇总
+    double sum = 0;
+    for (final r in _bundle?.rowsOf(_tab == 'analysis' ? 'product' : _tab) ?? const []) {
+      sum += (r[key] as num?)?.toDouble() ?? 0;
+    }
+    final isNeg = sum < 0;
+    return stripRich([
+      if (isNeg) TextSpan(text: '-', style: numStyle(LhColors.neg)),
+      TextSpan(text: _fmt(sum.abs()), style: numStyle(isNeg ? LhColors.neg : LhColors.ink)),
+      TextSpan(text: ' ${_unit(sum.abs())}元', style: unitStyle()),
+    ]);
+  }
+
+  /// 单个指标页面主体 — ListView (compact masthead + list header + rows)
+  Widget _metricPageBody(String key, String dim, String dimLabelEn, int rowsCount) {
+    final accent = _metricPageAccent(key);
+    final delta = _deltaForMetric(key);
+    final deltaUnit = key == 'rate' ? 'pp' : '%';
+    return ListView(
+      padding: EdgeInsets.zero,
+      children: [
+        _metricPageMasthead(key, accent, delta, deltaUnit),
+        _metricPageListHeader(key, dimLabelEn, rowsCount),
+        _metricPageFullList(key, dim, accent),
+        const SizedBox(height: 32),
+      ],
     );
   }
 
-  /// 段落标题（"§ 维度" 之类）
-  Widget _metricPageSection(String title, String sub) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 14, 20, 10),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.end,
+  /// 精简 masthead — kicker + 25pt 数字 + 环比 · 无 secondary row（切换靠上方 TabBar）
+  Widget _metricPageMasthead(
+    String key,
+    Color accent,
+    ({double pct, bool isUp})? delta,
+    String deltaUnit,
+  ) {
+    final label = _metricPageLabel(key);
+    final labelEn = _metricPageLabelEn(key);
+    return Container(
+      margin: const EdgeInsets.fromLTRB(14, 14, 14, 10),
+      padding: const EdgeInsets.fromLTRB(18, 18, 18, 18),
+      decoration: BoxDecoration(
+        color: LhColors.paper,
+        border: Border.all(color: LhColors.line2, width: 1),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Text(
-            title,
-            style: LhTypography.sans(size: 14, color: LhColors.ink, weight: FontWeight.w700, letterSpacing: 0.4),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Expanded(child: Container(height: 1, color: LhColors.line2)),
+              const SizedBox(width: 10),
+              Text(
+                '$label · $labelEn',
+                style: LhTypography.mono(
+                  size: 8.5,
+                  color: LhColors.mute,
+                  weight: FontWeight.w600,
+                  letterSpacing: 1.4,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(child: Container(height: 1, color: LhColors.line2)),
+            ],
           ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.only(bottom: 3),
-              child: Container(height: 1, color: LhColors.line2),
+          const SizedBox(height: 14),
+          _metricPageHeroNumber(key),
+          const SizedBox(height: 6),
+          if (delta != null)
+            Text(
+              '${delta.isUp ? '▲' : '▼'} ${delta.pct.toStringAsFixed(1)}$deltaUnit',
+              style: LhTypography.mono(
+                size: 9.5,
+                color: delta.isUp ? LhColors.pos : LhColors.neg,
+                weight: FontWeight.w600,
+                letterSpacing: 0.2,
+              ),
+            )
+          else
+            Text(
+              '—',
+              style: LhTypography.mono(size: 9.5, color: LhColors.mute2, weight: FontWeight.w600),
             ),
-          ),
-          const SizedBox(width: 8),
+          const SizedBox(height: 4),
           Text(
-            sub,
-            style: LhTypography.mono(size: 9.5, color: LhColors.mute2, weight: FontWeight.w600, letterSpacing: 0.4),
+            '${_heroInfo.deltaVs} · ${_heroInfo.label}',
+            style: LhTypography.sans(size: 9.5, color: LhColors.mute),
+            textAlign: TextAlign.center,
           ),
         ],
       ),
     );
   }
 
-  /// 单维度 TOP 5 区块
-  Widget _metricDimensionBreakdown(String key, String dim, String dimLabel, Color accent) {
+  /// 列表头 — 左端 kicker · 右端排序标识
+  Widget _metricPageListHeader(String key, String dimLabelEn, int rowsCount) {
+    final label = _metricPageLabel(key);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 22, 20, 10),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.baseline,
+        textBaseline: TextBaseline.alphabetic,
+        children: [
+          Text(
+            '$dimLabelEn · 全部 $rowsCount 项',
+            style: LhTypography.mono(
+              size: 9,
+              color: LhColors.mute,
+              weight: FontWeight.w700,
+              letterSpacing: 1.6,
+            ),
+          ),
+          const Spacer(),
+          Text(
+            '$label ↓',
+            style: LhTypography.mono(
+              size: 9,
+              color: LhColors.ink2,
+              weight: FontWeight.w600,
+              letterSpacing: 0.3,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 全量列表 — 每一行 Direction A 三层结构（主 + 副 + 条形）
+  Widget _metricPageFullList(String key, String dim, Color accent) {
     final rows = _bundle?.rowsOf(dim) ?? const [];
     if (rows.isEmpty) {
       return Padding(
-        padding: const EdgeInsets.fromLTRB(20, 0, 20, 14),
-        child: Text('$dimLabel：无数据', style: LhTypography.mono(size: 10, color: LhColors.mute2)),
+        padding: const EdgeInsets.fromLTRB(20, 10, 20, 20),
+        child: Text('无数据', style: LhTypography.sans(size: 11, color: LhColors.mute2)),
       );
     }
     final sorted = List<Map<String, dynamic>>.from(rows)
       ..sort((a, b) => _rowWeightForMetric(b, key).compareTo(_rowWeightForMetric(a, key)));
-    final top = sorted.take(5).toList();
 
-    // 计算 bar 比例的分母（top 之和 or 全部之和）
-    double maxAbs = 0;
-    for (final r in top) {
-      final v = _rowMetricValue(r, key).abs();
-      if (v > maxAbs) maxAbs = v;
+    // 条形宽度参考：取全量行的 weight 之和；rate 页保留 profit 权重（rate 不能相加）
+    double sumWeight = 0;
+    for (final r in sorted) {
+      sumWeight += _rowWeightForMetric(r, key).abs();
     }
-    if (maxAbs == 0) maxAbs = 1;
-
-    return Container(
-      margin: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-      padding: const EdgeInsets.fromLTRB(14, 12, 14, 8),
-      decoration: BoxDecoration(
-        color: LhColors.paper,
-        border: Border.all(color: LhColors.line2, width: 1),
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Text(
-                dimLabel,
-                style: LhTypography.mono(size: 9.5, color: LhColors.mute, weight: FontWeight.w700, letterSpacing: 1.6),
-              ),
-              const SizedBox(width: 6),
-              Text(
-                'TOP ${top.length} / 共 ${rows.length}',
-                style: LhTypography.mono(size: 9, color: LhColors.mute2, weight: FontWeight.w500, letterSpacing: 0.3),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          for (int i = 0; i < top.length; i++)
-            _metricBreakdownRow(top[i], key, i + 1, maxAbs, accent),
-        ],
-      ),
-    );
-  }
-
-  /// 单行 bar：rank + name + group chip + 条形 + 数值
-  Widget _metricBreakdownRow(Map<String, dynamic> r, String key, int rank, double maxAbs, Color accent) {
-    final name = r['name']?.toString() ?? '—';
-    final group = r['group']?.toString() ?? '';
-    final v = _rowMetricValue(r, key);
-    final isRate = key == 'rate';
-    final isNeg = v < 0;
-    final ratio = (v.abs() / maxAbs).clamp(0.0, 1.0);
-    final groupColor = group.isEmpty ? LhColors.mute2 : lhGroupColor(group);
-
-    final valueStr = isRate
-        ? '${v.toStringAsFixed(2)}%'
-        : '${isNeg ? '-' : ''}¥${_fmt(v.abs())}${_unit(v.abs())}';
+    if (sumWeight == 0) sumWeight = 1;
 
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 5),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          SizedBox(
-            width: 16,
-            child: Text(
-              '$rank',
-              style: LhTypography.mono(size: 10, color: LhColors.mute2, weight: FontWeight.w700, letterSpacing: 0.3),
-            ),
-          ),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        name,
-                        style: LhTypography.sans(size: 12, color: LhColors.ink, weight: FontWeight.w600, letterSpacing: 0.1),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    if (group.isNotEmpty) ...[
-                      const SizedBox(width: 6),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
-                        decoration: BoxDecoration(
-                          color: groupColor.withAlpha(20),
-                          border: Border.all(color: groupColor.withAlpha(80), width: 0.6),
-                          borderRadius: BorderRadius.circular(3),
-                        ),
-                        child: Text(
-                          group,
-                          style: LhTypography.mono(size: 8.5, color: groupColor, weight: FontWeight.w700),
-                        ),
-                      ),
-                    ],
-                    const SizedBox(width: 8),
-                    Text(
-                      valueStr,
-                      style: LhTypography.sans(
-                        size: 12,
-                        color: isNeg ? LhColors.neg : LhColors.ink,
-                        weight: FontWeight.w700,
-                        letterSpacing: 0.1,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 4),
-                Container(
-                  height: 3,
-                  decoration: BoxDecoration(
-                    color: LhColors.line2.withAlpha(160),
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                  child: FractionallySizedBox(
-                    alignment: Alignment.centerLeft,
-                    widthFactor: ratio,
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: isNeg ? LhColors.neg.withAlpha(180) : accent.withAlpha(190),
-                        borderRadius: BorderRadius.circular(2),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// 完整列表 — 当前 tab 全部行按此指标降序
-  Widget _metricFullList(String key, Color accent) {
-    final rows = _bundle?.rowsOf(_tab == 'analysis' ? 'product' : _tab) ?? const [];
-    if (rows.isEmpty) {
-      return Padding(
-        padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
-        child: Text('无数据', style: LhTypography.mono(size: 11, color: LhColors.mute2)),
-      );
-    }
-    final sorted = List<Map<String, dynamic>>.from(rows)
-      ..sort((a, b) => _rowWeightForMetric(b, key).compareTo(_rowWeightForMetric(a, key)));
-
-    double maxAbs = 0;
-    for (final r in sorted) {
-      final v = _rowMetricValue(r, key).abs();
-      if (v > maxAbs) maxAbs = v;
-    }
-    if (maxAbs == 0) maxAbs = 1;
-
-    return Container(
-      margin: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-      padding: const EdgeInsets.fromLTRB(14, 8, 14, 8),
-      decoration: BoxDecoration(
-        color: LhColors.paper,
-        border: Border.all(color: LhColors.line2, width: 1),
-        borderRadius: BorderRadius.circular(10),
-      ),
+      padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           for (int i = 0; i < sorted.length; i++) ...[
             if (i > 0)
-              Container(height: 0.5, color: LhColors.line2.withAlpha(140)),
-            _metricBreakdownRow(sorted[i], key, i + 1, maxAbs, accent),
+              Padding(
+                padding: const EdgeInsets.only(left: 30),
+                child: Container(height: 1, color: LhColors.line2.withAlpha(90)),
+              ),
+            _metricPageRow(sorted[i], key, i + 1, sumWeight, accent),
           ],
         ],
       ),
+    );
+  }
+
+  /// 单行 Direction A 三层：
+  ///   主行：排名 (14pt accent) · 名字 (14pt w500) · dot + group · 主数值 (20pt w500)
+  ///   副行：关联指标 x2  ·  右端 占/权重 %
+  ///   条形：3px flat · 宽度 = 该行 weight / sumWeight
+  Widget _metricPageRow(
+    Map<String, dynamic> r,
+    String key,
+    int rank,
+    double sumWeight,
+    Color accent,
+  ) {
+    final name = r['name']?.toString() ?? '—';
+    final group = r['group']?.toString() ?? '';
+    final v = _rowMetricValue(r, key);
+    final isRate = key == 'rate';
+    final isNeg = v < 0;
+    final ratio = (_rowWeightForMetric(r, key).abs() / sumWeight).clamp(0.0, 1.0);
+    final groupColor = group.isEmpty ? LhColors.mute2 : lhGroupColor(group);
+    final relatedKeys = _metricPageRelatedKeys(key);
+    final sharePct = (ratio * 100).round();
+    final shareLabel = isRate ? '权重 $sharePct%' : '占 $sharePct%';
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // 主行
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.baseline,
+            textBaseline: TextBaseline.alphabetic,
+            children: [
+              SizedBox(
+                width: 22,
+                child: Text(
+                  rank.toString().padLeft(2, '0'),
+                  style: LhTypography.mono(
+                    size: 14,
+                    color: accent,
+                    weight: FontWeight.w500,
+                    letterSpacing: 0.2,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Flexible(
+                child: Text(
+                  name,
+                  style: LhTypography.sans(
+                    size: 14,
+                    color: LhColors.ink,
+                    weight: FontWeight.w500,
+                    letterSpacing: 0.1,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              if (group.isNotEmpty) ...[
+                const SizedBox(width: 8),
+                Container(
+                  width: 4,
+                  height: 4,
+                  decoration: BoxDecoration(color: groupColor, shape: BoxShape.circle),
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  group,
+                  style: LhTypography.mono(
+                    size: 11,
+                    color: LhColors.mute,
+                    weight: FontWeight.w500,
+                    letterSpacing: 0.4,
+                  ),
+                ),
+              ],
+              const Spacer(),
+              _metricPageRowValue(v, isNeg, isRate),
+            ],
+          ),
+          // 副行 — 关联指标 + 右端占/权重 %
+          Padding(
+            padding: const EdgeInsets.only(left: 30, top: 6),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.baseline,
+              textBaseline: TextBaseline.alphabetic,
+              children: [
+                if (relatedKeys.isNotEmpty)
+                  Flexible(child: _metricPageRelatedRow(r, relatedKeys)),
+                const Spacer(),
+                Text(
+                  shareLabel,
+                  style: LhTypography.mono(
+                    size: 11,
+                    color: LhColors.mute,
+                    weight: FontWeight.w500,
+                    letterSpacing: 0.2,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          // 条形 — 3px flat，无 alpha 无圆角
+          Padding(
+            padding: const EdgeInsets.only(left: 30, top: 7),
+            child: Row(
+              children: [
+                Expanded(
+                  flex: (ratio * 1000).round().clamp(1, 1000),
+                  child: Container(height: 3, color: isNeg ? LhColors.neg : accent),
+                ),
+                Expanded(
+                  flex: (1000 - (ratio * 1000).round()).clamp(0, 1000),
+                  child: Container(height: 3, color: LhColors.line2),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 主数值：20pt w500 + 11pt mute 单位；rate 页显示 %
+  Widget _metricPageRowValue(double v, bool isNeg, bool isRate) {
+    if (isRate) {
+      return RichText(
+        text: TextSpan(children: [
+          if (isNeg)
+            TextSpan(text: '-', style: LhTypography.number(size: 20, color: LhColors.neg)),
+          TextSpan(
+            text: v.abs().toStringAsFixed(2),
+            style: LhTypography.number(size: 20, color: isNeg ? LhColors.neg : LhColors.ink),
+          ),
+          TextSpan(
+            text: ' %',
+            style: LhTypography.sans(size: 11, color: LhColors.mute, weight: FontWeight.w500),
+          ),
+        ]),
+      );
+    }
+    return RichText(
+      text: TextSpan(children: [
+        if (isNeg)
+          TextSpan(text: '-', style: LhTypography.number(size: 20, color: LhColors.neg)),
+        TextSpan(
+          text: _fmt(v.abs()),
+          style: LhTypography.number(size: 20, color: isNeg ? LhColors.neg : LhColors.ink),
+        ),
+        TextSpan(
+          text: _unit(v.abs()),
+          style: LhTypography.sans(size: 11, color: LhColors.mute, weight: FontWeight.w500),
+        ),
+      ]),
+    );
+  }
+
+  /// 副行 — 关联指标 x2：标签 (11pt mute mono) + 值 (11pt ink w500 number)
+  Widget _metricPageRelatedRow(Map<String, dynamic> r, List<String> relatedKeys) {
+    final spans = <InlineSpan>[];
+    for (int i = 0; i < relatedKeys.length; i++) {
+      if (i > 0) {
+        spans.add(TextSpan(
+          text: '  ·  ',
+          style: LhTypography.mono(size: 11, color: LhColors.line, weight: FontWeight.w500),
+        ));
+      }
+      final k = relatedKeys[i];
+      final label = _metricPageLabel(k);
+      final val = _rowMetricValue(r, k);
+      final isNeg = val < 0;
+      spans.add(TextSpan(
+        text: '$label ',
+        style: LhTypography.mono(
+          size: 11,
+          color: LhColors.mute,
+          weight: FontWeight.w500,
+          letterSpacing: 0.2,
+        ),
+      ));
+      if (isNeg) {
+        spans.add(TextSpan(
+          text: '-',
+          style: LhTypography.number(size: 11, color: LhColors.neg),
+        ));
+      }
+      if (k == 'rate') {
+        spans.add(TextSpan(
+          text: '${val.abs().toStringAsFixed(1)}%',
+          style: LhTypography.number(size: 11, color: isNeg ? LhColors.neg : LhColors.ink),
+        ));
+      } else {
+        spans.add(TextSpan(
+          text: '${_fmt(val.abs())}${_unit(val.abs())}',
+          style: LhTypography.number(size: 11, color: isNeg ? LhColors.neg : LhColors.ink),
+        ));
+      }
+    }
+    return RichText(
+      text: TextSpan(children: spans),
+      overflow: TextOverflow.ellipsis,
+      maxLines: 1,
     );
   }
 
@@ -4398,6 +4786,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                     if (key != 'supply') _supplyFuelFilter = '全部';
                     if (key != 'supply' && key != 'channel') _hunFilter = '全部';
                     _listPage = 1;
+                    _closeMetricPage();
                   });
                   if (key == 'analysis') _loadAnalysisCube();
                 },
@@ -5428,7 +5817,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                   // 全屏 dialog 只能通过 × 关闭，不再因为轻点空白或左滑而关闭。
                   if (start != null && startedAt != null) {
                     final dt = DateTime.now().difference(startedAt).inMilliseconds;
-                    if (dt < 280 && _cubeGestureMaxMove < 8) {
+                    if (dt < 280 && _cubeGestureMaxMove < 14) {
                       _handleCubeTap(start, cube, size);
                       onExternalChange?.call();
                     }
@@ -6735,7 +7124,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     final dColor = delta >= 0 ? LhColors.pos : LhColors.neg;
     final hasTrend = r['trend'] is Map;
     final canExpand = hasTrend;
-    final isMetaExpanded = _metaExpanded.contains(trendKey);
+    final isMetaExpanded = !_metaCollapsed.contains(trendKey);
 
     // Tag color (centralised helper)
     final tagColors = _groupTagColors(group);
@@ -6761,12 +7150,13 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       final raw = r[k];
       final v = raw is num ? raw.toDouble() : 0.0;
       final label = _metricShort(k);
-      metaItems.add(_MetaItem(label, '${_fmt(v.abs())}${_unit(v.abs())}'));
+      metaItems.add(_MetaItem(k, label, '${_fmt(v.abs())}${_unit(v.abs())}'));
     }
 
     void openDetail() {
       final detKey = _tab == 'channel' ? '$name::$group' : name;
       setState(() {
+        _closeMetricPage();
         _detailKey = detKey;
         _detailType = _tab;
         _detailSubTab = '';
@@ -6781,12 +7171,33 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         margin: const EdgeInsets.only(bottom: 6),
         padding: const EdgeInsets.fromLTRB(11, 10, 11, 10),
         decoration: BoxDecoration(
-          color: LhColors.paper,
+          // 白色主调纵向微渐变——跟顶部暖 cream 面板刻意错开语言：
+          // 面板是"热带纸"，行是"白卡"，两种表面靠在一起对比更强。
+          // 渐变对比压到 ~1%，纯粹给一点物理触感、不做视觉表达。
+          // Top3 只在顶端极淡地带一点铜色暗示，让 rank 徽章的 copperSoft 有语言呼应，
+          // 但整体仍是白卡。
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: isTop3
+                ? const [Color(0xFFFFFDF7), Color(0xFFFCF9F0)]  // top3: 白 → 极淡暖白
+                : const [Color(0xFFFFFFFF), Color(0xFFFAFAF8)], // regular: 纯白 → 极淡中性白
+          ),
           border: Border.all(
             color: isExpanded ? LhColors.ink2.withAlpha(40) : LhColors.line2,
             width: 1,
           ),
           borderRadius: BorderRadius.circular(10),
+          // 中性冷灰阴影——不再是暖色调，因为白卡上的暖阴影会显脏。
+          // 白卡需要接近纯灰的低透明度阴影才读作"卡片贴在纸上"。
+          // Expanded 时抬升。
+          boxShadow: [
+            BoxShadow(
+              color: isExpanded ? const Color(0x120A0A0F) : const Color(0x070A0A0F),
+              blurRadius: isExpanded ? 7 : 3,
+              offset: Offset(0, isExpanded ? 2 : 1),
+            ),
+          ],
         ),
         child: Column(
           children: [
@@ -6892,18 +7303,77 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                           ],
                         ],
                       ),
-                      // Meta row — 默认收起，点击 trend row 的"指标 ▾"按钮才展开
+                      // Meta row — 从"11 个 mute 灰色 label+value 挤成 Wrap 网格"
+                      // 改成"横向滚动 stat 条"：每个指标一列 stacked（label 上、数字下），
+                      // 相邻两列之间一根短 hairline。value 用 LhTypography.number ink
+                      // 取代之前的 mute，label 保留小 mono mute 作为 kicker——
+                      // 由此产生"标题 vs 数据"的真实层级，不再是一片灰噪音。
+                      // 用户左右滑动可看到全部 11+ 指标。
+                      //
+                      // 跨行"列聚焦"：点某个指标的 chip → _metaHighlightKey = 该 key，
+                      // 所有行的同一 key chip 都会渲染成 copper 色块，便于纵向比较；
+                      // 再点一次同一指标 → 取消聚焦；点其他指标 → 切换聚焦目标。
                       if (metaItems.isNotEmpty && isMetaExpanded) ...[
-                        const SizedBox(height: 4),
-                        Wrap(
-                          spacing: 8,
-                          runSpacing: 2,
-                          children: metaItems.map((m) => RichText(
-                            text: TextSpan(children: [
-                              TextSpan(text: '${m.label} ', style: LhTypography.mono(size: 8.6, color: LhColors.mute2)),
-                              TextSpan(text: m.value, style: LhTypography.mono(size: 8.6, color: LhColors.mute, weight: FontWeight.w500)),
-                            ]),
-                          )).toList(),
+                        const SizedBox(height: 6),
+                        SizedBox(
+                          height: 38,
+                          child: ListView.separated(
+                            scrollDirection: Axis.horizontal,
+                            padding: EdgeInsets.zero,
+                            physics: const BouncingScrollPhysics(),
+                            itemCount: metaItems.length,
+                            itemBuilder: (ctx, i) {
+                              final m = metaItems[i];
+                              final isHighlighted = _metaHighlightKey == m.key;
+                              return GestureDetector(
+                                behavior: HitTestBehavior.opaque,
+                                onTap: () => _openMetaCompare(m.key),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: isHighlighted
+                                        ? LhColors.copper.withAlpha(28)
+                                        : Colors.transparent,
+                                    borderRadius: BorderRadius.circular(5),
+                                  ),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(
+                                        m.label,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: LhTypography.mono(
+                                          size: 8.4,
+                                          height: 1.0,
+                                          color: isHighlighted ? LhColors.copper : LhColors.mute,
+                                          weight: FontWeight.w700,
+                                          letterSpacing: 0.4,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        m.value,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: LhTypography.number(
+                                          size: 11.5,
+                                          color: isHighlighted ? LhColors.copper : LhColors.ink,
+                                        ).copyWith(height: 1.0),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            },
+                            separatorBuilder: (ctx, i) => Container(
+                              width: 1,
+                              margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 7),
+                              color: LhColors.line2,
+                            ),
+                          ),
                         ),
                       ],
                       // Trend row（环比 + 指标 toggle + 展开趋势）
@@ -6941,15 +7411,15 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                                 Text(vsLabel, style: LhTypography.mono(size: 8.6, color: LhColors.mute2, letterSpacing: 0.1)),
                               ],
                               const Spacer(),
-                              // ── 指标 toggle 按钮（默认收起 meta row） ──
+                              // ── 指标 toggle 按钮（默认展开 meta row） ──
                               if (metaItems.isNotEmpty)
                                 GestureDetector(
                                   behavior: HitTestBehavior.opaque,
                                   onTap: () => setState(() {
-                                    if (_metaExpanded.contains(trendKey)) {
-                                      _metaExpanded.remove(trendKey);
+                                    if (_metaCollapsed.contains(trendKey)) {
+                                      _metaCollapsed.remove(trendKey);
                                     } else {
-                                      _metaExpanded.add(trendKey);
+                                      _metaCollapsed.add(trendKey);
                                     }
                                   }),
                                   child: Container(
@@ -7172,6 +7642,453 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     );
   }
 
+  // ═══════════════════════════════════════════════════════════════════════
+  // 跨行 meta 指标"列聚焦"侧边栏比较视图
+  //   在任一行的 meta chip 上点击 → 从右侧滑入的全高 drawer，
+  //   展示当前筛选下"所有行"在该指标上的分布：总/均/涨跌数 +
+  //   全量排行（rank + name + value + 环比 + 条形），可滚动。
+  // ═══════════════════════════════════════════════════════════════════════
+
+  /// 从右侧滑入的 drawer 打开器
+  void _openMetaCompare(String metricKey) {
+    setState(() => _metaHighlightKey = metricKey);
+    showGeneralDialog(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: '关闭比较',
+      barrierColor: Colors.black.withAlpha(72),
+      transitionDuration: const Duration(milliseconds: 240),
+      pageBuilder: (ctx, anim, secAnim) {
+        final rows = _currentRows;
+        final screenW = MediaQuery.of(ctx).size.width;
+        // 悬浮式侧卡：不是整条 drawer，而是靠右的小卡片。
+        // 使用暖灰底和中性阴影，避免纯白卡片与铜色线过于突兀。
+        return SafeArea(
+          child: Align(
+            alignment: Alignment.centerRight,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(0, 28, 14, 28),
+              child: Container(
+                width: screenW * 0.78,
+                clipBehavior: Clip.antiAlias,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF7F4EC),
+                  border: Border.all(color: const Color(0xFFE3DED2), width: 1),
+                  borderRadius: BorderRadius.circular(14),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withAlpha(24),
+                      blurRadius: 24,
+                      spreadRadius: -8,
+                      offset: const Offset(-6, 8),
+                    ),
+                    BoxShadow(
+                      color: Colors.black.withAlpha(18),
+                      blurRadius: 10,
+                      spreadRadius: -5,
+                      offset: const Offset(0, 3),
+                    ),
+                  ],
+                ),
+                child: _buildMetaCompareDrawer(metricKey, rows),
+              ),
+            ),
+          ),
+        );
+      },
+      transitionBuilder: (ctx, anim, secAnim, child) {
+        final slide = Tween<Offset>(
+          begin: const Offset(1.15, 0.0),
+          end: Offset.zero,
+        ).animate(CurvedAnimation(parent: anim, curve: Curves.easeOutCubic));
+        final fade = CurvedAnimation(parent: anim, curve: Curves.easeOut);
+        return SlideTransition(
+          position: slide,
+          child: FadeTransition(opacity: fade, child: child),
+        );
+      },
+    ).then((_) {
+      if (mounted) setState(() => _metaHighlightKey = null);
+    });
+  }
+
+  /// Drawer 主体 — editorial 财报封面式，无卡壳、无 pill 徽章、
+  /// masthead + hairline + 排行的三层结构，最大限度压掉视觉噪音。
+  Widget _buildMetaCompareDrawer(String metricKey, List<Map<String, dynamic>> rows) {
+    final labelFull = _metricLabel(metricKey, tab: _tab);
+    final labelEn = _metricPageLabelEn(metricKey);
+    final dim = _tab == 'analysis' ? 'product' : _tab;
+    final dimLabelEn = _dimLabelEn(dim);
+    final shortLabel = _metricShort(metricKey);
+
+    // 每行聚合：value + delta%
+    final entries = <({Map<String, dynamic> r, double value, double? delta})>[];
+    for (final r in rows) {
+      final v = (r[metricKey] as num?)?.toDouble() ?? 0;
+      final deltas = (r['deltas'] as Map?)?.cast<String, dynamic>();
+      final d = (deltas?[metricKey] as num?)?.toDouble()
+          ?? (r['deltaPct'] as num?)?.toDouble();
+      entries.add((r: r, value: v, delta: d));
+    }
+    entries.sort((a, b) => b.value.abs().compareTo(a.value.abs()));
+
+    double total = 0;
+    int upCount = 0, downCount = 0, flatCount = 0;
+    for (final e in entries) {
+      total += e.value;
+      if (e.delta == null) {
+        flatCount++;
+      } else if (e.delta! > 0) {
+        upCount++;
+      } else if (e.delta! < 0) {
+        downCount++;
+      } else {
+        flatCount++;
+      }
+    }
+    final avg = entries.isEmpty ? 0.0 : total / entries.length;
+    final maxAbs = entries.isEmpty ? 1.0 : entries.first.value.abs().clamp(1.0, double.infinity);
+    final vsLabel = _kPeriodVs[_period] ?? '';
+    final isTotalNeg = total < 0;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // ── 关闭 × 单独一行 —────────────────────────────────
+        Padding(
+          padding: const EdgeInsets.fromLTRB(0, 4, 4, 0),
+          child: Row(
+            children: [
+              const Spacer(),
+              GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () => Navigator.of(context).pop(),
+                child: const Padding(
+                  padding: EdgeInsets.all(10),
+                  child: Icon(Icons.close_rounded, size: 20, color: LhColors.ink2),
+                ),
+              ),
+            ],
+          ),
+        ),
+        // ── Masthead：kicker + 大数字 + 汇总副行 —───────────
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 2, 20, 22),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // kicker：短竖标 + 完整指标名 + 英文
+              Row(
+                children: [
+                  Container(
+                    width: 3,
+                    height: 12,
+                    decoration: BoxDecoration(
+                      color: LhColors.product.withAlpha(190),
+                      borderRadius: BorderRadius.circular(1.5),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    '$labelFull · $labelEn',
+                    style: LhTypography.mono(
+                      size: 8.5,
+                      color: LhColors.mute,
+                      weight: FontWeight.w700,
+                      letterSpacing: 1.4,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              // 大数字（总）
+              RichText(
+                text: TextSpan(children: [
+                  if (isTotalNeg)
+                    TextSpan(
+                      text: '-',
+                      style: LhTypography.number(size: 28, color: LhColors.neg),
+                    ),
+                  TextSpan(
+                    text: _fmt(total.abs()),
+                    style: LhTypography.number(
+                      size: 28,
+                      color: isTotalNeg ? LhColors.neg : LhColors.ink,
+                    ),
+                  ),
+                  TextSpan(
+                    text: ' ${_unit(total.abs())}${_unit(total.abs()).isNotEmpty ? '元' : ''}',
+                    style: LhTypography.sans(
+                      size: 12,
+                      color: LhColors.mute,
+                      weight: FontWeight.w500,
+                    ),
+                  ),
+                ]),
+              ),
+              const SizedBox(height: 8),
+              // 副行：项数 · 均 · 参照期
+              RichText(
+                text: TextSpan(children: [
+                  TextSpan(
+                    text: '共 ${entries.length} 项',
+                    style: LhTypography.sans(size: 10.5, color: LhColors.mute),
+                  ),
+                  TextSpan(
+                    text: '  ·  均 ',
+                    style: LhTypography.sans(size: 10.5, color: LhColors.mute2),
+                  ),
+                  TextSpan(
+                    text: '${_fmt(avg.abs())}${_unit(avg.abs())}',
+                    style: LhTypography.number(size: 10.5, color: LhColors.ink2),
+                  ),
+                  if (vsLabel.isNotEmpty) ...[
+                    TextSpan(
+                      text: '  ·  vs $vsLabel',
+                      style: LhTypography.mono(
+                        size: 9.5,
+                        color: LhColors.mute2,
+                        weight: FontWeight.w500,
+                        letterSpacing: 0.3,
+                      ),
+                    ),
+                  ],
+                ]),
+              ),
+              const SizedBox(height: 10),
+              // 涨/跌/平 分布——inline sentence，纯 typography 表达
+              Row(
+                children: [
+                  Text('▲', style: LhTypography.mono(size: 9.5, color: LhColors.pos, weight: FontWeight.w700)),
+                  const SizedBox(width: 4),
+                  Text(
+                    '$upCount 上涨',
+                    style: LhTypography.mono(size: 9.5, color: LhColors.ink2, weight: FontWeight.w600, letterSpacing: 0.2),
+                  ),
+                  const SizedBox(width: 14),
+                  Text('▼', style: LhTypography.mono(size: 9.5, color: LhColors.neg, weight: FontWeight.w700)),
+                  const SizedBox(width: 4),
+                  Text(
+                    '$downCount 下跌',
+                    style: LhTypography.mono(size: 9.5, color: LhColors.ink2, weight: FontWeight.w600, letterSpacing: 0.2),
+                  ),
+                  if (flatCount > 0) ...[
+                    const SizedBox(width: 14),
+                    Text('—', style: LhTypography.mono(size: 9.5, color: LhColors.mute2, weight: FontWeight.w700)),
+                    const SizedBox(width: 4),
+                    Text(
+                      '$flatCount 无环比',
+                      style: LhTypography.mono(size: 9.5, color: LhColors.mute2, weight: FontWeight.w500, letterSpacing: 0.2),
+                    ),
+                  ],
+                ],
+              ),
+            ],
+          ),
+        ),
+        // ── Masthead 与列表间的 hairline ────────────────────
+        Container(height: 1, color: const Color(0xFFE5DFD4)),
+        // ── 列表 kicker ─────────────────────────────────────
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 18, 20, 8),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.baseline,
+            textBaseline: TextBaseline.alphabetic,
+            children: [
+              Text(
+                '$dimLabelEn · 排名',
+                style: LhTypography.mono(
+                  size: 9,
+                  color: LhColors.mute,
+                  weight: FontWeight.w700,
+                  letterSpacing: 1.6,
+                ),
+              ),
+              const Spacer(),
+              Text(
+                '按$shortLabel降序',
+                style: LhTypography.mono(
+                  size: 9,
+                  color: LhColors.mute2,
+                  weight: FontWeight.w500,
+                  letterSpacing: 0.3,
+                ),
+              ),
+            ],
+          ),
+        ),
+        // ── 全量行滚动列表 ─────────────────────────────────
+        Expanded(
+          child: entries.isEmpty
+              ? Center(
+                  child: Text(
+                    '无数据',
+                    style: LhTypography.sans(size: 12, color: LhColors.mute2),
+                  ),
+                )
+              : ListView.separated(
+                  padding: const EdgeInsets.only(bottom: 32),
+                  itemCount: entries.length,
+                  separatorBuilder: (ctx, i) => Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    child: Container(height: 1, color: const Color(0xFFE5DFD4)),
+                  ),
+                  itemBuilder: (ctx, i) {
+                    final e = entries[i];
+                    return _buildMetaCompareDrawerRow(i + 1, e.r, e.value, e.delta, maxAbs);
+                  },
+                ),
+        ),
+      ],
+    );
+  }
+
+  /// Drawer 单行 — editorial 排行：主行 rank+name+value / 副行 bar+delta
+  /// 与指标下钻页的维度分解排版一致。
+  Widget _buildMetaCompareDrawerRow(
+    int rank,
+    Map<String, dynamic> r,
+    double value,
+    double? delta,
+    double maxAbs,
+  ) {
+    final name = r['name']?.toString() ?? '—';
+    final group = r['group']?.toString() ?? '';
+    final ratio = (value.abs() / maxAbs).clamp(0.0, 1.0);
+    final isNeg = value < 0;
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // 主行：rank + name + (group 灰 mono) + value 右对齐
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.baseline,
+            textBaseline: TextBaseline.alphabetic,
+            children: [
+              SizedBox(
+                width: 24,
+                child: Text(
+                  rank.toString().padLeft(2, '0'),
+                  style: LhTypography.mono(
+                    size: 10.5,
+                    color: rank <= 3 ? LhColors.product : LhColors.mute2,
+                    weight: FontWeight.w700,
+                    letterSpacing: 0.3,
+                  ),
+                ),
+              ),
+              Flexible(
+                child: Text(
+                  name,
+                  style: LhTypography.sans(
+                    size: 12.5,
+                    color: LhColors.ink,
+                    weight: FontWeight.w600,
+                    letterSpacing: 0.1,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              if (group.isNotEmpty) ...[
+                const SizedBox(width: 6),
+                Text(
+                  group,
+                  style: LhTypography.mono(
+                    size: 8.5,
+                    color: LhColors.mute2,
+                    weight: FontWeight.w500,
+                    letterSpacing: 0.3,
+                  ),
+                ),
+              ],
+              const Spacer(),
+              RichText(
+                text: TextSpan(children: [
+                  if (isNeg)
+                    TextSpan(
+                      text: '-',
+                      style: LhTypography.number(size: 13, color: LhColors.neg),
+                    ),
+                  TextSpan(
+                    text: _fmt(value.abs()),
+                    style: LhTypography.number(
+                      size: 13,
+                      color: isNeg ? LhColors.neg : LhColors.ink,
+                    ),
+                  ),
+                  TextSpan(
+                    text: _unit(value.abs()),
+                    style: LhTypography.sans(
+                      size: 8.5,
+                      color: LhColors.mute,
+                      weight: FontWeight.w500,
+                    ),
+                  ),
+                ]),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          // 副行：bar (占满) + 环比 mono 右对齐
+          Padding(
+            padding: const EdgeInsets.only(left: 24),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Expanded(
+                  child: Row(
+                    children: [
+                      Expanded(
+                        flex: (ratio * 1000).round().clamp(1, 1000),
+                        child: Container(
+                          height: 2,
+                          color: isNeg ? LhColors.neg : LhColors.product.withAlpha(210),
+                        ),
+                      ),
+                      Expanded(
+                        flex: (1000 - (ratio * 1000).round()).clamp(0, 1000),
+                        child: Container(height: 1, color: const Color(0xFFE5DFD4)),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 12),
+                SizedBox(
+                  width: 52,
+                  child: delta == null
+                      ? Text(
+                          '—',
+                          textAlign: TextAlign.right,
+                          style: LhTypography.mono(
+                            size: 9.5,
+                            color: LhColors.mute2,
+                            weight: FontWeight.w600,
+                            letterSpacing: 0.2,
+                          ),
+                        )
+                      : Text(
+                          '${delta > 0 ? '▲' : (delta < 0 ? '▼' : '—')} ${delta.abs().toStringAsFixed(1)}%',
+                          textAlign: TextAlign.right,
+                          style: LhTypography.mono(
+                            size: 9.5,
+                            color: delta > 0
+                                ? LhColors.pos
+                                : (delta < 0 ? LhColors.neg : LhColors.mute2),
+                            weight: FontWeight.w700,
+                            letterSpacing: 0.2,
+                          ),
+                        ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildInlineExpanded(String trendKey, String name, Map<String, dynamic> r, Color groupColor) {
     final trendChart = _trendChartFor(r, showHeader: false);
     final headerTitle = _kPeriodTitle[_period] ?? '趋势';
@@ -7301,6 +8218,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           _detailType = null;
           _resetDetailSkuSearch();
           _resetDetailDrill();
+          _closeMetricPage();
         });
       });
       return const SizedBox();
@@ -7481,6 +8399,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                     _detailType = null;
                     _resetDetailSkuSearch();
                     _resetDetailDrill();
+                    _closeMetricPage();
                   });
                 },
                 child: Padding(
@@ -7529,6 +8448,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                   _detailType = null;
                   _resetDetailSkuSearch();
                   _resetDetailDrill();
+                  _closeMetricPage();
                 });
               },
             ),
@@ -7951,6 +8871,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                   _detailType = null;
                   _resetDetailSkuSearch();
                   _resetDetailDrill();
+                  _closeMetricPage();
                 });
               },
             ),
@@ -9086,7 +10007,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     for (final k in (_metrics[type] ?? []).where((key) => key != 'discount')) {
       final raw = r[k];
       final v = raw is num ? raw.toDouble() : 0.0;
-      metaItems.add(_MetaItem(_metricShort(k, tab: type), '${_fmt(v.abs())}${_unit(v.abs())}'));
+      metaItems.add(_MetaItem(k, _metricShort(k, tab: type), '${_fmt(v.abs())}${_unit(v.abs())}'));
     }
 
     final tagColors = _groupTagColors(group);
@@ -9237,7 +10158,8 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
 }
 
 class _MetaItem {
-  const _MetaItem(this.label, this.value);
+  const _MetaItem(this.key, this.label, this.value);
+  final String key;
   final String label;
   final String value;
 }
@@ -9249,9 +10171,28 @@ class _SubTabInfo {
   final Color color;
 }
 
-// ── Brand refresh loader（灯塔 logo + 铜色旋转环）────────────────────────────
+// ── Brand logo / loader（灯塔 logo；加载时整图旋转）──────────────────────────
+const _kLhLogoAsset = 'assets/images/lighthouse_logo.png';
+
+class _LhBrandMark extends StatelessWidget {
+  const _LhBrandMark({this.size = 42});
+
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    return Image.asset(
+      _kLhLogoAsset,
+      width: size,
+      height: size,
+      fit: BoxFit.contain,
+      filterQuality: FilterQuality.medium,
+    );
+  }
+}
+
 class _LhBrandLoader extends StatefulWidget {
-  const _LhBrandLoader({this.size = 40});
+  const _LhBrandLoader({this.size = 60});
 
   final double size;
 
@@ -9268,7 +10209,7 @@ class _LhBrandLoaderState extends State<_LhBrandLoader>
     super.initState();
     _spin = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 1100),
+      duration: const Duration(milliseconds: 1800),
     )..repeat();
   }
 
@@ -9281,79 +10222,21 @@ class _LhBrandLoaderState extends State<_LhBrandLoader>
   @override
   Widget build(BuildContext context) {
     final s = widget.size;
-    final mark = s * 0.52;
     return SizedBox(
       width: s,
       height: s,
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          RotationTransition(
-            turns: _spin,
-            child: SizedBox(
-              width: s,
-              height: s,
-              child: CustomPaint(
-                painter: _LhLoaderRingPainter(stroke: math.max(1.5, s * 0.05)),
-              ),
-            ),
-          ),
-          Container(
-            width: mark,
-            height: mark,
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [Color(0xFF1A1816), Color(0xFF3A342C)],
-              ),
-              borderRadius: BorderRadius.circular(mark * 0.28),
-              border: Border.all(color: LhColors.copper.withAlpha(72), width: 1),
-            ),
-            child: Center(
-              child: Container(
-                width: mark * 0.22,
-                height: mark * 0.22,
-                decoration: BoxDecoration(
-                  color: LhColors.copper,
-                  shape: BoxShape.circle,
-                  boxShadow: [
-                    BoxShadow(color: LhColors.copper.withAlpha(150), blurRadius: mark * 0.18),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ],
+      child: RotationTransition(
+        turns: _spin,
+        child: Image.asset(
+          _kLhLogoAsset,
+          width: s,
+          height: s,
+          fit: BoxFit.contain,
+          filterQuality: FilterQuality.medium,
+        ),
       ),
     );
   }
-}
-
-class _LhLoaderRingPainter extends CustomPainter {
-  const _LhLoaderRingPainter({required this.stroke});
-
-  final double stroke;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final rect = Offset.zero & size;
-    final paint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = stroke
-      ..strokeCap = StrokeCap.round
-      ..color = LhColors.copper;
-    canvas.drawArc(rect.deflate(stroke), -math.pi / 2, math.pi * 1.35, false, paint);
-    final track = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = stroke
-      ..color = LhColors.line2.withAlpha(160);
-    canvas.drawArc(rect.deflate(stroke), math.pi * 0.55, math.pi * 1.55, false, track);
-  }
-
-  @override
-  bool shouldRepaint(covariant _LhLoaderRingPainter oldDelegate) =>
-      oldDelegate.stroke != stroke;
 }
 
 // ── Dropdown panel (HTML `.dropdown`) ───────────────────────────────────────

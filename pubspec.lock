@@ -761,10 +761,10 @@ packages:
     dependency: "direct main"
     description:
       name: pro_image_editor
-      sha256: a7ba819fabe37b1c0212fa7f0d5d7c2e25261ab3548b103793ffcf63e3535346
+      sha256: d0cc9516c52e775de4b02ece96f69dd9c5eebf1f9c3060ecec9a58042038f786
       url: "https://pub.dev"
     source: hosted
-    version: "12.11.0"
+    version: "11.23.0"
   protobuf:
     dependency: transitive
     description:
@@ -1100,4 +1100,4 @@ packages:
     version: "3.1.3"
 sdks:
   dart: ">=3.11.0 <4.0.0"
-  flutter: ">=3.41.0"
+  flutter: ">=3.38.4"

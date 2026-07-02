@@ -32,7 +32,7 @@ dependencies:
   package_info_plus: ^10.2.0
   mobile_scanner: ^7.2.0
   emoji_picker_flutter: ^4.4.0
-  pro_image_editor: ^12.11.0
+  pro_image_editor: 11.23.0
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -62,6 +62,7 @@ flutter:
   uses-material-design: true
   assets:
     - assets/images/app_logo.png
+    - assets/images/lighthouse_logo.png
     - assets/prototype/
     - assets/prototype/dunes_app_ui.js
     - assets/prototype/workbench_live.js

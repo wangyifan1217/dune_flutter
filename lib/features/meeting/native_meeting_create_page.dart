@@ -53,6 +53,8 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
   bool _handlingBack = false;
   String? _error;
   _CreateMode _mode = _CreateMode.upload;
+  static const double _livePreviewMaxHeight = 280;
+  final ScrollController _livePreviewScrollController = ScrollController();
   late final AnimationController _pulseController = AnimationController(
     vsync: this,
     duration: const Duration(milliseconds: 1100),
@@ -92,7 +94,13 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
   }
 
   void _onLiveChanged() {
-    if (mounted) setState(() {});
+    if (!mounted) return;
+    setState(() {});
+    if (!_live.active.value) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_livePreviewScrollController.hasClients) return;
+      _livePreviewScrollController.jumpTo(0);
+    });
   }
 
   @override
@@ -104,6 +112,7 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
     _live.lines.removeListener(_onLiveChanged);
     _live.partial.removeListener(_onLiveChanged);
     _recordingCtrl.state.removeListener(_onLiveChanged);
+    _livePreviewScrollController.dispose();
     _titleCtrl.dispose();
     super.dispose();
   }
@@ -976,50 +985,21 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
             _sectionCard(
               title: '实时转写预览',
               icon: Icons.record_voice_over_outlined,
-              child: liveLines.isEmpty && livePartial.isEmpty
+              trailing: liveLines.isNotEmpty || livePartial.isNotEmpty
                   ? Text(
-                      liveRecording && !livePaused
-                          ? '正在监听语音，请开始发言...'
-                          : (liveRecording && livePaused)
-                          ? '已暂停，点击“继续录音”后恢复录音与实时转写'
-                          : '点击“开始实时转写”后，这里会实时显示文字',
+                      '上下滑动查看更多',
                       style: DunesTypography.sans(
-                        fontSize: 13,
+                        fontSize: 11,
                         color: DunesColors.text3,
                       ),
                     )
-                  : Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        if (livePartial.isNotEmpty)
-                          Padding(
-                            padding: const EdgeInsets.only(bottom: 8),
-                            child: Text(
-                              livePartial,
-                              style: DunesTypography.sans(
-                                fontSize: 13,
-                                color: DunesColors.accent,
-                                height: 1.5,
-                              ).copyWith(fontStyle: FontStyle.italic),
-                            ),
-                          ),
-                        ...liveLines
-                            .take(8)
-                            .map(
-                              (line) => Padding(
-                                padding: const EdgeInsets.only(bottom: 8),
-                                child: Text(
-                                  line,
-                                  style: DunesTypography.sans(
-                                    fontSize: 13,
-                                    color: DunesColors.text2,
-                                    height: 1.5,
-                                  ),
-                                ),
-                              ),
-                            ),
-                      ],
-                    ),
+                  : null,
+              child: _buildLivePreviewContent(
+                liveLines: liveLines,
+                livePartial: livePartial,
+                liveRecording: liveRecording,
+                livePaused: livePaused,
+              ),
             ),
           ],
 
@@ -1092,10 +1072,75 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
     );
   }
 
+  Widget _buildLivePreviewContent({
+    required List<String> liveLines,
+    required String livePartial,
+    required bool liveRecording,
+    required bool livePaused,
+  }) {
+    if (liveLines.isEmpty && livePartial.isEmpty) {
+      return Text(
+        liveRecording && !livePaused
+            ? '正在监听语音，请开始发言...'
+            : (liveRecording && livePaused)
+            ? '已暂停，点击“继续录音”后恢复录音与实时转写'
+            : '点击“开始实时转写”后，这里会实时显示文字',
+        style: DunesTypography.sans(
+          fontSize: 13,
+          color: DunesColors.text3,
+        ),
+      );
+    }
+
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxHeight: _livePreviewMaxHeight),
+      child: Scrollbar(
+        controller: _livePreviewScrollController,
+        thumbVisibility: true,
+        radius: const Radius.circular(8),
+        child: SingleChildScrollView(
+          controller: _livePreviewScrollController,
+          padding: EdgeInsets.zero,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (livePartial.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Text(
+                    livePartial,
+                    style: DunesTypography.sans(
+                      fontSize: 13,
+                      color: DunesColors.accent,
+                      height: 1.5,
+                    ).copyWith(fontStyle: FontStyle.italic),
+                  ),
+                ),
+              ...liveLines.map(
+                (line) => Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Text(
+                    line,
+                    style: DunesTypography.sans(
+                      fontSize: 13,
+                      color: DunesColors.text2,
+                      height: 1.5,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _sectionCard({
     required String title,
     required IconData icon,
     required Widget child,
+    Widget? trailing,
   }) {
     return Container(
       padding: const EdgeInsets.all(14),
@@ -1111,14 +1156,17 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
             children: [
               Icon(icon, size: 18, color: DunesColors.accent),
               const SizedBox(width: 8),
-              Text(
-                title,
-                style: DunesTypography.sans(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: DunesColors.text,
+              Expanded(
+                child: Text(
+                  title,
+                  style: DunesTypography.sans(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: DunesColors.text,
+                  ),
                 ),
               ),
+              if (trailing != null) trailing,
             ],
           ),
           const SizedBox(height: 10),

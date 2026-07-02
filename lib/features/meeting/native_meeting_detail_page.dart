@@ -12,6 +12,8 @@ import '../../core/util/friendly_error.dart';
 import '../auth/auth_session.dart';
 import '../chat/file_download.dart' as file_dl;
 import 'meeting_minutes_export.dart';
+import 'meeting_upload_coordinator.dart';
+import 'meeting_upload_storage.dart';
 import 'native_meeting_models.dart';
 import 'native_meeting_service.dart';
 
@@ -63,6 +65,12 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
       const Duration(seconds: 5),
       (_) => _load(silent: true),
     );
+    MeetingUploadCoordinator.instance.attach(widget.session);
+    MeetingUploadCoordinator.instance.addListener(_onUploadUpdate);
+  }
+
+  void _onUploadUpdate() {
+    if (mounted) setState(() {});
   }
 
   @override
@@ -89,6 +97,7 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
 
   @override
   void dispose() {
+    MeetingUploadCoordinator.instance.removeListener(_onUploadUpdate);
     _poller?.cancel();
     _player.dispose();
     super.dispose();
@@ -416,6 +425,17 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
   }
 
   String _summaryText(NativeMeetingDetail d) {
+    final uploadJob =
+        MeetingUploadCoordinator.instance.jobForMeeting(d.meetingId);
+    if (uploadJob != null) {
+      return switch (uploadJob.phase) {
+        MeetingUploadPhase.failed =>
+          '录音上传失败：${uploadJob.error ?? '请稍后重试'}',
+        MeetingUploadPhase.attaching => '录音已上传，正在保存到云端...',
+        _ =>
+          '录音正在后台上传，完成后${uploadJob.generate ? '将自动开始转写' : '可在本页开始转写'}。您可以先离开做其他事情。',
+      };
+    }
     if (d.summary.isNotEmpty) return d.summary;
     return switch (d.status.toUpperCase()) {
       'DRAFT' => d.audioObjectKey.trim().isNotEmpty
@@ -461,6 +481,77 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
     });
   }
 
+  Widget _buildUploadBanner(MeetingUploadJob job) {
+    final failed = job.phase == MeetingUploadPhase.failed;
+    final attaching = job.phase == MeetingUploadPhase.attaching;
+    final label = failed
+        ? '录音上传失败'
+        : attaching
+        ? '正在保存录音...'
+        : '录音后台上传中';
+    final detail = failed
+        ? (job.error ?? '请检查网络后重试')
+        : attaching
+        ? '即将完成，请稍候'
+        : '上传完成后将自动继续，您可先使用其他功能';
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: failed
+            ? DunesColors.coral.withValues(alpha: 0.08)
+            : DunesColors.accentSoft,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: failed ? DunesColors.coral.withValues(alpha: 0.35) : DunesColors.borderSoft,
+        ),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (!failed)
+            const Padding(
+              padding: EdgeInsets.only(top: 2, right: 10),
+              child: SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+            ),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: DunesTypography.sans(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: failed ? DunesColors.coral : DunesColors.text,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  detail,
+                  style: DunesTypography.sans(
+                    fontSize: 12,
+                    color: DunesColors.text2,
+                    height: 1.45,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (failed)
+            TextButton(
+              onPressed: () => MeetingUploadCoordinator.instance.retry(job.meetingId),
+              child: const Text('重试'),
+            ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final d = _detail;
@@ -501,6 +592,9 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
         : ListView(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
               children: [
+                if (MeetingUploadCoordinator.instance.jobForMeeting(d.meetingId)
+                    case final job?)
+                  _buildUploadBanner(job),
                 _buildHero(d),
                 const SizedBox(height: 16),
                 if (d.audioPlayUrl.isNotEmpty || d.audioObjectKey.isNotEmpty) ...[

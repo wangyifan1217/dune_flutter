@@ -279,6 +279,10 @@ class NativeMeetingService {
     return meetingId;
   }
 
+  String readUploadUrlForAttach(Map<String, dynamic> upload, String objectKey) {
+    return _readUploadUrl(upload, objectKey);
+  }
+
   String _readUploadUrl(Map<String, dynamic> upload, String objectKey) {
     final url = (upload['url'] ?? '').toString().trim();
     if (url.isNotEmpty) return url;

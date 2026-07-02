@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import '../../core/theme/dunes_theme.dart';
 import '../../core/util/friendly_error.dart';
 import '../auth/auth_session.dart';
+import 'meeting_upload_coordinator.dart';
+import 'meeting_upload_storage.dart';
 import 'native_meeting_models.dart';
 import 'native_meeting_service.dart';
 
@@ -42,14 +44,21 @@ class _NativeMeetingListPageState extends State<NativeMeetingListPage> {
   @override
   void initState() {
     super.initState();
+    MeetingUploadCoordinator.instance.attach(widget.session);
+    MeetingUploadCoordinator.instance.addListener(_onUploadUpdate);
     _scrollController.addListener(_onScroll);
     _load(reset: true);
   }
 
   @override
   void dispose() {
+    MeetingUploadCoordinator.instance.removeListener(_onUploadUpdate);
     _scrollController.dispose();
     super.dispose();
+  }
+
+  void _onUploadUpdate() {
+    if (mounted) setState(() {});
   }
 
   void _onScroll() {
@@ -146,6 +155,23 @@ class _NativeMeetingListPageState extends State<NativeMeetingListPage> {
       'FAILED' => '失败',
       'DRAFT' => '草稿',
       _ => status.isEmpty ? '未知' : status,
+    };
+  }
+
+  String _uploadStatusLabel(MeetingUploadJob job) {
+    return switch (job.phase) {
+      MeetingUploadPhase.pending || MeetingUploadPhase.uploading => '录音上传中',
+      MeetingUploadPhase.attaching => '正在保存',
+      MeetingUploadPhase.failed => '上传失败',
+      MeetingUploadPhase.done => '草稿',
+    };
+  }
+
+  Color _uploadStatusColor(MeetingUploadJob job) {
+    return switch (job.phase) {
+      MeetingUploadPhase.failed => DunesColors.coral,
+      MeetingUploadPhase.attaching => DunesColors.amber,
+      _ => DunesColors.accent,
     };
   }
 
@@ -386,8 +412,13 @@ class _NativeMeetingListPageState extends State<NativeMeetingListPage> {
   }
 
   Widget _buildMeetingCard(NativeMeetingSummary row) {
-    final status = _statusLabel(row.status);
-    final statusColor = _statusColor(row.status);
+    final uploadJob = MeetingUploadCoordinator.instance.jobForMeeting(row.meetingId);
+    final status = uploadJob != null
+        ? _uploadStatusLabel(uploadJob)
+        : _statusLabel(row.status);
+    final statusColor = uploadJob != null
+        ? _uploadStatusColor(uploadJob)
+        : _statusColor(row.status);
     final enabled = row.meetingId > 0;
 
     return Padding(

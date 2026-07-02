@@ -57,6 +57,7 @@ import '../workbench/native_my_workbench_pages.dart';
 import '../workbench/workbench_badge_notifier.dart';
 import '../lighthouse/native_lighthouse_page.dart';
 import '../meeting/meeting_live_controller.dart';
+import '../meeting/meeting_upload_coordinator.dart';
 import '../meeting/native_meeting_create_page.dart';
 import '../meeting/native_meeting_detail_page.dart';
 import '../meeting/native_meeting_list_page.dart';
@@ -140,6 +141,9 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     _pendingBadgeZeroSync = false;
     unawaited(ConversationRealtimeHub.instance.of(widget.session).connect());
     NovaBackgroundCoordinator.instance.addListener(_onNovaCoordinatorUpdate);
+    MeetingUploadCoordinator.instance.attach(widget.session);
+    MeetingUploadCoordinator.instance.addListener(_onMeetingUploadUpdate);
+    unawaited(MeetingUploadCoordinator.instance.resumePending());
     unawaited(_bootCommBadgeRealtime());
     unawaited(_refreshCommUnreadBadge());
     unawaited(_refreshWorkbenchBadge());
@@ -183,6 +187,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     _commBadgeRtSub?.cancel();
     dismissDunesActionToast();
     NovaBackgroundCoordinator.instance.removeListener(_onNovaCoordinatorUpdate);
+    MeetingUploadCoordinator.instance.removeListener(_onMeetingUploadUpdate);
     _commUnread.dispose();
     _workbenchBadge.dispose();
     _workbenchRefresh.dispose();
@@ -402,6 +407,13 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         .takePendingCommBadgeBump();
     final notOnC4 = widget.navigation.currentScreen != 'C4';
     unawaited(_handleNovaCoordinatorBadge(shouldBump: shouldBump && notOnC4));
+  }
+
+  void _onMeetingUploadUpdate() {
+    if (!mounted) return;
+    if (widget.navigation.currentScreen == 'B2') {
+      setState(() {});
+    }
   }
 
   Future<void> _handleNovaCoordinatorBadge({required bool shouldBump}) async {

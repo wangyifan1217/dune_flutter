@@ -12,6 +12,7 @@ import '../../core/util/friendly_error.dart';
 import '../auth/auth_session.dart';
 import '../shell/dunes_toast.dart';
 import 'meeting_live_controller.dart';
+import 'meeting_upload_coordinator.dart';
 import 'native_meeting_recording_controller.dart';
 import 'native_meeting_service.dart';
 
@@ -350,9 +351,8 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
         title: const Text('正在处理中'),
         content: Text(
           _persistingAfterEnd
-              ? '会议纪要正在保存，现在离开可能导致保存失败。确定离开吗？'
-              : '录音正在上传并提交转写，现在离开可能导致提交失败。\n\n'
-                  '上传完成后服务端会继续在后台生成纪要，建议等待处理完成。',
+              ? '正在创建会议记录，现在离开可能导致提交失败。'
+              : '录音正在后台上传，现在离开不影响上传进度。',
           style: DunesTypography.sans(fontSize: 13.5, height: 1.55),
         ),
         actions: [
@@ -433,21 +433,19 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
     });
     try {
       final meetingDate = DateTime.now().toIso8601String().substring(0, 10);
-      final meetingId = generate
-          ? await _service.createByMeetingDoc(
-              title: title,
-              meetingDate: meetingDate,
-              filePath: filePath,
-            )
-          : await _service.saveMeetingDraft(
-              title: title,
-              meetingDate: meetingDate,
-              filePath: filePath,
-            );
+      final meetingId = await MeetingUploadCoordinator.instance.enqueue(
+        session: widget.session,
+        title: title,
+        meetingDate: meetingDate,
+        sourceFilePath: filePath,
+        generate: generate,
+      );
       if (!mounted) return;
       showDunesToast(
         context,
-        generate ? '已开始转写并生成会议纪要' : '已存为草稿，可在详情页生成纪要',
+        generate
+            ? '录音正在后台上传，完成后将自动开始转写'
+            : '录音正在后台上传，完成后可在详情页生成纪要',
       );
       _live.clearPreview();
       _live.consumeRecordedFile();
@@ -461,9 +459,9 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
       if (!mounted) return;
       final msg = friendlyErrorText(
         e,
-        fallback: generate ? '生成失败，请稍后重试' : '草稿保存失败，请稍后重试',
+        fallback: generate ? '提交失败，请稍后重试' : '草稿保存失败，请稍后重试',
       );
-      setState(() => _error = generate ? '生成失败：$msg' : '草稿保存失败：$msg');
+      setState(() => _error = generate ? '提交失败：$msg' : '草稿保存失败：$msg');
       showDunesToast(
         context,
         msg,
@@ -479,13 +477,9 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
     }
   }
 
-  bool get _showBusyOverlay => _submitting || _persistingAfterEnd;
+  bool get _showBusyOverlay => false;
 
-  String get _busyOverlayMessage {
-    if (_submitting) return '正在上传并开始转写...';
-    if (_persistGenerate == true) return '正在上传并开始转写...';
-    return '正在上传并保存草稿...';
-  }
+  String get _busyOverlayMessage => '';
 
   Widget _buildBusyOverlay() {
     return Positioned.fill(
@@ -560,12 +554,15 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
     }
     setState(() => _submitting = true);
     try {
-      final meetingId = await _service.createByMeetingDoc(
+      final meetingId = await MeetingUploadCoordinator.instance.enqueue(
+        session: widget.session,
         title: _titleCtrl.text.trim(),
         meetingDate: DateTime.now().toIso8601String().substring(0, 10),
-        filePath: _filePath,
+        sourceFilePath: _filePath,
+        generate: true,
       );
       if (!mounted) return;
+      showDunesToast(context, '录音正在后台上传，完成后将自动开始转写');
       widget.onCreated(meetingId, isDraft: false);
     } catch (e) {
       if (!mounted) return;

@@ -20,7 +20,17 @@ class NovaBackgroundCoordinator extends ChangeNotifier {
   Timer? _pollTimer;
   int _pollConvId = 0;
   bool _pendingCommBadgeBump = false;
+  bool _novaPageActive = false;
   final Set<int> _finalizedConvIds = <int>{};
+
+  /// C4 页面可见时为 true；用于区分「用户已在 NOVA 内看到回复」与「后台完成需通知」。
+  void setNovaPageActive(bool active) {
+    if (_novaPageActive == active) return;
+    _novaPageActive = active;
+    if (active) {
+      _pendingCommBadgeBump = false;
+    }
+  }
 
   void clearFinalizedConversation(int conversationId) {
     if (conversationId > 0) _finalizedConvIds.remove(conversationId);
@@ -33,7 +43,12 @@ class NovaBackgroundCoordinator extends ChangeNotifier {
   }
 
   void markPendingCommBadgeBump() {
+    if (_novaPageActive) return;
     _pendingCommBadgeBump = true;
+  }
+
+  void clearPendingCommBadgeBump() {
+    _pendingCommBadgeBump = false;
   }
 
   NativeNovaService serviceFor(AuthSession session) {
@@ -117,12 +132,26 @@ class NovaBackgroundCoordinator extends ChangeNotifier {
       return;
     }
     if (localGen == null) {
-      try {
-        final history = await svc.fetchFullHistory(convId);
-        if (!history.assistantGenerating) {
-          stopPoll();
-        }
-      } catch (_) {}
+      if (draft != null && novaStreamDraftHasContent(draft)) {
+        try {
+          final history = await svc.fetchFullHistory(convId);
+          if (!svc.isStreamInFlight) {
+            await onGenerationComplete(
+              session: session,
+              conversationId: convId,
+              messages: history.messages,
+            );
+          }
+        } catch (_) {}
+      } else {
+        try {
+          final history = await svc.fetchFullHistory(convId);
+          if (!history.assistantGenerating) {
+            stopPoll();
+          }
+        } catch (_) {}
+      }
+      notifyListeners();
       return;
     }
     if (_isStoppedStatus(localGen.status)) {
@@ -308,7 +337,9 @@ class NovaBackgroundCoordinator extends ChangeNotifier {
     );
     stopPoll();
     _finalizedConvIds.add(conversationId);
-    _pendingCommBadgeBump = true;
+    if (!_novaPageActive) {
+      _pendingCommBadgeBump = true;
+    }
     notifyListeners();
     if (kDebugMode) {
       debugPrint('[NovaBackground] generation complete conv=$conversationId');

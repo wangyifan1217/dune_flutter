@@ -128,7 +128,7 @@ bool shouldPersistNovaGenerating({
     if (localGen == null) return false;
     if (localGen.expired) return false;
     if (isNovaStoppedGeneratingStatus(localGen.status)) return false;
-    return false;
+    return true;
   }
   final hasDraftContent =
       draft.text.trim().isNotEmpty || draft.userText.trim().isNotEmpty;

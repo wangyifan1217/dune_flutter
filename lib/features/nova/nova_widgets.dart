@@ -8,7 +8,9 @@ import '../conversation/conversation_service.dart';
 import 'native_nova_service.dart';
 import 'nova_icon.dart';
 import 'nova_markdown.dart';
+import 'nova_markdown_preview.dart';
 import 'nova_media.dart';
+import 'nova_file_utils.dart';
 import 'nova_models_service.dart';
 
 const kNovaName = 'NOVA';
@@ -285,6 +287,7 @@ Future<void> showNovaModelSheet(
   required String selected,
   required ValueChanged<String> onPick,
   List<NovaModelCatalogEntry> modelCatalog = const <NovaModelCatalogEntry>[],
+  String title = '选择对话模型',
 }) {
   return showModalBottomSheet<void>(
     context: context,
@@ -315,7 +318,7 @@ Future<void> showNovaModelSheet(
                 child: Align(
                   alignment: Alignment.centerLeft,
                   child: Text(
-                    '选择对话模型',
+                    title,
                     style: DunesTypography.sans(
                       fontSize: 13,
                       fontWeight: FontWeight.w700,
@@ -1078,7 +1081,11 @@ class NovaC4MessageRow extends StatelessWidget {
     return true;
   }
 
-  Widget? _buildKindMedia(NovaMediaResolver? resolver, {required bool onDarkBubble}) {
+  Widget? _buildKindMedia(
+    BuildContext context,
+    NovaMediaResolver? resolver, {
+    required bool onDarkBubble,
+  }) {
     if (resolver == null) return null;
     final upperKind = kind.toUpperCase();
     if ((upperKind == 'IMAGE' || _isImagePlaceholderLabel(text)) && attachments.isNotEmpty) {
@@ -1103,18 +1110,30 @@ class NovaC4MessageRow extends StatelessWidget {
     }
     if (upperKind == 'FILE' && attachments.isNotEmpty) {
       final a = attachments.first;
+      final name = a.fileName.isNotEmpty ? a.fileName : text;
       return NovaC4FileLink(
         resolver: resolver,
         url: a.url,
         objectKey: a.objectKey,
-        fileName: a.fileName.isNotEmpty ? a.fileName : text,
+        fileName: name,
+        previewBytes: a.previewBytes,
         onDarkBubble: onDarkBubble,
+        onTap: novaIsMarkdownFile(name, mimeType: a.mimeType)
+            ? () => openNovaMarkdownPreview(
+                  context,
+                  resolver: resolver,
+                  fileName: name,
+                  url: a.url,
+                  objectKey: a.objectKey,
+                  previewBytes: a.previewBytes,
+                )
+            : null,
       );
     }
     return null;
   }
 
-  Widget _buildUserBubbleContent() {
+  Widget _buildUserBubbleContent(BuildContext context) {
     final resolver = mediaResolver;
     final upperKind = kind.toUpperCase();
     final hasAttachments = attachments.isNotEmpty;
@@ -1132,13 +1151,13 @@ class NovaC4MessageRow extends StatelessWidget {
                 text,
                 style: DunesTypography.sans(fontSize: 13, color: Colors.white, height: 1.5),
               ),
-            ...attachments.map((a) => _combinedAttachment(resolver, a)),
+            ...attachments.map((a) => _combinedAttachment(context, resolver, a)),
           ],
         ),
       );
     }
 
-    final kindMedia = _buildKindMedia(resolver, onDarkBubble: true);
+    final kindMedia = _buildKindMedia(context, resolver, onDarkBubble: true);
     if (kindMedia != null) {
       return NovaC4SentBubble(
         highlighted: highlighted,
@@ -1152,9 +1171,9 @@ class NovaC4MessageRow extends StatelessWidget {
     );
   }
 
-  Widget _buildAiBubbleContent() {
+  Widget _buildAiBubbleContent(BuildContext context) {
     final resolver = mediaResolver;
-    final kindMedia = _buildKindMedia(resolver, onDarkBubble: false);
+    final kindMedia = _buildKindMedia(context, resolver, onDarkBubble: false);
     if (kindMedia != null) return kindMedia;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1181,7 +1200,7 @@ class NovaC4MessageRow extends StatelessWidget {
           if (attachments.isNotEmpty && resolver != null)
             ...attachments.map((a) => Padding(
                   padding: const EdgeInsets.only(top: 6),
-                  child: _combinedAttachment(resolver, a, onDarkBubble: false),
+                  child: _combinedAttachment(context, resolver, a, onDarkBubble: false),
                 )),
           if (ragUsed && text.isNotEmpty)
             Padding(
@@ -1197,6 +1216,7 @@ class NovaC4MessageRow extends StatelessWidget {
   }
 
   Widget _combinedAttachment(
+    BuildContext context,
     NovaMediaResolver resolver,
     NovaMessageAttachment a, {
     bool onDarkBubble = true,
@@ -1213,14 +1233,26 @@ class NovaC4MessageRow extends StatelessWidget {
         ),
       );
     }
+    final name = a.fileName.trim().isNotEmpty ? a.fileName.trim() : '附件';
     return Padding(
       padding: const EdgeInsets.only(top: 6),
       child: NovaC4FileLink(
         resolver: resolver,
         url: a.url,
         objectKey: a.objectKey,
-        fileName: a.fileName,
+        fileName: name,
+        previewBytes: a.previewBytes,
         onDarkBubble: onDarkBubble,
+        onTap: novaIsMarkdownFile(name, mimeType: a.mimeType)
+            ? () => openNovaMarkdownPreview(
+                  context,
+                  resolver: resolver,
+                  fileName: name,
+                  url: a.url,
+                  objectKey: a.objectKey,
+                  previewBytes: a.previewBytes,
+                )
+            : null,
       ),
     );
   }
@@ -1295,7 +1327,7 @@ class NovaC4MessageRow extends StatelessWidget {
                         ],
                       ),
                     ),
-                  _wrapCopyable(context, _buildUserBubbleContent(), _userCopyText),
+                  _wrapCopyable(context, _buildUserBubbleContent(context), _userCopyText),
                   if (messageId > 0)
                     Padding(
                       padding: const EdgeInsets.only(top: 2, right: 4),
@@ -1379,7 +1411,7 @@ class NovaC4MessageRow extends StatelessWidget {
                       : null,
                   child: _wrapCopyable(
                     context,
-                    NovaC4AiBubble(child: _buildAiBubbleContent()),
+                    NovaC4AiBubble(child: _buildAiBubbleContent(context)),
                     _aiCopyText,
                   ),
                 ),
@@ -1397,60 +1429,91 @@ class NovaC4QuickActions extends StatelessWidget {
     super.key,
     required this.onCamera,
     required this.onAlbum,
-    required this.onNewChat,
+    required this.onOpenMeeting,
+    required this.onMeetingPrd,
     this.enabled = true,
   });
 
   final VoidCallback onCamera;
   final VoidCallback onAlbum;
-  final VoidCallback onNewChat;
+  final VoidCallback onOpenMeeting;
+  final VoidCallback onMeetingPrd;
   final bool enabled;
 
   @override
   Widget build(BuildContext context) {
-    final opacity = enabled ? 1.0 : 0.55;
+    final cells = <_NovaQaCell>[
+      _NovaQaCell(
+        icon: Icons.photo_camera_outlined,
+        label: '拍照',
+        onTap: enabled ? onCamera : null,
+      ),
+      _NovaQaCell(
+        icon: Icons.photo_library_outlined,
+        label: '图片',
+        onTap: enabled ? onAlbum : null,
+      ),
+      _NovaQaCell(
+        icon: Icons.description_outlined,
+        label: '会议纪要',
+        onTap: enabled ? onOpenMeeting : null,
+      ),
+      _NovaQaCell(
+        icon: Icons.article_outlined,
+        label: 'PRD',
+        onTap: enabled ? onMeetingPrd : null,
+      ),
+    ];
     return Opacity(
-      opacity: opacity,
+      opacity: enabled ? 1.0 : 0.55,
       child: Container(
-        padding: const EdgeInsets.fromLTRB(14, 10, 14, 8),
+        padding: const EdgeInsets.fromLTRB(14, 6, 14, 4),
         decoration: const BoxDecoration(
           color: DunesColors.bgApp,
           border: Border(top: BorderSide(color: DunesColors.borderSoft)),
         ),
         child: Row(
-          children: [
-            Expanded(child: _QaCell(icon: Icons.photo_camera_outlined, label: '拍照', onTap: enabled ? onCamera : null)),
-            Expanded(child: _QaCell(icon: Icons.photo_library_outlined, label: '图片', onTap: enabled ? onAlbum : null)),
-            Expanded(child: _QaCell(icon: Icons.add, label: '新对话', onTap: enabled ? onNewChat : null)),
-          ],
+          children: cells
+              .map(
+                (c) => Expanded(
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(10),
+                    onTap: c.onTap,
+                    child: SizedBox(
+                      height: 46,
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(c.icon, size: 18, color: DunesColors.text2),
+                          const SizedBox(height: 3),
+                          Text(
+                            c.label,
+                            style: DunesTypography.sans(
+                              fontSize: 9.5,
+                              color: DunesColors.text3,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              )
+              .toList(),
         ),
       ),
     );
   }
 }
 
-class _QaCell extends StatelessWidget {
-  const _QaCell({required this.icon, required this.label, this.onTap});
+class _NovaQaCell {
+  const _NovaQaCell({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
 
   final IconData icon;
   final String label;
   final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      borderRadius: BorderRadius.circular(10),
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
-        child: Column(
-          children: [
-            Icon(icon, size: 20, color: DunesColors.text2),
-            const SizedBox(height: 5),
-            Text(label, style: DunesTypography.sans(fontSize: 10, color: DunesColors.text3)),
-          ],
-        ),
-      ),
-    );
-  }
 }

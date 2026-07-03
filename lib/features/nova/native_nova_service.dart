@@ -11,6 +11,7 @@ import '../../core/util/friendly_error.dart';
 import '../auth/auth_session.dart';
 import '../conversation/conversation_models.dart';
 import 'nova_draft.dart';
+import 'nova_file_utils.dart';
 import 'nova_generating_storage.dart';
 import 'nova_history_sync.dart';
 import 'nova_history_utils.dart';
@@ -57,15 +58,22 @@ class NovaMessageAttachment {
   }
 
   factory NovaMessageAttachment.fromJson(Map<String, dynamic> json) {
+    final url =
+        (json['url'] ??
+                json['accessUrl'] ??
+                json['publicUrl'] ??
+                json['previewUrl'] ??
+                '')
+            .toString();
+    var objectKey = (json['objectKey'] ?? '').toString();
+    if (objectKey.isEmpty &&
+        url.isNotEmpty &&
+        !RegExp(r'^https?:', caseSensitive: false).hasMatch(url)) {
+      objectKey = url;
+    }
     return NovaMessageAttachment(
-      url:
-          (json['url'] ??
-                  json['accessUrl'] ??
-                  json['publicUrl'] ??
-                  json['previewUrl'] ??
-                  '')
-              .toString(),
-      objectKey: (json['objectKey'] ?? '').toString(),
+      url: url,
+      objectKey: objectKey,
       fileName: (json['fileName'] ?? 'file').toString(),
       mimeType: (json['mimeType'] ?? 'application/octet-stream').toString(),
       kind: (json['kind'] ?? 'FILE').toString(),
@@ -594,6 +602,19 @@ class NativeNovaService {
     if (msg.contains('凭证') || msg.contains('api_key'))
       return 'NOVA账号尚未就绪，请重新登录后再试';
     if (msg.contains('尚未开通')) return msg;
+    if (msg.contains('NOVA未返回正文') || msg.contains('NOVA回复失败')) return msg;
+    final low = msg.toLowerCase();
+    if (low.contains('context length') ||
+        low.contains('maximum context') ||
+        low.contains('token limit') ||
+        low.contains('too large') ||
+        low.contains('payload too large') ||
+        low.contains('request entity too large')) {
+      return '附件内容过大，请缩短会议纪要或稍后重试';
+    }
+    if (low.contains('unsupported') && low.contains('file')) {
+      return '当前模型不支持该文件类型，请切换模型后重试';
+    }
     return friendlyErrorText(msg, fallback: 'NOVA 请求失败，请稍后重试');
   }
 
@@ -1075,6 +1096,16 @@ class NativeNovaService {
     // 消息」覆盖本地缓存，导致已生成的回复永久丢失。这里用本地已保存的完整回复补齐。
     msgs = _mergeTrailingAssistantFromLocal(msgs, localMsgs);
 
+    final preserveGeneratingSnapshot = shouldPersistNovaGenerating(
+      localGen: localGen,
+      draft: streamDraft,
+      streamInFlight: isStreamInFlight,
+    );
+    if (localMsgs.isNotEmpty &&
+        (shouldUseLocalFallback || preserveGeneratingSnapshot)) {
+      msgs = _mergeTurnsWithSessionCache(msgs, localMsgs);
+    }
+
     if (_shouldRebuildFromTurns(msgs)) {
       final turns = await _fetchTurnRows(200, conversationId: conversationId);
       if (turns.isNotEmpty) {
@@ -1096,7 +1127,7 @@ class NativeNovaService {
 
     msgs = applyViewSinceFilter ? await _applyViewSinceFilter(msgs) : msgs;
 
-    if (!isStreamInFlight) {
+    if (!isStreamInFlight && !preserveGeneratingSnapshot) {
       msgs = _stripIncompleteStreamingMessages(msgs);
     }
 
@@ -1639,7 +1670,10 @@ class NativeNovaService {
     return messages
         .where(
           (m) =>
-              !(m.role == 'assistant' && m.streaming && m.text.trim().isEmpty),
+              !(m.role == 'assistant' &&
+                  m.streaming &&
+                  m.text.trim().isEmpty &&
+                  m.thinkStatus.trim().isEmpty),
         )
         .toList();
   }
@@ -1790,6 +1824,26 @@ class NativeNovaService {
     return conversationId;
   }
 
+  Future<void> persistAssistantAttachmentTurn({
+    required int conversationId,
+    required int assistantMessageId,
+    required String displayText,
+    required List<Map<String, dynamic>> attachments,
+  }) async {
+    if (conversationId <= 0 || displayText.trim().isEmpty) return;
+    await _saveLocalMessage(
+      conversationId,
+      role: 'assistant',
+      content: displayText.trim(),
+      kind: 'TEXT',
+      metadata: <String, dynamic>{'attachments': attachments},
+      messageId: assistantMessageId > 0 ? assistantMessageId : null,
+      createdAt: assistantMessageId > 0
+          ? DateTime.fromMillisecondsSinceEpoch(assistantMessageId)
+          : null,
+    );
+  }
+
   /// 对齐 WebView `persistNovaAssistantReply`：assistant 写入 messages/local 并 upsert history/turns。
   Future<void> persistAssistantTurn({
     required int conversationId,
@@ -1863,6 +1917,11 @@ class NativeNovaService {
       return;
     }
 
+    final lastMessageAt = resolveHistoryTurnLastMessageAt(
+      knownRows,
+      assistantReply: reply,
+    );
+
     await registerHistoryTurn(
       conversationId: activeConvId,
       messageId: effectiveMessageId > 0
@@ -1871,6 +1930,7 @@ class NativeNovaService {
       userMessage: effectiveUser,
       assistantMessage: reply,
       lastMessagePreview: reply.length > 200 ? reply.substring(0, 200) : reply,
+      lastMessageAt: lastMessageAt,
       userPayload: userPayload,
     );
   }
@@ -2237,24 +2297,33 @@ class NativeNovaService {
     String source, {
     String bucket = 'im-attachments',
   }) async {
-    if (source.startsWith('http://') || source.startsWith('https://'))
-      return source;
-    final resp = await _client.get(
-      _dunesUri(
-        '/storage/presigned-get?bucket=$bucket&objectKey=${Uri.encodeQueryComponent(source)}',
-      ),
-      headers: _dunesHeaders,
-    );
+    final trimmed = source.trim();
+    if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+      return trimmed;
+    }
+    // 移动端走 API 代理，避免 presigned URL 指向 Docker 内网 MinIO 导致无法访问。
+    return mediaProxyUrl(trimmed, bucket: bucket);
+  }
+
+  Future<String> fetchTextViaStorageProxy(
+    String objectKey, {
+    String bucket = 'im-attachments',
+  }) async {
+    final key = objectKey.trim();
+    if (key.isEmpty) {
+      throw Exception('文件路径无效');
+    }
+    final resp = await _client.get(Uri.parse(mediaProxyUrl(key, bucket: bucket)));
     if (resp.statusCode < 200 || resp.statusCode >= 300) {
-      throw Exception('媒体地址解析失败: HTTP ${resp.statusCode}');
+      throw Exception('读取失败（HTTP ${resp.statusCode}）');
     }
-    final body = _decode(resp.body);
-    final data = body['data'];
-    if (data is Map<String, dynamic>) {
-      final url = (data['url'] ?? '').toString();
-      if (url.isNotEmpty) return url;
+    if (resp.body.isEmpty) {
+      throw Exception('文件内容为空');
     }
-    throw Exception('媒体地址解析失败');
+    return decodeHttpResponseText(
+      resp.bodyBytes,
+      contentType: resp.headers['content-type'] ?? '',
+    );
   }
 
   Future<NovaHistoryPageResult> fetchHistoryTurns({
@@ -2437,6 +2506,29 @@ class NativeNovaService {
     return h;
   }
 
+  Future<Uint8List> _resolveMultimodalFileBytes(NovaDraftAttachment attachment) async {
+    if (attachment.bytes.isNotEmpty) return attachment.bytes;
+    final payload = attachment.payload;
+    if (payload == null) return attachment.bytes;
+    for (final key in ['url', 'accessUrl', 'publicUrl', 'previewUrl']) {
+      final raw = (payload[key] ?? '').toString().trim();
+      if (!raw.startsWith('http://') && !raw.startsWith('https://')) continue;
+      final resp = await _client.get(Uri.parse(raw));
+      if (resp.statusCode >= 200 && resp.statusCode < 300 && resp.bodyBytes.isNotEmpty) {
+        return resp.bodyBytes;
+      }
+    }
+    final objectKey = (payload['objectKey'] ?? '').toString().trim();
+    if (objectKey.isNotEmpty) {
+      final url = await resolveMediaUrl(objectKey);
+      final resp = await _client.get(Uri.parse(url));
+      if (resp.statusCode >= 200 && resp.statusCode < 300 && resp.bodyBytes.isNotEmpty) {
+        return resp.bodyBytes;
+      }
+    }
+    return attachment.bytes;
+  }
+
   Future<dynamic> buildMultimodalContent({
     required String text,
     required List<NovaDraftAttachment> attachments,
@@ -2460,10 +2552,15 @@ class NativeNovaService {
         final visionUrl = uploadedUrl ?? dataUrl;
         parts.add(_visionImagePart(imagePartType, visionUrl));
       } else {
-        final b64 = base64Encode(a.bytes);
+        final bytes = await _resolveMultimodalFileBytes(a);
+        if (bytes.isEmpty) continue;
+        final b64 = base64Encode(bytes);
         parts.add(<String, dynamic>{
           'type': 'file',
-          'file': <String, dynamic>{'filename': a.fileName, 'file_data': b64},
+          'file': <String, dynamic>{
+            'filename': a.fileName,
+            'file_data': b64,
+          },
         });
       }
     }
@@ -2542,6 +2639,7 @@ class NativeNovaService {
     Map<String, dynamic>? userMetadata,
     int? userMessageId,
     bool skipUserPersist = false,
+    bool stream = true,
     required void Function(NovaStreamUpdate update) onUpdate,
     void Function(int conversationId)? onConversationId,
   }) async {
@@ -2559,6 +2657,7 @@ class NativeNovaService {
       userContent,
       displayText: contentLabel.toString(),
     );
+    final skipEchoCheck = userContent is List;
     userStoppedStream = false;
     if (!skipUserPersist) {
       final fallbackId = userMessageId ?? DateTime.now().millisecondsSinceEpoch;
@@ -2632,14 +2731,14 @@ class NativeNovaService {
       );
       final headers = novaHeaders(<String, String>{
         'Content-Type': 'application/json',
-        'Accept': 'text/event-stream',
       });
+      if (stream) headers['Accept'] = 'text/event-stream';
       final sessionId = novaProfileSessionId.trim();
       if (sessionId.isNotEmpty) headers['X-Nova-Chat-Session-Id'] = sessionId;
       req.headers.addAll(headers);
       final body = <String, dynamic>{
         'model': model,
-        'stream': true,
+        'stream': stream,
         'messages': requestMessages,
       };
       final bizUser = novaBizUserId.trim();
@@ -2648,8 +2747,53 @@ class NativeNovaService {
       if (kDebugMode) {
         debugPrint(
           '[NativeNova] POST chat/completions conv=$activeConvId model=$model '
-          'user=$bizUser session=$sessionId',
+          'user=$bizUser session=$sessionId stream=$stream bodyBytes=${req.body.length}',
         );
+      }
+
+      if (!stream) {
+        onUpdate(
+          const NovaStreamUpdate(
+            replyText: '',
+            thinkStatus: '正在分析…',
+          ),
+        );
+        final resp = await streamClient.post(
+          req.url,
+          headers: req.headers,
+          body: req.body,
+        );
+        if (resp.statusCode < 200 || resp.statusCode >= 300) {
+          throw Exception(_parseNovaHttpError(resp.statusCode, resp.body));
+        }
+        final decoded = _decode(resp.body);
+        final choices = decoded['choices'] as List<dynamic>? ?? const <dynamic>[];
+        final first = choices.isNotEmpty && choices.first is Map<String, dynamic>
+            ? choices.first as Map<String, dynamic>
+            : const <String, dynamic>{};
+        final message = first['message'] is Map<String, dynamic>
+            ? first['message'] as Map<String, dynamic>
+            : const <String, dynamic>{};
+        var reply = _extractAssistantText(message).trim();
+        if (reply.isEmpty) throw Exception('NOVA未返回正文，请重试');
+        if (!skipEchoCheck && reply.trim() == userPrompt.trim()) {
+          throw Exception('NOVA未返回正文，请重试');
+        }
+        onUpdate(NovaStreamUpdate(replyText: reply, thinkStatus: ''));
+        await _saveLocalMessage(
+          activeConvId,
+          role: 'assistant',
+          content: reply,
+          kind: 'AI_ASSISTANT',
+          messageId: (userMessageId ?? 0) > 0 ? userMessageId! + 1 : null,
+          createdAt: _assistantCreatedAt(activeConvId),
+        );
+        await commitAssistantReplyToSession(
+          activeConvId,
+          replyText: reply,
+        );
+        await _clearGeneratingMarkersForConversation(activeConvId);
+        return reply;
       }
 
       final streamed = await streamClient.send(req);
@@ -2711,10 +2855,25 @@ class NativeNovaService {
         thinkBuffer,
         finalPass: true,
       );
-      if (reply.isEmpty && thinkBuffer.trim().isNotEmpty)
+      if (reply.isEmpty && thinkBuffer.trim().isNotEmpty) {
         reply = thinkBuffer.trim();
-      if (!hadOutput || reply.isEmpty) throw Exception('NOVA未返回正文，请重试');
-      if (reply.trim() == userPrompt.trim()) {
+      }
+      if (reply.isEmpty && replyBuffer.trim().isNotEmpty) {
+        reply = stripHermesProgressLines(replyBuffer.trim());
+      }
+      if (reply.isEmpty && finalParts.thinking.trim().isNotEmpty) {
+        reply = finalParts.thinking.trim();
+      }
+      if (!hadOutput || reply.isEmpty) {
+        if (kDebugMode) {
+          debugPrint(
+            '[NativeNova] empty stream reply hadOutput=$hadOutput '
+            'replyLen=${replyBuffer.length} thinkLen=${thinkBuffer.length}',
+          );
+        }
+        throw Exception('NOVA未返回正文，请重试');
+      }
+      if (!skipEchoCheck && reply.trim() == userPrompt.trim()) {
         throw Exception('NOVA未返回正文，请重试');
       }
       await _saveLocalMessage(
@@ -2806,6 +2965,63 @@ class NativeNovaService {
       content: reply,
       kind: 'AI_ASSISTANT',
     );
+    return reply;
+  }
+
+  /// 一次性补全（不写入会话），用于会议纪要 → PRD 等离线生成场景。
+  Future<String> generateCompletionWithModel({
+    required String model,
+    required String systemPrompt,
+    required String userText,
+  }) async {
+    final readiness = await checkReadiness();
+    if (!readiness.ready) {
+      throw Exception(readiness.message ?? 'NOVA账号尚未开通，请稍后再试');
+    }
+    if (novaApiKey.isEmpty) {
+      throw Exception('NOVA账号尚未就绪，请重新登录后再试');
+    }
+    final trimmed = userText.trim();
+    if (trimmed.isEmpty) {
+      throw Exception('输入内容为空，无法生成');
+    }
+    final effectiveModel = model.trim().isNotEmpty
+        ? model.trim()
+        : (selectedModel.isEmpty ? NovaConfig.defaultChatModel : selectedModel);
+    final requestMessages = <Map<String, dynamic>>[
+      <String, dynamic>{'role': 'system', 'content': systemPrompt.trim()},
+      <String, dynamic>{'role': 'user', 'content': trimmed},
+    ];
+    final headers = novaHeaders(<String, String>{
+      'Content-Type': 'application/json',
+    });
+    final sessionId = novaProfileSessionId.trim();
+    if (sessionId.isNotEmpty) headers['X-Nova-Chat-Session-Id'] = sessionId;
+    final requestBody = <String, dynamic>{
+      'model': effectiveModel,
+      'stream': false,
+      'messages': requestMessages,
+    };
+    final bizUser = novaBizUserId.trim();
+    if (bizUser.isNotEmpty) requestBody['user'] = bizUser;
+    final resp = await _client.post(
+      Uri.parse('$novaBase/v1/chat/completions'),
+      headers: headers,
+      body: jsonEncode(requestBody),
+    );
+    if (resp.statusCode < 200 || resp.statusCode >= 300) {
+      throw Exception(_parseNovaHttpError(resp.statusCode, resp.body));
+    }
+    final body = _decode(resp.body);
+    final choices = body['choices'] as List<dynamic>? ?? const <dynamic>[];
+    final first = choices.isNotEmpty && choices.first is Map<String, dynamic>
+        ? choices.first as Map<String, dynamic>
+        : const <String, dynamic>{};
+    final message = first['message'] is Map<String, dynamic>
+        ? first['message'] as Map<String, dynamic>
+        : const <String, dynamic>{};
+    final reply = _extractAssistantText(message).trim();
+    if (reply.isEmpty) throw Exception('NOVA未返回正文，请重试');
     return reply;
   }
 

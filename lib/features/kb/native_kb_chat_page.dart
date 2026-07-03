@@ -217,7 +217,7 @@ class _NativeKbChatPageState extends State<NativeKbChatPage> {
       child: Row(
         children: [
           IconButton(
-            onPressed: () => widget.navigation.go('K1'),
+            onPressed: () => widget.navigation.popTo('K1'),
             icon: const Icon(Icons.chevron_left),
           ),
           Expanded(
@@ -239,7 +239,7 @@ class _NativeKbChatPageState extends State<NativeKbChatPage> {
           ),
           IconButton(onPressed: _newChat, icon: const Icon(Icons.add, size: 20), tooltip: '新对话'),
           IconButton(
-            onPressed: () => widget.navigation.go('K1'),
+            onPressed: () => widget.navigation.popTo('K1'),
             icon: const Icon(Icons.menu_book_outlined, size: 20),
             tooltip: '我的知识库',
           ),

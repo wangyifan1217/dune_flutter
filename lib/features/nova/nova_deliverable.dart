@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 
+import 'nova_file_utils.dart';
 import 'nova_stream_parser.dart';
 
 /// 云枢回复中的可交付物（图片 / 文件），对齐 WebView `renderNovaImageCard` / `renderNovaFileCard`。
@@ -48,7 +49,14 @@ String sanitizeNovaDeliverableName(String name) {
 bool novaImageUrlNeedsAuthFetch(String url) {
   final u = url.trim();
   if (u.isEmpty) return false;
-  return RegExp(r'/v1/files/download', caseSensitive: false).hasMatch(u);
+  if (!RegExp(r'/v1/files/download', caseSensitive: false).hasMatch(u)) {
+    return false;
+  }
+  // 绝对可访问链接（如 Nova 返回的开放地址）优先直连，不强制走 Bearer 抓取。
+  if (isDirectHttpUrl(u) && isUrlLikelyDeviceReachable(u)) {
+    return false;
+  }
+  return true;
 }
 
 String normalizeNovaBodyText(String text) {
@@ -281,17 +289,56 @@ List<String> guessNovaAgentPaths(String name) {
   if (name.isEmpty) return const [];
   final base = name.split('/').last;
   final out = <String>[];
-  for (final p in [name, base, '/tmp/$base', '/workspace/$base', '/opt/data/$base', '/root/$base']) {
+  for (final p in [name, base, '/opt/data/$base', '/workspace/$base', '/tmp/$base', '/root/$base']) {
     if (p.isNotEmpty && !out.contains(p)) out.add(p);
   }
   return out;
 }
 
+/// 知识库会议纪要文件名，不是 Nova agent 交付物。
+bool isNovaKbMinutesReferenceFilename(String name) {
+  final base = sanitizeNovaDeliverableName(name).split('?').first.toLowerCase();
+  if (RegExp(r'^会议纪要[-_]').hasMatch(base)) return true;
+  if (RegExp(r'^meeting-minutes[-_]').hasMatch(base)) return true;
+  return false;
+}
+
+/// 正文里引用的知识库来源文档（如《会议纪要-测试.md》）不应渲染为 Nova 可下载卡片。
+bool isNovaCitationFilename(String raw, int start, int end, String name) {
+  if (name.isEmpty) return false;
+  if (isNovaKbMinutesReferenceFilename(name)) return true;
+  final ctxStart = (start - 96).clamp(0, start);
+  final ctxEnd = (end + 48).clamp(end, raw.length);
+  final ctx = raw.substring(ctxStart, ctxEnd);
+  final isDeliverable = RegExp(
+    r'(?:已生成|可下载|下载并查看|文件名称|生成(?:的)?文件|可直接下载)',
+    caseSensitive: false,
+  ).hasMatch(ctx);
+  if (isDeliverable) return false;
+  if (RegExp(
+    r'(?:来源文档|内容来源|基于知识库|知识库文档|知识库里的|知识库中)',
+    caseSensitive: false,
+  ).hasMatch(ctx)) {
+    return true;
+  }
+  final before = raw.substring(0, start);
+  final lastOpen = before.lastIndexOf('《') > before.lastIndexOf('「')
+      ? before.lastIndexOf('《')
+      : before.lastIndexOf('「');
+  final lastClose = before.lastIndexOf('》') > before.lastIndexOf('」')
+      ? before.lastIndexOf('》')
+      : before.lastIndexOf('」');
+  if (lastOpen > lastClose) return true;
+  return false;
+}
+
 List<NovaDeliverableItem> extractNovaNamedDownloadFiles(String text) {
   final raw = normalizeNovaBodyText(text);
   if (raw.isEmpty) return const [];
-  if (!RegExp(r'(?:可下载|下载链接|点击下载|Markdown文件|markdown文件|📎|下载\s*链接)', caseSensitive: false)
-      .hasMatch(raw)) {
+  if (!RegExp(
+    r'(?:可下载|下载链接|点击下载|Markdown文件|markdown文件|Word文档|word文档|docx文件|📎|下载\s*链接)',
+    caseSensitive: false,
+  ).hasMatch(raw)) {
     return const [];
   }
   if (tryParseHermesFileJson(raw) != null || extractNovaMarkdownFileLinks(raw).isNotEmpty) {
@@ -306,6 +353,8 @@ List<NovaDeliverableItem> extractNovaNamedDownloadFiles(String text) {
   for (final m in re.allMatches(raw)) {
     final name = m.group(1)?.trim() ?? '';
     if (name.isEmpty || seen.contains(name)) continue;
+    if (isNovaCitationFilename(raw, m.start, m.end, name)) continue;
+    if (isNovaKbMinutesReferenceFilename(name)) continue;
     if (!novaIsDeliverableFileExt(novaFileExt(name))) continue;
     seen.add(name);
     final paths = guessNovaAgentPaths(name);
@@ -320,26 +369,29 @@ List<NovaDeliverableItem> extractNovaNamedDownloadFiles(String text) {
 }
 
 List<NovaDeliverableItem> collectNovaExtraFiles(
-  String raw,
+  String displayRaw,
   Set<String> shownNames,
-  Set<String> shownUrls,
-) {
-  final markdownFiles = extractNovaMarkdownFileLinks(raw);
+  Set<String> shownUrls, {
+  String toolRaw = '',
+}) {
+  final toolSource = toolRaw.trim().isNotEmpty ? toolRaw : displayRaw;
+  final markdownFiles = extractNovaMarkdownFileLinks(displayRaw);
   final mdNames = {for (final f in markdownFiles) f.name: true};
   final all = <NovaDeliverableItem>[
     ...markdownFiles,
-    ...extractNovaToolCallFiles(raw),
-    ...extractNovaGeneratedFiles(raw),
-    ...extractNovaNamedDownloadFiles(raw),
+    ...extractNovaToolCallFiles(toolSource),
+    ...extractNovaGeneratedFiles(toolSource),
+    ...extractNovaNamedDownloadFiles(displayRaw),
   ];
   final hasDownloadIntent = RegExp(
-    r'(?:可下载|下载链接|点击下载|Markdown文件|markdown文件|📎|下载\s*链接|附件|\.md\)|\.pdf\))',
+    r'(?:可下载|下载链接|点击下载|Markdown文件|markdown文件|Word文档|word文档|docx文件|📎|下载\s*链接|附件|\.md\)|\.pdf\)|\.docx\))',
     caseSensitive: false,
-  ).hasMatch(raw);
+  ).hasMatch(displayRaw);
   final out = <NovaDeliverableItem>[];
   final seenUrl = <String>{};
   final seenAgent = <String>{};
   for (final f in all) {
+    if (f.url.isEmpty && isNovaKbMinutesReferenceFilename(f.name)) continue;
     if (f.url.isNotEmpty) {
       if (seenUrl.contains(f.url) || shownUrls.contains(f.url)) continue;
       seenUrl.add(f.url);

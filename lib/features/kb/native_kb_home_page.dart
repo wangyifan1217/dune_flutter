@@ -8,6 +8,7 @@ import '../../core/theme/dunes_theme.dart';
 import '../../core/util/friendly_error.dart';
 import '../auth/auth_session.dart';
 import '../shell/dunes_toast.dart';
+import 'kb_document_coordinator.dart';
 import 'native_kb_models.dart';
 import 'native_kb_service.dart';
 
@@ -18,12 +19,14 @@ class NativeKbHomePage extends StatefulWidget {
     required this.navigation,
     required this.onBack,
     required this.onOpenChat,
+    required this.onOpenDoc,
   });
 
   final AuthSession session;
   final DunesNavigationController navigation;
   final VoidCallback onBack;
   final VoidCallback onOpenChat;
+  final void Function(NativeKbDocument doc) onOpenDoc;
 
   @override
   State<NativeKbHomePage> createState() => _NativeKbHomePageState();
@@ -94,10 +97,22 @@ class _NativeKbHomePageState extends State<NativeKbHomePage> {
       _syncStatus = '正在同步 RAGFlow 文件夹与文件…';
     });
     try {
-      await _service.fetchSummary();
+      try {
+        await _service.syncRagflow();
+      } catch (e) {
+        if (!mounted) return;
+        setState(
+          () => _syncStatus = friendlyErrorText(
+            e,
+            fallback: 'RAGFlow 同步未完成，已刷新本地列表',
+          ),
+        );
+      }
       await _load();
       if (!mounted) return;
-      setState(() => _syncStatus = '同步完成，已更新知识库状态');
+      if (!_syncStatus.contains('未完成') && !_syncStatus.contains('失败')) {
+        setState(() => _syncStatus = '同步完成，已更新知识库状态');
+      }
     } catch (e) {
       if (!mounted) return;
       setState(
@@ -175,22 +190,12 @@ class _NativeKbHomePageState extends State<NativeKbHomePage> {
     if (ok != true) return;
     try {
       await _service.deleteDocument(doc.id);
+      KbDocumentCoordinator.instance.notifyChanged();
       await _load();
     } catch (e) {
       if (!mounted) return;
       _toast('删除失败：${friendlyErrorText(e)}', error: true);
     }
-  }
-
-  Future<void> _enterChat() async {
-    final summary = _summary;
-    if (summary != null &&
-        !summary.ready &&
-        summary.documents.every((d) => !d.indexed)) {
-      _toast('请先上传文档并等待解析完成');
-      return;
-    }
-    widget.onOpenChat();
   }
 
   void _toast(String msg, {bool error = false}) {
@@ -228,14 +233,6 @@ class _NativeKbHomePageState extends State<NativeKbHomePage> {
                           _sectionLabel('上传', '知识库文档'),
                           const SizedBox(height: 8),
                           _buildUploadPanel(),
-                          const SizedBox(height: 14),
-                          _sectionLabel(
-                            '分类',
-                            '知识库目录',
-                            count: '${_summary?.categoryCount ?? 0} 个',
-                          ),
-                          const SizedBox(height: 8),
-                          _buildCategoryGrid(),
                           const SizedBox(height: 14),
                           _sectionLabel(
                             '我的',
@@ -506,62 +503,6 @@ class _NativeKbHomePageState extends State<NativeKbHomePage> {
     );
   }
 
-  Widget _buildCategoryGrid() {
-    final phone = widget.session.phone;
-    final count = _summary?.documentCount ?? 0;
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: DunesColors.border),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: DunesColors.accentSoft,
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: const Icon(
-              Icons.folder_outlined,
-              color: DunesColors.accentDeep,
-            ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '我的知识库${phone.isNotEmpty ? '（$phone）' : ''}',
-                  style: const TextStyle(
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                Text(
-                  '$count 篇',
-                  style: const TextStyle(
-                    fontSize: 10,
-                    color: DunesColors.text3,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          IconButton(
-            onPressed: _enterChat,
-            icon: const Icon(Icons.chat_bubble_outline, size: 18),
-            tooltip: '问知识库',
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildDocList() {
     final docs = _summary?.documents ?? const <NativeKbDocument>[];
     if (docs.isEmpty) {
@@ -589,98 +530,105 @@ class _NativeKbHomePageState extends State<NativeKbHomePage> {
     return Column(
       children: [
         for (final doc in docs)
-          Container(
-            key: ValueKey(doc.id),
-            margin: const EdgeInsets.only(bottom: 8),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            decoration: BoxDecoration(
-              color: Colors.white,
+          Material(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(10),
+            child: InkWell(
               borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: DunesColors.border),
-            ),
-            child: Row(
-              children: [
-                Container(
-                  width: 36,
-                  height: 36,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF0EEE8),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Icon(
-                    Icons.description_outlined,
-                    size: 18,
-                    color: DunesColors.text2,
-                  ),
+              onTap: () => widget.onOpenDoc(doc),
+              child: Container(
+                key: ValueKey(doc.id),
+                margin: const EdgeInsets.only(bottom: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: DunesColors.border),
                 ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        doc.title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 12.5,
-                          fontWeight: FontWeight.w500,
-                        ),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 36,
+                      height: 36,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF0EEE8),
+                        borderRadius: BorderRadius.circular(8),
                       ),
-                      const SizedBox(height: 3),
-                      Row(
+                      child: const Icon(
+                        Icons.description_outlined,
+                        size: 18,
+                        color: DunesColors.text2,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 5,
-                              vertical: 1,
-                            ),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFF0EEE8),
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: Text(
-                              (doc.fileExtension.isEmpty
-                                      ? 'DOC'
-                                      : doc.fileExtension)
-                                  .toUpperCase(),
-                              style: const TextStyle(
-                                fontSize: 8.5,
-                                fontWeight: FontWeight.w600,
-                              ),
+                          Text(
+                            doc.title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w500,
                             ),
                           ),
-                          const SizedBox(width: 6),
-                          Text(
-                            doc.statusLabel,
-                            style: const TextStyle(
-                              fontSize: 10,
-                              color: DunesColors.text3,
-                            ),
+                          const SizedBox(height: 3),
+                          Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 5,
+                                  vertical: 1,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFF0EEE8),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Text(
+                                  (doc.fileExtension.isEmpty
+                                          ? 'DOC'
+                                          : doc.fileExtension)
+                                      .toUpperCase(),
+                                  style: const TextStyle(
+                                    fontSize: 8.5,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                doc.statusLabel,
+                                style: const TextStyle(
+                                  fontSize: 10,
+                                  color: DunesColors.text3,
+                                ),
+                              ),
+                            ],
                           ),
                         ],
                       ),
-                    ],
-                  ),
-                ),
-                Material(
-                  color: DunesColors.coralSoft,
-                  borderRadius: BorderRadius.circular(8),
-                  child: InkWell(
-                    onTap: () => _deleteDoc(doc),
-                    borderRadius: BorderRadius.circular(8),
-                    child: const SizedBox(
-                      width: 30,
-                      height: 30,
-                      child: Icon(
-                        Icons.delete_outline,
-                        size: 16,
-                        color: DunesColors.coral,
+                    ),
+                    Material(
+                      color: DunesColors.coralSoft,
+                      borderRadius: BorderRadius.circular(8),
+                      child: InkWell(
+                        onTap: () => _deleteDoc(doc),
+                        borderRadius: BorderRadius.circular(8),
+                        child: const SizedBox(
+                          width: 30,
+                          height: 30,
+                          child: Icon(
+                            Icons.delete_outline,
+                            size: 16,
+                            color: DunesColors.coral,
+                          ),
+                        ),
                       ),
                     ),
-                  ),
+                  ],
                 ),
-              ],
+              ),
             ),
           ),
       ],

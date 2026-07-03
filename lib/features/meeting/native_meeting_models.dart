@@ -41,6 +41,33 @@ class NativeMeetingSummary {
   }
 }
 
+class NativeMeetingKbUpload {
+  const NativeMeetingKbUpload({
+    required this.uploaded,
+    this.documentId,
+    this.uploadedAt,
+    this.fileName,
+  });
+
+  final bool uploaded;
+  final int? documentId;
+  final String? uploadedAt;
+  final String? fileName;
+
+  factory NativeMeetingKbUpload.fromJson(Map<String, dynamic>? json) {
+    if (json == null) {
+      return const NativeMeetingKbUpload(uploaded: false);
+    }
+    final docId = json['documentId'];
+    return NativeMeetingKbUpload(
+      uploaded: json['uploaded'] == true,
+      documentId: docId is num ? docId.toInt() : int.tryParse('$docId'),
+      uploadedAt: json['uploadedAt']?.toString(),
+      fileName: json['fileName']?.toString(),
+    );
+  }
+}
+
 class NativeMeetingDetail {
   const NativeMeetingDetail({
     required this.meetingId,
@@ -56,6 +83,7 @@ class NativeMeetingDetail {
     required this.summary,
     required this.actionItems,
     required this.transcriptSegments,
+    this.kbUpload,
   });
 
   final int meetingId;
@@ -71,6 +99,9 @@ class NativeMeetingDetail {
   final String summary;
   final List<String> actionItems;
   final List<NativeTranscriptSegment> transcriptSegments;
+  final NativeMeetingKbUpload? kbUpload;
+
+  bool get kbUploaded => kbUpload?.uploaded == true;
 
   String get displayTime => NativeMeetingTime.formatDisplayBest(
         createdAt: createdAt,
@@ -96,6 +127,11 @@ class NativeMeetingDetail {
       summary: _readSummary(json, minutes, transcript),
       actionItems: _readActionItems(action, minutes),
       transcriptSegments: _readTranscriptSegments(transcript),
+      kbUpload: NativeMeetingKbUpload.fromJson(
+        json['kbUpload'] is Map
+            ? Map<String, dynamic>.from(json['kbUpload'] as Map)
+            : null,
+      ),
     );
   }
 }

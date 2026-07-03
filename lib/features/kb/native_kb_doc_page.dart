@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/navigation/navigation_controller.dart';
 import '../../core/theme/dunes_theme.dart';
 import '../../core/util/friendly_error.dart';
 import '../auth/auth_session.dart';
+import '../nova/nova_markdown.dart';
 import 'native_kb_models.dart';
 import 'native_kb_service.dart';
 
@@ -14,13 +14,13 @@ class NativeKbDocPage extends StatefulWidget {
     required this.session,
     required this.navigation,
     required this.docId,
-    required this.onAskAi,
+    this.initialDoc,
   });
 
   final AuthSession session;
   final DunesNavigationController navigation;
   final String docId;
-  final void Function(String docId) onAskAi;
+  final NativeKbDocument? initialDoc;
 
   @override
   State<NativeKbDocPage> createState() => _NativeKbDocPageState();
@@ -30,7 +30,7 @@ class _NativeKbDocPageState extends State<NativeKbDocPage> {
   late final NativeKbService _service;
   NativeKbDocument? _doc;
   String? _markdown;
-  String? _downloadUrl;
+  String _fileName = '';
   bool _loading = true;
   String? _error;
 
@@ -54,23 +54,15 @@ class _NativeKbDocPageState extends State<NativeKbDocPage> {
       _error = null;
     });
     try {
-      final doc = await _service.fetchDocumentDetail(widget.docId);
-      String? md;
-      String? url;
-      if (doc.fileObjectKey.isNotEmpty) {
-        url = await _service.resolveDownloadUrl(doc.fileObjectKey);
-        final ext = doc.fileExtension.toLowerCase();
-        final isMd = ext == 'md' || doc.fileName.toLowerCase().endsWith('.md');
-        if (isMd) {
-          md = await _service.fetchMarkdownContent(doc.fileObjectKey);
-        }
-      }
-      await _service.recordDocumentView(widget.docId);
+      final preview = await _service.loadDocumentPreview(
+        docId: widget.docId,
+        initialDoc: widget.initialDoc,
+      );
       if (!mounted) return;
       setState(() {
-        _doc = doc;
-        _markdown = md;
-        _downloadUrl = url;
+        _doc = preview.doc;
+        _markdown = preview.markdown;
+        _fileName = preview.fileName;
         _loading = false;
       });
     } catch (e) {
@@ -79,15 +71,6 @@ class _NativeKbDocPageState extends State<NativeKbDocPage> {
         _error = friendlyErrorText(e);
         _loading = false;
       });
-    }
-  }
-
-  Future<void> _openExternal() async {
-    final url = _downloadUrl;
-    if (url == null || url.isEmpty) return;
-    final uri = Uri.parse(url);
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
     }
   }
 
@@ -106,7 +89,6 @@ class _NativeKbDocPageState extends State<NativeKbDocPage> {
                       ? _buildError()
                       : _buildBody(),
             ),
-            _buildActionBar(),
           ],
         ),
       ),
@@ -124,25 +106,36 @@ class _NativeKbDocPageState extends State<NativeKbDocPage> {
       child: Row(
         children: [
           IconButton(
-            onPressed: () => widget.navigation.go('K1'),
+            onPressed: () => widget.navigation.popTo('K1'),
             icon: const Icon(Icons.chevron_left),
           ),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('知识库 · 文档预览', style: TextStyle(fontSize: 9.5, color: DunesColors.text3)),
+                const Text(
+                  '知识库 · 文档预览',
+                  style: TextStyle(
+                    fontFamily: 'Noto Sans SC',
+                    fontSize: 9.5,
+                    color: DunesColors.text3,
+                    decoration: TextDecoration.none,
+                  ),
+                ),
                 Text(
                   doc?.title ?? '—',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                  style: const TextStyle(
+                    fontFamily: 'Noto Sans SC',
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    decoration: TextDecoration.none,
+                  ),
                 ),
               ],
             ),
           ),
-          if (_downloadUrl != null)
-            IconButton(onPressed: _openExternal, icon: const Icon(Icons.download_outlined, size: 20)),
         ],
       ),
     );
@@ -166,161 +159,42 @@ class _NativeKbDocPageState extends State<NativeKbDocPage> {
 
   Widget _buildBody() {
     final doc = _doc!;
-    final ext = doc.fileExtension.toUpperCase();
-    return ListView(
-      padding: const EdgeInsets.all(12),
-      children: [
-        Wrap(
-          spacing: 6,
-          runSpacing: 6,
-          children: [
-            _chip((ext.isEmpty ? '文档' : ext)),
-            _chip(doc.statusLabel),
-            if (doc.fileName.isNotEmpty) _chip(doc.fileName),
-          ],
-        ),
-        const SizedBox(height: 10),
-        Container(
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(11),
-            border: Border.all(color: DunesColors.border),
-          ),
-          clipBehavior: Clip.antiAlias,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                color: const Color(0xFFF7F6F2),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      '${ext.isEmpty ? '文档' : ext}${doc.fileName.isNotEmpty ? ' · ${doc.fileName}' : ''}',
-                      style: const TextStyle(fontSize: 9, color: DunesColors.text3),
-                    ),
-                    Text(
-                      doc.indexed ? 'INDEXED · RAGFlow' : doc.statusLabel,
-                      style: const TextStyle(fontSize: 9, color: DunesColors.text3),
-                    ),
-                  ],
-                ),
-              ),
-              if (_markdown != null)
-                Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: SelectableText(
-                    _markdown!,
-                    style: const TextStyle(fontSize: 11, height: 1.55, color: DunesColors.text),
-                  ),
-                )
-              else if (_downloadUrl != null)
-                Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Column(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFF7F6F2),
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(color: DunesColors.borderSoft),
-                        ),
-                        child: Row(
-                          children: [
-                            Container(
-                              width: 40,
-                              height: 40,
-                              decoration: BoxDecoration(
-                                color: DunesColors.accentSoft,
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              child: const Icon(Icons.description_outlined, color: DunesColors.accentDeep),
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(doc.title, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
-                                  const Text('点击下方按钮在浏览器中打开原文', style: TextStyle(fontSize: 9.5, color: DunesColors.text3)),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      FilledButton(
-                        onPressed: _openExternal,
-                        style: FilledButton.styleFrom(
-                          backgroundColor: const Color(0xFF2F5D62),
-                          minimumSize: const Size.fromHeight(44),
-                        ),
-                        child: const Text('打开文档'),
-                      ),
-                    ],
-                  ),
-                )
-              else
-                const Padding(
-                  padding: EdgeInsets.all(16),
-                  child: Text('暂无法预览此文档', style: TextStyle(fontSize: 11, color: DunesColors.text3)),
-                ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 8),
-        const Row(
-          children: [
-            Icon(Icons.visibility_outlined, size: 14, color: DunesColors.text3),
-            SizedBox(width: 6),
-            Text('已记录最近查阅', style: TextStyle(fontSize: 10, color: DunesColors.text3)),
-          ],
-        ),
-      ],
-    );
-  }
-
-  Widget _chip(String text) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF7F6F2),
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: DunesColors.borderSoft),
-      ),
-      child: Text(text, style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w600, color: DunesColors.text2)),
-    );
-  }
-
-  Widget _buildActionBar() {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        border: Border(top: BorderSide(color: DunesColors.borderSoft)),
-      ),
-      child: Row(
+    if (_markdown != null) {
+      return ListView(
+        padding: const EdgeInsets.all(14),
         children: [
-          Expanded(
-            child: OutlinedButton.icon(
-              onPressed: () => widget.navigation.go('K1'),
-              icon: const Icon(Icons.arrow_back, size: 16),
-              label: const Text('返回知识库'),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: FilledButton.icon(
-              onPressed: widget.docId.isEmpty ? null : () => widget.onAskAi(widget.docId),
-              style: FilledButton.styleFrom(backgroundColor: DunesColors.accentDeep),
-              icon: const Icon(Icons.auto_awesome, size: 16),
-              label: const Text('用 AI 问这篇'),
-            ),
+          NovaMarkdownBody(
+            text: _markdown!.trim().isEmpty ? '（空文档）' : _markdown!,
+            documentPreview: true,
           ),
         ],
+      );
+    }
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.description_outlined,
+              size: 48,
+              color: DunesColors.text3.withValues(alpha: 0.6),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              doc.title.isNotEmpty ? doc.title : _fileName,
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              '暂无法预览此文档',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 12, color: DunesColors.text3),
+            ),
+          ],
+        ),
       ),
     );
   }

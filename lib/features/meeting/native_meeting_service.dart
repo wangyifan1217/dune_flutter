@@ -323,6 +323,17 @@ class NativeMeetingService {
     _ensureSuccess(resp);
   }
 
+  Future<NativeMeetingKbUpload> uploadToKb(int meetingId) async {
+    final resp = await _requestMeeting(
+      'POST',
+      '/$meetingId/upload-to-kb',
+      body: '{}',
+    );
+    _ensureSuccess(resp);
+    final data = _unwrapData(resp.body);
+    return NativeMeetingKbUpload.fromJson(data);
+  }
+
   Future<void> deleteMeeting(int meetingId) async {
     final resp = await _requestMeeting('DELETE', '/$meetingId');
     if (resp.statusCode == 204) return;
@@ -513,6 +524,7 @@ Map<String, dynamic> _normalizeMeetingPayload(Map<String, dynamic> json) {
       'meetingDate',
       'createdAt',
       'updatedAt',
+      'kbUpload',
     ]) {
       if (!merged.containsKey(key) && json.containsKey(key)) {
         merged[key] = json[key];

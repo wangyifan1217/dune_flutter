@@ -15,11 +15,22 @@ class NovaMarkdownBody extends StatelessWidget {
     required this.text,
     this.streaming = false,
     this.mediaResolver,
+    this.documentPreview = false,
   });
 
   final String text;
   final bool streaming;
   final NovaMediaResolver? mediaResolver;
+  /// 全文档预览（知识库 / Nova 附件 MD）：弱化链接样式，避免满屏下划线。
+  final bool documentPreview;
+
+  static TextStyle _documentPreviewStyle() => const TextStyle(
+        fontFamily: 'Noto Sans SC',
+        fontSize: 13,
+        color: DunesColors.text,
+        height: 1.65,
+        decoration: TextDecoration.none,
+      );
 
   @override
   Widget build(BuildContext context) {
@@ -32,6 +43,14 @@ class NovaMarkdownBody extends StatelessWidget {
       return streaming
           ? Text('…', style: DunesTypography.sans(fontSize: 13, color: DunesColors.text3))
           : const SizedBox.shrink();
+    }
+
+    // 全文档预览：纯文本 + 中文字体，避免 Geist 缺字黄线、链接下划线。
+    if (documentPreview) {
+      return SelectableText(
+        raw,
+        style: _documentPreviewStyle(),
+      );
     }
 
     final shownNames = <String>{};
@@ -54,7 +73,12 @@ class NovaMarkdownBody extends StatelessWidget {
       widgets.addAll(_renderInlineSegment(context, raw, shownNames, shownUrls));
     }
 
-    for (final f in collectNovaExtraFiles(prep.toolRaw.isNotEmpty ? prep.toolRaw : text, shownNames, shownUrls)) {
+    for (final f in collectNovaExtraFiles(
+      prep.raw,
+      shownNames,
+      shownUrls,
+      toolRaw: prep.toolRaw,
+    )) {
       widgets.add(_deliverableCard(context, f, shownNames, shownUrls));
     }
 
@@ -157,7 +181,10 @@ class NovaMarkdownBody extends StatelessWidget {
     var last = 0;
     for (final m in re.allMatches(raw)) {
       if (m.start > last) {
-        widgets.add(_NovaMarkdownInline(text: raw.substring(last, m.start)));
+        widgets.add(_NovaMarkdownInline(
+          text: raw.substring(last, m.start),
+          documentPreview: documentPreview,
+        ));
       }
       final path = m.group(1)!;
       final name = path.split('/').last;
@@ -170,7 +197,10 @@ class NovaMarkdownBody extends StatelessWidget {
       last = m.end;
     }
     if (last < raw.length) {
-      widgets.add(_NovaMarkdownInline(text: raw.substring(last)));
+      widgets.add(_NovaMarkdownInline(
+        text: raw.substring(last),
+        documentPreview: documentPreview,
+      ));
     }
     return widgets;
   }
@@ -183,10 +213,15 @@ class NovaMarkdownBody extends StatelessWidget {
   ) {
     if (RegExp(r'^#{1,3}\s', multiLine: true).hasMatch(raw) ||
         RegExp(r'^[-*•]\s', multiLine: true).hasMatch(raw)) {
-      return [_NovaMarkdownBlock(text: raw, onImage: (item) => _imageCard(context, item, shownNames, shownUrls))];
+      return [_NovaMarkdownBlock(
+      text: raw,
+      documentPreview: documentPreview,
+      onImage: (item) => _imageCard(context, item, shownNames, shownUrls),
+    )];
     }
     return [_NovaMarkdownInline(
       text: raw,
+      documentPreview: documentPreview,
       onImage: (item) => _imageCard(context, item, shownNames, shownUrls),
       onFileLink: (label, url) => _markdownLinkCard(context, label, url, shownNames, shownUrls),
     )];
@@ -208,7 +243,11 @@ class NovaMarkdownBody extends StatelessWidget {
     if (novaShouldRenderLinkAsFileCard(label, url)) {
       return _fileCard(context, item, shownNames, shownUrls);
     }
-    return _NovaMarkdownInline(text: '[$label]($url)', linkOnly: true);
+    return _NovaMarkdownInline(
+      text: '[$label]($url)',
+      linkOnly: true,
+      documentPreview: documentPreview,
+    );
   }
 
   Widget _deliverableCard(
@@ -377,10 +416,12 @@ class _NovaMarkdownBlock extends StatelessWidget {
   const _NovaMarkdownBlock({
     required this.text,
     required this.onImage,
+    this.documentPreview = false,
   });
 
   final String text;
   final Widget Function(NovaDeliverableItem item) onImage;
+  final bool documentPreview;
 
   @override
   Widget build(BuildContext context) {
@@ -412,7 +453,12 @@ class _NovaMarkdownBlock extends StatelessWidget {
         flushList();
         children.add(Padding(
           padding: const EdgeInsets.fromLTRB(0, 10, 0, 6),
-          child: _NovaMarkdownInline(text: hm.group(1)!, heading: true, onImage: onImage),
+          child: _NovaMarkdownInline(
+            text: hm.group(1)!,
+            heading: true,
+            documentPreview: documentPreview,
+            onImage: onImage,
+          ),
         ));
         continue;
       }
@@ -424,7 +470,13 @@ class _NovaMarkdownBlock extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text('• ', style: TextStyle(fontSize: 13, color: DunesColors.text, height: 1.6)),
-              Expanded(child: _NovaMarkdownInline(text: lm.group(1)!, onImage: onImage)),
+              Expanded(
+                child: _NovaMarkdownInline(
+                  text: lm.group(1)!,
+                  documentPreview: documentPreview,
+                  onImage: onImage,
+                ),
+              ),
             ],
           ),
         ));
@@ -433,7 +485,11 @@ class _NovaMarkdownBlock extends StatelessWidget {
       flushList();
       children.add(Padding(
         padding: const EdgeInsets.symmetric(vertical: 4),
-        child: _NovaMarkdownInline(text: trimmed, onImage: onImage),
+        child: _NovaMarkdownInline(
+          text: trimmed,
+          documentPreview: documentPreview,
+          onImage: onImage,
+        ),
       ));
     }
     flushList();
@@ -447,6 +503,7 @@ class _NovaMarkdownInline extends StatelessWidget {
     required this.text,
     this.heading = false,
     this.linkOnly = false,
+    this.documentPreview = false,
     this.onImage,
     this.onFileLink,
   });
@@ -454,27 +511,32 @@ class _NovaMarkdownInline extends StatelessWidget {
   final String text;
   final bool heading;
   final bool linkOnly;
+  final bool documentPreview;
   final Widget Function(NovaDeliverableItem item)? onImage;
   final Widget Function(String label, String url)? onFileLink;
 
+  TextStyle _baseStyle() => DunesTypography.sans(
+        fontSize: heading ? 15 : 13,
+        fontWeight: heading ? FontWeight.w700 : FontWeight.w400,
+        color: DunesColors.text,
+        height: heading ? 1.45 : 1.65,
+      );
+
   @override
   Widget build(BuildContext context) {
+    if (documentPreview) {
+      return Text(
+        text,
+        style: _baseStyle(),
+      );
+    }
     if (onImage != null && RegExp(r'!\[[^\]]*\]\(https?:', caseSensitive: false).hasMatch(text)) {
       return _buildWithImageWidgets(context);
     }
     final spans = <InlineSpan>[];
     _parseInline(text, spans, context);
-    return SelectableText.rich(
-      TextSpan(
-        style: DunesTypography.sans(
-          fontSize: heading ? 15 : 13,
-          fontWeight: heading ? FontWeight.w700 : FontWeight.w400,
-          color: DunesColors.text,
-          height: heading ? 1.45 : 1.65,
-        ),
-        children: spans,
-      ),
-    );
+    final span = TextSpan(style: _baseStyle(), children: spans);
+    return SelectableText.rich(span);
   }
 
   Widget _buildWithImageWidgets(BuildContext context) {
@@ -483,7 +545,10 @@ class _NovaMarkdownInline extends StatelessWidget {
     var idx = 0;
     for (final m in imgRe.allMatches(text)) {
       if (m.start > idx) {
-        widgets.add(_NovaMarkdownInline(text: text.substring(idx, m.start)));
+        widgets.add(_NovaMarkdownInline(
+          text: text.substring(idx, m.start),
+          documentPreview: documentPreview,
+        ));
       }
       var nm = m.group(1)?.trim() ?? '';
       if (nm.isEmpty) {
@@ -497,9 +562,22 @@ class _NovaMarkdownInline extends StatelessWidget {
       idx = m.end;
     }
     if (idx < text.length) {
-      widgets.add(_NovaMarkdownInline(text: text.substring(idx)));
+      widgets.add(_NovaMarkdownInline(
+        text: text.substring(idx),
+        documentPreview: documentPreview,
+      ));
     }
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: widgets);
+  }
+
+  TextStyle _linkTextStyle() {
+    if (documentPreview) {
+      return const TextStyle(color: DunesColors.accent);
+    }
+    return const TextStyle(
+      color: DunesColors.accentDeep,
+      decoration: TextDecoration.underline,
+    );
   }
 
   void _parseInline(String input, List<InlineSpan> out, BuildContext context) {
@@ -543,7 +621,7 @@ class _NovaMarkdownInline extends StatelessWidget {
         if (url != null && onImage == null) {
           out.add(TextSpan(
             text: url,
-            style: const TextStyle(color: DunesColors.accentDeep, decoration: TextDecoration.underline),
+            style: _linkTextStyle(),
             recognizer: TapGestureRecognizer()..onTap = () => launchUrl(Uri.parse(url)),
           ));
         }
@@ -556,7 +634,7 @@ class _NovaMarkdownInline extends StatelessWidget {
         } else {
           out.add(TextSpan(
             text: label,
-            style: const TextStyle(color: DunesColors.accentDeep, decoration: TextDecoration.underline),
+            style: _linkTextStyle(),
             recognizer: TapGestureRecognizer()..onTap = () => launchUrl(Uri.parse(url)),
           ));
         }

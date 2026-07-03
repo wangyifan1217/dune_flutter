@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/foundation.dart';
@@ -7,6 +8,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:mime/mime.dart';
 import 'package:permission_handler/permission_handler.dart';
 
+import '../../core/config/nova_config.dart';
 import '../../core/theme/dunes_theme.dart';
 import '../../core/util/friendly_error.dart';
 import '../../core/util/native_permissions.dart';
@@ -15,6 +17,11 @@ import '../auth/auth_session.dart';
 import '../chat/native_audio_recorder.dart';
 import '../chat/chat_widgets.dart';
 import '../meeting/meeting_live_controller.dart';
+import '../meeting/meeting_minutes_export.dart';
+import '../meeting/native_meeting_models.dart';
+import '../meeting/native_meeting_service.dart';
+import '../kb/native_kb_models.dart';
+import '../kb/native_kb_service.dart';
 import '../conversation/conversation_service.dart';
 import '../shell/dunes_toast.dart';
 import 'native_nova_service.dart';
@@ -24,8 +31,10 @@ import 'nova_generating_storage.dart';
 import 'nova_history_utils.dart';
 import 'nova_image_utils.dart';
 import 'nova_media.dart';
+import 'nova_meeting_prd.dart';
 import 'nova_models_service.dart';
 import 'nova_web_storage.dart';
+import 'nova_stream_parser.dart';
 import 'nova_widgets.dart';
 
 class NativeNovaPage extends StatefulWidget {
@@ -35,6 +44,7 @@ class NativeNovaPage extends StatefulWidget {
     required this.onBack,
     this.onHistory,
     this.onOpenKb,
+    this.onOpenMeeting,
     this.focusConversationId,
     this.focusMessageId,
     this.onClearHistoryFocus,
@@ -44,6 +54,7 @@ class NativeNovaPage extends StatefulWidget {
   final VoidCallback onBack;
   final VoidCallback? onHistory;
   final VoidCallback? onOpenKb;
+  final VoidCallback? onOpenMeeting;
   final int? focusConversationId;
   final int? focusMessageId;
   final VoidCallback? onClearHistoryFocus;
@@ -54,6 +65,7 @@ class NativeNovaPage extends StatefulWidget {
 
 class _NativeNovaPageState extends State<NativeNovaPage> with WidgetsBindingObserver {
   late final NativeNovaService _service;
+  late final NativeKbService _kbService;
   late final ConversationService _avatarService;
   late final NovaMediaResolver _mediaResolver;
   final ImagePicker _imagePicker = ImagePicker();
@@ -85,6 +97,8 @@ class _NativeNovaPageState extends State<NativeNovaPage> with WidgetsBindingObse
   List<NovaModelCatalogEntry> _modelCatalog = const <NovaModelCatalogEntry>[];
   List<NovaDraftAttachment> _drafts = const <NovaDraftAttachment>[];
   int _draftSeq = 0;
+  bool _prdResumeInFlight = false;
+  bool _prdNovaSendStarted = false;
   String _userAvatarPreset = '';
   String _userAvatarObjectKey = '';
   String _userAvatarUrl = '';
@@ -106,12 +120,31 @@ class _NativeNovaPageState extends State<NativeNovaPage> with WidgetsBindingObse
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _service = NovaBackgroundCoordinator.instance.serviceFor(widget.session);
+    _kbService = NativeKbService(session: widget.session);
     _avatarService = ConversationService(session: widget.session);
     _mediaResolver = NovaMediaResolver(widget.session, service: _service);
     _inputFocusNode.addListener(_onInputFocusChanged);
     userAvatarRefresh.addListener(_onSelfAvatarUpdated);
     _load();
     MeetingLiveController.instance.active.addListener(_onMeetingLiveActiveChanged);
+    NovaBackgroundCoordinator.instance.addListener(_onNovaBackgroundUpdate);
+    NovaBackgroundCoordinator.instance.setNovaPageActive(true);
+  }
+
+  @override
+  void activate() {
+    super.activate();
+    NovaBackgroundCoordinator.instance.setNovaPageActive(true);
+    NovaBackgroundCoordinator.instance.clearPendingCommBadgeBump();
+  }
+
+  void _onNovaBackgroundUpdate() {
+    if (!mounted || _conversationId <= 0) return;
+    if (!_serverGenerating && !_sending && !_hasActiveAssistantStream()) return;
+    if (!_serverGenerating && !_sending && _hasActiveAssistantStream()) {
+      return;
+    }
+    unawaited(_pollGenerating());
   }
 
   void _onMeetingLiveActiveChanged() {
@@ -135,15 +168,18 @@ class _NativeNovaPageState extends State<NativeNovaPage> with WidgetsBindingObse
 
   @override
   void deactivate() {
+    NovaBackgroundCoordinator.instance.setNovaPageActive(false);
     unawaited(_flushOnLeave());
     super.deactivate();
   }
 
   @override
   void dispose() {
+    NovaBackgroundCoordinator.instance.setNovaPageActive(false);
     WidgetsBinding.instance.removeObserver(this);
     userAvatarRefresh.removeListener(_onSelfAvatarUpdated);
     MeetingLiveController.instance.active.removeListener(_onMeetingLiveActiveChanged);
+    NovaBackgroundCoordinator.instance.removeListener(_onNovaBackgroundUpdate);
     _streamDraftTimer?.cancel();
     _genPollTimer?.cancel();
     _recordTicker?.cancel();
@@ -545,13 +581,19 @@ class _NativeNovaPageState extends State<NativeNovaPage> with WidgetsBindingObse
         _loading = false;
       });
       if (serverGenerating) {
-        NovaBackgroundCoordinator.instance.stopPoll();
+        if (_service.isStreamInFlight) {
+          NovaBackgroundCoordinator.instance.stopPoll();
+          _startStreamDraftWatcher();
+        } else {
+          NovaBackgroundCoordinator.instance.ensurePoll(
+            widget.session,
+            conversationId: convId,
+          );
+        }
         _startGeneratingPoll();
         unawaited(_pollGenerating());
-        if (_service.isStreamInFlight || streamDraft != null) {
-          _startStreamDraftWatcher();
-        }
       }
+      unawaited(_maybeResumePrdGeneration());
       final focusId = widget.focusMessageId;
       if (focusId != null && focusId > 0) {
         WidgetsBinding.instance.addPostFrameCallback((_) => _focusMessage(focusId));
@@ -811,6 +853,7 @@ class _NativeNovaPageState extends State<NativeNovaPage> with WidgetsBindingObse
     required int assistantMsgId,
     int? userMsgId,
     bool skipUserBubble = false,
+    bool skipAssistantPersist = false,
     String replyText = '',
   }) async {
     await _clearGeneratingMarkers();
@@ -837,7 +880,7 @@ class _NativeNovaPageState extends State<NativeNovaPage> with WidgetsBindingObse
     }
 
     final reply = replyText.trim();
-    if (_conversationId > 0 && reply.isNotEmpty && !skipUserBubble) {
+    if (_conversationId > 0 && reply.isNotEmpty && !skipUserBubble && !skipAssistantPersist) {
       final rows = _messages.where((m) => !m.isWelcome).toList(growable: false);
       NativeNovaMessage? preferredUser;
       if (userMsgId != null && userMsgId > 0) {
@@ -891,6 +934,7 @@ class _NativeNovaPageState extends State<NativeNovaPage> with WidgetsBindingObse
     if (_conversationId > 0) {
       if (mounted) {
         NovaBackgroundCoordinator.instance.stopPoll();
+        NovaBackgroundCoordinator.instance.clearPendingCommBadgeBump();
       } else {
         unawaited(
           NovaBackgroundCoordinator.instance.onGenerationComplete(
@@ -942,10 +986,22 @@ class _NativeNovaPageState extends State<NativeNovaPage> with WidgetsBindingObse
     final streamAlive = _service.isStreamInFlight;
     final hadPendingAssistant =
         !stopped && (_sending || _serverGenerating || _hasActiveAssistantStream());
-    final generating = !stopped &&
-        streamAlive &&
-        (_sending || _serverGenerating || _hasActiveAssistantStream());
-    if (generating) {
+    if (!stopped && hadPendingAssistant) {
+      final storage = await NovaWebStorage.load(widget.session.userId);
+      final prdJob = readNovaPrdPendingJob(storage, _conversationId);
+      if (prdJob != null && !_prdNovaSendStarted) {
+        // PRD 文档离线生成阶段：只落盘会话与任务，不触发 NOVA 后台轮询。
+        await persistNovaPrdPendingJob(
+          userId: widget.session.userId,
+          conversationId: _conversationId,
+          job: prdJob,
+        );
+        await _persistSessionNow();
+        await _service.flushConvToLocalHistory(
+          _conversationId,
+          _messages.where((m) => !m.isWelcome).toList(growable: false),
+        );
+      } else {
       final status = _busyHint.isNotEmpty ? _busyHint : kNovaInputBusyHint;
       if (_genAfterMessageId <= 0) {
         final user = _messages.cast<NativeNovaMessage?>().lastWhere(
@@ -970,21 +1026,28 @@ class _NativeNovaPageState extends State<NativeNovaPage> with WidgetsBindingObse
           text: assistant.text,
           streaming: assistant.streaming,
         );
-      }
-      NovaBackgroundCoordinator.instance.onNovaPageLeave(
-        session: widget.session,
-        conversationId: _conversationId,
-        generating: true,
-        afterMessageId: _genAfterMessageId,
-      );
-    } else {
-      if (stopped) {
-        await _clearGeneratingMarkers();
-        await clearNovaStreamDraftState(
+      } else if (_lastUserDisplayText.trim().isNotEmpty) {
+        await persistNovaStreamDraftState(
           userId: widget.session.userId,
           conversationId: _conversationId,
+          status: status,
+          afterMessageId: _genAfterMessageId,
+          userText: _lastUserDisplayText,
+          streaming: true,
         );
       }
+      NovaBackgroundCoordinator.instance.ensurePoll(
+        widget.session,
+        conversationId: _conversationId,
+      );
+      }
+    } else if (stopped) {
+      await _clearGeneratingMarkers();
+      await clearNovaStreamDraftState(
+        userId: widget.session.userId,
+        conversationId: _conversationId,
+      );
+    } else {
       final storage = await NovaWebStorage.load(widget.session.userId);
       final local = readNovaGeneratingFromStorage(
         storage,
@@ -1002,12 +1065,16 @@ class _NativeNovaPageState extends State<NativeNovaPage> with WidgetsBindingObse
           widget.session,
           conversationId: _conversationId,
         );
+      } else if (draft != null && novaStreamDraftHasContent(draft)) {
+        NovaBackgroundCoordinator.instance.ensurePoll(
+          widget.session,
+          conversationId: _conversationId,
+        );
       } else {
         await _clearGeneratingMarkers();
       }
 
-      // 兜底：离开时若原本在生成、但此刻流已结束，补做一次收口与历史入库。
-      if (hadPendingAssistant) {
+      if (hadPendingAssistant && !streamAlive) {
         try {
           final history = await _service.fetchFullHistory(_conversationId);
           final rows = history.messages.where((m) => !m.isWelcome).toList(growable: false);
@@ -1018,7 +1085,9 @@ class _NativeNovaPageState extends State<NativeNovaPage> with WidgetsBindingObse
               rows,
               userMsgId: _genAfterMessageId > 0 ? _genAfterMessageId : null,
             );
-            NovaBackgroundCoordinator.instance.markPendingCommBadgeBump();
+            if (!_hasAiReplyAfter(_messages, _genAfterMessageId)) {
+              NovaBackgroundCoordinator.instance.markPendingCommBadgeBump();
+            }
             NovaBackgroundCoordinator.instance.notifyInboxRefresh();
           }
         } catch (_) {}
@@ -1226,6 +1295,27 @@ class _NativeNovaPageState extends State<NativeNovaPage> with WidgetsBindingObse
       );
 
       if (resolved.generating) {
+        if (!_service.isStreamInFlight) {
+          if (draft != null && novaStreamDraftHasContent(draft)) {
+            await NovaBackgroundCoordinator.instance.onGenerationComplete(
+              session: widget.session,
+              conversationId: _conversationId,
+              messages: history.messages.where((m) => !m.isWelcome).toList(growable: false),
+            );
+            if (!mounted) return;
+            final refreshed = await _service.fetchFullHistory(_conversationId);
+            setState(() {
+              _messages = _withWelcome(refreshed.messages);
+            });
+            _releaseGeneratingUi(clearStreamingFlags: false);
+            _scrollBottom();
+            return;
+          }
+          NovaBackgroundCoordinator.instance.ensurePoll(
+            widget.session,
+            conversationId: _conversationId,
+          );
+        }
         setState(() {
           _busyHint = resolved.status.isNotEmpty ? resolved.status : kNovaInputBusyHint;
           _genAfterMessageId = resolved.afterMessageId > 0
@@ -1290,6 +1380,79 @@ class _NativeNovaPageState extends State<NativeNovaPage> with WidgetsBindingObse
   Future<void> _ensureConversationId() async {
     if (_conversationId > 0) return;
     _conversationId = await _service.ensureConversation();
+  }
+
+  Future<bool> _tryRecoverAssistantAfterSendFailure({
+    required int userMsgId,
+    required int assistantMsgId,
+  }) async {
+    if (_conversationId <= 0) return false;
+    try {
+      final history = await _service.fetchFullHistory(_conversationId);
+      if (!_hasAiReplyAfter(history.messages, userMsgId)) return false;
+      NativeNovaMessage? assistant;
+      for (final m in history.messages.reversed) {
+        if (m.isWelcome || m.role != 'assistant') continue;
+        if (m.text.trim().isEmpty) continue;
+        assistant = m;
+        break;
+      }
+      if (assistant == null) return false;
+      if (mounted) {
+        setState(() {
+          final idx = _messages.indexWhere((m) => m.id == assistantMsgId);
+          if (idx >= 0) {
+            final copy = [..._messages];
+            copy[idx] = assistant!.copyWith(
+              id: assistantMsgId,
+              streaming: false,
+              thinkStatus: '',
+            );
+            _messages = copy;
+          }
+        });
+      }
+      await _completeAssistantStream(
+        assistantMsgId: assistantMsgId,
+        userMsgId: userMsgId,
+        replyText: assistant.text,
+      );
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<void> _failAssistantTurnInChat({
+    required int assistantMsgId,
+    required String message,
+  }) async {
+    final err = message.trim().isNotEmpty ? message.trim() : 'NOVA 请求失败，请稍后重试';
+    if (mounted) {
+      setState(() {
+        _busyHint = '';
+        final idx = _messages.indexWhere((m) => m.id == assistantMsgId);
+        if (idx >= 0) {
+          final copy = [..._messages];
+          copy[idx] = copy[idx].copyWith(
+            streaming: false,
+            text: err,
+            thinkStatus: '',
+          );
+          _messages = copy;
+        }
+        _banner = err;
+      });
+    }
+    await _clearGeneratingMarkers();
+    if (_conversationId > 0) {
+      await clearNovaStreamDraftState(
+        userId: widget.session.userId,
+        conversationId: _conversationId,
+      );
+      unawaited(_persistSessionNow());
+    }
+    _releaseGeneratingUi(clearStreamingFlags: false);
   }
 
   void _addDraft(NovaDraftAttachment draft) {
@@ -1388,35 +1551,131 @@ class _NativeNovaPageState extends State<NativeNovaPage> with WidgetsBindingObse
     });
   }
 
+  List<NovaMessageAttachment> _attachmentsFromDrafts(
+    List<NovaDraftAttachment> drafts,
+  ) {
+    return drafts
+        .map(
+          (d) {
+            if (d.payload != null) {
+              return NovaMessageAttachment.fromJson(d.payload!).copyWith(
+                previewBytes: d.bytes,
+              );
+            }
+            return NovaMessageAttachment(
+              url: '',
+              objectKey: '',
+              fileName: d.fileName,
+              mimeType: d.mimeType,
+              kind: d.kind,
+              previewBytes: d.bytes,
+            );
+          },
+        )
+        .toList(growable: false);
+  }
+
+  Future<void> _applyUploadedFileToUserTurn({
+    required int userMsgId,
+    required int assistantMsgId,
+    required String displayText,
+    required NovaMessageAttachment attachment,
+    required Map<String, dynamic> userMetadata,
+    String assistantThinkStatus = '正在分析…',
+  }) async {
+    if (!mounted) return;
+    setState(() {
+      _busyHint = assistantThinkStatus;
+      final userIdx = _messages.indexWhere((m) => m.id == userMsgId);
+      final assistantIdx = _messages.indexWhere((m) => m.id == assistantMsgId);
+      final copy = [..._messages];
+      if (userIdx >= 0) {
+        copy[userIdx] = copy[userIdx].copyWith(
+          text: displayText,
+          attachments: [attachment],
+          kind: 'TEXT',
+          payload: userMetadata,
+        );
+      }
+      if (assistantIdx >= 0) {
+        copy[assistantIdx] = copy[assistantIdx].copyWith(
+          streaming: true,
+          text: '',
+          thinkStatus: assistantThinkStatus,
+        );
+      }
+      _messages = copy;
+    });
+    _scrollBottom();
+    await _persistSessionNow();
+  }
+
   Future<void> _sendMessage({
     required String text,
+    String? novaPrompt,
     List<NovaDraftAttachment> drafts = const <NovaDraftAttachment>[],
     bool skipUserBubble = false,
+    bool userAlreadyPersisted = false,
+    String? assistantThinkStatus,
+    int? existingUserMsgId,
+    int? existingAssistantMsgId,
   }) async {
-    if (_sending) return;
+    final reusingTurn =
+        existingUserMsgId != null && existingAssistantMsgId != null;
+    if (_sending && !reusingTurn) return;
+    if (_sending && reusingTurn) {
+      setState(() => _sending = false);
+    }
 
-    final prompt = novaDraftPrompt(text, drafts);
+    if (reusingTurn) {
+      _prdNovaSendStarted = true;
+    }
+
+    final promptSource = novaPrompt ?? text;
+    final prompt = novaDraftPrompt(promptSource, drafts);
     final displayText = text.isNotEmpty
         ? text
         : (novaAttachmentSummary(drafts).isNotEmpty ? novaAttachmentSummary(drafts) : prompt);
     _lastUserDisplayText = displayText;
 
-    final userMsgId = DateTime.now().millisecondsSinceEpoch;
-    final assistantMsgId = userMsgId + 1;
-    final draftAttachments = drafts
-        .map(
-          (d) => NovaMessageAttachment(
-            url: '',
-            objectKey: '',
-            fileName: d.fileName,
-            mimeType: d.mimeType,
-            kind: d.kind,
-            previewBytes: d.bytes,
-          ),
-        )
-        .toList(growable: false);
+    final userMsgId = existingUserMsgId ?? DateTime.now().millisecondsSinceEpoch;
+    final assistantMsgId = existingAssistantMsgId ?? userMsgId + 1;
+    final draftAttachments = _attachmentsFromDrafts(drafts);
 
-    if (!skipUserBubble) {
+    if (reusingTurn) {
+      final genStatus = assistantThinkStatus ??
+          (drafts.isNotEmpty ? '正在分析…' : '正在生成…');
+      setState(() {
+        _sending = true;
+        _busyHint = genStatus;
+        final assistantIdx = _messages.indexWhere((m) => m.id == assistantMsgId);
+        if (assistantIdx >= 0) {
+          final copy = [..._messages];
+          copy[assistantIdx] = copy[assistantIdx].copyWith(
+            streaming: true,
+            text: '',
+            thinkStatus: genStatus,
+          );
+          _messages = copy;
+        }
+        if (draftAttachments.isNotEmpty) {
+          final userIdx = _messages.indexWhere((m) => m.id == userMsgId);
+          if (userIdx >= 0) {
+            final copy = [..._messages];
+            copy[userIdx] = copy[userIdx].copyWith(
+              text: displayText,
+              attachments: draftAttachments,
+              payload: <String, dynamic>{
+                'attachments': draftAttachments.map((a) => a.toJson()).toList(),
+              },
+            );
+            _messages = copy;
+          }
+        }
+        _banner = null;
+      });
+      _scrollBottom();
+    } else if (!skipUserBubble) {
       setState(() {
         _sending = true;
         _busyHint = kNovaInputBusyHint;
@@ -1473,8 +1732,9 @@ class _NativeNovaPageState extends State<NativeNovaPage> with WidgetsBindingObse
       if (_conversationId <= 0) {
         throw Exception('无法创建NOVA会话，请稍后重试');
       }
-      final genStatus = drafts.isNotEmpty ? '正在分析…' : '正在生成…';
-      if (!skipUserBubble) {
+      final genStatus = assistantThinkStatus ??
+          (drafts.isNotEmpty ? '正在分析…' : '正在生成…');
+      if (!skipUserBubble || reusingTurn) {
         _genAfterMessageId = userMsgId;
         NovaBackgroundCoordinator.instance.clearFinalizedConversation(_conversationId);
         await _markGenerating(status: genStatus, afterMessageId: userMsgId);
@@ -1500,8 +1760,8 @@ class _NativeNovaPageState extends State<NativeNovaPage> with WidgetsBindingObse
         }
       }
 
-      var userPersistedToServer = skipUserBubble;
-      if (!skipUserBubble && drafts.isEmpty) {
+      var userPersistedToServer = skipUserBubble || userAlreadyPersisted;
+      if (!skipUserBubble && !reusingTurn && drafts.isEmpty) {
         final earlyContent = text.isNotEmpty ? text : prompt;
         final savedConvId = await _service.persistUserMessage(
           conversationId: _conversationId,
@@ -1518,6 +1778,7 @@ class _NativeNovaPageState extends State<NativeNovaPage> with WidgetsBindingObse
       }
 
       for (final d in drafts) {
+        if (d.payload != null) continue;
         setState(() {
           d.uploading = true;
           d.uploadProgress = 1;
@@ -1559,7 +1820,7 @@ class _NativeNovaPageState extends State<NativeNovaPage> with WidgetsBindingObse
           .map((d) => NovaMessageAttachment.fromJson(d.payload!))
           .toList();
 
-      if (!skipUserBubble && attachments.isNotEmpty) {
+      if ((!skipUserBubble || reusingTurn) && attachments.isNotEmpty) {
         setState(() {
           final idx = _messages.indexWhere((m) => m.id == userMsgId);
           if (idx >= 0) {
@@ -1590,7 +1851,9 @@ class _NativeNovaPageState extends State<NativeNovaPage> with WidgetsBindingObse
           ? null
           : <String, dynamic>{'attachments': attachments.map((a) => a.toJson()).toList()};
 
-      if (!skipUserBubble && attachments.isNotEmpty) {
+      if ((!skipUserBubble || reusingTurn) &&
+          attachments.isNotEmpty &&
+          !userAlreadyPersisted) {
         final savedConvId = await _service.persistUserMessage(
           conversationId: _conversationId,
           messageId: userMsgId,
@@ -1604,18 +1867,19 @@ class _NativeNovaPageState extends State<NativeNovaPage> with WidgetsBindingObse
       }
 
       final userContent = drafts.isEmpty
-          ? (text.isNotEmpty ? text : prompt)
+          ? (promptSource.trim().isNotEmpty ? promptSource.trim() : (text.isNotEmpty ? text : prompt))
           : await _service.buildMultimodalContent(
               text: prompt,
               attachments: drafts,
               model: _selectedModel,
             );
 
-      final reply = await _service.sendAndReplyStream(
+      var reply = await _service.sendAndReplyStream(
         conversationId: _conversationId,
         userContent: userContent,
         displayText: displayText,
         userMetadata: userMetadata,
+        userMessageId: userMsgId,
         skipUserPersist: userPersistedToServer,
         onConversationId: (id) {
           if (!mounted || id <= 0 || id == _conversationId) return;
@@ -1670,9 +1934,18 @@ class _NativeNovaPageState extends State<NativeNovaPage> with WidgetsBindingObse
         skipUserBubble: skipUserBubble,
         replyText: reply,
       );
+      if (_conversationId > 0) {
+        unawaited(clearNovaPrdPendingJob(
+          userId: widget.session.userId,
+          conversationId: _conversationId,
+        ));
+      }
       if (!mounted) return;
       _scrollBottom();
     } catch (e) {
+      if (kDebugMode) {
+        debugPrint('[NativeNovaPage] sendMessage failed: $e');
+      }
       final convId = _conversationId;
       if (_service.userStoppedStream) {
         if (mounted) {
@@ -1695,40 +1968,48 @@ class _NativeNovaPageState extends State<NativeNovaPage> with WidgetsBindingObse
           await _clearGeneratingMarkers();
           await _service.stripStreamingFromSession(convId);
         }
-      } else if (mounted && convId > 0) {
-        final storage = await NovaWebStorage.load(widget.session.userId);
-        final draft = readNovaStreamDraftFromStorage(storage, convId);
-        if (draft != null && novaStreamDraftHasContent(draft)) {
-          setState(() {
-            _messages = _mergeGeneratingAndDraft(
-              rows: _messages,
-              generating: true,
-              status: draft.status.isNotEmpty ? draft.status : kNovaInputBusyHint,
-              afterMessageId:
-                  draft.afterMessageId > 0 ? draft.afterMessageId : _genAfterMessageId,
-              draft: draft,
-            );
-            _serverGenerating = true;
-            _sending = true;
-            _busyHint = draft.status.isNotEmpty ? draft.status : kNovaInputBusyHint;
-          });
-          _startGeneratingPoll();
-          NovaBackgroundCoordinator.instance.ensurePoll(
-            widget.session,
-            conversationId: convId,
+      } else if (!_service.userStoppedStream &&
+          await _tryRecoverAssistantAfterSendFailure(
+            userMsgId: userMsgId,
+            assistantMsgId: assistantMsgId,
+          )) {
+        if (_conversationId > 0) {
+          unawaited(clearNovaPrdPendingJob(
+            userId: widget.session.userId,
+            conversationId: _conversationId,
+          ));
+        }
+      } else if (mounted) {
+        final idx = _messages.indexWhere((m) => m.id == assistantMsgId);
+        final streamed = idx >= 0 ? _messages[idx].text.trim() : '';
+        final streamedThink = idx >= 0 ? _messages[idx].thinkText.trim() : '';
+        final partial = streamed.isNotEmpty ? streamed : streamedThink;
+        if (partial.isNotEmpty && partial != displayText.trim()) {
+          await _completeAssistantStream(
+            assistantMsgId: assistantMsgId,
+            userMsgId: skipUserBubble ? null : userMsgId,
+            skipUserBubble: skipUserBubble,
+            replyText: partial,
           );
+          if (_conversationId > 0) {
+            unawaited(clearNovaPrdPendingJob(
+              userId: widget.session.userId,
+              conversationId: _conversationId,
+            ));
+          }
         } else {
-          setState(() => _banner = NativeNovaService.friendlyError(e));
-          _releaseGeneratingUi();
+          await _failAssistantTurnInChat(
+            assistantMsgId: assistantMsgId,
+            message: NativeNovaService.friendlyError(e),
+          );
         }
-      } else {
-        if (mounted) {
-          setState(() => _banner = NativeNovaService.friendlyError(e));
-          _releaseGeneratingUi();
-        } else if (convId > 0) {
-          await _clearGeneratingMarkers();
-          await _service.stripStreamingFromSession(convId);
-        }
+      } else if (convId > 0) {
+        await _clearGeneratingMarkers();
+        await clearNovaStreamDraftState(
+          userId: widget.session.userId,
+          conversationId: convId,
+        );
+        await _service.stripStreamingFromSession(convId);
       }
     } finally {
       if (_conversationId > 0 && _messages.isNotEmpty) {
@@ -1792,7 +2073,6 @@ class _NativeNovaPageState extends State<NativeNovaPage> with WidgetsBindingObse
     }
     if (prevConvId > 0) {
       await _service.flushConvToLocalHistory(prevConvId, _messages);
-      await _registerLastTurnIfComplete();
     }
     await _service.resetNovaNewChatPlaceholder(
       userId: uid,
@@ -1992,6 +2272,380 @@ class _NativeNovaPageState extends State<NativeNovaPage> with WidgetsBindingObse
     );
   }
 
+  Future<String?> _pickPrdGenerationModel() async {
+    if (_chatModels.isEmpty) {
+      return _selectedModel.trim().isNotEmpty ? _selectedModel : null;
+    }
+    var picked = _selectedModel.trim().isNotEmpty
+        ? _selectedModel
+        : _chatModels.first;
+    await showNovaModelSheet(
+      context,
+      title: '选择 NOVA 模型',
+      models: _chatModels,
+      selected: picked,
+      modelCatalog: _modelCatalog,
+      onPick: (id) => picked = id,
+    );
+    return picked.trim().isNotEmpty ? picked : null;
+  }
+
+  void _applySelectedChatModel(String modelId) {
+    final id = modelId.trim();
+    if (id.isEmpty) return;
+    _service.setSelectedChatModel(id, persist: true);
+    if (!mounted) return;
+    setState(() => _selectedModel = id);
+  }
+
+  Future<void> _persistPrdPendingTurn({
+    required int userMsgId,
+    required int assistantMsgId,
+    required String displayText,
+    required NovaPrdPendingJob pendingJob,
+  }) async {
+    _lastUserDisplayText = displayText;
+    _genAfterMessageId = userMsgId;
+    _prdNovaSendStarted = false;
+    await _ensureConversationId();
+    if (!mounted || _conversationId <= 0) return;
+
+    NovaBackgroundCoordinator.instance.clearFinalizedConversation(_conversationId);
+    await persistNovaPrdPendingJob(
+      userId: widget.session.userId,
+      conversationId: _conversationId,
+      job: pendingJob,
+    );
+    await _persistSessionNow();
+    await _service.persistActiveConversationId(_conversationId);
+    await _service.flushConvToLocalHistory(
+      _conversationId,
+      _messages.where((m) => !m.isWelcome).toList(growable: false),
+    );
+  }
+
+  Future<void> _maybeResumePrdGeneration() async {
+    if (!mounted || _conversationId <= 0 || _prdResumeInFlight || _sending) {
+      return;
+    }
+
+    final storage = await NovaWebStorage.load(widget.session.userId);
+    final job = readNovaPrdPendingJob(storage, _conversationId);
+    if (job == null || _prdResumeInFlight) return;
+    if (_hasAiReplyAfter(_messages, job.userMsgId)) {
+      await clearNovaPrdPendingJob(
+        userId: widget.session.userId,
+        conversationId: _conversationId,
+      );
+      return;
+    }
+
+    _prdResumeInFlight = true;
+    try {
+      _applySelectedChatModel(job.prdModel);
+      await _continuePrdGeneration(job);
+    } finally {
+      _prdResumeInFlight = false;
+    }
+  }
+
+  Future<void> _continuePrdGeneration(NovaPrdPendingJob job) async {
+    if (!mounted || _sending) return;
+    final hasReply = _hasAiReplyAfter(_messages, job.userMsgId);
+    if (hasReply) {
+      await clearNovaPrdPendingJob(
+        userId: widget.session.userId,
+        conversationId: _conversationId,
+      );
+      return;
+    }
+
+    try {
+      await _ensureKbAndSendPrdToNova(job: job);
+    } catch (e) {
+      if (mounted) {
+        final err = NativeNovaService.friendlyError(e);
+        _failPrdTurnInChat(assistantMsgId: job.assistantMsgId, message: err);
+        if (err.isNotEmpty) _toast(err, error: true);
+      }
+      await clearNovaPrdPendingJob(
+        userId: widget.session.userId,
+        conversationId: _conversationId,
+      );
+    }
+  }
+
+  void _updatePrdAssistantThinkStatus(int assistantMsgId, String status) {
+    if (!mounted) return;
+    setState(() {
+      _busyHint = status;
+      final idx = _messages.indexWhere((m) => m.id == assistantMsgId);
+      if (idx >= 0) {
+        final copy = [..._messages];
+        copy[idx] = copy[idx].copyWith(thinkStatus: status);
+        _messages = copy;
+      }
+    });
+  }
+
+  Future<NativeKbDocument> _requireIndexedKbDocument({
+    required NativeMeetingDetail detail,
+    required int assistantMsgId,
+  }) async {
+    await _kbService.ensureNovaReady();
+    final kbFileName = MeetingMinutesExport.kbUploadFileName(detail);
+    final kbTitle = MeetingMinutesExport.kbUploadTitle(detail);
+
+    _updatePrdAssistantThinkStatus(assistantMsgId, '正在确认知识库文档…');
+    final doc = await _kbService.findMeetingMinutesDocument(
+      meetingId: detail.meetingId,
+      kbFileName: kbFileName,
+      kbTitle: kbTitle,
+    );
+    if (doc == null) {
+      throw Exception('该会议纪要未在知识库中找到，请先在会议详情页上传至知识库');
+    }
+    if (!nativeKbDocumentIndexed(doc)) {
+      throw Exception('该会议纪要尚未完成知识库索引，请稍后再试');
+    }
+    return doc;
+  }
+
+  /// 引用已索引的知识库文档，以纯文字发给 NOVA 生成 PRD。
+  Future<void> _ensureKbAndSendPrdToNova({
+    required NovaPrdPendingJob job,
+    NativeMeetingDetail? detail,
+  }) async {
+    await _ensureConversationId();
+    if (!mounted || _conversationId <= 0) {
+      throw Exception('无法创建 NOVA 会话，请稍后重试');
+    }
+
+    final meetingService = NativeMeetingService(session: widget.session);
+    final resolvedDetail = detail ??
+        (job.meetingId > 0
+            ? await meetingService.fetchDetail(job.meetingId)
+            : null);
+    if (resolvedDetail == null) {
+      throw Exception('无法加载会议纪要，请稍后重试');
+    }
+
+    final kbDoc = await _requireIndexedKbDocument(
+      detail: resolvedDetail,
+      assistantMsgId: job.assistantMsgId,
+    );
+    if (!mounted) return;
+
+    final resolvedKbFileName = kbDoc.fileName.trim().isNotEmpty
+        ? kbDoc.fileName.trim()
+        : job.kbFileName.trim();
+    final novaPrompt = buildMeetingPrdNovaMessage(
+      kbFileName: resolvedKbFileName,
+      prdFileName: job.prdFileName,
+    );
+    final displayText = buildMeetingPrdDisplayText(resolvedKbFileName);
+
+    _updatePrdAssistantThinkStatus(job.assistantMsgId, '正在生成 PRD…');
+    if (mounted) {
+      setState(() {
+        final userIdx = _messages.indexWhere((m) => m.id == job.userMsgId);
+        if (userIdx >= 0) {
+          final copy = [..._messages];
+          copy[userIdx] = copy[userIdx].copyWith(text: displayText);
+          _messages = copy;
+        }
+      });
+    }
+
+    var userPersisted = false;
+    try {
+      await _service.persistUserMessage(
+        conversationId: _conversationId,
+        messageId: job.userMsgId,
+        content: displayText,
+      );
+      userPersisted = true;
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('[NativeNovaPage] PRD user persist skipped: $e');
+      }
+    }
+
+    await _sendMessage(
+      text: displayText,
+      novaPrompt: novaPrompt,
+      existingUserMsgId: job.userMsgId,
+      existingAssistantMsgId: job.assistantMsgId,
+      userAlreadyPersisted: userPersisted,
+      assistantThinkStatus: '正在生成 PRD…',
+    );
+  }
+
+  void _showPrdPendingTurnInChat({
+    required int userMsgId,
+    required int assistantMsgId,
+    required String displayText,
+  }) {
+    setState(() {
+      _busyHint = '正在检查知识库…';
+      _messages = [
+        ..._messages.where((m) => !m.isWelcome),
+        NativeNovaMessage(
+          id: userMsgId,
+          role: 'user',
+          text: displayText,
+          createdAt: DateTime.fromMillisecondsSinceEpoch(userMsgId),
+          kind: 'TEXT',
+        ),
+        NativeNovaMessage(
+          id: assistantMsgId,
+          role: 'assistant',
+          text: '',
+          createdAt: DateTime.fromMillisecondsSinceEpoch(userMsgId)
+              .add(const Duration(milliseconds: 1)),
+          streaming: true,
+          thinkStatus: '正在检查知识库…',
+        ),
+      ];
+      _banner = null;
+    });
+    _scrollBottom();
+  }
+
+  void _failPrdTurnInChat({
+    required int assistantMsgId,
+    required String message,
+  }) {
+    setState(() {
+      _busyHint = '';
+      final idx = _messages.indexWhere((m) => m.id == assistantMsgId);
+      if (idx >= 0) {
+        final copy = [..._messages];
+        copy[idx] = copy[idx].copyWith(
+          streaming: false,
+          text: message,
+          thinkStatus: '',
+        );
+        _messages = copy;
+      }
+    });
+  }
+
+  Future<void> _openMeetingPrdFlow() async {
+    if (!_novaReady || _isGenerating || _sending) return;
+    int? prdAssistantMsgId;
+    try {
+      final meetingService = NativeMeetingService(session: widget.session);
+      setState(() => _busyHint = '正在加载可生成 PRD 的会议纪要…');
+      final meetings = await meetingService.fetchList(page: 0, size: 50);
+      await _kbService.ensureNovaReady();
+      final exportable = meetings
+          .where(MeetingMinutesExport.isListItemLikelyExportable)
+          .toList(growable: false);
+      final kbIndexedMeetings =
+          await _kbService.filterMeetingsWithIndexedKb(exportable);
+      if (!mounted) return;
+      setState(() => _busyHint = '');
+
+      final picked = await showMeetingMinutesPickerDialog(
+        context,
+        meetings: kbIndexedMeetings,
+      );
+      if (picked == null || !mounted) return;
+
+      final detail = await meetingService.fetchDetail(picked.meetingId);
+      if (!mounted) return;
+      if (!MeetingMinutesExport.canExport(detail)) {
+        _toast('该会议纪要尚未生成完成', error: true);
+        return;
+      }
+
+      final kbDoc = await _kbService.findIndexedMeetingMinutesDocument(
+        meetingId: detail.meetingId,
+        kbFileName: MeetingMinutesExport.kbUploadFileName(detail),
+        kbTitle: MeetingMinutesExport.kbUploadTitle(detail),
+      );
+      if (kbDoc == null) {
+        _toast('该会议纪要尚未在知识库中完成索引，请稍后再试', error: true);
+        return;
+      }
+
+      final prdModel = await _pickPrdGenerationModel();
+      if (!mounted || prdModel == null || prdModel.trim().isEmpty) return;
+
+      final meetingTitle = detail.title.trim().isNotEmpty
+          ? detail.title.trim()
+          : '未命名会议';
+      final confirmed = await showMeetingPrdConfirmDialog(
+        context,
+        meetingTitle: meetingTitle,
+        modelName: novaModelDisplayName(prdModel),
+      );
+      if (!confirmed || !mounted) return;
+
+      _applySelectedChatModel(prdModel);
+
+      if (detail.summary.trim().isEmpty) {
+        _toast('该会议纪要尚无摘要，无法生成 PRD', error: true);
+        return;
+      }
+
+      final kbFileName = kbDoc.fileName.trim().isNotEmpty
+          ? kbDoc.fileName.trim()
+          : MeetingMinutesExport.kbUploadFileName(detail);
+      final kbTitle = MeetingMinutesExport.kbUploadTitle(detail);
+      final prdFileName = MeetingMinutesExport.prdFileName(detail);
+      final displayText = buildMeetingPrdDisplayText(kbFileName);
+      final messageText = buildMeetingPrdNovaMessage(
+        kbFileName: kbFileName,
+        prdFileName: prdFileName,
+      );
+
+      final userMsgId = DateTime.now().millisecondsSinceEpoch;
+      final assistantMsgId = userMsgId + 1;
+      prdAssistantMsgId = assistantMsgId;
+      final pendingJob = NovaPrdPendingJob(
+        at: DateTime.now().millisecondsSinceEpoch,
+        meetingId: detail.meetingId,
+        prdModel: prdModel,
+        userMsgId: userMsgId,
+        assistantMsgId: assistantMsgId,
+        messageText: messageText,
+        kbFileName: kbFileName,
+        kbTitle: kbTitle,
+        prdFileName: prdFileName,
+        meetingTitle: meetingTitle,
+      );
+      _showPrdPendingTurnInChat(
+        userMsgId: userMsgId,
+        assistantMsgId: assistantMsgId,
+        displayText: displayText,
+      );
+      await _persistPrdPendingTurn(
+        userMsgId: userMsgId,
+        assistantMsgId: assistantMsgId,
+        displayText: displayText,
+        pendingJob: pendingJob,
+      );
+      if (!mounted) return;
+
+      _prdResumeInFlight = true;
+      try {
+        await _ensureKbAndSendPrdToNova(job: pendingJob, detail: detail);
+      } finally {
+        _prdResumeInFlight = false;
+      }
+    } catch (e) {
+      if (mounted) {
+        final err = NativeNovaService.friendlyError(e);
+        if (prdAssistantMsgId != null) {
+          _failPrdTurnInChat(assistantMsgId: prdAssistantMsgId, message: err);
+        }
+        if (err.isNotEmpty) _toast(err, error: true);
+      }
+    }
+  }
+
   void _toast(String msg, {bool error = false}) {
     if (!mounted) return;
     showDunesToast(
@@ -2064,7 +2718,8 @@ class _NativeNovaPageState extends State<NativeNovaPage> with WidgetsBindingObse
               enabled: inputEnabled && !_isGenerating,
               onCamera: _pickCamera,
               onAlbum: _pickAlbum,
-              onNewChat: _startNewChat,
+              onOpenMeeting: widget.onOpenMeeting ?? () {},
+              onMeetingPrd: _openMeetingPrdFlow,
             ),
             ValueListenableBuilder<bool>(
               valueListenable: MeetingLiveController.instance.active,
@@ -2088,8 +2743,12 @@ class _NativeNovaPageState extends State<NativeNovaPage> with WidgetsBindingObse
                       : () => setState(() => _voiceMode = !_voiceMode),
                   onSend: _submitInput,
                   onStop: _stopGeneration,
-                  onEmoji: inputEnabled ? _pickFile : null,
-                  secondaryIcon: Icons.attach_file,
+                  onEmoji: inputEnabled && NovaConfig.fileUploadInChatEnabled
+                      ? _pickFile
+                      : null,
+                  secondaryIcon: NovaConfig.fileUploadInChatEnabled
+                      ? Icons.attach_file
+                      : null,
                   recording: _recording,
                   recordWillCancel: _recordWillCancel,
                   recordDurationMs: _recordDurationMs,

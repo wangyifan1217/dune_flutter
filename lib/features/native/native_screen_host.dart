@@ -102,6 +102,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
   int _mediaConversationId = 0;
   String _mediaTitle = '群聊';
   String? _kbSelectedDocId;
+  NativeKbDocument? _kbSelectedDoc;
   String _kbChatKind = 'KB_ALL';
   String? _kbChatDocId;
   int _selectedProposalId = 0;
@@ -532,6 +533,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           },
           onOpenContacts: () => widget.navigation.go('C3'),
           onOpenNova: () {
+            NovaBackgroundCoordinator.instance.clearPendingCommBadgeBump();
             setState(() {
               _novaFocusConversationId = null;
               _novaFocusMessageId = null;
@@ -740,9 +742,13 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       case 'C4':
         return NativeNovaPage(
           session: widget.session,
-          onBack: () => widget.navigation.go('C1'),
+          onBack: () {
+            NovaBackgroundCoordinator.instance.clearPendingCommBadgeBump();
+            widget.navigation.go('C1');
+          },
           onHistory: () => widget.navigation.go('C11'),
           onOpenKb: () => widget.navigation.go('K1'),
+          onOpenMeeting: () => widget.navigation.go('MM-L'),
           focusConversationId: _novaFocusConversationId,
           focusMessageId: _novaFocusMessageId,
           onClearHistoryFocus: () {
@@ -777,19 +783,20 @@ class _NativeScreenHostState extends State<NativeScreenHost>
             });
             widget.navigation.go('K2');
           },
+          onOpenDoc: (doc) {
+            setState(() {
+              _kbSelectedDocId = doc.id;
+              _kbSelectedDoc = doc;
+            });
+            widget.navigation.go('K3');
+          },
         );
       case 'K3':
         return NativeKbDocPage(
           session: widget.session,
           navigation: widget.navigation,
           docId: _kbSelectedDocId ?? '',
-          onAskAi: (docId) {
-            setState(() {
-              _kbChatKind = 'KB_DOC';
-              _kbChatDocId = docId;
-            });
-            widget.navigation.go('K2');
-          },
+          initialDoc: _kbSelectedDoc,
         );
       case 'K2':
         return NativeKbChatPage(

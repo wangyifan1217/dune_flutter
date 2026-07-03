@@ -43,6 +43,64 @@ import 'native_audio_recorder.dart';
 
 enum NativeChatKind { private, group }
 
+/// 纯文本行高约；图片/语音消息实际更高，估算时略保守。
+const double _kChatMessageRowHeight = 76;
+
+/// 会话列表滚动/分页参数，按列表可视高度自适应（Android / iOS、大小屏通用）。
+class _ChatScrollMetrics {
+  const _ChatScrollMetrics({required this.listViewportHeight});
+
+  final double listViewportHeight;
+
+  /// 顶栏 + 输入区大约占用（首屏尚未 layout 时 fallback）。
+  static const double _screenChromeHeight = 168;
+
+  /// 一屏大约能看到的消息条数（6~14）。
+  int get visibleMessageEstimate => (listViewportHeight / _kChatMessageRowHeight)
+      .ceil()
+      .clamp(6, 14);
+
+  /// 首屏：约 1.8 屏，15~24 条。
+  int get initialPageSize =>
+      (visibleMessageEstimate * 1.8).round().clamp(15, 24);
+
+  /// 上滑/下拉分页：约 1.2 屏，12~18 条。
+  int get batchPageSize =>
+      (visibleMessageEstimate * 1.2).round().clamp(12, 18);
+
+  /// 距顶部剩余多少时预拉下一批（约 0.55 屏）。
+  double get prefetchLead => listViewportHeight * 0.55;
+
+  /// 列表预渲染范围（约 0.85 屏）。
+  double get cacheExtent => listViewportHeight * 0.85;
+
+  /// 惯性初速上限：大屏略高、小屏略低。
+  double get maxFlingVelocity => listViewportHeight * 2.5;
+
+  /// iOS 系统滚动本身更「跟手」，阻尼略小；Android 略加强分段感。
+  double get dragDamping {
+    switch (defaultTargetPlatform) {
+      case TargetPlatform.iOS:
+      case TargetPlatform.macOS:
+        return 0.91;
+      default:
+        return 0.88;
+    }
+  }
+
+  factory _ChatScrollMetrics.fromListViewport(double listViewportHeight) {
+    return _ChatScrollMetrics(
+      listViewportHeight: math.max(240, listViewportHeight),
+    );
+  }
+
+  factory _ChatScrollMetrics.fromScreenHeight(double screenHeight) {
+    return _ChatScrollMetrics(
+      listViewportHeight: math.max(240, screenHeight - _screenChromeHeight),
+    );
+  }
+}
+
 class _ChatListEntry {
   const _ChatListEntry.divider(this.dividerLabel)
     : message = null,
@@ -175,8 +233,14 @@ class _NativeChatViewState extends State<NativeChatView>
   String? _downloadLabel;
   bool _recordWillCancel = false;
   bool _loadingOlder = false;
-  ///  prepend 历史消息后正在恢复滚动位置，避免仍停在 maxScrollExtent 连续拉完全部历史。
+  /// prepend 历史消息后正在恢复滚动位置，避免仍停在 maxScrollExtent 连续拉完全部历史。
   bool _olderScrollRestorePending = false;
+  int _olderLoadCooldownUntilMs = 0;
+  int? _scrollRestoreAnchorId;
+  final Map<int, GlobalKey> _scrollRestoreKeys = <int, GlobalKey>{};
+  ScrollHoldController? _olderScrollHold;
+  double _olderScrollHoldPixels = 0;
+  double _olderScrollHoldMax = 0;
   bool _loadingNewer = false;
   bool _locatedMode = false;
   bool _forceLatestMode = false;
@@ -189,6 +253,7 @@ class _NativeChatViewState extends State<NativeChatView>
   bool _wasNearBottom = true;
   bool _userInteractedWithScroll = false;
   bool _manualScrollInProgress = false;
+  bool _userScrollActive = false;
   int _lastManualScrollAtMs = 0;
   bool _hasMore = false;
   bool _hasNewer = false;
@@ -213,7 +278,6 @@ class _NativeChatViewState extends State<NativeChatView>
   bool _insertingAtMentions = false;
   String _lastComposeText = '';
   Map<int, int> _groupReadMap = const <int, int>{};
-  final Map<int, GlobalKey> _messageKeys = <int, GlobalKey>{};
   final Map<String, Future<String>> _mediaUrlCache = <String, Future<String>>{};
   ChatMessageQuote? _quoteDraft;
   bool _messageMultiSelectMode = false;
@@ -391,6 +455,7 @@ class _NativeChatViewState extends State<NativeChatView>
       unawaited(NativeAudioRecorder.instance.cancel());
     }
     unawaited(ChatVoicePlayer.instance.stop());
+    _olderScrollHold?.cancel();
     _inputController.dispose();
     _scrollController.dispose();
     super.dispose();
@@ -407,7 +472,10 @@ class _NativeChatViewState extends State<NativeChatView>
     final nowMs = DateTime.now().millisecondsSinceEpoch;
     final recentlyManualScroll = nowMs - _lastManualScrollAtMs <= 1500;
     if ((_manualScrollInProgress || recentlyManualScroll) &&
-        pos.pixels >= pos.maxScrollExtent - 220) {
+        nowMs >= _olderLoadCooldownUntilMs &&
+        pos.pixels >=
+            pos.maxScrollExtent -
+                math.min(180.0, pos.viewportDimension * 0.24)) {
       unawaited(_loadOlder());
     }
     if (_locatedMode &&
@@ -416,7 +484,10 @@ class _NativeChatViewState extends State<NativeChatView>
         pos.pixels <= 72) {
       unawaited(_loadNewer());
     }
-    _updateStickBottomState();
+    // 手指拖动或惯性滑动期间不刷新 UI，避免滚动中 setState 导致卡顿。
+    if (!_userScrollActive) {
+      _updateStickBottomState();
+    }
   }
 
   int get _newestMessageId {
@@ -698,21 +769,26 @@ class _NativeChatViewState extends State<NativeChatView>
     if (notification is ScrollStartNotification) {
       _manualScrollInProgress = notification.dragDetails != null;
       if (_manualScrollInProgress) {
+        _userScrollActive = true;
         _lastManualScrollAtMs = DateTime.now().millisecondsSinceEpoch;
       }
     } else if (notification is ScrollUpdateNotification) {
       if (notification.dragDetails != null) {
         _manualScrollInProgress = true;
+        _userScrollActive = true;
         _lastManualScrollAtMs = DateTime.now().millisecondsSinceEpoch;
       }
-    } else if (notification is UserScrollNotification &&
-        notification.direction == ScrollDirection.idle) {
-      _manualScrollInProgress = false;
+    } else if (notification is UserScrollNotification) {
+      if (notification.direction != ScrollDirection.idle) {
+        _userScrollActive = true;
+      }
     } else if (notification is ScrollEndNotification) {
       _manualScrollInProgress = false;
-    }
-    if (_canMarkReadNow && _isNearBottom) {
-      unawaited(_markReadIfNeeded());
+      _userScrollActive = false;
+      _updateStickBottomState();
+      if (_canMarkReadNow && _isNearBottom) {
+        unawaited(_markReadIfNeeded());
+      }
     }
     return false;
   }
@@ -732,6 +808,74 @@ class _NativeChatViewState extends State<NativeChatView>
     final entryIndex = entries.length - 1 - adj;
     if (entryIndex < 0 || entryIndex >= entries.length) return null;
     return entries[entryIndex];
+  }
+
+  ScrollPhysics _chatListScrollPhysics(_ChatScrollMetrics metrics) {
+    switch (defaultTargetPlatform) {
+      case TargetPlatform.iOS:
+      case TargetPlatform.macOS:
+        return AlwaysScrollableScrollPhysics(
+          parent: _ChatScrollPhysics(
+            flingVelocityCap: metrics.maxFlingVelocity,
+            dragDampingFactor: metrics.dragDamping,
+            parent: const BouncingScrollPhysics(),
+          ),
+        );
+      default:
+        return AlwaysScrollableScrollPhysics(
+          parent: _ChatScrollPhysics(
+            flingVelocityCap: metrics.maxFlingVelocity,
+            dragDampingFactor: metrics.dragDamping,
+            parent: const ClampingScrollPhysics(),
+          ),
+        );
+    }
+  }
+
+  _ChatScrollMetrics _scrollMetricsForScreen() {
+    if (!mounted) {
+      return _ChatScrollMetrics.fromScreenHeight(780);
+    }
+    return _ChatScrollMetrics.fromScreenHeight(
+      MediaQuery.sizeOf(context).height,
+    );
+  }
+
+  int? _listIndexForMessageId(int messageId, List<_ChatListEntry> entries) {
+    for (var i = 0; i < entries.length; i++) {
+      if (entries[i].message?.id == messageId) {
+        return _listFooterCount + (entries.length - 1 - i);
+      }
+    }
+    return null;
+  }
+
+  int? _findMessageListChildIndex(Key key) {
+    final entries = _buildListEntries();
+    if (key is ValueKey<int>) {
+      return _listIndexForMessageId(key.value, entries);
+    }
+    if (key is ValueKey<String>) {
+      final value = key.value;
+      if (value.startsWith('day-')) {
+        final label = value.substring(4);
+        for (var i = 0; i < entries.length; i++) {
+          if (entries[i].dividerLabel == label) {
+            return _listFooterCount + (entries.length - 1 - i);
+          }
+        }
+      }
+    }
+    return null;
+  }
+
+  void _scrollToListIndex(int listIndex, List<_ChatListEntry> entries) {
+    if (!_scrollController.hasClients) return;
+    final total = entries.length + _listFooterCount;
+    if (total <= 1 || listIndex < 0 || listIndex >= total) return;
+    final max = _scrollController.position.maxScrollExtent;
+    final ratio = listIndex / (total - 1);
+    _scrollController.jumpTo((max * ratio).clamp(0.0, max));
   }
 
   /// reverse 列表下默认最新消息贴底，无需再滚到 maxScrollExtent。
@@ -903,7 +1047,13 @@ class _NativeChatViewState extends State<NativeChatView>
   }
 
   void _scheduleRealtimeRefresh() {
-    if (!mounted) return;
+    if (!mounted ||
+        _sending ||
+        !_isNearBottom ||
+        _loadingOlder ||
+        _olderScrollRestorePending) {
+      return;
+    }
     _rtRefreshDebounce?.cancel();
     _rtRefreshDebounce = Timer(const Duration(milliseconds: 250), () {
       if (!mounted || _sending) return;
@@ -944,7 +1094,7 @@ class _NativeChatViewState extends State<NativeChatView>
       } else {
         page = await _service.fetchMessagePage(
           conv.id,
-          size: _isPrivate ? 20 : 20,
+          size: _scrollMetricsForScreen().initialPageSize,
         );
       }
       if (!_isPrivate) {
@@ -992,8 +1142,7 @@ class _NativeChatViewState extends State<NativeChatView>
           _bootstrapped &&
           !conversationChanged &&
           focusId <= 0 &&
-          !_isNearBottom &&
-          _messages.length > msgs.length;
+          !_isNearBottom;
       final nextMessages = preservePaginatedHistory
           ? (_enrichMessages(_mergeMessages(_messages, msgs), conv)
             ..sort((a, b) => a.id.compareTo(b.id)))
@@ -1044,6 +1193,88 @@ class _NativeChatViewState extends State<NativeChatView>
     }
   }
 
+  int? _topVisibleMessageId() {
+    final entries = _buildListEntries();
+    final total = entries.length + _listFooterCount;
+    if (total <= 0 || !_scrollController.hasClients) return null;
+    final pos = _scrollController.position;
+    if (pos.maxScrollExtent <= 0) {
+      for (var i = entries.length - 1; i >= 0; i--) {
+        final id = entries[i].message?.id;
+        if (id != null && id > 0) return id;
+      }
+      return null;
+    }
+    // reverse 列表：scroll 越大，视口上沿越靠近更老的消息。
+    final topRatio =
+        ((pos.pixels + pos.viewportDimension * 0.1) / pos.maxScrollExtent)
+            .clamp(0.0, 1.0);
+    final listIndex =
+        (topRatio * (total - 1)).round().clamp(0, total - 1);
+    return _entryForListIndex(listIndex, entries)?.message?.id;
+  }
+
+  Key _messageRowKey(int messageId) {
+    if (_scrollRestoreAnchorId == messageId) {
+      return _scrollRestoreKeys.putIfAbsent(messageId, GlobalKey.new);
+    }
+    return ValueKey<int>(messageId);
+  }
+
+  void _finishOlderScrollRestore() {
+    _olderScrollHold?.cancel();
+    _olderScrollHold = null;
+    _scrollRestoreAnchorId = null;
+    _releaseOlderScrollRestoreGate();
+    if (mounted) setState(() {});
+  }
+
+  void _ensureAnchorVisibleAfterOlderLoad(
+    int anchorId, {
+    int attempt = 0,
+    double? fallbackPixels,
+    double? fallbackOldMax,
+  }) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_scrollController.hasClients) {
+        _finishOlderScrollRestore();
+        return;
+      }
+      final ctx = _scrollRestoreKeys[anchorId]?.currentContext;
+      if (ctx != null) {
+        Scrollable.ensureVisible(
+          ctx,
+          alignment: 0.06,
+          duration: Duration.zero,
+        );
+        _finishOlderScrollRestore();
+        return;
+      }
+      if (attempt < 18) {
+        _ensureAnchorVisibleAfterOlderLoad(
+          anchorId,
+          attempt: attempt + 1,
+          fallbackPixels: fallbackPixels,
+          fallbackOldMax: fallbackOldMax,
+        );
+        return;
+      }
+      if (fallbackPixels != null && fallbackOldMax != null) {
+        final pos = _scrollController.position;
+        final delta = pos.maxScrollExtent - fallbackOldMax;
+        if (delta > 0.5) {
+          final wasAtHistoryTop =
+              fallbackOldMax > 0 && fallbackPixels >= fallbackOldMax - 1.0;
+          final target = wasAtHistoryTop
+              ? fallbackPixels.clamp(0.0, pos.maxScrollExtent)
+              : (fallbackPixels + delta).clamp(0.0, pos.maxScrollExtent);
+          _scrollController.jumpTo(target);
+        }
+      }
+      _finishOlderScrollRestore();
+    });
+  }
+
   Future<void> _loadOlder() async {
     final conv = _conversation;
     if (conv == null ||
@@ -1055,95 +1286,67 @@ class _NativeChatViewState extends State<NativeChatView>
     }
     final oldestId = _messages.first.id;
     if (oldestId <= 0) return;
-    final anchorMessageId = oldestId;
+    final anchorMessageId = _topVisibleMessageId() ?? oldestId;
     final oldMax = _scrollController.hasClients
         ? _scrollController.position.maxScrollExtent
         : 0.0;
     final oldPixels = _scrollController.hasClients
         ? _scrollController.position.pixels
         : 0.0;
+    final batchSize = _scrollController.hasClients
+        ? _ChatScrollMetrics.fromListViewport(
+            _scrollController.position.viewportDimension,
+          ).batchPageSize
+        : _scrollMetricsForScreen().batchPageSize;
+    _olderScrollHold?.cancel();
+    if (_scrollController.hasClients) {
+      _olderScrollHold = _scrollController.position.hold(() {});
+      _olderScrollHoldPixels = oldPixels;
+      _olderScrollHoldMax = oldMax;
+    }
     setState(() => _loadingOlder = true);
     try {
       final page = await _service.fetchMessagePage(
         conv.id,
-        size: 18,
+        size: batchSize,
         before: oldestId,
       );
       if (!mounted) return;
       if (page.items.isEmpty) {
+        _olderScrollHold?.cancel();
+        _olderScrollHold = null;
         setState(() => _hasMore = false);
         return;
       }
       final merged = _enrichMessages(_mergeMessages(page.items, _messages));
       if (!mounted) return;
+      _scrollRestoreAnchorId = anchorMessageId;
       setState(() {
         _messages = merged;
         _hasMore = page.hasMore;
+        _loadingOlder = false;
       });
       _olderScrollRestorePending = true;
-      _scheduleRestoreScrollAfterOlderLoad(
-        anchorMessageId: anchorMessageId,
-        oldPixels: oldPixels,
-        oldMax: oldMax,
+      _olderLoadCooldownUntilMs =
+          DateTime.now().millisecondsSinceEpoch + 600;
+      _ensureAnchorVisibleAfterOlderLoad(
+        anchorMessageId,
+        fallbackPixels: _olderScrollHoldPixels,
+        fallbackOldMax: _olderScrollHoldMax,
       );
     } catch (e) {
+      _olderScrollHold?.cancel();
+      _olderScrollHold = null;
+      _scrollRestoreAnchorId = null;
       _showToast('加载历史失败：${friendlyErrorText(e)}');
     } finally {
-      if (mounted) setState(() => _loadingOlder = false);
+      if (mounted && _loadingOlder) setState(() => _loadingOlder = false);
     }
   }
 
   void _releaseOlderScrollRestoreGate() {
-    Future<void>.delayed(const Duration(milliseconds: 60), () {
+    Future<void>.delayed(const Duration(milliseconds: 120), () {
       if (mounted) _olderScrollRestorePending = false;
-    });
-  }
-
-  void _scheduleRestoreScrollAfterOlderLoad({
-    required int anchorMessageId,
-    required double oldPixels,
-    required double oldMax,
-    int attempt = 0,
-  }) {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || !_scrollController.hasClients) {
-        _olderScrollRestorePending = false;
-        return;
-      }
-      final pos = _scrollController.position;
-      final delta = pos.maxScrollExtent - oldMax;
-      if (delta > 0.5) {
-        final target = (oldPixels + delta).clamp(0.0, pos.maxScrollExtent);
-        if ((pos.pixels - target).abs() > 0.5) {
-          _scrollController.jumpTo(target);
-        }
-      }
-
-      final stillAtHistoryEdge =
-          _scrollController.position.pixels >=
-          _scrollController.position.maxScrollExtent - 48;
-      final layoutPending = attempt < 10 && delta <= 0.5;
-      if (layoutPending || (stillAtHistoryEdge && attempt < 6 && delta > 0.5)) {
-        _scheduleRestoreScrollAfterOlderLoad(
-          anchorMessageId: anchorMessageId,
-          oldPixels: oldPixels,
-          oldMax: oldMax,
-          attempt: attempt + 1,
-        );
-        return;
-      }
-
-      if (stillAtHistoryEdge && anchorMessageId > 0) {
-        final ctx = _messageKeys[anchorMessageId]?.currentContext;
-        if (ctx != null) {
-          Scrollable.ensureVisible(
-            ctx,
-            alignment: 0.05,
-            duration: Duration.zero,
-          );
-        }
-      }
-      _releaseOlderScrollRestoreGate();
     });
   }
 
@@ -1153,11 +1356,16 @@ class _NativeChatViewState extends State<NativeChatView>
       return;
     final newestId = _messages.last.id;
     if (newestId <= 0) return;
+    final batchSize = _scrollController.hasClients
+        ? _ChatScrollMetrics.fromListViewport(
+            _scrollController.position.viewportDimension,
+          ).batchPageSize
+        : _scrollMetricsForScreen().batchPageSize;
     setState(() => _loadingNewer = true);
     try {
       final page = await _service.fetchMessagePage(
         conv.id,
-        size: 25,
+        size: batchSize,
         after: newestId,
       );
       if (!mounted || page.items.isEmpty) {
@@ -1208,14 +1416,6 @@ class _NativeChatViewState extends State<NativeChatView>
     _scrollToLatestOnEnter();
   }
 
-  int? _entryIndexForMessage(int messageId) {
-    final entries = _buildListEntries();
-    for (var i = 0; i < entries.length; i++) {
-      if (entries[i].message?.id == messageId) return i;
-    }
-    return null;
-  }
-
   void _preScrollTowardMessage(int messageId) {
     if (!_scrollController.hasClients) return;
     final msgIndex = _messages.indexWhere((m) => m.id == messageId);
@@ -1224,21 +1424,11 @@ class _NativeChatViewState extends State<NativeChatView>
       _scrollBottom(force: true);
       return;
     }
-    final key = _messageKeys[messageId];
-    final ctx = key?.currentContext;
-    if (ctx != null) {
-      Scrollable.ensureVisible(ctx, alignment: 0.35);
-      return;
-    }
-    final entryIndex = _entryIndexForMessage(messageId);
-    if (entryIndex == null) return;
     final entries = _buildListEntries();
-    final total = entries.length + _listFooterCount;
-    if (total <= 1) return;
-    final listIndex = _listFooterCount + (entries.length - 1 - entryIndex);
-    final max = _scrollController.position.maxScrollExtent;
-    final ratio = listIndex / (total - 1);
-    _scrollController.jumpTo((max * ratio).clamp(0.0, max));
+    final listIndex = _listIndexForMessageId(messageId, entries);
+    if (listIndex != null) {
+      _scrollToListIndex(listIndex, entries);
+    }
   }
 
   void _highlightAndScroll(int messageId) {
@@ -1256,22 +1446,28 @@ class _NativeChatViewState extends State<NativeChatView>
       if (attempt == 0) {
         _preScrollTowardMessage(messageId);
       }
-      final key = _messageKeys[messageId];
-      final ctx = key?.currentContext;
-      if (ctx != null) {
-        Scrollable.ensureVisible(
-          ctx,
-          alignment: 0.35,
-          duration: const Duration(milliseconds: 280),
-          curve: Curves.easeOutCubic,
-        );
+      final entries = _buildListEntries();
+      final listIndex = _listIndexForMessageId(messageId, entries);
+      if (listIndex != null && _scrollController.hasClients) {
+        final total = entries.length + _listFooterCount;
+        if (total > 1) {
+          final max = _scrollController.position.maxScrollExtent;
+          final ratio = listIndex / (total - 1);
+          final target = (max * ratio).clamp(0.0, max);
+          if ((_scrollController.position.pixels - target).abs() > 8) {
+            _scrollController.animateTo(
+              target,
+              duration: const Duration(milliseconds: 280),
+              curve: Curves.easeOutCubic,
+            );
+          }
+        }
         return;
       }
       if (attempt < 8) {
         _ensureMessageVisible(messageId, attempt: attempt + 1);
         return;
       }
-      // 兜底：仍找不到渲染节点时，至少滚到列表底部（今日消息常见于此）。
       if (_messages.any((m) => m.id == messageId)) {
         _scrollBottom(force: true);
       }
@@ -2241,18 +2437,6 @@ class _NativeChatViewState extends State<NativeChatView>
             onTap: _forwardSelectedMessages,
           ),
           _multiBarAction(
-            icon: Icons.bookmark_border_rounded,
-            label: '收藏',
-            enabled: selectedCount > 0,
-            onTap: _collectSelectedMessages,
-          ),
-          _multiBarAction(
-            icon: Icons.delete_outline_rounded,
-            label: '删除',
-            enabled: selectedCount > 0,
-            onTap: _deleteSelectedMessages,
-          ),
-          _multiBarAction(
             icon: Icons.more_horiz_rounded,
             label: '更多',
             enabled: true,
@@ -2294,33 +2478,6 @@ class _NativeChatViewState extends State<NativeChatView>
         ),
       ),
     );
-  }
-
-  void _collectSelectedMessages() {
-    final count = _multiSelectedMessageIds.length;
-    if (count <= 0) return;
-    _showToast('已收藏$count条消息（占位）');
-  }
-
-  Future<void> _deleteSelectedMessages() async {
-    final picked = _multiSelectedMessages;
-    if (picked.isEmpty) return;
-    final allMine = picked.every((m) => m.senderUserId == widget.session.userId);
-    if (!allMine) {
-      _showToast('仅支持删除自己发送的消息');
-      return;
-    }
-    var success = 0;
-    for (final m in picked) {
-      try {
-        await _tryRecallMessage(m);
-        success += 1;
-      } catch (_) {}
-    }
-    if (success > 0) {
-      _showToast('已删除$success条消息');
-    }
-    _exitMessageMultiSelect();
   }
 
   Future<void> _showMultiMoreActions() async {
@@ -3635,21 +3792,6 @@ class _NativeChatViewState extends State<NativeChatView>
       } else {
         _scrollController.jumpTo(target);
       }
-      // 优先滚到最新一条消息，避免仅 jumpTo(0) 时末条仍被输入栏遮挡
-      final newestId = _newestMessageId;
-      if (newestId > 0) {
-        final ctx = _messageKeys[newestId]?.currentContext;
-        if (ctx != null) {
-          Scrollable.ensureVisible(
-            ctx,
-            alignment: 1.0,
-            duration: animated
-                ? const Duration(milliseconds: 280)
-                : Duration.zero,
-            curve: Curves.easeOutCubic,
-          );
-        }
-      }
     }
 
     WidgetsBinding.instance.addPostFrameCallback((_) => doScroll());
@@ -3893,6 +4035,10 @@ class _NativeChatViewState extends State<NativeChatView>
         : memberLabel;
     final listEntries = _buildListEntries();
     final selecting = _messageMultiSelectMode;
+    final scrollMetrics = _ChatScrollMetrics.fromScreenHeight(
+      MediaQuery.sizeOf(context).height,
+    );
+    final listCacheExtent = scrollMetrics.cacheExtent;
     final inputHint = locked
         ? '群聊已解散，无法发送消息'
         : _isPrivate
@@ -3980,20 +4126,14 @@ class _NativeChatViewState extends State<NativeChatView>
                         child: ListView.builder(
                           controller: _scrollController,
                           reverse: true,
-                          physics: const ClampingScrollPhysics(),
-                          cacheExtent: 640,
+                          physics: _chatListScrollPhysics(scrollMetrics),
+                          cacheExtent: listCacheExtent,
                           addAutomaticKeepAlives: false,
-                          addRepaintBoundaries: false,
+                          addRepaintBoundaries: true,
+                          findChildIndexCallback: _findMessageListChildIndex,
                           keyboardDismissBehavior:
                               ScrollViewKeyboardDismissBehavior.onDrag,
-                          padding: EdgeInsets.fromLTRB(
-                            12,
-                            (_locatedMode || _pendingNewMessageCount > 0)
-                                ? 52
-                                : 12,
-                            12,
-                            10,
-                          ),
+                          padding: const EdgeInsets.fromLTRB(12, 12, 12, 10),
                           itemCount:
                               listEntries.length + _listFooterCount,
                           itemBuilder: (_, index) {
@@ -4023,16 +4163,13 @@ class _NativeChatViewState extends State<NativeChatView>
                             if (entry == null) return const SizedBox.shrink();
                             if (entry.dividerLabel != null) {
                               return ChatDateDivider(
+                                key: ValueKey<String>('day-${entry.dividerLabel}'),
                                 label: entry.dividerLabel!,
                               );
                             }
                             final m = entry.message!;
                             final mine =
                                 m.senderUserId == widget.session.userId;
-                            final key = _messageKeys.putIfAbsent(
-                              m.id,
-                              GlobalKey.new,
-                            );
                             final highlighted = _highlightMessageId == m.id;
                             final timeLabel = InboxFormat.msgTimeLabel(
                               m.createdAt,
@@ -4050,6 +4187,8 @@ class _NativeChatViewState extends State<NativeChatView>
                               final hasQuote =
                                   textMessage &&
                                   !ChatMessageQuote.fromPayload(m.payload).isEmpty;
+                              final isForwardBundle =
+                                  _forwardBundleFromPayload(m.payload) != null;
                               row = ChatMessageRow(
                                 message: m,
                                 mine: mine,
@@ -4063,7 +4202,7 @@ class _NativeChatViewState extends State<NativeChatView>
                                 onLongPressStart:
                                     !_messageMultiSelectMode &&
                                     !_isSystemKind(m.kind) &&
-                                    (!textMessage || hasQuote)
+                                    (isForwardBundle || !textMessage || hasQuote)
                                     ? (details) => _onMessageActions(
                                         m,
                                         mine,
@@ -4084,7 +4223,7 @@ class _NativeChatViewState extends State<NativeChatView>
                             }
                             var rowWidget = highlighted
                                 ? AnimatedContainer(
-                                    key: key,
+                                    key: _messageRowKey(m.id),
                                     duration: const Duration(milliseconds: 200),
                                     decoration: BoxDecoration(
                                       color: DunesColors.accentSoft.withValues(
@@ -4097,7 +4236,10 @@ class _NativeChatViewState extends State<NativeChatView>
                                     ),
                                     child: row,
                                   )
-                                : KeyedSubtree(key: key, child: row);
+                                : KeyedSubtree(
+                                    key: _messageRowKey(m.id),
+                                    child: row,
+                                  );
                             if (_messageMultiSelectMode &&
                                 _canSelectMessageForMulti(m)) {
                               final selected =
@@ -4135,7 +4277,7 @@ class _NativeChatViewState extends State<NativeChatView>
                                 ],
                               );
                             }
-                            return RepaintBoundary(child: rowWidget);
+                            return rowWidget;
                           },
                         ),
                       ),
@@ -5057,5 +5199,43 @@ class _GroupReadSheetRow extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+/// 聊天列表滚动物理：按屏高限制惯性，配合分页实现「一滑一屏左右」手感。
+class _ChatScrollPhysics extends ScrollPhysics {
+  const _ChatScrollPhysics({
+    super.parent,
+    this.flingVelocityCap = 2200,
+    this.dragDampingFactor = 0.90,
+  });
+
+  final double flingVelocityCap;
+  final double dragDampingFactor;
+
+  @override
+  _ChatScrollPhysics applyTo(ScrollPhysics? ancestor) {
+    return _ChatScrollPhysics(
+      parent: buildParent(ancestor),
+      flingVelocityCap: flingVelocityCap,
+      dragDampingFactor: dragDampingFactor,
+    );
+  }
+
+  @override
+  double applyPhysicsToUserOffset(ScrollMetrics position, double offset) {
+    return super.applyPhysicsToUserOffset(
+      position,
+      offset * dragDampingFactor,
+    );
+  }
+
+  @override
+  Simulation? createBallisticSimulation(
+    ScrollMetrics position,
+    double velocity,
+  ) {
+    final clamped = velocity.clamp(-flingVelocityCap, flingVelocityCap);
+    return super.createBallisticSimulation(position, clamped);
   }
 }

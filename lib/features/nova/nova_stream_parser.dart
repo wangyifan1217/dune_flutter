@@ -158,6 +158,24 @@ NovaStreamParts splitNovaStreamText(String raw, {required bool finalPass}) {
 
 bool isHermesThinkLine(String piece) => _hermesThinkLine.hasMatch(piece.trim());
 
+String extractNovaMessageTextContent(dynamic content) {
+  if (content == null) return '';
+  if (content is String) return content;
+  if (content is List) {
+    final parts = <String>[];
+    for (final row in content) {
+      if (row is! Map) continue;
+      final map = Map<String, dynamic>.from(row);
+      final type = (map['type'] ?? '').toString();
+      if (type.isNotEmpty && type != 'text') continue;
+      final text = (map['text'] ?? map['content'] ?? '').toString();
+      if (text.isNotEmpty) parts.add(text);
+    }
+    return parts.join('\n');
+  }
+  return content.toString();
+}
+
 String novaFinalReplyText(String rawReply, String rawThink, {required bool finalPass}) {
   final parts = splitNovaStreamText(rawReply, finalPass: finalPass);
   var reply = parts.reply.trim();
@@ -221,19 +239,18 @@ NovaOpenAiSseEvent? parseNovaOpenAiSseJson(Map<String, dynamic> json) {
       }
       final content = dm['content'] ?? dm['text'];
       if (content != null) {
-        final text = content is String ? content : content.toString();
+        final text = extractNovaMessageTextContent(content);
         if (text.isNotEmpty) return NovaOpenAiSseEvent(text: text);
       }
     }
     final message = first['message'];
     if (message is Map && message['content'] != null) {
-      final content = message['content'];
-      final text = content is String ? content : content.toString();
+      final text = extractNovaMessageTextContent(message['content']);
       if (text.isNotEmpty) return NovaOpenAiSseEvent(text: text);
     }
   }
 
-  final text = (json['text'] ?? json['content'] ?? '').toString();
+  final text = extractNovaMessageTextContent(json['text'] ?? json['content']);
   if (text.isNotEmpty) return NovaOpenAiSseEvent(text: text);
   return null;
 }

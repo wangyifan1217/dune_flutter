@@ -10,6 +10,30 @@ import 'nova_web_storage.dart';
 
 const _queueKey = 'dunes_nova_history_sync_queue';
 
+/// 从会话消息推导 history turn 的 lastMessageAt，避免重复同步时写成当前时间。
+String resolveHistoryTurnLastMessageAt(
+  List<NativeNovaMessage> messages, {
+  String? assistantReply,
+}) {
+  final rows = messages.where((m) => !m.isWelcome).toList();
+  final reply = (assistantReply ?? '').trim();
+  if (reply.isNotEmpty) {
+    for (var i = rows.length - 1; i >= 0; i--) {
+      final m = rows[i];
+      if (m.role == 'assistant' &&
+          m.text.trim() == reply &&
+          m.createdAt != null) {
+        return m.createdAt!.toUtc().toIso8601String();
+      }
+    }
+  }
+  for (var i = rows.length - 1; i >= 0; i--) {
+    final at = rows[i].createdAt;
+    if (at != null) return at.toUtc().toIso8601String();
+  }
+  return DateTime.now().toUtc().toIso8601String();
+}
+
 /// 对齐 WebView `registerNovaHistoryTurn` / `flushNovaHistorySyncQueue` /
 /// `syncNovaLocalTurnPreview` / `flushNovaConvToLocalHistory`。
 class NovaHistorySync {
@@ -334,13 +358,13 @@ class NovaHistorySync {
         break;
       }
     }
-    final last = items.last;
+    final lastMessageAt = resolveHistoryTurnLastMessageAt(items);
     await upsertLocalTurn(<String, dynamic>{
       'conversationId': conversationId,
       'title': title,
       'lastMessagePreview': preview.length > 200 ? preview.substring(0, 200) : preview,
-      'lastMessageAt': (last.createdAt ?? DateTime.now()).toUtc().toIso8601String(),
-      'messageId': turnMessageId > 0 ? turnMessageId : last.id,
+      'lastMessageAt': lastMessageAt,
+      'messageId': turnMessageId > 0 ? turnMessageId : items.last.id,
       'source': 'app',
     });
   }

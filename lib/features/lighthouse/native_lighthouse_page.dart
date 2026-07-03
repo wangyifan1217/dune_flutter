@@ -12984,8 +12984,21 @@ class _SubTabInfo {
   final Color color;
 }
 
-// ── Brand logo / loader（灯塔 logo；加载时整图旋转）──────────────────────────
-const _kLhLogoAsset = 'assets/images/lighthouse_logo.png';
+// ── Brand logo / loader（矢量 mark，透明底；避免 PNG 黑底在移动端露边）────────
+class _HePowerMark extends StatelessWidget {
+  const _HePowerMark({required this.size});
+
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: size,
+      height: size,
+      child: const CustomPaint(painter: _HePowerMarkPainter(alpha: 1.0)),
+    );
+  }
+}
 
 class _LhBrandMark extends StatelessWidget {
   const _LhBrandMark({this.size = 42});
@@ -12993,15 +13006,7 @@ class _LhBrandMark extends StatelessWidget {
   final double size;
 
   @override
-  Widget build(BuildContext context) {
-    return Image.asset(
-      _kLhLogoAsset,
-      width: size,
-      height: size,
-      fit: BoxFit.contain,
-      filterQuality: FilterQuality.medium,
-    );
-  }
+  Widget build(BuildContext context) => _HePowerMark(size: size);
 }
 
 class _LhBrandLoader extends StatefulWidget {
@@ -13040,13 +13045,7 @@ class _LhBrandLoaderState extends State<_LhBrandLoader>
       height: s,
       child: RotationTransition(
         turns: _spin,
-        child: Image.asset(
-          _kLhLogoAsset,
-          width: s,
-          height: s,
-          fit: BoxFit.contain,
-          filterQuality: FilterQuality.medium,
-        ),
+        child: _HePowerMark(size: s),
       ),
     );
   }

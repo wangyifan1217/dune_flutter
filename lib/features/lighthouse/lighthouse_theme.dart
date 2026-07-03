@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 // lighthouse_v13.html :root CSS variables
 abstract final class LhColors {
-  static const cream = Color(0xFFF6F5F2);
+  static const cream = Color(0xFFE7DCC6);
   static const paper = Color(0xFFFFFFFF);
   static const ink = Color(0xFF1A1816);
   static const ink2 = Color(0xFF3D3A35);

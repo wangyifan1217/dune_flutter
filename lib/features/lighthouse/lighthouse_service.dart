@@ -11,11 +11,9 @@ const _lighthouseApiBaseOverride = String.fromEnvironment(
 );
 
 class LighthouseService {
-  LighthouseService({
-    required AuthSession session,
-    http.Client? client,
-  })  : _session = session,
-        _client = client ?? http.Client();
+  LighthouseService({required AuthSession session, http.Client? client})
+    : _session = session,
+      _client = client ?? http.Client();
 
   final AuthSession _session;
   final http.Client _client;
@@ -31,16 +29,15 @@ class LighthouseService {
   Uri _uri(String path, [Map<String, String>? query]) {
     final base = Uri.parse('$_apiBase$path');
     if (query == null || query.isEmpty) return base;
-    return base.replace(queryParameters: <String, String>{
-      ...base.queryParameters,
-      ...query,
-    });
+    return base.replace(
+      queryParameters: <String, String>{...base.queryParameters, ...query},
+    );
   }
 
   Map<String, String> get _headers => <String, String>{
-        'Authorization': 'Bearer ${_session.token}',
-        'Content-Type': 'application/json',
-      };
+    'Authorization': 'Bearer ${_session.token}',
+    'Content-Type': 'application/json',
+  };
 
   Future<LighthouseDataBundle> fetchOverview({
     String? period,
@@ -72,6 +69,84 @@ class LighthouseService {
     final map = Map<String, dynamic>.from(decoded);
     final payload = _unwrapPayload(map);
     return LighthouseDataBundle.fromJson(payload);
+  }
+
+  Future<Map<String, dynamic>> fetchSummary({
+    String? period,
+    String? date,
+    String? fuel,
+    int? offset,
+  }) {
+    return _getData('/lighthouse/summary', {
+      if (period != null && period.isNotEmpty) 'period': period,
+      if (date != null && date.isNotEmpty) 'date': date,
+      if (fuel != null && fuel.isNotEmpty && fuel != '全部') 'fuel': fuel,
+      if (offset != null && offset != 0) 'offset': '$offset',
+    }, '灯塔摘要加载失败');
+  }
+
+  Future<Map<String, dynamic>> fetchDimension({
+    required String tab,
+    String? period,
+    String? date,
+    String? fuel,
+    int? offset,
+  }) {
+    return _getData('/lighthouse/dimension', {
+      'tab': tab,
+      if (period != null && period.isNotEmpty) 'period': period,
+      if (date != null && date.isNotEmpty) 'date': date,
+      if (fuel != null && fuel.isNotEmpty && fuel != '全部') 'fuel': fuel,
+      if (offset != null && offset != 0) 'offset': '$offset',
+    }, '灯塔列表加载失败');
+  }
+
+  Future<Map<String, dynamic>> fetchDetail({
+    required String tab,
+    required String key,
+    String? period,
+    String? date,
+    String? fuel,
+    int? offset,
+  }) {
+    return _getData('/lighthouse/detail', {
+      'tab': tab,
+      'key': key,
+      if (period != null && period.isNotEmpty) 'period': period,
+      if (date != null && date.isNotEmpty) 'date': date,
+      if (fuel != null && fuel.isNotEmpty && fuel != '全部') 'fuel': fuel,
+      if (offset != null && offset != 0) 'offset': '$offset',
+    }, '灯塔详情加载失败');
+  }
+
+  Future<Map<String, dynamic>> fetchTrend({
+    required String tab,
+    String? period,
+    String? date,
+    String? fuel,
+    int? offset,
+  }) {
+    return _getData('/lighthouse/trend', {
+      'tab': tab,
+      if (period != null && period.isNotEmpty) 'period': period,
+      if (date != null && date.isNotEmpty) 'date': date,
+      if (fuel != null && fuel.isNotEmpty && fuel != '全部') 'fuel': fuel,
+      if (offset != null && offset != 0) 'offset': '$offset',
+    }, '灯塔趋势加载失败');
+  }
+
+  Future<Map<String, dynamic>> fetchDiscounts({
+    String? period,
+    String? date,
+    String? fuel,
+    int? offset,
+  }) {
+    return _getData('/lighthouse/discounts', {
+      if (period != null && period.isNotEmpty) 'period': period,
+      if (date != null && date.isNotEmpty) 'date': date,
+      if (fuel != null && fuel.isNotEmpty && fuel != '全部') 'fuel': fuel,
+      if (offset != null && offset != 0) 'offset': '$offset',
+    }, '灯塔折扣加载失败');
   }
 
   /// 分析 tab 3D 坐标 + 机会清单（懒加载）。
@@ -115,6 +190,31 @@ class LighthouseService {
       throw Exception((map['message'] ?? '分析数据加载失败').toString());
     }
 
+    final data = map['data'];
+    if (data is Map) return Map<String, dynamic>.from(data);
+    return map;
+  }
+
+  Future<Map<String, dynamic>> _getData(
+    String path,
+    Map<String, String> query,
+    String errorPrefix,
+  ) async {
+    final resp = await _client.get(_uri(path, query), headers: _headers);
+    if (resp.statusCode == 403) {
+      throw Exception('暂无权限');
+    }
+    if (resp.statusCode < 200 || resp.statusCode >= 300) {
+      throw Exception('$errorPrefix: HTTP ${resp.statusCode}');
+    }
+    final decoded = jsonDecode(resp.body);
+    if (decoded is! Map) {
+      throw Exception('$errorPrefix: 数据格式错误');
+    }
+    final map = Map<String, dynamic>.from(decoded);
+    if (map['success'] == false) {
+      throw Exception((map['message'] ?? errorPrefix).toString());
+    }
     final data = map['data'];
     if (data is Map) return Map<String, dynamic>.from(data);
     return map;

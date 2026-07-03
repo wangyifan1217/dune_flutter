@@ -13,12 +13,32 @@ class LighthouseDataBundle {
   final Map<String, dynamic> channelDetail;
   final Map<String, dynamic> metrics;
 
+  factory LighthouseDataBundle.empty() {
+    return LighthouseDataBundle(
+      data: <String, dynamic>{
+        'product': <Map<String, dynamic>>[],
+        'supply': <Map<String, dynamic>>[],
+        'channel': <Map<String, dynamic>>[],
+      },
+      productDetail: <String, dynamic>{},
+      supplyDetail: <String, dynamic>{},
+      channelDetail: <String, dynamic>{},
+      metrics: <String, dynamic>{},
+    );
+  }
+
   factory LighthouseDataBundle.fromJson(Map<String, dynamic> map) {
     return LighthouseDataBundle(
       data: Map<String, dynamic>.from(map['data'] as Map? ?? const {}),
-      productDetail: Map<String, dynamic>.from(map['product_detail'] as Map? ?? const {}),
-      supplyDetail: Map<String, dynamic>.from(map['supply_detail'] as Map? ?? const {}),
-      channelDetail: Map<String, dynamic>.from(map['channel_detail'] as Map? ?? const {}),
+      productDetail: Map<String, dynamic>.from(
+        map['product_detail'] as Map? ?? const {},
+      ),
+      supplyDetail: Map<String, dynamic>.from(
+        map['supply_detail'] as Map? ?? const {},
+      ),
+      channelDetail: Map<String, dynamic>.from(
+        map['channel_detail'] as Map? ?? const {},
+      ),
       metrics: Map<String, dynamic>.from(map['metrics'] as Map? ?? const {}),
     );
   }
@@ -30,5 +50,83 @@ class LighthouseDataBundle {
         .whereType<Map>()
         .map((e) => Map<String, dynamic>.from(e))
         .toList();
+  }
+
+  LighthouseDataBundle copyWith({
+    Map<String, dynamic>? data,
+    Map<String, dynamic>? productDetail,
+    Map<String, dynamic>? supplyDetail,
+    Map<String, dynamic>? channelDetail,
+    Map<String, dynamic>? metrics,
+  }) {
+    return LighthouseDataBundle(
+      data: data ?? this.data,
+      productDetail: productDetail ?? this.productDetail,
+      supplyDetail: supplyDetail ?? this.supplyDetail,
+      channelDetail: channelDetail ?? this.channelDetail,
+      metrics: metrics ?? this.metrics,
+    );
+  }
+
+  LighthouseDataBundle withSummary(Map<String, dynamic> summary) {
+    final nextMetrics = Map<String, dynamic>.from(metrics);
+    final rawMetrics = summary['metrics'];
+    if (rawMetrics is Map) {
+      nextMetrics
+        ..clear()
+        ..addAll(Map<String, dynamic>.from(rawMetrics));
+    }
+    return copyWith(metrics: nextMetrics);
+  }
+
+  LighthouseDataBundle withDimension(
+    String tab,
+    List<Map<String, dynamic>> rows,
+  ) {
+    final nextData = Map<String, dynamic>.from(data);
+    nextData[tab] = rows;
+    return copyWith(data: nextData);
+  }
+
+  LighthouseDataBundle withDetail(
+    String tab,
+    String key,
+    Map<String, dynamic> detail,
+  ) {
+    switch (tab) {
+      case 'supply':
+        final next = Map<String, dynamic>.from(supplyDetail)..[key] = detail;
+        return copyWith(supplyDetail: next);
+      case 'channel':
+        final next = Map<String, dynamic>.from(channelDetail)..[key] = detail;
+        return copyWith(channelDetail: next);
+      default:
+        final next = Map<String, dynamic>.from(productDetail)..[key] = detail;
+        return copyWith(productDetail: next);
+    }
+  }
+
+  LighthouseDataBundle withTrends(String tab, Map<String, dynamic> trends) {
+    final rows = rowsOf(tab).map((row) {
+      final next = Map<String, dynamic>.from(row);
+      final name = next['name']?.toString() ?? '';
+      final trend = trends[name];
+      if (trend is Map) next['trend'] = Map<String, dynamic>.from(trend);
+      return next;
+    }).toList();
+    return withDimension(tab, rows);
+  }
+
+  LighthouseDataBundle withDiscounts(Map<String, dynamic> discounts) {
+    final rows = rowsOf('supply').map((row) {
+      final next = Map<String, dynamic>.from(row);
+      final name = next['name']?.toString() ?? '';
+      final discount = discounts[name];
+      if (discount is Map) {
+        next['discount'] = Map<String, dynamic>.from(discount);
+      }
+      return next;
+    }).toList();
+    return withDimension('supply', rows);
   }
 }

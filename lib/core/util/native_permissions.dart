@@ -50,7 +50,7 @@ String cameraPermissionHint(PermissionStatus status) {
   if (status.isPermanentlyDenied || status.isRestricted) {
     return '相机权限未开启，请在系统设置中允许「沙丘」使用相机';
   }
-  return '请先允许相机权限';
+  return '请先允许相机权限，以便扫码登录或拍摄照片';
 }
 
 String photosPermissionHint(PermissionStatus status) {

@@ -55,6 +55,7 @@ import '../shell/dunes_toast.dart';
 import '../workbench/native_avatar_sheet.dart';
 import '../workbench/native_my_workbench_pages.dart';
 import '../workbench/workbench_badge_notifier.dart';
+import '../lighthouse/contract_sealing_page.dart';
 import '../lighthouse/native_lighthouse_page.dart';
 import '../meeting/meeting_live_controller.dart';
 import '../meeting/meeting_upload_coordinator.dart';
@@ -1473,6 +1474,11 @@ class _NativeB2PageState extends State<_NativeB2Page> {
                     const SizedBox(height: 14),
                     _buildQuickLaunch(),
                     const SizedBox(height: 14),
+                    _buildSectionLabel('灯塔 · 合同行政'),
+                    const SizedBox(height: 4),
+                    const ContractSealingEntryCard(pendingCount: 2),
+                    const ContractBorrowEntryCard(),
+                    const SizedBox(height: 14),
                     if (stats.pendingForMe > 0)
                       _buildReminderBanner(
                         icon: Icons.notifications_active_outlined,
@@ -1567,13 +1573,6 @@ class _NativeB2PageState extends State<_NativeB2Page> {
                         onTap: () => _showSoonToast(),
                       ),
                       _buildMenuItem(
-                        icon: Icons.file_copy_outlined,
-                        title: '我的合同 / 用印记录',
-                        desc: '0 份 · 0 临期 · 寄出待回收 0',
-                        comingSoon: true,
-                        onTap: () => _showSoonToast(),
-                      ),
-                      _buildMenuItem(
                         icon: Icons.warning_amber_rounded,
                         title: '欠票催办',
                         desc: '0 笔 · ¥0 · 欠 0 天',
@@ -1623,7 +1622,7 @@ class _NativeB2PageState extends State<_NativeB2Page> {
             if (_live.active.value)
               Positioned(
                 right: 16,
-                bottom: 80,
+                bottom: kDunesMainTabBarHeight + 12,
                 child: _buildLiveTranscribeFab(),
               ),
           ],

@@ -6,7 +6,10 @@ import '../conversation/comm_unread_notifier.dart';
 import '../workbench/workbench_badge_notifier.dart';
 import 'dunes_toast.dart';
 
-/// 与 index.html 底部 Tab 栏 1:1 对齐：通讯 · 千机 · 灯塔 · 我的。
+/// 底部主 Tab：通讯 · 千机 · 灯塔 · 我的。
+/// 高度在 [kDunesMainTabBarHeight] 统一维护，供 FAB 等待定位引用。
+const double kDunesMainTabBarHeight = 56;
+
 class DunesMainTabBar extends StatefulWidget {
   const DunesMainTabBar({
     super.key,
@@ -65,8 +68,7 @@ class _DunesMainTabBarState extends State<DunesMainTabBar> {
 
   @override
   Widget build(BuildContext context) {
-    // 与安卓一致：Tab 栏固定 72 高、图标垂直居中，不再叠加 iOS home indicator
-    // 安全区（居中的图标/文字不会被底部横条遮住），避免「我的」整块被拉高。
+    // 固定高度、图标垂直居中；iOS/Android 共用同一尺寸，不再额外垫高。
     return Container(
       decoration: const BoxDecoration(
         color: DunesColors.bgApp,
@@ -115,7 +117,7 @@ class _DunesMainTabBarState extends State<DunesMainTabBar> {
               widget.navigation.switchMainTab(screen!);
             },
         child: SizedBox(
-          height: 72,
+          height: kDunesMainTabBarHeight,
           child: Stack(
             clipBehavior: Clip.none,
             alignment: Alignment.center,
@@ -123,13 +125,13 @@ class _DunesMainTabBarState extends State<DunesMainTabBar> {
               Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(icon, size: 21, color: color),
-                  const SizedBox(height: 2),
-                  Text(label, style: TextStyle(fontSize: 10.5, color: color)),
+                  Icon(icon, size: 20, color: color),
+                  const SizedBox(height: 1),
+                  Text(label, style: TextStyle(fontSize: 10, color: color)),
                 ],
               ),
               if (showRedDot)
-                const Positioned(top: 10, right: 22, child: _PulseDot()),
+                const Positioned(top: 7, right: 22, child: _PulseDot()),
             ],
           ),
         ),

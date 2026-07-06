@@ -48,14 +48,21 @@ Future<bool> ensureMicrophonePermission() async {
 
 String cameraPermissionHint(PermissionStatus status) {
   if (status.isPermanentlyDenied || status.isRestricted) {
-    return '相机权限未开启，请在系统设置中允许「沙丘」使用相机';
+    return '相机权限未开启，请在系统设置中允许「沙丘X」使用相机';
   }
-  return '请先允许相机权限，以便扫码登录或拍摄照片';
+  return '请先允许相机权限，以便扫码登录或在聊天、NOVA 中拍摄照片';
 }
 
 String photosPermissionHint(PermissionStatus status) {
   if (status.isPermanentlyDenied || status.isRestricted) {
-    return '相册权限未开启，请在系统设置中允许「沙丘」访问照片';
+    return '相册权限未开启，请在系统设置中允许「沙丘X」访问照片';
   }
-  return '请先允许相册/照片权限';
+  return '请先允许相册权限，以便选择图片、设置头像或上传审批附件';
+}
+
+String microphonePermissionHint(PermissionStatus status) {
+  if (status.isPermanentlyDenied || status.isRestricted) {
+    return '麦克风权限未开启，请在系统设置中允许「沙丘X」使用麦克风';
+  }
+  return '请先允许麦克风权限，以便发送语音、NOVA 语音输入或录制会议';
 }

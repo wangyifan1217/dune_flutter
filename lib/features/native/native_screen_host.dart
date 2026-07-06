@@ -55,7 +55,6 @@ import '../shell/dunes_toast.dart';
 import '../workbench/native_avatar_sheet.dart';
 import '../workbench/native_my_workbench_pages.dart';
 import '../workbench/workbench_badge_notifier.dart';
-import '../lighthouse/contract_sealing_page.dart';
 import '../lighthouse/native_lighthouse_page.dart';
 import '../meeting/meeting_live_controller.dart';
 import '../meeting/meeting_upload_coordinator.dart';
@@ -1488,11 +1487,6 @@ class _NativeB2PageState extends State<_NativeB2Page> {
                     _buildQuickStats(stats),
                     const SizedBox(height: 14),
                     _buildQuickLaunch(),
-                    const SizedBox(height: 14),
-                    _buildSectionLabel('灯塔 · 合同行政'),
-                    const SizedBox(height: 4),
-                    const ContractSealingEntryCard(pendingCount: 2),
-                    const ContractBorrowEntryCard(),
                     const SizedBox(height: 14),
                     if (stats.pendingForMe > 0)
                       _buildReminderBanner(

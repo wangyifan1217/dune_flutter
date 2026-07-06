@@ -361,52 +361,51 @@ class NativeMeetingService {
     return (data['url'] ?? data['downloadUrl'] ?? '').toString().trim();
   }
 
-  /// 导出会议纪要 PDF（服务端 302 重定向至预签名 URL）。
+  /// 导出会议纪要 PDF（优先 inline 直出；兼容旧版 302 重定向）。
   Future<Uint8List> exportPdfBytes(int meetingId) async {
     final uri = dunesApiUri(
       session,
-      '/ai/meeting-minutes/$meetingId/export?format=pdf',
+      '/ai/meeting-minutes/$meetingId/export?format=pdf&inline=1',
     );
     final client = http.Client();
     try {
-      final req = http.Request('GET', uri);
-      req.followRedirects = false;
-      req.headers['Authorization'] = 'Bearer ${session.token}';
-      req.headers['Accept'] = '*/*';
-      final streamed = await client.send(req);
-      final statusCode = streamed.statusCode;
-
-      if (statusCode == 301 ||
-          statusCode == 302 ||
-          statusCode == 303 ||
-          statusCode == 307 ||
-          statusCode == 308) {
-        final location = streamed.headers['location']?.trim();
-        if (location == null || location.isEmpty) {
-          throw Exception('导出链接不可用');
-        }
-        final pdfUri = location.startsWith('http')
-            ? Uri.parse(location)
-            : uri.resolve(location);
-        final pdfResp = await client.get(pdfUri);
-        if (pdfResp.statusCode < 200 || pdfResp.statusCode >= 300) {
-          throw Exception('PDF 下载失败(${pdfResp.statusCode})');
-        }
-        return pdfResp.bodyBytes;
-      }
-
-      final bytes = await streamed.stream.toBytes();
-      if (statusCode >= 200 && statusCode < 300) {
+      final resp = await client.get(
+        uri,
+        headers: <String, String>{
+          'Authorization': 'Bearer ${session.token}',
+          'Accept': 'application/pdf',
+        },
+      );
+      if (resp.statusCode >= 200 && resp.statusCode < 300) {
+        final bytes = resp.bodyBytes;
+        if (bytes.isEmpty) throw Exception('导出 PDF 为空');
         if (bytes.isNotEmpty && bytes.first == 0x7B) {
           final msg = _readErrorMessage(
             _unwrapDataFromDecoded(jsonDecode(utf8.decode(bytes))),
           );
           if (msg.isNotEmpty) throw Exception(msg);
         }
-        if (bytes.isEmpty) throw Exception('导出 PDF 为空');
         return bytes;
       }
 
+      // 兼容未部署 inline 的后端：走 302 预签名链接
+      if (resp.statusCode == 301 ||
+          resp.statusCode == 302 ||
+          resp.statusCode == 303 ||
+          resp.statusCode == 307 ||
+          resp.statusCode == 308) {
+        final location = resp.headers['location']?.trim();
+        if (location == null || location.isEmpty) {
+          throw Exception('导出链接不可用');
+        }
+        final pdfResp = await client.get(Uri.parse(location));
+        if (pdfResp.statusCode < 200 || pdfResp.statusCode >= 300) {
+          throw Exception('PDF 下载失败(${pdfResp.statusCode})');
+        }
+        return pdfResp.bodyBytes;
+      }
+
+      final bytes = resp.bodyBytes;
       if (bytes.isNotEmpty) {
         try {
           final body = _decodeJsonMap(utf8.decode(bytes));
@@ -416,7 +415,7 @@ class NativeMeetingService {
           }
         } catch (_) {}
       }
-      throw Exception('导出 PDF 失败($statusCode)');
+      throw Exception('导出 PDF 失败(${resp.statusCode})');
     } finally {
       client.close();
     }

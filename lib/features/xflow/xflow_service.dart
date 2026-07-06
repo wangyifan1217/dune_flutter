@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -11,13 +12,114 @@ class XflowService {
   XflowService({
     required this.session,
     http.Client? client,
+    this.templateKey = salesTemplateKey,
   }) : _client = client ?? http.Client();
 
   static const salesTemplateKey = 'sales-proposal';
-  static const _draftStorageKey = 'xflow_draft_sales-proposal';
+  static const contractSealTemplateKey = 'contract-seal';
+  static const _templateCachePrefsKey = 'xflow_templates_cache_v1';
+
+  static final Map<String, List<XflowTemplateCard>> _templateMemoryCache = {};
+  static bool _templatePrefsHydrated = false;
+
+  static const List<XflowTemplateCard> defaultBizTemplates = [
+    XflowTemplateCard(
+      templateKey: salesTemplateKey,
+      title: '销售提案',
+      subtitle: '业务元数据 · 财务 · 四流 · 方案叙事 · 提交审批',
+      endpoint: 'POST /xflow/templates/sales-proposal/submit',
+      tagLabel: '新建',
+      category: 'biz',
+    ),
+    XflowTemplateCard(
+      templateKey: contractSealTemplateKey,
+      title: '合同用印申请',
+      subtitle: '合同信息 · 签约主体 · 关键日期 · 附件',
+      endpoint: 'POST /xflow/templates/contract-seal/submit',
+      tagLabel: '合同',
+      category: 'biz',
+    ),
+  ];
+
+  /// 启动后尽早调用，从本地恢复模板列表，避免「我的」页快捷入口闪烁。
+  static Future<void> hydrateTemplateCache() async {
+    if (_templatePrefsHydrated) return;
+    _templatePrefsHydrated = true;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_templateCachePrefsKey);
+      if (raw == null || raw.isEmpty) {
+        _templateMemoryCache['biz'] = List<XflowTemplateCard>.from(defaultBizTemplates);
+        return;
+      }
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map) {
+        _templateMemoryCache['biz'] = List<XflowTemplateCard>.from(defaultBizTemplates);
+        return;
+      }
+      for (final entry in decoded.entries) {
+        final key = entry.key.toString();
+        final rows = entry.value;
+        if (rows is! List) continue;
+        final cards = <XflowTemplateCard>[];
+        for (final row in rows) {
+          if (row is Map<String, dynamic>) {
+            cards.add(XflowTemplateCard.fromJson(row));
+          } else if (row is Map) {
+            cards.add(XflowTemplateCard.fromJson(Map<String, dynamic>.from(row)));
+          }
+        }
+        if (cards.isNotEmpty) _templateMemoryCache[key] = cards;
+      }
+      _templateMemoryCache.putIfAbsent(
+        'biz',
+        () => List<XflowTemplateCard>.from(defaultBizTemplates),
+      );
+    } catch (_) {
+      _templateMemoryCache['biz'] = List<XflowTemplateCard>.from(defaultBizTemplates);
+    }
+  }
+
+  static List<XflowTemplateCard> cachedTemplatesByCategory(String category) {
+    final cat = category.trim().isEmpty ? 'biz' : category.trim();
+    final cached = _templateMemoryCache[cat];
+    if (cached != null && cached.isNotEmpty) return cached;
+    if (cat == 'biz') return List<XflowTemplateCard>.from(defaultBizTemplates);
+    return const [];
+  }
+
+  static Future<void> _persistTemplateCache(String category, List<XflowTemplateCard> rows) async {
+    _templateMemoryCache[category] = rows;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final existingRaw = prefs.getString(_templateCachePrefsKey);
+      final map = <String, dynamic>{};
+      if (existingRaw != null && existingRaw.isNotEmpty) {
+        final decoded = jsonDecode(existingRaw);
+        if (decoded is Map) map.addAll(Map<String, dynamic>.from(decoded));
+      }
+      map[category] = rows
+          .map(
+            (row) => {
+              'templateKey': row.templateKey,
+              'title': row.title,
+              'subtitle': row.subtitle,
+              'endpoint': row.endpoint,
+              'tagLabel': row.tagLabel,
+              'category': row.category,
+              'enabled': row.enabled,
+            },
+          )
+          .toList(growable: false);
+      await prefs.setString(_templateCachePrefsKey, jsonEncode(map));
+    } catch (_) {}
+  }
 
   final AuthSession session;
   final http.Client _client;
+  final String templateKey;
+
+  String get _draftStorageKey => 'xflow_draft_$templateKey';
 
   Map<String, String> get _headers => <String, String>{
         'Authorization': 'Bearer ${session.token}',
@@ -155,16 +257,10 @@ class XflowService {
       if (item.templateKey.isNotEmpty) out.add(item);
     }
     if (cat == 'biz' && out.isEmpty) {
-      out.add(
-        const XflowTemplateCard(
-          templateKey: salesTemplateKey,
-          title: '销售提案',
-          subtitle: '业务元数据 · 财务 · 四流 · 方案叙事 · 提交审批',
-          endpoint: 'POST /xflow/templates/sales-proposal/submit',
-          tagLabel: '新建',
-          category: 'biz',
-        ),
-      );
+      out.addAll(defaultBizTemplates);
+    }
+    if (out.isNotEmpty) {
+      unawaited(_persistTemplateCache(cat, out));
     }
     return out;
   }

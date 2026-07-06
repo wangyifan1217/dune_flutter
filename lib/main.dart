@@ -9,6 +9,7 @@ import 'core/layout/mobile_viewport_shell.dart';
 import 'core/theme/dunes_theme.dart';
 import 'features/push/push_service.dart';
 import 'features/shell/splash_screen.dart';
+import 'features/xflow/xflow_service.dart';
 import 'core/web/text_input_guard_stub.dart'
     if (dart.library.html) 'core/web/text_input_guard_web.dart';
 
@@ -52,6 +53,7 @@ void main() {
       ),
     );
     unawaited(ensurePushInitialized());
+    unawaited(XflowService.hydrateTemplateCache());
   }
   runApp(const DunesApp());
 }

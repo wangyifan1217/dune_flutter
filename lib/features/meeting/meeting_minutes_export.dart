@@ -2,7 +2,8 @@ import 'native_meeting_models.dart';
 
 enum MeetingExportFormat {
   markdown('md'),
-  plainText('txt');
+  plainText('txt'),
+  pdf('pdf');
 
   const MeetingExportFormat(this.extension);
   final String extension;
@@ -10,7 +11,10 @@ enum MeetingExportFormat {
   String get label => switch (this) {
         MeetingExportFormat.markdown => 'Markdown',
         MeetingExportFormat.plainText => '文本',
+        MeetingExportFormat.pdf => 'PDF',
       };
+
+  bool get isServerPdf => this == MeetingExportFormat.pdf;
 }
 
 class MeetingMinutesExport {
@@ -29,11 +33,17 @@ class MeetingMinutesExport {
   }
 
   static String fileName(NativeMeetingDetail detail, MeetingExportFormat format) {
+    if (format == MeetingExportFormat.pdf) return pdfFileName(detail);
     final title = detail.title.trim();
     final base = title.isNotEmpty
         ? title.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_')
         : 'meeting-${detail.meetingId}';
     return '$base.${format.extension}';
+  }
+
+  /// 转发/导出 PDF 文件名。
+  static String pdfFileName(NativeMeetingDetail detail) {
+    return '${kbUploadBaseName(detail)}.pdf';
   }
 
   /// 上传到知识库时的文件名与展示标题：`会议纪要-{用户填写标题}.md`

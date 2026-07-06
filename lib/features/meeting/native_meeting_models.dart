@@ -44,12 +44,14 @@ class NativeMeetingSummary {
 class NativeMeetingKbUpload {
   const NativeMeetingKbUpload({
     required this.uploaded,
+    this.stale = false,
     this.documentId,
     this.uploadedAt,
     this.fileName,
   });
 
   final bool uploaded;
+  final bool stale;
   final int? documentId;
   final String? uploadedAt;
   final String? fileName;
@@ -61,6 +63,7 @@ class NativeMeetingKbUpload {
     final docId = json['documentId'];
     return NativeMeetingKbUpload(
       uploaded: json['uploaded'] == true,
+      stale: json['stale'] == true,
       documentId: docId is num ? docId.toInt() : int.tryParse('$docId'),
       uploadedAt: json['uploadedAt']?.toString(),
       fileName: json['fileName']?.toString(),
@@ -167,57 +170,14 @@ String _readSummary(
   dynamic minutes,
   dynamic transcript,
 ) {
+  // 重新生成后后端常先更新 minutes，顶层 summary 可能仍是旧快照。
+  final fromMinutes = _readSummaryFromMinutes(minutes);
+  if (fromMinutes.isNotEmpty) return fromMinutes;
+
   final rootSummary = (root['summary'] ?? root['minutesSummary'] ?? '')
       .toString()
       .trim();
   if (rootSummary.isNotEmpty) return rootSummary;
-
-  if (minutes is Map) {
-    for (final key in const ['summary', 'content', 'text', 'markdown']) {
-      final value = (minutes[key] ?? '').toString().trim();
-      if (value.isNotEmpty) return value;
-    }
-    final topics = minutes['topics'];
-    if (topics is List) {
-      final lines = <String>[];
-      for (var i = 0; i < topics.length; i++) {
-        final topic = topics[i];
-        if (topic is! Map) continue;
-        final title = (topic['title'] ?? '').toString().trim();
-        final discussion = (topic['discussion'] ?? topic['content'] ?? '')
-            .toString()
-            .trim();
-        final decisions = topic['decisions'];
-        lines.add('### ${title.isNotEmpty ? title : '议题 ${i + 1}'}');
-        if (discussion.isNotEmpty) {
-          lines.add(discussion);
-        }
-        if (decisions is List) {
-          for (final decision in decisions) {
-            final text = decision.toString().trim();
-            if (text.isNotEmpty) lines.add('- $text');
-          }
-        }
-        lines.add('');
-      }
-      final risks = minutes['risks'];
-      if (risks is List && risks.isNotEmpty) {
-        lines.add('### 风险提示');
-        for (final risk in risks) {
-          final text = risk.toString().trim();
-          if (text.isNotEmpty) lines.add('- $text');
-        }
-        lines.add('');
-      }
-      final nextMeeting = (minutes['nextMeeting'] ?? '').toString().trim();
-      if (nextMeeting.isNotEmpty) {
-        lines.add('### 下次会议');
-        lines.add(nextMeeting);
-      }
-      final topicText = lines.join('\n').trim();
-      if (topicText.isNotEmpty) return topicText;
-    }
-  }
 
   if (transcript is Map) {
     final full = (transcript['fullText'] ??
@@ -242,7 +202,86 @@ String _readSummary(
   return '';
 }
 
+String _readSummaryFromMinutes(dynamic minutes) {
+  if (minutes is! Map) return '';
+
+  for (final key in const ['summary', 'content', 'text', 'markdown']) {
+    final value = (minutes[key] ?? '').toString().trim();
+    if (value.isNotEmpty) return value;
+  }
+
+  final topics = minutes['topics'];
+  if (topics is! List || topics.isEmpty) return '';
+
+  final lines = <String>[];
+  for (var i = 0; i < topics.length; i++) {
+    final topic = topics[i];
+    if (topic is! Map) continue;
+    final title = (topic['title'] ?? '').toString().trim();
+    final discussion = (topic['discussion'] ?? topic['content'] ?? '')
+        .toString()
+        .trim();
+    final decisions = topic['decisions'];
+    lines.add('### ${title.isNotEmpty ? title : '议题 ${i + 1}'}');
+    if (discussion.isNotEmpty) {
+      lines.add(discussion);
+    }
+    if (decisions is List) {
+      for (final decision in decisions) {
+        final text = decision.toString().trim();
+        if (text.isNotEmpty) lines.add('- $text');
+      }
+    }
+    lines.add('');
+  }
+  final risks = minutes['risks'];
+  if (risks is List && risks.isNotEmpty) {
+    lines.add('### 风险提示');
+    for (final risk in risks) {
+      final text = risk.toString().trim();
+      if (text.isNotEmpty) lines.add('- $text');
+    }
+    lines.add('');
+  }
+  final nextMeeting = (minutes['nextMeeting'] ?? '').toString().trim();
+  if (nextMeeting.isNotEmpty) {
+    lines.add('### 下次会议');
+    lines.add(nextMeeting);
+  }
+  return lines.join('\n').trim();
+}
+
+List<String> _readActionItemsFromMinutes(dynamic minutes) {
+  if (minutes is! Map) return const [];
+  final topics = minutes['topics'];
+  if (topics is! List) return const [];
+
+  final rows = <String>[];
+  for (final t in topics.whereType<Map>()) {
+    final nested = t['actionItems'];
+    if (nested is! List) continue;
+    for (final item in nested) {
+      if (item is Map) {
+        final text = (item['taskDescription'] ??
+                item['task'] ??
+                item['description'] ??
+                '')
+            .toString()
+            .trim();
+        if (text.isNotEmpty) rows.add(text);
+      } else {
+        final text = item.toString().trim();
+        if (text.isNotEmpty) rows.add(text);
+      }
+    }
+  }
+  return rows;
+}
+
 List<String> _readActionItems(dynamic action, dynamic minutes) {
+  final fromMinutes = _readActionItemsFromMinutes(minutes);
+  if (fromMinutes.isNotEmpty) return fromMinutes;
+
   if (action is List) {
     final rows = action
         .map<String>((item) {
@@ -262,31 +301,6 @@ List<String> _readActionItems(dynamic action, dynamic minutes) {
     if (rows.isNotEmpty) return rows;
   }
 
-  if (minutes is Map) {
-    final topics = minutes['topics'];
-    if (topics is List) {
-      final rows = <String>[];
-      for (final t in topics.whereType<Map>()) {
-        final nested = t['actionItems'];
-        if (nested is! List) continue;
-        for (final item in nested) {
-          if (item is Map) {
-            final text = (item['taskDescription'] ??
-                    item['task'] ??
-                    item['description'] ??
-                    '')
-                .toString()
-                .trim();
-            if (text.isNotEmpty) rows.add(text);
-          } else {
-            final text = item.toString().trim();
-            if (text.isNotEmpty) rows.add(text);
-          }
-        }
-      }
-      if (rows.isNotEmpty) return rows;
-    }
-  }
   return const <String>[];
 }
 

@@ -31,6 +31,7 @@ import 'chat_emoji_gif_panel.dart';
 import 'chat_image_batch_preview.dart';
 import 'chat_image_editor.dart';
 import 'chat_image_utils.dart';
+import 'chat_pdf_preview.dart';
 import 'giphy_proxy_service.dart';
 import 'chat_media_widgets.dart';
 import 'chat_quote.dart';
@@ -3268,6 +3269,22 @@ class _NativeChatViewState extends State<NativeChatView>
     return (payload['objectKey'] ?? '').toString().trim();
   }
 
+  Future<void> _openFileAttachment(
+    Map<String, dynamic>? payload,
+    String fileName,
+  ) async {
+    if (chatPayloadIsPdf(payload, fileName)) {
+      await showChatPdfPreview(
+        context: context,
+        service: _service,
+        payload: payload,
+        fileName: fileName,
+      );
+      return;
+    }
+    await _downloadFile(payload, fileName);
+  }
+
   Future<void> _downloadFile(
     Map<String, dynamic>? payload,
     String fileName,
@@ -3466,7 +3483,8 @@ class _NativeChatViewState extends State<NativeChatView>
         ChatFileAttach(
           fileName: fileName,
           mine: mine,
-          onTap: () => _downloadFile(m.payload, fileName),
+          isPdf: chatPayloadIsPdf(m.payload, fileName),
+          onTap: () => _openFileAttachment(m.payload, fileName),
         ),
       );
     }
@@ -3567,7 +3585,8 @@ class _NativeChatViewState extends State<NativeChatView>
       return ChatFileAttach(
         fileName: fileName,
         mine: mine,
-        onTap: () => _downloadFile(e.payload, fileName),
+        isPdf: chatPayloadIsPdf(e.payload, fileName),
+        onTap: () => _openFileAttachment(e.payload, fileName),
       );
     }
     if (kind == 'AUDIO') {

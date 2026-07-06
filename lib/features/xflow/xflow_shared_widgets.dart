@@ -1532,6 +1532,7 @@ _ProgressFoot _progressFoot(XflowProposalItem item) {
 
 String _proposalTypeLabel(XflowProposalItem item) {
   if (item.txType != null && item.txType!.isNotEmpty) return item.txType!;
+  if (item.businessType.toUpperCase() == 'CONTRACT_SEAL') return '合同用印';
   return '销售提案';
 }
 

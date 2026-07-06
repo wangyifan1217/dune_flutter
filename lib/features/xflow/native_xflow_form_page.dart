@@ -83,7 +83,7 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage> {
   @override
   void initState() {
     super.initState();
-    _service = XflowService(session: widget.session);
+    _service = XflowService(session: widget.session, templateKey: widget.templateKey);
     _load();
   }
 
@@ -401,6 +401,22 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage> {
     return '提交审批';
   }
 
+  String get _templateName {
+    final name = _template?.title.trim() ?? '';
+    return name.isEmpty ? '提案' : name;
+  }
+
+  String get _pageTitle => _isEditing ? '编辑$_templateName' : '新建$_templateName';
+
+  String get _pageCrumb {
+    final templateObj = _template?.raw['template'];
+    final submitRoute = templateObj is Map
+        ? (templateObj['submitRoute'] ?? '').toString().trim()
+        : '';
+    if (submitRoute.isNotEmpty) return '$_templateName · $submitRoute';
+    return _templateName;
+  }
+
   @override
   Widget build(BuildContext context) {
     return ColoredBox(
@@ -409,8 +425,8 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage> {
         child: Column(
           children: [
             XflowDsBar(
-              crumb: '销售提案 · PROPOSAL_3STEP',
-              title: _isEditing ? '编辑销售提案' : '新建销售提案',
+              crumb: _pageCrumb,
+              title: _pageTitle,
               onBack: () => widget.navigation.popTo(widget.backScreen),
               onMore: _canDeleteDraft ? _confirmDeleteDraft : null,
             ),
@@ -428,7 +444,7 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage> {
                               padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
                               children: [
                                 XflowFormCard(
-                                  title: _isEditing ? '编辑销售提案' : '新建销售提案',
+                                  title: _pageTitle,
                                   tag: 'XFlow',
                                   child: XflowFormRenderer(
                                     fields: _isDelegatedPendingInitiate

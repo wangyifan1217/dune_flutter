@@ -1057,8 +1057,23 @@ class _NativeB2PageState extends State<_NativeB2Page> {
   void initState() {
     super.initState();
     _profile = _restoreCachedProfile();
+    _quickLaunchItems = buildQuickLaunchItems(
+      bizTemplates: XflowService.cachedTemplatesByCategory('biz'),
+      admTemplates: XflowService.cachedTemplatesByCategory('adm'),
+      maxItems: 4,
+    );
     widget.workbenchRefresh.addListener(_onWorkbenchDataRefresh);
     _live.active.addListener(_onLiveActiveChanged);
+    unawaited(XflowService.hydrateTemplateCache().then((_) {
+      if (!mounted) return;
+      setState(() {
+        _quickLaunchItems = buildQuickLaunchItems(
+          bizTemplates: XflowService.cachedTemplatesByCategory('biz'),
+          admTemplates: XflowService.cachedTemplatesByCategory('adm'),
+          maxItems: 4,
+        );
+      });
+    }));
     _loadStats(silent: _profile != null);
     _refreshCommBadge();
   }

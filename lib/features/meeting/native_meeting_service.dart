@@ -1,6 +1,7 @@
 import 'dart:convert';
-import 'dart:io';
+import 'dart:io' as io;
 
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 import '../../core/http/session_http.dart';
@@ -360,6 +361,67 @@ class NativeMeetingService {
     return (data['url'] ?? data['downloadUrl'] ?? '').toString().trim();
   }
 
+  /// 导出会议纪要 PDF（服务端 302 重定向至预签名 URL）。
+  Future<Uint8List> exportPdfBytes(int meetingId) async {
+    final uri = dunesApiUri(
+      session,
+      '/ai/meeting-minutes/$meetingId/export?format=pdf',
+    );
+    final client = http.Client();
+    try {
+      final req = http.Request('GET', uri);
+      req.followRedirects = false;
+      req.headers['Authorization'] = 'Bearer ${session.token}';
+      req.headers['Accept'] = '*/*';
+      final streamed = await client.send(req);
+      final statusCode = streamed.statusCode;
+
+      if (statusCode == 301 ||
+          statusCode == 302 ||
+          statusCode == 303 ||
+          statusCode == 307 ||
+          statusCode == 308) {
+        final location = streamed.headers['location']?.trim();
+        if (location == null || location.isEmpty) {
+          throw Exception('导出链接不可用');
+        }
+        final pdfUri = location.startsWith('http')
+            ? Uri.parse(location)
+            : uri.resolve(location);
+        final pdfResp = await client.get(pdfUri);
+        if (pdfResp.statusCode < 200 || pdfResp.statusCode >= 300) {
+          throw Exception('PDF 下载失败(${pdfResp.statusCode})');
+        }
+        return pdfResp.bodyBytes;
+      }
+
+      final bytes = await streamed.stream.toBytes();
+      if (statusCode >= 200 && statusCode < 300) {
+        if (bytes.isNotEmpty && bytes.first == 0x7B) {
+          final msg = _readErrorMessage(
+            _unwrapDataFromDecoded(jsonDecode(utf8.decode(bytes))),
+          );
+          if (msg.isNotEmpty) throw Exception(msg);
+        }
+        if (bytes.isEmpty) throw Exception('导出 PDF 为空');
+        return bytes;
+      }
+
+      if (bytes.isNotEmpty) {
+        try {
+          final body = _decodeJsonMap(utf8.decode(bytes));
+          if (body is Map<String, dynamic>) {
+            final msg = _readErrorMessage(body);
+            if (msg.isNotEmpty) throw Exception(msg);
+          }
+        } catch (_) {}
+      }
+      throw Exception('导出 PDF 失败($statusCode)');
+    } finally {
+      client.close();
+    }
+  }
+
   String audioDownloadFileName(NativeMeetingDetail detail) {
     final key = detail.audioObjectKey.trim();
     if (key.isNotEmpty) {
@@ -380,7 +442,7 @@ class NativeMeetingService {
   }
 
   int guessDurationSeconds(String path) {
-    final file = File(path);
+    final file = io.File(path);
     final size = file.existsSync() ? file.lengthSync() : 0;
     if (size <= 0) return 0;
     // 16k/16bit/mono wav rough estimate fallback.

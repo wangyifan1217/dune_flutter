@@ -124,6 +124,7 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
 
   Widget _progressCard() {
     final p = _progress();
+    if (p.bizTotal + p.finTotal == 0) return const SizedBox.shrink();
     return Container(
       padding: const EdgeInsets.all(10),
       margin: const EdgeInsets.only(bottom: 10),
@@ -205,25 +206,26 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
     );
   }
 
-  Widget _fieldWidget(XflowField field) {
+  Widget _fieldWidget(XflowField field, {bool inRow = false}) {
     if (field.type == 'row') return _rowField(field);
     switch (field.type) {
       case 'section':
         return _sectionField(field);
       case 'pill':
-        return _pillField(field, false);
+        return _pillField(field, false, inRow: inRow);
       case 'multiSelect':
-        return _pillField(field, true);
+        return _pillField(field, true, inRow: inRow);
       case 'select':
-        return _selectField(field);
+        return _selectField(field, inRow: inRow);
       case 'computed':
-        return _computedField(field);
+        return _computedField(field, inRow: inRow);
       case 'level':
-        return _levelField(field);
+        return _levelField(field, inRow: inRow);
       case 'user':
-        return _userField(field);
+      case 'userSelect':
+        return _userField(field, inRow: inRow);
       case 'date':
-        return _dateField(field);
+        return _dateField(field, inRow: inRow);
       case 'dynamicList':
         return _dynamicListField(field);
       case 'structuredTable':
@@ -244,7 +246,7 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
       case 'action':
         return const SizedBox.shrink();
       default:
-        return _basicField(field);
+        return _basicField(field, inRow: inRow);
     }
   }
 
@@ -254,12 +256,66 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
       final child = widget.fields.where((f) => f.key == key).firstOrNull;
       if (child != null) children.add(child);
     }
+    if (children.isEmpty) return const SizedBox.shrink();
+
+    final connector = (field.raw['connector'] ?? '').toString().trim();
+    final maxPerRow = _rowMaxColumns(field, children);
+
+    if (children.length <= maxPerRow) {
+      return _rowChunk(children, connector: connector);
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (var start = 0; start < children.length; start += maxPerRow)
+          Padding(
+            padding: EdgeInsets.only(bottom: start + maxPerRow < children.length ? 8 : 0),
+            child: _rowChunk(
+              children.sublist(start, start + maxPerRow > children.length ? children.length : start + maxPerRow),
+              connector: connector.isNotEmpty && start == 0 ? connector : '',
+            ),
+          ),
+      ],
+    );
+  }
+
+  int _rowMaxColumns(XflowField field, List<XflowField> children) {
+    final fromRaw = field.raw['maxPerRow'] ?? field.raw['columns'];
+    if (fromRaw is num && fromRaw.toInt() > 0) return fromRaw.toInt();
+    if (fromRaw is String) {
+      final parsed = int.tryParse(fromRaw);
+      if (parsed != null && parsed > 0) return parsed;
+    }
+    if (children.isNotEmpty && children.every((c) => c.type == 'date') && children.length > 2) {
+      return 2;
+    }
+    return children.length;
+  }
+
+  Widget _rowChunk(List<XflowField> children, {required String connector}) {
+    if (children.length == 1) {
+      return _fieldWidget(children.first, inRow: false);
+    }
     return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.end,
       children: [
         for (var i = 0; i < children.length; i++) ...[
-          Expanded(child: _fieldWidget(children[i])),
-          if (i != children.length - 1) const SizedBox(width: 8),
+          Expanded(child: _fieldWidget(children[i], inRow: true)),
+          if (connector.isNotEmpty && i < children.length - 1)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(2, 0, 2, 10),
+              child: Text(
+                connector,
+                style: DunesTypography.mono(
+                  fontSize: 11,
+                  color: DunesColors.text3,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            )
+          else if (i != children.length - 1)
+            const SizedBox(width: 8),
         ],
       ],
     );
@@ -293,27 +349,34 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
     return xfInputDecoration(hint: hint, readonly: readonly, mono: mono);
   }
 
-  Widget _selectField(XflowField field) {
+  Widget _selectField(XflowField field, {bool inRow = false}) {
     final current = widget.values[field.key]?.toString() ?? '';
     return _fieldWrap(
       field,
-      DropdownButtonFormField<String>(
-        value: current.isEmpty ? null : current,
-        isExpanded: true,
-        decoration: _inputDecoration(hint: field.placeholder.isEmpty ? '请选择' : field.placeholder),
-        items: [
-          for (final option in field.options)
-            DropdownMenuItem(
-              value: option.value,
-              child: Text(option.label, style: DunesTypography.sans(fontSize: 11.5)),
-            ),
-        ],
-        onChanged: field.readonly ? null : (v) => widget.onChanged(field.key, v ?? ''),
+      xfFixedHeightControl(
+        child: DropdownButtonHideUnderline(
+          child: DropdownButtonFormField<String>(
+            value: current.isEmpty ? null : current,
+            isExpanded: true,
+            style: xfInputTextStyle(),
+            icon: const Icon(Icons.keyboard_arrow_down_rounded, size: 18, color: DunesColors.text3),
+            decoration: _inputDecoration(hint: field.placeholder.isEmpty ? '请选择' : field.placeholder),
+            items: [
+              for (final option in field.options)
+                DropdownMenuItem(
+                  value: option.value,
+                  child: Text(option.label, style: xfInputTextStyle()),
+                ),
+            ],
+            onChanged: field.readonly ? null : (v) => widget.onChanged(field.key, v ?? ''),
+          ),
+        ),
       ),
+      inRow: inRow,
     );
   }
 
-  Widget _levelField(XflowField field) {
+  Widget _levelField(XflowField field, {bool inRow = false}) {
     final current = widget.values[field.key]?.toString() ?? '';
     final levels = field.options.isNotEmpty
         ? field.options.map((o) => o.value).toList()
@@ -366,10 +429,11 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
             ),
         ],
       ),
+      inRow: inRow,
     );
   }
 
-  Widget _basicField(XflowField field) {
+  Widget _basicField(XflowField field, {bool inRow = false}) {
     final value = widget.values[field.key];
     final keyboardType = switch (field.type) {
       'number' || 'money' => const TextInputType.numberWithOptions(decimal: true),
@@ -393,22 +457,57 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
         decoration: _inputDecoration(hint: field.placeholder, readonly: field.readonly),
         onChanged: (text) => widget.onChanged(field.key, text),
       ),
+      inRow: inRow,
     );
   }
 
-  Widget _dateField(XflowField field) {
+  Widget _dateField(XflowField field, {bool inRow = false}) {
     final raw = widget.values[field.key]?.toString() ?? '';
     DateTime? date;
     if (raw.isNotEmpty) date = DateTime.tryParse(raw);
+    final readonly = field.readonly;
+    final autoHint = (field.raw['hint'] ?? '').toString().trim();
     final label = date == null
-        ? (field.placeholder.isEmpty ? '年 / 月 / 日' : field.placeholder)
+        ? (readonly
+            ? '待流程写入'
+            : (field.placeholder.isEmpty ? '年 / 月 / 日' : field.placeholder))
         : '${date.year} / ${date.month.toString().padLeft(2, '0')} / ${date.day.toString().padLeft(2, '0')}';
+    final decoration = _inputDecoration(
+      hint: readonly ? null : field.placeholder,
+      readonly: readonly,
+    );
+    final control = xfFixedHeightControl(
+      child: InputDecorator(
+        decoration: decoration,
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: xfInputTextStyle().copyWith(
+                  color: date == null
+                      ? DunesColors.text3
+                      : (readonly ? DunesColors.text2 : DunesColors.text),
+                ),
+              ),
+            ),
+            Icon(
+              readonly ? Icons.lock_clock_outlined : Icons.calendar_today_outlined,
+              size: 14,
+              color: readonly ? DunesColors.text3.withValues(alpha: 0.65) : DunesColors.text3,
+            ),
+          ],
+        ),
+      ),
+    );
     return _fieldWrap(
       field,
-      InkWell(
-        onTap: field.readonly
-            ? null
-            : () async {
+      readonly
+          ? control
+          : InkWell(
+              onTap: () async {
                 final now = DateTime.now();
                 final picked = await showDatePicker(
                   context: context,
@@ -423,29 +522,15 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
                   );
                 }
               },
-        borderRadius: BorderRadius.circular(8),
-        child: InputDecorator(
-          decoration: _inputDecoration(hint: field.placeholder),
-          child: Row(
-            children: [
-              Expanded(
-                child: Text(
-                  label,
-                  style: DunesTypography.sans(
-                    fontSize: 11.5,
-                    color: date == null ? DunesColors.text3 : DunesColors.text,
-                  ),
-                ),
-              ),
-              const Icon(Icons.calendar_today_outlined, size: 14, color: DunesColors.text3),
-            ],
-          ),
-        ),
-      ),
+              borderRadius: BorderRadius.circular(9),
+              child: control,
+            ),
+      inRow: inRow,
+      hint: readonly && autoHint.isNotEmpty ? autoHint : null,
     );
   }
 
-  Widget _computedField(XflowField field) {
+  Widget _computedField(XflowField field, {bool inRow = false}) {
     final text = widget.values[field.key]?.toString() ?? '';
     return _fieldWrap(
       field,
@@ -462,10 +547,11 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
           style: DunesTypography.mono(fontSize: 13, color: DunesColors.text2),
         ),
       ),
+      inRow: inRow,
     );
   }
 
-  Widget _userField(XflowField field) {
+  Widget _userField(XflowField field, {bool inRow = false}) {
     return _fieldWrap(
       field,
       _XflowUserPicker(
@@ -475,6 +561,7 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
         readonly: field.readonly,
         onChanged: (v) => widget.onChanged(field.key, v),
       ),
+      inRow: inRow,
     );
   }
 
@@ -881,7 +968,10 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
     return XfAddRowButton(label: label, onTap: onTap);
   }
 
-  Widget _pillField(XflowField field, bool multi) {
+  Widget _pillField(XflowField field, bool multi, {bool inRow = false}) {
+    if (multi && (field.raw['allowCustom'] == true || field.options.isEmpty)) {
+      return _customTagsField(field, inRow: inRow);
+    }
     final current = widget.values[field.key];
     final selected = <String>{};
     if (current is List) {
@@ -925,6 +1015,89 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
                   ),
               ],
             ),
+      inRow: inRow,
+    );
+  }
+
+  Widget _customTagsField(XflowField field, {bool inRow = false}) {
+    final raw = widget.values[field.key];
+    final tags = <String>[];
+    if (raw is List) {
+      for (final item in raw) {
+        final text = item.toString().trim();
+        if (text.isNotEmpty) tags.add(text);
+      }
+    } else if (raw != null && raw.toString().trim().isNotEmpty) {
+      tags.add(raw.toString().trim());
+    }
+
+    void addTag(String text) {
+      final next = text.trim();
+      if (next.isEmpty || tags.contains(next)) return;
+      final updated = [...tags, next];
+      widget.onChanged(field.key, updated);
+      setState(() {});
+    }
+
+    void removeTag(String text) {
+      final updated = tags.where((tag) => tag != text).toList(growable: false);
+      widget.onChanged(field.key, updated);
+      setState(() {});
+    }
+
+    return _fieldWrap(
+      field,
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (tags.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: [
+                  for (final tag in tags)
+                    InputChip(
+                      label: Text(
+                        tag,
+                        style: DunesTypography.sans(fontSize: 11, color: DunesColors.accentDeep),
+                      ),
+                      deleteIcon: field.readonly
+                          ? null
+                          : const Icon(Icons.close, size: 14, color: DunesColors.text3),
+                      onDeleted: field.readonly ? null : () => removeTag(tag),
+                      backgroundColor: DunesColors.accentSoft,
+                      side: const BorderSide(color: DunesColors.accentLine),
+                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      visualDensity: VisualDensity.compact,
+                    ),
+                ],
+              ),
+            ),
+          if (!field.readonly)
+            _XflowTagInput(
+              key: ValueKey('tags_input_${field.key}'),
+              hint: field.placeholder.isEmpty ? '输入关键词后按回车添加' : field.placeholder,
+              onSubmit: addTag,
+            )
+          else if (tags.isEmpty)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 9),
+              decoration: BoxDecoration(
+                color: DunesColors.bgSoft,
+                borderRadius: BorderRadius.circular(9),
+                border: Border.all(color: DunesColors.border),
+              ),
+              child: Text(
+                field.placeholder.isEmpty ? '—' : field.placeholder,
+                style: DunesTypography.sans(fontSize: 12.5, color: DunesColors.text3),
+              ),
+            ),
+        ],
+      ),
+      inRow: inRow,
     );
   }
 
@@ -977,13 +1150,24 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
     );
   }
 
-  Widget _fieldWrap(XflowField field, Widget child) {
+  Widget _fieldWrap(XflowField field, Widget child, {bool inRow = false, String? hint}) {
     final label = field.label.isEmpty ? field.key : field.label;
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
       children: [
-        XfFieldLabel(label: label, required: field.required),
+        XfFieldLabel(label: label, required: field.required, compact: inRow),
         child,
+        if (hint != null && hint.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Text(
+              hint,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: DunesTypography.sans(fontSize: 9.5, color: DunesColors.text3, height: 1.3),
+            ),
+          ),
       ],
     );
   }
@@ -1244,5 +1428,58 @@ extension on Iterable<XflowField> {
   XflowField? get firstOrNull {
     if (isEmpty) return null;
     return first;
+  }
+}
+
+class _XflowTagInput extends StatefulWidget {
+  const _XflowTagInput({
+    super.key,
+    required this.hint,
+    required this.onSubmit,
+  });
+
+  final String hint;
+  final ValueChanged<String> onSubmit;
+
+  @override
+  State<_XflowTagInput> createState() => _XflowTagInputState();
+}
+
+class _XflowTagInputState extends State<_XflowTagInput> {
+  final _controller = TextEditingController();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _submit([String? raw]) {
+    final text = (raw ?? _controller.text).trim();
+    if (text.isEmpty) return;
+    widget.onSubmit(text);
+    _controller.clear();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return TextField(
+      controller: _controller,
+      style: xfInputTextStyle(),
+      textInputAction: TextInputAction.done,
+      decoration: xfInputDecoration(hint: widget.hint),
+      onTapOutside: (_) => FocusManager.instance.primaryFocus?.unfocus(),
+      onSubmitted: _submit,
+      onChanged: (text) {
+        if (text.contains(',') || text.contains('，')) {
+          final parts = text.split(RegExp('[,，]'));
+          for (var i = 0; i < parts.length - 1; i++) {
+            _submit(parts[i]);
+          }
+          _controller.text = parts.last;
+          _controller.selection = TextSelection.collapsed(offset: _controller.text.length);
+        }
+      },
+    );
   }
 }

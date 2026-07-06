@@ -249,25 +249,34 @@ class XfFieldLabel extends StatelessWidget {
     super.key,
     required this.label,
     this.required = false,
+    this.compact = false,
   });
 
   final String label;
   final bool required;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 6),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Expanded(
-            child: Text(
-              label.toUpperCase(),
-              style: DunesTypography.mono(
-                fontSize: 10,
-                fontWeight: FontWeight.w500,
-                letterSpacing: 0.04 * 10,
-                color: DunesColors.text3,
+            child: SizedBox(
+              height: compact ? 14 : null,
+              child: Text(
+                label.toUpperCase(),
+                maxLines: compact ? 1 : 2,
+                overflow: TextOverflow.ellipsis,
+                style: DunesTypography.mono(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w500,
+                  letterSpacing: 0.04 * 10,
+                  color: DunesColors.text3,
+                  height: compact ? 1.2 : 1.25,
+                ),
               ),
             ),
           ),
@@ -311,4 +320,17 @@ TextStyle xfInputTextStyle({bool mono = false}) {
     return DunesTypography.mono(fontSize: 12, color: DunesColors.text, letterSpacing: 0);
   }
   return DunesTypography.sans(fontSize: 12.5, color: DunesColors.text, letterSpacing: -0.005 * 12.5);
+}
+
+/// 与 `.fld-in` 单行输入对齐的统一控件高度。
+const double xfControlHeight = 40;
+
+Widget xfFixedHeightControl({required Widget child, double height = xfControlHeight}) {
+  return SizedBox(
+    height: height,
+    child: Align(
+      alignment: Alignment.centerLeft,
+      child: child,
+    ),
+  );
 }

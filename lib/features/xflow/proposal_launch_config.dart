@@ -59,14 +59,21 @@ List<ProposalLaunchItem> buildQuickLaunchItems({
     ...admTemplates.where((t) => t.enabled).map(ProposalLaunchItem.fromTemplate),
   ];
   if (enabled.isEmpty) {
-    enabled.add(
+    enabled.addAll([
       const ProposalLaunchItem(
         label: '销售提案',
         icon: Icons.assignment_outlined,
         badge: '新建',
         templateKey: 'sales-proposal',
       ),
-    );
+      const ProposalLaunchItem(
+        label: '合同用印',
+        icon: Icons.apartment_outlined,
+        tone: ProposalLaunchIconTone.amber,
+        badge: '合同',
+        templateKey: 'contract-seal',
+      ),
+    ]);
   }
 
   final out = enabled.take(maxItems).toList(growable: true);

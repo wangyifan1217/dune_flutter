@@ -11,10 +11,13 @@ import '../../core/theme/dunes_theme.dart';
 import '../../core/util/friendly_error.dart';
 import '../auth/auth_session.dart';
 import '../chat/file_download.dart' as file_dl;
+import '../conversation/conversation_picker_sheet.dart';
+import '../conversation/conversation_service.dart';
 import '../kb/kb_document_coordinator.dart';
 import '../kb/native_kb_models.dart';
 import '../kb/native_kb_service.dart';
 import 'meeting_minutes_export.dart';
+import 'meeting_minutes_markdown.dart';
 import 'meeting_upload_coordinator.dart';
 import 'meeting_upload_storage.dart';
 import 'native_meeting_models.dart';
@@ -41,6 +44,9 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
   late final NativeMeetingService _service = NativeMeetingService(
     session: widget.session,
   );
+  late final ConversationService _chatService = ConversationService(
+    session: widget.session,
+  );
   late final NativeKbService _kbService = NativeKbService(
     session: widget.session,
   );
@@ -52,7 +58,10 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
   bool _regenerating = false;
   bool _startingTranscription = false;
   bool _downloadingAudio = false;
+  bool _forwarding = false;
   bool _uploadingSummaryToKb = false;
+  bool _kbMarkedStale = false;
+  String? _kbSyncedMeetingUpdatedAt;
   double _downloadProgress = 0;
   String? _downloadLabel;
   bool _transcriptExpanded = false;
@@ -89,6 +98,7 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
       meetingId: detail.meetingId,
       kbFileName: MeetingMinutesExport.kbUploadFileName(detail),
       kbTitle: MeetingMinutesExport.kbUploadTitle(detail),
+      kbDocumentId: detail.kbUpload?.documentId,
     );
   }
 
@@ -204,6 +214,27 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
 
   bool get _kbUploaded => _kbUploadedDoc != null;
 
+  bool _isKbUploadStale(NativeMeetingDetail detail) {
+    if (detail.kbUpload?.stale == true) return true;
+    if (!_kbUploaded && !detail.kbUploaded) return _kbMarkedStale;
+
+    final meetingAt = DateTime.tryParse(detail.updatedAt.trim());
+    if (meetingAt != null) {
+      final uploadedAtStr = detail.kbUpload?.uploadedAt?.trim();
+      if (uploadedAtStr != null && uploadedAtStr.isNotEmpty) {
+        final uploadedAt = DateTime.tryParse(uploadedAtStr);
+        if (uploadedAt != null) return meetingAt.isAfter(uploadedAt);
+      }
+      if (_kbSyncedMeetingUpdatedAt != null &&
+          _kbSyncedMeetingUpdatedAt!.isNotEmpty) {
+        final syncedAt = DateTime.tryParse(_kbSyncedMeetingUpdatedAt!);
+        if (syncedAt != null) return meetingAt.isAfter(syncedAt);
+        return detail.updatedAt != _kbSyncedMeetingUpdatedAt;
+      }
+    }
+    return _kbMarkedStale;
+  }
+
   Future<void> _refreshKbUploadStatus(NativeMeetingDetail detail) async {
     if (detail.meetingId <= 0) return;
     try {
@@ -223,16 +254,19 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
       );
       return;
     }
-    if (_kbUploaded) {
+    if (_kbUploaded || _isKbUploadStale(detail)) {
       final title = detail.title.trim().isNotEmpty
           ? detail.title.trim()
           : '未命名会议';
+      final stale = _isKbUploadStale(detail);
       final confirmed = await showDialog<bool>(
         context: context,
         builder: (ctx) => AlertDialog(
-          title: const Text('重新上传到知识库'),
+          title: Text(stale ? '更新知识库文档' : '重新上传到知识库'),
           content: Text(
-            '「$title」已上传过知识库。重新上传将删除旧版本并替换为仅含摘要与待办的新文档（不含原始逐句转写）。\n\n是否继续？',
+            stale
+                ? '「$title」的纪要已重新生成，知识库中的版本可能仍是旧内容。重新上传将删除旧文档并替换为最新摘要与待办（不含原始逐句转写）。\n\n是否继续？'
+                : '「$title」已上传过知识库。重新上传将删除旧版本并替换为仅含摘要与待办的新文档（不含原始逐句转写）。\n\n是否继续？',
             style: DunesTypography.sans(fontSize: 14, height: 1.55),
           ),
           actions: [
@@ -291,14 +325,21 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
   }
 
   Future<void> _uploadSummaryToKb({bool replaceExisting = false}) async {
-    final detail = _detail;
-    if (detail == null || _uploadingSummaryToKb) return;
+    if (_detail == null || _uploadingSummaryToKb) return;
 
     setState(() => _uploadingSummaryToKb = true);
     try {
       await _kbService.ensureNovaReady();
+
+      final fresh = await _service.fetchDetail(widget.meetingId);
+      if (!mounted) return;
+      setState(() => _detail = fresh);
+      final detail = fresh;
+
+      final shouldReplace =
+          replaceExisting || _isKbUploadStale(detail);
       final existing = _kbUploadedDoc ?? await _findKbDoc(detail);
-      if (existing != null && !replaceExisting) {
+      if (existing != null && !shouldReplace) {
         if (mounted) {
           setState(() => _kbUploadedDoc = existing);
           ScaffoldMessenger.of(context).showSnackBar(
@@ -307,44 +348,51 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
         }
         return;
       }
-      if (existing != null && replaceExisting) {
+      if (existing != null && shouldReplace) {
         try {
           await _kbService.deleteDocument(existing.id);
         } catch (e) {
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('删除旧文档失败：${friendlyErrorText(e)}')),
+              SnackBar(
+                content: Text(
+                  '删除旧 Nova 文档失败：${friendlyErrorText(e)}，将继续尝试服务端上传',
+                ),
+              ),
             );
           }
-          return;
         }
         if (mounted) setState(() => _kbUploadedDoc = null);
       }
 
-      final fileName = MeetingMinutesExport.kbUploadFileName(detail);
-      final markdown = utf8.encode(
-        MeetingMinutesExport.buildKbUploadMarkdown(detail),
-      );
-      final title = MeetingMinutesExport.kbUploadTitle(detail);
-
-      await _kbService.uploadDocument(
-        bytes: markdown,
-        fileName: fileName,
-        title: title,
-      );
+      await _service.uploadToKb(widget.meetingId);
 
       if (!mounted) return;
-      final uploaded = await _waitKbDocument(detail);
+      final updated = await _service.fetchDetail(widget.meetingId);
+      setState(() => _detail = updated);
+
+      NativeKbDocument? uploaded = await _findKbDoc(updated);
+      uploaded ??= await _waitKbDocument(updated);
+
       if (!mounted) return;
-      if (uploaded == null) {
-        throw Exception('上传请求已发送，但未在知识库中找到文档，请稍后在知识库页刷新查看');
+      if (uploaded == null && updated.kbUpload?.uploaded == true) {
+        throw Exception('上传已完成，但知识库列表尚未同步，请稍后刷新知识库页查看');
       }
-      setState(() => _kbUploadedDoc = uploaded);
+      if (uploaded == null) {
+        throw Exception('上传知识库失败，请稍后重试');
+      }
+
+      setState(() {
+        _kbUploadedDoc = uploaded;
+        _kbMarkedStale = false;
+        _kbSyncedMeetingUpdatedAt = updated.updatedAt;
+      });
+      KbDocumentCoordinator.instance.notifyChanged();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            replaceExisting
-                ? '已重新上传至知识库（不含逐句转写），正在后台解析入库'
+            shouldReplace
+                ? '已更新知识库文档（不含逐句转写），正在后台解析入库'
                 : '已上传至知识库，正在后台解析入库',
           ),
         ),
@@ -363,7 +411,7 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
 
   Future<void> _exportSummary(MeetingExportFormat format) async {
     final detail = _detail;
-    if (detail == null || _downloadingAudio) return;
+    if (detail == null || _downloadingAudio || _forwarding) return;
     if (!MeetingMinutesExport.canExport(detail)) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('纪要尚未生成，暂无法导出')),
@@ -378,14 +426,17 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
     });
 
     try {
-      final content = format == MeetingExportFormat.markdown
-          ? MeetingMinutesExport.buildMarkdown(detail)
-          : MeetingMinutesExport.buildPlainText(detail);
       final fileName = MeetingMinutesExport.fileName(detail, format);
-      final savedPath = await file_dl.saveBytesAsFile(
-        Uint8List.fromList(utf8.encode(content)),
-        fileName,
-      );
+      final Uint8List bytes;
+      if (format.isServerPdf) {
+        bytes = await _service.exportPdfBytes(detail.meetingId);
+      } else {
+        final content = format == MeetingExportFormat.markdown
+            ? MeetingMinutesExport.buildMarkdown(detail)
+            : MeetingMinutesExport.buildPlainText(detail);
+        bytes = Uint8List.fromList(utf8.encode(content));
+      }
+      final savedPath = await file_dl.saveBytesAsFile(bytes, fileName);
       if (!mounted) return;
       setState(() => _downloadProgress = 1);
       await _showSaveSuccessDialog(
@@ -401,6 +452,66 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
       if (mounted) {
         setState(() {
           _downloadingAudio = false;
+          _downloadProgress = 0;
+          _downloadLabel = null;
+        });
+      }
+    }
+  }
+
+  Future<void> _forwardMeetingMinutes() async {
+    final detail = _detail;
+    if (detail == null || _forwarding || _downloadingAudio) return;
+    if (!MeetingMinutesExport.canExport(detail)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('纪要尚未生成，暂无法转发')),
+      );
+      return;
+    }
+
+    final conversationId = await showConversationPickerSheet(
+      context: context,
+      service: _chatService,
+      title: '转发至',
+    );
+    if (conversationId == null || conversationId <= 0 || !mounted) return;
+
+    setState(() {
+      _forwarding = true;
+      _downloadProgress = 0;
+      _downloadLabel = '生成 PDF';
+    });
+
+    try {
+      final bytes = await _service.exportPdfBytes(detail.meetingId);
+      if (!mounted) return;
+      setState(() => _downloadLabel = '发送中');
+      final fileName = MeetingMinutesExport.pdfFileName(detail);
+      await _chatService.sendFile(
+        conversationId: conversationId,
+        bytes: bytes,
+        fileName: fileName,
+        mimeType: 'application/pdf',
+        onProgress: (p) {
+          if (!mounted) return;
+          setState(() => _downloadProgress = p.clamp(0.0, 1.0));
+        },
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('会议纪要 PDF 已转发')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(friendlyErrorText(e, fallback: '转发失败，请稍后重试')),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _forwarding = false;
           _downloadProgress = 0;
           _downloadLabel = null;
         });
@@ -452,12 +563,17 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
   Widget? _buildSummarySectionTrailing(NativeMeetingDetail d) {
     if (!MeetingMinutesExport.canExport(d)) return null;
     final uploaded = _kbUploaded;
+    final stale = _isKbUploadStale(d);
     final exportMenu = _buildSummaryExportMenu(d);
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         IconButton(
-          tooltip: uploaded ? '重新上传到知识库' : '上传到知识库',
+          tooltip: stale
+              ? '更新知识库（纪要已变更）'
+              : uploaded
+                  ? '重新上传到知识库'
+                  : '上传到知识库',
           onPressed: _uploadingSummaryToKb ? null : _confirmUploadSummaryToKb,
           icon: _uploadingSummaryToKb
               ? const SizedBox(
@@ -466,11 +582,17 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
               : Icon(
-                  uploaded
-                      ? Icons.cloud_done_outlined
-                      : Icons.cloud_upload_outlined,
+                  stale
+                      ? Icons.cloud_sync_outlined
+                      : uploaded
+                          ? Icons.cloud_done_outlined
+                          : Icons.cloud_upload_outlined,
                   size: 20,
-                  color: uploaded ? DunesColors.readReceipt : null,
+                  color: stale
+                      ? DunesColors.accentDeep
+                      : uploaded
+                          ? DunesColors.readReceipt
+                          : null,
                 ),
         ),
         if (exportMenu != null) exportMenu,
@@ -486,6 +608,10 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
       icon: const Icon(Icons.download_outlined, size: 20),
       onSelected: _exportSummary,
       itemBuilder: (ctx) => const [
+        PopupMenuItem(
+          value: MeetingExportFormat.pdf,
+          child: Text('下载 PDF (.pdf)'),
+        ),
         PopupMenuItem(
           value: MeetingExportFormat.markdown,
           child: Text('下载 Markdown (.md)'),
@@ -522,11 +648,15 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
   Future<void> _regenerate() async {
     final detail = _detail;
     if (detail == null) return;
+    final hadKbUpload = _kbUploaded || detail.kbUploaded;
     try {
       setState(() => _regenerating = true);
       await _service.regenerate(widget.meetingId);
       await _load();
       if (!mounted) return;
+      if (hadKbUpload) {
+        setState(() => _kbMarkedStale = true);
+      }
       final refreshed = _detail;
       final restarted = refreshed != null &&
           refreshed.transcriptSegments.isEmpty &&
@@ -534,7 +664,11 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            restarted ? '已开始重新转写，请稍候查看进度' : '已重新生成纪要',
+            restarted
+                ? '已开始重新转写，请稍候查看进度'
+                : hadKbUpload
+                    ? '已重新生成纪要，请重新上传以更新知识库'
+                    : '已重新生成纪要',
           ),
         ),
       );
@@ -776,6 +910,18 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
         leading: BackButton(onPressed: widget.onBack),
         title: const Text('会议纪要'),
         actions: [
+          if (d != null && MeetingMinutesExport.canExport(d))
+            IconButton(
+              onPressed: _forwarding ? null : _forwardMeetingMinutes,
+              icon: _forwarding
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.forward_outlined),
+              tooltip: '转发',
+            ),
           IconButton(
             onPressed: _delete,
             icon: const Icon(Icons.delete_outline_rounded),
@@ -790,7 +936,7 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
       body: Stack(
         children: [
           _buildBody(d),
-          if (_downloadingAudio) _buildDownloadOverlay(),
+          if (_downloadingAudio || _forwarding) _buildDownloadOverlay(),
         ],
       ),
     );
@@ -822,38 +968,48 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      if (_kbUploaded)
+                      if (_kbUploaded || _isKbUploadStale(d))
                         Padding(
                           padding: const EdgeInsets.only(bottom: 8),
                           child: Row(
                             children: [
                               Icon(
-                                Icons.check_circle_outline,
+                                _isKbUploadStale(d)
+                                    ? Icons.cloud_sync_outlined
+                                    : Icons.check_circle_outline,
                                 size: 14,
-                                color: DunesColors.readReceipt,
+                                color: _isKbUploadStale(d)
+                                    ? DunesColors.accentDeep
+                                    : DunesColors.readReceipt,
                               ),
                               const SizedBox(width: 4),
                               Text(
-                                '已同步至知识库',
+                                _isKbUploadStale(d)
+                                    ? '知识库内容可能已过期，请重新上传'
+                                    : '已同步至知识库',
                                 style: DunesTypography.sans(
                                   fontSize: 12,
-                                  color: DunesColors.readReceipt,
+                                  color: _isKbUploadStale(d)
+                                      ? DunesColors.accentDeep
+                                      : DunesColors.readReceipt,
                                 ),
                               ),
                             ],
                           ),
                         ),
-                      Text(
-                        _summaryText(d),
-                        style: DunesTypography.sans(
-                          fontSize: 14,
-                          color: d.status.toUpperCase() == 'DRAFT' &&
-                                  d.summary.isEmpty
-                              ? DunesColors.accentDeep
-                              : DunesColors.text2,
-                          height: 1.7,
+                      if (d.summary.trim().isNotEmpty)
+                        MeetingMinutesMarkdown(markdown: d.summary)
+                      else
+                        Text(
+                          _summaryText(d),
+                          style: DunesTypography.sans(
+                            fontSize: 14,
+                            color: d.status.toUpperCase() == 'DRAFT'
+                                ? DunesColors.accentDeep
+                                : DunesColors.text2,
+                            height: 1.7,
+                          ),
                         ),
-                      ),
                     ],
                   ),
                 ),

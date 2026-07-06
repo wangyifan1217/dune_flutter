@@ -324,9 +324,20 @@ class NativeKbService {
     required int meetingId,
     required String kbFileName,
     required String kbTitle,
+    int? kbDocumentId,
   }) async {
     if (meetingId <= 0) return null;
     final summary = await fetchSummary();
+    if (kbDocumentId != null && kbDocumentId > 0) {
+      final idStr = '$kbDocumentId';
+      for (final doc in summary.documents) {
+        if (doc.dunesDocumentId == idStr ||
+            doc.localDocId == idStr ||
+            doc.id == idStr) {
+          return doc;
+        }
+      }
+    }
     return findMeetingMinutesDocumentInSummary(
       summary,
       meetingId: meetingId,
@@ -389,16 +400,17 @@ class NativeKbService {
     if (expectedTitle.isNotEmpty && title == expectedTitle) return true;
     if (expectedTitle.isNotEmpty && fileName.contains(expectedTitle)) return true;
 
-    // 兼容旧版 meeting-minutes-{id}.md
-    final legacy = 'meeting-minutes-$meetingId'.toLowerCase();
-    if (fileName == legacy ||
-        fileName == '$legacy.md' ||
-        fileName.contains(legacy)) {
+    // 兼容 minutes-go upload-to-kb：meeting-minutes-{id}.md
+    final backendFile = 'meeting-minutes-$meetingId'.toLowerCase();
+    if (fileName == backendFile ||
+        fileName == '$backendFile.md' ||
+        fileName.contains(backendFile)) {
       return true;
     }
-    if (title.contains(legacy)) return true;
+    if (title.contains(backendFile)) return true;
     final objectKey = doc.fileObjectKey.trim().toLowerCase();
-    return objectKey.contains(legacy);
+    if (objectKey.contains(backendFile)) return true;
+    return objectKey.contains(backendFile);
   }
 
   Future<void> deleteDocument(String documentId, {String? folderId}) async {
@@ -553,7 +565,7 @@ class NativeKbService {
 
   /// 使用后端签名的 downloadUrl 直读正文（签名约 1 小时有效）。
   Future<String> fetchTextFromSignedUrl(String downloadUrl) async {
-    final url = downloadUrl.trim();
+    final url = _withCacheBust(downloadUrl.trim());
     if (!isDirectHttpUrl(url)) {
       throw Exception('下载链接无效');
     }
@@ -599,8 +611,12 @@ class NativeKbService {
     int? lastStatus;
     for (final key in candidates) {
       final resp = await _client.get(
-        _dunesUri(
-          '/storage/download?bucket=$bucket&objectKey=${Uri.encodeComponent(key)}&proxy=1',
+        Uri.parse(
+          _withCacheBust(
+            _dunesUri(
+              '/storage/download?bucket=$bucket&objectKey=${Uri.encodeComponent(key)}&proxy=1',
+            ).toString(),
+          ),
         ),
         headers: _dunesHeaders,
       );
@@ -674,12 +690,20 @@ class NativeKbService {
       out.add(v);
     }
 
+    final meetingMatch = RegExp(
+      r'meeting-minutes-(\d+)',
+      caseSensitive: false,
+    ).firstMatch('$title $fileName ${doc.fileObjectKey}');
+    final meetingId = meetingMatch != null
+        ? int.tryParse(meetingMatch.group(1) ?? '')
+        : null;
+
     try {
       final meetings =
           await NativeMeetingService(session: session).fetchList(page: 0, size: 100);
       for (final meeting in meetings) {
         if (meeting.meetingId <= 0) continue;
-        // minutes-go 实际上传路径固定为 {userId}/meeting-minutes-{id}.md
+        if (meetingId != null && meeting.meetingId != meetingId) continue;
         add('${session.userId}/meeting-minutes-${meeting.meetingId}.md');
         final kbTitle = MeetingMinutesExport.kbUploadTitleFromSummary(meeting);
         final kbFile = MeetingMinutesExport.kbUploadFileNameFromSummary(meeting);
@@ -690,7 +714,14 @@ class NativeKbService {
     return out;
   }
 
-  Future<String?> _tryFetchKbMarkdownFromStorage(NativeKbDocument doc) async {
+  /// 优先读文档记录关联的对象；仅在记录缺失时扫描 MinIO 遗留路径。
+  Future<String?> _tryFetchKbMarkdownLegacyFallback(NativeKbDocument doc) async {
+    final ragId = doc.id.trim();
+    // RAGFlow 直传文档没有 MinIO 镜像时，遗留路径会命中旧版 meeting-minutes 文件。
+    if (ragId.isNotEmpty && int.tryParse(ragId) == null) {
+      return null;
+    }
+
     final keys = <String>[..._kbStorageKeyCandidates(doc)];
     keys.addAll(await _meetingMinutesLegacyStorageKeys(doc));
     for (final key in keys) {
@@ -700,6 +731,61 @@ class NativeKbService {
       } catch (_) {}
     }
     return null;
+  }
+
+  Future<String?> _fetchMarkdownFromDocumentRecord({
+    required NativeKbDocument doc,
+    required String docId,
+  }) async {
+    try {
+      final md = await fetchKbDocumentText(
+        downloadUrl: doc.fileUrl,
+        objectKey: doc.fileObjectKey,
+      );
+      if (md.trim().isNotEmpty) return md;
+    } catch (_) {}
+
+    try {
+      final dunesId = await _resolveDunesDocumentIdForPreview(
+        doc: doc,
+        docId: docId,
+      );
+      if (dunesId.isEmpty) return null;
+      final fresh = await fetchDunesDocument(dunesId);
+      final download = await fetchDocumentDownload(dunesId);
+      final md = await fetchKbDocumentText(
+        downloadUrl: download.downloadUrl,
+        objectKey: fresh.fileObjectKey,
+      );
+      if (md.trim().isNotEmpty) {
+        await recordDocumentView(dunesId);
+        return md;
+      }
+    } catch (_) {}
+
+    final ragId = doc.id.trim();
+    if (ragId.isNotEmpty && int.tryParse(ragId) == null) {
+      try {
+        final mirrored = await fetchDunesDocumentByRagflowId(ragId);
+        final md = await fetchKbDocumentText(
+          downloadUrl: mirrored.fileUrl,
+          objectKey: mirrored.fileObjectKey,
+        );
+        if (md.trim().isNotEmpty) return md;
+      } catch (_) {}
+    }
+    return null;
+  }
+
+  static String _withCacheBust(String url) {
+    final uri = Uri.tryParse(url.trim());
+    if (uri == null) return url;
+    return uri.replace(
+      queryParameters: {
+        ...uri.queryParameters,
+        '_': '${DateTime.now().millisecondsSinceEpoch}',
+      },
+    ).toString();
   }
 
   Future<String> fetchKbDocumentText({
@@ -796,7 +882,8 @@ class NativeKbService {
     required String docId,
     NativeKbDocument? initialDoc,
   }) async {
-    final hint = initialDoc ?? await findDocumentById(docId);
+    final refreshed = await findDocumentById(docId);
+    final hint = refreshed ?? initialDoc;
     if (hint == null) {
       throw Exception('文档不存在或暂不可用');
     }
@@ -810,46 +897,8 @@ class NativeKbService {
     }
 
     if (isMarkdownDocument(hint, fileName: fileName)) {
-      // dunes 记录被删时，MinIO 里往往仍有 meeting-minutes-{id}.md，优先走存储回退。
-      var md = await _tryFetchKbMarkdownFromStorage(hint);
-      if (md == null) {
-        try {
-          md = await fetchKbDocumentText(
-            downloadUrl: hint.fileUrl,
-            objectKey: hint.fileObjectKey,
-          );
-        } catch (_) {}
-      }
-
-      if (md == null) {
-        try {
-          final dunesId = await _resolveDunesDocumentIdForPreview(
-            doc: hint,
-            docId: docId,
-          );
-          if (dunesId.isNotEmpty) {
-            final doc = await fetchDunesDocument(dunesId);
-            final download = await fetchDocumentDownload(dunesId);
-            final dunesFileName = download.fileName.isNotEmpty
-                ? download.fileName
-                : (doc.fileName.isNotEmpty ? doc.fileName : doc.title);
-            try {
-              md = await fetchKbDocumentText(
-                downloadUrl: download.downloadUrl,
-                objectKey: doc.fileObjectKey,
-              );
-            } catch (_) {}
-            md ??= await _tryFetchKbMarkdownFromStorage(doc);
-            await recordDocumentView(dunesId);
-            return (
-              doc: doc,
-              fileName: dunesFileName,
-              downloadUrl: download.downloadUrl,
-              markdown: md,
-            );
-          }
-        } catch (_) {}
-      }
+      var md = await _fetchMarkdownFromDocumentRecord(doc: hint, docId: docId);
+      md ??= await _tryFetchKbMarkdownLegacyFallback(hint);
 
       if (md != null && md.trim().isNotEmpty) {
         return (

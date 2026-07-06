@@ -42,14 +42,19 @@ class _NativeB3PageState extends State<NativeB3Page> {
     _category = widget.initialCategory.trim().toLowerCase() == 'adm'
         ? 'adm'
         : 'biz';
+    _bizTemplates = XflowService.cachedTemplatesByCategory('biz');
+    _admTemplates = XflowService.cachedTemplatesByCategory('adm');
+    _loading = _bizTemplates.isEmpty && _admTemplates.isEmpty;
     _load();
   }
 
   Future<void> _load() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
+    if (_bizTemplates.isEmpty && _admTemplates.isEmpty) {
+      setState(() {
+        _loading = true;
+        _error = null;
+      });
+    }
     try {
       final results = await Future.wait([
         _service.fetchTemplatesByCategory('biz'),

@@ -1107,11 +1107,13 @@ class ChatFileAttach extends StatelessWidget {
     required this.fileName,
     required this.mine,
     required this.onTap,
+    this.isPdf = false,
   });
 
   final String fileName;
   final bool mine;
   final VoidCallback onTap;
+  final bool isPdf;
 
   @override
   Widget build(BuildContext context) {
@@ -1134,10 +1136,12 @@ class ChatFileAttach extends StatelessWidget {
                 color: DunesColors.bgSoft,
                 borderRadius: BorderRadius.circular(9),
               ),
-              child: const Icon(
-                Icons.insert_drive_file_outlined,
+              child: Icon(
+                isPdf
+                    ? Icons.picture_as_pdf_outlined
+                    : Icons.insert_drive_file_outlined,
                 size: 16,
-                color: DunesColors.text2,
+                color: isPdf ? DunesColors.coral : DunesColors.text2,
               ),
             ),
             const SizedBox(width: 11),

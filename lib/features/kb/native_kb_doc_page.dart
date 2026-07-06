@@ -106,6 +106,11 @@ class _NativeKbDocPageState extends State<NativeKbDocPage> {
       child: Row(
         children: [
           IconButton(
+            onPressed: _loading ? null : _load,
+            icon: const Icon(Icons.refresh_rounded),
+            tooltip: '刷新',
+          ),
+          IconButton(
             onPressed: () => widget.navigation.popTo('K1'),
             icon: const Icon(Icons.chevron_left),
           ),

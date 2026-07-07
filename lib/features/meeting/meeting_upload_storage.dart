@@ -20,6 +20,7 @@ class MeetingUploadJob {
     required this.generate,
     required this.createdAtMs,
     this.phase = MeetingUploadPhase.pending,
+    this.uploadProgressPercent = 0,
     this.retryCount = 0,
     this.error,
   });
@@ -32,6 +33,7 @@ class MeetingUploadJob {
   final bool generate;
   final int createdAtMs;
   final MeetingUploadPhase phase;
+  final int uploadProgressPercent;
   final int retryCount;
   final String? error;
 
@@ -42,19 +44,24 @@ class MeetingUploadJob {
 
   MeetingUploadJob copyWith({
     MeetingUploadPhase? phase,
+    int? uploadProgressPercent,
     int? retryCount,
     String? error,
+    String? localFilePath,
     bool clearError = false,
   }) {
     return MeetingUploadJob(
       meetingId: meetingId,
       userId: userId,
-      localFilePath: localFilePath,
+      localFilePath: localFilePath ?? this.localFilePath,
       title: title,
       meetingDate: meetingDate,
       generate: generate,
       createdAtMs: createdAtMs,
       phase: phase ?? this.phase,
+      uploadProgressPercent: _clampPercent(
+        uploadProgressPercent ?? this.uploadProgressPercent,
+      ),
       retryCount: retryCount ?? this.retryCount,
       error: clearError ? null : (error ?? this.error),
     );
@@ -69,6 +76,7 @@ class MeetingUploadJob {
         'generate': generate,
         'createdAtMs': createdAtMs,
         'phase': phase.name,
+        'uploadProgressPercent': uploadProgressPercent,
         'retryCount': retryCount,
         if (error != null && error!.isNotEmpty) 'error': error,
       };
@@ -88,11 +96,19 @@ class MeetingUploadJob {
         (e) => e.name == phaseRaw,
         orElse: () => MeetingUploadPhase.pending,
       ),
+      uploadProgressPercent:
+          _clampPercent((json['uploadProgressPercent'] as num?)?.toInt() ?? 0),
       retryCount: (json['retryCount'] as num?)?.toInt() ?? 0,
       error: (json['error'] ?? '').toString().trim().isEmpty
           ? null
           : (json['error'] ?? '').toString(),
     );
+  }
+
+  static int _clampPercent(int value) {
+    if (value < 0) return 0;
+    if (value > 100) return 100;
+    return value;
   }
 }
 

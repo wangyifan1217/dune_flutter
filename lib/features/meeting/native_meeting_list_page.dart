@@ -46,6 +46,7 @@ class _NativeMeetingListPageState extends State<NativeMeetingListPage> {
     super.initState();
     MeetingUploadCoordinator.instance.attach(widget.session);
     MeetingUploadCoordinator.instance.addListener(_onUploadUpdate);
+    unawaited(MeetingUploadCoordinator.instance.resumePending());
     _scrollController.addListener(_onScroll);
     _load(reset: true);
   }
@@ -160,7 +161,11 @@ class _NativeMeetingListPageState extends State<NativeMeetingListPage> {
 
   String _uploadStatusLabel(MeetingUploadJob job) {
     return switch (job.phase) {
-      MeetingUploadPhase.pending || MeetingUploadPhase.uploading => '录音上传中',
+      MeetingUploadPhase.pending =>
+        job.error != null && job.error!.isNotEmpty
+            ? '上传重试中'
+            : '排队上传中',
+      MeetingUploadPhase.uploading => '录音上传中 ${job.uploadProgressPercent}%',
       MeetingUploadPhase.attaching => '正在保存',
       MeetingUploadPhase.failed => '上传失败',
       MeetingUploadPhase.done => '草稿',
@@ -420,6 +425,13 @@ class _NativeMeetingListPageState extends State<NativeMeetingListPage> {
         ? _uploadStatusColor(uploadJob)
         : _statusColor(row.status);
     final enabled = row.meetingId > 0;
+    final showUploadProgressBar = uploadJob != null &&
+        uploadJob.phase == MeetingUploadPhase.uploading &&
+        uploadJob.uploadProgressPercent < 100;
+    final deletingDisabled = uploadJob != null &&
+        (uploadJob.phase == MeetingUploadPhase.pending ||
+            uploadJob.phase == MeetingUploadPhase.uploading ||
+            uploadJob.phase == MeetingUploadPhase.attaching);
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
@@ -472,6 +484,20 @@ class _NativeMeetingListPageState extends State<NativeMeetingListPage> {
                           color: DunesColors.text3,
                         ),
                       ),
+                      if (showUploadProgressBar) ...[
+                        const SizedBox(height: 8),
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(999),
+                          child: LinearProgressIndicator(
+                            value: uploadJob.uploadProgressPercent / 100,
+                            minHeight: 4,
+                            backgroundColor: DunesColors.borderSoft,
+                            valueColor: const AlwaysStoppedAnimation<Color>(
+                              DunesColors.accent,
+                            ),
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -497,7 +523,7 @@ class _NativeMeetingListPageState extends State<NativeMeetingListPage> {
                         ),
                       ),
                     ),
-                    if (row.asrProgress > 0) ...[
+                    if (uploadJob == null && row.asrProgress > 0) ...[
                       const SizedBox(height: 4),
                       Text(
                         '${row.asrProgress}%',
@@ -511,10 +537,12 @@ class _NativeMeetingListPageState extends State<NativeMeetingListPage> {
                 ),
                 const SizedBox(width: 4),
                 IconButton(
-                  onPressed: enabled ? () => _deleteMeeting(row) : null,
+                  onPressed: enabled && !deletingDisabled
+                      ? () => _deleteMeeting(row)
+                      : null,
                   icon: const Icon(Icons.delete_outline_rounded, size: 20),
-                  color: DunesColors.text3,
-                  tooltip: '删除',
+                  color: deletingDisabled ? DunesColors.border : DunesColors.text3,
+                  tooltip: deletingDisabled ? '上传处理中，暂不可删除' : '删除',
                 ),
                 Icon(
                   Icons.chevron_right_rounded,

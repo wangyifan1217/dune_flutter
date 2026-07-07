@@ -31,7 +31,7 @@ Future<http.Response> dunesHttpGet(
     dunesApiUri(session, path),
     headers: dunesAuthHeaders(session, headers),
   );
-  AuthSessionGuard.instance.inspectStatusCode(resp.statusCode);
+  AuthSessionGuard.instance.inspectResponse(resp);
   return resp;
 }
 
@@ -47,7 +47,7 @@ Future<http.Response> dunesHttpPost(
     headers: dunesAuthHeaders(session, headers),
     body: body,
   );
-  AuthSessionGuard.instance.inspectStatusCode(resp.statusCode);
+  AuthSessionGuard.instance.inspectResponse(resp);
   return resp;
 }
 
@@ -61,6 +61,6 @@ Future<http.Response> dunesHttpDelete(
     dunesApiUri(session, path),
     headers: dunesAuthHeaders(session, headers),
   );
-  AuthSessionGuard.instance.inspectStatusCode(resp.statusCode);
+  AuthSessionGuard.instance.inspectResponse(resp);
   return resp;
 }

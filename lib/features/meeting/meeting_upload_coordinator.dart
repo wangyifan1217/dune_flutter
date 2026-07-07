@@ -1,10 +1,12 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../auth/auth_session.dart';
+import 'meeting_audio_converter.dart';
 import 'meeting_upload_storage.dart';
 import 'native_meeting_service.dart';
 
@@ -14,33 +16,61 @@ class MeetingUploadCoordinator extends ChangeNotifier {
 
   static final MeetingUploadCoordinator instance = MeetingUploadCoordinator._();
 
-  static const int _maxRetries = 5;
+  static const int _maxRetries = 8;
+  static const Duration _pendingWatchdogDelay = Duration(seconds: 15);
 
   AuthSession? _session;
   NativeMeetingService? _service;
   List<MeetingUploadJob> _jobs = const [];
-  bool _processing = false;
+  bool _workerRunning = false;
+  bool _workerKickPending = false;
   Timer? _retryTimer;
 
   List<MeetingUploadJob> get jobs => List.unmodifiable(_jobs);
 
   void attach(AuthSession session) {
-    if (_session?.userId == session.userId) {
-      _session = session;
-      _service ??= NativeMeetingService(session: session);
+    final resolved = _resolveSessionUserId(session);
+    final previousUserId = _session?.userId ?? 0;
+    _session = resolved;
+    _service = NativeMeetingService(session: resolved);
+    if (previousUserId != resolved.userId) {
+      unawaited(_reloadJobs().then((_) => _drainUploadWorker()));
       return;
     }
-    _session = session;
-    _service = NativeMeetingService(session: session);
-    unawaited(_reloadJobs());
+    unawaited(_ensureWorkerStarted());
+  }
+
+  Future<void> _ensureWorkerStarted() async {
+    if (_jobs.isEmpty) {
+      await _reloadJobs();
+    }
+    await _drainUploadWorker();
+  }
+
+  AuthSession _resolveSessionUserId(AuthSession session) {
+    if (session.userId > 0) return session;
+    final reparsed = AuthSession.fromJwt(
+      phone: session.phone,
+      userId: 0,
+      token: session.token,
+      apiBase: session.apiBase,
+    );
+    if (reparsed.userId <= 0) return session;
+    return session.copyWith(userId: reparsed.userId);
+  }
+
+  int _effectiveUserId(int userId) {
+    if (userId > 0) return userId;
+    final session = _session;
+    if (session == null) return userId;
+    return _resolveSessionUserId(session).userId;
   }
 
   MeetingUploadJob? jobForMeeting(int meetingId) {
     if (meetingId <= 0) return null;
-    for (final job in _jobs) {
-      if (job.meetingId == meetingId) return job;
-    }
-    return null;
+    final idx = _indexOfJob(meetingId);
+    if (idx < 0) return null;
+    return _jobs[idx];
   }
 
   bool isUploadingMeeting(int meetingId) {
@@ -52,8 +82,7 @@ class MeetingUploadCoordinator extends ChangeNotifier {
 
   Future<void> resumePending() async {
     await _reloadJobs();
-    _scheduleRetryTimer();
-    unawaited(_processQueue());
+    await _drainUploadWorker();
   }
 
   Future<int> enqueue({
@@ -65,7 +94,7 @@ class MeetingUploadCoordinator extends ChangeNotifier {
   }) async {
     attach(session);
     final svc = _service!;
-    final userId = session.userId;
+    final userId = _effectiveUserId(session.userId);
     final trimmedTitle = title.trim().isEmpty ? '未命名会议' : title.trim();
     final src = sourceFilePath.trim();
     if (src.isEmpty) {
@@ -101,65 +130,144 @@ class MeetingUploadCoordinator extends ChangeNotifier {
     _jobs = <MeetingUploadJob>[..._jobs, job];
     await MeetingUploadStorage.save(userId, _jobs);
     notifyListeners();
-    unawaited(_processQueue());
+    _schedulePendingWatchdog(meetingId);
+    unawaited(_runMeetingJobNow(meetingId));
     return meetingId;
   }
 
+  Future<void> _runMeetingJobNow(int meetingId) async {
+    while (_workerRunning) {
+      _workerKickPending = true;
+      await Future<void>.delayed(const Duration(milliseconds: 30));
+    }
+    _workerRunning = true;
+    try {
+      final idx = _indexOfJob(meetingId);
+      if (idx < 0) return;
+      final job = _jobs[idx];
+      if (job.phase != MeetingUploadPhase.pending || !job.isActive) return;
+      await _runJob(idx);
+    } finally {
+      _workerRunning = false;
+      if (_workerKickPending) {
+        _workerKickPending = false;
+        unawaited(_drainUploadWorker());
+      }
+    }
+    unawaited(_drainUploadWorker());
+  }
+
   Future<void> retry(int meetingId) async {
-    final idx = _jobs.indexWhere((job) => job.meetingId == meetingId);
+    final idx = _indexOfJob(meetingId);
     if (idx < 0) return;
     final job = _jobs[idx];
     _jobs = List<MeetingUploadJob>.from(_jobs)
       ..[idx] = job.copyWith(
         phase: MeetingUploadPhase.pending,
+        uploadProgressPercent: 0,
         retryCount: 0,
         clearError: true,
       );
     await _persistJobs();
     notifyListeners();
-    unawaited(_processQueue());
+    await _drainUploadWorker();
   }
 
   Future<void> _reloadJobs() async {
-    final userId = _session?.userId ?? 0;
+    final userId = _effectiveUserId(_session?.userId ?? 0);
     if (userId <= 0) {
       _jobs = const [];
       return;
     }
     final loaded = await MeetingUploadStorage.load(userId);
-    _jobs = loaded
-        .where((job) => job.phase != MeetingUploadPhase.done)
+    final loadedIds = loaded.map((job) => job.meetingId).toSet();
+    final memoryExtra = _jobs
+        .where(
+          (job) =>
+              _jobBelongsToUser(job, userId) &&
+              job.phase != MeetingUploadPhase.done &&
+              !loadedIds.contains(job.meetingId),
+        )
         .toList(growable: false);
-    for (var i = 0; i < _jobs.length; i++) {
-      final job = _jobs[i];
-      if (job.phase == MeetingUploadPhase.uploading ||
-          job.phase == MeetingUploadPhase.attaching) {
-        _jobs = List<MeetingUploadJob>.from(_jobs)
-          ..[i] = job.copyWith(phase: MeetingUploadPhase.pending);
+    _jobs = <MeetingUploadJob>[
+      ...loaded
+          .where((job) => job.phase != MeetingUploadPhase.done)
+          .map((job) => _normalizeJobUserId(job, userId)),
+      ...memoryExtra.map((job) => _normalizeJobUserId(job, userId)),
+    ];
+    if (!_workerRunning) {
+      for (var i = 0; i < _jobs.length; i++) {
+        final job = _jobs[i];
+        if (job.phase == MeetingUploadPhase.uploading ||
+            job.phase == MeetingUploadPhase.attaching) {
+          _jobs = List<MeetingUploadJob>.from(_jobs)
+            ..[i] = job.copyWith(phase: MeetingUploadPhase.pending);
+        }
       }
     }
     await _persistJobs();
     notifyListeners();
   }
 
-  Future<void> _processQueue() async {
-    if (_processing || _service == null || _session == null) return;
-    _processing = true;
+  Future<void> _drainUploadWorker() async {
+    if (_service == null || _session == null) return;
+    if (_workerRunning) {
+      _workerKickPending = true;
+      return;
+    }
+    _workerRunning = true;
     try {
-      while (true) {
-        final nextIdx = _jobs.indexWhere(
-          (job) =>
-              job.isActive &&
-              job.phase == MeetingUploadPhase.pending &&
-              job.userId == _session!.userId,
-        );
-        if (nextIdx < 0) break;
-        await _runJob(nextIdx);
-      }
+      do {
+        _workerKickPending = false;
+        while (true) {
+          final nextIdx = _indexOfNextPendingJob();
+          if (nextIdx < 0) break;
+          await _runJob(nextIdx);
+        }
+      } while (_workerKickPending);
     } finally {
-      _processing = false;
+      _workerRunning = false;
     }
     _scheduleRetryTimer();
+  }
+
+  int _indexOfNextPendingJob() {
+    final userId = _effectiveUserId(_session?.userId ?? 0);
+    return _jobs.indexWhere(
+      (job) =>
+          job.isActive &&
+          job.phase == MeetingUploadPhase.pending &&
+          _jobBelongsToUser(job, userId),
+    );
+  }
+
+  int _indexOfJob(int meetingId) {
+    return _jobs.indexWhere((job) => job.meetingId == meetingId);
+  }
+
+  bool _jobBelongsToUser(MeetingUploadJob job, int userId) {
+    if (userId <= 0) return job.userId <= 0;
+    return job.userId == userId || job.userId <= 0;
+  }
+
+  MeetingUploadJob _normalizeJobUserId(MeetingUploadJob job, int userId) {
+    if (userId <= 0 || job.userId == userId) return job;
+    if (job.userId <= 0) {
+      return MeetingUploadJob(
+        meetingId: job.meetingId,
+        userId: userId,
+        localFilePath: job.localFilePath,
+        title: job.title,
+        meetingDate: job.meetingDate,
+        generate: job.generate,
+        createdAtMs: job.createdAtMs,
+        phase: job.phase,
+        uploadProgressPercent: job.uploadProgressPercent,
+        retryCount: job.retryCount,
+        error: job.error,
+      );
+    }
+    return job;
   }
 
   Future<void> _runJob(int index) async {
@@ -177,27 +285,44 @@ class MeetingUploadCoordinator extends ChangeNotifier {
       return;
     }
 
+    debugPrint(
+      'MeetingUpload start meetingId=${job.meetingId} file=${job.localFilePath}',
+    );
+
     try {
+      final uploadPath = await _prepareJobUploadPath(index, job);
+      final latestIdx = _indexOfJob(job.meetingId);
+      if (latestIdx < 0) return;
+      job = _jobs[latestIdx];
+
       job = job.copyWith(phase: MeetingUploadPhase.uploading, clearError: true);
-      _jobs = List<MeetingUploadJob>.from(_jobs)..[index] = job;
+      _jobs = List<MeetingUploadJob>.from(_jobs)..[latestIdx] = job;
       await _persistJobs();
       notifyListeners();
 
-      final fileName = svc.filenameFromPath(job.localFilePath);
+      final fileName = svc.filenameFromPath(uploadPath);
       final upload = await svc.uploadAudioFile(
-        filePath: job.localFilePath,
+        filePath: uploadPath,
         fileName: fileName,
+        onProgress: (progress) {
+          _updateProgress(job.meetingId, progress);
+        },
       );
       final audioObjectKey = (upload['objectKey'] ?? '').toString().trim();
       if (audioObjectKey.isEmpty) {
         throw Exception('录音上传失败，未获得文件标识');
       }
       final audioUrl = svc.readUploadUrlForAttach(upload, audioObjectKey);
-      final contentType = (upload['contentType'] ?? 'audio/wav').toString();
-      final durationSeconds = svc.guessDurationSeconds(job.localFilePath);
+      final contentType = svc.contentTypeForPath(uploadPath);
+      final durationSeconds = svc.guessDurationSeconds(uploadPath);
 
-      job = job.copyWith(phase: MeetingUploadPhase.attaching);
-      _jobs = List<MeetingUploadJob>.from(_jobs)..[index] = job;
+      final attachIdx = _indexOfJob(job.meetingId);
+      if (attachIdx < 0) return;
+      job = _jobs[attachIdx].copyWith(
+        phase: MeetingUploadPhase.attaching,
+        uploadProgressPercent: 100,
+      );
+      _jobs = List<MeetingUploadJob>.from(_jobs)..[attachIdx] = job;
       await _persistJobs();
       notifyListeners();
 
@@ -220,13 +345,18 @@ class MeetingUploadCoordinator extends ChangeNotifier {
       }
 
       await _deleteLocalFile(job.localFilePath);
-      _jobs = List<MeetingUploadJob>.from(_jobs)..removeAt(index);
+      final doneIdx = _indexOfJob(job.meetingId);
+      if (doneIdx < 0) return;
+      _jobs = List<MeetingUploadJob>.from(_jobs)..removeAt(doneIdx);
       await _persistJobs();
       notifyListeners();
     } catch (e) {
+      final latestIdx = _indexOfJob(job.meetingId);
+      if (latestIdx < 0) return;
+      final latest = _jobs[latestIdx];
       final message = _stripError(e);
-      final permanent = job.retryCount + 1 >= _maxRetries;
-      await _markFailed(index, job, message, permanent: permanent);
+      final permanent = latest.retryCount + 1 >= _maxRetries;
+      await _markFailed(latestIdx, latest, message, permanent: permanent);
     }
   }
 
@@ -239,12 +369,53 @@ class MeetingUploadCoordinator extends ChangeNotifier {
     if (index < 0 || index >= _jobs.length) return;
     final next = job.copyWith(
       phase: permanent ? MeetingUploadPhase.failed : MeetingUploadPhase.pending,
+      uploadProgressPercent:
+          permanent ? job.uploadProgressPercent : job.uploadProgressPercent,
       retryCount: job.retryCount + 1,
       error: message,
     );
     _jobs = List<MeetingUploadJob>.from(_jobs)..[index] = next;
     await _persistJobs();
     notifyListeners();
+    debugPrint(
+      'MeetingUpload failed meetingId=${job.meetingId} retry=${next.retryCount} permanent=$permanent error=$message',
+    );
+  }
+
+  Future<String> _prepareJobUploadPath(int index, MeetingUploadJob job) async {
+    final src = job.localFilePath.trim();
+    if (src.isEmpty) return src;
+
+    final normalized = src.replaceAll('\\', '/');
+    final dot = normalized.lastIndexOf('.');
+    final ext = dot >= 0 ? normalized.substring(dot).toLowerCase() : '';
+    final destPath = ext == '.wav'
+        ? '${normalized.substring(0, dot)}.m4a'.replaceAll('/', Platform.pathSeparator)
+        : '${normalized}_compressed.m4a'.replaceAll('/', Platform.pathSeparator);
+
+    final prepared = await MeetingAudioConverter.prepareForUpload(
+      src,
+      outputPath: destPath,
+    );
+    if (prepared == src) return src;
+
+    await _deleteLocalFile(src);
+    if (prepared != destPath) {
+      await _moveFile(prepared, destPath);
+    }
+
+    final latestIdx = _indexOfJob(job.meetingId);
+    if (latestIdx >= 0) {
+      final updated = _jobs[latestIdx].copyWith(localFilePath: destPath);
+      _jobs = List<MeetingUploadJob>.from(_jobs)..[latestIdx] = updated;
+      await _persistJobs();
+      notifyListeners();
+    }
+    debugPrint(
+      'MeetingUpload compressed meetingId=${job.meetingId} '
+      '$src -> $destPath',
+    );
+    return destPath;
   }
 
   Future<String> _persistLocalCopy({
@@ -259,8 +430,26 @@ class MeetingUploadCoordinator extends ChangeNotifier {
     final ext = dot >= 0 ? normalized.substring(dot) : '.wav';
     final destPath =
         '${dir.path}/meeting_${meetingId}_${DateTime.now().millisecondsSinceEpoch}$ext';
-    await File(sourcePath).copy(destPath);
+    await _moveFile(sourcePath, destPath);
     return destPath;
+  }
+
+  Future<void> _moveFile(String sourcePath, String destPath) async {
+    if (sourcePath == destPath) return;
+    final src = File(sourcePath);
+    if (!await src.exists()) {
+      throw Exception('录音文件不存在');
+    }
+    final dest = File(destPath);
+    if (await dest.exists()) {
+      await dest.delete();
+    }
+    try {
+      await src.rename(destPath);
+    } catch (_) {
+      await src.copy(destPath);
+      await src.delete();
+    }
   }
 
   Future<void> _deleteLocalFile(String path) async {
@@ -273,26 +462,69 @@ class MeetingUploadCoordinator extends ChangeNotifier {
   }
 
   Future<void> _persistJobs() async {
-    final userId = _session?.userId ?? 0;
+    final userId = _effectiveUserId(_session?.userId ?? 0);
     if (userId <= 0) return;
     await MeetingUploadStorage.save(userId, _jobs);
   }
 
+  void _schedulePendingWatchdog(int meetingId) {
+    Future<void>.delayed(_pendingWatchdogDelay, () async {
+      final idx = _indexOfJob(meetingId);
+      if (idx < 0) return;
+      final job = _jobs[idx];
+      if (job.phase != MeetingUploadPhase.pending || !job.isActive) return;
+      debugPrint(
+        'MeetingUpload watchdog re-kick meetingId=$meetingId retry=${job.retryCount}',
+      );
+      await _drainUploadWorker();
+    });
+  }
+
   void _scheduleRetryTimer() {
     _retryTimer?.cancel();
+    final userId = _effectiveUserId(_session?.userId ?? 0);
     final hasPending = _jobs.any(
       (job) =>
           job.phase == MeetingUploadPhase.pending &&
-          job.retryCount > 0 &&
-          job.userId == (_session?.userId ?? 0),
+          _jobBelongsToUser(job, userId),
     );
     if (!hasPending) return;
-    _retryTimer = Timer(const Duration(seconds: 20), () {
-      unawaited(_processQueue());
-    });
+    final maxRetryCount = _jobs
+        .where(
+          (job) =>
+              job.phase == MeetingUploadPhase.pending &&
+              _jobBelongsToUser(job, userId),
+        )
+        .fold<int>(0, (prev, job) => math.max(prev, job.retryCount));
+    final delaySeconds = maxRetryCount > 0 ? 20 + maxRetryCount * 5 : 30;
+    final jitterMs = math.Random().nextInt(12000);
+    _retryTimer = Timer(
+      Duration(seconds: delaySeconds, milliseconds: jitterMs),
+      () {
+        unawaited(_drainUploadWorker());
+      },
+    );
   }
 
   String _stripError(Object e) {
     return e.toString().replaceFirst(RegExp(r'^Exception:\s*'), '').trim();
+  }
+
+  void _updateProgress(int meetingId, double progress) {
+    final idx = _indexOfJob(meetingId);
+    if (idx < 0) return;
+    final current = _jobs[idx];
+    if (current.phase != MeetingUploadPhase.uploading) return;
+    var nextPercent = (progress * 100).round().clamp(0, 100);
+    if (progress > 0 && nextPercent == 0) {
+      nextPercent = 1;
+    }
+    if (nextPercent == current.uploadProgressPercent) return;
+    _jobs = List<MeetingUploadJob>.from(_jobs)
+      ..[idx] = current.copyWith(uploadProgressPercent: nextPercent);
+    notifyListeners();
+    if (nextPercent % 5 == 0 || nextPercent >= 95) {
+      unawaited(_persistJobs());
+    }
   }
 }

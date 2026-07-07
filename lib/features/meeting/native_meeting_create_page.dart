@@ -52,7 +52,7 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
   String _pendingDraftTitle = '';
   bool _handlingBack = false;
   String? _error;
-  _CreateMode _mode = _CreateMode.upload;
+  _CreateMode _mode = _CreateMode.live;
   static const double _livePreviewMaxHeight = 280;
   final ScrollController _livePreviewScrollController = ScrollController();
   late final AnimationController _pulseController = AnimationController(
@@ -90,6 +90,7 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
     _live.paused.addListener(_onLiveChanged);
     _live.lines.addListener(_onLiveChanged);
     _live.partial.addListener(_onLiveChanged);
+    _live.elapsed.addListener(_onLiveChanged);
     _recordingCtrl.state.addListener(_onLiveChanged);
   }
 
@@ -111,6 +112,7 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
     _live.paused.removeListener(_onLiveChanged);
     _live.lines.removeListener(_onLiveChanged);
     _live.partial.removeListener(_onLiveChanged);
+    _live.elapsed.removeListener(_onLiveChanged);
     _recordingCtrl.state.removeListener(_onLiveChanged);
     _livePreviewScrollController.dispose();
     _titleCtrl.dispose();
@@ -360,7 +362,7 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
         title: const Text('正在处理中'),
         content: Text(
           _persistingAfterEnd
-              ? '正在创建会议记录，现在离开可能导致提交失败。'
+              ? '正在创建会议记录，请稍候...'
               : '录音正在后台上传，现在离开不影响上传进度。',
           style: DunesTypography.sans(fontSize: 13.5, height: 1.55),
         ),
@@ -589,6 +591,14 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
     return normalized.substring(idx + 1);
   }
 
+  String _formatLiveElapsed(Duration duration) {
+    final total = duration.inSeconds.clamp(0, 24 * 60 * 60);
+    final h = (total ~/ 3600).toString().padLeft(2, '0');
+    final m = ((total % 3600) ~/ 60).toString().padLeft(2, '0');
+    final s = (total % 60).toString().padLeft(2, '0');
+    return '$h:$m:$s';
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = _recordingCtrl.state.value;
@@ -596,6 +606,7 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
     final livePaused = _live.paused.value;
     final liveLines = _live.lines.value;
     final livePartial = _live.partial.value;
+    final liveElapsed = _live.elapsed.value;
     final recording = liveWorking;
     final canSubmit = !_submitting &&
         !_persistingAfterEnd &&
@@ -903,6 +914,17 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
                           color: DunesColors.text2,
                         ),
                       ),
+                      if (liveWorking || liveElapsed > Duration.zero) ...[
+                        const SizedBox(width: 8),
+                        Text(
+                          _formatLiveElapsed(liveElapsed),
+                          style: DunesTypography.sans(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: DunesColors.accentDeep,
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                   const SizedBox(height: 12),

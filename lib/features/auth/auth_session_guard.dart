@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/widgets.dart';
 import 'package:http/http.dart' as http;
@@ -46,7 +47,32 @@ class AuthSessionGuard {
   }
 
   void inspectResponse(http.Response response) {
-    inspectStatusCode(response.statusCode);
+    if (response.statusCode != 401) return;
+    if (_shouldRevokeForUnauthorized(response)) {
+      unawaited(revoke());
+    }
+  }
+
+  bool _shouldRevokeForUnauthorized(http.Response response) {
+    final path = response.request?.url.path ?? '';
+    if (path.endsWith('/users/me')) return true;
+    final message = _readApiMessage(response.body);
+    if (message.contains('其他设备登录')) return true;
+    if (message.contains('missing bearer token') ||
+        message.contains('invalid token')) {
+      return true;
+    }
+    return false;
+  }
+
+  String _readApiMessage(String body) {
+    try {
+      final decoded = jsonDecode(body);
+      if (decoded is Map<String, dynamic>) {
+        return (decoded['message'] ?? '').toString();
+      }
+    } catch (_) {}
+    return body;
   }
 
   Future<void> checkOnUserActivity() async {
@@ -77,7 +103,7 @@ class AuthSessionGuard {
           'Accept': 'application/json',
         },
       );
-      inspectStatusCode(resp.statusCode);
+      inspectResponse(resp);
     } catch (_) {
       // 网络异常不强制退出。
     } finally {

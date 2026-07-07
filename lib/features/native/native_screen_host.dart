@@ -1063,7 +1063,9 @@ class _NativeB2PageState extends State<_NativeB2Page> {
       maxItems: 4,
     );
     widget.workbenchRefresh.addListener(_onWorkbenchDataRefresh);
-    _live.active.addListener(_onLiveActiveChanged);
+    _live.active.addListener(_onLiveStateChanged);
+    _live.paused.addListener(_onLiveStateChanged);
+    _live.elapsed.addListener(_onLiveStateChanged);
     unawaited(XflowService.hydrateTemplateCache().then((_) {
       if (!mounted) return;
       setState(() {
@@ -1078,7 +1080,7 @@ class _NativeB2PageState extends State<_NativeB2Page> {
     _refreshCommBadge();
   }
 
-  void _onLiveActiveChanged() {
+  void _onLiveStateChanged() {
     if (mounted) setState(() {});
   }
 
@@ -1120,8 +1122,18 @@ class _NativeB2PageState extends State<_NativeB2Page> {
   @override
   void dispose() {
     widget.workbenchRefresh.removeListener(_onWorkbenchDataRefresh);
-    _live.active.removeListener(_onLiveActiveChanged);
+    _live.active.removeListener(_onLiveStateChanged);
+    _live.paused.removeListener(_onLiveStateChanged);
+    _live.elapsed.removeListener(_onLiveStateChanged);
     super.dispose();
+  }
+
+  String _formatLiveElapsed(Duration duration) {
+    final total = duration.inSeconds.clamp(0, 24 * 60 * 60);
+    final h = (total ~/ 3600).toString().padLeft(2, '0');
+    final m = ((total % 3600) ~/ 60).toString().padLeft(2, '0');
+    final s = (total % 60).toString().padLeft(2, '0');
+    return '$h:$m:$s';
   }
 
   void _onWorkbenchDataRefresh() {
@@ -1642,6 +1654,7 @@ class _NativeB2PageState extends State<_NativeB2Page> {
 
   Widget _buildLiveTranscribeFab() {
     final paused = _live.paused.value;
+    final elapsedText = _formatLiveElapsed(_live.elapsed.value);
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -1672,7 +1685,7 @@ class _NativeB2PageState extends State<_NativeB2Page> {
               ),
               const SizedBox(width: 6),
               Text(
-                paused ? '录音已暂停' : '录音进行中',
+                '${paused ? '录音已暂停' : '录音进行中'} $elapsedText',
                 style: DunesTypography.sans(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,

@@ -88,9 +88,11 @@ class AuthSession {
     final roles = (claims['roles'] as List<dynamic>? ?? const [])
         .whereType<String>()
         .toList(growable: false);
+    final claimUserId = (claims['userId'] as num?)?.toInt();
+    final subUserId = int.tryParse('${claims['sub'] ?? ''}'.trim());
     return AuthSession(
       phone: phone,
-      userId: (claims['userId'] as num?)?.toInt() ?? userId,
+      userId: claimUserId ?? subUserId ?? userId,
       token: token,
       apiBase: apiBase,
       roles: roles,

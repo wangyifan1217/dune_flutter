@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io' as io;
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
@@ -93,7 +94,7 @@ class NativeMeetingService {
     final upload = await uploadAudioFile(filePath: filePath, fileName: filename);
     final audioObjectKey = (upload['objectKey'] ?? '').toString();
     final audioUrl = (upload['url'] ?? upload['objectKey'] ?? '').toString();
-    final contentType = (upload['contentType'] ?? 'audio/wav').toString();
+    final contentType = contentTypeForPath(filePath);
 
     // Use local async pipeline as source of truth: once confirmed, backend can
     // keep processing even if the user exits the app.
@@ -111,20 +112,148 @@ class NativeMeetingService {
     required String filePath,
     required String fileName,
     String bucket = 'meeting-audio',
+    void Function(double progress)? onProgress,
   }) async {
+    onProgress?.call(0);
+    const maxAttempts = 5;
+    Object? lastError;
+    for (var attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        return await _uploadAudioViaStorageApi(
+          filePath: filePath,
+          fileName: fileName,
+          bucket: bucket,
+          onProgress: onProgress,
+        );
+      } catch (e) {
+        lastError = e;
+        debugPrint(
+          'Meeting audio upload attempt $attempt/$maxAttempts failed: $e',
+        );
+        if (attempt >= maxAttempts || !_isRetryableUploadError(e)) break;
+        onProgress?.call(0);
+        final jitter = math.Random().nextInt(2000);
+        final baseMs = _retryDelayMsForError(e, attempt);
+        await Future<void>.delayed(Duration(milliseconds: baseMs + jitter));
+      }
+    }
+    if (lastError is Exception) throw lastError as Exception;
+    throw Exception('$lastError');
+  }
+
+  int _retryDelayMsForError(Object error, int attempt) {
+    final status = _readUploadStatusCode(error);
+    if (status == 503 || status == 429) {
+      return 3000 * attempt;
+    }
+    return 900 * attempt;
+  }
+
+  int? _readUploadStatusCode(Object error) {
+    final text = error.toString();
+    final match = RegExp(r'upload failed:\s*(\d{3})').firstMatch(text);
+    if (match == null) return null;
+    return int.tryParse(match.group(1) ?? '');
+  }
+
+  bool _isRetryableUploadError(Object error) {
+    final status = _readUploadStatusCode(error);
+    if (status != null) {
+      return status == 408 ||
+          status == 429 ||
+          status == 502 ||
+          status == 503 ||
+          status >= 500;
+    }
+    final msg = error.toString().toLowerCase();
+    return msg.contains('timeout') ||
+        msg.contains('socket') ||
+        msg.contains('connection') ||
+        msg.contains('排队') ||
+        msg.contains('network');
+  }
+
+  Future<Map<String, dynamic>> _uploadAudioViaStorageApi({
+    required String filePath,
+    required String fileName,
+    required String bucket,
+    void Function(double progress)? onProgress,
+  }) async {
+    final localFile = io.File(filePath);
+    if (!await localFile.exists()) {
+      throw Exception('录音文件不存在');
+    }
+    final fileSize = await localFile.length();
+    if (fileSize <= 0) {
+      throw Exception('录音文件为空');
+    }
+
     final uri = dunesApiUri(session, '/storage/upload');
-    final req = http.MultipartRequest('POST', uri);
-    req.headers['Authorization'] = 'Bearer ${session.token}';
-    req.fields['bucket'] = bucket;
+    final req = http.MultipartRequest('POST', uri)
+      ..headers['Authorization'] = 'Bearer ${session.token}'
+      ..fields['bucket'] = bucket;
     req.files.add(
-      await http.MultipartFile.fromPath('file', filePath, filename: fileName),
+      await _multipartFileFromPath(
+        field: 'file',
+        filePath: filePath,
+        fileName: fileName,
+        fileSize: fileSize,
+        onProgress: onProgress,
+      ),
     );
-    final streamed = await req.send();
-    final body = await streamed.stream.bytesToString();
+
+    final streamed = await req.send().timeout(
+      const Duration(minutes: 30),
+      onTimeout: () => throw Exception('上传超时，请检查网络后重试'),
+    );
+    final body = await streamed.stream.bytesToString().timeout(
+      const Duration(minutes: 2),
+      onTimeout: () => throw Exception('上传响应超时，请稍后重试'),
+    );
     if (streamed.statusCode < 200 || streamed.statusCode >= 300) {
       throw Exception('upload failed: ${streamed.statusCode} $body');
     }
-    return _unwrapData(body);
+    final data = _unwrapData(body);
+    final objectKey = (data['objectKey'] ?? '').toString().trim();
+    if (objectKey.isEmpty) {
+      throw Exception('录音上传失败，未获得文件标识');
+    }
+    onProgress?.call(1);
+    return data;
+  }
+
+  Future<http.MultipartFile> _multipartFileFromPath({
+    required String field,
+    required String filePath,
+    required String fileName,
+    required int fileSize,
+    void Function(double progress)? onProgress,
+  }) async {
+    Stream<List<int>> chunked() async* {
+      const chunkSize = 512 * 1024;
+      final raf = await io.File(filePath).open(mode: io.FileMode.read);
+      try {
+        var sent = 0;
+        while (true) {
+          final chunk = await raf.read(chunkSize);
+          if (chunk.isEmpty) break;
+          yield chunk;
+          sent += chunk.length;
+          if (fileSize > 0) {
+            onProgress?.call((sent / fileSize).clamp(0.0, 1.0));
+          }
+        }
+      } finally {
+        await raf.close();
+      }
+    }
+
+    return http.MultipartFile(
+      field,
+      http.ByteStream(chunked()),
+      fileSize,
+      filename: fileName,
+    );
   }
 
   Future<void> confirmUpload({
@@ -269,7 +398,7 @@ class NativeMeetingService {
       throw Exception('录音上传失败，未获得文件标识');
     }
     final audioUrl = _readUploadUrl(upload, audioObjectKey);
-    final contentType = (upload['contentType'] ?? 'audio/wav').toString();
+    final contentType = contentTypeForPath(filePath);
     await _attachDraftAudio(
       meetingId: meetingId,
       audioObjectKey: audioObjectKey,
@@ -440,10 +569,31 @@ class NativeMeetingService {
     return idx >= 0 ? p.substring(idx + 1) : p;
   }
 
+  String contentTypeForPath(String path) {
+    final normalized = path.replaceAll('\\', '/');
+    final dot = normalized.lastIndexOf('.');
+    final ext = dot >= 0 ? normalized.substring(dot + 1).toLowerCase() : '';
+    switch (ext) {
+      case 'm4a':
+      case 'mp4':
+        return 'audio/mp4';
+      case 'mp3':
+        return 'audio/mpeg';
+      case 'wav':
+      default:
+        return 'audio/wav';
+    }
+  }
+
   int guessDurationSeconds(String path) {
     final file = io.File(path);
     final size = file.existsSync() ? file.lengthSync() : 0;
     if (size <= 0) return 0;
+    final ext = contentTypeForPath(path);
+    if (ext == 'audio/mp4' || ext == 'audio/mpeg') {
+      // ~32kbps AAC speech rough estimate.
+      return (size / 4000).ceil();
+    }
     // 16k/16bit/mono wav rough estimate fallback.
     return (size / 32000).ceil();
   }

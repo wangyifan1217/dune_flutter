@@ -2174,7 +2174,9 @@ class _NativeNovaPageState extends State<NativeNovaPage> with WidgetsBindingObse
         return;
       }
       final bytes = await XFile(recorded.path).readAsBytes();
-      final fileName = 'voice-${DateTime.now().millisecondsSinceEpoch}.wav';
+      final fileName = Uri.file(recorded.path).pathSegments.isEmpty
+          ? 'voice-${DateTime.now().millisecondsSinceEpoch}.m4a'
+          : Uri.file(recorded.path).pathSegments.last;
       // 语音用于转写为文字（非语音消息），气泡直接以文本展示，避免出现不可播放的空语音气泡。
       setState(() {
         _messages = [

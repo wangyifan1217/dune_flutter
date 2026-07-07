@@ -61,6 +61,20 @@ class _LoginFlowState extends State<LoginFlow> {
 
   void _onSignedIn(AuthSession session) {
     session = session.withLocalDevGrants();
+    if (session.userId <= 0) {
+      session = AuthSession.fromJwt(
+        phone: session.phone,
+        userId: 0,
+        token: session.token,
+        apiBase: session.apiBase,
+      ).copyWith(
+        displayName: session.displayName,
+        departmentId: session.departmentId,
+        roles: session.roles,
+        novaLocalStorage: session.novaLocalStorage,
+        lighthouseAccess: session.lighthouseAccess,
+      ).withLocalDevGrants();
+    }
     setState(() {
       _session = session;
       _showPostLoginSplash = true;
@@ -88,6 +102,20 @@ class _LoginFlowState extends State<LoginFlow> {
         return;
       }
       var session = AuthSession.fromJson(decoded).withLocalDevGrants();
+      if (session.userId <= 0 && session.token.isNotEmpty) {
+        session = AuthSession.fromJwt(
+          phone: session.phone,
+          userId: 0,
+          token: session.token,
+          apiBase: session.apiBase,
+        ).copyWith(
+          displayName: session.displayName,
+          departmentId: session.departmentId,
+          roles: session.roles,
+          novaLocalStorage: session.novaLocalStorage,
+          lighthouseAccess: session.lighthouseAccess,
+        ).withLocalDevGrants();
+      }
       final normalized = _normalizeApiHost(session);
       if (normalized.apiBase != session.apiBase) {
         session = normalized;

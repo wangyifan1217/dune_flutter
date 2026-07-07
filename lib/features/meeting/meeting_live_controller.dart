@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 
@@ -31,8 +30,12 @@ class MeetingLiveController {
   final ValueNotifier<String> partial = ValueNotifier<String>('');
   final ValueNotifier<String?> recordedFilePath = ValueNotifier<String?>(null);
   final ValueNotifier<String> meetingTitle = ValueNotifier<String>('');
+  final ValueNotifier<Duration> elapsed = ValueNotifier<Duration>(Duration.zero);
 
   final List<String> _lines = <String>[];
+  Timer? _elapsedTicker;
+  Duration _elapsedCommitted = Duration.zero;
+  DateTime? _elapsedRunStartedAt;
 
   bool get isActive => active.value;
 
@@ -55,6 +58,10 @@ class MeetingLiveController {
     await _recording.start();
     paused.value = false;
     active.value = true;
+    _elapsedCommitted = Duration.zero;
+    elapsed.value = Duration.zero;
+    _elapsedRunStartedAt = DateTime.now();
+    _startElapsedTicker();
     NativeAudioRecorder.isStartBlocked = () => active.value;
   }
 
@@ -62,6 +69,8 @@ class MeetingLiveController {
     if (!active.value || paused.value) return;
     await _recording.pause();
     await _realtime?.pause();
+    _commitElapsedRun();
+    _stopElapsedTicker();
     paused.value = true;
     partial.value = '';
   }
@@ -70,6 +79,8 @@ class MeetingLiveController {
     if (!active.value || !paused.value) return;
     await _recording.resume();
     await _realtime?.resume();
+    _elapsedRunStartedAt = DateTime.now();
+    _startElapsedTicker();
     paused.value = false;
   }
 
@@ -87,6 +98,9 @@ class MeetingLiveController {
     try {
       await _realtime?.stop();
     } catch (_) {}
+    _commitElapsedRun();
+    _stopElapsedTicker();
+    _elapsedRunStartedAt = null;
     active.value = false;
     paused.value = false;
     NativeAudioRecorder.isStartBlocked = null;
@@ -108,6 +122,45 @@ class MeetingLiveController {
   void consumeRecordedFile() {
     recordedFilePath.value = null;
     meetingTitle.value = '';
+    elapsed.value = Duration.zero;
+    _elapsedCommitted = Duration.zero;
+    _elapsedRunStartedAt = null;
+  }
+
+  void _startElapsedTicker() {
+    _elapsedTicker?.cancel();
+    _elapsedTicker = Timer.periodic(const Duration(seconds: 1), (_) {
+      _refreshElapsed();
+    });
+    _refreshElapsed();
+  }
+
+  void _stopElapsedTicker() {
+    _elapsedTicker?.cancel();
+    _elapsedTicker = null;
+  }
+
+  void _commitElapsedRun() {
+    final startedAt = _elapsedRunStartedAt;
+    if (startedAt == null) return;
+    final now = DateTime.now();
+    if (now.isAfter(startedAt)) {
+      _elapsedCommitted += now.difference(startedAt);
+    }
+    _elapsedRunStartedAt = null;
+    _refreshElapsed();
+  }
+
+  void _refreshElapsed() {
+    var current = _elapsedCommitted;
+    final startedAt = _elapsedRunStartedAt;
+    if (startedAt != null) {
+      final now = DateTime.now();
+      if (now.isAfter(startedAt)) {
+        current += now.difference(startedAt);
+      }
+    }
+    elapsed.value = current;
   }
 
   void _onUpdate(RealtimeTranscriptUpdate update) {

@@ -9,9 +9,9 @@ import UserNotifications
 {
   private let voiceChannelName = "dunes/audio_recorder"
   private let voiceStreamChannelName = "dunes/audio_recorder_stream"
+  private let meetingAudioChannelName = "dunes/meeting_audio"
   private var audioEngine: AVAudioEngine?
-  private var pcmFileHandle: FileHandle?
-  private var pcmPath: String?
+  private var m4aWriter: StreamingAacM4aWriter?
   private var recordStartedAt: Date?
   private var activeSegmentStartedAt: Date?
   private var accumulatedDurationMs: Int = 0
@@ -80,6 +80,32 @@ import UserNotifications
       binaryMessenger: messenger
     )
     streamChannel.setStreamHandler(self)
+
+    let meetingAudioChannel = FlutterMethodChannel(
+      name: meetingAudioChannelName,
+      binaryMessenger: messenger
+    )
+    meetingAudioChannel.setMethodCallHandler { [weak self] call, result in
+      guard let self = self else { return result(nil) }
+      switch call.method {
+      case "convertWavToM4a":
+        guard let args = call.arguments as? [String: Any],
+          let inputPath = args["inputPath"] as? String,
+          let outputPath = args["outputPath"] as? String
+        else {
+          result(
+            FlutterError(
+              code: "INVALID_ARGS",
+              message: "inputPath/outputPath required",
+              details: nil
+            ))
+          return
+        }
+        self.convertWavToM4a(inputPath: inputPath, outputPath: outputPath, result: result)
+      default:
+        result(FlutterMethodNotImplemented)
+      }
+    }
 
     NotificationCenter.default.addObserver(
       self,
@@ -206,8 +232,7 @@ import UserNotifications
   private func startRecordImpl(result: @escaping FlutterResult) {
     stopInternal(deleteFile: true)
     let stamp = Int(Date().timeIntervalSince1970 * 1000)
-    let pcm = "\(NSTemporaryDirectory())voice-\(stamp).pcm"
-    let wav = "\(NSTemporaryDirectory())voice-\(stamp).wav"
+    let m4a = "\(NSTemporaryDirectory())voice-\(stamp).m4a"
     do {
       let session = AVAudioSession.sharedInstance()
       try session.setCategory(
@@ -218,12 +243,10 @@ import UserNotifications
       try session.setPreferredSampleRate(16000)
       try session.setActive(true)
 
-      FileManager.default.createFile(atPath: pcm, contents: nil)
-      streamLock.lock()
-      pcmFileHandle = try FileHandle(forWritingTo: URL(fileURLWithPath: pcm))
-      streamLock.unlock()
-      pcmPath = pcm
-      outputPath = wav
+      let writer = StreamingAacM4aWriter()
+      try writer.start(url: URL(fileURLWithPath: m4a))
+      m4aWriter = writer
+      outputPath = m4a
 
       let engine = AVAudioEngine()
       let input = engine.inputNode
@@ -332,36 +355,27 @@ import UserNotifications
     }
     audioEngine = nil
     audioConverter = nil
-    streamLock.lock()
-    let handle = pcmFileHandle
-    pcmFileHandle = nil
-    streamLock.unlock()
-    try? handle?.close()
     recordStartedAt = nil
     activeSegmentStartedAt = nil
     accumulatedDurationMs = 0
 
-    let localPcmPath = pcmPath
-    pcmPath = nil
+    let writer = m4aWriter
+    m4aWriter = nil
+    let localOutputPath = outputPath
 
-    if deleteFile, let path = outputPath {
-      if let localPcmPath {
-        try? FileManager.default.removeItem(atPath: localPcmPath)
+    if deleteFile {
+      writer?.abort()
+      if let path = localOutputPath {
+        try? FileManager.default.removeItem(atPath: path)
       }
-      try? FileManager.default.removeItem(atPath: path)
       outputPath = nil
       return durationMs
     }
 
-    if let localPcmPath, let localWavPath = outputPath {
-      do {
-        try writeWavFromPcm(pcmPath: localPcmPath, wavPath: localWavPath)
-        try? FileManager.default.removeItem(atPath: localPcmPath)
-      } catch {
-        try? FileManager.default.removeItem(atPath: localPcmPath)
-        try? FileManager.default.removeItem(atPath: localWavPath)
-        outputPath = nil
-      }
+    let ok = writer?.finish() ?? false
+    if !ok, let path = localOutputPath {
+      try? FileManager.default.removeItem(atPath: path)
+      outputPath = nil
     }
     return durationMs
   }
@@ -375,16 +389,11 @@ import UserNotifications
       resampled = pcmData(from: buffer)
     }
     guard let data = resampled, !data.isEmpty else { return }
+    m4aWriter?.appendPcmInt16(data)
     streamLock.lock()
-    let handle = pcmFileHandle
     let sink = streamSink
     streamLock.unlock()
 
-    do {
-      try handle?.write(contentsOf: data)
-    } catch {
-      // Keep streaming best-effort; stop() will clean up.
-    }
     if let sink {
       DispatchQueue.main.async {
         sink(FlutterStandardTypedData(bytes: data))
@@ -493,6 +502,150 @@ import UserNotifications
     return data
   }
 
+  private func convertWavToM4a(
+    inputPath: String,
+    outputPath: String,
+    result: @escaping FlutterResult
+  ) {
+    DispatchQueue.global(qos: .userInitiated).async {
+      let bitRate = 32_000
+      let inputURL = URL(fileURLWithPath: inputPath)
+      let outputURL = URL(fileURLWithPath: outputPath)
+      if FileManager.default.fileExists(atPath: outputPath) {
+        try? FileManager.default.removeItem(at: outputURL)
+      }
+
+      if self.convertWavToM4aWithReaderWriter(
+        inputURL: inputURL,
+        outputURL: outputURL,
+        bitRate: bitRate
+      ) {
+        DispatchQueue.main.async { result(outputPath) }
+        return
+      }
+
+      // 回退：Apple 预设（码率不可控，但兼容性更好）
+      let asset = AVURLAsset(url: inputURL)
+      guard let export = AVAssetExportSession(
+        asset: asset,
+        presetName: AVAssetExportPresetAppleM4A
+      ) else {
+        DispatchQueue.main.async {
+          result(
+            FlutterError(
+              code: "CONVERT_FAILED",
+              message: "export session unavailable",
+              details: nil
+            ))
+        }
+        return
+      }
+      export.outputURL = outputURL
+      export.outputFileType = .m4a
+      export.exportAsynchronously {
+        DispatchQueue.main.async {
+          if export.status == .completed {
+            result(outputPath)
+          } else {
+            result(
+              FlutterError(
+                code: "CONVERT_FAILED",
+                message: export.error?.localizedDescription ?? "export failed",
+                details: nil
+              ))
+          }
+        }
+      }
+    }
+  }
+
+  /// 与 Android 对齐：16k/mono AAC-LC 32kbps。
+  private func convertWavToM4aWithReaderWriter(
+    inputURL: URL,
+    outputURL: URL,
+    bitRate: Int
+  ) -> Bool {
+    let asset = AVURLAsset(url: inputURL)
+    guard let track = asset.tracks(withMediaType: .audio).first else {
+      return false
+    }
+
+    let reader: AVAssetReader
+    let writer: AVAssetWriter
+    do {
+      reader = try AVAssetReader(asset: asset)
+      writer = try AVAssetWriter(outputURL: outputURL, fileType: .m4a)
+    } catch {
+      return false
+    }
+
+    let readerOutput = AVAssetReaderTrackOutput(
+      track: track,
+      outputSettings: [
+        AVFormatIDKey: kAudioFormatLinearPCM,
+        AVLinearPCMBitDepthKey: 16,
+        AVLinearPCMIsFloatKey: false,
+        AVLinearPCMIsBigEndianKey: false,
+        AVLinearPCMIsNonInterleaved: false,
+      ]
+    )
+    readerOutput.alwaysCopiesSampleData = false
+    guard reader.canAdd(readerOutput) else { return false }
+    reader.add(readerOutput)
+
+    let writerInput = AVAssetWriterInput(
+      mediaType: .audio,
+      outputSettings: [
+        AVFormatIDKey: kAudioFormatMPEG4AAC,
+        AVSampleRateKey: 16_000,
+        AVNumberOfChannelsKey: 1,
+        AVEncoderBitRateKey: bitRate,
+        AVEncoderAudioQualityKey: AVAudioQuality.medium.rawValue,
+      ]
+    )
+    writerInput.expectsMediaDataInRealTime = false
+    guard writer.canAdd(writerInput) else { return false }
+    writer.add(writerInput)
+
+    guard reader.startReading() else { return false }
+    guard writer.startWriting() else { return false }
+    writer.startSession(atSourceTime: .zero)
+
+    let group = DispatchGroup()
+    group.enter()
+    var ok = true
+
+    writerInput.requestMediaDataWhenReady(on: DispatchQueue.global(qos: .userInitiated)) {
+      while writerInput.isReadyForMoreMediaData {
+        if let sampleBuffer = readerOutput.copyNextSampleBuffer() {
+          if !writerInput.append(sampleBuffer) {
+            ok = false
+            reader.cancelReading()
+            writer.cancelWriting()
+            group.leave()
+            return
+          }
+        } else {
+          writerInput.markAsFinished()
+          writer.finishWriting {
+            ok = ok && writer.status == .completed
+            group.leave()
+          }
+          return
+        }
+      }
+    }
+
+    group.wait()
+    guard ok else {
+      try? FileManager.default.removeItem(at: outputURL)
+      return false
+    }
+    let attrs = try? FileManager.default.attributesOfItem(atPath: outputURL.path)
+    let size = (attrs?[.size] as? NSNumber)?.intValue ?? 0
+    return size > 0
+  }
+
   // MARK: - FlutterStreamHandler
 
   func onListen(withArguments arguments: Any?, eventSink events: @escaping FlutterEventSink) -> FlutterError?
@@ -515,6 +668,187 @@ private extension FixedWidthInteger {
   var leData: Data {
     var v = self.littleEndian
     return Data(bytes: &v, count: MemoryLayout<Self>.size)
+  }
+}
+
+/// 边录边编码 PCM → AAC/m4a（16k/mono/32kbps）。
+final class StreamingAacM4aWriter {
+  private var writer: AVAssetWriter?
+  private var input: AVAssetWriterInput?
+  private var startedSession = false
+  private var sampleCount: Int64 = 0
+  private let sampleRate: Double = 16_000
+  private let channels: UInt32 = 1
+
+  func start(url: URL) throws {
+    if FileManager.default.fileExists(atPath: url.path) {
+      try FileManager.default.removeItem(at: url)
+    }
+    let assetWriter = try AVAssetWriter(outputURL: url, fileType: .m4a)
+    let settings: [String: Any] = [
+      AVFormatIDKey: kAudioFormatMPEG4AAC,
+      AVSampleRateKey: sampleRate,
+      AVNumberOfChannelsKey: channels,
+      AVEncoderBitRateKey: 32_000,
+      AVEncoderAudioQualityKey: AVAudioQuality.medium.rawValue,
+    ]
+    let writerInput = AVAssetWriterInput(mediaType: .audio, outputSettings: settings)
+    writerInput.expectsMediaDataInRealTime = true
+    guard assetWriter.canAdd(writerInput) else {
+      throw NSError(
+        domain: "dunes.audio",
+        code: 2,
+        userInfo: [NSLocalizedDescriptionKey: "cannot add audio writer input"]
+      )
+    }
+    assetWriter.add(writerInput)
+    guard assetWriter.startWriting() else {
+      throw assetWriter.error
+        ?? NSError(
+          domain: "dunes.audio",
+          code: 3,
+          userInfo: [NSLocalizedDescriptionKey: "asset writer start failed"]
+        )
+    }
+    writer = assetWriter
+    input = writerInput
+    startedSession = false
+    sampleCount = 0
+  }
+
+  func appendPcmInt16(_ data: Data) {
+    guard let input, let writer, !data.isEmpty else { return }
+    let frameCount = data.count / MemoryLayout<Int16>.size
+    if frameCount <= 0 { return }
+    guard let sampleBuffer = makeSampleBuffer(from: data, frameCount: frameCount) else { return }
+    if !startedSession {
+      writer.startSession(atSourceTime: .zero)
+      startedSession = true
+    }
+    var waitCount = 0
+    while !input.isReadyForMoreMediaData && waitCount < 200 {
+      Thread.sleep(forTimeInterval: 0.005)
+      waitCount += 1
+    }
+    guard input.isReadyForMoreMediaData else { return }
+    if input.append(sampleBuffer) {
+      sampleCount += Int64(frameCount)
+    }
+  }
+
+  func finish() -> Bool {
+    input?.markAsFinished()
+    let group = DispatchGroup()
+    group.enter()
+    var ok = false
+    writer?.finishWriting {
+      ok = self.writer?.status == .completed
+      group.leave()
+    }
+    group.wait()
+    let path = writer?.outputURL.path ?? ""
+    cleanup()
+    guard ok else { return false }
+    let attrs = try? FileManager.default.attributesOfItem(atPath: path)
+    let size = (attrs?[.size] as? NSNumber)?.intValue ?? 0
+    return size > 0
+  }
+
+  func abort() {
+    input?.markAsFinished()
+    writer?.cancelWriting()
+    if let path = writer?.outputURL.path {
+      try? FileManager.default.removeItem(atPath: path)
+    }
+    cleanup()
+  }
+
+  private func cleanup() {
+    writer = nil
+    input = nil
+    startedSession = false
+    sampleCount = 0
+  }
+
+  private func makeSampleBuffer(from data: Data, frameCount: Int) -> CMSampleBuffer? {
+    var blockBuffer: CMBlockBuffer?
+    let status = data.withUnsafeBytes { raw -> OSStatus in
+      guard let base = raw.baseAddress else { return -1 }
+      return CMBlockBufferCreateWithMemoryBlock(
+        allocator: kCFAllocatorDefault,
+        memoryBlock: nil,
+        blockLength: data.count,
+        blockAllocator: kCFAllocatorDefault,
+        customBlockSource: nil,
+        offsetToData: 0,
+        dataLength: data.count,
+        flags: 0,
+        blockBufferOut: &blockBuffer
+      )
+    }
+    guard status == kCMBlockBufferNoErr, let blockBuffer else { return nil }
+
+    data.withUnsafeBytes { raw in
+      guard let base = raw.baseAddress else { return }
+      CMBlockBufferReplaceDataBytes(
+        with: base,
+        blockBuffer: blockBuffer,
+        offsetIntoDestination: 0,
+        dataLength: data.count
+      )
+    }
+
+    var asbd = AudioStreamBasicDescription(
+      mSampleRate: sampleRate,
+      mFormatID: kAudioFormatLinearPCM,
+      mFormatFlags: kAudioFormatFlagIsSignedInteger | kAudioFormatFlagIsPacked,
+      mBytesPerPacket: 2,
+      mFramesPerPacket: 1,
+      mBytesPerFrame: 2,
+      mChannelsPerFrame: channels,
+      mBitsPerChannel: 16,
+      mReserved: 0
+    )
+    var formatDesc: CMAudioFormatDescription?
+    guard
+      CMAudioFormatDescriptionCreate(
+        allocator: kCFAllocatorDefault,
+        asbd: &asbd,
+        layoutSize: 0,
+        layout: nil,
+        magicCookieSize: 0,
+        magicCookie: nil,
+        extensions: nil,
+        formatDescriptionOut: &formatDesc
+      ) == noErr,
+      let formatDesc
+    else {
+      return nil
+    }
+
+    var timing = CMSampleTimingInfo(
+      duration: CMTime(value: 1, timescale: Int32(sampleRate)),
+      presentationTimeStamp: CMTime(value: sampleCount, timescale: Int32(sampleRate)),
+      decodeTimeStamp: .invalid
+    )
+    var sampleBuffer: CMSampleBuffer?
+    guard
+      CMSampleBufferCreate(
+        allocator: kCFAllocatorDefault,
+        dataBuffer: blockBuffer,
+        dataReady: true,
+        formatDescription: formatDesc,
+        sampleCount: CMItemCount(frameCount),
+        sampleTimingEntryCount: 1,
+        sampleTimingArray: &timing,
+        sampleSizeEntryCount: 0,
+        sampleSizeArray: nil,
+        sampleBufferOut: &sampleBuffer
+      ) == noErr
+    else {
+      return nil
+    }
+    return sampleBuffer
   }
 }
 

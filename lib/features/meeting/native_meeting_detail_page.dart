@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as math;
-import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -84,6 +83,7 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
     );
     MeetingUploadCoordinator.instance.attach(widget.session);
     MeetingUploadCoordinator.instance.addListener(_onUploadUpdate);
+    unawaited(MeetingUploadCoordinator.instance.resumePending());
     KbDocumentCoordinator.instance.addListener(_onKbDocumentsChanged);
   }
 
@@ -779,9 +779,11 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
       return switch (uploadJob.phase) {
         MeetingUploadPhase.failed =>
           '录音上传失败：${uploadJob.error ?? '请稍后重试'}',
+        MeetingUploadPhase.pending => '录音正在后台压缩并上传...',
+        MeetingUploadPhase.uploading =>
+          '录音正在后台上传（${uploadJob.uploadProgressPercent}%），完成后${uploadJob.generate ? '将自动开始转写' : '可在本页开始转写'}。您可以先离开做其他事情。',
         MeetingUploadPhase.attaching => '录音已上传，正在保存到云端...',
-        _ =>
-          '录音正在后台上传，完成后${uploadJob.generate ? '将自动开始转写' : '可在本页开始转写'}。您可以先离开做其他事情。',
+        _ => '录音后台处理中，请稍候...',
       };
     }
     if (d.summary.isNotEmpty) return d.summary;
@@ -793,6 +795,41 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
       'FAILED' => '纪要生成失败，可尝试重新转写或重新生成。',
       _ => '暂无会议摘要',
     };
+  }
+
+  String _summaryDisplayMarkdown(NativeMeetingDetail d) {
+    final summary = d.summary.trim();
+    final items = d.actionItems
+        .map((e) => e.trim())
+        .where((e) => e.isNotEmpty)
+        .toList(growable: false);
+
+    final buf = StringBuffer();
+    if (d.meetingDate.trim().isNotEmpty) {
+      buf.writeln('- 会议日期：${d.meetingDate.trim()}');
+    }
+    buf.writeln('- 记录时间：${d.displayTime}');
+    buf.writeln();
+
+    if (summary.isNotEmpty) {
+      buf.writeln(summary);
+      buf.writeln();
+    }
+    if (items.isNotEmpty) {
+      buf.writeln('## 待办事项');
+      buf.writeln();
+      for (final item in items) {
+        buf.writeln('- $item');
+      }
+    }
+    return buf.toString().trimRight();
+  }
+
+  bool _preferRawSummaryView(String markdown) {
+    if (markdown.length > 4000) return true;
+    if (RegExp(r'^#{4,6}\s', multiLine: true).hasMatch(markdown)) return true;
+    if (RegExp(r'^\|.+\|$', multiLine: true).hasMatch(markdown)) return true;
+    return false;
   }
 
   String _transcriptEmptyText(NativeMeetingDetail d) {
@@ -832,16 +869,26 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
   Widget _buildUploadBanner(MeetingUploadJob job) {
     final failed = job.phase == MeetingUploadPhase.failed;
     final attaching = job.phase == MeetingUploadPhase.attaching;
+    final pending = job.phase == MeetingUploadPhase.pending;
+    final uploading = job.phase == MeetingUploadPhase.uploading;
     final label = failed
         ? '录音上传失败'
         : attaching
         ? '正在保存录音...'
+        : pending
+        ? (job.error != null && job.error!.isNotEmpty
+            ? '录音上传重试中'
+            : '录音排队上传中')
         : '录音后台上传中';
     final detail = failed
         ? (job.error ?? '请检查网络后重试')
         : attaching
         ? '即将完成，请稍候'
-        : '上传完成后将自动继续，您可先使用其他功能';
+        : pending
+        ? (job.error != null && job.error!.isNotEmpty
+            ? '${job.error} · 系统将自动重试'
+            : '上传任务已创建，正在等待开始')
+        : '当前进度 ${job.uploadProgressPercent}% · 上传完成后将自动继续，您可先使用其他功能';
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(14),
@@ -887,6 +934,17 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
                     height: 1.45,
                   ),
                 ),
+                if (!failed && !attaching && uploading) ...[
+                  const SizedBox(height: 8),
+                  LinearProgressIndicator(
+                    value: job.uploadProgressPercent / 100,
+                    minHeight: 4,
+                    backgroundColor: DunesColors.borderSoft,
+                    valueColor: const AlwaysStoppedAnimation<Color>(
+                      DunesColors.accent,
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
@@ -997,8 +1055,21 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
                             ],
                           ),
                         ),
-                      if (d.summary.trim().isNotEmpty)
-                        MeetingMinutesMarkdown(markdown: d.summary)
+                      if (_summaryDisplayMarkdown(d).isNotEmpty)
+                        () {
+                          final markdown = _summaryDisplayMarkdown(d);
+                          if (_preferRawSummaryView(markdown)) {
+                            return SelectableText(
+                              markdown,
+                              style: DunesTypography.sans(
+                                fontSize: 14,
+                                color: DunesColors.text2,
+                                height: 1.7,
+                              ),
+                            );
+                          }
+                          return MeetingMinutesMarkdown(markdown: markdown);
+                        }()
                       else
                         Text(
                           _summaryText(d),

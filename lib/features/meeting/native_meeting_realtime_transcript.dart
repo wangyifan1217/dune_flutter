@@ -7,6 +7,7 @@ import 'package:http/http.dart' as http;
 
 import '../../core/http/session_http.dart';
 import '../auth/auth_session.dart';
+import '../auth/auth_session_coordinator.dart';
 import 'native_meeting_realtime_models.dart';
 
 class NativeMeetingRealtimeTranscript {
@@ -87,7 +88,8 @@ class NativeMeetingRealtimeTranscript {
   }
 
   Future<http.Response> _createSession() async {
-    return dunesHttpPost(session, _sessionPath, body: '{}');
+    final fresh = AuthSessionCoordinator.instance.resolve(session);
+    return dunesHttpPost(fresh, _sessionPath, body: '{}');
   }
 
   Future<void> _reconnectSocket() async {

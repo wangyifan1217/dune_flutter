@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 
 import 'package:flutter/widgets.dart';
 import 'package:http/http.dart' as http;
@@ -7,8 +6,9 @@ import 'package:http/http.dart' as http;
 import '../conversation/conversation_realtime_hub.dart';
 import '../shell/dunes_toast.dart';
 import 'auth_session.dart';
+import 'auth_session_coordinator.dart';
 
-/// 检测账号是否已在其他设备登录（token 失效 / HTTP 401），并触发退出。
+/// 检测账号是否已在其他设备登录，401 时优先静默 refresh，仅明确踢下线才退出。
 class AuthSessionGuard {
   AuthSessionGuard._();
 
@@ -40,10 +40,13 @@ class AuthSessionGuard {
     _checking = false;
   }
 
-  void inspectStatusCode(int statusCode) {
-    if (statusCode == 401) {
-      unawaited(revoke());
+  void inspectStatusCode(int statusCode, {http.Response? response}) {
+    if (statusCode != 401) return;
+    if (response != null) {
+      inspectResponse(response);
+      return;
     }
+    // 无 response 体时不直接踢下线，交给带 retry 的 HTTP 层处理。
   }
 
   void inspectResponse(http.Response response) {
@@ -54,25 +57,7 @@ class AuthSessionGuard {
   }
 
   bool _shouldRevokeForUnauthorized(http.Response response) {
-    final path = response.request?.url.path ?? '';
-    if (path.endsWith('/users/me')) return true;
-    final message = _readApiMessage(response.body);
-    if (message.contains('其他设备登录')) return true;
-    if (message.contains('missing bearer token') ||
-        message.contains('invalid token')) {
-      return true;
-    }
-    return false;
-  }
-
-  String _readApiMessage(String body) {
-    try {
-      final decoded = jsonDecode(body);
-      if (decoded is Map<String, dynamic>) {
-        return (decoded['message'] ?? '').toString();
-      }
-    } catch (_) {}
-    return body;
+    return AuthSessionCoordinator.shouldForceLogout(response);
   }
 
   Future<void> checkOnUserActivity() async {
@@ -92,17 +77,31 @@ class AuthSessionGuard {
     if (_lastCheck != null && now.difference(_lastCheck!) < _checkCooldown) {
       return;
     }
-    final session = _session!;
+    var session = AuthSessionCoordinator.instance.resolve(_session!);
     _checking = true;
     _lastCheck = now;
     try {
-      final resp = await http.get(
+      var resp = await http.get(
         Uri.parse('${session.apiBase}/users/me'),
         headers: <String, String>{
           'Authorization': 'Bearer ${session.token}',
           'Accept': 'application/json',
         },
       );
+      if (AuthSessionCoordinator.isRecoverable401(resp)) {
+        final refreshed = await AuthSessionCoordinator.instance.refreshToken();
+        if (refreshed != null) {
+          session = refreshed;
+          _session = refreshed;
+          resp = await http.get(
+            Uri.parse('${session.apiBase}/users/me'),
+            headers: <String, String>{
+              'Authorization': 'Bearer ${session.token}',
+              'Accept': 'application/json',
+            },
+          );
+        }
+      }
       inspectResponse(resp);
     } catch (_) {
       // 网络异常不强制退出。
@@ -116,6 +115,7 @@ class AuthSessionGuard {
     _revoking = true;
     final callback = _onRevoked;
     unbind();
+    AuthSessionCoordinator.instance.clear();
     await ConversationRealtimeHub.instance.dispose();
     callback?.call();
   }
@@ -170,6 +170,16 @@ class _AuthSessionGuardScopeState extends State<AuthSessionGuardScope>
   }
 
   void _bindGuard() {
+    AuthSessionCoordinator.instance.bind(
+      widget.session,
+      onUpdated: (_) {
+        if (!mounted) return;
+        AuthSessionGuard.instance.bind(
+          session: AuthSessionCoordinator.instance.session ?? widget.session,
+          onRevoked: _handleRevoked,
+        );
+      },
+    );
     AuthSessionGuard.instance.bind(
       session: widget.session,
       onRevoked: _handleRevoked,

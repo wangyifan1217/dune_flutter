@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../auth/auth_session.dart';
+import '../auth/auth_session_coordinator.dart';
 import '../chat/native_audio_recorder.dart';
 import 'native_meeting_realtime_models.dart';
 import 'native_meeting_realtime_transcript.dart';
@@ -42,7 +43,14 @@ class MeetingLiveController {
   Future<void> start(AuthSession session, {required String title}) async {
     if (active.value) return;
     meetingTitle.value = title.trim();
-    _realtime ??= NativeMeetingRealtimeTranscript(session: session);
+    final fresh = AuthSessionCoordinator.instance.resolve(session);
+    if (_realtime != null && _realtime!.session.token != fresh.token) {
+      await _rtSub?.cancel();
+      _rtSub = null;
+      await _realtime?.dispose();
+      _realtime = null;
+    }
+    _realtime ??= NativeMeetingRealtimeTranscript(session: fresh);
     _rtSub ??= _realtime!.updates.listen(_onUpdate);
     _lines.clear();
     lines.value = const <String>[];

@@ -23,6 +23,7 @@ class MeetingUploadJob {
     this.uploadProgressPercent = 0,
     this.retryCount = 0,
     this.error,
+    this.recordingDurationSeconds = 0,
   });
 
   final int meetingId;
@@ -36,6 +37,7 @@ class MeetingUploadJob {
   final int uploadProgressPercent;
   final int retryCount;
   final String? error;
+  final int recordingDurationSeconds;
 
   bool get isActive =>
       phase == MeetingUploadPhase.pending ||
@@ -48,6 +50,7 @@ class MeetingUploadJob {
     int? retryCount,
     String? error,
     String? localFilePath,
+    int? recordingDurationSeconds,
     bool clearError = false,
   }) {
     return MeetingUploadJob(
@@ -64,6 +67,8 @@ class MeetingUploadJob {
       ),
       retryCount: retryCount ?? this.retryCount,
       error: clearError ? null : (error ?? this.error),
+      recordingDurationSeconds:
+          recordingDurationSeconds ?? this.recordingDurationSeconds,
     );
   }
 
@@ -78,6 +83,7 @@ class MeetingUploadJob {
         'phase': phase.name,
         'uploadProgressPercent': uploadProgressPercent,
         'retryCount': retryCount,
+        'recordingDurationSeconds': recordingDurationSeconds,
         if (error != null && error!.isNotEmpty) 'error': error,
       };
 
@@ -99,6 +105,8 @@ class MeetingUploadJob {
       uploadProgressPercent:
           _clampPercent((json['uploadProgressPercent'] as num?)?.toInt() ?? 0),
       retryCount: (json['retryCount'] as num?)?.toInt() ?? 0,
+      recordingDurationSeconds:
+          (json['recordingDurationSeconds'] as num?)?.toInt() ?? 0,
       error: (json['error'] ?? '').toString().trim().isEmpty
           ? null
           : (json['error'] ?? '').toString(),

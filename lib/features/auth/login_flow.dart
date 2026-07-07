@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -19,6 +20,7 @@ import '../update/app_update_service.dart';
 import 'auth_service.dart';
 import 'auth_profile.dart';
 import 'auth_session.dart';
+import 'auth_session_coordinator.dart';
 
 const _authBlue = Color(0xFF1A6FDB);
 const _authBlueDeep = Color(0xFF0D4A9E);
@@ -75,6 +77,10 @@ class _LoginFlowState extends State<LoginFlow> {
         lighthouseAccess: session.lighthouseAccess,
       ).withLocalDevGrants();
     }
+    AuthSessionCoordinator.instance.bind(
+      session,
+      onUpdated: _onSessionRefreshed,
+    );
     setState(() {
       _session = session;
       _showPostLoginSplash = true;
@@ -82,8 +88,20 @@ class _LoginFlowState extends State<LoginFlow> {
     _persistSession(session);
   }
 
+  void _onSessionRefreshed(AuthSession session) {
+    if (!mounted) return;
+    if (_session?.userId != null &&
+        _session!.userId > 0 &&
+        session.userId != _session!.userId) {
+      return;
+    }
+    setState(() => _session = session);
+    unawaited(_persistSession(session));
+  }
+
   void _onSignedOut() {
     final uid = _session?.userId ?? 0;
+    AuthSessionCoordinator.instance.clear();
     setState(() => _session = null);
     _clearSession(userId: uid);
   }
@@ -122,13 +140,29 @@ class _LoginFlowState extends State<LoginFlow> {
         await _persistSession(session);
       }
       if (session.token.isNotEmpty) {
+        AuthSessionCoordinator.instance.bind(
+          session,
+          onUpdated: _onSessionRefreshed,
+        );
         try {
-          final resp = await http.get(
+          var resp = await http.get(
             Uri.parse('${session.apiBase}/users/me'),
             headers: {'Authorization': 'Bearer ${session.token}'},
           );
+          if (AuthSessionCoordinator.isRecoverable401(resp)) {
+            final refreshed =
+                await AuthSessionCoordinator.instance.refreshToken();
+            if (refreshed != null) {
+              session = refreshed;
+              resp = await http.get(
+                Uri.parse('${session.apiBase}/users/me'),
+                headers: {'Authorization': 'Bearer ${session.token}'},
+              );
+            }
+          }
           if (resp.statusCode == 401) {
             await _clearSession(userId: session.userId);
+            AuthSessionCoordinator.instance.clear();
             if (mounted) setState(() => _hydrating = false);
             return;
           }
@@ -140,6 +174,7 @@ class _LoginFlowState extends State<LoginFlow> {
                       : body)
                 : const <String, dynamic>{};
             session = AuthSession.enrichFromUsersMe(session, data).withLocalDevGrants();
+            AuthSessionCoordinator.instance.updateSession(session);
             await _persistSession(session);
           }
         } catch (_) {}

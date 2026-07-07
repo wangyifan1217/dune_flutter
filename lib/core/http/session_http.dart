@@ -1,6 +1,7 @@
 import 'package:http/http.dart' as http;
 
 import '../../features/auth/auth_session.dart';
+import '../../features/auth/auth_session_coordinator.dart';
 import '../../features/auth/auth_session_guard.dart';
 
 Uri dunesApiUri(AuthSession session, String path) {
@@ -21,18 +22,39 @@ Map<String, String> dunesAuthHeaders(
   };
 }
 
+Future<http.Response> _dunesRequestWithRetry(
+  AuthSession session,
+  Future<http.Response> Function(AuthSession active) send, {
+  http.Client? client,
+  bool retried = false,
+}) async {
+  final active = AuthSessionCoordinator.instance.resolve(session);
+  var resp = await send(active);
+  if (!retried && AuthSessionCoordinator.isRecoverable401(resp)) {
+    final refreshed = await AuthSessionCoordinator.instance.refreshToken();
+    if (refreshed != null) {
+      resp = await send(refreshed);
+    }
+  }
+  AuthSessionGuard.instance.inspectResponse(resp);
+  return resp;
+}
+
 Future<http.Response> dunesHttpGet(
   AuthSession session,
   String path, {
   Map<String, String>? headers,
   http.Client? client,
-}) async {
-  final resp = await (client ?? http.Client()).get(
-    dunesApiUri(session, path),
-    headers: dunesAuthHeaders(session, headers),
+}) {
+  final c = client ?? http.Client();
+  return _dunesRequestWithRetry(
+    session,
+    (active) => c.get(
+      dunesApiUri(active, path),
+      headers: dunesAuthHeaders(active, headers),
+    ),
+    client: c,
   );
-  AuthSessionGuard.instance.inspectResponse(resp);
-  return resp;
 }
 
 Future<http.Response> dunesHttpPost(
@@ -41,14 +63,17 @@ Future<http.Response> dunesHttpPost(
   Object? body,
   Map<String, String>? headers,
   http.Client? client,
-}) async {
-  final resp = await (client ?? http.Client()).post(
-    dunesApiUri(session, path),
-    headers: dunesAuthHeaders(session, headers),
-    body: body,
+}) {
+  final c = client ?? http.Client();
+  return _dunesRequestWithRetry(
+    session,
+    (active) => c.post(
+      dunesApiUri(active, path),
+      headers: dunesAuthHeaders(active, headers),
+      body: body,
+    ),
+    client: c,
   );
-  AuthSessionGuard.instance.inspectResponse(resp);
-  return resp;
 }
 
 Future<http.Response> dunesHttpDelete(
@@ -56,11 +81,14 @@ Future<http.Response> dunesHttpDelete(
   String path, {
   Map<String, String>? headers,
   http.Client? client,
-}) async {
-  final resp = await (client ?? http.Client()).delete(
-    dunesApiUri(session, path),
-    headers: dunesAuthHeaders(session, headers),
+}) {
+  final c = client ?? http.Client();
+  return _dunesRequestWithRetry(
+    session,
+    (active) => c.delete(
+      dunesApiUri(active, path),
+      headers: dunesAuthHeaders(active, headers),
+    ),
+    client: c,
   );
-  AuthSessionGuard.instance.inspectResponse(resp);
-  return resp;
 }

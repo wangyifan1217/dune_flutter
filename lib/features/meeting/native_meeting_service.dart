@@ -4,6 +4,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import 'package:just_audio/just_audio.dart';
 
 import '../../core/http/session_http.dart';
 import '../auth/auth_session.dart';
@@ -103,7 +104,7 @@ class NativeMeetingService {
       audioObjectKey: audioObjectKey,
       audioUrl: audioUrl,
       contentType: contentType,
-      durationSeconds: guessDurationSeconds(filePath),
+      durationSeconds: await resolveDurationSeconds(filePath),
     );
     return meetingId;
   }
@@ -404,7 +405,7 @@ class NativeMeetingService {
       audioObjectKey: audioObjectKey,
       audioUrl: audioUrl,
       contentType: contentType,
-      durationSeconds: guessDurationSeconds(filePath),
+      durationSeconds: await resolveDurationSeconds(filePath),
     );
     return meetingId;
   }
@@ -583,6 +584,32 @@ class NativeMeetingService {
       default:
         return 'audio/wav';
     }
+  }
+
+  /// 优先读取媒体元数据时长；失败时回退到文件大小估算。
+  Future<int> resolveDurationSeconds(String path) async {
+    if (!kIsWeb) {
+      try {
+        final player = AudioPlayer();
+        try {
+          final duration = await player
+              .setFilePath(path)
+              .timeout(const Duration(seconds: 20));
+          if (duration != null && duration.inSeconds > 0) {
+            return duration.inSeconds;
+          }
+          final loaded = player.duration;
+          if (loaded != null && loaded.inSeconds > 0) {
+            return loaded.inSeconds;
+          }
+        } finally {
+          await player.dispose();
+        }
+      } catch (e) {
+        debugPrint('Meeting duration probe failed for $path: $e');
+      }
+    }
+    return guessDurationSeconds(path);
   }
 
   int guessDurationSeconds(String path) {

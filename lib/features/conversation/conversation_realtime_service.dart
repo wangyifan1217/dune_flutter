@@ -3,9 +3,9 @@ import 'dart:convert';
 
 import 'package:centrifuge/centrifuge.dart' as centrifuge;
 import 'package:flutter/foundation.dart';
-import 'package:http/http.dart' as http;
 
-import '../auth/auth_session_guard.dart';
+import '../../core/http/session_http.dart';
+import '../auth/auth_session_coordinator.dart';
 import '../auth/auth_session.dart';
 
 class ConversationRealtimeEvent {
@@ -25,12 +25,9 @@ class ConversationRealtimeEvent {
 class ConversationRealtimeService {
   ConversationRealtimeService({
     required AuthSession session,
-    http.Client? client,
-  })  : _session = session,
-        _http = client ?? http.Client();
+  }) : _session = session;
 
   final AuthSession _session;
-  final http.Client _http;
   final StreamController<ConversationRealtimeEvent> _events =
       StreamController<ConversationRealtimeEvent>.broadcast();
   final StreamController<Set<int>> _onlineUsersController =
@@ -63,13 +60,6 @@ class ConversationRealtimeService {
     });
     return _onlineUsersController.stream.listen(onData);
   }
-
-  Uri _uri(String path) => Uri.parse('${_session.apiBase}$path');
-
-  Map<String, String> get _headers => <String, String>{
-    'Authorization': 'Bearer ${_session.token}',
-    'Content-Type': 'application/json',
-  };
 
   Completer<void>? _connectCompleter;
 
@@ -384,12 +374,9 @@ class ConversationRealtimeService {
   }
 
   Future<Map<String, dynamic>> _fetchConnectionToken() async {
-    final resp = await _http.get(
-      _uri('/realtime/connection-token'),
-      headers: _headers,
-    );
+    final session = AuthSessionCoordinator.instance.resolve(_session);
+    final resp = await dunesHttpGet(session, '/realtime/connection-token');
     if (resp.statusCode == 401) {
-      AuthSessionGuard.instance.inspectStatusCode(resp.statusCode);
       throw Exception('realtime token 获取失败: HTTP 401');
     }
     if (resp.statusCode < 200 || resp.statusCode >= 300) {

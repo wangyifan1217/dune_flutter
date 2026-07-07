@@ -91,6 +91,7 @@ class MeetingUploadCoordinator extends ChangeNotifier {
     required String meetingDate,
     required String sourceFilePath,
     required bool generate,
+    int recordingDurationSeconds = 0,
   }) async {
     attach(session);
     final svc = _service!;
@@ -126,6 +127,7 @@ class MeetingUploadCoordinator extends ChangeNotifier {
       meetingDate: meetingDate,
       generate: generate,
       createdAtMs: DateTime.now().millisecondsSinceEpoch,
+      recordingDurationSeconds: recordingDurationSeconds.clamp(0, 24 * 60 * 60),
     );
     _jobs = <MeetingUploadJob>[..._jobs, job];
     await MeetingUploadStorage.save(userId, _jobs);
@@ -314,7 +316,11 @@ class MeetingUploadCoordinator extends ChangeNotifier {
       }
       final audioUrl = svc.readUploadUrlForAttach(upload, audioObjectKey);
       final contentType = svc.contentTypeForPath(uploadPath);
-      final durationSeconds = svc.guessDurationSeconds(uploadPath);
+      final durationSeconds = await _resolveUploadDurationSeconds(
+        svc: svc,
+        uploadPath: uploadPath,
+        recordingDurationSeconds: job.recordingDurationSeconds,
+      );
 
       final attachIdx = _indexOfJob(job.meetingId);
       if (attachIdx < 0) return;
@@ -380,6 +386,24 @@ class MeetingUploadCoordinator extends ChangeNotifier {
     debugPrint(
       'MeetingUpload failed meetingId=${job.meetingId} retry=${next.retryCount} permanent=$permanent error=$message',
     );
+  }
+
+  Future<int> _resolveUploadDurationSeconds({
+    required NativeMeetingService svc,
+    required String uploadPath,
+    required int recordingDurationSeconds,
+  }) async {
+    final probed = await svc.resolveDurationSeconds(uploadPath);
+    if (recordingDurationSeconds <= 0) return probed;
+    if (probed <= 0) return recordingDurationSeconds;
+    // 元数据时长优先；与录音计时偏差过大时取较小值，避免 inflated 估算。
+    final delta = (probed - recordingDurationSeconds).abs();
+    final tolerance = math.max(30, recordingDurationSeconds ~/ 10);
+    if (delta <= tolerance) return probed;
+    if (probed > recordingDurationSeconds * 2) {
+      return recordingDurationSeconds;
+    }
+    return probed;
   }
 
   Future<String> _prepareJobUploadPath(int index, MeetingUploadJob job) async {

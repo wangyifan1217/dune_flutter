@@ -450,6 +450,7 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
         meetingDate: meetingDate,
         sourceFilePath: filePath,
         generate: generate,
+        recordingDurationSeconds: _live.elapsed.value.inSeconds,
       );
       if (!mounted) return;
       showDunesToast(

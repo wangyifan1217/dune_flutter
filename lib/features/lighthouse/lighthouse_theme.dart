@@ -63,6 +63,7 @@ abstract final class LhTypography {
     FontWeight weight = FontWeight.w400,
     double? letterSpacing,
     double? height,
+    FontStyle? fontStyle,
   }) =>
       TextStyle(
         fontFamily: 'PingFang SC',
@@ -72,6 +73,7 @@ abstract final class LhTypography {
         fontWeight: weight,
         letterSpacing: letterSpacing,
         height: height,
+        fontStyle: fontStyle,
       );
 }
 

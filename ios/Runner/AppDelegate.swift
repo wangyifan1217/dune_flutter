@@ -837,6 +837,8 @@ final class StreamingAacM4aWriter {
         allocator: kCFAllocatorDefault,
         dataBuffer: blockBuffer,
         dataReady: true,
+        makeDataReadyCallback: nil,
+        refcon: nil,
         formatDescription: formatDesc,
         sampleCount: CMItemCount(frameCount),
         sampleTimingEntryCount: 1,

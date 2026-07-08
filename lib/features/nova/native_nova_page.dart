@@ -4,8 +4,6 @@ import 'dart:convert';
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-
-import '../../core/widgets/dunes_logo_loader.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:mime/mime.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -2698,7 +2696,7 @@ class _NativeNovaPageState extends State<NativeNovaPage> with WidgetsBindingObse
             ),
             if (_loading)
               const Expanded(
-                child: Center(child: const DunesLogoLoader()),
+                child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
               )
             else
               Expanded(

@@ -24,7 +24,6 @@ import 'dart:typed_data';
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 
-import '../../core/widgets/dunes_logo_loader.dart';
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -630,7 +629,15 @@ class _ProposalUploadPageState extends State<ProposalUploadPage> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const DunesLogoLoader(size: 32),
+          SizedBox(
+            width: 32,
+            height: 32,
+            child: CircularProgressIndicator(
+              color: _PDColors.coral,
+              strokeWidth: 2.2,
+              backgroundColor: _PDColors.line,
+            ),
+          ),
           SizedBox(height: 14),
           Text(
             '解析中',

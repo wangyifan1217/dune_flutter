@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../../core/widgets/dunes_logo_loader.dart';
-
 import '../chat/user_avatar_widget.dart';
 import '../chat/group_composite_avatar.dart';
 import '../conversation/conversation_models.dart';
@@ -474,7 +472,11 @@ class _PreviewLine extends StatelessWidget {
     if (generating) {
       return Row(
         children: [
-          const DunesLogoLoader(size: 12),
+          const SizedBox(
+            width: 12,
+            height: 12,
+            child: CircularProgressIndicator(strokeWidth: 1.5),
+          ),
           const SizedBox(width: 6),
           Expanded(
             child: Text(

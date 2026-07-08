@@ -7,8 +7,6 @@ import 'package:http/http.dart' as http;
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-
-import '../../core/widgets/dunes_logo_loader.dart';
 import 'package:flutter/rendering.dart' show ScrollDirection;
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
@@ -4020,7 +4018,7 @@ class _NativeChatViewState extends State<NativeChatView>
     if (!_bootstrapped && _loading && _conversation == null) {
       return const Scaffold(
         backgroundColor: DunesColors.bgApp,
-        body: Center(child: const DunesLogoLoader()),
+        body: Center(child: CircularProgressIndicator(strokeWidth: 2)),
       );
     }
     if (_error != null && !_bootstrapped && _conversation == null) {
@@ -4043,7 +4041,7 @@ class _NativeChatViewState extends State<NativeChatView>
     if (conv == null) {
       return const Scaffold(
         backgroundColor: DunesColors.bgApp,
-        body: Center(child: const DunesLogoLoader()),
+        body: Center(child: CircularProgressIndicator(strokeWidth: 2)),
       );
     }
     final title = conv.displayTitle;
@@ -4138,7 +4136,9 @@ class _NativeChatViewState extends State<NativeChatView>
                 child: Stack(
                   children: [
                     if (!_bootstrapped && _loading)
-                      const Center(child: DunesLogoLoader())
+                      const Center(
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
                     else
                       NotificationListener<ScrollNotification>(
                         onNotification: _onMessageListScroll,
@@ -4164,7 +4164,13 @@ class _NativeChatViewState extends State<NativeChatView>
                                 ),
                                 child: Center(
                                   child: _loadingNewer
-                                      ? const DunesLogoLoader(size: 18)
+                                      ? const SizedBox(
+                                          width: 18,
+                                          height: 18,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                          ),
+                                        )
                                       : TextButton(
                                           onPressed: _loadNewer,
                                           child: const Text('加载更新消息'),
@@ -4302,7 +4308,11 @@ class _NativeChatViewState extends State<NativeChatView>
                         child: Center(
                           child: Material(
                             color: Colors.transparent,
-                            child: const DunesLogoLoader(size: 18),
+                            child: SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
                           ),
                         ),
                       ),
@@ -4324,7 +4334,13 @@ class _NativeChatViewState extends State<NativeChatView>
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  const DunesLogoLoader(size: 12),
+                                  const SizedBox(
+                                    width: 12,
+                                    height: 12,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 1.5,
+                                    ),
+                                  ),
                                   const SizedBox(width: 8),
                                   Text(
                                     '定位中…',

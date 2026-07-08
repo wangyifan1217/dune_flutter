@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../../core/widgets/dunes_logo_loader.dart';
-
 import '../../core/theme/dunes_theme.dart';
 import '../../core/util/friendly_error.dart';
 import '../auth/auth_session.dart';
@@ -366,7 +364,7 @@ class _NativeGroupInfoPageState extends State<NativeGroupInfoPage> {
 
   Widget _buildBody(NativeConversation hint) {
     if (_loading) {
-      return const Center(child: const DunesLogoLoader());
+      return const Center(child: CircularProgressIndicator(strokeWidth: 2, color: DunesColors.accent));
     }
     if (_error != null) {
       return Center(
@@ -733,7 +731,7 @@ class _MemberPickerSheetState extends State<_MemberPickerSheet> {
       return const Center(
         child: Padding(
           padding: EdgeInsets.all(24),
-          child: const DunesLogoLoader(),
+          child: CircularProgressIndicator(strokeWidth: 2),
         ),
       );
     }

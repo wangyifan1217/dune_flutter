@@ -1,8 +1,6 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
-
-import '../../core/widgets/dunes_logo_loader.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/theme/dunes_theme.dart';
@@ -1593,7 +1591,14 @@ class _ApvBtn extends StatelessWidget {
             border: Border.all(color: border),
           ),
           child: loading
-              ? const DunesLogoLoader(size: 14)
+              ? SizedBox(
+                  width: 14,
+                  height: 14,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: approve ? Colors.white : DunesColors.coral,
+                  ),
+                )
               : Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [

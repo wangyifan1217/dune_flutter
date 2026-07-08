@@ -2,8 +2,6 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-import '../../core/widgets/dunes_logo_loader.dart';
-
 import '../../core/theme/dunes_theme.dart';
 import '../../core/util/friendly_error.dart';
 import 'chat_quote.dart';
@@ -394,7 +392,10 @@ class ChatInputBar extends StatelessWidget {
                       : sending
                       ? const Padding(
                           padding: EdgeInsets.all(8),
-                          child: const DunesLogoLoader(),
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
                         )
                       : const Icon(
                           Icons.arrow_upward_rounded,

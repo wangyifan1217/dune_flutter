@@ -3,8 +3,6 @@ import 'dart:async';
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-
-import '../../core/widgets/dunes_logo_loader.dart';
 import 'package:flutter/services.dart';
 import 'package:permission_handler/permission_handler.dart';
 
@@ -518,7 +516,11 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const DunesLogoLoader(size: 32),
+                  const SizedBox(
+                    width: 32,
+                    height: 32,
+                    child: CircularProgressIndicator(strokeWidth: 3),
+                  ),
                   const SizedBox(height: 16),
                   Text(
                     _busyOverlayMessage,
@@ -971,7 +973,14 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
                           child: FilledButton.icon(
                             onPressed: canEndLive ? _confirmEndLive : null,
                             icon: _persistingAfterEnd
-                                ? const DunesLogoLoader(size: 16)
+                                ? const SizedBox(
+                                    width: 16,
+                                    height: 16,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: Colors.white,
+                                    ),
+                                  )
                                 : const Icon(Icons.stop_rounded),
                             label: Text(
                               _persistingAfterEnd ? '保存中...' : '结束并保存',
@@ -1056,7 +1065,11 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
           child: FilledButton.icon(
             onPressed: canSubmit ? _submit : null,
             icon: (_submitting || _persistingAfterEnd)
-                ? const DunesLogoLoader(size: 16)
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
                 : const Icon(Icons.auto_awesome_rounded),
             label: Text(
               (_submitting || _persistingAfterEnd)

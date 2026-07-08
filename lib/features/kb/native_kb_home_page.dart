@@ -3,8 +3,6 @@ import 'dart:async';
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 
-import '../../core/widgets/dunes_logo_loader.dart';
-
 import '../../core/navigation/navigation_controller.dart';
 import '../../core/theme/dunes_theme.dart';
 import '../../core/util/friendly_error.dart';
@@ -217,7 +215,7 @@ class _NativeKbHomePageState extends State<NativeKbHomePage> {
       color: DunesColors.bgApp,
       child: SafeArea(
         child: _loading
-            ? const Center(child: const DunesLogoLoader())
+            ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
             : _error != null
             ? _buildError()
             : RefreshIndicator(
@@ -392,7 +390,11 @@ class _NativeKbHomePageState extends State<NativeKbHomePage> {
           OutlinedButton.icon(
             onPressed: _syncing ? null : _sync,
             icon: _syncing
-                ? const DunesLogoLoader(size: 14)
+                ? const SizedBox(
+                    width: 14,
+                    height: 14,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
                 : const Icon(Icons.refresh, size: 16),
             label: const Text('同步 RAGFlow', style: TextStyle(fontSize: 11)),
           ),

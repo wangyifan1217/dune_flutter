@@ -3,8 +3,6 @@ import 'dart:typed_data';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 
-import '../../core/widgets/dunes_logo_loader.dart';
-
 import '../../core/theme/dunes_theme.dart';
 import '../../core/util/friendly_error.dart';
 import '../../core/widgets/cached_network_image.dart';
@@ -225,7 +223,11 @@ class _ChatAuthImageBubbleState extends State<ChatAuthImageBubble> {
     return _placeholder(
       width: box.width,
       height: box.width * 0.72,
-      child: const DunesLogoLoader(size: 20),
+      child: const SizedBox(
+        width: 20,
+        height: 20,
+        child: CircularProgressIndicator(strokeWidth: 2, color: DunesColors.text3),
+      ),
     );
   }
 
@@ -234,7 +236,11 @@ class _ChatAuthImageBubbleState extends State<ChatAuthImageBubble> {
     return _placeholder(
       width: box.width * 0.72,
       height: box.width * 0.54,
-      child: const DunesLogoLoader(size: 20),
+      child: const SizedBox(
+        width: 20,
+        height: 20,
+        child: CircularProgressIndicator(strokeWidth: 2, color: DunesColors.text3),
+      ),
     );
   }
 
@@ -492,7 +498,9 @@ class _ImagePreviewDialogState extends State<_ImagePreviewDialog> {
 
           final Widget content;
           if (loading) {
-            content = const Center(child: DunesLogoLoader());
+            content = const Center(
+              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white70),
+            );
           } else if (failed) {
             content = const Center(
               child: Icon(Icons.broken_image_outlined, color: Colors.white54, size: 48),

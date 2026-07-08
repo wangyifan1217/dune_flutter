@@ -4,8 +4,6 @@ import 'dart:typed_data';
 
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
-
-import '../../core/widgets/dunes_logo_loader.dart';
 import 'package:mime/mime.dart';
 import 'package:permission_handler/permission_handler.dart';
 
@@ -310,7 +308,11 @@ class _XflowUploadFieldState extends State<XflowUploadField> {
                   ),
                   if (_picking) ...[
                     const SizedBox(height: 10),
-                    const DunesLogoLoader(size: 18),
+                    const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
                   ],
                 ],
               ),

@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../../core/widgets/dunes_logo_loader.dart';
-
 import '../../core/navigation/navigation_controller.dart';
 import '../../core/theme/dunes_theme.dart';
 import '../../core/util/friendly_error.dart';
@@ -86,7 +84,7 @@ class _NativeKbDocPageState extends State<NativeKbDocPage> {
             _buildHeader(),
             Expanded(
               child: _loading
-                  ? const Center(child: const DunesLogoLoader())
+                  ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
                   : _error != null
                       ? _buildError()
                       : _buildBody(),

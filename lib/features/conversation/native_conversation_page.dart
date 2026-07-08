@@ -2,8 +2,6 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-import '../../core/widgets/dunes_logo_loader.dart';
-
 import '../../core/navigation/navigation_controller.dart';
 import '../../core/widgets/cached_network_image.dart';
 import '../nova/nova_background_coordinator.dart';
@@ -729,7 +727,7 @@ class _NativeConversationPageState extends State<NativeConversationPage>
 
   Widget _buildBody() {
     if (_loading) {
-      return const Center(child: const DunesLogoLoader());
+      return const Center(child: CircularProgressIndicator(strokeWidth: 2));
     }
     if (_error != null) {
       return _ErrorPanel(

@@ -2,8 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
-
-import '../../core/widgets/dunes_logo_loader.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/http/session_http.dart';
@@ -44,7 +42,6 @@ import '../xflow/native_b10_page.dart';
 import '../xflow/native_b3_page.dart';
 import '../xflow/native_xflow_form_page.dart';
 import '../xflow/proposal_launch_config.dart';
-import '../xflow/proposal_upload_page.dart';
 import '../xflow/xflow_models.dart';
 import '../xflow/xflow_service.dart';
 import '../nova/native_nova_history_page.dart';
@@ -57,6 +54,7 @@ import '../shell/dunes_main_tab_bar.dart';
 import '../shell/dunes_toast.dart';
 import '../workbench/native_avatar_sheet.dart';
 import '../workbench/native_my_workbench_pages.dart';
+import '../workbench/native_team_board_page.dart';
 import '../workbench/workbench_badge_notifier.dart';
 import '../lighthouse/native_lighthouse_page.dart';
 import '../meeting/meeting_live_controller.dart';
@@ -115,7 +113,6 @@ class _NativeScreenHostState extends State<NativeScreenHost>
   String _b3InitialCategory = 'biz';
   int? _xflowEditProposalId;
   String _xflowFormBackScreen = 'B3';
-  String _proposalUploadBackScreen = 'B3';
   String? _b14InitialFilter;
   int _meetingId = 0;
   final ConversationRealtimeDedup _commBadgeDedup = ConversationRealtimeDedup();
@@ -695,14 +692,14 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           session: widget.session,
           navigation: widget.navigation,
           initialCategory: _b3InitialCategory,
-          onOpenForm: (templateKey) => _openXflowOrUpload(
-            templateKey,
-            backScreen: 'B3',
-          ),
-        );
-      case 'PU':
-        return ProposalUploadPage(
-          onBack: () => widget.navigation.go(_proposalUploadBackScreen),
+          onOpenForm: (templateKey) {
+            setState(() {
+              _xflowTemplateKey = templateKey;
+              _xflowEditProposalId = null;
+              _xflowFormBackScreen = 'B3';
+            });
+            widget.navigation.go('XF');
+          },
         );
       case 'XF':
         return NativeXflowFormPage(
@@ -847,7 +844,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           });
           return const Scaffold(
             backgroundColor: DunesColors.bgApp,
-            body: Center(child: const DunesLogoLoader()),
+            body: Center(child: CircularProgressIndicator()),
           );
         }
         return NativeMeetingDetailPage(
@@ -989,20 +986,10 @@ class _NativeScreenHostState extends State<NativeScreenHost>
   }
 
   void _openXflowFormFromB2(String templateKey) {
-    _openXflowOrUpload(templateKey, backScreen: 'B2');
-  }
-
-  void _openXflowOrUpload(String templateKey, {required String backScreen}) {
-    final key = templateKey.trim();
-    if (key == 'sales-proposal') {
-      setState(() => _proposalUploadBackScreen = backScreen);
-      widget.navigation.go('PU');
-      return;
-    }
     setState(() {
-      _xflowTemplateKey = key;
+      _xflowTemplateKey = templateKey;
       _xflowEditProposalId = null;
-      _xflowFormBackScreen = backScreen;
+      _xflowFormBackScreen = 'B2';
     });
     widget.navigation.go('XF');
   }
@@ -1514,6 +1501,15 @@ class _NativeB2PageState extends State<_NativeB2Page> {
                     const SizedBox(height: 14),
                     _buildQuickLaunch(),
                     const SizedBox(height: 14),
+                    _buildSectionLabel('灯塔 · 合同行政'),
+                    const SizedBox(height: 4),
+                    const ContractSealingEntryCard(pendingCount: 2),
+                    const ContractBorrowEntryCard(),
+                    const SizedBox(height: 14),
+                    _buildSectionLabel('团队协作'),
+                    const SizedBox(height: 4),
+                    const TeamBoardEntryCard(),
+                    const SizedBox(height: 14),
                     if (stats.pendingForMe > 0)
                       _buildReminderBanner(
                         icon: Icons.notifications_active_outlined,
@@ -1622,7 +1618,11 @@ class _NativeB2PageState extends State<_NativeB2Page> {
                       const Center(
                         child: Padding(
                           padding: EdgeInsets.only(top: 12),
-                          child: const DunesLogoLoader(size: 20),
+                          child: SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
                         ),
                       ),
                     if (_loadError != null)

@@ -2,8 +2,6 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-import '../../core/widgets/dunes_logo_loader.dart';
-
 import '../../core/theme/dunes_theme.dart';
 import 'xflow_models.dart';
 import 'xflow_service.dart';
@@ -1197,7 +1195,11 @@ class XflowXfActionBar extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(vertical: 12),
                 child: loading
                     ? const Center(
-                        child: const DunesLogoLoader(size: 18),
+                        child: SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                        ),
                       )
                     : Row(
                         mainAxisAlignment: MainAxisAlignment.center,

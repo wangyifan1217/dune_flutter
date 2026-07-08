@@ -2,8 +2,6 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-import '../../core/widgets/dunes_logo_loader.dart';
-
 import '../../core/theme/dunes_theme.dart';
 import '../../core/util/friendly_error.dart';
 import '../auth/auth_session.dart';
@@ -313,7 +311,7 @@ class _NativeChatSearchPageState extends State<NativeChatSearchPage> {
   }
 
   Widget _buildResults(List<_SearchListEntry> entries) {
-    if (_loading) return const Center(child: const DunesLogoLoader());
+    if (_loading) return const Center(child: CircularProgressIndicator(strokeWidth: 2));
     if (_error != null) {
       return Center(child: Text(_error!, style: const TextStyle(fontSize: 12, color: DunesColors.text3)));
     }
@@ -336,7 +334,11 @@ class _NativeChatSearchPageState extends State<NativeChatSearchPage> {
             return const Padding(
               padding: EdgeInsets.symmetric(vertical: 14),
               child: Center(
-                child: const DunesLogoLoader(size: 18),
+                child: SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
               ),
             );
           }

@@ -4,8 +4,6 @@ import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-
-import '../../core/widgets/dunes_logo_loader.dart';
 import 'package:just_audio/just_audio.dart';
 
 import '../../core/theme/dunes_theme.dart';
@@ -578,7 +576,11 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
                   : '上传到知识库',
           onPressed: _uploadingSummaryToKb ? null : _confirmUploadSummaryToKb,
           icon: _uploadingSummaryToKb
-              ? const DunesLogoLoader(size: 18)
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
               : Icon(
                   stale
                       ? Icons.cloud_sync_outlined
@@ -905,7 +907,11 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
           if (!failed)
             const Padding(
               padding: EdgeInsets.only(top: 2, right: 10),
-              child: const DunesLogoLoader(size: 18),
+              child: SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
             ),
           Expanded(
             child: Column(
@@ -966,7 +972,11 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
             IconButton(
               onPressed: _forwarding ? null : _forwardMeetingMinutes,
               icon: _forwarding
-                  ? const DunesLogoLoader(size: 20)
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
                   : const Icon(Icons.forward_outlined),
               tooltip: '转发',
             ),
@@ -992,7 +1002,7 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
 
   Widget _buildBody(NativeMeetingDetail? d) {
     return _loading && d == null
-        ? const Center(child: const DunesLogoLoader())
+        ? const Center(child: CircularProgressIndicator())
         : _error != null && d == null
         ? _buildErrorState()
         : d == null
@@ -1178,7 +1188,14 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
                         ? null
                         : _startTranscriptionFromDraft,
                     icon: _startingTranscription
-                        ? const DunesLogoLoader(size: 16)
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
                         : const Icon(Icons.play_arrow_rounded),
                     label: Text(
                       _startingTranscription ? '启动中...' : '开始转写并生成纪要',
@@ -1198,7 +1215,11 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
                   OutlinedButton.icon(
                     onPressed: _regenerating ? null : _regenerate,
                     icon: _regenerating
-                        ? const DunesLogoLoader(size: 16)
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
                         : const Icon(Icons.refresh_rounded),
                     label: Text(
                       _regenerating ? '处理中...' : _regenerateLabel(d),

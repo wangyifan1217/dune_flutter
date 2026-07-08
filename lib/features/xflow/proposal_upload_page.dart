@@ -12,11 +12,7 @@
 // 交互:
 //   • 5 张内容预览卡, "四·财务数据" 默认展开且珊瑚 accent
 //   • 灯塔基线内嵌在财务卡内 (违背检测基准数据)
-//   • 6 步审批时间线, 当前步骤珊瑚呼吸圈
-//
-// TODO 接入:
-//   • 提交 API → _handleSubmit
-//   • 从 auth 拿当前用户填入 approvers[0]
+//   • Excel 识别审批人时间线, 当前步骤珊瑚呼吸圈
 
 import 'dart:convert';
 import 'dart:typed_data';
@@ -29,11 +25,13 @@ import 'package:http_parser/http_parser.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/config/dunes_defaults.dart';
+import '../auth/auth_session.dart';
 
 class ProposalUploadPage extends StatefulWidget {
-  const ProposalUploadPage({super.key, this.onBack});
+  const ProposalUploadPage({super.key, this.onBack, this.session});
 
   final VoidCallback? onBack;
+  final AuthSession? session;
 
   @override
   State<ProposalUploadPage> createState() => _ProposalUploadPageState();
@@ -48,7 +46,6 @@ class _PDColors {
   static const card = Color(0xFFFFFFFF);
   static const cardAlt = Color(0xFFFAF9F6);
   static const ink = Color(0xFF232320);
-  static const ink2 = Color(0xFF3A3833);
   static const mute = Color(0xFF7A7770);
   static const mute2 = Color(0xFF9A968E);
   static const line = Color(0xFFDED9D0);
@@ -62,6 +59,7 @@ class _PDColors {
 // Data models
 // ══════════════════════════════════════════════════════════════════════
 enum _UploadState { empty, uploading, parsed }
+
 enum _ApprovalStatus { done, current, pending }
 
 class _ParsedProposal {
@@ -79,6 +77,7 @@ class _ParsedProposal {
   final double baselineMarginRate;
   final double baselineDiscountRate;
   final List<_Approver> approvers;
+  final Map<String, dynamic> owners;
 
   _ParsedProposal({
     required this.archiveId,
@@ -95,18 +94,18 @@ class _ParsedProposal {
     required this.baselineMarginRate,
     required this.baselineDiscountRate,
     required this.approvers,
+    required this.owners,
   });
 
   factory _ParsedProposal.fromUploadResponse(Map<String, dynamic> json) {
     final data = _asMap(json['data']) ?? json;
     final proposal = _asMap(data['proposal']) ?? data;
     final file = _asMap(proposal['file']) ?? const <String, dynamic>{};
-    final baseline =
-        _asMap(proposal['baseline']) ?? const <String, dynamic>{};
+    final baseline = _asMap(proposal['baseline']) ?? const <String, dynamic>{};
     final owners = _asMap(proposal['owners']) ?? const <String, dynamic>{};
-    final tierRows = _asList(proposal['tier_rows'])
-        .map(_TierRow.fromJson)
-        .toList(growable: false);
+    final tierRows = _asList(
+      proposal['tier_rows'],
+    ).map(_TierRow.fromJson).toList(growable: false);
     final sections = _asList(proposal['sections'])
         .map(
           (section) => _ProposalSection.fromJson(
@@ -131,7 +130,71 @@ class _ParsedProposal {
       baselineMarginRate: _double(baseline['margin_rate']),
       baselineDiscountRate: _double(baseline['discount_rate']),
       approvers: _buildApprovers(owners),
+      owners: owners,
     );
+  }
+
+  Map<String, dynamic> toXflowSubmitValues() {
+    final financeScale = _sectionValue(sections, const [
+      '销售规模',
+      '承诺月规模',
+      '月规模',
+    ]);
+    final financeProfit = _sectionValue(sections, const ['利润', '承诺月毛利', '月毛利']);
+    final launchDate = _sectionValue(sections, const ['上线日期', '计划上线日期']);
+    final txType = _sectionValue(sections, const ['交易类型']);
+    final goodType =
+        _sectionValue(sections, const ['商品类型']) ?? _inferGoodType(productTags);
+    final techPlatform = _sectionValue(sections, const [
+      '技术平台',
+      '技术标签',
+      '技术能力',
+    ]);
+    final owner1 = _firstNonEmpty([
+      _string(owners['national']),
+      _string(owners['regional']),
+      _string(owners['provincial']),
+    ]);
+    final owner2 = _firstNonEmpty(
+      [
+        _string(owners['regional']),
+        _string(owners['provincial']),
+      ].where((name) => name != owner1).toList(growable: false),
+    );
+    final body = <String, dynamic>{
+      'title': _proposalTitle(fileName: fileName, proposalCode: proposalId),
+      'proposalCode': proposalId,
+      'launchChannel': channel,
+      'launchDate': launchDate ?? '',
+      'txType': txType ?? '',
+      'goodType': goodType ?? '',
+      'proposalType': proposalType,
+      'tag1': productTags.map(_tagCode).where((tag) => tag.isNotEmpty).toList(),
+      'provinces': _splitListText(province),
+      'owner1': owner1,
+      'owner1Level': _sectionValue(sections, const ['第一责任人等级', '任务等级']) ?? '',
+      'owner2': owner2,
+      'owner2Level': _sectionValue(sections, const ['第二责任人等级']) ?? '',
+      'techPlatform': techPlatform ?? '',
+      'respNational': _string(owners['national']),
+      'respOps': _string(owners['regional']),
+      'respProvince': _string(owners['provincial']),
+      'respTech': _string(owners['tech']),
+      'targetMonthlyScaleWan': financeScale ?? '',
+      'targetMonthlyProfitWan': financeProfit ?? '',
+      'profitModel': profitModel == '未识别' ? '' : profitModel,
+      'solutionDesc': _solutionText(sections),
+      'proposalArchiveId': archiveId,
+      'sourceFileName': fileName,
+      'sourceFileSize': fileSize,
+      'sourceSheetCount': sheetCount,
+    };
+    body.removeWhere((_, value) {
+      if (value is String) return value.trim().isEmpty;
+      if (value is Iterable) return value.isEmpty;
+      return value == null;
+    });
+    return body;
   }
 }
 
@@ -166,9 +229,9 @@ class _ProposalSection {
         .toList(growable: false);
     final sectionTierRows =
         tierRows ??
-        _asList(json['tier_rows'])
-            .map(_TierRow.fromJson)
-            .toList(growable: false);
+        _asList(
+          json['tier_rows'],
+        ).map(_TierRow.fromJson).toList(growable: false);
     return _ProposalSection(
       id: id,
       orderCn: _string(json['order_cn']),
@@ -216,14 +279,12 @@ class _Approver {
   final String name;
   final String? subLabel;
   final _ApprovalStatus status;
-  final String? dateLabel;
 
   const _Approver({
     required this.role,
     required this.name,
     this.subLabel,
     required this.status,
-    this.dateLabel,
   });
 }
 
@@ -286,55 +347,126 @@ String _buildSectionPreview(List<_SectionRow> rows) {
       .map((row) => row.value)
       .where((value) => value.isNotEmpty)
       .map((value) {
-    final runes = value.runes.toList();
-    if (runes.length <= 30) return value;
-    return '${String.fromCharCodes(runes.take(30))}…';
-  }).toList(growable: false);
+        final runes = value.runes.toList();
+        if (runes.length <= 30) return value;
+        return '${String.fromCharCodes(runes.take(30))}…';
+      })
+      .toList(growable: false);
   return parts.join(' · ');
 }
 
+String? _sectionValue(List<_ProposalSection> sections, List<String> labels) {
+  for (final section in sections) {
+    for (final row in section.rows) {
+      final label = row.label.trim();
+      if (label.isEmpty) continue;
+      if (labels.any(label.contains) && row.value.trim().isNotEmpty) {
+        return row.value.trim();
+      }
+    }
+  }
+  return null;
+}
+
+String _solutionText(List<_ProposalSection> sections) {
+  final parts = <String>[];
+  for (final section in sections) {
+    if (section.id != 'business' && section.id != 'solution') continue;
+    for (final row in section.rows) {
+      final value = row.value.trim();
+      if (value.isNotEmpty) parts.add(value);
+    }
+  }
+  if (parts.isNotEmpty) return parts.join('\n');
+  return sections
+      .expand((section) => section.rows)
+      .map((row) => row.value.trim())
+      .where((value) => value.isNotEmpty)
+      .take(8)
+      .join('\n');
+}
+
+String _proposalTitle({
+  required String fileName,
+  required String proposalCode,
+}) {
+  if (proposalCode.isNotEmpty) return proposalCode;
+  return fileName.replaceFirst(RegExp(r'\.xlsx$', caseSensitive: false), '');
+}
+
+String _firstNonEmpty(List<String> values) {
+  for (final value in values) {
+    if (value.trim().isNotEmpty) return value.trim();
+  }
+  return '';
+}
+
+List<String> _splitListText(String value) {
+  return value
+      .split(RegExp(r'[,，、/;\s]+'))
+      .map((item) => item.trim())
+      .where((item) => item.isNotEmpty)
+      .toList(growable: false);
+}
+
+String _tagCode(String tag) {
+  final text = tag.trim();
+  const known = {
+    '成品油零售': 'RETAIL_FUEL',
+    '电子券': 'COUPON',
+    '加油卡': 'FUEL_CARD',
+    '保险': 'INSURANCE',
+    'SaaS': 'SAAS',
+    'SAAS': 'SAAS',
+    '权益券包': 'BENEFIT_PACK',
+  };
+  if (known.containsValue(text)) return text;
+  return known[text] ?? '';
+}
+
+String? _inferGoodType(List<String> tags) {
+  final text = tags.join(' ');
+  if (text.contains('油')) return '油品';
+  if (text.contains('券') ||
+      text.contains('保险') ||
+      text.toLowerCase().contains('saas')) {
+    return '虚拟商品';
+  }
+  return null;
+}
+
+String _friendlySubmitError(Object err) {
+  if (err is _UploadException) return err.message;
+  final text = err.toString();
+  const prefix = 'Exception: ';
+  return text.startsWith(prefix) ? text.substring(prefix.length) : text;
+}
+
 List<_Approver> _buildApprovers(Map<String, dynamic> owners) {
-  final businessOwners = [
-    _string(owners['national']),
-    _string(owners['regional']),
-    _string(owners['provincial']),
-  ].where((item) => item.isNotEmpty).join(' · ');
-  final techOwner = _string(owners['tech'], fallback: '技术');
-  return [
-    const _Approver(
-      role: '提案提报人',
-      name: '待提交',
-      subLabel: '上传解析完成',
-      status: _ApprovalStatus.done,
-    ),
-    _Approver(
-      role: '业务签字',
-      name: businessOwners.isEmpty ? '业务负责人' : businessOwners,
-      subLabel: '国线 · 大区 · 分省',
-      status: _ApprovalStatus.current,
-    ),
-    _Approver(
-      role: '技术签字',
-      name: techOwner,
-      status: _ApprovalStatus.pending,
-    ),
-    const _Approver(
-      role: '风控组签字',
-      name: '风控组',
-      status: _ApprovalStatus.pending,
-    ),
-    const _Approver(
-      role: '财务签字',
-      name: '财务',
-      status: _ApprovalStatus.pending,
-    ),
-    const _Approver(
-      role: '总裁办签字',
-      name: '总裁办',
-      status: _ApprovalStatus.pending,
-      dateLabel: '终审',
-    ),
-  ];
+  final rows = <_Approver>[];
+  void addOwner(String role, Object? raw) {
+    final name = _string(raw);
+    if (name.isEmpty) return;
+    rows.add(
+      _Approver(role: role, name: name, status: _ApprovalStatus.pending),
+    );
+  }
+
+  addOwner('国线负责人', owners['national']);
+  addOwner('大区负责人', owners['regional']);
+  addOwner('分省负责人', owners['provincial']);
+  addOwner('技术负责人', owners['tech']);
+  if (rows.isEmpty) {
+    return const [
+      _Approver(
+        role: '审批人',
+        name: 'Excel 未识别审批人',
+        subLabel: '请在原表补充负责人后重新上传',
+        status: _ApprovalStatus.pending,
+      ),
+    ];
+  }
+  return rows;
 }
 
 // ══════════════════════════════════════════════════════════════════════
@@ -344,6 +476,7 @@ class _ProposalUploadPageState extends State<ProposalUploadPage> {
   _UploadState _state = _UploadState.empty;
   _ParsedProposal? _parsed;
   final Set<String> _expandedIds = <String>{'finance'}; // 财务默认展开
+  bool _submitting = false;
 
   Future<void> _handleUpload() async {
     final file = await openFile(
@@ -383,7 +516,10 @@ class _ProposalUploadPageState extends State<ProposalUploadPage> {
     }
   }
 
-  Future<_ParsedProposal> _uploadAndParse(String fileName, Uint8List bytes) async {
+  Future<_ParsedProposal> _uploadAndParse(
+    String fileName,
+    Uint8List bytes,
+  ) async {
     final uri = Uri.parse('${DunesDefaults.apiBase}/proposals/upload');
     final req = http.MultipartRequest('POST', uri);
     req.files.add(
@@ -413,13 +549,22 @@ class _ProposalUploadPageState extends State<ProposalUploadPage> {
     if (streamed.statusCode < 200 || streamed.statusCode >= 300) {
       final data = _asMap(body['data']);
       throw _UploadException(
-        _string(data?['message'], fallback: _string(body['message'], fallback: 'HTTP ${streamed.statusCode}')),
+        _string(
+          data?['message'],
+          fallback: _string(
+            body['message'],
+            fallback: 'HTTP ${streamed.statusCode}',
+          ),
+        ),
       );
     }
     if (body['success'] == false) {
       final data = _asMap(body['data']);
       throw _UploadException(
-        _string(data?['message'], fallback: _string(body['message'], fallback: '解析失败')),
+        _string(
+          data?['message'],
+          fallback: _string(body['message'], fallback: '解析失败'),
+        ),
       );
     }
     return _ParsedProposal.fromUploadResponse(body);
@@ -432,13 +577,60 @@ class _ProposalUploadPageState extends State<ProposalUploadPage> {
   }
 
   Future<void> _handleSubmit() async {
-    // TODO: 实际提交 API + 触发下一步签字通知
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('已提交归档 · 已加入业务签字队列'),
-        duration: Duration(seconds: 2),
-      ),
+    final parsed = _parsed;
+    if (parsed == null || _submitting) return;
+    setState(() => _submitting = true);
+    try {
+      final res = await _submitToXflow(parsed.toXflowSubmitValues());
+      final businessId = _int(
+        res['businessId'] ?? res['proposalId'] ?? res['id'],
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(businessId > 0 ? '已提交审批 · 提案 #$businessId' : '已提交审批'),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    } catch (err) {
+      if (!mounted) return;
+      _showUploadError('提交审批失败：${_friendlySubmitError(err)}');
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
+  }
+
+  Future<Map<String, dynamic>> _submitToXflow(
+    Map<String, dynamic> values,
+  ) async {
+    final uri = Uri.parse(
+      '${DunesDefaults.flowApiBase}/xflow/templates/sales-proposal/submit',
     );
+    final headers = <String, String>{'Content-Type': 'application/json'};
+    final token = widget.session?.token.trim() ?? '';
+    if (token.isNotEmpty) {
+      headers['Authorization'] = 'Bearer $token';
+    }
+    final resp = await http.post(
+      uri,
+      headers: headers,
+      body: jsonEncode(values),
+    );
+    final decoded = jsonDecode(resp.body);
+    final body = decoded is Map<String, dynamic>
+        ? decoded
+        : Map<String, dynamic>.from(decoded as Map);
+    if (resp.statusCode < 200 ||
+        resp.statusCode >= 300 ||
+        body['success'] == false) {
+      throw _UploadException(
+        _string(body['message'], fallback: 'HTTP ${resp.statusCode}'),
+      );
+    }
+    final data = body['data'];
+    if (data is Map<String, dynamic>) return data;
+    if (data is Map) return Map<String, dynamic>.from(data);
+    return body;
   }
 
   void _toggleSection(String id) {
@@ -889,9 +1081,7 @@ class _ProposalUploadPageState extends State<ProposalUploadPage> {
         color: _PDColors.card,
         borderRadius: BorderRadius.circular(10),
         border: Border.all(
-          color: isFinance
-              ? _PDColors.coral.withAlpha(90)
-              : _PDColors.line2,
+          color: isFinance ? _PDColors.coral.withAlpha(90) : _PDColors.line2,
           width: 0.6,
         ),
       ),
@@ -910,10 +1100,7 @@ class _ProposalUploadPageState extends State<ProposalUploadPage> {
                 decoration: BoxDecoration(
                   border: isFinance
                       ? const Border(
-                          left: BorderSide(
-                            color: _PDColors.coral,
-                            width: 2,
-                          ),
+                          left: BorderSide(color: _PDColors.coral, width: 2),
                         )
                       : null,
                 ),
@@ -1114,8 +1301,8 @@ class _ProposalUploadPageState extends State<ProposalUploadPage> {
                       color: rows[i].netProfit < 0
                           ? _PDColors.danger
                           : (rows[i].netProfit >= 2000
-                              ? _PDColors.success
-                              : _PDColors.ink),
+                                ? _PDColors.success
+                                : _PDColors.ink),
                       weight: rows[i].netProfit >= 5000
                           ? FontWeight.w700
                           : FontWeight.w500,
@@ -1359,10 +1546,9 @@ class _ProposalUploadPageState extends State<ProposalUploadPage> {
   Widget _statusChip(_Approver a) {
     switch (a.status) {
       case _ApprovalStatus.done:
-        final label = a.dateLabel != null ? '已完成 · ${a.dateLabel}' : '已完成';
-        return Text(
-          label,
-          style: const TextStyle(
+        return const Text(
+          '已完成',
+          style: TextStyle(
             fontFamily: 'monospace',
             fontSize: 8,
             color: _PDColors.success,
@@ -1389,9 +1575,9 @@ class _ProposalUploadPageState extends State<ProposalUploadPage> {
           ),
         );
       case _ApprovalStatus.pending:
-        return Text(
-          a.dateLabel ?? '待',
-          style: const TextStyle(
+        return const Text(
+          '待',
+          style: TextStyle(
             fontFamily: 'monospace',
             fontSize: 8,
             color: _PDColors.mute2,
@@ -1404,7 +1590,7 @@ class _ProposalUploadPageState extends State<ProposalUploadPage> {
 
   Widget _buildSubmitButton() {
     return GestureDetector(
-      onTap: _handleSubmit,
+      onTap: _submitting ? null : _handleSubmit,
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 15),
         decoration: BoxDecoration(
@@ -1415,12 +1601,26 @@ class _ProposalUploadPageState extends State<ProposalUploadPage> {
           children: [
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
-              children: const [
-                Icon(Icons.check_rounded, size: 15, color: _PDColors.bg),
-                SizedBox(width: 8),
+              children: [
+                if (_submitting)
+                  const SizedBox(
+                    width: 15,
+                    height: 15,
+                    child: CircularProgressIndicator(
+                      color: _PDColors.bg,
+                      strokeWidth: 1.8,
+                    ),
+                  )
+                else
+                  const Icon(
+                    Icons.check_rounded,
+                    size: 15,
+                    color: _PDColors.bg,
+                  ),
+                const SizedBox(width: 8),
                 Text(
-                  '提交归档',
-                  style: TextStyle(
+                  _submitting ? '提交中' : '提交归档',
+                  style: const TextStyle(
                     color: _PDColors.bg,
                     fontSize: 13.5,
                     fontWeight: FontWeight.w500,
@@ -1511,7 +1711,9 @@ class _ProposalUploadPageState extends State<ProposalUploadPage> {
         ),
         const Spacer(),
         if (child != null)
-          Flexible(child: Align(alignment: Alignment.centerRight, child: child))
+          Flexible(
+            child: Align(alignment: Alignment.centerRight, child: child),
+          )
         else if (valueMono != null)
           Text(
             valueMono,
@@ -1695,10 +1897,7 @@ class _DashedBorderPainter extends CustomPainter {
       while (distance < metric.length) {
         final endDist = distance + dashLen;
         canvas.drawPath(
-          metric.extractPath(
-            distance,
-            endDist.clamp(0, metric.length),
-          ),
+          metric.extractPath(distance, endDist.clamp(0, metric.length)),
           paint,
         );
         distance = endDist + gapLen;

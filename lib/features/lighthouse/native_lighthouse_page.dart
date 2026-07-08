@@ -9533,9 +9533,6 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       for (final f in filters)
         f: baseRows.where((r) => _rowMatchesAnomaly(r, f)).length,
     };
-    if (counts.values.every((n) => n == 0) && _anomalyFilter == '全部') {
-      return const SizedBox.shrink();
-    }
     final isFiltered = _anomalyFilter != '全部';
 
     return Column(
@@ -16559,9 +16556,7 @@ class _SubTabInfo {
   final Color color;
 }
 
-// ── Brand logo / loader（灯塔 logo；加载时整图旋转）────────
-const _kLhLogoAsset = 'assets/images/lighthouse_logo.png';
-
+// ── Brand mark / loader（抽象同心圆 mark；加载时旋转）────────
 class _LhBrandMark extends StatelessWidget {
   const _LhBrandMark({this.size = 42});
 
@@ -16569,12 +16564,10 @@ class _LhBrandMark extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Image.asset(
-      _kLhLogoAsset,
+    return SizedBox(
       width: size,
       height: size,
-      fit: BoxFit.contain,
-      filterQuality: FilterQuality.medium,
+      child: const CustomPaint(painter: _LighthouseLogoPainter()),
     );
   }
 }

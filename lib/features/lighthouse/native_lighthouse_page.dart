@@ -3644,12 +3644,13 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     }
   }
 
-  Future<void> _loadTrend(String tab) async {
+  Future<void> _loadTrend(String tab, {bool force = false}) async {
     final requestedPeriod = _period;
     final requestedFuel = _supplyFuelFilter;
     final requestedOffset = _periodOffset;
     final key = '$tab|$requestedPeriod|$requestedOffset|$requestedFuel';
-    if (_loadedTrends.contains(key)) return;
+    if (!force && _loadedTrends.contains(key)) return;
+    if (force) _loadedTrends.remove(key);
     try {
       final data = await LighthouseService(session: widget.session).fetchTrend(
         tab: tab,
@@ -12404,7 +12405,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     for (final e in raw) {
       if (e is num) pts.add(e.toDouble());
     }
-    return pts;
+    return pts.length >= 2 ? pts : (pts.isEmpty ? pts : [pts.first, pts.first]);
   }
 
   Widget _buildListRankBadge(String rank, {required bool isTop3}) {
@@ -12459,8 +12460,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     final delta = deltaRaw ?? 0;
     final dArrow = delta >= 0 ? '↑' : '↓';
     final dColor = delta >= 0 ? LhColors.pos : LhColors.neg;
-    final hasTrend = r['trend'] is Map;
-    final canExpand = hasTrend;
+    final canExpand = _tab == 'product' || _tab == 'supply' || _tab == 'channel';
     final isMetaExpanded = _metaExpanded.contains(trendKey);
 
     // Tag color (centralised helper)
@@ -12579,13 +12579,8 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                   width: 1,
                 ),
               ),
-              // 整卡 tappable → openDetail (hero cell 一致 UX)。
-              // 内部 meta chip / bottom control / expanded body 的 GestureDetector
-              // 都有 onTap, 会在手势竞技场里赢过外层, 不冲突。
-              child: GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTap: canDetail ? openDetail : null,
-                child: Column(
+              // 左栏点名称进详情；右栏毛利块点数字看走势。
+              child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     Row(
@@ -12603,17 +12598,21 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Text(
-                                name,
-                                style: LhTypography.sans(
-                                  size: 11.2,
-                                  weight: FontWeight.w700,
-                                  color: LhColors.ink,
-                                  height: 1.2,
-                                  letterSpacing: -0.1,
+                              GestureDetector(
+                                behavior: HitTestBehavior.opaque,
+                                onTap: canDetail ? openDetail : null,
+                                child: Text(
+                                  name,
+                                  style: LhTypography.sans(
+                                    size: 11.2,
+                                    weight: FontWeight.w700,
+                                    color: LhColors.ink,
+                                    height: 1.2,
+                                    letterSpacing: -0.1,
+                                  ),
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
                                 ),
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
                               ),
                               const SizedBox(height: 5),
                               Row(
@@ -12882,13 +12881,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                                         const SizedBox(width: 2),
                                         GestureDetector(
                                           behavior: HitTestBehavior.opaque,
-                                          onTap: () => setState(() {
-                                            if (_expanded.contains(trendKey)) {
-                                              _expanded.remove(trendKey);
-                                            } else {
-                                              _expanded.add(trendKey);
-                                            }
-                                          }),
+                                          onTap: () => _openRowTrendSheet(
+                                            name,
+                                            group,
+                                          ),
                                           child: Padding(
                                             padding: const EdgeInsets.fromLTRB(
                                               4,
@@ -12900,26 +12896,20 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                                               text: TextSpan(
                                                 children: [
                                                   TextSpan(
-                                                    text: '趋势',
+                                                    text: '走势',
                                                     style: LhTypography.mono(
                                                       size: 8,
-                                                      color: isExpanded
-                                                          ? LhColors.ink2
-                                                          : LhColors.mute2,
-                                                      weight: FontWeight.w600,
+                                                      color: LhColors.copper,
+                                                      weight: FontWeight.w700,
                                                       letterSpacing: 0.5,
                                                     ),
                                                   ),
-                                                  TextSpan(
-                                                    text: isExpanded
-                                                        ? ' ▴'
-                                                        : ' ▾',
-                                                    style: LhTypography.mono(
-                                                      size: 8.2,
-                                                      color: isExpanded
-                                                          ? LhColors.ink2
-                                                          : LhColors.mute2,
-                                                      weight: FontWeight.w600,
+                                                  const TextSpan(
+                                                    text: ' ›',
+                                                    style: TextStyle(
+                                                      fontSize: 8.2,
+                                                      color: LhColors.copper,
+                                                      fontWeight: FontWeight.w700,
                                                     ),
                                                   ),
                                                 ],
@@ -12948,7 +12938,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                         //   率 30.0%                 ← mono kicker + sans w700 -0.3 数字
                         //   ↑ 2.4%  vs 上月    ›     ← mono 8.6 delta + vsLabel + chevron_right_rounded
                         //                              (chevron 从原左栏搬到这里, 跟 hero pattern 完全一致)
-                        SizedBox(
+                        GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onTap: () => _openRowTrendSheet(name, group),
+                          child: SizedBox(
                           width: 102,
                           child: Builder(
                             builder: (ctx) {
@@ -12956,12 +12949,12 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                                   ? dColor
                                   : LhColors.mute2;
                               final sparkPoints = _heroSparkPoints(r);
-                              final hasSpark = sparkPoints.length >= 2;
+                              final hasSpark = sparkPoints.isNotEmpty;
                               return Column(
                                 crossAxisAlignment: CrossAxisAlignment.end,
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  // Sparkline (v2)
+                                  // Sparkline (v2) — 有数据才画，无数据也保留可点区域
                                   if (hasSpark) ...[
                                     SizedBox(
                                       width: 40,
@@ -12972,6 +12965,13 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                                           color: sparkColor,
                                         ),
                                       ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                  ] else ...[
+                                    Icon(
+                                      Icons.show_chart_rounded,
+                                      size: 12,
+                                      color: LhColors.mute2.withAlpha(160),
                                     ),
                                     const SizedBox(height: 4),
                                   ],
@@ -13135,21 +13135,20 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                                           ),
                                         ),
                                       ],
-                                      // Chevron 收尾 —— 完全跟 _buildHeroCell 一样
-                                      if (canDetail) ...[
-                                        const SizedBox(width: 4),
-                                        const Icon(
-                                          Icons.chevron_right_rounded,
-                                          size: 11,
-                                          color: LhColors.mute2,
-                                        ),
-                                      ],
+                                      // Chevron 收尾 —— 点右侧毛利块看走势
+                                      const SizedBox(width: 4),
+                                      Icon(
+                                        Icons.chevron_right_rounded,
+                                        size: 11,
+                                        color: LhColors.copper.withAlpha(180),
+                                      ),
                                     ],
                                   ),
                                 ],
                               );
                             },
                           ),
+                        ),
                         ),
                       ],
                     ),
@@ -13293,11 +13292,153 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                       ),
                   ],
                 ),
-              ),
             ),
           ],
         ),
       ),
+    );
+  }
+
+  Map<String, dynamic>? _findListRow(String name, String group) {
+    for (final r in _currentRows) {
+      if (r['name']?.toString() == name &&
+          (r['group']?.toString() ?? '') == group) {
+        return r;
+      }
+    }
+    return null;
+  }
+
+  /// 列表行点毛利/效率数字 → 上升页走势（会议纪要 8.3）
+  Future<void> _openRowTrendSheet(String name, String group) async {
+    if (!mounted) return;
+    var row = _findListRow(name, group);
+    var chart = row == null ? null : _trendChartFor(row, showHeader: false);
+
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: LhColors.paper,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (sheetCtx) {
+        var loading = chart == null;
+        return StatefulBuilder(
+          builder: (ctx, setSheet) {
+            Future<void> ensureTrend() async {
+              if (!loading || chart != null) return;
+              await _loadTrend(_tab, force: true);
+              if (!sheetCtx.mounted) return;
+              row = _findListRow(name, group);
+              chart = row == null
+                  ? null
+                  : _trendChartFor(row!, showHeader: false);
+              setSheet(() => loading = false);
+            }
+
+            if (loading) {
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                ensureTrend();
+              });
+            }
+
+            return DraggableScrollableSheet(
+              initialChildSize: 0.52,
+              minChildSize: 0.35,
+              maxChildSize: 0.82,
+              expand: false,
+              builder: (ctx, scrollCtrl) {
+                final rangeLabel =
+                    (row?['trend'] as Map?)?['rangeLabel']?.toString() ?? '';
+                return SingleChildScrollView(
+                  controller: scrollCtrl,
+                  padding: const EdgeInsets.fromLTRB(18, 8, 18, 24),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Center(
+                        child: Container(
+                          width: 32,
+                          height: 3,
+                          margin: const EdgeInsets.only(top: 6, bottom: 14),
+                          decoration: BoxDecoration(
+                            color: LhColors.line,
+                            borderRadius: BorderRadius.circular(2),
+                          ),
+                        ),
+                      ),
+                      Text(
+                        name,
+                        style: LhTypography.sans(
+                          size: 15,
+                          color: LhColors.ink,
+                          weight: FontWeight.w700,
+                          letterSpacing: -0.2,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            _heroTrendTitle(),
+                            style: LhTypography.mono(
+                              size: 9,
+                              color: LhColors.mute2,
+                              weight: FontWeight.w600,
+                              letterSpacing: 0.8,
+                            ),
+                          ),
+                          if (rangeLabel.isNotEmpty)
+                            Text(
+                              rangeLabel,
+                              style: LhTypography.mono(
+                                size: 9,
+                                color: LhColors.ink2,
+                                weight: FontWeight.w600,
+                              ),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 14),
+                      if (loading)
+                        const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 36),
+                          child: Center(
+                            child: SizedBox(
+                              width: 22,
+                              height: 22,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: LhColors.copper,
+                              ),
+                            ),
+                          ),
+                        )
+                      else if (chart != null)
+                        chart!
+                      else
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 28),
+                          child: Center(
+                            child: Text(
+                              '暂无趋势数据',
+                              style: LhTypography.sans(
+                                size: 11,
+                                color: LhColors.mute,
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                );
+              },
+            );
+          },
+        );
+      },
     );
   }
 

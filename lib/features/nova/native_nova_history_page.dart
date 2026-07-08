@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../core/widgets/dunes_logo_loader.dart';
+
 import '../../core/theme/dunes_theme.dart';
 import '../auth/auth_session.dart';
 import 'native_nova_service.dart';
@@ -140,7 +142,7 @@ class _NativeNovaHistoryPageState extends State<NativeNovaHistoryPage> {
           padding: const EdgeInsets.all(12),
           child: Center(
             child: _loadingMore
-                ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                ? const SizedBox(width: 18, height: 18, child: const DunesLogoLoader())
                 : TextButton(
                     onPressed: () => _load(append: true),
                     child: const Text('加载更多历史'),
@@ -181,7 +183,7 @@ class _NativeNovaHistoryPageState extends State<NativeNovaHistoryPage> {
 
   Widget _buildBody() {
     if (_loading) {
-      return const Center(child: CircularProgressIndicator(strokeWidth: 2));
+      return const Center(child: const DunesLogoLoader());
     }
     if (_error != null) {
       return Center(

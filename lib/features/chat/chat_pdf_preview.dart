@@ -1,6 +1,8 @@
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+
+import '../../core/widgets/dunes_logo_loader.dart';
 import 'package:http/http.dart' as http;
 import 'package:pdfx/pdfx.dart';
 
@@ -143,11 +145,7 @@ class _ChatPdfPreviewPageState extends State<ChatPdfPreviewPage> {
           IconButton(
             onPressed: _downloading ? null : _downloadPdf,
             icon: _downloading
-                ? const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
+                ? const DunesLogoLoader(size: 20)
                 : const Icon(Icons.download_outlined),
             tooltip: '下载',
           ),
@@ -159,7 +157,7 @@ class _ChatPdfPreviewPageState extends State<ChatPdfPreviewPage> {
 
   Widget _buildBody() {
     if (_loading) {
-      return const Center(child: CircularProgressIndicator());
+      return const Center(child: const DunesLogoLoader());
     }
     if (_error != null) {
       return Center(

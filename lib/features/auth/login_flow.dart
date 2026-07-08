@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+
+import '../../core/widgets/dunes_logo_loader.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:package_info_plus/package_info_plus.dart';
@@ -250,9 +252,7 @@ class _LoginFlowState extends State<LoginFlow> {
     if (_hydrating) {
       return const Scaffold(
         backgroundColor: _authBg,
-        body: Center(
-          child: CircularProgressIndicator(strokeWidth: 2, color: _authBlue),
-        ),
+        body: const Center(child: DunesLogoLoader()),
       );
     }
     final session = _session;

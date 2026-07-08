@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+
+import '../../core/widgets/dunes_logo_loader.dart';
 import 'package:http/http.dart' as http;
 
 import '../../core/theme/dunes_theme.dart';
@@ -283,7 +285,7 @@ class _NovaMarkdownPreviewPageState extends State<_NovaMarkdownPreviewPage> {
             ),
             Expanded(
               child: _loading
-                  ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
+                  ? const Center(child: const DunesLogoLoader())
                   : _error != null
                       ? Center(
                           child: Padding(

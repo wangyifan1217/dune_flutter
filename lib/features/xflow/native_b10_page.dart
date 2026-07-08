@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../core/widgets/dunes_logo_loader.dart';
+
 import '../../core/navigation/navigation_controller.dart';
 import '../../core/theme/dunes_theme.dart';
 import '../../core/util/friendly_error.dart';
@@ -279,7 +281,7 @@ class _NativeB10PageState extends State<NativeB10Page> {
             ),
             Expanded(
               child: _loading
-                  ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
+                  ? const Center(child: const DunesLogoLoader())
                   : _error != null
                       ? _buildError()
                       : RefreshIndicator(

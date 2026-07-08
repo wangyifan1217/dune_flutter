@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../core/widgets/dunes_logo_loader.dart';
+
 import '../../core/navigation/navigation_controller.dart';
 import '../../core/theme/dunes_theme.dart';
 import '../../core/util/friendly_error.dart';
@@ -173,7 +175,7 @@ class _NativeKbChatPageState extends State<NativeKbChatPage> {
           children: [
             _buildHeader(),
             if (_loading)
-              const Expanded(child: Center(child: CircularProgressIndicator(strokeWidth: 2)))
+              const Expanded(child: Center(child: const DunesLogoLoader()))
             else if (_error != null)
               Expanded(child: _buildError())
             else ...[

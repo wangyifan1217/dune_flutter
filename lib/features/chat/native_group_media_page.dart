@@ -2,6 +2,8 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 
+import '../../core/widgets/dunes_logo_loader.dart';
+
 import '../../core/theme/dunes_theme.dart';
 import '../../core/util/friendly_error.dart';
 import '../auth/auth_session.dart';
@@ -173,7 +175,7 @@ class _NativeGroupMediaPageState extends State<NativeGroupMediaPage> {
 
   Widget _buildBody() {
     if (_loading) {
-      return const Center(child: CircularProgressIndicator(strokeWidth: 2));
+      return const Center(child: const DunesLogoLoader());
     }
     if (_error != null) {
       return Center(child: Text(_error!, style: const TextStyle(color: DunesColors.text3)));
@@ -518,11 +520,7 @@ class _ImageMediaRow extends StatelessWidget {
       ),
       child: Center(
         child: loading
-            ? const SizedBox(
-                width: 16,
-                height: 16,
-                child: CircularProgressIndicator(strokeWidth: 2, color: DunesColors.text3),
-              )
+            ? const DunesLogoLoader(size: 16)
             : const Icon(Icons.image_outlined, color: DunesColors.text3, size: 16),
       ),
     );

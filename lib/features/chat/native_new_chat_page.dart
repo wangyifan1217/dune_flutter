@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../core/widgets/dunes_logo_loader.dart';
+
 import '../../core/theme/dunes_theme.dart';
 import '../../core/util/friendly_error.dart';
 import '../auth/auth_session.dart';
@@ -284,7 +286,7 @@ class _NativeNewChatPageState extends State<NativeNewChatPage> {
             _NewChatOrgLabel(total: _total),
             Expanded(
               child: _loading
-                  ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
+                  ? const Center(child: const DunesLogoLoader())
                   : _error != null
                       ? Center(child: Text(_error!, style: const TextStyle(color: DunesColors.text3)))
                       : _buildBody(),

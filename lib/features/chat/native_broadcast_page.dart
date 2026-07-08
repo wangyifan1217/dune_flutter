@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+
+import '../../core/widgets/dunes_logo_loader.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/theme/dunes_theme.dart';
@@ -146,7 +148,7 @@ class _NativeBroadcastPageState extends State<NativeBroadcastPage> {
 
   Widget _buildBody() {
     if (_loading) {
-      return const Center(child: CircularProgressIndicator(strokeWidth: 2));
+      return const Center(child: const DunesLogoLoader());
     }
     if (_error != null) {
       return Center(

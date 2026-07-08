@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:emoji_picker_flutter/emoji_picker_flutter.dart';
 import 'package:flutter/material.dart';
 
+import '../../core/widgets/dunes_logo_loader.dart';
+
 import '../../core/theme/dunes_theme.dart';
 import '../../core/util/friendly_error.dart';
 import '../../core/widgets/cached_network_image.dart';
@@ -290,7 +292,7 @@ class _GifGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (loading && items.isEmpty) {
-      return const Center(child: CircularProgressIndicator(strokeWidth: 2));
+      return const Center(child: const DunesLogoLoader());
     }
     if (error != null && items.isEmpty) {
       return Center(
@@ -332,11 +334,7 @@ class _GifGrid extends StatelessWidget {
       itemBuilder: (_, index) {
         if (index >= items.length) {
           return const Center(
-            child: SizedBox(
-              width: 18,
-              height: 18,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            ),
+            child: const DunesLogoLoader(size: 18),
           );
         }
         final item = items[index];

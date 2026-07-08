@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../core/widgets/dunes_logo_loader.dart';
+
 import '../../core/theme/dunes_theme.dart';
 import '../shell/dunes_toast.dart';
 import 'xflow_form_styles.dart';
@@ -1337,7 +1339,7 @@ class _XflowUserPickerState extends State<_XflowUserPicker> {
         suffixIcon: _loading
             ? const Padding(
                 padding: EdgeInsets.all(10),
-                child: SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2)),
+                child: SizedBox(width: 14, height: 14, child: const DunesLogoLoader()),
               )
             : null,
       ),

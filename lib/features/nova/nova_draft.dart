@@ -2,6 +2,8 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 
+import '../../core/widgets/dunes_logo_loader.dart';
+
 import '../../core/theme/dunes_theme.dart';
 
 class NovaDraftAttachment {
@@ -110,15 +112,7 @@ class _DraftTile extends StatelessWidget {
                   borderRadius: BorderRadius.circular(12),
                 ),
                 alignment: Alignment.center,
-                child: SizedBox(
-                  width: 22,
-                  height: 22,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    value: item.uploadProgress > 0 ? item.uploadProgress / 100 : null,
-                    color: Colors.white,
-                  ),
-                ),
+                child: const DunesLogoLoader(size: 22),
               ),
             ),
           Positioned(

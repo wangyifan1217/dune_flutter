@@ -2,6 +2,8 @@ import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+
+import '../../core/widgets/dunes_logo_loader.dart';
 import 'package:http/http.dart' as http;
 
 import '../../core/theme/dunes_theme.dart';
@@ -689,11 +691,7 @@ class _NovaImagePreviewDialog extends StatelessWidget {
         fit: BoxFit.contain,
         loadingBuilder: (_, child, progress) {
           if (progress == null) return child;
-          return const SizedBox(
-            width: 48,
-            height: 48,
-            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white70),
-          );
+          return const DunesLogoLoader(size: 48);
         },
         errorBuilder: (_, _, _) => const Icon(Icons.broken_image_outlined, color: Colors.white54, size: 48),
       );
@@ -943,7 +941,7 @@ class _NovaC4ImageCardState extends State<NovaC4ImageCard> {
                     child: loading
                         ? const SizedBox(
                             height: 120,
-                            child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+                            child: Center(child: const DunesLogoLoader()),
                           )
                         : _imageBody(image),
                   ),
@@ -1171,7 +1169,7 @@ class NovaC4ImageThumb extends StatelessWidget {
           return SizedBox(
             width: maxWidth,
             height: 96,
-            child: const Center(child: CircularProgressIndicator(strokeWidth: 2)),
+            child: const Center(child: const DunesLogoLoader()),
           );
         }
         if (snap.hasError || !(snap.data ?? '').startsWith('http')) {

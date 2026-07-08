@@ -9,6 +9,8 @@
 
 import 'dart:convert';
 import 'package:flutter/material.dart';
+
+import '../../core/widgets/dunes_logo_loader.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../lighthouse/lighthouse_theme.dart';
@@ -183,14 +185,7 @@ class _NativeTeamBoardPageState extends State<NativeTeamBoardPage> {
       return const Scaffold(
         backgroundColor: _Tokens.paper,
         body: Center(
-          child: SizedBox(
-            width: 20,
-            height: 20,
-            child: CircularProgressIndicator(
-              strokeWidth: 1.5,
-              valueColor: AlwaysStoppedAnimation(_Tokens.copper),
-            ),
-          ),
+          child: const DunesLogoLoader(size: 20),
         ),
       );
     }

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../core/widgets/dunes_logo_loader.dart';
+
 import '../../core/theme/dunes_theme.dart';
 import '../../core/util/friendly_error.dart';
 import '../auth/auth_session.dart';
@@ -89,7 +91,7 @@ class _NativeContactProfilePageState extends State<NativeContactProfilePage> {
     if (_loading) {
       return const Scaffold(
         backgroundColor: DunesColors.stageBg,
-        body: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+        body: Center(child: const DunesLogoLoader()),
       );
     }
     if (_contact == null) {

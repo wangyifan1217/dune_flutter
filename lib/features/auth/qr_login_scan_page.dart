@@ -1,6 +1,8 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+
+import '../../core/widgets/dunes_logo_loader.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:permission_handler/permission_handler.dart';
 
@@ -195,9 +197,7 @@ class _QrLoginScanPageState extends State<QrLoginScanPage> {
   Widget build(BuildContext context) {
     Widget scannerArea;
     if (_checkingPermission) {
-      scannerArea = const Center(
-        child: CircularProgressIndicator(strokeWidth: 2),
-      );
+      scannerArea = const Center(child: DunesLogoLoader());
     } else if (!_cameraGranted) {
       scannerArea = Center(
         child: Padding(

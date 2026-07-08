@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../core/widgets/dunes_logo_loader.dart';
+
 import '../../core/theme/dunes_theme.dart';
 import '../../core/util/friendly_error.dart';
 import '../auth/auth_session.dart';
@@ -223,7 +225,7 @@ class _NativeMeetingListPageState extends State<NativeMeetingListPage> {
         physics: const AlwaysScrollableScrollPhysics(),
         children: const [
           SizedBox(height: 180),
-          Center(child: CircularProgressIndicator()),
+          Center(child: const DunesLogoLoader()),
         ],
       );
     }
@@ -286,11 +288,7 @@ class _NativeMeetingListPageState extends State<NativeMeetingListPage> {
           const Padding(
             padding: EdgeInsets.only(top: 6, bottom: 8),
             child: Center(
-              child: SizedBox(
-                width: 18,
-                height: 18,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              ),
+              child: const DunesLogoLoader(size: 18),
             ),
           ),
         if (!_hasMore && _rows.isNotEmpty)

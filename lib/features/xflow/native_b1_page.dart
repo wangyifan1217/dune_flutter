@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../core/widgets/dunes_logo_loader.dart';
+
 import '../../core/theme/dunes_theme.dart';
 import '../../core/util/friendly_error.dart';
 import '../auth/auth_session.dart';
@@ -275,7 +277,7 @@ class _NativeProposalListPageState extends State<_NativeProposalListPage> {
             _buildTopBar(),
             Expanded(
               child: _loading
-                  ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
+                  ? const Center(child: const DunesLogoLoader())
                   : _error != null
                       ? _buildError()
                       : RefreshIndicator(

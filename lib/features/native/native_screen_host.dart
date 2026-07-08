@@ -1501,15 +1501,6 @@ class _NativeB2PageState extends State<_NativeB2Page> {
                     const SizedBox(height: 14),
                     _buildQuickLaunch(),
                     const SizedBox(height: 14),
-                    _buildSectionLabel('灯塔 · 合同行政'),
-                    const SizedBox(height: 4),
-                    const ContractSealingEntryCard(pendingCount: 2),
-                    const ContractBorrowEntryCard(),
-                    const SizedBox(height: 14),
-                    _buildSectionLabel('团队协作'),
-                    const SizedBox(height: 4),
-                    const TeamBoardEntryCard(),
-                    const SizedBox(height: 14),
                     if (stats.pendingForMe > 0)
                       _buildReminderBanner(
                         icon: Icons.notifications_active_outlined,

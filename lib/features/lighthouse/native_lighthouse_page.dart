@@ -103,7 +103,7 @@ extension _LhAnchorX on _LhAnchor {
 const String _kHeroTermVerifiedScale = '核销规模';
 const String _kHeroTermVerifiedSpread = '已核销利差';
 const Color _kHeroVerifiedScaleColor = LhColors.product;
-const Color _kHeroVerifiedSpreadColor = LhColors.copper;
+const Color _kHeroVerifiedSpreadColor = LhColors.ink;
 
 TextStyle _heroSemanticStyle({
   required Color color,
@@ -276,17 +276,6 @@ class _LhBiz {
     return profit / anchor * 100;
   }
 
-  /// 违背判定:与提案效率的相对偏离度(%)
-  /// null 表示无提案基线(不判定)
-  static double? deviationPct(
-    Map<String, dynamic> row, {
-    _LhAnchor pref = _LhAnchor.verified,
-  }) {
-    final expected = (row['expectedRate'] as num?)?.toDouble() ?? 0;
-    if (expected <= 0) return null;
-    final actual = efficiency(row, pref: pref);
-    return (actual - expected) / expected.abs() * 100;
-  }
 }
 
 // Hero metric cell definitions per tab
@@ -642,11 +631,11 @@ String _fmtPermille(double? r) {
 
 // period bar / 趋势卡标题（纯 UI 文案，非业务数据）
 const _kPeriodTitle = {
-  'day': '近 24 小时趋势',
-  'week': '本周趋势',
-  'month': '近 30 日趋势',
-  'quarter': '本季趋势',
-  'year': '近 12 个月趋势',
+  'day': '环比上月',
+  'week': '近 5 周走势',
+  'month': '近 7 日走势',
+  'quarter': '近 7 日走势',
+  'year': '近 7 日走势',
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1042,6 +1031,8 @@ class _LhBigTrendPainter extends CustomPainter {
     this.pillLabel,
     this.selectedIndex,
     this.xLabels,
+    this.compareData,
+    this.compareColor,
     this.axisTextColor = const Color(0xFF9E988E),
     this.gridColor = const Color(0xFFE1DBCC),
   });
@@ -1058,6 +1049,8 @@ class _LhBigTrendPainter extends CustomPainter {
   final String? pillLabel; // 末端 pill 文字 (缺则从 data.last 生成)
   final int? selectedIndex; // 拖动选中的点；非 null 时不画 TODAY pill
   final List<String>? xLabels; // 与 data 对齐的日期标签 (mm.dd)
+  final List<double>? compareData; // 环比对比线（如日视图的上月）
+  final Color? compareColor;
 
   final Color axisTextColor;
   final Color gridColor;
@@ -1066,38 +1059,51 @@ class _LhBigTrendPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     if (data.length < 2) return;
 
-    // ═════ Hi-Tech 仪表盘配色 (深炭底 + 铜色发光) ═════════
-    const bgColor = Color(0xFF1A1712); // 深炭底
-    const gridBright = Color(0xFFF4A85A); // 网格 / signal (亮铜)
-    const lineBright = Color(0xFFF4A85A); // 折线 (亮铜)
-    const baselineBright = Color(0xFFE5B26D); // 提案 baseline (浅铜)
-    const axisMute = Color(0xFF8A7856); // 静默铜 (未激活刻度)
-    const axisHi = Color(0xFFF4A85A); // 高亮铜 (激活刻度)
+    // ═════ 科研论文风配色 (暖米底 + ink 主轴 + copper 提案) ═════════
+    // 跟 hero 外部 sheet 底色 (LhColors.paper) 无缝连接, 不再有"独立仪表"感.
+    // ink 深色轴, copper accent, 无 gradient 无 tint block, 让"数据点自己说话".
+    final paperWhite = LhColors.paper;    // sheet 同色暖米底
+    const axisInk = Color(0xFF3D3A34);    // ink2 深灰 (坐标轴)
+    const axisMute = Color(0xFF9E988E);   // mute2 灰 (副 tick, 刻度值)
+    const gridSoft = Color(0xFFEDE7D8);   // 极淡纸色 (水平参考线)
+    const copperMain = Color(0xFFB8763A); // copper (提案线)
+    const negMain = Color(0xFFB4443D);    // neg (违背阈值线)
+    final lineColor = color;               // 主线 (通常 ink 或 copper, 外部传入)
 
-    // ─── 1. 深炭底铺满 ───────────────────────────────
+    // ─── 1. 白底铺满 ───────────────────────────────
     canvas.drawRect(
       Rect.fromLTWH(0, 0, size.width, size.height),
-      Paint()..color = bgColor,
+      Paint()..color = paperWhite,
     );
 
-    // ─── 2. 值域计算 ────────────────────────────────
+    // ─── 2. 值域计算 (含 expected / 对比线) ────
     double minV = data.first, maxV = data.first;
     for (final v in data) {
       if (v < minV) minV = v;
       if (v > maxV) maxV = v;
     }
-    if (expected != null) {
-      if (expected! < minV) minV = expected!;
-      if (expected! > maxV) maxV = expected!;
+    if (compareData != null) {
+      for (final v in compareData!) {
+        if (v < minV) minV = v;
+        if (v > maxV) maxV = v;
+      }
     }
-    final valPad = (maxV - minV).abs() * 0.14 + 1e-9;
+    if (expected != null) {
+      final ex = expected!;
+      final absEx = ex.abs() < 1e-9 ? 1.0 : ex.abs();
+      final ub = ex + absEx * breachPct / 100;
+      final lb = ex - absEx * breachPct / 100;
+      if (ub > maxV) maxV = ub;
+      if (lb < minV) minV = lb;
+    }
+    final valPad = (maxV - minV).abs() * 0.12 + 1e-9;
     minV -= valPad;
     maxV += valPad;
     final valRange = (maxV - minV).abs() < 1e-9 ? 1.0 : (maxV - minV);
 
-    const padLeft = 34.0; // Y 轴数字区
-    const padRight = 8.0;
-    const padTop = 10.0;
+    const padLeft = 38.0;   // Y 轴数值区
+    const padRight = 10.0;
+    const padTop = 12.0;
     const padBottom = 22.0; // x 轴刻度区
     final usableW = size.width - padLeft - padRight;
     final usableH = size.height - padTop - padBottom;
@@ -1106,450 +1112,72 @@ class _LhBigTrendPainter extends CustomPainter {
     double yOf(double v) => padTop + (maxV - v) / valRange * usableH;
     final baselineY = padTop + usableH;
 
-    // ─── 3. 点阵网格 (dot intersections, 示波器感) + 4 角 L 支架 ───
-    // 十字网格换成交点小点, 更"仪表", 视觉噪音更低
-    final gridDotPaint = Paint()..color = gridBright.withAlpha(52);
-    const gridCell = 22.0;
-    for (double x = padLeft; x <= padLeft + usableW + 0.5; x += gridCell) {
-      for (double y = padTop; y <= baselineY + 0.5; y += gridCell) {
-        canvas.drawCircle(Offset(x, y), 0.7, gridDotPaint);
-      }
-    }
-    // 4 角 L 支架 (Bloomberg 终端 / 医疗监护仪表边框语言)
-    final cornerPaint = Paint()
-      ..color = gridBright.withAlpha(210)
-      ..strokeWidth = 1.2
-      ..strokeCap = StrokeCap.square;
-    const cornerLen = 8.0;
-    void drawCorner(Offset origin, double sx, double sy) {
-      canvas.drawLine(
-        origin,
-        origin.translate(sx * cornerLen, 0),
-        cornerPaint,
-      );
-      canvas.drawLine(
-        origin,
-        origin.translate(0, sy * cornerLen),
-        cornerPaint,
-      );
-    }
-    drawCorner(Offset(padLeft, padTop), 1, 1); // TL
-    drawCorner(Offset(padLeft + usableW, padTop), -1, 1); // TR
-    drawCorner(Offset(padLeft, baselineY), 1, -1); // BL
-    drawCorner(Offset(padLeft + usableW, baselineY), -1, -1); // BR
-
-    // ─── 4. Y 轴 4 档参考线 + 数值标签 ──────────────
-    //   MAX / 2/3 / 1/3 / MIN, 首尾实线 hairline, 中间 2 档虚线
+    // ─── 3. 极淡水平网格 (5 档参考线) ──────────────
     final yTicks = <double>[
       maxV,
-      maxV - valRange / 3,
-      maxV - valRange * 2 / 3,
+      maxV - valRange / 4,
+      maxV - valRange * 2 / 4,
+      maxV - valRange * 3 / 4,
       minV,
     ];
+    final gridPaint = Paint()
+      ..color = gridSoft
+      ..strokeWidth = 0.5;
+    for (int i = 1; i < yTicks.length - 1; i++) {
+      final y = yOf(yTicks[i]);
+      canvas.drawLine(
+        Offset(padLeft, y),
+        Offset(padLeft + usableW, y),
+        gridPaint,
+      );
+    }
+
+    // ─── 4. Y 轴刻度值 (mono, 右对齐贴 tick) ──────
     for (int i = 0; i < yTicks.length; i++) {
       final y = yOf(yTicks[i]);
-      final refPaint = Paint()
-        ..color = gridBright.withAlpha(i == 0 || i == 3 ? 65 : 45)
-        ..strokeWidth = 0.5;
-      if (i == 0 || i == yTicks.length - 1) {
-        canvas.drawLine(
-          Offset(padLeft, y),
-          Offset(padLeft + usableW, y),
-          refPaint,
-        );
-      } else {
-        double x = padLeft;
-        const dashW = 1.5;
-        const dashGap = 3.0;
-        while (x < padLeft + usableW) {
-          canvas.drawLine(
-            Offset(x, y),
-            Offset(math.min(x + dashW, padLeft + usableW), y),
-            refPaint,
-          );
-          x += dashW + dashGap;
-        }
-      }
-      final isNearCurrent = _nearestTickIdx(yTicks, data.last) == i;
       final tp = TextPainter(
         text: TextSpan(
           text: _formatAxisValue(yTicks[i]),
-          style: TextStyle(
-            color: isNearCurrent ? axisHi : axisMute,
-            fontSize: 7.5,
-            fontWeight: FontWeight.w700,
-            letterSpacing: 0.3,
-          ),
-        ),
-        textDirection: TextDirection.ltr,
-      )..layout();
-      tp.paint(canvas, Offset(padLeft - 4 - tp.width, y - tp.height / 2));
-      // Minor ticks: 相邻两个 major 之间加 3 根极细 hairline (仪器刻度感)
-      if (i < yTicks.length - 1) {
-        final nextY = yOf(yTicks[i + 1]);
-        final minorStep = (nextY - y) / 4;
-        final minorPaint = Paint()
-          ..color = axisMute.withAlpha(140)
-          ..strokeWidth = 0.4;
-        for (int k = 1; k < 4; k++) {
-          final my = y + minorStep * k;
-          canvas.drawLine(
-            Offset(padLeft, my),
-            Offset(padLeft + 2.5, my),
-            minorPaint,
-          );
-        }
-      }
-    }
-
-    // ─── 5. 违背带 tint (breach / warn 双层) ────────
-    if (expected != null && (violationTint != null || warnTint != null)) {
-      final ex = expected!;
-      final absEx = ex.abs() < 1e-9 ? 1.0 : ex.abs();
-      final upperBreach = ex + absEx * breachPct / 100;
-      final upperWarn = ex + absEx * warnPct / 100;
-      final lowerWarn = ex - absEx * warnPct / 100;
-      final lowerBreach = ex - absEx * breachPct / 100;
-
-      if (warnTint != null) {
-        final wp = Paint()..color = warnTint!;
-        final ubY = yOf(upperBreach).clamp(padTop, baselineY);
-        final uwY = yOf(upperWarn).clamp(padTop, baselineY);
-        if (uwY > ubY) {
-          canvas.drawRect(
-            Rect.fromLTRB(padLeft, ubY, padLeft + usableW, uwY),
-            wp,
-          );
-        }
-        final lwY = yOf(lowerWarn).clamp(padTop, baselineY);
-        final lbY = yOf(lowerBreach).clamp(padTop, baselineY);
-        if (lbY > lwY) {
-          canvas.drawRect(
-            Rect.fromLTRB(padLeft, lwY, padLeft + usableW, lbY),
-            wp,
-          );
-        }
-      }
-      if (violationTint != null) {
-        final bp = Paint()..color = violationTint!;
-        final ubY = yOf(upperBreach).clamp(padTop, baselineY);
-        if (ubY > padTop) {
-          canvas.drawRect(
-            Rect.fromLTRB(padLeft, padTop, padLeft + usableW, ubY),
-            bp,
-          );
-        }
-        final lbY = yOf(lowerBreach).clamp(padTop, baselineY);
-        if (lbY < baselineY) {
-          canvas.drawRect(
-            Rect.fromLTRB(padLeft, lbY, padLeft + usableW, baselineY),
-            bp,
-          );
-        }
-      }
-    }
-
-    // ─── 6. 折线下方 glow 填充 (亮铜渐变) ───────────
-    final fillPath = Path()..moveTo(xOf(0), yOf(data[0]));
-    for (int i = 1; i < data.length; i++) {
-      fillPath.lineTo(xOf(i), yOf(data[i]));
-    }
-    fillPath.lineTo(xOf(data.length - 1), baselineY);
-    fillPath.lineTo(xOf(0), baselineY);
-    fillPath.close();
-    canvas.drawPath(
-      fillPath,
-      Paint()
-        ..shader = ui.Gradient.linear(
-          Offset(0, padTop),
-          Offset(0, baselineY),
-          [lineBright.withAlpha(72), lineBright.withAlpha(0)],
-        ),
-    );
-
-    // ─── 7. 提案 baseline 虚线 + TARGET label ───────
-    if (expected != null) {
-      final ey = yOf(expected!);
-      final dashPaint = Paint()
-        ..color = baselineBright
-        ..strokeWidth = 1.2;
-      const bdashW = 5.0;
-      const bgapW = 3.0;
-      double x = padLeft;
-      while (x < padLeft + usableW) {
-        canvas.drawLine(
-          Offset(x, ey),
-          Offset(math.min(x + bdashW, padLeft + usableW), ey),
-          dashPaint,
-        );
-        x += bdashW + bgapW;
-      }
-      final tp = TextPainter(
-        text: TextSpan(
-          text: 'TARGET ${_formatAxisValue(expected!)}',
           style: const TextStyle(
-            color: baselineBright,
-            fontSize: 7.5,
-            fontWeight: FontWeight.w700,
-            letterSpacing: 0.6,
-          ),
-        ),
-        textDirection: TextDirection.ltr,
-      )..layout();
-      tp.paint(canvas, Offset(padLeft + usableW - tp.width, ey - 11));
-    }
-
-    // ─── 8. 主折线: 4 层叠加发光 (outer bloom → 实心信号) ─
-    final path = Path()..moveTo(xOf(0), yOf(data[0]));
-    for (int i = 1; i < data.length; i++) {
-      path.lineTo(xOf(i), yOf(data[i]));
-    }
-    void drawSignalLine(int alpha, double sw) {
-      canvas.drawPath(
-        path,
-        Paint()
-          ..color = lineBright.withAlpha(alpha)
-          ..strokeWidth = sw
-          ..style = PaintingStyle.stroke
-          ..strokeCap = StrokeCap.round
-          ..strokeJoin = StrokeJoin.round,
-      );
-    }
-    drawSignalLine(32, 5.5); // 外层 bloom (最柔的 halo)
-    drawSignalLine(68, 3.5); // 中层 glow
-    drawSignalLine(135, 2.2); // 内层 bright
-    drawSignalLine(255, 1.3); // 实心信号 (crisp edge)
-
-    // ─── 8b. 数据点微点 (让 30 天节奏在信号上可见) ─────
-    // 极细 0.9r 圆点, 亮铜 alpha 210, 落在每天数据位置
-    final microDotPaint = Paint()..color = lineBright.withAlpha(210);
-    for (int i = 0; i < data.length; i++) {
-      canvas.drawCircle(Offset(xOf(i), yOf(data[i])), 0.9, microDotPaint);
-    }
-
-    // ─── 9. 违背/关注日单独打点 (深底适配: 用炭色 halo) ─
-    if (expected != null && (violationTint != null || warnTint != null)) {
-      final ex = expected!;
-      final absEx = ex.abs() < 1e-9 ? 1.0 : ex.abs();
-      final warnFullColor = warnTint != null
-          ? _boostAlpha(warnTint!, 220)
-          : null;
-      final breachFullColor = violationTint != null
-          ? _boostAlpha(violationTint!, 220)
-          : null;
-      for (int i = 0; i < data.length - 1; i++) {
-        final dev = (data[i] - ex) / absEx * 100;
-        final absDev = dev.abs();
-        Color? dotColor;
-        double dotRadius = 1.8;
-        if (absDev > breachPct && breachFullColor != null) {
-          dotColor = breachFullColor;
-          dotRadius = 2.4;
-        } else if (absDev > warnPct && warnFullColor != null) {
-          dotColor = warnFullColor;
-          dotRadius = 1.8;
-        }
-        if (dotColor != null) {
-          final cx = xOf(i);
-          final cy = yOf(data[i]);
-          canvas.drawCircle(
-            Offset(cx, cy),
-            dotRadius + 1.2,
-            Paint()..color = bgColor,
-          );
-          canvas.drawCircle(
-            Offset(cx, cy),
-            dotRadius,
-            Paint()..color = dotColor,
-          );
-        }
-      }
-    }
-
-    // ─── 10. 选中点 十字准星 或 TODAY 目标环 ────────
-    final si = selectedIndex;
-    if (si != null && si >= 0 && si < data.length) {
-      // 拖动选中: 亮铜竖虚线 + 目标环
-      final sx = xOf(si);
-      final sy = yOf(data[si]);
-      final chPaint = Paint()
-        ..color = lineBright.withAlpha(140)
-        ..strokeWidth = 0.9;
-      const chDashH = 3.0;
-      const chGap = 2.0;
-      double y = padTop;
-      while (y < baselineY) {
-        canvas.drawLine(
-          Offset(sx, y),
-          Offset(sx, math.min(y + chDashH, baselineY)),
-          chPaint,
-        );
-        y += chDashH + chGap;
-      }
-      // 声呐外圈 (深度感 + live 呼吸感)
-      canvas.drawCircle(Offset(sx, sy), 14, Paint()..color = lineBright.withAlpha(24));
-      canvas.drawCircle(Offset(sx, sy), 10, Paint()..color = lineBright.withAlpha(40));
-      canvas.drawCircle(Offset(sx, sy), 7, Paint()..color = lineBright.withAlpha(70));
-      canvas.drawCircle(Offset(sx, sy), 3.5, Paint()..color = lineBright);
-      canvas.drawCircle(Offset(sx, sy), 1.5, Paint()..color = bgColor);
-    } else {
-      // TODAY 3 层目标环 + 双向十字准星
-      final lastX = xOf(data.length - 1);
-      final lastY = yOf(data.last);
-      final chPaint = Paint()
-        ..color = lineBright.withAlpha(95)
-        ..strokeWidth = 0.6;
-      const chDashH = 2.5;
-      const chGap = 2.0;
-      // 竖直准星
-      double y = padTop;
-      while (y < baselineY) {
-        canvas.drawLine(
-          Offset(lastX, y),
-          Offset(lastX, math.min(y + chDashH, baselineY)),
-          chPaint,
-        );
-        y += chDashH + chGap;
-      }
-      // 水平准星
-      double xh = padLeft;
-      while (xh < padLeft + usableW) {
-        canvas.drawLine(
-          Offset(xh, lastY),
-          Offset(math.min(xh + chDashH, padLeft + usableW), lastY),
-          chPaint,
-        );
-        xh += chDashH + chGap;
-      }
-      // 3 层目标环 + 外圈声呐 ping (2 层大 faint 圆)
-      canvas.drawCircle(Offset(lastX, lastY), 14, Paint()..color = lineBright.withAlpha(24));
-      canvas.drawCircle(Offset(lastX, lastY), 10, Paint()..color = lineBright.withAlpha(40));
-      canvas.drawCircle(Offset(lastX, lastY), 7, Paint()..color = lineBright.withAlpha(70));
-      canvas.drawCircle(Offset(lastX, lastY), 3.5, Paint()..color = lineBright);
-      canvas.drawCircle(Offset(lastX, lastY), 1.5, Paint()..color = bgColor);
-
-      // TODAY pill (亮铜实心 + 炭色字, [ ] 括号包裹 —— 仪表读数感)
-      final pillText = pillLabel ?? '[ ▸ TODAY ${_formatAxisValue(data.last)} ]';
-      final pillTp = TextPainter(
-        text: TextSpan(
-          text: pillText,
-          style: const TextStyle(
-            color: bgColor,
+            color: axisMute,
             fontSize: 8,
-            fontWeight: FontWeight.w700,
-            letterSpacing: 0.5,
+            fontWeight: FontWeight.w500,
+            letterSpacing: 0.2,
           ),
         ),
         textDirection: TextDirection.ltr,
       )..layout();
-      final belowLast = lastY < padTop + usableH / 2;
-      final pillW = pillTp.width + 12;
-      final pillH = pillTp.height + 6;
-      double pillLeft = lastX - pillW - 10;
-      if (pillLeft < padLeft) pillLeft = lastX + 10;
-      if (pillLeft + pillW > padLeft + usableW) {
-        pillLeft = padLeft + usableW - pillW;
-      }
-      final pillTop = belowLast ? lastY + 12 : lastY - pillH - 12;
-      canvas.drawRect(
-        Rect.fromLTWH(pillLeft, pillTop, pillW, pillH),
-        Paint()..color = lineBright,
+      tp.paint(
+        canvas,
+        Offset(padLeft - 5 - tp.width, y - tp.height / 2),
       );
-      pillTp.paint(canvas, Offset(pillLeft + 6, pillTop + 3));
     }
 
-    // ─── 11. MAX / MIN 极值标签 (避开末端 3 天避免遮 TODAY) ─
-    int minIdx = 0, maxIdx = 0;
-    for (int i = 1; i < data.length; i++) {
-      if (data[i] < data[minIdx]) minIdx = i;
-      if (data[i] > data[maxIdx]) maxIdx = i;
-    }
-    void drawExtremePill(int idx, String label, Color pillColor) {
-      // 末端 3 天内不画 (跟 TODAY pill 撞位)
-      if (idx >= data.length - 3) return;
-      final cx = xOf(idx);
-      final cy = yOf(data[idx]);
-      canvas.drawCircle(Offset(cx, cy), 2.6, Paint()..color = bgColor);
-      canvas.drawCircle(Offset(cx, cy), 2.0, Paint()..color = pillColor);
-      final tp = TextPainter(
-        text: TextSpan(
-          text: label,
-          style: TextStyle(
-            color: bgColor,
-            fontSize: 7,
-            fontWeight: FontWeight.w700,
-            letterSpacing: 0.6,
-          ),
-        ),
-        textDirection: TextDirection.ltr,
-      )..layout();
-      final pw = tp.width + 8;
-      final ph = tp.height + 4;
-      double px = cx + 8;
-      double py = cy - ph / 2;
-      if (px + pw > padLeft + usableW) px = cx - pw - 8;
-      if (py < padTop) py = padTop;
-      if (py + ph > baselineY) py = baselineY - ph;
-      canvas.drawRect(Rect.fromLTWH(px, py, pw, ph), Paint()..color = pillColor);
-      tp.paint(canvas, Offset(px + 4, py + 2));
-    }
-    drawExtremePill(maxIdx, 'MAX ${_formatAxisValue(data[maxIdx])}', lineBright);
-    drawExtremePill(minIdx, 'MIN ${_formatAxisValue(data[minIdx])}', axisMute);
+    // ─── 5. 提案基线 + ±20% 违背阈值线 ─────────────
+    if (expected != null) {
+      final ex = expected!;
+      final absEx = ex.abs() < 1e-9 ? 1.0 : ex.abs();
+      final ub = ex + absEx * breachPct / 100;
+      final lb = ex - absEx * breachPct / 100;
+      final expColor = expectedColor ?? copperMain;
 
-    // ─── 12. 底部 x 轴 baseline + 每周 tick ─────────
-    canvas.drawLine(
-      Offset(padLeft, baselineY),
-      Offset(padLeft + usableW, baselineY),
-      Paint()
-        ..color = gridBright.withAlpha(65)
-        ..strokeWidth = 0.5,
-    );
-    if (data.length > 14) {
-      final weekTick = Paint()
-        ..color = axisMute.withAlpha(140)
-        ..strokeWidth = 0.5;
-      for (int i = 7; i < data.length - 1; i += 7) {
-        final x = xOf(i);
-        canvas.drawLine(
-          Offset(x, baselineY),
-          Offset(x, baselineY + 1.5),
-          weekTick,
-        );
-      }
-    }
-
-    // ─── 13. x 轴 4 锚点日期标签 (今日高亮成亮铜) ──
-    final tickIndices = <int>[
-      0,
-      (data.length / 3).round(),
-      (data.length * 2 / 3).round(),
-      data.length - 1,
-    ];
-    final tickPaint = Paint()
-      ..color = axisMute.withAlpha(180)
-      ..strokeWidth = 0.5;
-    for (final ti in tickIndices) {
-      final x = xOf(ti);
-      canvas.drawLine(
-        Offset(x, baselineY),
-        Offset(x, baselineY + 2),
-        tickPaint,
+      // 提案主线 (稍粗虚线)
+      _drawDashedLine(
+        canvas,
+        Offset(padLeft, yOf(ex)),
+        Offset(padLeft + usableW, yOf(ex)),
+        Paint()
+          ..color = expColor.withAlpha(200)
+          ..strokeWidth = 0.9,
+        dashW: 5,
+        gapW: 3,
       );
-      final rawLabel =
-          (xLabels != null &&
-              ti >= 0 &&
-              ti < xLabels!.length &&
-              xLabels![ti].isNotEmpty)
-          ? xLabels![ti]
-          : (ti == data.length - 1 ? 'TODAY ▸' : '');
-      if (rawLabel.isEmpty) continue;
-      final isToday = ti == data.length - 1;
-      final label = isToday && rawLabel != 'TODAY ▸' ? '$rawLabel ▸' : rawLabel;
-      final tp = TextPainter(
+      // 提案标签 (右上角外部)
+      final expTp = TextPainter(
         text: TextSpan(
-          text: label,
+          text: '提案 ${_formatAxisValue(ex)}',
           style: TextStyle(
-            color: isToday ? axisHi : axisMute,
+            color: expColor,
             fontSize: 7.5,
             fontWeight: FontWeight.w700,
             letterSpacing: 0.4,
@@ -1557,9 +1185,257 @@ class _LhBigTrendPainter extends CustomPainter {
         ),
         textDirection: TextDirection.ltr,
       )..layout();
-      tp.paint(canvas, Offset(x - tp.width / 2, baselineY + 4));
+      final expLabelY = yOf(ex) - expTp.height - 3;
+      expTp.paint(
+        canvas,
+        Offset(
+          padLeft + usableW - expTp.width,
+          expLabelY < padTop ? yOf(ex) + 3 : expLabelY,
+        ),
+      );
+
+      // 上/下违背阈值线 (极细虚线, neg 半透明)
+      final vLinePaint = Paint()
+        ..color = negMain.withAlpha(105)
+        ..strokeWidth = 0.5;
+      if (yOf(ub) > padTop - 1) {
+        _drawDashedLine(
+          canvas,
+          Offset(padLeft, yOf(ub)),
+          Offset(padLeft + usableW, yOf(ub)),
+          vLinePaint,
+          dashW: 2,
+          gapW: 3,
+        );
+      }
+      if (yOf(lb) < baselineY + 1) {
+        _drawDashedLine(
+          canvas,
+          Offset(padLeft, yOf(lb)),
+          Offset(padLeft + usableW, yOf(lb)),
+          vLinePaint,
+          dashW: 2,
+          gapW: 3,
+        );
+      }
+    }
+
+    // ─── 6. 主折线 (1.4px, 圆角连接, 简洁) ─────────
+    final path = Path()..moveTo(xOf(0), yOf(data[0]));
+    for (int i = 1; i < data.length; i++) {
+      path.lineTo(xOf(i), yOf(data[i]));
+    }
+    canvas.drawPath(
+      path,
+      Paint()
+        ..color = lineColor
+        ..strokeWidth = 1.4
+        ..style = PaintingStyle.stroke
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round,
+    );
+
+    if (compareData != null && compareData!.length >= 2) {
+      final compare = compareData!;
+      final cmpPaint = Paint()
+        ..color = (compareColor ?? axisMute).withAlpha(190)
+        ..strokeWidth = 1.1
+        ..style = PaintingStyle.stroke
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round;
+      for (int i = 1; i < compare.length; i++) {
+        _drawDashedLine(
+          canvas,
+          Offset(xOf(i - 1), yOf(compare[i - 1])),
+          Offset(xOf(i), yOf(compare[i])),
+          cmpPaint,
+          dashW: 4,
+          gapW: 3,
+        );
+      }
+    }
+
+    // ─── 7. 每个数据点小空心圆 (科研风 marker) ────
+    // 违背天用实心 neg, 关注天用实心 copper, 其他用白填 + 主色描边.
+    for (int i = 0; i < data.length; i++) {
+      final cx = xOf(i);
+      final cy = yOf(data[i]);
+      Color dotStroke = lineColor;
+      Color dotFill = paperWhite;
+      bool solid = false;
+      double radius = 2.2;
+
+      if (expected != null) {
+        final absEx = expected!.abs() < 1e-9 ? 1.0 : expected!.abs();
+        final absDev = ((data[i] - expected!) / absEx * 100).abs();
+        if (absDev > breachPct) {
+          dotStroke = negMain;
+          dotFill = negMain;
+          solid = true;
+          radius = 2.6;
+        } else if (absDev > warnPct) {
+          dotStroke = copperMain;
+          dotFill = copperMain;
+          solid = true;
+          radius = 2.3;
+        }
+      }
+
+      // 末端 today 突出 (仅未选中时)
+      if (i == data.length - 1 && selectedIndex == null) {
+        canvas.drawCircle(Offset(cx, cy), 3.6, Paint()..color = paperWhite);
+        canvas.drawCircle(Offset(cx, cy), 3.0, Paint()..color = lineColor);
+        continue;
+      }
+
+      canvas.drawCircle(Offset(cx, cy), radius, Paint()..color = dotFill);
+      if (!solid) {
+        canvas.drawCircle(
+          Offset(cx, cy),
+          radius,
+          Paint()
+            ..color = dotStroke
+            ..strokeWidth = 1.0
+            ..style = PaintingStyle.stroke,
+        );
+      }
+    }
+
+    // ─── 8. 拖动选点 crosshair ──────────────────────
+    final si = selectedIndex;
+    if (si != null && si >= 0 && si < data.length) {
+      final cx = xOf(si);
+      final cy = yOf(data[si]);
+      final chPaint = Paint()
+        ..color = axisInk.withAlpha(140)
+        ..strokeWidth = 0.6;
+      // 竖直虚线 (baseline → point)
+      _drawDashedLine(
+        canvas,
+        Offset(cx, cy),
+        Offset(cx, baselineY),
+        chPaint,
+        dashW: 2,
+        gapW: 3,
+      );
+      // 水平虚线 (Y 轴 → point)
+      _drawDashedLine(
+        canvas,
+        Offset(padLeft, cy),
+        Offset(cx, cy),
+        chPaint,
+        dashW: 2,
+        gapW: 3,
+      );
+      // 选中点大圆 (双层: 白 halo + 主色实心)
+      canvas.drawCircle(Offset(cx, cy), 4.5, Paint()..color = paperWhite);
+      canvas.drawCircle(Offset(cx, cy), 3.4, Paint()..color = lineColor);
+    }
+
+    // ─── 9. Y 轴主轴 + tick 短线 ──────────────────
+    final axisPaint = Paint()
+      ..color = axisInk.withAlpha(200)
+      ..strokeWidth = 0.7;
+    canvas.drawLine(
+      Offset(padLeft, padTop),
+      Offset(padLeft, baselineY),
+      axisPaint,
+    );
+    for (int i = 0; i < yTicks.length; i++) {
+      final y = yOf(yTicks[i]);
+      canvas.drawLine(
+        Offset(padLeft - 3, y),
+        Offset(padLeft, y),
+        axisPaint,
+      );
+    }
+
+    // ─── 10. X 轴主轴 + 每周 tick ─────────────────
+    canvas.drawLine(
+      Offset(padLeft, baselineY),
+      Offset(padLeft + usableW, baselineY),
+      axisPaint,
+    );
+    if (data.length > 14) {
+      final wtPaint = Paint()
+        ..color = axisMute.withAlpha(180)
+        ..strokeWidth = 0.5;
+      for (int i = 7; i < data.length - 1; i += 7) {
+        final x = xOf(i);
+        canvas.drawLine(
+          Offset(x, baselineY),
+          Offset(x, baselineY + 2),
+          wtPaint,
+        );
+      }
+    }
+
+    // ─── 11. X 轴 4 锚点日期标签 (无 pill, 无 today marker) ─
+    final tickIndices = <int>[
+      0,
+      (data.length / 3).round(),
+      (data.length * 2 / 3).round(),
+      data.length - 1,
+    ];
+    for (final ti in tickIndices) {
+      final x = xOf(ti);
+      canvas.drawLine(
+        Offset(x, baselineY),
+        Offset(x, baselineY + 3.5),
+        axisPaint,
+      );
+      final rawLabel =
+          (xLabels != null &&
+              ti >= 0 &&
+              ti < xLabels!.length &&
+              xLabels![ti].isNotEmpty)
+          ? xLabels![ti]
+          : (ti == data.length - 1 ? 'today' : '');
+      if (rawLabel.isEmpty) continue;
+      final isToday = ti == data.length - 1;
+      final tp = TextPainter(
+        text: TextSpan(
+          text: rawLabel,
+          style: TextStyle(
+            color: isToday ? axisInk : axisMute,
+            fontSize: 7.5,
+            fontWeight: isToday ? FontWeight.w700 : FontWeight.w600,
+            letterSpacing: 0.3,
+          ),
+        ),
+        textDirection: TextDirection.ltr,
+      )..layout();
+      tp.paint(canvas, Offset(x - tp.width / 2, baselineY + 6));
     }
   }
+
+  /// Helper: 画虚线段 (通用)
+  void _drawDashedLine(
+    Canvas canvas,
+    Offset from,
+    Offset to,
+    Paint paint, {
+    required double dashW,
+    required double gapW,
+  }) {
+    final dx = to.dx - from.dx;
+    final dy = to.dy - from.dy;
+    final len = math.sqrt(dx * dx + dy * dy);
+    if (len < 1e-9) return;
+    final ux = dx / len;
+    final uy = dy / len;
+    double travelled = 0;
+    while (travelled < len) {
+      final segEnd = math.min(travelled + dashW, len);
+      canvas.drawLine(
+        Offset(from.dx + ux * travelled, from.dy + uy * travelled),
+        Offset(from.dx + ux * segEnd, from.dy + uy * segEnd),
+        paint,
+      );
+      travelled += dashW + gapW;
+    }
+  }
+
 
   /// Y 轴数值格式化: 比率类 → X.XX%, 金额 → 保留 2 位有效 + 万/亿 后缀
   String _formatAxisValue(double v) {
@@ -2425,6 +2301,7 @@ class _HeroMetricTrendChart extends StatefulWidget {
     this.expectedColor,
     this.violationTint,
     this.warnTint,
+    this.compareData,
     this.chartHeight = 168,
     this.onInteractionChanged,
   });
@@ -2439,6 +2316,7 @@ class _HeroMetricTrendChart extends StatefulWidget {
   final Color? expectedColor;
   final Color? violationTint; // breach 带 tint
   final Color? warnTint; // warn 带 tint
+  final List<double>? compareData;
   final double chartHeight;
   final ValueChanged<bool>? onInteractionChanged;
 
@@ -2473,97 +2351,9 @@ class _HeroMetricTrendChartState extends State<_HeroMetricTrendChart> {
     return '${_fmt(v)}${_unit(v)}';
   }
 
-  /// Hi-Tech 仪表条 (深炭底折线图顶部)
-  ///   左: ● LIVE · N=30
-  ///   中: RANGE X.XX–X.XX
-  ///   右: Δ ±X.X% (违背色着色, 无 expected 时缺省)
-  Widget _buildHiTechHudHeader() {
-    final n = widget.data.length;
-    double mn = widget.data.first, mx = widget.data.first;
-    for (final v in widget.data) {
-      if (v < mn) mn = v;
-      if (v > mx) mx = v;
-    }
-    String fmtCompact(double v) {
-      if (widget.isRate) return v.toStringAsFixed(2);
-      final abs = v.abs();
-      if (abs >= 1e8) return '${(v / 1e8).toStringAsFixed(1)}亿';
-      if (abs >= 1e4) return '${(v / 1e4).toStringAsFixed(1)}万';
-      return v.toStringAsFixed(0);
-    }
-
-    double? devPct;
-    if (widget.expected != null && widget.expected!.abs() > 1e-9) {
-      devPct =
-          (widget.data.last - widget.expected!) /
-          widget.expected!.abs() *
-          100;
-    }
-    // 违背色: 高铜 F4A85A (关注) / 亮红 E24B4A (违背)
-    Color deltaColor = const Color(0xFF8A7856);
-    if (devPct != null) {
-      final abs = devPct.abs();
-      if (abs > 20) {
-        deltaColor = const Color(0xFFE24B4A);
-      } else if (abs > 10) {
-        deltaColor = const Color(0xFFF4A85A);
-      } else {
-        deltaColor = const Color(0xFF9FE1CB);
-      }
-    }
-
-    return Container(
-      padding: const EdgeInsets.fromLTRB(10, 7, 10, 6),
-      decoration: const BoxDecoration(
-        border: Border(
-          bottom: BorderSide(color: Color(0xFF2E2620), width: 0.5),
-        ),
-      ),
-      child: Row(
-        children: [
-          // [ ● LIVE · N=X ]
-          Text(
-            '[ ● LIVE · N=$n ]',
-            style: const TextStyle(
-              color: Color(0xFFF4A85A),
-              fontSize: 8,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 0.7,
-            ),
-          ),
-          const Spacer(),
-          // RANGE (中间不加括号避免过密)
-          Text(
-            'RANGE ${fmtCompact(mn)}–${fmtCompact(mx)}${widget.isRate ? "%" : ""}',
-            style: const TextStyle(
-              color: Color(0xFFE5B26D),
-              fontSize: 8,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 0.7,
-            ),
-          ),
-          const Spacer(),
-          // [ Δ ±X.X% ]
-          if (devPct != null)
-            Text(
-              '[ Δ ${devPct >= 0 ? '+' : ''}${devPct.toStringAsFixed(1)}% ]',
-              style: TextStyle(
-                color: deltaColor,
-                fontSize: 8,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 0.7,
-              ),
-            )
-          else
-            const SizedBox.shrink(),
-        ],
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
-    if (widget.data.length < 2) {
+    if (widget.data.isEmpty) {
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 28),
         child: Center(
@@ -2575,9 +2365,13 @@ class _HeroMetricTrendChartState extends State<_HeroMetricTrendChart> {
       );
     }
 
+    final chartData = widget.data.length >= 2
+        ? widget.data
+        : [widget.data.first, widget.data.first];
+
     final si = _selectedIndex;
-    final isSelected = si != null && si >= 0 && si < widget.data.length;
-    final displayValue = isSelected ? widget.data[si] : widget.periodValue;
+    final isSelected = si != null && si >= 0 && si < chartData.length;
+    final displayValue = isSelected ? chartData[si] : widget.periodValue;
     final statusText = isSelected && si < widget.labels.length
         ? widget.labels[si]
         : '本期合计';
@@ -2701,43 +2495,6 @@ class _HeroMetricTrendChartState extends State<_HeroMetricTrendChart> {
                             weight: FontWeight.w500,
                           ),
                         ),
-                        if (isSelected &&
-                            widget.expected != null &&
-                            widget.expected!.abs() > 1e-9) ...[
-                          const SizedBox(width: 10),
-                          Builder(
-                            builder: (_) {
-                              final dev =
-                                  (displayValue - widget.expected!) /
-                                  widget.expected!.abs() *
-                                  100;
-                              final abs = dev.abs();
-                              final devColor = abs > 20
-                                  ? LhColors.neg
-                                  : abs > 10
-                                  ? LhColors.copper
-                                  : LhColors.pos;
-                              return Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 7,
-                                  vertical: 2,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: devColor.withAlpha(22),
-                                  borderRadius: BorderRadius.circular(4),
-                                ),
-                                child: Text(
-                                  'vs 提案 ${dev >= 0 ? '+' : ''}${dev.toStringAsFixed(1)}%',
-                                  style: LhTypography.mono(
-                                    size: 9,
-                                    color: devColor,
-                                    weight: FontWeight.w700,
-                                  ),
-                                ),
-                              );
-                            },
-                          ),
-                        ],
                       ],
                     ),
                   ],
@@ -2773,44 +2530,39 @@ class _HeroMetricTrendChartState extends State<_HeroMetricTrendChart> {
               child: Container(
                 height: widget.chartHeight,
                 decoration: BoxDecoration(
-                  color: const Color(0xFF1A1712),
+                  color: LhColors.paper,
                   border: Border.all(
-                    color: const Color(0xFF2E2620),
+                    color: LhColors.line2,
                     width: 0.8,
                   ),
-                  borderRadius: BorderRadius.circular(12),
-                  boxShadow: [
+                  borderRadius: BorderRadius.circular(10),
+                  boxShadow: const [
                     BoxShadow(
-                      color: widget.color.withAlpha(28),
-                      blurRadius: 16,
-                      offset: const Offset(0, 6),
+                      color: Color(0x0E140A00),
+                      blurRadius: 8,
+                      offset: Offset(0, 2),
                     ),
                   ],
                 ),
                 child: ClipRRect(
-                  borderRadius: BorderRadius.circular(12),
-                  child: Column(
-                    children: [
-                      _buildHiTechHudHeader(),
-                      Expanded(
-                        child: RepaintBoundary(
-                          child: CustomPaint(
-                            painter: _LhBigTrendPainter(
-                              data: widget.data,
-                              color: widget.color,
-                              expected: widget.expected,
-                              expectedColor: widget.expectedColor,
-                              violationTint: widget.violationTint,
-                              warnTint: widget.warnTint,
-                              isRate: widget.isRate,
-                              selectedIndex: _selectedIndex,
-                              xLabels: widget.labels,
-                            ),
-                            size: Size.infinite,
-                          ),
-                        ),
+                  borderRadius: BorderRadius.circular(10),
+                  child: RepaintBoundary(
+                    child: CustomPaint(
+                      painter: _LhBigTrendPainter(
+                        data: chartData,
+                        color: widget.color,
+                        expected: widget.expected,
+                        expectedColor: widget.expectedColor,
+                        violationTint: widget.violationTint,
+                        warnTint: widget.warnTint,
+                        compareData: widget.compareData,
+                        compareColor: LhColors.mute,
+                        isRate: widget.isRate,
+                        selectedIndex: _selectedIndex,
+                        xLabels: widget.labels,
                       ),
-                    ],
+                      size: Size.infinite,
+                    ),
                   ),
                 ),
               ),
@@ -2818,11 +2570,7 @@ class _HeroMetricTrendChartState extends State<_HeroMetricTrendChart> {
           },
         ),
         const SizedBox(height: 4),
-        // v3: 有 expected 时展示"30 天分布"条; 无则保留原提示
-        if (widget.expected != null && widget.expected!.abs() > 1e-9)
-          _buildDistributionBar()
-        else
-          Container(
+        Container(
             width: double.infinity,
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
             decoration: BoxDecoration(
@@ -2854,111 +2602,6 @@ class _HeroMetricTrendChartState extends State<_HeroMetricTrendChart> {
     );
   }
 
-  /// 30 天违背分布统计条: pos/copper/neg 三段占比 + 计数
-  /// 会议规则: 一致 (≤10%) / 关注 (10~20%) / 违背 (>20%)
-  Widget _buildDistributionBar() {
-    final ex = widget.expected!;
-    final absEx = ex.abs();
-    int okCount = 0, warnCount = 0, breachCount = 0;
-    for (final v in widget.data) {
-      final absDev = ((v - ex) / absEx * 100).abs();
-      if (absDev > 20) {
-        breachCount++;
-      } else if (absDev > 10) {
-        warnCount++;
-      } else {
-        okCount++;
-      }
-    }
-    final total = widget.data.length;
-    if (total == 0) return const SizedBox.shrink();
-
-    return Padding(
-      padding: const EdgeInsets.only(top: 8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // 分段条: 用 flex 按占比分块
-          SizedBox(
-            height: 4,
-            child: Row(
-              children: [
-                if (okCount > 0)
-                  Expanded(
-                    flex: okCount,
-                    child: Container(color: LhColors.pos.withAlpha(180)),
-                  ),
-                if (warnCount > 0)
-                  Expanded(
-                    flex: warnCount,
-                    child: Container(color: LhColors.copper.withAlpha(180)),
-                  ),
-                if (breachCount > 0)
-                  Expanded(
-                    flex: breachCount,
-                    child: Container(color: LhColors.neg.withAlpha(180)),
-                  ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 5),
-          // 底部图例 · 数字
-          Row(
-            children: [
-              Text(
-                '$total 天分布',
-                style: LhTypography.mono(
-                  size: 8,
-                  color: LhColors.mute2,
-                  weight: FontWeight.w700,
-                  letterSpacing: 1.0,
-                ),
-              ),
-              const Spacer(),
-              _distLegend('一致', okCount, LhColors.pos),
-              const SizedBox(width: 10),
-              _distLegend('关注', warnCount, LhColors.copper),
-              const SizedBox(width: 10),
-              _distLegend('违背', breachCount, LhColors.neg),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _distLegend(String label, int count, Color c) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        Container(
-          width: 5,
-          height: 5,
-          decoration: BoxDecoration(color: c, shape: BoxShape.circle),
-        ),
-        const SizedBox(width: 4),
-        Text(
-          label,
-          style: LhTypography.sans(
-            size: 9,
-            color: LhColors.mute,
-            weight: FontWeight.w600,
-          ),
-        ),
-        const SizedBox(width: 3),
-        Text(
-          '$count',
-          style: LhTypography.mono(
-            size: 9.5,
-            color: c,
-            weight: FontWeight.w700,
-            letterSpacing: 0.1,
-          ),
-        ),
-      ],
-    );
-  }
 }
 
 /// 仅在手指几乎未移动时触发点击，避免列表滑动/拖动误触进入指标页。
@@ -5545,10 +5188,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                     begin: Alignment(-0.9, -1.0),
                     end: Alignment(0.5, 1.0),
                     colors: [
-                      Color(0xFFFFFDF7), // warm off-white（取代纯白）
-                      Color(0xFFFCF8EC),
-                      Color(0xFFF5EEDA),
-                      Color(0xFFEBE2CC), // 略深于原 #F2EEE3，给高光留对比空间
+                      Color(0xFFFAF7EF), // 略压亮度，降低与底色的对比
+                      Color(0xFFF3ECDF),
+                      Color(0xFFEBE3D2),
+                      Color(0xFFE0D6C2), // 终点再深半档，整体更沉
                     ],
                     stops: [0, 0.32, 0.7, 1],
                   ),
@@ -5565,8 +5208,8 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                     center: const Alignment(0.95, -0.85),
                     radius: 1.1,
                     colors: [
-                      LhColors.copper.withAlpha(0x10), // ~6%
-                      LhColors.copper.withAlpha(0x06), // ~2%
+                      LhColors.copper.withAlpha(0x08), // ~3%（压低右上暖光）
+                      LhColors.copper.withAlpha(0x03), // ~1%
                       LhColors.copper.withAlpha(0), // 完全消失
                     ],
                     stops: const [0, 0.35, 0.7],
@@ -5675,7 +5318,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       children: [
         // ─── 品牌水印 ────────────────────────────────────────────────
         // 三片纸飞机 mark 落在 hero 右上，与大数字/角标区域重叠。
-        // alpha 0.08 —— "纸上落款"手势，可辨认，不干扰阅读。
+        // alpha 0.05 —— "纸上落款"手势，可辨认，不干扰阅读。
         // 位置 right: -4 让边缘微微溢出，制造 editorial "bleed" 效果
         // （Stack.clipBehavior=hardEdge 会裁掉 hero 边界外的部分）。
         // IgnorePointer —— 水印永不吃事件，不干扰下方角标点击。
@@ -5686,7 +5329,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             child: SizedBox(
               width: 150,
               height: 150,
-              child: CustomPaint(painter: _LighthouseLogoPainter(alpha: 0.12)),
+              child: CustomPaint(painter: _LighthouseLogoPainter(alpha: 0.05)),
             ),
           ),
         ),
@@ -5707,19 +5350,23 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                     useVerifiedBig
                         ? (filterActive ? '筛选核销规模' : '核销规模')
                         : (filterActive ? '筛选销售额' : '销售规模'),
-                    baseColor: LhColors.mute,
+                    baseColor: LhColors.ink2,
                     size: 8.5,
-                    baseWeight: FontWeight.w600,
+                    baseWeight: FontWeight.w700,
                     letterSpacing: 1.4,
                   ),
-                  const SizedBox(width: 6),
+                  const SizedBox(width: 8),
+                  // v5: 锚点 chip 直接嵌 label 行, 贴"核销规模"kicker 右侧
+                  // 取代原 pnl grid 里独立占一行的 anchor selector card
+                  _buildInlineAnchorChips(),
+                  const SizedBox(width: 8),
                   Expanded(child: Container(height: 1, color: LhColors.line2)),
                   const SizedBox(width: 6),
                   Text(
                     p.hasDelta ? '$deltaArrow ${p.deltaVal}%' : '—',
                     style: LhTypography.mono(
                       size: 9.5,
-                      color: p.hasDelta ? deltaColor : LhColors.mute2,
+                      color: p.hasDelta ? deltaColor : LhColors.mute,
                       weight: FontWeight.w600,
                       letterSpacing: 0.2,
                     ),
@@ -5753,8 +5400,8 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                           bigU,
                           style: LhTypography.sans(
                             size: 12,
-                            color: LhColors.mute,
-                            weight: FontWeight.w500,
+                            color: LhColors.ink2,
+                            weight: FontWeight.w600,
                           ),
                         ),
                         // 核销规模直读 verify_amount，不再展示「估」角标
@@ -5773,7 +5420,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                     : '环比 — · ${p.deltaVs}',
                 style: LhTypography.mono(
                   size: 9.5,
-                  color: p.hasDelta ? deltaColor : LhColors.mute,
+                  color: p.hasDelta ? deltaColor : LhColors.ink2,
                   letterSpacing: 0.2,
                 ),
               ),
@@ -5805,7 +5452,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   /// 右侧: 锚点[核销][销售] chip
   /// 会议规则:
   ///   - 所有比率锚定核销规模 (老板会议原话:"成本跟核销走")
-  ///   - 违背判定: 与提案效率对比 (±10% 一致 / ±20% 关注 / 超 20% 违背)
+  ///   - 效率展示实际 ROI 数值
   Widget _buildBusinessLine({
     required double sumVerifiedSales,
     required double sumPrepaid,
@@ -5840,7 +5487,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             ),
           ),
         const SizedBox(width: 12),
-        // ── 效率 + 违背判定 chip ────────────────────
+        // ── 效率 chip ────────────────────
         _efficiencyChip(sumRate),
         const SizedBox(width: 12),
         Expanded(
@@ -5853,30 +5500,8 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     );
   }
 
-  /// 效率 chip: 展示实际效率 + 违背判定 (对比提案基线)
-  /// 提案基线来自 _bundle.metrics.rateExpected, 缺则用能源类默认 1.1%
+  /// 效率 chip: 展示实际效率
   Widget _efficiencyChip(double actualRate) {
-    final mtr = _bundle?.metrics ?? const <String, dynamic>{};
-    final expected = (mtr['rateExpected'] as num?)?.toDouble() ?? 1.1;
-    final deviation = expected.abs() > 0
-        ? (actualRate - expected) / expected.abs() * 100
-        : 0.0;
-    final absDev = deviation.abs();
-
-    // 违背判定
-    late final String tag;
-    late final Color tagColor;
-    if (absDev > 20) {
-      tag = '违背';
-      tagColor = LhColors.neg;
-    } else if (absDev > 10) {
-      tag = '关注';
-      tagColor = LhColors.copper;
-    } else {
-      tag = '一致';
-      tagColor = LhColors.pos;
-    }
-
     return Row(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.center,
@@ -5886,23 +5511,6 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         Text(
           '${actualRate.toStringAsFixed(2)}%',
           style: LhTypography.number(size: 12, color: LhColors.ink2),
-        ),
-        const SizedBox(width: 6),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
-          decoration: BoxDecoration(
-            color: tagColor.withAlpha(30),
-            borderRadius: BorderRadius.circular(2),
-          ),
-          child: Text(
-            tag,
-            style: LhTypography.mono(
-              size: 8.5,
-              color: tagColor,
-              weight: FontWeight.w700,
-              letterSpacing: 0.5,
-            ),
-          ),
         ),
       ],
     );
@@ -6010,6 +5618,48 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           ),
         ),
       ],
+    );
+  }
+
+  /// v5 极简锚点 chip pair — 内嵌 hero label 行右侧, 无容器/无 kicker/无 formula
+  /// 用来取代原独立占一行的 _buildAnchorSelector card (太大一块)
+  Widget _buildInlineAnchorChips() {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _inlineAnchorChip(_LhAnchor.verified),
+        const SizedBox(width: 3),
+        _inlineAnchorChip(_LhAnchor.sales),
+      ],
+    );
+  }
+
+  Widget _inlineAnchorChip(_LhAnchor a) {
+    final active = _anchor == a;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () => setState(() => _anchor = a),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+        decoration: BoxDecoration(
+          color: active ? LhColors.copperSoft.withAlpha(150) : Colors.transparent,
+          border: Border.all(
+            color: active ? LhColors.copper : LhColors.line2,
+            width: active ? 0.9 : 0.6,
+          ),
+          borderRadius: BorderRadius.circular(3),
+        ),
+        child: Text(
+          a.labelCn,
+          style: LhTypography.sans(
+            size: 8.5,
+            color: active ? LhColors.copper : LhColors.mute,
+            weight: active ? FontWeight.w700 : FontWeight.w600,
+            letterSpacing: 0.4,
+          ),
+        ),
+      ),
     );
   }
 
@@ -6123,24 +5773,16 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     final filters = _activeHeroFilters();
     if (filters.isEmpty) return const SizedBox.shrink();
 
+    // v5: 整体 GestureDetector 清除功能拿掉 —— 只做展示
+    // 用户如需清除, 回 sortbar 里点对应已选中的卡片取消即可
     return Padding(
       padding: const EdgeInsets.only(left: 8),
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: () {
-          setState(() {
-            _groupFilter = '全部';
-            _supplyFuelFilter = '全部';
-            _hunFilter = '全部';
-            _anomalyFilter = '全部';
-          });
-        },
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 128),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            mainAxisSize: MainAxisSize.min,
-            children: [
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 128),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          mainAxisSize: MainAxisSize.min,
+          children: [
               for (int i = 0; i < filters.length; i++) ...[
                 if (i > 0) const SizedBox(height: 3),
                 Text(
@@ -6157,31 +5799,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                   textAlign: TextAlign.right,
                 ),
               ],
-              const SizedBox(height: 4),
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.close_rounded,
-                    size: 9,
-                    color: LhColors.copper.withAlpha(180),
-                  ),
-                  const SizedBox(width: 2),
-                  Text(
-                    '清除',
-                    style: LhTypography.mono(
-                      size: 8,
-                      color: LhColors.copper.withAlpha(180),
-                      weight: FontWeight.w600,
-                      letterSpacing: 0.3,
-                    ),
-                  ),
-                ],
-              ),
+              // v5: 清除按钮拿掉 —— 点击已选中的 filter 即取消, 不需要独立入口
             ],
           ),
         ),
-      ),
     );
   }
 
@@ -6236,33 +5857,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             ),
           ),
           const SizedBox(width: 10),
-          // 右侧: 极简清除入口 —— 点击清掉所有 hero 层筛选
-          GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: () {
-              setState(() {
-                _groupFilter = '全部';
-                _supplyFuelFilter = '全部';
-                _hunFilter = '全部';
-              });
-            },
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.close_rounded, size: 11, color: LhColors.copper),
-                const SizedBox(width: 2),
-                Text(
-                  '清除筛选',
-                  style: LhTypography.sans(
-                    size: 10,
-                    color: LhColors.copper,
-                    weight: FontWeight.w700,
-                    letterSpacing: 0.3,
-                  ),
-                ),
-              ],
-            ),
-          ),
+          // v5: 清除入口拿掉
         ],
       ),
     );
@@ -6813,8 +6408,8 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                         textAlign: TextAlign.center,
                         style: LhTypography.sans(
                           size: 12.5,
-                          color: isOn ? LhColors.ink : LhColors.mute,
-                          weight: isOn ? FontWeight.w700 : FontWeight.w500,
+                          color: isOn ? LhColors.ink : LhColors.ink2,
+                          weight: isOn ? FontWeight.w700 : FontWeight.w600,
                           letterSpacing: isOn ? 1.2 : 0.8,
                         ),
                       ),
@@ -6835,6 +6430,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             );
           }).toList(),
         ),
+        if (_buildPeriodTrendHint() case final hint?) hint,
         // 非默认实例时，下面贴一行淡色提示：当前看的是哪一期
         if (_periodOffset != 0 && !_periodPickerOpen)
           Padding(
@@ -6988,8 +6584,8 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           '渠道构成',
           style: LhTypography.sans(
             size: 8.8,
-            color: LhColors.mute,
-            weight: FontWeight.w600,
+            color: LhColors.ink2,
+            weight: FontWeight.w700,
             letterSpacing: 0.4,
           ),
         ),
@@ -7017,8 +6613,8 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           label,
           style: LhTypography.mono(
             size: 8,
-            color: LhColors.mute2,
-            weight: FontWeight.w500,
+            color: LhColors.mute,
+            weight: FontWeight.w600,
             letterSpacing: 0.1,
           ),
         ),
@@ -7140,15 +6736,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     final tax = totals['tax'] ?? 0;
     final profit = totals['profit'] ?? 0;
     final rate = totals['rate'] ?? 0;
-    final expected = _expectedForMetric('rate') ?? 0;
 
     // 派生比率 —— 从数据反推, 让用户看到"实际的利差率是多少"
     final spreadRate = anchor > 0 ? revenue / anchor * 100 : 0.0;
     final costRate = anchor > 0 ? cost / anchor * 100 : 0.0;
     final taxRate = revenue > 0 ? tax / revenue * 100 : 0.0;
-    final deviation = expected > 0
-        ? (rate - expected) / expected.abs() * 100
-        : null;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -7193,7 +6785,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           role: _FlowRole.intermediate,
         ),
         _flowBridge('÷  核销规模  ${_fmt(anchor)}${_unitCn(anchor)}'),
-        // ── 节点 4: 效率 (终点 + 违背判定) ───────────
+        // ── 节点 4: 效率 (终点) ───────────
         _flowNode(
           key: 'rate',
           label: '效率（ROI）',
@@ -7201,8 +6793,6 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           value: rate,
           isRate: true,
           role: _FlowRole.result,
-          deviation: deviation,
-          expectedRate: expected > 0 ? expected : null,
         ),
       ],
     );
@@ -7213,7 +6803,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   //
   // 会议规则回顾:
   //   • 所有比率锚点 = 核销规模 (成本跟核销走)
-  //   • 效率 = 毛利 ÷ 核销规模, 与提案基线比对 ±10 一致 / ±20 关注 / >20 违背
+  //   • 效率 = 毛利 ÷ 核销规模
   //   • 每格数字可点弹折线 (会议原话:"点那个数字就能看到日的")
   //
   // 布局:
@@ -7233,37 +6823,14 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     final tax = totals['tax'] ?? 0;
     final profit = totals['profit'] ?? 0;
     final rate = totals['rate'] ?? 0;
-    final expected = _expectedForMetric('rate') ?? 0;
 
     // 派生比率 —— 让"利差率"格子有真实值可展示 (不用心算)
     final spreadRate = anchor > 0 ? revenue / anchor * 100 : 0.0;
-    final deviation = expected > 0
-        ? (rate - expected) / expected.abs() * 100
-        : null;
-
-    // 违背判定 (与原 _efficiencyChip 同款规则)
-    String violationTag = '';
-    Color violationColor = LhColors.pos;
-    if (deviation != null) {
-      final abs = deviation.abs();
-      if (abs > 20) {
-        violationTag = '违背';
-        violationColor = LhColors.neg;
-      } else if (abs > 10) {
-        violationTag = '关注';
-        violationColor = LhColors.copper;
-      } else {
-        violationTag = '一致';
-        violationColor = LhColors.pos;
-      }
-    }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // ── 计算锚点：明确 ROI/利差率等比率的分母口径 ─────────────
-        Align(alignment: Alignment.centerRight, child: _buildAnchorSelector()),
-        const SizedBox(height: 8),
+        // v5: 锚点已内嵌到 hero label 行 (跟 "核销规模" kicker 挨着), 这里不再占独立一行
         // ── Row 1: 利差率 · 收入 · 毛利 (收入侧 + 结果) ─
         Row(
           children: [
@@ -7335,9 +6902,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 subLabel: '毛利 ÷ $anchorLabel',
                 value: rate,
                 isRate: true,
-                accent: violationColor,
-                valueColor: violationColor,
-                badge: violationTag.isNotEmpty ? violationTag : null,
+                accent: LhColors.copper,
               ),
             ),
           ],
@@ -7347,7 +6912,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   }
 
   /// 单个 P&L 按钮 — 6 格统一高度/结构，左侧 accent 条区分语义色
-  ///   铜 = 利差率/收入 · 绿 = 毛利 · 红 = 成本 · 效率 = 违背等级色
+  ///   铜 = 利差率/收入/效率 · 绿 = 毛利 · 红 = 成本
   static const double _pnlCellHeight = 78;
 
   Widget _pnlButton({
@@ -7363,7 +6928,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     final fg = valueColor ?? LhColors.ink;
     final unitColor = isRate && valueColor != null
         ? valueColor!
-        : LhColors.mute;
+        : LhColors.ink2;
     final trendLabel = label.replaceAll(' ★', '');
     final delta = _deltaForMetric(keyId);
     final deltaUnit = (keyId == 'rate' || keyId == 'spreadRate') ? 'pp' : '%';
@@ -7394,11 +6959,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                     Expanded(
                       child: _heroSemanticText(
                         label,
-                        baseColor: badge != null ? LhColors.ink : LhColors.mute,
+                        baseColor: badge != null ? LhColors.ink : LhColors.ink2,
                         size: 8.5,
                         baseWeight: badge != null
                             ? FontWeight.w700
-                            : FontWeight.w600,
+                            : FontWeight.w700,
                         termWeight: FontWeight.w700,
                         letterSpacing: 1.2,
                       ),
@@ -7464,10 +7029,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                   Expanded(
                     child: _heroSemanticText(
                       subLabel,
-                      baseColor: LhColors.mute2,
+                      baseColor: LhColors.mute,
                       size: 7.3,
-                      baseWeight: FontWeight.w500,
-                      termWeight: FontWeight.w600,
+                      baseWeight: FontWeight.w600,
+                      termWeight: FontWeight.w700,
                       letterSpacing: 0.2,
                     ),
                   ),
@@ -7479,9 +7044,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                     style: LhTypography.mono(
                       size: 7.2,
                       color: delta == null
-                          ? LhColors.mute2
+                          ? LhColors.mute
                           : (delta.isUp ? LhColors.pos : LhColors.neg),
-                      weight: FontWeight.w600,
+                      weight: FontWeight.w700,
                       letterSpacing: 0.1,
                     ),
                     maxLines: 1,
@@ -7619,8 +7184,6 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     required _FlowRole role,
     String? subLabel,
     String? rightBadge,
-    double? deviation,
-    double? expectedRate,
   }) {
     // ── 视觉规则 (v2: 三种角色视觉真正拉开层次) ──────
     late final Color leftAccent;
@@ -7640,27 +7203,8 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         leftWidth = 2;
         break;
       case _FlowRole.result:
-        // 终点: 3px 左边框 + 底色跟违背等级联动 (极淡, 只做暗示不刺眼)
-        Color resultAccent;
-        Color resultBg;
-        if (deviation == null) {
-          resultAccent = LhColors.ink;
-          resultBg = Colors.white;
-        } else {
-          final abs = deviation.abs();
-          if (abs > 20) {
-            resultAccent = LhColors.neg;
-            resultBg = LhColors.neg.withAlpha(14); // 违背: 极淡红底
-          } else if (abs > 10) {
-            resultAccent = LhColors.copper;
-            resultBg = LhColors.copperSoft.withAlpha(110); // 关注: 铜色底
-          } else {
-            resultAccent = LhColors.pos;
-            resultBg = LhColors.pos.withAlpha(12); // 一致: 极淡绿底
-          }
-        }
-        leftAccent = resultAccent;
-        bg = resultBg;
+        leftAccent = LhColors.ink;
+        bg = Colors.white;
         leftWidth = 3;
         break;
     }
@@ -7687,7 +7231,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            // ── 左侧: label + subLabel + 违背判定行 ──
+            // ── 左侧: label + subLabel ──
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -7718,12 +7262,6 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                       ],
                     ],
                   ),
-                  if (role == _FlowRole.result &&
-                      deviation != null &&
-                      expectedRate != null) ...[
-                    const SizedBox(height: 4),
-                    _deviationInline(deviation, expectedRate),
-                  ],
                 ],
               ),
             ),
@@ -7762,63 +7300,6 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           ],
         ),
       ),
-    );
-  }
-
-  /// 效率节点下方的违背判定行: 提案 X.XX%  +Y.Y% · 一致
-  Widget _deviationInline(double dev, double expected) {
-    final abs = dev.abs();
-    late final String tag;
-    late final Color color;
-    if (abs > 20) {
-      tag = '违背';
-      color = LhColors.neg;
-    } else if (abs > 10) {
-      tag = '关注';
-      color = LhColors.copper;
-    } else {
-      tag = '一致';
-      color = LhColors.pos;
-    }
-    return Row(
-      children: [
-        Text(
-          '提案 ${expected.toStringAsFixed(2)}%',
-          style: LhTypography.mono(
-            size: 8.5,
-            color: LhColors.mute,
-            weight: FontWeight.w600,
-            letterSpacing: 0.2,
-          ),
-        ),
-        const SizedBox(width: 6),
-        Text(
-          '${dev >= 0 ? '+' : ''}${dev.toStringAsFixed(1)}%',
-          style: LhTypography.mono(
-            size: 8.5,
-            color: color,
-            weight: FontWeight.w700,
-            letterSpacing: 0.2,
-          ),
-        ),
-        const SizedBox(width: 4),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 0.5),
-          decoration: BoxDecoration(
-            color: color.withAlpha(28),
-            borderRadius: BorderRadius.circular(2),
-          ),
-          child: Text(
-            tag,
-            style: LhTypography.mono(
-              size: 8,
-              color: color,
-              weight: FontWeight.w700,
-              letterSpacing: 0.3,
-            ),
-          ),
-        ),
-      ],
     );
   }
 
@@ -8078,8 +7559,12 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     );
   }
 
-  /// Hero 30 日走势标签（与后端 hero daily series 对齐）
+  /// Hero 走势标签（优先后端 heroSeriesLabels）
   List<String> _heroTrendLabels(int n) {
+    final raw = _bundle?.metrics['heroSeriesLabels'];
+    if (raw is List && raw.isNotEmpty) {
+      return raw.map((e) => e.toString()).toList(growable: false);
+    }
     if (n <= 0) return const <String>[];
     final end = _nowCST().subtract(Duration(days: _periodOffset));
     return List<String>.generate(n, (i) {
@@ -8089,6 +7574,23 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       return '$mm.$dd';
     }, growable: false);
   }
+
+  String _heroTrendTitle() {
+    final title = _bundle?.metrics['heroSeriesTitle']?.toString();
+    if (title != null && title.isNotEmpty) return title;
+    return _kPeriodTitle[_period] ?? '走势';
+  }
+
+  String _heroTrendRangeLabel(List<String> labels) {
+    final raw = _bundle?.metrics['heroSeriesRangeLabel']?.toString();
+    if (raw != null && raw.isNotEmpty) return raw;
+    if (labels.isEmpty) return '';
+    if (labels.length == 1) return labels.first;
+    return '${labels.first} — ${labels.last}';
+  }
+
+  bool get _heroTrendIsMom =>
+      _bundle?.metrics['heroSeriesGranularity']?.toString() == 'mom';
 
   // ═══════════════════════════════════════════════════════════════════════
   // 折线图 sheet —— 点 hero 数字后弹出（单指标 + 拖动选点，交互同列表 _TrendChart）
@@ -8106,52 +7608,70 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       case 'tax':
         return LhColors.neg;
       case 'rate':
-        final expected = _expectedForMetric('rate');
-        final currentRate = totals['rate'] ?? 0.0;
-        if (expected != null && expected != 0) {
-          final devPct = (currentRate - expected) / expected.abs() * 100;
-          final abs = devPct.abs();
-          if (abs > 20) return LhColors.neg;
-          if (abs > 10) return LhColors.copper;
-          return LhColors.pos;
-        }
         return LhColors.copper;
       default:
         return LhColors.copper;
     }
   }
 
+  List<double> _normalizeTrendSeriesForChart(List<double> series) {
+    if (series.isEmpty) return const <double>[];
+    if (series.length >= 2) return series;
+    return [series.first, series.first];
+  }
+
+  List<double> _alignCompareSeriesLengths(
+    List<double> primary,
+    List<double> compare,
+  ) {
+    if (compare.isEmpty) return const <double>[];
+    final n = primary.length > compare.length ? primary.length : compare.length;
+    double at(List<double> src, int i) => i < src.length ? src[i] : 0.0;
+    return List<double>.generate(n, (i) => at(compare, i), growable: false);
+  }
+
+  /// 周期条下方：提示当前粒度对应的走势口径（会议纪要 8.3）
+  Widget? _buildPeriodTrendHint() {
+    final hint = switch (_period) {
+      'day' => '点数字看走势 · 环比上月',
+      'week' => '点数字看走势 · 近 5 周',
+      'month' => '点数字看走势 · 近 7 日',
+      _ => null,
+    };
+    if (hint == null) return null;
+    return Padding(
+      padding: const EdgeInsets.only(top: 4),
+      child: Row(
+        children: [
+          Icon(Icons.show_chart_rounded, size: 10, color: LhColors.mute2),
+          const SizedBox(width: 4),
+          Text(
+            hint,
+            style: LhTypography.mono(
+              size: 8.5,
+              color: LhColors.mute2,
+              weight: FontWeight.w600,
+              letterSpacing: 0.2,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _showMetricTrendSheet(_HeroMetric m, Map<String, double> totals) {
-    final series = _seriesForMetric(m.key);
+    final rawSeries = _seriesForMetric(m.key);
+    final rawCompare = _seriesPrevForMetric(m.key);
+    final series = _normalizeTrendSeriesForChart(rawSeries);
+    final compareSeries = _alignCompareSeriesLengths(series, rawCompare);
     final labels = _heroTrendLabels(series.length);
-    final rangeLabel = labels.isEmpty
-        ? ''
-        : labels.length == 1
-        ? labels.first
-        : '${labels.first} — ${labels.last}';
+    final rangeLabel = _heroTrendRangeLabel(labels);
+    final trendTitle = _heroTrendTitle();
     final isRateLike = m.isRate || m.key == 'rate' || m.key == 'spreadRate';
     final periodValue = totals[m.key] ?? 0.0;
     final chartColor = _heroMetricTrendColor(m.key, totals);
-    final expected = m.key == 'rate' ? _expectedForMetric('rate') : null;
-    final currentRate = totals['rate'] ?? 0.0;
-    final devPct = (expected != null && expected != 0)
-        ? (currentRate - expected) / expected.abs() * 100
-        : null;
-    Color? trendColor;
-    String? violationTag;
-    if (devPct != null) {
-      final abs = devPct.abs();
-      if (abs > 20) {
-        trendColor = LhColors.neg;
-        violationTag = '违背';
-      } else if (abs > 10) {
-        trendColor = LhColors.copper;
-        violationTag = '关注';
-      } else {
-        trendColor = LhColors.pos;
-        violationTag = '一致';
-      }
-    }
+    final showMomLegend =
+        _heroTrendIsMom && compareSeries.isNotEmpty && series.isNotEmpty;
 
     showModalBottomSheet(
       context: context,
@@ -8196,7 +7716,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                           crossAxisAlignment: CrossAxisAlignment.end,
                           children: [
                             Text(
-                              '近 30 日趋势',
+                              trendTitle,
                               style: LhTypography.mono(
                                 size: 9,
                                 color: LhColors.mute2,
@@ -8248,91 +7768,51 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                           color: chartColor,
                           isRate: isRateLike,
                           periodValue: periodValue,
-                          expected: expected,
-                          expectedColor: expected != null
-                              ? (trendColor ?? LhColors.copper)
-                              : null,
-                          violationTint: expected != null
-                              ? LhColors.neg.withAlpha(14)
-                              : null,
-                          warnTint: expected != null
-                              ? LhColors.copper.withAlpha(10)
-                              : null,
+                          compareData: showMomLegend ? compareSeries : null,
                           chartHeight: 168,
                           onInteractionChanged: (active) {
                             if (chartScrollLocked == active) return;
                             setSheetState(() => chartScrollLocked = active);
                           },
                         ),
-                        const SizedBox(height: 12),
-                        _buildTrendFormulaPanel(m.key),
-                        if (expected != null &&
-                            devPct != null &&
-                            trendColor != null) ...[
-                          const SizedBox(height: 14),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 9,
-                            ),
-                            decoration: BoxDecoration(
-                              color: trendColor.withAlpha(18),
-                              border: Border(
-                                left: BorderSide(color: trendColor, width: 2),
+                        if (showMomLegend) ...[
+                          const SizedBox(height: 8),
+                          Row(
+                            children: [
+                              Container(width: 14, height: 2, color: chartColor),
+                              const SizedBox(width: 6),
+                              Text(
+                                '本月',
+                                style: LhTypography.sans(
+                                  size: 9.5,
+                                  color: LhColors.mute,
+                                  weight: FontWeight.w600,
+                                ),
                               ),
-                            ),
-                            child: Row(
-                              children: [
-                                Text(
-                                  '提案基线',
-                                  style: LhTypography.sans(
-                                    size: 10,
-                                    color: trendColor,
-                                    weight: FontWeight.w700,
-                                    letterSpacing: 0.5,
-                                  ),
+                              const SizedBox(width: 14),
+                              Text(
+                                '- - -',
+                                style: LhTypography.mono(
+                                  size: 9,
+                                  color: LhColors.mute2,
+                                  weight: FontWeight.w700,
+                                  letterSpacing: 1.2,
                                 ),
-                                const SizedBox(width: 8),
-                                Text(
-                                  '${expected.toStringAsFixed(2)}%',
-                                  style: LhTypography.number(
-                                    size: 13,
-                                    color: trendColor,
-                                  ),
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                '上月',
+                                style: LhTypography.sans(
+                                  size: 9.5,
+                                  color: LhColors.mute,
+                                  weight: FontWeight.w600,
                                 ),
-                                const Spacer(),
-                                Text(
-                                  '${devPct >= 0 ? '+' : ''}${devPct.toStringAsFixed(1)}%',
-                                  style: LhTypography.mono(
-                                    size: 11,
-                                    color: trendColor,
-                                    weight: FontWeight.w700,
-                                    letterSpacing: 0.2,
-                                  ),
-                                ),
-                                const SizedBox(width: 6),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 5,
-                                    vertical: 2,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: trendColor.withAlpha(45),
-                                  ),
-                                  child: Text(
-                                    violationTag ?? '一致',
-                                    style: LhTypography.mono(
-                                      size: 9,
-                                      color: trendColor,
-                                      weight: FontWeight.w700,
-                                      letterSpacing: 0.4,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
+                              ),
+                            ],
                           ),
                         ],
+                        const SizedBox(height: 12),
+                        _buildTrendFormulaPanel(m.key),
                       ],
                     ),
                   ),
@@ -8368,28 +7848,43 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     }
 
     return Container(
-      padding: const EdgeInsets.fromLTRB(10, 9, 10, 9),
+      padding: const EdgeInsets.fromLTRB(12, 11, 12, 11),
       decoration: BoxDecoration(
-        color: LhColors.copperSoft.withAlpha(48),
-        border: Border(
-          left: BorderSide(color: LhColors.copper, width: 1.5),
-          top: BorderSide(color: LhColors.line2, width: 0.5),
-          right: BorderSide(color: LhColors.line2, width: 0.5),
-          bottom: BorderSide(color: LhColors.line2, width: 0.5),
-        ),
+        color: LhColors.paper,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: LhColors.line2, width: 0.8),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x0E140A00),
+            blurRadius: 8,
+            offset: Offset(0, 2),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              Text(
-                '计算公式',
-                style: LhTypography.mono(
-                  size: 8.5,
-                  color: LhColors.copper,
-                  weight: FontWeight.w700,
-                  letterSpacing: 1.1,
+              // 铜色小 badge 做身份标记 (替代之前的左侧 accent 条)
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 6,
+                  vertical: 2,
+                ),
+                decoration: BoxDecoration(
+                  color: LhColors.copper.withAlpha(28),
+                  borderRadius: BorderRadius.circular(3),
+                ),
+                child: Text(
+                  '计算公式',
+                  style: LhTypography.mono(
+                    size: 8.5,
+                    color: LhColors.copper,
+                    weight: FontWeight.w700,
+                    letterSpacing: 1.1,
+                  ),
                 ),
               ),
               const SizedBox(width: 8),
@@ -8405,7 +7900,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               ),
             ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 10),
           for (final row in rows) ...[
             _trendFormulaLine(row.text, highlighted: isHighlighted(row.key)),
             if (row.key != 'rate') const SizedBox(height: 5),
@@ -8418,13 +7913,14 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   Widget _trendFormulaLine(String text, {required bool highlighted}) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
       decoration: highlighted
           ? BoxDecoration(
-              color: LhColors.paper,
+              color: LhColors.copper.withAlpha(14),
+              borderRadius: BorderRadius.circular(6),
               border: Border.all(
-                color: LhColors.copper.withAlpha(160),
-                width: 0.8,
+                color: LhColors.copper.withAlpha(120),
+                width: 0.6,
               ),
             )
           : null,
@@ -8433,8 +7929,15 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         children: [
           if (highlighted)
             Padding(
-              padding: const EdgeInsets.only(top: 1.5, right: 5),
-              child: Container(width: 4, height: 4, color: LhColors.copper),
+              padding: const EdgeInsets.only(top: 2, right: 6),
+              child: Container(
+                width: 4,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: LhColors.copper,
+                  borderRadius: BorderRadius.circular(1),
+                ),
+              ),
             ),
           Expanded(
             child: Text.rich(
@@ -8627,15 +8130,58 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     }
   }
 
-  /// 提案基线: 优先从 bundle.metrics[key + 'Expected'] 拿
-  /// 只对 rate/效率 类指标返回 (其他指标暂无基线)
-  double? _expectedForMetric(String key) {
-    final mtr = _bundle?.metrics ?? const <String, dynamic>{};
-    final raw = mtr['${key}Expected'];
-    if (raw is num) return raw.toDouble();
-    // 无后端下发时, 对 rate 用一个合理默认值让 UI 可看
-    if (key == 'rate') return 1.1;
-    return null;
+  List<double> _seriesPrevForMetric(String key) {
+    switch (key) {
+      case 'cost':
+        final operating = _readMetricSeries('operatingCostSeriesPrev');
+        if (operating.isNotEmpty) return operating;
+        return _mergeMetricSeries(
+          _readMetricSeries('costSeriesPrev'),
+          _readMetricSeries('projectCostSeriesPrev'),
+        );
+      case 'spreadRate':
+        final direct = _readMetricSeries('spreadRateSeriesPrev');
+        if (direct.isNotEmpty) return direct;
+        final revenue = _readMetricSeries('revenueSeriesPrev');
+        final anchor = _anchorMetricSeriesPrev();
+        final n = revenue.length < anchor.length
+            ? revenue.length
+            : anchor.length;
+        if (n > 0) {
+          return List<double>.generate(n, (i) {
+            final a = anchor[i];
+            return a > 0 ? revenue[i] / a * 100 : 0.0;
+          }, growable: false);
+        }
+        return const <double>[];
+      case 'rate':
+        final direct = _readMetricSeries('rateSeriesPrev');
+        if (direct.isNotEmpty) return direct;
+        final profit = _readMetricSeries('profitSeriesPrev');
+        final anchor = _anchorMetricSeriesPrev();
+        final n = profit.length < anchor.length ? profit.length : anchor.length;
+        if (n > 0) {
+          return List<double>.generate(n, (i) {
+            final a = anchor[i];
+            return a > 0 ? profit[i] / a * 100 : 0.0;
+          }, growable: false);
+        }
+        return const <double>[];
+      default:
+        return _readMetricSeries('${key}SeriesPrev');
+    }
+  }
+
+  List<double> _anchorMetricSeriesPrev() {
+    final verified = _readMetricSeries('verifiedSalesSeriesPrev');
+    final sales = _readMetricSeries('salesSeriesPrev');
+    final n = verified.isNotEmpty ? verified.length : sales.length;
+    if (n == 0) return const <double>[];
+    return List<double>.generate(n, (i) {
+      final v = i < verified.length ? verified[i] : 0.0;
+      if (_anchor == _LhAnchor.verified) return v;
+      return i < sales.length ? sales[i] : v;
+    }, growable: false);
   }
 
   // ═══════════════════════════════════════════════════════════════════════
@@ -9813,39 +9359,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (isFiltered) ...[
-          Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTap: () {
-                  setState(() {
-                    _anomalyFilter = '全部';
-                    _listPage = 1;
-                  });
-                },
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.close_rounded, size: 12, color: LhColors.copper),
-                    const SizedBox(width: 2),
-                    Text(
-                      '清除',
-                      style: LhTypography.sans(
-                        size: 10,
-                        color: LhColors.copper,
-                        weight: FontWeight.w700,
-                        letterSpacing: 0.3,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-        ],
+        // v5: 清除按钮拿掉 —— 点击已选中卡片即取消选中
         // ── 4 张卡片一行 ────────────────────────────
         Row(
           children: [
@@ -9987,39 +9501,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (isFiltered) ...[
-          Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTap: () {
-                  setState(() {
-                    _groupFilter = '全部';
-                    _listPage = 1;
-                  });
-                },
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.close_rounded, size: 12, color: LhColors.copper),
-                    const SizedBox(width: 2),
-                    Text(
-                      '清除',
-                      style: LhTypography.sans(
-                        size: 10,
-                        color: LhColors.copper,
-                        weight: FontWeight.w700,
-                        letterSpacing: 0.3,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 7),
-        ],
+        // v5: 清除按钮拿掉 —— 点击已选中分类即取消
         // ── 4 张矮卡横排 (label + count 并列, 无图标) ──
         Row(
           children: [
@@ -11990,36 +11472,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                                         ),
                                       ),
                                       const Spacer(),
-                                      if (_cubeSelectedOwner != null)
-                                        GestureDetector(
-                                          behavior: HitTestBehavior.opaque,
-                                          onTap: () {
-                                            setState(
-                                              () => _cubeSelectedOwner = null,
-                                            );
-                                            resync();
-                                          },
-                                          child: Row(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              Icon(
-                                                Icons.close_rounded,
-                                                size: 12,
-                                                color: LhColors.copper,
-                                              ),
-                                              const SizedBox(width: 2),
-                                              Text(
-                                                '清除',
-                                                style: LhTypography.mono(
-                                                  size: 10,
-                                                  color: LhColors.copper,
-                                                  weight: FontWeight.w600,
-                                                  letterSpacing: 0.4,
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
+                                      // v5: 清除按钮拿掉
                                     ],
                                   ),
                                   const SizedBox(height: 6),

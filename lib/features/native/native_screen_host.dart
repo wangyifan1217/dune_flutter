@@ -42,6 +42,7 @@ import '../xflow/native_b10_page.dart';
 import '../xflow/native_b3_page.dart';
 import '../xflow/native_xflow_form_page.dart';
 import '../xflow/proposal_launch_config.dart';
+import '../xflow/proposal_upload_page.dart';
 import '../xflow/xflow_models.dart';
 import '../xflow/xflow_service.dart';
 import '../nova/native_nova_history_page.dart';
@@ -692,14 +693,14 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           session: widget.session,
           navigation: widget.navigation,
           initialCategory: _b3InitialCategory,
-          onOpenForm: (templateKey) {
-            setState(() {
-              _xflowTemplateKey = templateKey;
-              _xflowEditProposalId = null;
-              _xflowFormBackScreen = 'B3';
-            });
-            widget.navigation.go('XF');
-          },
+          onOpenForm: (templateKey) => _openXflowOrUpload(templateKey, backScreen: 'B3'),
+        );
+      case 'PU':
+        return ProposalUploadPage(
+          session: widget.session,
+          onBack: widget.navigation.canGoBack
+              ? widget.navigation.back
+              : () => widget.navigation.go('B2'),
         );
       case 'XF':
         return NativeXflowFormPage(
@@ -737,7 +738,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
               _xflowEditProposalId = proposalId;
               _xflowFormBackScreen = _b10BackScreen;
             });
-            widget.navigation.go('XF');
+            _openXflowOrUpload('sales-proposal', backScreen: _b10BackScreen);
           },
         );
       case 'C4':
@@ -986,10 +987,18 @@ class _NativeScreenHostState extends State<NativeScreenHost>
   }
 
   void _openXflowFormFromB2(String templateKey) {
+    _openXflowOrUpload(templateKey, backScreen: 'B2');
+  }
+
+  void _openXflowOrUpload(String templateKey, {required String backScreen}) {
+    if (templateKey == 'sales-proposal') {
+      widget.navigation.go('PU');
+      return;
+    }
     setState(() {
       _xflowTemplateKey = templateKey;
       _xflowEditProposalId = null;
-      _xflowFormBackScreen = 'B2';
+      _xflowFormBackScreen = backScreen;
     });
     widget.navigation.go('XF');
   }
@@ -1002,7 +1011,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         _xflowEditProposalId = item.id;
         _xflowFormBackScreen = from;
       });
-      widget.navigation.go('XF');
+      _openXflowOrUpload('sales-proposal', backScreen: from);
       return;
     }
     setState(() {

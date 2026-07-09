@@ -45,9 +45,7 @@ class XflowService {
           if (row is Map<String, dynamic>) {
             cards.add(XflowTemplateCard.fromJson(row));
           } else if (row is Map) {
-            cards.add(
-              XflowTemplateCard.fromJson(Map<String, dynamic>.from(row)),
-            );
+            cards.add(XflowTemplateCard.fromJson(Map<String, dynamic>.from(row)));
           }
         }
         if (cards.isNotEmpty) _templateMemoryCache[key] = cards;
@@ -64,10 +62,7 @@ class XflowService {
     return const [];
   }
 
-  static Future<void> _persistTemplateCache(
-    String category,
-    List<XflowTemplateCard> rows,
-  ) async {
+  static Future<void> _persistTemplateCache(String category, List<XflowTemplateCard> rows) async {
     _templateMemoryCache[category] = rows;
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -101,16 +96,14 @@ class XflowService {
   String get _draftStorageKey => 'xflow_draft_$templateKey';
 
   Map<String, String> get _headers => <String, String>{
-    'Authorization': 'Bearer ${session.token}',
-    'Content-Type': 'application/json',
-  };
+        'Authorization': 'Bearer ${session.token}',
+        'Content-Type': 'application/json',
+      };
 
   Uri _uri(String path) => Uri.parse('${session.apiBase}$path');
 
   Future<List<XflowProposalItem>> fetchB1Approvals() async {
-    final rows = await _requestList(
-      '/workbench/inbox?kind=APPROVAL&status=ALL',
-    );
+    final rows = await _requestList('/workbench/inbox?kind=APPROVAL&status=ALL');
     final out = <XflowProposalItem>[];
     for (final row in rows.whereType<Map<String, dynamic>>()) {
       if ((row['kind'] ?? 'APPROVAL').toString().toUpperCase() != 'APPROVAL') {
@@ -127,8 +120,7 @@ class XflowService {
           code: '#$businessId',
           title: (row['title'] ?? row['businessTitle'] ?? '提案').toString(),
           status: (row['status'] ?? 'PENDING').toString(),
-          createdByName: (row['createdByName'] ?? row['subtitle'] ?? '')
-              .toString(),
+          createdByName: (row['createdByName'] ?? row['subtitle'] ?? '').toString(),
           createdAt: DateTime.tryParse(
             (row['createdAt'] ?? row['updatedAt'] ?? '').toString(),
           ),
@@ -209,10 +201,7 @@ class XflowService {
   }
 
   /// 以 my-initiated 项为主，用 proposals/mine 补齐缺失字段。
-  XflowProposalItem _fillB14Missing(
-    XflowProposalItem base,
-    XflowProposalItem extra,
-  ) {
+  XflowProposalItem _fillB14Missing(XflowProposalItem base, XflowProposalItem extra) {
     return base.copyWith(
       code: base.code.isEmpty || base.code.startsWith('#') ? extra.code : null,
       title: base.title.isEmpty ? extra.title : null,
@@ -220,12 +209,8 @@ class XflowService {
       createdByName: base.createdByName.isEmpty ? extra.createdByName : null,
       createdAt: base.createdAt ?? extra.createdAt,
       tag1: (base.tag1 == null || base.tag1!.isEmpty) ? extra.tag1 : null,
-      txType: (base.txType == null || base.txType!.isEmpty)
-          ? extra.txType
-          : null,
-      scaleWan: (base.scaleWan == null || base.scaleWan!.isEmpty)
-          ? extra.scaleWan
-          : null,
+      txType: (base.txType == null || base.txType!.isEmpty) ? extra.txType : null,
+      scaleWan: (base.scaleWan == null || base.scaleWan!.isEmpty) ? extra.scaleWan : null,
     );
   }
 
@@ -237,9 +222,7 @@ class XflowService {
     return Future.wait(items.map(_enrichP1Item));
   }
 
-  Future<List<XflowTemplateCard>> fetchTemplatesByCategory(
-    String category,
-  ) async {
+  Future<List<XflowTemplateCard>> fetchTemplatesByCategory(String category) async {
     final cat = category.trim().isEmpty ? 'biz' : category.trim();
     final rows = await _requestList('/xflow/templates?category=$cat');
     final out = <XflowTemplateCard>[];
@@ -266,23 +249,17 @@ class XflowService {
     String templateKey = salesTemplateKey,
     bool includeDictEnrich = true,
   }) async {
-    final rawRes = await _request(
-      '/xflow/templates/${Uri.encodeComponent(templateKey)}',
-    );
+    final rawRes = await _request('/xflow/templates/${Uri.encodeComponent(templateKey)}');
     final templateObj = rawRes['template'];
-    final fieldsRaw =
-        rawRes['fields'] ??
-        (templateObj is Map<String, dynamic>
-            ? templateObj['fieldsJson']
-            : null) ??
+    final fieldsRaw = rawRes['fields'] ??
+        (templateObj is Map<String, dynamic> ? templateObj['fieldsJson'] : null) ??
         (templateObj is Map<String, dynamic> ? templateObj['fields'] : null) ??
         const [];
     var fields = _parseFields(fieldsRaw);
     if (includeDictEnrich) {
       fields = await _enrichFieldOptions(fields);
     }
-    final stagesRaw =
-        rawRes['stages'] ??
+    final stagesRaw = rawRes['stages'] ??
         (templateObj is Map<String, dynamic> ? templateObj['stages'] : null) ??
         const [];
     final stages = _mapStages(stagesRaw);
@@ -291,13 +268,10 @@ class XflowService {
         : rawRes['layoutJson'];
     return XflowTemplateDetail(
       templateKey: templateKey,
-      title:
-          (rawRes['title'] ??
-                  (templateObj is Map<String, dynamic>
-                      ? templateObj['title']
-                      : null) ??
-                  '新建销售提案')
-              .toString(),
+      title: (rawRes['title'] ??
+              (templateObj is Map<String, dynamic> ? templateObj['title'] : null) ??
+              '新建销售提案')
+          .toString(),
       fields: fields,
       stages: stages,
       layout: parseLayout(rawLayout),
@@ -317,13 +291,7 @@ class XflowService {
     final merged = <String, dynamic>{};
     final inner = raw['detailConfig'];
     if (inner is Map) merged.addAll(Map<String, dynamic>.from(inner));
-    for (final key in const [
-      'pushRules',
-      'ccRules',
-      'stages',
-      'dicts',
-      'templateKey',
-    ]) {
+    for (final key in const ['pushRules', 'ccRules', 'stages', 'dicts', 'templateKey']) {
       if (raw[key] != null) merged[key] = raw[key];
     }
     return merged;
@@ -388,9 +356,7 @@ class XflowService {
       final bt = (row['businessType'] ?? '').toString().toUpperCase();
       final bid = _int(row['businessId']);
       final status = (row['status'] ?? '').toString().toUpperCase();
-      if (bt == businessType.toUpperCase() &&
-          bid == businessId &&
-          status == 'OPEN') {
+      if (bt == businessType.toUpperCase() && bid == businessId && status == 'OPEN') {
         return XflowTodoHint(
           id: _int(row['id']),
           sourceStepId: _intNullable(row['sourceStepId']),
@@ -413,33 +379,26 @@ class XflowService {
     final detailCfg = await fetchDetailConfig();
     final detail = await fetchProposalDetail(proposalId);
     final trail = await fetchProposalTrail(proposalId);
-    final myTodo =
-        todoHint ??
+    final myTodo = todoHint ??
         await findMyOpenTodo(businessType: 'PROPOSAL', businessId: proposalId);
     final stages = _mapStages(detailCfg['stages'] ?? template.stages);
     final assigneeNames = await _fetchAssigneeNames(trail);
     final ccRaw = detail.raw['ccList'];
     final ccList = ccRaw is List
-        ? ccRaw
-              .whereType<Map>()
-              .map((e) => Map<String, dynamic>.from(e))
-              .toList(growable: false)
+        ? ccRaw.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList(growable: false)
         : const <Map<String, dynamic>>[];
     final uid = currentUserId ?? 0;
     final st = detail.status.toLowerCase();
     final initiator = trail?.initiatorId ?? detail.createdById;
-    final canReedit =
-        uid > 0 &&
+    final canReedit = uid > 0 &&
         (detail.createdById == uid || initiator == uid) &&
         st == 'rejected' &&
         st != 'voided';
     // 「待发起」角色：owner_id 为代发起人（被推送人），created_by 为推送人。
     final ownerId = _int(detail.raw['ownerId']);
     final isPendingInitiate = st == 'pending_initiate';
-    final isDesignatedInitiator =
-        isPendingInitiate && uid > 0 && ownerId == uid;
-    final isPusher =
-        isPendingInitiate &&
+    final isDesignatedInitiator = isPendingInitiate && uid > 0 && ownerId == uid;
+    final isPusher = isPendingInitiate &&
         uid > 0 &&
         detail.createdById == uid &&
         ownerId != uid;
@@ -462,9 +421,7 @@ class XflowService {
     );
   }
 
-  Future<Map<int, String>> _fetchAssigneeNames(
-    XflowApprovalTrail? trail,
-  ) async {
+  Future<Map<int, String>> _fetchAssigneeNames(XflowApprovalTrail? trail) async {
     final ids = <int>{};
     if (trail != null) {
       if (trail.initiatorId > 0) ids.add(trail.initiatorId);
@@ -619,9 +576,7 @@ class XflowService {
   Future<List<Map<String, dynamic>>> searchOrgUsers(String keyword) async {
     final q = keyword.trim();
     if (q.isEmpty) return const [];
-    final rows = await _requestList(
-      '/org/users?q=${Uri.encodeQueryComponent(q)}&size=20',
-    );
+    final rows = await _requestList('/org/users?q=${Uri.encodeQueryComponent(q)}&size=20');
     return rows.whereType<Map<String, dynamic>>().toList(growable: false);
   }
 
@@ -634,9 +589,7 @@ class XflowService {
     final req = http.MultipartRequest('POST', _uri('/storage/upload'));
     req.headers['Authorization'] = 'Bearer ${session.token}';
     req.fields['bucket'] = 'xflow-proposals';
-    req.files.add(
-      http.MultipartFile.fromBytes('file', bytes, filename: fileName),
-    );
+    req.files.add(http.MultipartFile.fromBytes('file', bytes, filename: fileName));
     onProgress?.call(35);
     final streamed = await _client.send(req);
     final bodyText = await streamed.stream.bytesToString();
@@ -737,8 +690,8 @@ class XflowService {
   }
 
   String _apiMessage(Map<String, dynamic> map, String fallback) {
-    final msg = (map['message'] ?? (map['error'] as Map?)?['message'] ?? '')
-        .toString();
+    final msg =
+        (map['message'] ?? (map['error'] as Map?)?['message'] ?? '').toString();
     if (msg.trim().isNotEmpty) return msg;
     return fallback;
   }
@@ -823,36 +776,29 @@ class XflowService {
         copy['options'] = dictCache[dk]!
             .map(
               (it) => <String, dynamic>{
-                'label': (it['label'] ?? it['name'] ?? it['value'] ?? '')
-                    .toString(),
-                'value': (it['value'] ?? it['code'] ?? it['id'] ?? '')
-                    .toString(),
+                'label': (it['label'] ?? it['name'] ?? it['value'] ?? '').toString(),
+                'value': (it['value'] ?? it['code'] ?? it['id'] ?? '').toString(),
               },
             )
             .toList(growable: false);
       }
       if (copy['columns'] is List) {
-        copy['columns'] = (copy['columns'] as List)
-            .map((col) {
-              if (col is! Map) return col;
-              final nc = Map<String, dynamic>.from(col);
-              final cdk = (nc['dictKey'] ?? '').toString();
-              if (cdk.isNotEmpty && (dictCache[cdk]?.isNotEmpty ?? false)) {
-                nc['options'] = dictCache[cdk]!
-                    .map(
-                      (it) => <String, dynamic>{
-                        'label':
-                            (it['label'] ?? it['name'] ?? it['value'] ?? '')
-                                .toString(),
-                        'value': (it['value'] ?? it['code'] ?? it['id'] ?? '')
-                            .toString(),
-                      },
-                    )
-                    .toList(growable: false);
-              }
-              return nc;
-            })
-            .toList(growable: false);
+        copy['columns'] = (copy['columns'] as List).map((col) {
+          if (col is! Map) return col;
+          final nc = Map<String, dynamic>.from(col);
+          final cdk = (nc['dictKey'] ?? '').toString();
+          if (cdk.isNotEmpty && (dictCache[cdk]?.isNotEmpty ?? false)) {
+            nc['options'] = dictCache[cdk]!
+                .map(
+                  (it) => <String, dynamic>{
+                    'label': (it['label'] ?? it['name'] ?? it['value'] ?? '').toString(),
+                    'value': (it['value'] ?? it['code'] ?? it['id'] ?? '').toString(),
+                  },
+                )
+                .toList(growable: false);
+          }
+          return nc;
+        }).toList(growable: false);
       }
       out.add(XflowField.fromJson(copy));
     }
@@ -879,18 +825,15 @@ class XflowService {
       final status = _resolveB1Status(item, detail, trail);
       final initiator = detail.ownerName.isNotEmpty
           ? detail.ownerName
-          : (detail.raw['createdBy'] ??
-                    detail.raw['initiator'] ??
-                    item.createdByName)
-                .toString();
+          : (detail.raw['createdBy'] ?? detail.raw['initiator'] ?? item.createdByName)
+              .toString();
       return item.copyWith(
         code: detail.code,
         title: detail.title,
         status: status,
         createdByName: initiator,
         createdAt: detail.raw['createdAt'] != null
-            ? DateTime.tryParse(detail.raw['createdAt'].toString()) ??
-                  item.createdAt
+            ? DateTime.tryParse(detail.raw['createdAt'].toString()) ?? item.createdAt
             : item.createdAt,
         tag1: (detail.raw['tag1'] ?? '').toString().isEmpty
             ? null
@@ -905,9 +848,7 @@ class XflowService {
         totalSteps: trail?.steps.length ?? 0,
       );
     } catch (_) {
-      final st = item.todoHint?.status.toUpperCase() == 'OPEN'
-          ? 'PENDING'
-          : 'APPROVED';
+      final st = item.todoHint?.status.toUpperCase() == 'OPEN' ? 'PENDING' : 'APPROVED';
       return item.copyWith(status: st);
     }
   }
@@ -916,8 +857,7 @@ class XflowService {
     try {
       final detail = await fetchProposalDetail(item.id);
       final trail = await fetchProposalTrail(item.id);
-      var st = (detail.status.isNotEmpty ? detail.status : item.status)
-          .toLowerCase();
+      var st = (detail.status.isNotEmpty ? detail.status : item.status).toLowerCase();
       var status = st == 'pending' ? 'PENDING' : st.toUpperCase();
       if (st == 'superseded') status = 'SUPERSEDED';
       if (st == 'voided') status = 'VOIDED';
@@ -1000,11 +940,9 @@ class XflowService {
       code: (json['code'] ?? '#$id').toString(),
       title: (json['title'] ?? json['name'] ?? '未命名提案').toString(),
       status: (json['status'] ?? '').toString(),
-      createdByName: (json['createdByName'] ?? json['initiatorName'] ?? '')
-          .toString(),
-      createdAt: DateTime.tryParse(
-        (json['createdAt'] ?? json['updatedAt'] ?? '').toString(),
-      ),
+      createdByName: (json['createdByName'] ?? json['initiatorName'] ?? '').toString(),
+      createdAt:
+          DateTime.tryParse((json['createdAt'] ?? json['updatedAt'] ?? '').toString()),
     );
   }
 
@@ -1013,29 +951,25 @@ class XflowService {
     return XflowProposalItem(
       id: bid,
       businessType:
-          (json['businessType'] ?? json['business_type'] ?? 'PROPOSAL')
-              .toString(),
+          (json['businessType'] ?? json['business_type'] ?? 'PROPOSAL').toString(),
       code: (json['code'] ?? '#$bid').toString(),
       title: (json['title'] ?? json['name'] ?? '提案').toString(),
       status: (json['status'] ?? '').toString(),
-      createdByName: (json['createdByName'] ?? json['initiatorName'] ?? '')
-          .toString(),
-      createdAt: DateTime.tryParse(
-        (json['createdAt'] ?? json['updatedAt'] ?? '').toString(),
-      ),
+      createdByName: (json['createdByName'] ?? json['initiatorName'] ?? '').toString(),
+      createdAt:
+          DateTime.tryParse((json['createdAt'] ?? json['updatedAt'] ?? '').toString()),
       todoHint:
-          _int(json['todoId']) > 0 &&
-              (json['todoStatus'] ?? '').toString().toUpperCase() == 'OPEN'
-          ? XflowTodoHint(
-              id: _int(json['todoId']),
-              sourceStepId: _intNullable(json['sourceStepId']),
-              businessType:
-                  (json['businessType'] ?? json['business_type'] ?? 'PROPOSAL')
-                      .toString(),
-              businessId: bid,
-              status: (json['todoStatus'] ?? '').toString(),
-            )
-          : null,
+          _int(json['todoId']) > 0 && (json['todoStatus'] ?? '').toString().toUpperCase() == 'OPEN'
+              ? XflowTodoHint(
+                  id: _int(json['todoId']),
+                  sourceStepId: _intNullable(json['sourceStepId']),
+                  businessType:
+                      (json['businessType'] ?? json['business_type'] ?? 'PROPOSAL')
+                          .toString(),
+                  businessId: bid,
+                  status: (json['todoStatus'] ?? '').toString(),
+                )
+              : null,
     );
   }
 
@@ -1045,8 +979,8 @@ class XflowService {
     final formValues = formValuesRaw is Map<String, dynamic>
         ? Map<String, dynamic>.from(formValuesRaw)
         : (formValuesRaw is Map
-              ? Map<String, dynamic>.from(formValuesRaw)
-              : <String, dynamic>{});
+            ? Map<String, dynamic>.from(formValuesRaw)
+            : <String, dynamic>{});
     final products = <XflowProduct>[];
     final productRows = raw['products'];
     if (productRows is List) {
@@ -1057,8 +991,7 @@ class XflowService {
             XflowProduct(
               name: (map['name'] ?? map['productName'] ?? '').toString(),
               platformProductId:
-                  (map['platformProductId'] ?? map['productId'] ?? '')
-                      .toString(),
+                  (map['platformProductId'] ?? map['productId'] ?? '').toString(),
               ratio: (map['ratio'] ?? map['discountRatio'] ?? '').toString(),
             ),
           );
@@ -1119,8 +1052,7 @@ class XflowService {
             stepName: (map['stepName'] ?? map['name'] ?? '').toString(),
             decision: (map['decision'] ?? '').toString(),
             assigneeId: _int(map['assigneeId'] ?? map['actorId']),
-            assigneeName: (map['assigneeName'] ?? map['actorName'] ?? '')
-                .toString(),
+            assigneeName: (map['assigneeName'] ?? map['actorName'] ?? '').toString(),
             comment: (map['comment'] ?? '').toString(),
             updatedAt: DateTime.tryParse(
               (map['updatedAt'] ?? map['createdAt'] ?? '').toString(),

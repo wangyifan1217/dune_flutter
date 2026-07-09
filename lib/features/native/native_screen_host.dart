@@ -737,6 +737,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
                 '/business/proposals/new',
               ),
               backScreen: _b10BackScreen,
+              editProposalId: proposalId,
             );
           },
         );
@@ -988,10 +989,11 @@ class _NativeScreenHostState extends State<NativeScreenHost>
   void _openProposalEntry({
     required String templateKey,
     required String backScreen,
+    int? editProposalId,
   }) {
     setState(() {
       _xflowTemplateKey = templateKey;
-      _xflowEditProposalId = null;
+      _xflowEditProposalId = editProposalId;
       _xflowFormBackScreen = backScreen;
     });
     widget.navigation.go('XFP');
@@ -1004,11 +1006,13 @@ class _NativeScreenHostState extends State<NativeScreenHost>
   void _openProposalDetail(XflowProposalItem item, {required String from}) {
     // 「我发起的」列表点击草稿 → 进入可继续填写的表单（与提交页一致），并可删除草稿。
     if (from == 'B14' && item.status.toUpperCase() == 'DRAFT') {
+      final templateKey = (item.templateKey ?? '').trim().isNotEmpty
+          ? item.templateKey!.trim()
+          : XflowService.boundTemplateKeyForMenu('/business/proposals/new');
       _openProposalEntry(
-        templateKey: XflowService.boundTemplateKeyForMenu(
-          '/business/proposals/new',
-        ),
+        templateKey: templateKey,
         backScreen: from,
+        editProposalId: item.id,
       );
       return;
     }

@@ -38,7 +38,13 @@ class AuthSession {
   /// Nova Provisioning 结果，注入 WebView localStorage（与 dunes JWT 分离）。
   final Map<String, String>? novaLocalStorage;
 
-  String get landingScreen => 'C1';
+  static const _initialScreenFromDefine = String.fromEnvironment(
+    'DUNES_INITIAL_SCREEN',
+    defaultValue: '',
+  );
+
+  String get landingScreen =>
+      _initialScreenFromDefine.isNotEmpty ? _initialScreenFromDefine : 'C1';
 
   bool get canUseApproval =>
       roles.any((r) => {'BUSINESS', 'INITIATOR', 'FINANCE', 'ADMIN'}.contains(r));

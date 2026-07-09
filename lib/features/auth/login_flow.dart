@@ -52,6 +52,9 @@ class _LoginFlowState extends State<LoginFlow> {
     super.initState();
     _loadAppVersion();
     _restoreSession();
+    Future<void>.delayed(const Duration(seconds: 8), () {
+      if (mounted && _hydrating) setState(() => _hydrating = false);
+    });
   }
 
   Future<void> _loadAppVersion() async {
@@ -145,19 +148,25 @@ class _LoginFlowState extends State<LoginFlow> {
           onUpdated: _onSessionRefreshed,
         );
         try {
-          var resp = await http.get(
-            Uri.parse('${session.apiBase}/users/me'),
-            headers: {'Authorization': 'Bearer ${session.token}'},
-          );
-          if (AuthSessionCoordinator.isRecoverable401(resp)) {
-            final refreshed =
-                await AuthSessionCoordinator.instance.refreshToken();
-            if (refreshed != null) {
-              session = refreshed;
-              resp = await http.get(
+          var resp = await http
+              .get(
                 Uri.parse('${session.apiBase}/users/me'),
                 headers: {'Authorization': 'Bearer ${session.token}'},
-              );
+              )
+              .timeout(const Duration(seconds: 5));
+          if (AuthSessionCoordinator.isRecoverable401(resp)) {
+            final refreshed =
+                await AuthSessionCoordinator.instance
+                    .refreshToken()
+                    .timeout(const Duration(seconds: 5));
+            if (refreshed != null) {
+              session = refreshed;
+              resp = await http
+                  .get(
+                    Uri.parse('${session.apiBase}/users/me'),
+                    headers: {'Authorization': 'Bearer ${session.token}'},
+                  )
+                  .timeout(const Duration(seconds: 5));
             }
           }
           if (resp.statusCode == 401) {

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/theme/dunes_theme.dart';
 import 'xflow_models.dart';
+import 'xflow_service.dart';
 
 enum ProposalLaunchIconTone { accent, green, blue, amber }
 
@@ -53,18 +54,23 @@ List<ProposalLaunchItem> buildQuickLaunchItems({
   required List<XflowTemplateCard> bizTemplates,
   required List<XflowTemplateCard> admTemplates,
   int maxItems = 4,
+  String defaultSalesTemplateKey = XflowService.salesTemplateKey,
 }) {
   final enabled = <ProposalLaunchItem>[
-    ...bizTemplates.where((t) => t.enabled).map(ProposalLaunchItem.fromTemplate),
-    ...admTemplates.where((t) => t.enabled).map(ProposalLaunchItem.fromTemplate),
+    ...bizTemplates
+        .where((t) => t.enabled)
+        .map(ProposalLaunchItem.fromTemplate),
+    ...admTemplates
+        .where((t) => t.enabled)
+        .map(ProposalLaunchItem.fromTemplate),
   ];
   if (enabled.isEmpty) {
     enabled.addAll([
-      const ProposalLaunchItem(
+      ProposalLaunchItem(
         label: '销售提案',
         icon: Icons.assignment_outlined,
         badge: '新建',
-        templateKey: 'sales-proposal',
+        templateKey: defaultSalesTemplateKey,
       ),
       const ProposalLaunchItem(
         label: '合同用印',
@@ -135,7 +141,9 @@ class ProposalQuickLaunchCell extends StatelessWidget {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(10),
             border: Border.all(
-              color: tappable ? DunesColors.borderSoft : const Color(0xFFEFEFEF),
+              color: tappable
+                  ? DunesColors.borderSoft
+                  : const Color(0xFFEFEFEF),
             ),
           ),
           child: Stack(
@@ -181,7 +189,10 @@ class ProposalQuickLaunchCell extends StatelessWidget {
                   top: 0,
                   right: 2,
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 3,
+                      vertical: 1,
+                    ),
                     decoration: BoxDecoration(
                       color: DunesColors.accentSoft,
                       borderRadius: BorderRadius.circular(2),

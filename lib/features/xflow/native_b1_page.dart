@@ -365,8 +365,6 @@ class _NativeProposalListPageState extends State<_NativeProposalListPage> {
                                       child: XflowProposalListCard(
                                         item: item,
                                         mode: _cardMode,
-                                        showTrackButton: widget.type == _ListType.b14,
-                                        onTrackTap: () => widget.onOpenProposal(item),
                                         onTap: () => widget.onOpenProposal(item),
                                         onDeleteDraft: widget.type == _ListType.b14 &&
                                                 _normalizeStatus(item.status) == 'DRAFT'

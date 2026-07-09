@@ -40,7 +40,7 @@ import '../kb/native_kb_models.dart';
 import '../kb/native_kb_service.dart';
 import '../xflow/native_b10_page.dart';
 import '../xflow/native_b3_page.dart';
-import '../xflow/native_xflow_form_page.dart';
+import '../xflow/native_xflow_proposal_page.dart';
 import '../xflow/proposal_launch_config.dart';
 import '../xflow/xflow_models.dart';
 import '../xflow/xflow_service.dart';
@@ -109,7 +109,9 @@ class _NativeScreenHostState extends State<NativeScreenHost>
   int _selectedProposalId = 0;
   XflowTodoHint? _selectedTodoHint;
   String _b10BackScreen = 'P1';
-  String _xflowTemplateKey = 'sales-proposal';
+  String _xflowTemplateKey = XflowService.boundTemplateKeyForMenu(
+    '/business/proposals/new',
+  );
   String _b3InitialCategory = 'biz';
   int? _xflowEditProposalId;
   String _xflowFormBackScreen = 'B3';
@@ -270,8 +272,9 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       final msg = event.raw['message'];
       if (msg is Map) {
         final kind = (msg['kind'] ?? '').toString();
-        final rawBody = (msg['bodyText'] ?? msg['content'] ?? msg['text'] ?? body)
-            .toString();
+        final rawBody =
+            (msg['bodyText'] ?? msg['content'] ?? msg['text'] ?? body)
+                .toString();
         body = compactMessagePushPreview(kind: kind, body: rawBody);
         final sender = msg['sender'];
         if (sender is Map) {
@@ -693,16 +696,13 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           navigation: widget.navigation,
           initialCategory: _b3InitialCategory,
           onOpenForm: (templateKey) {
-            setState(() {
-              _xflowTemplateKey = templateKey;
-              _xflowEditProposalId = null;
-              _xflowFormBackScreen = 'B3';
-            });
-            widget.navigation.go('XF');
+            _openProposalEntry(templateKey: templateKey, backScreen: 'B3');
           },
         );
+      case 'XFP':
+      case 'XFU':
       case 'XF':
-        return NativeXflowFormPage(
+        return NativeXflowProposalPage(
           session: widget.session,
           navigation: widget.navigation,
           templateKey: _xflowTemplateKey,
@@ -732,12 +732,12 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           todoHint: _selectedTodoHint,
           backScreen: _b10BackScreen,
           onReedit: (proposalId) {
-            setState(() {
-              _xflowTemplateKey = 'sales-proposal';
-              _xflowEditProposalId = proposalId;
-              _xflowFormBackScreen = _b10BackScreen;
-            });
-            widget.navigation.go('XF');
+            _openProposalEntry(
+              templateKey: XflowService.boundTemplateKeyForMenu(
+                '/business/proposals/new',
+              ),
+              backScreen: _b10BackScreen,
+            );
           },
         );
       case 'C4':
@@ -985,24 +985,31 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     widget.navigation.go('B3');
   }
 
-  void _openXflowFormFromB2(String templateKey) {
+  void _openProposalEntry({
+    required String templateKey,
+    required String backScreen,
+  }) {
     setState(() {
       _xflowTemplateKey = templateKey;
       _xflowEditProposalId = null;
-      _xflowFormBackScreen = 'B2';
+      _xflowFormBackScreen = backScreen;
     });
-    widget.navigation.go('XF');
+    widget.navigation.go('XFP');
+  }
+
+  void _openXflowFormFromB2(String templateKey) {
+    _openProposalEntry(templateKey: templateKey, backScreen: 'B2');
   }
 
   void _openProposalDetail(XflowProposalItem item, {required String from}) {
     // 「我发起的」列表点击草稿 → 进入可继续填写的表单（与提交页一致），并可删除草稿。
     if (from == 'B14' && item.status.toUpperCase() == 'DRAFT') {
-      setState(() {
-        _xflowTemplateKey = 'sales-proposal';
-        _xflowEditProposalId = item.id;
-        _xflowFormBackScreen = from;
-      });
-      widget.navigation.go('XF');
+      _openProposalEntry(
+        templateKey: XflowService.boundTemplateKeyForMenu(
+          '/business/proposals/new',
+        ),
+        backScreen: from,
+      );
       return;
     }
     setState(() {
@@ -1052,6 +1059,9 @@ class _NativeB2PageState extends State<_NativeB2Page> {
   bool _qrLoginOpening = false;
   int _avatarRefreshVersion = 0;
   List<ProposalLaunchItem> _quickLaunchItems = const <ProposalLaunchItem>[];
+  String _defaultSalesTemplateKey = XflowService.boundTemplateKeyForMenu(
+    '/business/proposals/new',
+  );
   final MeetingLiveController _live = MeetingLiveController.instance;
 
   @override
@@ -1062,21 +1072,25 @@ class _NativeB2PageState extends State<_NativeB2Page> {
       bizTemplates: XflowService.cachedTemplatesByCategory('biz'),
       admTemplates: XflowService.cachedTemplatesByCategory('adm'),
       maxItems: 4,
+      defaultSalesTemplateKey: _defaultSalesTemplateKey,
     );
     widget.workbenchRefresh.addListener(_onWorkbenchDataRefresh);
     _live.active.addListener(_onLiveStateChanged);
     _live.paused.addListener(_onLiveStateChanged);
     _live.elapsed.addListener(_onLiveStateChanged);
-    unawaited(XflowService.hydrateTemplateCache().then((_) {
-      if (!mounted) return;
-      setState(() {
-        _quickLaunchItems = buildQuickLaunchItems(
-          bizTemplates: XflowService.cachedTemplatesByCategory('biz'),
-          admTemplates: XflowService.cachedTemplatesByCategory('adm'),
-          maxItems: 4,
-        );
-      });
-    }));
+    unawaited(
+      XflowService.hydrateTemplateCache().then((_) {
+        if (!mounted) return;
+        setState(() {
+          _quickLaunchItems = buildQuickLaunchItems(
+            bizTemplates: XflowService.cachedTemplatesByCategory('biz'),
+            admTemplates: XflowService.cachedTemplatesByCategory('adm'),
+            maxItems: 4,
+            defaultSalesTemplateKey: _defaultSalesTemplateKey,
+          );
+        });
+      }),
+    );
     _loadStats(silent: _profile != null);
     _refreshCommBadge();
   }
@@ -1196,11 +1210,18 @@ class _NativeB2PageState extends State<_NativeB2Page> {
             .fetchB14Initiated()
             .then<List<XflowProposalItem>?>((v) => v)
             .catchError((_) => null),
-        NativeMeetingService(session: widget.session)
-            .fetchMyCount()
-            .catchError((_) => 0),
-        xflow.fetchTemplatesByCategory('biz').catchError((_) => const <XflowTemplateCard>[]),
-        xflow.fetchTemplatesByCategory('adm').catchError((_) => const <XflowTemplateCard>[]),
+        NativeMeetingService(
+          session: widget.session,
+        ).fetchMyCount().catchError((_) => 0),
+        xflow
+            .fetchTemplatesByCategory('biz')
+            .catchError((_) => const <XflowTemplateCard>[]),
+        xflow
+            .fetchTemplatesByCategory('adm')
+            .catchError((_) => const <XflowTemplateCard>[]),
+        xflow.fetchWorkbenchConfig().catchError(
+          (_) => const <String, dynamic>{},
+        ),
       ]);
       final resp = results[0] as http.Response;
       final kbSummary = results[1] as NativeKbSummary?;
@@ -1209,6 +1230,15 @@ class _NativeB2PageState extends State<_NativeB2Page> {
       final meetingCount = results[4] as int;
       final bizTemplates = results[5] as List<XflowTemplateCard>;
       final admTemplates = results[6] as List<XflowTemplateCard>;
+      final wbConfig = results[7] as Map<String, dynamic>;
+      final bindings = wbConfig['templateBindings'];
+      String defaultTemplate = _defaultSalesTemplateKey;
+      if (bindings is Map) {
+        final hit = (bindings['/business/proposals/new'] ?? '')
+            .toString()
+            .trim();
+        if (hit.isNotEmpty) defaultTemplate = hit;
+      }
       if (resp.statusCode < 200 || resp.statusCode >= 300) {
         throw Exception('HTTP ${resp.statusCode}');
       }
@@ -1228,10 +1258,12 @@ class _NativeB2PageState extends State<_NativeB2Page> {
         _kbSummary = kbSummary;
         _profile = profile;
         _meetingCount = meetingCount;
+        _defaultSalesTemplateKey = defaultTemplate;
         _quickLaunchItems = buildQuickLaunchItems(
           bizTemplates: bizTemplates,
           admTemplates: admTemplates,
           maxItems: 4,
+          defaultSalesTemplateKey: defaultTemplate,
         );
         _loading = false;
       });
@@ -1282,17 +1314,19 @@ class _NativeB2PageState extends State<_NativeB2Page> {
       final objectKey =
           (data['avatarObjectKey'] ?? data['peerAvatarObjectKey'] ?? '')
               .toString();
-      String avatarUrl = (data['avatarUrl'] ??
-              data['avatarFullUrl'] ??
-              data['avatarImageUrl'] ??
-              data['avatar'] ??
-              data['avatarSrc'] ??
-              data['avatarImage'] ??
-              '')
-          .toString()
-          .trim();
+      String avatarUrl =
+          (data['avatarUrl'] ??
+                  data['avatarFullUrl'] ??
+                  data['avatarImageUrl'] ??
+                  data['avatar'] ??
+                  data['avatarSrc'] ??
+                  data['avatarImage'] ??
+                  '')
+              .toString()
+              .trim();
       if (avatarUrl.isEmpty) {
-        avatarUrl = cachedMyPageAvatarUrl(
+        avatarUrl =
+            cachedMyPageAvatarUrl(
               widget.session.userId,
               preset: avatarPreset,
               objectKey: objectKey,
@@ -1421,23 +1455,24 @@ class _NativeB2PageState extends State<_NativeB2Page> {
     _NativeB2Profile base,
     Map<String, dynamic> payload,
   ) {
-    final preset = (payload['avatarPreset'] ?? payload['peerAvatarPreset'] ?? '')
-        .toString()
-        .trim();
-    final objectKey = (payload['avatarObjectKey'] ??
-            payload['peerAvatarObjectKey'] ??
-            '')
-        .toString()
-        .trim();
-    var avatarUrl = (payload['avatarUrl'] ??
-            payload['avatarFullUrl'] ??
-            payload['avatarImageUrl'] ??
-            payload['avatar'] ??
-            payload['avatarSrc'] ??
-            payload['avatarImage'] ??
-            '')
-        .toString()
-        .trim();
+    final preset =
+        (payload['avatarPreset'] ?? payload['peerAvatarPreset'] ?? '')
+            .toString()
+            .trim();
+    final objectKey =
+        (payload['avatarObjectKey'] ?? payload['peerAvatarObjectKey'] ?? '')
+            .toString()
+            .trim();
+    var avatarUrl =
+        (payload['avatarUrl'] ??
+                payload['avatarFullUrl'] ??
+                payload['avatarImageUrl'] ??
+                payload['avatar'] ??
+                payload['avatarSrc'] ??
+                payload['avatarImage'] ??
+                '')
+            .toString()
+            .trim();
     if (avatarUrl.isNotEmpty) {
       avatarUrl = _avatarProxyUrl(avatarUrl);
     } else if (objectKey.isNotEmpty) {
@@ -1487,159 +1522,161 @@ class _NativeB2PageState extends State<_NativeB2Page> {
         child: Stack(
           children: [
             Column(
-          children: [
-            _buildB2TopBar(),
-            Expanded(
-              child: RefreshIndicator(
-                onRefresh: _loadStats,
-                child: ListView(
-                  padding: const EdgeInsets.fromLTRB(12, 10, 12, 14),
-                  children: [
-                    _buildProfileCard(stats, profile),
-                    const SizedBox(height: 10),
-                    _buildQuickStats(stats),
-                    const SizedBox(height: 14),
-                    _buildQuickLaunch(),
-                    const SizedBox(height: 14),
-                    if (stats.pendingForMe > 0)
-                      _buildReminderBanner(
-                        icon: Icons.notifications_active_outlined,
-                        text: '您有 ${stats.pendingForMe} 条待审批，点击进入「我审批的」',
-                        onTap: () => widget.navigation.go('B1'),
-                      ),
-                    if (stats.approvalRejected > 0) ...[
-                      const SizedBox(height: 8),
-                      _buildReminderBanner(
-                        icon: Icons.warning_amber_rounded,
-                        text:
-                            '您有 ${stats.approvalRejected} 条审批被驳回，点击进入「我发起的审批」',
-                        onTap: () => widget.onOpenB14(),
-                      ),
-                    ],
-                    if (stats.pendingInitiateForMe > 0) ...[
-                      const SizedBox(height: 8),
-                      _buildReminderBanner(
-                        icon: Icons.assignment_ind_outlined,
-                        text:
-                            '有 ${stats.pendingInitiateForMe} 条同事推送给您、待您确认发起的提案',
-                        onTap: () =>
-                            widget.onOpenB14(filter: 'PENDING_INITIATE'),
-                      ),
-                    ],
-                    if (stats.pendingForMe > 0 ||
-                        stats.approvalRejected > 0 ||
-                        stats.pendingInitiateForMe > 0)
-                      const SizedBox(height: 14),
-                    _buildSectionLabel('我的事项 · 审批与穿透'),
-                    const SizedBox(height: 8),
-                    _buildMenuList(<Widget>[
-                      _buildMenuItem(
-                        icon: Icons.send_outlined,
-                        title: '我发起的审批',
-                        desc:
-                            '$initiatedTotal 条总数 · ${stats.pendingInitiateForMe} 条代发起 · ${stats.approvalPending} 审批中',
-                        badge: initiatedTotal,
-                        onTap: () => widget.onOpenB14(),
-                      ),
-                      _buildMenuItem(
-                        icon: Icons.assignment_outlined,
-                        title: '抄送我的提案',
-                        desc:
-                            '${stats.ccProposalCount} 份抄送 · ${stats.ccProposalPending} 审批中',
-                        badge: stats.ccProposalCount,
-                        onTap: () => widget.navigation.go('P1'),
-                      ),
-                      _buildMenuItem(
-                        icon: Icons.fact_check_outlined,
-                        title: '我审批的',
-                        desc:
-                            '${stats.pendingForMe} 待我审 · ${stats.handledThisMonth} 已审核',
-                        badge: stats.pendingForMe,
-                        tint: const Color(0xFFDFF1E8),
-                        onTap: () => widget.navigation.go('B1'),
-                      ),
-                      _buildMenuItem(
-                        icon: Icons.menu_book_outlined,
-                        title: '知识库',
-                        desc:
-                            '$kbDocCount 文档 · $kbCategoryCount 分类 · $kbUnreadCount 未读',
-                        badge: kbUnreadCount,
-                        onTap: () => widget.navigation.go('K1'),
-                      ),
-                      _buildMenuItem(
-                        icon: Icons.edit_outlined,
-                        title: '写汇报',
-                        desc: '0 篇 · 0 草稿 · 日 / 周 / 月 / 季',
-                        badge: 0,
-                        comingSoon: true,
-                        onTap: () => _showSoonToast(),
-                      ),
-                      _buildMenuItem(
-                        icon: Icons.mic_none_rounded,
-                        title: '会议纪要',
-                        desc:
-                            '$_meetingCount 场 · 录音转写 · 纪要生成',
-                        badge: _meetingCount,
-                        onTap: () => widget.navigation.go('MM-L'),
-                      ),
-                    ]),
-                    const SizedBox(height: 10),
-                    _buildMenuList(<Widget>[
-                      _buildMenuItem(
-                        icon: Icons.receipt_long_outlined,
-                        title: '应付账单',
-                        desc: '${stats.outstandingInvoices} 待处理 · 总 ¥0 · 灯塔联动',
-                        badge: stats.outstandingInvoices,
-                        tint: const Color(0xFFE1ECF7),
-                        comingSoon: true,
-                        onTap: () => _showSoonToast(),
-                      ),
-                      _buildMenuItem(
-                        icon: Icons.warning_amber_rounded,
-                        title: '欠票催办',
-                        desc: '0 笔 · ¥0 · 欠 0 天',
-                        badge: 0,
-                        tint: const Color(0xFFF5E5DC),
-                        comingSoon: true,
-                        onTap: () => _showSoonToast(),
-                      ),
-                    ]),
-                    const SizedBox(height: 12),
-                    if (_loading)
-                      const Center(
-                        child: Padding(
-                          padding: EdgeInsets.only(top: 12),
-                          child: SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2),
+              children: [
+                _buildB2TopBar(),
+                Expanded(
+                  child: RefreshIndicator(
+                    onRefresh: _loadStats,
+                    child: ListView(
+                      padding: const EdgeInsets.fromLTRB(12, 10, 12, 14),
+                      children: [
+                        _buildProfileCard(stats, profile),
+                        const SizedBox(height: 10),
+                        _buildQuickStats(stats),
+                        const SizedBox(height: 14),
+                        _buildQuickLaunch(),
+                        const SizedBox(height: 14),
+                        if (stats.pendingForMe > 0)
+                          _buildReminderBanner(
+                            icon: Icons.notifications_active_outlined,
+                            text: '您有 ${stats.pendingForMe} 条待审批，点击进入「我审批的」',
+                            onTap: () => widget.navigation.go('B1'),
                           ),
-                        ),
-                      ),
-                    if (_loadError != null)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 8),
-                        child: TextButton(
-                          onPressed: _loadStats,
-                          child: const Text('数据同步失败，点击重试'),
-                        ),
-                      ),
-                    if (widget.onLogout != null) ...[
-                      const SizedBox(height: 8),
-                      _buildLogoutButton(),
-                    ],
-                  ],
+                        if (stats.approvalRejected > 0) ...[
+                          const SizedBox(height: 8),
+                          _buildReminderBanner(
+                            icon: Icons.warning_amber_rounded,
+                            text:
+                                '您有 ${stats.approvalRejected} 条审批被驳回，点击进入「我发起的审批」',
+                            onTap: () => widget.onOpenB14(),
+                          ),
+                        ],
+                        if (stats.pendingInitiateForMe > 0) ...[
+                          const SizedBox(height: 8),
+                          _buildReminderBanner(
+                            icon: Icons.assignment_ind_outlined,
+                            text:
+                                '有 ${stats.pendingInitiateForMe} 条同事推送给您、待您确认发起的提案',
+                            onTap: () =>
+                                widget.onOpenB14(filter: 'PENDING_INITIATE'),
+                          ),
+                        ],
+                        if (stats.pendingForMe > 0 ||
+                            stats.approvalRejected > 0 ||
+                            stats.pendingInitiateForMe > 0)
+                          const SizedBox(height: 14),
+                        _buildSectionLabel('我的事项 · 审批与穿透'),
+                        const SizedBox(height: 8),
+                        _buildMenuList(<Widget>[
+                          _buildMenuItem(
+                            icon: Icons.send_outlined,
+                            title: '我发起的审批',
+                            desc:
+                                '$initiatedTotal 条总数 · ${stats.pendingInitiateForMe} 条代发起 · ${stats.approvalPending} 审批中',
+                            badge: initiatedTotal,
+                            onTap: () => widget.onOpenB14(),
+                          ),
+                          _buildMenuItem(
+                            icon: Icons.assignment_outlined,
+                            title: '抄送我的提案',
+                            desc:
+                                '${stats.ccProposalCount} 份抄送 · ${stats.ccProposalPending} 审批中',
+                            badge: stats.ccProposalCount,
+                            onTap: () => widget.navigation.go('P1'),
+                          ),
+                          _buildMenuItem(
+                            icon: Icons.fact_check_outlined,
+                            title: '我审批的',
+                            desc:
+                                '${stats.pendingForMe} 待我审 · ${stats.handledThisMonth} 已审核',
+                            badge: stats.pendingForMe,
+                            tint: const Color(0xFFDFF1E8),
+                            onTap: () => widget.navigation.go('B1'),
+                          ),
+                          _buildMenuItem(
+                            icon: Icons.menu_book_outlined,
+                            title: '知识库',
+                            desc:
+                                '$kbDocCount 文档 · $kbCategoryCount 分类 · $kbUnreadCount 未读',
+                            badge: kbUnreadCount,
+                            onTap: () => widget.navigation.go('K1'),
+                          ),
+                          _buildMenuItem(
+                            icon: Icons.edit_outlined,
+                            title: '写汇报',
+                            desc: '0 篇 · 0 草稿 · 日 / 周 / 月 / 季',
+                            badge: 0,
+                            comingSoon: true,
+                            onTap: () => _showSoonToast(),
+                          ),
+                          _buildMenuItem(
+                            icon: Icons.mic_none_rounded,
+                            title: '会议纪要',
+                            desc: '$_meetingCount 场 · 录音转写 · 纪要生成',
+                            badge: _meetingCount,
+                            onTap: () => widget.navigation.go('MM-L'),
+                          ),
+                        ]),
+                        const SizedBox(height: 10),
+                        _buildMenuList(<Widget>[
+                          _buildMenuItem(
+                            icon: Icons.receipt_long_outlined,
+                            title: '应付账单',
+                            desc:
+                                '${stats.outstandingInvoices} 待处理 · 总 ¥0 · 灯塔联动',
+                            badge: stats.outstandingInvoices,
+                            tint: const Color(0xFFE1ECF7),
+                            comingSoon: true,
+                            onTap: () => _showSoonToast(),
+                          ),
+                          _buildMenuItem(
+                            icon: Icons.warning_amber_rounded,
+                            title: '欠票催办',
+                            desc: '0 笔 · ¥0 · 欠 0 天',
+                            badge: 0,
+                            tint: const Color(0xFFF5E5DC),
+                            comingSoon: true,
+                            onTap: () => _showSoonToast(),
+                          ),
+                        ]),
+                        const SizedBox(height: 12),
+                        if (_loading)
+                          const Center(
+                            child: Padding(
+                              padding: EdgeInsets.only(top: 12),
+                              child: SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              ),
+                            ),
+                          ),
+                        if (_loadError != null)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 8),
+                            child: TextButton(
+                              onPressed: _loadStats,
+                              child: const Text('数据同步失败，点击重试'),
+                            ),
+                          ),
+                        if (widget.onLogout != null) ...[
+                          const SizedBox(height: 8),
+                          _buildLogoutButton(),
+                        ],
+                      ],
+                    ),
+                  ),
                 ),
-              ),
-            ),
-            DunesMainTabBar(
-              navigation: widget.navigation,
-              activeScreen: 'B2',
-              commUnread: widget.commUnread,
-              workbenchBadge: widget.workbenchBadge,
-              lighthouseAccess: widget.session.lighthouseAccess,
-            ),
-          ],
+                DunesMainTabBar(
+                  navigation: widget.navigation,
+                  activeScreen: 'B2',
+                  commUnread: widget.commUnread,
+                  workbenchBadge: widget.workbenchBadge,
+                  lighthouseAccess: widget.session.lighthouseAccess,
+                ),
+              ],
             ),
             if (_live.active.value)
               Positioned(

@@ -3,25 +3,43 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../core/theme/dunes_theme.dart';
+import 'proposal_upload_config.dart';
+import 'xflow_form_styles.dart';
 import 'xflow_models.dart';
 import 'xflow_service.dart';
 
-/// 代发起人确认发起前的二次确认。
-Future<bool> confirmInitiateProposal(BuildContext context) async {
+/// 提交审批前的二次确认。
+Future<bool> confirmSubmitForApproval(
+  BuildContext context, {
+  String title = '确认提交审批',
+  String? message,
+}) async {
   final ok = await showDialog<bool>(
     context: context,
     builder: (ctx) => AlertDialog(
-      title: const Text('确认发起审批'),
-      content: const Text(
-        '确认后将进入推送人的审批流程，提案状态不可撤回。\n\n请再次核对表单内容是否完整准确。',
-      ),
+      title: Text(title),
+      content: Text(message ?? '提交后将进入审批流程，请确认信息填写完整准确。'),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('取消')),
-        FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('确认发起')),
+        TextButton(
+          onPressed: () => Navigator.pop(ctx, false),
+          child: const Text('取消'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(ctx, true),
+          child: const Text('确认提交'),
+        ),
       ],
     ),
   );
   return ok == true;
+}
+
+/// 代发起人确认发起前的二次确认。
+Future<bool> confirmInitiateProposal(BuildContext context) {
+  return confirmSubmitForApproval(
+    context,
+    message: '确认后将进入推送人的审批流程，提案状态不可撤回。\n\n请再次核对表单内容是否完整准确。',
+  );
 }
 
 /// B1 / B14 / P1 暖紫居中 hero-stat（与 index.html 1:1）
@@ -137,7 +155,9 @@ class XflowHeroStatCard extends StatelessWidget {
               padding: const EdgeInsets.only(top: 12),
               decoration: BoxDecoration(
                 border: Border(
-                  top: BorderSide(color: const Color(0xFF7E64BD).withValues(alpha: 0.18)),
+                  top: BorderSide(
+                    color: const Color(0xFF7E64BD).withValues(alpha: 0.18),
+                  ),
                 ),
               ),
               child: Row(
@@ -158,7 +178,11 @@ class XflowHeroStatCard extends StatelessWidget {
   Widget _darkHero() {
     final gradientColors = colors.isNotEmpty
         ? colors
-        : const <Color>[Color(0xFF1B3A3F), Color(0xFF2F5D62), Color(0xFF5F8B8F)];
+        : const <Color>[
+            Color(0xFF1B3A3F),
+            Color(0xFF2F5D62),
+            Color(0xFF5F8B8F),
+          ];
     return Container(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(13),
@@ -310,7 +334,10 @@ class XflowSectionLabel extends StatelessWidget {
         if (trailing != null)
           Text(
             trailing!,
-            style: DunesTypography.sans(fontSize: 9.5, color: DunesColors.text3),
+            style: DunesTypography.sans(
+              fontSize: 9.5,
+              color: DunesColors.text3,
+            ),
           ),
       ],
     );
@@ -341,7 +368,9 @@ class XflowStatusChip extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
         decoration: BoxDecoration(
           color: active ? DunesColors.text : DunesColors.bgApp,
-          border: Border.all(color: active ? DunesColors.text : DunesColors.border),
+          border: Border.all(
+            color: active ? DunesColors.text : DunesColors.border,
+          ),
           borderRadius: BorderRadius.circular(14),
         ),
         child: Row(
@@ -399,11 +428,18 @@ class XflowWfListSearch extends StatelessWidget {
           Expanded(
             child: TextField(
               controller: controller,
-              onTapOutside: (_) => FocusManager.instance.primaryFocus?.unfocus(),
-              style: DunesTypography.sans(fontSize: 11, color: DunesColors.text),
+              onTapOutside: (_) =>
+                  FocusManager.instance.primaryFocus?.unfocus(),
+              style: DunesTypography.sans(
+                fontSize: 11,
+                color: DunesColors.text,
+              ),
               decoration: InputDecoration(
                 hintText: hint,
-                hintStyle: DunesTypography.sans(fontSize: 11, color: DunesColors.text3),
+                hintStyle: DunesTypography.sans(
+                  fontSize: 11,
+                  color: DunesColors.text3,
+                ),
                 border: InputBorder.none,
                 isDense: true,
                 contentPadding: EdgeInsets.zero,
@@ -436,6 +472,12 @@ class XflowProposalListCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (mode == XflowListCardMode.b14) {
+      return _buildCompactInitiatedCard(context);
+    }
+    if (mode == XflowListCardMode.b1 || mode == XflowListCardMode.p1) {
+      return _buildCompactApprovalCard(context);
+    }
     final prog = _progressFoot(item);
     final typePill = item.tag1 ?? item.txType ?? '';
     return Material(
@@ -478,14 +520,20 @@ class XflowProposalListCard extends StatelessWidget {
                             if (typePill.isNotEmpty) ...[
                               const SizedBox(width: 6),
                               Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 1,
+                                ),
                                 decoration: BoxDecoration(
                                   color: DunesColors.bgSoft,
                                   borderRadius: BorderRadius.circular(5),
                                 ),
                                 child: Text(
                                   typePill,
-                                  style: DunesTypography.mono(fontSize: 9, color: DunesColors.text2),
+                                  style: DunesTypography.mono(
+                                    fontSize: 9,
+                                    color: DunesColors.text2,
+                                  ),
                                 ),
                               ),
                             ],
@@ -513,15 +561,22 @@ class XflowProposalListCard extends StatelessWidget {
                 runSpacing: 4,
                 crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
-                  if (mode == XflowListCardMode.b1 && item.createdByName.isNotEmpty)
+                  if (mode == XflowListCardMode.b1 &&
+                      item.createdByName.isNotEmpty)
                     Text(
                       '提交人 ${item.createdByName}',
-                      style: DunesTypography.sans(fontSize: 10, color: DunesColors.text2),
+                      style: DunesTypography.sans(
+                        fontSize: 10,
+                        color: DunesColors.text2,
+                      ),
                     ),
                   if (item.createdAt != null)
                     Text(
                       _formatShortDate(item.createdAt!),
-                      style: DunesTypography.sans(fontSize: 10, color: DunesColors.text2),
+                      style: DunesTypography.sans(
+                        fontSize: 10,
+                        color: DunesColors.text2,
+                      ),
                     ),
                   if (item.scaleWan != null && item.scaleWan!.isNotEmpty)
                     Text(
@@ -538,7 +593,9 @@ class XflowProposalListCard extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.only(top: 7),
                 decoration: const BoxDecoration(
-                  border: Border(top: BorderSide(color: DunesColors.borderSoft)),
+                  border: Border(
+                    top: BorderSide(color: DunesColors.borderSoft),
+                  ),
                 ),
                 child: Row(
                   children: [
@@ -589,7 +646,10 @@ class XflowProposalListCard extends StatelessWidget {
                         ),
                         child: Text(
                           '流程追踪',
-                          style: DunesTypography.sans(fontSize: 9.5, color: DunesColors.accent),
+                          style: DunesTypography.sans(
+                            fontSize: 9.5,
+                            color: DunesColors.accent,
+                          ),
                         ),
                       ),
                     ],
@@ -604,7 +664,10 @@ class XflowProposalListCard extends StatelessWidget {
                         ),
                         child: Text(
                           '删除',
-                          style: DunesTypography.sans(fontSize: 9.5, color: DunesColors.coral),
+                          style: DunesTypography.sans(
+                            fontSize: 9.5,
+                            color: DunesColors.coral,
+                          ),
                         ),
                       ),
                     ],
@@ -615,6 +678,187 @@ class XflowProposalListCard extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+
+  /// 「我发起的」列表：名称、提案种类、提案编码、提案类型、时间。
+  Widget _buildCompactInitiatedCard(BuildContext context) {
+    final code = item.code.trim().isEmpty ? '#${item.id}' : item.code.trim();
+    final kindLabel = proposalKindLabel(
+      templateKey: item.templateKey,
+      businessType: item.businessType,
+    );
+    final typeLabel = excelProposalTypeLabel(item.proposalType);
+    final timeText = item.createdAt != null
+        ? _formatShortDate(item.createdAt!)
+        : '—';
+    return Material(
+      color: DunesColors.bgApp,
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(12, 11, 12, 10),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: DunesColors.border),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Text(
+                      item.title.trim().isEmpty ? '未命名提案' : item.title.trim(),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: DunesTypography.sans(
+                        fontSize: 14,
+                        height: 1.35,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: -0.01 * 14,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  _StatusBadge(status: item.status),
+                ],
+              ),
+              const SizedBox(height: 8),
+              _compactMetaRow('提案种类', kindLabel),
+              const SizedBox(height: 4),
+              _compactMetaRow('提案编码', code, mono: true),
+              const SizedBox(height: 4),
+              _compactMetaRow('提案类型', typeLabel),
+              const SizedBox(height: 4),
+              _compactMetaRow('时间', timeText),
+              if (onDeleteDraft != null) ...[
+                const SizedBox(height: 8),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton(
+                    onPressed: onDeleteDraft,
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    child: Text(
+                      '删除草稿',
+                      style: DunesTypography.sans(
+                        fontSize: 11,
+                        color: DunesColors.coral,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// 「我审批的 / 抄送」紧凑列表：含彩色提案状态。
+  Widget _buildCompactApprovalCard(BuildContext context) {
+    final code = item.code.trim().isEmpty ? '#${item.id}' : item.code.trim();
+    final kindLabel = proposalKindLabel(
+      templateKey: item.templateKey,
+      businessType: item.businessType,
+    );
+    final typeLabel = excelProposalTypeLabel(item.proposalType);
+    final timeText = item.createdAt != null
+        ? _formatShortDate(item.createdAt!)
+        : '—';
+    final submitter = item.createdByName.trim();
+    return Material(
+      color: DunesColors.bgApp,
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(12, 11, 12, 10),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: DunesColors.border),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Text(
+                      item.title.trim().isEmpty ? '未命名提案' : item.title.trim(),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: DunesTypography.sans(
+                        fontSize: 14,
+                        height: 1.35,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: -0.01 * 14,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  _StatusBadge(status: item.status),
+                ],
+              ),
+              const SizedBox(height: 8),
+              _compactMetaRow('提案种类', kindLabel),
+              const SizedBox(height: 4),
+              _compactMetaRow('提案编码', code, mono: true),
+              const SizedBox(height: 4),
+              _compactMetaRow('提案类型', typeLabel),
+              if (mode == XflowListCardMode.b1 && submitter.isNotEmpty) ...[
+                const SizedBox(height: 4),
+                _compactMetaRow('提交人', submitter),
+              ],
+              const SizedBox(height: 4),
+              _compactMetaRow('时间', timeText),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _compactMetaRow(String label, String value, {bool mono = false, String? status}) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 62,
+          child: Text(
+            label,
+            style: DunesTypography.sans(fontSize: 11, color: DunesColors.text3),
+          ),
+        ),
+        Expanded(
+          child: status != null && status.trim().isNotEmpty
+              ? Align(
+                  alignment: Alignment.centerRight,
+                  child: _StatusBadge(status: status),
+                )
+              : Text(
+                  value,
+                  textAlign: TextAlign.right,
+                  style: mono
+                      ? DunesTypography.mono(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: DunesColors.text2,
+                        )
+                      : DunesTypography.sans(fontSize: 11.5, color: DunesColors.text2),
+                ),
+        ),
+      ],
     );
   }
 }
@@ -643,6 +887,12 @@ class _StatusBadge extends StatelessWidget {
     } else if (st == 'DRAFT' || st == 'PENDING_INITIATE') {
       bg = DunesColors.blueSoft;
       fg = DunesColors.blue;
+    } else if (st == 'VOIDED') {
+      bg = DunesColors.bgSoft;
+      fg = DunesColors.text3;
+    } else if (st == 'SUPERSEDED') {
+      bg = DunesColors.bgSoft;
+      fg = DunesColors.text2;
     } else {
       bg = DunesColors.bgSoft;
       fg = DunesColors.text2;
@@ -685,7 +935,8 @@ class XflowDsBar extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.fromLTRB(12, 6, 12, 12),
       decoration: const BoxDecoration(
-        border: Border(bottom: BorderSide(color: DunesColors.borderSoft)),
+        color: XfProposalUi.bg,
+        border: Border(bottom: BorderSide(color: XfProposalUi.line)),
       ),
       child: Row(
         children: [
@@ -699,7 +950,7 @@ class XflowDsBar extends StatelessWidget {
                   crumb,
                   style: DunesTypography.mono(
                     fontSize: 9.5,
-                    color: DunesColors.text3,
+                    color: XfProposalUi.mute2,
                     letterSpacing: 0.04 * 9.5,
                   ),
                 ),
@@ -708,7 +959,7 @@ class XflowDsBar extends StatelessWidget {
                   style: DunesTypography.sans(
                     fontSize: 14,
                     fontWeight: FontWeight.w500,
-                    color: DunesColors.text,
+                    color: XfProposalUi.ink,
                     letterSpacing: -0.005 * 14,
                     height: 1.2,
                   ),
@@ -716,7 +967,12 @@ class XflowDsBar extends StatelessWidget {
               ],
             ),
           ),
-          if (onMore != null) _CircleIconButton(onPressed: onMore!, icon: Icons.more_horiz, filled: false),
+          if (onMore != null)
+            _CircleIconButton(
+              onPressed: onMore!,
+              icon: Icons.more_horiz,
+              filled: false,
+            ),
         ],
       ),
     );
@@ -737,7 +993,7 @@ class _CircleIconButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: filled ? DunesColors.bgSoft : Colors.transparent,
+      color: filled ? XfProposalUi.cardAlt : Colors.transparent,
       shape: const CircleBorder(),
       child: InkWell(
         customBorder: const CircleBorder(),
@@ -745,7 +1001,11 @@ class _CircleIconButton extends StatelessWidget {
         child: SizedBox(
           width: 32,
           height: 32,
-          child: Icon(icon, size: 16, color: filled ? DunesColors.text : DunesColors.text2),
+          child: Icon(
+            icon,
+            size: 16,
+            color: filled ? XfProposalUi.ink : XfProposalUi.mute,
+          ),
         ),
       ),
     );
@@ -770,9 +1030,9 @@ class XflowFormCard extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: XfProposalUi.card,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: DunesColors.borderSoft),
+        border: Border.all(color: XfProposalUi.lineSoft),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -782,19 +1042,30 @@ class XflowFormCard extends StatelessWidget {
               Expanded(
                 child: Text(
                   title,
-                  style: DunesTypography.sans(fontSize: 13, fontWeight: FontWeight.w600),
+                  style: DunesTypography.sans(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: XfProposalUi.ink,
+                  ),
                 ),
               ),
               if (tag != null)
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 1,
+                  ),
                   decoration: BoxDecoration(
-                    color: DunesColors.accentSoft,
+                    color: XfProposalUi.coralSoft,
                     borderRadius: BorderRadius.circular(5),
+                    border: Border.all(color: const Color(0xFFFFD6C8)),
                   ),
                   child: Text(
                     tag!,
-                    style: DunesTypography.mono(fontSize: 9, color: DunesColors.accentDeep),
+                    style: DunesTypography.mono(
+                      fontSize: 9,
+                      color: XfProposalUi.coral,
+                    ),
                   ),
                 ),
             ],
@@ -825,7 +1096,10 @@ class XflowStageList extends StatelessWidget {
     final prefix = _stageExtras(flow is Map ? flow['prefix'] : null);
     final suffix = _stageExtras(flow is Map ? flow['suffix'] : null);
     if (stages.isEmpty && prefix.isEmpty && suffix.isEmpty) {
-      return Text('未配置审批阶段', style: DunesTypography.sans(fontSize: 11, color: DunesColors.text3));
+      return Text(
+        '未配置审批阶段',
+        style: DunesTypography.sans(fontSize: 11, color: DunesColors.text3),
+      );
     }
     final rows = <Widget>[];
     var n = 1;
@@ -862,13 +1136,18 @@ class XflowStageList extends StatelessWidget {
     );
   }
 
-  Widget _stageRow(Map<String, dynamic> st, int num, {required int stageIndex}) {
+  Widget _stageRow(
+    Map<String, dynamic> st,
+    int num, {
+    required int stageIndex,
+  }) {
     final approverType = (st['approverType'] ?? '').toString();
     final mode = (st['mode'] ?? 'SINGLE').toString();
     final meta = '$mode · ${_stageMetaLabel(st)}';
     return _rowShell(
       num,
-      stageName: (st['stageName'] ?? st['name'] ?? st['label'] ?? '审批步骤').toString(),
+      stageName: (st['stageName'] ?? st['name'] ?? st['label'] ?? '审批步骤')
+          .toString(),
       meta: meta,
       showHelp: approverType != 'SYSTEM',
       onHelp: onStageHelp == null ? null : () => onStageHelp!(stageIndex),
@@ -916,7 +1195,10 @@ class XflowStageList extends StatelessWidget {
             ),
             child: Text(
               '$num',
-              style: DunesTypography.sans(fontSize: 12, fontWeight: FontWeight.w600),
+              style: DunesTypography.sans(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ),
           const SizedBox(width: 10),
@@ -929,7 +1211,10 @@ class XflowStageList extends StatelessWidget {
                     Expanded(
                       child: Text(
                         stageName,
-                        style: DunesTypography.sans(fontSize: 14, fontWeight: FontWeight.w600),
+                        style: DunesTypography.sans(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                     ),
                     if (showHelp && onHelp != null)
@@ -942,14 +1227,24 @@ class XflowStageList extends StatelessWidget {
                           child: const SizedBox(
                             width: 22,
                             height: 22,
-                            child: Icon(Icons.help_outline, size: 13, color: DunesColors.text2),
+                            child: Icon(
+                              Icons.help_outline,
+                              size: 13,
+                              color: DunesColors.text2,
+                            ),
                           ),
                         ),
                       ),
                   ],
                 ),
                 if (meta.isNotEmpty)
-                  Text(meta, style: DunesTypography.sans(fontSize: 12, color: DunesColors.text3)),
+                  Text(
+                    meta,
+                    style: DunesTypography.sans(
+                      fontSize: 12,
+                      color: DunesColors.text3,
+                    ),
+                  ),
               ],
             ),
           ),
@@ -1020,11 +1315,12 @@ class XfCcRuleRow extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.only(top: 3),
             child: Text(
-              [
-                if (meta.isNotEmpty) meta,
-                reasonLine,
-              ].join(' · '),
-              style: DunesTypography.sans(fontSize: 10, color: DunesColors.text3, height: 1.45),
+              [if (meta.isNotEmpty) meta, reasonLine].join(' · '),
+              style: DunesTypography.sans(
+                fontSize: 10,
+                color: DunesColors.text3,
+                height: 1.45,
+              ),
             ),
           ),
         ],
@@ -1045,6 +1341,7 @@ class XflowCcRulesCard extends StatefulWidget {
   final List<Map<String, dynamic>> rules;
   final bool loading;
   final String? error;
+
   /// WebView：规则加载成功且为空时隐藏整张卡片
   final bool hideWhenEmpty;
 
@@ -1067,9 +1364,9 @@ class _XflowCcRulesCardState extends State<XflowCcRulesCard> {
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: XfProposalUi.card,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: DunesColors.borderSoft),
+        border: Border.all(color: XfProposalUi.lineSoft),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1078,46 +1375,68 @@ class _XflowCcRulesCardState extends State<XflowCcRulesCard> {
             onTap: () => setState(() => _open = !_open),
             borderRadius: BorderRadius.circular(4),
             child: Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  Text(
-                    '抄送规则说明',
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Text(
+                  '抄送规则说明',
+                  style: DunesTypography.sans(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: XfProposalUi.ink,
+                    letterSpacing: -0.005 * 13,
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    '提交后按规则自动知会相关人员',
                     style: DunesTypography.sans(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: DunesColors.text,
-                      letterSpacing: -0.005 * 13,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w400,
+                      color: XfProposalUi.mute2,
                     ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
                   ),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Text(
-                      '提交后按规则自动知会相关人员',
-                      style: DunesTypography.sans(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w400,
-                        color: DunesColors.text3,
-                      ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
+                ),
+                AnimatedRotation(
+                  turns: _open ? 0.5 : 0,
+                  duration: const Duration(milliseconds: 200),
+                  child: const Icon(
+                    Icons.expand_more,
+                    size: 16,
+                    color: XfProposalUi.mute2,
                   ),
-                  AnimatedRotation(
-                    turns: _open ? 0.5 : 0,
-                    duration: const Duration(milliseconds: 200),
-                    child: const Icon(Icons.expand_more, size: 16, color: DunesColors.text3),
-                  ),
-                ],
+                ),
+              ],
             ),
           ),
           if (_open) ...[
             const SizedBox(height: 10),
             if (widget.loading)
-              Text('加载抄送规则…', style: DunesTypography.sans(fontSize: 12, color: DunesColors.text3))
+              Text(
+                '加载抄送规则…',
+                style: DunesTypography.sans(
+                  fontSize: 12,
+                  color: XfProposalUi.mute2,
+                ),
+              )
             else if (widget.error != null)
-              Text(widget.error!, style: DunesTypography.sans(fontSize: 12, color: DunesColors.coral))
+              Text(
+                widget.error!,
+                style: DunesTypography.sans(
+                  fontSize: 12,
+                  color: XfProposalUi.coral,
+                ),
+              )
             else if (widget.rules.isEmpty)
-              Text('暂无抄送规则配置', style: DunesTypography.sans(fontSize: 12, color: DunesColors.text3))
+              Text(
+                '暂无抄送规则配置',
+                style: DunesTypography.sans(
+                  fontSize: 12,
+                  color: XfProposalUi.mute2,
+                ),
+              )
             else
               for (var i = 0; i < widget.rules.length; i++)
                 XfCcRuleRow(
@@ -1140,6 +1459,7 @@ class XflowXfActionBar extends StatelessWidget {
     this.secondaryLabel,
     this.onSecondaryPressed,
     this.secondaryDanger = false,
+    this.onDisabledTap,
   });
 
   final String label;
@@ -1148,6 +1468,7 @@ class XflowXfActionBar extends StatelessWidget {
   final String? secondaryLabel;
   final VoidCallback? onSecondaryPressed;
   final bool secondaryDanger;
+  final VoidCallback? onDisabledTap;
 
   @override
   Widget build(BuildContext context) {
@@ -1160,63 +1481,34 @@ class XflowXfActionBar extends StatelessWidget {
             OutlinedButton(
               onPressed: loading ? null : onSecondaryPressed,
               style: OutlinedButton.styleFrom(
-                foregroundColor: secondaryDanger ? DunesColors.coral : DunesColors.text2,
+                foregroundColor: secondaryDanger
+                    ? XfProposalUi.coral
+                    : XfProposalUi.mute,
                 side: BorderSide(
-                  color: secondaryDanger ? DunesColors.coral.withValues(alpha: 0.45) : DunesColors.border,
+                  color: secondaryDanger
+                      ? XfProposalUi.coral.withValues(alpha: 0.45)
+                      : XfProposalUi.line,
                 ),
                 padding: const EdgeInsets.symmetric(vertical: 10),
               ),
               child: Text(
                 secondaryLabel!,
-                style: DunesTypography.sans(fontSize: 13, fontWeight: FontWeight.w600),
+                style: DunesTypography.sans(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
             const SizedBox(height: 8),
           ],
           Material(
             color: Colors.transparent,
-            child: InkWell(
-              onTap: loading ? null : onPressed,
-              borderRadius: BorderRadius.circular(10),
-              child: Ink(
-                width: double.infinity,
-                decoration: BoxDecoration(
-                  color: DunesColors.accent,
-                  borderRadius: BorderRadius.circular(10),
-                  boxShadow: [
-                    BoxShadow(
-                      color: DunesColors.accent.withValues(alpha: 0.35),
-                      blurRadius: 12,
-                      offset: const Offset(0, 4),
-                      spreadRadius: -2,
-                    ),
-                  ],
-                ),
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                child: loading
-                    ? const Center(
-                        child: SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                        ),
-                      )
-                    : Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const Icon(Icons.send, size: 14, color: Colors.white),
-                          const SizedBox(width: 6),
-                          Text(
-                            label,
-                            style: DunesTypography.sans(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.white,
-                            ),
-                          ),
-                        ],
-                      ),
-              ),
+            child: XflowApprovalSubmitButton(
+              onPressed: onPressed,
+              loading: loading,
+              enabled: onPressed != null,
+              label: label == '重新提交' ? '提交审批' : label,
+              onDisabledTap: onDisabledTap,
             ),
           ),
         ],
@@ -1226,10 +1518,7 @@ class XflowXfActionBar extends StatelessWidget {
 }
 
 class XflowProposalHero extends StatelessWidget {
-  const XflowProposalHero({
-    super.key,
-    required this.detail,
-  });
+  const XflowProposalHero({super.key, required this.detail});
 
   final XflowProposalDetail detail;
 
@@ -1284,7 +1573,10 @@ class XflowProposalHero extends StatelessWidget {
               Expanded(child: _metaItem('owner', detail.ownerName)),
               const SizedBox(width: 8),
               Expanded(
-                child: _metaItem('amount', detail.amountText.isEmpty ? '—' : detail.amountText),
+                child: _metaItem(
+                  'amount',
+                  detail.amountText.isEmpty ? '—' : detail.amountText,
+                ),
               ),
             ],
           ),
@@ -1317,7 +1609,10 @@ class XflowProposalHero extends StatelessWidget {
       children: [
         Text(
           label,
-          style: TextStyle(color: Colors.white.withValues(alpha: .65), fontSize: 8),
+          style: TextStyle(
+            color: Colors.white.withValues(alpha: .65),
+            fontSize: 8,
+          ),
         ),
         const SizedBox(height: 1),
         Text(
@@ -1336,10 +1631,7 @@ class XflowProposalHero extends StatelessWidget {
 }
 
 class XflowProductCard extends StatelessWidget {
-  const XflowProductCard({
-    super.key,
-    required this.product,
-  });
+  const XflowProductCard({super.key, required this.product});
 
   final XflowProduct product;
 
@@ -1362,7 +1654,11 @@ class XflowProductCard extends StatelessWidget {
               color: DunesColors.accentSoft,
               borderRadius: BorderRadius.circular(8),
             ),
-            child: const Icon(Icons.inventory_2_outlined, size: 16, color: DunesColors.accentDeep),
+            child: const Icon(
+              Icons.inventory_2_outlined,
+              size: 16,
+              color: DunesColors.accentDeep,
+            ),
           ),
           const SizedBox(width: 9),
           Expanded(
@@ -1371,19 +1667,28 @@ class XflowProductCard extends StatelessWidget {
               children: [
                 Text(
                   product.name.isEmpty ? '未命名产品' : product.name,
-                  style: DunesTypography.sans(fontSize: 12, fontWeight: FontWeight.w600),
+                  style: DunesTypography.sans(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
                 if (product.platformProductId.isNotEmpty)
                   Text(
                     'platformProductId: ${product.platformProductId}',
-                    style: DunesTypography.sans(fontSize: 9.5, color: DunesColors.text3),
+                    style: DunesTypography.sans(
+                      fontSize: 9.5,
+                      color: DunesColors.text3,
+                    ),
                   ),
               ],
             ),
           ),
           Text(
             product.ratio.isEmpty ? '—' : product.ratio,
-            style: DunesTypography.sans(fontSize: 12, fontWeight: FontWeight.w600),
+            style: DunesTypography.sans(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
           ),
         ],
       ),
@@ -1392,10 +1697,7 @@ class XflowProductCard extends StatelessWidget {
 }
 
 class XflowSlotGrid extends StatelessWidget {
-  const XflowSlotGrid({
-    super.key,
-    required this.slots,
-  });
+  const XflowSlotGrid({super.key, required this.slots});
 
   final List<XflowSettlementSlot> slots;
 
@@ -1409,7 +1711,10 @@ class XflowSlotGrid extends StatelessWidget {
           borderRadius: BorderRadius.circular(10),
           border: Border.all(color: DunesColors.border),
         ),
-        child: Text('暂无协议槽位', style: DunesTypography.sans(fontSize: 11, color: DunesColors.text3)),
+        child: Text(
+          '暂无协议槽位',
+          style: DunesTypography.sans(fontSize: 11, color: DunesColors.text3),
+        ),
       );
     }
     return GridView.builder(
@@ -1460,12 +1765,18 @@ class XflowSlotGrid extends StatelessWidget {
                 slot.name.isEmpty ? '未命名槽位' : slot.name,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: DunesTypography.sans(fontSize: 11, fontWeight: FontWeight.w600),
+                style: DunesTypography.sans(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
               const SizedBox(height: 3),
               Text(
                 slot.ratio.isEmpty ? '—' : slot.ratio,
-                style: DunesTypography.sans(fontSize: 11, color: DunesColors.text2),
+                style: DunesTypography.sans(
+                  fontSize: 11,
+                  color: DunesColors.text2,
+                ),
               ),
               const Spacer(),
               Wrap(
@@ -1474,14 +1785,20 @@ class XflowSlotGrid extends StatelessWidget {
                 children: [
                   for (final tag in slot.tags.take(2))
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 5,
+                        vertical: 1,
+                      ),
                       decoration: BoxDecoration(
                         color: DunesColors.bgSoft,
                         borderRadius: BorderRadius.circular(99),
                       ),
                       child: Text(
                         tag,
-                        style: DunesTypography.sans(fontSize: 8.5, color: DunesColors.text2),
+                        style: DunesTypography.sans(
+                          fontSize: 8.5,
+                          color: DunesColors.text2,
+                        ),
                       ),
                     ),
                 ],
@@ -1495,7 +1812,11 @@ class XflowSlotGrid extends StatelessWidget {
 }
 
 class _ProgressFoot {
-  const _ProgressFoot({required this.pct, required this.px, required this.hint});
+  const _ProgressFoot({
+    required this.pct,
+    required this.px,
+    required this.hint,
+  });
 
   final int pct;
   final String px;
@@ -1531,6 +1852,9 @@ _ProgressFoot _progressFoot(XflowProposalItem item) {
 }
 
 String _proposalTypeLabel(XflowProposalItem item) {
+  if (item.proposalType != null && item.proposalType!.trim().isNotEmpty) {
+    return item.proposalType!.trim();
+  }
   if (item.txType != null && item.txType!.isNotEmpty) return item.txType!;
   if (item.businessType.toUpperCase() == 'CONTRACT_SEAL') return '合同用印';
   return '销售提案';
@@ -1551,6 +1875,8 @@ String _statusText(String status) {
   if (raw == 'REJECTED') return '已驳回';
   if (raw == 'DRAFT') return '草稿';
   if (raw == 'PENDING_INITIATE') return '待发起';
+  if (raw == 'VOIDED') return '已作废';
+  if (raw == 'SUPERSEDED') return '已替代';
   return raw.isEmpty ? '未知状态' : raw;
 }
 
@@ -1633,11 +1959,17 @@ class _XflowPushSheetBodyState extends State<_XflowPushSheetBody> {
 
   Map<String, dynamic> _normalizeUser(Map<dynamic, dynamic> raw) {
     final uid = _toInt(raw['userId'] ?? raw['id']);
-    final name = (raw['displayName'] ?? raw['userName'] ?? raw['name'] ?? '用户#$uid')
-        .toString();
-    final dept = (raw['departmentName'] ?? raw['department'] ?? raw['dept'] ?? '')
-        .toString();
-    return <String, dynamic>{'userId': uid, 'displayName': name, 'departmentName': dept};
+    final name =
+        (raw['displayName'] ?? raw['userName'] ?? raw['name'] ?? '用户#$uid')
+            .toString();
+    final dept =
+        (raw['departmentName'] ?? raw['department'] ?? raw['dept'] ?? '')
+            .toString();
+    return <String, dynamic>{
+      'userId': uid,
+      'displayName': name,
+      'departmentName': dept,
+    };
   }
 
   int _toInt(dynamic v) {
@@ -1652,11 +1984,13 @@ class _XflowPushSheetBodyState extends State<_XflowPushSheetBody> {
       return;
     }
     setState(() {
-      _results = _whitelist.where((u) {
-        final name = (u['displayName'] ?? '').toString().toLowerCase();
-        final dept = (u['departmentName'] ?? '').toString().toLowerCase();
-        return name.contains(q) || dept.contains(q);
-      }).toList(growable: false);
+      _results = _whitelist
+          .where((u) {
+            final name = (u['displayName'] ?? '').toString().toLowerCase();
+            final dept = (u['departmentName'] ?? '').toString().toLowerCase();
+            return name.contains(q) || dept.contains(q);
+          })
+          .toList(growable: false);
     });
   }
 
@@ -1667,25 +2001,46 @@ class _XflowPushSheetBodyState extends State<_XflowPushSheetBody> {
         16,
         16,
         16,
-        MediaQuery.of(context).viewInsets.bottom + MediaQuery.of(context).padding.bottom + 16,
+        MediaQuery.of(context).viewInsets.bottom +
+            MediaQuery.of(context).padding.bottom +
+            16,
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text('推送给同事', style: DunesTypography.sans(fontSize: 14, fontWeight: FontWeight.w600)),
+          Text(
+            '推送给同事',
+            style: DunesTypography.sans(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
           const SizedBox(height: 6),
-          Text(widget.subtitle, style: DunesTypography.sans(fontSize: 11, color: DunesColors.text3)),
+          Text(
+            widget.subtitle,
+            style: DunesTypography.sans(fontSize: 11, color: DunesColors.text3),
+          ),
           const SizedBox(height: 12),
           TextField(
             controller: _searchController,
             onChanged: _onQueryChanged,
             onTapOutside: (_) => FocusManager.instance.primaryFocus?.unfocus(),
-            style: DunesTypography.sans(fontSize: 12.5, color: DunesColors.text),
+            style: DunesTypography.sans(
+              fontSize: 12.5,
+              color: DunesColors.text,
+            ),
             decoration: InputDecoration(
               hintText: '搜索白名单同事',
-              hintStyle: DunesTypography.sans(fontSize: 12.5, color: DunesColors.text3),
-              prefixIcon: const Icon(Icons.search, size: 18, color: DunesColors.text3),
+              hintStyle: DunesTypography.sans(
+                fontSize: 12.5,
+                color: DunesColors.text3,
+              ),
+              prefixIcon: const Icon(
+                Icons.search,
+                size: 18,
+                color: DunesColors.text3,
+              ),
               isDense: true,
               filled: true,
               fillColor: DunesColors.bgSoft,
@@ -1697,7 +2052,9 @@ class _XflowPushSheetBodyState extends State<_XflowPushSheetBody> {
           ),
           const SizedBox(height: 10),
           ConstrainedBox(
-            constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.35),
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.of(context).size.height * 0.35,
+            ),
             child: _buildResults(),
           ),
           const SizedBox(height: 10),
@@ -1706,10 +2063,16 @@ class _XflowPushSheetBodyState extends State<_XflowPushSheetBody> {
             minLines: 1,
             maxLines: 3,
             onTapOutside: (_) => FocusManager.instance.primaryFocus?.unfocus(),
-            style: DunesTypography.sans(fontSize: 12.5, color: DunesColors.text),
+            style: DunesTypography.sans(
+              fontSize: 12.5,
+              color: DunesColors.text,
+            ),
             decoration: InputDecoration(
               labelText: '附言（可选）',
-              labelStyle: DunesTypography.sans(fontSize: 11, color: DunesColors.text3),
+              labelStyle: DunesTypography.sans(
+                fontSize: 11,
+                color: DunesColors.text3,
+              ),
               isDense: true,
               filled: true,
               fillColor: DunesColors.bgSoft,
@@ -1781,7 +2144,11 @@ class _XflowPushSheetBodyState extends State<_XflowPushSheetBody> {
             style: DunesTypography.sans(fontSize: 12.5),
           ),
           trailing: _selectedId == uid
-              ? const Icon(Icons.check_circle, size: 18, color: DunesColors.accent)
+              ? const Icon(
+                  Icons.check_circle,
+                  size: 18,
+                  color: DunesColors.accent,
+                )
               : null,
           onTap: () => setState(() {
             _selectedId = uid;

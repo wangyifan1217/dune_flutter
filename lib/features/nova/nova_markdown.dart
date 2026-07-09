@@ -101,6 +101,7 @@ class NovaMarkdownBody extends StatelessWidget {
     Set<String> shownUrls,
   ) {
     var raw = body.replaceAll(RegExp(r'\]\s*\n+\s*\('), '](');
+    raw = normalizeNovaMarkdownLayout(raw);
     if (raw.trim().isEmpty) return const [];
 
     var file = tryParseHermesFileJson(raw) ?? tryParseMarkdownFileLink(raw);
@@ -211,8 +212,8 @@ class NovaMarkdownBody extends StatelessWidget {
     Set<String> shownNames,
     Set<String> shownUrls,
   ) {
-    if (RegExp(r'^#{1,3}\s', multiLine: true).hasMatch(raw) ||
-        RegExp(r'^[-*•]\s', multiLine: true).hasMatch(raw)) {
+    if (RegExp(r'^\s*#{1,3}\s', multiLine: true).hasMatch(raw) ||
+        RegExp(r'^\s*[-*•]\s', multiLine: true).hasMatch(raw)) {
       return [_NovaMarkdownBlock(
       text: raw,
       documentPreview: documentPreview,
@@ -448,6 +449,8 @@ class _NovaMarkdownBlock extends StatelessWidget {
         flushList();
         continue;
       }
+      // Skip lone "#" / "##" lines (empty heading markers).
+      if (RegExp(r'^#{1,3}\s*$').hasMatch(trimmed)) continue;
       final hm = RegExp(r'^#{1,3}\s*(.+)$').firstMatch(trimmed);
       if (hm != null) {
         flushList();

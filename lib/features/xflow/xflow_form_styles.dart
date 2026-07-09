@@ -405,6 +405,7 @@ class XflowApprovalSubmitButton extends StatelessWidget {
     final fgAlpha = canTap ? 255 : 180;
 
     return GestureDetector(
+      behavior: HitTestBehavior.opaque,
       onTap: canTap
           ? onPressed
           : loading

@@ -477,6 +477,7 @@ class _ProposalUploadPageState extends State<ProposalUploadPage> {
   final Map<String, dynamic> _supplementalValues = <String, dynamic>{};
   bool _configLoading = true;
   String? _configError;
+  bool _pickingFile = false;
 
   @override
   void initState() {
@@ -610,17 +611,19 @@ class _ProposalUploadPageState extends State<ProposalUploadPage> {
   }
 
   Future<void> _handleUpload() async {
-    final file = await openFile(
-      acceptedTypeGroups: const [
-        XTypeGroup(
-          label: 'Excel 提案',
-          extensions: ['xlsx'],
-          mimeTypes: [
-            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-          ],
-        ),
-      ],
-    );
+    if (_pickingFile || _state == _UploadState.uploading) return;
+    setState(() => _pickingFile = true);
+    XFile? file;
+    try {
+      file = await _pickExcelFile();
+    } catch (_) {
+      if (mounted) {
+        _showUploadError('无法打开文件选择器，请重试');
+      }
+      return;
+    } finally {
+      if (mounted) setState(() => _pickingFile = false);
+    }
     if (file == null) return;
 
     if (!file.name.toLowerCase().endsWith('.xlsx')) {
@@ -658,6 +661,34 @@ class _ProposalUploadPageState extends State<ProposalUploadPage> {
       if (!mounted) return;
       setState(() => _state = _UploadState.empty);
       _showUploadError(err is _UploadException ? err.message : '上传解析失败：$err');
+    }
+  }
+
+  /// iOS 需声明 UTI；类型组合异常时逐级降级，避免选择器无法弹出。
+  Future<XFile?> _pickExcelFile() async {
+    const primary = XTypeGroup(
+      label: 'Excel 提案',
+      extensions: ['xlsx'],
+      mimeTypes: [
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      ],
+      uniformTypeIdentifiers: [
+        'org.openxmlformats.spreadsheetml.sheet',
+        'com.microsoft.excel.xlsx',
+      ],
+    );
+    try {
+      return await openFile(acceptedTypeGroups: const [primary]);
+    } catch (_) {
+      try {
+        const fallback = XTypeGroup(
+          label: 'Excel 提案',
+          extensions: ['xlsx'],
+        );
+        return await openFile(acceptedTypeGroups: const [fallback]);
+      } catch (_) {
+        return openFile();
+      }
     }
   }
 
@@ -1058,7 +1089,7 @@ class _ProposalUploadPageState extends State<ProposalUploadPage> {
   }
 
   Widget _buildExcelImportField(XflowField field) {
-    if (_state == _UploadState.uploading) {
+    if (_state == _UploadState.uploading || _pickingFile) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -1152,46 +1183,55 @@ class _ProposalUploadPageState extends State<ProposalUploadPage> {
           ),
           const SizedBox(height: 10),
         ],
-        GestureDetector(
-          onTap: _handleUpload,
-          child: CustomPaint(
-            painter: _DashedBorderPainter(
-              color: _PDColors.ink.withAlpha(78),
-              strokeWidth: 1.4,
-              radius: 12,
-              dashLen: 6,
-              gapLen: 4,
-            ),
-            child: Container(
-              padding: const EdgeInsets.symmetric(vertical: 28, horizontal: 20),
-              child: Column(
-                children: [
-                  Container(
-                    width: 48,
-                    height: 48,
-                    decoration: BoxDecoration(
-                      color: _PDColors.ink.withAlpha(14),
-                      borderRadius: BorderRadius.circular(24),
-                    ),
-                    child: const Icon(
-                      Icons.cloud_upload_outlined,
-                      size: 26,
-                      color: _PDColors.ink,
-                    ),
-                  ),
-                  if (acceptHint.isNotEmpty) ...[
-                    const SizedBox(height: 10),
-                    Text(
-                      acceptHint,
-                      style: const TextStyle(
-                        fontSize: 10,
-                        color: _PDColors.mute,
-                        letterSpacing: 0.3,
-                        fontFamily: 'monospace',
+        Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: _pickingFile || _state == _UploadState.uploading
+                ? null
+                : _handleUpload,
+            borderRadius: BorderRadius.circular(12),
+            child: CustomPaint(
+              painter: _DashedBorderPainter(
+                color: _PDColors.ink.withAlpha(78),
+                strokeWidth: 1.4,
+                radius: 12,
+                dashLen: 6,
+                gapLen: 4,
+              ),
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 28, horizontal: 20),
+                child: Column(
+                  children: [
+                    Container(
+                      width: 48,
+                      height: 48,
+                      decoration: BoxDecoration(
+                        color: _PDColors.ink.withAlpha(14),
+                        borderRadius: BorderRadius.circular(24),
+                      ),
+                      child: Icon(
+                        _pickingFile
+                            ? Icons.hourglass_top_outlined
+                            : Icons.cloud_upload_outlined,
+                        size: 26,
+                        color: _PDColors.ink,
                       ),
                     ),
+                    if (acceptHint.isNotEmpty) ...[
+                      const SizedBox(height: 10),
+                      Text(
+                        acceptHint,
+                        style: const TextStyle(
+                          fontSize: 10,
+                          color: _PDColors.mute,
+                          letterSpacing: 0.3,
+                          fontFamily: 'monospace',
+                        ),
+                      ),
+                    ],
                   ],
-                ],
+                ),
               ),
             ),
           ),
@@ -1309,22 +1349,26 @@ class _ProposalUploadPageState extends State<ProposalUploadPage> {
               ],
             ),
           ),
-          GestureDetector(
-            onTap: _resetUpload,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-              decoration: BoxDecoration(
-                border: Border.all(color: _PDColors.line, width: 0.6),
-                borderRadius: BorderRadius.circular(4),
-              ),
-              child: const Text(
-                '重新',
-                style: TextStyle(
-                  fontSize: 9,
-                  color: _PDColors.mute,
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: 0.4,
-                  fontFamily: 'monospace',
+          Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: _resetUpload,
+              borderRadius: BorderRadius.circular(4),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  border: Border.all(color: _PDColors.line, width: 0.6),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: const Text(
+                  '重新',
+                  style: TextStyle(
+                    fontSize: 9,
+                    color: _PDColors.mute,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 0.4,
+                    fontFamily: 'monospace',
+                  ),
                 ),
               ),
             ),

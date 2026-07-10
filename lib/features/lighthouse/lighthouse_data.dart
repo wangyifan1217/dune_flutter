@@ -110,7 +110,9 @@ class LighthouseDataBundle {
     final rows = rowsOf(tab).map((row) {
       final next = Map<String, dynamic>.from(row);
       final name = next['name']?.toString() ?? '';
-      final trend = trends[name];
+      final group = next['group']?.toString() ?? '';
+      final key = group.isEmpty ? name : '$name::$group';
+      final trend = trends[key] ?? trends[name];
       if (trend is Map) next['trend'] = Map<String, dynamic>.from(trend);
       return next;
     }).toList();

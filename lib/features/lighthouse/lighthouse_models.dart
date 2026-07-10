@@ -54,7 +54,6 @@ const kLighthouseMetricDefaults = <LighthouseTab, List<String>>{
     'spread',
     'saasFee',
     'woa',
-    'projectCost',
     'deferred',
     'discount',
   ],
@@ -66,7 +65,6 @@ const kLighthouseMetricDefaults = <LighthouseTab, List<String>>{
     'spread',
     'saasFee',
     'woa',
-    'projectCost',
     'deferred',
   ],
 };

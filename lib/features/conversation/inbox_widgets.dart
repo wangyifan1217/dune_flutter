@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../chat/user_avatar_widget.dart';
@@ -11,63 +13,64 @@ import 'inbox_format.dart';
 class ChatInboxHeader extends StatelessWidget {
   const ChatInboxHeader({
     super.key,
-    required this.visibleCount,
     required this.onOpenContacts,
     required this.onNewChat,
+    required this.onOpenNova,
     required this.onOpenMessageCenter,
     this.messageCenterUnread = 0,
   });
 
-  final int visibleCount;
   final VoidCallback onOpenContacts;
   final VoidCallback onNewChat;
+  final VoidCallback onOpenNova;
   final VoidCallback onOpenMessageCenter;
   final int messageCenterUnread;
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 14, 16, 11),
-      child: Row(
-        children: [
-          RichText(
-            text: TextSpan(
+    return Container(
+      color: const Color(0xFFF5F5F5),
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 3),
+      child: SizedBox(
+        height: 40,
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            Text(
+              '消息',
               style: DunesTypography.sans(
-                fontSize: 21,
+                fontSize: 16,
                 fontWeight: FontWeight.w600,
-                letterSpacing: -0.025 * 21,
-                color: DunesColors.text,
+                color: const Color(0xFF1C1C1C),
               ),
-              children: [
-                const TextSpan(text: '消息'),
-                WidgetSpan(
-                  alignment: PlaceholderAlignment.baseline,
-                  baseline: TextBaseline.alphabetic,
-                  child: Padding(
-                    padding: const EdgeInsets.only(left: 8),
-                    child: Text(
-                      'CHAT · $visibleCount',
-                      style: DunesTypography.mono(
-                        fontSize: 9.5,
-                        fontWeight: FontWeight.w500,
-                        letterSpacing: 0.06 * 9.5,
-                        color: DunesColors.text3,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
             ),
-          ),
-          const Spacer(),
-          _IconBtn(
-            icon: Icons.notifications_none_rounded,
-            onTap: onOpenMessageCenter,
-            unreadCount: messageCenterUnread,
-          ),
-          _IconBtn(icon: Icons.people_outline_rounded, onTap: onOpenContacts),
-          _IconBtn(icon: Icons.edit_outlined, onTap: onNewChat),
-        ],
+            Align(
+              alignment: Alignment.centerLeft,
+              child: _NovaEyesButton(onTap: onOpenNova),
+            ),
+            Align(
+              alignment: Alignment.centerRight,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _IconBtn(
+                    icon: Icons.notifications_none_rounded,
+                    onTap: onOpenMessageCenter,
+                    unreadCount: messageCenterUnread,
+                  ),
+                  _IconBtn(
+                    icon: Icons.people_outline_rounded,
+                    onTap: onOpenContacts,
+                  ),
+                  _IconBtn(
+                    icon: Icons.edit_outlined,
+                    onTap: onNewChat,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -85,18 +88,24 @@ class ChatInboxSearchBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
+    return Container(
+      color: const Color(0xFFF5F5F5),
+      padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        height: 34,
+        padding: const EdgeInsets.symmetric(horizontal: 12),
         decoration: BoxDecoration(
-          color: DunesColors.bgSoft,
-          borderRadius: BorderRadius.circular(10),
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(6),
         ),
         child: Row(
           children: [
-            const Icon(Icons.search, size: 15, color: DunesColors.text3),
-            const SizedBox(width: 9),
+            const Icon(
+              Icons.search,
+              size: 17,
+              color: Color(0xFFB2B2B2),
+            ),
+            const SizedBox(width: 6),
             Expanded(
               child: TextField(
                 controller: controller,
@@ -109,10 +118,10 @@ class ChatInboxSearchBar extends StatelessWidget {
                 decoration: InputDecoration(
                   isDense: true,
                   border: InputBorder.none,
-                  hintText: '搜索人 / 群 / 消息内容 / 审批号',
+                  hintText: '搜索',
                   hintStyle: DunesTypography.sans(
                     fontSize: 13,
-                    color: DunesColors.text3,
+                    color: const Color(0xFFB2B2B2),
                   ),
                   contentPadding: EdgeInsets.zero,
                 ),
@@ -737,17 +746,17 @@ class _IconBtn extends StatelessWidget {
         customBorder: const CircleBorder(),
         onTap: onTap,
         child: SizedBox(
-          width: 44,
-          height: 44,
+          width: 36,
+          height: 36,
           child: Stack(
             clipBehavior: Clip.none,
             alignment: Alignment.center,
             children: [
-              Icon(icon, size: 22, color: DunesColors.text2),
+              Icon(icon, size: 20, color: DunesColors.text2),
               if (unreadCount > 0)
                 Positioned(
-                  top: 7,
-                  right: 6,
+                  top: 5,
+                  right: 4,
                   child: Container(
                     constraints: const BoxConstraints(minWidth: 8, minHeight: 8),
                     padding: unreadCount > 9
@@ -757,7 +766,7 @@ class _IconBtn extends StatelessWidget {
                     decoration: BoxDecoration(
                       color: DunesColors.coral,
                       borderRadius: BorderRadius.circular(99),
-                      border: Border.all(color: DunesColors.bgApp, width: 1.5),
+                      border: Border.all(color: const Color(0xFFF5F5F5), width: 1.5),
                     ),
                     child: unreadCount > 9
                         ? Text(
@@ -774,6 +783,96 @@ class _IconBtn extends StatelessWidget {
                 ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _NovaEyesButton extends StatefulWidget {
+  const _NovaEyesButton({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  State<_NovaEyesButton> createState() => _NovaEyesButtonState();
+}
+
+class _NovaEyesButtonState extends State<_NovaEyesButton>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 2800),
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: 'NOVA',
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          customBorder: const CircleBorder(),
+          onTap: widget.onTap,
+          child: SizedBox(
+            width: 44,
+            height: 40,
+            child: AnimatedBuilder(
+              animation: _controller,
+              builder: (context, _) {
+                final t = _controller.value;
+                final lookOffset = math.sin(t * math.pi * 2) * 3;
+                final blinkDistance = (t - 0.72).abs();
+                final eyeScaleY = blinkDistance < 0.055
+                    ? blinkDistance / 0.055
+                    : 1.0;
+                return Transform.translate(
+                  offset: Offset(lookOffset, 0),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      _NovaEye(verticalScale: eyeScaleY),
+                      const SizedBox(width: 4),
+                      _NovaEye(verticalScale: eyeScaleY),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _NovaEye extends StatelessWidget {
+  const _NovaEye({required this.verticalScale});
+
+  final double verticalScale;
+
+  @override
+  Widget build(BuildContext context) {
+    return Transform.scale(
+      scaleY: verticalScale,
+      child: Container(
+        width: 8,
+        height: 8,
+        decoration: BoxDecoration(
+          color: const Color(0xFF07C160),
+          shape: BoxShape.circle,
         ),
       ),
     );

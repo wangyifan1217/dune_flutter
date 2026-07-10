@@ -448,29 +448,6 @@ class _NativeConversationPageState extends State<NativeConversationPage>
     return parts.join(' · ');
   }
 
-  Widget _buildAiRow(NativeConversation? ai) {
-    final gen = _novaGeneratingFor(ai);
-    final preview = resolveNovaInboxPreview(
-      storage: _novaStorage,
-      convId: novaActiveConvIdFromStorage(_novaStorage),
-      serverPreview: ai?.preview,
-      generating: gen.generating,
-      generatingStatus: gen.status,
-      allowLocalCache: true,
-    );
-    return ChatInboxRow(
-      kind: ChatInboxRowKind.aiAssistant,
-      title: _yunshuName,
-      preview: preview,
-      previewGenerating: gen.generating,
-      timeLabel: InboxFormat.formatTime(ai?.updatedAt),
-      showAiMark: true,
-      unreadCount: ai?.unreadCount ?? 0,
-      showDivider: true,
-      onTap: widget.onOpenNova,
-    );
-  }
-
   int? _peerUserId(NativeConversation c) {
     final id = c.peerUserId;
     if (id == null || id <= 0 || id == widget.session.userId) return null;
@@ -578,13 +555,6 @@ class _NativeConversationPageState extends State<NativeConversationPage>
   }
 
   List<_InboxSection> _buildSections() {
-    final aiRows = _items.where((c) => c.isAiAssistant).toList();
-    NativeConversation? ai;
-    if (aiRows.isNotEmpty) {
-      aiRows.sort((a, b) => b.sortTimestamp.compareTo(a.sortTimestamp));
-      ai = aiRows.first;
-    }
-
     final approvals = _sorted(
       _items.where((c) => c.isWorkgroupApproval).toList(),
     );
@@ -619,15 +589,6 @@ class _NativeConversationPageState extends State<NativeConversationPage>
     }
 
     final sections = <_InboxSection>[
-      _InboxSection(
-        key: 'ai',
-        label: _yunshuName,
-        count: ai == null ? 1 : 1,
-        timestamp: ai?.sortTimestamp ?? 0,
-        pinned: true,
-        leading: const NovaSectionIcon(),
-        rows: [_buildAiRow(ai)],
-      ),
       if (approvals.isNotEmpty)
         _InboxSection(
           key: 'approval',
@@ -658,19 +619,8 @@ class _NativeConversationPageState extends State<NativeConversationPage>
         ),
     ];
 
-    // NOVA 固定置顶；其余会话分区按时间倒序。
-    final aiSection = sections.firstWhere((s) => s.key == 'ai');
-    final dynamicSections =
-        sections.where((s) => s.key != 'ai').toList()
-          ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
-
-    return [aiSection, ...dynamicSections];
-  }
-
-  int get _visibleCount {
-    return _items
-        .where((c) => c.isPrivate || c.isGroup || c.isWorkgroupApproval)
-        .length;
+    sections.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+    return sections;
   }
 
   int get _messageCenterUnread {
@@ -694,9 +644,9 @@ class _NativeConversationPageState extends State<NativeConversationPage>
           child: Column(
             children: [
               ChatInboxHeader(
-                visibleCount: _visibleCount,
                 onOpenContacts: widget.onOpenContacts,
                 onNewChat: widget.onOpenNewChat,
+                onOpenNova: widget.onOpenNova,
                 onOpenMessageCenter: widget.onOpenNotifications,
                 messageCenterUnread: _messageCenterUnread,
               ),

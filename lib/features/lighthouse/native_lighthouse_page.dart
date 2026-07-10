@@ -243,7 +243,7 @@ enum _FlowRole { anchor, intermediate, result }
 //   核销规模 = 核销张数 × 面值
 //   预收    = 销售规模 − 核销规模
 //   收入    = 核销规模 × 利差率
-//   经营成本 = 核销 × 千 5 (项目 千 4 + 业务 千 1)
+//   经营成本 = 业务成本
 //   税务成本 = 收入 × 5%
 //   毛利    = 收入 − (经营成本 + 税务成本)
 //   效率    = 毛利 ÷ 锚点(优先核销)
@@ -471,7 +471,6 @@ Map<String, dynamic> _fallbackUiRoot() {
           metric('spread', '利差', '利差', 'copper'),
           metric('saasFee', 'SAAS服务费', 'SAAS', 'mute'),
           metric('woa', 'WOA', 'WOA', 'mute'),
-          metric('projectCost', '项目成本', '项目', 'mute'),
           metric('deferred', '抵扣延期分润', '延期', 'mute'),
           metric('discount', '折扣返点', '折扣', 'copper', sortable: false),
           metric('profit', '毛利润', '毛利', 'pos', listDefault: false, hero: true),
@@ -493,7 +492,6 @@ Map<String, dynamic> _fallbackUiRoot() {
           'spread',
           'saasFee',
           'woa',
-          'projectCost',
           'deferred',
           'discount',
         ],
@@ -520,7 +518,6 @@ Map<String, dynamic> _fallbackUiRoot() {
           metric('spread', '利差', '利差', 'copper'),
           metric('saasFee', 'SAAS服务费', 'SAAS', 'mute'),
           metric('woa', 'WOA', 'WOA', 'mute'),
-          metric('projectCost', '项目成本', '项目', 'mute'),
           metric('deferred', '抵扣延期分润', '延期', 'mute'),
           metric('profit', '毛利润', '毛利', 'pos', listDefault: false, hero: true),
           metric(
@@ -533,17 +530,7 @@ Map<String, dynamic> _fallbackUiRoot() {
             isRate: true,
           ),
         ],
-        [
-          'sales',
-          'gmv',
-          'cost',
-          'tax',
-          'spread',
-          'saasFee',
-          'woa',
-          'projectCost',
-          'deferred',
-        ],
+        ['sales', 'gmv', 'cost', 'tax', 'spread', 'saasFee', 'woa', 'deferred'],
         ['profit', 'revenue', 'cost', 'rate'],
         filters: [
           {'key': 'hun', 'label': 'U/N', 'options': hunOptions},
@@ -2329,6 +2316,87 @@ class _HeroMetricTrendChartState extends State<_HeroMetricTrendChart> {
   static const double _padRight = 6;
   int? _selectedIndex;
 
+  // ═══════════════════════════════════════════════════════════════════════
+  // 指标公式表 (点开折线后 "本期合计" 右边展示, 科研论文式)
+  //   ≡ 是定义符 (identity/definition), 术语 ink2 中性, 运算符 + 字面量 accent 高亮
+  //   会议原话:"想把每个对应的公式规规整整的写到本期合计的右边，有科研感"
+  // ═══════════════════════════════════════════════════════════════════════
+  static const _kMetricFormulas = <String, String>{
+    '利差率': '收入 ÷ 核销规模 × 100%',
+    '收入（已核销利差）': '核销规模 × 利差率',
+    '经营成本': '业务成本',
+    '税务成本': '收入 × 5%',
+    '毛利': '收入 − 经营成本 − 税务成本',
+    '毛利（净毛利）': '收入 − 经营成本 − 税务成本',
+    '效率（ROI）': '毛利 ÷ 核销规模 × 100%',
+  };
+
+  /// 内联公式渲染 — mono LaTeX 感, 分色 tokens.
+  ///   ≡ (定义符): accent bold
+  ///   运算符 (÷ × − + =): accent bold
+  ///   字面量 (100%, 5%): accent semi-bold
+  ///   术语 (收入, 核销规模 等): ink2 中性
+  Widget _buildFormulaInline(String metricLabel, Color accent) {
+    final formula = _kMetricFormulas[metricLabel];
+    if (formula == null || formula.isEmpty) return const SizedBox.shrink();
+
+    final tokens = formula
+        .split(' ')
+        .where((t) => t.isNotEmpty)
+        .toList(growable: false);
+
+    bool isOperator(String t) => t.length == 1 && '÷×−+='.contains(t);
+    bool isLiteral(String t) => RegExp(r'^\d+(\.\d+)?%?$').hasMatch(t);
+
+    final spans = <TextSpan>[
+      TextSpan(
+        text: '≡  ',
+        style: LhTypography.mono(
+          size: 11,
+          color: accent,
+          weight: FontWeight.w800,
+          letterSpacing: 0.4,
+        ),
+      ),
+    ];
+
+    for (int i = 0; i < tokens.length; i++) {
+      final t = tokens[i];
+      final Color color;
+      final FontWeight weight;
+      if (isOperator(t)) {
+        color = accent;
+        weight = FontWeight.w800;
+      } else if (isLiteral(t)) {
+        color = accent;
+        weight = FontWeight.w700;
+      } else {
+        color = LhColors.ink2;
+        weight = FontWeight.w600;
+      }
+      spans.add(
+        TextSpan(
+          text: t,
+          style: LhTypography.mono(
+            size: 10,
+            color: color,
+            weight: weight,
+            letterSpacing: 0.3,
+          ),
+        ),
+      );
+      if (i < tokens.length - 1) {
+        spans.add(const TextSpan(text: '  '));
+      }
+    }
+
+    return RichText(
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      text: TextSpan(children: spans),
+    );
+  }
+
   void _notifyInteraction(bool active) {
     widget.onInteractionChanged?.call(active);
   }
@@ -3262,8 +3330,8 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   String _detailRowDrillKey(String dim, Map<String, dynamic> row) {
     final name = row['name']?.toString() ?? '';
     final group = row['group']?.toString() ?? '';
-    if (dim == 'channel') return '$name::$group';
-    return name;
+    if (group.isEmpty) return name;
+    return '$name::$group';
   }
 
   Map<String, dynamic>? _detailEntityMap(String type, String key) {
@@ -3972,9 +4040,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   }
 
   double _rowOperatingCost(Map<String, dynamic> r) {
-    final business = (r['cost'] as num?)?.toDouble() ?? 0;
-    final project = (r['projectCost'] as num?)?.toDouble() ?? 0;
-    return business + project;
+    return (r['cost'] as num?)?.toDouble() ?? 0;
   }
 
   bool _rowMatchesAnomaly(Map<String, dynamic> r, String filter) {
@@ -5245,7 +5311,6 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         sumVerifiedSales = 0,
         sumGmv = 0,
         sumCost = 0,
-        sumProjectCost = 0,
         sumProfit = 0,
         sumRevenue = 0,
         sumTax = 0;
@@ -5256,7 +5321,6 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       sumVerifiedSales += v;
       sumGmv += (r['gmv'] as num?)?.toDouble() ?? 0;
       sumCost += (r['cost'] as num?)?.toDouble() ?? 0;
-      sumProjectCost += (r['projectCost'] as num?)?.toDouble() ?? 0;
       sumProfit += (r['profit'] as num?)?.toDouble() ?? 0;
       sumRevenue += (r['revenue'] as num?)?.toDouble() ?? 0;
       sumTax += (r['tax'] as num?)?.toDouble() ?? 0;
@@ -5280,9 +5344,8 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       'verifiedSales': heroVerified,
       'prepaid': sumPrepaid,
       'gmv': sumGmv,
-      'cost': sumCost + sumProjectCost,
+      'cost': sumCost,
       'businessCost': sumCost,
-      'projectCost': sumProjectCost,
       'profit': sumProfit,
       'revenue': sumRevenue,
       'tax': sumTax,
@@ -5515,12 +5578,12 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     );
   }
 
-  /// hero grid 的业务口径核心指标 (6 格 2 行, 硬编码, 不受 tab 影响)
+  /// hero grid 的业务口径核心指标 (5 格, 硬编码, 不受 tab 影响)
   ///   第 1 行 (损益): 毛利 / 收入 / 效率
-  ///   第 2 行 (三分): 业务成本 / 项目成本 / 税务成本
+  ///   第 2 行 (成本): 经营成本 / 税务成本
   /// 会议规则:
   ///   - 大数字销售规模保留(业务盘子)
-  ///   - grid 展示损益 + 成本三分, 让运营/财务/市场看统一口径
+  ///   - grid 展示损益 + 成本, 让运营/财务/市场看统一口径
   ///   - 移除原来的 GMV / GMV2 / ITS / WOA / spread 等边缘指标
   List<_HeroMetric> _lhCoreMetrics() {
     return [
@@ -5544,15 +5607,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       ),
       _HeroMetric(
         key: 'cost',
-        label: '业务成本',
+        label: '经营成本',
         isRate: false,
         cellColor: LhColors.neg,
-      ),
-      _HeroMetric(
-        key: 'projectCost',
-        label: '项目成本',
-        isRate: false,
-        cellColor: LhColors.mute,
       ),
       _HeroMetric(
         key: 'tax',
@@ -6745,7 +6802,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   Widget _buildLossProfitFlow(Map<String, double> totals, bool isEstimated) {
     final anchor = totals['verifiedSales'] ?? 0;
     final revenue = totals['revenue'] ?? 0;
-    final cost = totals['cost'] ?? 0; // 经营成本 (业务 + 项目, 合并展示)
+    final cost = totals['cost'] ?? 0; // 经营成本 (= 业务成本)
     final tax = totals['tax'] ?? 0;
     final profit = totals['profit'] ?? 0;
     final rate = totals['rate'] ?? 0;
@@ -6890,7 +6947,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               child: _pnlButton(
                 keyId: 'cost',
                 label: '经营成本',
-                subLabel: '业务成本 + 项目成本',
+                subLabel: '业务成本',
                 value: cost,
                 isRate: false,
                 accent: LhColors.neg,
@@ -7535,7 +7592,6 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     double sumSales = 0,
         sumVerifiedSales = 0,
         sumCost = 0,
-        sumProjectCost = 0,
         sumProfit = 0,
         sumRevenue = 0,
         sumTax = 0;
@@ -7545,7 +7601,6 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       sumSales += s;
       sumVerifiedSales += v;
       sumCost += (r['cost'] as num?)?.toDouble() ?? 0;
-      sumProjectCost += (r['projectCost'] as num?)?.toDouble() ?? 0;
       sumProfit += (r['profit'] as num?)?.toDouble() ?? 0;
       sumRevenue += (r['revenue'] as num?)?.toDouble() ?? 0;
       sumTax += (r['tax'] as num?)?.toDouble() ?? 0;
@@ -7565,9 +7620,8 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     final totals = {
       'sales': heroSales,
       'verifiedSales': heroVerified,
-      'cost': sumCost + sumProjectCost,
+      'cost': sumCost,
       'businessCost': sumCost,
-      'projectCost': sumProjectCost,
       'profit': sumProfit,
       'revenue': sumRevenue,
       'tax': sumTax,
@@ -8016,8 +8070,8 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
 
     final rows = <({String key, String text})>[
       (key: 'spreadRate', text: '利差率 = 收入（已核销利差） ÷ ${anchor}规模'),
-      (key: 'revenue', text: '收入（已核销利差）= ${anchor}张数 × 单张利差'),
-      (key: 'cost', text: '经营成本 = 业务成本 + 项目成本'),
+      (key: 'revenue', text: '收入（已核销利差）= ${anchor}规模 × 利差率'),
+      (key: 'cost', text: '经营成本 = 业务成本'),
       (key: 'tax', text: '税务成本 = 收入（已核销利差）× 5%'),
       (key: 'profit', text: '毛利润（净毛利）= 收入（已核销利差）− 经营成本 − 税务成本'),
       (key: 'rate', text: '效率（ROI）= 毛利 ÷ 核销规模'),
@@ -8025,7 +8079,6 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
 
     bool isHighlighted(String key) {
       if (key == highlightKey) return true;
-      if (highlightKey == 'projectCost' && key == 'cost') return true;
       return false;
     }
 
@@ -8275,10 +8328,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       case 'cost':
         final operating = _readMetricSeries('operatingCostSeries');
         if (operating.isNotEmpty) return operating;
-        return _mergeMetricSeries(
-          _readMetricSeries('costSeries'),
-          _readMetricSeries('projectCostSeries'),
-        );
+        return _readMetricSeries('costSeries');
       case 'spreadRate':
         final direct = _readMetricSeries('spreadRateSeries');
         if (direct.isNotEmpty) return direct;
@@ -8317,10 +8367,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       case 'cost':
         final operating = _readMetricSeries('operatingCostSeriesPrev');
         if (operating.isNotEmpty) return operating;
-        return _mergeMetricSeries(
-          _readMetricSeries('costSeriesPrev'),
-          _readMetricSeries('projectCostSeriesPrev'),
-        );
+        return _readMetricSeries('costSeriesPrev');
       case 'spreadRate':
         final direct = _readMetricSeries('spreadRateSeriesPrev');
         if (direct.isNotEmpty) return direct;
@@ -12625,11 +12672,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     final hasRate = roiAnchor > 0;
     final rateValue = hasRate ? _rowRoiPct(r) : 0.0;
 
-    // 环比：跟随当前排序列读 r['deltas'][sortField]，否则回退 deltaPct（毛利环比）
+    // 环比：跟随当前排序列读 r['deltas'][sortField]；缺失时不展示，避免把毛利环比套到其他指标。
     final deltas = (r['deltas'] as Map?)?.cast<String, dynamic>();
-    final deltaRaw =
-        (deltas?[_sortField] as num?)?.toDouble() ??
-        (r['deltaPct'] as num?)?.toDouble();
+    final deltaRaw = (deltas?[_sortField] as num?)?.toDouble();
     final showDelta = deltaRaw != null;
     final delta = deltaRaw ?? 0;
     final dArrow = delta >= 0 ? '↑' : '↓';
@@ -12659,7 +12704,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     }
 
     void openDetail() {
-      final detKey = _tab == 'channel' ? '$name::$group' : name;
+      final detKey = group.isEmpty ? name : '$name::$group';
       setState(() {
         _closeMetricPage();
         _detailKey = detKey;
@@ -13712,9 +13757,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         values[k] = v;
       }
       final deltas = (r['deltas'] as Map?)?.cast<String, dynamic>();
-      final d =
-          (deltas?[metricKey] as num?)?.toDouble() ??
-          (r['deltaPct'] as num?)?.toDouble();
+      final d = (deltas?[metricKey] as num?)?.toDouble();
       entries.add(
         _MetaEntry(
           name: r['name']?.toString() ?? '—',
@@ -15637,22 +15680,17 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       0.0,
       double.infinity,
     );
-    final proj = ((r['projectCost'] as num?)?.toDouble() ?? 0).clamp(
-      0.0,
-      double.infinity,
-    );
     final profit = ((r['profit'] as num?)?.toDouble() ?? 0).clamp(
       0.0,
       double.infinity,
     );
 
-    // 5 段：业务 / 税 / SaaS / 项目 / 毛利；占比统一以销售额为分母
+    // 4 段：业务 / 税 / SaaS / 毛利；占比统一以销售额为分母
     final segments = <({String label, double value, Color color})>[
       (label: '业务', value: cost, color: const Color(0xFFD05568)),
       (label: '税务', value: tax, color: const Color(0xFF8A6FE0)),
       if (saas > 0)
         (label: 'SaaS', value: saas, color: const Color(0xFFC9842A)),
-      if (proj > 0) (label: '项目', value: proj, color: const Color(0xFF7C5CD6)),
       (label: '毛利', value: profit, color: LhColors.pos),
     ];
     final barTotal = segments.fold<double>(0, (s, x) => s + x.value);

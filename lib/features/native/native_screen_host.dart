@@ -1845,7 +1845,7 @@ class _NativeB2PageState extends State<_NativeB2Page> {
       offset: const Offset(0, 4),
       shape: const _WechatMenuShape(),
       menuPadding: const EdgeInsets.only(top: 12, bottom: 8),
-      color: const Color(0xFF303030),
+      color: const Color(0xFFF2F2F2),
       onSelected: (action) {
         switch (action) {
           case _B2MenuAction.scanWorkstation:
@@ -2396,7 +2396,7 @@ class _B2MenuEntry extends StatelessWidget {
   const _B2MenuEntry({
     required this.icon,
     required this.label,
-    this.color = const Color(0xFFF5F5F5),
+    this.color = DunesColors.text,
   });
 
   final IconData icon;

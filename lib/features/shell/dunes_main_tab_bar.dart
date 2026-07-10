@@ -70,40 +70,45 @@ class _DunesMainTabBarState extends State<DunesMainTabBar> {
 
   @override
   Widget build(BuildContext context) {
-    return SafeArea(
-      top: false,
-      child: Container(
-        decoration: const BoxDecoration(
-          color: DunesColors.bgApp,
-          border: Border(top: BorderSide(color: DunesColors.borderSoft)),
-        ),
-        child: Row(
-          children: [
-            _tab(
-              icon: Icons.forum_outlined,
-              label: '通讯',
-              screen: 'C1',
-              showRedDot: _showCommDot,
-            ),
-            if (!widget.chatOnlyMode) ...[
+    // 让 SafeArea 的 Home Indicator 区也使用 Tab 背景色；否则灯塔等页面的
+    // Scaffold 底色会从该空白区域透出。
+    return Container(
+      color: DunesColors.bgApp,
+      child: SafeArea(
+        top: false,
+        child: Container(
+          decoration: const BoxDecoration(
+            color: DunesColors.bgApp,
+            border: Border(top: BorderSide(color: DunesColors.borderSoft)),
+          ),
+          child: Row(
+            children: [
               _tab(
-                icon: Icons.grid_view_rounded,
-                label: '千机',
-                onTap: () => showDunesSoonToast(context),
+                icon: Icons.forum_outlined,
+                label: '通讯',
+                screen: 'C1',
+                showRedDot: _showCommDot,
               ),
+              if (!widget.chatOnlyMode) ...[
+                _tab(
+                  icon: Icons.grid_view_rounded,
+                  label: '千机',
+                  onTap: () => showDunesSoonToast(context),
+                ),
+                _tab(
+                  icon: Icons.explore_outlined,
+                  label: '灯塔',
+                  screen: 'LH',
+                ),
+              ],
               _tab(
-                icon: Icons.explore_outlined,
-                label: '灯塔',
-                screen: 'LH',
+                icon: Icons.person_outline_rounded,
+                label: '我的',
+                screen: 'B2',
+                showRedDot: widget.chatOnlyMode ? false : _showMyDot,
               ),
             ],
-            _tab(
-              icon: Icons.person_outline_rounded,
-              label: '我的',
-              screen: 'B2',
-              showRedDot: widget.chatOnlyMode ? false : _showMyDot,
-            ),
-          ],
+          ),
         ),
       ),
     );

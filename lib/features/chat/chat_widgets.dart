@@ -253,14 +253,15 @@ class ChatInputBar extends StatelessWidget {
     final bottomInset = MediaQuery.paddingOf(context).bottom;
     return Container(
       padding: EdgeInsets.fromLTRB(
-        12,
-        9,
-        12,
-        bottomInset > 0 ? bottomInset : 9,
+        8,
+        7,
+        8,
+        // 保留 Home Indicator 安全距离，并额外上移少量，避免输入栏贴底。
+        bottomInset > 0 ? bottomInset + 6 : 9,
       ),
       decoration: const BoxDecoration(
-        color: DunesColors.bgApp,
-        border: Border(top: BorderSide(color: DunesColors.borderSoft)),
+        color: Color(0xFFF7F4FB),
+        border: Border(top: BorderSide(color: Color(0xFFE5DFEE))),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.end,
@@ -290,9 +291,12 @@ class ChatInputBar extends StatelessWidget {
                         color: recording
                             ? (recordWillCancel
                                   ? DunesColors.coral
-                                  : const Color(0xFF7E64BD))
-                            : DunesColors.bgSoft,
-                        borderRadius: BorderRadius.circular(18),
+                                  : const Color(0xFF8B72B7))
+                            : Colors.white,
+                        borderRadius: BorderRadius.circular(7),
+                        border: recording
+                            ? null
+                            : Border.all(color: DunesColors.borderSoft),
                       ),
                       child: Text(
                         recording
@@ -332,14 +336,28 @@ class ChatInputBar extends StatelessWidget {
                         color: DunesColors.text3,
                       ),
                       filled: true,
-                      fillColor: DunesColors.bgSoft,
+                      fillColor: const Color(0xFFFFFEFF),
                       border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(18),
-                        borderSide: BorderSide.none,
+                        borderRadius: BorderRadius.circular(7),
+                        borderSide: const BorderSide(
+                          color: Color(0xFFE3DCEE),
+                        ),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(7),
+                        borderSide: const BorderSide(
+                          color: Color(0xFFE3DCEE),
+                        ),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(7),
+                        borderSide: const BorderSide(
+                          color: Color(0xFF9A82C5),
+                        ),
                       ),
                       contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 10,
+                        horizontal: 12,
+                        vertical: 9,
                       ),
                       isDense: true,
                     ),
@@ -359,49 +377,44 @@ class ChatInputBar extends StatelessWidget {
             Material(
               color: Colors.transparent,
               child: InkWell(
-                customBorder: const CircleBorder(),
+                borderRadius: BorderRadius.circular(6),
                 onTap: showStop ? onStop : (interactionLocked ? null : onSend),
                 child: Ink(
-                  width: 34,
-                  height: 34,
+                  width: 52,
+                  height: 40,
                   decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    gradient: showStop
-                        ? const LinearGradient(
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                            colors: [Color(0xFF8A4A4A), Color(0xFF6A3333)],
-                          )
+                    borderRadius: BorderRadius.circular(6),
+                    color: showStop
+                        ? const Color(0xFFB65252)
                         : interactionLocked
-                        ? null
-                        : const LinearGradient(
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                            colors: [Color(0xFF7E64BD), Color(0xFF553B96)],
-                          ),
-                    color: interactionLocked && !showStop
-                        ? DunesColors.text3.withValues(alpha: 0.35)
-                        : null,
+                        ? const Color(0xFFC9BEDD)
+                        : const Color(0xFF8B72B7),
                   ),
-                  child: showStop
-                      ? const Icon(
-                          Icons.stop_rounded,
-                          size: 18,
-                          color: Colors.white,
-                        )
-                      : sending
-                      ? const Padding(
-                          padding: EdgeInsets.all(8),
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
+                  child: Center(
+                    child: showStop
+                        ? const Icon(
+                            Icons.stop_rounded,
+                            size: 18,
                             color: Colors.white,
+                          )
+                        : sending
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Text(
+                            '发送',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
-                        )
-                      : const Icon(
-                          Icons.arrow_upward_rounded,
-                          size: 20,
-                          color: Colors.white,
-                        ),
+                  ),
                 ),
               ),
             ),
@@ -425,9 +438,9 @@ class _RoundIconBtn extends StatelessWidget {
         customBorder: const CircleBorder(),
         onTap: onTap,
         child: SizedBox(
-          width: 34,
-          height: 34,
-          child: Icon(icon, size: 18, color: DunesColors.text2),
+          width: 40,
+          height: 40,
+          child: Icon(icon, size: 23, color: DunesColors.text2),
         ),
       ),
     );

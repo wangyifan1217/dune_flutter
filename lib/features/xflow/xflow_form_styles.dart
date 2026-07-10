@@ -2,6 +2,22 @@ import 'package:flutter/material.dart';
 
 import '../../core/theme/dunes_theme.dart';
 
+/// Sales proposal UI palette aligned with `proposal_upload_page.dart`.
+class XfProposalUi {
+  const XfProposalUi._();
+
+  static const bg = Color(0xFFF8F7F5);
+  static const card = Color(0xFFFFFFFF);
+  static const cardAlt = Color(0xFFFAF9F6);
+  static const ink = Color(0xFF232320);
+  static const mute = Color(0xFF7A7770);
+  static const mute2 = Color(0xFF9A968E);
+  static const line = Color(0xFFDED9D0);
+  static const lineSoft = Color(0xFFECE8DE);
+  static const coral = Color(0xFFD85A30);
+  static const coralSoft = Color(0xFFFFEFE8);
+}
+
 /// WebView `.xf-action-btn` 1:1
 class XfActionButton extends StatelessWidget {
   const XfActionButton({
@@ -18,21 +34,21 @@ class XfActionButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final kind = actionKind ?? '';
-    Color bg = DunesColors.accentSoft;
-    Color border = DunesColors.accentLine;
-    Color fg = DunesColors.accentDeep;
+    Color bg = XfProposalUi.cardAlt;
+    Color border = XfProposalUi.line;
+    Color fg = XfProposalUi.ink;
     if (kind == 'push-colleague') {
-      bg = DunesColors.accent;
-      border = DunesColors.accent;
+      bg = XfProposalUi.coral;
+      border = XfProposalUi.coral;
       fg = Colors.white;
     } else if (kind == 'clear-form') {
       bg = Colors.white;
-      border = DunesColors.coral;
-      fg = DunesColors.coral;
+      border = XfProposalUi.coral;
+      fg = XfProposalUi.coral;
     } else if (kind == 'ai-summary' || kind == 'ai-policy') {
-      bg = const Color(0xFFF0F4FF);
-      border = const Color(0xFFD8E4FF);
-      fg = const Color(0xFF42526E);
+      bg = XfProposalUi.coralSoft;
+      border = const Color(0xFFFFD6C8);
+      fg = XfProposalUi.coral;
     }
     return Material(
       color: Colors.transparent,
@@ -82,7 +98,11 @@ class XfAddRowButton extends StatelessWidget {
           alignment: Alignment.center,
           child: Text(
             label,
-            style: DunesTypography.sans(fontSize: 11, color: DunesColors.text2, height: 1.2),
+            style: DunesTypography.sans(
+              fontSize: 11,
+              color: DunesColors.text2,
+              height: 1.2,
+            ),
           ),
         ),
       ),
@@ -167,7 +187,11 @@ InputDecoration xfDynCellDecoration({String? hint}) {
     filled: true,
     fillColor: Colors.white,
     contentPadding: const EdgeInsets.symmetric(horizontal: 11, vertical: 9),
-    hintStyle: DunesTypography.sans(fontSize: 12.5, color: DunesColors.text3, letterSpacing: -0.005 * 12.5),
+    hintStyle: DunesTypography.sans(
+      fontSize: 12.5,
+      color: DunesColors.text3,
+      letterSpacing: -0.005 * 12.5,
+    ),
     border: OutlineInputBorder(
       borderRadius: BorderRadius.circular(9),
       borderSide: const BorderSide(color: DunesColors.border),
@@ -188,7 +212,11 @@ InputDecoration xfDynCellDecoration({String? hint}) {
 }
 
 TextStyle xfDynInputTextStyle() {
-  return DunesTypography.sans(fontSize: 12.5, color: DunesColors.text, letterSpacing: -0.005 * 12.5);
+  return DunesTypography.sans(
+    fontSize: 12.5,
+    color: DunesColors.text,
+    letterSpacing: -0.005 * 12.5,
+  );
 }
 
 /// WebView `.dr-cell` — label + 输入，flex:1 min-width:60
@@ -281,7 +309,10 @@ class XfFieldLabel extends StatelessWidget {
             ),
           ),
           if (required)
-            const Text('*', style: TextStyle(color: DunesColors.coral, fontSize: 10)),
+            const Text(
+              '*',
+              style: TextStyle(color: DunesColors.coral, fontSize: 10),
+            ),
         ],
       ),
     );
@@ -297,40 +328,128 @@ InputDecoration xfInputDecoration({
     hintText: hint,
     isDense: true,
     filled: true,
-    fillColor: readonly ? DunesColors.bgSoft : Colors.white,
+    fillColor: readonly ? XfProposalUi.cardAlt : Colors.white,
     contentPadding: const EdgeInsets.symmetric(horizontal: 11, vertical: 9),
     hintStyle: DunesTypography.sans(fontSize: 12.5, color: DunesColors.text3),
     border: OutlineInputBorder(
       borderRadius: BorderRadius.circular(9),
-      borderSide: const BorderSide(color: DunesColors.border),
+      borderSide: const BorderSide(color: XfProposalUi.line),
     ),
     enabledBorder: OutlineInputBorder(
       borderRadius: BorderRadius.circular(9),
-      borderSide: const BorderSide(color: DunesColors.border),
+      borderSide: const BorderSide(color: XfProposalUi.line),
     ),
     focusedBorder: OutlineInputBorder(
       borderRadius: BorderRadius.circular(9),
-      borderSide: const BorderSide(color: DunesColors.accent),
+      borderSide: const BorderSide(color: XfProposalUi.coral),
     ),
   );
 }
 
 TextStyle xfInputTextStyle({bool mono = false}) {
   if (mono) {
-    return DunesTypography.mono(fontSize: 12, color: DunesColors.text, letterSpacing: 0);
+    return DunesTypography.mono(
+      fontSize: 12,
+      color: DunesColors.text,
+      letterSpacing: 0,
+    );
   }
-  return DunesTypography.sans(fontSize: 12.5, color: DunesColors.text, letterSpacing: -0.005 * 12.5);
+  return DunesTypography.sans(
+    fontSize: 12.5,
+    color: DunesColors.text,
+    letterSpacing: -0.005 * 12.5,
+  );
 }
 
 /// 与 `.fld-in` 单行输入对齐的统一控件高度。
 const double xfControlHeight = 40;
 
-Widget xfFixedHeightControl({required Widget child, double height = xfControlHeight}) {
+Widget xfFixedHeightControl({
+  required Widget child,
+  double height = xfControlHeight,
+}) {
   return SizedBox(
     height: height,
-    child: Align(
-      alignment: Alignment.centerLeft,
-      child: child,
-    ),
+    child: Align(alignment: Alignment.centerLeft, child: child),
   );
+}
+
+/// 统一的审批提交按钮（与销售提案上传页一致）。
+class XflowApprovalSubmitButton extends StatelessWidget {
+  const XflowApprovalSubmitButton({
+    super.key,
+    this.onPressed,
+    this.enabled = true,
+    this.loading = false,
+    this.label = '提交审批',
+    this.loadingLabel = '提交中',
+    this.onDisabledTap,
+    this.fullWidth = true,
+  });
+
+  final VoidCallback? onPressed;
+  final bool enabled;
+  final bool loading;
+  final String label;
+  final String loadingLabel;
+  final VoidCallback? onDisabledTap;
+  final bool fullWidth;
+
+  @override
+  Widget build(BuildContext context) {
+    final canTap = enabled && !loading && onPressed != null;
+    final bgColor = canTap
+        ? XfProposalUi.ink
+        : XfProposalUi.ink.withValues(alpha: 0.28);
+    final fgColor = XfProposalUi.bg;
+    final fgAlpha = canTap ? 255 : 180;
+
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: canTap
+          ? onPressed
+          : loading
+          ? null
+          : onDisabledTap,
+      child: Container(
+        width: fullWidth ? double.infinity : null,
+        padding: const EdgeInsets.symmetric(vertical: 11, horizontal: 16),
+        decoration: BoxDecoration(
+          color: bgColor,
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: fullWidth ? MainAxisSize.max : MainAxisSize.min,
+          children: [
+            if (loading)
+              SizedBox(
+                width: 14,
+                height: 14,
+                child: CircularProgressIndicator(
+                  color: fgColor,
+                  strokeWidth: 1.8,
+                ),
+              )
+            else
+              Icon(
+                Icons.check_rounded,
+                size: 14,
+                color: fgColor.withAlpha(fgAlpha),
+              ),
+            const SizedBox(width: 7),
+            Text(
+              loading ? loadingLabel : label,
+              style: TextStyle(
+                color: fgColor.withAlpha(fgAlpha),
+                fontSize: 12.5,
+                fontWeight: FontWeight.w500,
+                letterSpacing: 1.2,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }

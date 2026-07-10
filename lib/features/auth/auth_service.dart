@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 
 import '../../core/config/dunes_defaults.dart';
 import 'auth_session.dart';
+import 'registration_messages.dart';
 
 class AuthService {
   AuthService({http.Client? client, String? apiBase})
@@ -85,6 +86,91 @@ class AuthService {
     );
   }
 
+  Future<RegistrationPhoneCheck> checkRegistrationPhone(String phone) async {
+    if (!RegExp(r'^\d{11}$').hasMatch(phone)) {
+      throw AuthException('请输入 11 位手机号');
+    }
+    final uri = Uri.parse('$apiBase/auth/register/check?phone=${Uri.encodeQueryComponent(phone)}');
+    final resp = await _client.get(uri);
+    if (resp.statusCode < 200 || resp.statusCode >= 300) {
+      throw AuthException(
+        _registrationApiMessage(resp.body, fallback: '手机号校验失败'),
+      );
+    }
+    final data = _unwrapData(resp.body);
+    return RegistrationPhoneCheck.fromJson(data);
+  }
+
+  Future<void> requestRegistrationSmsCode({required String phone}) async {
+    if (!RegExp(r'^\d{11}$').hasMatch(phone)) {
+      throw AuthException('请输入 11 位手机号');
+    }
+    final uri = Uri.parse('$apiBase/auth/register/sms/request');
+    final resp = await _client.post(
+      uri,
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'phone': phone}),
+    );
+    if (resp.statusCode < 200 || resp.statusCode >= 300) {
+      throw AuthException(
+        _registrationApiMessage(resp.body, fallback: '发送验证码失败'),
+      );
+    }
+  }
+
+  Future<RegistrationSubmitResult> submitRegistration({
+    required String phone,
+    required String code,
+    required String displayName,
+    String organizationName = '',
+    String referrerName = '',
+  }) async {
+    final uri = Uri.parse('$apiBase/auth/register/submit');
+    final resp = await _client.post(
+      uri,
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'phone': phone,
+        'code': code,
+        'displayName': displayName,
+        'organizationName': organizationName,
+        'referrerName': referrerName,
+      }),
+    );
+    if (resp.statusCode < 200 || resp.statusCode >= 300) {
+      throw AuthException(
+        _registrationApiMessage(resp.body, fallback: '注册提交失败'),
+      );
+    }
+    return RegistrationSubmitResult.fromJson(_unwrapData(resp.body));
+  }
+
+  Future<RegistrationStatusResult> registrationStatus(String phone) async {
+    final uri = Uri.parse('$apiBase/auth/register/status?phone=${Uri.encodeQueryComponent(phone)}');
+    final resp = await _client.get(uri);
+    if (resp.statusCode == 404) {
+      throw AuthException('未找到注册记录');
+    }
+    if (resp.statusCode < 200 || resp.statusCode >= 300) {
+      throw AuthException(
+        _registrationApiMessage(resp.body, fallback: '查询注册状态失败'),
+      );
+    }
+    return RegistrationStatusResult.fromJson(_unwrapData(resp.body));
+  }
+
+  static Map<String, dynamic> _unwrapData(String body) {
+    try {
+      final decoded = jsonDecode(body);
+      if (decoded is Map<String, dynamic>) {
+        final data = decoded['data'];
+        if (data is Map<String, dynamic>) return data;
+        return decoded;
+      }
+    } catch (_) {}
+    return const {};
+  }
+
   static String? _apiMessage(String body) {
     try {
       final decoded = jsonDecode(body);
@@ -95,6 +181,10 @@ class AuthService {
     } catch (_) {}
     return null;
   }
+
+  static String _registrationApiMessage(String body, {required String fallback}) {
+    return localizeRegistrationMessage(_apiMessage(body), fallback: fallback);
+  }
 }
 
 class AuthException implements Exception {
@@ -103,4 +193,77 @@ class AuthException implements Exception {
 
   @override
   String toString() => message;
+}
+
+class RegistrationPhoneCheck {
+  const RegistrationPhoneCheck({
+    required this.allowed,
+    this.reason,
+    this.applicationStatus,
+  });
+
+  final bool allowed;
+  final String? reason;
+  final String? applicationStatus;
+
+  String? get localizedReason =>
+      reason == null ? null : localizeRegistrationMessage(reason, fallback: '该手机号不可注册');
+
+  factory RegistrationPhoneCheck.fromJson(Map<String, dynamic> json) {
+    return RegistrationPhoneCheck(
+      allowed: json['allowed'] == true,
+      reason: json['reason'] as String?,
+      applicationStatus: json['applicationStatus'] as String?,
+    );
+  }
+}
+
+class RegistrationSubmitResult {
+  const RegistrationSubmitResult({
+    required this.status,
+    this.token,
+    this.rejectReason,
+  });
+
+  final String status;
+  final String? token;
+  final String? rejectReason;
+
+  factory RegistrationSubmitResult.fromJson(Map<String, dynamic> json) {
+    final app = json['application'];
+    String? rejectReason;
+    if (app is Map<String, dynamic>) {
+      rejectReason = app['rejectReason'] as String?;
+    }
+    return RegistrationSubmitResult(
+      status: (json['status'] as String?) ?? '',
+      token: json['token'] as String?,
+      rejectReason: rejectReason,
+    );
+  }
+}
+
+class RegistrationStatusResult {
+  const RegistrationStatusResult({
+    required this.status,
+    this.token,
+    this.rejectReason,
+  });
+
+  final String status;
+  final String? token;
+  final String? rejectReason;
+
+  factory RegistrationStatusResult.fromJson(Map<String, dynamic> json) {
+    final app = json['application'];
+    String? rejectReason;
+    if (app is Map<String, dynamic>) {
+      rejectReason = app['rejectReason'] as String?;
+    }
+    return RegistrationStatusResult(
+      status: (json['status'] as String?) ?? '',
+      token: json['token'] as String?,
+      rejectReason: rejectReason,
+    );
+  }
 }

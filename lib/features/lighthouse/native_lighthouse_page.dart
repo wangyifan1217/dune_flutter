@@ -318,9 +318,9 @@ class _HunInfo {
 Color _lhColorFromKey(String? key) {
   switch (key) {
     case 'pos':
-      return LhColors.pos;
-    case 'neg':
       return LhColors.neg;
+    case 'neg':
+      return LhColors.pos;
     case 'product':
       return LhColors.product;
     case 'copper':
@@ -1838,7 +1838,7 @@ class _MetaCompareStageState extends State<_MetaCompareStage> {
         '${v.toStringAsFixed(1)}%',
         style: LhTypography.mono(
           size: 10.5,
-          color: isNeg ? LhColors.neg : LhColors.ink,
+          color: isNeg ? LhColors.pos : LhColors.ink,
           weight: FontWeight.w600,
         ),
       );
@@ -1851,7 +1851,7 @@ class _MetaCompareStageState extends State<_MetaCompareStage> {
             text: '${isNeg ? "-" : ""}${_fmt(v.abs())}',
             style: LhTypography.mono(
               size: 10.5,
-              color: isNeg ? LhColors.neg : LhColors.ink,
+              color: isNeg ? LhColors.pos : LhColors.ink,
               weight: FontWeight.w600,
             ),
           ),
@@ -1902,8 +1902,8 @@ class _TrendChart extends StatefulWidget {
 class _TrendChartState extends State<_TrendChart> {
   static const double _kChartPadH = 6.0;
   static const Color _cRev = LhColors.product;
-  static const Color _cCost = LhColors.neg;
-  static const Color _cProf = LhColors.pos;
+  static const Color _cCost = LhColors.pos;
+  static const Color _cProf = LhColors.neg;
   static const List<Color> _kColors = [_cRev, _cCost, _cProf];
 
   int? _selectedIndex;
@@ -2021,7 +2021,7 @@ class _TrendChartState extends State<_TrendChart> {
                   style: LhTypography.sans(
                     size: 10,
                     weight: FontWeight.w600,
-                    color: LhColors.neg,
+                    color: LhColors.pos,
                     letterSpacing: -0.1,
                   ),
                 ),
@@ -2030,7 +2030,7 @@ class _TrendChartState extends State<_TrendChart> {
                 style: LhTypography.sans(
                   size: 10,
                   weight: FontWeight.w600,
-                  color: isNeg ? LhColors.neg : LhColors.ink2,
+                  color: isNeg ? LhColors.pos : LhColors.ink2,
                   letterSpacing: -0.1,
                 ),
               ),
@@ -5179,11 +5179,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 width: 5,
                 height: 5,
                 decoration: BoxDecoration(
-                  color: LhColors.pos,
+                  color: LhColors.neg,
                   shape: BoxShape.circle,
                   boxShadow: [
                     BoxShadow(
-                      color: LhColors.pos.withAlpha(46),
+                      color: LhColors.neg.withAlpha(46),
                       blurRadius: 0,
                       spreadRadius: 3,
                     ),
@@ -5297,7 +5297,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   Widget _buildHero() {
     final p = _heroInfo;
     final isUp = p.deltaDir == 'up';
-    final deltaColor = isUp ? LhColors.pos : LhColors.neg;
+    final deltaColor = isUp ? LhColors.neg : LhColors.pos;
     final deltaArrow = isUp ? '↑' : '↓';
 
     // Compute totals from data
@@ -5589,7 +5589,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         key: 'profit',
         label: '毛利',
         isRate: false,
-        cellColor: LhColors.pos,
+        cellColor: LhColors.neg,
       ),
       _HeroMetric(
         key: 'revenue',
@@ -5607,7 +5607,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         key: 'cost',
         label: '经营成本',
         isRate: false,
-        cellColor: LhColors.neg,
+        cellColor: LhColors.pos,
       ),
       _HeroMetric(
         key: 'tax',
@@ -6931,8 +6931,8 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 subLabel: '净毛利',
                 value: profit,
                 isRate: false,
-                accent: LhColors.pos,
-                valueColor: LhColors.pos,
+                accent: LhColors.neg,
+                valueColor: LhColors.neg,
               ),
             ),
           ],
@@ -6948,7 +6948,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 subLabel: '业务成本',
                 value: cost,
                 isRate: false,
-                accent: LhColors.neg,
+                accent: LhColors.pos,
               ),
             ),
             const SizedBox(width: 6),
@@ -6959,7 +6959,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 subLabel: '已核销利差 x 税率',
                 value: tax,
                 isRate: false,
-                accent: LhColors.neg,
+                accent: LhColors.pos,
               ),
             ),
             const SizedBox(width: 6),
@@ -7306,7 +7306,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                       size: 7.2,
                       color: delta == null
                           ? LhColors.mute
-                          : (delta.isUp ? LhColors.pos : LhColors.neg),
+                          : (delta.isUp ? LhColors.neg : LhColors.pos),
                       weight: FontWeight.w700,
                       letterSpacing: 0.1,
                     ),
@@ -7798,7 +7798,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                     size: 8.6,
                     color: d == null
                         ? LhColors.mute2
-                        : (d.isUp ? LhColors.pos : LhColors.neg),
+                        : (d.isUp ? LhColors.neg : LhColors.pos),
                     weight: FontWeight.w600,
                     letterSpacing: 0.2,
                   ),
@@ -7861,10 +7861,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       case 'revenue':
         return LhColors.copper;
       case 'profit':
-        return LhColors.pos;
+        return LhColors.neg;
       case 'cost':
       case 'tax':
-        return LhColors.neg;
+        return LhColors.pos;
       case 'rate':
         return LhColors.copper;
       default:
@@ -8433,7 +8433,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       case 'sales':
         return LhColors.ink2;
       case 'profit':
-        return LhColors.pos;
+        return LhColors.neg;
       case 'rate':
         return LhColors.copper;
       case 'gmv':
@@ -8443,7 +8443,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       case 'cost':
       case 'totalCost':
       case 'tax':
-        return LhColors.neg;
+        return LhColors.pos;
       default:
         return LhColors.ink;
     }
@@ -8470,13 +8470,13 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             if (isNeg)
               TextSpan(
                 text: '-',
-                style: LhTypography.number(size: numSize, color: LhColors.neg),
+                style: LhTypography.number(size: numSize, color: LhColors.pos),
               ),
             TextSpan(
               text: rate.abs().toStringAsFixed(2),
               style: LhTypography.number(
                 size: numSize,
-                color: isNeg ? LhColors.neg : LhColors.ink,
+                color: isNeg ? LhColors.pos : LhColors.ink,
               ),
             ),
             TextSpan(
@@ -8502,13 +8502,13 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             if (isNeg)
               TextSpan(
                 text: '-',
-                style: LhTypography.number(size: numSize, color: LhColors.neg),
+                style: LhTypography.number(size: numSize, color: LhColors.pos),
               ),
             TextSpan(
               text: v,
               style: LhTypography.number(
                 size: numSize,
-                color: isNeg ? LhColors.neg : LhColors.ink,
+                color: isNeg ? LhColors.pos : LhColors.ink,
               ),
             ),
             if (unit.isNotEmpty)
@@ -8536,13 +8536,13 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           if (isNeg)
             TextSpan(
               text: '-',
-              style: LhTypography.number(size: numSize, color: LhColors.neg),
+              style: LhTypography.number(size: numSize, color: LhColors.pos),
             ),
           TextSpan(
             text: _fmt(sum.abs()),
             style: LhTypography.number(
               size: numSize,
-              color: isNeg ? LhColors.neg : LhColors.ink,
+              color: isNeg ? LhColors.pos : LhColors.ink,
             ),
           ),
           TextSpan(
@@ -8797,7 +8797,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             height: 1.0,
             color: delta == null
                 ? LhColors.mute2
-                : (delta.isUp ? LhColors.pos : LhColors.neg),
+                : (delta.isUp ? LhColors.neg : LhColors.pos),
             weight: FontWeight.w700,
             letterSpacing: 0.2,
           ),
@@ -8838,10 +8838,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       }
       final isNeg = rate < 0;
       return stripRich([
-        if (isNeg) TextSpan(text: '-', style: numStyle(LhColors.neg)),
+        if (isNeg) TextSpan(text: '-', style: numStyle(LhColors.pos)),
         TextSpan(
           text: rate.abs().toStringAsFixed(2),
-          style: numStyle(isNeg ? LhColors.neg : LhColors.ink),
+          style: numStyle(isNeg ? LhColors.pos : LhColors.ink),
         ),
         TextSpan(text: ' %', style: unitStyle()),
       ]);
@@ -8852,8 +8852,8 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       final isNeg = raw < 0;
       final v = raw.abs().toString().replaceAll(RegExp(r'\.0$'), '');
       return stripRich([
-        if (isNeg) TextSpan(text: '-', style: numStyle(LhColors.neg)),
-        TextSpan(text: v, style: numStyle(isNeg ? LhColors.neg : LhColors.ink)),
+        if (isNeg) TextSpan(text: '-', style: numStyle(LhColors.pos)),
+        TextSpan(text: v, style: numStyle(isNeg ? LhColors.pos : LhColors.ink)),
         if (unit.isNotEmpty) TextSpan(text: ' $unit', style: unitStyle()),
       ]);
     }
@@ -8865,10 +8865,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     }
     final isNeg = sum < 0;
     return stripRich([
-      if (isNeg) TextSpan(text: '-', style: numStyle(LhColors.neg)),
+      if (isNeg) TextSpan(text: '-', style: numStyle(LhColors.pos)),
       TextSpan(
         text: _fmt(sum.abs()),
-        style: numStyle(isNeg ? LhColors.neg : LhColors.ink),
+        style: numStyle(isNeg ? LhColors.pos : LhColors.ink),
       ),
       TextSpan(text: ' ${_unit(sum.abs())}元', style: unitStyle()),
     ]);
@@ -8941,7 +8941,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               '${delta.isUp ? '▲' : '▼'} ${delta.pct.toStringAsFixed(1)}$deltaUnit',
               style: LhTypography.mono(
                 size: 9.5,
-                color: delta.isUp ? LhColors.pos : LhColors.neg,
+                color: delta.isUp ? LhColors.neg : LhColors.pos,
                 weight: FontWeight.w600,
                 letterSpacing: 0.2,
               ),
@@ -9161,7 +9161,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                   flex: (ratio * 1000).round().clamp(1, 1000),
                   child: Container(
                     height: 3,
-                    color: isNeg ? LhColors.neg : accent,
+                    color: isNeg ? LhColors.pos : accent,
                   ),
                 ),
                 Expanded(
@@ -9185,13 +9185,13 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             if (isNeg)
               TextSpan(
                 text: '-',
-                style: LhTypography.number(size: 20, color: LhColors.neg),
+                style: LhTypography.number(size: 20, color: LhColors.pos),
               ),
             TextSpan(
               text: v.abs().toStringAsFixed(2),
               style: LhTypography.number(
                 size: 20,
-                color: isNeg ? LhColors.neg : LhColors.ink,
+                color: isNeg ? LhColors.pos : LhColors.ink,
               ),
             ),
             TextSpan(
@@ -9212,13 +9212,13 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           if (isNeg)
             TextSpan(
               text: '-',
-              style: LhTypography.number(size: 20, color: LhColors.neg),
+              style: LhTypography.number(size: 20, color: LhColors.pos),
             ),
           TextSpan(
             text: _fmt(v.abs()),
             style: LhTypography.number(
               size: 20,
-              color: isNeg ? LhColors.neg : LhColors.ink,
+              color: isNeg ? LhColors.pos : LhColors.ink,
             ),
           ),
           TextSpan(
@@ -9272,7 +9272,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         spans.add(
           TextSpan(
             text: '-',
-            style: LhTypography.number(size: 11, color: LhColors.neg),
+            style: LhTypography.number(size: 11, color: LhColors.pos),
           ),
         );
       }
@@ -9282,7 +9282,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             text: '${val.abs().toStringAsFixed(1)}%',
             style: LhTypography.number(
               size: 11,
-              color: isNeg ? LhColors.neg : LhColors.ink,
+              color: isNeg ? LhColors.pos : LhColors.ink,
             ),
           ),
         );
@@ -9292,7 +9292,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             text: '${_fmt(val.abs())}${_unit(val.abs())}',
             style: LhTypography.number(
               size: 11,
-              color: isNeg ? LhColors.neg : LhColors.ink,
+              color: isNeg ? LhColors.pos : LhColors.ink,
             ),
           ),
         );
@@ -9348,7 +9348,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               style: LhTypography.sans(
                 size: 16,
                 weight: FontWeight.w700,
-                color: LhColors.neg,
+                color: LhColors.pos,
                 letterSpacing: -0.3,
               ),
             ),
@@ -9357,7 +9357,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             style: LhTypography.sans(
               size: 16,
               weight: FontWeight.w700,
-              color: isNeg ? LhColors.neg : LhColors.ink,
+              color: isNeg ? LhColors.pos : LhColors.ink,
               letterSpacing: -0.3,
             ),
           ),
@@ -9389,7 +9389,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               style: LhTypography.sans(
                 size: 16,
                 weight: FontWeight.w700,
-                color: LhColors.neg,
+                color: LhColors.pos,
                 letterSpacing: -0.3,
               ),
             ),
@@ -9398,7 +9398,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             style: LhTypography.sans(
               size: 16,
               weight: FontWeight.w700,
-              color: isNeg ? LhColors.neg : LhColors.ink,
+              color: isNeg ? LhColors.pos : LhColors.ink,
               letterSpacing: -0.3,
             ),
           ),
@@ -9629,7 +9629,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         : (active ? LhColors.ink : LhColors.ink2);
     final countColor = muted
         ? LhColors.mute2
-        : LhColors.neg.withAlpha(active ? 255 : 210);
+        : LhColors.pos.withAlpha(active ? 255 : 210);
 
     return Opacity(
       opacity: muted ? 0.42 : 1.0,
@@ -9856,7 +9856,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     final active = _anomalyFilter == label;
     final muted = label != '全部' && count == 0;
     final color = label == '亏损' || label == '成本异常' || label == '利差倒挂'
-        ? LhColors.neg
+        ? LhColors.pos
         : LhColors.copper;
     final fg = active ? color : (muted ? LhColors.mute2 : LhColors.mute);
     return GestureDetector(
@@ -10345,7 +10345,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                         ),
                         style: LhTypography.sans(
                           size: 10,
-                          color: LhColors.pos,
+                          color: LhColors.neg,
                           weight: FontWeight.w700,
                         ),
                       ),
@@ -10651,7 +10651,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               _projectDecisionPill(
                 '甩包袱',
                 '${burden.length}项',
-                burden.isEmpty ? LhColors.pos : LhColors.neg,
+                burden.isEmpty ? LhColors.neg : LhColors.pos,
               ),
             ],
           ),
@@ -10802,7 +10802,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 style: LhTypography.mono(
                   size: 7.5,
                   color: days != null && days < 0
-                      ? LhColors.neg
+                      ? LhColors.pos
                       : LhColors.mute2,
                   weight: FontWeight.w600,
                 ),
@@ -10830,11 +10830,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   Color _projectStatusColor(String status) {
     switch (status) {
       case 'healthy':
-        return LhColors.pos;
+        return LhColors.neg;
       case 'watch':
         return LhColors.copper;
       case 'burden':
-        return LhColors.neg;
+        return LhColors.pos;
       default:
         return LhColors.mute;
     }
@@ -10880,7 +10880,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                   width: 5,
                   height: 5,
                   decoration: BoxDecoration(
-                    color: LhColors.pos.withAlpha(220),
+                    color: LhColors.neg.withAlpha(220),
                     shape: BoxShape.circle,
                   ),
                 ),
@@ -12672,9 +12672,8 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     final showDelta = deltaRaw != null;
     final delta = deltaRaw ?? 0;
     final dArrow = delta >= 0 ? '↑' : '↓';
-    final dColor = delta >= 0 ? LhColors.pos : LhColors.neg;
-    final canExpand =
-        _tab == 'product' || _tab == 'supply' || _tab == 'channel';
+    final dColor = delta >= 0 ? LhColors.neg : LhColors.pos;
+    final canExpand = _tab == 'product' || _tab == 'supply' || _tab == 'channel';
     final isMetaExpanded = _metaExpanded.contains(trendKey);
 
     // Tag color (centralised helper)
@@ -12744,7 +12743,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         ? LhColors.ink2.withAlpha(40)
         : LhColors.line2;
     // Hero 签名圆点色：正毛利 → pos(绿), 负毛利 → neg(红)
-    final profitDotColor = isNeg ? LhColors.neg : LhColors.pos;
+    final profitDotColor = isNeg ? LhColors.pos : LhColors.neg;
 
     // v3.5 —— 暖 near-white cream + paper 质感
     //   v3.4 cool sage 被否 —— 好丑, 掉进 cream 底像发霉。
@@ -13249,7 +13248,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                                                   style: LhTypography.sans(
                                                     size: 14.5,
                                                     weight: FontWeight.w700,
-                                                    color: LhColors.neg,
+                                                    color: LhColors.pos,
                                                     letterSpacing: -0.3,
                                                   ),
                                                 ),
@@ -13259,7 +13258,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                                                   size: 14.5,
                                                   weight: FontWeight.w700,
                                                   color: isNeg
-                                                      ? LhColors.neg
+                                                      ? LhColors.pos
                                                       : LhColors.ink,
                                                   letterSpacing: -0.3,
                                                 ),
@@ -13325,7 +13324,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                                                       size: 10,
                                                       weight: FontWeight.w700,
                                                       color: rateValue < 0
-                                                          ? LhColors.neg
+                                                          ? LhColors.pos
                                                           : LhColors.ink,
                                                       letterSpacing: -0.2,
                                                     ),
@@ -14542,7 +14541,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                                     text: '-',
                                     style: LhTypography.number(
                                       size: 22,
-                                      color: LhColors.neg,
+                                      color: LhColors.pos,
                                     ),
                                   ),
                                 TextSpan(
@@ -14550,7 +14549,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                                   style: LhTypography.number(
                                     size: 22,
                                     color: entityProfitIsNeg
-                                        ? LhColors.neg
+                                        ? LhColors.pos
                                         : LhColors.ink,
                                   ),
                                 ),
@@ -15078,7 +15077,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           style: LhTypography.sans(
             size: 11.5,
             weight: FontWeight.w600,
-            color: isNeg ? LhColors.neg : LhColors.ink2,
+            color: isNeg ? LhColors.pos : LhColors.ink2,
             letterSpacing: -0.1,
           ),
         ),
@@ -15319,7 +15318,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                             text: '${_fmt(profit.abs())}${_unit(profit.abs())}',
                             style: LhTypography.mono(
                               size: 8.6,
-                              color: isNeg ? LhColors.neg : LhColors.ink2,
+                              color: isNeg ? LhColors.pos : LhColors.ink2,
                               weight: FontWeight.w600,
                             ),
                           ),
@@ -15348,7 +15347,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                               style: LhTypography.mono(
                                 size: 9.2,
                                 color: rateValue < 0
-                                    ? LhColors.neg
+                                    ? LhColors.pos
                                     : LhColors.ink2,
                                 weight: FontWeight.w600,
                               ),
@@ -15517,13 +15516,13 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     Color verdictColor;
     String verdictText;
     if (roi >= benchmark * 1.3) {
-      verdictColor = LhColors.pos;
+      verdictColor = LhColors.neg;
       verdictText = '优秀';
     } else if (roi >= benchmark * 0.7) {
       verdictColor = LhColors.copper;
       verdictText = '良好';
     } else {
-      verdictColor = LhColors.neg;
+      verdictColor = LhColors.pos;
       verdictText = '待提升';
     }
 
@@ -15612,7 +15611,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               width: 4,
               height: 4,
               decoration: BoxDecoration(
-                color: diff >= 0 ? LhColors.pos : LhColors.neg,
+                color: diff >= 0 ? LhColors.neg : LhColors.pos,
                 shape: BoxShape.circle,
               ),
             ),
@@ -15629,7 +15628,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               ' · ${diff >= 0 ? "+" : ""}${diff.toStringAsFixed(1)}pp',
               style: LhTypography.mono(
                 size: 10,
-                color: diff >= 0 ? LhColors.pos : LhColors.neg,
+                color: diff >= 0 ? LhColors.neg : LhColors.pos,
                 weight: FontWeight.w700,
                 letterSpacing: 0.3,
               ),
@@ -15759,7 +15758,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                     '${(s.value / sales * 100).toStringAsFixed(0)}%',
                     style: LhTypography.mono(
                       size: 9,
-                      color: s.label == '毛利' ? LhColors.pos : LhColors.mute,
+                      color: s.label == '毛利' ? LhColors.neg : LhColors.mute,
                       weight: FontWeight.w700,
                       letterSpacing: 0.2,
                     ),
@@ -15777,9 +15776,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     final h = _calcHealthScores(r, type);
 
     Color scoreColor(int s) {
-      if (s >= 70) return LhColors.pos;
+      if (s >= 70) return LhColors.neg;
       if (s >= 40) return LhColors.copper;
-      return LhColors.neg;
+      return LhColors.pos;
     }
 
     Widget bar(String label, int score) {
@@ -16065,8 +16064,8 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 subLabel: '净毛利',
                 value: profit,
                 isRate: false,
-                accent: LhColors.pos,
-                valueColor: profit >= 0 ? LhColors.pos : LhColors.neg,
+                accent: LhColors.neg,
+                valueColor: profit >= 0 ? LhColors.neg : LhColors.pos,
                 delta: deltaFor('profit'),
                 deltaUnit: '%',
               ),
@@ -16083,7 +16082,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 subLabel: '业务 + 项目',
                 value: cost,
                 isRate: false,
-                accent: LhColors.neg,
+                accent: LhColors.pos,
                 delta: deltaFor('cost'),
                 deltaUnit: '%',
               ),
@@ -16095,7 +16094,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 subLabel: '已核销利差 × 税率',
                 value: tax,
                 isRate: false,
-                accent: LhColors.neg,
+                accent: LhColors.pos,
                 delta: deltaFor('tax'),
                 deltaUnit: '%',
               ),
@@ -16214,7 +16213,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                     size: 7.2,
                     color: delta == null
                         ? LhColors.mute
-                        : (delta.isUp ? LhColors.pos : LhColors.neg),
+                        : (delta.isUp ? LhColors.neg : LhColors.pos),
                     weight: FontWeight.w700,
                     letterSpacing: 0.1,
                   ),
@@ -16485,7 +16484,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                               style: LhTypography.sans(
                                 size: 10.5,
                                 weight: FontWeight.w600,
-                                color: LhColors.neg,
+                                color: LhColors.pos,
                                 letterSpacing: -0.1,
                               ),
                             ),
@@ -16494,7 +16493,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                             style: LhTypography.sans(
                               size: 10.5,
                               weight: FontWeight.w600,
-                              color: isNeg ? LhColors.neg : LhColors.ink2,
+                              color: isNeg ? LhColors.pos : LhColors.ink2,
                               letterSpacing: -0.1,
                             ),
                           ),
@@ -16531,7 +16530,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                                   style: LhTypography.mono(
                                     size: 8.4,
                                     color: rateValue < 0
-                                        ? LhColors.neg
+                                        ? LhColors.pos
                                         : LhColors.ink2,
                                     weight: FontWeight.w600,
                                   ),

@@ -192,10 +192,7 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
         },
       );
       if (!mounted) return;
-      await _showSaveSuccessDialog(
-        fileName: fileName,
-        savedPath: savedPath,
-      );
+      await _showSaveSuccessDialog(fileName: fileName, savedPath: savedPath);
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -249,9 +246,9 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
     final detail = _detail;
     if (detail == null || _uploadingSummaryToKb) return;
     if (!MeetingMinutesExport.canExport(detail)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('纪要尚未生成，暂无法上传知识库')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('纪要尚未生成，暂无法上传知识库')));
       return;
     }
     if (_kbUploaded || _isKbUploadStale(detail)) {
@@ -336,15 +333,14 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
       setState(() => _detail = fresh);
       final detail = fresh;
 
-      final shouldReplace =
-          replaceExisting || _isKbUploadStale(detail);
+      final shouldReplace = replaceExisting || _isKbUploadStale(detail);
       final existing = _kbUploadedDoc ?? await _findKbDoc(detail);
       if (existing != null && !shouldReplace) {
         if (mounted) {
           setState(() => _kbUploadedDoc = existing);
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('该会议纪要已上传至知识库')),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text('该会议纪要已上传至知识库')));
         }
         return;
       }
@@ -391,9 +387,7 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            shouldReplace
-                ? '已更新知识库文档（不含逐句转写），正在后台解析入库'
-                : '已上传至知识库，正在后台解析入库',
+            shouldReplace ? '已更新知识库文档（不含逐句转写），正在后台解析入库' : '已上传至知识库，正在后台解析入库',
           ),
         ),
       );
@@ -413,9 +407,9 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
     final detail = _detail;
     if (detail == null || _downloadingAudio || _forwarding) return;
     if (!MeetingMinutesExport.canExport(detail)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('纪要尚未生成，暂无法导出')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('纪要尚未生成，暂无法导出')));
       return;
     }
 
@@ -439,10 +433,7 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
       final savedPath = await file_dl.saveBytesAsFile(bytes, fileName);
       if (!mounted) return;
       setState(() => _downloadProgress = 1);
-      await _showSaveSuccessDialog(
-        fileName: fileName,
-        savedPath: savedPath,
-      );
+      await _showSaveSuccessDialog(fileName: fileName, savedPath: savedPath);
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -463,9 +454,9 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
     final detail = _detail;
     if (detail == null || _forwarding || _downloadingAudio) return;
     if (!MeetingMinutesExport.canExport(detail)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('纪要尚未生成，暂无法转发')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('纪要尚未生成，暂无法转发')));
       return;
     }
 
@@ -498,15 +489,13 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
         },
       );
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('会议纪要 PDF 已转发')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('会议纪要 PDF 已转发')));
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(friendlyErrorText(e, fallback: '转发失败，请稍后重试')),
-        ),
+        SnackBar(content: Text(friendlyErrorText(e, fallback: '转发失败，请稍后重试'))),
       );
     } finally {
       if (mounted) {
@@ -537,9 +526,9 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
   }) async {
     if (!mounted) return;
     if (savedPath == null || savedPath.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('已保存 $fileName')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('已保存 $fileName')));
       return;
     }
     await showDialog<void>(
@@ -572,8 +561,8 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
           tooltip: stale
               ? '更新知识库（纪要已变更）'
               : uploaded
-                  ? '重新上传到知识库'
-                  : '上传到知识库',
+              ? '重新上传到知识库'
+              : '上传到知识库',
           onPressed: _uploadingSummaryToKb ? null : _confirmUploadSummaryToKb,
           icon: _uploadingSummaryToKb
               ? const SizedBox(
@@ -585,14 +574,14 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
                   stale
                       ? Icons.cloud_sync_outlined
                       : uploaded
-                          ? Icons.cloud_done_outlined
-                          : Icons.cloud_upload_outlined,
+                      ? Icons.cloud_done_outlined
+                      : Icons.cloud_upload_outlined,
                   size: 20,
                   color: stale
                       ? DunesColors.accentDeep
                       : uploaded
-                          ? DunesColors.readReceipt
-                          : null,
+                      ? DunesColors.readReceipt
+                      : null,
                 ),
         ),
         if (exportMenu != null) exportMenu,
@@ -658,7 +647,8 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
         setState(() => _kbMarkedStale = true);
       }
       final refreshed = _detail;
-      final restarted = refreshed != null &&
+      final restarted =
+          refreshed != null &&
           refreshed.transcriptSegments.isEmpty &&
           refreshed.status.toUpperCase() == 'TRANSCRIBING';
       ScaffoldMessenger.of(context).showSnackBar(
@@ -667,19 +657,15 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
             restarted
                 ? '已开始重新转写，请稍候查看进度'
                 : hadKbUpload
-                    ? '已重新生成纪要，请重新上传以更新知识库'
-                    : '已重新生成纪要',
+                ? '已重新生成纪要，请重新上传以更新知识库'
+                : '已重新生成纪要',
           ),
         ),
       );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            friendlyErrorText(e, fallback: '重新生成失败，请稍后重试'),
-          ),
-        ),
+        SnackBar(content: Text(friendlyErrorText(e, fallback: '重新生成失败，请稍后重试'))),
       );
     } finally {
       if (mounted) setState(() => _regenerating = false);
@@ -694,17 +680,13 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
       await _service.startTranscriptionForDraft(detail);
       await _load();
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('已开始转写并生成会议纪要')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('已开始转写并生成会议纪要')));
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            friendlyErrorText(e, fallback: '开始转写失败，请稍后重试'),
-          ),
-        ),
+        SnackBar(content: Text(friendlyErrorText(e, fallback: '开始转写失败，请稍后重试'))),
       );
     } finally {
       if (mounted) setState(() => _startingTranscription = false);
@@ -743,7 +725,10 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
         title: const Text('删除会议纪要'),
         content: Text('确定删除「$title」吗？此操作不可恢复。'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('取消')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('取消'),
+          ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: FilledButton.styleFrom(backgroundColor: DunesColors.coral),
@@ -773,12 +758,12 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
   }
 
   String _summaryText(NativeMeetingDetail d) {
-    final uploadJob =
-        MeetingUploadCoordinator.instance.jobForMeeting(d.meetingId);
+    final uploadJob = MeetingUploadCoordinator.instance.jobForMeeting(
+      d.meetingId,
+    );
     if (uploadJob != null) {
       return switch (uploadJob.phase) {
-        MeetingUploadPhase.failed =>
-          '录音上传失败：${uploadJob.error ?? '请稍后重试'}',
+        MeetingUploadPhase.failed => '录音上传失败：${uploadJob.error ?? '请稍后重试'}',
         MeetingUploadPhase.pending => '录音正在后台压缩并上传...',
         MeetingUploadPhase.uploading =>
           '录音正在后台上传（${uploadJob.uploadProgressPercent}%），完成后${uploadJob.generate ? '将自动开始转写' : '可在本页开始转写'}。您可以先离开做其他事情。',
@@ -788,9 +773,10 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
     }
     if (d.summary.isNotEmpty) return d.summary;
     return switch (d.status.toUpperCase()) {
-      'DRAFT' => d.audioObjectKey.trim().isNotEmpty
-          ? '录音已保存为草稿，尚未开始转写。请点击下方「开始转写并生成纪要」，系统将自动生成会议摘要与待办事项。'
-          : '草稿尚未关联录音文件，请返回补充录音后再开始转写。',
+      'DRAFT' =>
+        d.audioObjectKey.trim().isNotEmpty
+            ? '录音已保存为草稿，尚未开始转写。请点击下方「开始转写并生成纪要」，系统将自动生成会议摘要与待办事项。'
+            : '草稿尚未关联录音文件，请返回补充录音后再开始转写。',
       'TRANSCRIBING' || 'GENERATING' => '正在智能生成会议摘要，请稍候...',
       'FAILED' => '纪要生成失败，可尝试重新转写或重新生成。',
       _ => '暂无会议摘要',
@@ -826,10 +812,9 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
   }
 
   bool _preferRawSummaryView(String markdown) {
-    if (markdown.length > 4000) return true;
-    if (RegExp(r'^#{4,6}\s', multiLine: true).hasMatch(markdown)) return true;
-    if (RegExp(r'^\|.+\|$', multiLine: true).hasMatch(markdown)) return true;
-    return false;
+    // Default to Markdown rendering for compatibility. Keep a high safety
+    // threshold only for extremely long content to avoid UI jank.
+    return markdown.length > 20000;
   }
 
   String _transcriptEmptyText(NativeMeetingDetail d) {
@@ -862,7 +847,10 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
     final total = _detail?.transcriptSegments.length ?? 0;
     if (_segmentVisibleCount >= total) return;
     setState(() {
-      _segmentVisibleCount = math.min(total, _segmentVisibleCount + _segmentPageSize);
+      _segmentVisibleCount = math.min(
+        total,
+        _segmentVisibleCount + _segmentPageSize,
+      );
     });
   }
 
@@ -876,9 +864,7 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
         : attaching
         ? '正在保存录音...'
         : pending
-        ? (job.error != null && job.error!.isNotEmpty
-            ? '录音上传重试中'
-            : '录音排队上传中')
+        ? (job.error != null && job.error!.isNotEmpty ? '录音上传重试中' : '录音排队上传中')
         : '录音后台上传中';
     final detail = failed
         ? (job.error ?? '请检查网络后重试')
@@ -886,8 +872,8 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
         ? '即将完成，请稍候'
         : pending
         ? (job.error != null && job.error!.isNotEmpty
-            ? '${job.error} · 系统将自动重试'
-            : '上传任务已创建，正在等待开始')
+              ? '${job.error} · 系统将自动重试'
+              : '上传任务已创建，正在等待开始')
         : '当前进度 ${job.uploadProgressPercent}% · 上传完成后将自动继续，您可先使用其他功能';
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -898,7 +884,9 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
             : DunesColors.accentSoft,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
-          color: failed ? DunesColors.coral.withValues(alpha: 0.35) : DunesColors.borderSoft,
+          color: failed
+              ? DunesColors.coral.withValues(alpha: 0.35)
+              : DunesColors.borderSoft,
         ),
       ),
       child: Row(
@@ -950,7 +938,8 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
           ),
           if (failed)
             TextButton(
-              onPressed: () => MeetingUploadCoordinator.instance.retry(job.meetingId),
+              onPressed: () =>
+                  MeetingUploadCoordinator.instance.retry(job.meetingId),
               child: const Text('重试'),
             ),
         ],
@@ -985,10 +974,7 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
             icon: const Icon(Icons.delete_outline_rounded),
             tooltip: '删除',
           ),
-          IconButton(
-            onPressed: _load,
-            icon: const Icon(Icons.refresh_rounded),
-          ),
+          IconButton(onPressed: _load, icon: const Icon(Icons.refresh_rounded)),
         ],
       ),
       body: Stack(
@@ -1008,234 +994,238 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
         : d == null
         ? _buildEmptyState()
         : ListView(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
-              children: [
-                if (MeetingUploadCoordinator.instance.jobForMeeting(d.meetingId)
-                    case final job?)
-                  _buildUploadBanner(job),
-                _buildHero(d),
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
+            children: [
+              if (MeetingUploadCoordinator.instance.jobForMeeting(d.meetingId)
+                  case final job?)
+                _buildUploadBanner(job),
+              _buildHero(d),
+              const SizedBox(height: 16),
+              if (d.audioPlayUrl.isNotEmpty || d.audioObjectKey.isNotEmpty) ...[
+                _buildAudioCard(),
                 const SizedBox(height: 16),
-                if (d.audioPlayUrl.isNotEmpty || d.audioObjectKey.isNotEmpty) ...[
-                  _buildAudioCard(),
-                  const SizedBox(height: 16),
-                ],
-                _buildSection(
-                  title: '会议摘要',
-                  icon: Icons.auto_awesome_outlined,
-                  trailing: _buildSummarySectionTrailing(d),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      if (_kbUploaded || _isKbUploadStale(d))
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 8),
-                          child: Row(
-                            children: [
-                              Icon(
-                                _isKbUploadStale(d)
-                                    ? Icons.cloud_sync_outlined
-                                    : Icons.check_circle_outline,
-                                size: 14,
+              ],
+              _buildSection(
+                title: '会议摘要',
+                icon: Icons.auto_awesome_outlined,
+                trailing: _buildSummarySectionTrailing(d),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (_kbUploaded || _isKbUploadStale(d))
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Row(
+                          children: [
+                            Icon(
+                              _isKbUploadStale(d)
+                                  ? Icons.cloud_sync_outlined
+                                  : Icons.check_circle_outline,
+                              size: 14,
+                              color: _isKbUploadStale(d)
+                                  ? DunesColors.accentDeep
+                                  : DunesColors.readReceipt,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              _isKbUploadStale(d)
+                                  ? '知识库内容可能已过期，请重新上传'
+                                  : '已同步至知识库',
+                              style: DunesTypography.sans(
+                                fontSize: 12,
                                 color: _isKbUploadStale(d)
                                     ? DunesColors.accentDeep
                                     : DunesColors.readReceipt,
                               ),
-                              const SizedBox(width: 4),
-                              Text(
-                                _isKbUploadStale(d)
-                                    ? '知识库内容可能已过期，请重新上传'
-                                    : '已同步至知识库',
-                                style: DunesTypography.sans(
-                                  fontSize: 12,
-                                  color: _isKbUploadStale(d)
-                                      ? DunesColors.accentDeep
-                                      : DunesColors.readReceipt,
-                                ),
-                              ),
-                            ],
-                          ),
+                            ),
+                          ],
                         ),
-                      if (_summaryDisplayMarkdown(d).isNotEmpty)
-                        () {
-                          final markdown = _summaryDisplayMarkdown(d);
-                          if (_preferRawSummaryView(markdown)) {
-                            return SelectableText(
-                              markdown,
-                              style: DunesTypography.sans(
-                                fontSize: 14,
-                                color: DunesColors.text2,
-                                height: 1.7,
-                              ),
-                            );
-                          }
-                          return MeetingMinutesMarkdown(markdown: markdown);
-                        }()
-                      else
-                        Text(
-                          _summaryText(d),
-                          style: DunesTypography.sans(
-                            fontSize: 14,
-                            color: d.status.toUpperCase() == 'DRAFT'
-                                ? DunesColors.accentDeep
-                                : DunesColors.text2,
-                            height: 1.7,
-                          ),
+                      ),
+                    if (_summaryDisplayMarkdown(d).isNotEmpty)
+                      () {
+                        final markdown = _summaryDisplayMarkdown(d);
+                        if (_preferRawSummaryView(markdown)) {
+                          return SelectableText(
+                            markdown,
+                            style: DunesTypography.sans(
+                              fontSize: 14,
+                              color: DunesColors.text2,
+                              height: 1.7,
+                            ),
+                          );
+                        }
+                        return MeetingMinutesMarkdown(markdown: markdown);
+                      }()
+                    else
+                      Text(
+                        _summaryText(d),
+                        style: DunesTypography.sans(
+                          fontSize: 14,
+                          color: d.status.toUpperCase() == 'DRAFT'
+                              ? DunesColors.accentDeep
+                              : DunesColors.text2,
+                          height: 1.7,
                         ),
-                    ],
-                  ),
+                      ),
+                  ],
                 ),
-                const SizedBox(height: 16),
-                _buildSection(
-                  title: '原始逐句转写',
-                  icon: Icons.article_outlined,
-                  trailing: d.transcriptSegments.isNotEmpty
-                      ? TextButton.icon(
-                          onPressed: () {
-                            setState(() => _transcriptExpanded = !_transcriptExpanded);
-                          },
-                          icon: Icon(
-                            _transcriptExpanded
-                                ? Icons.keyboard_arrow_up_rounded
-                                : Icons.keyboard_arrow_down_rounded,
-                            size: 18,
-                          ),
-                          label: Text(_transcriptExpanded ? '收起' : '展开'),
-                        )
-                      : null,
-                  child: d.transcriptSegments.isEmpty
-                      ? Text(
-                          _transcriptEmptyText(d),
+              ),
+              const SizedBox(height: 16),
+              _buildSection(
+                title: '原始逐句转写',
+                icon: Icons.article_outlined,
+                trailing: d.transcriptSegments.isNotEmpty
+                    ? TextButton.icon(
+                        onPressed: () {
+                          setState(
+                            () => _transcriptExpanded = !_transcriptExpanded,
+                          );
+                        },
+                        icon: Icon(
+                          _transcriptExpanded
+                              ? Icons.keyboard_arrow_up_rounded
+                              : Icons.keyboard_arrow_down_rounded,
+                          size: 18,
+                        ),
+                        label: Text(_transcriptExpanded ? '收起' : '展开'),
+                      )
+                    : null,
+                child: d.transcriptSegments.isEmpty
+                    ? Text(
+                        _transcriptEmptyText(d),
+                        style: DunesTypography.sans(
+                          fontSize: 13,
+                          color: DunesColors.text3,
+                        ),
+                      )
+                    : _transcriptExpanded
+                    ? Column(
+                        children:
+                            d.transcriptSegments
+                                .take(_segmentVisibleCount)
+                                .map<Widget>(
+                                  (seg) => Container(
+                                    width: double.infinity,
+                                    margin: const EdgeInsets.only(bottom: 8),
+                                    padding: const EdgeInsets.all(10),
+                                    decoration: BoxDecoration(
+                                      color: DunesColors.bgSoft,
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          '${seg.speaker} · ${_formatMillis(seg.startMs)}',
+                                          style: DunesTypography.sans(
+                                            fontSize: 11,
+                                            color: DunesColors.text3,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          seg.text,
+                                          style: DunesTypography.sans(
+                                            fontSize: 13,
+                                            color: DunesColors.text2,
+                                            height: 1.45,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                )
+                                .toList()
+                              ..addAll(
+                                _segmentVisibleCount <
+                                        d.transcriptSegments.length
+                                    ? <Widget>[
+                                        Padding(
+                                          padding: const EdgeInsets.only(
+                                            top: 4,
+                                          ),
+                                          child: OutlinedButton.icon(
+                                            onPressed: _loadMoreSegments,
+                                            icon: const Icon(
+                                              Icons.expand_more_rounded,
+                                            ),
+                                            label: Text(
+                                              '加载更多（$_segmentVisibleCount/${d.transcriptSegments.length}）',
+                                            ),
+                                          ),
+                                        ),
+                                      ]
+                                    : const <Widget>[],
+                              ),
+                      )
+                    : Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: DunesColors.bgSoft,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Text(
+                          '共 ${d.transcriptSegments.length} 条逐句转写，点击右上角展开查看',
                           style: DunesTypography.sans(
                             fontSize: 13,
                             color: DunesColors.text3,
                           ),
+                        ),
+                      ),
+              ),
+              const SizedBox(height: 20),
+              if (_isDraftWithAudio(d)) ...[
+                FilledButton.icon(
+                  onPressed: _startingTranscription
+                      ? null
+                      : _startTranscriptionFromDraft,
+                  icon: _startingTranscription
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
                         )
-                      : _transcriptExpanded
-                          ? Column(
-                              children: d.transcriptSegments
-                                  .take(_segmentVisibleCount)
-                                  .map<Widget>(
-                                    (seg) => Container(
-                                      width: double.infinity,
-                                      margin: const EdgeInsets.only(bottom: 8),
-                                      padding: const EdgeInsets.all(10),
-                                      decoration: BoxDecoration(
-                                        color: DunesColors.bgSoft,
-                                        borderRadius: BorderRadius.circular(10),
-                                      ),
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            '${seg.speaker} · ${_formatMillis(seg.startMs)}',
-                                            style: DunesTypography.sans(
-                                              fontSize: 11,
-                                              color: DunesColors.text3,
-                                            ),
-                                          ),
-                                          const SizedBox(height: 4),
-                                          Text(
-                                            seg.text,
-                                            style: DunesTypography.sans(
-                                              fontSize: 13,
-                                              color: DunesColors.text2,
-                                              height: 1.45,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  )
-                                  .toList()
-                                ..addAll(
-                                  _segmentVisibleCount < d.transcriptSegments.length
-                                      ? <Widget>[
-                                          Padding(
-                                            padding: const EdgeInsets.only(top: 4),
-                                            child: OutlinedButton.icon(
-                                              onPressed: _loadMoreSegments,
-                                              icon: const Icon(Icons.expand_more_rounded),
-                                              label: Text(
-                                                '加载更多（$_segmentVisibleCount/${d.transcriptSegments.length}）',
-                                              ),
-                                            ),
-                                          ),
-                                        ]
-                                      : const <Widget>[],
-                                ),
-                            )
-                          : Container(
-                              width: double.infinity,
-                              padding: const EdgeInsets.all(10),
-                              decoration: BoxDecoration(
-                                color: DunesColors.bgSoft,
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              child: Text(
-                                '共 ${d.transcriptSegments.length} 条逐句转写，点击右上角展开查看',
-                                style: DunesTypography.sans(
-                                  fontSize: 13,
-                                  color: DunesColors.text3,
-                                ),
-                              ),
-                            ),
+                      : const Icon(Icons.play_arrow_rounded),
+                  label: Text(_startingTranscription ? '启动中...' : '开始转写并生成纪要'),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: DunesColors.accent,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
                 ),
-                const SizedBox(height: 20),
-                if (_isDraftWithAudio(d)) ...[
-                  FilledButton.icon(
-                    onPressed: _startingTranscription
-                        ? null
-                        : _startTranscriptionFromDraft,
-                    icon: _startingTranscription
-                        ? const SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Colors.white,
-                            ),
-                          )
-                        : const Icon(Icons.play_arrow_rounded),
-                    label: Text(
-                      _startingTranscription ? '启动中...' : '开始转写并生成纪要',
-                    ),
-                    style: FilledButton.styleFrom(
-                      backgroundColor: DunesColors.accent,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                ],
-                if (_canRegenerate(d)) ...[
-                  OutlinedButton.icon(
-                    onPressed: _regenerating ? null : _regenerate,
-                    icon: _regenerating
-                        ? const SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.refresh_rounded),
-                    label: Text(
-                      _regenerating ? '处理中...' : _regenerateLabel(d),
-                    ),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: DunesColors.accentDeep,
-                      side: const BorderSide(color: DunesColors.accentLine),
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                  ),
-                ],
+                const SizedBox(height: 10),
               ],
-            );
+              if (_canRegenerate(d)) ...[
+                OutlinedButton.icon(
+                  onPressed: _regenerating ? null : _regenerate,
+                  icon: _regenerating
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.refresh_rounded),
+                  label: Text(_regenerating ? '处理中...' : _regenerateLabel(d)),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: DunesColors.accentDeep,
+                    side: const BorderSide(color: DunesColors.accentLine),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          );
   }
 
   Widget _buildDownloadOverlay() {
@@ -1292,7 +1282,11 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.event_note_outlined, size: 48, color: DunesColors.text3),
+            const Icon(
+              Icons.event_note_outlined,
+              size: 48,
+              color: DunesColors.text3,
+            ),
             const SizedBox(height: 12),
             Text(
               '暂无会议详情',
@@ -1419,7 +1413,10 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
                 ),
               ),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 5,
+                ),
                 decoration: BoxDecoration(
                   color: DunesColors.amberSoft,
                   borderRadius: BorderRadius.circular(999),
@@ -1512,15 +1509,22 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
                   builder: (context, snapshot) {
                     final detail = _detail;
                     final fallbackTotal = Duration(
-                      seconds: (detail?.audioDurationSeconds ?? 0).clamp(0, 24 * 60 * 60),
+                      seconds: (detail?.audioDurationSeconds ?? 0).clamp(
+                        0,
+                        24 * 60 * 60,
+                      ),
                     );
-                    final total = (snapshot.data ?? _player.duration ?? fallbackTotal);
+                    final total =
+                        (snapshot.data ?? _player.duration ?? fallbackTotal);
                     final totalMs = total.inMilliseconds;
                     return StreamBuilder<Duration>(
                       stream: _player.positionStream,
                       builder: (context, posSnap) {
                         final position = posSnap.data ?? Duration.zero;
-                        final posMs = position.inMilliseconds.clamp(0, totalMs > 0 ? totalMs : 0);
+                        final posMs = position.inMilliseconds.clamp(
+                          0,
+                          totalMs > 0 ? totalMs : 0,
+                        );
                         return Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
@@ -1544,7 +1548,9 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
                                 min: 0,
                                 max: totalMs > 0 ? totalMs.toDouble() : 1,
                                 onChanged: totalMs > 0
-                                    ? (v) => _player.seek(Duration(milliseconds: v.round()))
+                                    ? (v) => _player.seek(
+                                        Duration(milliseconds: v.round()),
+                                      )
                                     : null,
                               ),
                             ),

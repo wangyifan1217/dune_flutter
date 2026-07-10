@@ -5,6 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/theme/dunes_theme.dart';
 import '../shell/dunes_toast.dart';
+import 'xflow_approval_flow_ui.dart';
 import 'xflow_detail_logic.dart';
 import 'xflow_models.dart';
 import 'xflow_service.dart';
@@ -1090,15 +1091,14 @@ class XfDetTrackTimeline extends StatelessWidget {
       return fallback;
     }
 
-    final nodes = <Widget>[
-      _HistoryStep(
-        kind: _HistoryKind.done,
-        icon: Icons.flag_outlined,
-        who: trailSubmitterLabel(detail, trail, bundle.assigneeNames),
+    final rows = <XflowApprovalFlowTrackRowData>[
+      XflowApprovalFlowTrackRowData(
+        title: trailSubmitterLabel(detail, trail, bundle.assigneeNames),
         role: '提交人',
         time: fmtDetailTime(trail?.createdAtRaw ?? detail.raw['createdAt']),
         comment: trailSubmitterComment(detail),
         subComment: trailProxyInitiatorNote(detail),
+        state: XflowApprovalFlowStepState.done,
       ),
     ];
 
@@ -1106,39 +1106,32 @@ class XfDetTrackTimeline extends StatelessWidget {
       final label = stageLabel(step.stepNo, step.stepType, bundle.stages);
       final who = assigneeLabel(step, label);
       final decision = step.decision.toUpperCase();
-      _HistoryKind kind;
-      IconData icon;
-      String cmt;
-      String tm;
+      late XflowApprovalFlowStepState state;
+      late String cmt;
+      late String tm;
       if (decision == 'APPROVED') {
-        kind = _HistoryKind.done;
-        icon = Icons.check;
+        state = XflowApprovalFlowStepState.done;
         cmt = step.comment.isEmpty ? '已通过' : step.comment;
         tm = fmtDetailTime(step.decidedAtRaw);
       } else if (decision == 'REJECTED') {
-        kind = _HistoryKind.rejected;
-        icon = Icons.close;
+        state = XflowApprovalFlowStepState.rejected;
         cmt = step.comment.isEmpty ? '已驳回' : step.comment;
         tm = fmtDetailTime(step.decidedAtRaw);
       } else if (step.stepNo == curStep && st == 'pending') {
-        kind = _HistoryKind.cur;
-        icon = Icons.schedule;
+        state = XflowApprovalFlowStepState.current;
         cmt = '审批进行中';
         tm = '当前处理';
       } else {
-        kind = _HistoryKind.todo;
-        icon = Icons.circle_outlined;
+        state = XflowApprovalFlowStepState.pending;
         cmt = '待处理';
         tm = '待处理';
       }
-      nodes.add(
-        _HistoryStep(
-          kind: kind,
-          icon: icon,
-          who: who,
+      rows.add(
+        XflowApprovalFlowTrackRowData(
+          title: who,
           time: tm,
           comment: cmt,
-          stepNo: kind == _HistoryKind.todo ? step.stepNo : null,
+          state: state,
         ),
       );
     }
@@ -1157,224 +1150,30 @@ class XfDetTrackTimeline extends StatelessWidget {
         if (name != null && name.isNotEmpty) who = '$name · $label';
       }
       final isCurrent = st == 'pending' && no == curStep;
-      nodes.add(
-        _HistoryStep(
-          kind: isCurrent ? _HistoryKind.cur : _HistoryKind.todo,
-          icon: isCurrent ? Icons.schedule : Icons.circle_outlined,
-          who: who,
+      rows.add(
+        XflowApprovalFlowTrackRowData(
+          title: who,
           time: isCurrent ? '当前处理' : '待处理',
           comment: isCurrent ? '审批进行中' : '待处理',
-          stepNo: isCurrent ? null : no,
+          state: isCurrent
+              ? XflowApprovalFlowStepState.current
+              : XflowApprovalFlowStepState.pending,
         ),
       );
     }
 
     if (st == 'approved') {
-      nodes.add(
-        _HistoryStep(
-          kind: _HistoryKind.done,
-          icon: Icons.check_circle_outline,
-          who: '审批通过',
+      rows.add(
+        XflowApprovalFlowTrackRowData(
+          title: '审批通过',
           time: fmtDetailTime(trail?.finishedAtRaw),
           comment: '全部节点已完成',
+          state: XflowApprovalFlowStepState.done,
         ),
       );
     }
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Icon(Icons.route, size: 16, color: DunesColors.text2),
-            const SizedBox(width: 6),
-            Text('流程追踪', style: DunesTypography.sans(fontSize: 13, fontWeight: FontWeight.w600)),
-          ],
-        ),
-        const SizedBox(height: 8),
-        ...nodes,
-      ],
-    );
-  }
-}
-
-enum _HistoryKind { done, cur, todo, rejected }
-
-class _HistoryStep extends StatelessWidget {
-  const _HistoryStep({
-    required this.kind,
-    required this.icon,
-    required this.who,
-    required this.time,
-    required this.comment,
-    this.role,
-    this.stepNo,
-    this.subComment,
-  });
-
-  final _HistoryKind kind;
-  final IconData icon;
-  final String who;
-  final String time;
-  final String comment;
-  final String? role;
-  final int? stepNo;
-  final String? subComment;
-
-  @override
-  Widget build(BuildContext context) {
-    Color dotBg;
-    Color dotFg;
-    Color dotBorder;
-    switch (kind) {
-      case _HistoryKind.done:
-        dotBg = DunesColors.greenSoft;
-        dotFg = const Color(0xFF085041);
-        dotBorder = const Color(0xFFB8E5D2);
-      case _HistoryKind.cur:
-        dotBg = Colors.white;
-        dotFg = DunesColors.accent;
-        dotBorder = DunesColors.accent;
-      case _HistoryKind.rejected:
-        dotBg = DunesColors.coralSoft;
-        dotFg = const Color(0xFF993C1D);
-        dotBorder = const Color(0xFFF0C4BC);
-      case _HistoryKind.todo:
-        dotBg = DunesColors.bgSoft;
-        dotFg = DunesColors.text3;
-        dotBorder = DunesColors.border;
-    }
-
-    Color cmtBg = DunesColors.bgSoft;
-    Color cmtFg = DunesColors.text2;
-    Color cmtBorder = DunesColors.border;
-    switch (kind) {
-      case _HistoryKind.done:
-        cmtBorder = const Color(0xFF1D9E75);
-      case _HistoryKind.cur:
-        cmtBg = DunesColors.accentSoft;
-        cmtFg = DunesColors.accentDeep;
-        cmtBorder = DunesColors.accent;
-      case _HistoryKind.rejected:
-        cmtBg = DunesColors.coralSoft;
-        cmtFg = const Color(0xFF993C1D);
-        cmtBorder = DunesColors.coral;
-      case _HistoryKind.todo:
-        break;
-    }
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 7),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 26,
-            height: 26,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: dotBg,
-              shape: BoxShape.circle,
-              border: Border.all(color: dotBorder, width: kind == _HistoryKind.cur ? 2 : 1.5),
-            ),
-            child: stepNo != null
-                ? Text(
-                    '$stepNo',
-                    style: DunesTypography.mono(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w600,
-                      color: dotFg,
-                    ),
-                  )
-                : Icon(icon, size: 13, color: dotFg),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: Wrap(
-                        spacing: 6,
-                        crossAxisAlignment: WrapCrossAlignment.center,
-                        children: [
-                          Text(
-                            who,
-                            style: DunesTypography.sans(
-                              fontSize: 11.5,
-                              fontWeight: FontWeight.w500,
-                              color: kind == _HistoryKind.todo ? DunesColors.text3 : DunesColors.text,
-                            ),
-                          ),
-                          if (role != null)
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                              decoration: BoxDecoration(
-                                color: kind == _HistoryKind.done
-                                    ? DunesColors.greenSoft
-                                    : DunesColors.bgCard,
-                                borderRadius: BorderRadius.circular(3),
-                              ),
-                              child: Text(
-                                role!,
-                                style: DunesTypography.mono(
-                                  fontSize: 8.5,
-                                  fontWeight: FontWeight.w700,
-                                  color: kind == _HistoryKind.done
-                                      ? const Color(0xFF085041)
-                                      : DunesColors.text3,
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
-                    Text(
-                      time,
-                      style: DunesTypography.mono(fontSize: 9, color: DunesColors.text3),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 4),
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.fromLTRB(8, 5, 8, 5),
-                  decoration: BoxDecoration(
-                    color: cmtBg,
-                    borderRadius: BorderRadius.circular(7),
-                    border: Border(left: BorderSide(color: cmtBorder, width: 2)),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        comment,
-                        style: DunesTypography.mono(
-                          fontSize: 9.5,
-                          height: 1.5,
-                          color: cmtFg,
-                          fontWeight: kind == _HistoryKind.cur ? FontWeight.w500 : FontWeight.w400,
-                        ),
-                      ),
-                      if (subComment != null && subComment!.isNotEmpty) ...[
-                        const SizedBox(height: 3),
-                        Text(
-                          subComment!,
-                          style: DunesTypography.sans(fontSize: 9, color: DunesColors.text3),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
+    return XflowApprovalFlowTrackSection(rows: rows);
   }
 }
 

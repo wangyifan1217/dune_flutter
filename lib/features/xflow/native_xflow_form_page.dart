@@ -5,6 +5,8 @@ import '../../core/theme/dunes_theme.dart';
 import '../../core/util/friendly_error.dart';
 import '../auth/auth_session.dart';
 import '../shell/dunes_toast.dart';
+import 'xflow_approval_flow_ui.dart';
+import 'xflow_form_styles.dart';
 import 'xflow_form_renderer.dart';
 import 'xflow_linkage.dart';
 import 'xflow_models.dart';
@@ -62,13 +64,18 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage> {
     focus?.unfocus();
   }
 
-  bool get _isEditing => widget.editProposalId != null && widget.editProposalId! > 0;
+  bool get _isEditing =>
+      widget.editProposalId != null && widget.editProposalId! > 0;
   bool get _isDelegatedPendingInitiate =>
-      _isEditing && (_editingDetail?.status.toLowerCase() == 'pending_initiate');
+      _isEditing &&
+      (_editingDetail?.status.toLowerCase() == 'pending_initiate');
 
   bool _isDelegatedClearActionKind(String kind) {
     final k = kind.trim().toLowerCase();
-    return k == 'clear-form' || k == 'clear_form' || k == 'clearform' || k == 'reset-form';
+    return k == 'clear-form' ||
+        k == 'clear_form' ||
+        k == 'clearform' ||
+        k == 'reset-form';
   }
 
   /// 仅创建人本人的草稿(DRAFT)可删除；已推送的「待发起」由代发起人处理，不在此删除。
@@ -83,7 +90,10 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage> {
   @override
   void initState() {
     super.initState();
-    _service = XflowService(session: widget.session, templateKey: widget.templateKey);
+    _service = XflowService(
+      session: widget.session,
+      templateKey: widget.templateKey,
+    );
     _load();
   }
 
@@ -96,8 +106,9 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage> {
     });
     final ccFuture = _service.fetchCcRulesList(templateKey: widget.templateKey);
     try {
-      final template =
-          await _service.fetchTemplateDetail(templateKey: widget.templateKey);
+      final template = await _service.fetchTemplateDetail(
+        templateKey: widget.templateKey,
+      );
       _values
         ..clear()
         ..addAll(await _service.loadLocalDraft());
@@ -108,7 +119,9 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage> {
       }
       Map<String, dynamic> detailCfg = const {};
       try {
-        detailCfg = await _service.fetchDetailConfig(templateKey: widget.templateKey);
+        detailCfg = await _service.fetchDetailConfig(
+          templateKey: widget.templateKey,
+        );
       } catch (_) {}
       // 初次渲染前先重算计算字段（如印花税），避免编辑/草稿预填时显示为空。
       XflowLinkage.recompute(template.fields, template.layout, _values);
@@ -170,7 +183,10 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage> {
     final status = _editingDetail?.status.toLowerCase() ?? '';
     if (_isEditing && status == 'pending_initiate') {
       final ok = await confirmInitiateProposal(context);
-      if (!ok) return;
+      if (!ok || !mounted) return;
+    } else {
+      final ok = await confirmSubmitForApproval(context);
+      if (!ok || !mounted) return;
     }
     setState(() => _submitting = true);
     try {
@@ -210,7 +226,11 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage> {
       if (pid > 0) widget.onSubmitted(pid);
     } catch (e) {
       if (!mounted) return;
-      showDunesToast(context, '提交失败：${friendlyErrorText(e)}', kind: DunesToastKind.error);
+      showDunesToast(
+        context,
+        '提交失败：${friendlyErrorText(e)}',
+        kind: DunesToastKind.error,
+      );
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
@@ -225,7 +245,10 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage> {
         title: const Text('删除草稿'),
         content: const Text('确认删除该草稿？删除后不可恢复。'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('取消')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('取消'),
+          ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text('删除', style: TextStyle(color: DunesColors.coral)),
@@ -243,13 +266,19 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage> {
       widget.navigation.popTo(widget.backScreen);
     } catch (e) {
       if (!mounted) return;
-      showDunesToast(context, '删除失败：${friendlyErrorText(e)}', kind: DunesToastKind.error);
+      showDunesToast(
+        context,
+        '删除失败：${friendlyErrorText(e)}',
+        kind: DunesToastKind.error,
+      );
     }
   }
 
   Future<void> _handleAction(String kind) async {
     if (_isDelegatedPendingInitiate &&
-        (kind == 'save-draft' || kind == 'load-draft' || kind == 'push-colleague')) {
+        (kind == 'save-draft' ||
+            kind == 'load-draft' ||
+            kind == 'push-colleague')) {
       showDunesToast(context, '代发起提案请直接继续填写并提交审批');
       return;
     }
@@ -331,7 +360,11 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage> {
       await _showPushDialog(pid);
     } catch (e) {
       if (!mounted) return;
-      showDunesToast(context, '推送失败：${friendlyErrorText(e)}', kind: DunesToastKind.error);
+      showDunesToast(
+        context,
+        '推送失败：${friendlyErrorText(e)}',
+        kind: DunesToastKind.error,
+      );
     }
   }
 
@@ -355,7 +388,11 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage> {
       showDunesToast(context, '已推送给同事，对方可代为填写并确认发起');
     } catch (e) {
       if (!mounted) return;
-      showDunesToast(context, '推送失败：${friendlyErrorText(e)}', kind: DunesToastKind.error);
+      showDunesToast(
+        context,
+        '推送失败：${friendlyErrorText(e)}',
+        kind: DunesToastKind.error,
+      );
     }
   }
 
@@ -369,7 +406,11 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage> {
         if (uid <= 0) continue;
         users.add(<String, dynamic>{
           'userId': uid,
-          'displayName': rule['displayName'] ?? rule['userName'] ?? rule['name'] ?? '用户#$uid',
+          'displayName':
+              rule['displayName'] ??
+              rule['userName'] ??
+              rule['name'] ??
+              '用户#$uid',
           'departmentName': rule['department'] ?? rule['departmentName'] ?? '',
         });
       }
@@ -382,9 +423,11 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage> {
     if (template == null) return const [];
     final out = <String>[];
     for (final field in template.fields) {
-      if (!field.required || field.key.isEmpty || field.type == 'section') continue;
+      if (!field.required || field.key.isEmpty || field.type == 'section')
+        continue;
       final value = _values[field.key];
-      final ok = value != null &&
+      final ok =
+          value != null &&
           ((value is String && value.trim().isNotEmpty) ||
               (value is List && value.isNotEmpty) ||
               (value is Map && value.isNotEmpty) ||
@@ -394,12 +437,7 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage> {
     return out;
   }
 
-  String get _submitLabel {
-    final status = _editingDetail?.status.toLowerCase() ?? '';
-    if (status == 'rejected') return '重新提交';
-    if (status == 'pending_initiate') return '提交审批';
-    return '提交审批';
-  }
+  String get _submitLabel => '提交审批';
 
   String get _templateName {
     final name = _template?.title.trim() ?? '';
@@ -420,7 +458,7 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage> {
   @override
   Widget build(BuildContext context) {
     return ColoredBox(
-      color: DunesColors.bgApp,
+      color: XfProposalUi.bg,
       child: SafeArea(
         child: Column(
           children: [
@@ -432,69 +470,72 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage> {
             ),
             Expanded(
               child: _loading
-                  ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
+                  ? const Center(
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
                   : _error != null
-                      ? _errorView()
-                      : GestureDetector(
-                          behavior: HitTestBehavior.translucent,
-                          onTap: _dismissKeyboard,
-                          child: RefreshIndicator(
-                            onRefresh: _load,
-                            child: ListView(
-                              padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
-                              children: [
-                                XflowFormCard(
-                                  title: _pageTitle,
-                                  tag: 'XFlow',
-                                  child: XflowFormRenderer(
-                                    fields: _isDelegatedPendingInitiate
-                                        ? _template!.fields.where((f) {
+                  ? _errorView()
+                  : GestureDetector(
+                      behavior: HitTestBehavior.translucent,
+                      onTap: _dismissKeyboard,
+                      child: RefreshIndicator(
+                        onRefresh: _load,
+                        child: ListView(
+                          padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
+                          children: [
+                            XflowFormCard(
+                              title: _pageTitle,
+                              tag: 'XFlow',
+                              child: XflowFormRenderer(
+                                fields: _isDelegatedPendingInitiate
+                                    ? _template!.fields
+                                          .where((f) {
                                             if (f.type != 'action') return true;
                                             final kind =
-                                                (f.raw['actionKind'] ?? f.key).toString();
-                                            return _isDelegatedClearActionKind(kind);
-                                          }).toList(growable: false)
-                                        : _template!.fields,
-                                    values: _values,
-                                    layout: _template!.layout,
-                                    service: _service,
-                                    embedded: true,
-                                    allowedActionKinds:
-                                        _isDelegatedPendingInitiate
-                                            ? <String>{
-                                                'clear-form',
-                                                'clear_form',
-                                                'clearform',
-                                                'reset-form',
-                                              }
-                                            : null,
-                                    onChanged: (key, value) {
-                                      setState(() {
-                                        _values[key] = value;
-                                        _recompute();
-                                      });
-                                    },
-                                    onAction: _handleAction,
-                                  ),
-                                ),
-                                XflowFormCard(
-                                  title: '审批流程',
-                                  child: XflowStageList(
-                                    stages: _template!.stages,
-                                    layout: _template!.layout,
-                                  ),
-                                ),
-                                XflowCcRulesCard(
-                                  rules: _ccRules,
-                                  loading: _ccLoading,
-                                  error: _ccError,
-                                  hideWhenEmpty: true,
-                                ),
-                                const SizedBox(height: 4),
-                              ],
+                                                (f.raw['actionKind'] ?? f.key)
+                                                    .toString();
+                                            return _isDelegatedClearActionKind(
+                                              kind,
+                                            );
+                                          })
+                                          .toList(growable: false)
+                                    : _template!.fields,
+                                values: _values,
+                                layout: _template!.layout,
+                                service: _service,
+                                embedded: true,
+                                allowedActionKinds: _isDelegatedPendingInitiate
+                                    ? <String>{
+                                        'clear-form',
+                                        'clear_form',
+                                        'clearform',
+                                        'reset-form',
+                                      }
+                                    : null,
+                                onChanged: (key, value) {
+                                  setState(() {
+                                    _values[key] = value;
+                                    _recompute();
+                                  });
+                                },
+                                onAction: _handleAction,
+                              ),
                             ),
-                          ),
+                            XflowApprovalFlowSection(
+                              stages: _template!.stages,
+                              layout: _template!.layout,
+                            ),
+                            XflowCcRulesCard(
+                              rules: _ccRules,
+                              loading: _ccLoading,
+                              error: _ccError,
+                              hideWhenEmpty: true,
+                            ),
+                            const SizedBox(height: 4),
+                          ],
                         ),
+                      ),
+                    ),
             ),
             XflowXfActionBar(
               label: _submitLabel,
@@ -502,7 +543,9 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage> {
               onPressed: _submitting ? null : _submit,
               secondaryLabel: _canDeleteDraft ? '删除草稿' : null,
               secondaryDanger: true,
-              onSecondaryPressed: _canDeleteDraft && !_submitting ? _confirmDeleteDraft : null,
+              onSecondaryPressed: _canDeleteDraft && !_submitting
+                  ? _confirmDeleteDraft
+                  : null,
             ),
           ],
         ),

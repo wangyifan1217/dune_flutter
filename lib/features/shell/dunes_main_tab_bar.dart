@@ -7,8 +7,8 @@ import '../workbench/workbench_badge_notifier.dart';
 import 'dunes_toast.dart';
 
 /// 底部主 Tab：通讯 · 千机 · 灯塔 · 我的。
-/// 高度在 [kDunesMainTabBarHeight] 统一维护，供 FAB 等待定位引用。
-const double kDunesMainTabBarHeight = 56;
+/// 此为 Tab 内容区高度；iOS Home Indicator 的安全区由组件自身额外处理。
+const double kDunesMainTabBarHeight = 64;
 
 class DunesMainTabBar extends StatefulWidget {
   const DunesMainTabBar({
@@ -18,6 +18,7 @@ class DunesMainTabBar extends StatefulWidget {
     this.commUnread,
     this.workbenchBadge,
     this.lighthouseAccess = false,
+    this.chatOnlyMode = false,
   });
 
   final DunesNavigationController navigation;
@@ -25,6 +26,7 @@ class DunesMainTabBar extends StatefulWidget {
   final CommUnreadNotifier? commUnread;
   final WorkbenchBadgeNotifier? workbenchBadge;
   final bool lighthouseAccess;
+  final bool chatOnlyMode;
 
   @override
   State<DunesMainTabBar> createState() => _DunesMainTabBarState();
@@ -68,33 +70,41 @@ class _DunesMainTabBarState extends State<DunesMainTabBar> {
 
   @override
   Widget build(BuildContext context) {
-    // 固定高度、图标垂直居中；iOS/Android 共用同一尺寸，不再额外垫高。
-    return Container(
-      decoration: const BoxDecoration(
-        color: DunesColors.bgApp,
-        border: Border(top: BorderSide(color: DunesColors.borderSoft)),
-      ),
-      child: Row(
-        children: [
-          _tab(
-            icon: Icons.chat_bubble_outline_rounded,
-            label: '通讯',
-            screen: 'C1',
-            showRedDot: _showCommDot,
-          ),
-          _tab(
-            icon: Icons.grid_view_rounded,
-            label: '千机',
-            onTap: () => showDunesSoonToast(context),
-          ),
-          _tab(icon: Icons.location_city_outlined, label: '灯塔', screen: 'LH'),
-          _tab(
-            icon: Icons.person_outline_rounded,
-            label: '我的',
-            screen: 'B2',
-            showRedDot: _showMyDot,
-          ),
-        ],
+    return SafeArea(
+      top: false,
+      child: Container(
+        decoration: const BoxDecoration(
+          color: DunesColors.bgApp,
+          border: Border(top: BorderSide(color: DunesColors.borderSoft)),
+        ),
+        child: Row(
+          children: [
+            _tab(
+              icon: Icons.forum_outlined,
+              label: '通讯',
+              screen: 'C1',
+              showRedDot: _showCommDot,
+            ),
+            if (!widget.chatOnlyMode) ...[
+              _tab(
+                icon: Icons.grid_view_rounded,
+                label: '千机',
+                onTap: () => showDunesSoonToast(context),
+              ),
+              _tab(
+                icon: Icons.explore_outlined,
+                label: '灯塔',
+                screen: 'LH',
+              ),
+            ],
+            _tab(
+              icon: Icons.person_outline_rounded,
+              label: '我的',
+              screen: 'B2',
+              showRedDot: widget.chatOnlyMode ? false : _showMyDot,
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -111,7 +121,8 @@ class _DunesMainTabBarState extends State<DunesMainTabBar> {
 
     return Expanded(
       child: InkWell(
-        onTap: onTap ??
+        onTap:
+            onTap ??
             () {
               FocusManager.instance.primaryFocus?.unfocus();
               widget.navigation.switchMainTab(screen!);
@@ -125,13 +136,13 @@ class _DunesMainTabBarState extends State<DunesMainTabBar> {
               Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(icon, size: 20, color: color),
-                  const SizedBox(height: 1),
-                  Text(label, style: TextStyle(fontSize: 10, color: color)),
+                  Icon(icon, size: 24, color: color),
+                  const SizedBox(height: 3),
+                  Text(label, style: TextStyle(fontSize: 11, color: color)),
                 ],
               ),
               if (showRedDot)
-                const Positioned(top: 7, right: 22, child: _PulseDot()),
+                const Positioned(top: 9, right: 20, child: _PulseDot()),
             ],
           ),
         ),

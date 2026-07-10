@@ -410,6 +410,11 @@ List<NovaDeliverableItem> collectNovaExtraFiles(
 
 String normalizeNovaMarkdownLayout(String text) {
   var s = text;
+  // Normalize headings like "##标题" / "###标题" to "## 标题" so they are parsed as headings.
+  s = s.replaceAllMapped(
+    RegExp(r'(^|\n)(\s*#{1,3})([^\s#\n])'),
+    (m) => '${m.group(1)}${m.group(2)} ${m.group(3)}',
+  );
   s = s.replaceAll(
     RegExp(r'(\.(?:md|txt|html?|pdf|docx?|xlsx?|csv|json|yaml|yml|zip|rar|7z))(#\s*)', caseSensitive: false),
     r'$1\n\n$2',
@@ -417,7 +422,15 @@ String normalizeNovaMarkdownLayout(String text) {
   s = s.replaceAllMapped(RegExp(r'([。！？!?.])(#\s*[^\n#]+)'), (m) => '${m.group(1)}\n\n${m.group(2)}');
   s = s.replaceAllMapped(RegExp(r'([^\n])(#[#]?\s*[🔍✅🎯💡][^\n]*)'), (m) => '${m.group(1)}\n\n${m.group(2)}');
   s = s.replaceAllMapped(RegExp(r'([^\n])(-\s*[✅🎯💡])'), (m) => '${m.group(1)}\n${m.group(2)}');
+  // Generic heading normalization: if "## " appears mid-line, split it into a new block.
+  // Do not split on consecutive '#' (e.g. "## 标题" must not become "#\n\n## 标题").
+  s = s.replaceAllMapped(RegExp(r'([^\n#])\s*(#{1,3}\s+)'), (m) => '${m.group(1)}\n\n${m.group(2)}');
   s = s.replaceAllMapped(RegExp(r'([：:])\s*-\s*'), (m) => '${m.group(1)}\n- ');
+  // Drop orphan heading markers left on their own line (legacy bad splits).
+  s = s
+      .split('\n')
+      .where((line) => !RegExp(r'^\s*#{1,3}\s*$').hasMatch(line))
+      .join('\n');
   return s.trim();
 }
 

@@ -162,6 +162,8 @@ class XflowProposalItem {
     this.todoHint,
     this.tag1,
     this.txType,
+    this.proposalType,
+    this.templateKey,
     this.scaleWan,
     this.currentStep = 0,
     this.totalSteps = 0,
@@ -178,6 +180,8 @@ class XflowProposalItem {
   final XflowTodoHint? todoHint;
   final String? tag1;
   final String? txType;
+  final String? proposalType;
+  final String? templateKey;
   final String? scaleWan;
   final int currentStep;
   final int totalSteps;
@@ -194,6 +198,8 @@ class XflowProposalItem {
     DateTime? createdAt,
     String? tag1,
     String? txType,
+    String? proposalType,
+    String? templateKey,
     String? scaleWan,
     int? currentStep,
     int? totalSteps,
@@ -207,13 +213,15 @@ class XflowProposalItem {
       status: status ?? this.status,
       createdByName: createdByName ?? this.createdByName,
       createdAt: createdAt ?? this.createdAt,
-      todoHint: todoHint,
       tag1: tag1 ?? this.tag1,
       txType: txType ?? this.txType,
+      proposalType: proposalType ?? this.proposalType,
+      templateKey: templateKey ?? this.templateKey,
       scaleWan: scaleWan ?? this.scaleWan,
       currentStep: currentStep ?? this.currentStep,
       totalSteps: totalSteps ?? this.totalSteps,
       canRefedit: canRefedit ?? this.canRefedit,
+      todoHint: todoHint,
     );
   }
 }

@@ -30,6 +30,7 @@ import 'proposal_archive_models.dart';
 import 'proposal_excel_preview_page.dart';
 import 'proposal_recognition_ui.dart';
 import 'proposal_upload_config.dart';
+import 'xflow_approval_flow_ui.dart';
 import 'xflow_form_renderer.dart';
 import 'xflow_linkage.dart';
 import 'xflow_models.dart';
@@ -1262,19 +1263,7 @@ class _ProposalUploadPageState extends State<ProposalUploadPage> {
   }
 
   Widget _buildWorkflowSection() {
-    final stageCount = _approvalStages.length;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const SizedBox(height: 18),
-        _badgeKicker(
-          '审批流程',
-          stageCount > 0 ? '$stageCount-STEP FLOW' : 'NO STAGES',
-        ),
-        const SizedBox(height: 10),
-        _buildStageWorkflow(),
-      ],
-    );
+    return XflowApprovalFlowSection(stages: _approvalStages);
   }
 
   List<_ProposalSection> _previewSectionsFor(_ParsedProposal parsed) {
@@ -1850,189 +1839,6 @@ class _ProposalUploadPageState extends State<ProposalUploadPage> {
             ),
           ],
         ),
-      ],
-    );
-  }
-
-  Widget _buildStageWorkflow() {
-    final stages = _approvalStages;
-    if (stages.isEmpty) {
-      return Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: _PDColors.card,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: _PDColors.line2, width: 0.6),
-        ),
-        child: const Text(
-          '未配置审批阶段，请在模板设计器「审批阶段」中维护',
-          style: TextStyle(fontSize: 11, color: _PDColors.mute, height: 1.5),
-        ),
-      );
-    }
-    return Container(
-      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-      decoration: BoxDecoration(
-        color: _PDColors.card,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: _PDColors.line2, width: 0.6),
-      ),
-      child: Column(
-        children: [
-          for (int i = 0; i < stages.length; i++)
-            _buildStageRow(
-              stages[i],
-              stepNo: i + 1,
-              isLast: i == stages.length - 1,
-            ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildStageRow(
-    Map<String, dynamic> stage, {
-    required int stepNo,
-    required bool isLast,
-  }) {
-    final stageName =
-        (stage['stageName'] ?? stage['name'] ?? stage['label'] ?? '审批步骤')
-            .toString();
-    final meta = uploadStageMetaLabel(stage);
-    const dotSize = 12.0;
-    return IntrinsicHeight(
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: dotSize + 2,
-            child: Column(
-              children: [
-                _pendingStageDot(),
-                if (!isLast)
-                  Expanded(
-                    child: Container(
-                      width: 0.5,
-                      color: _PDColors.line2,
-                      margin: const EdgeInsets.symmetric(vertical: 2),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Padding(
-              padding: EdgeInsets.only(bottom: isLast ? 0 : 10),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.baseline,
-                    textBaseline: TextBaseline.alphabetic,
-                    children: [
-                      Expanded(
-                        child: Text(
-                          '$stepNo. $stageName',
-                          style: const TextStyle(
-                            fontSize: 11.5,
-                            color: _PDColors.ink,
-                            fontWeight: FontWeight.w600,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      const SizedBox(width: 6),
-                      const Text(
-                        '待发起',
-                        style: TextStyle(
-                          fontFamily: 'monospace',
-                          fontSize: 8,
-                          color: _PDColors.mute2,
-                          fontWeight: FontWeight.w600,
-                          letterSpacing: 0.4,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    meta,
-                    style: const TextStyle(
-                      fontFamily: 'monospace',
-                      fontSize: 9,
-                      color: _PDColors.mute2,
-                      letterSpacing: 0.2,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _pendingStageDot() {
-    return Container(
-      width: 12,
-      height: 12,
-      decoration: BoxDecoration(
-        color: _PDColors.card,
-        shape: BoxShape.circle,
-        border: Border.all(color: const Color(0xFFC9C3B7), width: 1),
-      ),
-    );
-  }
-
-  // ────────── helpers ──────────
-
-  Widget _badgeKicker(String label, String subLabel, {String? trailing}) {
-    return Row(
-      children: [
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-          decoration: BoxDecoration(
-            color: _PDColors.coral.withAlpha(31),
-            borderRadius: BorderRadius.circular(3),
-          ),
-          child: Text(
-            label,
-            style: const TextStyle(
-              fontFamily: 'monospace',
-              fontSize: 8,
-              color: _PDColors.coral,
-              letterSpacing: 1,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ),
-        const SizedBox(width: 6),
-        Text(
-          subLabel,
-          style: const TextStyle(
-            fontFamily: 'monospace',
-            fontSize: 8.5,
-            color: _PDColors.mute2,
-            letterSpacing: 1.4,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(child: Container(height: 0.5, color: _PDColors.line)),
-        if (trailing != null) ...[
-          const SizedBox(width: 8),
-          Text(
-            trailing,
-            style: const TextStyle(
-              fontFamily: 'monospace',
-              fontSize: 9,
-              color: _PDColors.coral,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ],
       ],
     );
   }

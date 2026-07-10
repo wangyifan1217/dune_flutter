@@ -240,7 +240,7 @@ class _LoginFlowState extends State<LoginFlow> {
   Future<void> _checkAppUpdate() async {
     if (_updateChecked || !mounted) return;
     _updateChecked = true;
-    final result = await AppUpdateService.instance.checkAndroidUpdate();
+    final result = await AppUpdateService.instance.checkUpdate();
     if (!mounted || result == null || !result.updateAvailable) return;
     await showAppUpdateDialog(context, result);
   }

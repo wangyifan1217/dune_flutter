@@ -16,6 +16,8 @@ import UserNotifications
   private var activeSegmentStartedAt: Date?
   private var accumulatedDurationMs: Int = 0
   private var outputPath: String?
+  private var segmentPaths: [String] = []
+  private var needsCaptureRebuild = false
   private var isRecording = false
   private var isPaused = false
   private var streamSink: FlutterEventSink?
@@ -119,6 +121,18 @@ import UserNotifications
       name: AVAudioSession.mediaServicesWereResetNotification,
       object: nil
     )
+    NotificationCenter.default.addObserver(
+      self,
+      selector: #selector(handleAppDidEnterBackground(_:)),
+      name: UIApplication.didEnterBackgroundNotification,
+      object: nil
+    )
+    NotificationCenter.default.addObserver(
+      self,
+      selector: #selector(handleAppWillEnterForeground(_:)),
+      name: UIApplication.willEnterForegroundNotification,
+      object: nil
+    )
   }
 
   // MARK: - Audio interruption recovery
@@ -133,8 +147,12 @@ import UserNotifications
     }
     switch type {
     case .began:
-      // 系统已暂停音频输入（来电/Siri/闹钟等），保持状态，等待中断结束后恢复。
+      needsCaptureRebuild = true
       audioEngine?.pause()
+      if isPaused {
+        finalizeCurrentSegmentIfNeeded()
+        teardownAudioEngine()
+      }
     case .ended:
       var shouldResume = true
       if let optRaw = info[AVAudioSessionInterruptionOptionKey] as? UInt {
@@ -150,15 +168,43 @@ import UserNotifications
   }
 
   @objc private func handleMediaServicesReset(_ note: Notification) {
-    // 媒体服务被重置后，音频引擎会失效，需要重新激活会话并启动引擎。
+    guard isRecording else { return }
+    needsCaptureRebuild = true
+    if isPaused {
+      finalizeCurrentSegmentIfNeeded()
+      teardownAudioEngine()
+      return
+    }
     resumeEngineAfterInterruption()
+  }
+
+  @objc private func handleAppDidEnterBackground(_ note: Notification) {
+    guard isRecording else { return }
+    needsCaptureRebuild = true
+    if isPaused {
+      // 暂停后熄屏时 AVAssetWriter / AVAudioEngine 容易失效，先落盘当前片段。
+      finalizeCurrentSegmentIfNeeded()
+      teardownAudioEngine()
+    }
+  }
+
+  @objc private func handleAppWillEnterForeground(_ note: Notification) {
+    guard isRecording else { return }
+    needsCaptureRebuild = true
   }
 
   private func resumeEngineAfterInterruption() {
     guard isRecording, !isPaused else { return }
     do {
-      try AVAudioSession.sharedInstance().setActive(true)
-      if let engine = audioEngine, !engine.isRunning {
+      try prepareAudioSessionForRecording()
+      if m4aWriter == nil {
+        try startNewSegmentWriter()
+      }
+      if needsCaptureRebuild || audioEngine == nil {
+        teardownAudioEngine()
+        try setupAudioEngine()
+        needsCaptureRebuild = false
+      } else if let engine = audioEngine, !engine.isRunning {
         try engine.start()
       }
     } catch {
@@ -231,35 +277,19 @@ import UserNotifications
 
   private func startRecordImpl(result: @escaping FlutterResult) {
     stopInternal(deleteFile: true)
+    segmentPaths = []
+    needsCaptureRebuild = false
     let stamp = Int(Date().timeIntervalSince1970 * 1000)
     let m4a = "\(NSTemporaryDirectory())voice-\(stamp).m4a"
     do {
-      let session = AVAudioSession.sharedInstance()
-      try session.setCategory(
-        .playAndRecord,
-        mode: .spokenAudio,
-        options: [.defaultToSpeaker, .allowBluetooth, .allowBluetoothA2DP, .mixWithOthers]
-      )
-      try session.setPreferredSampleRate(16000)
-      try session.setActive(true)
+      try prepareAudioSessionForRecording()
 
       let writer = StreamingAacM4aWriter()
       try writer.start(url: URL(fileURLWithPath: m4a))
       m4aWriter = writer
       outputPath = m4a
 
-      let engine = AVAudioEngine()
-      let input = engine.inputNode
-      let format = input.inputFormat(forBus: 0)
-      // 麦克风硬件通常是 44.1k/48k 浮点，需重采样为 16k 单声道 Int16，
-      // 否则 ASR 按 16k 解析高采样率音频会变速、识别率极低。
-      audioConverter = AVAudioConverter(from: format, to: targetFormat)
-      input.removeTap(onBus: 0)
-      input.installTap(onBus: 0, bufferSize: 2048, format: format) { [weak self] buffer, _ in
-        self?.consumeAudioBuffer(buffer)
-      }
-      try engine.start()
-      audioEngine = engine
+      try setupAudioEngine()
 
       recordStartedAt = Date()
       activeSegmentStartedAt = Date()
@@ -270,6 +300,64 @@ import UserNotifications
     } catch {
       stopInternal(deleteFile: true)
       result(FlutterError(code: "AUDIO_START_FAILED", message: error.localizedDescription, details: nil))
+    }
+  }
+
+  private func prepareAudioSessionForRecording() throws {
+    let session = AVAudioSession.sharedInstance()
+    try session.setCategory(
+      .playAndRecord,
+      mode: .spokenAudio,
+      options: [.defaultToSpeaker, .allowBluetooth, .allowBluetoothA2DP, .mixWithOthers]
+    )
+    try session.setPreferredSampleRate(16000)
+    try session.setActive(true)
+  }
+
+  private func setupAudioEngine() throws {
+    let engine = AVAudioEngine()
+    let input = engine.inputNode
+    let format = input.inputFormat(forBus: 0)
+    audioConverter = AVAudioConverter(from: format, to: targetFormat)
+    input.removeTap(onBus: 0)
+    input.installTap(onBus: 0, bufferSize: 2048, format: format) { [weak self] buffer, _ in
+      self?.consumeAudioBuffer(buffer)
+    }
+    try engine.start()
+    audioEngine = engine
+  }
+
+  private func teardownAudioEngine() {
+    if let engine = audioEngine {
+      engine.inputNode.removeTap(onBus: 0)
+      engine.stop()
+    }
+    audioEngine = nil
+    audioConverter = nil
+  }
+
+  private func startNewSegmentWriter() throws {
+    let stamp = Int(Date().timeIntervalSince1970 * 1000)
+    let m4a = "\(NSTemporaryDirectory())voice-\(stamp).m4a"
+    let writer = StreamingAacM4aWriter()
+    try writer.start(url: URL(fileURLWithPath: m4a))
+    m4aWriter = writer
+    outputPath = m4a
+  }
+
+  private func finalizeCurrentSegmentIfNeeded() {
+    guard let writer = m4aWriter, let path = outputPath, !path.isEmpty else {
+      m4aWriter = nil
+      outputPath = nil
+      return
+    }
+    let ok = writer.finish()
+    m4aWriter = nil
+    outputPath = nil
+    if ok {
+      segmentPaths.append(path)
+    } else {
+      try? FileManager.default.removeItem(atPath: path)
     }
   }
 
@@ -307,17 +395,16 @@ import UserNotifications
       return
     }
     do {
-      try AVAudioSession.sharedInstance().setActive(true)
-      if let engine = audioEngine {
-        if !engine.isRunning {
-          try engine.start()
-        }
-      } else {
-        throw NSError(
-          domain: "dunes.audio",
-          code: 1,
-          userInfo: [NSLocalizedDescriptionKey: "audio engine unavailable"]
-        )
+      try prepareAudioSessionForRecording()
+      if m4aWriter == nil {
+        try startNewSegmentWriter()
+      }
+      if needsCaptureRebuild || audioEngine == nil {
+        teardownAudioEngine()
+        try setupAudioEngine()
+        needsCaptureRebuild = false
+      } else if let engine = audioEngine, !engine.isRunning {
+        try engine.start()
       }
       isPaused = false
       activeSegmentStartedAt = Date()
@@ -349,35 +436,134 @@ import UserNotifications
     let durationMs = currentDurationMs()
     isRecording = false
     isPaused = false
-    if let engine = audioEngine {
-      engine.inputNode.removeTap(onBus: 0)
-      engine.stop()
-    }
-    audioEngine = nil
-    audioConverter = nil
+    needsCaptureRebuild = false
+    teardownAudioEngine()
     recordStartedAt = nil
     activeSegmentStartedAt = nil
     accumulatedDurationMs = 0
 
-    let writer = m4aWriter
-    m4aWriter = nil
-    let localOutputPath = outputPath
-
     if deleteFile {
-      writer?.abort()
-      if let path = localOutputPath {
+      m4aWriter?.abort()
+      m4aWriter = nil
+      if let path = outputPath {
         try? FileManager.default.removeItem(atPath: path)
       }
+      outputPath = nil
+      for path in segmentPaths {
+        try? FileManager.default.removeItem(atPath: path)
+      }
+      segmentPaths.removeAll()
+      return durationMs
+    }
+
+    finalizeCurrentSegmentIfNeeded()
+    let paths = segmentPaths
+    segmentPaths.removeAll()
+
+    guard !paths.isEmpty else {
       outputPath = nil
       return durationMs
     }
 
-    let ok = writer?.finish() ?? false
-    if !ok, let path = localOutputPath {
-      try? FileManager.default.removeItem(atPath: path)
-      outputPath = nil
+    let finalPath: String?
+    if paths.count == 1 {
+      finalPath = paths[0]
+    } else {
+      let stamp = Int(Date().timeIntervalSince1970 * 1000)
+      let merged = "\(NSTemporaryDirectory())voice-merged-\(stamp).m4a"
+      if mergeAudioSegments(paths, to: merged) {
+        finalPath = merged
+        for path in paths where path != merged {
+          try? FileManager.default.removeItem(atPath: path)
+        }
+      } else {
+        finalPath = nil
+        for path in paths {
+          try? FileManager.default.removeItem(atPath: path)
+        }
+      }
     }
+
+    outputPath = finalPath
     return durationMs
+  }
+
+  private func mergeAudioSegments(_ paths: [String], to outputPath: String) -> Bool {
+    guard !paths.isEmpty else { return false }
+    if paths.count == 1 {
+      let src = paths[0]
+      if src == outputPath { return true }
+      do {
+        if FileManager.default.fileExists(atPath: outputPath) {
+          try FileManager.default.removeItem(atPath: outputPath)
+        }
+        try FileManager.default.copyItem(atPath: src, toPath: outputPath)
+        return true
+      } catch {
+        return false
+      }
+    }
+
+    let composition = AVMutableComposition()
+    guard
+      let compTrack = composition.addMutableTrack(
+        withMediaType: .audio,
+        preferredTrackID: kCMPersistentTrackID_Invalid
+      )
+    else {
+      return false
+    }
+
+    var cursor = CMTime.zero
+    for path in paths {
+      let asset = AVURLAsset(url: URL(fileURLWithPath: path))
+      guard let srcTrack = asset.tracks(withMediaType: .audio).first else { continue }
+      let duration = asset.duration
+      guard duration.isValid, duration.seconds > 0 else { continue }
+      do {
+        try compTrack.insertTimeRange(
+          CMTimeRange(start: .zero, duration: duration),
+          of: srcTrack,
+          at: cursor
+        )
+        cursor = CMTimeAdd(cursor, duration)
+      } catch {
+        return false
+      }
+    }
+
+    guard cursor.seconds > 0 else { return false }
+
+    if FileManager.default.fileExists(atPath: outputPath) {
+      try? FileManager.default.removeItem(atPath: outputPath)
+    }
+
+    guard
+      let export = AVAssetExportSession(
+        asset: composition,
+        presetName: AVAssetExportPresetAppleM4A
+      )
+    else {
+      return false
+    }
+    export.outputURL = URL(fileURLWithPath: outputPath)
+    export.outputFileType = .m4a
+
+    let group = DispatchGroup()
+    group.enter()
+    var ok = false
+    export.exportAsynchronously {
+      ok = export.status == .completed
+      group.leave()
+    }
+    group.wait()
+    guard ok else {
+      try? FileManager.default.removeItem(atPath: outputPath)
+      return false
+    }
+    let attrs = try? FileManager.default.attributesOfItem(atPath: outputPath)
+    let size = (attrs?[.size] as? NSNumber)?.intValue ?? 0
+    return size > 0
   }
 
   private func consumeAudioBuffer(_ buffer: AVAudioPCMBuffer) {

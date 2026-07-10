@@ -5,6 +5,7 @@ import '../../core/theme/dunes_theme.dart';
 import '../../core/util/friendly_error.dart';
 import '../auth/auth_session.dart';
 import '../shell/dunes_toast.dart';
+import 'xflow_approval_flow_ui.dart';
 import 'xflow_form_styles.dart';
 import 'xflow_form_renderer.dart';
 import 'xflow_linkage.dart';
@@ -520,12 +521,9 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage> {
                                 onAction: _handleAction,
                               ),
                             ),
-                            XflowFormCard(
-                              title: '审批流程',
-                              child: XflowStageList(
-                                stages: _template!.stages,
-                                layout: _template!.layout,
-                              ),
+                            XflowApprovalFlowSection(
+                              stages: _template!.stages,
+                              layout: _template!.layout,
                             ),
                             XflowCcRulesCard(
                               rules: _ccRules,

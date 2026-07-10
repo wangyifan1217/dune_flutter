@@ -27,8 +27,14 @@ class AppUpdateService {
 
   static const instance = AppUpdateService._();
 
-  Future<AppReleaseCheckResult?> checkAndroidUpdate() async {
-    if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) return null;
+  Future<AppReleaseCheckResult?> checkUpdate() async {
+    if (kIsWeb) return null;
+    final platform = switch (defaultTargetPlatform) {
+      TargetPlatform.android => 'android',
+      TargetPlatform.iOS => 'ios',
+      _ => null,
+    };
+    if (platform == null) return null;
     try {
       final info = await PackageInfo.fromPlatform();
       final versionName = info.version.trim();
@@ -36,7 +42,7 @@ class AppUpdateService {
       final uri = Uri.parse('${DunesDefaults.apiBase}/meta/app-release')
           .replace(
             queryParameters: {
-              'platform': 'android',
+              'platform': platform,
               'versionName': versionName,
               'versionCode': '$versionCode',
             },

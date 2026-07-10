@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/theme/dunes_theme.dart';
 import 'proposal_upload_config.dart';
+import 'xflow_approval_flow_ui.dart';
 import 'xflow_form_styles.dart';
 import 'xflow_models.dart';
 import 'xflow_service.dart';
@@ -1092,167 +1093,17 @@ class XflowStageList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final flow = layout['approvalFlow'];
-    final prefix = _stageExtras(flow is Map ? flow['prefix'] : null);
-    final suffix = _stageExtras(flow is Map ? flow['suffix'] : null);
-    if (stages.isEmpty && prefix.isEmpty && suffix.isEmpty) {
-      return Text(
-        '未配置审批阶段',
-        style: DunesTypography.sans(fontSize: 11, color: DunesColors.text3),
-      );
-    }
-    final rows = <Widget>[];
-    var n = 1;
-    for (final st in prefix) {
-      rows.add(_extraRow(st, n, system: true));
-      n++;
-    }
-    for (var i = 0; i < stages.length; i++) {
-      rows.add(_stageRow(stages[i], n, stageIndex: i));
-      n++;
-    }
-    for (final st in suffix) {
-      rows.add(_extraRow(st, n, system: true));
-      n++;
-    }
-    return Column(children: rows);
-  }
-
-  List<Map<String, dynamic>> _stageExtras(dynamic raw) {
-    if (raw is! List) return const [];
-    return raw
-        .whereType<Map>()
-        .map((row) => Map<String, dynamic>.from(row))
-        .toList(growable: false);
-  }
-
-  Widget _extraRow(Map<String, dynamic> st, int num, {required bool system}) {
-    final meta = (st['meta'] ?? (system ? '系统自动' : '')).toString();
-    return _rowShell(
-      num,
-      stageName: (st['stageName'] ?? '阶段').toString(),
-      meta: meta,
-      showHelp: false,
-    );
-  }
-
-  Widget _stageRow(
-    Map<String, dynamic> st,
-    int num, {
-    required int stageIndex,
-  }) {
-    final approverType = (st['approverType'] ?? '').toString();
-    final mode = (st['mode'] ?? 'SINGLE').toString();
-    final meta = '$mode · ${_stageMetaLabel(st)}';
-    return _rowShell(
-      num,
-      stageName: (st['stageName'] ?? st['name'] ?? st['label'] ?? '审批步骤')
-          .toString(),
-      meta: meta,
-      showHelp: approverType != 'SYSTEM',
-      onHelp: onStageHelp == null ? null : () => onStageHelp!(stageIndex),
-    );
-  }
-
-  String _stageMetaLabel(Map<String, dynamic> st) {
-    final approverType = (st['approverType'] ?? '').toString();
-    if (approverType == 'SYSTEM') return '系统自动';
-    if (approverType == 'ROLE') {
-      final role = (st['roleCode'] ?? '').toString();
-      if (role == 'TECH') return '按技术标签';
-      return '角色 · $role';
-    }
-    if (approverType == 'DIRECT_SUP') return '部门主管';
-    if (approverType == 'DIVISION') return '事业部负责人';
-    if (approverType == 'USER') return '指定人员';
-    final ids = st['approverIds'];
-    if (ids is List && ids.isNotEmpty) return '${ids.length} 人';
-    return '指定审批人';
-  }
-
-  Widget _rowShell(
-    int num, {
-    required String stageName,
-    required String meta,
-    required bool showHelp,
-    VoidCallback? onHelp,
-  }) {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 10),
-      decoration: const BoxDecoration(
-        border: Border(bottom: BorderSide(color: DunesColors.borderSoft)),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 24,
-            height: 24,
-            alignment: Alignment.center,
-            decoration: const BoxDecoration(
-              color: DunesColors.stageBg,
-              shape: BoxShape.circle,
-            ),
-            child: Text(
-              '$num',
-              style: DunesTypography.sans(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        stageName,
-                        style: DunesTypography.sans(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                    if (showHelp && onHelp != null)
-                      Material(
-                        color: DunesColors.bgSoft,
-                        shape: const CircleBorder(),
-                        child: InkWell(
-                          customBorder: const CircleBorder(),
-                          onTap: onHelp,
-                          child: const SizedBox(
-                            width: 22,
-                            height: 22,
-                            child: Icon(
-                              Icons.help_outline,
-                              size: 13,
-                              color: DunesColors.text2,
-                            ),
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-                if (meta.isNotEmpty)
-                  Text(
-                    meta,
-                    style: DunesTypography.sans(
-                      fontSize: 12,
-                      color: DunesColors.text3,
-                    ),
-                  ),
-              ],
-            ),
-          ),
-        ],
-      ),
+    return XflowApprovalFlowSection(
+      stages: stages,
+      layout: layout,
+      onStageHelp: onStageHelp,
+      topSpacing: 0,
+      showHeader: false,
     );
   }
 }
+
+// Legacy stage list helpers removed — visuals live in xflow_approval_flow_ui.dart.
 
 String ccTriggerTypeLabel(dynamic t) {
   switch ('${t ?? ''}'.toLowerCase()) {

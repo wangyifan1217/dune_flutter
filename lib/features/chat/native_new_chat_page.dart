@@ -422,7 +422,7 @@ class _NewChatHeader extends StatelessWidget {
         children: [
           IconButton(
             onPressed: onBack,
-            icon: const Icon(Icons.chevron_left_rounded, size: 24),
+            icon: const Icon(Icons.chevron_left_rounded, size: 28),
           ),
           Expanded(
             child: Column(
@@ -439,8 +439,11 @@ class _NewChatHeader extends StatelessWidget {
               backgroundColor: DunesColors.accent,
               foregroundColor: Colors.white,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              textStyle: DunesTypography.mono(fontSize: 10, fontWeight: FontWeight.w700),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              textStyle: DunesTypography.mono(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+              ),
             ),
             child: Text(creating ? '创建中' : '创建'),
           ),

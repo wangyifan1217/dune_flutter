@@ -473,9 +473,9 @@ class _HeaderIconBtn extends StatelessWidget {
           customBorder: const CircleBorder(),
           onTap: onTap,
           child: SizedBox(
-            width: 34,
-            height: 34,
-            child: Icon(icon, size: 16, color: DunesColors.text2),
+            width: 44,
+            height: 44,
+            child: Icon(icon, size: 22, color: DunesColors.text2),
           ),
         ),
       ),

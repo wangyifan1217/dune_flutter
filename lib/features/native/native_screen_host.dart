@@ -17,8 +17,8 @@ import '../chat/native_chat_search_page.dart';
 import '../chat/native_group_chat_page.dart';
 import '../chat/native_group_info_page.dart';
 import '../chat/native_group_media_page.dart';
+import '../chat/native_message_center_page.dart';
 import '../chat/native_new_chat_page.dart';
-import '../chat/native_notifications_page.dart';
 import '../chat/native_private_chat_page.dart';
 import '../contacts/contact_models.dart';
 import '../contacts/native_contact_profile_page.dart';
@@ -545,17 +545,14 @@ class _NativeScreenHostState extends State<NativeScreenHost>
             widget.navigation.go('C4');
           },
           onOpenNotifications: () => widget.navigation.go('Z2'),
-          onOpenBroadcast: (conv) {
-            setState(() => _selectedBroadcast = conv);
-            widget.navigation.go('C10');
-          },
           onOpenNewChat: () => widget.navigation.go('C7'),
         );
       case 'Z2':
-        return NativeNotificationsPage(
+        return NativeMessageCenterPage(
           session: widget.session,
           onBack: widget.navigation.back,
           onNotificationsRead: _handleNotificationsRead,
+          onBroadcastRead: _handleConversationRead,
         );
       case 'C10':
         return NativeBroadcastPage(
@@ -1053,6 +1050,10 @@ class _NativeB2Page extends StatefulWidget {
 }
 
 class _NativeB2PageState extends State<_NativeB2Page> {
+  static bool get _showDeferredTools => false;
+  static bool get _showQuickStats => false;
+  static bool get _showItemBadges => false;
+
   _NativeMyStats? _stats;
   NativeKbSummary? _kbSummary;
   _NativeB2Profile? _profile;
@@ -1296,7 +1297,10 @@ class _NativeB2PageState extends State<_NativeB2Page> {
           title: const Text('无法扫码登录'),
           content: const Text('外部用户不支持登录 PC 工作台'),
           actions: [
-            TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('知道了')),
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('知道了'),
+            ),
           ],
         ),
       );
@@ -1555,131 +1559,139 @@ class _NativeB2PageState extends State<_NativeB2Page> {
                           Text(
                             '外部用户仅可使用通讯聊天功能',
                             textAlign: TextAlign.center,
-                            style: DunesTypography.sans(fontSize: 13, color: DunesColors.text3),
+                            style: DunesTypography.sans(
+                              fontSize: 14,
+                              color: DunesColors.text3,
+                            ),
                           ),
                         ] else ...[
-                        const SizedBox(height: 10),
-                        _buildQuickStats(stats),
-                        const SizedBox(height: 14),
-                        _buildQuickLaunch(),
-                        const SizedBox(height: 14),
-                        if (stats.pendingForMe > 0)
-                          _buildReminderBanner(
-                            icon: Icons.notifications_active_outlined,
-                            text: '您有 ${stats.pendingForMe} 条待审批，点击进入「我审批的」',
-                            onTap: () => widget.navigation.go('B1'),
-                          ),
-                        if (stats.approvalRejected > 0) ...[
-                          const SizedBox(height: 8),
-                          _buildReminderBanner(
-                            icon: Icons.warning_amber_rounded,
-                            text:
-                                '您有 ${stats.approvalRejected} 条审批被驳回，点击进入「我发起的审批」',
-                            onTap: () => widget.onOpenB14(),
-                          ),
-                        ],
-                        if (stats.pendingInitiateForMe > 0) ...[
-                          const SizedBox(height: 8),
-                          _buildReminderBanner(
-                            icon: Icons.assignment_ind_outlined,
-                            text:
-                                '有 ${stats.pendingInitiateForMe} 条同事推送给您、待您确认发起的提案',
-                            onTap: () =>
-                                widget.onOpenB14(filter: 'PENDING_INITIATE'),
-                          ),
-                        ],
-                        if (stats.pendingForMe > 0 ||
-                            stats.approvalRejected > 0 ||
-                            stats.pendingInitiateForMe > 0)
+                          const SizedBox(height: 10),
+                          if (_showQuickStats) ...[
+                            _buildQuickStats(stats),
+                            const SizedBox(height: 14),
+                          ],
+                          _buildQuickLaunch(),
                           const SizedBox(height: 14),
-                        _buildSectionLabel('我的事项 · 审批与穿透'),
-                        const SizedBox(height: 8),
-                        _buildMenuList(<Widget>[
-                          _buildMenuItem(
-                            icon: Icons.send_outlined,
-                            title: '我发起的审批',
-                            desc:
-                                '$initiatedTotal 条总数 · ${stats.pendingInitiateForMe} 条代发起 · ${stats.approvalPending} 审批中',
-                            badge: initiatedTotal,
-                            onTap: () => widget.onOpenB14(),
-                          ),
-                          _buildMenuItem(
-                            icon: Icons.assignment_outlined,
-                            title: '抄送我的提案',
-                            desc:
-                                '${stats.ccProposalCount} 份抄送 · ${stats.ccProposalPending} 审批中',
-                            badge: stats.ccProposalCount,
-                            onTap: () => widget.navigation.go('P1'),
-                          ),
-                          _buildMenuItem(
-                            icon: Icons.fact_check_outlined,
-                            title: '我审批的',
-                            desc:
-                                '${stats.pendingForMe} 待我审 · ${stats.handledThisMonth} 已审核',
-                            badge: stats.pendingForMe,
-                            tint: const Color(0xFFDFF1E8),
-                            onTap: () => widget.navigation.go('B1'),
-                          ),
-                          _buildMenuItem(
-                            icon: Icons.menu_book_outlined,
-                            title: '知识库',
-                            desc:
-                                '$kbDocCount 文档 · $kbCategoryCount 分类 · $kbUnreadCount 未读',
-                            badge: kbUnreadCount,
-                            onTap: () => widget.navigation.go('K1'),
-                          ),
-                          _buildMenuItem(
-                            icon: Icons.edit_outlined,
-                            title: '写汇报',
-                            desc: '0 篇 · 0 草稿 · 日 / 周 / 月 / 季',
-                            badge: 0,
-                            comingSoon: true,
-                            onTap: () => _showSoonToast(),
-                          ),
-                          _buildMenuItem(
-                            icon: Icons.mic_none_rounded,
-                            title: '会议纪要',
-                            desc: '$_meetingCount 场 · 录音转写 · 纪要生成',
-                            badge: _meetingCount,
-                            onTap: () => widget.navigation.go('MM-L'),
-                          ),
-                        ]),
-                        const SizedBox(height: 10),
-                        _buildMenuList(<Widget>[
-                          _buildMenuItem(
-                            icon: Icons.receipt_long_outlined,
-                            title: '应付账单',
-                            desc:
-                                '${stats.outstandingInvoices} 待处理 · 总 ¥0 · 灯塔联动',
-                            badge: stats.outstandingInvoices,
-                            tint: const Color(0xFFE1ECF7),
-                            comingSoon: true,
-                            onTap: () => _showSoonToast(),
-                          ),
-                          _buildMenuItem(
-                            icon: Icons.warning_amber_rounded,
-                            title: '欠票催办',
-                            desc: '0 笔 · ¥0 · 欠 0 天',
-                            badge: 0,
-                            tint: const Color(0xFFF5E5DC),
-                            comingSoon: true,
-                            onTap: () => _showSoonToast(),
-                          ),
-                        ]),
-                        const SizedBox(height: 12),
-                        if (_loading)
-                          const Center(
-                            child: Padding(
-                              padding: EdgeInsets.only(top: 12),
-                              child: SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
+                          if (stats.pendingForMe > 0)
+                            _buildReminderBanner(
+                              icon: Icons.notifications_active_outlined,
+                              text: '您有 ${stats.pendingForMe} 条待审批，点击进入「我审批的」',
+                              onTap: () => widget.navigation.go('B1'),
+                            ),
+                          if (stats.approvalRejected > 0) ...[
+                            const SizedBox(height: 8),
+                            _buildReminderBanner(
+                              icon: Icons.warning_amber_rounded,
+                              text:
+                                  '您有 ${stats.approvalRejected} 条审批被驳回，点击进入「我发起的审批」',
+                              onTap: () => widget.onOpenB14(),
+                            ),
+                          ],
+                          if (stats.pendingInitiateForMe > 0) ...[
+                            const SizedBox(height: 8),
+                            _buildReminderBanner(
+                              icon: Icons.assignment_ind_outlined,
+                              text:
+                                  '有 ${stats.pendingInitiateForMe} 条同事推送给您、待您确认发起的提案',
+                              onTap: () =>
+                                  widget.onOpenB14(filter: 'PENDING_INITIATE'),
+                            ),
+                          ],
+                          if (stats.pendingForMe > 0 ||
+                              stats.approvalRejected > 0 ||
+                              stats.pendingInitiateForMe > 0)
+                            const SizedBox(height: 14),
+                          _buildSectionLabel('我的事项 · 审批与穿透'),
+                          const SizedBox(height: 8),
+                          _buildMenuList(<Widget>[
+                            _buildMenuItem(
+                              icon: Icons.send_outlined,
+                              title: '我发起的审批',
+                              desc:
+                                  '$initiatedTotal 条总数 · ${stats.pendingInitiateForMe} 条代发起 · ${stats.approvalPending} 审批中',
+                              badge: initiatedTotal,
+                              onTap: () => widget.onOpenB14(),
+                            ),
+                            _buildMenuItem(
+                              icon: Icons.assignment_outlined,
+                              title: '抄送我的提案',
+                              desc:
+                                  '${stats.ccProposalCount} 份抄送 · ${stats.ccProposalPending} 审批中',
+                              badge: stats.ccProposalCount,
+                              onTap: () => widget.navigation.go('P1'),
+                            ),
+                            _buildMenuItem(
+                              icon: Icons.fact_check_outlined,
+                              title: '我审批的',
+                              desc:
+                                  '${stats.pendingForMe} 待我审 · ${stats.handledThisMonth} 已审核',
+                              badge: stats.pendingForMe,
+                              tint: const Color(0xFFDFF1E8),
+                              onTap: () => widget.navigation.go('B1'),
+                            ),
+                            _buildMenuItem(
+                              icon: Icons.menu_book_outlined,
+                              title: '知识库',
+                              desc:
+                                  '$kbDocCount 文档 · $kbCategoryCount 分类 · $kbUnreadCount 未读',
+                              badge: kbUnreadCount,
+                              onTap: () => widget.navigation.go('K1'),
+                            ),
+                            if (_showDeferredTools)
+                              _buildMenuItem(
+                                icon: Icons.edit_outlined,
+                                title: '写汇报',
+                                desc: '0 篇 · 0 草稿 · 日 / 周 / 月 / 季',
+                                badge: 0,
+                                comingSoon: true,
+                                onTap: () => _showSoonToast(),
+                              ),
+                            _buildMenuItem(
+                              icon: Icons.mic_none_rounded,
+                              title: '会议纪要',
+                              desc: '$_meetingCount 场 · 录音转写 · 纪要生成',
+                              badge: _meetingCount,
+                              onTap: () => widget.navigation.go('MM-L'),
+                            ),
+                          ]),
+                          if (_showDeferredTools) ...[
+                            const SizedBox(height: 10),
+                            _buildMenuList(<Widget>[
+                              _buildMenuItem(
+                                icon: Icons.receipt_long_outlined,
+                                title: '应付账单',
+                                desc:
+                                    '${stats.outstandingInvoices} 待处理 · 总 ¥0 · 灯塔联动',
+                                badge: stats.outstandingInvoices,
+                                tint: const Color(0xFFE1ECF7),
+                                comingSoon: true,
+                                onTap: () => _showSoonToast(),
+                              ),
+                              _buildMenuItem(
+                                icon: Icons.warning_amber_rounded,
+                                title: '欠票催办',
+                                desc: '0 笔 · ¥0 · 欠 0 天',
+                                badge: 0,
+                                tint: const Color(0xFFF5E5DC),
+                                comingSoon: true,
+                                onTap: () => _showSoonToast(),
+                              ),
+                            ]),
+                          ],
+                          const SizedBox(height: 12),
+                          if (_loading)
+                            const Center(
+                              child: Padding(
+                                padding: EdgeInsets.only(top: 12),
+                                child: SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
                                 ),
                               ),
                             ),
-                          ),
                         ],
                         if (_loadError != null)
                           Padding(
@@ -1689,10 +1701,6 @@ class _NativeB2PageState extends State<_NativeB2Page> {
                               child: const Text('数据同步失败，点击重试'),
                             ),
                           ),
-                        if (widget.onLogout != null) ...[
-                          const SizedBox(height: 8),
-                          _buildLogoutButton(),
-                        ],
                       ],
                     ),
                   ),
@@ -1710,7 +1718,10 @@ class _NativeB2PageState extends State<_NativeB2Page> {
             if (_live.active.value)
               Positioned(
                 right: 16,
-                bottom: kDunesMainTabBarHeight + 12,
+                bottom:
+                    kDunesMainTabBarHeight +
+                    MediaQuery.viewPaddingOf(context).bottom +
+                    12,
                 child: _buildLiveTranscribeFab(),
               ),
           ],
@@ -1786,35 +1797,6 @@ class _NativeB2PageState extends State<_NativeB2Page> {
     return '$url${sep}dunes_avatar_v=$_avatarRefreshVersion';
   }
 
-  Widget _buildLogoutButton() {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(0, 20, 0, 28),
-      child: SizedBox(
-        width: double.infinity,
-        child: OutlinedButton.icon(
-          onPressed: widget.onLogout,
-          icon: const Icon(Icons.logout, size: 18, color: DunesColors.coral),
-          label: Text(
-            '退出登录',
-            style: DunesTypography.sans(
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-              color: DunesColors.coral,
-            ),
-          ),
-          style: OutlinedButton.styleFrom(
-            padding: const EdgeInsets.symmetric(vertical: 12),
-            side: BorderSide(color: DunesColors.coral.withValues(alpha: 0.28)),
-            backgroundColor: DunesColors.coral.withValues(alpha: 0.08),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
   Widget _buildB2TopBar() {
     return Container(
       height: 56,
@@ -1832,104 +1814,124 @@ class _NativeB2PageState extends State<_NativeB2Page> {
                   text: '沙丘',
                   style: TextStyle(
                     color: Color(0xFF7C5CE6),
-                    fontSize: 17,
+                    fontSize: 19,
                     fontWeight: FontWeight.w500,
                     letterSpacing: -0.2,
                   ),
                 ),
                 TextSpan(
                   text: ' DUNES',
-                  style: TextStyle(color: DunesColors.text3, fontSize: 10),
+                  style: TextStyle(color: DunesColors.text3, fontSize: 11),
                 ),
                 TextSpan(
                   text: '  ·  我的',
-                  style: TextStyle(color: DunesColors.text2, fontSize: 10),
+                  style: TextStyle(color: DunesColors.text2, fontSize: 11),
                 ),
               ],
             ),
           ),
           const Spacer(),
-          if (!widget.session.isExternalUser)
-            Tooltip(
-              message: '扫码登录工作台',
-              child: InkWell(
-                borderRadius: BorderRadius.circular(14),
-                onTap: _qrLoginOpening ? null : _openQrLoginScanner,
-                child: Container(
-                  margin: const EdgeInsets.only(right: 8),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 6,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: DunesColors.borderSoft),
-                  ),
-                  child: Icon(
-                    _qrLoginOpening
-                        ? Icons.hourglass_top
-                        : Icons.qr_code_scanner_rounded,
-                    size: 16,
-                    color: DunesColors.text2,
-                  ),
-                ),
-              ),
-            ),
-          Tooltip(
-            message: '清除本地缓存',
-            child: InkWell(
-              borderRadius: BorderRadius.circular(14),
-              onTap: _clearLocalCache,
-              child: Container(
-                margin: const EdgeInsets.only(right: 8),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: DunesColors.borderSoft),
-                ),
-                child: const Icon(
-                  Icons.cleaning_services_outlined,
-                  size: 16,
-                  color: DunesColors.text2,
-                ),
-              ),
-            ),
-          ),
-          if (!widget.session.isExternalUser)
-            InkWell(
-              borderRadius: BorderRadius.circular(14),
-              onTap: () => widget.onOpenB3(),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
-                decoration: BoxDecoration(
-                  color: DunesColors.accentSoft,
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                child: const Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.add, size: 15, color: DunesColors.accentDeep),
-                    SizedBox(width: 2),
-                    Text(
-                      '发起',
-                      style: TextStyle(
-                        color: DunesColors.accentDeep,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
+          _buildB2OverflowMenu(),
         ],
       ),
     );
+  }
+
+  Widget _buildB2OverflowMenu() {
+    return PopupMenuButton<_B2MenuAction>(
+      tooltip: '更多功能',
+      position: PopupMenuPosition.under,
+      offset: const Offset(0, 4),
+      shape: const _WechatMenuShape(),
+      menuPadding: const EdgeInsets.only(top: 12, bottom: 8),
+      onSelected: (action) {
+        switch (action) {
+          case _B2MenuAction.scanWorkstation:
+            _openQrLoginScanner();
+          case _B2MenuAction.clearCache:
+            _clearLocalCache();
+          case _B2MenuAction.startProposal:
+            widget.onOpenB3();
+          case _B2MenuAction.logout:
+            unawaited(_confirmLogout());
+        }
+      },
+      itemBuilder: (context) => [
+        if (!widget.session.isExternalUser)
+          PopupMenuItem(
+            value: _B2MenuAction.scanWorkstation,
+            enabled: !_qrLoginOpening,
+            child: const _B2MenuEntry(
+              icon: Icons.qr_code_scanner_rounded,
+              label: '扫码登录工作台',
+            ),
+          ),
+        const PopupMenuItem(
+          value: _B2MenuAction.clearCache,
+          child: _B2MenuEntry(
+            icon: Icons.cleaning_services_outlined,
+            label: '清除本地缓存',
+          ),
+        ),
+        if (!widget.session.isExternalUser)
+          const PopupMenuItem(
+            value: _B2MenuAction.startProposal,
+            child: _B2MenuEntry(
+              icon: Icons.add_circle_outline_rounded,
+              label: '发起提案',
+            ),
+          ),
+        if (widget.onLogout != null) ...[
+          const PopupMenuDivider(),
+          const PopupMenuItem(
+            value: _B2MenuAction.logout,
+            child: _B2MenuEntry(
+              icon: Icons.logout_rounded,
+              label: '退出登录',
+              color: DunesColors.coral,
+            ),
+          ),
+        ],
+      ],
+      child: Container(
+        width: 42,
+        height: 42,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: DunesColors.borderSoft),
+        ),
+        child: const Icon(
+          Icons.more_horiz_rounded,
+          size: 24,
+          color: DunesColors.text2,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _confirmLogout() async {
+    final confirmed =
+        await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('确认退出登录？'),
+            content: const Text('退出后需要重新登录才能继续使用。'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text('取消'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                child: const Text('退出登录'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+    if (confirmed && mounted) widget.onLogout?.call();
   }
 
   Widget _buildProfileCard(_NativeMyStats stats, _NativeB2Profile profile) {
@@ -1994,7 +1996,7 @@ class _NativeB2PageState extends State<_NativeB2Page> {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
-                    fontSize: 16,
+                    fontSize: 18,
                     fontWeight: FontWeight.w500,
                   ),
                 ),
@@ -2004,7 +2006,7 @@ class _NativeB2PageState extends State<_NativeB2Page> {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
-                    fontSize: 10,
+                    fontSize: 12,
                     color: DunesColors.text2,
                   ),
                 ),
@@ -2050,7 +2052,7 @@ class _NativeB2PageState extends State<_NativeB2Page> {
         borderRadius: BorderRadius.circular(10),
         onTap: onTap,
         child: Container(
-          height: 70,
+          height: 76,
           decoration: BoxDecoration(
             color: const Color(0xFFF0EEE8),
             borderRadius: BorderRadius.circular(10),
@@ -2067,7 +2069,7 @@ class _NativeB2PageState extends State<_NativeB2Page> {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
-                        fontSize: 8.5,
+                        fontSize: 10,
                         color: DunesColors.text3,
                       ),
                     ),
@@ -2077,7 +2079,7 @@ class _NativeB2PageState extends State<_NativeB2Page> {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
-                        fontSize: 15,
+                        fontSize: 17,
                         fontWeight: FontWeight.w500,
                         height: .9,
                       ),
@@ -2159,7 +2161,7 @@ class _NativeB2PageState extends State<_NativeB2Page> {
           children: [
             const Text(
               '快速发起',
-              style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w500),
+              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
             ),
             const Spacer(),
             TextButton(
@@ -2169,7 +2171,7 @@ class _NativeB2PageState extends State<_NativeB2Page> {
                 minimumSize: Size.zero,
                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
               ),
-              child: const Text('更多提案  →', style: TextStyle(fontSize: 10)),
+            child: const Text('更多提案  →', style: TextStyle(fontSize: 11.5)),
             ),
           ],
         ),
@@ -2214,7 +2216,7 @@ class _NativeB2PageState extends State<_NativeB2Page> {
       text,
       style: const TextStyle(
         color: DunesColors.text2,
-        fontSize: 12,
+        fontSize: 14,
         fontWeight: FontWeight.w500,
       ),
     );
@@ -2235,13 +2237,13 @@ class _NativeB2PageState extends State<_NativeB2Page> {
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
           child: Row(
             children: [
-              Icon(icon, size: 14, color: const Color(0xFF8A5A14)),
+              Icon(icon, size: 16, color: const Color(0xFF8A5A14)),
               const SizedBox(width: 6),
               Expanded(
                 child: Text(
                   text,
                   style: const TextStyle(
-                    fontSize: 10.5,
+                    fontSize: 12,
                     color: Color(0xFF6E4A11),
                   ),
                 ),
@@ -2282,18 +2284,18 @@ class _NativeB2PageState extends State<_NativeB2Page> {
       child: InkWell(
         onTap: onTap,
         child: SizedBox(
-          height: 68,
+          height: 76,
           child: Row(
             children: [
               const SizedBox(width: 12),
               Container(
-                width: 28,
-                height: 28,
+                width: 32,
+                height: 32,
                 decoration: BoxDecoration(
                   color: tint,
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: Icon(icon, size: 15, color: DunesColors.accentDeep),
+                child: Icon(icon, size: 18, color: DunesColors.accentDeep),
               ),
               const SizedBox(width: 11),
               Expanded(
@@ -2304,7 +2306,7 @@ class _NativeB2PageState extends State<_NativeB2Page> {
                     Text(
                       title,
                       style: const TextStyle(
-                        fontSize: 12.5,
+                        fontSize: 13.5,
                         fontWeight: FontWeight.w500,
                       ),
                     ),
@@ -2312,14 +2314,14 @@ class _NativeB2PageState extends State<_NativeB2Page> {
                     Text(
                       desc,
                       style: const TextStyle(
-                        fontSize: 10,
+                        fontSize: 10.5,
                         color: DunesColors.text3,
                       ),
                     ),
                   ],
                 ),
               ),
-              if (badge != null)
+              if (_showItemBadges && badge != null && badge > 0)
                 Container(
                   margin: const EdgeInsets.only(right: 8),
                   padding: const EdgeInsets.symmetric(
@@ -2333,7 +2335,7 @@ class _NativeB2PageState extends State<_NativeB2Page> {
                   child: Text(
                     '$badge',
                     style: const TextStyle(
-                      fontSize: 9,
+                      fontSize: 10,
                       color: Colors.white,
                       fontWeight: FontWeight.w700,
                     ),
@@ -2382,6 +2384,91 @@ class _NativeB2PageState extends State<_NativeB2Page> {
           ),
         ),
       ],
+    );
+  }
+}
+
+enum _B2MenuAction { scanWorkstation, clearCache, startProposal, logout }
+
+class _B2MenuEntry extends StatelessWidget {
+  const _B2MenuEntry({
+    required this.icon,
+    required this.label,
+    this.color = DunesColors.text,
+  });
+
+  final IconData icon;
+  final String label;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Icon(icon, size: 20, color: color),
+        const SizedBox(width: 10),
+        Text(
+          label,
+          style: DunesTypography.sans(fontSize: 14, color: color),
+        ),
+      ],
+    );
+  }
+}
+
+class _WechatMenuShape extends ShapeBorder {
+  const _WechatMenuShape({
+    this.radius = 12,
+    this.tipWidth = 14,
+    this.tipHeight = 8,
+  });
+
+  final double radius;
+  final double tipWidth;
+  final double tipHeight;
+
+  @override
+  EdgeInsetsGeometry get dimensions => EdgeInsets.zero;
+
+  @override
+  Path getInnerPath(Rect rect, {TextDirection? textDirection}) =>
+      getOuterPath(rect, textDirection: textDirection);
+
+  @override
+  Path getOuterPath(Rect rect, {TextDirection? textDirection}) {
+    final top = rect.top + tipHeight;
+    final tipCenter = rect.right - 28;
+    final path = Path()
+      ..moveTo(rect.left + radius, top)
+      ..lineTo(tipCenter - tipWidth / 2, top)
+      ..lineTo(tipCenter, rect.top)
+      ..lineTo(tipCenter + tipWidth / 2, top)
+      ..lineTo(rect.right - radius, top)
+      ..quadraticBezierTo(rect.right, top, rect.right, top + radius)
+      ..lineTo(rect.right, rect.bottom - radius)
+      ..quadraticBezierTo(
+        rect.right,
+        rect.bottom,
+        rect.right - radius,
+        rect.bottom,
+      )
+      ..lineTo(rect.left + radius, rect.bottom)
+      ..quadraticBezierTo(rect.left, rect.bottom, rect.left, rect.bottom - radius)
+      ..lineTo(rect.left, top + radius)
+      ..quadraticBezierTo(rect.left, top, rect.left + radius, top)
+      ..close();
+    return path;
+  }
+
+  @override
+  void paint(Canvas canvas, Rect rect, {TextDirection? textDirection}) {}
+
+  @override
+  ShapeBorder scale(double t) {
+    return _WechatMenuShape(
+      radius: radius * t,
+      tipWidth: tipWidth * t,
+      tipHeight: tipHeight * t,
     );
   }
 }

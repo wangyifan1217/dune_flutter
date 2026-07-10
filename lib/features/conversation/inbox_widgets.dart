@@ -14,13 +14,15 @@ class ChatInboxHeader extends StatelessWidget {
     required this.visibleCount,
     required this.onOpenContacts,
     required this.onNewChat,
-    required this.onScan,
+    required this.onOpenMessageCenter,
+    this.messageCenterUnread = 0,
   });
 
   final int visibleCount;
   final VoidCallback onOpenContacts;
   final VoidCallback onNewChat;
-  final VoidCallback onScan;
+  final VoidCallback onOpenMessageCenter;
+  final int messageCenterUnread;
 
   @override
   Widget build(BuildContext context) {
@@ -58,9 +60,13 @@ class ChatInboxHeader extends StatelessWidget {
             ),
           ),
           const Spacer(),
+          _IconBtn(
+            icon: Icons.notifications_none_rounded,
+            onTap: onOpenMessageCenter,
+            unreadCount: messageCenterUnread,
+          ),
           _IconBtn(icon: Icons.people_outline_rounded, onTap: onOpenContacts),
           _IconBtn(icon: Icons.edit_outlined, onTap: onNewChat),
-          _IconBtn(icon: Icons.qr_code_scanner_outlined, onTap: onScan),
         ],
       ),
     );
@@ -95,18 +101,23 @@ class ChatInboxSearchBar extends StatelessWidget {
               child: TextField(
                 controller: controller,
                 onChanged: onChanged,
-                style: DunesTypography.sans(fontSize: 13, color: DunesColors.text),
+                style: DunesTypography.sans(
+                  fontSize: 13,
+                  color: DunesColors.text,
+                ),
                 textInputAction: TextInputAction.search,
                 decoration: InputDecoration(
                   isDense: true,
                   border: InputBorder.none,
                   hintText: '搜索人 / 群 / 消息内容 / 审批号',
-                  hintStyle: DunesTypography.sans(fontSize: 13, color: DunesColors.text3),
+                  hintStyle: DunesTypography.sans(
+                    fontSize: 13,
+                    color: DunesColors.text3,
+                  ),
                   contentPadding: EdgeInsets.zero,
                 ),
               ),
             ),
-            const Icon(Icons.mic_none_rounded, size: 15, color: DunesColors.text3),
           ],
         ),
       ),
@@ -121,50 +132,70 @@ class ChatInboxSectionHeader extends StatelessWidget {
     required this.count,
     this.pinned = false,
     this.leading,
+    this.collapsed = false,
+    this.onTap,
   });
 
   final String label;
   final int count;
   final bool pinned;
   final Widget? leading;
+  final bool collapsed;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 14, 16, 6),
-      child: Row(
-        children: [
-          if (leading != null) ...[
-            leading!,
-            const SizedBox(width: 5),
-          ] else
-            Icon(
-              pinned ? Icons.push_pin_outlined : Icons.more_horiz,
-              size: 11,
-              color: pinned ? DunesColors.accent : DunesColors.text3,
-            ),
-          const SizedBox(width: 6),
-          Expanded(
-            child: Text(
-              label.toUpperCase(),
-              style: DunesTypography.mono(
-                fontSize: 9.5,
-                fontWeight: FontWeight.w600,
-                letterSpacing: 0.08 * 9.5,
-                color: DunesColors.text3,
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 14, 16, 6),
+          child: Row(
+            children: [
+              if (leading != null) ...[
+                leading!,
+                const SizedBox(width: 5),
+              ] else
+                Icon(
+                  pinned ? Icons.push_pin_outlined : Icons.more_horiz,
+                  size: 11,
+                  color: pinned ? DunesColors.accent : DunesColors.text3,
+                ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  label.toUpperCase(),
+                  style: DunesTypography.mono(
+                    fontSize: 9.5,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 0.08 * 9.5,
+                    color: DunesColors.text3,
+                  ),
+                ),
               ),
-            ),
+              Text(
+                '$count',
+                style: DunesTypography.mono(
+                  fontSize: 9.5,
+                  fontWeight: FontWeight.w500,
+                  letterSpacing: 0.04 * 9.5,
+                  color: DunesColors.text3,
+                ),
+              ),
+              if (onTap != null) ...[
+                const SizedBox(width: 4),
+                Icon(
+                  collapsed
+                      ? Icons.keyboard_arrow_down_rounded
+                      : Icons.keyboard_arrow_up_rounded,
+                  size: 16,
+                  color: DunesColors.text3,
+                ),
+              ],
+            ],
           ),
-          Text(
-            '$count',
-            style: DunesTypography.mono(
-              fontSize: 9.5,
-              fontWeight: FontWeight.w500,
-              letterSpacing: 0.04 * 9.5,
-              color: DunesColors.text3,
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -241,21 +272,21 @@ class ChatInboxRow extends StatelessWidget {
           child: InkWell(
             onTap: onTap,
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 11, 16, 11),
+              padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   SizedBox(
-                    width: 44,
-                    height: 44,
+                    width: 52,
+                    height: 52,
                     child: Stack(
                       clipBehavior: Clip.none,
                       children: [
                         RepaintBoundary(
                           child: OverflowBox(
                             alignment: Alignment.center,
-                            maxWidth: 50,
-                            maxHeight: 50,
+                            maxWidth: 56,
+                            maxHeight: 56,
                             child: _Avatar(
                               kind: kind,
                               initial: avatarInitial,
@@ -282,7 +313,7 @@ class ChatInboxRow extends StatelessWidget {
                       ],
                     ),
                   ),
-                  const SizedBox(width: 11),
+                  const SizedBox(width: 12),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -298,9 +329,9 @@ class ChatInboxRow extends StatelessWidget {
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
                                       style: DunesTypography.sans(
-                                        fontSize: 13.5,
+                                        fontSize: 15,
                                         fontWeight: FontWeight.w500,
-                                        letterSpacing: -0.01 * 13.5,
+                                        letterSpacing: -0.01 * 15,
                                         color: DunesColors.text,
                                       ),
                                     ),
@@ -308,7 +339,10 @@ class ChatInboxRow extends StatelessWidget {
                                   if (showAiMark) ...[
                                     const SizedBox(width: 6),
                                     Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 5,
+                                        vertical: 1,
+                                      ),
                                       decoration: BoxDecoration(
                                         color: DunesColors.accent,
                                         borderRadius: BorderRadius.circular(3),
@@ -324,7 +358,8 @@ class ChatInboxRow extends StatelessWidget {
                                       ),
                                     ),
                                   ],
-                                  if (memberCount != null && memberCount! > 0) ...[
+                                  if (memberCount != null &&
+                                      memberCount! > 0) ...[
                                     const SizedBox(width: 4),
                                     Text(
                                       '($memberCount)',
@@ -334,7 +369,8 @@ class ChatInboxRow extends StatelessWidget {
                                       ),
                                     ),
                                   ],
-                                  if (subtitle != null && subtitle!.isNotEmpty) ...[
+                                  if (subtitle != null &&
+                                      subtitle!.isNotEmpty) ...[
                                     Text(
                                       ' · ${subtitle!.toUpperCase()}',
                                       style: DunesTypography.mono(
@@ -388,8 +424,12 @@ class ChatInboxRow extends StatelessWidget {
         ),
         if (showDivider)
           const Padding(
-            padding: EdgeInsets.only(left: 71, right: 16),
-            child: Divider(height: 1, thickness: 1, color: DunesColors.borderSoft),
+            padding: EdgeInsets.only(left: 80, right: 16),
+            child: Divider(
+              height: 1,
+              thickness: 1,
+              color: DunesColors.borderSoft,
+            ),
           ),
       ],
     );
@@ -413,15 +453,11 @@ class _UnreadBadge extends StatelessWidget {
     return Container(
       margin: mini ? EdgeInsets.zero : const EdgeInsets.only(top: 4),
       constraints: BoxConstraints(
-        minWidth: mini
-            ? (isSingle ? 16 : 20)
-            : (isSingle ? 24 : 26),
+        minWidth: mini ? (isSingle ? 16 : 20) : (isSingle ? 24 : 26),
         minHeight: mini ? 16 : 24,
       ),
       padding: EdgeInsets.symmetric(
-        horizontal: mini
-            ? (isSingle ? 0 : 5)
-            : (isSingle ? 0 : 8),
+        horizontal: mini ? (isSingle ? 0 : 5) : (isSingle ? 0 : 8),
         vertical: 0,
       ),
       alignment: Alignment.center,
@@ -481,7 +517,10 @@ class _PreviewLine extends StatelessWidget {
           Expanded(
             child: Text(
               preview.isEmpty ? '正在生成…' : preview,
-              style: DunesTypography.sans(fontSize: 12.5, color: DunesColors.text3),
+              style: DunesTypography.sans(
+                fontSize: 12.5,
+                color: DunesColors.text3,
+              ),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
@@ -503,7 +542,10 @@ class _PreviewLine extends StatelessWidget {
             ),
           TextSpan(
             text: preview.isEmpty ? '暂无消息' : preview,
-            style: DunesTypography.sans(fontSize: 12.5, color: DunesColors.text3),
+            style: DunesTypography.sans(
+              fontSize: 12.5,
+              color: DunesColors.text3,
+            ),
           ),
         ],
       ),
@@ -536,7 +578,7 @@ class _Avatar extends StatelessWidget {
   final ConversationService? avatarService;
   final List<ConversationAvatarMember> groupAvatarMembers;
 
-  static const _inboxAvatarSize = 44.0;
+  static const _inboxAvatarSize = 52.0;
   static const _inboxAvatarRadius = _inboxAvatarSize * 0.18;
 
   @override
@@ -548,7 +590,7 @@ class _Avatar extends StatelessWidget {
 
     switch (kind) {
       case ChatInboxRowKind.aiAssistant:
-        return const NovaIconImage(size: 44, borderRadius: 12);
+        return const NovaIconImage(size: _inboxAvatarSize, borderRadius: 12);
       case ChatInboxRowKind.systemNotification:
         decoration = BoxDecoration(
           borderRadius: borderRadius,
@@ -556,7 +598,11 @@ class _Avatar extends StatelessWidget {
             colors: [Color(0xFFC2AEE7), Color(0xFF9C82CE)],
           ),
         );
-        child = const Icon(Icons.notifications_none_rounded, color: Colors.white, size: 17);
+        child = const Icon(
+          Icons.notifications_none_rounded,
+          color: Colors.white,
+          size: 17,
+        );
       case ChatInboxRowKind.broadcast:
         decoration = BoxDecoration(
           borderRadius: borderRadius,
@@ -564,13 +610,17 @@ class _Avatar extends StatelessWidget {
             colors: [Color(0xFFD9C9F0), Color(0xFFB89FE2)],
           ),
         );
-        child = const Icon(Icons.campaign_outlined, color: Colors.white, size: 17);
+        child = const Icon(
+          Icons.campaign_outlined,
+          color: Colors.white,
+          size: 17,
+        );
       case ChatInboxRowKind.group:
       case ChatInboxRowKind.workgroupApproval:
         if (groupAvatarMembers.isNotEmpty) {
           return GroupCompositeAvatar(
             members: groupAvatarMembers,
-            size: 44,
+            size: _inboxAvatarSize,
             avatarService: avatarService,
           );
         }
@@ -581,7 +631,11 @@ class _Avatar extends StatelessWidget {
               colors: [Color(0xFF9079C2), Color(0xFF6A4FA0)],
             ),
           );
-          child = const Icon(Icons.assignment_outlined, color: Colors.white, size: 17);
+          child = const Icon(
+            Icons.assignment_outlined,
+            color: Colors.white,
+            size: 17,
+          );
         } else {
           decoration = BoxDecoration(
             borderRadius: borderRadius,
@@ -589,7 +643,11 @@ class _Avatar extends StatelessWidget {
               colors: [Color(0xFFCABCEB), Color(0xFFA88CD8)],
             ),
           );
-          child = const Icon(Icons.groups_outlined, color: Colors.white, size: 17);
+          child = const Icon(
+            Icons.groups_outlined,
+            color: Colors.white,
+            size: 17,
+          );
         }
       case ChatInboxRowKind.private:
         final letter = (initial == null || initial!.isEmpty) ? '?' : initial!;
@@ -661,10 +719,15 @@ class _Avatar extends StatelessWidget {
 }
 
 class _IconBtn extends StatelessWidget {
-  const _IconBtn({required this.icon, required this.onTap});
+  const _IconBtn({
+    required this.icon,
+    required this.onTap,
+    this.unreadCount = 0,
+  });
 
   final IconData icon;
   final VoidCallback onTap;
+  final int unreadCount;
 
   @override
   Widget build(BuildContext context) {
@@ -674,9 +737,43 @@ class _IconBtn extends StatelessWidget {
         customBorder: const CircleBorder(),
         onTap: onTap,
         child: SizedBox(
-          width: 34,
-          height: 34,
-          child: Icon(icon, size: 16, color: DunesColors.text2),
+          width: 44,
+          height: 44,
+          child: Stack(
+            clipBehavior: Clip.none,
+            alignment: Alignment.center,
+            children: [
+              Icon(icon, size: 22, color: DunesColors.text2),
+              if (unreadCount > 0)
+                Positioned(
+                  top: 7,
+                  right: 6,
+                  child: Container(
+                    constraints: const BoxConstraints(minWidth: 8, minHeight: 8),
+                    padding: unreadCount > 9
+                        ? const EdgeInsets.symmetric(horizontal: 3, vertical: 1)
+                        : EdgeInsets.zero,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: DunesColors.coral,
+                      borderRadius: BorderRadius.circular(99),
+                      border: Border.all(color: DunesColors.bgApp, width: 1.5),
+                    ),
+                    child: unreadCount > 9
+                        ? Text(
+                            unreadCount > 99 ? '99+' : '$unreadCount',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 8,
+                              fontWeight: FontWeight.w700,
+                              height: 1,
+                            ),
+                          )
+                        : null,
+                  ),
+                ),
+            ],
+          ),
         ),
       ),
     );

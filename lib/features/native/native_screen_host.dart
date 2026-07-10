@@ -56,6 +56,7 @@ import '../workbench/native_avatar_sheet.dart';
 import '../workbench/native_my_workbench_pages.dart';
 import '../workbench/native_team_board_page.dart';
 import '../workbench/workbench_badge_notifier.dart';
+import '../lighthouse/contract_sealing_page.dart';
 import '../lighthouse/native_lighthouse_page.dart';
 import '../meeting/meeting_live_controller.dart';
 import '../meeting/meeting_upload_coordinator.dart';

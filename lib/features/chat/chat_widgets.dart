@@ -260,8 +260,8 @@ class ChatInputBar extends StatelessWidget {
         bottomInset > 0 ? bottomInset + 6 : 9,
       ),
       decoration: const BoxDecoration(
-        color: Color(0xFFF7F4FB),
-        border: Border(top: BorderSide(color: Color(0xFFE5DFEE))),
+        color: DunesColors.bgApp,
+        border: Border(top: BorderSide(color: DunesColors.borderSoft)),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.end,

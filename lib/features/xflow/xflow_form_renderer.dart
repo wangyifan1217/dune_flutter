@@ -397,32 +397,12 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
     final current = widget.values[field.key]?.toString() ?? '';
     return _fieldWrap(
       field,
-      xfFixedHeightControl(
-        child: DropdownButtonHideUnderline(
-          child: DropdownButtonFormField<String>(
-            value: current.isEmpty ? null : current,
-            isExpanded: true,
-            style: xfInputTextStyle(),
-            icon: const Icon(
-              Icons.keyboard_arrow_down_rounded,
-              size: 18,
-              color: DunesColors.text3,
-            ),
-            decoration: _inputDecoration(
-              hint: field.placeholder.isEmpty ? '请选择' : field.placeholder,
-            ),
-            items: [
-              for (final option in field.options)
-                DropdownMenuItem(
-                  value: option.value,
-                  child: Text(option.label, style: xfInputTextStyle()),
-                ),
-            ],
-            onChanged: field.readonly
-                ? null
-                : (v) => widget.onChanged(field.key, v ?? ''),
-          ),
-        ),
+      _XflowSelectPicker(
+        options: field.options,
+        value: current,
+        placeholder: field.placeholder.isEmpty ? '请选择' : field.placeholder,
+        readonly: field.readonly,
+        onChanged: (v) => widget.onChanged(field.key, v),
       ),
       inRow: inRow,
     );
@@ -1354,6 +1334,219 @@ class _XflowUserPicker extends StatefulWidget {
 
   @override
   State<_XflowUserPicker> createState() => _XflowUserPickerState();
+}
+
+class _XflowSelectPicker extends StatefulWidget {
+  const _XflowSelectPicker({
+    required this.options,
+    required this.value,
+    required this.placeholder,
+    required this.readonly,
+    required this.onChanged,
+  });
+
+  final List<XflowFieldOption> options;
+  final String value;
+  final String placeholder;
+  final bool readonly;
+  final ValueChanged<String> onChanged;
+
+  @override
+  State<_XflowSelectPicker> createState() => _XflowSelectPickerState();
+}
+
+class _XflowSelectPickerState extends State<_XflowSelectPicker> {
+  final TextEditingController _controller = TextEditingController();
+  List<XflowFieldOption> _filtered = const [];
+  bool _touched = false;
+  bool _expanded = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller.text = _labelForValue(widget.value);
+  }
+
+  @override
+  void didUpdateWidget(covariant _XflowSelectPicker oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.value != widget.value || oldWidget.options != widget.options) {
+      final next = _labelForValue(widget.value);
+      if (_controller.text != next) {
+        _controller.text = next;
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  String _labelForValue(String value) {
+    if (value.trim().isEmpty) return '';
+    for (final option in widget.options) {
+      if (option.value == value) return option.label;
+    }
+    return value;
+  }
+
+  void _applyFilter(String query, {bool markTouched = true}) {
+    final q = query.trim().toLowerCase();
+    final out = q.isEmpty
+        ? widget.options
+        : widget.options.where((o) {
+            final label = o.label.toLowerCase();
+            final value = o.value.toLowerCase();
+            return label.contains(q) || value.contains(q);
+          }).toList(growable: false);
+    setState(() {
+      _filtered = out;
+      if (markTouched) _touched = true;
+    });
+  }
+
+  void _select(XflowFieldOption option) {
+    widget.onChanged(option.value);
+    setState(() {
+      _controller.text = option.label;
+      _filtered = const [];
+      _touched = false;
+      _expanded = false;
+    });
+  }
+
+  void _clear() {
+    widget.onChanged('');
+    setState(() {
+      _controller.clear();
+      _filtered = widget.options;
+      _touched = false;
+      _expanded = true;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final hasText = _controller.text.trim().isNotEmpty;
+    final showMenu = !widget.readonly && _expanded && _filtered.isNotEmpty;
+    return TapRegion(
+      onTapOutside: (_) {
+        FocusManager.instance.primaryFocus?.unfocus();
+        if (_expanded) setState(() => _expanded = false);
+      },
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          xfFixedHeightControl(
+            child: TextField(
+              controller: _controller,
+              onTap: widget.readonly
+                  ? null
+                  : () {
+                      if (!_expanded) {
+                        setState(() => _expanded = true);
+                        _applyFilter('', markTouched: false);
+                      }
+                    },
+              readOnly: true,
+              enableInteractiveSelection: false,
+              style: xfInputTextStyle(),
+              decoration: xfInputDecoration(
+                hint: widget.placeholder,
+                readonly: widget.readonly,
+              ).copyWith(
+                suffixIconConstraints: const BoxConstraints(minWidth: 72),
+                suffixIcon: widget.readonly
+                    ? const Icon(
+                        Icons.keyboard_arrow_down_rounded,
+                        size: 18,
+                        color: DunesColors.text3,
+                      )
+                    : Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (hasText)
+                            IconButton(
+                              tooltip: '清除',
+                              icon: const Icon(
+                                Icons.close_rounded,
+                                size: 18,
+                                color: DunesColors.text3,
+                              ),
+                              onPressed: _clear,
+                            ),
+                          IconButton(
+                            tooltip: _expanded ? '收起' : '展开',
+                            icon: Icon(
+                              _expanded
+                                  ? Icons.keyboard_arrow_up_rounded
+                                  : Icons.keyboard_arrow_down_rounded,
+                              size: 18,
+                              color: DunesColors.text3,
+                            ),
+                            onPressed: () {
+                              if (_expanded) {
+                                setState(() => _expanded = false);
+                              } else {
+                                setState(() => _expanded = true);
+                                _applyFilter('', markTouched: false);
+                              }
+                            },
+                          ),
+                        ],
+                      ),
+              ),
+            ),
+          ),
+        if (showMenu) ...[
+          const SizedBox(height: 6),
+          Container(
+            constraints: const BoxConstraints(maxHeight: 220),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: DunesColors.border),
+            ),
+            child: ListView.separated(
+              padding: EdgeInsets.zero,
+              shrinkWrap: true,
+              itemCount: _filtered.length.clamp(0, 8),
+              separatorBuilder: (_, _) =>
+                  Divider(height: 1, color: DunesColors.borderSoft),
+              itemBuilder: (context, index) {
+                final option = _filtered[index];
+                return ListTile(
+                  dense: true,
+                  title: Text(
+                    option.label,
+                    style: DunesTypography.sans(fontSize: 12),
+                  ),
+                  trailing: const Icon(
+                    Icons.keyboard_arrow_right_rounded,
+                    size: 16,
+                    color: DunesColors.text3,
+                  ),
+                  onTap: () => _select(option),
+                );
+              },
+            ),
+          ),
+        ] else if (!widget.readonly &&
+            _touched &&
+            _expanded &&
+            _controller.text.trim().isNotEmpty) ...[
+          const SizedBox(height: 6),
+          Text(
+            '未找到匹配选项，请换个关键词',
+            style: DunesTypography.sans(fontSize: 11, color: DunesColors.text3),
+          ),
+        ],
+        ],
+      ),
+    );
+  }
 }
 
 class _XflowUserPickerState extends State<_XflowUserPicker> {

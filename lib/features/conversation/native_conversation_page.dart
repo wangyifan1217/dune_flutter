@@ -607,6 +607,33 @@ class _NativeConversationPageState extends State<NativeConversationPage>
     List<Widget> convRows(Iterable<NativeConversation> rows) =>
         rows.map(_buildConvRow).whereType<Widget>().toList();
 
+    if (widget.session.isExternalUser) {
+      final sections = <_InboxSection>[
+        if (groups.isNotEmpty)
+          _InboxSection(
+            key: 'group',
+            label: '工作群',
+            count: groups.length,
+            timestamp: groups.first.sortTimestamp,
+            pinned: false,
+            leading: const Icon(Icons.groups_outlined, size: 11, color: DunesColors.text3),
+            rows: convRows(groups),
+          ),
+        if (privates.isNotEmpty)
+          _InboxSection(
+            key: 'private',
+            label: '1 对 1',
+            count: privates.length,
+            timestamp: privates.first.sortTimestamp,
+            pinned: false,
+            leading: const Icon(Icons.chat_bubble_outline, size: 11, color: DunesColors.text3),
+            rows: convRows(privates),
+          ),
+      ];
+      sections.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+      return sections;
+    }
+
     final sections = <_InboxSection>[
       _InboxSection(
         key: 'ai',
@@ -717,6 +744,7 @@ class _NativeConversationPageState extends State<NativeConversationPage>
                 commUnread: widget.commUnread,
                 workbenchBadge: widget.workbenchBadge,
                 lighthouseAccess: widget.session.lighthouseAccess,
+                chatOnlyMode: widget.session.isExternalUser,
               ),
             ],
           ),

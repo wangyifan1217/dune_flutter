@@ -44,6 +44,7 @@ class _NativeNewChatPageState extends State<NativeNewChatPage> {
   int _total = 0;
   List<NativeDepartment> _departments = const <NativeDepartment>[];
   List<NativeContact> _searchItems = const <NativeContact>[];
+  List<NativeContact> _externalContacts = const <NativeContact>[];
   Set<int> _onlineUsers = <int>{};
   Set<int> _selectedUserIds = <int>{};
   StreamSubscription<Set<int>>? _onlineSub;
@@ -86,11 +87,18 @@ class _NativeNewChatPageState extends State<NativeNewChatPage> {
     try {
       final searching = _searchController.text.trim().isNotEmpty;
       final data = await _service.fetchOrgContacts(keyword: _searchController.text);
+      final external = searching
+          ? await _service.fetchExternalContacts(keyword: _searchController.text)
+          : await _service.fetchExternalContacts();
       if (!mounted) return;
       setState(() {
         _total = data.total;
         if (!searching) _departments = data.departments;
-        _searchItems = data.searchItems.where((c) => c.enabled && c.userId != widget.session.userId).toList(growable: false);
+        final mergedSearch = [...data.searchItems, ...external]
+            .where((c) => c.enabled && c.userId != widget.session.userId)
+            .toList(growable: false);
+        _searchItems = searching ? mergedSearch : data.searchItems.where((c) => c.enabled && c.userId != widget.session.userId).toList(growable: false);
+        _externalContacts = external.where((c) => c.enabled && c.userId != widget.session.userId).toList(growable: false);
         _loading = false;
       });
     } catch (e) {
@@ -172,6 +180,9 @@ class _NativeNewChatPageState extends State<NativeNewChatPage> {
 
   NativeContact? _contactById(int userId) {
     for (final c in _searchItems) {
+      if (c.userId == userId) return c;
+    }
+    for (final c in _externalContacts) {
       if (c.userId == userId) return c;
     }
     NativeContact? hit;
@@ -316,24 +327,47 @@ class _NativeNewChatPageState extends State<NativeNewChatPage> {
             .toList(growable: false),
       );
     }
-    if (_departments.isEmpty) {
+    if (_departments.isEmpty && _externalContacts.isEmpty) {
       return const Center(child: Text('暂无组织数据', style: TextStyle(color: DunesColors.text3)));
     }
     return ListView(
       padding: const EdgeInsets.only(bottom: 16),
-      children: _departments
-          .map(
-            (dep) => _NewChatDeptBlock(
-              key: ValueKey('dept-${dep.id}'),
-              department: dep,
-              currentUserId: widget.session.userId,
-              selectedUserIds: _selectedUserIds,
-              onlineUsers: _onlineUsers,
-              avatarService: _conversationService,
-              onToggleContact: _toggleSelected,
+      children: [
+        ..._departments
+            .map(
+              (dep) => _NewChatDeptBlock(
+                key: ValueKey('dept-${dep.id}'),
+                department: dep,
+                currentUserId: widget.session.userId,
+                selectedUserIds: _selectedUserIds,
+                onlineUsers: _onlineUsers,
+                avatarService: _conversationService,
+                onToggleContact: _toggleSelected,
+              ),
+            )
+            .toList(growable: false),
+        if (_externalContacts.isNotEmpty) ...[
+          const Padding(
+            padding: EdgeInsets.fromLTRB(16, 10, 16, 6),
+            child: Row(
+              children: [
+                Text('外部用户', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: DunesColors.accent)),
+              ],
             ),
-          )
-          .toList(growable: false),
+          ),
+          ..._externalContacts
+              .map(
+                (c) => _NewChatPickRow(
+                  contact: c,
+                  selected: _selectedUserIds.contains(c.userId),
+                  online: _onlineUsers.contains(c.userId),
+                  avatarService: _conversationService,
+                  onTap: () => _toggleSelected(c),
+                ),
+              )
+              .toList(growable: false),
+        ],
+      ],
     );
   }
 }
@@ -350,7 +384,7 @@ class _NewChatOrgLabel extends StatelessWidget {
       child: Row(
         children: [
           Text(
-            '组织树',
+            'HeUnion',
             style: DunesTypography.sans(fontSize: 12, fontWeight: FontWeight.w600, color: DunesColors.accent),
           ),
           Expanded(
@@ -555,7 +589,7 @@ class _NewChatSelectedStack extends StatelessWidget {
             ),
           ),
           if (selectedUserIds.isEmpty)
-            Text('请从组织树选择成员', style: DunesTypography.sans(fontSize: 11, color: DunesColors.text3))
+            Text('请从 HeUnion 选择成员', style: DunesTypography.sans(fontSize: 11, color: DunesColors.text3))
           else
             ...selectedUserIds.map((id) {
               final name = resolveContact(id)?.displayName ?? '成员$id';

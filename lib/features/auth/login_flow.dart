@@ -17,16 +17,15 @@ import '../shell/dunes_shell.dart';
 import '../shell/splash_screen.dart';
 import '../update/app_update_dialog.dart';
 import '../update/app_update_service.dart';
+import 'auth_flow_ui.dart';
 import 'auth_service.dart';
 import 'auth_profile.dart';
 import 'auth_session.dart';
 import 'auth_session_coordinator.dart';
+import 'registration_flow.dart';
 
-const _authBlue = Color(0xFF1A6FDB);
-const _authBlueDeep = Color(0xFF0D4A9E);
-const _authBg = Color(0xFFF7F8FA);
-const _authSurface = Colors.white;
-
+const _authBlue = authBlue;
+const _authBg = authBg;
 class LoginFlow extends StatefulWidget {
   const LoginFlow({super.key, this.onHydrated});
 
@@ -339,12 +338,10 @@ class _PhoneStepState extends State<_PhoneStep> {
 
   @override
   Widget build(BuildContext context) {
-    return _AuthScaffold(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+    return AuthScaffold(
+      child: Column(        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const _AppLogo(size: 88),
-          const SizedBox(height: 20),
+          const AuthAppLogo(size: 88),          const SizedBox(height: 20),
           Text(
             '沙丘',
             textAlign: TextAlign.center,
@@ -388,10 +385,9 @@ class _PhoneStepState extends State<_PhoneStep> {
               color: DunesColors.text,
               letterSpacing: 1.2,
             ),
-            decoration: _inputDecoration(hintText: '请输入手机号', errorText: _error)
+            decoration: authInputDecoration(hintText: '请输入手机号', errorText: _error)
                 .copyWith(
-                  prefixIcon: const _PhonePrefix(),
-                  prefixIconConstraints: const BoxConstraints(
+                  prefixIcon: const AuthPhonePrefix(),                  prefixIconConstraints: const BoxConstraints(
                     minWidth: 0,
                     minHeight: 0,
                   ),
@@ -408,9 +404,22 @@ class _PhoneStepState extends State<_PhoneStep> {
             height: 50,
             child: FilledButton(
               onPressed: _next,
-              style: _authPrimaryButtonStyle,
-              child: const Text('获取验证码'),
+              style: authPrimaryButtonStyle,              child: const Text('获取验证码'),
             ),
+          ),
+          const SizedBox(height: 16),
+          TextButton(
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => RegistrationFlowPage(
+                    auth: widget.auth,
+                    onSignedIn: widget.onSignedIn,
+                  ),
+                ),
+              );
+            },
+            child: const Text('没有账号？立即注册'),
           ),
         ],
       ),
@@ -485,24 +494,17 @@ class _CodeStepState extends State<_CodeStep> {
         phone: widget.phone,
         code: _code,
       );
-      try {
-        final nova = await NovaAuthService().provisionAfterLogin(
-          apiBase: session.apiBase,
-          dunesToken: session.token,
-          phone: session.phone,
-        );
-        session = AuthSession(
-          phone: session.phone,
-          userId: session.userId,
-          token: session.token,
-          apiBase: session.apiBase,
-          roles: session.roles,
-          displayName: session.displayName,
-          departmentId: session.departmentId,
-          novaLocalStorage: nova.toLocalStorageEntries(),
-        );
-      } catch (_) {}
       session = await enrichSessionFromUsersMe(session);
+      if (!session.isExternalUser) {
+        try {
+          final nova = await NovaAuthService().provisionAfterLogin(
+            apiBase: session.apiBase,
+            dunesToken: session.token,
+            phone: session.phone,
+          );
+          session = session.copyWith(novaLocalStorage: nova.toLocalStorageEntries());
+        } catch (_) {}
+      }
       if (!mounted) return;
       widget.onSignedIn(session);
       if (mounted) {
@@ -521,363 +523,18 @@ class _CodeStepState extends State<_CodeStep> {
 
   @override
   Widget build(BuildContext context) {
-    final maskedPhone = widget.phone.replaceRange(3, 7, '****');
-
-    return _AuthScaffold(
-      showLogo: false,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Align(
-            alignment: Alignment.centerLeft,
-            child: _BackButton(onPressed: () => Navigator.of(context).pop()),
-          ),
-          const SizedBox(height: 12),
-          const _AppLogo(size: 64),
-          const SizedBox(height: 24),
-          Text(
-            '输入验证码',
-            textAlign: TextAlign.center,
-            style: DunesTypography.sans(
-              fontSize: 22,
-              fontWeight: FontWeight.w600,
-              color: DunesColors.text,
-            ),
-          ),
-          const SizedBox(height: 10),
-          Text(
-            '验证码已发送至 +86 $maskedPhone',
-            textAlign: TextAlign.center,
-            style: DunesTypography.sans(
-              fontSize: 14,
-              color: DunesColors.text3,
-              height: 1.5,
-            ),
-          ),
-          const SizedBox(height: 36),
-          _CodeInput(
-            length: _codeLen,
-            controller: _controller,
-            focusNode: _focus,
-            hasError: _error != null,
-            onSubmitted: _trySubmit,
-          ),
-          const SizedBox(height: 24),
-          AnimatedSwitcher(
-            duration: const Duration(milliseconds: 180),
-            child: _loading
-                ? const LinearProgressIndicator(
-                    minHeight: 2,
-                    color: _authBlue,
-                    backgroundColor: Color(0xFFE8EDF5),
-                  )
-                : _error != null
-                ? Text(
-                    _error!,
-                    key: const ValueKey('error'),
-                    textAlign: TextAlign.center,
-                    style: DunesTypography.sans(
-                      fontSize: 13,
-                      color: DunesColors.coral,
-                      height: 1.5,
-                    ),
-                  )
-                : const SizedBox.shrink(key: ValueKey('idle')),
-          ),
-        ],
+    return AuthCodeEntryLayout(
+      phone: widget.phone,
+      loading: _loading,
+      error: _error,
+      onBack: () => Navigator.of(context).pop(),
+      codeInput: AuthCodeInput(
+        length: _codeLen,
+        controller: _controller,
+        focusNode: _focus,
+        hasError: _error != null,
+        onSubmitted: _trySubmit,
       ),
     );
   }
-}
-
-class _PhonePrefix extends StatelessWidget {
-  const _PhonePrefix();
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(left: 16, right: 12),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            '+86',
-            style: DunesTypography.sans(
-              fontSize: 18,
-              fontWeight: FontWeight.w500,
-              color: DunesColors.text,
-            ),
-          ),
-          const SizedBox(width: 12),
-          Container(width: 1, height: 22, color: const Color(0xFFE8ECF2)),
-          const SizedBox(width: 12),
-        ],
-      ),
-    );
-  }
-}
-
-class _AppLogo extends StatelessWidget {
-  const _AppLogo({required this.size});
-
-  final double size;
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Container(
-        width: size,
-        height: size,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: _authSurface,
-          boxShadow: [
-            BoxShadow(
-              color: _authBlue.withValues(alpha: 0.18),
-              blurRadius: size * 0.28,
-              offset: Offset(0, size * 0.08),
-            ),
-          ],
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: Image.asset(
-          'assets/images/app_logo.png',
-          fit: BoxFit.cover,
-          errorBuilder: (context, error, stackTrace) => Container(
-            color: const Color(0xFFE8F0FE),
-            alignment: Alignment.center,
-            child: Icon(
-              Icons.terrain_rounded,
-              size: size * 0.44,
-              color: _authBlue,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// 验证码输入：单个隐藏的真实输入框叠在 6 个展示格子之上。
-/// 这样可原生支持复制、粘贴（一次粘贴 6 位自动铺满）以及 App 风格的删除回退。
-class _CodeInput extends StatelessWidget {
-  const _CodeInput({
-    required this.length,
-    required this.controller,
-    required this.focusNode,
-    required this.hasError,
-    required this.onSubmitted,
-  });
-
-  final int length;
-  final TextEditingController controller;
-  final FocusNode focusNode;
-  final bool hasError;
-  final VoidCallback onSubmitted;
-
-  @override
-  Widget build(BuildContext context) {
-    final code = controller.text;
-    final focused = focusNode.hasFocus;
-    return Stack(
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            for (var i = 0; i < length; i++)
-              _CodeBox(
-                char: i < code.length ? code[i] : '',
-                active: focused && i == code.length && code.length < length,
-                hasError: hasError,
-              ),
-          ],
-        ),
-        Positioned.fill(
-          child: TextField(
-            controller: controller,
-            focusNode: focusNode,
-            autofocus: true,
-            showCursor: false,
-            cursorColor: Colors.transparent,
-            keyboardType: TextInputType.number,
-            textInputAction: TextInputAction.done,
-            enableInteractiveSelection: true,
-            autofillHints: const [AutofillHints.oneTimeCode],
-            style: const TextStyle(
-              color: Colors.transparent,
-              fontSize: 24,
-              height: 1.0,
-            ),
-            inputFormatters: [
-              FilteringTextInputFormatter.digitsOnly,
-              LengthLimitingTextInputFormatter(length),
-            ],
-            decoration: const InputDecoration(
-              counterText: '',
-              border: InputBorder.none,
-              enabledBorder: InputBorder.none,
-              focusedBorder: InputBorder.none,
-              errorBorder: InputBorder.none,
-              focusedErrorBorder: InputBorder.none,
-              filled: false,
-              contentPadding: EdgeInsets.zero,
-            ),
-            onSubmitted: (_) => onSubmitted(),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _CodeBox extends StatelessWidget {
-  const _CodeBox({
-    required this.char,
-    required this.active,
-    required this.hasError,
-  });
-
-  final String char;
-  final bool active;
-  final bool hasError;
-
-  @override
-  Widget build(BuildContext context) {
-    final Color borderColor = hasError
-        ? DunesColors.coral
-        : active
-        ? _authBlue
-        : const Color(0xFFE8ECF2);
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 120),
-      width: 48,
-      height: 56,
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        color: _authSurface,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: borderColor,
-          width: active || hasError ? 1.5 : 1,
-        ),
-      ),
-      child: Text(
-        char,
-        style: DunesTypography.sans(
-          fontSize: 24,
-          fontWeight: FontWeight.w600,
-          color: DunesColors.text,
-        ),
-      ),
-    );
-  }
-}
-
-class _AuthScaffold extends StatelessWidget {
-  const _AuthScaffold({required this.child, this.showLogo = true});
-
-  final Widget child;
-  final bool showLogo;
-
-  @override
-  Widget build(BuildContext context) {
-    final bottomInset = MediaQuery.viewPaddingOf(context).bottom;
-
-    return Scaffold(
-      backgroundColor: _authBg,
-      body: SafeArea(
-        child: GestureDetector(
-          behavior: HitTestBehavior.translucent,
-          onTap: () => FocusScope.of(context).unfocus(),
-          child: Center(
-            child: SingleChildScrollView(
-              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-              padding: EdgeInsets.fromLTRB(
-                32,
-                showLogo ? 48 : 24,
-                32,
-                24 + bottomInset,
-              ),
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 400),
-                child: child,
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _BackButton extends StatelessWidget {
-  const _BackButton({required this.onPressed});
-
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    return IconButton(
-      onPressed: onPressed,
-      style: IconButton.styleFrom(
-        backgroundColor: _authSurface,
-        foregroundColor: DunesColors.text,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        side: const BorderSide(color: Color(0xFFE8ECF2)),
-      ),
-      icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18),
-    );
-  }
-}
-
-final ButtonStyle _authPrimaryButtonStyle =
-    FilledButton.styleFrom(
-      backgroundColor: _authBlue,
-      foregroundColor: Colors.white,
-      disabledBackgroundColor: _authBlue.withValues(alpha: 0.45),
-      elevation: 0,
-      textStyle: DunesTypography.sans(
-        fontSize: 16,
-        fontWeight: FontWeight.w600,
-        letterSpacing: -0.01 * 16,
-      ),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-    ).copyWith(
-      overlayColor: WidgetStateProperty.resolveWith((states) {
-        if (states.contains(WidgetState.pressed)) {
-          return _authBlueDeep.withValues(alpha: 0.12);
-        }
-        return null;
-      }),
-    );
-
-InputDecoration _inputDecoration({String? hintText, String? errorText}) {
-  return InputDecoration(
-    hintText: hintText,
-    errorText: errorText,
-    hintStyle: DunesTypography.sans(fontSize: 16, color: DunesColors.text3),
-    filled: true,
-    fillColor: _authSurface,
-    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-    border: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(14),
-      borderSide: const BorderSide(color: Color(0xFFE8ECF2)),
-    ),
-    enabledBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(14),
-      borderSide: const BorderSide(color: Color(0xFFE8ECF2)),
-    ),
-    focusedBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(14),
-      borderSide: const BorderSide(color: _authBlue, width: 1.5),
-    ),
-    errorBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(14),
-      borderSide: const BorderSide(color: DunesColors.coral),
-    ),
-    focusedErrorBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(14),
-      borderSide: const BorderSide(color: DunesColors.coral, width: 1.5),
-    ),
-  );
 }

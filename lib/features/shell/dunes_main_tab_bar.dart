@@ -18,6 +18,7 @@ class DunesMainTabBar extends StatefulWidget {
     this.commUnread,
     this.workbenchBadge,
     this.lighthouseAccess = false,
+    this.chatOnlyMode = false,
   });
 
   final DunesNavigationController navigation;
@@ -25,6 +26,7 @@ class DunesMainTabBar extends StatefulWidget {
   final CommUnreadNotifier? commUnread;
   final WorkbenchBadgeNotifier? workbenchBadge;
   final bool lighthouseAccess;
+  final bool chatOnlyMode;
 
   @override
   State<DunesMainTabBar> createState() => _DunesMainTabBarState();
@@ -82,17 +84,19 @@ class _DunesMainTabBarState extends State<DunesMainTabBar> {
             screen: 'C1',
             showRedDot: _showCommDot,
           ),
-          _tab(
-            icon: Icons.grid_view_rounded,
-            label: '千机',
-            onTap: () => showDunesSoonToast(context),
-          ),
-          _tab(icon: Icons.location_city_outlined, label: '灯塔', screen: 'LH'),
+          if (!widget.chatOnlyMode) ...[
+            _tab(
+              icon: Icons.grid_view_rounded,
+              label: '千机',
+              onTap: () => showDunesSoonToast(context),
+            ),
+            _tab(icon: Icons.location_city_outlined, label: '灯塔', screen: 'LH'),
+          ],
           _tab(
             icon: Icons.person_outline_rounded,
             label: '我的',
             screen: 'B2',
-            showRedDot: _showMyDot,
+            showRedDot: widget.chatOnlyMode ? false : _showMyDot,
           ),
         ],
       ),

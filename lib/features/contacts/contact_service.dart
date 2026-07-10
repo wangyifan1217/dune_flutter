@@ -49,6 +49,27 @@ class ContactService {
     return ContactOrgData(total: total, departments: departments, searchItems: const <NativeContact>[]);
   }
 
+  Future<List<NativeContact>> fetchExternalContacts({String keyword = ''}) async {
+    final q = keyword.trim();
+    final query = q.isEmpty ? 'view=external' : 'view=external&q=${Uri.encodeQueryComponent(q)}';
+    final resp = await _client.get(_uri('/contacts?$query'), headers: _headers);
+    if (resp.statusCode < 200 || resp.statusCode >= 300) {
+      throw Exception('外部用户加载失败: HTTP ${resp.statusCode}');
+    }
+    final body = _decode(resp.body);
+    if (body['success'] == false) {
+      throw Exception((body['message'] ?? '外部用户加载失败').toString());
+    }
+    final data = body['data'];
+    if (data is Map<String, dynamic>) {
+      return _contactList(data['items']);
+    }
+    if (data is List) {
+      return data.whereType<Map<String, dynamic>>().map(_mapContact).toList(growable: false);
+    }
+    return const <NativeContact>[];
+  }
+
   Future<List<NativeContact>> fetchContacts({String keyword = ''}) async {
     final org = await fetchOrgContacts(keyword: keyword);
     if (keyword.trim().isNotEmpty) return org.searchItems;

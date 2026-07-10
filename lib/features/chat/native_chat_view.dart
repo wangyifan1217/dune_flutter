@@ -3282,7 +3282,50 @@ class _NativeChatViewState extends State<NativeChatView>
       );
       return;
     }
+    final confirmed = await _confirmFileDownload(fileName, payload: payload);
+    if (!confirmed || !mounted) return;
     await _downloadFile(payload, fileName);
+  }
+
+  Future<bool> _confirmFileDownload(
+    String fileName, {
+    Map<String, dynamic>? payload,
+  }) async {
+    final sizeHint = _fileSizeHint(payload);
+    final detail = sizeHint == null ? fileName : '$fileName\n$sizeHint';
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('下载文件'),
+        content: Text(
+          '确定要下载以下文件吗？\n\n$detail',
+          style: DunesTypography.sans(fontSize: 13.5, height: 1.5),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('下载'),
+          ),
+        ],
+      ),
+    );
+    return confirmed == true;
+  }
+
+  String? _fileSizeHint(Map<String, dynamic>? payload) {
+    if (payload == null) return null;
+    final size = payload['size'];
+    if (size is! num || size <= 0) return null;
+    final bytes = size.toInt();
+    if (bytes < 1024) return '大小：$bytes B';
+    if (bytes < 1024 * 1024) {
+      return '大小：${(bytes / 1024).toStringAsFixed(1)} KB';
+    }
+    return '大小：${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
   }
 
   Future<void> _downloadFile(

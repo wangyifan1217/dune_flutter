@@ -1288,6 +1288,20 @@ class _NativeB2PageState extends State<_NativeB2Page> {
   }
 
   Future<void> _openQrLoginScanner() async {
+    if (widget.session.isExternalUser) {
+      if (!mounted) return;
+      showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('无法扫码登录'),
+          content: const Text('外部用户不支持登录 PC 工作台'),
+          actions: [
+            TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('知道了')),
+          ],
+        ),
+      );
+      return;
+    }
     if (_qrLoginOpening) return;
     setState(() => _qrLoginOpening = true);
     try {
@@ -1513,6 +1527,7 @@ class _NativeB2PageState extends State<_NativeB2Page> {
         stats.approvalPending +
         stats.approvalRejected;
     final profile = _profile ?? _NativeB2Profile.fromSession(widget.session);
+    final isExternal = widget.session.isExternalUser;
     final kb = _kbSummary;
     final kbDocCount = kb != null && kb.documents.isNotEmpty
         ? kb.documents.length
@@ -1535,6 +1550,14 @@ class _NativeB2PageState extends State<_NativeB2Page> {
                       padding: const EdgeInsets.fromLTRB(12, 10, 12, 14),
                       children: [
                         _buildProfileCard(stats, profile),
+                        if (isExternal) ...[
+                          const SizedBox(height: 12),
+                          Text(
+                            '外部用户仅可使用通讯聊天功能',
+                            textAlign: TextAlign.center,
+                            style: DunesTypography.sans(fontSize: 13, color: DunesColors.text3),
+                          ),
+                        ] else ...[
                         const SizedBox(height: 10),
                         _buildQuickStats(stats),
                         const SizedBox(height: 14),
@@ -1657,6 +1680,7 @@ class _NativeB2PageState extends State<_NativeB2Page> {
                               ),
                             ),
                           ),
+                        ],
                         if (_loadError != null)
                           Padding(
                             padding: const EdgeInsets.only(top: 8),
@@ -1679,6 +1703,7 @@ class _NativeB2PageState extends State<_NativeB2Page> {
                   commUnread: widget.commUnread,
                   workbenchBadge: widget.workbenchBadge,
                   lighthouseAccess: widget.session.lighthouseAccess,
+                  chatOnlyMode: widget.session.isExternalUser,
                 ),
               ],
             ),
@@ -1824,32 +1849,33 @@ class _NativeB2PageState extends State<_NativeB2Page> {
             ),
           ),
           const Spacer(),
-          Tooltip(
-            message: '扫码登录工作台',
-            child: InkWell(
-              borderRadius: BorderRadius.circular(14),
-              onTap: _qrLoginOpening ? null : _openQrLoginScanner,
-              child: Container(
-                margin: const EdgeInsets.only(right: 8),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: DunesColors.borderSoft),
-                ),
-                child: Icon(
-                  _qrLoginOpening
-                      ? Icons.hourglass_top
-                      : Icons.qr_code_scanner_rounded,
-                  size: 16,
-                  color: DunesColors.text2,
+          if (!widget.session.isExternalUser)
+            Tooltip(
+              message: '扫码登录工作台',
+              child: InkWell(
+                borderRadius: BorderRadius.circular(14),
+                onTap: _qrLoginOpening ? null : _openQrLoginScanner,
+                child: Container(
+                  margin: const EdgeInsets.only(right: 8),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: DunesColors.borderSoft),
+                  ),
+                  child: Icon(
+                    _qrLoginOpening
+                        ? Icons.hourglass_top
+                        : Icons.qr_code_scanner_rounded,
+                    size: 16,
+                    color: DunesColors.text2,
+                  ),
                 ),
               ),
             ),
-          ),
           Tooltip(
             message: '清除本地缓存',
             child: InkWell(
@@ -1874,32 +1900,33 @@ class _NativeB2PageState extends State<_NativeB2Page> {
               ),
             ),
           ),
-          InkWell(
-            borderRadius: BorderRadius.circular(14),
-            onTap: () => widget.onOpenB3(),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
-              decoration: BoxDecoration(
-                color: DunesColors.accentSoft,
-                borderRadius: BorderRadius.circular(14),
-              ),
-              child: const Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.add, size: 15, color: DunesColors.accentDeep),
-                  SizedBox(width: 2),
-                  Text(
-                    '发起',
-                    style: TextStyle(
-                      color: DunesColors.accentDeep,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
+          if (!widget.session.isExternalUser)
+            InkWell(
+              borderRadius: BorderRadius.circular(14),
+              onTap: () => widget.onOpenB3(),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
+                decoration: BoxDecoration(
+                  color: DunesColors.accentSoft,
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.add, size: 15, color: DunesColors.accentDeep),
+                    SizedBox(width: 2),
+                    Text(
+                      '发起',
+                      style: TextStyle(
+                        color: DunesColors.accentDeep,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
-          ),
         ],
       ),
     );

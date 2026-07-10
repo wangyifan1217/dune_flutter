@@ -11,6 +11,7 @@ class AuthSession {
     required this.roles,
     this.displayName,
     this.departmentId,
+    this.userType = 'ORG',
     this.novaLocalStorage,
     this.lighthouseAccess = false,
   });
@@ -22,7 +23,10 @@ class AuthSession {
   final List<String> roles;
   final String? displayName;
   final int? departmentId;
+  final String userType;
   final bool lighthouseAccess;
+
+  bool get isExternalUser => userType.toUpperCase() == 'EXTERNAL';
 
   /// 本地联调网关时自动视为已开通灯塔（见 [DunesDefaults.localLighthouseAccessBypass]）。
   bool get effectiveLighthouseAccess =>
@@ -57,6 +61,7 @@ class AuthSession {
     List<String>? roles,
     String? displayName,
     int? departmentId,
+    String? userType,
     Map<String, String>? novaLocalStorage,
     bool? lighthouseAccess,
   }) {
@@ -68,6 +73,7 @@ class AuthSession {
       roles: roles ?? this.roles,
       displayName: displayName ?? this.displayName,
       departmentId: departmentId ?? this.departmentId,
+      userType: userType ?? this.userType,
       novaLocalStorage: novaLocalStorage ?? this.novaLocalStorage,
       lighthouseAccess: lighthouseAccess ?? this.lighthouseAccess,
     );
@@ -80,6 +86,7 @@ class AuthSession {
     return session.copyWith(
       displayName: (data['displayName'] ?? session.displayName)?.toString(),
       departmentId: (data['departmentId'] as num?)?.toInt() ?? session.departmentId,
+      userType: (data['userType'] ?? session.userType)?.toString() ?? session.userType,
       lighthouseAccess: data['lighthouseAccess'] == true,
     );
   }
@@ -104,8 +111,16 @@ class AuthSession {
       roles: roles,
       displayName: claims['displayName'] as String?,
       departmentId: (claims['departmentId'] as num?)?.toInt(),
+      userType: _resolveUserType(claims),
       lighthouseAccess: claims['lighthouseAccess'] == true,
     );
+  }
+
+  static String _resolveUserType(Map<String, dynamic> claims) {
+    final raw = (claims['userType'] as String?)?.trim();
+    if (raw != null && raw.isNotEmpty) return raw.toUpperCase();
+    if (claims['external'] == true) return 'EXTERNAL';
+    return 'ORG';
   }
 
   static Map<String, dynamic> _decodeJwtClaims(String token) {
@@ -126,6 +141,7 @@ class AuthSession {
       'roles': roles,
       'displayName': displayName,
       'departmentId': departmentId,
+      'userType': userType,
       if (novaLocalStorage != null && novaLocalStorage!.isNotEmpty)
         'novaLocalStorage': novaLocalStorage,
       'lighthouseAccess': lighthouseAccess,
@@ -144,6 +160,7 @@ class AuthSession {
       roles: roles,
       displayName: json['displayName'] as String?,
       departmentId: (json['departmentId'] as num?)?.toInt(),
+      userType: (json['userType'] as String?)?.toUpperCase() ?? 'ORG',
       novaLocalStorage: _parseNovaStorage(json['novaLocalStorage']),
       lighthouseAccess: json['lighthouseAccess'] == true,
     );

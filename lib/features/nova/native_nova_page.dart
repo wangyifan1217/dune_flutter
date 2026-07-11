@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/foundation.dart';
@@ -85,9 +86,12 @@ class _NativeNovaPageState extends State<NativeNovaPage>
   bool _quickActionsOpen = false;
   bool _recording = false;
   bool _recordWillCancel = false;
+  Offset? _recordFocalPoint;
   int _recordDurationMs = 0;
   int? _highlightMessageId;
   Timer? _recordTicker;
+  StreamSubscription<Uint8List>? _asrPcmSubscription;
+  BytesBuilder? _asrPcmBytes;
   Timer? _genPollTimer;
   Timer? _streamDraftTimer;
   int _genAfterMessageId = 0;
@@ -191,6 +195,7 @@ class _NativeNovaPageState extends State<NativeNovaPage>
     _streamDraftTimer?.cancel();
     _genPollTimer?.cancel();
     _recordTicker?.cancel();
+    unawaited(_discardAsrPcmCapture());
     unawaited(_flushOnLeave());
     if (_recording) {
       unawaited(NativeAudioRecorder.instance.cancel());
@@ -2271,7 +2276,66 @@ class _NativeNovaPageState extends State<NativeNovaPage>
     _toast('已开启新对话，上一段可在右上角「历史」查看');
   }
 
-  Future<void> _startHoldRecord() async {
+  Future<void> _startAsrPcmCapture() async {
+    await _discardAsrPcmCapture();
+    final pcmBytes = BytesBuilder(copy: false);
+    _asrPcmBytes = pcmBytes;
+    _asrPcmSubscription = NativeAudioRecorder.instance.pcmStream().listen(
+      pcmBytes.add,
+      onError: (_, _) {},
+      cancelOnError: false,
+    );
+  }
+
+  Future<void> _discardAsrPcmCapture() async {
+    final subscription = _asrPcmSubscription;
+    _asrPcmSubscription = null;
+    _asrPcmBytes = null;
+    await subscription?.cancel();
+  }
+
+  Future<Uint8List> _takeAsrWavBytes() async {
+    // 原生端通过 EventChannel 推送 PCM；停止后给主线程一个短暂窗口送达最后一帧。
+    await Future<void>.delayed(const Duration(milliseconds: 60));
+    final subscription = _asrPcmSubscription;
+    _asrPcmSubscription = null;
+    await subscription?.cancel();
+    final pcm = _asrPcmBytes?.takeBytes() ?? Uint8List(0);
+    _asrPcmBytes = null;
+    if (pcm.isEmpty) return pcm;
+    return _pcm16MonoToWav(pcm);
+  }
+
+  Uint8List _pcm16MonoToWav(Uint8List pcm) {
+    const sampleRate = 16000;
+    const channels = 1;
+    const bitsPerSample = 16;
+    final wav = Uint8List(44 + pcm.length);
+    final header = ByteData.sublistView(wav);
+    void writeAscii(int offset, String value) {
+      for (var index = 0; index < value.length; index++) {
+        header.setUint8(offset + index, value.codeUnitAt(index));
+      }
+    }
+
+    writeAscii(0, 'RIFF');
+    header.setUint32(4, 36 + pcm.length, Endian.little);
+    writeAscii(8, 'WAVE');
+    writeAscii(12, 'fmt ');
+    header.setUint32(16, 16, Endian.little);
+    header.setUint16(20, 1, Endian.little);
+    header.setUint16(22, channels, Endian.little);
+    header.setUint32(24, sampleRate, Endian.little);
+    header.setUint32(28, sampleRate * channels * bitsPerSample ~/ 8, Endian.little);
+    header.setUint16(32, channels * bitsPerSample ~/ 8, Endian.little);
+    header.setUint16(34, bitsPerSample, Endian.little);
+    writeAscii(36, 'data');
+    header.setUint32(40, pcm.length, Endian.little);
+    wav.setRange(44, wav.length, pcm);
+    return wav;
+  }
+
+  Future<void> _startHoldRecord(Offset focalPoint) async {
     if (_sending || _recording || !_novaReady) return;
     if (MeetingLiveController.instance.isActive) {
       _toast('会议录音进行中，暂无法发送语音');
@@ -2289,11 +2353,13 @@ class _NativeNovaPageState extends State<NativeNovaPage>
       }
     }
     try {
+      await _startAsrPcmCapture();
       await NativeAudioRecorder.instance.start();
       _recordTicker?.cancel();
       setState(() {
         _recording = true;
         _recordWillCancel = false;
+        _recordFocalPoint = focalPoint;
         _recordDurationMs = 0;
       });
       _recordTicker = Timer.periodic(const Duration(milliseconds: 120), (_) {
@@ -2307,6 +2373,7 @@ class _NativeNovaPageState extends State<NativeNovaPage>
         }
       });
     } catch (e) {
+      await _discardAsrPcmCapture();
       if (e is NativeAudioRecorderBusyException) {
         _toast(e.message);
         return;
@@ -2322,19 +2389,24 @@ class _NativeNovaPageState extends State<NativeNovaPage>
       return;
     }
     _recordTicker?.cancel();
-    setState(() => _recording = false);
+    setState(() {
+      _recording = false;
+      _recordFocalPoint = null;
+    });
     try {
       final recorded = await NativeAudioRecorder.instance.stop();
+      final wavBytes = await _takeAsrWavBytes();
       if (recorded == null) return;
       if (recorded.durationMs < 500) {
         _toast('录音时间太短');
         return;
       }
-      final bytes = await XFile(recorded.path).readAsBytes();
-      final fileName = Uri.file(recorded.path).pathSegments.isEmpty
-          ? 'voice-${DateTime.now().millisecondsSinceEpoch}.m4a'
-          : Uri.file(recorded.path).pathSegments.last;
-      // 语音用于转写为文字（非语音消息），气泡直接以文本展示，避免出现不可播放的空语音气泡。
+      if (wavBytes.length <= 44) {
+        throw Exception('未获取到可识别的语音数据');
+      }
+      final fileName = 'voice-${DateTime.now().millisecondsSinceEpoch}.wav';
+      // 原生端推送的就是 16kHz / 单声道 / PCM16；封装 WAV 后可被 ASR
+      // 稳定识别，避免 AAC/M4A 容器在部分模型端不兼容。
       setState(() {
         _messages = [
           ..._messages.where((m) => !m.isWelcome),
@@ -2348,7 +2420,7 @@ class _NativeNovaPageState extends State<NativeNovaPage>
         ];
       });
       _scrollBottom();
-      final transcript = await _service.transcribeAudio(bytes, fileName);
+      final transcript = await _service.transcribeAudio(wavBytes, fileName);
       if (!mounted) return;
       setState(() {
         final idx = _messages.lastIndexWhere((m) => m.role == 'user');
@@ -2360,6 +2432,7 @@ class _NativeNovaPageState extends State<NativeNovaPage>
       });
       await _sendMessage(text: transcript, skipUserBubble: true);
     } catch (e) {
+      await _discardAsrPcmCapture();
       if (mounted) {
         setState(() {
           final idx = _messages.lastIndexWhere(
@@ -2382,8 +2455,10 @@ class _NativeNovaPageState extends State<NativeNovaPage>
     setState(() {
       _recording = false;
       _recordWillCancel = false;
+      _recordFocalPoint = null;
       _recordDurationMs = 0;
     });
+    await _discardAsrPcmCapture();
     try {
       await NativeAudioRecorder.instance.cancel();
     } catch (_) {}
@@ -2392,9 +2467,13 @@ class _NativeNovaPageState extends State<NativeNovaPage>
 
   void _onRecordMove(LongPressMoveUpdateDetails details) {
     if (!_recording) return;
-    final shouldCancel = details.offsetFromOrigin.dy < -56;
-    if (shouldCancel == _recordWillCancel) return;
-    setState(() => _recordWillCancel = shouldCancel);
+    final overlayTop =
+        MediaQuery.sizeOf(context).height - kVoiceRecordingOverlayHeight;
+    final shouldCancel = details.globalPosition.dy < overlayTop;
+    setState(() {
+      _recordWillCancel = shouldCancel;
+      _recordFocalPoint = details.globalPosition;
+    });
   }
 
   void _scrollBottom() {
@@ -2925,7 +3004,8 @@ class _NativeNovaPageState extends State<NativeNovaPage>
                       recordDurationMs: _recordDurationMs,
                       onVoiceHoldStart: voiceBlocked
                           ? null
-                          : (_) => _startHoldRecord(),
+                          : (details) =>
+                                _startHoldRecord(details.globalPosition),
                       onVoiceHoldMove: _onRecordMove,
                       onVoiceHoldEnd: (_) => _finishHoldRecord(),
                       onVoiceHoldCancel: () =>
@@ -2939,6 +3019,7 @@ class _NativeNovaPageState extends State<NativeNovaPage>
                   VoiceRecordingOverlay(
                     durationMs: _recordDurationMs,
                     willCancel: _recordWillCancel,
+                    focalPoint: _recordFocalPoint,
                   ),
               ],
             ),

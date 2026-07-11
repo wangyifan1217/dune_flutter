@@ -234,6 +234,7 @@ class _NativeChatViewState extends State<NativeChatView>
   double _downloadProgress = 0;
   String? _downloadLabel;
   bool _recordWillCancel = false;
+  Offset? _recordFocalPoint;
   bool _loadingOlder = false;
   /// prepend 历史消息后正在恢复滚动位置，避免仍停在 maxScrollExtent 连续拉完全部历史。
   bool _olderScrollRestorePending = false;
@@ -1830,7 +1831,7 @@ class _NativeChatViewState extends State<NativeChatView>
     });
   }
 
-  Future<void> _startHoldRecord() async {
+  Future<void> _startHoldRecord(Offset focalPoint) async {
     if (_sending || _recording) return;
     if (MeetingLiveController.instance.isActive) {
       _showToast('会议录音进行中，暂无法发送语音');
@@ -1853,6 +1854,7 @@ class _NativeChatViewState extends State<NativeChatView>
       setState(() {
         _recording = true;
         _recordWillCancel = false;
+        _recordFocalPoint = focalPoint;
         _recordDurationMs = 0;
       });
       _recordTicker = Timer.periodic(const Duration(milliseconds: 120), (_) {
@@ -1875,7 +1877,10 @@ class _NativeChatViewState extends State<NativeChatView>
       return;
     }
     _recordTicker?.cancel();
-    setState(() => _recording = false);
+    setState(() {
+      _recording = false;
+      _recordFocalPoint = null;
+    });
     try {
       final recorded = await NativeAudioRecorder.instance.stop();
       if (recorded == null) return;
@@ -1911,6 +1916,7 @@ class _NativeChatViewState extends State<NativeChatView>
     setState(() {
       _recording = false;
       _recordWillCancel = false;
+      _recordFocalPoint = null;
       _recordDurationMs = 0;
     });
     try {
@@ -1921,9 +1927,13 @@ class _NativeChatViewState extends State<NativeChatView>
 
   void _onRecordMove(LongPressMoveUpdateDetails details) {
     if (!_recording) return;
-    final shouldCancel = details.offsetFromOrigin.dy < -56;
-    if (shouldCancel == _recordWillCancel) return;
-    setState(() => _recordWillCancel = shouldCancel);
+    final overlayTop =
+        MediaQuery.sizeOf(context).height - kVoiceRecordingOverlayHeight;
+    final shouldCancel = details.globalPosition.dy < overlayTop;
+    setState(() {
+      _recordWillCancel = shouldCancel;
+      _recordFocalPoint = details.globalPosition;
+    });
   }
 
   Widget _buildUploadOverlay() {
@@ -2578,7 +2588,9 @@ class _NativeChatViewState extends State<NativeChatView>
               recordWillCancel: _recordWillCancel,
               recordDurationMs: _recordDurationMs,
               onVoiceHoldStart:
-                  voiceBlocked ? null : (_) => _startHoldRecord(),
+                  voiceBlocked
+                      ? null
+                      : (details) => _startHoldRecord(details.globalPosition),
               onVoiceHoldMove: _onRecordMove,
               onVoiceHoldEnd: (_) => _finishHoldRecord(),
               onVoiceHoldCancel: () =>
@@ -4514,6 +4526,7 @@ class _NativeChatViewState extends State<NativeChatView>
               VoiceRecordingOverlay(
                 durationMs: _recordDurationMs,
                 willCancel: _recordWillCancel,
+                focalPoint: _recordFocalPoint,
               ),
           ],
         ),

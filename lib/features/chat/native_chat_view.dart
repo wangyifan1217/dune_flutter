@@ -36,6 +36,7 @@ import 'giphy_proxy_service.dart';
 import 'chat_media_widgets.dart';
 import 'chat_quote.dart';
 import 'chat_voice_player.dart';
+import 'voice_recording_overlay.dart';
 import 'chat_widgets.dart';
 import 'file_download.dart' as file_dl;
 import 'group_composite_avatar.dart';
@@ -4112,13 +4113,16 @@ class _NativeChatViewState extends State<NativeChatView>
       backgroundColor: DunesColors.bgApp,
       body: SafeArea(
         bottom: false,
-        child: GestureDetector(
-          behavior: HitTestBehavior.translucent,
-          onTap: () {
-            FocusScope.of(context).unfocus();
-            _closeEmojiPicker();
-          },
-          child: Column(
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            GestureDetector(
+              behavior: HitTestBehavior.translucent,
+              onTap: () {
+                FocusScope.of(context).unfocus();
+                _closeEmojiPicker();
+              },
+              child: Column(
             children: [
               if (selecting)
                 _buildMultiSelectHeader()
@@ -4488,34 +4492,6 @@ class _NativeChatViewState extends State<NativeChatView>
                           ),
                         ),
                       ),
-                    if (_recording)
-                      Positioned.fill(
-                        child: IgnorePointer(
-                          child: Container(
-                            color: Colors.black26,
-                            alignment: Alignment.center,
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 20,
-                                vertical: 14,
-                              ),
-                              decoration: BoxDecoration(
-                                color: _recordWillCancel
-                                    ? DunesColors.coral
-                                    : const Color(0xE61F2421),
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Text(
-                                _recordWillCancel ? '松开取消' : '松开发送',
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
                     if (_uploadLabel != null) _buildUploadOverlay(),
                     if (_downloadingMedia) _buildDownloadOverlay(),
                   ],
@@ -4532,7 +4508,14 @@ class _NativeChatViewState extends State<NativeChatView>
                   ),
                 ),
             ],
-          ),
+              ),
+            ),
+            if (_recording)
+              VoiceRecordingOverlay(
+                durationMs: _recordDurationMs,
+                willCancel: _recordWillCancel,
+              ),
+          ],
         ),
       ),
     );

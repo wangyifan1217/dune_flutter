@@ -17,6 +17,7 @@ import '../auth/auth_session.dart';
 import '../chat/native_audio_recorder.dart';
 import '../chat/chat_image_batch_preview.dart';
 import '../chat/chat_image_editor.dart';
+import '../chat/voice_recording_overlay.dart';
 import '../meeting/meeting_live_controller.dart';
 import '../meeting/meeting_minutes_export.dart';
 import '../meeting/native_meeting_models.dart';
@@ -2838,9 +2839,12 @@ class _NativeNovaPageState extends State<NativeNovaPage>
           child: GestureDetector(
             behavior: HitTestBehavior.translucent,
             onTap: () => FocusScope.of(context).unfocus(),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
+            child: Stack(
+              fit: StackFit.expand,
               children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
                 NovaPageHeader(
                   onBack: _handleBack,
                   onNewChat: _novaReady ? _startNewChat : null,
@@ -2929,6 +2933,13 @@ class _NativeNovaPageState extends State<NativeNovaPage>
                     );
                   },
                 ),
+                  ],
+                ),
+                if (_recording)
+                  VoiceRecordingOverlay(
+                    durationMs: _recordDurationMs,
+                    willCancel: _recordWillCancel,
+                  ),
               ],
             ),
           ),

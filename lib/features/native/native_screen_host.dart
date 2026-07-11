@@ -623,7 +623,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
             widget.navigation.go('C9');
           },
           onOpenApproval: () => _goB14(),
-          onExitedGroup: () => widget.navigation.go('C1'),
+          onExitedGroup: () => widget.navigation.popTo('C1'),
         );
       case 'C3':
         return NativeContactsPage(
@@ -745,7 +745,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           session: widget.session,
           onBack: () {
             NovaBackgroundCoordinator.instance.clearPendingCommBadgeBump();
-            widget.navigation.go('C1');
+            widget.navigation.popTo('C1');
           },
           onHistory: () => widget.navigation.go('C11'),
           onOpenKb: () => widget.navigation.go('K1'),
@@ -1001,21 +1001,23 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       layoutBuilder: (currentChild, previousChildren) {
         return Stack(
           fit: StackFit.expand,
-          children: [...previousChildren, ?currentChild],
+          clipBehavior: Clip.hardEdge,
+          // 返回时让离场页位于上层向右退出，避免它在入场页右侧留下残影。
+          children: isBack
+              ? [?currentChild, ...previousChildren]
+              : [...previousChildren, ?currentChild],
         );
       },
       transitionBuilder: (transitionChild, animation) {
         final isIncoming = transitionChild.key == child.key;
+        // AnimatedSwitcher 会反向驱动离场 child 的 animation：离场 Tween 必须
+        // 以「目标位置 -> 原位」定义，才能从原位自然滑出而不是闪现/重复一帧。
         final begin = !useSlide
             ? Offset.zero
-            : isBack
-            ? (isIncoming ? const Offset(-0.18, 0) : Offset.zero)
-            : (isIncoming ? const Offset(1, 0) : Offset.zero);
-        final end = !useSlide
-            ? Offset.zero
-            : isBack
-            ? (isIncoming ? Offset.zero : const Offset(1, 0))
-            : (isIncoming ? Offset.zero : const Offset(-0.18, 0));
+            : isIncoming
+            ? (isBack ? const Offset(-0.18, 0) : const Offset(1, 0))
+            : (isBack ? const Offset(1, 0) : const Offset(-0.18, 0));
+        final end = Offset.zero;
         return SlideTransition(
           position: Tween<Offset>(begin: begin, end: end).animate(animation),
           child: transitionChild,

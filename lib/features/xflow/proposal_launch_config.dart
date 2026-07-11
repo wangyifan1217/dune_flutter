@@ -31,8 +31,8 @@ class ProposalLaunchItem {
     return ProposalLaunchItem(
       label: template.title.trim().isEmpty ? '提案' : template.title.trim(),
       icon: template.category == 'adm'
-          ? Icons.apartment_outlined
-          : Icons.assignment_outlined,
+          ? Icons.account_balance_outlined
+          : Icons.business_center_outlined,
       tone: template.category == 'adm'
           ? ProposalLaunchIconTone.amber
           : ProposalLaunchIconTone.accent,
@@ -68,13 +68,13 @@ List<ProposalLaunchItem> buildQuickLaunchItems({
     enabled.addAll([
       ProposalLaunchItem(
         label: '销售提案',
-        icon: Icons.assignment_outlined,
+        icon: Icons.business_center_outlined,
         badge: '新建',
         templateKey: defaultSalesTemplateKey,
       ),
       const ProposalLaunchItem(
         label: '合同用印',
-        icon: Icons.apartment_outlined,
+        icon: Icons.handshake_outlined,
         tone: ProposalLaunchIconTone.amber,
         badge: '合同',
         templateKey: 'contract-seal',

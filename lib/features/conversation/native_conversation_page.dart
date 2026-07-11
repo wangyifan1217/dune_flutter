@@ -649,6 +649,7 @@ class _NativeConversationPageState extends State<NativeConversationPage>
                 onOpenNova: widget.onOpenNova,
                 onOpenMessageCenter: widget.onOpenNotifications,
                 messageCenterUnread: _messageCenterUnread,
+                novaThinking: NovaBackgroundCoordinator.instance.isThinking,
               ),
               ChatInboxSearchBar(
                 controller: _searchController,

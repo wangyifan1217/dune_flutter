@@ -18,6 +18,7 @@ class ChatInboxHeader extends StatelessWidget {
     required this.onOpenNova,
     required this.onOpenMessageCenter,
     this.messageCenterUnread = 0,
+    this.novaThinking = false,
   });
 
   final VoidCallback onOpenContacts;
@@ -25,6 +26,7 @@ class ChatInboxHeader extends StatelessWidget {
   final VoidCallback onOpenNova;
   final VoidCallback onOpenMessageCenter;
   final int messageCenterUnread;
+  final bool novaThinking;
 
   @override
   Widget build(BuildContext context) {
@@ -46,7 +48,20 @@ class ChatInboxHeader extends StatelessWidget {
             ),
             Align(
               alignment: Alignment.centerLeft,
-              child: _NovaEyesButton(onTap: onOpenNova),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _NovaEyesButton(onTap: onOpenNova),
+                  if (novaThinking)
+                    Text(
+                      '正在思考',
+                      style: DunesTypography.sans(
+                        fontSize: 10.5,
+                        color: const Color(0xFF07A957),
+                      ),
+                    ),
+                ],
+              ),
             ),
             Align(
               alignment: Alignment.centerRight,
@@ -62,10 +77,7 @@ class ChatInboxHeader extends StatelessWidget {
                     icon: Icons.people_outline_rounded,
                     onTap: onOpenContacts,
                   ),
-                  _IconBtn(
-                    icon: Icons.edit_outlined,
-                    onTap: onNewChat,
-                  ),
+                  _IconBtn(icon: Icons.edit_outlined, onTap: onNewChat),
                 ],
               ),
             ),
@@ -100,11 +112,7 @@ class ChatInboxSearchBar extends StatelessWidget {
         ),
         child: Row(
           children: [
-            const Icon(
-              Icons.search,
-              size: 17,
-              color: Color(0xFFB2B2B2),
-            ),
+            const Icon(Icons.search, size: 17, color: Color(0xFFB2B2B2)),
             const SizedBox(width: 6),
             Expanded(
               child: TextField(
@@ -758,7 +766,10 @@ class _IconBtn extends StatelessWidget {
                   top: 5,
                   right: 4,
                   child: Container(
-                    constraints: const BoxConstraints(minWidth: 8, minHeight: 8),
+                    constraints: const BoxConstraints(
+                      minWidth: 8,
+                      minHeight: 8,
+                    ),
                     padding: unreadCount > 9
                         ? const EdgeInsets.symmetric(horizontal: 3, vertical: 1)
                         : EdgeInsets.zero,
@@ -766,7 +777,10 @@ class _IconBtn extends StatelessWidget {
                     decoration: BoxDecoration(
                       color: DunesColors.coral,
                       borderRadius: BorderRadius.circular(99),
-                      border: Border.all(color: const Color(0xFFF5F5F5), width: 1.5),
+                      border: Border.all(
+                        color: const Color(0xFFF5F5F5),
+                        width: 1.5,
+                      ),
                     ),
                     child: unreadCount > 9
                         ? Text(

@@ -205,7 +205,7 @@ class ChatInputBar extends StatelessWidget {
     required this.voiceMode,
     required this.sending,
     required this.onToggleVoice,
-    required     this.onSend,
+    required this.onSend,
     this.onEmoji,
     this.emojiPicker,
     this.secondaryIcon,
@@ -221,6 +221,7 @@ class ChatInputBar extends StatelessWidget {
     this.hintText,
     this.focusNode,
     this.onInputFocused,
+    this.backgroundColor,
   });
 
   final TextEditingController controller;
@@ -243,6 +244,7 @@ class ChatInputBar extends StatelessWidget {
   final String? hintText;
   final FocusNode? focusNode;
   final VoidCallback? onInputFocused;
+  final Color? backgroundColor;
 
   @override
   Widget build(BuildContext context) {
@@ -259,9 +261,9 @@ class ChatInputBar extends StatelessWidget {
         // 保留 Home Indicator 安全距离，并额外上移少量，避免输入栏贴底。
         bottomInset > 0 ? bottomInset + 6 : 9,
       ),
-      decoration: const BoxDecoration(
-        color: DunesColors.bgApp,
-        border: Border(top: BorderSide(color: DunesColors.borderSoft)),
+      decoration: BoxDecoration(
+        color: backgroundColor ?? DunesColors.bgApp,
+        border: const Border(top: BorderSide(color: DunesColors.borderSoft)),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.end,
@@ -339,21 +341,15 @@ class ChatInputBar extends StatelessWidget {
                       fillColor: const Color(0xFFFFFEFF),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(7),
-                        borderSide: const BorderSide(
-                          color: Color(0xFFE3DCEE),
-                        ),
+                        borderSide: const BorderSide(color: Color(0xFFE3DCEE)),
                       ),
                       enabledBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(7),
-                        borderSide: const BorderSide(
-                          color: Color(0xFFE3DCEE),
-                        ),
+                        borderSide: const BorderSide(color: Color(0xFFE3DCEE)),
                       ),
                       focusedBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(7),
-                        borderSide: const BorderSide(
-                          color: Color(0xFF9A82C5),
-                        ),
+                        borderSide: const BorderSide(color: Color(0xFF9A82C5)),
                       ),
                       contentPadding: const EdgeInsets.symmetric(
                         horizontal: 12,
@@ -561,45 +557,45 @@ class ChatMessageRow extends StatelessWidget {
                       ),
                     ),
                   content,
-                if (readLabel != null)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 3, right: 2),
-                    child: Text(
-                      readLabel!,
-                      style: DunesTypography.mono(
-                        fontSize: 10.5,
-                        fontWeight: FontWeight.w500,
-                        color: readLabel == '已读'
-                            ? DunesColors.readReceipt
-                            : DunesColors.text3,
-                      ),
-                    ),
-                  )
-                else if (onReadTap != null)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 3, right: 2),
-                    child: GestureDetector(
-                      onTap: onReadTap,
+                  if (readLabel != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 3, right: 2),
                       child: Text(
-                        (readTapLabel ?? '查看已读').trim(),
+                        readLabel!,
                         style: DunesTypography.mono(
                           fontSize: 10.5,
                           fontWeight: FontWeight.w500,
-                          color: (readTapLabel ?? '').trim() != '未读'
+                          color: readLabel == '已读'
                               ? DunesColors.readReceipt
                               : DunesColors.text3,
                         ),
                       ),
+                    )
+                  else if (onReadTap != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 3, right: 2),
+                      child: GestureDetector(
+                        onTap: onReadTap,
+                        child: Text(
+                          (readTapLabel ?? '查看已读').trim(),
+                          style: DunesTypography.mono(
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w500,
+                            color: (readTapLabel ?? '').trim() != '未读'
+                                ? DunesColors.readReceipt
+                                : DunesColors.text3,
+                          ),
+                        ),
+                      ),
                     ),
-                  ),
-              ],
+                ],
+              ),
             ),
-          ),
-          if (mine) ...[
-            const SizedBox(width: 8),
-            trailingAvatar ?? avatar ?? const SizedBox(width: 32),
+            if (mine) ...[
+              const SizedBox(width: 8),
+              trailingAvatar ?? avatar ?? const SizedBox(width: 32),
+            ],
           ],
-        ],
         ),
       ),
     );
@@ -709,7 +705,9 @@ class ChatTextBubble extends StatelessWidget {
             SelectableText.rich(
               _buildMentionTextSpan(),
               contextMenuBuilder: (context, editableTextState) {
-                final selected = _selectedText(editableTextState.textEditingValue);
+                final selected = _selectedText(
+                  editableTextState.textEditingValue,
+                );
                 return AdaptiveTextSelectionToolbar.buttonItems(
                   anchors: editableTextState.contextMenuAnchors,
                   buttonItems: <ContextMenuButtonItem>[
@@ -725,7 +723,8 @@ class ChatTextBubble extends StatelessWidget {
                     ContextMenuButtonItem(
                       label: '引用',
                       onPressed: () {
-                        if (selected.isNotEmpty) onSelectionQuote?.call(selected);
+                        if (selected.isNotEmpty)
+                          onSelectionQuote?.call(selected);
                         editableTextState.hideToolbar();
                       },
                     ),
@@ -741,14 +740,17 @@ class ChatTextBubble extends StatelessWidget {
                     ContextMenuButtonItem(
                       label: '多选',
                       onPressed: () {
-                        if (selected.isNotEmpty) onSelectionMulti?.call(selected);
+                        if (selected.isNotEmpty)
+                          onSelectionMulti?.call(selected);
                         editableTextState.hideToolbar();
                       },
                     ),
                     ContextMenuButtonItem(
                       label: '全选',
                       onPressed: () {
-                        editableTextState.selectAll(SelectionChangedCause.toolbar);
+                        editableTextState.selectAll(
+                          SelectionChangedCause.toolbar,
+                        );
                       },
                     ),
                     if (onSelectionRecall != null)
@@ -764,9 +766,7 @@ class ChatTextBubble extends StatelessWidget {
               },
             )
           else
-            RichText(
-              text: _buildMentionTextSpan(),
-            ),
+            RichText(text: _buildMentionTextSpan()),
           if (quote != null && !quote!.isEmpty) ...[
             const SizedBox(height: 6),
             ChatQuoteBlock(quote: quote!, mine: mine, onTap: onQuoteTap),

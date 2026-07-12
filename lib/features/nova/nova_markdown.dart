@@ -508,7 +508,7 @@ class NovaCodeBlock extends StatelessWidget {
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
-            child: Text(
+            child: SelectableText(
               code + (partial ? '▍' : ''),
               style: DunesTypography.mono(
                 fontSize: 12,
@@ -574,15 +574,15 @@ class _NovaMarkdownBlock extends StatelessWidget {
       }
       // Skip lone "#" / "##" lines (empty heading markers).
       if (RegExp(r'^#{1,3}\s*$').hasMatch(trimmed)) continue;
-      final hm = RegExp(r'^#{1,3}\s*(.+)$').firstMatch(trimmed);
+      final hm = RegExp(r'^(#{1,3})\s*(.+)$').firstMatch(trimmed);
       if (hm != null) {
         flushList();
         children.add(
           Padding(
             padding: const EdgeInsets.fromLTRB(0, 10, 0, 6),
             child: _NovaMarkdownInline(
-              text: hm.group(1)!,
-              heading: true,
+              text: hm.group(2)!,
+              headingLevel: hm.group(1)!.length,
               documentPreview: documentPreview,
               onImage: onImage,
             ),
@@ -643,7 +643,7 @@ class _NovaMarkdownBlock extends StatelessWidget {
 class _NovaMarkdownInline extends StatelessWidget {
   const _NovaMarkdownInline({
     required this.text,
-    this.heading = false,
+    this.headingLevel = 0,
     this.linkOnly = false,
     this.documentPreview = false,
     this.onImage,
@@ -651,17 +651,23 @@ class _NovaMarkdownInline extends StatelessWidget {
   });
 
   final String text;
-  final bool heading;
+  final int headingLevel;
   final bool linkOnly;
   final bool documentPreview;
   final Widget Function(NovaDeliverableItem item)? onImage;
   final Widget Function(String label, String url)? onFileLink;
 
   TextStyle _baseStyle() => DunesTypography.sans(
-    fontSize: heading ? 17 : 15,
-    fontWeight: heading ? FontWeight.w700 : FontWeight.w400,
+    fontSize: headingLevel == 1
+        ? 20
+        : headingLevel == 2
+        ? 18
+        : headingLevel == 3
+        ? 16
+        : 15,
+    fontWeight: headingLevel > 0 ? FontWeight.w700 : FontWeight.w400,
     color: DunesColors.text,
-    height: heading ? 1.4 : 1.6,
+    height: headingLevel > 0 ? 1.4 : 1.6,
   );
 
   @override

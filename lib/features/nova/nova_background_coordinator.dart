@@ -24,6 +24,7 @@ class NovaBackgroundCoordinator extends ChangeNotifier {
   bool _novaPageActive = false;
   final Set<int> _finalizedConvIds = <int>{};
   final Set<int> _seenReplyConversationIds = <int>{};
+  final Set<int> _unreadReplyConversationIds = <int>{};
 
   /// C4 页面可见时为 true；用于区分「用户已在 NOVA 内看到回复」与「后台完成需通知」。
   void setNovaPageActive(bool active) {
@@ -38,8 +39,18 @@ class NovaBackgroundCoordinator extends ChangeNotifier {
     if (conversationId > 0) {
       _finalizedConvIds.remove(conversationId);
       _seenReplyConversationIds.remove(conversationId);
+      _unreadReplyConversationIds.remove(conversationId);
     }
   }
+
+  /// NOVA 会话是否有用户尚未进入会话查看的最终回复。
+  bool hasUnreadReplyFor(int conversationId) =>
+      conversationId > 0 &&
+      _unreadReplyConversationIds.contains(conversationId);
+
+  bool get hasUnreadReply => _unreadReplyConversationIds.isNotEmpty;
+
+  bool get isNovaPageActive => _novaPageActive;
 
   bool takePendingCommBadgeBump() {
     if (!_pendingCommBadgeBump) return false;
@@ -48,12 +59,13 @@ class NovaBackgroundCoordinator extends ChangeNotifier {
   }
 
   void markPendingCommBadgeBump({int conversationId = 0}) {
-    if (_novaPageActive ||
-        (conversationId > 0 &&
-            _seenReplyConversationIds.contains(conversationId))) {
-      return;
-    }
+    // 已读只针对上一轮已完成回复。不能因为用户看过同一会话的旧消息，
+    // 就抑制下一轮在后台完成时的提醒。
+    if (_novaPageActive) return;
     _pendingCommBadgeBump = true;
+    if (conversationId > 0) {
+      _unreadReplyConversationIds.add(conversationId);
+    }
   }
 
   void clearPendingCommBadgeBump() {
@@ -62,8 +74,14 @@ class NovaBackgroundCoordinator extends ChangeNotifier {
 
   /// 页面已展示该会话的回答；之后离开不会再将同一回答标成未读。
   void markReplySeen(int conversationId) {
-    if (conversationId > 0) _seenReplyConversationIds.add(conversationId);
+    if (conversationId > 0) {
+      _seenReplyConversationIds.add(conversationId);
+    }
+    // 通讯列表的 IM 会话 ID 与原生 NOVA 的历史会话 ID 曾经来自不同
+    // 服务；用户只要进入 NOVA，就应视为已查看所有 NOVA 完成提醒。
+    _unreadReplyConversationIds.clear();
     _pendingCommBadgeBump = false;
+    notifyListeners();
   }
 
   NativeNovaService serviceFor(AuthSession session) {
@@ -581,5 +599,6 @@ class NovaBackgroundCoordinator extends ChangeNotifier {
     _pollConvId = 0;
     _finalizedConvIds.clear();
     _seenReplyConversationIds.clear();
+    _unreadReplyConversationIds.clear();
   }
 }

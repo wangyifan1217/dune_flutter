@@ -321,7 +321,9 @@ bool isDuplicateNovaHistoryMessage(NativeNovaMessage a, NativeNovaMessage b) {
   return false;
 }
 
-List<NativeNovaMessage> dedupeNovaHistoryMessages(List<NativeNovaMessage> items) {
+List<NativeNovaMessage> dedupeNovaHistoryMessages(
+  List<NativeNovaMessage> items,
+) {
   if (items.isEmpty) return items;
   final sorted = [...items]
     ..sort((a, b) {
@@ -509,10 +511,7 @@ class NativeNovaService {
 
   Uri _dunesUri(String path) => Uri.parse('${session.apiBase}$path');
 
-  String mediaProxyUrl(
-    String source, {
-    String bucket = 'im-attachments',
-  }) {
+  String mediaProxyUrl(String source, {String bucket = 'im-attachments'}) {
     final raw = source.trim();
     if (raw.isEmpty) return raw;
     return _dunesUri(
@@ -548,9 +547,7 @@ class NativeNovaService {
     if (!persist) return;
     final uid = session.userId;
     if (uid > 0) {
-      unawaited(
-        NovaWebStorage.merge(uid, {'dunes_nova_chat_model': trimmed}),
-      );
+      unawaited(NovaWebStorage.merge(uid, {'dunes_nova_chat_model': trimmed}));
     }
   }
 
@@ -792,7 +789,10 @@ class NativeNovaService {
       userId: uid,
       previousConversationId: previousConversationId,
     );
-    final id = await ensureConversation();
+    // `sessions/ensure` 会返回已有的最近会话，不能用于「新对话」；
+    // 否则新问题会被追加到历史会话并在重新进入时一并回放。
+    final fresh = await sessionNew();
+    final id = fresh.conversationId;
     if (id > 0) {
       await applyNovaNewChatStorage(
         userId: uid,
@@ -917,13 +917,14 @@ class NativeNovaService {
   }
 
   Future<int> _createConversation({bool forceNew = false}) async {
+    if (forceNew) return sessionNew().then((snap) => snap.conversationId);
     return _postAiConversationSessionEnsure();
   }
 
-  /// `POST /ai/conversations/sessions/ensure`
+  /// IM 服务是 NOVA 的唯一会话来源；不得再混用 KB 会话 ID。
   Future<NovaConversationSnapshot> sessionEnsure() async {
     final resp = await _client.post(
-      _dunesUri('/ai/conversations/sessions/ensure'),
+      _dunesUri('/ai/assistant/sessions/ensure'),
       headers: _dunesHeaders,
       body: jsonEncode(<String, dynamic>{
         'kind': 'AI_ASSISTANT',
@@ -944,6 +945,27 @@ class NativeNovaService {
     return snap;
   }
 
+  /// 强制新建一个独立的 NOVA 会话，不能回退到 `sessions/ensure` 的最近会话。
+  Future<NovaConversationSnapshot> sessionNew() async {
+    final resp = await _client.post(
+      _dunesUri('/ai/assistant/sessions/new'),
+      headers: _dunesHeaders,
+      body: jsonEncode(<String, dynamic>{
+        'kind': 'AI_ASSISTANT',
+        'title': '新对话',
+      }),
+    );
+    if (resp.statusCode < 200 || resp.statusCode >= 300) {
+      throw Exception(_parseApiError(resp, fallback: '创建NOVA新会话失败'));
+    }
+    final snap = _parseConversationSnapshot(_decode(resp.body));
+    _lastSessionSnapshot = snap;
+    if (kDebugMode) {
+      debugPrint('[NativeNova] sessions/new convId=${snap.conversationId}');
+    }
+    return snap;
+  }
+
   /// `GET /ai/conversations/{id}?all=true`
   Future<NovaConversationSnapshot> fetchConversationAll(
     int conversationId,
@@ -952,7 +974,7 @@ class NativeNovaService {
       return const NovaConversationSnapshot(conversationId: 0);
     }
     final resp = await _client.get(
-      _dunesUri('/ai/conversations/$conversationId?all=true'),
+      _dunesUri('/conversations/$conversationId/messages?size=50'),
       headers: _dunesHeaders,
     );
     if (resp.statusCode < 200 || resp.statusCode >= 300) {
@@ -1048,6 +1070,7 @@ class NativeNovaService {
     int conversationId, {
     int? aroundMessageId,
     bool applyViewSinceFilter = true,
+    bool restoreFromHistory = false,
   }) async {
     if (conversationId <= 0) {
       return const NovaHistoryLoadResult(messages: <NativeNovaMessage>[]);
@@ -1106,7 +1129,12 @@ class NativeNovaService {
       msgs = _mergeTurnsWithSessionCache(msgs, localMsgs);
     }
 
-    if (_shouldRebuildFromTurns(msgs)) {
+    // 审计 history/turns 是跨设备恢复的辅助数据，不能在普通 C4 打开时
+    // 反向重建会话；历史服务一旦返回错误的 conversationId 集合，就会把所有
+    // 旧会话拼到当前窗口。仅在明确定位历史消息时才允许使用该兜底。
+    if ((restoreFromHistory ||
+            (aroundMessageId != null && aroundMessageId > 0)) &&
+        _shouldRebuildFromTurns(msgs)) {
       final turns = await _fetchTurnRows(200, conversationId: conversationId);
       if (turns.isNotEmpty) {
         final turnMsgs = _novaMsgsFromTurns(
@@ -2313,7 +2341,9 @@ class NativeNovaService {
     if (key.isEmpty) {
       throw Exception('文件路径无效');
     }
-    final resp = await _client.get(Uri.parse(mediaProxyUrl(key, bucket: bucket)));
+    final resp = await _client.get(
+      Uri.parse(mediaProxyUrl(key, bucket: bucket)),
+    );
     if (resp.statusCode < 200 || resp.statusCode >= 300) {
       throw Exception('读取失败（HTTP ${resp.statusCode}）');
     }
@@ -2506,7 +2536,9 @@ class NativeNovaService {
     return h;
   }
 
-  Future<Uint8List> _resolveMultimodalFileBytes(NovaDraftAttachment attachment) async {
+  Future<Uint8List> _resolveMultimodalFileBytes(
+    NovaDraftAttachment attachment,
+  ) async {
     if (attachment.bytes.isNotEmpty) return attachment.bytes;
     final payload = attachment.payload;
     if (payload == null) return attachment.bytes;
@@ -2514,7 +2546,9 @@ class NativeNovaService {
       final raw = (payload[key] ?? '').toString().trim();
       if (!raw.startsWith('http://') && !raw.startsWith('https://')) continue;
       final resp = await _client.get(Uri.parse(raw));
-      if (resp.statusCode >= 200 && resp.statusCode < 300 && resp.bodyBytes.isNotEmpty) {
+      if (resp.statusCode >= 200 &&
+          resp.statusCode < 300 &&
+          resp.bodyBytes.isNotEmpty) {
         return resp.bodyBytes;
       }
     }
@@ -2522,7 +2556,9 @@ class NativeNovaService {
     if (objectKey.isNotEmpty) {
       final url = await resolveMediaUrl(objectKey);
       final resp = await _client.get(Uri.parse(url));
-      if (resp.statusCode >= 200 && resp.statusCode < 300 && resp.bodyBytes.isNotEmpty) {
+      if (resp.statusCode >= 200 &&
+          resp.statusCode < 300 &&
+          resp.bodyBytes.isNotEmpty) {
         return resp.bodyBytes;
       }
     }
@@ -2557,10 +2593,7 @@ class NativeNovaService {
         final b64 = base64Encode(bytes);
         parts.add(<String, dynamic>{
           'type': 'file',
-          'file': <String, dynamic>{
-            'filename': a.fileName,
-            'file_data': b64,
-          },
+          'file': <String, dynamic>{'filename': a.fileName, 'file_data': b64},
         });
       }
     }
@@ -2647,9 +2680,6 @@ class NativeNovaService {
     if (!readiness.ready) {
       throw Exception(readiness.message ?? 'NOVA账号尚未开通，请稍后再试');
     }
-    if (novaApiKey.isEmpty) {
-      throw Exception('NOVA账号尚未就绪，请重新登录后再试');
-    }
     var activeConvId = conversationId;
     final contentLabel =
         displayText ?? (userContent is String ? userContent : '[附件消息]');
@@ -2659,15 +2689,6 @@ class NativeNovaService {
     );
     final skipEchoCheck = userContent is List;
     userStoppedStream = false;
-    if (!skipUserPersist) {
-      final fallbackId = userMessageId ?? DateTime.now().millisecondsSinceEpoch;
-      await persistUserMessage(
-        conversationId: activeConvId,
-        messageId: fallbackId,
-        content: contentLabel.toString(),
-        metadata: userMetadata,
-      );
-    }
 
     _streamClient?.close();
     _streamClient = http.Client();
@@ -2686,6 +2707,11 @@ class NativeNovaService {
       if (event.error != null && event.error!.isNotEmpty) {
         streamError = event.error;
         return;
+      }
+      if (event.conversationId > 0 && event.conversationId != activeConvId) {
+        activeConvId = event.conversationId;
+        unawaited(persistActiveConversationId(activeConvId));
+        onConversationId?.call(activeConvId);
       }
       if (event.think.isNotEmpty) {
         hadOutput = true;
@@ -2723,41 +2749,35 @@ class NativeNovaService {
     }
 
     try {
-      // 对齐 admin-web / WebView：直连 Nova /v1/chat/completions。
-      final requestMessages = buildNovaChatMessages(userContent);
-      final req = http.Request(
-        'POST',
-        Uri.parse('$novaBase/v1/chat/completions'),
-      );
-      final headers = novaHeaders(<String, String>{
+      // 通过 im-svc 执行生成并持久化完整问答。服务端使用不随客户端断开的
+      // context 继续处理，因此离开 C4 或 SSE 断开后仍可从会话历史恢复。
+      final req = http.Request('POST', _dunesUri('/ai/assistant/messages'));
+      final headers = <String, String>{
+        ..._dunesHeaders,
         'Content-Type': 'application/json',
-      });
+        'Accept': 'text/event-stream',
+      };
       if (stream) headers['Accept'] = 'text/event-stream';
-      final sessionId = novaProfileSessionId.trim();
-      if (sessionId.isNotEmpty) headers['X-Nova-Chat-Session-Id'] = sessionId;
       req.headers.addAll(headers);
       final body = <String, dynamic>{
+        'conversationId': activeConvId,
         'model': model,
-        'stream': stream,
-        'messages': requestMessages,
+        'kind': 'TEXT',
+        'content': userPrompt,
+        'bodyText': contentLabel,
+        if (userMetadata != null && userMetadata.isNotEmpty)
+          'payload': userMetadata,
       };
-      final bizUser = novaBizUserId.trim();
-      if (bizUser.isNotEmpty) body['user'] = bizUser;
       req.body = jsonEncode(body);
       if (kDebugMode) {
         debugPrint(
-          '[NativeNova] POST chat/completions conv=$activeConvId model=$model '
-          'user=$bizUser session=$sessionId stream=$stream bodyBytes=${req.body.length}',
+          '[NativeNova] POST assistant/messages conv=$activeConvId '
+          'model=$model stream=$stream bodyBytes=${req.body.length}',
         );
       }
 
       if (!stream) {
-        onUpdate(
-          const NovaStreamUpdate(
-            replyText: '',
-            thinkStatus: '正在分析…',
-          ),
-        );
+        onUpdate(const NovaStreamUpdate(replyText: '', thinkStatus: '正在分析…'));
         final resp = await streamClient.post(
           req.url,
           headers: req.headers,
@@ -2767,8 +2787,10 @@ class NativeNovaService {
           throw Exception(_parseNovaHttpError(resp.statusCode, resp.body));
         }
         final decoded = _decode(resp.body);
-        final choices = decoded['choices'] as List<dynamic>? ?? const <dynamic>[];
-        final first = choices.isNotEmpty && choices.first is Map<String, dynamic>
+        final choices =
+            decoded['choices'] as List<dynamic>? ?? const <dynamic>[];
+        final first =
+            choices.isNotEmpty && choices.first is Map<String, dynamic>
             ? choices.first as Map<String, dynamic>
             : const <String, dynamic>{};
         final message = first['message'] is Map<String, dynamic>
@@ -2780,18 +2802,7 @@ class NativeNovaService {
           throw Exception('NOVA未返回正文，请重试');
         }
         onUpdate(NovaStreamUpdate(replyText: reply, thinkStatus: ''));
-        await _saveLocalMessage(
-          activeConvId,
-          role: 'assistant',
-          content: reply,
-          kind: 'AI_ASSISTANT',
-          messageId: (userMessageId ?? 0) > 0 ? userMessageId! + 1 : null,
-          createdAt: _assistantCreatedAt(activeConvId),
-        );
-        await commitAssistantReplyToSession(
-          activeConvId,
-          replyText: reply,
-        );
+        await commitAssistantReplyToSession(activeConvId, replyText: reply);
         await _clearGeneratingMarkersForConversation(activeConvId);
         return reply;
       }
@@ -2876,14 +2887,6 @@ class NativeNovaService {
       if (!skipEchoCheck && reply.trim() == userPrompt.trim()) {
         throw Exception('NOVA未返回正文，请重试');
       }
-      await _saveLocalMessage(
-        activeConvId,
-        role: 'assistant',
-        content: reply,
-        kind: 'AI_ASSISTANT',
-        messageId: (userMessageId ?? 0) > 0 ? userMessageId! + 1 : null,
-        createdAt: _assistantCreatedAt(activeConvId),
-      );
       await commitAssistantReplyToSession(
         activeConvId,
         replyText: reply,
@@ -3061,6 +3064,11 @@ class NativeNovaService {
     bool requireSuccess = false,
   }) async {
     if (content.trim().isEmpty && metadata == null) return !requireSuccess;
+    // `/ai/assistant/messages` already persists both turns in im-go. Sending
+    // the same message to KB's `messages/local` reintroduces a second,
+    // unrelated conversation store and breaks ID stability.
+    return true;
+    /*
     final body = <String, dynamic>{
       'role': role,
       'content': content,
@@ -3093,6 +3101,7 @@ class NativeNovaService {
     if (newId <= 0) return false;
     await persistActiveConversationId(newId);
     return _postLocalMessage(newId, body);
+    */
   }
 
   Future<bool> _postLocalMessage(

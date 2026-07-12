@@ -1,10 +1,8 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import '../../core/theme/dunes_theme.dart';
-import '../shell/dunes_toast.dart';
 import '../conversation/conversation_service.dart';
 import 'native_nova_service.dart';
 import 'nova_icon.dart';
@@ -1442,34 +1440,11 @@ class NovaC4MessageRow extends StatelessWidget {
     );
   }
 
-  /// 长按文字气泡弹出「复制」。媒体/思考中等无文本内容时返回原气泡。
+  /// 交给系统原生选择菜单处理长按复制/选取：iOS 显示 Cupertino 文本菜单，
+  /// Android 和 Web 则使用各自平台的默认选择控件。
   Widget _wrapCopyable(BuildContext context, Widget bubble, String copyText) {
     if (copyText.trim().isEmpty) return bubble;
-    return GestureDetector(
-      onLongPress: () async {
-        final action = await showModalBottomSheet<String>(
-          context: context,
-          showDragHandle: true,
-          builder: (_) => SafeArea(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                ListTile(
-                  leading: const Icon(Icons.copy_rounded),
-                  title: const Text('复制'),
-                  onTap: () => Navigator.of(context).pop('copy'),
-                ),
-              ],
-            ),
-          ),
-        );
-        if (action != 'copy' || !context.mounted) return;
-        await Clipboard.setData(ClipboardData(text: copyText));
-        if (!context.mounted) return;
-        showDunesToast(context, '已复制');
-      },
-      child: bubble,
-    );
+    return SelectionArea(child: bubble);
   }
 
   String get _userCopyText =>

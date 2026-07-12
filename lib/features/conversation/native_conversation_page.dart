@@ -346,6 +346,21 @@ class _NativeConversationPageState extends State<NativeConversationPage>
     return aiRows.first;
   }
 
+  void _openNovaConversation([NativeConversation? conversation]) {
+    final nova = conversation ?? _primaryAiConversation(_items);
+    if (nova != null) {
+      NovaBackgroundCoordinator.instance.markReplySeen(nova.id);
+      final remaining = widget.commUnread.total - nova.unreadCount;
+      widget.commUnread.update(remaining > 0 ? remaining : 0);
+      unawaited(
+        _service.markConversationRead(nova.id).whenComplete(() {
+          if (mounted) unawaited(_load(silent: true));
+        }),
+      );
+    }
+    widget.onOpenNova();
+  }
+
   ({bool generating, String status}) _novaGeneratingFor(
     NativeConversation? ai,
   ) {
@@ -482,7 +497,7 @@ class _NativeConversationPageState extends State<NativeConversationPage>
       onTap = widget.onOpenNotifications;
     } else if (c.isAiAssistant) {
       rowKind = ChatInboxRowKind.aiAssistant;
-      onTap = widget.onOpenNova;
+      onTap = () => _openNovaConversation(c);
     } else {
       rowKind = ChatInboxRowKind.group;
       onTap = () => widget.onOpenGroup(c);
@@ -516,7 +531,11 @@ class _NativeConversationPageState extends State<NativeConversationPage>
       memberCount: c.isPrivate || kind == 'AI_ASSISTANT' || kind == 'BROADCAST'
           ? null
           : c.memberCount,
-      unreadCount: c.unreadCount,
+      unreadCount:
+          c.isAiAssistant &&
+              NovaBackgroundCoordinator.instance.hasUnreadReplyFor(c.id)
+          ? (c.unreadCount > 0 ? c.unreadCount : 1)
+          : c.unreadCount,
       muted: c.muted,
       showAiMark: c.isAiAssistant,
       previewGenerating: c.isAiAssistant && gen.generating,
@@ -646,10 +665,13 @@ class _NativeConversationPageState extends State<NativeConversationPage>
               ChatInboxHeader(
                 onOpenContacts: widget.onOpenContacts,
                 onNewChat: widget.onOpenNewChat,
-                onOpenNova: widget.onOpenNova,
+                onOpenNova: _openNovaConversation,
                 onOpenMessageCenter: widget.onOpenNotifications,
                 messageCenterUnread: _messageCenterUnread,
-                novaThinking: NovaBackgroundCoordinator.instance.isThinking,
+                novaThinking: _novaGeneratingFor(
+                  _primaryAiConversation(_items),
+                ).generating,
+                novaUnread: NovaBackgroundCoordinator.instance.hasUnreadReply,
               ),
               ChatInboxSearchBar(
                 controller: _searchController,

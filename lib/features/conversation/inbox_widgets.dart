@@ -19,6 +19,7 @@ class ChatInboxHeader extends StatelessWidget {
     required this.onOpenMessageCenter,
     this.messageCenterUnread = 0,
     this.novaThinking = false,
+    this.novaUnread = false,
   });
 
   final VoidCallback onOpenContacts;
@@ -27,6 +28,7 @@ class ChatInboxHeader extends StatelessWidget {
   final VoidCallback onOpenMessageCenter;
   final int messageCenterUnread;
   final bool novaThinking;
+  final bool novaUnread;
 
   @override
   Widget build(BuildContext context) {
@@ -51,7 +53,7 @@ class ChatInboxHeader extends StatelessWidget {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  _NovaEyesButton(onTap: onOpenNova),
+                  _NovaEyesButton(onTap: onOpenNova, unread: novaUnread),
                   if (novaThinking)
                     Text(
                       '正在思考',
@@ -804,9 +806,10 @@ class _IconBtn extends StatelessWidget {
 }
 
 class _NovaEyesButton extends StatefulWidget {
-  const _NovaEyesButton({required this.onTap});
+  const _NovaEyesButton({required this.onTap, required this.unread});
 
   final VoidCallback onTap;
+  final bool unread;
 
   @override
   State<_NovaEyesButton> createState() => _NovaEyesButtonState();
@@ -843,27 +846,56 @@ class _NovaEyesButtonState extends State<_NovaEyesButton>
           child: SizedBox(
             width: 44,
             height: 40,
-            child: AnimatedBuilder(
-              animation: _controller,
-              builder: (context, _) {
-                final t = _controller.value;
-                final lookOffset = math.sin(t * math.pi * 2) * 3;
-                final blinkDistance = (t - 0.72).abs();
-                final eyeScaleY = blinkDistance < 0.055
-                    ? blinkDistance / 0.055
-                    : 1.0;
-                return Transform.translate(
-                  offset: Offset(lookOffset, 0),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      _NovaEye(verticalScale: eyeScaleY),
-                      const SizedBox(width: 4),
-                      _NovaEye(verticalScale: eyeScaleY),
-                    ],
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Positioned.fill(
+                  child: AnimatedBuilder(
+                    animation: _controller,
+                    builder: (context, _) {
+                      final t = _controller.value;
+                      final lookOffset = math.sin(t * math.pi * 2) * 3;
+                      final blinkDistance = (t - 0.72).abs();
+                      final eyeScaleY = blinkDistance < 0.055
+                          ? blinkDistance / 0.055
+                          : 1.0;
+                      return Transform.translate(
+                        offset: Offset(lookOffset, 0),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            _NovaEye(verticalScale: eyeScaleY),
+                            const SizedBox(width: 4),
+                            _NovaEye(verticalScale: eyeScaleY),
+                          ],
+                        ),
+                      );
+                    },
                   ),
-                );
-              },
+                ),
+                if (widget.unread)
+                  Positioned(
+                    top: 1,
+                    right: 1,
+                    child: Container(
+                      width: 16,
+                      height: 16,
+                      alignment: Alignment.center,
+                      decoration: const BoxDecoration(
+                        color: Color(0xFFFF5B61),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Text(
+                        '1',
+                        style: DunesTypography.sans(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
             ),
           ),
         ),

@@ -99,6 +99,7 @@ class _NativeNovaPageState extends State<NativeNovaPage>
   String? _banner;
   String _busyHint = '';
   int _conversationId = 0;
+  int _loadToken = 0;
   List<NativeNovaMessage> _messages = const <NativeNovaMessage>[];
   List<String> _chatModels = const <String>[];
   String _selectedModel = '';
@@ -478,6 +479,7 @@ class _NativeNovaPageState extends State<NativeNovaPage>
   }
 
   Future<void> _load() async {
+    final loadToken = ++_loadToken;
     setState(() {
       _loading = true;
       _banner = null;
@@ -486,9 +488,10 @@ class _NativeNovaPageState extends State<NativeNovaPage>
     });
     _stopGeneratingPoll();
     await Future.wait<void>([_loadModels(), _loadUserAvatar()]);
+    if (!mounted || loadToken != _loadToken) return;
     try {
       final readiness = await _service.checkReadiness();
-      if (!mounted) return;
+      if (!mounted || loadToken != _loadToken) return;
       await _service.sanitizeNovaConvStorage();
       // 对齐 WebView onScreen(C4)：重试历史同步队列。
       unawaited(_service.flushHistorySyncQueue());
@@ -501,6 +504,7 @@ class _NativeNovaPageState extends State<NativeNovaPage>
       var generatingAfter = 0;
 
       if (!readiness.ready) {
+        if (loadToken != _loadToken) return;
         setState(() {
           _novaReady = false;
           _conversationId = 0;
@@ -536,6 +540,7 @@ class _NativeNovaPageState extends State<NativeNovaPage>
           final history = await _service.fetchFullHistory(
             convId,
             aroundMessageId: focusId != null && focusId > 0 ? focusId : null,
+            restoreFromHistory: focusedConvId > 0,
           );
           msgs = history.messages;
           serverGenerating = history.assistantGenerating;
@@ -585,7 +590,7 @@ class _NativeNovaPageState extends State<NativeNovaPage>
         }
       }
 
-      if (!mounted) return;
+      if (!mounted || loadToken != _loadToken) return;
       setState(() {
         _novaReady = true;
         _conversationId = convId;
@@ -630,7 +635,7 @@ class _NativeNovaPageState extends State<NativeNovaPage>
         _scrollBottom();
       }
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted || loadToken != _loadToken) return;
       setState(() {
         _novaReady = true;
         _conversationId = 0;
@@ -730,11 +735,15 @@ class _NativeNovaPageState extends State<NativeNovaPage>
     final draftUserText = (draft?.userText ?? '').trim();
 
     if (draftUserText.isNotEmpty && effectiveAfter > 0) {
-      final hasUser = novaHasMatchingUserMessage(
-        out,
-        afterMessageId: effectiveAfter,
-        userText: draftUserText,
-      );
+      // 后端 IM 分配的 message ID 与前端临时 afterMessageId 不同。重入
+      // 流式会话时，只要当前会话已有同文本用户消息就不能再插入一次。
+      final hasUser =
+          out.any((m) => m.role == 'user' && m.text.trim() == draftUserText) ||
+          novaHasMatchingUserMessage(
+            out,
+            afterMessageId: effectiveAfter,
+            userText: draftUserText,
+          );
       if (!hasUser) {
         final userMsg = NativeNovaMessage(
           id: effectiveAfter,
@@ -974,7 +983,8 @@ class _NativeNovaPageState extends State<NativeNovaPage>
       unawaited(_service.flushConvToLocalHistory(_conversationId, rows));
     }
     if (_conversationId > 0) {
-      if (mounted) {
+      final replyVisible = NovaBackgroundCoordinator.instance.isNovaPageActive;
+      if (replyVisible) {
         NovaBackgroundCoordinator.instance.stopPoll();
         NovaBackgroundCoordinator.instance.markReplySeen(_conversationId);
       } else {
@@ -987,7 +997,7 @@ class _NativeNovaPageState extends State<NativeNovaPage>
         );
       }
       NovaBackgroundCoordinator.instance.notifyInboxRefresh();
-      if (!mounted) {
+      if (!replyVisible) {
         NovaBackgroundCoordinator.instance.markPendingCommBadgeBump(
           conversationId: _conversationId,
         );
@@ -1886,24 +1896,10 @@ class _NativeNovaPageState extends State<NativeNovaPage>
         }
       }
 
+      // `/ai/assistant/messages` persists the user turn atomically before
+      // starting NOVA. Persisting here as well used to create duplicate turns
+      // when the user navigated away during a stream.
       var userPersistedToServer = skipUserBubble || userAlreadyPersisted;
-      if (!skipUserBubble && !reusingTurn && drafts.isEmpty) {
-        final earlyContent = text.isNotEmpty ? text : prompt;
-        final savedConvId = await _service.persistUserMessage(
-          conversationId: _conversationId,
-          messageId: userMsgId,
-          content: earlyContent,
-        );
-        if (savedConvId > 0 && savedConvId != _conversationId && mounted) {
-          setState(() => _conversationId = savedConvId);
-        }
-        userPersistedToServer = true;
-        if (kDebugMode) {
-          debugPrint(
-            '[NativeNovaPage] user persisted before stream conv=$_conversationId id=$userMsgId',
-          );
-        }
-      }
 
       for (final d in drafts) {
         if (d.payload != null) continue;
@@ -1986,21 +1982,6 @@ class _NativeNovaPageState extends State<NativeNovaPage>
           : <String, dynamic>{
               'attachments': attachments.map((a) => a.toJson()).toList(),
             };
-
-      if ((!skipUserBubble || reusingTurn) &&
-          attachments.isNotEmpty &&
-          !userAlreadyPersisted) {
-        final savedConvId = await _service.persistUserMessage(
-          conversationId: _conversationId,
-          messageId: userMsgId,
-          content: displayText,
-          metadata: userMetadata,
-        );
-        if (savedConvId > 0 && savedConvId != _conversationId && mounted) {
-          setState(() => _conversationId = savedConvId);
-        }
-        userPersistedToServer = true;
-      }
 
       final userContent = drafts.isEmpty
           ? (promptSource.trim().isNotEmpty
@@ -2226,6 +2207,8 @@ class _NativeNovaPageState extends State<NativeNovaPage>
 
   Future<void> _startNewChat() async {
     if (_isGenerating) return;
+    // 取消尚未完成的 `_load`，避免旧请求完成后覆盖新会话 ID 和消息列表。
+    _loadToken += 1;
     _stopGeneratingPoll();
     final prevConvId = _conversationId;
     final uid = widget.session.userId;
@@ -2326,7 +2309,11 @@ class _NativeNovaPageState extends State<NativeNovaPage>
     header.setUint16(20, 1, Endian.little);
     header.setUint16(22, channels, Endian.little);
     header.setUint32(24, sampleRate, Endian.little);
-    header.setUint32(28, sampleRate * channels * bitsPerSample ~/ 8, Endian.little);
+    header.setUint32(
+      28,
+      sampleRate * channels * bitsPerSample ~/ 8,
+      Endian.little,
+    );
     header.setUint16(32, channels * bitsPerSample ~/ 8, Endian.little);
     header.setUint16(34, bitsPerSample, Endian.little);
     writeAscii(36, 'data');
@@ -2924,95 +2911,100 @@ class _NativeNovaPageState extends State<NativeNovaPage>
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                NovaPageHeader(
-                  onBack: _handleBack,
-                  onNewChat: _novaReady ? _startNewChat : null,
-                  onHistory: widget.onHistory,
-                  onOpenKb: widget.onOpenKb,
-                  actionsEnabled: !_isGenerating,
-                ),
-                if (_loading)
-                  const Expanded(
-                    child: Center(
-                      child: CircularProgressIndicator(strokeWidth: 2),
+                    NovaPageHeader(
+                      onBack: _handleBack,
+                      onNewChat: _novaReady ? _startNewChat : null,
+                      onHistory: widget.onHistory,
+                      onOpenKb: widget.onOpenKb,
+                      actionsEnabled: !_isGenerating,
                     ),
-                  )
-                else
-                  Expanded(
-                    child: NovaC4MessageStream(
-                      child: ListView(
-                        controller: _scrollController,
-                        keyboardDismissBehavior:
-                            ScrollViewKeyboardDismissBehavior.onDrag,
-                        padding: const EdgeInsets.fromLTRB(14, 12, 14, 28),
-                        children: [
-                          if (_banner != null)
-                            NovaStatusBanner(message: _banner!, onRetry: _load),
-                          if (_isEmptyConversation)
-                            const SizedBox(
-                              height: 360,
-                              child: NovaC4EmptyState(),
-                            )
-                          else
-                            ..._buildMessageList(),
-                        ],
+                    if (_loading)
+                      const Expanded(
+                        child: Center(
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                      )
+                    else
+                      Expanded(
+                        child: NovaC4MessageStream(
+                          child: ListView(
+                            controller: _scrollController,
+                            keyboardDismissBehavior:
+                                ScrollViewKeyboardDismissBehavior.onDrag,
+                            padding: const EdgeInsets.fromLTRB(14, 12, 14, 28),
+                            children: [
+                              if (_banner != null)
+                                NovaStatusBanner(
+                                  message: _banner!,
+                                  onRetry: _load,
+                                ),
+                              if (_isEmptyConversation)
+                                const SizedBox(
+                                  height: 360,
+                                  child: NovaC4EmptyState(),
+                                )
+                              else
+                                ..._buildMessageList(),
+                            ],
+                          ),
+                        ),
                       ),
-                    ),
-                  ),
-                NovaC4BusyHint(text: _busyHint),
-                NovaDraftTray(items: _drafts, onRemove: _removeDraft),
-                ValueListenableBuilder<bool>(
-                  valueListenable: MeetingLiveController.instance.active,
-                  builder: (context, meetingLive, _) {
-                    final voiceBlocked = !inputEnabled || meetingLive;
-                    final effectiveVoiceMode = voiceBlocked
-                        ? false
-                        : _voiceMode;
-                    return NovaC4InputBar(
-                      controller: _inputController,
-                      focusNode: _inputFocusNode,
-                      onInputFocused: _scrollToLatestAfterKeyboard,
-                      voiceMode: effectiveVoiceMode,
-                      sending: _sending,
-                      enabled: inputEnabled,
-                      hintText: inputHint,
-                      onToggleVoice: voiceBlocked
-                          ? () {
-                              if (meetingLive) {
-                                _toast('会议录音进行中，暂无法发送语音');
-                              }
-                            }
-                          : () => setState(() => _voiceMode = !_voiceMode),
-                      onSend: _submitInput,
-                      onPickModel: _pickModel,
-                      modelLabel: novaModelDisplayName(_selectedModel),
-                      quickActionsOpen: _quickActionsOpen,
-                      onToggleQuickActions: () {
-                        setState(() => _quickActionsOpen = !_quickActionsOpen);
+                    NovaC4BusyHint(text: _busyHint),
+                    NovaDraftTray(items: _drafts, onRemove: _removeDraft),
+                    ValueListenableBuilder<bool>(
+                      valueListenable: MeetingLiveController.instance.active,
+                      builder: (context, meetingLive, _) {
+                        final voiceBlocked = !inputEnabled || meetingLive;
+                        final effectiveVoiceMode = voiceBlocked
+                            ? false
+                            : _voiceMode;
+                        return NovaC4InputBar(
+                          controller: _inputController,
+                          focusNode: _inputFocusNode,
+                          onInputFocused: _scrollToLatestAfterKeyboard,
+                          voiceMode: effectiveVoiceMode,
+                          sending: _sending,
+                          enabled: inputEnabled,
+                          hintText: inputHint,
+                          onToggleVoice: voiceBlocked
+                              ? () {
+                                  if (meetingLive) {
+                                    _toast('会议录音进行中，暂无法发送语音');
+                                  }
+                                }
+                              : () => setState(() => _voiceMode = !_voiceMode),
+                          onSend: _submitInput,
+                          onPickModel: _pickModel,
+                          modelLabel: novaModelDisplayName(_selectedModel),
+                          quickActionsOpen: _quickActionsOpen,
+                          onToggleQuickActions: () {
+                            setState(
+                              () => _quickActionsOpen = !_quickActionsOpen,
+                            );
+                          },
+                          onStop: _stopGeneration,
+                          onCamera: _pickCamera,
+                          onAlbum: _pickAlbum,
+                          onOpenMeeting: widget.onOpenMeeting,
+                          onMeetingPrd: _openMeetingPrdFlow,
+                          onAttach:
+                              inputEnabled && NovaConfig.fileUploadInChatEnabled
+                              ? _pickFile
+                              : null,
+                          recording: _recording,
+                          recordWillCancel: _recordWillCancel,
+                          recordDurationMs: _recordDurationMs,
+                          onVoiceHoldStart: voiceBlocked
+                              ? null
+                              : (details) =>
+                                    _startHoldRecord(details.globalPosition),
+                          onVoiceHoldMove: _onRecordMove,
+                          onVoiceHoldEnd: (_) => _finishHoldRecord(),
+                          onVoiceHoldCancel: () =>
+                              _cancelHoldRecord(showHint: false),
+                        );
                       },
-                      onStop: _stopGeneration,
-                      onCamera: _pickCamera,
-                      onAlbum: _pickAlbum,
-                      onOpenMeeting: widget.onOpenMeeting,
-                      onMeetingPrd: _openMeetingPrdFlow,
-                      onAttach:
-                          inputEnabled && NovaConfig.fileUploadInChatEnabled
-                          ? _pickFile
-                          : null,
-                      recording: _recording,
-                      recordWillCancel: _recordWillCancel,
-                      recordDurationMs: _recordDurationMs,
-                      onVoiceHoldStart: voiceBlocked
-                          ? null
-                          : (details) =>
-                                _startHoldRecord(details.globalPosition),
-                      onVoiceHoldMove: _onRecordMove,
-                      onVoiceHoldEnd: (_) => _finishHoldRecord(),
-                      onVoiceHoldCancel: () =>
-                          _cancelHoldRecord(showHint: false),
-                    );
-                  },
-                ),
+                    ),
                   ],
                 ),
                 if (_recording)

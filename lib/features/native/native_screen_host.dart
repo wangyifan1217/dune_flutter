@@ -745,6 +745,10 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           session: widget.session,
           onBack: () {
             NovaBackgroundCoordinator.instance.clearPendingCommBadgeBump();
+            setState(() {
+              _novaFocusConversationId = null;
+              _novaFocusMessageId = null;
+            });
             widget.navigation.popTo('C1');
           },
           onHistory: () => widget.navigation.go('C11'),
@@ -766,7 +770,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           onOpenConversation: (convId, messageId, title, preview) {
             setState(() {
               _novaFocusConversationId = convId;
-              // 从历史列表进入会话时默认展示到最底部（最新消息），不跳到某条中间消息。
+              // 历史会话恢复完整内容后默认滚动到底部，不定位到单条中间消息。
               _novaFocusMessageId = null;
             });
             widget.navigation.go('C4');

@@ -6,7 +6,8 @@ const kNovaGeneratingTtlMs = 15 * 60 * 1000;
 
 String novaGeneratingStorageKey(int convId) => 'dunes_nova_generating_$convId';
 
-String novaStreamDraftStorageKey(int convId) => 'dunes_nova_stream_draft_$convId';
+String novaStreamDraftStorageKey(int convId) =>
+    'dunes_nova_stream_draft_$convId';
 
 class NovaGeneratingState {
   const NovaGeneratingState({
@@ -21,9 +22,13 @@ class NovaGeneratingState {
   final int afterMessageId;
   final int conversationId;
 
-  bool get expired => DateTime.now().millisecondsSinceEpoch - at > kNovaGeneratingTtlMs;
+  bool get expired =>
+      DateTime.now().millisecondsSinceEpoch - at > kNovaGeneratingTtlMs;
 
-  factory NovaGeneratingState.fromJson(Map<String, dynamic> json, {required int convId}) {
+  factory NovaGeneratingState.fromJson(
+    Map<String, dynamic> json, {
+    required int convId,
+  }) {
     return NovaGeneratingState(
       at: (json['at'] as num?)?.toInt() ?? 0,
       status: (json['status'] ?? '正在生成…').toString(),
@@ -33,10 +38,10 @@ class NovaGeneratingState {
   }
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-        'at': at,
-        'status': status,
-        'after': afterMessageId,
-      };
+    'at': at,
+    'status': status,
+    'after': afterMessageId,
+  };
 }
 
 class NovaStreamDraft {
@@ -58,7 +63,8 @@ class NovaStreamDraft {
   final String text;
   final bool streaming;
 
-  bool get expired => DateTime.now().millisecondsSinceEpoch - at > kNovaGeneratingTtlMs;
+  bool get expired =>
+      DateTime.now().millisecondsSinceEpoch - at > kNovaGeneratingTtlMs;
 
   factory NovaStreamDraft.fromJson(Map<String, dynamic> json) {
     return NovaStreamDraft(
@@ -73,14 +79,14 @@ class NovaStreamDraft {
   }
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-        'at': at,
-        'status': status,
-        'after': afterMessageId,
-        'userText': userText,
-        'thinkStream': thinkText,
-        'text': text,
-        'streaming': streaming,
-      };
+    'at': at,
+    'status': status,
+    'after': afterMessageId,
+    'userText': userText,
+    'thinkStream': thinkText,
+    'text': text,
+    'streaming': streaming,
+  };
 }
 
 NovaGeneratingState? readNovaGeneratingFromStorage(
@@ -100,7 +106,10 @@ NovaGeneratingState? readNovaGeneratingFromStorage(
     try {
       final json = jsonDecode(raw);
       if (json is! Map) continue;
-      final state = NovaGeneratingState.fromJson(Map<String, dynamic>.from(json), convId: id);
+      final state = NovaGeneratingState.fromJson(
+        Map<String, dynamic>.from(json),
+        convId: id,
+      );
       if (state.expired) continue;
       return state;
     } catch (_) {}
@@ -108,14 +117,16 @@ NovaGeneratingState? readNovaGeneratingFromStorage(
   return null;
 }
 
-bool isNovaStoppedGeneratingStatus(String status) => status.trim().contains('停止');
+bool isNovaStoppedGeneratingStatus(String status) =>
+    status.trim().contains('停止');
 
 bool novaStreamDraftHasContent(NovaStreamDraft? draft) {
   if (draft == null || draft.expired) return false;
   return draft.text.trim().isNotEmpty || draft.thinkText.trim().isNotEmpty;
 }
 
-/// 对齐 WebView `applyNovaGeneratingState`：无活跃流时，仅「已有正文草稿」才算 generating。
+/// 本地标记只用于维持仍在连接的 SSE 流。流断开后，生成状态必须由
+/// 服务端历史接口确认；否则一个未清理的本地标记会让通讯页持续显示“思考中”。
 bool shouldPersistNovaGenerating({
   NovaGeneratingState? localGen,
   NovaStreamDraft? draft,
@@ -123,29 +134,15 @@ bool shouldPersistNovaGenerating({
   bool hasAiReplyAfter = false,
 }) {
   if (streamInFlight) return true;
-  if (hasAiReplyAfter) return false;
-  if (draft == null || draft.expired) {
-    if (localGen == null) return false;
-    if (localGen.expired) return false;
-    if (isNovaStoppedGeneratingStatus(localGen.status)) return false;
-    return true;
-  }
-  final hasDraftContent =
-      draft.text.trim().isNotEmpty || draft.userText.trim().isNotEmpty;
-  if (!hasDraftContent) {
-    if (localGen == null) return false;
-    if (localGen.expired) return false;
-    if (isNovaStoppedGeneratingStatus(localGen.status)) return false;
-    return false;
-  }
-  // SSE 中断后 generating 标记可能被清掉，但草稿仍在：仍需恢复/轮询。
-  if (localGen == null) return draft.text.trim().isNotEmpty;
-  if (localGen.expired) return draft.text.trim().isNotEmpty;
-  if (isNovaStoppedGeneratingStatus(localGen.status)) return false;
-  return true;
+  // `localGen` / `draft` 是 UI 恢复缓存，不是服务端任务状态。后台轮询
+  // 会继续查询服务端；服务端未标记生成时不能让它们单独把 UI 卡在思考中。
+  return false;
 }
 
-NovaStreamDraft? readNovaStreamDraftFromStorage(Map<String, String> storage, int convId) {
+NovaStreamDraft? readNovaStreamDraftFromStorage(
+  Map<String, String> storage,
+  int convId,
+) {
   if (convId <= 0) return null;
   final raw = storage[novaStreamDraftStorageKey(convId)];
   if (raw == null || raw.isEmpty) return null;

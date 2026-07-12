@@ -51,7 +51,10 @@ String trimNovaReasoningHeader(String text) {
       .trim();
 }
 
-({String thinking, String reply}) splitNovaReasoningReply(String raw, {required bool finalPass}) {
+({String thinking, String reply}) splitNovaReasoningReply(
+  String raw, {
+  required bool finalPass,
+}) {
   raw = raw.trim();
   if (raw.isEmpty || !raw.contains('推理过程')) {
     return (thinking: '', reply: raw);
@@ -66,7 +69,9 @@ String trimNovaReasoningHeader(String text) {
   }
   if (sepIdx >= 0) {
     return (
-      thinking: trimNovaReasoningHeader(lines.sublist(0, sepIdx).join('\n').trim()),
+      thinking: trimNovaReasoningHeader(
+        lines.sublist(0, sepIdx).join('\n').trim(),
+      ),
       reply: lines.sublist(sepIdx + 1).join('\n').trim(),
     );
   }
@@ -80,15 +85,22 @@ String stripNovaReasoningBlock(String text) {
   if (!text.contains('推理过程')) return text;
   final split = splitNovaReasoningReply(text, finalPass: true);
   if (split.reply.isNotEmpty) return split.reply;
-  final m = RegExp(r'推理过程\s*[:：][\s\S]*?\n-{3,}\s*\n?([\s\S]+)').firstMatch(text);
+  final m = RegExp(
+    r'推理过程\s*[:：][\s\S]*?\n-{3,}\s*\n?([\s\S]+)',
+  ).firstMatch(text);
   if (m != null) return m.group(1)?.trim() ?? text;
   return text;
 }
 
 String? hermesProgressStatus(String text) {
-  final tools = RegExp(r'🔧\s*\*\*调用工具\*\*\s*([^\n…]+)').allMatches(text).toList();
+  final tools = RegExp(
+    r'🔧\s*\*\*调用工具\*\*\s*([^\n…]+)',
+  ).allMatches(text).toList();
   if (tools.isNotEmpty) {
-    final last = tools.last.group(0)!.replaceFirst(RegExp(r'🔧\s*\*\*调用工具\*\*\s*'), '').trim();
+    final last = tools.last
+        .group(0)!
+        .replaceFirst(RegExp(r'🔧\s*\*\*调用工具\*\*\s*'), '')
+        .trim();
     return '调用工具 $last…';
   }
   final done = RegExp(r'✓\s*(\S+)\s*完成').allMatches(text).toList();
@@ -108,7 +120,9 @@ NovaStreamParts splitNovaStreamText(String raw, {required bool finalPass}) {
     if (idx >= 0 && idx < raw.length - 1) {
       pending = raw.substring(idx + 1);
       buf = raw.substring(0, idx + 1);
-    } else if (idx < 0 && RegExp(r'^[💭🔧✓]').hasMatch(raw) && raw.length < 28) {
+    } else if (idx < 0 &&
+        RegExp(r'^[💭🔧✓]').hasMatch(raw) &&
+        raw.length < 28) {
       return NovaStreamParts(status: hermesProgressStatus(raw) ?? '思考中…');
     }
   }
@@ -129,7 +143,8 @@ NovaStreamParts splitNovaStreamText(String raw, {required bool finalPass}) {
       if (body.isNotEmpty) thinking.add(body);
       continue;
     }
-    if (_hermesToolLine.hasMatch(trimmed) || _hermesDoneLine.hasMatch(trimmed)) {
+    if (_hermesToolLine.hasMatch(trimmed) ||
+        _hermesDoneLine.hasMatch(trimmed)) {
       mode = 'think';
       thinking.add(trimmed);
       continue;
@@ -146,8 +161,13 @@ NovaStreamParts splitNovaStreamText(String raw, {required bool finalPass}) {
   replyText = stripHermesProgressLines(replyText);
 
   final reasoning = splitNovaReasoningReply(replyText, finalPass: finalPass);
-  final mergedThink = [thinkText, reasoning.thinking].where((s) => s.isNotEmpty).join('\n').trim();
-  final status = hermesProgressStatus(raw) ?? (mergedThink.isNotEmpty && replyText.isEmpty ? '思考中…' : '');
+  final mergedThink = [
+    thinkText,
+    reasoning.thinking,
+  ].where((s) => s.isNotEmpty).join('\n').trim();
+  final status =
+      hermesProgressStatus(raw) ??
+      (mergedThink.isNotEmpty && replyText.isEmpty ? '思考中…' : '');
 
   return NovaStreamParts(
     thinking: mergedThink,
@@ -176,7 +196,11 @@ String extractNovaMessageTextContent(dynamic content) {
   return content.toString();
 }
 
-String novaFinalReplyText(String rawReply, String rawThink, {required bool finalPass}) {
+String novaFinalReplyText(
+  String rawReply,
+  String rawThink, {
+  required bool finalPass,
+}) {
   final parts = splitNovaStreamText(rawReply, finalPass: finalPass);
   var reply = parts.reply.trim();
   if (reply.isEmpty && rawThink.trim().isNotEmpty && finalPass) {
@@ -191,25 +215,65 @@ class NovaOpenAiSseEvent {
     this.text = '',
     this.think = '',
     this.status = '',
+    this.conversationId = 0,
     this.error,
   });
 
   final String text;
   final String think;
   final String status;
+  final int conversationId;
   final String? error;
 }
 
 NovaOpenAiSseEvent? parseNovaOpenAiSseJson(Map<String, dynamic> json) {
+  // im-svc wraps SSE payloads as {"event": "...", "data": {...}} while
+  // the upstream NOVA endpoint emits OpenAI-compatible chunks directly.
+  // Normalize both protocols here so UI state is driven by the backend stream.
+  final wrappedEvent = (json['event'] ?? '').toString();
+  final wrappedData = json['data'];
+  if (wrappedData is Map) {
+    final data = Map<String, dynamic>.from(wrappedData);
+    final text = (data['text'] ?? data['content'] ?? '').toString();
+    final conversationId = (data['conversationId'] as num?)?.toInt() ?? 0;
+    switch (wrappedEvent) {
+      case 'user_message':
+        return NovaOpenAiSseEvent(conversationId: conversationId);
+      case 'delta':
+        return text.isEmpty
+            ? null
+            : NovaOpenAiSseEvent(text: text, conversationId: conversationId);
+      case 'thinking':
+      case 'thinking_delta':
+      case 'reasoning':
+        return text.isEmpty
+            ? null
+            : NovaOpenAiSseEvent(
+                think: text,
+                status: (data['status'] ?? '思考中…').toString(),
+              );
+      case 'tool_progress':
+      case 'tool_call':
+      case 'tool_result':
+        final status = (data['text'] ?? data['message'] ?? '正在处理…').toString();
+        return NovaOpenAiSseEvent(think: '', status: status);
+      case 'error':
+        final message = (data['message'] ?? data['error'] ?? 'NOVA 请求失败')
+            .toString();
+        return NovaOpenAiSseEvent(error: message);
+      case 'done':
+        // `text` is the complete reply, already delivered through delta events.
+        return null;
+    }
+  }
+
   final err = json['error'];
   if (err != null) {
     final em = err is Map
         ? (err['message'] ?? err['code'] ?? err).toString()
         : err.toString();
     final code = err is Map ? (err['code'] ?? '').toString() : '';
-    return NovaOpenAiSseEvent(
-      error: code.isNotEmpty ? '$em ($code)' : em,
-    );
+    return NovaOpenAiSseEvent(error: code.isNotEmpty ? '$em ($code)' : em);
   }
 
   final event = (json['event'] ?? '').toString();

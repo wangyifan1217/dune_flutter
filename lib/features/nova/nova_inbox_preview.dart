@@ -41,7 +41,10 @@ String novaInboxPreviewOrIntro(String? preview) {
 }
 
 /// 对齐 WebView `resolveNovaConvIdForEnter`：仅读 `dunes_nova_conv_id`，不用 C1 列表 AI 行 id。
-int novaActiveConvIdFromStorage(Map<String, String> storage, {int fallback = 0}) {
+int novaActiveConvIdFromStorage(
+  Map<String, String> storage, {
+  int fallback = 0,
+}) {
   final saved = int.tryParse(storage['dunes_nova_conv_id'] ?? '') ?? 0;
   if (saved > 0) return saved;
   return fallback > 0 ? fallback : 0;
@@ -93,10 +96,7 @@ String novaConvPreviewTextFromStorage(
   if (!allowLocalCache && serverUsable) return server;
   final originalId = convId;
   var cid = originalId;
-  if (originalId > 0) {
-    final active = novaActiveConvIdFromStorage(storage, fallback: originalId);
-    if (active > 0) cid = active;
-  } else {
+  if (originalId <= 0) {
     cid = novaActiveConvIdFromStorage(storage);
   }
 
@@ -104,7 +104,8 @@ String novaConvPreviewTextFromStorage(
     final session = _novaSessionAssistantPreview(storage, cid);
     if (session.isNotEmpty && !isNovaWelcomePreview(session)) return session;
     final localTurn = _novaLocalTurnPreview(storage, cid);
-    if (localTurn.isNotEmpty && !isNovaWelcomePreview(localTurn)) return localTurn;
+    if (localTurn.isNotEmpty && !isNovaWelcomePreview(localTurn))
+      return localTurn;
     if (cid > 0 && originalId > 0 && cid != originalId) return '';
   }
 

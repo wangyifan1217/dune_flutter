@@ -1,9 +1,11 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../core/theme/dunes_theme.dart';
 import '../conversation/conversation_service.dart';
+import '../shell/dunes_toast.dart';
 import 'native_nova_service.dart';
 import 'nova_icon.dart';
 import 'nova_markdown.dart';
@@ -1441,10 +1443,36 @@ class NovaC4MessageRow extends StatelessWidget {
   }
 
   /// 交给系统原生选择菜单处理长按复制/选取：iOS 显示 Cupertino 文本菜单，
-  /// Android 和 Web 则使用各自平台的默认选择控件。
+  /// Android 和 Web 则使用各自平台的默认选择控件。额外提供“复制全部”，
+  /// 不必拖拽选完整条 NOVA 回复。
   Widget _wrapCopyable(BuildContext context, Widget bubble, String copyText) {
     if (copyText.trim().isEmpty) return bubble;
-    return SelectionArea(child: bubble);
+    return SelectionArea(
+      contextMenuBuilder: (menuContext, selectableRegionState) {
+        final items = <ContextMenuButtonItem>[
+          ContextMenuButtonItem(
+            label: '复制全部',
+            onPressed: () async {
+              await Clipboard.setData(ClipboardData(text: copyText));
+              selectableRegionState.hideToolbar();
+              if (menuContext.mounted) {
+                showDunesToast(
+                  menuContext,
+                  '已复制整条回复',
+                  duration: const Duration(milliseconds: 1200),
+                );
+              }
+            },
+          ),
+          ...selectableRegionState.contextMenuButtonItems,
+        ];
+        return AdaptiveTextSelectionToolbar.buttonItems(
+          anchors: selectableRegionState.contextMenuAnchors,
+          buttonItems: items,
+        );
+      },
+      child: bubble,
+    );
   }
 
   String get _userCopyText =>

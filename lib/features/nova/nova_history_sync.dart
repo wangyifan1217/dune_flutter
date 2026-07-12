@@ -58,20 +58,27 @@ class NovaHistorySync {
   Uri get _turnsUri => Uri.parse('${session.apiBase}/ai/history/turns');
 
   Map<String, String> get _headers => <String, String>{
-        'Authorization': 'Bearer ${session.token}',
-        'Content-Type': 'application/json',
-      };
+    'Authorization': 'Bearer ${session.token}',
+    'Content-Type': 'application/json',
+  };
 
-  static String turnTitleFromUser(String userLabel, {Map<String, dynamic>? payload}) {
+  static String turnTitleFromUser(
+    String userLabel, {
+    Map<String, dynamic>? payload,
+  }) {
     var label = userLabel.trim();
-    if (label.isNotEmpty && label != '[图片]' && label != '[文件]' && label != '[消息]') {
+    if (label.isNotEmpty &&
+        label != '[图片]' &&
+        label != '[文件]' &&
+        label != '[消息]') {
       return label.length > 24 ? label.substring(0, 24) : label;
     }
     final attachments = payload?['attachments'];
     if (attachments is List && attachments.isNotEmpty) {
       return attachments.length > 1 ? '图文对话' : '图片对话';
     }
-    if (label.isNotEmpty) return label.length > 24 ? label.substring(0, 24) : label;
+    if (label.isNotEmpty)
+      return label.length > 24 ? label.substring(0, 24) : label;
     return '对话';
   }
 
@@ -89,17 +96,23 @@ class NovaHistorySync {
     final user = userMessage.trim();
     var preview = (lastMessagePreview ?? '').trim();
     if (preview.isEmpty) {
-      preview = assistant.length > 200 ? assistant.substring(0, 200) : assistant;
+      preview = assistant.length > 200
+          ? assistant.substring(0, 200)
+          : assistant;
     }
     if (preview.isEmpty) {
       preview = user.length > 200 ? user.substring(0, 200) : user;
     }
     return <String, dynamic>{
       'conversationId': conversationId,
+      if (conversationId > 0) 'imConversationId': conversationId,
       'messageId': messageId,
       'title': title.length > 64 ? title.substring(0, 64) : title,
-      'lastMessagePreview': preview.length > 200 ? preview.substring(0, 200) : preview,
-      'lastMessageAt': lastMessageAt ?? DateTime.now().toUtc().toIso8601String(),
+      'lastMessagePreview': preview.length > 200
+          ? preview.substring(0, 200)
+          : preview,
+      'lastMessageAt':
+          lastMessageAt ?? DateTime.now().toUtc().toIso8601String(),
       'source': 'app',
       'userId': session.userId,
       'userDisplayName': displayName,
@@ -107,16 +120,18 @@ class NovaHistorySync {
       'novaSessionId': novaProfileSessionId,
       'model': (model ?? selectedModel).trim(),
       'userMessage': user.length > 8000 ? user.substring(0, 8000) : user,
-      'assistantMessage': assistant.length > 32000 ? assistant.substring(0, 32000) : assistant,
+      'assistantMessage': assistant.length > 32000
+          ? assistant.substring(0, 32000)
+          : assistant,
     };
   }
 
   String _payloadSig(Map<String, dynamic> payload) => [
-        payload['conversationId'],
-        payload['messageId'],
-        payload['userMessage'],
-        payload['assistantMessage'],
-      ].join('\x1e');
+    payload['conversationId'],
+    payload['messageId'],
+    payload['userMessage'],
+    payload['assistantMessage'],
+  ].join('\x1e');
 
   Future<void> upsertLocalTurn(Map<String, dynamic> turn) async {
     if (session.userId <= 0) return;
@@ -194,7 +209,9 @@ class NovaHistorySync {
         final itemSig = _payloadSig(Map<String, dynamic>.from(p));
         if (itemSig != sig) remain.add(Map<String, dynamic>.from(item));
       }
-      await NovaWebStorage.merge(session.userId, {_queueKey: jsonEncode(remain)});
+      await NovaWebStorage.merge(session.userId, {
+        _queueKey: jsonEncode(remain),
+      });
     } catch (_) {}
   }
 
@@ -213,9 +230,12 @@ class NovaHistorySync {
     if (conversationId <= 0 || session.userId <= 0) return;
     final reply = stripHermesProgressLines(assistantMessage.trim());
     if (reply.isEmpty) return;
-    final effectiveMessageId = messageId > 0 ? messageId : DateTime.now().millisecondsSinceEpoch;
+    final effectiveMessageId = messageId > 0
+        ? messageId
+        : DateTime.now().millisecondsSinceEpoch;
 
-    final resolvedTitle = title ?? turnTitleFromUser(userMessage, payload: userPayload);
+    final resolvedTitle =
+        title ?? turnTitleFromUser(userMessage, payload: userPayload);
     final payload = buildTurnPayload(
       conversationId: conversationId,
       messageId: effectiveMessageId,
@@ -362,7 +382,9 @@ class NovaHistorySync {
     await upsertLocalTurn(<String, dynamic>{
       'conversationId': conversationId,
       'title': title,
-      'lastMessagePreview': preview.length > 200 ? preview.substring(0, 200) : preview,
+      'lastMessagePreview': preview.length > 200
+          ? preview.substring(0, 200)
+          : preview,
       'lastMessageAt': lastMessageAt,
       'messageId': turnMessageId > 0 ? turnMessageId : items.last.id,
       'source': 'app',
@@ -373,8 +395,7 @@ class NovaHistorySync {
   Future<void> flushConvToLocalHistory(
     int conversationId,
     List<NativeNovaMessage> messages,
-  ) =>
-      syncLocalTurnPreviewFromMessages(conversationId, messages);
+  ) => syncLocalTurnPreviewFromMessages(conversationId, messages);
 
   Future<void> persistActiveConversationId(int conversationId) async {
     if (conversationId <= 0 || session.userId <= 0) return;

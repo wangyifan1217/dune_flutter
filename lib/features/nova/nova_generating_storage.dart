@@ -94,27 +94,22 @@ NovaGeneratingState? readNovaGeneratingFromStorage(
   int convId = 0,
   int activeConvId = 0,
 }) {
-  final ids = <int>{};
-  if (convId > 0) ids.add(convId);
-  if (activeConvId > 0) ids.add(activeConvId);
-  final active = int.tryParse(storage['dunes_nova_conv_id'] ?? '') ?? 0;
-  if (active > 0) ids.add(active);
-
-  for (final id in ids) {
-    final raw = storage[novaGeneratingStorageKey(id)];
-    if (raw == null || raw.isEmpty) continue;
-    try {
-      final json = jsonDecode(raw);
-      if (json is! Map) continue;
-      final state = NovaGeneratingState.fromJson(
-        Map<String, dynamic>.from(json),
-        convId: id,
-      );
-      if (state.expired) continue;
-      return state;
-    } catch (_) {}
+  final target = convId > 0 ? convId : (activeConvId > 0 ? activeConvId : 0);
+  if (target <= 0) return null;
+  final raw = storage[novaGeneratingStorageKey(target)];
+  if (raw == null || raw.isEmpty) return null;
+  try {
+    final json = jsonDecode(raw);
+    if (json is! Map) return null;
+    final state = NovaGeneratingState.fromJson(
+      Map<String, dynamic>.from(json),
+      convId: target,
+    );
+    if (state.expired) return null;
+    return state;
+  } catch (_) {
+    return null;
   }
-  return null;
 }
 
 bool isNovaStoppedGeneratingStatus(String status) =>

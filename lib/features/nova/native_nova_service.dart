@@ -585,6 +585,116 @@ class NativeNovaService {
   Future<void> persistActiveConversationId(int conversationId) =>
       _history.persistActiveConversationId(conversationId);
 
+  int _canonicalConversationIdFromBody(
+    Map<String, dynamic> body, {
+    required int fallback,
+  }) {
+    final data = body['data'] is Map<String, dynamic>
+        ? body['data'] as Map<String, dynamic>
+        : body;
+    final canonical =
+        (data['canonicalConversationId'] as num?)?.toInt() ??
+        (data['conversationId'] as num?)?.toInt() ??
+        fallback;
+    return canonical > 0 ? canonical : fallback;
+  }
+
+  Future<void> remapConversationId(int oldId, int newId) async {
+    if (oldId <= 0 || newId <= 0 || oldId == newId) return;
+    final uid = session.userId;
+    if (uid <= 0) return;
+    final storage = await NovaWebStorage.load(uid);
+    final patch = <String, dynamic>{'dunes_nova_conv_id': newId.toString()};
+
+    final oldMsgsKey = 'dunes_nova_msgs_$oldId';
+    final newMsgsKey = 'dunes_nova_msgs_$newId';
+    final oldMsgs = storage[oldMsgsKey];
+    if (oldMsgs != null && oldMsgs.isNotEmpty) {
+      final newMsgs = storage[newMsgsKey];
+      if (newMsgs == null || newMsgs.isEmpty) {
+        patch[newMsgsKey] = oldMsgs;
+      }
+    }
+
+    final oldGenKey = novaGeneratingStorageKey(oldId);
+    final newGenKey = novaGeneratingStorageKey(newId);
+    if (storage[oldGenKey] != null && storage[newGenKey] == null) {
+      patch[newGenKey] = storage[oldGenKey];
+    }
+
+    final oldDraftKey = novaStreamDraftStorageKey(oldId);
+    final newDraftKey = novaStreamDraftStorageKey(newId);
+    if (storage[oldDraftKey] != null && storage[newDraftKey] == null) {
+      patch[newDraftKey] = storage[oldDraftKey];
+    }
+
+    try {
+      final rawHistory = storage['dunes_nova_local_history'];
+      if (rawHistory != null && rawHistory.isNotEmpty) {
+        final decoded = jsonDecode(rawHistory);
+        if (decoded is List) {
+          final updated = decoded
+              .map((item) {
+                if (item is! Map) return item;
+                final copy = Map<String, dynamic>.from(item);
+                if ((copy['conversationId'] as num?)?.toInt() == oldId) {
+                  copy['conversationId'] = newId;
+                }
+                return copy;
+              })
+              .toList(growable: false);
+          patch['dunes_nova_local_history'] = jsonEncode(updated);
+        }
+      }
+    } catch (_) {}
+
+    try {
+      final rawQueue = storage['dunes_nova_history_sync_queue'];
+      if (rawQueue != null && rawQueue.isNotEmpty) {
+        final decoded = jsonDecode(rawQueue);
+        if (decoded is List) {
+          final updated = decoded
+              .map((item) {
+                if (item is! Map) return item;
+                final copy = Map<String, dynamic>.from(item);
+                final payload = copy['payload'];
+                if (payload is Map) {
+                  final payloadCopy = Map<String, dynamic>.from(payload);
+                  if ((payloadCopy['conversationId'] as num?)?.toInt() ==
+                      oldId) {
+                    payloadCopy['conversationId'] = newId;
+                    payloadCopy['imConversationId'] = newId;
+                  }
+                  copy['payload'] = payloadCopy;
+                }
+                return copy;
+              })
+              .toList(growable: false);
+          patch['dunes_nova_history_sync_queue'] = jsonEncode(updated);
+        }
+      }
+    } catch (_) {}
+
+    await NovaWebStorage.merge(uid, patch);
+    await NovaWebStorage.removeKeys(uid, [oldMsgsKey, oldGenKey, oldDraftKey]);
+    if (kDebugMode) {
+      debugPrint('[NativeNova] remapConversationId $oldId -> $newId');
+    }
+  }
+
+  Future<int> _adoptCanonicalConversationId(
+    int requestedId,
+    int canonicalId,
+  ) async {
+    if (canonicalId <= 0) return requestedId > 0 ? requestedId : 0;
+    if (requestedId > 0 && requestedId != canonicalId) {
+      await remapConversationId(requestedId, canonicalId);
+    } else {
+      await persistActiveConversationId(canonicalId);
+    }
+    return canonicalId;
+  }
+
   static String friendlyError(Object error) {
     final raw = error.toString();
     var msg = raw.startsWith('Exception: ')
@@ -922,24 +1032,37 @@ class NativeNovaService {
   }
 
   /// IM 服务是 NOVA 的唯一会话来源；不得再混用 KB 会话 ID。
-  Future<NovaConversationSnapshot> sessionEnsure() async {
+  Future<NovaConversationSnapshot> sessionEnsure({
+    int legacyConversationId = 0,
+  }) async {
     final resp = await _client.post(
       _dunesUri('/ai/assistant/sessions/ensure'),
       headers: _dunesHeaders,
       body: jsonEncode(<String, dynamic>{
         'kind': 'AI_ASSISTANT',
         'title': NovaConfig.displayName,
+        if (legacyConversationId > 0) 'conversationId': legacyConversationId,
       }),
     );
     if (resp.statusCode < 200 || resp.statusCode >= 300) {
       throw Exception(_parseApiError(resp, fallback: 'NOVA会话初始化失败'));
     }
-    final snap = _parseConversationSnapshot(_decode(resp.body));
+    final decoded = _decode(resp.body);
+    final canonical = _canonicalConversationIdFromBody(
+      decoded,
+      fallback: legacyConversationId,
+    );
+    if (legacyConversationId > 0) {
+      await _adoptCanonicalConversationId(legacyConversationId, canonical);
+    } else if (canonical > 0) {
+      await persistActiveConversationId(canonical);
+    }
+    final snap = _parseConversationSnapshot(decoded, fallbackConvId: canonical);
     _lastSessionSnapshot = snap;
     if (kDebugMode) {
       debugPrint(
         '[NativeNova] sessions/ensure convId=${snap.conversationId} '
-        'generating=${snap.assistantGenerating}',
+        'legacy=$legacyConversationId generating=${snap.assistantGenerating}',
       );
     }
     return snap;
@@ -980,10 +1103,13 @@ class NativeNovaService {
     if (resp.statusCode < 200 || resp.statusCode >= 300) {
       throw Exception(_parseApiError(resp, fallback: '加载NOVA会话失败'));
     }
-    final snap = _parseConversationSnapshot(
-      _decode(resp.body),
-      fallbackConvId: conversationId,
+    final decoded = _decode(resp.body);
+    final canonical = _canonicalConversationIdFromBody(
+      decoded,
+      fallback: conversationId,
     );
+    await _adoptCanonicalConversationId(conversationId, canonical);
+    final snap = _parseConversationSnapshot(decoded, fallbackConvId: canonical);
     _lastSessionSnapshot = snap;
     return snap;
   }
@@ -995,7 +1121,10 @@ class NativeNovaService {
     final d = body['data'] is Map<String, dynamic>
         ? body['data'] as Map<String, dynamic>
         : body;
-    final convId = (d['conversationId'] as num?)?.toInt() ?? fallbackConvId;
+    final convId =
+        (d['canonicalConversationId'] as num?)?.toInt() ??
+        (d['conversationId'] as num?)?.toInt() ??
+        fallbackConvId;
     final gen = _parseGeneratingFields(d);
     final rawMsgs = d['messages'] ?? d['items'] ?? d['rows'];
     final msgs = _messagesFromServerList(rawMsgs);
@@ -1082,6 +1211,9 @@ class NativeNovaService {
     } catch (_) {
       server = NovaConversationSnapshot(conversationId: conversationId);
     }
+    final effectiveConvId = server.conversationId > 0
+        ? server.conversationId
+        : conversationId;
 
     var generating = server.assistantGenerating;
     var genStatus = server.assistantGeneratingStatus;
@@ -1093,13 +1225,13 @@ class NativeNovaService {
       final storage = await NovaWebStorage.load(session.userId);
       localGen = readNovaGeneratingFromStorage(
         storage,
-        convId: conversationId,
-        activeConvId: conversationId,
+        convId: effectiveConvId,
+        activeConvId: effectiveConvId,
       );
-      streamDraft = readNovaStreamDraftFromStorage(storage, conversationId);
+      streamDraft = readNovaStreamDraftFromStorage(storage, effectiveConvId);
     }
 
-    final localMsgs = await _loadPersistedSessionMessages(conversationId);
+    final localMsgs = await _loadPersistedSessionMessages(effectiveConvId);
     var msgs = server.messages;
     final shouldUseLocalFallback =
         generating ||
@@ -1178,7 +1310,7 @@ class NativeNovaService {
         unawaited(
           clearNovaGeneratingState(
             userId: session.userId,
-            conversationId: conversationId,
+            conversationId: effectiveConvId,
           ),
         );
       }
@@ -1187,13 +1319,13 @@ class NativeNovaService {
       unawaited(
         clearNovaGeneratingState(
           userId: session.userId,
-          conversationId: conversationId,
+          conversationId: effectiveConvId,
         ),
       );
     }
 
     if (msgs.isNotEmpty && !generating) {
-      unawaited(_persistSessionMessages(conversationId, msgs));
+      unawaited(_persistSessionMessages(effectiveConvId, msgs));
     }
     return NovaHistoryLoadResult(
       messages: repairNovaConversationMessages(
@@ -2709,8 +2841,9 @@ class NativeNovaService {
         return;
       }
       if (event.conversationId > 0 && event.conversationId != activeConvId) {
+        final previous = activeConvId;
         activeConvId = event.conversationId;
-        unawaited(persistActiveConversationId(activeConvId));
+        unawaited(remapConversationId(previous, activeConvId));
         onConversationId?.call(activeConvId);
       }
       if (event.think.isNotEmpty) {

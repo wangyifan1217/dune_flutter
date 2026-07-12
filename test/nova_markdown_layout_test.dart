@@ -15,24 +15,27 @@ void main() {
     });
 
     test('normalizes heading without space after hashes', () {
-      expect(
-        normalizeNovaMarkdownLayout('##标题'),
-        '## 标题',
-      );
+      expect(normalizeNovaMarkdownLayout('##标题'), '## 标题');
     });
 
     test('splits mid-line heading after plain text', () {
-      expect(
-        normalizeNovaMarkdownLayout('正文 ## 小节'),
-        '正文\n\n## 小节',
-      );
+      expect(normalizeNovaMarkdownLayout('正文 ## 小节'), '正文\n\n## 小节');
     });
 
     test('removes orphan heading marker lines', () {
+      expect(normalizeNovaMarkdownLayout('#\n## 标题\n正文'), '## 标题\n正文');
+    });
+
+    test('splits compressed Chinese menu-style list items', () {
       expect(
-        normalizeNovaMarkdownLayout('#\n## 标题\n正文'),
-        '## 标题\n正文',
+        normalizeNovaMarkdownLayout('早食（过早）-热干面：碱面拌芝麻酱。 -豆皮：蛋皮糯米。 -面窝：外酥内嫩。'),
+        '早食（过早）\n- 热干面：碱面拌芝麻酱。\n- 豆皮：蛋皮糯米。\n- 面窝：外酥内嫩。',
       );
+    });
+
+    test('does not split ordinary hyphenated text', () {
+      const input = '武汉-北京的高铁大约四小时。';
+      expect(normalizeNovaMarkdownLayout(input), input);
     });
   });
 }

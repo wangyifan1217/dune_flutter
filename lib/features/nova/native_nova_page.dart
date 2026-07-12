@@ -517,11 +517,17 @@ class _NativeNovaPageState extends State<NativeNovaPage>
 
       final focusedConvId = widget.focusConversationId ?? 0;
       if (focusedConvId > 0) {
-        convId = focusedConvId;
+        final ensured = await _service.sessionEnsure(
+          legacyConversationId: focusedConvId,
+        );
+        convId = ensured.conversationId > 0
+            ? ensured.conversationId
+            : focusedConvId;
         if (kDebugMode) {
-          debugPrint('[NativeNovaPage] open focused convId=$convId');
+          debugPrint(
+            '[NativeNovaPage] open focused legacy=$focusedConvId canonical=$convId',
+          );
         }
-        await _service.persistActiveConversationId(convId);
       } else {
         convId = await _service.ensureConversation();
       }
@@ -2002,6 +2008,8 @@ class _NativeNovaPageState extends State<NativeNovaPage>
         skipUserPersist: userPersistedToServer,
         onConversationId: (id) {
           if (!mounted || id <= 0 || id == _conversationId) return;
+          final previous = _conversationId;
+          unawaited(_service.remapConversationId(previous, id));
           setState(() => _conversationId = id);
         },
         onUpdate: (update) {

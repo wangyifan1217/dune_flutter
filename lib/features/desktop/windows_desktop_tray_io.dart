@@ -20,6 +20,10 @@ void windowsTrayNotifyIncomingMessage() {
   WindowsDesktopTray.instance.notifyIncomingMessage();
 }
 
+void setWindowsTrayOnBeforeQuit(Future<void> Function()? callback) {
+  WindowsDesktopTray.instance.onBeforeQuit = callback;
+}
+
 /// 关闭进托盘；隐藏且有未读/新消息时托盘图标闪烁。
 class WindowsDesktopTray with WindowListener, TrayListener {
   WindowsDesktopTray._();
@@ -35,6 +39,7 @@ class WindowsDesktopTray with WindowListener, TrayListener {
   Timer? _flashTimer;
   String _trayIcon = _trayIconWin;
   String _trayIconBlank = _trayIconWinBlank;
+  Future<void> Function()? onBeforeQuit;
 
   Future<void> init() async {
     if (kIsWeb || !(Platform.isWindows || Platform.isMacOS) || _ready) return;
@@ -121,6 +126,9 @@ class WindowsDesktopTray with WindowListener, TrayListener {
   Future<void> _quitApp() async {
     _allowQuit = true;
     await _stopFlash();
+    try {
+      await onBeforeQuit?.call();
+    } catch (_) {}
     try {
       await trayManager.destroy();
     } catch (_) {}

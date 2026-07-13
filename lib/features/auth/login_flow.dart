@@ -8,7 +8,9 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/config/dunes_defaults.dart';
+import '../../core/platform/desktop_features.dart';
 import '../../core/theme/dunes_theme.dart';
+import '../desktop/windows_desktop_tray.dart';
 import '../nova/nova_auth_service.dart';
 import '../nova/nova_web_storage.dart';
 import '../conversation/conversation_realtime_hub.dart';
@@ -22,6 +24,7 @@ import 'auth_service.dart';
 import 'auth_profile.dart';
 import 'auth_session.dart';
 import 'auth_session_coordinator.dart';
+import 'desktop_login_page.dart';
 import 'registration_flow.dart';
 
 const _authBlue = authBlue;
@@ -51,9 +54,25 @@ class _LoginFlowState extends State<LoginFlow> {
     super.initState();
     _loadAppVersion();
     _restoreSession();
+    if (isDesktopCommOnly) {
+      setWindowsTrayOnBeforeQuit(() async {
+        final uid = _session?.userId ?? 0;
+        AuthSessionCoordinator.instance.clear();
+        if (mounted) setState(() => _session = null);
+        await _clearSession(userId: uid);
+      });
+    }
     Future<void>.delayed(const Duration(seconds: 8), () {
       if (mounted && _hydrating) setState(() => _hydrating = false);
     });
+  }
+
+  @override
+  void dispose() {
+    if (isDesktopCommOnly) {
+      setWindowsTrayOnBeforeQuit(null);
+    }
+    super.dispose();
   }
 
   Future<void> _loadAppVersion() async {
@@ -282,7 +301,9 @@ class _LoginFlowState extends State<LoginFlow> {
         ],
       );
     }
-    return _PhoneStep(auth: _auth, onSignedIn: _onSignedIn);
+    return isDesktopCommOnly
+        ? DesktopLoginPage(auth: _auth, onSignedIn: _onSignedIn)
+        : _PhoneStep(auth: _auth, onSignedIn: _onSignedIn);
   }
 }
 
@@ -408,19 +429,20 @@ class _PhoneStepState extends State<_PhoneStep> {
             ),
           ),
           const SizedBox(height: 16),
-          TextButton(
-            onPressed: () {
-              Navigator.of(context).push(
-                MaterialPageRoute<void>(
-                  builder: (_) => RegistrationFlowPage(
-                    auth: widget.auth,
-                    onSignedIn: widget.onSignedIn,
+          if (!isDesktopCommOnly)
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => RegistrationFlowPage(
+                      auth: widget.auth,
+                      onSignedIn: widget.onSignedIn,
+                    ),
                   ),
-                ),
-              );
-            },
-            child: const Text('没有账号？立即注册'),
-          ),
+                );
+              },
+              child: const Text('没有账号？立即注册'),
+            ),
         ],
       ),
     );

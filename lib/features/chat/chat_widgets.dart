@@ -262,6 +262,8 @@ class ChatInputBar extends StatelessWidget {
     final interactionLocked = !enabled || (sending && !showStop);
     final effectiveVoiceMode = voiceEnabled && voiceMode;
     final wide = isWideChatLayout(context);
+    final showEmojiControl =
+        !wide && (emojiPicker != null || onEmoji != null);
     final minLines = wide ? 3 : 1;
     final maxLines = wide ? 8 : 4;
     final fieldPadV = wide ? 14.0 : 9.0;
@@ -353,17 +355,16 @@ class ChatInputBar extends StatelessWidget {
                   ),
           ),
           if (!effectiveVoiceMode) ...[
-            const SizedBox(width: 8),
-            if (emojiPicker != null)
-              emojiPicker!
-            else if (onEmoji != null)
-              Padding(
-                padding: EdgeInsets.only(bottom: wide ? 16 : 0),
-                child: _RoundIconBtn(
+            if (showEmojiControl) ...[
+              const SizedBox(width: 8),
+              if (emojiPicker != null)
+                emojiPicker!
+              else if (onEmoji != null)
+                _RoundIconBtn(
                   icon: secondaryIcon ?? Icons.emoji_emotions_outlined,
                   onTap: interactionLocked ? null : onEmoji,
                 ),
-              ),
+            ],
             const SizedBox(width: 8),
             Material(
               color: Colors.transparent,

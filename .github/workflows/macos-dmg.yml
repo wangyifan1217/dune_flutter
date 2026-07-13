@@ -40,6 +40,15 @@ jobs:
       - name: Install Flutter dependencies
         run: flutter pub get
 
+      # gal 等插件要求 macOS ≥ 11.0（默认模板常为 10.15）
+      - name: Force macOS Deployment Target 11.0
+        run: |
+          sed -i '' 's/MACOSX_DEPLOYMENT_TARGET = .*;/MACOSX_DEPLOYMENT_TARGET = 11.0;/g' \
+            macos/Runner.xcodeproj/project.pbxproj
+          if [ -f macos/Podfile ]; then
+            sed -i '' "s/platform :osx, '.*'/platform :osx, '11.0'/g" macos/Podfile
+          fi
+
       # CI 无本机 Apple Development 证书时，先无签名构建，再用 Developer ID 重签
       - name: Disable Xcode automatic signing for CI build
         run: |

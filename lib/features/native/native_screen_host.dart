@@ -366,11 +366,18 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       }
       _workbenchRefresh.bump();
       if (delta > 0 && !notifyRejected) {
+        final body = delta == 1
+            ? '你有新的审批待办，请及时处理'
+            : '您有 $delta 条新的待审批，请及时处理';
         showDunesToast(context, '您有 $delta 条新的待审批，请及时处理');
+        // 与 APP TPNS（title=审批待办）对齐：桌面本地系统通知。
+        notifyPushRealtimeMessage(title: '审批待办', body: body);
+        windowsTrayNotifyIncomingMessage();
       } else if (pendingInitiateDelta > 0) {
+        final body = '有 $pendingInitiateDelta 条同事推送的提案待您确认发起';
         showDunesActionToast(
           context,
-          '有 $pendingInitiateDelta 条同事推送的提案待您确认发起',
+          body,
           actionLabel: '去查看',
           icon: Icons.assignment_ind_outlined,
           onTap: () {
@@ -378,10 +385,13 @@ class _NativeScreenHostState extends State<NativeScreenHost>
             _goB14(filter: 'PENDING_INITIATE');
           },
         );
+        notifyPushRealtimeMessage(title: '待确认发起', body: body);
+        windowsTrayNotifyIncomingMessage();
       } else if (notifyRejected) {
+        const body = '您有 1 条审批被驳回，请及时查看';
         showDunesActionToast(
           context,
-          '您有 1 条审批被驳回，请及时查看',
+          body,
           actionLabel: '去查看',
           icon: Icons.warning_amber_rounded,
           onTap: () {
@@ -389,6 +399,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
             _goB14();
           },
         );
+        notifyPushRealtimeMessage(title: '审批驳回', body: body);
+        windowsTrayNotifyIncomingMessage();
       }
     } catch (_) {
       // Workbench badge is best-effort.

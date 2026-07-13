@@ -61,9 +61,9 @@ jobs:
             echo 'CODE_SIGNING_ALLOWED=NO'
           } >> macos/Runner/Configs/Release.xcconfig
 
-      # DMG 分发（非 Mac App Store）关闭 App Sandbox，避免网络/文件权限被沙箱拦住
-      # 仅改 CI 工作区副本，不提交；不影响 iOS / 本地默认工程
-      - name: Use non-sandbox entitlements for Developer ID
+      # 仓库内 Release.entitlements 已按 Developer ID / DMG 关闭沙箱；
+      # 此处再写一遍，防止本地误改导致 CI 产物无法应用内更新。
+      - name: Ensure non-sandbox entitlements for Developer ID
         run: |
           cat > macos/Runner/Release.entitlements <<'EOF'
           <?xml version="1.0" encoding="UTF-8"?>

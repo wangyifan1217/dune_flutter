@@ -102,6 +102,25 @@ DetailStatusTone detailStatusTone(String? st) {
 
 enum DetailStatusTone { ok, warn, bad, muted }
 
+String formatProposalDisplay(dynamic val) {
+  if (val == null || val == '') return '';
+  if (val is String) {
+    final text = val.trim();
+    if (text.isEmpty || text.startsWith('map[')) return '';
+    return text;
+  }
+  if (val is Map) {
+    final code = (val['code'] ?? val['proposalCode'] ?? '').toString().trim();
+    final title = (val['title'] ?? val['name'] ?? '').toString().trim();
+    if (code.isNotEmpty && title.isNotEmpty) return '$code · $title';
+    if (code.isNotEmpty) return code;
+    if (title.isNotEmpty) return title;
+    final pid = val['proposalId'] ?? val['id'];
+    if (pid != null) return '提案#$pid';
+  }
+  return val.toString();
+}
+
 String formatUserDisplay(dynamic val) {
   if (val == null || val == '') return '';
   if (val is String) {
@@ -132,6 +151,8 @@ String labelForOptionValue(XflowField field, dynamic value) {
 String formatFieldValue(XflowField field, dynamic val) {
   if (val == null || val == '') return '';
   switch (field.type) {
+    case 'proposal':
+      return formatProposalDisplay(val);
     case 'user':
       return formatUserDisplay(val);
     case 'upload':
@@ -174,6 +195,11 @@ String formatFieldValue(XflowField field, dynamic val) {
     }
     if (val['fileName'] != null) return val['fileName'].toString();
     if (val['text'] != null) return val['text'].toString();
+    if (field.type == 'proposal' ||
+        val['proposalId'] != null ||
+        val['code'] != null && val['title'] != null) {
+      return formatProposalDisplay(val);
+    }
     return formatUserDisplay(val);
   }
   if (val is bool) return val ? '是' : '否';

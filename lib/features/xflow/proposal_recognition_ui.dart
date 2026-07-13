@@ -34,6 +34,8 @@ class ProposalRecognitionView extends StatefulWidget {
     this.baselineDiscountRate = 0,
     this.onPreviewTap,
     this.initialExpandedSectionIds = const {},
+    this.resolveAssetUrl,
+    this.authenticatedImageHeaders = const {},
   });
 
   final List<UploadSummaryFieldConfig> summaryFields;
@@ -48,6 +50,8 @@ class ProposalRecognitionView extends StatefulWidget {
   final double baselineDiscountRate;
   final VoidCallback? onPreviewTap;
   final Set<String> initialExpandedSectionIds;
+  final String Function(String urlOrPath)? resolveAssetUrl;
+  final Map<String, String> authenticatedImageHeaders;
 
   @override
   State<ProposalRecognitionView> createState() => _ProposalRecognitionViewState();
@@ -394,6 +398,10 @@ class _ProposalRecognitionViewState extends State<ProposalRecognitionView> {
         children: [
           for (var i = 0; i < section.rows.length; i++) ...[
             _rowKV(section.rows[i].label, section.rows[i].value),
+            if (section.rows[i].images.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              _rowImages(section.rows[i].images),
+            ],
             if (i != section.rows.length - 1) const SizedBox(height: 5),
           ],
           if (section.tierRows.isNotEmpty) ...[
@@ -632,6 +640,48 @@ class _ProposalRecognitionViewState extends State<ProposalRecognitionView> {
     );
   }
 
+  Widget _rowImages(List<ProposalArchiveImage> images) {
+    final resolver = widget.resolveAssetUrl;
+    final headers = widget.authenticatedImageHeaders;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (var i = 0; i < images.length; i++) ...[
+          if (i > 0) const SizedBox(height: 8),
+          Builder(
+            builder: (context) {
+              final image = images[i];
+              final raw = image.url.isNotEmpty ? image.url : image.blobKey;
+              if (raw.isEmpty) return const SizedBox.shrink();
+              final src = resolver != null ? resolver(raw) : raw;
+              if (src.isEmpty) return const SizedBox.shrink();
+              return _ProposalArchiveImageThumb(
+                src: src,
+                headers: headers,
+                onTap: () => _openImagePreview(context, src, headers),
+              );
+            },
+          ),
+        ],
+      ],
+    );
+  }
+
+  void _openImagePreview(
+    BuildContext context,
+    String src,
+    Map<String, String> headers,
+  ) {
+    showDialog<void>(
+      context: context,
+      barrierColor: Colors.black87,
+      builder: (ctx) => _ProposalArchiveImagePreview(
+        src: src,
+        headers: headers,
+      ),
+    );
+  }
+
   Widget _coralChip(String text) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 1),
@@ -714,6 +764,140 @@ class _TierCell extends StatelessWidget {
           color: color,
           fontWeight: weight,
         ),
+      ),
+    );
+  }
+}
+
+class _ProposalArchiveImageThumb extends StatelessWidget {
+  const _ProposalArchiveImageThumb({
+    required this.src,
+    required this.headers,
+    required this.onTap,
+  });
+
+  final String src;
+  final Map<String, String> headers;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: ProposalRecognitionColors.cardAlt,
+      borderRadius: BorderRadius.circular(6),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(6),
+        child: Ink(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(color: ProposalRecognitionColors.line2, width: 0.6),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              ClipRRect(
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(5.4)),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxHeight: 360),
+                  child: Image.network(
+                    src,
+                    headers: headers.isEmpty ? null : headers,
+                    fit: BoxFit.contain,
+                    width: double.infinity,
+                    alignment: Alignment.center,
+                    errorBuilder: (_, _, _) => Container(
+                      height: 96,
+                      alignment: Alignment.center,
+                      child: const Text(
+                        '图片加载失败',
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: ProposalRecognitionColors.mute,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                child: Text(
+                  '点击放大查看',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: ProposalRecognitionColors.mute,
+                    letterSpacing: 0.2,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ProposalArchiveImagePreview extends StatelessWidget {
+  const _ProposalArchiveImagePreview({
+    required this.src,
+    required this.headers,
+  });
+
+  final String src;
+  final Map<String, String> headers;
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      insetPadding: const EdgeInsets.all(12),
+      child: Stack(
+        children: [
+          Positioned.fill(
+            child: GestureDetector(
+              onTap: () => Navigator.of(context).pop(),
+              behavior: HitTestBehavior.opaque,
+              child: const SizedBox.expand(),
+            ),
+          ),
+          Center(
+            child: InteractiveViewer(
+              minScale: 0.5,
+              maxScale: 5,
+              child: Image.network(
+                src,
+                headers: headers.isEmpty ? null : headers,
+                fit: BoxFit.contain,
+                errorBuilder: (_, _, _) => const Text(
+                  '图片加载失败',
+                  style: TextStyle(color: Colors.white70, fontSize: 13),
+                ),
+              ),
+            ),
+          ),
+          Positioned(
+            top: 8,
+            right: 8,
+            child: IconButton(
+              onPressed: () => Navigator.of(context).pop(),
+              icon: const Icon(Icons.close, color: Colors.white),
+              tooltip: '关闭',
+            ),
+          ),
+          const Positioned(
+            left: 0,
+            right: 0,
+            bottom: 16,
+            child: Text(
+              '双指缩放 · 点击空白处关闭',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.white54, fontSize: 11),
+            ),
+          ),
+        ],
       ),
     );
   }

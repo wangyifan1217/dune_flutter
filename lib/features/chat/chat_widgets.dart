@@ -595,6 +595,7 @@ class ChatMessageRow extends StatelessWidget {
     required this.content,
     this.onLongPress,
     this.onLongPressStart,
+    this.onSecondaryTapDown,
     this.onReadTap,
     this.readTapLabel,
     this.avatar,
@@ -610,6 +611,7 @@ class ChatMessageRow extends StatelessWidget {
   final Widget content;
   final VoidCallback? onLongPress;
   final GestureLongPressStartCallback? onLongPressStart;
+  final GestureTapDownCallback? onSecondaryTapDown;
   final VoidCallback? onReadTap;
   final String? readTapLabel;
   final Widget? avatar;
@@ -630,6 +632,7 @@ class ChatMessageRow extends StatelessWidget {
       child: GestureDetector(
         onLongPress: onLongPress,
         onLongPressStart: onLongPressStart,
+        onSecondaryTapDown: onSecondaryTapDown,
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisAlignment: mine
@@ -865,25 +868,21 @@ class ChatTextBubble extends StatelessWidget {
                     ContextMenuButtonItem(
                       label: '引用',
                       onPressed: () {
-                        if (selected.isNotEmpty)
-                          onSelectionQuote?.call(selected);
+                        onSelectionQuote?.call(selected);
                         editableTextState.hideToolbar();
                       },
                     ),
                     ContextMenuButtonItem(
                       label: '转发',
                       onPressed: () {
-                        if (selected.isNotEmpty) {
-                          onSelectionForward?.call(selected);
-                        }
+                        onSelectionForward?.call(selected);
                         editableTextState.hideToolbar();
                       },
                     ),
                     ContextMenuButtonItem(
                       label: '多选',
                       onPressed: () {
-                        if (selected.isNotEmpty)
-                          onSelectionMulti?.call(selected);
+                        onSelectionMulti?.call(selected);
                         editableTextState.hideToolbar();
                       },
                     ),
@@ -1262,18 +1261,21 @@ class ChatFileAttach extends StatelessWidget {
     required this.fileName,
     required this.mine,
     required this.onTap,
+    this.onSecondaryTapDown,
     this.isPdf = false,
   });
 
   final String fileName;
   final bool mine;
   final VoidCallback onTap;
+  final GestureTapDownCallback? onSecondaryTapDown;
   final bool isPdf;
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
+      onSecondaryTapDown: onSecondaryTapDown,
       child: Container(
         constraints: const BoxConstraints(minWidth: 210, maxWidth: 280),
         padding: const EdgeInsets.all(11),

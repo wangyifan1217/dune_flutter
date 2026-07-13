@@ -1,5 +1,3 @@
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
 
 import '../../core/navigation/navigation_controller.dart';
@@ -7,6 +5,7 @@ import '../../core/theme/dunes_theme.dart';
 import '../../core/util/friendly_error.dart';
 import '../auth/auth_session.dart';
 import '../shell/dunes_toast.dart';
+import 'xflow_detail_logic.dart';
 import 'xflow_models.dart';
 import 'xflow_service.dart';
 import 'xflow_shared_widgets.dart';
@@ -130,11 +129,10 @@ class _NativeXflowSubmissionPageState extends State<NativeXflowSubmissionPage> {
     }
   }
 
-  String _valueText(dynamic value) {
-    if (value == null) return '-';
-    if (value is List || value is Map) return jsonEncode(value);
-    final text = value.toString().trim();
-    return text.isEmpty ? '-' : text;
+  String _valueText(XflowField field, dynamic value) {
+    final text = formatFieldValue(field, value);
+    if (text.isEmpty) return '-';
+    return text;
   }
 
   @override
@@ -195,6 +193,7 @@ class _NativeXflowSubmissionPageState extends State<NativeXflowSubmissionPage> {
                                         Expanded(
                                           child: Text(
                                             _valueText(
+                                              field,
                                               detail.formData[field.key],
                                             ),
                                             style: DunesTypography.sans(

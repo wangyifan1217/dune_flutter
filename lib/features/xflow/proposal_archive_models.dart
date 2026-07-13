@@ -3,9 +3,32 @@ import 'xflow_models.dart';
 import 'xflow_template_runtime.dart';
 
 class ProposalArchiveRow {
-  const ProposalArchiveRow(this.label, this.value);
+  const ProposalArchiveRow(this.label, this.value, {this.images = const []});
+
   final String label;
   final String value;
+  final List<ProposalArchiveImage> images;
+}
+
+class ProposalArchiveImage {
+  const ProposalArchiveImage({
+    required this.url,
+    this.mimeType = '',
+    this.blobKey = '',
+  });
+
+  final String url;
+  final String mimeType;
+  final String blobKey;
+
+  factory ProposalArchiveImage.fromJson(Object? raw) {
+    final json = _asMap(raw) ?? const <String, dynamic>{};
+    return ProposalArchiveImage(
+      url: _string(json['url']),
+      mimeType: _string(json['mime_type'] ?? json['mimeType']),
+      blobKey: _string(json['blob_key'] ?? json['blobKey']),
+    );
+  }
 }
 
 class ProposalArchiveTierRow {
@@ -60,9 +83,20 @@ class ProposalArchiveSection {
     final rows = _asList(json['rows'])
         .map((row) {
           final map = _asMap(row) ?? const <String, dynamic>{};
-          return ProposalArchiveRow(_string(map['label']), _string(map['value']));
+          final images = _asList(map['images'])
+              .map(ProposalArchiveImage.fromJson)
+              .where((img) => img.url.isNotEmpty || img.blobKey.isNotEmpty)
+              .toList(growable: false);
+          return ProposalArchiveRow(
+            _string(map['label']),
+            _string(map['value']),
+            images: images,
+          );
         })
-        .where((row) => row.label.isNotEmpty || row.value.isNotEmpty)
+        .where((row) =>
+            row.label.isNotEmpty ||
+            row.value.isNotEmpty ||
+            row.images.isNotEmpty)
         .toList(growable: false);
     final sectionTierRows =
         tierRows ??

@@ -15,6 +15,7 @@ import 'package:pasteboard/pasteboard.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import '../../core/layout/chat_layout.dart';
+import '../../core/platform/desktop_features.dart';
 import '../../core/theme/dunes_theme.dart';
 import '../../core/util/friendly_error.dart';
 import '../../core/util/native_permissions.dart';
@@ -2282,11 +2283,30 @@ class _NativeChatViewState extends State<NativeChatView>
   }) async {
     if (_isSystemKind(m.kind)) return;
     final copyText = _messageCopyText(m);
+    final isFile = m.kind.toUpperCase() == 'FILE';
+    final desktop = isDesktopCommOnly;
     final actions = <_MessageQuickAction>[
+      if (desktop && isFile) ...[
+        const _MessageQuickAction(
+          id: 'open_file',
+          label: '打开',
+          icon: Icons.open_in_new_rounded,
+        ),
+        const _MessageQuickAction(
+          id: 'reveal_file',
+          label: '打开文件夹',
+          icon: Icons.folder_open_rounded,
+        ),
+      ],
       const _MessageQuickAction(
         id: 'quote',
         label: '引用',
         icon: Icons.format_quote_outlined,
+      ),
+      const _MessageQuickAction(
+        id: 'forward',
+        label: '转发',
+        icon: Icons.shortcut_rounded,
       ),
       if (copyText.isNotEmpty)
         const _MessageQuickAction(
@@ -2315,8 +2335,17 @@ class _NativeChatViewState extends State<NativeChatView>
     ];
     final action = await _showMessageActionsMenu(actions, anchor: anchor);
     switch (action) {
+      case 'open_file':
+        await _openFileAttachment(m.payload, _mediaDownloadFileName(m));
+        break;
+      case 'reveal_file':
+        await _revealFileOnDesktop(m.payload, _mediaDownloadFileName(m));
+        break;
       case 'quote':
         _startQuote(m);
+        break;
+      case 'forward':
+        _forwardMessage(m);
         break;
       case 'copy':
         await Clipboard.setData(ClipboardData(text: copyText));
@@ -2728,7 +2757,10 @@ class _NativeChatViewState extends State<NativeChatView>
 
   void _quoteFromSelectedText(NativeChatMessage message, String selectedText) {
     final text = selectedText.trim();
-    if (text.isEmpty) return;
+    if (text.isEmpty) {
+      _startQuote(message);
+      return;
+    }
     _startQuote(message);
     final current = _inputController.text.trim();
     final next = current.isEmpty ? text : '$current\n$text';
@@ -2740,6 +2772,15 @@ class _NativeChatViewState extends State<NativeChatView>
   bool _canSelectMessageForMulti(NativeChatMessage message) {
     if (message.id <= 0) return false;
     return !_isSystemKind(message.kind);
+  }
+
+  void _forwardMessage(NativeChatMessage message) {
+    final units = _forwardUnitsFromMessages(<NativeChatMessage>[message]);
+    if (units.isEmpty) {
+      _showToast('暂无可转发内容');
+      return;
+    }
+    unawaited(_startForwardFlow(units, fromMultiSelect: false));
   }
 
   void _setMessageMultiSelectMode(
@@ -2815,7 +2856,10 @@ class _NativeChatViewState extends State<NativeChatView>
     String selectedText,
   ) {
     final text = selectedText.trim();
-    if (text.isEmpty) return;
+    if (text.isEmpty) {
+      _forwardMessage(message);
+      return;
+    }
     final unit = (
       senderName: message.senderName.trim().isEmpty
           ? '用户${message.senderUserId}'
@@ -3379,9 +3423,129 @@ class _NativeChatViewState extends State<NativeChatView>
       );
       return;
     }
+    // PC：像企微一样，点击后下载并用系统默认应用直接打开（已缓存则跳过下载）。
+    if (isDesktopCommOnly) {
+      await _openOrDownloadFileOnDesktop(payload, fileName);
+      return;
+    }
     final confirmed = await _confirmFileDownload(fileName, payload: payload);
     if (!confirmed || !mounted) return;
     await _downloadFile(payload, fileName);
+  }
+
+  String _fileCacheKey(Map<String, dynamic>? payload) {
+    if (payload == null) return '';
+    final objectKey = (payload['objectKey'] ?? '').toString().trim();
+    if (objectKey.isNotEmpty) return objectKey;
+    return ConversationService.mediaDirectUrl(payload);
+  }
+
+  Future<void> _openOrDownloadFileOnDesktop(
+    Map<String, dynamic>? payload,
+    String fileName,
+  ) async {
+    final cacheKey = _fileCacheKey(payload);
+    if (cacheKey.isNotEmpty) {
+      final cached = await file_dl.findCachedChatFile(cacheKey, fileName);
+      if (cached != null && cached.isNotEmpty) {
+        try {
+          await file_dl.openLocalFile(cached);
+          return;
+        } catch (_) {
+          // 缓存损坏或关联应用失败时重新下载。
+        }
+      }
+    }
+    if (_downloadingMedia) {
+      _showToast('正在下载，请稍候…');
+      return;
+    }
+    _beginDownload('打开 $fileName');
+    try {
+      final savedPath = await _saveAttachmentToDisk(
+        payload,
+        fileName,
+        cacheKey: cacheKey,
+      );
+      if (!mounted) return;
+      if (savedPath == null || savedPath.isEmpty) {
+        _showToast('文件已保存，但无法自动打开');
+        return;
+      }
+      await file_dl.openLocalFile(savedPath);
+    } catch (e) {
+      _showToast('打开失败：${friendlyErrorText(e)}', error: true);
+    } finally {
+      _endDownload();
+    }
+  }
+
+  /// PC：确保本地有文件后，在资源管理器 / Finder 中选中显示。
+  Future<void> _revealFileOnDesktop(
+    Map<String, dynamic>? payload,
+    String fileName,
+  ) async {
+    final cacheKey = _fileCacheKey(payload);
+    String? path;
+    if (cacheKey.isNotEmpty) {
+      path = await file_dl.findCachedChatFile(cacheKey, fileName);
+    }
+    if (path == null || path.isEmpty) {
+      if (_downloadingMedia) {
+        _showToast('正在下载，请稍候…');
+        return;
+      }
+      _beginDownload('定位 $fileName');
+      try {
+        path = await _saveAttachmentToDisk(
+          payload,
+          fileName,
+          cacheKey: cacheKey,
+        );
+      } catch (e) {
+        _showToast('下载失败：${friendlyErrorText(e)}', error: true);
+        return;
+      } finally {
+        _endDownload();
+      }
+    }
+    if (!mounted) return;
+    if (path == null || path.isEmpty) {
+      _showToast('文件未找到', error: true);
+      return;
+    }
+    try {
+      await file_dl.revealLocalFile(path);
+    } catch (e) {
+      _showToast('无法打开文件夹：${friendlyErrorText(e)}', error: true);
+    }
+  }
+
+  Future<String?> _saveAttachmentToDisk(
+    Map<String, dynamic>? payload,
+    String fileName, {
+    String cacheKey = '',
+  }) async {
+    if (ConversationService.hasAuthMedia(payload)) {
+      final bytes = await _service.loadChatMediaBytes(
+        payload,
+        onProgress: _setDownloadProgress,
+      );
+      if (cacheKey.isNotEmpty) {
+        return file_dl.saveBytesAsCachedFile(bytes, cacheKey, fileName);
+      }
+      return file_dl.saveBytesAsFile(bytes, fileName);
+    }
+    final url = ConversationService.mediaDirectUrl(payload);
+    if (url.isEmpty) {
+      throw Exception('附件地址为空');
+    }
+    return file_dl.openUrlAsFile(
+      url,
+      fileName,
+      onProgress: _setDownloadProgress,
+      cacheKey: cacheKey.isEmpty ? null : cacheKey,
+    );
   }
 
   Future<bool> _confirmFileDownload(
@@ -3435,25 +3599,12 @@ class _NativeChatViewState extends State<NativeChatView>
     }
     _beginDownload('下载 $fileName');
     try {
-      String? savedPath;
-      if (ConversationService.hasAuthMedia(payload)) {
-        final bytes = await _service.loadChatMediaBytes(
-          payload,
-          onProgress: _setDownloadProgress,
-        );
-        savedPath = await file_dl.saveBytesAsFile(bytes, fileName);
-      } else {
-        final url = ConversationService.mediaDirectUrl(payload);
-        if (url.isEmpty) {
-          _showToast('附件地址为空', error: true);
-          return;
-        }
-        savedPath = await file_dl.openUrlAsFile(
-          url,
-          fileName,
-          onProgress: _setDownloadProgress,
-        );
-      }
+      final cacheKey = _fileCacheKey(payload);
+      final savedPath = await _saveAttachmentToDisk(
+        payload,
+        fileName,
+        cacheKey: cacheKey,
+      );
       if (!mounted) return;
       if (savedPath == null || savedPath.isEmpty) {
         _showToast('已保存 $fileName');
@@ -3474,6 +3625,7 @@ class _NativeChatViewState extends State<NativeChatView>
   void _showDownloadSuccessDialog(String savedPath, String fileName) {
     if (!mounted) return;
     final displayPath = _formatSavedPath(savedPath);
+    final desktop = isDesktopCommOnly;
     showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -3484,6 +3636,32 @@ class _NativeChatViewState extends State<NativeChatView>
             onPressed: () => Navigator.of(ctx).pop(),
             child: const Text('知道了'),
           ),
+          if (desktop) ...[
+            TextButton(
+              onPressed: () async {
+                Navigator.of(ctx).pop();
+                try {
+                  await file_dl.revealLocalFile(savedPath);
+                } catch (e) {
+                  if (!mounted) return;
+                  _showToast('无法打开文件夹：${friendlyErrorText(e)}', error: true);
+                }
+              },
+              child: const Text('打开文件夹'),
+            ),
+            FilledButton(
+              onPressed: () async {
+                Navigator.of(ctx).pop();
+                try {
+                  await file_dl.openLocalFile(savedPath);
+                } catch (e) {
+                  if (!mounted) return;
+                  _showToast('打开失败：${friendlyErrorText(e)}', error: true);
+                }
+              },
+              child: const Text('打开'),
+            ),
+          ],
         ],
       ),
     );
@@ -3623,6 +3801,13 @@ class _NativeChatViewState extends State<NativeChatView>
           mine: mine,
           isPdf: chatPayloadIsPdf(m.payload, fileName),
           onTap: () => _openFileAttachment(m.payload, fileName),
+          onSecondaryTapDown: isDesktopCommOnly && !_messageMultiSelectMode
+              ? (details) => _onMessageActions(
+                    m,
+                    mine,
+                    anchor: details.globalPosition,
+                  )
+              : null,
         ),
       );
     }
@@ -4424,6 +4609,33 @@ class _NativeChatViewState extends State<NativeChatView>
                                   final isForwardBundle =
                                       _forwardBundleFromPayload(m.payload) !=
                                       null;
+                                  final desktop = isDesktopCommOnly;
+                                  // 移动端：媒体/合并转发/带引用文本可长按；
+                                  // PC（Win/macOS）：任意消息右键或长按均可操作。
+                                  final canShowActions =
+                                      !_messageMultiSelectMode &&
+                                      !_isSystemKind(m.kind);
+                                  final enableLongPress =
+                                      canShowActions &&
+                                      (desktop ||
+                                          isForwardBundle ||
+                                          !textMessage ||
+                                          hasQuote);
+                                  final enableSecondaryTap =
+                                      canShowActions &&
+                                      desktop &&
+                                      // 文本气泡走选区右键菜单，避免与 SelectableText 双菜单冲突。
+                                      !textMessage;
+                                  void openActions(Offset anchor) {
+                                    unawaited(
+                                      _onMessageActions(
+                                        m,
+                                        mine,
+                                        anchor: anchor,
+                                      ),
+                                    );
+                                  }
+
                                   row = ChatMessageRow(
                                     message: m,
                                     mine: mine,
@@ -4434,16 +4646,14 @@ class _NativeChatViewState extends State<NativeChatView>
                                         ? (peerRead ? '已读' : '未读')
                                         : null,
                                     onLongPress: null,
-                                    onLongPressStart:
-                                        !_messageMultiSelectMode &&
-                                            !_isSystemKind(m.kind) &&
-                                            (isForwardBundle ||
-                                                !textMessage ||
-                                                hasQuote)
-                                        ? (details) => _onMessageActions(
-                                            m,
-                                            mine,
-                                            anchor: details.globalPosition,
+                                    onLongPressStart: enableLongPress
+                                        ? (details) => openActions(
+                                            details.globalPosition,
+                                          )
+                                        : null,
+                                    onSecondaryTapDown: enableSecondaryTap
+                                        ? (details) => openActions(
+                                            details.globalPosition,
                                           )
                                         : null,
                                     onReadTap: mine && !_isPrivate

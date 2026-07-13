@@ -507,6 +507,36 @@ class XflowService {
     );
   }
 
+  Future<List<Map<String, dynamic>>> searchApprovedProposals(String query) async {
+    final q = query.trim();
+    final path = q.isEmpty
+        ? '/xflow/proposals/approved'
+        : '/xflow/proposals/approved?q=${Uri.encodeQueryComponent(q)}';
+    final rows = await _requestList(path);
+    return rows
+        .whereType<Map>()
+        .map((row) => Map<String, dynamic>.from(row))
+        .toList(growable: false);
+  }
+
+  String resolveProposalAssetUrl(String urlOrPath) {
+    final value = urlOrPath.trim();
+    if (value.isEmpty) return '';
+    if (value.startsWith('http://') || value.startsWith('https://')) {
+      return value;
+    }
+    if (value.startsWith('/api/v1/')) {
+      final uri = Uri.parse(session.apiBase);
+      return '${uri.scheme}://${uri.host}${uri.hasPort ? ':${uri.port}' : ''}$value';
+    }
+    if (value.startsWith('/')) return '${session.apiBase}$value';
+    return '${session.apiBase}/$value';
+  }
+
+  Map<String, String> get authImageHeaders => <String, String>{
+    'Authorization': 'Bearer ${session.token}',
+  };
+
   Future<List<Map<String, dynamic>>> fetchCcRulesList({
     String templateKey = salesTemplateKey,
   }) async {

@@ -238,6 +238,7 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
     if (override != null) return override;
     if (field.type == 'row') return _rowField(field);
     if (_isUserField(field)) return _userField(field, inRow: inRow);
+    if (field.type == 'proposal') return _proposalField(field, inRow: inRow);
     switch (field.type) {
       case 'section':
         return _sectionField(field);
@@ -607,6 +608,21 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
     // 技术负责人：仅可选 TECH 审批角色
     if (field.key == 'respTech') return 'TECH';
     return null;
+  }
+
+  Widget _proposalField(XflowField field, {bool inRow = false}) {
+    final hint = field.placeholder.isEmpty ? '搜索已通过的销售提案' : field.placeholder;
+    return _fieldWrap(
+      field,
+      _XflowProposalPicker(
+        service: widget.service,
+        value: widget.values[field.key],
+        placeholder: hint,
+        readonly: field.readonly,
+        onChanged: (v) => widget.onChanged(field.key, v),
+      ),
+      inRow: inRow,
+    );
   }
 
   Widget _userField(XflowField field, {bool inRow = false}) {
@@ -1832,6 +1848,235 @@ class _XflowTextFieldState extends State<_XflowTextField> {
       decoration: widget.decoration,
       onTapOutside: (_) => FocusManager.instance.primaryFocus?.unfocus(),
       onChanged: widget.onChanged,
+    );
+  }
+}
+
+class _XflowProposalPicker extends StatefulWidget {
+  const _XflowProposalPicker({
+    required this.service,
+    required this.value,
+    required this.placeholder,
+    required this.readonly,
+    required this.onChanged,
+  });
+
+  final XflowService? service;
+  final dynamic value;
+  final String placeholder;
+  final bool readonly;
+  final void Function(dynamic value) onChanged;
+
+  @override
+  State<_XflowProposalPicker> createState() => _XflowProposalPickerState();
+}
+
+class _XflowProposalPickerState extends State<_XflowProposalPicker> {
+  final _controller = TextEditingController();
+  final _focus = FocusNode();
+  List<Map<String, dynamic>> _results = const [];
+  bool _loading = false;
+  bool _searched = false;
+  Timer? _debounce;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller.text = _displayText(widget.value);
+    _focus.addListener(_onFocusChange);
+  }
+
+  void _onFocusChange() {
+    if (!_focus.hasFocus || widget.readonly) return;
+    if (_controller.text.trim().isNotEmpty) return;
+    if (_results.isNotEmpty || _loading) return;
+    _search('');
+  }
+
+  @override
+  void didUpdateWidget(covariant _XflowProposalPicker oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.value != widget.value) {
+      final next = _displayText(widget.value);
+      if (_controller.text != next) {
+        _controller.text = next;
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _debounce?.cancel();
+    _focus.removeListener(_onFocusChange);
+    _focus.dispose();
+    _controller.dispose();
+    super.dispose();
+  }
+
+  String _displayText(dynamic val) {
+    if (val is Map) {
+      final code = (val['code'] ?? val['proposalCode'] ?? '').toString().trim();
+      final title = (val['title'] ?? val['name'] ?? '').toString().trim();
+      if (code.isNotEmpty && title.isNotEmpty) return '$code · $title';
+      if (code.isNotEmpty) return code;
+      if (title.isNotEmpty) return title;
+    }
+    return val?.toString() ?? '';
+  }
+
+  void _clearSelection() {
+    _debounce?.cancel();
+    setState(() {
+      _controller.clear();
+      _results = const [];
+      _searched = false;
+      _loading = false;
+    });
+    widget.onChanged(null);
+  }
+
+  void _selectProposal(Map<String, dynamic> row) {
+    final id = _int(row['proposalId'] ?? row['id']);
+    final code = (row['code'] ?? '').toString().trim();
+    final title = (row['title'] ?? row['name'] ?? '').toString().trim();
+    widget.onChanged({
+      'proposalId': id,
+      'code': code,
+      'title': title,
+    });
+    setState(() {
+      _controller.text = code.isNotEmpty && title.isNotEmpty
+          ? '$code · $title'
+          : (code.isNotEmpty ? code : title);
+      _results = const [];
+      _searched = false;
+      _loading = false;
+    });
+    _focus.unfocus();
+  }
+
+  int _int(dynamic v) {
+    if (v is num) return v.toInt();
+    return int.tryParse('$v') ?? 0;
+  }
+
+  Future<void> _search(String q) async {
+    if (widget.service == null) {
+      setState(() {
+        _results = const [];
+        _searched = false;
+        _loading = false;
+      });
+      return;
+    }
+    setState(() => _loading = true);
+    try {
+      final rows = await widget.service!.searchApprovedProposals(q);
+      if (!mounted || _controller.text.trim() != q.trim()) return;
+      setState(() {
+        _results = rows;
+        _searched = true;
+        _loading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _searched = true;
+        _results = const [];
+      });
+      showDunesToast(context, '提案搜索失败', kind: DunesToastKind.error);
+    }
+  }
+
+  void _onQueryChanged(String q) {
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 280), () {
+      if (!mounted) return;
+      if (_controller.text.trim() == q.trim()) _search(q);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final hasText = _controller.text.trim().isNotEmpty;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        TextField(
+          controller: _controller,
+          focusNode: _focus,
+          readOnly: widget.readonly,
+          decoration: xfInputDecoration(hint: widget.placeholder).copyWith(
+            suffixIcon: _loading
+                ? const Padding(
+                    padding: EdgeInsets.all(10),
+                    child: SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  )
+                : hasText && !widget.readonly
+                ? IconButton(
+                    icon: const Icon(
+                      Icons.close_rounded,
+                      size: 18,
+                      color: DunesColors.text3,
+                    ),
+                    onPressed: _clearSelection,
+                    tooltip: '清除',
+                  )
+                : const Icon(
+                    Icons.search,
+                    size: 18,
+                    color: DunesColors.text3,
+                  ),
+          ),
+          style: xfInputTextStyle(),
+          onChanged: widget.readonly ? null : _onQueryChanged,
+        ),
+        if (_results.isNotEmpty) ...[
+          const SizedBox(height: 6),
+          Container(
+            constraints: const BoxConstraints(maxHeight: 220),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: DunesColors.border),
+            ),
+            child: ListView.separated(
+              padding: EdgeInsets.zero,
+              shrinkWrap: true,
+              itemCount: _results.length.clamp(0, 8),
+              separatorBuilder: (_, _) =>
+                  Divider(height: 1, color: DunesColors.borderSoft),
+              itemBuilder: (context, index) {
+                final row = _results[index];
+                final code = (row['code'] ?? '').toString();
+                final title = (row['title'] ?? row['name'] ?? '').toString();
+                final label = code.isNotEmpty && title.isNotEmpty
+                    ? '$code · $title'
+                    : (code.isNotEmpty ? code : title);
+                return ListTile(
+                  dense: true,
+                  title: Text(
+                    label,
+                    style: DunesTypography.sans(fontSize: 12),
+                  ),
+                  onTap: () => _selectProposal(row),
+                );
+              },
+            ),
+          ),
+        ] else if (_searched && !_loading && hasText) ...[
+          const SizedBox(height: 6),
+          Text(
+            '无匹配提案',
+            style: DunesTypography.sans(fontSize: 11, color: DunesColors.text3),
+          ),
+        ],
+      ],
     );
   }
 }

@@ -62,24 +62,26 @@ class _AppUpdateDialogState extends State<_AppUpdateDialog> {
       }
       Navigator.of(context).pop();
     } catch (e) {
-      // 桌面内更新失败时回退浏览器。
-      if (_inApp) {
-        try {
-          final url = widget.result.downloadUrl.trim();
-          if (url.isNotEmpty) {
-            await launchUrl(
-              Uri.parse(url),
-              mode: LaunchMode.externalApplication,
-            );
-            if (mounted) Navigator.of(context).pop();
-            return;
-          }
-        } catch (_) {}
-      }
       if (!mounted) return;
       setState(() {
         _busy = false;
-        _error = '更新失败，请稍后重试';
+        _error = _inApp
+            ? '应用内更新失败，可重试或改用浏览器下载。'
+            : '更新失败，请稍后重试';
+      });
+    }
+  }
+
+  Future<void> _openInBrowser() async {
+    final url = widget.result.downloadUrl.trim();
+    if (url.isEmpty) return;
+    try {
+      await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+      if (mounted) Navigator.of(context).pop();
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _error = '无法打开浏览器，请检查下载地址配置';
       });
     }
   }
@@ -200,6 +202,17 @@ class _AppUpdateDialogState extends State<_AppUpdateDialog> {
               ),
             ),
           ),
+        if (_inApp && _error != null && !_macOpened)
+          TextButton(
+            onPressed: _busy ? null : _openInBrowser,
+            child: Text(
+              '浏览器下载',
+              style: DunesTypography.sans(
+                fontSize: 15,
+                color: DunesColors.text2,
+              ),
+            ),
+          ),
         FilledButton(
           onPressed: _macOpened
               ? () => Navigator.of(context).pop()
@@ -211,7 +224,7 @@ class _AppUpdateDialogState extends State<_AppUpdateDialog> {
           child: Text(
             _macOpened
                 ? '知道了'
-                : (_busy ? '更新中…' : '立即更新'),
+                : (_busy ? '更新中…' : (_error != null ? '重试' : '立即更新')),
           ),
         ),
       ],

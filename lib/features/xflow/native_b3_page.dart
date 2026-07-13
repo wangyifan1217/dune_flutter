@@ -15,12 +15,14 @@ class NativeB3Page extends StatefulWidget {
     required this.session,
     required this.navigation,
     required this.onOpenForm,
+    this.onCategoryChanged,
     this.initialCategory = 'biz',
   });
 
   final AuthSession session;
   final DunesNavigationController navigation;
   final void Function(String templateKey) onOpenForm;
+  final void Function(String category)? onCategoryChanged;
   final String initialCategory;
 
   @override
@@ -101,6 +103,12 @@ class _NativeB3PageState extends State<NativeB3Page> {
         .toList(growable: false);
   }
 
+  void _setCategory(String category) {
+    if (_category == category) return;
+    setState(() => _category = category);
+    widget.onCategoryChanged?.call(category);
+  }
+
   @override
   Widget build(BuildContext context) {
     final visibleTemplates = _visibleTemplates;
@@ -110,7 +118,7 @@ class _NativeB3PageState extends State<NativeB3Page> {
         child: Column(
           children: [
             XflowDsBar(
-              crumb: '我的 · 更多提案',
+              crumb: '我的 · 更多审批',
               title: '发起新审批',
               onBack: () => widget.navigation.go('B2'),
             ),
@@ -130,12 +138,12 @@ class _NativeB3PageState extends State<NativeB3Page> {
                           const SizedBox(height: 10),
                           XflowWfListSearch(
                             controller: _search,
-                            hint: '搜索提案类型、说明…',
+                            hint: '搜索审批类型、说明…',
                           ),
                           const SizedBox(height: 10),
                           XflowSectionLabel(
                             accent: _category == 'adm' ? '非业务类' : '业务类',
-                            title: '提案模板',
+                            title: '审批模板',
                             trailing: '${visibleTemplates.length} 类',
                           ),
                           const SizedBox(height: 8),
@@ -149,9 +157,14 @@ class _NativeB3PageState extends State<NativeB3Page> {
                                   template: template,
                                   isAdm: _category == 'adm',
                                   onTap: template.enabled
-                                      ? () => widget.onOpenForm(
-                                          template.templateKey,
-                                        )
+                                      ? () {
+                                          widget.onCategoryChanged?.call(
+                                            _category,
+                                          );
+                                          widget.onOpenForm(
+                                            template.templateKey,
+                                          );
+                                        }
                                       : null,
                                 ),
                               ),
@@ -176,18 +189,18 @@ class _NativeB3PageState extends State<NativeB3Page> {
       child: Row(
         children: [
           _categoryTab(
-            label: '业务类',
+            label: '业务类 · 审批',
             count: _bizTemplates.length,
             selected: _category == 'biz',
             accent: DunesColors.accentDeep,
-            onTap: () => setState(() => _category = 'biz'),
+            onTap: () => _setCategory('biz'),
           ),
           _categoryTab(
-            label: '非业务类',
+            label: '非业务类 · 审批',
             count: _admTemplates.length,
             selected: _category == 'adm',
             accent: const Color(0xFF9D5F1A),
-            onTap: () => setState(() => _category = 'adm'),
+            onTap: () => _setCategory('adm'),
           ),
         ],
       ),
@@ -208,17 +221,21 @@ class _NativeB3PageState extends State<NativeB3Page> {
         child: InkWell(
           borderRadius: BorderRadius.circular(7),
           onTap: onTap,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Text(
-                  label,
-                  style: DunesTypography.sans(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: selected ? accent : DunesColors.text2,
+                Flexible(
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: DunesTypography.sans(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w600,
+                      color: selected ? accent : DunesColors.text2,
+                    ),
                   ),
                 ),
                 const SizedBox(width: 4),

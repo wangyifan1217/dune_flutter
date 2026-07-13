@@ -709,9 +709,10 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         selectedConversationId: _dualPaneSelectedConversationId,
       ),
       chatPane: _buildDualPaneChatPane(),
-      bottomBar: DunesMainTabBar(
+      sideRail: DunesMainTabBar(
         navigation: widget.navigation,
         activeScreen: 'C1',
+        axis: Axis.vertical,
         commUnread: _commUnread,
         workbenchBadge: _workbenchBadge,
         lighthouseAccess: widget.session.lighthouseAccess,
@@ -853,6 +854,9 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           session: widget.session,
           navigation: widget.navigation,
           initialCategory: _b3InitialCategory,
+          onCategoryChanged: (category) {
+            _b3InitialCategory = category;
+          },
           onOpenForm: (templateKey) {
             _openProposalEntry(templateKey: templateKey, backScreen: 'B3');
           },
@@ -1862,33 +1866,39 @@ class _NativeB2PageState extends State<_NativeB2Page> {
         : (kb?.documentCount ?? 0);
     final kbCategoryCount = kb?.categoryCount ?? 0;
     final kbUnreadCount = kb?.unreadCount ?? 0;
-    return ColoredBox(
-      color: DunesColors.bgApp,
-      child: SafeArea(
-        bottom: false,
-        child: Stack(
+    final useSideRail = isDesktopCommOnly;
+    final tabBar = DunesMainTabBar(
+      navigation: widget.navigation,
+      activeScreen: 'B2',
+      axis: useSideRail ? Axis.vertical : Axis.horizontal,
+      commUnread: widget.commUnread,
+      workbenchBadge: widget.workbenchBadge,
+      lighthouseAccess: widget.session.lighthouseAccess,
+      chatOnlyMode: widget.session.isExternalUser,
+    );
+    final body = Stack(
+      children: [
+        Column(
           children: [
-            Column(
-              children: [
-                _buildB2TopBar(),
-                Expanded(
-                  child: RefreshIndicator(
-                    onRefresh: _loadStats,
-                    child: ListView(
-                      padding: const EdgeInsets.fromLTRB(12, 10, 12, 14),
-                      children: [
-                        _buildProfileCard(stats, profile),
-                        if (isExternal) ...[
-                          const SizedBox(height: 12),
-                          Text(
-                            '外部用户仅可使用通讯聊天功能',
-                            textAlign: TextAlign.center,
-                            style: DunesTypography.sans(
-                              fontSize: 14,
-                              color: DunesColors.text3,
-                            ),
-                          ),
-                        ] else ...[
+            _buildB2TopBar(),
+            Expanded(
+              child: RefreshIndicator(
+                onRefresh: _loadStats,
+                child: ListView(
+                  padding: const EdgeInsets.fromLTRB(12, 10, 12, 14),
+                  children: [
+                    _buildProfileCard(stats, profile),
+                    if (isExternal) ...[
+                      const SizedBox(height: 12),
+                      Text(
+                        '外部用户仅可使用通讯聊天功能',
+                        textAlign: TextAlign.center,
+                        style: DunesTypography.sans(
+                          fontSize: 14,
+                          color: DunesColors.text3,
+                        ),
+                      ),
+                    ] else ...[
                           const SizedBox(height: 10),
                           if (_showQuickStats) ...[
                             _buildQuickStats(stats),
@@ -2029,14 +2039,7 @@ class _NativeB2PageState extends State<_NativeB2Page> {
                     ),
                   ),
                 ),
-                DunesMainTabBar(
-                  navigation: widget.navigation,
-                  activeScreen: 'B2',
-                  commUnread: widget.commUnread,
-                  workbenchBadge: widget.workbenchBadge,
-                  lighthouseAccess: widget.session.lighthouseAccess,
-                  chatOnlyMode: widget.session.isExternalUser,
-                ),
+                if (!useSideRail) tabBar,
               ],
             ),
             if (_live.active.value && !isWindowsDesktopCommOnly)
@@ -2049,7 +2052,30 @@ class _NativeB2PageState extends State<_NativeB2Page> {
                 child: _buildLiveTranscribeFab(),
               ),
           ],
+        );
+    if (useSideRail) {
+      return ColoredBox(
+        color: DunesColors.bgApp,
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            tabBar,
+            Expanded(
+              child: SafeArea(
+                left: false,
+                bottom: false,
+                child: body,
+              ),
+            ),
+          ],
         ),
+      );
+    }
+    return ColoredBox(
+      color: DunesColors.bgApp,
+      child: SafeArea(
+        bottom: false,
+        child: body,
       ),
     );
   }
@@ -2506,7 +2532,7 @@ class _NativeB2PageState extends State<_NativeB2Page> {
                 minimumSize: Size.zero,
                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
               ),
-              child: const Text('更多提案  →', style: TextStyle(fontSize: 11.5)),
+              child: const Text('更多审批  →', style: TextStyle(fontSize: 11.5)),
             ),
           ],
         ),

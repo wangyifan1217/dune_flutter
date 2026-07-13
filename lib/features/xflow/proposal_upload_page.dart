@@ -259,9 +259,20 @@ class _ProposalSection {
     final rows = _asList(json['rows'])
         .map((row) {
           final map = _asMap(row) ?? const <String, dynamic>{};
-          return _SectionRow(_string(map['label']), _string(map['value']));
+          final images = _asList(map['images'])
+              .map(ProposalArchiveImage.fromJson)
+              .where((img) => img.url.isNotEmpty || img.blobKey.isNotEmpty)
+              .toList(growable: false);
+          return _SectionRow(
+            _string(map['label']),
+            _string(map['value']),
+            images: images,
+          );
         })
-        .where((row) => row.label.isNotEmpty || row.value.isNotEmpty)
+        .where((row) =>
+            row.label.isNotEmpty ||
+            row.value.isNotEmpty ||
+            row.images.isNotEmpty)
         .toList(growable: false);
     final sectionTierRows =
         tierRows ??
@@ -283,7 +294,9 @@ class _ProposalSection {
 class _SectionRow {
   final String label;
   final String value;
-  const _SectionRow(this.label, this.value);
+  final List<ProposalArchiveImage> images;
+
+  const _SectionRow(this.label, this.value, {this.images = const []});
 }
 
 class _TierRow {
@@ -992,7 +1005,13 @@ class _ProposalUploadPageState extends State<ProposalUploadPage> {
                     title: s.title,
                     preview: s.preview,
                     rows: s.rows
-                        .map((r) => ProposalArchiveRow(r.label, r.value))
+                        .map(
+                          (r) => ProposalArchiveRow(
+                            r.label,
+                            r.value,
+                            images: r.images,
+                          ),
+                        )
                         .toList(),
                     isFinancial: s.isFinancial,
                     tierRows: (s.tierRows ?? const [])
@@ -1018,6 +1037,8 @@ class _ProposalUploadPageState extends State<ProposalUploadPage> {
                 .where((section) => section.expanded)
                 .map((section) => section.id)
                 .toSet(),
+            resolveAssetUrl: _service.resolveProposalAssetUrl,
+            authenticatedImageHeaders: _service.authImageHeaders,
             onPreviewTap: parsed.archiveId.isEmpty
                 ? null
                 : () => _openExcelPreview(parsed),

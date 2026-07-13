@@ -2,47 +2,41 @@ import 'package:flutter/material.dart';
 
 import '../../core/theme/dunes_theme.dart';
 
-/// Windows / 宽屏下的「会话列表 + 聊天窗口」双栏壳。
+/// Windows / macOS / 宽屏下的「侧栏导航 + 会话列表 + 聊天窗口」壳。
 ///
-/// 底部 Tab 横跨整宽；列表与聊天分栏渲染，窄屏不应使用本组件。
+/// 左侧竖栏导航；列表与聊天分栏渲染，窄屏不应使用本组件。
 class ChatDualPaneShell extends StatelessWidget {
   const ChatDualPaneShell({
     super.key,
     required this.listPane,
     required this.chatPane,
-    required this.bottomBar,
+    required this.sideRail,
     this.listPaneWidth = 320,
   });
 
   final Widget listPane;
   final Widget chatPane;
-  final Widget bottomBar;
+  final Widget sideRail;
   final double listPaneWidth;
 
   @override
   Widget build(BuildContext context) {
     return ColoredBox(
       color: DunesColors.bgApp,
-      child: Column(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Expanded(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                SizedBox(
-                  width: listPaneWidth,
-                  child: listPane,
-                ),
-                const VerticalDivider(
-                  width: 1,
-                  thickness: 1,
-                  color: DunesColors.borderSoft,
-                ),
-                Expanded(child: chatPane),
-              ],
-            ),
+          sideRail,
+          SizedBox(
+            width: listPaneWidth,
+            child: listPane,
           ),
-          bottomBar,
+          const VerticalDivider(
+            width: 1,
+            thickness: 1,
+            color: DunesColors.borderSoft,
+          ),
+          Expanded(child: chatPane),
         ],
       ),
     );

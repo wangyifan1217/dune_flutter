@@ -11,6 +11,9 @@ import 'dunes_toast.dart';
 /// 此为 Tab 内容区高度；iOS Home Indicator 的安全区由组件自身额外处理。
 const double kDunesMainTabBarHeight = 64;
 
+/// PC 端左侧导航栏宽度（Win / macOS）。
+const double kDunesMainSideRailWidth = 64;
+
 class DunesMainTabBar extends StatefulWidget {
   const DunesMainTabBar({
     super.key,
@@ -20,6 +23,7 @@ class DunesMainTabBar extends StatefulWidget {
     this.workbenchBadge,
     this.lighthouseAccess = false,
     this.chatOnlyMode = false,
+    this.axis = Axis.horizontal,
   });
 
   final DunesNavigationController navigation;
@@ -28,6 +32,9 @@ class DunesMainTabBar extends StatefulWidget {
   final WorkbenchBadgeNotifier? workbenchBadge;
   final bool lighthouseAccess;
   final bool chatOnlyMode;
+
+  /// [Axis.horizontal]：底部横栏（移动端）；[Axis.vertical]：左侧竖栏（PC）。
+  final Axis axis;
 
   @override
   State<DunesMainTabBar> createState() => _DunesMainTabBarState();
@@ -69,12 +76,49 @@ class _DunesMainTabBarState extends State<DunesMainTabBar> {
 
   bool get _showMyDot => (widget.workbenchBadge?.pendingForMe ?? 0) > 0;
 
-  /// 外部用户或 Windows 桌面：不展示千机 / 灯塔。
+  /// 外部用户或桌面端：不展示千机 / 灯塔。
   bool get _hideWorkbenchTabs =>
       widget.chatOnlyMode || isDesktopCommOnly;
 
+  bool get _isVertical => widget.axis == Axis.vertical;
+
+  List<Widget> get _tabs => [
+        _tab(
+          icon: Icons.forum_outlined,
+          label: '通讯',
+          screen: 'C1',
+          showRedDot: _showCommDot,
+        ),
+        if (!_hideWorkbenchTabs) ...[
+          _tab(
+            icon: Icons.grid_view_rounded,
+            label: '千机',
+            onTap: () => showDunesSoonToast(context),
+          ),
+          _tab(
+            icon: Icons.explore_outlined,
+            label: '灯塔',
+            screen: 'LH',
+          ),
+        ],
+        _tab(
+          icon: Icons.person_outline_rounded,
+          label: '我的',
+          screen: 'B2',
+          showRedDot: widget.chatOnlyMode ? false : _showMyDot,
+        ),
+      ];
+
   @override
   Widget build(BuildContext context) {
+    if (_isVertical) {
+      return _buildSideRail();
+    }
+    return _buildBottomBar();
+  }
+
+  /// 移动端底部横栏。
+  Widget _buildBottomBar() {
     // 让 SafeArea 的 Home Indicator 区也使用 Tab 背景色；否则灯塔等页面的
     // Scaffold 底色会从该空白区域透出。
     return Container(
@@ -86,32 +130,30 @@ class _DunesMainTabBarState extends State<DunesMainTabBar> {
             color: DunesColors.bgApp,
             border: Border(top: BorderSide(color: DunesColors.borderSoft)),
           ),
-          child: Row(
+          child: Row(children: _tabs),
+        ),
+      ),
+    );
+  }
+
+  /// PC 左侧竖栏。标准标题栏下内容区绘制，不与 macOS 红绿灯重叠。
+  Widget _buildSideRail() {
+    return Container(
+      width: kDunesMainSideRailWidth,
+      color: DunesColors.bgApp,
+      child: SafeArea(
+        // 保留左右安全区（外接刘海/圆角屏）；顶部由系统标题栏占用，无需再垫。
+        top: false,
+        bottom: false,
+        child: Container(
+          decoration: const BoxDecoration(
+            color: DunesColors.bgApp,
+            border: Border(right: BorderSide(color: DunesColors.borderSoft)),
+          ),
+          child: Column(
             children: [
-              _tab(
-                icon: Icons.forum_outlined,
-                label: '通讯',
-                screen: 'C1',
-                showRedDot: _showCommDot,
-              ),
-              if (!_hideWorkbenchTabs) ...[
-                _tab(
-                  icon: Icons.grid_view_rounded,
-                  label: '千机',
-                  onTap: () => showDunesSoonToast(context),
-                ),
-                _tab(
-                  icon: Icons.explore_outlined,
-                  label: '灯塔',
-                  screen: 'LH',
-                ),
-              ],
-              _tab(
-                icon: Icons.person_outline_rounded,
-                label: '我的',
-                screen: 'B2',
-                showRedDot: widget.chatOnlyMode ? false : _showMyDot,
-              ),
+              const SizedBox(height: 12),
+              ..._tabs,
             ],
           ),
         ),
@@ -129,44 +171,48 @@ class _DunesMainTabBarState extends State<DunesMainTabBar> {
     final active = screen != null && widget.activeScreen == screen;
     final color = active ? const Color(0xFF7B5CD8) : DunesColors.text3;
 
-    return Expanded(
-      child: InkWell(
-        onTap:
-            onTap ??
-            () {
-              FocusManager.instance.primaryFocus?.unfocus();
-              widget.navigation.switchMainTab(screen!);
-            },
-        child: SizedBox(
-          height: kDunesMainTabBarHeight,
-          child: Stack(
-            clipBehavior: Clip.none,
-            alignment: Alignment.center,
-            children: [
-              Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Stack(
-                    clipBehavior: Clip.none,
-                    children: [
-                      Icon(icon, size: 24, color: color),
-                      if (showRedDot)
-                        const Positioned(
-                          top: -3,
-                          right: -5,
-                          child: _PulseDot(),
-                        ),
-                    ],
-                  ),
-                  const SizedBox(height: 3),
-                  Text(label, style: TextStyle(fontSize: 11, color: color)),
-                ],
-              ),
-            ],
-          ),
+    final body = InkWell(
+      onTap:
+          onTap ??
+          () {
+            FocusManager.instance.primaryFocus?.unfocus();
+            widget.navigation.switchMainTab(screen!);
+          },
+      child: SizedBox(
+        width: _isVertical ? kDunesMainSideRailWidth : null,
+        height: _isVertical ? 64 : kDunesMainTabBarHeight,
+        child: Stack(
+          clipBehavior: Clip.none,
+          alignment: Alignment.center,
+          children: [
+            Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    Icon(icon, size: 24, color: color),
+                    if (showRedDot)
+                      const Positioned(
+                        top: -3,
+                        right: -5,
+                        child: _PulseDot(),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 3),
+                Text(label, style: TextStyle(fontSize: 11, color: color)),
+              ],
+            ),
+          ],
         ),
       ),
     );
+
+    if (_isVertical) {
+      return body;
+    }
+    return Expanded(child: body);
   }
 }
 

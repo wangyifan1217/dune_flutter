@@ -215,6 +215,8 @@ class _XfDetRecognitionPanelState extends State<XfDetRecognitionPanel> {
                   baselineMarginRate: _archive?.baselineMarginRate ?? 0,
                   baselineDiscountRate: _archive?.baselineDiscountRate ?? 0,
                   initialExpandedSectionIds: _initialExpandedIds,
+                  resolveAssetUrl: widget.service.resolveProposalAssetUrl,
+                  authenticatedImageHeaders: widget.service.authImageHeaders,
                   onPreviewTap: _archive != null && _archive!.archiveId.isNotEmpty
                       ? () => _openExcelPreview(_archive!)
                       : null,

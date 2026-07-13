@@ -265,7 +265,9 @@ class ChatInputBar extends StatelessWidget {
     final minLines = wide ? 3 : 1;
     final maxLines = wide ? 8 : 4;
     final fieldPadV = wide ? 14.0 : 9.0;
-    final sendH = wide ? 72.0 : 40.0;
+    // 宽屏输入区可以保留多行，但发送按钮应是紧凑的辅助操作，
+    // 不应与整个输入框等高。
+    final sendH = wide ? 44.0 : 40.0;
     // 发送按钮在最底部，必须避开 iOS home indicator，否则会被底部横条盖住。
     // 有安全区时用安全区作为下内边距（刚好托起按钮、不额外叠加），安卓为 0 时回退 9px。
     final bottomInset = MediaQuery.paddingOf(context).bottom;
@@ -369,7 +371,7 @@ class ChatInputBar extends StatelessWidget {
                 borderRadius: BorderRadius.circular(6),
                 onTap: showStop ? onStop : (interactionLocked ? null : onSend),
                 child: Ink(
-                  width: wide ? 64 : 52,
+                  width: wide ? 56 : 52,
                   height: sendH,
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(6),

@@ -573,10 +573,21 @@ class _NativeScreenHostState extends State<NativeScreenHost>
   }
 
   int? get _dualPaneSelectedConversationId {
-    final screen = widget.navigation.currentScreen;
-    if (screen == 'C5') return _selectedPrivate?.id;
-    if (screen == 'C2') return _selectedGroup?.id;
+    final chatScreen = _dualPaneChatScreen;
+    if (chatScreen == 'C5') return _selectedPrivate?.id;
+    if (chatScreen == 'C2') return _selectedGroup?.id;
     return null;
+  }
+
+  /// 从「我的」回到桌面端通讯时，保留原来打开的会话，而不是重置右侧聊天栏。
+  String get _dualPaneChatScreen {
+    final screen = widget.navigation.currentScreen;
+    if (screen == 'C2' || screen == 'C5') return screen;
+    if (_selectedPrivate != null || _selectedPrivatePeerUserId != null) {
+      return 'C5';
+    }
+    if (_selectedGroup != null) return 'C2';
+    return 'C1';
   }
 
   bool _isDualPaneChatRoute(String screen) {
@@ -611,7 +622,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
   }
 
   Widget _buildDualPaneChatPane() {
-    switch (widget.navigation.currentScreen) {
+    switch (_dualPaneChatScreen) {
       case 'C2':
         return NativeGroupChatPage(
           key: ValueKey<String>('dual-group-${_selectedGroup?.id ?? 0}'),

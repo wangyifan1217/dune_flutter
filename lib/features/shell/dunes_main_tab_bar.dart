@@ -146,13 +146,22 @@ class _DunesMainTabBarState extends State<DunesMainTabBar> {
               Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(icon, size: 24, color: color),
+                  Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      Icon(icon, size: 24, color: color),
+                      if (showRedDot)
+                        const Positioned(
+                          top: -3,
+                          right: -5,
+                          child: _PulseDot(),
+                        ),
+                    ],
+                  ),
                   const SizedBox(height: 3),
                   Text(label, style: TextStyle(fontSize: 11, color: color)),
                 ],
               ),
-              if (showRedDot)
-                const Positioned(top: 9, right: 20, child: _PulseDot()),
             ],
           ),
         ),

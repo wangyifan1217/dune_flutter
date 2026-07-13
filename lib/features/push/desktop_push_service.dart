@@ -98,8 +98,14 @@ Future<void> _showToast({
     final id = _seq++;
     if (_seq > 900000) _seq = 1000;
 
-    final safeTitle = title.trim().isEmpty ? '沙丘' : title.trim();
-    final safeBody = body.trim().isEmpty ? '您有新消息' : body.trim();
+    final safeTitle = _compactNotificationText(
+      title.trim().isEmpty ? '沙丘' : title,
+      maxLength: 32,
+    );
+    final safeBody = _compactNotificationText(
+      body.trim().isEmpty ? '您有新消息' : body,
+      maxLength: 48,
+    );
 
     await _plugin.show(
       id: id,
@@ -116,7 +122,6 @@ Future<void> _showToast({
         ),
         windows: const WindowsNotificationDetails(
           duration: WindowsNotificationDuration.short,
-          subtitle: '沙丘',
         ),
       ),
       payload: conversationId > 0 ? 'conv:$conversationId' : 'conv:0',
@@ -124,6 +129,13 @@ Future<void> _showToast({
   } catch (e, st) {
     debugPrint('[DesktopPush] show failed: $e\n$st');
   }
+}
+
+/// 系统通知只保留一行摘要，避免 Windows/macOS 因换行或长文本撑高横幅。
+String _compactNotificationText(String value, {required int maxLength}) {
+  final singleLine = value.replaceAll(RegExp(r'\s+'), ' ').trim();
+  if (singleLine.length <= maxLength) return singleLine;
+  return '${singleLine.substring(0, maxLength)}…';
 }
 
 Future<void> _bringAppToFront() async {

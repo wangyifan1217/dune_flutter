@@ -72,6 +72,8 @@ flutter:
     - assets/images/lighthouse_logo.png
     - assets/images/tray_icon.ico
     - assets/images/tray_icon_blank.ico
+    - assets/images/tray_icon.png
+    - assets/images/tray_icon_blank.png
     - assets/prototype/
     - assets/prototype/dunes_app_ui.js
     - assets/prototype/workbench_live.js

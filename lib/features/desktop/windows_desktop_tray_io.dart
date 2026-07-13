@@ -8,7 +8,8 @@ import 'package:window_manager/window_manager.dart';
 
 const _trayIconWin = 'assets/images/tray_icon.ico';
 const _trayIconWinBlank = 'assets/images/tray_icon_blank.ico';
-const _trayIconMac = 'assets/images/app_logo.png';
+const _trayIconMac = 'assets/images/tray_icon.png';
+const _trayIconMacBlank = 'assets/images/tray_icon_blank.png';
 
 Future<void> initWindowsDesktopTray() => WindowsDesktopTray.instance.init();
 
@@ -69,7 +70,7 @@ class WindowsDesktopTray with WindowListener, TrayListener {
     if (Platform.isMacOS) {
       // macOS 托盘更稳妥用 png；暂无 blank 资源时闪烁仍切换同一图标（无害）。
       _trayIcon = _trayIconMac;
-      _trayIconBlank = _trayIconMac;
+      _trayIconBlank = _trayIconMacBlank;
     } else {
       _trayIcon = _trayIconWin;
       _trayIconBlank = _trayIconWinBlank;
@@ -87,6 +88,9 @@ class WindowsDesktopTray with WindowListener, TrayListener {
       ),
     );
     trayManager.addListener(this);
+    if (Platform.isMacOS) {
+      await windowManager.setPreventClose(true);
+    }
     _ready = true;
   }
 
@@ -108,6 +112,7 @@ class WindowsDesktopTray with WindowListener, TrayListener {
     // 再次确保关闭被拦截（部分时机下可能被重置）。
     await windowManager.setPreventClose(true);
     await windowManager.hide();
+    // Windows：从任务栏隐藏；macOS：从 Dock 隐藏，仅留状态栏图标
     await windowManager.setSkipTaskbar(true);
     await _syncFlash();
   }
@@ -119,6 +124,11 @@ class WindowsDesktopTray with WindowListener, TrayListener {
     await windowManager.setSkipTaskbar(false);
     await windowManager.show();
     await windowManager.focus();
+    if (Platform.isMacOS) {
+      // 确保 macOS 前台激活
+      await windowManager.setAlwaysOnTop(true);
+      await windowManager.setAlwaysOnTop(false);
+    }
     await windowManager.setPreventClose(true);
     await trayManager.setIcon(_trayIcon);
   }
@@ -214,12 +224,21 @@ class WindowsDesktopTray with WindowListener, TrayListener {
 
   @override
   void onTrayIconMouseDown() {
+    // macOS 状态栏单击：显示窗口；Windows 左键同理
     unawaited(_showFromTray());
   }
 
   @override
   void onTrayIconRightMouseDown() {
     unawaited(trayManager.popUpContextMenu());
+  }
+
+  @override
+  void onTrayIconRightMouseUp() {
+    // macOS 部分版本在 mouseUp 弹出菜单更稳
+    if (Platform.isMacOS) {
+      unawaited(trayManager.popUpContextMenu());
+    }
   }
 
   @override

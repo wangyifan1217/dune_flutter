@@ -21,6 +21,10 @@ void windowsTrayNotifyIncomingMessage() {
   WindowsDesktopTray.instance.notifyIncomingMessage();
 }
 
+void windowsTrayReveal() {
+  unawaited(WindowsDesktopTray.instance.reveal());
+}
+
 void setWindowsTrayOnBeforeQuit(Future<void> Function()? callback) {
   WindowsDesktopTray.instance.onBeforeQuit = callback;
 }
@@ -106,6 +110,8 @@ class WindowsDesktopTray with WindowListener, TrayListener {
     _pendingAlert = true;
     unawaited(_syncFlash());
   }
+
+  Future<void> reveal() => _showFromTray();
 
   Future<void> _hideToTray() async {
     _hidden = true;

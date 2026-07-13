@@ -12,6 +12,9 @@ void windowsTrayUpdateUnread(int total) => impl.windowsTrayUpdateUnread(total);
 void windowsTrayNotifyIncomingMessage() =>
     impl.windowsTrayNotifyIncomingMessage();
 
+/// 从托盘/通知点击恢复窗口。
+void windowsTrayReveal() => impl.windowsTrayReveal();
+
 /// 托盘「退出」前回调（用于清除登录会话）。
 void setWindowsTrayOnBeforeQuit(Future<void> Function()? callback) =>
     impl.setWindowsTrayOnBeforeQuit(callback);

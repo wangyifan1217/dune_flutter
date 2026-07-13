@@ -1,11 +1,15 @@
 import 'dart:io' show Platform;
 
 import 'android_push_service.dart' as android;
+import 'desktop_push_service.dart' as desktop;
 import 'ios_push_service.dart' as ios;
+
+bool get _isDesktop => Platform.isWindows || Platform.isMacOS;
 
 Future<void> ensurePushInitializedImpl() {
   if (Platform.isAndroid) return android.ensurePushInitializedImpl();
   if (Platform.isIOS) return ios.ensurePushInitializedImpl();
+  if (_isDesktop) return desktop.ensurePushInitializedImpl();
   return Future<void>.value();
 }
 
@@ -14,6 +18,8 @@ void registerPushLifecycleObserverImpl() {
     android.registerPushLifecycleObserverImpl();
   } else if (Platform.isIOS) {
     ios.registerPushLifecycleObserverImpl();
+  } else if (_isDesktop) {
+    desktop.registerPushLifecycleObserverImpl();
   }
 }
 
@@ -22,6 +28,8 @@ void setPushBadgeRefreshHandlerImpl(void Function()? handler) {
     android.setPushBadgeRefreshHandlerImpl(handler);
   } else if (Platform.isIOS) {
     ios.setPushBadgeRefreshHandlerImpl(handler);
+  } else if (_isDesktop) {
+    desktop.setPushBadgeRefreshHandlerImpl(handler);
   }
 }
 
@@ -44,12 +52,20 @@ Future<void> bindPushSessionImpl({
       apiBase: apiBase,
     );
   }
+  if (_isDesktop) {
+    return desktop.bindPushSessionImpl(
+      userId: userId,
+      token: token,
+      apiBase: apiBase,
+    );
+  }
   return Future<void>.value();
 }
 
 Future<void> unbindPushSessionImpl() {
   if (Platform.isAndroid) return android.unbindPushSessionImpl();
   if (Platform.isIOS) return ios.unbindPushSessionImpl();
+  if (_isDesktop) return desktop.unbindPushSessionImpl();
   return Future<void>.value();
 }
 
@@ -58,12 +74,15 @@ void syncPushBadgeCountImpl(int count) {
     android.syncPushBadgeCountImpl(count);
   } else if (Platform.isIOS) {
     ios.syncPushBadgeCountImpl(count);
+  } else if (_isDesktop) {
+    desktop.syncPushBadgeCountImpl(count);
   }
 }
 
 Future<int> readPushBadgeCountImpl() {
   if (Platform.isAndroid) return android.readPushBadgeCountImpl();
   if (Platform.isIOS) return ios.readPushBadgeCountImpl();
+  if (_isDesktop) return desktop.readPushBadgeCountImpl();
   return Future<int>.value(0);
 }
 
@@ -80,6 +99,12 @@ void notifyPushRealtimeMessageImpl({
     );
   } else if (Platform.isIOS) {
     ios.notifyPushRealtimeMessageImpl(
+      title: title,
+      body: body,
+      conversationId: conversationId,
+    );
+  } else if (_isDesktop) {
+    desktop.notifyPushRealtimeMessageImpl(
       title: title,
       body: body,
       conversationId: conversationId,

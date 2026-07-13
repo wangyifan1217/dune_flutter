@@ -45,6 +45,7 @@ import '../kb/native_kb_service.dart';
 import '../xflow/native_b10_page.dart';
 import '../xflow/native_b3_page.dart';
 import '../xflow/native_xflow_proposal_page.dart';
+import '../xflow/native_xflow_submission_page.dart';
 import '../xflow/proposal_launch_config.dart';
 import '../xflow/xflow_models.dart';
 import '../xflow/xflow_service.dart';
@@ -121,6 +122,9 @@ class _NativeScreenHostState extends State<NativeScreenHost>
   );
   String _b3InitialCategory = 'biz';
   int? _xflowEditProposalId;
+  String _xflowEditBusinessType = 'PROPOSAL';
+  String _selectedSubmissionBusinessType = '';
+  int _selectedSubmissionBusinessId = 0;
   String _xflowFormBackScreen = 'B3';
   String? _b14InitialFilter;
   int _meetingId = 0;
@@ -366,9 +370,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       }
       _workbenchRefresh.bump();
       if (delta > 0 && !notifyRejected) {
-        final body = delta == 1
-            ? '你有新的审批待办，请及时处理'
-            : '您有 $delta 条新的待审批，请及时处理';
+        final body = delta == 1 ? '你有新的审批待办，请及时处理' : '您有 $delta 条新的待审批，请及时处理';
         showDunesToast(context, '您有 $delta 条新的待审批，请及时处理');
         // 与 APP TPNS（title=审批待办）对齐：桌面本地系统通知。
         notifyPushRealtimeMessage(title: '审批待办', body: body);
@@ -863,21 +865,46 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           navigation: widget.navigation,
           templateKey: _xflowTemplateKey,
           editProposalId: _xflowEditProposalId,
+          editBusinessType: _xflowEditBusinessType,
           backScreen: _xflowFormBackScreen,
           onDeleted: () {
             setState(() {
               _xflowEditProposalId = null;
+              _xflowEditBusinessType = 'PROPOSAL';
             });
           },
           onSubmitted: (proposalId) {
             setState(() {
-              _selectedProposalId = proposalId;
               _selectedTodoHint = null;
+              if (_xflowEditBusinessType != 'PROPOSAL') {
+                _selectedSubmissionBusinessType = _xflowEditBusinessType;
+                _selectedSubmissionBusinessId = proposalId;
+              } else {
+                _selectedProposalId = proposalId;
+              }
               if (_xflowEditProposalId == null) {
                 _b10BackScreen = 'B3';
               }
             });
-            widget.navigation.go('B10');
+            widget.navigation.go(
+              _xflowEditBusinessType == 'PROPOSAL' ? 'B10' : 'XFS',
+            );
+          },
+        );
+      case 'XFS':
+        return NativeXflowSubmissionPage(
+          session: widget.session,
+          navigation: widget.navigation,
+          businessType: _selectedSubmissionBusinessType,
+          businessId: _selectedSubmissionBusinessId,
+          backScreen: _b10BackScreen,
+          onEdit: () {
+            _openProposalEntry(
+              templateKey: _xflowTemplateKey,
+              backScreen: _b10BackScreen,
+              editProposalId: _selectedSubmissionBusinessId,
+              editBusinessType: _selectedSubmissionBusinessType,
+            );
           },
         );
       case 'B10':
@@ -1231,6 +1258,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       'XFP',
       'XFU',
       'XF',
+      'XFS',
       'K1',
       'K2',
       'K3',
@@ -1255,10 +1283,12 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     required String templateKey,
     required String backScreen,
     int? editProposalId,
+    String editBusinessType = 'PROPOSAL',
   }) {
     setState(() {
       _xflowTemplateKey = templateKey;
       _xflowEditProposalId = editProposalId;
+      _xflowEditBusinessType = editBusinessType;
       _xflowFormBackScreen = backScreen;
     });
     widget.navigation.go('XFP');
@@ -1278,7 +1308,18 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         templateKey: templateKey,
         backScreen: from,
         editProposalId: item.id,
+        editBusinessType: item.businessType,
       );
+      return;
+    }
+    if (from == 'B14' && item.businessType.toUpperCase() != 'PROPOSAL') {
+      setState(() {
+        _selectedSubmissionBusinessType = item.businessType;
+        _selectedSubmissionBusinessId = item.id;
+        _xflowTemplateKey = item.templateKey ?? '';
+        _b10BackScreen = from;
+      });
+      widget.navigation.go('XFS');
       return;
     }
     setState(() {

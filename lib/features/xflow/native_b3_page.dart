@@ -29,6 +29,7 @@ class NativeB3Page extends StatefulWidget {
 
 class _NativeB3PageState extends State<NativeB3Page> {
   late final XflowService _service;
+  final TextEditingController _search = TextEditingController();
   late String _category;
   bool _loading = true;
   String? _error;
@@ -45,7 +46,16 @@ class _NativeB3PageState extends State<NativeB3Page> {
     _bizTemplates = XflowService.cachedTemplatesByCategory('biz');
     _admTemplates = XflowService.cachedTemplatesByCategory('adm');
     _loading = _bizTemplates.isEmpty && _admTemplates.isEmpty;
+    _search.addListener(() {
+      if (mounted) setState(() {});
+    });
     _load();
+  }
+
+  @override
+  void dispose() {
+    _search.dispose();
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -78,8 +88,22 @@ class _NativeB3PageState extends State<NativeB3Page> {
   List<XflowTemplateCard> get _activeTemplates =>
       _category == 'adm' ? _admTemplates : _bizTemplates;
 
+  List<XflowTemplateCard> get _visibleTemplates {
+    final query = _search.text.trim().toLowerCase();
+    if (query.isEmpty) return _activeTemplates;
+    return _activeTemplates
+        .where((template) {
+          final text =
+              '${template.title} ${template.subtitle} ${template.tagLabel} ${template.templateKey}'
+                  .toLowerCase();
+          return text.contains(query);
+        })
+        .toList(growable: false);
+  }
+
   @override
   Widget build(BuildContext context) {
+    final visibleTemplates = _visibleTemplates;
     return ColoredBox(
       color: DunesColors.bgApp,
       child: SafeArea(
@@ -92,42 +116,49 @@ class _NativeB3PageState extends State<NativeB3Page> {
             ),
             Expanded(
               child: _loading
-                  ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
+                  ? const Center(
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
                   : _error != null
-                      ? _errorView()
-                      : RefreshIndicator(
-                          onRefresh: _load,
-                          child: ListView(
-                            padding: const EdgeInsets.fromLTRB(12, 10, 12, 14),
-                            children: [
-                              _buildCategoryTabs(),
-                              const SizedBox(height: 10),
-                              XflowSectionLabel(
-                                accent: _category == 'adm' ? '非业务类' : '业务类',
-                                title: '提案模板',
-                                trailing: '${_activeTemplates.length} 类',
-                              ),
-                              const SizedBox(height: 8),
-                              if (_activeTemplates.isEmpty)
-                                _emptyTemplates()
-                              else
-                                ..._activeTemplates.map(
-                                  (template) => Padding(
-                                    padding: const EdgeInsets.only(bottom: 8),
-                                    child: ProposalTemplateListTile(
-                                      template: template,
-                                      isAdm: _category == 'adm',
-                                      onTap: template.enabled
-                                          ? () => widget.onOpenForm(
-                                                template.templateKey,
-                                              )
-                                          : null,
-                                    ),
-                                  ),
-                                ),
-                            ],
+                  ? _errorView()
+                  : RefreshIndicator(
+                      onRefresh: _load,
+                      child: ListView(
+                        padding: const EdgeInsets.fromLTRB(12, 10, 12, 14),
+                        children: [
+                          _buildCategoryTabs(),
+                          const SizedBox(height: 10),
+                          XflowWfListSearch(
+                            controller: _search,
+                            hint: '搜索提案类型、说明…',
                           ),
-                        ),
+                          const SizedBox(height: 10),
+                          XflowSectionLabel(
+                            accent: _category == 'adm' ? '非业务类' : '业务类',
+                            title: '提案模板',
+                            trailing: '${visibleTemplates.length} 类',
+                          ),
+                          const SizedBox(height: 8),
+                          if (visibleTemplates.isEmpty)
+                            _emptyTemplates()
+                          else
+                            ...visibleTemplates.map(
+                              (template) => Padding(
+                                padding: const EdgeInsets.only(bottom: 8),
+                                child: ProposalTemplateListTile(
+                                  template: template,
+                                  isAdm: _category == 'adm',
+                                  onTap: template.enabled
+                                      ? () => widget.onOpenForm(
+                                          template.templateKey,
+                                        )
+                                      : null,
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
             ),
           ],
         ),
@@ -145,14 +176,14 @@ class _NativeB3PageState extends State<NativeB3Page> {
       child: Row(
         children: [
           _categoryTab(
-            label: '业务类提案',
+            label: '业务类',
             count: _bizTemplates.length,
             selected: _category == 'biz',
             accent: DunesColors.accentDeep,
             onTap: () => setState(() => _category = 'biz'),
           ),
           _categoryTab(
-            label: '非业务类提案',
+            label: '非业务类',
             count: _admTemplates.length,
             selected: _category == 'adm',
             accent: const Color(0xFF9D5F1A),

@@ -19,6 +19,7 @@ class NativeXflowProposalPage extends StatefulWidget {
     required this.onSubmitted,
     this.backScreen = 'B3',
     this.onDeleted,
+    this.editBusinessType = 'PROPOSAL',
   });
 
   final AuthSession session;
@@ -28,6 +29,7 @@ class NativeXflowProposalPage extends StatefulWidget {
   final void Function(int proposalId) onSubmitted;
   final String backScreen;
   final VoidCallback? onDeleted;
+  final String editBusinessType;
 
   @override
   State<NativeXflowProposalPage> createState() =>
@@ -120,6 +122,7 @@ class _NativeXflowProposalPageState extends State<NativeXflowProposalPage> {
       navigation: widget.navigation,
       templateKey: widget.templateKey,
       editProposalId: widget.editProposalId,
+      editBusinessType: widget.editBusinessType,
       backScreen: widget.backScreen,
       onDeleted: widget.onDeleted,
       onSubmitted: widget.onSubmitted,

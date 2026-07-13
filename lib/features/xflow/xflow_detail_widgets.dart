@@ -35,7 +35,8 @@ class XfDetCard extends StatelessWidget {
     return Container(
       margin: EdgeInsets.only(bottom: marginBottom),
       padding: padding,
-      decoration: decoration ??
+      decoration:
+          decoration ??
           BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(12),
@@ -81,7 +82,8 @@ class XfDetHero extends StatelessWidget {
   Widget build(BuildContext context) {
     final raw = detail.raw;
     final tag1 = (raw['tag1'] ?? detail.formValues['tag1'] ?? '—').toString();
-    final taskLevel = (raw['taskLevel'] ?? detail.formValues['taskLevel'] ?? 'C').toString();
+    final taskLevel =
+        (raw['taskLevel'] ?? detail.formValues['taskLevel'] ?? 'C').toString();
     final coverage = raw['coverage'] ?? detail.formValues['provinces'];
     final tone = detailStatusTone(detail.status);
 
@@ -105,7 +107,10 @@ class XfDetHero extends StatelessWidget {
             children: [
               Text(
                 detail.code,
-                style: DunesTypography.mono(fontSize: 11, color: DunesColors.text3),
+                style: DunesTypography.mono(
+                  fontSize: 11,
+                  color: DunesColors.text3,
+                ),
               ),
               _StatusPill(label: detailStatusLabel(detail.status), tone: tone),
             ],
@@ -141,7 +146,10 @@ class XfDetHero extends StatelessWidget {
       children: [
         Icon(icon, size: 12, color: DunesColors.text2),
         const SizedBox(width: 4),
-        Text(text, style: DunesTypography.sans(fontSize: 11, color: DunesColors.text2)),
+        Text(
+          text,
+          style: DunesTypography.sans(fontSize: 11, color: DunesColors.text2),
+        ),
       ],
     );
   }
@@ -172,10 +180,17 @@ class _StatusPill extends StatelessWidget {
     }
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(999)),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(999),
+      ),
       child: Text(
         label,
-        style: DunesTypography.sans(fontSize: 11, fontWeight: FontWeight.w600, color: fg),
+        style: DunesTypography.sans(
+          fontSize: 11,
+          fontWeight: FontWeight.w600,
+          color: fg,
+        ),
       ),
     );
   }
@@ -221,11 +236,17 @@ class XfDetClosedBanner extends StatelessWidget {
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(8),
-              border: Border(left: BorderSide(color: DunesColors.border, width: 3)),
+              border: Border(
+                left: BorderSide(color: DunesColors.border, width: 3),
+              ),
             ),
             child: Text(
               '该提案已关闭，不可重新填写或再次提交。',
-              style: DunesTypography.sans(fontSize: 12, height: 1.55, color: DunesColors.text3),
+              style: DunesTypography.sans(
+                fontSize: 12,
+                height: 1.55,
+                color: DunesColors.text3,
+              ),
             ),
           ),
         ],
@@ -235,14 +256,19 @@ class XfDetClosedBanner extends StatelessWidget {
 }
 
 class XfDetRejectBanner extends StatelessWidget {
-  const XfDetRejectBanner({super.key, required this.detail, required this.info});
+  const XfDetRejectBanner({
+    super.key,
+    required this.detail,
+    required this.info,
+  });
 
   final XflowProposalDetail detail;
   final RejectStepInfo? info;
 
   @override
   Widget build(BuildContext context) {
-    if (detail.status.toLowerCase() != 'rejected') return const SizedBox.shrink();
+    if (detail.status.toLowerCase() != 'rejected')
+      return const SizedBox.shrink();
     final meta = info != null
         ? '第${info!.stepNo}步 · ${info!.who}${info!.at.isNotEmpty ? ' · ${fmtDetailTime(info!.at).substring(0, info!.at.length >= 16 ? 16 : info!.at.length)}' : ''}'
         : '审批未通过，请修改后重新提交';
@@ -277,7 +303,10 @@ class XfDetRejectBanner extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 6),
-          Text(meta, style: DunesTypography.sans(fontSize: 11, color: DunesColors.text3)),
+          Text(
+            meta,
+            style: DunesTypography.sans(fontSize: 11, color: DunesColors.text3),
+          ),
           const SizedBox(height: 4),
           Container(
             width: double.infinity,
@@ -285,11 +314,17 @@ class XfDetRejectBanner extends StatelessWidget {
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: DunesColors.coral.withValues(alpha: 0.12)),
+              border: Border.all(
+                color: DunesColors.coral.withValues(alpha: 0.12),
+              ),
             ),
             child: Text(
               comment,
-              style: DunesTypography.sans(fontSize: 12, height: 1.55, color: DunesColors.text2),
+              style: DunesTypography.sans(
+                fontSize: 12,
+                height: 1.55,
+                color: DunesColors.text2,
+              ),
             ),
           ),
         ],
@@ -314,7 +349,9 @@ class XfDetPeopleCard extends StatelessWidget {
     rows.add((
       '第一责任人',
       formatUserDisplay(fv['owner1']).ifEmpty(
-        (raw['owner1'] ?? d.ownerName).toString().ifEmpty(raw['initiator']?.toString() ?? '—'),
+        (raw['owner1'] ?? d.ownerName).toString().ifEmpty(
+          raw['initiator']?.toString() ?? '—',
+        ),
       ),
     ));
     final o2 = owner2Line(fv, raw);
@@ -329,7 +366,11 @@ class XfDetPeopleCard extends StatelessWidget {
     }
     final techRoute = (raw['techRoute'] ?? fv['techRoute'] ?? '').toString();
     if (techRoute.isNotEmpty) rows.add(('技术路由', techRoute));
-    final cur = currentApproverLabel(bundle.trail, bundle.assigneeNames, bundle.stages);
+    final cur = currentApproverLabel(
+      bundle.trail,
+      bundle.assigneeNames,
+      bundle.stages,
+    );
     if (cur.isNotEmpty) rows.add(('当前审批节点', cur));
     if (rows.isEmpty) return const SizedBox.shrink();
 
@@ -358,7 +399,10 @@ class XfDetPeopleCard extends StatelessWidget {
                   Expanded(
                     child: Text(
                       rows[i].$1,
-                      style: DunesTypography.sans(fontSize: 12, color: DunesColors.text2),
+                      style: DunesTypography.sans(
+                        fontSize: 12,
+                        color: DunesColors.text2,
+                      ),
                     ),
                   ),
                   const SizedBox(width: 10),
@@ -390,19 +434,31 @@ class XfDetPendingHint extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final st = bundle.detail.status.toLowerCase();
-    if (st != 'pending' && st != 'pending_initiate') return const SizedBox.shrink();
+    if (st != 'pending' && st != 'pending_initiate')
+      return const SizedBox.shrink();
     if (bundle.myTodo != null) return const SizedBox.shrink();
-    var who = currentApproverLabel(bundle.trail, bundle.assigneeNames, bundle.stages);
+    var who = currentApproverLabel(
+      bundle.trail,
+      bundle.assigneeNames,
+      bundle.stages,
+    );
     if (who.isEmpty) who = '待分配';
     return XfDetCard(
       title: '审批进行中',
       icon: Icons.hourglass_empty,
       child: Text.rich(
         TextSpan(
-          style: DunesTypography.sans(fontSize: 12, height: 1.5, color: DunesColors.text2),
+          style: DunesTypography.sans(
+            fontSize: 12,
+            height: 1.5,
+            color: DunesColors.text2,
+          ),
           children: [
             const TextSpan(text: '当前节点：'),
-            TextSpan(text: who, style: const TextStyle(fontWeight: FontWeight.w700)),
+            TextSpan(
+              text: who,
+              style: const TextStyle(fontWeight: FontWeight.w700),
+            ),
             const TextSpan(text: '。您可在「流程追踪」查看完整进度。'),
           ],
         ),
@@ -421,11 +477,16 @@ class XfDetPushContext extends StatelessWidget {
     final raw = detail.raw;
     final draftedBy = raw['draftedBy'];
     final pushMessage = (raw['pushMessage'] ?? '').toString();
-    if (draftedBy == null && pushMessage.isEmpty) return const SizedBox.shrink();
-    final by = draftedBy is Map ? Map<String, dynamic>.from(draftedBy) : <String, dynamic>{};
+    if (draftedBy == null && pushMessage.isEmpty)
+      return const SizedBox.shrink();
+    final by = draftedBy is Map
+        ? Map<String, dynamic>.from(draftedBy)
+        : <String, dynamic>{};
     // 代发起人 = 被推送、待确认发起的同事（即我选择的运营部门同事）。
     final designated = raw['designatedInitiator'];
-    final to = designated is Map ? Map<String, dynamic>.from(designated) : <String, dynamic>{};
+    final to = designated is Map
+        ? Map<String, dynamic>.from(designated)
+        : <String, dynamic>{};
     final toName = (to['name'] ?? '').toString();
     final toDept = (to['dept'] ?? '').toString();
     return XfDetCard(
@@ -463,7 +524,9 @@ class XfDetPushContext extends StatelessWidget {
               decoration: BoxDecoration(
                 color: DunesColors.amberSoft.withValues(alpha: 0.35),
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: DunesColors.amber.withValues(alpha: 0.35)),
+                border: Border.all(
+                  color: DunesColors.amber.withValues(alpha: 0.35),
+                ),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -479,7 +542,11 @@ class XfDetPushContext extends StatelessWidget {
                   const SizedBox(height: 4),
                   Text(
                     pushMessage,
-                    style: DunesTypography.sans(fontSize: 12, height: 1.5, color: DunesColors.text2),
+                    style: DunesTypography.sans(
+                      fontSize: 12,
+                      height: 1.5,
+                      color: DunesColors.text2,
+                    ),
                   ),
                 ],
               ),
@@ -497,7 +564,13 @@ class XfDetPushContext extends StatelessWidget {
         children: [
           SizedBox(
             width: 72,
-            child: Text(k, style: DunesTypography.sans(fontSize: 11, color: DunesColors.text3)),
+            child: Text(
+              k,
+              style: DunesTypography.sans(
+                fontSize: 11,
+                color: DunesColors.text3,
+              ),
+            ),
           ),
           Expanded(
             child: Text(
@@ -604,7 +677,11 @@ class _XfDetTabsWrapState extends State<XfDetTabsWrap> {
 }
 
 class XfDetFormSections extends StatelessWidget {
-  const XfDetFormSections({super.key, required this.sections, required this.service});
+  const XfDetFormSections({
+    super.key,
+    required this.sections,
+    required this.service,
+  });
 
   final List<DetailSection> sections;
   final XflowService service;
@@ -612,12 +689,19 @@ class XfDetFormSections extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (sections.isEmpty) {
-      return Text('暂无填报内容', style: DunesTypography.sans(fontSize: 12, color: DunesColors.text3));
+      return Text(
+        '暂无填报内容',
+        style: DunesTypography.sans(fontSize: 12, color: DunesColors.text3),
+      );
     }
     return Column(
       children: [
         for (var si = 0; si < sections.length; si++)
-          _SectionBlock(section: sections[si], sectionIndex: si, service: service),
+          _SectionBlock(
+            section: sections[si],
+            sectionIndex: si,
+            service: service,
+          ),
       ],
     );
   }
@@ -654,7 +738,10 @@ class _SectionBlockState extends State<_SectionBlock> {
         children: [
           Text(
             '${widget.section.title} · ${items.length} 项',
-            style: DunesTypography.sans(fontSize: 13, fontWeight: FontWeight.w600),
+            style: DunesTypography.sans(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+            ),
           ),
           const SizedBox(height: 6),
           for (final item in visible)
@@ -669,14 +756,19 @@ class _SectionBlockState extends State<_SectionBlock> {
                 padding: const EdgeInsets.symmetric(vertical: 9),
                 foregroundColor: DunesColors.accentDeep,
                 backgroundColor: DunesColors.bgSoft,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
               ),
               child: SizedBox(
                 width: double.infinity,
                 child: Text(
                   '展开剩余 $hiddenCount 项',
                   textAlign: TextAlign.center,
-                  style: DunesTypography.sans(fontSize: 12, fontWeight: FontWeight.w600),
+                  style: DunesTypography.sans(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ),
             ),
@@ -698,21 +790,32 @@ class XfDetKv extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 8),
       decoration: BoxDecoration(
         border: Border(
-          bottom: BorderSide(color: DunesColors.borderSoft.withValues(alpha: 0.7)),
+          bottom: BorderSide(
+            color: DunesColors.borderSoft.withValues(alpha: 0.7),
+          ),
         ),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Expanded(
-            child: Text(label, style: DunesTypography.sans(fontSize: 12, color: DunesColors.text2)),
+            child: Text(
+              label,
+              style: DunesTypography.sans(
+                fontSize: 12,
+                color: DunesColors.text2,
+              ),
+            ),
           ),
           const SizedBox(width: 12),
           Flexible(
             child: Text(
               value,
               textAlign: TextAlign.right,
-              style: DunesTypography.sans(fontSize: 12, fontWeight: FontWeight.w500),
+              style: DunesTypography.sans(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+              ),
             ),
           ),
         ],
@@ -739,7 +842,9 @@ class _XfDetKvExpandState extends State<XfDetKvExpand> {
     return Container(
       decoration: BoxDecoration(
         border: Border(
-          bottom: BorderSide(color: DunesColors.borderSoft.withValues(alpha: 0.7)),
+          bottom: BorderSide(
+            color: DunesColors.borderSoft.withValues(alpha: 0.7),
+          ),
         ),
       ),
       child: Column(
@@ -753,7 +858,10 @@ class _XfDetKvExpandState extends State<XfDetKvExpand> {
                   Expanded(
                     child: Text(
                       widget.item.label,
-                      style: DunesTypography.sans(fontSize: 12, color: DunesColors.text2),
+                      style: DunesTypography.sans(
+                        fontSize: 12,
+                        color: DunesColors.text2,
+                      ),
                     ),
                   ),
                   Row(
@@ -761,13 +869,20 @@ class _XfDetKvExpandState extends State<XfDetKvExpand> {
                     children: [
                       Text(
                         widget.item.value,
-                        style: DunesTypography.sans(fontSize: 12, fontWeight: FontWeight.w500),
+                        style: DunesTypography.sans(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                        ),
                       ),
                       const SizedBox(width: 4),
                       AnimatedRotation(
                         turns: _open ? 0.5 : 0,
                         duration: const Duration(milliseconds: 200),
-                        child: Icon(Icons.expand_more, size: 14, color: DunesColors.text3),
+                        child: Icon(
+                          Icons.expand_more,
+                          size: 14,
+                          color: DunesColors.text3,
+                        ),
                       ),
                     ],
                   ),
@@ -796,13 +911,16 @@ class _ExpandBody extends StatelessWidget {
   Widget build(BuildContext context) {
     if (item.field.type == 'upload') {
       return XfDetFileList(
-        items: normalizeUploadItems(item.rawValue)
-            .where((e) => e['status'] != 'error')
-            .toList(growable: false),
+        items: normalizeUploadItems(
+          item.rawValue,
+        ).where((e) => e['status'] != 'error').toList(growable: false),
         service: service,
       );
     }
-    return XfDetTable(field: item.field, rows: normalizeDynamicListValue(item.rawValue));
+    return XfDetTable(
+      field: item.field,
+      rows: normalizeDynamicListValue(item.rawValue),
+    );
   }
 }
 
@@ -821,7 +939,10 @@ class XfDetTable extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (rows.isEmpty) {
-      return Text('暂无明细', style: DunesTypography.sans(fontSize: 11, color: DunesColors.text3));
+      return Text(
+        '暂无明细',
+        style: DunesTypography.sans(fontSize: 11, color: DunesColors.text3),
+      );
     }
     final cols = inferColumns(rows, field);
     if (cols.isEmpty) {
@@ -841,9 +962,9 @@ class XfDetTable extends StatelessWidget {
     final nestedKey = (field.raw['nestedKey'] ?? 'items').toString();
     final nestedCols = field.raw['nestedColumns'] is List
         ? (field.raw['nestedColumns'] as List)
-            .whereType<Map>()
-            .map((e) => Map<String, dynamic>.from(e))
-            .toList(growable: false)
+              .whereType<Map>()
+              .map((e) => Map<String, dynamic>.from(e))
+              .toList(growable: false)
         : const <Map<String, dynamic>>[];
 
     final content = Column(
@@ -920,7 +1041,9 @@ class XfDetTable extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
       decoration: BoxDecoration(
-        border: Border(top: BorderSide(color: DunesColors.borderSoft.withValues(alpha: 0.7))),
+        border: Border(
+          top: BorderSide(color: DunesColors.borderSoft.withValues(alpha: 0.7)),
+        ),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -954,12 +1077,13 @@ class XfDetFileList extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (items.isEmpty) {
-      return Text('暂无文件', style: DunesTypography.sans(fontSize: 11, color: DunesColors.text3));
+      return Text(
+        '暂无文件',
+        style: DunesTypography.sans(fontSize: 11, color: DunesColors.text3),
+      );
     }
     return Column(
-      children: [
-        for (final it in items) _FileItem(item: it, service: service),
-      ],
+      children: [for (final it in items) _FileItem(item: it, service: service)],
     );
   }
 }
@@ -1029,7 +1153,9 @@ class _FileItem extends StatelessWidget {
               borderRadius: BorderRadius.circular(8),
             ),
             child: Icon(
-              _isImage ? Icons.image_outlined : Icons.insert_drive_file_outlined,
+              _isImage
+                  ? Icons.image_outlined
+                  : Icons.insert_drive_file_outlined,
               color: DunesColors.accentDeep,
               size: 20,
             ),
@@ -1043,12 +1169,18 @@ class _FileItem extends StatelessWidget {
                   name,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: DunesTypography.sans(fontSize: 12, fontWeight: FontWeight.w500),
+                  style: DunesTypography.sans(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                  ),
                 ),
                 if (size != null)
                   Text(
                     _formatSize(size),
-                    style: DunesTypography.sans(fontSize: 10, color: DunesColors.text3),
+                    style: DunesTypography.sans(
+                      fontSize: 10,
+                      color: DunesColors.text3,
+                    ),
                   ),
               ],
             ),
@@ -1082,7 +1214,8 @@ class XfDetTrackTimeline extends StatelessWidget {
     final st = detail.status.toLowerCase();
 
     String assigneeLabel(XflowApprovalStep step, String fallback) {
-      if (step.assigneeId > 0 && bundle.assigneeNames.containsKey(step.assigneeId)) {
+      if (step.assigneeId > 0 &&
+          bundle.assigneeNames.containsKey(step.assigneeId)) {
         return '${bundle.assigneeNames[step.assigneeId]} · $fallback';
       }
       if (step.assigneeName.isNotEmpty) {
@@ -1210,7 +1343,10 @@ class _CcRow extends StatelessWidget {
     final role = (item['role'] ?? '').toString();
     final dept = (item['dept'] ?? '').toString();
     final reasons = item['reasons'] is List
-        ? (item['reasons'] as List).map((e) => e.toString()).where((e) => e.isNotEmpty).join(' · ')
+        ? (item['reasons'] as List)
+              .map((e) => e.toString())
+              .where((e) => e.isNotEmpty)
+              .join(' · ')
         : '';
     final metaParts = <String>[
       if (role.isNotEmpty) role,
@@ -1231,14 +1367,21 @@ class _CcRow extends StatelessWidget {
         children: [
           Text(
             name,
-            style: DunesTypography.sans(fontSize: 13, fontWeight: FontWeight.w600),
+            style: DunesTypography.sans(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+            ),
           ),
           if (metaParts.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(top: 3),
               child: Text(
                 metaParts.join(' · '),
-                style: DunesTypography.sans(fontSize: 11, color: DunesColors.text3, height: 1.45),
+                style: DunesTypography.sans(
+                  fontSize: 11,
+                  color: DunesColors.text3,
+                  height: 1.45,
+                ),
               ),
             ),
         ],
@@ -1308,7 +1451,11 @@ class _XfDetApproveCardState extends State<XfDetApproveCard> {
         children: [
           Text(
             '请查看填报内容与流程进度，填写意见后确认。',
-            style: DunesTypography.sans(fontSize: 11.5, color: DunesColors.text3, height: 1.45),
+            style: DunesTypography.sans(
+              fontSize: 11.5,
+              color: DunesColors.text3,
+              height: 1.45,
+            ),
           ),
           const SizedBox(height: 10),
           TextField(
@@ -1318,7 +1465,10 @@ class _XfDetApproveCardState extends State<XfDetApproveCard> {
             onTapOutside: (_) => FocusManager.instance.primaryFocus?.unfocus(),
             decoration: InputDecoration(
               hintText: '请填写审批意见（必填）',
-              hintStyle: DunesTypography.sans(fontSize: 12, color: DunesColors.text3),
+              hintStyle: DunesTypography.sans(
+                fontSize: 12,
+                color: DunesColors.text3,
+              ),
               filled: true,
               fillColor: Colors.white,
               contentPadding: const EdgeInsets.all(10),
@@ -1425,11 +1575,13 @@ class XfDetActions extends StatelessWidget {
     required this.detail,
     required this.canReedit,
     this.canDeleteDraft = false,
+    this.canWithdraw = false,
     this.onDelete,
     this.onPush,
     this.onInitiate,
     this.onReedit,
     this.onVoid,
+    this.onWithdraw,
     this.onReturn,
     this.isDesignatedInitiator = false,
     this.isPusher = false,
@@ -1438,11 +1590,13 @@ class XfDetActions extends StatelessWidget {
   final XflowProposalDetail detail;
   final bool canReedit;
   final bool canDeleteDraft;
+  final bool canWithdraw;
   final VoidCallback? onDelete;
   final VoidCallback? onPush;
   final VoidCallback? onInitiate;
   final VoidCallback? onReedit;
   final VoidCallback? onVoid;
+  final VoidCallback? onWithdraw;
   final VoidCallback? onReturn;
   final bool isDesignatedInitiator;
   final bool isPusher;
@@ -1455,28 +1609,73 @@ class XfDetActions extends StatelessWidget {
     // 草稿：创建人可删除 / 推送给同事。
     if (st == 'draft' && canDeleteDraft) {
       if (onDelete != null) {
-        buttons.add(_ActBtn(label: '删除草稿', icon: Icons.delete_outline, danger: true, onPressed: onDelete!));
+        buttons.add(
+          _ActBtn(
+            label: '删除草稿',
+            icon: Icons.delete_outline,
+            danger: true,
+            onPressed: onDelete!,
+          ),
+        );
       }
       if (onPush != null) {
-        buttons.add(_ActBtn(label: '推送给业务负责人', icon: Icons.send_outlined, onPressed: onPush!));
+        buttons.add(
+          _ActBtn(
+            label: '推送给业务负责人',
+            icon: Icons.send_outlined,
+            onPressed: onPush!,
+          ),
+        );
       }
     }
     // 待发起：仅代发起人(被推送人)可继续填写 / 提交审批 / 退回；推送人只读等待。
     if (st == 'pending_initiate' && isDesignatedInitiator) {
       if (onReedit != null) {
-        buttons.add(_ActBtn(label: '继续填写', icon: Icons.edit_outlined, onPressed: onReedit!));
+        buttons.add(
+          _ActBtn(
+            label: '继续填写',
+            icon: Icons.edit_outlined,
+            onPressed: onReedit!,
+          ),
+        );
       }
       if (onReturn != null) {
-        buttons.add(_ActBtn(label: '退回给推送人', icon: Icons.undo, onPressed: onReturn!));
+        buttons.add(
+          _ActBtn(label: '退回给推送人', icon: Icons.undo, onPressed: onReturn!),
+        );
       }
     }
     if (st == 'rejected' && canReedit) {
       if (onReedit != null) {
-        buttons.add(_ActBtn(label: '重新填写并提交', icon: Icons.edit_outlined, primary: true, onPressed: onReedit!));
+        buttons.add(
+          _ActBtn(
+            label: '重新填写并提交',
+            icon: Icons.edit_outlined,
+            primary: true,
+            onPressed: onReedit!,
+          ),
+        );
       }
       if (onVoid != null) {
-        buttons.add(_ActBtn(label: '作废', icon: Icons.delete_outline, danger: true, onPressed: onVoid!));
+        buttons.add(
+          _ActBtn(
+            label: '作废',
+            icon: Icons.delete_outline,
+            danger: true,
+            onPressed: onVoid!,
+          ),
+        );
       }
+    }
+    if (st == 'pending' && canWithdraw && onWithdraw != null) {
+      buttons.add(
+        _ActBtn(
+          label: '撤回',
+          icon: Icons.undo,
+          danger: true,
+          onPressed: onWithdraw!,
+        ),
+      );
     }
 
     if (buttons.isEmpty) {
@@ -1492,7 +1691,11 @@ class XfDetActions extends StatelessWidget {
           ),
           child: Text(
             '已推送给代发起人，等待对方继续填写并提交审批；对方也可退回给你。',
-            style: DunesTypography.sans(fontSize: 12, height: 1.5, color: DunesColors.text2),
+            style: DunesTypography.sans(
+              fontSize: 12,
+              height: 1.5,
+              color: DunesColors.text2,
+            ),
           ),
         );
       }
@@ -1562,7 +1765,11 @@ class _ActBtn extends StatelessWidget {
                 child: Text(
                   label,
                   textAlign: TextAlign.center,
-                  style: DunesTypography.sans(fontSize: 13, fontWeight: FontWeight.w600, color: fg),
+                  style: DunesTypography.sans(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: fg,
+                  ),
                 ),
               ),
             ],

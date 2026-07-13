@@ -21,6 +21,7 @@ class NativeXflowFormPage extends StatefulWidget {
     required this.templateKey,
     required this.editProposalId,
     required this.onSubmitted,
+    this.editBusinessType = 'PROPOSAL',
     this.backScreen = 'B3',
     this.onDeleted,
   });
@@ -30,6 +31,7 @@ class NativeXflowFormPage extends StatefulWidget {
   final String templateKey;
   final int? editProposalId;
   final void Function(int proposalId) onSubmitted;
+  final String editBusinessType;
 
   /// 返回 / 删除后跳转的目标屏（新建来自 B3，编辑草稿来自 B14）。
   final String backScreen;
@@ -45,6 +47,7 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage> {
   late final XflowService _service;
   XflowTemplateDetail? _template;
   XflowProposalDetail? _editingDetail;
+  XflowSubmissionDetail? _editingSubmission;
   Map<String, dynamic> _detailConfig = const {};
   final Map<String, dynamic> _values = <String, dynamic>{};
   List<Map<String, dynamic>> _ccRules = const [];
@@ -66,6 +69,11 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage> {
 
   bool get _isEditing =>
       widget.editProposalId != null && widget.editProposalId! > 0;
+  bool get _isDynamicSubmission =>
+      _isEditing && widget.editBusinessType.toUpperCase() != 'PROPOSAL';
+  String get _editingStatus => _isDynamicSubmission
+      ? (_editingSubmission?.status.toLowerCase() ?? '')
+      : (_editingDetail?.status.toLowerCase() ?? '');
   bool get _isDelegatedPendingInitiate =>
       _isEditing &&
       (_editingDetail?.status.toLowerCase() == 'pending_initiate');
@@ -80,6 +88,7 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage> {
 
   /// 仅创建人本人的草稿(DRAFT)可删除；已推送的「待发起」由代发起人处理，不在此删除。
   bool get _canDeleteDraft {
+    if (_isDynamicSubmission) return false;
     if (!_isEditing) return false;
     final st = _editingDetail?.status.toUpperCase() ?? '';
     if (st != 'DRAFT') return false;
@@ -113,7 +122,14 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage> {
         ..clear()
         ..addAll(await _service.loadLocalDraft());
       XflowProposalDetail? detail;
-      if (_isEditing) {
+      if (_isDynamicSubmission) {
+        final submission = await _service.fetchSubmissionDetail(
+          businessType: widget.editBusinessType,
+          businessId: widget.editProposalId!,
+        );
+        _editingSubmission = submission;
+        _values.addAll(submission.formData);
+      } else if (_isEditing) {
         detail = await _service.fetchProposalDetail(widget.editProposalId!);
         _mergeProposalToForm(detail);
       }
@@ -180,7 +196,7 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage> {
       );
       return;
     }
-    final status = _editingDetail?.status.toLowerCase() ?? '';
+    final status = _editingStatus;
     if (_isEditing && status == 'pending_initiate') {
       final ok = await confirmInitiateProposal(context);
       if (!ok || !mounted) return;
@@ -191,7 +207,13 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage> {
     setState(() => _submitting = true);
     try {
       Map<String, dynamic> res;
-      if (_isEditing && status == 'rejected') {
+      if (_isDynamicSubmission && status == 'draft') {
+        res = await _service.resubmitSubmission(
+          businessType: widget.editBusinessType,
+          businessId: widget.editProposalId!,
+          formValues: _values,
+        );
+      } else if (_isEditing && status == 'rejected') {
         res = await _service.resubmitProposal(
           proposalId: widget.editProposalId!,
           formValues: _values,
@@ -214,7 +236,7 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage> {
         );
         // 继续填写的服务端草稿在提交后会生成新的正式提案，
         // 删除原草稿以避免「我发起的」列表里残留重复的草稿项。
-        if (_isEditing && status == 'draft') {
+        if (_isEditing && status == 'draft' && !_isDynamicSubmission) {
           try {
             await _service.deleteProposal(widget.editProposalId!);
           } catch (_) {}
@@ -299,6 +321,16 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage> {
   Future<void> _saveDraft() async {
     showDunesToast(context, '正在保存草稿到服务端…');
     try {
+      if (_isDynamicSubmission) {
+        await _service.updateSubmissionDraft(
+          businessType: widget.editBusinessType,
+          businessId: widget.editProposalId!,
+          formValues: _values,
+        );
+        if (!mounted) return;
+        showDunesToast(context, '草稿已保存');
+        return;
+      }
       final res = await _service.submitDraft(
         formValues: _values,
         proposalId: _draftProposalId ?? widget.editProposalId,

@@ -45,7 +45,7 @@ class DunesApp extends StatelessWidget {
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   installWebTextInputGuard();
-  if (isWindowsDesktopCommOnly) {
+  if (isDesktopCommOnly) {
     await initWindowsDesktopTray();
   }
   if (!kIsWeb) {

@@ -33,6 +33,7 @@ class AppUpdateService {
       TargetPlatform.android => 'android',
       TargetPlatform.iOS => 'ios',
       TargetPlatform.windows => 'windows',
+      TargetPlatform.macOS => 'macos',
       _ => null,
     };
     if (platform == null) return null;

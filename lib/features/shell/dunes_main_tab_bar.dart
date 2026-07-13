@@ -71,7 +71,7 @@ class _DunesMainTabBarState extends State<DunesMainTabBar> {
 
   /// 外部用户或 Windows 桌面：不展示千机 / 灯塔。
   bool get _hideWorkbenchTabs =>
-      widget.chatOnlyMode || isWindowsDesktopCommOnly;
+      widget.chatOnlyMode || isDesktopCommOnly;
 
   @override
   Widget build(BuildContext context) {

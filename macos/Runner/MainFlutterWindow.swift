@@ -8,6 +8,12 @@ class MainFlutterWindow: NSWindow {
     self.contentViewController = flutterViewController
     self.setFrame(windowFrame, display: true)
 
+    // 与 Windows 桌面端接近的默认窗口尺寸（Dart 侧 window_manager 还会再设一次）
+    self.setContentSize(NSSize(width: 1180, height: 760))
+    self.minSize = NSSize(width: 960, height: 640)
+    self.center()
+    self.title = "沙丘"
+
     RegisterGeneratedPlugins(registry: flutterViewController)
 
     super.awakeFromNib()

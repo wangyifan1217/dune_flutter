@@ -2630,8 +2630,9 @@ class _NativeChatViewState extends State<NativeChatView>
             // Windows desktop MVP deliberately has no recorder implementation.
             // Keep the text/file/image IM path identical to mobile while hiding
             // the mobile hold-to-record control entirely.
-            final voiceEnabled =
-                !kIsWeb && defaultTargetPlatform != TargetPlatform.windows;
+            final voiceEnabled = !kIsWeb &&
+                defaultTargetPlatform != TargetPlatform.windows &&
+                defaultTargetPlatform != TargetPlatform.macOS;
             final voiceBlocked = !voiceEnabled || locked || meetingLive;
             final effectiveVoiceMode = voiceBlocked ? false : _voiceMode;
             return ChatInputBar(

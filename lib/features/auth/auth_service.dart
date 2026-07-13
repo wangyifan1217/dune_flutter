@@ -18,7 +18,7 @@ class AuthService {
   /// Windows 桌面用独立 channel，避免与手机 APP（app）互踢。
   /// admin-web 使用 pc，三者各占一槽。
   static String get loginChannel =>
-      isWindowsDesktopCommOnly ? 'desktop' : 'app';
+      isDesktopCommOnly ? 'desktop' : 'app';
 
   static String _defaultApiBase() {
     const fromEnv = String.fromEnvironment('DUNES_API_BASE');

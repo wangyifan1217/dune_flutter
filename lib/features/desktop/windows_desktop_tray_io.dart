@@ -1,12 +1,14 @@
 import 'dart:async';
 import 'dart:io' show Platform, exit;
+import 'dart:ui' show Size;
 
 import 'package:flutter/foundation.dart';
 import 'package:tray_manager/tray_manager.dart';
 import 'package:window_manager/window_manager.dart';
 
-const _trayIcon = 'assets/images/tray_icon.ico';
-const _trayIconBlank = 'assets/images/tray_icon_blank.ico';
+const _trayIconWin = 'assets/images/tray_icon.ico';
+const _trayIconWinBlank = 'assets/images/tray_icon_blank.ico';
+const _trayIconMac = 'assets/images/app_logo.png';
 
 Future<void> initWindowsDesktopTray() => WindowsDesktopTray.instance.init();
 
@@ -31,18 +33,26 @@ class WindowsDesktopTray with WindowListener, TrayListener {
   bool _pendingAlert = false;
   int _unread = 0;
   Timer? _flashTimer;
+  String _trayIcon = _trayIconWin;
+  String _trayIconBlank = _trayIconWinBlank;
 
   Future<void> init() async {
-    if (kIsWeb || !Platform.isWindows || _ready) return;
+    if (kIsWeb || !(Platform.isWindows || Platform.isMacOS) || _ready) return;
 
     await windowManager.ensureInitialized();
     windowManager.addListener(this);
 
-    // 窗口就绪后再拦截关闭，避免插件尚未挂上 HWND 时点 X 直接退出。
-    windowManager.waitUntilReadyToShow(const WindowOptions(
+    // 默认宽窗，保证进入双栏聊天布局（≥900）；可再拖拽缩放。
+    const windowOptions = WindowOptions(
+      size: Size(1180, 760),
+      minimumSize: Size(960, 640),
+      center: true,
       skipTaskbar: false,
       title: '沙丘',
-    ), () async {
+    );
+
+    // 窗口就绪后再拦截关闭，避免插件尚未挂上 HWND 时点 X 直接退出。
+    windowManager.waitUntilReadyToShow(windowOptions, () async {
       await windowManager.setPreventClose(true);
       await windowManager.setTitle('沙丘');
       await windowManager.show();
@@ -50,6 +60,15 @@ class WindowsDesktopTray with WindowListener, TrayListener {
     });
 
     await windowManager.setPreventClose(true);
+
+    if (Platform.isMacOS) {
+      // macOS 托盘更稳妥用 png；暂无 blank 资源时闪烁仍切换同一图标（无害）。
+      _trayIcon = _trayIconMac;
+      _trayIconBlank = _trayIconMac;
+    } else {
+      _trayIcon = _trayIconWin;
+      _trayIconBlank = _trayIconWinBlank;
+    }
 
     await trayManager.setIcon(_trayIcon);
     await trayManager.setToolTip('沙丘');

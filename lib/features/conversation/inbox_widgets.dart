@@ -253,6 +253,7 @@ class ChatInboxRow extends StatelessWidget {
     this.sysTag,
     this.showDivider = true,
     this.previewGenerating = false,
+    this.selected = false,
   });
 
   final ChatInboxRowKind kind;
@@ -276,6 +277,7 @@ class ChatInboxRow extends StatelessWidget {
   final String? sysTag;
   final bool showDivider;
   final bool previewGenerating;
+  final bool selected;
 
   @override
   Widget build(BuildContext context) {
@@ -287,7 +289,7 @@ class ChatInboxRow extends StatelessWidget {
     return Column(
       children: [
         Material(
-          color: DunesColors.bgApp,
+          color: selected ? DunesColors.accentSoft : DunesColors.bgApp,
           child: InkWell(
             onTap: onTap,
             child: Padding(

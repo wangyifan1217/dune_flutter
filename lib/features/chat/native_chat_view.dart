@@ -11,8 +11,10 @@ import 'package:flutter/rendering.dart' show ScrollDirection;
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:mime/mime.dart';
+import 'package:pasteboard/pasteboard.dart';
 import 'package:permission_handler/permission_handler.dart';
 
+import '../../core/layout/chat_layout.dart';
 import '../../core/theme/dunes_theme.dart';
 import '../../core/util/friendly_error.dart';
 import '../../core/util/native_permissions.dart';
@@ -58,17 +60,15 @@ class _ChatScrollMetrics {
   static const double _screenChromeHeight = 168;
 
   /// 一屏大约能看到的消息条数（6~14）。
-  int get visibleMessageEstimate => (listViewportHeight / _kChatMessageRowHeight)
-      .ceil()
-      .clamp(6, 14);
+  int get visibleMessageEstimate =>
+      (listViewportHeight / _kChatMessageRowHeight).ceil().clamp(6, 14);
 
   /// 首屏：约 1.8 屏，15~24 条。
   int get initialPageSize =>
       (visibleMessageEstimate * 1.8).round().clamp(15, 24);
 
   /// 上滑/下拉分页：约 1.2 屏，12~18 条。
-  int get batchPageSize =>
-      (visibleMessageEstimate * 1.2).round().clamp(12, 18);
+  int get batchPageSize => (visibleMessageEstimate * 1.2).round().clamp(12, 18);
 
   /// 距顶部剩余多少时预拉下一批（约 0.55 屏）。
   double get prefetchLead => listViewportHeight * 0.55;
@@ -128,22 +128,18 @@ class _MessageQuickAction {
   final IconData icon;
 }
 
-typedef _ForwardUnit =
-    ({
-      String senderName,
-      String timeLabel,
-      String text,
-      String kind,
-      Map<String, dynamic>? payload,
-      String? avatarPreset,
-      String? avatarObjectKey,
-    });
+typedef _ForwardUnit = ({
+  String senderName,
+  String timeLabel,
+  String text,
+  String kind,
+  Map<String, dynamic>? payload,
+  String? avatarPreset,
+  String? avatarObjectKey,
+});
 
 class _ForwardBundle {
-  const _ForwardBundle({
-    required this.title,
-    required this.entries,
-  });
+  const _ForwardBundle({required this.title, required this.entries});
 
   final String title;
   final List<_ForwardEntry> entries;
@@ -186,6 +182,7 @@ class NativeChatView extends StatefulWidget {
     this.onOpenCall,
     this.onConversationRead,
     this.autoMarkRead = false,
+    this.showBackButton = true,
   });
 
   final AuthSession session;
@@ -202,6 +199,8 @@ class NativeChatView extends StatefulWidget {
   final VoidCallback? onOpenCall;
   final ValueChanged<int>? onConversationRead;
   final bool autoMarkRead;
+  /// 双栏布局下列表已可见时隐藏返回按钮。
+  final bool showBackButton;
 
   @override
   State<NativeChatView> createState() => _NativeChatViewState();
@@ -236,6 +235,7 @@ class _NativeChatViewState extends State<NativeChatView>
   bool _recordWillCancel = false;
   Offset? _recordFocalPoint;
   bool _loadingOlder = false;
+
   /// prepend 历史消息后正在恢复滚动位置，避免仍停在 maxScrollExtent 连续拉完全部历史。
   bool _olderScrollRestorePending = false;
   int _olderLoadCooldownUntilMs = 0;
@@ -247,6 +247,7 @@ class _NativeChatViewState extends State<NativeChatView>
   bool _loadingNewer = false;
   bool _locatedMode = false;
   bool _forceLatestMode = false;
+
   /// 进入会话后需持续尝试滚到底，直到成功或用户手动滚动（解决 ListView/图片懒加载竞态）。
   bool _enterStickBottomPending = true;
   int _scrollBottomGen = 0;
@@ -255,9 +256,7 @@ class _NativeChatViewState extends State<NativeChatView>
   int _lastMarkedReadNewestId = 0;
   bool _wasNearBottom = true;
   bool _userInteractedWithScroll = false;
-  bool _manualScrollInProgress = false;
   bool _userScrollActive = false;
-  int _lastManualScrollAtMs = 0;
   bool _hasMore = false;
   bool _hasNewer = false;
   int? _highlightMessageId;
@@ -306,7 +305,9 @@ class _NativeChatViewState extends State<NativeChatView>
     _bootRealtime();
     unawaited(_loadSelfAvatar());
     userAvatarRefresh.addListener(_onSelfAvatarUpdated);
-    MeetingLiveController.instance.active.addListener(_onMeetingLiveActiveChanged);
+    MeetingLiveController.instance.active.addListener(
+      _onMeetingLiveActiveChanged,
+    );
   }
 
   void _onMeetingLiveActiveChanged() {
@@ -321,8 +322,9 @@ class _NativeChatViewState extends State<NativeChatView>
     if (snap == null || !mounted) return;
     setState(() {
       _selfAvatarPreset = snap.avatarPreset.isEmpty ? null : snap.avatarPreset;
-      _selfAvatarObjectKey =
-          snap.avatarObjectKey.isEmpty ? null : snap.avatarObjectKey;
+      _selfAvatarObjectKey = snap.avatarObjectKey.isEmpty
+          ? null
+          : snap.avatarObjectKey;
       _selfAvatarUrl = snap.avatarUrl.isEmpty ? null : snap.avatarUrl;
       if (_messages.isNotEmpty) {
         _messages = _enrichMessages(_messages);
@@ -347,10 +349,12 @@ class _NativeChatViewState extends State<NativeChatView>
     final cached = userAvatarRefresh.snapshotFor(widget.session.userId);
     if (cached != null && mounted) {
       setState(() {
-        _selfAvatarPreset =
-            cached.avatarPreset.isEmpty ? null : cached.avatarPreset;
-        _selfAvatarObjectKey =
-            cached.avatarObjectKey.isEmpty ? null : cached.avatarObjectKey;
+        _selfAvatarPreset = cached.avatarPreset.isEmpty
+            ? null
+            : cached.avatarPreset;
+        _selfAvatarObjectKey = cached.avatarObjectKey.isEmpty
+            ? null
+            : cached.avatarObjectKey;
         _selfAvatarUrl = cached.avatarUrl.isEmpty ? null : cached.avatarUrl;
       });
     }
@@ -444,7 +448,9 @@ class _NativeChatViewState extends State<NativeChatView>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     userAvatarRefresh.removeListener(_onSelfAvatarUpdated);
-    MeetingLiveController.instance.active.removeListener(_onMeetingLiveActiveChanged);
+    MeetingLiveController.instance.active.removeListener(
+      _onMeetingLiveActiveChanged,
+    );
     _rtRefreshDebounce?.cancel();
     _rtSub?.cancel();
     _onlineSub?.cancel();
@@ -472,19 +478,16 @@ class _NativeChatViewState extends State<NativeChatView>
     }
     final pos = _scrollController.position;
     // reverse 列表：scroll≈0 为最新消息（靠近输入框），maxScrollExtent 为历史方向。
+    // PC 鼠标滚轮不会产生 dragDetails，但仍应触发加载更早消息。
     final nowMs = DateTime.now().millisecondsSinceEpoch;
-    final recentlyManualScroll = nowMs - _lastManualScrollAtMs <= 1500;
-    if ((_manualScrollInProgress || recentlyManualScroll) &&
-        nowMs >= _olderLoadCooldownUntilMs &&
+    if (nowMs >= _olderLoadCooldownUntilMs &&
+        pos.maxScrollExtent > 0 &&
         pos.pixels >=
             pos.maxScrollExtent -
                 math.min(180.0, pos.viewportDimension * 0.24)) {
       unawaited(_loadOlder());
     }
-    if (_locatedMode &&
-        _hasNewer &&
-        !_loadingNewer &&
-        pos.pixels <= 72) {
+    if (_locatedMode && _hasNewer && !_loadingNewer && pos.pixels <= 72) {
       unawaited(_loadNewer());
     }
     // 手指拖动或惯性滑动期间不刷新 UI，避免滚动中 setState 导致卡顿。
@@ -770,23 +773,18 @@ class _NativeChatViewState extends State<NativeChatView>
       _enterStickBottomPending = false;
     }
     if (notification is ScrollStartNotification) {
-      _manualScrollInProgress = notification.dragDetails != null;
-      if (_manualScrollInProgress) {
+      if (notification.dragDetails != null) {
         _userScrollActive = true;
-        _lastManualScrollAtMs = DateTime.now().millisecondsSinceEpoch;
       }
     } else if (notification is ScrollUpdateNotification) {
       if (notification.dragDetails != null) {
-        _manualScrollInProgress = true;
         _userScrollActive = true;
-        _lastManualScrollAtMs = DateTime.now().millisecondsSinceEpoch;
       }
     } else if (notification is UserScrollNotification) {
       if (notification.direction != ScrollDirection.idle) {
         _userScrollActive = true;
       }
     } else if (notification is ScrollEndNotification) {
-      _manualScrollInProgress = false;
       _userScrollActive = false;
       _updateStickBottomState();
       if (_canMarkReadNow && _isNearBottom) {
@@ -804,9 +802,15 @@ class _NativeChatViewState extends State<NativeChatView>
 
   int get _listFooterCount => (_locatedMode && _hasNewer) ? 1 : 0;
 
+  /// reverse 列表视觉顶部：加载更早消息入口（对齐 admin-web）。
+  int get _listHeaderCount => _hasMore ? 1 : 0;
+
   _ChatListEntry? _entryForListIndex(int index, List<_ChatListEntry> entries) {
     final footer = _listFooterCount;
+    final header = _listHeaderCount;
     if (footer > 0 && index == 0) return null;
+    final contentCount = entries.length + footer;
+    if (header > 0 && index >= contentCount) return null;
     final adj = index - footer;
     final entryIndex = entries.length - 1 - adj;
     if (entryIndex < 0 || entryIndex >= entries.length) return null;
@@ -874,7 +878,7 @@ class _NativeChatViewState extends State<NativeChatView>
 
   void _scrollToListIndex(int listIndex, List<_ChatListEntry> entries) {
     if (!_scrollController.hasClients) return;
-    final total = entries.length + _listFooterCount;
+    final total = entries.length + _listFooterCount + _listHeaderCount;
     if (total <= 1 || listIndex < 0 || listIndex >= total) return;
     final max = _scrollController.position.maxScrollExtent;
     final ratio = listIndex / (total - 1);
@@ -1030,10 +1034,7 @@ class _NativeChatViewState extends State<NativeChatView>
         lastDivider = label;
       }
       entries.add(
-        _ChatListEntry.message(
-          m,
-          showSenderMeta: !_isSystemKind(m.kind),
-        ),
+        _ChatListEntry.message(m, showSenderMeta: !_isSystemKind(m.kind)),
       );
     }
     return entries;
@@ -1141,14 +1142,15 @@ class _NativeChatViewState extends State<NativeChatView>
         ..sort((a, b) => a.id.compareTo(b.id));
       if (!mounted) return;
       final conversationChanged = _conversation?.id != conv.id;
-      final preservePaginatedHistory = silent &&
+      final preservePaginatedHistory =
+          silent &&
           _bootstrapped &&
           !conversationChanged &&
           focusId <= 0 &&
           !_isNearBottom;
       final nextMessages = preservePaginatedHistory
           ? (_enrichMessages(_mergeMessages(_messages, msgs), conv)
-            ..sort((a, b) => a.id.compareTo(b.id)))
+              ..sort((a, b) => a.id.compareTo(b.id)))
           : msgs;
       setState(() {
         if (conversationChanged) {
@@ -1198,7 +1200,7 @@ class _NativeChatViewState extends State<NativeChatView>
 
   int? _topVisibleMessageId() {
     final entries = _buildListEntries();
-    final total = entries.length + _listFooterCount;
+    final total = entries.length + _listFooterCount + _listHeaderCount;
     if (total <= 0 || !_scrollController.hasClients) return null;
     final pos = _scrollController.position;
     if (pos.maxScrollExtent <= 0) {
@@ -1212,8 +1214,7 @@ class _NativeChatViewState extends State<NativeChatView>
     final topRatio =
         ((pos.pixels + pos.viewportDimension * 0.1) / pos.maxScrollExtent)
             .clamp(0.0, 1.0);
-    final listIndex =
-        (topRatio * (total - 1)).round().clamp(0, total - 1);
+    final listIndex = (topRatio * (total - 1)).round().clamp(0, total - 1);
     return _entryForListIndex(listIndex, entries)?.message?.id;
   }
 
@@ -1245,11 +1246,7 @@ class _NativeChatViewState extends State<NativeChatView>
       }
       final ctx = _scrollRestoreKeys[anchorId]?.currentContext;
       if (ctx != null) {
-        Scrollable.ensureVisible(
-          ctx,
-          alignment: 0.06,
-          duration: Duration.zero,
-        );
+        Scrollable.ensureVisible(ctx, alignment: 0.06, duration: Duration.zero);
         _finishOlderScrollRestore();
         return;
       }
@@ -1330,8 +1327,7 @@ class _NativeChatViewState extends State<NativeChatView>
         _loadingOlder = false;
       });
       _olderScrollRestorePending = true;
-      _olderLoadCooldownUntilMs =
-          DateTime.now().millisecondsSinceEpoch + 600;
+      _olderLoadCooldownUntilMs = DateTime.now().millisecondsSinceEpoch + 600;
       _ensureAnchorVisibleAfterOlderLoad(
         anchorMessageId,
         fallbackPixels: _olderScrollHoldPixels,
@@ -1452,7 +1448,7 @@ class _NativeChatViewState extends State<NativeChatView>
       final entries = _buildListEntries();
       final listIndex = _listIndexForMessageId(messageId, entries);
       if (listIndex != null && _scrollController.hasClients) {
-        final total = entries.length + _listFooterCount;
+        final total = entries.length + _listFooterCount + _listHeaderCount;
         if (total > 1) {
           final max = _scrollController.position.maxScrollExtent;
           final ratio = listIndex / (total - 1);
@@ -1584,6 +1580,7 @@ class _NativeChatViewState extends State<NativeChatView>
       if (!mounted) return;
       _scrollBottom(force: true, animated: animated, gentle: true);
     }
+
     snap(animated: true);
     WidgetsBinding.instance.addPostFrameCallback((_) => snap());
     Future<void>.delayed(const Duration(milliseconds: 280), () {
@@ -1683,15 +1680,8 @@ class _NativeChatViewState extends State<NativeChatView>
     return false;
   }
 
-  Future<
-      ({
-        Uint8List bytes,
-        String fileName,
-        String mimeType,
-      })?> _prepareChatImagePreview(
-    Uint8List bytes,
-    String fileName,
-  ) async {
+  Future<({Uint8List bytes, String fileName, String mimeType})?>
+  _prepareChatImagePreview(Uint8List bytes, String fileName) async {
     final preview = await buildChatImagePreview(bytes, fileName: fileName);
     if (preview == null) return null;
     return (
@@ -1706,7 +1696,8 @@ class _NativeChatViewState extends State<NativeChatView>
     if (conv == null || _sending) return;
     if (source == ImageSource.camera && !await _ensureCameraPermission())
       return;
-    if (source == ImageSource.gallery && !await _ensurePhotosPermission()) return;
+    if (source == ImageSource.gallery && !await _ensurePhotosPermission())
+      return;
     final picked = await _imagePicker.pickImage(
       source: source,
       maxWidth: kChatImagePickMaxEdge,
@@ -1742,6 +1733,75 @@ class _NativeChatViewState extends State<NativeChatView>
     });
   }
 
+  /// 粘贴图片（对齐 admin-web ChatComposer onPaste）。
+  Future<bool> _attemptPasteImage() async {
+    if (_sending || _conversation == null || _conversation!.dissolved) {
+      return false;
+    }
+    try {
+      final image = await Pasteboard.image;
+      if (image != null && image.isNotEmpty) {
+        await _sendPastedImageBytes(image);
+        return true;
+      }
+      if (kIsWeb) return false;
+      final paths = await Pasteboard.files();
+      for (final path in paths) {
+        final lower = path.toLowerCase();
+        if (!(lower.endsWith('.png') ||
+            lower.endsWith('.jpg') ||
+            lower.endsWith('.jpeg') ||
+            lower.endsWith('.webp') ||
+            lower.endsWith('.gif') ||
+            lower.endsWith('.bmp'))) {
+          continue;
+        }
+        final file = XFile(path);
+        final bytes = await file.readAsBytes();
+        if (bytes.isEmpty) continue;
+        final name = path.replaceAll('\\', '/').split('/').last;
+        await _sendPastedImageBytes(bytes, fileName: name);
+        return true;
+      }
+    } catch (e) {
+      debugPrint('[Chat] paste image failed: $e');
+    }
+    return false;
+  }
+
+  Future<void> _sendPastedImageBytes(
+    Uint8List bytes, {
+    String? fileName,
+  }) async {
+    final conv = _conversation;
+    if (conv == null || _sending) return;
+    var name =
+        fileName ??
+        'paste-${DateTime.now().millisecondsSinceEpoch}.png';
+    var mimeType = lookupMimeType(name) ?? 'image/png';
+    if (!chatImageShouldSkipEditor(fileName: name, mimeType: mimeType)) {
+      if (!mounted) return;
+      final edited = await openChatImageEditor(context, bytes: bytes);
+      if (edited == null) return;
+      bytes = edited;
+      name = chatImageEditedFileName(name);
+      mimeType = lookupMimeType(name) ?? 'image/jpeg';
+    }
+    if (!_checkSizeLimit(bytes.length, _maxImageBytes, name)) return;
+    await _guardSend(() async {
+      _beginUpload('上传图片');
+      await _service.sendImage(
+        conversationId: conv.id,
+        bytes: bytes,
+        fileName: name,
+        mimeType: mimeType,
+        sourceLabel: '粘贴',
+        preparePreview: () => _prepareChatImagePreview(bytes, name),
+        onProgress: (p) => _setUploadProgress(p),
+      );
+    });
+  }
+
   Future<void> _sendMultiImagesFromGallery() async {
     final conv = _conversation;
     if (conv == null || _sending) return;
@@ -1768,14 +1828,19 @@ class _NativeChatViewState extends State<NativeChatView>
     List<ChatImageDraft> toSend;
     if (drafts.length == 1 &&
         !chatImageShouldSkipEditor(fileName: drafts.first.fileName)) {
-      final edited =
-          await openChatImageEditor(context, bytes: drafts.first.bytes);
+      final edited = await openChatImageEditor(
+        context,
+        bytes: drafts.first.bytes,
+      );
       if (edited == null) return;
       drafts.first.bytes = edited;
       drafts.first.fileName = chatImageEditedFileName(drafts.first.fileName);
       toSend = drafts;
     } else {
-      final confirmed = await openChatImageBatchPreview(context, drafts: drafts);
+      final confirmed = await openChatImageBatchPreview(
+        context,
+        drafts: drafts,
+      );
       if (confirmed == null || confirmed.isEmpty) return;
       toSend = confirmed;
     }
@@ -2286,16 +2351,19 @@ class _NativeChatViewState extends State<NativeChatView>
         final safeTop = media.padding.top + 8;
         final safeBottom = size.height - media.padding.bottom - 8;
         final menuWidth = math.min(size.width - 24, 324.0).toDouble();
-        final left = (anchor == null
-            ? (size.width - menuWidth) / 2
-            : (anchor.dx - menuWidth / 2).clamp(12.0, size.width - menuWidth - 12))
-            .toDouble();
-        final preferredTop = anchor == null ? size.height * 0.35 : anchor.dy - 136;
+        final left =
+            (anchor == null
+                    ? (size.width - menuWidth) / 2
+                    : (anchor.dx - menuWidth / 2).clamp(
+                        12.0,
+                        size.width - menuWidth - 12,
+                      ))
+                .toDouble();
+        final preferredTop = anchor == null
+            ? size.height * 0.35
+            : anchor.dy - 136;
         final top = preferredTop
-            .clamp(
-          safeTop,
-          math.max(safeTop, safeBottom - 190),
-        )
+            .clamp(safeTop, math.max(safeTop, safeBottom - 190))
             .toDouble();
         return SafeArea(
           child: Stack(
@@ -2327,7 +2395,9 @@ class _NativeChatViewState extends State<NativeChatView>
                                   borderRadius: BorderRadius.circular(8),
                                   onTap: () => Navigator.of(ctx).pop(item.id),
                                   child: Padding(
-                                    padding: const EdgeInsets.symmetric(vertical: 4),
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 4,
+                                    ),
                                     child: Column(
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
@@ -2363,7 +2433,10 @@ class _NativeChatViewState extends State<NativeChatView>
         );
       },
       transitionBuilder: (context, animation, _, child) {
-        final curve = CurvedAnimation(parent: animation, curve: Curves.easeOutCubic);
+        final curve = CurvedAnimation(
+          parent: animation,
+          curve: Curves.easeOutCubic,
+        );
         return FadeTransition(
           opacity: curve,
           child: ScaleTransition(
@@ -2532,10 +2605,7 @@ class _NativeChatViewState extends State<NativeChatView>
     }
   }
 
-  Widget _buildComposerDock({
-    required bool locked,
-    required String inputHint,
-  }) {
+  Widget _buildComposerDock({required bool locked, required String inputHint}) {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -2543,9 +2613,7 @@ class _NativeChatViewState extends State<NativeChatView>
           onCamera: locked || _sending
               ? () {}
               : () => _sendImageFrom(ImageSource.camera, '拍照'),
-          onAlbum: locked || _sending
-              ? () {}
-              : _sendMultiImagesFromGallery,
+          onAlbum: locked || _sending ? () {} : _sendMultiImagesFromGallery,
           onFile: locked || _sending ? () {} : _sendFile,
           onApproval: () => showDunesSoonToast(context),
           onAt: locked ? null : _pickAtMember,
@@ -2555,23 +2623,27 @@ class _NativeChatViewState extends State<NativeChatView>
           showVideo: !_isPrivate,
         ),
         if (_quoteDraft != null && !_quoteDraft!.isEmpty && !locked)
-          ChatQuotePreviewBar(
-            quote: _quoteDraft!,
-            onCancel: _clearQuoteDraft,
-          ),
+          ChatQuotePreviewBar(quote: _quoteDraft!, onCancel: _clearQuoteDraft),
         ValueListenableBuilder<bool>(
           valueListenable: MeetingLiveController.instance.active,
           builder: (context, meetingLive, _) {
-            final voiceBlocked = locked || meetingLive;
+            // Windows desktop MVP deliberately has no recorder implementation.
+            // Keep the text/file/image IM path identical to mobile while hiding
+            // the mobile hold-to-record control entirely.
+            final voiceEnabled =
+                !kIsWeb && defaultTargetPlatform != TargetPlatform.windows;
+            final voiceBlocked = !voiceEnabled || locked || meetingLive;
             final effectiveVoiceMode = voiceBlocked ? false : _voiceMode;
             return ChatInputBar(
               controller: _inputController,
               focusNode: _inputFocusNode,
               onInputFocused: _scrollToLatestAfterKeyboard,
               voiceMode: effectiveVoiceMode,
+              voiceEnabled: voiceEnabled,
               sending: _sending,
               enabled: !locked,
               hintText: inputHint,
+              onAttemptPasteImage: locked ? null : _attemptPasteImage,
               onToggleVoice: voiceBlocked
                   ? () {
                       if (meetingLive) {
@@ -2587,10 +2659,9 @@ class _NativeChatViewState extends State<NativeChatView>
               recording: _recording,
               recordWillCancel: _recordWillCancel,
               recordDurationMs: _recordDurationMs,
-              onVoiceHoldStart:
-                  voiceBlocked
-                      ? null
-                      : (details) => _startHoldRecord(details.globalPosition),
+              onVoiceHoldStart: voiceBlocked
+                  ? null
+                  : (details) => _startHoldRecord(details.globalPosition),
               onVoiceHoldMove: _onRecordMove,
               onVoiceHoldEnd: (_) => _finishHoldRecord(),
               onVoiceHoldCancel: () =>
@@ -2617,7 +2688,11 @@ class _NativeChatViewState extends State<NativeChatView>
     await _guardSend(() async {
       _beginUpload('发送 GIF');
       final bytes = await _giphyService.downloadGifBytes(gif);
-      if (!_checkSizeLimit(bytes.length, _maxImageBytes, 'giphy_${gif.id}.gif')) {
+      if (!_checkSizeLimit(
+        bytes.length,
+        _maxImageBytes,
+        'giphy_${gif.id}.gif',
+      )) {
         return;
       }
       final fileName = gif.id.isNotEmpty
@@ -2721,10 +2796,11 @@ class _NativeChatViewState extends State<NativeChatView>
 
   List<NativeChatMessage> get _multiSelectedMessages {
     if (_multiSelectedMessageIds.isEmpty) return const <NativeChatMessage>[];
-    final picked = _messages
-        .where((m) => _multiSelectedMessageIds.contains(m.id))
-        .toList(growable: false)
-      ..sort((a, b) => a.id.compareTo(b.id));
+    final picked =
+        _messages
+            .where((m) => _multiSelectedMessageIds.contains(m.id))
+            .toList(growable: false)
+          ..sort((a, b) => a.id.compareTo(b.id));
     return picked;
   }
 
@@ -2758,7 +2834,9 @@ class _NativeChatViewState extends State<NativeChatView>
     _enterMessageMultiSelect(initialMessageId: message.id);
   }
 
-  List<_ForwardUnit> _forwardUnitsFromMessages(List<NativeChatMessage> messages) {
+  List<_ForwardUnit> _forwardUnitsFromMessages(
+    List<NativeChatMessage> messages,
+  ) {
     return messages
         .map((m) {
           final text = _messageForwardText(m).trim();
@@ -2769,7 +2847,9 @@ class _NativeChatViewState extends State<NativeChatView>
             payload = Map<String, dynamic>.from(m.payload!);
           } else if (m.payload?['forward'] is Map) {
             payload = <String, dynamic>{
-              'forward': Map<String, dynamic>.from(m.payload!['forward'] as Map),
+              'forward': Map<String, dynamic>.from(
+                m.payload!['forward'] as Map,
+              ),
             };
           }
           return (
@@ -2984,11 +3064,13 @@ class _NativeChatViewState extends State<NativeChatView>
             final q = keyword.trim().toLowerCase();
             final filtered = q.isEmpty
                 ? candidates
-                : candidates.where((c) {
-                    final t = c.displayTitle.toLowerCase();
-                    final p = c.preview.toLowerCase();
-                    return t.contains(q) || p.contains(q);
-                  }).toList(growable: false);
+                : candidates
+                      .where((c) {
+                        final t = c.displayTitle.toLowerCase();
+                        final p = c.preview.toLowerCase();
+                        return t.contains(q) || p.contains(q);
+                      })
+                      .toList(growable: false);
             return ConstrainedBox(
               constraints: BoxConstraints(
                 maxHeight: MediaQuery.of(context).size.height * 0.72,
@@ -3070,7 +3152,8 @@ class _NativeChatViewState extends State<NativeChatView>
   }
 
   Map<String, dynamic> _buildForwardPayload(List<_ForwardUnit> units) {
-    final titleName = units.isNotEmpty && units.first.senderName.trim().isNotEmpty
+    final titleName =
+        units.isNotEmpty && units.first.senderName.trim().isNotEmpty
         ? units.first.senderName.trim()
         : '聊天';
     return <String, dynamic>{
@@ -3412,8 +3495,9 @@ class _NativeChatViewState extends State<NativeChatView>
     final kind = m.kind.toUpperCase();
     if (kind == 'AUDIO') return 'voice-${m.id}.m4a';
     if (kind == 'FILE') {
-      final stripped =
-          m.bodyText.replaceAll(RegExp(r'^\[[^\]]+\]\s*'), '').trim();
+      final stripped = m.bodyText
+          .replaceAll(RegExp(r'^\[[^\]]+\]\s*'), '')
+          .trim();
       if (stripped.isNotEmpty) return stripped;
       return 'file-${m.id}';
     }
@@ -3474,12 +3558,13 @@ class _NativeChatViewState extends State<NativeChatView>
     final seed = m.senderUserId > 0
         ? m.senderUserId
         : (conv?.peerUserId ?? conv?.id ?? 0);
-    final memberAvatars =
-        !_isPrivate && m.senderUserId > 0 ? _memberAvatarMap[m.senderUserId] : null;
-    final preset = m.senderAvatarPreset ??
-        memberAvatars?.preset ??
-        conv?.peerAvatarPreset;
-    final objectKey = m.senderAvatarObjectKey ??
+    final memberAvatars = !_isPrivate && m.senderUserId > 0
+        ? _memberAvatarMap[m.senderUserId]
+        : null;
+    final preset =
+        m.senderAvatarPreset ?? memberAvatars?.preset ?? conv?.peerAvatarPreset;
+    final objectKey =
+        m.senderAvatarObjectKey ??
         memberAvatars?.objectKey ??
         conv?.peerAvatarObjectKey;
     return ImUserAvatar(
@@ -3519,11 +3604,7 @@ class _NativeChatViewState extends State<NativeChatView>
       return _wrapQuotedContent(
         m,
         mine,
-        ChatAuthImageBubble(
-          service: _service,
-          payload: m.payload,
-          mine: mine,
-        ),
+        ChatAuthImageBubble(service: _service, payload: m.payload, mine: mine),
       );
     }
     if (kind == 'FILE') {
@@ -3596,7 +3677,8 @@ class _NativeChatViewState extends State<NativeChatView>
             avatarPreset: (e['avatarPreset'] ?? '').toString().trim().isEmpty
                 ? null
                 : (e['avatarPreset'] ?? '').toString().trim(),
-            avatarObjectKey: (e['avatarObjectKey'] ?? '').toString().trim().isEmpty
+            avatarObjectKey:
+                (e['avatarObjectKey'] ?? '').toString().trim().isEmpty
                 ? null
                 : (e['avatarObjectKey'] ?? '').toString().trim(),
           ),
@@ -3634,7 +3716,8 @@ class _NativeChatViewState extends State<NativeChatView>
     if (kind == 'FILE') {
       final fileName = ConversationService.mediaFileName(
         e.payload,
-        fallback: e.text.replaceAll(RegExp(r'^\[[^\]]+\]\s*'), '').trim().isEmpty
+        fallback:
+            e.text.replaceAll(RegExp(r'^\[[^\]]+\]\s*'), '').trim().isEmpty
             ? '文件'
             : e.text.replaceAll(RegExp(r'^\[[^\]]+\]\s*'), ''),
       );
@@ -3794,7 +3877,9 @@ class _NativeChatViewState extends State<NativeChatView>
                                   children: [
                                     Expanded(
                                       child: Text(
-                                        e.senderName.isEmpty ? '用户' : e.senderName,
+                                        e.senderName.isEmpty
+                                            ? '用户'
+                                            : e.senderName,
                                         maxLines: 1,
                                         overflow: TextOverflow.ellipsis,
                                         style: DunesTypography.sans(
@@ -3816,11 +3901,18 @@ class _NativeChatViewState extends State<NativeChatView>
                                 const SizedBox(height: 4),
                                 Container(
                                   width: double.infinity,
-                                  padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+                                  padding: const EdgeInsets.fromLTRB(
+                                    10,
+                                    8,
+                                    10,
+                                    8,
+                                  ),
                                   decoration: BoxDecoration(
                                     color: Colors.white,
                                     borderRadius: BorderRadius.circular(8),
-                                    border: Border.all(color: const Color(0xFFE8E8E8)),
+                                    border: Border.all(
+                                      color: const Color(0xFFE8E8E8),
+                                    ),
                                   ),
                                   child: _buildForwardEntryContent(
                                     e,
@@ -4135,391 +4227,477 @@ class _NativeChatViewState extends State<NativeChatView>
                 _closeEmojiPicker();
               },
               child: Column(
-            children: [
-              if (selecting)
-                _buildMultiSelectHeader()
-              else
-                ChatConvHeader(
-                  title: title,
-                  subtitle: subtitle,
-                  onBack: widget.onBack,
-                  onTapTitle: _isPrivate
-                      ? widget.onOpenProfile
-                      : widget.onOpenGroupInfo,
-                  showOnlineDot: _isPrivate && _peerOnline,
-                  leadingAvatar: _isPrivate
-                      ? ImUserAvatar(
-                          initial: title.isNotEmpty ? title.substring(0, 1) : '?',
-                          seed: conv.peerUserId ?? conv.id,
-                          showOnline: _peerOnline,
-                          avatarPreset: conv.peerAvatarPreset,
-                          avatarObjectKey: conv.peerAvatarObjectKey,
-                          avatarService: _service,
-                          borderRadius: 32 * 0.18,
-                        )
-                      : null,
-                  actions: [
-                    if (widget.onOpenSearch != null)
-                      IconButton(
-                        tooltip: '聊天记录',
-                        onPressed: () => widget.onOpenSearch!(conv.id),
-                        icon: const Icon(Icons.history, size: 20),
-                      ),
-                    IconButton(
-                      tooltip: '语音通话',
-                      onPressed:
-                          widget.onOpenCall ??
-                          () => showDunesSoonToast(context, '通话功能敬请期待'),
-                      icon: const Icon(Icons.phone_outlined, size: 20),
+                children: [
+                  if (selecting)
+                    _buildMultiSelectHeader()
+                  else
+                    ChatConvHeader(
+                      title: title,
+                      subtitle: subtitle,
+                      onBack: widget.onBack,
+                      showBackButton: widget.showBackButton,
+                      onTapTitle: _isPrivate
+                          ? widget.onOpenProfile
+                          : widget.onOpenGroupInfo,
+                      showOnlineDot: _isPrivate && _peerOnline,
+                      leadingAvatar: _isPrivate
+                          ? ImUserAvatar(
+                              initial: title.isNotEmpty
+                                  ? title.substring(0, 1)
+                                  : '?',
+                              seed: conv.peerUserId ?? conv.id,
+                              showOnline: _peerOnline,
+                              avatarPreset: conv.peerAvatarPreset,
+                              avatarObjectKey: conv.peerAvatarObjectKey,
+                              avatarService: _service,
+                              borderRadius: 32 * 0.18,
+                            )
+                          : null,
+                      actions: [
+                        if (widget.onOpenSearch != null)
+                          IconButton(
+                            tooltip: '聊天记录',
+                            onPressed: () => widget.onOpenSearch!(conv.id),
+                            icon: const Icon(Icons.history, size: 20),
+                          ),
+                        IconButton(
+                          tooltip: '语音通话',
+                          onPressed:
+                              widget.onOpenCall ??
+                              () => showDunesSoonToast(context, '通话功能敬请期待'),
+                          icon: const Icon(Icons.phone_outlined, size: 20),
+                        ),
+                        IconButton(
+                          tooltip: '视频通话',
+                          onPressed: () =>
+                              showDunesSoonToast(context, '视频通话敬请期待'),
+                          icon: const Icon(Icons.videocam_outlined, size: 20),
+                        ),
+                        if (!_isPrivate && widget.onOpenMedia != null)
+                          IconButton(
+                            tooltip: '媒体',
+                            onPressed: () => widget.onOpenMedia!(conv.id),
+                            icon: const Icon(
+                              Icons.perm_media_outlined,
+                              size: 20,
+                            ),
+                          ),
+                        if (!_isPrivate && widget.onOpenGroupInfo != null)
+                          IconButton(
+                            tooltip: '群信息',
+                            onPressed: widget.onOpenGroupInfo,
+                            icon: const Icon(Icons.more_vert, size: 20),
+                          ),
+                      ],
                     ),
-                    IconButton(
-                      tooltip: '视频通话',
-                      onPressed: () => showDunesSoonToast(context, '视频通话敬请期待'),
-                      icon: const Icon(Icons.videocam_outlined, size: 20),
-                    ),
-                    if (!_isPrivate && widget.onOpenMedia != null)
-                      IconButton(
-                        tooltip: '媒体',
-                        onPressed: () => widget.onOpenMedia!(conv.id),
-                        icon: const Icon(Icons.perm_media_outlined, size: 20),
-                      ),
-                    if (!_isPrivate && widget.onOpenGroupInfo != null)
-                      IconButton(
-                        tooltip: '群信息',
-                        onPressed: widget.onOpenGroupInfo,
-                        icon: const Icon(Icons.more_vert, size: 20),
-                      ),
-                  ],
-                ),
-              Expanded(
-                child: Stack(
-                  children: [
-                    if (!_bootstrapped && _loading)
-                      const Center(
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    else
-                      NotificationListener<ScrollNotification>(
-                        onNotification: _onMessageListScroll,
-                        child: ListView.builder(
-                          controller: _scrollController,
-                          reverse: true,
-                          physics: _chatListScrollPhysics(scrollMetrics),
-                          cacheExtent: listCacheExtent,
-                          addAutomaticKeepAlives: false,
-                          addRepaintBoundaries: true,
-                          findChildIndexCallback: _findMessageListChildIndex,
-                          keyboardDismissBehavior:
-                              ScrollViewKeyboardDismissBehavior.onDrag,
-                          padding: const EdgeInsets.fromLTRB(12, 12, 12, 10),
-                          itemCount:
-                              listEntries.length + _listFooterCount,
-                          itemBuilder: (_, index) {
-                            final hasNewerFooter = _locatedMode && _hasNewer;
-                            if (hasNewerFooter && index == 0) {
-                              return Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  vertical: 10,
-                                ),
-                                child: Center(
-                                  child: _loadingNewer
-                                      ? const SizedBox(
-                                          width: 18,
-                                          height: 18,
-                                          child: CircularProgressIndicator(
-                                            strokeWidth: 2,
-                                          ),
-                                        )
-                                      : TextButton(
-                                          onPressed: _loadNewer,
-                                          child: const Text('加载更新消息'),
+                  Expanded(
+                    child: Stack(
+                      children: [
+                        if (!_bootstrapped && _loading)
+                          const Center(
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        else
+                          NotificationListener<ScrollNotification>(
+                            onNotification: _onMessageListScroll,
+                            child: LayoutBuilder(
+                              builder: (context, constraints) {
+                                final wide = isWideChatLayout(context);
+                                final list = ListView.builder(
+                                  controller: _scrollController,
+                                  reverse: true,
+                                  // 宽屏短会话贴顶（微信 PC）；内容超出后在 ConstrainedBox 内滚动。
+                                  shrinkWrap: wide,
+                                  physics: _chatListScrollPhysics(scrollMetrics),
+                                  cacheExtent: listCacheExtent,
+                                  addAutomaticKeepAlives: false,
+                                  addRepaintBoundaries: true,
+                                  findChildIndexCallback:
+                                      _findMessageListChildIndex,
+                                  keyboardDismissBehavior:
+                                      ScrollViewKeyboardDismissBehavior.onDrag,
+                                  padding: const EdgeInsets.fromLTRB(
+                                    12,
+                                    12,
+                                    12,
+                                    10,
+                                  ),
+                                  itemCount:
+                                      listEntries.length +
+                                      _listFooterCount +
+                                      _listHeaderCount,
+                                  itemBuilder: (_, index) {
+                                    final hasNewerFooter =
+                                        _locatedMode && _hasNewer;
+                                    if (hasNewerFooter && index == 0) {
+                                      return Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                          vertical: 10,
                                         ),
-                                ),
-                              );
-                            }
-                            final entry = _entryForListIndex(index, listEntries);
-                            if (entry == null) return const SizedBox.shrink();
-                            if (entry.dividerLabel != null) {
-                              return ChatDateDivider(
-                                key: ValueKey<String>('day-${entry.dividerLabel}'),
-                                label: entry.dividerLabel!,
-                              );
-                            }
-                            final m = entry.message!;
-                            final mine =
-                                m.senderUserId == widget.session.userId;
-                            final highlighted = _highlightMessageId == m.id;
-                            final timeLabel = InboxFormat.msgTimeLabel(
-                              m.createdAt,
-                            );
-                            final rowAvatar = _avatarForMessage(m, mine: mine);
-                            Widget row;
-                            if (_isSystemKind(m.kind)) {
-                              row = _buildMessageWidget(m, mine);
-                            } else {
-                              final peerRead = mine && _isPrivate
-                                  ? _messagePeerRead(m)
-                                  : false;
-                              final textMessage =
-                                  m.kind.toUpperCase() == 'TEXT';
-                              final hasQuote =
-                                  textMessage &&
-                                  !ChatMessageQuote.fromPayload(m.payload).isEmpty;
-                              final isForwardBundle =
-                                  _forwardBundleFromPayload(m.payload) != null;
-                              row = ChatMessageRow(
-                                message: m,
-                                mine: mine,
-                                showSenderMeta: entry.showSenderMeta,
-                                showTimeForMine: mine,
-                                timeLabel: timeLabel,
-                                readLabel: mine && _isPrivate
-                                    ? (peerRead ? '已读' : '未读')
-                                    : null,
-                                onLongPress: null,
-                                onLongPressStart:
-                                    !_messageMultiSelectMode &&
-                                    !_isSystemKind(m.kind) &&
-                                    (isForwardBundle || !textMessage || hasQuote)
-                                    ? (details) => _onMessageActions(
-                                        m,
-                                        mine,
-                                        anchor: details.globalPosition,
-                                      )
-                                    : null,
-                                onReadTap: mine && !_isPrivate
-                                    ? () => _showReadReceipts(m)
-                                    : null,
-                                readTapLabel: _groupReadLabelForMessage(
+                                        child: Center(
+                                          child: _loadingNewer
+                                              ? const SizedBox(
+                                                  width: 18,
+                                                  height: 18,
+                                                  child:
+                                                      CircularProgressIndicator(
+                                                        strokeWidth: 2,
+                                                      ),
+                                                )
+                                              : TextButton(
+                                                  onPressed: _loadNewer,
+                                                  child: const Text(
+                                                    '加载更新消息',
+                                                  ),
+                                                ),
+                                        ),
+                                      );
+                                    }
+                                    final headerIndex =
+                                        listEntries.length + _listFooterCount;
+                                    if (_listHeaderCount > 0 &&
+                                        index >= headerIndex) {
+                                      return Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                          vertical: 10,
+                                        ),
+                                        child: Center(
+                                          child: _loadingOlder
+                                              ? const SizedBox(
+                                                  width: 18,
+                                                  height: 18,
+                                                  child:
+                                                      CircularProgressIndicator(
+                                                        strokeWidth: 2,
+                                                      ),
+                                                )
+                                              : TextButton(
+                                                  onPressed: _loadOlder,
+                                                  child: const Text(
+                                                    '加载更早消息',
+                                                  ),
+                                                ),
+                                        ),
+                                      );
+                                    }
+                                    final entry = _entryForListIndex(
+                                      index,
+                                      listEntries,
+                                    );
+                                    if (entry == null) {
+                                      return const SizedBox.shrink();
+                                    }
+                                if (entry.dividerLabel != null) {
+                                  return ChatDateDivider(
+                                    key: ValueKey<String>(
+                                      'day-${entry.dividerLabel}',
+                                    ),
+                                    label: entry.dividerLabel!,
+                                  );
+                                }
+                                final m = entry.message!;
+                                final mine =
+                                    m.senderUserId == widget.session.userId;
+                                final highlighted = _highlightMessageId == m.id;
+                                final timeLabel = InboxFormat.msgTimeLabel(
+                                  m.createdAt,
+                                );
+                                final rowAvatar = _avatarForMessage(
                                   m,
                                   mine: mine,
-                                ),
-                                avatar: !mine ? rowAvatar : null,
-                                trailingAvatar: mine ? rowAvatar : null,
-                                content: _buildMessageWidget(m, mine),
-                              );
-                            }
-                            var rowWidget = highlighted
-                                ? AnimatedContainer(
-                                    key: _messageRowKey(m.id),
-                                    duration: const Duration(milliseconds: 200),
-                                    decoration: BoxDecoration(
-                                      color: DunesColors.accentSoft.withValues(
-                                        alpha: 0.45,
-                                      ),
-                                      borderRadius: BorderRadius.circular(8),
+                                );
+                                Widget row;
+                                if (_isSystemKind(m.kind)) {
+                                  row = _buildMessageWidget(m, mine);
+                                } else {
+                                  final peerRead = mine && _isPrivate
+                                      ? _messagePeerRead(m)
+                                      : false;
+                                  final textMessage =
+                                      m.kind.toUpperCase() == 'TEXT';
+                                  final hasQuote =
+                                      textMessage &&
+                                      !ChatMessageQuote.fromPayload(
+                                        m.payload,
+                                      ).isEmpty;
+                                  final isForwardBundle =
+                                      _forwardBundleFromPayload(m.payload) !=
+                                      null;
+                                  row = ChatMessageRow(
+                                    message: m,
+                                    mine: mine,
+                                    showSenderMeta: entry.showSenderMeta,
+                                    showTimeForMine: mine,
+                                    timeLabel: timeLabel,
+                                    readLabel: mine && _isPrivate
+                                        ? (peerRead ? '已读' : '未读')
+                                        : null,
+                                    onLongPress: null,
+                                    onLongPressStart:
+                                        !_messageMultiSelectMode &&
+                                            !_isSystemKind(m.kind) &&
+                                            (isForwardBundle ||
+                                                !textMessage ||
+                                                hasQuote)
+                                        ? (details) => _onMessageActions(
+                                            m,
+                                            mine,
+                                            anchor: details.globalPosition,
+                                          )
+                                        : null,
+                                    onReadTap: mine && !_isPrivate
+                                        ? () => _showReadReceipts(m)
+                                        : null,
+                                    readTapLabel: _groupReadLabelForMessage(
+                                      m,
+                                      mine: mine,
                                     ),
-                                    padding: const EdgeInsets.symmetric(
-                                      vertical: 2,
-                                    ),
-                                    child: row,
-                                  )
-                                : KeyedSubtree(
-                                    key: _messageRowKey(m.id),
-                                    child: row,
+                                    avatar: !mine ? rowAvatar : null,
+                                    trailingAvatar: mine ? rowAvatar : null,
+                                    content: _buildMessageWidget(m, mine),
                                   );
-                            if (_messageMultiSelectMode &&
-                                _canSelectMessageForMulti(m)) {
-                              final selected =
-                                  _multiSelectedMessageIds.contains(m.id);
-                              rowWidget = Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Padding(
-                                    padding: const EdgeInsets.only(
-                                      left: 2,
-                                      right: 6,
-                                      top: 8,
-                                    ),
-                                    child: GestureDetector(
-                                      behavior: HitTestBehavior.opaque,
-                                      onTap: () => _toggleMessageMultiSelected(m.id),
-                                      child: Icon(
-                                        selected
-                                            ? Icons.check_circle
-                                            : Icons.radio_button_unchecked,
-                                        size: 22,
-                                        color: selected
-                                            ? DunesColors.accent
-                                            : DunesColors.text3,
+                                }
+                                var rowWidget = highlighted
+                                    ? AnimatedContainer(
+                                        key: _messageRowKey(m.id),
+                                        duration: const Duration(
+                                          milliseconds: 200,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: DunesColors.accentSoft
+                                              .withValues(alpha: 0.45),
+                                          borderRadius: BorderRadius.circular(
+                                            8,
+                                          ),
+                                        ),
+                                        padding: const EdgeInsets.symmetric(
+                                          vertical: 2,
+                                        ),
+                                        child: row,
+                                      )
+                                    : KeyedSubtree(
+                                        key: _messageRowKey(m.id),
+                                        child: row,
+                                      );
+                                if (_messageMultiSelectMode &&
+                                    _canSelectMessageForMulti(m)) {
+                                  final selected = _multiSelectedMessageIds
+                                      .contains(m.id);
+                                  rowWidget = Row(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Padding(
+                                        padding: const EdgeInsets.only(
+                                          left: 2,
+                                          right: 6,
+                                          top: 8,
+                                        ),
+                                        child: GestureDetector(
+                                          behavior: HitTestBehavior.opaque,
+                                          onTap: () =>
+                                              _toggleMessageMultiSelected(m.id),
+                                          child: Icon(
+                                            selected
+                                                ? Icons.check_circle
+                                                : Icons.radio_button_unchecked,
+                                            size: 22,
+                                            color: selected
+                                                ? DunesColors.accent
+                                                : DunesColors.text3,
+                                          ),
+                                        ),
                                       ),
+                                      Expanded(
+                                        child: GestureDetector(
+                                          behavior: HitTestBehavior.opaque,
+                                          onTap: () =>
+                                              _toggleMessageMultiSelected(m.id),
+                                          child: rowWidget,
+                                        ),
+                                      ),
+                                    ],
+                                  );
+                                }
+                                return rowWidget;
+                              },
+                            );
+                                if (!wide) return list;
+                                return Align(
+                                  alignment: Alignment.topCenter,
+                                  child: ConstrainedBox(
+                                    constraints: BoxConstraints(
+                                      maxHeight: constraints.maxHeight,
                                     ),
+                                    child: list,
                                   ),
-                                  Expanded(
-                                    child: GestureDetector(
-                                      behavior: HitTestBehavior.opaque,
-                                      onTap: () => _toggleMessageMultiSelected(m.id),
-                                      child: rowWidget,
-                                    ),
-                                  ),
-                                ],
-                              );
-                            }
-                            return rowWidget;
-                          },
-                        ),
-                      ),
-                    if (_loadingOlder)
-                      const Positioned(
-                        top: 8,
-                        left: 0,
-                        right: 0,
-                        child: Center(
-                          child: Material(
-                            color: Colors.transparent,
-                            child: SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(strokeWidth: 2),
+                                );
+                              },
                             ),
                           ),
-                        ),
-                      ),
-                    if (_locating)
-                      Positioned(
-                        top: 8,
-                        left: 0,
-                        right: 0,
-                        child: Center(
-                          child: Material(
-                            elevation: 1,
-                            borderRadius: BorderRadius.circular(16),
-                            color: DunesColors.bgApp,
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 6,
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  const SizedBox(
-                                    width: 12,
-                                    height: 12,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 1.5,
-                                    ),
+                        if (_loadingOlder)
+                          const Positioned(
+                            top: 8,
+                            left: 0,
+                            right: 0,
+                            child: Center(
+                              child: Material(
+                                color: Colors.transparent,
+                                child: SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
                                   ),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    '定位中…',
-                                    style: DunesTypography.sans(
-                                      fontSize: 11,
-                                      color: DunesColors.text3,
-                                    ),
-                                  ),
-                                ],
+                                ),
                               ),
                             ),
                           ),
-                        ),
-                      ),
-                    if (_pendingNewMessageCount > 0 && !_locatedMode)
-                      Positioned(
-                        left: 0,
-                        right: 0,
-                        bottom: 12,
-                        child: Center(
-                          child: Material(
-                            color: Colors.transparent,
-                            elevation: 4,
-                            borderRadius: BorderRadius.circular(999),
-                            child: InkWell(
-                              onTap: _jumpToPendingMessages,
-                              borderRadius: BorderRadius.circular(999),
-                              child: Ink(
-                                decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(999),
-                                  gradient: const LinearGradient(
-                                    begin: Alignment.topLeft,
-                                    end: Alignment.bottomRight,
-                                    colors: [
-                                      Color(0xFF7E64BD),
-                                      Color(0xFF553B96),
+                        if (_locating)
+                          Positioned(
+                            top: 8,
+                            left: 0,
+                            right: 0,
+                            child: Center(
+                              child: Material(
+                                elevation: 1,
+                                borderRadius: BorderRadius.circular(16),
+                                color: DunesColors.bgApp,
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 6,
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const SizedBox(
+                                        width: 12,
+                                        height: 12,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 1.5,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        '定位中…',
+                                        style: DunesTypography.sans(
+                                          fontSize: 11,
+                                          color: DunesColors.text3,
+                                        ),
+                                      ),
                                     ],
                                   ),
-                                  boxShadow: const [
-                                    BoxShadow(
-                                      color: Color(0x59553B96),
-                                      blurRadius: 12,
-                                      offset: Offset(0, 4),
+                                ),
+                              ),
+                            ),
+                          ),
+                        if (_pendingNewMessageCount > 0 && !_locatedMode)
+                          Positioned(
+                            left: 0,
+                            right: 0,
+                            bottom: 12,
+                            child: Center(
+                              child: Material(
+                                color: Colors.transparent,
+                                elevation: 4,
+                                borderRadius: BorderRadius.circular(999),
+                                child: InkWell(
+                                  onTap: _jumpToPendingMessages,
+                                  borderRadius: BorderRadius.circular(999),
+                                  child: Ink(
+                                    decoration: BoxDecoration(
+                                      borderRadius: BorderRadius.circular(999),
+                                      gradient: const LinearGradient(
+                                        begin: Alignment.topLeft,
+                                        end: Alignment.bottomRight,
+                                        colors: [
+                                          Color(0xFF7E64BD),
+                                          Color(0xFF553B96),
+                                        ],
+                                      ),
+                                      boxShadow: const [
+                                        BoxShadow(
+                                          color: Color(0x59553B96),
+                                          blurRadius: 12,
+                                          offset: Offset(0, 4),
+                                        ),
+                                      ],
                                     ),
-                                  ],
-                                ),
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 14,
-                                  vertical: 8,
-                                ),
-                                child: Text(
-                                  '${_pendingNewMessageCount > 99 ? '99+' : _pendingNewMessageCount} 条新消息 ↓',
-                                  style: DunesTypography.sans(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w600,
-                                    color: Colors.white,
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 14,
+                                      vertical: 8,
+                                    ),
+                                    child: Text(
+                                      '${_pendingNewMessageCount > 99 ? '99+' : _pendingNewMessageCount} 条新消息 ↓',
+                                      style: DunesTypography.sans(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
+                                        color: Colors.white,
+                                      ),
+                                    ),
                                   ),
                                 ),
                               ),
                             ),
                           ),
-                        ),
-                      ),
-                    if (_locatedMode)
-                      Positioned(
-                        left: 0,
-                        right: 0,
-                        bottom: 8,
-                        child: Center(
-                          child: Material(
-                            elevation: 2,
-                            borderRadius: BorderRadius.circular(20),
-                            color: DunesColors.bgApp,
-                            child: InkWell(
-                              onTap: _jumpToLatest,
-                              borderRadius: BorderRadius.circular(20),
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 14,
-                                  vertical: 8,
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    const Icon(
-                                      Icons.arrow_downward,
-                                      size: 14,
-                                      color: DunesColors.accentDeep,
+                        if (_locatedMode)
+                          Positioned(
+                            left: 0,
+                            right: 0,
+                            bottom: 8,
+                            child: Center(
+                              child: Material(
+                                elevation: 2,
+                                borderRadius: BorderRadius.circular(20),
+                                color: DunesColors.bgApp,
+                                child: InkWell(
+                                  onTap: _jumpToLatest,
+                                  borderRadius: BorderRadius.circular(20),
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 14,
+                                      vertical: 8,
                                     ),
-                                    const SizedBox(width: 6),
-                                    Text(
-                                      '回到最新消息',
-                                      style: DunesTypography.sans(
-                                        fontSize: 12,
-                                        color: DunesColors.accentDeep,
-                                      ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        const Icon(
+                                          Icons.arrow_downward,
+                                          size: 14,
+                                          color: DunesColors.accentDeep,
+                                        ),
+                                        const SizedBox(width: 6),
+                                        Text(
+                                          '回到最新消息',
+                                          style: DunesTypography.sans(
+                                            fontSize: 12,
+                                            color: DunesColors.accentDeep,
+                                          ),
+                                        ),
+                                      ],
                                     ),
-                                  ],
+                                  ),
                                 ),
                               ),
                             ),
                           ),
-                        ),
-                      ),
-                    if (_uploadLabel != null) _buildUploadOverlay(),
-                    if (_downloadingMedia) _buildDownloadOverlay(),
-                  ],
-                ),
-              ),
-              if (selecting)
-                _buildMultiSelectBottomBar()
-              else
-                SafeArea(
-                  top: false,
-                  child: _buildComposerDock(
-                    locked: locked,
-                    inputHint: inputHint,
+                        if (_uploadLabel != null) _buildUploadOverlay(),
+                        if (_downloadingMedia) _buildDownloadOverlay(),
+                      ],
+                    ),
                   ),
-                ),
-            ],
+                  if (selecting)
+                    _buildMultiSelectBottomBar()
+                  else
+                    SafeArea(
+                      top: false,
+                      child: _buildComposerDock(
+                        locked: locked,
+                        inputHint: inputHint,
+                      ),
+                    ),
+                ],
               ),
             ),
             if (_recording)
@@ -5282,10 +5460,7 @@ class _ChatScrollPhysics extends ScrollPhysics {
 
   @override
   double applyPhysicsToUserOffset(ScrollMetrics position, double offset) {
-    return super.applyPhysicsToUserOffset(
-      position,
-      offset * dragDampingFactor,
-    );
+    return super.applyPhysicsToUserOffset(position, offset * dragDampingFactor);
   }
 
   @override

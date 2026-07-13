@@ -5,8 +5,10 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/http/session_http.dart';
+import '../../core/layout/chat_layout.dart';
 import '../../core/navigation/navigation_controller.dart';
 import '../../core/navigation/generated/screen_registry.dart';
+import '../../core/platform/desktop_features.dart';
 import '../../core/theme/dunes_theme.dart';
 import '../../core/widgets/cached_network_image.dart';
 import '../approval/native_approval_page.dart';
@@ -23,6 +25,7 @@ import '../chat/native_private_chat_page.dart';
 import '../contacts/contact_models.dart';
 import '../contacts/native_contact_profile_page.dart';
 import '../contacts/native_contacts_page.dart';
+import '../conversation/chat_dual_pane_shell.dart';
 import '../conversation/comm_unread_notifier.dart';
 import '../conversation/conversation_models.dart';
 import '../conversation/conversation_mention_utils.dart';
@@ -33,6 +36,7 @@ import '../conversation/conversation_service.dart';
 import '../conversation/inbox_hidden_storage.dart';
 import '../conversation/native_conversation_page.dart';
 import '../conversation/notification_service.dart';
+import '../desktop/windows_desktop_tray.dart';
 import '../kb/native_kb_chat_page.dart';
 import '../kb/native_kb_doc_page.dart';
 import '../kb/native_kb_home_page.dart';
@@ -52,6 +56,8 @@ import '../push/push_service.dart';
 import '../conversation/message_preview_text.dart';
 import '../shell/dunes_main_tab_bar.dart';
 import '../shell/dunes_toast.dart';
+import '../update/app_update_dialog.dart';
+import '../update/app_update_service.dart';
 import '../workbench/native_avatar_sheet.dart';
 import '../workbench/native_my_workbench_pages.dart';
 import '../workbench/native_team_board_page.dart';
@@ -251,6 +257,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       }
       if (!isMuted) {
         _notifyAndroidPushForEvent(event);
+        windowsTrayNotifyIncomingMessage();
       }
       _scheduleCommBadgeRefresh();
       return;
@@ -258,6 +265,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
 
     if (event.type == 'notification') {
       _notifyAndroidPushForEvent(event);
+      windowsTrayNotifyIncomingMessage();
     }
 
     _scheduleCommBadgeRefresh();
@@ -476,6 +484,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           'unreadRows=[$unreadRows]',
         );
         _commUnread.update(serverTotal);
+        windowsTrayUpdateUnread(serverTotal);
         if (serverTotal == 0) {
           if (!_pendingBadgeZeroSync) {
             print('[Badge] skip sync 0 (no read ack)');
@@ -489,6 +498,201 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     } catch (e, st) {
       print('[Badge] refresh failed: $e\n$st');
     }
+  }
+
+  /// 宽屏双栏：在 C2/C5 之间切换时替换栈顶，避免历史栈堆积。
+  void _goChatScreen(String screenId) {
+    final current = widget.navigation.currentScreen;
+    if (current == 'C2' || current == 'C5') {
+      widget.navigation.replaceTop(screenId);
+    } else {
+      widget.navigation.go(screenId);
+    }
+  }
+
+  void _openPrivateConversation(NativeConversation conv) {
+    setState(() {
+      _selectedPrivate = conv;
+      _selectedPrivatePeerUserId = conv.peerUserId;
+      _selectedGroup = null;
+      _focusMessageId = null;
+      _focusMessageHint = null;
+    });
+    _markUserEnteredChat();
+    _goChatScreen('C5');
+  }
+
+  void _openGroupConversation(NativeConversation conv) {
+    setState(() {
+      _selectedGroup = conv;
+      _selectedPrivate = null;
+      _selectedPrivatePeerUserId = null;
+      _focusMessageId = null;
+      _focusMessageHint = null;
+    });
+    _markUserEnteredChat();
+    _goChatScreen('C2');
+  }
+
+  void _openPrivateByPeerId(int peerUserId) {
+    setState(() {
+      _selectedPrivate = null;
+      _selectedPrivatePeerUserId = peerUserId;
+      _selectedGroup = null;
+      _focusMessageId = null;
+      _focusMessageHint = null;
+    });
+    _markUserEnteredChat();
+    _goChatScreen('C5');
+  }
+
+  void _leaveChatToInbox({required bool clearSelection}) {
+    setState(() {
+      _focusMessageId = null;
+      _focusMessageHint = null;
+      if (clearSelection) {
+        _selectedPrivate = null;
+        _selectedPrivatePeerUserId = null;
+        _selectedGroup = null;
+      }
+    });
+    _markUserLeftChat();
+    widget.navigation.popTo('C1');
+  }
+
+  int? get _dualPaneSelectedConversationId {
+    final screen = widget.navigation.currentScreen;
+    if (screen == 'C5') return _selectedPrivate?.id;
+    if (screen == 'C2') return _selectedGroup?.id;
+    return null;
+  }
+
+  bool _isDualPaneChatRoute(String screen) {
+    return screen == 'C1' || screen == 'C2' || screen == 'C5';
+  }
+
+  Widget _buildConversationListPage({
+    required bool showBottomTabBar,
+    int? selectedConversationId,
+  }) {
+    return NativeConversationPage(
+      session: widget.session,
+      navigation: widget.navigation,
+      commUnread: _commUnread,
+      workbenchBadge: _workbenchBadge,
+      selectedConversationId: selectedConversationId,
+      showBottomTabBar: showBottomTabBar,
+      onOpenPrivate: _openPrivateConversation,
+      onOpenGroup: _openGroupConversation,
+      onOpenContacts: () => widget.navigation.go('C3'),
+      onOpenNova: () {
+        NovaBackgroundCoordinator.instance.clearPendingCommBadgeBump();
+        setState(() {
+          _novaFocusConversationId = null;
+          _novaFocusMessageId = null;
+        });
+        widget.navigation.go('C4');
+      },
+      onOpenNotifications: () => widget.navigation.go('Z2'),
+      onOpenNewChat: () => widget.navigation.go('C7'),
+    );
+  }
+
+  Widget _buildDualPaneChatPane() {
+    switch (widget.navigation.currentScreen) {
+      case 'C2':
+        return NativeGroupChatPage(
+          key: ValueKey<String>('dual-group-${_selectedGroup?.id ?? 0}'),
+          session: widget.session,
+          conversationHint: _selectedGroup,
+          focusMessageId: _focusMessageId,
+          focusMessageHint: _focusMessageHint,
+          autoMarkRead: _userActivelyInChat,
+          showBackButton: false,
+          onBack: () => _leaveChatToInbox(clearSelection: true),
+          onOpenSearch: (convId) {
+            setState(() {
+              _searchConversationId = convId;
+              _searchTitle = _selectedGroup?.title ?? '群聊搜索';
+              _searchReturnScreen = 'C2';
+              _focusMessageId = null;
+              _focusMessageHint = null;
+            });
+            widget.navigation.go('C12');
+          },
+          onOpenMedia: (convId) {
+            setState(() {
+              _mediaConversationId = convId;
+              _mediaTitle = _selectedGroup?.title ?? '群聊';
+            });
+            widget.navigation.go('C13');
+          },
+          onOpenGroupInfo: () => widget.navigation.go('C6'),
+          onConversationRead: _handleConversationRead,
+        );
+      case 'C5':
+        return NativePrivateChatPage(
+          key: ValueKey<String>(
+            'dual-private-${_selectedPrivate?.id ?? _selectedPrivatePeerUserId ?? 0}',
+          ),
+          session: widget.session,
+          conversationHint: _selectedPrivate,
+          peerUserIdHint: _selectedPrivatePeerUserId,
+          focusMessageId: _focusMessageId,
+          focusMessageHint: _focusMessageHint,
+          autoMarkRead: _userActivelyInChat,
+          showBackButton: false,
+          onBack: () => _leaveChatToInbox(clearSelection: true),
+          onOpenProfile: () {
+            final peerId =
+                _selectedPrivate?.peerUserId ?? _selectedPrivatePeerUserId;
+            if (peerId != null && peerId > 0) {
+              setState(() {
+                _selectedContact = NativeContact(
+                  userId: peerId,
+                  displayName:
+                      _selectedPrivate?.peerDisplayName ??
+                      _selectedPrivate?.title ??
+                      '',
+                );
+              });
+            }
+            widget.navigation.go('C9');
+          },
+          onOpenSearch: (convId) {
+            setState(() {
+              _searchConversationId = convId;
+              _searchTitle = '${_selectedPrivate?.displayTitle ?? '私聊'} · 搜索';
+              _searchReturnScreen = 'C5';
+              _focusMessageId = null;
+              _focusMessageHint = null;
+            });
+            widget.navigation.go('C12');
+          },
+          onConversationRead: _handleConversationRead,
+        );
+      case 'C1':
+      default:
+        return const ChatDualPaneEmpty();
+    }
+  }
+
+  Widget _buildChatDualPane() {
+    return ChatDualPaneShell(
+      listPane: _buildConversationListPage(
+        showBottomTabBar: false,
+        selectedConversationId: _dualPaneSelectedConversationId,
+      ),
+      chatPane: _buildDualPaneChatPane(),
+      bottomBar: DunesMainTabBar(
+        navigation: widget.navigation,
+        activeScreen: 'C1',
+        commUnread: _commUnread,
+        workbenchBadge: _workbenchBadge,
+        lighthouseAccess: widget.session.lighthouseAccess,
+        chatOnlyMode: widget.session.isExternalUser,
+      ),
+    );
   }
 
   Widget _buildCurrentScreen(BuildContext context) {
@@ -513,42 +717,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           onLogout: widget.onLogout,
         );
       case 'C1':
-        return NativeConversationPage(
-          session: widget.session,
-          navigation: widget.navigation,
-          commUnread: _commUnread,
-          workbenchBadge: _workbenchBadge,
-          onOpenPrivate: (conv) {
-            setState(() {
-              _selectedPrivate = conv;
-              _selectedPrivatePeerUserId = conv.peerUserId;
-              _focusMessageId = null;
-              _focusMessageHint = null;
-            });
-            _markUserEnteredChat();
-            widget.navigation.go('C5');
-          },
-          onOpenGroup: (conv) {
-            setState(() {
-              _selectedGroup = conv;
-              _focusMessageId = null;
-              _focusMessageHint = null;
-            });
-            _markUserEnteredChat();
-            widget.navigation.go('C2');
-          },
-          onOpenContacts: () => widget.navigation.go('C3'),
-          onOpenNova: () {
-            NovaBackgroundCoordinator.instance.clearPendingCommBadgeBump();
-            setState(() {
-              _novaFocusConversationId = null;
-              _novaFocusMessageId = null;
-            });
-            widget.navigation.go('C4');
-          },
-          onOpenNotifications: () => widget.navigation.go('Z2'),
-          onOpenNewChat: () => widget.navigation.go('C7'),
-        );
+        return _buildConversationListPage(showBottomTabBar: true);
       case 'Z2':
         return NativeMessageCenterPage(
           session: widget.session,
@@ -567,25 +736,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         return NativeNewChatPage(
           session: widget.session,
           onBack: widget.navigation.back,
-          onOpenPrivateChat: (peerUserId) {
-            setState(() {
-              _selectedPrivate = null;
-              _selectedPrivatePeerUserId = peerUserId;
-              _focusMessageId = null;
-              _focusMessageHint = null;
-            });
-            _markUserEnteredChat();
-            widget.navigation.go('C5');
-          },
-          onOpenGroupChat: (conversation) {
-            setState(() {
-              _selectedGroup = conversation;
-              _focusMessageId = null;
-              _focusMessageHint = null;
-            });
-            _markUserEnteredChat();
-            widget.navigation.go('C2');
-          },
+          onOpenPrivateChat: _openPrivateByPeerId,
+          onOpenGroupChat: _openGroupConversation,
         );
       case 'C6':
         if (_selectedGroup == null) {
@@ -633,32 +785,14 @@ class _NativeScreenHostState extends State<NativeScreenHost>
             setState(() => _selectedContact = contact);
             widget.navigation.go('C9');
           },
-          onStartPrivateChat: (peerUserId) {
-            setState(() {
-              _selectedPrivate = null;
-              _selectedPrivatePeerUserId = peerUserId;
-              _focusMessageId = null;
-              _focusMessageHint = null;
-            });
-            _markUserEnteredChat();
-            widget.navigation.go('C5');
-          },
+          onStartPrivateChat: _openPrivateByPeerId,
         );
       case 'C9':
         return NativeContactProfilePage(
           session: widget.session,
           contactHint: _selectedContact,
           onBack: widget.navigation.back,
-          onOpenPrivateChat: (peerUserId) {
-            setState(() {
-              _selectedPrivate = null;
-              _selectedPrivatePeerUserId = peerUserId;
-              _focusMessageId = null;
-              _focusMessageHint = null;
-            });
-            _markUserEnteredChat();
-            widget.navigation.go('C5');
-          },
+          onOpenPrivateChat: _openPrivateByPeerId,
         );
       case 'B13':
         return NativeApprovalPage(
@@ -753,7 +887,13 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           },
           onHistory: () => widget.navigation.go('C11'),
           onOpenKb: () => widget.navigation.go('K1'),
-          onOpenMeeting: () => widget.navigation.go('MM-L'),
+          onOpenMeeting: () {
+            if (isWindowsDesktopCommOnly) {
+              showDunesToast(context, '桌面端暂不支持会议纪要');
+              return;
+            }
+            widget.navigation.go('MM-L');
+          },
           focusConversationId: _novaFocusConversationId,
           focusMessageId: _novaFocusMessageId,
           onClearHistoryFocus: () {
@@ -871,14 +1011,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           focusMessageId: _focusMessageId,
           focusMessageHint: _focusMessageHint,
           autoMarkRead: _userActivelyInChat,
-          onBack: () {
-            setState(() {
-              _focusMessageId = null;
-              _focusMessageHint = null;
-            });
-            _markUserLeftChat();
-            widget.navigation.popTo('C1');
-          },
+          onBack: () => _leaveChatToInbox(clearSelection: false),
           onOpenSearch: (convId) {
             setState(() {
               _searchConversationId = convId;
@@ -907,14 +1040,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           focusMessageId: _focusMessageId,
           focusMessageHint: _focusMessageHint,
           autoMarkRead: _userActivelyInChat,
-          onBack: () {
-            setState(() {
-              _focusMessageId = null;
-              _focusMessageHint = null;
-            });
-            _markUserLeftChat();
-            widget.navigation.popTo('C1');
-          },
+          onBack: () => _leaveChatToInbox(clearSelection: false),
           onOpenProfile: () {
             final peerId =
                 _selectedPrivate?.peerUserId ?? _selectedPrivatePeerUserId;
@@ -984,6 +1110,30 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     final depth = widget.navigation.history.length;
     final previousScreen = _lastScreen;
     final isBack = previousScreen != null && depth < _lastHistoryDepth;
+
+    // Windows 桌面暂时只开放通讯：误入其它板块时拉回会话首页。
+    if (isWindowsDesktopCommOnly && !isWindowsAllowedCommScreen(screen)) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        if (!isWindowsAllowedCommScreen(widget.navigation.currentScreen)) {
+          widget.navigation.popTo('C1');
+        }
+      });
+      _lastScreen = 'C1';
+      _lastHistoryDepth = depth;
+      if (isWideChatLayout(context)) {
+        return _buildChatDualPane();
+      }
+      return _buildConversationListPage(showBottomTabBar: false);
+    }
+
+    // 宽屏：C1/C2/C5 使用双栏，不走移动端整页切换动画。
+    if (isWideChatLayout(context) && _isDualPaneChatRoute(screen)) {
+      _lastScreen = screen;
+      _lastHistoryDepth = depth;
+      return _buildChatDualPane();
+    }
+
     final useSlide =
         (_isChatRoute(screen) && _isChatRoute(previousScreen)) ||
         (_isMyRoute(screen) && _isMyRoute(previousScreen));
@@ -1414,6 +1564,21 @@ class _NativeB2PageState extends State<_NativeB2Page> {
     }
   }
 
+  Future<void> _checkDesktopAppUpdate() async {
+    showDunesToast(context, '正在检查更新…');
+    final result = await AppUpdateService.instance.checkUpdate();
+    if (!mounted) return;
+    if (result == null) {
+      showDunesToast(context, '暂无法检查更新，请稍后重试');
+      return;
+    }
+    if (!result.updateAvailable) {
+      showDunesToast(context, '当前已是最新版本');
+      return;
+    }
+    await showAppUpdateDialog(context, result);
+  }
+
   Future<_NativeB2Profile> _loadProfile() async {
     try {
       final meResp = await dunesHttpGet(widget.session, '/users/me');
@@ -1742,13 +1907,14 @@ class _NativeB2PageState extends State<_NativeB2Page> {
                                 comingSoon: true,
                                 onTap: () => _showSoonToast(),
                               ),
-                            _buildMenuItem(
-                              icon: Icons.article_outlined,
-                              title: '会议纪要',
-                              desc: '$_meetingCount 场 · 录音转写 · 纪要生成',
-                              badge: _meetingCount,
-                              onTap: () => widget.navigation.go('MM-L'),
-                            ),
+                            if (!isWindowsDesktopCommOnly)
+                              _buildMenuItem(
+                                icon: Icons.article_outlined,
+                                title: '会议纪要',
+                                desc: '$_meetingCount 场 · 录音转写 · 纪要生成',
+                                badge: _meetingCount,
+                                onTap: () => widget.navigation.go('MM-L'),
+                              ),
                           ]),
                           if (_showDeferredTools) ...[
                             const SizedBox(height: 10),
@@ -1809,7 +1975,7 @@ class _NativeB2PageState extends State<_NativeB2Page> {
                 ),
               ],
             ),
-            if (_live.active.value)
+            if (_live.active.value && !isWindowsDesktopCommOnly)
               Positioned(
                 right: 16,
                 bottom:
@@ -1943,6 +2109,8 @@ class _NativeB2PageState extends State<_NativeB2Page> {
         switch (action) {
           case _B2MenuAction.scanWorkstation:
             _openQrLoginScanner();
+          case _B2MenuAction.checkUpdate:
+            unawaited(_checkDesktopAppUpdate());
           case _B2MenuAction.clearCache:
             _clearLocalCache();
           case _B2MenuAction.startProposal:
@@ -1952,7 +2120,15 @@ class _NativeB2PageState extends State<_NativeB2Page> {
         }
       },
       itemBuilder: (context) => [
-        if (!widget.session.isExternalUser)
+        if (isWindowsDesktopCommOnly)
+          const PopupMenuItem(
+            value: _B2MenuAction.checkUpdate,
+            child: _B2MenuEntry(
+              icon: Icons.system_update_alt_rounded,
+              label: '检查更新',
+            ),
+          )
+        else if (!widget.session.isExternalUser)
           PopupMenuItem(
             value: _B2MenuAction.scanWorkstation,
             enabled: !_qrLoginOpening,
@@ -2474,7 +2650,13 @@ class _NativeB2PageState extends State<_NativeB2Page> {
   }
 }
 
-enum _B2MenuAction { scanWorkstation, clearCache, startProposal, logout }
+enum _B2MenuAction {
+  scanWorkstation,
+  checkUpdate,
+  clearCache,
+  startProposal,
+  logout,
+}
 
 class _B2MenuEntry extends StatelessWidget {
   const _B2MenuEntry({

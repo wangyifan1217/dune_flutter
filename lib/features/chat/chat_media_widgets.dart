@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -5,7 +6,6 @@ import 'package:flutter/material.dart';
 
 import '../../core/theme/dunes_theme.dart';
 import '../../core/util/friendly_error.dart';
-import '../../core/widgets/cached_network_image.dart';
 import '../conversation/conversation_service.dart';
 import '../shell/dunes_toast.dart';
 import 'chat_image_utils.dart';
@@ -286,11 +286,111 @@ class _ChatInlineImage extends StatefulWidget {
 }
 
 class _ChatInlineImageState extends State<_ChatInlineImage> {
+  Size? _decodedSize;
+  ImageStream? _netStream;
+  ImageStreamListener? _netListener;
+
   Size get _maxBox => chatImageBubbleMaxSize(context);
+
+  @override
+  void initState() {
+    super.initState();
+    _resolveBytesSize();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _resolveNetworkSize();
+  }
+
+  @override
+  void didUpdateWidget(_ChatInlineImage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.bytes != widget.bytes || oldWidget.url != widget.url) {
+      _decodedSize = null;
+      _clearNetworkListener();
+      _resolveBytesSize();
+      _resolveNetworkSize();
+    }
+  }
+
+  @override
+  void dispose() {
+    _clearNetworkListener();
+    super.dispose();
+  }
+
+  void _clearNetworkListener() {
+    if (_netStream != null && _netListener != null) {
+      _netStream!.removeListener(_netListener!);
+    }
+    _netStream = null;
+    _netListener = null;
+  }
+
+  void _resolveBytesSize() {
+    final bytes = widget.bytes;
+    if (bytes == null || bytes.isEmpty) return;
+    unawaited(() async {
+      final dims = await decodeChatImageDimensions(bytes);
+      if (!mounted || dims == null) return;
+      setState(() {
+        _decodedSize = Size(dims.$1.toDouble(), dims.$2.toDouble());
+      });
+    }());
+  }
+
+  void _resolveNetworkSize() {
+    final url = widget.url;
+    if (url == null || url.isEmpty || widget.bytes != null || kIsWeb) return;
+    if (_decodedSize != null) return;
+    _clearNetworkListener();
+    final provider = NetworkImage(url);
+    final stream = provider.resolve(createLocalImageConfiguration(context));
+    late final ImageStreamListener listener;
+    listener = ImageStreamListener((info, _) {
+      if (!mounted) return;
+      final w = info.image.width.toDouble();
+      final h = info.image.height.toDouble();
+      if (w <= 0 || h <= 0) return;
+      setState(() => _decodedSize = Size(w, h));
+      stream.removeListener(listener);
+      if (_netStream == stream) {
+        _netStream = null;
+        _netListener = null;
+      }
+    }, onError: (_, _) {
+      stream.removeListener(listener);
+      if (_netStream == stream) {
+        _netStream = null;
+        _netListener = null;
+      }
+    });
+    _netStream = stream;
+    _netListener = listener;
+    stream.addListener(listener);
+  }
+
+  Size _displaySize() {
+    final box = _maxBox;
+    final src = _decodedSize;
+    if (src != null) {
+      return chatImageBubbleDisplaySize(
+        src.width,
+        src.height,
+        maxWidth: box.width,
+        maxHeight: box.height,
+      );
+    }
+    // 未知尺寸时用较扁占位，避免按 maxHeight 撑出大块空白。
+    return Size(box.width, box.width * 0.72);
+  }
 
   @override
   Widget build(BuildContext context) {
     final box = _maxBox;
+    final display = _displaySize();
     final bytes = widget.bytes;
     final url = widget.url;
 
@@ -298,27 +398,37 @@ class _ChatInlineImageState extends State<_ChatInlineImage> {
     if (bytes != null) {
       image = Image.memory(
         bytes,
+        width: display.width,
+        height: display.height,
         fit: BoxFit.contain,
         gaplessPlayback: true,
         errorBuilder: (_, _, _) => widget.error(),
       );
     } else if (url != null) {
-      // Web 上跨域图走 CORS-safe 通道；App 用 CachedDunesNetworkImage 渐进解码。
       if (kIsWeb) {
         image = buildCorsSafeImage(
           url: url,
-          width: box.width,
-          height: box.width * 0.72,
+          width: display.width,
+          height: display.height,
           fit: BoxFit.contain,
         );
       } else {
-        image = CachedDunesNetworkImage(
-          url: url,
-          width: box.width,
-          height: box.height,
+        image = Image.network(
+          url,
+          width: display.width,
+          height: display.height,
           fit: BoxFit.contain,
-          placeholder: widget.placeholder,
-          errorBuilder: () {
+          gaplessPlayback: true,
+          filterQuality: FilterQuality.medium,
+          frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
+            if (wasSynchronouslyLoaded || frame != null) return child;
+            return SizedBox(
+              width: display.width,
+              height: display.height,
+              child: widget.placeholder(),
+            );
+          },
+          errorBuilder: (_, _, _) {
             widget.onUrlError?.call();
             return widget.onUrlError != null
                 ? widget.placeholder()

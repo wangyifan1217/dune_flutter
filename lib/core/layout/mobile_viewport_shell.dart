@@ -11,7 +11,8 @@ class MobileViewportShell extends StatelessWidget {
 
   static bool shouldConstrain(BuildContext context) {
     if (defaultTargetPlatform == TargetPlatform.iOS ||
-        defaultTargetPlatform == TargetPlatform.android) {
+        defaultTargetPlatform == TargetPlatform.android ||
+        defaultTargetPlatform == TargetPlatform.windows) {
       return false;
     }
     return MediaQuery.sizeOf(context).width > phoneWidth;

@@ -32,6 +32,7 @@ class AppUpdateService {
     final platform = switch (defaultTargetPlatform) {
       TargetPlatform.android => 'android',
       TargetPlatform.iOS => 'ios',
+      TargetPlatform.windows => 'windows',
       _ => null,
     };
     if (platform == null) return null;

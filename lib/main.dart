@@ -6,7 +6,9 @@ import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
 import 'core/layout/mobile_viewport_shell.dart';
+import 'core/platform/desktop_features.dart';
 import 'core/theme/dunes_theme.dart';
+import 'features/desktop/windows_desktop_tray.dart';
 import 'features/push/push_service.dart';
 import 'features/shell/splash_screen.dart';
 import 'features/xflow/xflow_service.dart';
@@ -40,9 +42,12 @@ class DunesApp extends StatelessWidget {
   }
 }
 
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   installWebTextInputGuard();
+  if (isWindowsDesktopCommOnly) {
+    await initWindowsDesktopTray();
+  }
   if (!kIsWeb) {
     SystemChrome.setSystemUIOverlayStyle(
       const SystemUiOverlayStyle(

@@ -2,9 +2,14 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:image/image.dart' as img;
 
-/// 微信风格：会话内图片最大宽≈屏宽 32%，最大高≈屏宽 38%（按宽度 cap 竖图）。
+/// 微信 / 工作台 IM 风格：会话内图片上限。
+/// 宽屏用绝对上限，避免按整窗宽度比例把气泡撑得过高。
 Size chatImageBubbleMaxSize(BuildContext context) {
   final screenW = MediaQuery.sizeOf(context).width;
+  if (screenW >= 900) {
+    // 对齐 admin-web `.im-msg-image`：max-width 200 / max-height 240
+    return const Size(200, 240);
+  }
   return Size(screenW * 0.32, screenW * 0.38);
 }
 

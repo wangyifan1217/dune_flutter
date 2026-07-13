@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/navigation/navigation_controller.dart';
+import '../../core/platform/desktop_features.dart';
 import '../../core/theme/dunes_theme.dart';
 import '../conversation/comm_unread_notifier.dart';
 import '../workbench/workbench_badge_notifier.dart';
@@ -68,6 +69,10 @@ class _DunesMainTabBarState extends State<DunesMainTabBar> {
 
   bool get _showMyDot => (widget.workbenchBadge?.pendingForMe ?? 0) > 0;
 
+  /// 外部用户或 Windows 桌面：不展示千机 / 灯塔。
+  bool get _hideWorkbenchTabs =>
+      widget.chatOnlyMode || isWindowsDesktopCommOnly;
+
   @override
   Widget build(BuildContext context) {
     // 让 SafeArea 的 Home Indicator 区也使用 Tab 背景色；否则灯塔等页面的
@@ -89,7 +94,7 @@ class _DunesMainTabBarState extends State<DunesMainTabBar> {
                 screen: 'C1',
                 showRedDot: _showCommDot,
               ),
-              if (!widget.chatOnlyMode) ...[
+              if (!_hideWorkbenchTabs) ...[
                 _tab(
                   icon: Icons.grid_view_rounded,
                   label: '千机',

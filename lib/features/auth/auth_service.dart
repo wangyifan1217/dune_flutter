@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 import '../../core/config/dunes_defaults.dart';
+import '../../core/platform/desktop_features.dart';
 import 'auth_session.dart';
 import 'registration_messages.dart';
 
@@ -13,6 +14,11 @@ class AuthService {
 
   final http.Client _client;
   final String apiBase;
+
+  /// Windows 桌面用独立 channel，避免与手机 APP（app）互踢。
+  /// admin-web 使用 pc，三者各占一槽。
+  static String get loginChannel =>
+      isWindowsDesktopCommOnly ? 'desktop' : 'app';
 
   static String _defaultApiBase() {
     const fromEnv = String.fromEnvironment('DUNES_API_BASE');
@@ -28,7 +34,7 @@ class AuthService {
     final resp = await _client.post(
       uri,
       headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({'phone': phone, 'channel': 'app'}),
+      body: jsonEncode({'phone': phone, 'channel': loginChannel}),
     );
     if (resp.statusCode == 403) {
       final msg = _apiMessage(resp.body) ?? '账号已停用';
@@ -55,7 +61,11 @@ class AuthService {
     final response = await _client.post(
       uri,
       headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({'phone': phone, 'code': code, 'channel': 'app'}),
+      body: jsonEncode({
+        'phone': phone,
+        'code': code,
+        'channel': loginChannel,
+      }),
     );
 
     if (response.statusCode == 403) {

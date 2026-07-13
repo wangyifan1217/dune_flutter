@@ -1,0 +1,209 @@
+import 'dart:async';
+import 'dart:io' show Platform, exit;
+
+import 'package:flutter/foundation.dart';
+import 'package:tray_manager/tray_manager.dart';
+import 'package:window_manager/window_manager.dart';
+
+const _trayIcon = 'assets/images/tray_icon.ico';
+const _trayIconBlank = 'assets/images/tray_icon_blank.ico';
+
+Future<void> initWindowsDesktopTray() => WindowsDesktopTray.instance.init();
+
+void windowsTrayUpdateUnread(int total) {
+  WindowsDesktopTray.instance.updateUnread(total);
+}
+
+void windowsTrayNotifyIncomingMessage() {
+  WindowsDesktopTray.instance.notifyIncomingMessage();
+}
+
+/// 关闭进托盘；隐藏且有未读/新消息时托盘图标闪烁。
+class WindowsDesktopTray with WindowListener, TrayListener {
+  WindowsDesktopTray._();
+  static final WindowsDesktopTray instance = WindowsDesktopTray._();
+
+  bool _ready = false;
+  bool _hidden = false;
+  bool _allowQuit = false;
+  bool _flashing = false;
+  bool _flashVisible = true;
+  bool _pendingAlert = false;
+  int _unread = 0;
+  Timer? _flashTimer;
+
+  Future<void> init() async {
+    if (kIsWeb || !Platform.isWindows || _ready) return;
+
+    await windowManager.ensureInitialized();
+    windowManager.addListener(this);
+
+    // 窗口就绪后再拦截关闭，避免插件尚未挂上 HWND 时点 X 直接退出。
+    windowManager.waitUntilReadyToShow(const WindowOptions(
+      skipTaskbar: false,
+      title: '沙丘',
+    ), () async {
+      await windowManager.setPreventClose(true);
+      await windowManager.setTitle('沙丘');
+      await windowManager.show();
+      await windowManager.focus();
+    });
+
+    await windowManager.setPreventClose(true);
+
+    await trayManager.setIcon(_trayIcon);
+    await trayManager.setToolTip('沙丘');
+    await trayManager.setContextMenu(
+      Menu(
+        items: [
+          MenuItem(key: 'show', label: '打开沙丘'),
+          MenuItem.separator(),
+          MenuItem(key: 'quit', label: '退出'),
+        ],
+      ),
+    );
+    trayManager.addListener(this);
+    _ready = true;
+  }
+
+  void updateUnread(int total) {
+    if (!_ready) return;
+    _unread = total < 0 ? 0 : total;
+    if (_unread == 0) _pendingAlert = false;
+    unawaited(_syncFlash());
+  }
+
+  void notifyIncomingMessage() {
+    if (!_ready || !_hidden) return;
+    _pendingAlert = true;
+    unawaited(_syncFlash());
+  }
+
+  Future<void> _hideToTray() async {
+    _hidden = true;
+    // 再次确保关闭被拦截（部分时机下可能被重置）。
+    await windowManager.setPreventClose(true);
+    await windowManager.hide();
+    await windowManager.setSkipTaskbar(true);
+    await _syncFlash();
+  }
+
+  Future<void> _showFromTray() async {
+    _hidden = false;
+    _pendingAlert = false;
+    await _stopFlash();
+    await windowManager.setSkipTaskbar(false);
+    await windowManager.show();
+    await windowManager.focus();
+    await windowManager.setPreventClose(true);
+    await trayManager.setIcon(_trayIcon);
+  }
+
+  Future<void> _quitApp() async {
+    _allowQuit = true;
+    await _stopFlash();
+    try {
+      await trayManager.destroy();
+    } catch (_) {}
+    try {
+      await windowManager.setPreventClose(false);
+      await windowManager.destroy();
+    } catch (_) {}
+    // QuitOnClose=false 时必须主动结束进程。
+    exit(0);
+  }
+
+  Future<void> _syncFlash() async {
+    final shouldFlash = _hidden && (_unread > 0 || _pendingAlert);
+    if (shouldFlash) {
+      await _startFlash();
+    } else {
+      await _stopFlash();
+    }
+    final tip = _unread > 0 ? '沙丘（$_unread 条未读）' : '沙丘';
+    try {
+      await trayManager.setToolTip(tip);
+    } catch (_) {}
+  }
+
+  Future<void> _startFlash() async {
+    if (_flashing) return;
+    _flashing = true;
+    _flashVisible = true;
+    _flashTimer?.cancel();
+    _flashTimer = Timer.periodic(const Duration(milliseconds: 450), (_) {
+      unawaited(_toggleFlashIcon());
+    });
+  }
+
+  Future<void> _stopFlash() async {
+    _flashTimer?.cancel();
+    _flashTimer = null;
+    _flashing = false;
+    _flashVisible = true;
+    try {
+      await trayManager.setIcon(_trayIcon);
+    } catch (_) {}
+  }
+
+  Future<void> _toggleFlashIcon() async {
+    if (!_flashing) return;
+    _flashVisible = !_flashVisible;
+    try {
+      await trayManager.setIcon(_flashVisible ? _trayIcon : _trayIconBlank);
+    } catch (_) {}
+  }
+
+  @override
+  void onWindowClose() {
+    if (_allowQuit) return;
+    unawaited(_onCloseRequested());
+  }
+
+  Future<void> _onCloseRequested() async {
+    try {
+      final prevent = await windowManager.isPreventClose();
+      if (!prevent) return;
+      await _hideToTray();
+    } catch (e, st) {
+      debugPrint('[Tray] hide on close failed: $e\n$st');
+    }
+  }
+
+  @override
+  void onWindowRestore() {
+    _hidden = false;
+    _pendingAlert = false;
+    unawaited(_stopFlash());
+  }
+
+  @override
+  void onWindowFocus() {
+    if (!_hidden) {
+      _pendingAlert = false;
+      unawaited(_stopFlash());
+    }
+  }
+
+  @override
+  void onTrayIconMouseDown() {
+    unawaited(_showFromTray());
+  }
+
+  @override
+  void onTrayIconRightMouseDown() {
+    unawaited(trayManager.popUpContextMenu());
+  }
+
+  @override
+  void onTrayMenuItemClick(MenuItem menuItem) {
+    switch (menuItem.key) {
+      case 'show':
+        unawaited(_showFromTray());
+        break;
+      case 'quit':
+        unawaited(_quitApp());
+        break;
+    }
+  }
+}

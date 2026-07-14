@@ -71,11 +71,15 @@ abstract final class ConversationInboxRealtime {
 
     final copy = items.toList(growable: true);
     final old = copy[index];
+    // 正在看该会话：不累加，并清掉残留未读角标。
+    final nextUnread = activeOnChatScreen
+        ? 0
+        : (bumpUnread ? old.unreadCount + 1 : old.unreadCount);
     copy[index] = _copyConversation(
       old,
       preview: preview?.text,
       updatedAt: at ?? old.updatedAt,
-      unreadCount: bumpUnread ? old.unreadCount + 1 : old.unreadCount,
+      unreadCount: nextUnread,
       title: _titleForEvent(event, old),
     );
 

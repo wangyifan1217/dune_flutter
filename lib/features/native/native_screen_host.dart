@@ -144,6 +144,9 @@ class _NativeScreenHostState extends State<NativeScreenHost>
   /// 用户本次前台会话内主动点进聊天；切后台后清零，避免 resume 误触已读。
   bool _userActivelyInChat = false;
 
+  /// mark-read 成功后通知双栏列表清零对应未读角标。
+  final ConversationReadSignal _conversationReadSignal = ConversationReadSignal();
+
   void _markUserEnteredChat() {
     _userActivelyInChat = true;
   }
@@ -209,6 +212,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     _commUnread.dispose();
     _workbenchBadge.dispose();
     _workbenchRefresh.dispose();
+    _conversationReadSignal.dispose();
     super.dispose();
   }
 
@@ -321,6 +325,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     if (conversationId > 0) {
       _pendingBadgeZeroSync = true;
       _commUnread.clearMutedMention(conversationId);
+      _conversationReadSignal.notifyRead(conversationId);
     }
     print(
       '[Badge] handleConversationRead conv=$conversationId pendingZero=$_pendingBadgeZeroSync',
@@ -426,6 +431,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
 
   bool _isViewingConversation(int convId) {
     if (convId <= 0) return false;
+    // 双栏：右侧正在展示该会话时，Tab 角标不再累加。
+    if (_dualPaneSelectedConversationId == convId) return true;
     final screen = widget.navigation.currentScreen;
     if (screen == 'C5' && _selectedPrivate?.id == convId) return true;
     if (screen == 'C2' && _selectedGroup?.id == convId) return true;
@@ -534,6 +541,9 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       _focusMessageHint = null;
     });
     _markUserEnteredChat();
+    if (conv.id > 0) {
+      _conversationReadSignal.notifyRead(conv.id);
+    }
     _goChatScreen('C5');
   }
 
@@ -546,6 +556,9 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       _focusMessageHint = null;
     });
     _markUserEnteredChat();
+    if (conv.id > 0) {
+      _conversationReadSignal.notifyRead(conv.id);
+    }
     _goChatScreen('C2');
   }
 
@@ -607,6 +620,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       commUnread: _commUnread,
       workbenchBadge: _workbenchBadge,
       selectedConversationId: selectedConversationId,
+      conversationReadSignal: _conversationReadSignal,
       showBottomTabBar: showBottomTabBar,
       onOpenPrivate: _openPrivateConversation,
       onOpenGroup: _openGroupConversation,

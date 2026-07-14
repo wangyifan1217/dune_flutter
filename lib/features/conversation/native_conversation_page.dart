@@ -41,6 +41,7 @@ class NativeConversationPage extends StatefulWidget {
     required this.onOpenNotifications,
     required this.onOpenNewChat,
     this.selectedConversationId,
+    this.conversationReadSignal,
     this.showBottomTabBar = true,
   });
 
@@ -56,11 +57,26 @@ class NativeConversationPage extends StatefulWidget {
   final VoidCallback onOpenNewChat;
   /// 双栏布局中当前选中的会话，用于列表高亮。
   final int? selectedConversationId;
+  /// Host 在 mark-read 成功后通知列表清零对应未读角标。
+  final ConversationReadSignal? conversationReadSignal;
   /// 双栏壳已提供底部 Tab 时关闭页内 Tab，避免重复。
   final bool showBottomTabBar;
 
   @override
   State<NativeConversationPage> createState() => _NativeConversationPageState();
+}
+
+/// Host → 会话列表：mark-read 成功后清零未读角标。
+class ConversationReadSignal extends ChangeNotifier {
+  int _conversationId = 0;
+
+  int get conversationId => _conversationId;
+
+  void notifyRead(int conversationId) {
+    if (conversationId <= 0) return;
+    _conversationId = conversationId;
+    notifyListeners();
+  }
 }
 
 class _InboxSection {
@@ -118,9 +134,67 @@ class _NativeConversationPageState extends State<NativeConversationPage>
     _realtime = ConversationRealtimeHub.instance.of(widget.session);
     WidgetsBinding.instance.addObserver(this);
     userAvatarRefresh.addListener(_onSelfAvatarUpdated);
+    widget.conversationReadSignal?.addListener(_onConversationReadSignal);
     _load();
     _bootRealtime();
     NovaBackgroundCoordinator.instance.addListener(_onNovaBackgroundUpdate);
+  }
+
+  @override
+  void didUpdateWidget(covariant NativeConversationPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.conversationReadSignal != widget.conversationReadSignal) {
+      oldWidget.conversationReadSignal?.removeListener(_onConversationReadSignal);
+      widget.conversationReadSignal?.addListener(_onConversationReadSignal);
+    }
+    final selected = widget.selectedConversationId ?? 0;
+    final prev = oldWidget.selectedConversationId ?? 0;
+    if (selected > 0 && selected != prev) {
+      _clearUnreadLocally(selected);
+    }
+  }
+
+  void _onConversationReadSignal() {
+    final id = widget.conversationReadSignal?.conversationId ?? 0;
+    if (id > 0) _clearUnreadLocally(id);
+  }
+
+  void _clearUnreadLocally(int conversationId) {
+    if (conversationId <= 0 || !mounted) return;
+    final idx = _items.indexWhere((c) => c.id == conversationId);
+    if (idx < 0) return;
+    if (_items[idx].unreadCount <= 0) return;
+    setState(() {
+      final copy = _items.toList(growable: true);
+      final old = copy[idx];
+      copy[idx] = NativeConversation(
+        id: old.id,
+        kind: old.kind,
+        title: old.title,
+        unreadCount: 0,
+        preview: old.preview,
+        updatedAt: old.updatedAt,
+        peerUserId: old.peerUserId,
+        peerDisplayName: old.peerDisplayName,
+        memberCount: old.memberCount,
+        muted: old.muted,
+        pinned: old.pinned,
+        businessType: old.businessType,
+        peerDepartment: old.peerDepartment,
+        peerRoleLabel: old.peerRoleLabel,
+        peerAvatarPreset: old.peerAvatarPreset,
+        peerAvatarObjectKey: old.peerAvatarObjectKey,
+        peerAvatarUrl: old.peerAvatarUrl,
+        avatarMembers: old.avatarMembers,
+        dissolved: old.dissolved,
+        membershipStatus: old.membershipStatus,
+        assistantGenerating: old.assistantGenerating,
+        assistantGeneratingStatus: old.assistantGeneratingStatus,
+      );
+      _items = copy;
+    });
+    widget.commUnread.clearMutedMention(conversationId);
+    _updateCommBadge(_items, _notif.unreadCount);
   }
 
   void _onSelfAvatarUpdated() {
@@ -153,6 +227,7 @@ class _NativeConversationPageState extends State<NativeConversationPage>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     userAvatarRefresh.removeListener(_onSelfAvatarUpdated);
+    widget.conversationReadSignal?.removeListener(_onConversationReadSignal);
     NovaBackgroundCoordinator.instance.removeListener(_onNovaBackgroundUpdate);
     _rtRefreshDebounce?.cancel();
     _searchDebounce?.cancel();
@@ -243,6 +318,9 @@ class _NativeConversationPageState extends State<NativeConversationPage>
         event: like,
         selfUserId: widget.session.userId,
         selfDisplayName: widget.session.displayName,
+        activeOnChatScreen:
+            (widget.selectedConversationId ?? 0) > 0 &&
+            widget.selectedConversationId == convId,
       );
     });
     if (mentionHit && isMutedGroup && convId > 0) {

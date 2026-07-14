@@ -30,8 +30,6 @@ class ProposalRecognitionView extends StatefulWidget {
     this.fileName = '',
     this.fileSize = '',
     this.sheetCount = 0,
-    this.baselineMarginRate = 0,
-    this.baselineDiscountRate = 0,
     this.onPreviewTap,
     this.initialExpandedSectionIds = const {},
     this.resolveAssetUrl,
@@ -46,8 +44,6 @@ class ProposalRecognitionView extends StatefulWidget {
   final String fileName;
   final String fileSize;
   final int sheetCount;
-  final double baselineMarginRate;
-  final double baselineDiscountRate;
   final VoidCallback? onPreviewTap;
   final Set<String> initialExpandedSectionIds;
   final String Function(String urlOrPath)? resolveAssetUrl;
@@ -404,150 +400,8 @@ class _ProposalRecognitionViewState extends State<ProposalRecognitionView> {
             ],
             if (i != section.rows.length - 1) const SizedBox(height: 5),
           ],
-          if (section.tierRows.isNotEmpty) ...[
-            const SizedBox(height: 10),
-            const Text(
-              '阶梯利润测算 · TIER MODEL',
-              style: TextStyle(
-                fontFamily: 'monospace',
-                fontSize: 8,
-                color: ProposalRecognitionColors.mute2,
-                letterSpacing: 1.2,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            const SizedBox(height: 5),
-            _tierTable(section.tierRows),
-          ],
-          if (section.isFinancial) ...[
-            const SizedBox(height: 12),
-            _baselineEmbed(
-              widget.baselineMarginRate,
-              widget.baselineDiscountRate,
-            ),
-          ],
         ],
       ),
-    );
-  }
-
-  Widget _tierTable(List<ProposalArchiveTierRow> rows) {
-    return Container(
-      decoration: BoxDecoration(
-        color: ProposalRecognitionColors.cardAlt,
-        border: Border.all(color: ProposalRecognitionColors.line2, width: 0.5),
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Column(
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-            decoration: BoxDecoration(
-              color: ProposalRecognitionColors.ink.withAlpha(8),
-              border: const Border(
-                bottom: BorderSide(color: ProposalRecognitionColors.line2, width: 0.5),
-              ),
-            ),
-            child: const Row(
-              children: [
-                Expanded(child: _TierHeaderCell('规模', Alignment.centerLeft)),
-                Expanded(child: _TierHeaderCell('供货', Alignment.centerRight)),
-                Expanded(child: _TierHeaderCell('销售', Alignment.centerRight)),
-                Expanded(child: _TierHeaderCell('净利', Alignment.centerRight)),
-              ],
-            ),
-          ),
-          for (var i = 0; i < rows.length; i++)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                border: i != rows.length - 1
-                    ? const Border(
-                        bottom: BorderSide(color: Color(0xFFF2EFE6), width: 0.5),
-                      )
-                    : null,
-              ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: _TierCell(rows[i].scale, Alignment.centerLeft, ProposalRecognitionColors.ink),
-                  ),
-                  Expanded(
-                    child: _TierCell(
-                      '${rows[i].supply.toStringAsFixed(1)}%',
-                      Alignment.centerRight,
-                      ProposalRecognitionColors.ink,
-                    ),
-                  ),
-                  Expanded(
-                    child: _TierCell(
-                      '${rows[i].sell.toStringAsFixed(1)}%',
-                      Alignment.centerRight,
-                      ProposalRecognitionColors.ink,
-                    ),
-                  ),
-                  Expanded(
-                    child: _TierCell(
-                      rows[i].netProfit.toStringAsFixed(0),
-                      Alignment.centerRight,
-                      rows[i].netProfit < 0
-                          ? ProposalRecognitionColors.danger
-                          : (rows[i].netProfit >= 2000
-                                ? ProposalRecognitionColors.success
-                                : ProposalRecognitionColors.ink),
-                      weight: rows[i].netProfit >= 5000 ? FontWeight.w700 : FontWeight.w500,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-
-  Widget _baselineEmbed(double marginRate, double discountRate) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(11, 9, 11, 9),
-      decoration: BoxDecoration(
-        color: ProposalRecognitionColors.card,
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: ProposalRecognitionColors.coral.withAlpha(90), width: 0.6),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            children: [
-              Expanded(child: _baselineStat('目标毛利率', marginRate)),
-              const SizedBox(width: 12),
-              Expanded(child: _baselineStat('目标销售折扣', discountRate)),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _baselineStat(String label, double value) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: const TextStyle(fontSize: 9, color: ProposalRecognitionColors.mute),
-        ),
-        const SizedBox(height: 2),
-        Text(
-          value == 0 ? '—' : '${value.toStringAsFixed(1)}%',
-          style: const TextStyle(
-            fontFamily: 'monospace',
-            fontSize: 13,
-            fontWeight: FontWeight.w700,
-            color: ProposalRecognitionColors.coral,
-          ),
-        ),
-      ],
     );
   }
 
@@ -716,53 +570,6 @@ class _ProposalRecognitionViewState extends State<ProposalRecognitionView> {
           fontSize: 9,
           color: ProposalRecognitionColors.ink,
           fontWeight: FontWeight.w600,
-        ),
-      ),
-    );
-  }
-}
-
-class _TierHeaderCell extends StatelessWidget {
-  const _TierHeaderCell(this.text, this.align);
-  final String text;
-  final Alignment align;
-
-  @override
-  Widget build(BuildContext context) {
-    return Align(
-      alignment: align,
-      child: Text(
-        text,
-        style: const TextStyle(
-          fontFamily: 'monospace',
-          fontSize: 8,
-          color: ProposalRecognitionColors.mute2,
-          fontWeight: FontWeight.w700,
-          letterSpacing: 0.8,
-        ),
-      ),
-    );
-  }
-}
-
-class _TierCell extends StatelessWidget {
-  const _TierCell(this.text, this.align, this.color, {this.weight = FontWeight.w500});
-  final String text;
-  final Alignment align;
-  final Color color;
-  final FontWeight weight;
-
-  @override
-  Widget build(BuildContext context) {
-    return Align(
-      alignment: align,
-      child: Text(
-        text,
-        style: TextStyle(
-          fontFamily: 'monospace',
-          fontSize: 9.5,
-          color: color,
-          fontWeight: weight,
         ),
       ),
     );

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
@@ -266,17 +267,27 @@ List<NativeNovaMessage> repairNovaConversationMessages(
     usedAssistantIds.add(a.id);
   }
 
+  // 用单调递增时间戳保证 U1→A1→U2→A2… 不会因同秒/同毫秒塌缩成
+  // U1,U2,U3,A1,A2,A3（重新发送后 repair 全量重排时尤其容易触发）。
   final out = <NativeNovaMessage>[];
+  DateTime? cursor;
   for (final u in users) {
-    final userAt =
+    var userAt =
         u.createdAt ??
         (u.id > 0 ? DateTime.fromMillisecondsSinceEpoch(u.id) : DateTime.now());
+    if (cursor != null && !userAt.isAfter(cursor)) {
+      userAt = cursor.add(const Duration(milliseconds: 1));
+    }
     out.add(u.copyWith(createdAt: userAt));
+    cursor = userAt;
     final turnAssistants = buckets[u.id] ?? const <NativeNovaMessage>[];
-    for (var i = 0; i < turnAssistants.length; i++) {
-      final a = turnAssistants[i];
-      final aiAt = userAt.add(Duration(milliseconds: 1000 + i * 500));
+    for (final a in turnAssistants) {
+      var aiAt = a.createdAt;
+      if (aiAt == null || !aiAt.isAfter(cursor!)) {
+        aiAt = cursor!.add(const Duration(milliseconds: 1));
+      }
       out.add(a.copyWith(createdAt: aiAt));
+      cursor = aiAt;
     }
   }
 
@@ -331,7 +342,26 @@ bool isDuplicateNovaHistoryMessage(NativeNovaMessage a, NativeNovaMessage b) {
 
   // 不同 id：短窗口内同文案=本地/服务端镜像（退出再进会翻倍）；
   // 间隔更长则视为另一轮提问，保留。
+  // 用户消息除外：连续发/重发相同文案（如「测试」）是合法多轮，绝不能按文案合并。
   if (a.id > 0 && b.id > 0 && a.id != b.id) {
+    if (a.role == 'user') {
+      // 仅附件占位与正文镜像可合并；纯文本同文案一律保留为独立轮次。
+      if (((a.attachments.isNotEmpty) != (b.attachments.isNotEmpty)) &&
+          secondsApart < 90) {
+        if (at == bt ||
+            at.isEmpty ||
+            bt.isEmpty ||
+            at == '[图片]' ||
+            bt == '[图片]' ||
+            at == '[附件消息]' ||
+            bt == '[附件消息]' ||
+            at == '[文件]' ||
+            bt == '[文件]') {
+          return true;
+        }
+      }
+      return false;
+    }
     if (at.isNotEmpty && bt.isNotEmpty && secondsApart <= 12) {
       if (at == bt) return true;
       if (a.role == 'assistant' &&
@@ -341,27 +371,12 @@ bool isDuplicateNovaHistoryMessage(NativeNovaMessage a, NativeNovaMessage b) {
         return true;
       }
     }
-    if (a.role == 'user' &&
-        ((a.attachments.isNotEmpty) != (b.attachments.isNotEmpty)) &&
-        secondsApart < 90) {
-      if (at == bt ||
-          at.isEmpty ||
-          bt.isEmpty ||
-          at == '[图片]' ||
-          bt == '[图片]' ||
-          at == '[附件消息]' ||
-          bt == '[附件消息]' ||
-          at == '[文件]' ||
-          bt == '[文件]') {
-        return true;
-      }
-    }
     return false;
   }
 
   if (at.isNotEmpty && bt.isNotEmpty) {
-    // 无稳定 id 时也只用短窗口，避免把稍后的另一次提问合并掉。
-    if (at == bt && secondsApart <= 12) return true;
+    // 无稳定 id 时也只用短窗口；用户同文案仍保留（避免「测试」连发被吞）。
+    if (a.role != 'user' && at == bt && secondsApart <= 12) return true;
     if (a.role == 'assistant' &&
         secondsApart <= 12 &&
         at.length > 40 &&
@@ -499,6 +514,7 @@ class NovaHistoryLoadResult {
 class NovaConversationSnapshot {
   const NovaConversationSnapshot({
     required this.conversationId,
+    this.novaSessionId = '',
     this.assistantGenerating = false,
     this.assistantGeneratingStatus = '',
     this.assistantGeneratingAfterMessageId = 0,
@@ -506,6 +522,7 @@ class NovaConversationSnapshot {
   });
 
   final int conversationId;
+  final String novaSessionId;
   final bool assistantGenerating;
   final String assistantGeneratingStatus;
   final int assistantGeneratingAfterMessageId;
@@ -641,9 +658,7 @@ class NativeNovaService {
     try {
       final decoded = jsonDecode(raw);
       if (decoded is List) {
-        return resolveNovaChatModels(
-          decoded.map((e) => e.toString()).toList(),
-        );
+        return resolveNovaChatModels(decoded.map((e) => e.toString()).toList());
       }
     } catch (_) {}
     return const <String>[];
@@ -685,6 +700,124 @@ class NativeNovaService {
     model: selectedModel,
     userPayload: userPayload,
   );
+
+  /// 审计入库用的 userPayload：保证带 `attachments` 数组，避免 IM 平铺
+  /// `{objectKey,fileName}` 写进 flow-go 后管理端解析不到附件。
+  Map<String, dynamic>? historyUserPayloadFromMessage(
+    NativeNovaMessage user, {
+    Map<String, dynamic>? fallback,
+  }) {
+    return historyUserPayloadFromParts(
+      payload: user.payload ?? fallback,
+      attachments: user.attachments,
+      kind: user.kind,
+    );
+  }
+
+  Map<String, dynamic>? historyUserPayloadFromParts({
+    Map<String, dynamic>? payload,
+    List<NovaMessageAttachment> attachments = const <NovaMessageAttachment>[],
+    String kind = 'TEXT',
+  }) {
+    final out = <String, dynamic>{};
+    if (payload != null && payload.isNotEmpty) {
+      for (final e in payload.entries) {
+        out[e.key] = e.value;
+      }
+    }
+
+    final atts = <Map<String, dynamic>>[];
+    final nested = out['attachments'];
+    if (nested is List) {
+      for (final row in nested) {
+        if (row is Map) {
+          atts.add(Map<String, dynamic>.from(row));
+        }
+      }
+    }
+    if (atts.isEmpty && attachments.isNotEmpty) {
+      for (final a in attachments) {
+        atts.add(a.toJson());
+      }
+    }
+    if (atts.isEmpty) {
+      final k = kind.toUpperCase();
+      final hasFile =
+          (out['url'] != null && out['url'].toString().trim().isNotEmpty) ||
+          (out['objectKey'] != null &&
+              out['objectKey'].toString().trim().isNotEmpty) ||
+          (out['previewUrl'] != null &&
+              out['previewUrl'].toString().trim().isNotEmpty);
+      if (hasFile && (k == 'IMAGE' || k == 'FILE' || k == 'AUDIO')) {
+        atts.add(<String, dynamic>{
+          ...out,
+          'kind': k,
+          'fileName': (out['fileName'] ?? out['name'] ?? 'file').toString(),
+          'bucket': (out['bucket'] ?? 'im-attachments').toString(),
+        });
+      }
+    }
+    if (atts.isNotEmpty) {
+      out['attachments'] = atts;
+    }
+    return out.isEmpty ? null : out;
+  }
+
+  /// 以 IM 会话中的真实消息 ID 回填审计轮次。
+  ///
+  /// `/ai/assistant/messages` 会在服务端创建新的 user/assistant 消息，
+  /// 但客户端发送前生成的毫秒时间戳不是 IM 消息 ID。审计若使用该临时 ID
+  /// upsert，会覆盖旧轮次，导致工作台少轮或问答错配。
+  Future<List<NativeNovaMessage>> syncCanonicalHistoryTurns(
+    int conversationId,
+  ) async {
+    final snapshot = await fetchConversationAll(conversationId);
+    final canonicalConversationId = snapshot.conversationId > 0
+        ? snapshot.conversationId
+        : conversationId;
+    final rows = sortNovaMessages(
+      snapshot.messages,
+    ).where((m) => !m.isWelcome).toList(growable: false);
+
+    // 先与本地合并，把多模态/附件元数据带进审计写入；否则 IM 纯文本会冲掉
+    // 已有 userPayload.attachments。
+    final localRows = await _loadPersistedSessionMessages(
+      canonicalConversationId,
+    );
+    final mergedRows = _mergeTurnsWithSessionCache(rows, localRows)
+        .where((m) => !m.isWelcome)
+        .toList(growable: false);
+
+    for (var index = 0; index < mergedRows.length; index++) {
+      final user = mergedRows[index];
+      if (user.role != 'user' || user.id <= 0) continue;
+
+      NativeNovaMessage? assistant;
+      for (var next = index + 1; next < mergedRows.length; next++) {
+        final candidate = mergedRows[next];
+        if (candidate.role == 'user') break;
+        if (candidate.role == 'assistant' &&
+            !candidate.streaming &&
+            candidate.text.trim().isNotEmpty) {
+          assistant = candidate;
+          break;
+        }
+      }
+      if (assistant == null) continue;
+
+      await registerHistoryTurn(
+        conversationId: canonicalConversationId,
+        messageId: user.id,
+        userMessage: user.text,
+        assistantMessage: assistant.text,
+        lastMessageAt: (assistant.createdAt ?? user.createdAt ?? DateTime.now())
+            .toUtc()
+            .toIso8601String(),
+        userPayload: historyUserPayloadFromMessage(user),
+      );
+    }
+    return mergedRows;
+  }
 
   /// 离开 C4 / 新对话前刷新本地历史预览。
   Future<void> flushConvToLocalHistory(
@@ -1181,6 +1314,7 @@ class NativeNovaService {
       await persistActiveConversationId(canonical);
     }
     final snap = _parseConversationSnapshot(decoded, fallbackConvId: canonical);
+    await persistNovaChatSessionId(snap.conversationId, snap.novaSessionId);
     _lastSessionSnapshot = snap;
     if (kDebugMode) {
       debugPrint(
@@ -1205,6 +1339,7 @@ class NativeNovaService {
       throw Exception(_parseApiError(resp, fallback: '创建NOVA新会话失败'));
     }
     final snap = _parseConversationSnapshot(_decode(resp.body));
+    await persistNovaChatSessionId(snap.conversationId, snap.novaSessionId);
     _lastSessionSnapshot = snap;
     if (kDebugMode) {
       debugPrint('[NativeNova] sessions/new convId=${snap.conversationId}');
@@ -1233,6 +1368,7 @@ class NativeNovaService {
     );
     await _adoptCanonicalConversationId(conversationId, canonical);
     final snap = _parseConversationSnapshot(decoded, fallbackConvId: canonical);
+    await persistNovaChatSessionId(snap.conversationId, snap.novaSessionId);
     _lastSessionSnapshot = snap;
     return snap;
   }
@@ -1253,6 +1389,8 @@ class NativeNovaService {
     final msgs = _messagesFromServerList(rawMsgs);
     return NovaConversationSnapshot(
       conversationId: convId,
+      novaSessionId: (d['novaSessionId'] ?? d['nova_session_id'] ?? '')
+          .toString(),
       assistantGenerating: gen.$1,
       assistantGeneratingStatus: gen.$2,
       assistantGeneratingAfterMessageId: gen.$3,
@@ -1298,7 +1436,10 @@ class NativeNovaService {
       }
       return a.id.compareTo(b.id);
     });
-    return repairNovaConversationMessages(reconcileMisclassifiedNovaRoles(out));
+    // IM 返回的顺序、ID 和 createdAt 是会话的权威数据。不要在这里套
+    // repairNovaConversationMessages：它按启发式重新配对，会让相同文案的
+    // 多轮「测试」错配。
+    return reconcileMisclassifiedNovaRoles(out);
   }
 
   Future<int> _postAiConversationSessionEnsure() async {
@@ -1355,56 +1496,59 @@ class NativeNovaService {
     }
 
     final localMsgs = await _loadPersistedSessionMessages(effectiveConvId);
-    var msgs = server.messages;
-
-    // 多模态提问不走 im assistant/messages，服务端会话常为空；必须优先恢复本地会话，
-    // 否则退出再进会变成空白「新会话」。
-    if (msgs.isEmpty && localMsgs.isNotEmpty) {
-      msgs = localMsgs;
-    }
+    // IM 快照可能为空、落库延迟，或只返回最新一轮；多模态轮次也只在本地。
+    // 始终合并本地缓存，避免把已有完整会话截断成一轮。服务端同 ID 的消息
+    // 仍优先作为权威数据，临时 ID 则由去重逻辑按角色、内容和时间窗口合并。
+    var msgs = _mergeTurnsWithSessionCache(server.messages, localMsgs);
 
     // 修复：后台完成生成后重新进入会话时，服务端快照可能只回了用户消息而漏掉助手
     // 回复（助手 turn 尚未在服务端落库/回显）。若不补齐，下面的持久化会用「仅用户
     // 消息」覆盖本地缓存，导致已生成的回复永久丢失。这里用本地已保存的完整回复补齐。
-    msgs = _mergeTrailingAssistantFromLocal(msgs, localMsgs);
+    if (server.messages.isEmpty) {
+      msgs = _mergeTrailingAssistantFromLocal(msgs, localMsgs);
+    }
 
     final preserveGeneratingSnapshot = shouldPersistNovaGenerating(
       localGen: localGen,
       draft: streamDraft,
       streamInFlight: isStreamInFlight,
     );
-    if (localMsgs.isNotEmpty) {
-      msgs = _mergeTurnsWithSessionCache(msgs, localMsgs);
-    }
-
-    // history/turns 按 conversationId 过滤后，可作为空会话/多模态会话的恢复兜底。
-    final allowTurnsRebuild = restoreFromHistory ||
-        (aroundMessageId != null && aroundMessageId > 0) ||
-        msgs.isEmpty ||
-        _shouldRebuildFromTurns(msgs);
-    if (allowTurnsRebuild) {
-      final turns = await _fetchTurnRows(200, conversationId: conversationId);
-      final scoped = _filterTurnsForConversation(turns, conversationId);
-      if (scoped.isNotEmpty) {
-        final turnMsgs = _novaMsgsFromTurns(
-          _dedupeNovaTurns(scoped),
-          conversationId,
-        );
-        if (turnMsgs.isNotEmpty) {
-          if (kDebugMode) {
-            debugPrint(
-              '[NativeNova] rebuilt history from turns conv=$conversationId '
-              'turns=${scoped.length}/${turns.length} msgs=${turnMsgs.length}',
-            );
-          }
-          msgs = _mergeTurnsWithSessionCache(turnMsgs, localMsgs);
+    // 始终拉取 flow-go `/ai/history/turns`：附件与多模态轮次写在 userPayload，
+    // IM 快照通常只有正文。此前仅在 server.messages 为空时才请求，导致回看
+    // 看不到图片、文件。有 turns 时以审计时间线为主，再合并 IM/本地。
+    final turns = await _fetchTurnRows(200, conversationId: conversationId);
+    final scoped = _filterTurnsForConversation(turns, conversationId);
+    if (scoped.isNotEmpty) {
+      final turnMsgs = _novaMsgsFromTurns(
+        _dedupeNovaTurns(scoped),
+        conversationId,
+      );
+      if (turnMsgs.isNotEmpty) {
+        if (kDebugMode) {
+          debugPrint(
+            '[NativeNova] merge history turns conv=$conversationId '
+            'turns=${scoped.length} im=${server.messages.length} '
+            'local=${localMsgs.length}',
+          );
         }
-      } else if (turns.isNotEmpty && kDebugMode) {
-        debugPrint(
-          '[NativeNova] skip turns rebuild: none match conv=$conversationId '
-          '(got ${turns.length})',
-        );
+        // turns 优先：含 Excel/图片等仅存在于审计表的轮次。
+        msgs = _mergeTurnsWithSessionCache(turnMsgs, server.messages);
+        msgs = _mergeTurnsWithSessionCache(msgs, localMsgs);
+        if (restoreFromHistory) {
+          unawaited(
+            _backfillImMissingAttachmentTurns(
+              conversationId,
+              scoped,
+              server.messages,
+            ),
+          );
+        }
       }
+    } else if (turns.isNotEmpty && kDebugMode) {
+      debugPrint(
+        '[NativeNova] skip turns merge: none match conv=$conversationId '
+        '(got ${turns.length})',
+      );
     }
 
     msgs = applyViewSinceFilter ? await _applyViewSinceFilter(msgs) : msgs;
@@ -1450,13 +1594,43 @@ class NativeNovaService {
       unawaited(_persistSessionMessages(effectiveConvId, msgs));
     }
     return NovaHistoryLoadResult(
-      messages: repairNovaConversationMessages(
-        sortNovaMessages(_dedupeNovaHistory(msgs)),
-      ),
+      messages: sortNovaMessages(_dedupeNovaHistory(msgs)),
       assistantGenerating: generating,
       generatingStatus: genStatus,
       generatingAfterMessageId: genAfter,
     );
+  }
+
+  /// 审计表有附件轮次、IM 没有时补写到 IM（需 im-svc `/ai/assistant/turns`）。
+  Future<void> _backfillImMissingAttachmentTurns(
+    int conversationId,
+    List<Map<String, dynamic>> turns,
+    List<NativeNovaMessage> imMessages,
+  ) async {
+    if (conversationId <= 0 || turns.isEmpty) return;
+    final imTexts = imMessages
+        .where((m) => m.role == 'user')
+        .map((m) => m.text.trim())
+        .where((t) => t.isNotEmpty)
+        .toSet();
+    for (final t in turns) {
+      Map<String, dynamic>? payload;
+      final raw =
+          t['userPayload'] ?? t['userMetadata'] ?? t['user_payload'] ?? t['metadata'];
+      if (raw is Map) payload = Map<String, dynamic>.from(raw);
+      final atts = payload?['attachments'];
+      if (atts is! List || atts.isEmpty) continue;
+      final user = _novaTurnUserText(t);
+      final assist = _novaTurnAssistantText(t);
+      if (user.isEmpty || assist.isEmpty) continue;
+      if (imTexts.contains(user)) continue;
+      await persistImAssistantTurn(
+        conversationId: conversationId,
+        userMessage: user,
+        assistantMessage: assist,
+        userPayload: payload,
+      );
+    }
   }
 
   /// 当服务端快照缺失结尾的助手回复，但本地缓存已保存完整回复时，补齐该回复。
@@ -1508,28 +1682,59 @@ class NativeNovaService {
     return assistantOnlyPrefix;
   }
 
+  /// 客户端发送前用 `DateTime.now().millisecondsSinceEpoch` 作临时 id；
+  /// IM BIGSERIAL 远小于 1e12。用于识别「本地镜像 vs 服务端真消息」。
+  bool _isClientTempMessageId(int id) => id >= 1000000000000;
+
   List<NativeNovaMessage> _mergeTurnsWithSessionCache(
     List<NativeNovaMessage> turns,
     List<NativeNovaMessage> local,
   ) {
     if (local.isEmpty) return turns;
     final map = <int, NativeNovaMessage>{};
+    final serverIds = <int>{};
     for (final m in turns) {
-      if (m.id > 0) map[m.id] = m;
+      if (m.id <= 0) continue;
+      map[m.id] = m;
+      serverIds.add(m.id);
     }
-    for (final m in local) {
+    final consumedServerIds = <int>{};
+    final localSorted = [...local]
+      ..sort((a, b) {
+        final ta = a.createdAt?.millisecondsSinceEpoch ?? a.id;
+        final tb = b.createdAt?.millisecondsSinceEpoch ?? b.id;
+        return ta.compareTo(tb);
+      });
+
+    for (final m in localSorted) {
       if (m.id <= 0) continue;
       final prev = map[m.id];
-      if (prev == null) {
-        map[m.id] = m;
+      if (prev != null) {
+        map[m.id] = _mergeNovaHistoryById(prev, m);
         continue;
       }
-      map[m.id] = _mergeNovaHistoryById(prev, m);
-      continue;
-    }
-    for (final m in local) {
-      if (m.id <= 0 || map.containsKey(m.id)) continue;
-      // 多模态走 chat/completions 时用户/助手可能仅落本地；必须保留，否则退出再进会丢会话。
+
+      // 本地临时气泡与 IM 真消息内容相同、时间接近时，合并到服务端 id，
+      // 避免「测试1」先本地出现再被 sync 成第二条。
+      final mirror = _findServerMirrorForLocal(
+        map.values
+            .where(
+              (s) =>
+                  serverIds.contains(s.id) && !consumedServerIds.contains(s.id),
+            )
+            .toList(growable: false),
+        m,
+      );
+      if (mirror != null) {
+        consumedServerIds.add(mirror.id);
+        map[mirror.id] = _mergeNovaHistoryById(
+          mirror,
+          m.copyWith(id: mirror.id, createdAt: mirror.createdAt ?? m.createdAt),
+        );
+        continue;
+      }
+
+      // 多模态走 chat/completions 时用户/助手可能仅落本地；必须保留。
       map[m.id] = m;
     }
     var out = map.values.toList()
@@ -1540,6 +1745,34 @@ class NativeNovaService {
       });
     out = _applyFuzzyAttachmentMerge(out, local);
     return sortNovaMessages(_dedupeNovaHistory(out));
+  }
+
+  NativeNovaMessage? _findServerMirrorForLocal(
+    List<NativeNovaMessage> serverCandidates,
+    NativeNovaMessage local,
+  ) {
+    if (!_isClientTempMessageId(local.id)) return null;
+    final lText = local.text.trim();
+    for (final s in serverCandidates) {
+      if (s.role != local.role) continue;
+      if (_isClientTempMessageId(s.id)) continue;
+      if (!_novaMsgNearTime(s.createdAt, local.createdAt, seconds: 180)) {
+        continue;
+      }
+      final sText = s.text.trim();
+      final textMatch =
+          sText == lText ||
+          (lText.isEmpty && sText.isEmpty) ||
+          (local.attachments.isNotEmpty &&
+              (sText.isEmpty ||
+                  _isNovaImagePlaceholderText(sText) ||
+                  sText == '[附件消息]' ||
+                  sText == '[文件]' ||
+                  sText == '[图片]'));
+      if (!textMatch) continue;
+      return s;
+    }
+    return null;
   }
 
   bool _novaMsgNearTime(DateTime? a, DateTime? b, {int seconds = 180}) {
@@ -2132,7 +2365,11 @@ class NativeNovaService {
         kind: 'TEXT',
         payload: metadata,
         attachments: hasAttachments
-            ? _parseAttachmentsFromRaw(const <String, dynamic>{}, metadata, 'TEXT')
+            ? _parseAttachmentsFromRaw(
+                const <String, dynamic>{},
+                metadata,
+                'TEXT',
+              )
             : const <NovaMessageAttachment>[],
       ),
     );
@@ -2237,6 +2474,26 @@ class NativeNovaService {
       assistantReply: reply,
     );
 
+    NativeNovaMessage? userRow;
+    for (var i = knownRows.length - 1; i >= 0; i--) {
+      final m = knownRows[i];
+      if (m.role != 'user') continue;
+      if (effectiveMessageId > 0 && m.id == effectiveMessageId) {
+        userRow = m;
+        break;
+      }
+      if (m.text.trim() == effectiveUser) {
+        userRow = m;
+        break;
+      }
+    }
+    final payloadForHistory = userRow != null
+        ? historyUserPayloadFromMessage(userRow, fallback: userPayload)
+        : historyUserPayloadFromParts(
+            payload: userPayload,
+            kind: 'TEXT',
+          );
+
     await registerHistoryTurn(
       conversationId: activeConvId,
       messageId: effectiveMessageId > 0
@@ -2246,8 +2503,60 @@ class NativeNovaService {
       assistantMessage: reply,
       lastMessagePreview: reply.length > 200 ? reply.substring(0, 200) : reply,
       lastMessageAt: lastMessageAt,
-      userPayload: userPayload,
+      userPayload: payloadForHistory,
     );
+
+    // 多模态直连 completions 时 IM 不会自动落库；补写一轮，避免回看只剩审计表。
+    if (payloadForHistory != null &&
+        payloadForHistory['attachments'] is List &&
+        (payloadForHistory['attachments'] as List).isNotEmpty) {
+      unawaited(
+        persistImAssistantTurn(
+          conversationId: activeConvId,
+          userMessage: effectiveUser,
+          assistantMessage: reply,
+          userPayload: payloadForHistory,
+        ),
+      );
+    }
+  }
+
+  /// 将已完成的多模态轮次写入 IM（不调用模型）。
+  Future<void> persistImAssistantTurn({
+    required int conversationId,
+    required String userMessage,
+    required String assistantMessage,
+    Map<String, dynamic>? userPayload,
+    String kind = 'TEXT',
+  }) async {
+    if (conversationId <= 0) return;
+    final user = userMessage.trim();
+    final assist = stripHermesProgressLines(assistantMessage.trim());
+    if (user.isEmpty && assist.isEmpty) return;
+    try {
+      final resp = await _client.post(
+        _dunesUri('/ai/assistant/turns'),
+        headers: _dunesHeaders,
+        body: jsonEncode(<String, dynamic>{
+          'conversationId': conversationId,
+          'userMessage': user,
+          'assistantMessage': assist,
+          'kind': kind,
+          if (userPayload != null && userPayload.isNotEmpty)
+            'userPayload': userPayload,
+        }),
+      );
+      if (kDebugMode && (resp.statusCode < 200 || resp.statusCode >= 300)) {
+        debugPrint(
+          '[NativeNova] persist IM turn failed conv=$conversationId '
+          'status=${resp.statusCode} body=${resp.body}',
+        );
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('[NativeNova] persist IM turn error conv=$conversationId: $e');
+      }
+    }
   }
 
   /// 后台生成完成时，若服务端/本地尚未形成正式消息，使用草稿内容补做一次持久化。
@@ -2711,6 +3020,49 @@ class NativeNovaService {
 
   String get novaProfileSessionId => 'profile-$novaBizUserId';
 
+  static const _contextTurnLimit = 20;
+
+  String _chatSessionStorageKey(int conversationId) =>
+      'dunes_nova_chat_session_$conversationId';
+
+  String _summaryStorageKey(int conversationId) =>
+      'dunes_nova_summary_$conversationId';
+
+  /// 每个聊天窗口都有独立、持久化的 Nova 会话 UUID。不能使用用户级
+  /// `profile-*`，否则不同窗口会被 Nova 服务端视为同一个上下文。
+  Future<String> novaChatSessionId(int conversationId) async {
+    if (conversationId <= 0) return '';
+    final storage = await NovaWebStorage.load(session.userId);
+    final key = _chatSessionStorageKey(conversationId);
+    final existing = (storage[key] ?? '').trim();
+    if (existing.isNotEmpty) return 'chat-$existing';
+
+    final random = Random.secure();
+    final groups = <String>[
+      for (final length in const [8, 4, 4, 4, 12])
+        List<String>.generate(
+          length,
+          (_) => random.nextInt(16).toRadixString(16),
+        ).join(),
+    ];
+    final uuid = groups.join('-');
+    await NovaWebStorage.merge(session.userId, {key: uuid});
+    return 'chat-$uuid';
+  }
+
+  Future<void> persistNovaChatSessionId(
+    int conversationId,
+    String sessionId,
+  ) async {
+    final value = sessionId.trim();
+    if (conversationId <= 0 || value.isEmpty || !value.startsWith('chat-')) {
+      return;
+    }
+    await NovaWebStorage.merge(session.userId, {
+      _chatSessionStorageKey(conversationId): value.substring('chat-'.length),
+    });
+  }
+
   String get asrModel =>
       (session.novaLocalStorage?['dunes_nova_asr_model'] ?? NovaConfig.asrModel)
           .trim();
@@ -2823,7 +3175,9 @@ class NativeNovaService {
       throw Exception('文件上传失败: 返回数据异常');
     }
     final map = Map<String, dynamic>.from(data);
-    final id = (map['attachment_id'] ?? map['attachmentId'] ?? '').toString().trim();
+    final id = (map['attachment_id'] ?? map['attachmentId'] ?? '')
+        .toString()
+        .trim();
     if (id.isEmpty) throw Exception('文件上传失败: 未返回 attachment_id');
     onProgress?.call(100);
     return NovaChatAttachmentUpload(
@@ -2984,17 +3338,91 @@ class NativeNovaService {
     return out;
   }
 
-  /// 云枢 API 上下文：仅 system（当前用户）+ 本条 user；历史靠 X-Nova-Chat-Session-Id 服务端记忆。
-  List<Map<String, dynamic>> buildNovaChatMessages(dynamic latestContent) {
+  /// 构造独立聊天窗口的请求上下文：用户规则、旧消息摘要、最近 20 轮和本条提问。
+  ///
+  /// 历史只为模型理解本条提问，不能要求模型逐条回复；跨窗口的长期偏好仍由
+  /// Hermes Memory 维护，不把其它窗口消息带入本次请求。
+  Future<List<Map<String, dynamic>>> buildNovaChatMessages({
+    required int conversationId,
+    required dynamic latestContent,
+  }) async {
     final out = <Map<String, dynamic>>[];
     final sys = _buildNovaUserSystemMessage();
     if (sys != null) out.add(sys);
+
+    final cached = await _loadPersistedSessionMessages(conversationId);
+    final previous = [...cached];
+    final latestText = _extractUserPromptText(
+      latestContent,
+      displayText: latestContent is String ? latestContent : '',
+    );
+    if (previous.isNotEmpty &&
+        previous.last.role == 'user' &&
+        previous.last.text.trim() == latestText.trim()) {
+      previous.removeLast();
+    }
+
+    final contextMessageLimit = _contextTurnLimit * 2;
+    if (previous.length > contextMessageLimit) {
+      final older = previous.sublist(0, previous.length - contextMessageLimit);
+      final summary = _buildConversationSummary(older);
+      if (summary.isNotEmpty) {
+        await NovaWebStorage.merge(session.userId, {
+          _summaryStorageKey(conversationId): summary,
+        });
+        out.add(<String, dynamic>{
+          'role': 'system',
+          'content':
+              '以下是本聊天窗口较早对话的摘要，仅用于理解当前问题；'
+              '请只回答最后一条用户消息，不要逐条回应摘要内容。\n$summary',
+        });
+      }
+    } else {
+      final storage = await NovaWebStorage.load(session.userId);
+      final summary = (storage[_summaryStorageKey(conversationId)] ?? '')
+          .trim();
+      if (summary.isNotEmpty) {
+        out.add(<String, dynamic>{
+          'role': 'system',
+          'content':
+              '以下是本聊天窗口较早对话的摘要，仅用于理解当前问题；'
+              '请只回答最后一条用户消息，不要逐条回应摘要内容。\n$summary',
+        });
+      }
+    }
+
+    final recent = previous.length > contextMessageLimit
+        ? previous.sublist(previous.length - contextMessageLimit)
+        : previous;
+    for (final message in recent) {
+      final text = message.text.trim();
+      if (text.isEmpty) continue;
+      out.add(<String, dynamic>{
+        'role': message.role == 'assistant' ? 'assistant' : 'user',
+        'content': text,
+      });
+    }
     final hasLatest =
         latestContent != null &&
         !(latestContent is String && latestContent.toString().trim().isEmpty);
     if (hasLatest)
       out.add(<String, dynamic>{'role': 'user', 'content': latestContent});
     return out;
+  }
+
+  String _buildConversationSummary(List<NativeNovaMessage> messages) {
+    final lines = <String>[];
+    for (final message in messages) {
+      final text = message.text.replaceAll(RegExp(r'\s+'), ' ').trim();
+      if (text.isEmpty) continue;
+      final clipped = text.length > 180 ? '${text.substring(0, 180)}…' : text;
+      lines.add('${message.role == 'assistant' ? 'NOVA' : '用户'}：$clipped');
+    }
+    if (lines.isEmpty) return '';
+    final summary = lines.join('\n');
+    return summary.length > 6000
+        ? summary.substring(summary.length - 6000)
+        : summary;
   }
 
   Map<String, dynamic>? _buildNovaUserSystemMessage() {
@@ -3125,7 +3553,8 @@ class NativeNovaService {
     }
 
     try {
-      // 图片 parts 或当轮 attachment_ids：走云枢 chat/completions。
+      // 纯文本由 im-svc 持久化并统一构造会话上下文；多模态仍直连 Nova，
+      // 以保留 image parts / attachment_ids。
       final novaAttachmentIds = attachmentIds
           .map((e) => e.trim())
           .where((e) => e.isNotEmpty)
@@ -3398,12 +3827,15 @@ class NativeNovaService {
       }
     }
 
-    final requestMessages = buildNovaChatMessages(userContent);
+    final requestMessages = await buildNovaChatMessages(
+      conversationId: activeConvId,
+      latestContent: userContent,
+    );
     final headers = novaHeaders(<String, String>{
       'Content-Type': 'application/json',
       'Accept': 'text/event-stream',
     });
-    final sessionId = novaProfileSessionId.trim();
+    final sessionId = await novaChatSessionId(activeConvId);
     if (sessionId.isNotEmpty) headers['X-Nova-Chat-Session-Id'] = sessionId;
     final requestBody = <String, dynamic>{
       'model': model,
@@ -3469,6 +3901,14 @@ class NativeNovaService {
           replyText: partial,
           thinkText: thinkBuffer.trim(),
         );
+        await persistAssistantTurn(
+          conversationId: activeConvId,
+          messageId: userMessageId ?? 0,
+          userMessage: displayText,
+          assistantMessage: partial,
+          thinkText: thinkBuffer.trim(),
+          userPayload: userMetadata,
+        );
       }
       await _clearGeneratingMarkersForConversation(activeConvId);
       return partial;
@@ -3496,6 +3936,14 @@ class NativeNovaService {
       activeConvId,
       replyText: reply,
       thinkText: thinkBuffer.trim(),
+    );
+    await persistAssistantTurn(
+      conversationId: activeConvId,
+      messageId: userMessageId ?? 0,
+      userMessage: displayText,
+      assistantMessage: reply,
+      thinkText: thinkBuffer.trim(),
+      userPayload: userMetadata,
     );
     await _clearGeneratingMarkersForConversation(activeConvId);
     return reply;
@@ -3531,11 +3979,14 @@ class NativeNovaService {
       content: text,
       kind: 'TEXT',
     );
-    final requestMessages = buildNovaChatMessages(text);
+    final requestMessages = await buildNovaChatMessages(
+      conversationId: conversationId,
+      latestContent: text,
+    );
     final headers = novaHeaders(<String, String>{
       'Content-Type': 'application/json',
     });
-    final sessionId = novaProfileSessionId.trim();
+    final sessionId = await novaChatSessionId(conversationId);
     if (sessionId.isNotEmpty) headers['X-Nova-Chat-Session-Id'] = sessionId;
     final requestBody = <String, dynamic>{
       'model': selectedModel.isEmpty
@@ -3774,18 +4225,24 @@ class NativeNovaService {
   }
 
   List<Map<String, dynamic>> _extractTurns(Map<String, dynamic> body) {
-    final data = body['data'];
-    if (data is List)
-      return data.whereType<Map<String, dynamic>>().toList(growable: false);
-    if (data is Map<String, dynamic>) {
-      final items = data['items'];
-      if (items is List)
-        return items.whereType<Map<String, dynamic>>().toList(growable: false);
-      final turns = data['turns'];
-      if (turns is List)
-        return turns.whereType<Map<String, dynamic>>().toList(growable: false);
+    List<Map<String, dynamic>> asMaps(dynamic raw) {
+      if (raw is! List) return const <Map<String, dynamic>>[];
+      return raw
+          .whereType<Map>()
+          .map((e) => Map<String, dynamic>.from(e))
+          .toList(growable: false);
     }
-    return const <Map<String, dynamic>>[];
+
+    final data = body['data'];
+    if (data is List) return asMaps(data);
+    if (data is Map) {
+      final map = Map<String, dynamic>.from(data);
+      final items = asMaps(map['items']);
+      if (items.isNotEmpty) return items;
+      final turns = asMaps(map['turns']);
+      if (turns.isNotEmpty) return turns;
+    }
+    return asMaps(body['items']);
   }
 
   List<dynamic> _rowsFromData(dynamic data) {

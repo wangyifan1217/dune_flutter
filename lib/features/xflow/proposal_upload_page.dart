@@ -14,6 +14,7 @@
 //   • 灯塔基线内嵌在财务卡内 (违背检测基准数据)
 //   • Excel 识别审批人时间线, 当前步骤珊瑚呼吸圈
 
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -46,6 +47,7 @@ class ProposalUploadPage extends StatefulWidget {
     this.service,
     required this.templateKey,
     this.onSubmitted,
+    this.editProposalId,
   });
 
   final VoidCallback? onBack;
@@ -53,6 +55,7 @@ class ProposalUploadPage extends StatefulWidget {
   final XflowService? service;
   final String templateKey;
   final void Function(int proposalId)? onSubmitted;
+  final int? editProposalId;
 
   @override
   State<ProposalUploadPage> createState() => _ProposalUploadPageState();
@@ -231,6 +234,50 @@ class _ParsedProposal {
       return value == null;
     });
     return body;
+  }
+
+  /// 从已存草稿/详情 formValues 恢复（继续填写）。
+  factory _ParsedProposal.fromDraftValues(
+    Map<String, dynamic> values, {
+    String uploadFieldKey = 'proposalExcel',
+  }) {
+    final archiveId = _string(
+      values[uploadFieldKey] ??
+          values['proposalArchiveId'] ??
+          values['proposalExcel'],
+    );
+    final provinces = values['provinces'];
+    final provinceText = provinces is List
+        ? provinces.map((e) => _string(e)).where((e) => e.isNotEmpty).join('、')
+        : _string(provinces);
+    final tags = values['tag1'];
+    final productTags = tags is List
+        ? tags.map((e) => _string(e)).where((e) => e.isNotEmpty).toList()
+        : _stringList(tags);
+    return _ParsedProposal(
+      archiveId: archiveId,
+      fileName: _string(
+        values['sourceFileName'] ?? values['title'],
+        fallback: '已保存提案.xlsx',
+      ),
+      fileSize: _string(values['sourceFileSize']),
+      sheetCount: _int(values['sourceSheetCount']),
+      proposalId: _string(values['proposalCode']),
+      proposalType: _string(values['proposalType']),
+      productTags: productTags,
+      channel: _string(values['launchChannel']),
+      province: provinceText,
+      profitModel: _string(values['profitModel'], fallback: '未识别'),
+      sections: const [],
+      baselineMarginRate: 0,
+      baselineDiscountRate: 0,
+      owners: <String, dynamic>{
+        'national': _string(values['respNational']),
+        'regional': _string(values['respOps']),
+        'provincial': _string(values['respProvince']),
+        'tech': _string(values['respTech']),
+      },
+    );
   }
 }
 
@@ -480,7 +527,8 @@ String _friendlySubmitError(Object err) {
 // ══════════════════════════════════════════════════════════════════════
 // State
 // ══════════════════════════════════════════════════════════════════════
-class _ProposalUploadPageState extends State<ProposalUploadPage> {
+class _ProposalUploadPageState extends State<ProposalUploadPage>
+    with WidgetsBindingObserver {
   _UploadState _state = _UploadState.empty;
   _ParsedProposal? _parsed;
   final Set<String> _expandedIds = <String>{};
@@ -492,14 +540,132 @@ class _ProposalUploadPageState extends State<ProposalUploadPage> {
   bool _configLoading = true;
   String? _configError;
   bool _pickingFile = false;
+  int? _draftProposalId;
+  Timer? _autosaveTimer;
+  int _autosaveSeq = 0;
+  bool _autosaving = false;
+  String _autosaveHint = '';
+  bool _recognitionHydrating = false;
+
+  int? get _activeDraftId {
+    final draft = _draftProposalId;
+    if (draft != null && draft > 0) return draft;
+    final edit = widget.editProposalId;
+    if (edit != null && edit > 0) return edit;
+    return null;
+  }
+
+  bool get _canAutosave =>
+      !_configLoading &&
+      !_submitting &&
+      _parsed != null &&
+      _state == _UploadState.parsed;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _service =
         widget.service ??
         XflowService(session: widget.session, templateKey: widget.templateKey);
+    _draftProposalId = widget.editProposalId;
     _loadTemplateConfig();
+  }
+
+  @override
+  void dispose() {
+    _autosaveTimer?.cancel();
+    if (_canAutosave &&
+        XflowService.hasMeaningfulDraftValues(_buildDraftValues())) {
+      unawaited(_runAutosave(silent: true, forceLocalFirst: true));
+    }
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.detached) {
+      _autosaveTimer?.cancel();
+      unawaited(_runAutosave(silent: true, forceLocalFirst: true));
+    }
+  }
+
+  void _scheduleAutosave() {
+    if (!_canAutosave) return;
+    _autosaveTimer?.cancel();
+    _autosaveTimer = Timer(const Duration(milliseconds: 800), () {
+      unawaited(_runAutosave(silent: true));
+    });
+  }
+
+  Map<String, dynamic> _buildDraftValues() {
+    final parsed = _parsed;
+    if (parsed == null) return <String, dynamic>{};
+    final values = parsed.toXflowSubmitValues(extractRules: _extractRules);
+    for (final field in _supplementalFields) {
+      final isUser = field.type == 'user' ||
+          field.type == 'userSelect' ||
+          field.raw['dataSource']?.toString() == 'org_user';
+      if (isUser) values.remove(field.key);
+    }
+    final uploadKey = _uploadField?.key.trim() ?? '';
+    if (uploadKey.isNotEmpty && parsed.archiveId.isNotEmpty) {
+      values[uploadKey] = parsed.archiveId;
+    }
+    for (final field in _supplementalFields) {
+      final value = _supplementalValues[field.key];
+      if (!supplementalFieldHasValue(value, field: field)) continue;
+      values[field.key] = value;
+    }
+    return values;
+  }
+
+  Future<void> _runAutosave({
+    bool silent = true,
+    bool forceLocalFirst = false,
+  }) async {
+    if (!_canAutosave) return;
+    final values = _buildDraftValues();
+    if (!XflowService.hasMeaningfulDraftValues(values)) return;
+    if (_autosaving && !forceLocalFirst) return;
+    final seq = ++_autosaveSeq;
+    _autosaving = true;
+    if (mounted && silent) {
+      setState(() => _autosaveHint = '正在自动保存…');
+    }
+    try {
+      if (forceLocalFirst) {
+        await _service.saveLocalDraft(
+          Map<String, dynamic>.from(values),
+          businessId: _activeDraftId,
+        );
+      }
+      final res = await _service.submitDraft(
+        formValues: Map<String, dynamic>.from(values),
+        proposalId: _activeDraftId,
+        templateKey: _templateKey,
+      );
+      final pid = _int(res['proposalId'] ?? res['businessId'] ?? res['id']);
+      if (pid > 0) _draftProposalId = pid;
+      if (!mounted || seq != _autosaveSeq) return;
+      setState(() => _autosaveHint = '已自动保存');
+      if (!silent) showDunesToast(context, '草稿已保存');
+    } catch (_) {
+      await _service.saveLocalDraft(
+        Map<String, dynamic>.from(values),
+        businessId: _activeDraftId,
+      );
+      if (!mounted || seq != _autosaveSeq) return;
+      setState(() => _autosaveHint = '网络异常，已暂存到本机');
+      if (!silent) {
+        showDunesToast(context, '网络不可用，草稿已暂存到本机');
+      }
+    } finally {
+      _autosaving = false;
+    }
   }
 
   Future<void> _loadTemplateConfig() async {
@@ -519,6 +685,49 @@ class _ProposalUploadPageState extends State<ProposalUploadPage> {
       final template = results[0] as XflowTemplateDetail;
       final detailConfig = Map<String, dynamic>.from(results[1] as Map);
       final supplemental = supplementalFormFields(template.fields);
+      final uploadKey =
+          findPrimaryUploadField(template.fields)?.key.trim().isNotEmpty == true
+              ? findPrimaryUploadField(template.fields)!.key.trim()
+              : 'proposalExcel';
+
+      var draftValues = <String, dynamic>{};
+      final editId = widget.editProposalId;
+      if (editId != null && editId > 0) {
+        try {
+          final detail = await _service.fetchProposalDetail(editId);
+          draftValues = Map<String, dynamic>.from(detail.formValues);
+          _draftProposalId = editId;
+        } catch (_) {
+          if (mounted) {
+            showDunesToast(
+              context,
+              '加载已有草稿失败，将尝试恢复本机草稿',
+              kind: DunesToastKind.error,
+            );
+          }
+        }
+      }
+      if (!XflowService.hasMeaningfulDraftValues(draftValues)) {
+        final local = await _service.loadLocalDraft(
+          businessId: editId != null && editId > 0 ? editId : null,
+        );
+        if (XflowService.hasMeaningfulDraftValues(local)) {
+          draftValues = {...local, ...draftValues};
+        }
+      }
+
+      _ParsedProposal? restored;
+      if (XflowService.hasMeaningfulDraftValues(draftValues)) {
+        final candidate = _ParsedProposal.fromDraftValues(
+          draftValues,
+          uploadFieldKey: uploadKey,
+        );
+        // 有归档 ID 或提案编号即可进入识别态，随后回拉完整 sections。
+        if (candidate.archiveId.isNotEmpty || candidate.proposalId.isNotEmpty) {
+          restored = candidate;
+        }
+      }
+
       if (!mounted) return;
       setState(() {
         _template = template;
@@ -530,6 +739,19 @@ class _ProposalUploadPageState extends State<ProposalUploadPage> {
         _supplementalValues.removeWhere(
           (key, _) => supplemental.every((field) => field.key != key),
         );
+        if (restored != null) {
+          for (final field in supplemental) {
+            if (draftValues.containsKey(field.key)) {
+              _supplementalValues[field.key] = draftValues[field.key];
+            }
+          }
+          _parsed = restored;
+          _state = _UploadState.parsed;
+          _autosaveHint = 'Excel 已识别，填写补充信息时将自动保存草稿';
+          _recognitionHydrating = restored.sections.isEmpty &&
+              (restored.archiveId.trim().isNotEmpty ||
+                  restored.proposalId.trim().isNotEmpty);
+        }
         _expandedIds
           ..clear()
           ..addAll(
@@ -538,12 +760,68 @@ class _ProposalUploadPageState extends State<ProposalUploadPage> {
                 .map((section) => section.id),
           );
       });
+      if (restored != null &&
+          restored.sections.isEmpty &&
+          (restored.archiveId.trim().isNotEmpty ||
+              restored.proposalId.trim().isNotEmpty)) {
+        unawaited(_hydrateRecognitionFromArchive());
+      }
     } catch (e) {
       if (!mounted) return;
       setState(() {
         _configError = e.toString();
         _configLoading = false;
       });
+    }
+  }
+
+  /// 草稿只存了扁平字段，预览 sections 需从 proposal-archive 再拉一次。
+  Future<void> _hydrateRecognitionFromArchive() async {
+    final current = _parsed;
+    if (current == null) return;
+    if (current.sections.isNotEmpty) {
+      if (mounted) setState(() => _recognitionHydrating = false);
+      return;
+    }
+    final archiveId = current.archiveId.trim();
+    final code = current.proposalId.trim();
+    if (archiveId.isEmpty && code.isEmpty) {
+      if (mounted) setState(() => _recognitionHydrating = false);
+      return;
+    }
+    if (mounted) setState(() => _recognitionHydrating = true);
+    try {
+      Map<String, dynamic>? raw;
+      if (archiveId.isNotEmpty) {
+        try {
+          raw = await _service.fetchProposalArchive(archiveId);
+        } catch (_) {
+          raw = null;
+        }
+      }
+      if (raw == null && code.isNotEmpty) {
+        raw = await _service.fetchLatestProposalArchiveByCode(code);
+      }
+      if (!mounted) return;
+      if (raw == null) {
+        setState(() => _recognitionHydrating = false);
+        return;
+      }
+      final full = _ParsedProposal.fromUploadResponse(raw);
+      setState(() {
+        _parsed = full;
+        _state = _UploadState.parsed;
+        _recognitionHydrating = false;
+        _expandedIds
+          ..clear()
+          ..addAll(
+            _previewSectionConfig
+                .where((section) => section.expanded)
+                .map((section) => section.id),
+          );
+      });
+    } catch (_) {
+      if (mounted) setState(() => _recognitionHydrating = false);
     }
   }
 
@@ -622,6 +900,7 @@ class _ProposalUploadPageState extends State<ProposalUploadPage> {
         XflowLinkage.recompute(template.fields, template.layout, _supplementalValues);
       }
     });
+    _scheduleAutosave();
   }
 
   Future<void> _handleUpload() async {
@@ -663,6 +942,7 @@ class _ProposalUploadPageState extends State<ProposalUploadPage> {
         _parsed = parsed;
         _state = _UploadState.parsed;
         _applyParsedToForm(parsed);
+        _autosaveHint = 'Excel 已识别，填写补充信息时将自动保存草稿';
         _expandedIds
           ..clear()
           ..addAll(
@@ -671,6 +951,7 @@ class _ProposalUploadPageState extends State<ProposalUploadPage> {
                 .map((section) => section.id),
           );
       });
+      unawaited(_runAutosave(silent: true));
     } catch (err) {
       if (!mounted) return;
       setState(() => _state = _UploadState.empty);
@@ -782,29 +1063,21 @@ class _ProposalUploadPageState extends State<ProposalUploadPage> {
     }
     final ok = await confirmSubmitForApproval(context);
     if (!ok || !mounted) return;
+    _autosaveTimer?.cancel();
+    await _runAutosave(silent: true, forceLocalFirst: true);
+    if (!mounted) return;
     setState(() => _submitting = true);
     try {
-      final values = parsed.toXflowSubmitValues(extractRules: _extractRules);
-      // 人员类字段不走 Excel 回填值，只认用户在表单里选择的结果。
-      for (final field in _supplementalFields) {
-        final isUser = field.type == 'user' ||
-            field.type == 'userSelect' ||
-            field.raw['dataSource']?.toString() == 'org_user';
-        if (isUser) values.remove(field.key);
-      }
-      final uploadKey = _uploadField?.key.trim() ?? '';
-      if (uploadKey.isNotEmpty && parsed.archiveId.isNotEmpty) {
-        values[uploadKey] = parsed.archiveId;
-      }
-      for (final field in _supplementalFields) {
-        final value = _supplementalValues[field.key];
-        if (!supplementalFieldHasValue(value, field: field)) continue;
-        values[field.key] = value;
-      }
+      final values = _buildDraftValues();
       final res = await _submitToXflow(values);
       final businessId = _int(
         res['businessId'] ?? res['proposalId'] ?? res['id'],
       );
+      final clearId = _activeDraftId;
+      if (clearId != null && clearId > 0) {
+        await _service.clearLocalDraft(businessId: clearId);
+      }
+      await _service.clearLocalDraft(businessId: null);
       if (!mounted) return;
       _showUploadSuccess(
         businessId > 0 ? '已提交审批 · 提案 #$businessId' : '已提交审批',
@@ -866,6 +1139,7 @@ class _ProposalUploadPageState extends State<ProposalUploadPage> {
     setState(() {
       _state = _UploadState.empty;
       _parsed = null;
+      _autosaveHint = '';
     });
   }
 
@@ -980,10 +1254,47 @@ class _ProposalUploadPageState extends State<ProposalUploadPage> {
               height: 1.6,
             ),
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 8),
         ],
+        if (_autosaveHint.isNotEmpty) ...[
+          Text(
+            _autosaveHint,
+            style: const TextStyle(
+              fontSize: 12,
+              color: _PDColors.coral,
+              height: 1.4,
+            ),
+          ),
+          const SizedBox(height: 14),
+        ] else if (_pageSubtitle.isNotEmpty)
+          const SizedBox(height: 6),
         _buildTemplateForm(),
-        if (parsed != null) ...[
+        if (_recognitionHydrating) ...[
+          const SizedBox(height: 14),
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: _PDColors.card,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: _PDColors.line2, width: 0.6),
+            ),
+            child: const Row(
+              children: [
+                SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+                SizedBox(width: 10),
+                Text(
+                  '正在加载 Excel 识别内容…',
+                  style: TextStyle(fontSize: 12, color: _PDColors.mute),
+                ),
+              ],
+            ),
+          ),
+        ],
+        if (parsed != null && !_recognitionHydrating) ...[
           const SizedBox(height: 14),
           ProposalRecognitionView(
             summaryFields: _summaryFields,

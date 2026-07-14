@@ -112,6 +112,7 @@ class _NativeXflowProposalPageState extends State<NativeXflowProposalPage> {
         session: widget.session,
         service: _service,
         templateKey: widget.templateKey,
+        editProposalId: widget.editProposalId,
         onBack: widget.navigation.back,
         onSubmitted: widget.onSubmitted,
       );

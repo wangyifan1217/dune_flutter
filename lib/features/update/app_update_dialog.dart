@@ -29,6 +29,7 @@ class _AppUpdateDialog extends StatefulWidget {
 
 class _AppUpdateDialogState extends State<_AppUpdateDialog> {
   bool _busy = false;
+  bool _opening = false;
   bool _macOpened = false;
   double _progress = 0;
   String? _error;
@@ -39,6 +40,7 @@ class _AppUpdateDialogState extends State<_AppUpdateDialog> {
     if (_busy) return;
     setState(() {
       _busy = true;
+      _opening = false;
       _error = null;
       _progress = 0;
       _macOpened = false;
@@ -50,12 +52,20 @@ class _AppUpdateDialogState extends State<_AppUpdateDialog> {
           if (!mounted) return;
           setState(() => _progress = p);
         },
+        onLaunching: () {
+          if (!mounted) return;
+          setState(() {
+            _opening = true;
+            _progress = 1;
+          });
+        },
       );
       // Windows 安装器拉起后进程会 exit；能走到这里的是 Mac / 移动端。
       if (!mounted) return;
       if (_inApp && defaultTargetPlatform == TargetPlatform.macOS) {
         setState(() {
           _busy = false;
+          _opening = false;
           _macOpened = true;
         });
         return;
@@ -65,6 +75,7 @@ class _AppUpdateDialogState extends State<_AppUpdateDialog> {
       if (!mounted) return;
       setState(() {
         _busy = false;
+        _opening = false;
         _error = _inApp
             ? '应用内更新失败，可重试或改用浏览器下载。'
             : '更新失败，请稍后重试';
@@ -86,15 +97,18 @@ class _AppUpdateDialogState extends State<_AppUpdateDialog> {
     }
   }
 
+  String get _progressLabel {
+    if (_opening) return '下载完成，正在打开安装包…';
+    if (_progress < 0) return '正在下载…';
+    return '正在下载 ${(_progress * 100).clamp(0, 100).toStringAsFixed(0)}%';
+  }
+
   @override
   Widget build(BuildContext context) {
     final notes = widget.result.releaseNotes.trim();
     final versionLabel = widget.result.latestVersionName.isNotEmpty
         ? widget.result.latestVersionName
         : '最新版本';
-    final progressLabel = _progress < 0
-        ? '正在下载…'
-        : '正在下载 ${(_progress * 100).clamp(0, 100).toStringAsFixed(0)}%';
 
     return AlertDialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -153,13 +167,15 @@ class _AppUpdateDialogState extends State<_AppUpdateDialog> {
             if (_busy && _inApp) ...[
               const SizedBox(height: 16),
               LinearProgressIndicator(
-                value: _progress < 0 ? null : _progress.clamp(0.0, 1.0),
+                value: _opening || _progress < 0
+                    ? null
+                    : _progress.clamp(0.0, 1.0),
                 minHeight: 6,
                 borderRadius: BorderRadius.circular(4),
               ),
               const SizedBox(height: 8),
               Text(
-                progressLabel,
+                _progressLabel,
                 style: DunesTypography.sans(
                   fontSize: 12,
                   color: DunesColors.text3,
@@ -224,7 +240,9 @@ class _AppUpdateDialogState extends State<_AppUpdateDialog> {
           child: Text(
             _macOpened
                 ? '知道了'
-                : (_busy ? '更新中…' : (_error != null ? '重试' : '立即更新')),
+                : (_busy
+                    ? (_opening ? '打开中…' : '更新中…')
+                    : (_error != null ? '重试' : '立即更新')),
           ),
         ),
       ],

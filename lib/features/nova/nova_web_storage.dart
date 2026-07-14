@@ -46,7 +46,10 @@ abstract final class NovaWebStorage {
   }
 
   /// 合并写入，供原生云枢会话缓存 dunes_nova_msgs_* 等键。
-  static Future<Map<String, String>> merge(int userId, Map<String, dynamic> patch) async {
+  static Future<Map<String, String>> merge(
+    int userId,
+    Map<String, dynamic> patch,
+  ) async {
     if (userId <= 0 || patch.isEmpty) return load(userId);
     final existing = await load(userId);
     final merged = Map<String, String>.from(existing);
@@ -65,7 +68,10 @@ abstract final class NovaWebStorage {
   }
 
   /// 删除指定键，对齐 WebView `localStorage.removeItem`。
-  static Future<Map<String, String>> removeKeys(int userId, Iterable<String> keys) async {
+  static Future<Map<String, String>> removeKeys(
+    int userId,
+    Iterable<String> keys,
+  ) async {
     if (userId <= 0) return load(userId);
     final existing = await load(userId);
     final merged = Map<String, String>.from(existing);
@@ -108,6 +114,8 @@ abstract final class NovaWebStorage {
 
   static const _prefixKeys = [
     'dunes_nova_msgs_',
+    'dunes_nova_chat_session_',
+    'dunes_nova_summary_',
     'dunes_kb_msgs_',
     'dunes_nova_generating_',
     'dunes_nova_stream_draft_',

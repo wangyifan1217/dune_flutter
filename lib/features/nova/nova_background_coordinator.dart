@@ -357,7 +357,7 @@ class NovaBackgroundCoordinator extends ChangeNotifier {
           userMessage: user.text,
           assistantMessage: draftReplyText,
           thinkText: draftThinkText,
-          userPayload: user.payload,
+          userPayload: svc.historyUserPayloadFromMessage(user),
           existingMessages: resolvedRows,
         );
       } else if (user != null) {
@@ -466,7 +466,7 @@ class NovaBackgroundCoordinator extends ChangeNotifier {
           (assistant.createdAt ?? effectiveUser.createdAt ?? DateTime.now())
               .toUtc()
               .toIso8601String(),
-      userPayload: effectiveUser.payload,
+      userPayload: svc.historyUserPayloadFromMessage(effectiveUser),
     );
     if (kDebugMode) {
       debugPrint(

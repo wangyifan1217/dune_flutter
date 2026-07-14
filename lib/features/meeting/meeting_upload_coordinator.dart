@@ -10,7 +10,7 @@ import 'meeting_audio_converter.dart';
 import 'meeting_upload_storage.dart';
 import 'native_meeting_service.dart';
 
-/// 会议录音后台上传：先创建会议记录，再在后台上传录音并绑定 draft/upload。
+/// 会议录音后台上传：先落盘本地录音，再创建会议记录并后台上传绑定 draft/upload。
 class MeetingUploadCoordinator extends ChangeNotifier {
   MeetingUploadCoordinator._();
 
@@ -106,35 +106,75 @@ class MeetingUploadCoordinator extends ChangeNotifier {
       throw Exception('录音文件不存在');
     }
 
-    final meetingId = await svc.createMeeting(
-      title: trimmedTitle,
-      meetingDate: meetingDate,
-    );
-    if (meetingId <= 0) {
-      throw Exception('创建会议记录失败，请重试');
-    }
-
-    final destPath = await _persistLocalCopy(
-      meetingId: meetingId,
+    // 先落盘到 Documents，再创建服务端记录，避免「有草稿无录音」。
+    // 使用 copy 保留源文件：创建失败时可重试，且不破坏创建页持有的路径。
+    final stagingPath = await _persistLocalCopy(
+      meetingId: 0,
       sourcePath: src,
+      move: false,
     );
 
-    final job = MeetingUploadJob(
-      meetingId: meetingId,
-      userId: userId,
-      localFilePath: destPath,
-      title: trimmedTitle,
-      meetingDate: meetingDate,
-      generate: generate,
-      createdAtMs: DateTime.now().millisecondsSinceEpoch,
-      recordingDurationSeconds: recordingDurationSeconds.clamp(0, 24 * 60 * 60),
-    );
-    _jobs = <MeetingUploadJob>[..._jobs, job];
-    await MeetingUploadStorage.save(userId, _jobs);
-    notifyListeners();
-    _schedulePendingWatchdog(meetingId);
-    unawaited(_runMeetingJobNow(meetingId));
-    return meetingId;
+    var meetingId = 0;
+    var destPath = stagingPath;
+    var jobQueued = false;
+    try {
+      meetingId = await svc.createMeeting(
+        title: trimmedTitle,
+        meetingDate: meetingDate,
+      );
+      if (meetingId <= 0) {
+        throw Exception('创建会议记录失败，请重试');
+      }
+
+      destPath = await _renamePersistedCopy(
+        stagingPath: stagingPath,
+        meetingId: meetingId,
+      );
+
+      final job = MeetingUploadJob(
+        meetingId: meetingId,
+        userId: userId,
+        localFilePath: destPath,
+        title: trimmedTitle,
+        meetingDate: meetingDate,
+        generate: generate,
+        createdAtMs: DateTime.now().millisecondsSinceEpoch,
+        recordingDurationSeconds: recordingDurationSeconds.clamp(0, 24 * 60 * 60),
+      );
+      _jobs = <MeetingUploadJob>[..._jobs, job];
+      await MeetingUploadStorage.save(userId, _jobs);
+      jobQueued = true;
+      notifyListeners();
+
+      // 任务已入队后可清理源文件（上传使用 destPath）。
+      if (src != destPath) {
+        await _deleteLocalFile(src);
+      }
+
+      _schedulePendingWatchdog(meetingId);
+      unawaited(_runMeetingJobNow(meetingId));
+      return meetingId;
+    } catch (e) {
+      if (!jobQueued) {
+        await _deleteLocalFile(stagingPath);
+        if (destPath != stagingPath) {
+          await _deleteLocalFile(destPath);
+        }
+        if (meetingId > 0) {
+          _jobs = _jobs
+              .where((job) => job.meetingId != meetingId)
+              .toList(growable: false);
+          try {
+            await MeetingUploadStorage.save(userId, _jobs);
+          } catch (_) {}
+          try {
+            await svc.deleteMeeting(meetingId);
+          } catch (_) {}
+          notifyListeners();
+        }
+      }
+      rethrow;
+    }
   }
 
   Future<void> _runMeetingJobNow(int meetingId) async {
@@ -445,6 +485,7 @@ class MeetingUploadCoordinator extends ChangeNotifier {
   Future<String> _persistLocalCopy({
     required int meetingId,
     required String sourcePath,
+    bool move = true,
   }) async {
     final docs = await getApplicationDocumentsDirectory();
     final dir = Directory('${docs.path}/meeting_uploads');
@@ -452,10 +493,48 @@ class MeetingUploadCoordinator extends ChangeNotifier {
     final normalized = sourcePath.replaceAll('\\', '/');
     final dot = normalized.lastIndexOf('.');
     final ext = dot >= 0 ? normalized.substring(dot) : '.wav';
+    final idPart = meetingId > 0 ? '$meetingId' : 'pending';
+    final destPath =
+        '${dir.path}/meeting_${idPart}_${DateTime.now().millisecondsSinceEpoch}$ext';
+    if (move) {
+      await _moveFile(sourcePath, destPath);
+    } else {
+      await _copyFile(sourcePath, destPath);
+    }
+    return destPath;
+  }
+
+  Future<String> _renamePersistedCopy({
+    required String stagingPath,
+    required int meetingId,
+  }) async {
+    final normalized = stagingPath.replaceAll('\\', '/');
+    final fileName = normalized.split('/').last;
+    if (fileName.startsWith('meeting_${meetingId}_')) {
+      return stagingPath;
+    }
+    final docs = await getApplicationDocumentsDirectory();
+    final dir = Directory('${docs.path}/meeting_uploads');
+    await dir.create(recursive: true);
+    final dot = normalized.lastIndexOf('.');
+    final ext = dot >= 0 ? normalized.substring(dot) : '.wav';
     final destPath =
         '${dir.path}/meeting_${meetingId}_${DateTime.now().millisecondsSinceEpoch}$ext';
-    await _moveFile(sourcePath, destPath);
+    await _moveFile(stagingPath, destPath);
     return destPath;
+  }
+
+  Future<void> _copyFile(String sourcePath, String destPath) async {
+    if (sourcePath == destPath) return;
+    final src = File(sourcePath);
+    if (!await src.exists()) {
+      throw Exception('录音文件不存在');
+    }
+    final dest = File(destPath);
+    if (await dest.exists()) {
+      await dest.delete();
+    }
+    await src.copy(destPath);
   }
 
   Future<void> _moveFile(String sourcePath, String destPath) async {

@@ -84,23 +84,38 @@
     });
   }
 
-  function draftKey(templateKey) {
+  function draftKey(templateKey, opts) {
+    var tk = templateKey || 'sales-proposal';
+    var bt = String((opts && opts.businessType) || 'PROPOSAL').toUpperCase() || 'PROPOSAL';
+    var rawId = opts && opts.businessId;
+    var idNum = rawId == null || rawId === '' ? 0 : Number(rawId);
+    var id = isFinite(idNum) && idNum > 0 ? String(idNum) : 'new';
+    return 'xf_draft_' + tk + '_' + bt + '_' + id;
+  }
+
+  function legacyDraftKey(templateKey) {
     return 'xf_draft_' + (templateKey || 'sales-proposal');
   }
 
-  function saveDraft(templateKey, values) {
+  function saveDraft(templateKey, values, opts) {
     try {
-      localStorage.setItem(draftKey(templateKey), JSON.stringify(values));
+      localStorage.setItem(draftKey(templateKey, opts), JSON.stringify(values || {}));
       return true;
     } catch (e) {
       return false;
     }
   }
 
-  function loadDraft(templateKey) {
+  function loadDraft(templateKey, opts) {
     try {
-      var raw = localStorage.getItem(draftKey(templateKey));
-      return raw ? JSON.parse(raw) : null;
+      var scoped = localStorage.getItem(draftKey(templateKey, opts));
+      if (scoped) return JSON.parse(scoped);
+      var idNum = opts && opts.businessId != null && opts.businessId !== '' ? Number(opts.businessId) : 0;
+      if (!(isFinite(idNum) && idNum > 0)) {
+        var legacy = localStorage.getItem(legacyDraftKey(templateKey));
+        if (legacy) return JSON.parse(legacy);
+      }
+      return null;
     } catch (e) {
       return null;
     }

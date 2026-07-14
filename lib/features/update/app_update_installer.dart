@@ -17,11 +17,14 @@ class AppUpdateInstaller {
 
   static const instance = AppUpdateInstaller._();
 
+  static const _macOpenTimeout = Duration(seconds: 20);
+
   bool get supportsInAppInstall => isDesktopCommOnly;
 
   Future<void> applyUpdate(
     AppReleaseCheckResult result, {
     UpdateDownloadProgress? onProgress,
+    VoidCallback? onLaunching,
   }) async {
     final url = result.downloadUrl.trim();
     if (url.isEmpty) {
@@ -33,6 +36,7 @@ class AppUpdateInstaller {
     }
 
     final file = await downloadInstaller(url, onProgress: onProgress);
+    onLaunching?.call();
     await launchInstaller(file);
   }
 
@@ -71,6 +75,9 @@ class AppUpdateInstaller {
       }
       await sink.flush();
       await sink.close();
+      if (received <= 0 || await target.length() <= 0) {
+        throw StateError('下载文件为空');
+      }
       onProgress?.call(1);
       return target;
     } finally {
@@ -96,19 +103,48 @@ class AppUpdateInstaller {
       exit(0);
     }
     if (Platform.isMacOS) {
-      // 打开 DMG / PKG，由系统完成挂载或安装向导。
-      final result = await Process.run('open', [path]);
-      if (result.exitCode != 0) {
-        throw ProcessException(
-          'open',
-          [path],
-          result.stderr.toString(),
-          result.exitCode,
-        );
-      }
+      await _launchMacInstaller(path);
       return;
     }
     await _openExternal(path);
+  }
+
+  /// Mac：用 `open` 挂载/打开 DMG。不无限等待，避免 UI 卡在 100%。
+  Future<void> _launchMacInstaller(String path) async {
+    final file = File(path);
+    if (await file.length() <= 0) {
+      throw StateError('安装包无效');
+    }
+
+    try {
+      // 分离启动，避免阻塞在 Gatekeeper / 挂载过程。
+      await Process.start(
+        'open',
+        [path],
+        mode: ProcessStartMode.detached,
+      ).timeout(_macOpenTimeout);
+    } on TimeoutException {
+      // 已交给系统；超时仍视为已发起打开，由 UI 引导用户手动安装。
+      return;
+    } catch (_) {
+      // 分离启动失败时回退到同步 open，并限制等待时间。
+      try {
+        final result = await Process.run(
+          'open',
+          [path],
+        ).timeout(_macOpenTimeout);
+        if (result.exitCode != 0) {
+          throw ProcessException(
+            'open',
+            [path],
+            result.stderr.toString(),
+            result.exitCode,
+          );
+        }
+      } on TimeoutException {
+        return;
+      }
+    }
   }
 
   Future<void> _openExternal(String urlOrPath) async {

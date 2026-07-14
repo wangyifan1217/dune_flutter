@@ -555,6 +555,10 @@ class _NativeNovaPageState extends State<NativeNovaPage>
           serverGenerating = history.assistantGenerating;
           generatingStatus = history.generatingStatus;
           generatingAfter = history.generatingAfterMessageId;
+          // 历史页也顺手回填一次审计，修复旧版本用临时 ID 写入的缺失轮次。
+          if (!serverGenerating && msgs.isNotEmpty) {
+            unawaited(_service.syncCanonicalHistoryTurns(convId));
+          }
         } catch (e) {
           final hint = NativeNovaService.friendlyError(e);
           if (hint.isNotEmpty) banner ??= hint;
@@ -633,6 +637,10 @@ class _NativeNovaPageState extends State<NativeNovaPage>
         }
         _startGeneratingPoll();
         unawaited(_pollGenerating());
+      }
+      // 旧会话首次打开时补建；新会话则会立即持久化，后续请求始终复用此 UUID。
+      if (convId > 0) {
+        unawaited(_service.novaChatSessionId(convId));
       }
       unawaited(_maybeResumePrdGeneration());
       final focusId = widget.focusMessageId;
@@ -905,9 +913,7 @@ class _NativeNovaPageState extends State<NativeNovaPage>
   /// 流式结束：无论页面是否仍 mounted，都清理 generating 并落盘（对齐 WebView 后台流结束）。
   Future<void> _completeAssistantStream({
     required int assistantMsgId,
-    int? userMsgId,
     bool skipUserBubble = false,
-    bool skipAssistantPersist = false,
     String replyText = '',
   }) async {
     await _clearGeneratingMarkers();
@@ -925,49 +931,13 @@ class _NativeNovaPageState extends State<NativeNovaPage>
             text: replyText.isNotEmpty ? replyText : cur.text,
             thinkStatus: doneThink ? '已完成思考' : cur.thinkStatus,
           );
-          _messages = repairNovaConversationMessages(
-            sortNovaMessages(dedupeNovaHistoryMessages(copy)),
-          );
+          _messages = sortNovaMessages(copy);
         }
       });
       _releaseGeneratingUi(clearStreamingFlags: false);
     }
 
     final reply = replyText.trim();
-    if (_conversationId > 0 &&
-        reply.isNotEmpty &&
-        !skipUserBubble &&
-        !skipAssistantPersist) {
-      final rows = _messages.where((m) => !m.isWelcome).toList(growable: false);
-      NativeNovaMessage? preferredUser;
-      if (userMsgId != null && userMsgId > 0) {
-        for (final m in rows) {
-          if (m.id == userMsgId) {
-            preferredUser = m;
-            break;
-          }
-        }
-      }
-      final effectiveUser = await _resolveHistoryUser(
-        rows,
-        preferred: preferredUser,
-      );
-      if (effectiveUser != null) {
-        final existingMessages = mounted
-            ? rows
-            : (await _service.fetchFullHistory(_conversationId)).messages;
-        await _service.persistAssistantTurn(
-          conversationId: _conversationId,
-          messageId: userMsgId ?? _genAfterMessageId,
-          userMessage: effectiveUser.text,
-          assistantMessage: reply,
-          thinkText: thinkText,
-          userPayload: effectiveUser.payload,
-          existingMessages: existingMessages,
-        );
-      }
-    }
-
     List<NativeNovaMessage> rows;
     if (mounted) {
       rows = _messages.where((m) => !m.isWelcome).toList(growable: false);
@@ -985,6 +955,27 @@ class _NativeNovaPageState extends State<NativeNovaPage>
         }
       } catch (_) {
         rows = const <NativeNovaMessage>[];
+      }
+    }
+    // 发完后从 IM 刷新一次：服务端为本轮分配的真实消息 ID 才是审计 upsert
+    // 的主键。这样重发/连续同文案不会把客户端临时 ID 写进工作台。
+    if (_conversationId > 0 && reply.isNotEmpty) {
+      try {
+        final canonicalRows = await _service.syncCanonicalHistoryTurns(
+          _conversationId,
+        );
+        if (canonicalRows.isNotEmpty) {
+          rows = canonicalRows;
+          if (mounted) {
+            setState(() {
+              _messages = _withWelcome(canonicalRows);
+            });
+          }
+        }
+      } catch (e) {
+        if (kDebugMode) {
+          debugPrint('[NativeNovaPage] canonical history sync skipped: $e');
+        }
       }
     }
     if (_conversationId > 0 && rows.isNotEmpty) {
@@ -1230,7 +1221,10 @@ class _NativeNovaPageState extends State<NativeNovaPage>
       userMessage: effectiveUser.text,
       assistantMessage: assistantText,
       thinkText: assistant?.thinkText ?? fallbackThinkText,
-      userPayload: effectiveUser.payload,
+      userPayload: effectiveUser.payload != null ||
+              effectiveUser.attachments.isNotEmpty
+          ? _service.historyUserPayloadFromMessage(effectiveUser)
+          : effectiveUser.payload,
       existingMessages: rows,
     );
   }
@@ -1458,9 +1452,11 @@ class _NativeNovaPageState extends State<NativeNovaPage>
     setState(() => _highlightMessageId = messageId);
     await Future<void>.delayed(const Duration(milliseconds: 50));
     if (!mounted) return;
-    final key = _messageKeys[messageId];
-    final ctx = key?.currentContext;
-    if (ctx != null) {
+
+    Future<void> ensureVisibleIfBuilt() async {
+      final key = _messageKeys[messageId];
+      final ctx = key?.currentContext;
+      if (ctx == null) return;
       await Scrollable.ensureVisible(
         ctx,
         alignment: 0.5,
@@ -1468,6 +1464,24 @@ class _NativeNovaPageState extends State<NativeNovaPage>
         curve: Curves.easeOut,
       );
     }
+
+    await ensureVisibleIfBuilt();
+    // ListView.builder 可能尚未构建目标项：先按序号粗定位，再精确 ensureVisible。
+    if (_messageKeys[messageId]?.currentContext == null &&
+        _scrollController.hasClients) {
+      final items = _messageListItems();
+      final idx = items.indexWhere((e) => e.message?.id == messageId);
+      if (idx >= 0) {
+        final pos = _scrollController.position;
+        final denom = (items.length - 1).clamp(1, 1 << 30);
+        final target = (idx / denom) * pos.maxScrollExtent;
+        _scrollController.jumpTo(target.clamp(0.0, pos.maxScrollExtent));
+        await Future<void>.delayed(const Duration(milliseconds: 80));
+        if (!mounted) return;
+        await ensureVisibleIfBuilt();
+      }
+    }
+
     Future<void>.delayed(const Duration(milliseconds: 2600), () {
       if (mounted && _highlightMessageId == messageId) {
         setState(() => _highlightMessageId = null);
@@ -1512,7 +1526,6 @@ class _NativeNovaPageState extends State<NativeNovaPage>
       }
       await _completeAssistantStream(
         assistantMsgId: assistantMsgId,
-        userMsgId: userMsgId,
         replyText: assistant.text,
       );
       return true;
@@ -1648,9 +1661,12 @@ class _NativeNovaPageState extends State<NativeNovaPage>
     final bytes = await file.readAsBytes();
     final fileName = file.name;
     final mimeType = lookupMimeType(fileName) ?? 'application/octet-stream';
-    final isImage = mimeType.startsWith('image/') ||
-        RegExp(r'\.(jpe?g|png|gif|webp|bmp|heic|heif)$', caseSensitive: false)
-            .hasMatch(fileName);
+    final isImage =
+        mimeType.startsWith('image/') ||
+        RegExp(
+          r'\.(jpe?g|png|gif|webp|bmp|heic|heif)$',
+          caseSensitive: false,
+        ).hasMatch(fileName);
     if (!isImage) {
       final reject = novaChatAttachmentRejectReason(
         fileName: fileName,
@@ -1715,50 +1731,8 @@ class _NativeNovaPageState extends State<NativeNovaPage>
       return;
     }
 
-    // 原地重新生成：复用原用户气泡与 messageId，避免再插一条相同提问导致
-    // 退出再进翻倍、工作台按文案合并后只剩回复看不到提问。
-    var assistantMsgId = 0;
-    final userIdx = _messages.indexWhere((m) => m.id == message.id);
-    if (userIdx >= 0) {
-      for (var i = userIdx + 1; i < _messages.length; i++) {
-        final m = _messages[i];
-        if (m.role == 'user') break;
-        if (m.role == 'assistant') {
-          assistantMsgId = m.id;
-          break;
-        }
-      }
-    }
-    if (assistantMsgId <= 0) {
-      assistantMsgId = message.id > 0
-          ? message.id + 1
-          : DateTime.now().millisecondsSinceEpoch + 1;
-      if (userIdx >= 0 && mounted) {
-        setState(() {
-          final copy = [..._messages];
-          copy.insert(
-            userIdx + 1,
-            NativeNovaMessage(
-              id: assistantMsgId,
-              role: 'assistant',
-              text: '',
-              createdAt: DateTime.now(),
-              streaming: true,
-              thinkStatus: '正在生成…',
-            ),
-          );
-          _messages = copy;
-        });
-      }
-    }
-
-    await _sendMessage(
-      text: prompt,
-      drafts: drafts,
-      userAlreadyPersisted: true,
-      existingUserMsgId: message.id,
-      existingAssistantMsgId: assistantMsgId,
-    );
+    // 重新发送 = 在会话末尾追加一轮新提问，不改写原用户气泡/原回复。
+    await _sendMessage(text: prompt, drafts: drafts);
   }
 
   Future<List<NovaDraftAttachment>> _draftsFromMessage(
@@ -1794,7 +1768,8 @@ class _NativeNovaPageState extends State<NativeNovaPage>
         }
       }
       if (bytes.isEmpty) continue;
-      final isImage = a.kind.toUpperCase() == 'IMAGE' ||
+      final isImage =
+          a.kind.toUpperCase() == 'IMAGE' ||
           a.mimeType.startsWith('image/') ||
           RegExp(
             r'\.(jpe?g|png|gif|webp|bmp|heic|heif)$',
@@ -2122,8 +2097,9 @@ class _NativeNovaPageState extends State<NativeNovaPage>
             if (!mounted) return;
             final base = d.isImage ? 0.0 : 60.0;
             setState(() {
-              d.uploadProgress =
-                  (base + p * (d.isImage ? 1 : 0.4)).clamp(1, 100).toDouble();
+              d.uploadProgress = (base + p * (d.isImage ? 1 : 0.4))
+                  .clamp(1, 100)
+                  .toDouble();
             });
           },
         );
@@ -2168,9 +2144,9 @@ class _NativeNovaPageState extends State<NativeNovaPage>
                   previewByDraftId[d.id] ??
                   (d.bytes.isNotEmpty ? d.bytes : null);
               withPreview.add(
-                NovaMessageAttachment.fromJson(d.payload!).copyWith(
-                  previewBytes: preview,
-                ),
+                NovaMessageAttachment.fromJson(
+                  d.payload!,
+                ).copyWith(previewBytes: preview),
               );
             }
             copy[idx] = copy[idx].copyWith(
@@ -2251,11 +2227,13 @@ class _NativeNovaPageState extends State<NativeNovaPage>
                 ? update.thinkStatus
                 : kNovaInputBusyHint;
             final idx = _messages.indexWhere((m) => m.id == assistantMsgId);
+            // 保留原 createdAt，避免流式/重新发送把回复刷到「现在」导致整段乱序。
+            final prevAt = idx >= 0 ? _messages[idx].createdAt : null;
             final assistant = NativeNovaMessage(
               id: assistantMsgId,
               role: 'assistant',
               text: update.replyText,
-              createdAt: DateTime.now(),
+              createdAt: prevAt ?? DateTime.now(),
               thinkText: update.thinkText,
               thinkStatus: update.thinkStatus,
               streaming: true,
@@ -2275,7 +2253,6 @@ class _NativeNovaPageState extends State<NativeNovaPage>
 
       await _completeAssistantStream(
         assistantMsgId: assistantMsgId,
-        userMsgId: skipUserBubble ? null : userMsgId,
         skipUserBubble: skipUserBubble,
         replyText: reply,
       );
@@ -2338,7 +2315,6 @@ class _NativeNovaPageState extends State<NativeNovaPage>
         if (partial.isNotEmpty && partial != displayText.trim()) {
           await _completeAssistantStream(
             assistantMsgId: assistantMsgId,
-            userMsgId: skipUserBubble ? null : userMsgId,
             skipUserBubble: skipUserBubble,
             replyText: partial,
           );
@@ -2469,6 +2445,7 @@ class _NativeNovaPageState extends State<NativeNovaPage>
         conversationId: convId,
         previousConversationId: prevConvId,
       );
+      await _service.novaChatSessionId(convId);
       setState(() => _conversationId = convId);
     } else if (prevConvId > 0 &&
         await _service.validateNovaConversationId(prevConvId)) {
@@ -3151,9 +3128,7 @@ class _NativeNovaPageState extends State<NativeNovaPage>
 
     final title = kbDoc.title.trim().isNotEmpty
         ? kbDoc.title.trim()
-        : (kbDoc.fileName.trim().isNotEmpty
-              ? kbDoc.fileName.trim()
-              : '知识库文档');
+        : (kbDoc.fileName.trim().isNotEmpty ? kbDoc.fileName.trim() : '知识库文档');
     final confirmed = await showMeetingPrdConfirmDialog(
       context,
       meetingTitle: title,
@@ -3311,25 +3286,63 @@ class _NativeNovaPageState extends State<NativeNovaPage>
                     else
                       Expanded(
                         child: NovaC4MessageStream(
-                          child: ListView(
-                            controller: _scrollController,
-                            keyboardDismissBehavior:
-                                ScrollViewKeyboardDismissBehavior.onDrag,
-                            padding: const EdgeInsets.fromLTRB(14, 12, 14, 28),
-                            children: [
-                              if (_banner != null)
-                                NovaStatusBanner(
-                                  message: _banner!,
-                                  onRetry: _load,
+                          child: Builder(
+                            builder: (context) {
+                              if (_isEmptyConversation) {
+                                return ListView(
+                                  controller: _scrollController,
+                                  keyboardDismissBehavior:
+                                      ScrollViewKeyboardDismissBehavior.onDrag,
+                                  padding: const EdgeInsets.fromLTRB(
+                                    14,
+                                    12,
+                                    14,
+                                    28,
+                                  ),
+                                  children: [
+                                    if (_banner != null)
+                                      NovaStatusBanner(
+                                        message: _banner!,
+                                        onRetry: _load,
+                                      ),
+                                    const SizedBox(
+                                      height: 360,
+                                      child: NovaC4EmptyState(),
+                                    ),
+                                  ],
+                                );
+                              }
+                              final items = _messageListItems();
+                              final bannerOffset = _banner != null ? 1 : 0;
+                              return ListView.builder(
+                                controller: _scrollController,
+                                keyboardDismissBehavior:
+                                    ScrollViewKeyboardDismissBehavior.onDrag,
+                                padding: const EdgeInsets.fromLTRB(
+                                  14,
+                                  12,
+                                  14,
+                                  28,
                                 ),
-                              if (_isEmptyConversation)
-                                const SizedBox(
-                                  height: 360,
-                                  child: NovaC4EmptyState(),
-                                )
-                              else
-                                ..._buildMessageList(),
-                            ],
+                                addAutomaticKeepAlives: false,
+                                itemCount: bannerOffset + items.length,
+                                itemBuilder: (context, index) {
+                                  if (_banner != null && index == 0) {
+                                    return NovaStatusBanner(
+                                      message: _banner!,
+                                      onRetry: _load,
+                                    );
+                                  }
+                                  final item = items[index - bannerOffset];
+                                  if (item.dividerLabel != null) {
+                                    return NovaMsgDateDivider(
+                                      label: item.dividerLabel!,
+                                    );
+                                  }
+                                  return _buildMessageRow(item.message!);
+                                },
+                              );
+                            },
                           ),
                         ),
                       ),
@@ -3405,20 +3418,20 @@ class _NativeNovaPageState extends State<NativeNovaPage>
     );
   }
 
-  List<Widget> _buildMessageList() {
-    final widgets = <Widget>[];
+  List<_NovaTimelineItem> _messageListItems() {
+    final items = <_NovaTimelineItem>[];
     DateTime? prevAt;
     for (final m in _messages) {
       if (!m.isWelcome) {
         final label = historyDayDividerLabel(m.createdAt, prevAt);
         if (label != null) {
-          widgets.add(NovaMsgDateDivider(label: label));
+          items.add(_NovaTimelineItem.divider(label));
         }
         prevAt = m.createdAt;
       }
-      widgets.add(_buildMessageRow(m));
+      items.add(_NovaTimelineItem.message(m));
     }
-    return widgets;
+    return items;
   }
 
   bool get _isEmptyConversation =>
@@ -3438,33 +3451,48 @@ class _NativeNovaPageState extends State<NativeNovaPage>
     final key = m.id > 0 ? _messageKeys.putIfAbsent(m.id, GlobalKey.new) : null;
     return KeyedSubtree(
       key: key,
-      child: NovaC4MessageRow(
-        mine: mine,
-        text: m.text,
-        messageId: m.id,
-        time: time,
-        userName: mine ? _userName : '',
-        userInitial: _userInitial,
-        userSeed: widget.session.userId,
-        userAvatarPreset: _userAvatarPreset,
-        userAvatarObjectKey: _userAvatarObjectKey,
-        userAvatarUrl: _userAvatarUrl,
-        avatarService: _avatarService,
-        thinking: thinking,
-        showAiBadge: true,
-        thinkText: m.thinkText,
-        thinkStatus: m.thinkStatus,
-        streaming: m.streaming,
-        attachments: m.attachments,
-        kind: m.kind,
-        durationSec: m.durationSec,
-        mediaResolver: _mediaResolver,
-        highlighted: m.id > 0 && m.id == _highlightMessageId,
-        ragUsed: m.ragUsed,
-        onResend: mine && !_sending && !_serverGenerating
-            ? () => unawaited(_resendUserMessage(m))
-            : null,
+      child: RepaintBoundary(
+        child: NovaC4MessageRow(
+          mine: mine,
+          text: m.text,
+          messageId: m.id,
+          time: time,
+          userName: mine ? _userName : '',
+          userInitial: _userInitial,
+          userSeed: widget.session.userId,
+          userAvatarPreset: _userAvatarPreset,
+          userAvatarObjectKey: _userAvatarObjectKey,
+          userAvatarUrl: _userAvatarUrl,
+          avatarService: _avatarService,
+          thinking: thinking,
+          showAiBadge: true,
+          thinkText: m.thinkText,
+          thinkStatus: m.thinkStatus,
+          streaming: m.streaming,
+          attachments: m.attachments,
+          kind: m.kind,
+          durationSec: m.durationSec,
+          mediaResolver: _mediaResolver,
+          highlighted: m.id > 0 && m.id == _highlightMessageId,
+          ragUsed: m.ragUsed,
+          onResend: mine && !_sending && !_serverGenerating
+              ? () => unawaited(_resendUserMessage(m))
+              : null,
+        ),
       ),
     );
   }
+}
+
+class _NovaTimelineItem {
+  const _NovaTimelineItem._({this.dividerLabel, this.message});
+
+  factory _NovaTimelineItem.divider(String label) =>
+      _NovaTimelineItem._(dividerLabel: label);
+
+  factory _NovaTimelineItem.message(NativeNovaMessage message) =>
+      _NovaTimelineItem._(message: message);
+
+  final String? dividerLabel;
+  final NativeNovaMessage? message;
 }

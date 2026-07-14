@@ -2694,10 +2694,28 @@ class _NativeChatViewState extends State<NativeChatView>
   }
 
   Widget _buildComposerDock({required bool locked, required String inputHint}) {
+    final wide = isWideChatLayout(context);
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
         if (_uploadLabel != null) _buildPendingUploadBubble(),
+        // PC：工具栏常显在输入区上方；APP：点「+」后在下方展开宫格。
+        if (wide)
+          ChatQuickActions(
+            onCamera: locked || _sending
+                ? () {}
+                : () => _sendImageFrom(ImageSource.camera, '拍照'),
+            onAlbum: locked || _sending
+                ? () {}
+                : _sendMultiImagesFromGallery,
+            onFile: locked || _sending ? () {} : _sendFile,
+            onApproval: () => showDunesSoonToast(context),
+            onAt: locked ? null : _pickAtMember,
+            onEmoji: locked ? null : _toggleEmojiPicker,
+            onVideo: () => showDunesSoonToast(context, '视频通话敬请期待'),
+            showAt: !_isPrivate,
+            showVideo: !_isPrivate,
+          ),
         if (_quoteDraft != null && !_quoteDraft!.isEmpty && !locked)
           ChatQuotePreviewBar(quote: _quoteDraft!, onCancel: _clearQuoteDraft),
         ValueListenableBuilder<bool>(
@@ -2709,24 +2727,23 @@ class _NativeChatViewState extends State<NativeChatView>
                 defaultTargetPlatform != TargetPlatform.macOS;
             final voiceBlocked = !voiceSupported || locked || meetingLive;
             final effectiveVoiceMode = voiceBlocked ? false : _voiceMode;
+            // PC 不展示语音入口；APP 始终展示（不支持时点按提示）。
+            final showVoice = wide ? voiceSupported : true;
             return ChatInputBar(
               controller: _inputController,
               focusNode: _inputFocusNode,
               onInputFocused: () {
-                // 点输入框：收起工具栏。
-                if (_toolsOpen) setState(() => _toolsOpen = false);
+                if (!wide && _toolsOpen) setState(() => _toolsOpen = false);
                 _scrollToLatestAfterKeyboard();
               },
               voiceMode: effectiveVoiceMode,
-              // 始终展示语音入口，避免 Web 预览时按钮消失。
-              voiceEnabled: true,
+              voiceEnabled: showVoice,
               sending: _sending,
               enabled: !locked,
               hintText: inputHint,
               onAttemptPasteImage: locked ? null : _attemptPasteImage,
               onToggleVoice: () {
-                // 点语音：收起工具栏。
-                if (_toolsOpen) setState(() => _toolsOpen = false);
+                if (!wide && _toolsOpen) setState(() => _toolsOpen = false);
                 if (meetingLive) {
                   _showToast('会议录音进行中，暂无法发送语音');
                   return;
@@ -2744,7 +2761,7 @@ class _NativeChatViewState extends State<NativeChatView>
               onSend: () {
                 _send();
               },
-              onPlus: locked || _sending
+              onPlus: wide || locked || _sending
                   ? null
                   : () => setState(() {
                       _toolsOpen = !_toolsOpen;
@@ -2757,7 +2774,7 @@ class _NativeChatViewState extends State<NativeChatView>
               onEmoji: locked
                   ? null
                   : () {
-                      setState(() => _toolsOpen = false);
+                      if (!wide) setState(() => _toolsOpen = false);
                       _toggleEmojiPicker();
                     },
               recording: _recording,
@@ -2773,9 +2790,8 @@ class _NativeChatViewState extends State<NativeChatView>
             );
           },
         ),
-        // 微信式：工具宫格在输入栏下方展开。
-        // 相册/拍照/文件等点击后保持展开，仅语音、输入框、会话区点击时关闭。
-        if (_toolsOpen && !locked)
+        // APP：微信式工具宫格在输入栏下方展开。
+        if (!wide && _toolsOpen && !locked)
           ChatQuickActions(
             onCamera: locked || _sending
                 ? () {}

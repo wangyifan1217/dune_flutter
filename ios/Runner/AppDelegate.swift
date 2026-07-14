@@ -250,6 +250,29 @@ import UserNotifications
 
   // MARK: - Voice recorder
 
+  /// 持久化录音目录（不用 NSTemporaryDirectory，避免系统清 tmp 导致会议录音丢失）。
+  private func voiceRecordingDirectory() -> String {
+    let fm = FileManager.default
+    let base =
+      fm.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+      ?? fm.urls(for: .documentDirectory, in: .userDomainMask).first!
+    let dir = base.appendingPathComponent("voice_recordings", isDirectory: true)
+    if !fm.fileExists(atPath: dir.path) {
+      try? fm.createDirectory(at: dir, withIntermediateDirectories: true)
+    }
+    var mutableDir = dir
+    var values = URLResourceValues()
+    values.isExcludedFromBackup = true
+    try? mutableDir.setResourceValues(values)
+    return dir.path
+  }
+
+  private func newVoiceRecordingPath(prefix: String = "voice") -> String {
+    let stamp = Int(Date().timeIntervalSince1970 * 1000)
+    return (voiceRecordingDirectory() as NSString)
+      .appendingPathComponent("\(prefix)-\(stamp).m4a")
+  }
+
   private func startRecord(result: @escaping FlutterResult) {
     let session = AVAudioSession.sharedInstance()
     let permission = session.recordPermission
@@ -279,8 +302,7 @@ import UserNotifications
     stopInternal(deleteFile: true)
     segmentPaths = []
     needsCaptureRebuild = false
-    let stamp = Int(Date().timeIntervalSince1970 * 1000)
-    let m4a = "\(NSTemporaryDirectory())voice-\(stamp).m4a"
+    let m4a = newVoiceRecordingPath(prefix: "voice")
     do {
       try prepareAudioSessionForRecording()
 
@@ -337,8 +359,7 @@ import UserNotifications
   }
 
   private func startNewSegmentWriter() throws {
-    let stamp = Int(Date().timeIntervalSince1970 * 1000)
-    let m4a = "\(NSTemporaryDirectory())voice-\(stamp).m4a"
+    let m4a = newVoiceRecordingPath(prefix: "voice")
     let writer = StreamingAacM4aWriter()
     try writer.start(url: URL(fileURLWithPath: m4a))
     m4aWriter = writer
@@ -469,23 +490,44 @@ import UserNotifications
     if paths.count == 1 {
       finalPath = paths[0]
     } else {
-      let stamp = Int(Date().timeIntervalSince1970 * 1000)
-      let merged = "\(NSTemporaryDirectory())voice-merged-\(stamp).m4a"
+      let merged = newVoiceRecordingPath(prefix: "voice-merged")
       if mergeAudioSegments(paths, to: merged) {
         finalPath = merged
         for path in paths where path != merged {
           try? FileManager.default.removeItem(atPath: path)
         }
       } else {
-        finalPath = nil
-        for path in paths {
-          try? FileManager.default.removeItem(atPath: path)
+        // 合并失败时保留体积最大的片段，避免整段录音丢失。
+        finalPath = Self.largestExistingAudioPath(paths)
+        if let keep = finalPath {
+          for path in paths where path != keep {
+            try? FileManager.default.removeItem(atPath: path)
+          }
+        } else {
+          for path in paths {
+            try? FileManager.default.removeItem(atPath: path)
+          }
         }
       }
     }
 
     outputPath = finalPath
     return durationMs
+  }
+
+  private static func largestExistingAudioPath(_ paths: [String]) -> String? {
+    var best: String?
+    var bestSize: Int = -1
+    for path in paths {
+      guard FileManager.default.fileExists(atPath: path) else { continue }
+      let attrs = try? FileManager.default.attributesOfItem(atPath: path)
+      let size = (attrs?[.size] as? NSNumber)?.intValue ?? 0
+      if size > bestSize {
+        bestSize = size
+        best = path
+      }
+    }
+    return best
   }
 
   private func mergeAudioSegments(_ paths: [String], to outputPath: String) -> Bool {

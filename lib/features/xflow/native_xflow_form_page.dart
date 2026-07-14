@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../core/navigation/navigation_controller.dart';
@@ -43,7 +45,8 @@ class NativeXflowFormPage extends StatefulWidget {
   State<NativeXflowFormPage> createState() => _NativeXflowFormPageState();
 }
 
-class _NativeXflowFormPageState extends State<NativeXflowFormPage> {
+class _NativeXflowFormPageState extends State<NativeXflowFormPage>
+    with WidgetsBindingObserver {
   late final XflowService _service;
   XflowTemplateDetail? _template;
   XflowProposalDetail? _editingDetail;
@@ -57,6 +60,10 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage> {
   String? _ccError;
   bool _submitting = false;
   int? _draftProposalId;
+  Timer? _autosaveTimer;
+  int _autosaveSeq = 0;
+  String _autosaveHint = '填写中将自动保存草稿';
+  bool _autosaving = false;
 
   void _dismissKeyboard() {
     final focus = FocusManager.instance.primaryFocus;
@@ -77,6 +84,22 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage> {
   bool get _isDelegatedPendingInitiate =>
       _isEditing &&
       (_editingDetail?.status.toLowerCase() == 'pending_initiate');
+
+  int? get _activeDraftId =>
+      _draftProposalId ??
+      (widget.editProposalId != null && widget.editProposalId! > 0
+          ? widget.editProposalId
+          : null);
+
+  bool get _canAutosave {
+    if (_loading || _submitting || _isDelegatedPendingInitiate) return false;
+    final st = _editingStatus;
+    if (st.isEmpty) return true;
+    return st == 'draft' ||
+        st == 'rejected' ||
+        st == 'withdrawn' ||
+        st == 'pending_initiate';
+  }
 
   bool _isDelegatedClearActionKind(String kind) {
     final k = kind.trim().toLowerCase();
@@ -99,11 +122,101 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _service = XflowService(
       session: widget.session,
       templateKey: widget.templateKey,
     );
     _load();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _autosaveTimer?.cancel();
+    // iOS/Android 离开页时尽量落本地，避免未防抖完丢失。
+    if (_canAutosave && XflowService.hasMeaningfulDraftValues(_values)) {
+      unawaited(
+        _service.saveLocalDraft(
+          Map<String, dynamic>.from(_values),
+          businessType: widget.editBusinessType,
+          businessId: _activeDraftId,
+        ),
+      );
+    }
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.paused ||
+        state == AppLifecycleState.hidden) {
+      _autosaveTimer?.cancel();
+      unawaited(_runAutosave(silent: true, forceLocalFirst: true));
+    }
+  }
+
+  void _scheduleAutosave() {
+    if (!_canAutosave) return;
+    _autosaveTimer?.cancel();
+    _autosaveTimer = Timer(const Duration(milliseconds: 800), () {
+      unawaited(_runAutosave(silent: true));
+    });
+  }
+
+  Future<void> _runAutosave({
+    bool silent = true,
+    bool forceLocalFirst = false,
+  }) async {
+    if (!_canAutosave) return;
+    if (!XflowService.hasMeaningfulDraftValues(_values)) return;
+    if (_autosaving && !forceLocalFirst) return;
+    final seq = ++_autosaveSeq;
+    _autosaving = true;
+    if (mounted && silent) {
+      setState(() => _autosaveHint = '正在自动保存…');
+    }
+    try {
+      if (forceLocalFirst) {
+        await _service.saveLocalDraft(
+          Map<String, dynamic>.from(_values),
+          businessType: widget.editBusinessType,
+          businessId: _activeDraftId,
+        );
+      }
+      if (_isDynamicSubmission) {
+        await _service.updateSubmissionDraft(
+          businessType: widget.editBusinessType,
+          businessId: widget.editProposalId!,
+          formValues: Map<String, dynamic>.from(_values),
+        );
+      } else {
+        final res = await _service.submitDraft(
+          formValues: Map<String, dynamic>.from(_values),
+          proposalId: _activeDraftId,
+          templateKey: widget.templateKey,
+        );
+        final pid = _int(res['proposalId'] ?? res['businessId'] ?? res['id']);
+        if (pid > 0) _draftProposalId = pid;
+      }
+      if (!mounted || seq != _autosaveSeq) return;
+      setState(() => _autosaveHint = '已自动保存');
+      if (!silent) showDunesToast(context, '草稿已保存');
+    } catch (_) {
+      await _service.saveLocalDraft(
+        Map<String, dynamic>.from(_values),
+        businessType: widget.editBusinessType,
+        businessId: _activeDraftId,
+      );
+      if (!mounted || seq != _autosaveSeq) return;
+      setState(() => _autosaveHint = '网络异常，已暂存到本机');
+      if (!silent) {
+        showDunesToast(context, '网络不可用，草稿已暂存到本机');
+      }
+    } finally {
+      _autosaving = false;
+    }
   }
 
   Future<void> _load() async {
@@ -118,9 +231,13 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage> {
       final template = await _service.fetchTemplateDetail(
         templateKey: widget.templateKey,
       );
+      final local = await _service.loadLocalDraft(
+        businessType: widget.editBusinessType,
+        businessId: widget.editProposalId,
+      );
       _values
         ..clear()
-        ..addAll(await _service.loadLocalDraft());
+        ..addAll(local);
       XflowProposalDetail? detail;
       if (_isDynamicSubmission) {
         final submission = await _service.fetchSubmissionDetail(
@@ -132,6 +249,7 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage> {
       } else if (_isEditing) {
         detail = await _service.fetchProposalDetail(widget.editProposalId!);
         _mergeProposalToForm(detail);
+        _draftProposalId = widget.editProposalId;
       }
       Map<String, dynamic> detailCfg = const {};
       try {
@@ -147,6 +265,7 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage> {
         _editingDetail = detail;
         _detailConfig = detailCfg;
         _loading = false;
+        _autosaveHint = _canAutosave ? '填写中将自动保存草稿' : '';
       });
     } catch (e) {
       if (!mounted) return;
@@ -233,6 +352,7 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage> {
         res = await _service.submitProposal(
           formValues: _values,
           templateKey: widget.templateKey,
+          clearDraftBusinessId: _activeDraftId,
         );
         // 继续填写的服务端草稿在提交后会生成新的正式提案，
         // 删除原草稿以避免「我发起的」列表里残留重复的草稿项。
@@ -281,7 +401,14 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage> {
     if (confirm != true) return;
     try {
       await _service.deleteProposal(id);
-      await _service.clearLocalDraft();
+      await _service.clearLocalDraft(
+        businessType: widget.editBusinessType,
+        businessId: id,
+      );
+      await _service.clearLocalDraft(
+        businessType: widget.editBusinessType,
+        businessId: null,
+      );
       if (!mounted) return;
       showDunesToast(context, '草稿已删除');
       widget.onDeleted?.call();
@@ -319,40 +446,23 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage> {
   }
 
   Future<void> _saveDraft() async {
-    showDunesToast(context, '正在保存草稿到服务端…');
-    try {
-      if (_isDynamicSubmission) {
-        await _service.updateSubmissionDraft(
-          businessType: widget.editBusinessType,
-          businessId: widget.editProposalId!,
-          formValues: _values,
-        );
-        if (!mounted) return;
-        showDunesToast(context, '草稿已保存');
-        return;
-      }
-      final res = await _service.submitDraft(
-        formValues: _values,
-        proposalId: _draftProposalId ?? widget.editProposalId,
-        templateKey: widget.templateKey,
-      );
-      final pid = _int(res['proposalId'] ?? res['businessId'] ?? res['id']);
-      if (pid > 0) _draftProposalId = pid;
-      if (!mounted) return;
-      showDunesToast(context, '草稿已保存${pid > 0 ? ' · 提案 #$pid' : ''}');
-    } catch (_) {
-      await _service.saveLocalDraft(_values);
-      if (!mounted) return;
-      showDunesToast(context, '网络不可用，草稿已暂存到本机');
+    if (!_canAutosave && _isDelegatedPendingInitiate) {
+      showDunesToast(context, '代发起提案请直接继续填写并提交审批');
+      return;
     }
+    showDunesToast(context, '正在保存草稿到服务端…');
+    await _runAutosave(silent: false);
   }
 
   Future<void> _loadDraft() async {
-    final draft = await _service.loadLocalDraft();
-    if (draft.isEmpty) {
+    final draft = await _service.loadLocalDraft(
+      businessType: widget.editBusinessType,
+      businessId: _activeDraftId,
+    );
+    if (!XflowService.hasMeaningfulDraftValues(draft)) {
       showDunesToast(
         context,
-        '当前模板暂无本地草稿，请先点击「暂存草稿」保存后再恢复',
+        '当前模板暂无本地草稿，填写后会自动保存',
         kind: DunesToastKind.error,
       );
       return;
@@ -369,9 +479,18 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage> {
 
   Future<void> _clearForm() async {
     setState(_values.clear);
+    final oldId = _activeDraftId;
     _draftProposalId = null;
-    await _service.clearLocalDraft();
+    await _service.clearLocalDraft(
+      businessType: widget.editBusinessType,
+      businessId: oldId,
+    );
+    await _service.clearLocalDraft(
+      businessType: widget.editBusinessType,
+      businessId: null,
+    );
     if (!mounted) return;
+    setState(() => _autosaveHint = '填写中将自动保存草稿');
     showDunesToast(context, '表单已清空');
   }
 
@@ -518,7 +637,21 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage> {
                             XflowFormCard(
                               title: _pageTitle,
                               tag: 'XFlow',
-                              child: XflowFormRenderer(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  if (_autosaveHint.isNotEmpty)
+                                    Padding(
+                                      padding: const EdgeInsets.only(bottom: 10),
+                                      child: Text(
+                                        _autosaveHint,
+                                        style: DunesTypography.sans(
+                                          fontSize: 12,
+                                          color: DunesColors.text3,
+                                        ),
+                                      ),
+                                    ),
+                                  XflowFormRenderer(
                                 fields: _isDelegatedPendingInitiate
                                     ? _template!.fields
                                           .where((f) {
@@ -549,8 +682,11 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage> {
                                     _values[key] = value;
                                     _recompute();
                                   });
+                                  _scheduleAutosave();
                                 },
                                 onAction: _handleAction,
+                              ),
+                                ],
                               ),
                             ),
                             XflowApprovalFlowSection(

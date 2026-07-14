@@ -138,10 +138,18 @@ class ChatQuickActions extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final wide = isWideChatLayout(context);
+    // PC 宽屏：恢复原单行工具条（含表情入口）；APP：微信式宫格，表情在输入栏。
     final cells = <_QaCell>[
-      _QaCell(icon: Icons.photo_outlined, label: '相册', onTap: onAlbum),
-      _QaCell(icon: Icons.photo_camera_outlined, label: '拍照', onTap: onCamera),
-      _QaCell(icon: Icons.folder_outlined, label: '文件', onTap: onFile),
+      if (wide) ...[
+        _QaCell(icon: Icons.photo_camera_outlined, label: '拍照', onTap: onCamera),
+        _QaCell(icon: Icons.photo_library_outlined, label: '相册', onTap: onAlbum),
+        _QaCell(icon: Icons.attach_file, label: '文件', onTap: onFile),
+      ] else ...[
+        _QaCell(icon: Icons.photo_outlined, label: '相册', onTap: onAlbum),
+        _QaCell(icon: Icons.photo_camera_outlined, label: '拍照', onTap: onCamera),
+        _QaCell(icon: Icons.folder_outlined, label: '文件', onTap: onFile),
+      ],
       _QaCell(
         icon: Icons.assignment_outlined,
         label: '转发审批',
@@ -150,10 +158,53 @@ class ChatQuickActions extends StatelessWidget {
       if (showAt && onAt != null)
         _QaCell(icon: Icons.alternate_email, label: '@', onTap: onAt!),
       if (showVideo && onVideo != null)
-        _QaCell(icon: Icons.videocam_outlined, label: '视频', onTap: onVideo!),
+        _QaCell(icon: Icons.videocam_outlined, label: '视频', onTap: onVideo!)
+      else if (wide && onEmoji != null)
+        _QaCell(
+          icon: Icons.emoji_emotions_outlined,
+          label: '表情',
+          onTap: onEmoji!,
+        ),
     ];
-    // 微信式宫格：每行最多 4 个白底圆角方块。
-    // 表情已在输入栏，不再放入工具面板。
+    if (wide) {
+      return Container(
+        padding: const EdgeInsets.fromLTRB(14, 6, 14, 4),
+        decoration: const BoxDecoration(
+          color: DunesColors.bgApp,
+          border: Border(top: BorderSide(color: DunesColors.borderSoft)),
+        ),
+        child: Row(
+          children: cells
+              .map(
+                (c) => Expanded(
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(10),
+                    onTap: c.onTap,
+                    child: SizedBox(
+                      height: 46,
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(c.icon, size: 18, color: DunesColors.text2),
+                          const SizedBox(height: 3),
+                          Text(
+                            c.label,
+                            style: DunesTypography.sans(
+                              fontSize: 9.5,
+                              color: DunesColors.text3,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              )
+              .toList(),
+        ),
+      );
+    }
+    // APP：微信式宫格，每行最多 4 个。
     const cols = 4;
     final rows = <List<_QaCell>>[];
     for (var i = 0; i < cells.length; i += cols) {
@@ -301,29 +352,45 @@ class ChatInputBar extends StatelessWidget {
     final minLines = wide ? 3 : 1;
     final maxLines = wide ? 8 : 4;
     final fieldPadV = wide ? 14.0 : 10.0;
-    // 发送按钮在最底部，必须避开 iOS home indicator，否则会被底部横条盖住。
+    // PC：紧凑「发送」；APP：避开 iOS home indicator。
+    final sendH = wide ? 44.0 : 40.0;
     final bottomInset = MediaQuery.paddingOf(context).bottom;
     return Container(
       padding: EdgeInsets.fromLTRB(
         wide ? 12 : 10,
         wide ? 10 : 8,
         wide ? 12 : 10,
-        bottomInset > 0 ? bottomInset + 4 : (wide ? 12.0 : 8.0),
+        bottomInset > 0
+            ? bottomInset + (wide ? 6 : 4)
+            : (wide ? 12.0 : 8.0),
       ),
       decoration: BoxDecoration(
-        color: backgroundColor ?? const Color(0xFFF7F7F7),
-        border: const Border(top: BorderSide(color: Color(0xFFE8E8E8))),
+        color: backgroundColor ??
+            (wide ? DunesColors.bgApp : const Color(0xFFF7F7F7)),
+        border: Border(
+          top: BorderSide(
+            color: wide ? DunesColors.borderSoft : const Color(0xFFE8E8E8),
+          ),
+        ),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
           if (voiceEnabled) ...[
-            _WeChatCircleIconBtn(
-              icon: effectiveVoiceMode
-                  ? Icons.keyboard_alt_outlined
-                  : Icons.mic_none_rounded,
-              onTap: interactionLocked ? null : onToggleVoice,
-            ),
+            if (wide)
+              _RoundIconBtn(
+                icon: effectiveVoiceMode
+                    ? Icons.keyboard_outlined
+                    : Icons.mic_none_rounded,
+                onTap: interactionLocked ? null : onToggleVoice,
+              )
+            else
+              _WeChatCircleIconBtn(
+                icon: effectiveVoiceMode
+                    ? Icons.keyboard_alt_outlined
+                    : Icons.mic_none_rounded,
+                onTap: interactionLocked ? null : onToggleVoice,
+              ),
             const SizedBox(width: 8),
           ],
           Expanded(
@@ -348,7 +415,10 @@ class ChatInputBar extends StatelessWidget {
                                   ? DunesColors.coral
                                   : const Color(0xFF8B72B7))
                             : Colors.white,
-                        borderRadius: BorderRadius.circular(8),
+                        borderRadius: BorderRadius.circular(wide ? 7 : 8),
+                        border: recording || !wide
+                            ? null
+                            : Border.all(color: DunesColors.borderSoft),
                       ),
                       child: Text(
                         recording
@@ -357,7 +427,7 @@ class ChatInputBar extends StatelessWidget {
                                   : '松开发送 ${(recordDurationMs / 1000).toStringAsFixed(1)}s')
                             : '按住 说话',
                         style: DunesTypography.sans(
-                          fontSize: 15,
+                          fontSize: wide ? 13.5 : 15,
                           fontWeight: FontWeight.w500,
                           color: recording ? Colors.white : DunesColors.text2,
                         ),
@@ -382,7 +452,7 @@ class ChatInputBar extends StatelessWidget {
           ),
           if (!effectiveVoiceMode) ...[
             if (showEmojiControl) ...[
-              const SizedBox(width: 6),
+              SizedBox(width: wide ? 8 : 6),
               if (emojiPicker != null)
                 emojiPicker!
               else if (onEmoji != null)
@@ -391,18 +461,90 @@ class ChatInputBar extends StatelessWidget {
                   onTap: interactionLocked ? null : onEmoji,
                 ),
             ],
-            const SizedBox(width: 6),
-            _WeChatPlusBtn(
-              showStop: showStop,
-              sending: sending,
-              locked: interactionLocked,
-              plusOpen: plusOpen,
-              onTap: showStop
-                  ? onStop
-                  : (interactionLocked ? null : (onPlus ?? onSend)),
-            ),
+            SizedBox(width: wide ? 8 : 6),
+            // PC：原「发送」按钮；APP：紫色圆形「+」展开工具。
+            if (wide)
+              Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(6),
+                  onTap: showStop
+                      ? onStop
+                      : (interactionLocked ? null : onSend),
+                  child: Ink(
+                    width: 56,
+                    height: sendH,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(6),
+                      color: showStop
+                          ? const Color(0xFFB65252)
+                          : interactionLocked
+                          ? const Color(0xFFC9BEDD)
+                          : const Color(0xFF8B72B7),
+                    ),
+                    child: Center(
+                      child: showStop
+                          ? const Icon(
+                              Icons.stop_rounded,
+                              size: 18,
+                              color: Colors.white,
+                            )
+                          : sending
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            )
+                          : const Text(
+                              '发送',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                    ),
+                  ),
+                ),
+              )
+            else
+              _WeChatPlusBtn(
+                showStop: showStop,
+                sending: sending,
+                locked: interactionLocked,
+                plusOpen: plusOpen,
+                onTap: showStop
+                    ? onStop
+                    : (interactionLocked ? null : (onPlus ?? onSend)),
+              ),
           ],
         ],
+      ),
+    );
+  }
+}
+
+/// PC 桌面端圆形图标按钮（语音等）。
+class _RoundIconBtn extends StatelessWidget {
+  const _RoundIconBtn({required this.icon, required this.onTap});
+  final IconData icon;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        customBorder: const CircleBorder(),
+        onTap: onTap,
+        child: SizedBox(
+          width: 40,
+          height: 40,
+          child: Icon(icon, size: 23, color: DunesColors.text2),
+        ),
       ),
     );
   }
@@ -586,12 +728,20 @@ class _ChatTextFieldState extends State<_ChatTextField> {
         minLines: widget.minLines,
         maxLines: widget.maxLines,
         enableInteractiveSelection: true,
-        // iOS / Android：键盘右下角显示「发送」（随系统键盘语言），
-        // 宽屏仍可用 Enter 发送、Shift+Enter 换行（见 _isSendKey）。
-        textInputAction: TextInputAction.send,
-        onSubmitted: (_) => widget.onSend?.call(),
+        // PC：newline + Enter 发送；APP：键盘右下角「发送」，长按可选换行。
+        textInputAction: widget.wide
+            ? TextInputAction.newline
+            : TextInputAction.send,
+        onSubmitted: widget.wide || widget.onSend == null
+            ? null
+            : (_) => widget.onSend!(),
         onTap: widget.onInputFocused,
         contextMenuBuilder: (context, editableTextState) {
+          if (widget.wide) {
+            return AdaptiveTextSelectionToolbar.editableText(
+              editableTextState: editableTextState,
+            );
+          }
           final value = editableTextState.textEditingValue;
           final selection = value.selection;
           final canInsertNewline = widget.enabled && selection.isValid;
@@ -625,21 +775,27 @@ class _ChatTextFieldState extends State<_ChatTextField> {
           hintText: widget.hintText ?? '输入消息…',
           hintStyle: DunesTypography.sans(
             fontSize: widget.wide ? 15 : 16,
-            color: const Color(0xFFB0B0B0),
+            color: widget.wide ? DunesColors.text3 : const Color(0xFFB0B0B0),
           ),
           filled: true,
-          fillColor: Colors.white,
+          fillColor: widget.wide ? const Color(0xFFFFFEFF) : Colors.white,
           border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(8),
-            borderSide: BorderSide.none,
+            borderRadius: BorderRadius.circular(widget.wide ? 7 : 8),
+            borderSide: widget.wide
+                ? const BorderSide(color: Color(0xFFE3DCEE))
+                : BorderSide.none,
           ),
           enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(8),
-            borderSide: BorderSide.none,
+            borderRadius: BorderRadius.circular(widget.wide ? 7 : 8),
+            borderSide: widget.wide
+                ? const BorderSide(color: Color(0xFFE3DCEE))
+                : BorderSide.none,
           ),
           focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(8),
-            borderSide: BorderSide.none,
+            borderRadius: BorderRadius.circular(widget.wide ? 7 : 8),
+            borderSide: widget.wide
+                ? const BorderSide(color: Color(0xFF9A82C5))
+                : BorderSide.none,
           ),
           contentPadding: EdgeInsets.symmetric(
             horizontal: 12,

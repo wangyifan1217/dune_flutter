@@ -214,7 +214,17 @@ class XflowService {
   final http.Client _client;
   final String templateKey;
 
-  String get _draftStorageKey => 'xflow_draft_$templateKey';
+  /// 与 PC/WebView 对齐：`xf_draft_{templateKey}_{businessType}_{id|new}`
+  String draftStorageKey({String businessType = 'PROPOSAL', int? businessId}) {
+    final bt = businessType.trim().isEmpty
+        ? 'PROPOSAL'
+        : businessType.trim().toUpperCase();
+    final id = (businessId != null && businessId > 0) ? '$businessId' : 'new';
+    return 'xf_draft_${templateKey}_${bt}_$id';
+  }
+
+  String get _legacyDraftStorageKey => 'xflow_draft_$templateKey';
+  String get _legacyPcDraftStorageKey => 'xf_draft_$templateKey';
 
   Map<String, String> get _headers => <String, String>{
     'Authorization': 'Bearer ${session.token}',
@@ -748,20 +758,31 @@ class XflowService {
       method: 'POST',
       body: body,
     );
-    await saveLocalDraft(formValues);
+    final pid = _int(raw['proposalId'] ?? raw['businessId'] ?? raw['id']);
+    await saveLocalDraft(
+      formValues,
+      businessId: pid > 0 ? pid : proposalId,
+    );
+    if (pid > 0 && (proposalId == null || proposalId <= 0)) {
+      await clearLocalDraft(businessId: null);
+    }
     return raw;
   }
 
   Future<Map<String, dynamic>> submitProposal({
     required Map<String, dynamic> formValues,
     String templateKey = salesTemplateKey,
+    int? clearDraftBusinessId,
   }) async {
     final raw = await _request(
       '/xflow/templates/${Uri.encodeComponent(templateKey)}/submit',
       method: 'POST',
       body: formValues,
     );
-    await clearLocalDraft();
+    if (clearDraftBusinessId != null && clearDraftBusinessId > 0) {
+      await clearLocalDraft(businessId: clearDraftBusinessId);
+    }
+    await clearLocalDraft(businessId: null);
     return raw;
   }
 
@@ -774,7 +795,8 @@ class XflowService {
       method: 'POST',
       body: formValues,
     );
-    await clearLocalDraft();
+    await clearLocalDraft(businessId: proposalId);
+    await clearLocalDraft(businessId: null);
     return raw;
   }
 
@@ -842,6 +864,11 @@ class XflowService {
       '/xflow/submissions/${Uri.encodeComponent(businessType)}/$businessId/draft',
       method: 'PUT',
       body: formValues,
+    );
+    await saveLocalDraft(
+      formValues,
+      businessType: businessType,
+      businessId: businessId,
     );
     return XflowSubmissionDetail.fromJson(raw);
   }
@@ -945,25 +972,70 @@ class XflowService {
     return rows.whereType<Map<String, dynamic>>().toList(growable: false);
   }
 
-  Future<void> saveLocalDraft(Map<String, dynamic> values) async {
+  Future<void> saveLocalDraft(
+    Map<String, dynamic> values, {
+    String businessType = 'PROPOSAL',
+    int? businessId,
+  }) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_draftStorageKey, jsonEncode(values));
+    final key = draftStorageKey(
+      businessType: businessType,
+      businessId: businessId,
+    );
+    await prefs.setString(key, jsonEncode(values));
   }
 
-  Future<Map<String, dynamic>> loadLocalDraft() async {
+  Future<Map<String, dynamic>> loadLocalDraft({
+    String businessType = 'PROPOSAL',
+    int? businessId,
+  }) async {
     final prefs = await SharedPreferences.getInstance();
-    final text = prefs.getString(_draftStorageKey);
+    final key = draftStorageKey(
+      businessType: businessType,
+      businessId: businessId,
+    );
+    var text = prefs.getString(key);
+    // 新建才回退旧 key，避免编辑单串草稿。
+    if ((text == null || text.isEmpty) &&
+        (businessId == null || businessId <= 0)) {
+      text =
+          prefs.getString(_legacyDraftStorageKey) ??
+          prefs.getString(_legacyPcDraftStorageKey);
+    }
     if (text == null || text.isEmpty) return const {};
     try {
       final decoded = jsonDecode(text);
       if (decoded is Map<String, dynamic>) return decoded;
+      if (decoded is Map) return Map<String, dynamic>.from(decoded);
     } catch (_) {}
     return const {};
   }
 
-  Future<void> clearLocalDraft() async {
+  Future<void> clearLocalDraft({
+    String businessType = 'PROPOSAL',
+    int? businessId,
+  }) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_draftStorageKey);
+    await prefs.remove(
+      draftStorageKey(businessType: businessType, businessId: businessId),
+    );
+    if (businessId == null || businessId <= 0) {
+      await prefs.remove(_legacyDraftStorageKey);
+      await prefs.remove(_legacyPcDraftStorageKey);
+    }
+  }
+
+  static bool hasMeaningfulDraftValues(Map<String, dynamic> values) {
+    for (final v in values.values) {
+      if (v == null) continue;
+      if (v is String && v.trim().isNotEmpty) return true;
+      if (v is List && v.isNotEmpty) return true;
+      if (v is Map && v.isNotEmpty) return true;
+      if (v is num) return true;
+      if (v is bool) return true;
+      if (v.toString().trim().isNotEmpty) return true;
+    }
+    return false;
   }
 
   Future<Map<String, dynamic>> _request(

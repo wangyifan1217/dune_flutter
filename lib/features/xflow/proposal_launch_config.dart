@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/theme/dunes_theme.dart';
 import 'xflow_models.dart';
+import 'xflow_service.dart';
 
 enum ProposalLaunchIconTone { accent, green, blue, amber }
 
@@ -30,8 +31,8 @@ class ProposalLaunchItem {
     return ProposalLaunchItem(
       label: template.title.trim().isEmpty ? '提案' : template.title.trim(),
       icon: template.category == 'adm'
-          ? Icons.apartment_outlined
-          : Icons.assignment_outlined,
+          ? Icons.account_balance_outlined
+          : Icons.business_center_outlined,
       tone: template.category == 'adm'
           ? ProposalLaunchIconTone.amber
           : ProposalLaunchIconTone.accent,
@@ -53,22 +54,27 @@ List<ProposalLaunchItem> buildQuickLaunchItems({
   required List<XflowTemplateCard> bizTemplates,
   required List<XflowTemplateCard> admTemplates,
   int maxItems = 4,
+  String defaultSalesTemplateKey = XflowService.salesTemplateKey,
 }) {
   final enabled = <ProposalLaunchItem>[
-    ...bizTemplates.where((t) => t.enabled).map(ProposalLaunchItem.fromTemplate),
-    ...admTemplates.where((t) => t.enabled).map(ProposalLaunchItem.fromTemplate),
+    ...bizTemplates
+        .where((t) => t.enabled)
+        .map(ProposalLaunchItem.fromTemplate),
+    ...admTemplates
+        .where((t) => t.enabled)
+        .map(ProposalLaunchItem.fromTemplate),
   ];
   if (enabled.isEmpty) {
     enabled.addAll([
-      const ProposalLaunchItem(
+      ProposalLaunchItem(
         label: '销售提案',
-        icon: Icons.assignment_outlined,
+        icon: Icons.business_center_outlined,
         badge: '新建',
-        templateKey: 'sales-proposal',
+        templateKey: defaultSalesTemplateKey,
       ),
       const ProposalLaunchItem(
         label: '合同用印',
-        icon: Icons.apartment_outlined,
+        icon: Icons.handshake_outlined,
         tone: ProposalLaunchIconTone.amber,
         badge: '合同',
         templateKey: 'contract-seal',
@@ -135,7 +141,9 @@ class ProposalQuickLaunchCell extends StatelessWidget {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(10),
             border: Border.all(
-              color: tappable ? DunesColors.borderSoft : const Color(0xFFEFEFEF),
+              color: tappable
+                  ? DunesColors.borderSoft
+                  : const Color(0xFFEFEFEF),
             ),
           ),
           child: Stack(
@@ -181,7 +189,10 @@ class ProposalQuickLaunchCell extends StatelessWidget {
                   top: 0,
                   right: 2,
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 3,
+                      vertical: 1,
+                    ),
                     decoration: BoxDecoration(
                       color: DunesColors.accentSoft,
                       borderRadius: BorderRadius.circular(2),

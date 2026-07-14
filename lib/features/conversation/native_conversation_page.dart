@@ -12,7 +12,6 @@ import '../../core/theme/dunes_theme.dart';
 import '../../core/util/friendly_error.dart';
 import '../auth/auth_session.dart';
 import '../shell/dunes_main_tab_bar.dart';
-import '../shell/dunes_toast.dart';
 import '../workbench/workbench_badge_notifier.dart';
 import 'comm_unread_notifier.dart';
 import 'conversation_inbox_merge.dart';
@@ -40,8 +39,9 @@ class NativeConversationPage extends StatefulWidget {
     required this.onOpenContacts,
     required this.onOpenNova,
     required this.onOpenNotifications,
-    required this.onOpenBroadcast,
     required this.onOpenNewChat,
+    this.selectedConversationId,
+    this.showBottomTabBar = true,
   });
 
   final AuthSession session;
@@ -53,8 +53,11 @@ class NativeConversationPage extends StatefulWidget {
   final VoidCallback onOpenContacts;
   final VoidCallback onOpenNova;
   final VoidCallback onOpenNotifications;
-  final ValueChanged<NativeConversation> onOpenBroadcast;
   final VoidCallback onOpenNewChat;
+  /// 双栏布局中当前选中的会话，用于列表高亮。
+  final int? selectedConversationId;
+  /// 双栏壳已提供底部 Tab 时关闭页内 Tab，避免重复。
+  final bool showBottomTabBar;
 
   @override
   State<NativeConversationPage> createState() => _NativeConversationPageState();
@@ -99,7 +102,9 @@ class _NativeConversationPageState extends State<NativeConversationPage>
   bool _loading = true;
   String? _error;
   List<NativeConversation> _items = const <NativeConversation>[];
-  NativeNotificationSummary _notif = const NativeNotificationSummary(unreadCount: 0);
+  NativeNotificationSummary _notif = const NativeNotificationSummary(
+    unreadCount: 0,
+  );
   Set<int> _onlineUsers = <int>{};
   String _searchQuery = '';
   Map<String, String> _novaStorage = const {};
@@ -187,7 +192,12 @@ class _NativeConversationPageState extends State<NativeConversationPage>
     final like = ConversationInboxRealtime.fromEvent(event);
     final convId = like.conversationId ?? 0;
 
-    if (convId > 0 && shouldUnhideFromRealtimeEvent(like, _hiddenConversations, widget.session.userId)) {
+    if (convId > 0 &&
+        shouldUnhideFromRealtimeEvent(
+          like,
+          _hiddenConversations,
+          widget.session.userId,
+        )) {
       unawaited(_unhideConversation(convId));
       _scheduleRealtimeRefresh();
       return;
@@ -265,7 +275,10 @@ class _NativeConversationPageState extends State<NativeConversationPage>
     });
   }
 
-  Future<void> _load({bool silent = false, bool skipAvatarMerge = false}) async {
+  Future<void> _load({
+    bool silent = false,
+    bool skipAvatarMerge = false,
+  }) async {
     if (!silent) {
       setState(() {
         _loading = true;
@@ -295,11 +308,7 @@ class _NativeConversationPageState extends State<NativeConversationPage>
       if (!mounted) return;
       final selfAvatar = userAvatarRefresh.snapshotFor(widget.session.userId);
       final merged = silent && !skipAvatarMerge
-          ? mergeInboxConversations(
-              _items,
-              rows,
-              selfAvatar: selfAvatar,
-            )
+          ? mergeInboxConversations(_items, rows, selfAvatar: selfAvatar)
           : applySelfAvatarToConversations(rows, selfAvatar);
       warmConversationAvatarCache(merged);
       setState(() {
@@ -329,7 +338,10 @@ class _NativeConversationPageState extends State<NativeConversationPage>
 
   void _updateCommBadge(List<NativeConversation> rows, int notifUnread) {
     widget.commUnread.update(
-      widget.commUnread.sumConversationUnread(rows: rows, notifUnread: notifUnread),
+      widget.commUnread.sumConversationUnread(
+        rows: rows,
+        notifUnread: notifUnread,
+      ),
     );
   }
 
@@ -340,7 +352,24 @@ class _NativeConversationPageState extends State<NativeConversationPage>
     return aiRows.first;
   }
 
-  ({bool generating, String status}) _novaGeneratingFor(NativeConversation? ai) {
+  void _openNovaConversation([NativeConversation? conversation]) {
+    final nova = conversation ?? _primaryAiConversation(_items);
+    if (nova != null) {
+      NovaBackgroundCoordinator.instance.markReplySeen(nova.id);
+      final remaining = widget.commUnread.total - nova.unreadCount;
+      widget.commUnread.update(remaining > 0 ? remaining : 0);
+      unawaited(
+        _service.markConversationRead(nova.id).whenComplete(() {
+          if (mounted) unawaited(_load(silent: true));
+        }),
+      );
+    }
+    widget.onOpenNova();
+  }
+
+  ({bool generating, String status}) _novaGeneratingFor(
+    NativeConversation? ai,
+  ) {
     final activeConvId = novaActiveConvIdFromStorage(_novaStorage);
     final local = readNovaGeneratingFromStorage(
       _novaStorage,
@@ -351,7 +380,8 @@ class _NativeConversationPageState extends State<NativeConversationPage>
     final streamInFlight = NovaBackgroundCoordinator.instance
         .serviceFor(widget.session)
         .isStreamInFlight;
-    final localGenerating = local != null &&
+    final localGenerating =
+        local != null &&
         shouldPersistNovaGenerating(
           localGen: local,
           draft: draft,
@@ -363,7 +393,10 @@ class _NativeConversationPageState extends State<NativeConversationPage>
     return (generating: generating, status: status);
   }
 
-  void _syncNovaInboxPoll(List<NativeConversation> rows, Map<String, String> storage) {
+  void _syncNovaInboxPoll(
+    List<NativeConversation> rows,
+    Map<String, String> storage,
+  ) {
     final ai = _primaryAiConversation(rows);
     final activeConvId = novaActiveConvIdFromStorage(storage);
     final local = readNovaGeneratingFromStorage(
@@ -375,7 +408,8 @@ class _NativeConversationPageState extends State<NativeConversationPage>
     final streamInFlight = NovaBackgroundCoordinator.instance
         .serviceFor(widget.session)
         .isStreamInFlight;
-    final shouldPoll = (ai?.assistantGenerating ?? false) ||
+    final shouldPoll =
+        (ai?.assistantGenerating ?? false) ||
         (local != null &&
             shouldPersistNovaGenerating(
               localGen: local,
@@ -383,10 +417,13 @@ class _NativeConversationPageState extends State<NativeConversationPage>
               streamInFlight: streamInFlight,
             ));
     if (shouldPoll) {
-      _novaInboxPollTimer ??= Timer.periodic(const Duration(milliseconds: 2500), (_) {
-        if (!mounted || _loading) return;
-        _load(silent: true);
-      });
+      _novaInboxPollTimer ??= Timer.periodic(
+        const Duration(milliseconds: 2500),
+        (_) {
+          if (!mounted || _loading) return;
+          _load(silent: true);
+        },
+      );
     } else {
       _novaInboxPollTimer?.cancel();
       _novaInboxPollTimer = null;
@@ -432,67 +469,6 @@ class _NativeConversationPageState extends State<NativeConversationPage>
     return parts.join(' · ');
   }
 
-  Widget _buildAiRow(NativeConversation? ai) {
-    final gen = _novaGeneratingFor(ai);
-    final preview = resolveNovaInboxPreview(
-      storage: _novaStorage,
-      convId: novaActiveConvIdFromStorage(_novaStorage),
-      serverPreview: ai?.preview,
-      generating: gen.generating,
-      generatingStatus: gen.status,
-      allowLocalCache: true,
-    );
-    return ChatInboxRow(
-      kind: ChatInboxRowKind.aiAssistant,
-      title: _yunshuName,
-      preview: preview,
-      previewGenerating: gen.generating,
-      timeLabel: InboxFormat.formatTime(ai?.updatedAt),
-      showAiMark: true,
-      unreadCount: ai?.unreadCount ?? 0,
-      showDivider: true,
-      onTap: widget.onOpenNova,
-    );
-  }
-
-  Widget _buildSystemRow() {
-    final latest = _notif.latest;
-    final preview = latest == null
-        ? '暂无新通知'
-        : '${latest.title}${latest.body.isNotEmpty ? ' ${latest.body}' : ''}';
-    return ChatInboxRow(
-      kind: ChatInboxRowKind.systemNotification,
-      title: '系统通知',
-      preview: preview,
-      timeLabel: InboxFormat.formatTime(latest?.createdAt),
-      unreadCount: _notif.unreadCount,
-      showDivider: true,
-      onTap: widget.onOpenNotifications,
-    );
-  }
-
-  Widget _buildBroadcastRow(NativeConversation? broadcast) {
-    if (broadcast != null) {
-      return ChatInboxRow(
-        kind: ChatInboxRowKind.broadcast,
-        title: broadcast.title,
-        preview: broadcast.preview,
-        timeLabel: InboxFormat.formatTime(broadcast.updatedAt),
-        unreadCount: broadcast.unreadCount,
-        showDivider: true,
-        onTap: () => widget.onOpenBroadcast(broadcast),
-      );
-    }
-    return ChatInboxRow(
-      kind: ChatInboxRowKind.broadcast,
-      title: '公司广播',
-      preview: '暂无消息',
-      timeLabel: '',
-      showDivider: true,
-      onTap: () => showDunesSoonToast(context),
-    );
-  }
-
   int? _peerUserId(NativeConversation c) {
     final id = c.peerUserId;
     if (id == null || id <= 0 || id == widget.session.userId) return null;
@@ -524,62 +500,75 @@ class _NativeConversationPageState extends State<NativeConversationPage>
       onTap = () => widget.onOpenGroup(c);
     } else if (c.isBroadcast) {
       rowKind = ChatInboxRowKind.broadcast;
-      onTap = () => widget.onOpenBroadcast(c);
+      onTap = widget.onOpenNotifications;
     } else if (c.isAiAssistant) {
       rowKind = ChatInboxRowKind.aiAssistant;
-      onTap = widget.onOpenNova;
+      onTap = () => _openNovaConversation(c);
     } else {
       rowKind = ChatInboxRowKind.group;
       onTap = () => widget.onOpenGroup(c);
     }
 
-    final gen = c.isAiAssistant ? _novaGeneratingFor(c) : (generating: false, status: '');
+    final gen = c.isAiAssistant
+        ? _novaGeneratingFor(c)
+        : (generating: false, status: '');
 
     // 暂时屏蔽私聊/群聊的左滑删除功能。
-    final allowSwipeDelete = !(rowKind == ChatInboxRowKind.private ||
-        rowKind == ChatInboxRowKind.group ||
-        rowKind == ChatInboxRowKind.workgroupApproval);
+    final allowSwipeDelete =
+        !(rowKind == ChatInboxRowKind.private ||
+            rowKind == ChatInboxRowKind.group ||
+            rowKind == ChatInboxRowKind.workgroupApproval);
 
     final row = ChatInboxRow(
-        kind: rowKind,
-        title: c.isAiAssistant ? _yunshuName : title,
-        subtitle: c.isPrivate ? _privateSubtitle(c) : null,
-        preview: c.isAiAssistant
-            ? resolveNovaInboxPreview(
-                storage: _novaStorage,
-                convId: c.id,
-                serverPreview: c.preview,
-                generating: gen.generating,
-                generatingStatus: gen.status,
-                allowLocalCache: true,
-              )
-            : c.preview,
-        timeLabel: InboxFormat.formatTime(c.updatedAt, withClock: c.isPrivate),
-        memberCount: kind == 'AI_ASSISTANT' || kind == 'BROADCAST' ? null : c.memberCount,
-        unreadCount: c.unreadCount,
-        muted: c.muted,
-        showAiMark: c.isAiAssistant,
-        previewGenerating: c.isAiAssistant && gen.generating,
-        showOnlineDot: c.isPrivate && _isPeerOnline(c),
-        avatarInitial: c.isPrivate
-            ? (_privateTitle(c).isNotEmpty ? _privateTitle(c).substring(0, 1) : '?')
-            : null,
-        avatarSeed: _peerUserId(c) ?? c.id,
-        avatarPreset: c.isPrivate ? c.peerAvatarPreset : null,
-        avatarObjectKey: c.isPrivate ? c.peerAvatarObjectKey : null,
-        avatarUrl: c.isPrivate ? c.peerAvatarUrl : null,
-        avatarService: c.isPrivate || c.isGroup || c.isWorkgroupApproval ? _service : null,
-        groupAvatarMembers: c.isPrivate ? const <ConversationAvatarMember>[] : c.avatarMembers,
-        sysTag: c.businessType,
-        showDivider: true,
-        onTap: onTap,
-      );
+      kind: rowKind,
+      title: c.isAiAssistant ? _yunshuName : title,
+      subtitle: c.isPrivate ? _privateSubtitle(c) : null,
+      preview: c.isAiAssistant
+          ? resolveNovaInboxPreview(
+              storage: _novaStorage,
+              convId: c.id,
+              serverPreview: c.preview,
+              generating: gen.generating,
+              generatingStatus: gen.status,
+              allowLocalCache: true,
+            )
+          : c.preview,
+      timeLabel: InboxFormat.formatTime(c.updatedAt, withClock: c.isPrivate),
+      memberCount: c.isPrivate || kind == 'AI_ASSISTANT' || kind == 'BROADCAST'
+          ? null
+          : c.memberCount,
+      unreadCount:
+          c.isAiAssistant &&
+              NovaBackgroundCoordinator.instance.hasUnreadReplyFor(c.id)
+          ? (c.unreadCount > 0 ? c.unreadCount : 1)
+          : c.unreadCount,
+      muted: c.muted,
+      showAiMark: c.isAiAssistant,
+      previewGenerating: c.isAiAssistant && gen.generating,
+      showOnlineDot: c.isPrivate && _isPeerOnline(c),
+      avatarInitial: c.isPrivate
+          ? (_privateTitle(c).isNotEmpty
+                ? _privateTitle(c).substring(0, 1)
+                : '?')
+          : null,
+      avatarSeed: _peerUserId(c) ?? c.id,
+      avatarPreset: c.isPrivate ? c.peerAvatarPreset : null,
+      avatarObjectKey: c.isPrivate ? c.peerAvatarObjectKey : null,
+      avatarUrl: c.isPrivate ? c.peerAvatarUrl : null,
+      avatarService: c.isPrivate || c.isGroup || c.isWorkgroupApproval
+          ? _service
+          : null,
+      groupAvatarMembers: c.isPrivate
+          ? const <ConversationAvatarMember>[]
+          : c.avatarMembers,
+      sysTag: c.businessType,
+      showDivider: true,
+      selected: widget.selectedConversationId == c.id,
+      onTap: onTap,
+    );
 
     if (!allowSwipeDelete) {
-      return KeyedSubtree(
-        key: ValueKey<int>(c.id),
-        child: row,
-      );
+      return KeyedSubtree(key: ValueKey<int>(c.id), child: row);
     }
 
     return KeyedSubtree(
@@ -592,49 +581,40 @@ class _NativeConversationPageState extends State<NativeConversationPage>
   }
 
   List<_InboxSection> _buildSections() {
-    final aiRows = _items.where((c) => c.isAiAssistant).toList();
-    NativeConversation? ai;
-    if (aiRows.isNotEmpty) {
-      aiRows.sort((a, b) => b.sortTimestamp.compareTo(a.sortTimestamp));
-      ai = aiRows.first;
-    }
-
-    final broadcasts = _sorted(_items.where((c) => c.isBroadcast).toList());
-    final approvals = _sorted(_items.where((c) => c.isWorkgroupApproval).toList());
-    final groups = _sorted(_items.where((c) => c.isGroup).toList());
-    final privates = _sorted(_items.where((c) => c.isPrivate).toList());
+    final approvals = _sorted(
+      _items.where((c) => c.isWorkgroupApproval).toList(),
+    );
+    // 私聊与普通群聊共用一个按置顶、最近消息排序的会话流，和常见聊天
+    // 应用一致；审批工作群仍保留在独立的系统分区中。
+    final chats = _sorted(
+      _items.where((c) => c.isGroup || c.isPrivate).toList(),
+    );
 
     List<Widget> convRows(Iterable<NativeConversation> rows) =>
         rows.map(_buildConvRow).whereType<Widget>().toList();
 
+    if (widget.session.isExternalUser) {
+      final sections = <_InboxSection>[
+        if (chats.isNotEmpty)
+          _InboxSection(
+            key: 'chat',
+            label: '聊天',
+            count: chats.length,
+            timestamp: chats.first.sortTimestamp,
+            pinned: false,
+            leading: const Icon(
+              Icons.chat_bubble_outline,
+              size: 11,
+              color: DunesColors.text3,
+            ),
+            rows: convRows(chats),
+          ),
+      ];
+      sections.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+      return sections;
+    }
+
     final sections = <_InboxSection>[
-      _InboxSection(
-        key: 'ai',
-        label: _yunshuName,
-        count: ai == null ? 1 : 1,
-        timestamp: ai?.sortTimestamp ?? 0,
-        pinned: true,
-        leading: const NovaSectionIcon(),
-        rows: [_buildAiRow(ai)],
-      ),
-      _InboxSection(
-        key: 'system',
-        label: '系统消息 · 公司广播',
-        count: 1 + (broadcasts.isEmpty ? 1 : broadcasts.length),
-        timestamp: [
-          _notif.latest?.createdAt?.millisecondsSinceEpoch ?? 0,
-          ...broadcasts.map((c) => c.sortTimestamp),
-        ].reduce((a, b) => a > b ? a : b),
-        pinned: true,
-        leading: const Icon(Icons.push_pin_outlined, size: 11, color: DunesColors.accent),
-        rows: [
-          _buildSystemRow(),
-          if (broadcasts.isEmpty)
-            _buildBroadcastRow(null)
-          else
-            ...convRows(broadcasts),
-        ],
-      ),
       if (approvals.isNotEmpty)
         _InboxSection(
           key: 'approval',
@@ -642,49 +622,38 @@ class _NativeConversationPageState extends State<NativeConversationPage>
           count: approvals.length,
           timestamp: approvals.first.sortTimestamp,
           pinned: true,
-          leading: const Icon(Icons.route_outlined, size: 11, color: DunesColors.accent),
+          leading: const Icon(
+            Icons.route_outlined,
+            size: 11,
+            color: DunesColors.accent,
+          ),
           rows: convRows(approvals),
         ),
-      if (groups.isNotEmpty)
+      if (chats.isNotEmpty)
         _InboxSection(
-          key: 'group',
-          label: '工作群',
-          count: groups.length,
-          timestamp: groups.first.sortTimestamp,
+          key: 'chat',
+          label: '聊天',
+          count: chats.length,
+          timestamp: chats.first.sortTimestamp,
           pinned: false,
-          leading: const Icon(Icons.groups_outlined, size: 11, color: DunesColors.text3),
-          rows: convRows(groups),
-        ),
-      if (privates.isNotEmpty)
-        _InboxSection(
-          key: 'private',
-          label: '1 对 1',
-          count: privates.length,
-          timestamp: privates.first.sortTimestamp,
-          pinned: false,
-          leading: const Icon(Icons.chat_bubble_outline, size: 11, color: DunesColors.text3),
-          rows: convRows(privates),
+          leading: const Icon(
+            Icons.chat_bubble_outline,
+            size: 11,
+            color: DunesColors.text3,
+          ),
+          rows: convRows(chats),
         ),
     ];
 
-    // NOVA 固定置顶；系统消息（系统通知·公司广播）固定紧随其后；其余按时间倒序。
-    final aiSection = sections.firstWhere((s) => s.key == 'ai');
-    final systemSection = sections.firstWhere((s) => s.key == 'system');
-    final dynamicSections =
-        sections.where((s) => s.key != 'ai' && s.key != 'system').toList()
-          ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
-
-    return [
-      aiSection,
-      systemSection,
-      ...dynamicSections,
-    ];
+    sections.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+    return sections;
   }
 
-  int get _visibleCount {
-    return _items
-        .where((c) => c.isPrivate || c.isGroup || c.isWorkgroupApproval)
-        .length;
+  int get _messageCenterUnread {
+    return _notif.unreadCount +
+        _items
+            .where((conversation) => conversation.isBroadcast)
+            .fold(0, (total, conversation) => total + conversation.unreadCount);
   }
 
   @override
@@ -701,23 +670,30 @@ class _NativeConversationPageState extends State<NativeConversationPage>
           child: Column(
             children: [
               ChatInboxHeader(
-                visibleCount: _visibleCount,
                 onOpenContacts: widget.onOpenContacts,
                 onNewChat: widget.onOpenNewChat,
-                onScan: () => showDunesSoonToast(context),
+                onOpenNova: _openNovaConversation,
+                onOpenMessageCenter: widget.onOpenNotifications,
+                messageCenterUnread: _messageCenterUnread,
+                novaThinking: _novaGeneratingFor(
+                  _primaryAiConversation(_items),
+                ).generating,
+                novaUnread: NovaBackgroundCoordinator.instance.hasUnreadReply,
               ),
               ChatInboxSearchBar(
                 controller: _searchController,
                 onChanged: _onSearchChanged,
               ),
               Expanded(child: _buildBody()),
-              DunesMainTabBar(
-                navigation: widget.navigation,
-                activeScreen: 'C1',
-                commUnread: widget.commUnread,
-                workbenchBadge: widget.workbenchBadge,
-                lighthouseAccess: widget.session.lighthouseAccess,
-              ),
+              if (widget.showBottomTabBar)
+                DunesMainTabBar(
+                  navigation: widget.navigation,
+                  activeScreen: 'C1',
+                  commUnread: widget.commUnread,
+                  workbenchBadge: widget.workbenchBadge,
+                  lighthouseAccess: widget.session.lighthouseAccess,
+                  chatOnlyMode: widget.session.isExternalUser,
+                ),
             ],
           ),
         ),
@@ -730,10 +706,7 @@ class _NativeConversationPageState extends State<NativeConversationPage>
       return const Center(child: CircularProgressIndicator(strokeWidth: 2));
     }
     if (_error != null) {
-      return _ErrorPanel(
-        error: _error!,
-        onRetry: _load,
-      );
+      return _ErrorPanel(error: _error!, onRetry: _load);
     }
 
     final sections = _buildSections();
@@ -765,10 +738,7 @@ class _NativeConversationPageState extends State<NativeConversationPage>
 }
 
 class _ErrorPanel extends StatelessWidget {
-  const _ErrorPanel({
-    required this.error,
-    required this.onRetry,
-  });
+  const _ErrorPanel({required this.error, required this.onRetry});
 
   final String error;
   final VoidCallback onRetry;
@@ -781,9 +751,15 @@ class _ErrorPanel extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text('消息列表加载失败', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+            const Text(
+              '消息列表加载失败',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+            ),
             const SizedBox(height: 8),
-            Text(error, style: const TextStyle(fontSize: 12, color: DunesColors.text3)),
+            Text(
+              error,
+              style: const TextStyle(fontSize: 12, color: DunesColors.text3),
+            ),
             const SizedBox(height: 14),
             OutlinedButton(onPressed: onRetry, child: const Text('重试')),
           ],

@@ -11,8 +11,11 @@ import 'package:flutter/rendering.dart' show ScrollDirection;
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:mime/mime.dart';
+import 'package:pasteboard/pasteboard.dart';
 import 'package:permission_handler/permission_handler.dart';
 
+import '../../core/layout/chat_layout.dart';
+import '../../core/platform/desktop_features.dart';
 import '../../core/theme/dunes_theme.dart';
 import '../../core/util/friendly_error.dart';
 import '../../core/util/native_permissions.dart';
@@ -36,6 +39,7 @@ import 'giphy_proxy_service.dart';
 import 'chat_media_widgets.dart';
 import 'chat_quote.dart';
 import 'chat_voice_player.dart';
+import 'voice_recording_overlay.dart';
 import 'chat_widgets.dart';
 import 'file_download.dart' as file_dl;
 import 'group_composite_avatar.dart';
@@ -57,17 +61,15 @@ class _ChatScrollMetrics {
   static const double _screenChromeHeight = 168;
 
   /// 一屏大约能看到的消息条数（6~14）。
-  int get visibleMessageEstimate => (listViewportHeight / _kChatMessageRowHeight)
-      .ceil()
-      .clamp(6, 14);
+  int get visibleMessageEstimate =>
+      (listViewportHeight / _kChatMessageRowHeight).ceil().clamp(6, 14);
 
   /// 首屏：约 1.8 屏，15~24 条。
   int get initialPageSize =>
       (visibleMessageEstimate * 1.8).round().clamp(15, 24);
 
   /// 上滑/下拉分页：约 1.2 屏，12~18 条。
-  int get batchPageSize =>
-      (visibleMessageEstimate * 1.2).round().clamp(12, 18);
+  int get batchPageSize => (visibleMessageEstimate * 1.2).round().clamp(12, 18);
 
   /// 距顶部剩余多少时预拉下一批（约 0.55 屏）。
   double get prefetchLead => listViewportHeight * 0.55;
@@ -127,22 +129,18 @@ class _MessageQuickAction {
   final IconData icon;
 }
 
-typedef _ForwardUnit =
-    ({
-      String senderName,
-      String timeLabel,
-      String text,
-      String kind,
-      Map<String, dynamic>? payload,
-      String? avatarPreset,
-      String? avatarObjectKey,
-    });
+typedef _ForwardUnit = ({
+  String senderName,
+  String timeLabel,
+  String text,
+  String kind,
+  Map<String, dynamic>? payload,
+  String? avatarPreset,
+  String? avatarObjectKey,
+});
 
 class _ForwardBundle {
-  const _ForwardBundle({
-    required this.title,
-    required this.entries,
-  });
+  const _ForwardBundle({required this.title, required this.entries});
 
   final String title;
   final List<_ForwardEntry> entries;
@@ -185,6 +183,7 @@ class NativeChatView extends StatefulWidget {
     this.onOpenCall,
     this.onConversationRead,
     this.autoMarkRead = false,
+    this.showBackButton = true,
   });
 
   final AuthSession session;
@@ -201,6 +200,8 @@ class NativeChatView extends StatefulWidget {
   final VoidCallback? onOpenCall;
   final ValueChanged<int>? onConversationRead;
   final bool autoMarkRead;
+  /// 双栏布局下列表已可见时隐藏返回按钮。
+  final bool showBackButton;
 
   @override
   State<NativeChatView> createState() => _NativeChatViewState();
@@ -233,7 +234,9 @@ class _NativeChatViewState extends State<NativeChatView>
   double _downloadProgress = 0;
   String? _downloadLabel;
   bool _recordWillCancel = false;
+  Offset? _recordFocalPoint;
   bool _loadingOlder = false;
+
   /// prepend 历史消息后正在恢复滚动位置，避免仍停在 maxScrollExtent 连续拉完全部历史。
   bool _olderScrollRestorePending = false;
   int _olderLoadCooldownUntilMs = 0;
@@ -245,6 +248,7 @@ class _NativeChatViewState extends State<NativeChatView>
   bool _loadingNewer = false;
   bool _locatedMode = false;
   bool _forceLatestMode = false;
+
   /// 进入会话后需持续尝试滚到底，直到成功或用户手动滚动（解决 ListView/图片懒加载竞态）。
   bool _enterStickBottomPending = true;
   int _scrollBottomGen = 0;
@@ -253,9 +257,7 @@ class _NativeChatViewState extends State<NativeChatView>
   int _lastMarkedReadNewestId = 0;
   bool _wasNearBottom = true;
   bool _userInteractedWithScroll = false;
-  bool _manualScrollInProgress = false;
   bool _userScrollActive = false;
-  int _lastManualScrollAtMs = 0;
   bool _hasMore = false;
   bool _hasNewer = false;
   int? _highlightMessageId;
@@ -263,12 +265,17 @@ class _NativeChatViewState extends State<NativeChatView>
   Timer? _highlightTimer;
   bool _voiceMode = false;
   bool _emojiOpen = false;
+  bool _toolsOpen = false;
   bool _peerOnline = false;
   int _recordDurationMs = 0;
   String? _error;
   String? _selfAvatarPreset;
   String? _selfAvatarObjectKey;
   String? _selfAvatarUrl;
+  /// 上传中气泡预览（微信式圆形进度）。
+  Uint8List? _pendingUploadBytes;
+  String _pendingUploadKind = '';
+  String _pendingUploadName = '';
   NativeConversation? _conversation;
   List<NativeChatMessage> _messages = const <NativeChatMessage>[];
   List<Map<String, dynamic>> _groupMembers = const <Map<String, dynamic>>[];
@@ -304,7 +311,9 @@ class _NativeChatViewState extends State<NativeChatView>
     _bootRealtime();
     unawaited(_loadSelfAvatar());
     userAvatarRefresh.addListener(_onSelfAvatarUpdated);
-    MeetingLiveController.instance.active.addListener(_onMeetingLiveActiveChanged);
+    MeetingLiveController.instance.active.addListener(
+      _onMeetingLiveActiveChanged,
+    );
   }
 
   void _onMeetingLiveActiveChanged() {
@@ -319,8 +328,9 @@ class _NativeChatViewState extends State<NativeChatView>
     if (snap == null || !mounted) return;
     setState(() {
       _selfAvatarPreset = snap.avatarPreset.isEmpty ? null : snap.avatarPreset;
-      _selfAvatarObjectKey =
-          snap.avatarObjectKey.isEmpty ? null : snap.avatarObjectKey;
+      _selfAvatarObjectKey = snap.avatarObjectKey.isEmpty
+          ? null
+          : snap.avatarObjectKey;
       _selfAvatarUrl = snap.avatarUrl.isEmpty ? null : snap.avatarUrl;
       if (_messages.isNotEmpty) {
         _messages = _enrichMessages(_messages);
@@ -345,10 +355,12 @@ class _NativeChatViewState extends State<NativeChatView>
     final cached = userAvatarRefresh.snapshotFor(widget.session.userId);
     if (cached != null && mounted) {
       setState(() {
-        _selfAvatarPreset =
-            cached.avatarPreset.isEmpty ? null : cached.avatarPreset;
-        _selfAvatarObjectKey =
-            cached.avatarObjectKey.isEmpty ? null : cached.avatarObjectKey;
+        _selfAvatarPreset = cached.avatarPreset.isEmpty
+            ? null
+            : cached.avatarPreset;
+        _selfAvatarObjectKey = cached.avatarObjectKey.isEmpty
+            ? null
+            : cached.avatarObjectKey;
         _selfAvatarUrl = cached.avatarUrl.isEmpty ? null : cached.avatarUrl;
       });
     }
@@ -442,7 +454,9 @@ class _NativeChatViewState extends State<NativeChatView>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     userAvatarRefresh.removeListener(_onSelfAvatarUpdated);
-    MeetingLiveController.instance.active.removeListener(_onMeetingLiveActiveChanged);
+    MeetingLiveController.instance.active.removeListener(
+      _onMeetingLiveActiveChanged,
+    );
     _rtRefreshDebounce?.cancel();
     _rtSub?.cancel();
     _onlineSub?.cancel();
@@ -470,19 +484,16 @@ class _NativeChatViewState extends State<NativeChatView>
     }
     final pos = _scrollController.position;
     // reverse 列表：scroll≈0 为最新消息（靠近输入框），maxScrollExtent 为历史方向。
+    // PC 鼠标滚轮不会产生 dragDetails，但仍应触发加载更早消息。
     final nowMs = DateTime.now().millisecondsSinceEpoch;
-    final recentlyManualScroll = nowMs - _lastManualScrollAtMs <= 1500;
-    if ((_manualScrollInProgress || recentlyManualScroll) &&
-        nowMs >= _olderLoadCooldownUntilMs &&
+    if (nowMs >= _olderLoadCooldownUntilMs &&
+        pos.maxScrollExtent > 0 &&
         pos.pixels >=
             pos.maxScrollExtent -
                 math.min(180.0, pos.viewportDimension * 0.24)) {
       unawaited(_loadOlder());
     }
-    if (_locatedMode &&
-        _hasNewer &&
-        !_loadingNewer &&
-        pos.pixels <= 72) {
+    if (_locatedMode && _hasNewer && !_loadingNewer && pos.pixels <= 72) {
       unawaited(_loadNewer());
     }
     // 手指拖动或惯性滑动期间不刷新 UI，避免滚动中 setState 导致卡顿。
@@ -768,23 +779,18 @@ class _NativeChatViewState extends State<NativeChatView>
       _enterStickBottomPending = false;
     }
     if (notification is ScrollStartNotification) {
-      _manualScrollInProgress = notification.dragDetails != null;
-      if (_manualScrollInProgress) {
+      if (notification.dragDetails != null) {
         _userScrollActive = true;
-        _lastManualScrollAtMs = DateTime.now().millisecondsSinceEpoch;
       }
     } else if (notification is ScrollUpdateNotification) {
       if (notification.dragDetails != null) {
-        _manualScrollInProgress = true;
         _userScrollActive = true;
-        _lastManualScrollAtMs = DateTime.now().millisecondsSinceEpoch;
       }
     } else if (notification is UserScrollNotification) {
       if (notification.direction != ScrollDirection.idle) {
         _userScrollActive = true;
       }
     } else if (notification is ScrollEndNotification) {
-      _manualScrollInProgress = false;
       _userScrollActive = false;
       _updateStickBottomState();
       if (_canMarkReadNow && _isNearBottom) {
@@ -802,9 +808,15 @@ class _NativeChatViewState extends State<NativeChatView>
 
   int get _listFooterCount => (_locatedMode && _hasNewer) ? 1 : 0;
 
+  /// reverse 列表视觉顶部：加载更早消息入口（对齐 admin-web）。
+  int get _listHeaderCount => _hasMore ? 1 : 0;
+
   _ChatListEntry? _entryForListIndex(int index, List<_ChatListEntry> entries) {
     final footer = _listFooterCount;
+    final header = _listHeaderCount;
     if (footer > 0 && index == 0) return null;
+    final contentCount = entries.length + footer;
+    if (header > 0 && index >= contentCount) return null;
     final adj = index - footer;
     final entryIndex = entries.length - 1 - adj;
     if (entryIndex < 0 || entryIndex >= entries.length) return null;
@@ -872,7 +884,7 @@ class _NativeChatViewState extends State<NativeChatView>
 
   void _scrollToListIndex(int listIndex, List<_ChatListEntry> entries) {
     if (!_scrollController.hasClients) return;
-    final total = entries.length + _listFooterCount;
+    final total = entries.length + _listFooterCount + _listHeaderCount;
     if (total <= 1 || listIndex < 0 || listIndex >= total) return;
     final max = _scrollController.position.maxScrollExtent;
     final ratio = listIndex / (total - 1);
@@ -1028,10 +1040,7 @@ class _NativeChatViewState extends State<NativeChatView>
         lastDivider = label;
       }
       entries.add(
-        _ChatListEntry.message(
-          m,
-          showSenderMeta: !_isSystemKind(m.kind),
-        ),
+        _ChatListEntry.message(m, showSenderMeta: !_isSystemKind(m.kind)),
       );
     }
     return entries;
@@ -1139,14 +1148,15 @@ class _NativeChatViewState extends State<NativeChatView>
         ..sort((a, b) => a.id.compareTo(b.id));
       if (!mounted) return;
       final conversationChanged = _conversation?.id != conv.id;
-      final preservePaginatedHistory = silent &&
+      final preservePaginatedHistory =
+          silent &&
           _bootstrapped &&
           !conversationChanged &&
           focusId <= 0 &&
           !_isNearBottom;
       final nextMessages = preservePaginatedHistory
           ? (_enrichMessages(_mergeMessages(_messages, msgs), conv)
-            ..sort((a, b) => a.id.compareTo(b.id)))
+              ..sort((a, b) => a.id.compareTo(b.id)))
           : msgs;
       setState(() {
         if (conversationChanged) {
@@ -1196,7 +1206,7 @@ class _NativeChatViewState extends State<NativeChatView>
 
   int? _topVisibleMessageId() {
     final entries = _buildListEntries();
-    final total = entries.length + _listFooterCount;
+    final total = entries.length + _listFooterCount + _listHeaderCount;
     if (total <= 0 || !_scrollController.hasClients) return null;
     final pos = _scrollController.position;
     if (pos.maxScrollExtent <= 0) {
@@ -1210,8 +1220,7 @@ class _NativeChatViewState extends State<NativeChatView>
     final topRatio =
         ((pos.pixels + pos.viewportDimension * 0.1) / pos.maxScrollExtent)
             .clamp(0.0, 1.0);
-    final listIndex =
-        (topRatio * (total - 1)).round().clamp(0, total - 1);
+    final listIndex = (topRatio * (total - 1)).round().clamp(0, total - 1);
     return _entryForListIndex(listIndex, entries)?.message?.id;
   }
 
@@ -1243,11 +1252,7 @@ class _NativeChatViewState extends State<NativeChatView>
       }
       final ctx = _scrollRestoreKeys[anchorId]?.currentContext;
       if (ctx != null) {
-        Scrollable.ensureVisible(
-          ctx,
-          alignment: 0.06,
-          duration: Duration.zero,
-        );
+        Scrollable.ensureVisible(ctx, alignment: 0.06, duration: Duration.zero);
         _finishOlderScrollRestore();
         return;
       }
@@ -1328,8 +1333,7 @@ class _NativeChatViewState extends State<NativeChatView>
         _loadingOlder = false;
       });
       _olderScrollRestorePending = true;
-      _olderLoadCooldownUntilMs =
-          DateTime.now().millisecondsSinceEpoch + 600;
+      _olderLoadCooldownUntilMs = DateTime.now().millisecondsSinceEpoch + 600;
       _ensureAnchorVisibleAfterOlderLoad(
         anchorMessageId,
         fallbackPixels: _olderScrollHoldPixels,
@@ -1450,7 +1454,7 @@ class _NativeChatViewState extends State<NativeChatView>
       final entries = _buildListEntries();
       final listIndex = _listIndexForMessageId(messageId, entries);
       if (listIndex != null && _scrollController.hasClients) {
-        final total = entries.length + _listFooterCount;
+        final total = entries.length + _listFooterCount + _listHeaderCount;
         if (total > 1) {
           final max = _scrollController.position.maxScrollExtent;
           final ratio = listIndex / (total - 1);
@@ -1582,6 +1586,7 @@ class _NativeChatViewState extends State<NativeChatView>
       if (!mounted) return;
       _scrollBottom(force: true, animated: animated, gentle: true);
     }
+
     snap(animated: true);
     WidgetsBinding.instance.addPostFrameCallback((_) => snap());
     Future<void>.delayed(const Duration(milliseconds: 280), () {
@@ -1681,15 +1686,8 @@ class _NativeChatViewState extends State<NativeChatView>
     return false;
   }
 
-  Future<
-      ({
-        Uint8List bytes,
-        String fileName,
-        String mimeType,
-      })?> _prepareChatImagePreview(
-    Uint8List bytes,
-    String fileName,
-  ) async {
+  Future<({Uint8List bytes, String fileName, String mimeType})?>
+  _prepareChatImagePreview(Uint8List bytes, String fileName) async {
     final preview = await buildChatImagePreview(bytes, fileName: fileName);
     if (preview == null) return null;
     return (
@@ -1704,7 +1702,8 @@ class _NativeChatViewState extends State<NativeChatView>
     if (conv == null || _sending) return;
     if (source == ImageSource.camera && !await _ensureCameraPermission())
       return;
-    if (source == ImageSource.gallery && !await _ensurePhotosPermission()) return;
+    if (source == ImageSource.gallery && !await _ensurePhotosPermission())
+      return;
     final picked = await _imagePicker.pickImage(
       source: source,
       maxWidth: kChatImagePickMaxEdge,
@@ -1727,7 +1726,12 @@ class _NativeChatViewState extends State<NativeChatView>
     }
     if (!_checkSizeLimit(bytes.length, _maxImageBytes, fileName)) return;
     await _guardSend(() async {
-      _beginUpload('上传图片');
+      _beginUpload(
+        '上传图片',
+        previewBytes: bytes,
+        kind: 'IMAGE',
+        fileName: fileName,
+      );
       await _service.sendImage(
         conversationId: conv.id,
         bytes: bytes,
@@ -1735,6 +1739,80 @@ class _NativeChatViewState extends State<NativeChatView>
         mimeType: mimeType,
         sourceLabel: label,
         preparePreview: () => _prepareChatImagePreview(bytes, fileName),
+        onProgress: (p) => _setUploadProgress(p),
+      );
+    });
+  }
+
+  /// 粘贴图片（对齐 admin-web ChatComposer onPaste）。
+  Future<bool> _attemptPasteImage() async {
+    if (_sending || _conversation == null || _conversation!.dissolved) {
+      return false;
+    }
+    try {
+      final image = await Pasteboard.image;
+      if (image != null && image.isNotEmpty) {
+        await _sendPastedImageBytes(image);
+        return true;
+      }
+      if (kIsWeb) return false;
+      final paths = await Pasteboard.files();
+      for (final path in paths) {
+        final lower = path.toLowerCase();
+        if (!(lower.endsWith('.png') ||
+            lower.endsWith('.jpg') ||
+            lower.endsWith('.jpeg') ||
+            lower.endsWith('.webp') ||
+            lower.endsWith('.gif') ||
+            lower.endsWith('.bmp'))) {
+          continue;
+        }
+        final file = XFile(path);
+        final bytes = await file.readAsBytes();
+        if (bytes.isEmpty) continue;
+        final name = path.replaceAll('\\', '/').split('/').last;
+        await _sendPastedImageBytes(bytes, fileName: name);
+        return true;
+      }
+    } catch (e) {
+      debugPrint('[Chat] paste image failed: $e');
+    }
+    return false;
+  }
+
+  Future<void> _sendPastedImageBytes(
+    Uint8List bytes, {
+    String? fileName,
+  }) async {
+    final conv = _conversation;
+    if (conv == null || _sending) return;
+    var name =
+        fileName ??
+        'paste-${DateTime.now().millisecondsSinceEpoch}.png';
+    var mimeType = lookupMimeType(name) ?? 'image/png';
+    if (!chatImageShouldSkipEditor(fileName: name, mimeType: mimeType)) {
+      if (!mounted) return;
+      final edited = await openChatImageEditor(context, bytes: bytes);
+      if (edited == null) return;
+      bytes = edited;
+      name = chatImageEditedFileName(name);
+      mimeType = lookupMimeType(name) ?? 'image/jpeg';
+    }
+    if (!_checkSizeLimit(bytes.length, _maxImageBytes, name)) return;
+    await _guardSend(() async {
+      _beginUpload(
+        '上传图片',
+        previewBytes: bytes,
+        kind: 'IMAGE',
+        fileName: name,
+      );
+      await _service.sendImage(
+        conversationId: conv.id,
+        bytes: bytes,
+        fileName: name,
+        mimeType: mimeType,
+        sourceLabel: '粘贴',
+        preparePreview: () => _prepareChatImagePreview(bytes, name),
         onProgress: (p) => _setUploadProgress(p),
       );
     });
@@ -1766,14 +1844,19 @@ class _NativeChatViewState extends State<NativeChatView>
     List<ChatImageDraft> toSend;
     if (drafts.length == 1 &&
         !chatImageShouldSkipEditor(fileName: drafts.first.fileName)) {
-      final edited =
-          await openChatImageEditor(context, bytes: drafts.first.bytes);
+      final edited = await openChatImageEditor(
+        context,
+        bytes: drafts.first.bytes,
+      );
       if (edited == null) return;
       drafts.first.bytes = edited;
       drafts.first.fileName = chatImageEditedFileName(drafts.first.fileName);
       toSend = drafts;
     } else {
-      final confirmed = await openChatImageBatchPreview(context, drafts: drafts);
+      final confirmed = await openChatImageBatchPreview(
+        context,
+        drafts: drafts,
+      );
       if (confirmed == null || confirmed.isEmpty) return;
       toSend = confirmed;
     }
@@ -1790,7 +1873,12 @@ class _NativeChatViewState extends State<NativeChatView>
         }
         final mimeType = lookupMimeType(fileName) ?? 'image/jpeg';
         final baseDone = done;
-        _beginUpload(total > 1 ? '上传图片 (${baseDone + 1}/$total)' : '上传图片');
+        _beginUpload(
+          total > 1 ? '上传图片 (${baseDone + 1}/$total)' : '上传图片',
+          previewBytes: bytes,
+          kind: 'IMAGE',
+          fileName: fileName,
+        );
         await _service.sendImage(
           conversationId: conv.id,
           bytes: bytes,
@@ -1818,7 +1906,11 @@ class _NativeChatViewState extends State<NativeChatView>
     if (!_checkSizeLimit(bytes.length, _maxFileBytes, fileName)) return;
     final mimeType = lookupMimeType(fileName) ?? 'application/octet-stream';
     await _guardSend(() async {
-      _beginUpload('上传文件');
+      _beginUpload(
+        '上传文件',
+        kind: 'FILE',
+        fileName: fileName,
+      );
       await _service.sendFile(
         conversationId: conv.id,
         bytes: bytes,
@@ -1829,7 +1921,7 @@ class _NativeChatViewState extends State<NativeChatView>
     });
   }
 
-  Future<void> _startHoldRecord() async {
+  Future<void> _startHoldRecord(Offset focalPoint) async {
     if (_sending || _recording) return;
     if (MeetingLiveController.instance.isActive) {
       _showToast('会议录音进行中，暂无法发送语音');
@@ -1852,6 +1944,7 @@ class _NativeChatViewState extends State<NativeChatView>
       setState(() {
         _recording = true;
         _recordWillCancel = false;
+        _recordFocalPoint = focalPoint;
         _recordDurationMs = 0;
       });
       _recordTicker = Timer.periodic(const Duration(milliseconds: 120), (_) {
@@ -1874,7 +1967,10 @@ class _NativeChatViewState extends State<NativeChatView>
       return;
     }
     _recordTicker?.cancel();
-    setState(() => _recording = false);
+    setState(() {
+      _recording = false;
+      _recordFocalPoint = null;
+    });
     try {
       final recorded = await NativeAudioRecorder.instance.stop();
       if (recorded == null) return;
@@ -1910,6 +2006,7 @@ class _NativeChatViewState extends State<NativeChatView>
     setState(() {
       _recording = false;
       _recordWillCancel = false;
+      _recordFocalPoint = null;
       _recordDurationMs = 0;
     });
     try {
@@ -1920,56 +2017,13 @@ class _NativeChatViewState extends State<NativeChatView>
 
   void _onRecordMove(LongPressMoveUpdateDetails details) {
     if (!_recording) return;
-    final shouldCancel = details.offsetFromOrigin.dy < -56;
-    if (shouldCancel == _recordWillCancel) return;
-    setState(() => _recordWillCancel = shouldCancel);
-  }
-
-  Widget _buildUploadOverlay() {
-    final label = _uploadLabel ?? '上传中';
-    final hasProgress = _uploadProgress > 0;
-    final pct = (_uploadProgress * 100).round();
-    return Positioned.fill(
-      child: IgnorePointer(
-        child: Container(
-          color: Colors.black26,
-          alignment: Alignment.center,
-          child: Container(
-            width: 220,
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-            decoration: BoxDecoration(
-              color: const Color(0xE61F2421),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  hasProgress ? '$label  $pct%' : '$label…',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w600,
-                    fontSize: 13,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(4),
-                  child: LinearProgressIndicator(
-                    value: hasProgress ? _uploadProgress : null,
-                    minHeight: 6,
-                    backgroundColor: Colors.white24,
-                    valueColor: const AlwaysStoppedAnimation<Color>(
-                      DunesColors.accentLine,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
+    final overlayTop =
+        MediaQuery.sizeOf(context).height - kVoiceRecordingOverlayHeight;
+    final shouldCancel = details.globalPosition.dy < overlayTop;
+    setState(() {
+      _recordWillCancel = shouldCancel;
+      _recordFocalPoint = details.globalPosition;
+    });
   }
 
   Widget _buildDownloadOverlay() {
@@ -2044,11 +2098,19 @@ class _NativeChatViewState extends State<NativeChatView>
     });
   }
 
-  void _beginUpload(String label) {
+  void _beginUpload(
+    String label, {
+    Uint8List? previewBytes,
+    String kind = '',
+    String fileName = '',
+  }) {
     if (!mounted) return;
     setState(() {
       _uploadLabel = label;
       _uploadProgress = 0;
+      _pendingUploadBytes = previewBytes;
+      _pendingUploadKind = kind.toUpperCase();
+      _pendingUploadName = fileName;
     });
   }
 
@@ -2073,9 +2135,83 @@ class _NativeChatViewState extends State<NativeChatView>
           _sending = false;
           _uploadLabel = null;
           _uploadProgress = 0;
+          _pendingUploadBytes = null;
+          _pendingUploadKind = '';
+          _pendingUploadName = '';
         });
       }
     }
+  }
+
+  Widget _buildPendingUploadBubble() {
+    final progress = _uploadProgress;
+    final kind = _pendingUploadKind;
+    final name = _pendingUploadName.isNotEmpty
+        ? _pendingUploadName
+        : (_uploadLabel ?? '上传中');
+    final bytes = _pendingUploadBytes;
+    if (kind == 'IMAGE' && bytes != null && bytes.isNotEmpty) {
+      final box = chatImageBubbleMaxSize(context);
+      return Align(
+        alignment: Alignment.centerRight,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 4, 14, 8),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: SizedBox(
+              width: box.width * 0.72,
+              height: box.width * 0.72,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  Image.memory(bytes, fit: BoxFit.cover),
+                  Container(color: Colors.black45),
+                  Center(
+                    child: SizedBox(
+                      width: 44,
+                      height: 44,
+                      child: CircularProgressIndicator(
+                        value: progress > 0 && progress < 1 ? progress : null,
+                        strokeWidth: 3,
+                        color: Colors.white,
+                        backgroundColor: Colors.white24,
+                      ),
+                    ),
+                  ),
+                  if (progress > 0)
+                    Positioned(
+                      bottom: 8,
+                      left: 0,
+                      right: 0,
+                      child: Text(
+                        '${(progress * 100).round()}%',
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+    return Align(
+      alignment: Alignment.centerRight,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 4, 14, 8),
+        child: ChatFileAttach(
+          fileName: name,
+          mine: true,
+          onTap: () {},
+          uploadProgress: progress <= 0 ? 0.01 : progress,
+        ),
+      ),
+    );
   }
 
   Future<void> _tryRecallMessage(NativeChatMessage m) async {
@@ -2206,11 +2342,30 @@ class _NativeChatViewState extends State<NativeChatView>
   }) async {
     if (_isSystemKind(m.kind)) return;
     final copyText = _messageCopyText(m);
+    final isFile = m.kind.toUpperCase() == 'FILE';
+    final desktop = isDesktopCommOnly;
     final actions = <_MessageQuickAction>[
+      if (desktop && isFile) ...[
+        const _MessageQuickAction(
+          id: 'open_file',
+          label: '打开',
+          icon: Icons.open_in_new_rounded,
+        ),
+        const _MessageQuickAction(
+          id: 'reveal_file',
+          label: '打开文件夹',
+          icon: Icons.folder_open_rounded,
+        ),
+      ],
       const _MessageQuickAction(
         id: 'quote',
         label: '引用',
         icon: Icons.format_quote_outlined,
+      ),
+      const _MessageQuickAction(
+        id: 'forward',
+        label: '转发',
+        icon: Icons.shortcut_rounded,
       ),
       if (copyText.isNotEmpty)
         const _MessageQuickAction(
@@ -2239,8 +2394,17 @@ class _NativeChatViewState extends State<NativeChatView>
     ];
     final action = await _showMessageActionsMenu(actions, anchor: anchor);
     switch (action) {
+      case 'open_file':
+        await _openFileAttachment(m.payload, _mediaDownloadFileName(m));
+        break;
+      case 'reveal_file':
+        await _revealFileOnDesktop(m.payload, _mediaDownloadFileName(m));
+        break;
       case 'quote':
         _startQuote(m);
+        break;
+      case 'forward':
+        _forwardMessage(m);
         break;
       case 'copy':
         await Clipboard.setData(ClipboardData(text: copyText));
@@ -2275,16 +2439,19 @@ class _NativeChatViewState extends State<NativeChatView>
         final safeTop = media.padding.top + 8;
         final safeBottom = size.height - media.padding.bottom - 8;
         final menuWidth = math.min(size.width - 24, 324.0).toDouble();
-        final left = (anchor == null
-            ? (size.width - menuWidth) / 2
-            : (anchor.dx - menuWidth / 2).clamp(12.0, size.width - menuWidth - 12))
-            .toDouble();
-        final preferredTop = anchor == null ? size.height * 0.35 : anchor.dy - 136;
+        final left =
+            (anchor == null
+                    ? (size.width - menuWidth) / 2
+                    : (anchor.dx - menuWidth / 2).clamp(
+                        12.0,
+                        size.width - menuWidth - 12,
+                      ))
+                .toDouble();
+        final preferredTop = anchor == null
+            ? size.height * 0.35
+            : anchor.dy - 136;
         final top = preferredTop
-            .clamp(
-          safeTop,
-          math.max(safeTop, safeBottom - 190),
-        )
+            .clamp(safeTop, math.max(safeTop, safeBottom - 190))
             .toDouble();
         return SafeArea(
           child: Stack(
@@ -2316,7 +2483,9 @@ class _NativeChatViewState extends State<NativeChatView>
                                   borderRadius: BorderRadius.circular(8),
                                   onTap: () => Navigator.of(ctx).pop(item.id),
                                   child: Padding(
-                                    padding: const EdgeInsets.symmetric(vertical: 4),
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 4,
+                                    ),
                                     child: Column(
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
@@ -2352,7 +2521,10 @@ class _NativeChatViewState extends State<NativeChatView>
         );
       },
       transitionBuilder: (context, animation, _, child) {
-        final curve = CurvedAnimation(parent: animation, curve: Curves.easeOutCubic);
+        final curve = CurvedAnimation(
+          parent: animation,
+          curve: Curves.easeOutCubic,
+        );
         return FadeTransition(
           opacity: curve,
           child: ScaleTransition(
@@ -2521,63 +2693,79 @@ class _NativeChatViewState extends State<NativeChatView>
     }
   }
 
-  Widget _buildComposerDock({
-    required bool locked,
-    required String inputHint,
-  }) {
+  Widget _buildComposerDock({required bool locked, required String inputHint}) {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        ChatQuickActions(
-          onCamera: locked || _sending
-              ? () {}
-              : () => _sendImageFrom(ImageSource.camera, '拍照'),
-          onAlbum: locked || _sending
-              ? () {}
-              : _sendMultiImagesFromGallery,
-          onFile: locked || _sending ? () {} : _sendFile,
-          onApproval: () => showDunesSoonToast(context),
-          onAt: locked ? null : _pickAtMember,
-          onEmoji: locked ? null : _toggleEmojiPicker,
-          onVideo: () => showDunesSoonToast(context, '视频通话敬请期待'),
-          showAt: !_isPrivate,
-          showVideo: !_isPrivate,
-        ),
+        if (_uploadLabel != null) _buildPendingUploadBubble(),
         if (_quoteDraft != null && !_quoteDraft!.isEmpty && !locked)
-          ChatQuotePreviewBar(
-            quote: _quoteDraft!,
-            onCancel: _clearQuoteDraft,
-          ),
+          ChatQuotePreviewBar(quote: _quoteDraft!, onCancel: _clearQuoteDraft),
         ValueListenableBuilder<bool>(
           valueListenable: MeetingLiveController.instance.active,
           builder: (context, meetingLive, _) {
-            final voiceBlocked = locked || meetingLive;
+            // 录音能力仅移动端可用；Chrome/桌面仍显示语音按钮，点击时提示。
+            final voiceSupported = !kIsWeb &&
+                defaultTargetPlatform != TargetPlatform.windows &&
+                defaultTargetPlatform != TargetPlatform.macOS;
+            final voiceBlocked = !voiceSupported || locked || meetingLive;
             final effectiveVoiceMode = voiceBlocked ? false : _voiceMode;
             return ChatInputBar(
               controller: _inputController,
               focusNode: _inputFocusNode,
-              onInputFocused: _scrollToLatestAfterKeyboard,
+              onInputFocused: () {
+                // 点输入框：收起工具栏。
+                if (_toolsOpen) setState(() => _toolsOpen = false);
+                _scrollToLatestAfterKeyboard();
+              },
               voiceMode: effectiveVoiceMode,
+              // 始终展示语音入口，避免 Web 预览时按钮消失。
+              voiceEnabled: true,
               sending: _sending,
               enabled: !locked,
               hintText: inputHint,
-              onToggleVoice: voiceBlocked
-                  ? () {
-                      if (meetingLive) {
-                        _showToast('会议录音进行中，暂无法发送语音');
-                      }
-                    }
+              onAttemptPasteImage: locked ? null : _attemptPasteImage,
+              onToggleVoice: () {
+                // 点语音：收起工具栏。
+                if (_toolsOpen) setState(() => _toolsOpen = false);
+                if (meetingLive) {
+                  _showToast('会议录音进行中，暂无法发送语音');
+                  return;
+                }
+                if (!voiceSupported) {
+                  _showToast('当前环境不支持录音');
+                  return;
+                }
+                if (locked) return;
+                setState(() {
+                  _voiceMode = !_voiceMode;
+                  _emojiOpen = false;
+                });
+              },
+              onSend: () {
+                _send();
+              },
+              onPlus: locked || _sending
+                  ? null
                   : () => setState(() {
-                      _voiceMode = !_voiceMode;
-                      _emojiOpen = false;
+                      _toolsOpen = !_toolsOpen;
+                      if (_toolsOpen) {
+                        _emojiOpen = false;
+                        FocusScope.of(context).unfocus();
+                      }
                     }),
-              onSend: _send,
-              onEmoji: locked ? null : _toggleEmojiPicker,
+              plusOpen: _toolsOpen,
+              onEmoji: locked
+                  ? null
+                  : () {
+                      setState(() => _toolsOpen = false);
+                      _toggleEmojiPicker();
+                    },
               recording: _recording,
               recordWillCancel: _recordWillCancel,
               recordDurationMs: _recordDurationMs,
-              onVoiceHoldStart:
-                  voiceBlocked ? null : (_) => _startHoldRecord(),
+              onVoiceHoldStart: voiceBlocked
+                  ? null
+                  : (details) => _startHoldRecord(details.globalPosition),
               onVoiceHoldMove: _onRecordMove,
               onVoiceHoldEnd: (_) => _finishHoldRecord(),
               onVoiceHoldCancel: () =>
@@ -2585,6 +2773,23 @@ class _NativeChatViewState extends State<NativeChatView>
             );
           },
         ),
+        // 微信式：工具宫格在输入栏下方展开。
+        // 相册/拍照/文件等点击后保持展开，仅语音、输入框、会话区点击时关闭。
+        if (_toolsOpen && !locked)
+          ChatQuickActions(
+            onCamera: locked || _sending
+                ? () {}
+                : () => _sendImageFrom(ImageSource.camera, '拍照'),
+            onAlbum: locked || _sending
+                ? () {}
+                : _sendMultiImagesFromGallery,
+            onFile: locked || _sending ? () {} : _sendFile,
+            onApproval: () => showDunesSoonToast(context),
+            onAt: locked ? null : _pickAtMember,
+            onVideo: () => showDunesSoonToast(context, '视频通话敬请期待'),
+            showAt: !_isPrivate,
+            showVideo: !_isPrivate,
+          ),
         if (_emojiOpen && !locked)
           ChatEmojiGifPanel(
             controller: _inputController,
@@ -2602,14 +2807,23 @@ class _NativeChatViewState extends State<NativeChatView>
     setState(() => _emojiOpen = false);
 
     await _guardSend(() async {
-      _beginUpload('发送 GIF');
       final bytes = await _giphyService.downloadGifBytes(gif);
-      if (!_checkSizeLimit(bytes.length, _maxImageBytes, 'giphy_${gif.id}.gif')) {
+      if (!_checkSizeLimit(
+        bytes.length,
+        _maxImageBytes,
+        'giphy_${gif.id}.gif',
+      )) {
         return;
       }
       final fileName = gif.id.isNotEmpty
           ? 'giphy_${gif.id}.gif'
           : 'giphy_${DateTime.now().millisecondsSinceEpoch}.gif';
+      _beginUpload(
+        '发送 GIF',
+        previewBytes: bytes,
+        kind: 'IMAGE',
+        fileName: fileName,
+      );
       await _service.sendImage(
         conversationId: conv.id,
         bytes: bytes,
@@ -2639,7 +2853,10 @@ class _NativeChatViewState extends State<NativeChatView>
 
   void _quoteFromSelectedText(NativeChatMessage message, String selectedText) {
     final text = selectedText.trim();
-    if (text.isEmpty) return;
+    if (text.isEmpty) {
+      _startQuote(message);
+      return;
+    }
     _startQuote(message);
     final current = _inputController.text.trim();
     final next = current.isEmpty ? text : '$current\n$text';
@@ -2651,6 +2868,15 @@ class _NativeChatViewState extends State<NativeChatView>
   bool _canSelectMessageForMulti(NativeChatMessage message) {
     if (message.id <= 0) return false;
     return !_isSystemKind(message.kind);
+  }
+
+  void _forwardMessage(NativeChatMessage message) {
+    final units = _forwardUnitsFromMessages(<NativeChatMessage>[message]);
+    if (units.isEmpty) {
+      _showToast('暂无可转发内容');
+      return;
+    }
+    unawaited(_startForwardFlow(units, fromMultiSelect: false));
   }
 
   void _setMessageMultiSelectMode(
@@ -2708,10 +2934,11 @@ class _NativeChatViewState extends State<NativeChatView>
 
   List<NativeChatMessage> get _multiSelectedMessages {
     if (_multiSelectedMessageIds.isEmpty) return const <NativeChatMessage>[];
-    final picked = _messages
-        .where((m) => _multiSelectedMessageIds.contains(m.id))
-        .toList(growable: false)
-      ..sort((a, b) => a.id.compareTo(b.id));
+    final picked =
+        _messages
+            .where((m) => _multiSelectedMessageIds.contains(m.id))
+            .toList(growable: false)
+          ..sort((a, b) => a.id.compareTo(b.id));
     return picked;
   }
 
@@ -2725,7 +2952,10 @@ class _NativeChatViewState extends State<NativeChatView>
     String selectedText,
   ) {
     final text = selectedText.trim();
-    if (text.isEmpty) return;
+    if (text.isEmpty) {
+      _forwardMessage(message);
+      return;
+    }
     final unit = (
       senderName: message.senderName.trim().isEmpty
           ? '用户${message.senderUserId}'
@@ -2745,7 +2975,9 @@ class _NativeChatViewState extends State<NativeChatView>
     _enterMessageMultiSelect(initialMessageId: message.id);
   }
 
-  List<_ForwardUnit> _forwardUnitsFromMessages(List<NativeChatMessage> messages) {
+  List<_ForwardUnit> _forwardUnitsFromMessages(
+    List<NativeChatMessage> messages,
+  ) {
     return messages
         .map((m) {
           final text = _messageForwardText(m).trim();
@@ -2756,7 +2988,9 @@ class _NativeChatViewState extends State<NativeChatView>
             payload = Map<String, dynamic>.from(m.payload!);
           } else if (m.payload?['forward'] is Map) {
             payload = <String, dynamic>{
-              'forward': Map<String, dynamic>.from(m.payload!['forward'] as Map),
+              'forward': Map<String, dynamic>.from(
+                m.payload!['forward'] as Map,
+              ),
             };
           }
           return (
@@ -2971,11 +3205,13 @@ class _NativeChatViewState extends State<NativeChatView>
             final q = keyword.trim().toLowerCase();
             final filtered = q.isEmpty
                 ? candidates
-                : candidates.where((c) {
-                    final t = c.displayTitle.toLowerCase();
-                    final p = c.preview.toLowerCase();
-                    return t.contains(q) || p.contains(q);
-                  }).toList(growable: false);
+                : candidates
+                      .where((c) {
+                        final t = c.displayTitle.toLowerCase();
+                        final p = c.preview.toLowerCase();
+                        return t.contains(q) || p.contains(q);
+                      })
+                      .toList(growable: false);
             return ConstrainedBox(
               constraints: BoxConstraints(
                 maxHeight: MediaQuery.of(context).size.height * 0.72,
@@ -3057,7 +3293,8 @@ class _NativeChatViewState extends State<NativeChatView>
   }
 
   Map<String, dynamic> _buildForwardPayload(List<_ForwardUnit> units) {
-    final titleName = units.isNotEmpty && units.first.senderName.trim().isNotEmpty
+    final titleName =
+        units.isNotEmpty && units.first.senderName.trim().isNotEmpty
         ? units.first.senderName.trim()
         : '聊天';
     return <String, dynamic>{
@@ -3282,7 +3519,170 @@ class _NativeChatViewState extends State<NativeChatView>
       );
       return;
     }
+    // PC：像企微一样，点击后下载并用系统默认应用直接打开（已缓存则跳过下载）。
+    if (isDesktopCommOnly) {
+      await _openOrDownloadFileOnDesktop(payload, fileName);
+      return;
+    }
+    final confirmed = await _confirmFileDownload(fileName, payload: payload);
+    if (!confirmed || !mounted) return;
     await _downloadFile(payload, fileName);
+  }
+
+  String _fileCacheKey(Map<String, dynamic>? payload) {
+    if (payload == null) return '';
+    final objectKey = (payload['objectKey'] ?? '').toString().trim();
+    if (objectKey.isNotEmpty) return objectKey;
+    return ConversationService.mediaDirectUrl(payload);
+  }
+
+  Future<void> _openOrDownloadFileOnDesktop(
+    Map<String, dynamic>? payload,
+    String fileName,
+  ) async {
+    final cacheKey = _fileCacheKey(payload);
+    if (cacheKey.isNotEmpty) {
+      final cached = await file_dl.findCachedChatFile(cacheKey, fileName);
+      if (cached != null && cached.isNotEmpty) {
+        try {
+          await file_dl.openLocalFile(cached);
+          return;
+        } catch (_) {
+          // 缓存损坏或关联应用失败时重新下载。
+        }
+      }
+    }
+    if (_downloadingMedia) {
+      _showToast('正在下载，请稍候…');
+      return;
+    }
+    _beginDownload('打开 $fileName');
+    try {
+      final savedPath = await _saveAttachmentToDisk(
+        payload,
+        fileName,
+        cacheKey: cacheKey,
+      );
+      if (!mounted) return;
+      if (savedPath == null || savedPath.isEmpty) {
+        _showToast('文件已保存，但无法自动打开');
+        return;
+      }
+      await file_dl.openLocalFile(savedPath);
+    } catch (e) {
+      _showToast('打开失败：${friendlyErrorText(e)}', error: true);
+    } finally {
+      _endDownload();
+    }
+  }
+
+  /// PC：确保本地有文件后，在资源管理器 / Finder 中选中显示。
+  Future<void> _revealFileOnDesktop(
+    Map<String, dynamic>? payload,
+    String fileName,
+  ) async {
+    final cacheKey = _fileCacheKey(payload);
+    String? path;
+    if (cacheKey.isNotEmpty) {
+      path = await file_dl.findCachedChatFile(cacheKey, fileName);
+    }
+    if (path == null || path.isEmpty) {
+      if (_downloadingMedia) {
+        _showToast('正在下载，请稍候…');
+        return;
+      }
+      _beginDownload('定位 $fileName');
+      try {
+        path = await _saveAttachmentToDisk(
+          payload,
+          fileName,
+          cacheKey: cacheKey,
+        );
+      } catch (e) {
+        _showToast('下载失败：${friendlyErrorText(e)}', error: true);
+        return;
+      } finally {
+        _endDownload();
+      }
+    }
+    if (!mounted) return;
+    if (path == null || path.isEmpty) {
+      _showToast('文件未找到', error: true);
+      return;
+    }
+    try {
+      await file_dl.revealLocalFile(path);
+    } catch (e) {
+      _showToast('无法打开文件夹：${friendlyErrorText(e)}', error: true);
+    }
+  }
+
+  Future<String?> _saveAttachmentToDisk(
+    Map<String, dynamic>? payload,
+    String fileName, {
+    String cacheKey = '',
+  }) async {
+    if (ConversationService.hasAuthMedia(payload)) {
+      final bytes = await _service.loadChatMediaBytes(
+        payload,
+        onProgress: _setDownloadProgress,
+      );
+      if (cacheKey.isNotEmpty) {
+        return file_dl.saveBytesAsCachedFile(bytes, cacheKey, fileName);
+      }
+      return file_dl.saveBytesAsFile(bytes, fileName);
+    }
+    final url = ConversationService.mediaDirectUrl(payload);
+    if (url.isEmpty) {
+      throw Exception('附件地址为空');
+    }
+    return file_dl.openUrlAsFile(
+      url,
+      fileName,
+      onProgress: _setDownloadProgress,
+      cacheKey: cacheKey.isEmpty ? null : cacheKey,
+    );
+  }
+
+  Future<bool> _confirmFileDownload(
+    String fileName, {
+    Map<String, dynamic>? payload,
+  }) async {
+    final sizeHint = _fileSizeHint(payload);
+    final detail = sizeHint == null ? fileName : '$fileName\n$sizeHint';
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('下载文件'),
+        content: Text(
+          '确定要下载以下文件吗？\n\n$detail',
+          style: DunesTypography.sans(fontSize: 13.5, height: 1.5),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('下载'),
+          ),
+        ],
+      ),
+    );
+    return confirmed == true;
+  }
+
+  String? _fileSizeHint(Map<String, dynamic>? payload) {
+    if (payload == null) return null;
+    final size = payload['size'];
+    if (size is! num || size <= 0) return null;
+    final bytes = size.toInt();
+    if (bytes < 1024) return '大小：$bytes B';
+    if (bytes < 1024 * 1024) {
+      return '大小：${(bytes / 1024).toStringAsFixed(1)} KB';
+    }
+    return '大小：${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
   }
 
   Future<void> _downloadFile(
@@ -3295,25 +3695,12 @@ class _NativeChatViewState extends State<NativeChatView>
     }
     _beginDownload('下载 $fileName');
     try {
-      String? savedPath;
-      if (ConversationService.hasAuthMedia(payload)) {
-        final bytes = await _service.loadChatMediaBytes(
-          payload,
-          onProgress: _setDownloadProgress,
-        );
-        savedPath = await file_dl.saveBytesAsFile(bytes, fileName);
-      } else {
-        final url = ConversationService.mediaDirectUrl(payload);
-        if (url.isEmpty) {
-          _showToast('附件地址为空', error: true);
-          return;
-        }
-        savedPath = await file_dl.openUrlAsFile(
-          url,
-          fileName,
-          onProgress: _setDownloadProgress,
-        );
-      }
+      final cacheKey = _fileCacheKey(payload);
+      final savedPath = await _saveAttachmentToDisk(
+        payload,
+        fileName,
+        cacheKey: cacheKey,
+      );
       if (!mounted) return;
       if (savedPath == null || savedPath.isEmpty) {
         _showToast('已保存 $fileName');
@@ -3334,6 +3721,7 @@ class _NativeChatViewState extends State<NativeChatView>
   void _showDownloadSuccessDialog(String savedPath, String fileName) {
     if (!mounted) return;
     final displayPath = _formatSavedPath(savedPath);
+    final desktop = isDesktopCommOnly;
     showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -3344,6 +3732,32 @@ class _NativeChatViewState extends State<NativeChatView>
             onPressed: () => Navigator.of(ctx).pop(),
             child: const Text('知道了'),
           ),
+          if (desktop) ...[
+            TextButton(
+              onPressed: () async {
+                Navigator.of(ctx).pop();
+                try {
+                  await file_dl.revealLocalFile(savedPath);
+                } catch (e) {
+                  if (!mounted) return;
+                  _showToast('无法打开文件夹：${friendlyErrorText(e)}', error: true);
+                }
+              },
+              child: const Text('打开文件夹'),
+            ),
+            FilledButton(
+              onPressed: () async {
+                Navigator.of(ctx).pop();
+                try {
+                  await file_dl.openLocalFile(savedPath);
+                } catch (e) {
+                  if (!mounted) return;
+                  _showToast('打开失败：${friendlyErrorText(e)}', error: true);
+                }
+              },
+              child: const Text('打开'),
+            ),
+          ],
         ],
       ),
     );
@@ -3356,8 +3770,9 @@ class _NativeChatViewState extends State<NativeChatView>
     final kind = m.kind.toUpperCase();
     if (kind == 'AUDIO') return 'voice-${m.id}.m4a';
     if (kind == 'FILE') {
-      final stripped =
-          m.bodyText.replaceAll(RegExp(r'^\[[^\]]+\]\s*'), '').trim();
+      final stripped = m.bodyText
+          .replaceAll(RegExp(r'^\[[^\]]+\]\s*'), '')
+          .trim();
       if (stripped.isNotEmpty) return stripped;
       return 'file-${m.id}';
     }
@@ -3418,19 +3833,20 @@ class _NativeChatViewState extends State<NativeChatView>
     final seed = m.senderUserId > 0
         ? m.senderUserId
         : (conv?.peerUserId ?? conv?.id ?? 0);
-    final memberAvatars =
-        !_isPrivate && m.senderUserId > 0 ? _memberAvatarMap[m.senderUserId] : null;
-    final preset = m.senderAvatarPreset ??
-        memberAvatars?.preset ??
-        conv?.peerAvatarPreset;
-    final objectKey = m.senderAvatarObjectKey ??
+    final memberAvatars = !_isPrivate && m.senderUserId > 0
+        ? _memberAvatarMap[m.senderUserId]
+        : null;
+    final preset =
+        m.senderAvatarPreset ?? memberAvatars?.preset ?? conv?.peerAvatarPreset;
+    final objectKey =
+        m.senderAvatarObjectKey ??
         memberAvatars?.objectKey ??
         conv?.peerAvatarObjectKey;
     return ImUserAvatar(
       initial: name.isNotEmpty ? name.substring(0, 1) : '?',
       seed: seed,
       size: 32,
-      showOnline: _isPrivate && _peerOnline && seed == (conv?.peerUserId ?? 0),
+      showOnline: false,
       avatarPreset: preset,
       avatarObjectKey: objectKey,
       avatarService: _service,
@@ -3463,11 +3879,7 @@ class _NativeChatViewState extends State<NativeChatView>
       return _wrapQuotedContent(
         m,
         mine,
-        ChatAuthImageBubble(
-          service: _service,
-          payload: m.payload,
-          mine: mine,
-        ),
+        ChatAuthImageBubble(service: _service, payload: m.payload, mine: mine),
       );
     }
     if (kind == 'FILE') {
@@ -3485,6 +3897,13 @@ class _NativeChatViewState extends State<NativeChatView>
           mine: mine,
           isPdf: chatPayloadIsPdf(m.payload, fileName),
           onTap: () => _openFileAttachment(m.payload, fileName),
+          onSecondaryTapDown: isDesktopCommOnly && !_messageMultiSelectMode
+              ? (details) => _onMessageActions(
+                    m,
+                    mine,
+                    anchor: details.globalPosition,
+                  )
+              : null,
         ),
       );
     }
@@ -3540,7 +3959,8 @@ class _NativeChatViewState extends State<NativeChatView>
             avatarPreset: (e['avatarPreset'] ?? '').toString().trim().isEmpty
                 ? null
                 : (e['avatarPreset'] ?? '').toString().trim(),
-            avatarObjectKey: (e['avatarObjectKey'] ?? '').toString().trim().isEmpty
+            avatarObjectKey:
+                (e['avatarObjectKey'] ?? '').toString().trim().isEmpty
                 ? null
                 : (e['avatarObjectKey'] ?? '').toString().trim(),
           ),
@@ -3578,7 +3998,8 @@ class _NativeChatViewState extends State<NativeChatView>
     if (kind == 'FILE') {
       final fileName = ConversationService.mediaFileName(
         e.payload,
-        fallback: e.text.replaceAll(RegExp(r'^\[[^\]]+\]\s*'), '').trim().isEmpty
+        fallback:
+            e.text.replaceAll(RegExp(r'^\[[^\]]+\]\s*'), '').trim().isEmpty
             ? '文件'
             : e.text.replaceAll(RegExp(r'^\[[^\]]+\]\s*'), ''),
       );
@@ -3738,7 +4159,9 @@ class _NativeChatViewState extends State<NativeChatView>
                                   children: [
                                     Expanded(
                                       child: Text(
-                                        e.senderName.isEmpty ? '用户' : e.senderName,
+                                        e.senderName.isEmpty
+                                            ? '用户'
+                                            : e.senderName,
                                         maxLines: 1,
                                         overflow: TextOverflow.ellipsis,
                                         style: DunesTypography.sans(
@@ -3760,11 +4183,18 @@ class _NativeChatViewState extends State<NativeChatView>
                                 const SizedBox(height: 4),
                                 Container(
                                   width: double.infinity,
-                                  padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+                                  padding: const EdgeInsets.fromLTRB(
+                                    10,
+                                    8,
+                                    10,
+                                    8,
+                                  ),
                                   decoration: BoxDecoration(
                                     color: Colors.white,
                                     borderRadius: BorderRadius.circular(8),
-                                    border: Border.all(color: const Color(0xFFE8E8E8)),
+                                    border: Border.all(
+                                      color: const Color(0xFFE8E8E8),
+                                    ),
                                   ),
                                   child: _buildForwardEntryContent(
                                     e,
@@ -4069,427 +4499,508 @@ class _NativeChatViewState extends State<NativeChatView>
       backgroundColor: DunesColors.bgApp,
       body: SafeArea(
         bottom: false,
-        child: GestureDetector(
-          behavior: HitTestBehavior.translucent,
-          onTap: () {
-            FocusScope.of(context).unfocus();
-            _closeEmojiPicker();
-          },
-          child: Column(
-            children: [
-              if (selecting)
-                _buildMultiSelectHeader()
-              else
-                ChatConvHeader(
-                  title: title,
-                  subtitle: subtitle,
-                  onBack: widget.onBack,
-                  onTapTitle: _isPrivate
-                      ? widget.onOpenProfile
-                      : widget.onOpenGroupInfo,
-                  showOnlineDot: _isPrivate && _peerOnline,
-                  leadingAvatar: _isPrivate
-                      ? ImUserAvatar(
-                          initial: title.isNotEmpty ? title.substring(0, 1) : '?',
-                          seed: conv.peerUserId ?? conv.id,
-                          showOnline: _peerOnline,
-                          avatarPreset: conv.peerAvatarPreset,
-                          avatarObjectKey: conv.peerAvatarObjectKey,
-                          avatarService: _service,
-                          borderRadius: 32 * 0.18,
-                        )
-                      : null,
-                  actions: [
-                    if (widget.onOpenSearch != null)
-                      IconButton(
-                        tooltip: '聊天记录',
-                        onPressed: () => widget.onOpenSearch!(conv.id),
-                        icon: const Icon(Icons.history, size: 20),
-                      ),
-                    IconButton(
-                      tooltip: '语音通话',
-                      onPressed:
-                          widget.onOpenCall ??
-                          () => showDunesSoonToast(context, '通话功能敬请期待'),
-                      icon: const Icon(Icons.phone_outlined, size: 20),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            GestureDetector(
+              behavior: HitTestBehavior.translucent,
+              onTap: () {
+                FocusScope.of(context).unfocus();
+                _closeEmojiPicker();
+                // 点会话区域：收起工具栏。
+                if (_toolsOpen) setState(() => _toolsOpen = false);
+              },
+              child: Column(
+                children: [
+                  if (selecting)
+                    _buildMultiSelectHeader()
+                  else
+                    ChatConvHeader(
+                      title: title,
+                      subtitle: subtitle,
+                      onBack: widget.onBack,
+                      showBackButton: widget.showBackButton,
+                      onTapTitle: _isPrivate
+                          ? widget.onOpenProfile
+                          : widget.onOpenGroupInfo,
+                      showOnlineDot: _isPrivate && _peerOnline,
+                      leadingAvatar: _isPrivate
+                          ? ImUserAvatar(
+                              initial: title.isNotEmpty
+                                  ? title.substring(0, 1)
+                                  : '?',
+                              seed: conv.peerUserId ?? conv.id,
+                              showOnline: false,
+                              avatarPreset: conv.peerAvatarPreset,
+                              avatarObjectKey: conv.peerAvatarObjectKey,
+                              avatarService: _service,
+                              borderRadius: 32 * 0.18,
+                            )
+                          : null,
+                      actions: [
+                        if (widget.onOpenSearch != null)
+                          IconButton(
+                            tooltip: '聊天记录',
+                            onPressed: () => widget.onOpenSearch!(conv.id),
+                            icon: const Icon(Icons.history, size: 20),
+                          ),
+                        IconButton(
+                          tooltip: '语音通话',
+                          onPressed:
+                              widget.onOpenCall ??
+                              () => showDunesSoonToast(context, '通话功能敬请期待'),
+                          icon: const Icon(Icons.phone_outlined, size: 20),
+                        ),
+                        IconButton(
+                          tooltip: '视频通话',
+                          onPressed: () =>
+                              showDunesSoonToast(context, '视频通话敬请期待'),
+                          icon: const Icon(Icons.videocam_outlined, size: 20),
+                        ),
+                        if (!_isPrivate && widget.onOpenMedia != null)
+                          IconButton(
+                            tooltip: '媒体',
+                            onPressed: () => widget.onOpenMedia!(conv.id),
+                            icon: const Icon(
+                              Icons.perm_media_outlined,
+                              size: 20,
+                            ),
+                          ),
+                        if (!_isPrivate && widget.onOpenGroupInfo != null)
+                          IconButton(
+                            tooltip: '群信息',
+                            onPressed: widget.onOpenGroupInfo,
+                            icon: const Icon(Icons.more_vert, size: 20),
+                          ),
+                      ],
                     ),
-                    IconButton(
-                      tooltip: '视频通话',
-                      onPressed: () => showDunesSoonToast(context, '视频通话敬请期待'),
-                      icon: const Icon(Icons.videocam_outlined, size: 20),
-                    ),
-                    if (!_isPrivate && widget.onOpenMedia != null)
-                      IconButton(
-                        tooltip: '媒体',
-                        onPressed: () => widget.onOpenMedia!(conv.id),
-                        icon: const Icon(Icons.perm_media_outlined, size: 20),
-                      ),
-                    if (!_isPrivate && widget.onOpenGroupInfo != null)
-                      IconButton(
-                        tooltip: '群信息',
-                        onPressed: widget.onOpenGroupInfo,
-                        icon: const Icon(Icons.more_vert, size: 20),
-                      ),
-                  ],
-                ),
-              Expanded(
-                child: Stack(
-                  children: [
-                    if (!_bootstrapped && _loading)
-                      const Center(
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    else
-                      NotificationListener<ScrollNotification>(
-                        onNotification: _onMessageListScroll,
-                        child: ListView.builder(
-                          controller: _scrollController,
-                          reverse: true,
-                          physics: _chatListScrollPhysics(scrollMetrics),
-                          cacheExtent: listCacheExtent,
-                          addAutomaticKeepAlives: false,
-                          addRepaintBoundaries: true,
-                          findChildIndexCallback: _findMessageListChildIndex,
-                          keyboardDismissBehavior:
-                              ScrollViewKeyboardDismissBehavior.onDrag,
-                          padding: const EdgeInsets.fromLTRB(12, 12, 12, 10),
-                          itemCount:
-                              listEntries.length + _listFooterCount,
-                          itemBuilder: (_, index) {
-                            final hasNewerFooter = _locatedMode && _hasNewer;
-                            if (hasNewerFooter && index == 0) {
-                              return Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  vertical: 10,
-                                ),
-                                child: Center(
-                                  child: _loadingNewer
-                                      ? const SizedBox(
-                                          width: 18,
-                                          height: 18,
-                                          child: CircularProgressIndicator(
-                                            strokeWidth: 2,
-                                          ),
-                                        )
-                                      : TextButton(
-                                          onPressed: _loadNewer,
-                                          child: const Text('加载更新消息'),
+                  Expanded(
+                    child: Stack(
+                      children: [
+                        if (!_bootstrapped && _loading)
+                          const Center(
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        else
+                          NotificationListener<ScrollNotification>(
+                            onNotification: _onMessageListScroll,
+                            child: LayoutBuilder(
+                              builder: (context, constraints) {
+                                final wide = isWideChatLayout(context);
+                                final list = ListView.builder(
+                                  controller: _scrollController,
+                                  reverse: true,
+                                  // 宽屏短会话贴顶（微信 PC）；内容超出后在 ConstrainedBox 内滚动。
+                                  shrinkWrap: wide,
+                                  physics: _chatListScrollPhysics(scrollMetrics),
+                                  cacheExtent: listCacheExtent,
+                                  addAutomaticKeepAlives: false,
+                                  addRepaintBoundaries: true,
+                                  findChildIndexCallback:
+                                      _findMessageListChildIndex,
+                                  keyboardDismissBehavior:
+                                      ScrollViewKeyboardDismissBehavior.onDrag,
+                                  padding: const EdgeInsets.fromLTRB(
+                                    12,
+                                    12,
+                                    12,
+                                    10,
+                                  ),
+                                  itemCount:
+                                      listEntries.length +
+                                      _listFooterCount +
+                                      _listHeaderCount,
+                                  itemBuilder: (_, index) {
+                                    final hasNewerFooter =
+                                        _locatedMode && _hasNewer;
+                                    if (hasNewerFooter && index == 0) {
+                                      return Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                          vertical: 10,
                                         ),
-                                ),
-                              );
-                            }
-                            final entry = _entryForListIndex(index, listEntries);
-                            if (entry == null) return const SizedBox.shrink();
-                            if (entry.dividerLabel != null) {
-                              return ChatDateDivider(
-                                key: ValueKey<String>('day-${entry.dividerLabel}'),
-                                label: entry.dividerLabel!,
-                              );
-                            }
-                            final m = entry.message!;
-                            final mine =
-                                m.senderUserId == widget.session.userId;
-                            final highlighted = _highlightMessageId == m.id;
-                            final timeLabel = InboxFormat.msgTimeLabel(
-                              m.createdAt,
-                            );
-                            final rowAvatar = _avatarForMessage(m, mine: mine);
-                            Widget row;
-                            if (_isSystemKind(m.kind)) {
-                              row = _buildMessageWidget(m, mine);
-                            } else {
-                              final peerRead = mine && _isPrivate
-                                  ? _messagePeerRead(m)
-                                  : false;
-                              final textMessage =
-                                  m.kind.toUpperCase() == 'TEXT';
-                              final hasQuote =
-                                  textMessage &&
-                                  !ChatMessageQuote.fromPayload(m.payload).isEmpty;
-                              final isForwardBundle =
-                                  _forwardBundleFromPayload(m.payload) != null;
-                              row = ChatMessageRow(
-                                message: m,
-                                mine: mine,
-                                showSenderMeta: entry.showSenderMeta,
-                                showTimeForMine: mine,
-                                timeLabel: timeLabel,
-                                readLabel: mine && _isPrivate
-                                    ? (peerRead ? '已读' : '未读')
-                                    : null,
-                                onLongPress: null,
-                                onLongPressStart:
-                                    !_messageMultiSelectMode &&
-                                    !_isSystemKind(m.kind) &&
-                                    (isForwardBundle || !textMessage || hasQuote)
-                                    ? (details) => _onMessageActions(
-                                        m,
-                                        mine,
-                                        anchor: details.globalPosition,
-                                      )
-                                    : null,
-                                onReadTap: mine && !_isPrivate
-                                    ? () => _showReadReceipts(m)
-                                    : null,
-                                readTapLabel: _groupReadLabelForMessage(
+                                        child: Center(
+                                          child: _loadingNewer
+                                              ? const SizedBox(
+                                                  width: 18,
+                                                  height: 18,
+                                                  child:
+                                                      CircularProgressIndicator(
+                                                        strokeWidth: 2,
+                                                      ),
+                                                )
+                                              : TextButton(
+                                                  onPressed: _loadNewer,
+                                                  child: const Text(
+                                                    '加载更新消息',
+                                                  ),
+                                                ),
+                                        ),
+                                      );
+                                    }
+                                    final headerIndex =
+                                        listEntries.length + _listFooterCount;
+                                    if (_listHeaderCount > 0 &&
+                                        index >= headerIndex) {
+                                      return Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                          vertical: 10,
+                                        ),
+                                        child: Center(
+                                          child: _loadingOlder
+                                              ? const SizedBox(
+                                                  width: 18,
+                                                  height: 18,
+                                                  child:
+                                                      CircularProgressIndicator(
+                                                        strokeWidth: 2,
+                                                      ),
+                                                )
+                                              : TextButton(
+                                                  onPressed: _loadOlder,
+                                                  child: const Text(
+                                                    '加载更早消息',
+                                                  ),
+                                                ),
+                                        ),
+                                      );
+                                    }
+                                    final entry = _entryForListIndex(
+                                      index,
+                                      listEntries,
+                                    );
+                                    if (entry == null) {
+                                      return const SizedBox.shrink();
+                                    }
+                                if (entry.dividerLabel != null) {
+                                  return ChatDateDivider(
+                                    key: ValueKey<String>(
+                                      'day-${entry.dividerLabel}',
+                                    ),
+                                    label: entry.dividerLabel!,
+                                  );
+                                }
+                                final m = entry.message!;
+                                final mine =
+                                    m.senderUserId == widget.session.userId;
+                                final highlighted = _highlightMessageId == m.id;
+                                final timeLabel = InboxFormat.msgTimeLabel(
+                                  m.createdAt,
+                                );
+                                final rowAvatar = _avatarForMessage(
                                   m,
                                   mine: mine,
-                                ),
-                                avatar: !mine ? rowAvatar : null,
-                                trailingAvatar: mine ? rowAvatar : null,
-                                content: _buildMessageWidget(m, mine),
-                              );
-                            }
-                            var rowWidget = highlighted
-                                ? AnimatedContainer(
-                                    key: _messageRowKey(m.id),
-                                    duration: const Duration(milliseconds: 200),
-                                    decoration: BoxDecoration(
-                                      color: DunesColors.accentSoft.withValues(
-                                        alpha: 0.45,
+                                );
+                                Widget row;
+                                if (_isSystemKind(m.kind)) {
+                                  row = _buildMessageWidget(m, mine);
+                                } else {
+                                  final peerRead = mine && _isPrivate
+                                      ? _messagePeerRead(m)
+                                      : false;
+                                  final textMessage =
+                                      m.kind.toUpperCase() == 'TEXT';
+                                  final hasQuote =
+                                      textMessage &&
+                                      !ChatMessageQuote.fromPayload(
+                                        m.payload,
+                                      ).isEmpty;
+                                  final isForwardBundle =
+                                      _forwardBundleFromPayload(m.payload) !=
+                                      null;
+                                  final desktop = isDesktopCommOnly;
+                                  // 移动端：媒体/合并转发/带引用文本可长按；
+                                  // PC（Win/macOS）：任意消息右键或长按均可操作。
+                                  final canShowActions =
+                                      !_messageMultiSelectMode &&
+                                      !_isSystemKind(m.kind);
+                                  final enableLongPress =
+                                      canShowActions &&
+                                      (desktop ||
+                                          isForwardBundle ||
+                                          !textMessage ||
+                                          hasQuote);
+                                  final enableSecondaryTap =
+                                      canShowActions &&
+                                      desktop &&
+                                      // 文本气泡走选区右键菜单，避免与 SelectableText 双菜单冲突。
+                                      !textMessage;
+                                  void openActions(Offset anchor) {
+                                    unawaited(
+                                      _onMessageActions(
+                                        m,
+                                        mine,
+                                        anchor: anchor,
                                       ),
-                                      borderRadius: BorderRadius.circular(8),
+                                    );
+                                  }
+
+                                  row = ChatMessageRow(
+                                    message: m,
+                                    mine: mine,
+                                    showSenderMeta: entry.showSenderMeta,
+                                    showTimeForMine: mine,
+                                    timeLabel: timeLabel,
+                                    readLabel: mine && _isPrivate
+                                        ? (peerRead ? '已读' : '未读')
+                                        : null,
+                                    onLongPress: null,
+                                    onLongPressStart: enableLongPress
+                                        ? (details) => openActions(
+                                            details.globalPosition,
+                                          )
+                                        : null,
+                                    onSecondaryTapDown: enableSecondaryTap
+                                        ? (details) => openActions(
+                                            details.globalPosition,
+                                          )
+                                        : null,
+                                    onReadTap: mine && !_isPrivate
+                                        ? () => _showReadReceipts(m)
+                                        : null,
+                                    readTapLabel: _groupReadLabelForMessage(
+                                      m,
+                                      mine: mine,
                                     ),
-                                    padding: const EdgeInsets.symmetric(
-                                      vertical: 2,
-                                    ),
-                                    child: row,
-                                  )
-                                : KeyedSubtree(
-                                    key: _messageRowKey(m.id),
-                                    child: row,
+                                    avatar: !mine ? rowAvatar : null,
+                                    trailingAvatar: mine ? rowAvatar : null,
+                                    content: _buildMessageWidget(m, mine),
                                   );
-                            if (_messageMultiSelectMode &&
-                                _canSelectMessageForMulti(m)) {
-                              final selected =
-                                  _multiSelectedMessageIds.contains(m.id);
-                              rowWidget = Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Padding(
-                                    padding: const EdgeInsets.only(
-                                      left: 2,
-                                      right: 6,
-                                      top: 8,
-                                    ),
-                                    child: GestureDetector(
-                                      behavior: HitTestBehavior.opaque,
-                                      onTap: () => _toggleMessageMultiSelected(m.id),
-                                      child: Icon(
-                                        selected
-                                            ? Icons.check_circle
-                                            : Icons.radio_button_unchecked,
-                                        size: 22,
-                                        color: selected
-                                            ? DunesColors.accent
-                                            : DunesColors.text3,
+                                }
+                                var rowWidget = highlighted
+                                    ? AnimatedContainer(
+                                        key: _messageRowKey(m.id),
+                                        duration: const Duration(
+                                          milliseconds: 200,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: DunesColors.accentSoft
+                                              .withValues(alpha: 0.45),
+                                          borderRadius: BorderRadius.circular(
+                                            8,
+                                          ),
+                                        ),
+                                        padding: const EdgeInsets.symmetric(
+                                          vertical: 2,
+                                        ),
+                                        child: row,
+                                      )
+                                    : KeyedSubtree(
+                                        key: _messageRowKey(m.id),
+                                        child: row,
+                                      );
+                                if (_messageMultiSelectMode &&
+                                    _canSelectMessageForMulti(m)) {
+                                  final selected = _multiSelectedMessageIds
+                                      .contains(m.id);
+                                  rowWidget = Row(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Padding(
+                                        padding: const EdgeInsets.only(
+                                          left: 2,
+                                          right: 6,
+                                          top: 8,
+                                        ),
+                                        child: GestureDetector(
+                                          behavior: HitTestBehavior.opaque,
+                                          onTap: () =>
+                                              _toggleMessageMultiSelected(m.id),
+                                          child: Icon(
+                                            selected
+                                                ? Icons.check_circle
+                                                : Icons.radio_button_unchecked,
+                                            size: 22,
+                                            color: selected
+                                                ? DunesColors.accent
+                                                : DunesColors.text3,
+                                          ),
+                                        ),
                                       ),
+                                      Expanded(
+                                        child: GestureDetector(
+                                          behavior: HitTestBehavior.opaque,
+                                          onTap: () =>
+                                              _toggleMessageMultiSelected(m.id),
+                                          child: rowWidget,
+                                        ),
+                                      ),
+                                    ],
+                                  );
+                                }
+                                return rowWidget;
+                              },
+                            );
+                                if (!wide) return list;
+                                return Align(
+                                  alignment: Alignment.topCenter,
+                                  child: ConstrainedBox(
+                                    constraints: BoxConstraints(
+                                      maxHeight: constraints.maxHeight,
                                     ),
+                                    child: list,
                                   ),
-                                  Expanded(
-                                    child: GestureDetector(
-                                      behavior: HitTestBehavior.opaque,
-                                      onTap: () => _toggleMessageMultiSelected(m.id),
-                                      child: rowWidget,
-                                    ),
-                                  ),
-                                ],
-                              );
-                            }
-                            return rowWidget;
-                          },
-                        ),
-                      ),
-                    if (_loadingOlder)
-                      const Positioned(
-                        top: 8,
-                        left: 0,
-                        right: 0,
-                        child: Center(
-                          child: Material(
-                            color: Colors.transparent,
-                            child: SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(strokeWidth: 2),
+                                );
+                              },
                             ),
                           ),
-                        ),
-                      ),
-                    if (_locating)
-                      Positioned(
-                        top: 8,
-                        left: 0,
-                        right: 0,
-                        child: Center(
-                          child: Material(
-                            elevation: 1,
-                            borderRadius: BorderRadius.circular(16),
-                            color: DunesColors.bgApp,
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 6,
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  const SizedBox(
-                                    width: 12,
-                                    height: 12,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 1.5,
-                                    ),
+                        if (_loadingOlder)
+                          const Positioned(
+                            top: 8,
+                            left: 0,
+                            right: 0,
+                            child: Center(
+                              child: Material(
+                                color: Colors.transparent,
+                                child: SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
                                   ),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    '定位中…',
-                                    style: DunesTypography.sans(
-                                      fontSize: 11,
-                                      color: DunesColors.text3,
-                                    ),
-                                  ),
-                                ],
+                                ),
                               ),
                             ),
                           ),
-                        ),
-                      ),
-                    if (_pendingNewMessageCount > 0 && !_locatedMode)
-                      Positioned(
-                        left: 0,
-                        right: 0,
-                        bottom: 12,
-                        child: Center(
-                          child: Material(
-                            color: Colors.transparent,
-                            elevation: 4,
-                            borderRadius: BorderRadius.circular(999),
-                            child: InkWell(
-                              onTap: _jumpToPendingMessages,
-                              borderRadius: BorderRadius.circular(999),
-                              child: Ink(
-                                decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(999),
-                                  gradient: const LinearGradient(
-                                    begin: Alignment.topLeft,
-                                    end: Alignment.bottomRight,
-                                    colors: [
-                                      Color(0xFF7E64BD),
-                                      Color(0xFF553B96),
+                        if (_locating)
+                          Positioned(
+                            top: 8,
+                            left: 0,
+                            right: 0,
+                            child: Center(
+                              child: Material(
+                                elevation: 1,
+                                borderRadius: BorderRadius.circular(16),
+                                color: DunesColors.bgApp,
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 6,
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const SizedBox(
+                                        width: 12,
+                                        height: 12,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 1.5,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        '定位中…',
+                                        style: DunesTypography.sans(
+                                          fontSize: 11,
+                                          color: DunesColors.text3,
+                                        ),
+                                      ),
                                     ],
                                   ),
-                                  boxShadow: const [
-                                    BoxShadow(
-                                      color: Color(0x59553B96),
-                                      blurRadius: 12,
-                                      offset: Offset(0, 4),
+                                ),
+                              ),
+                            ),
+                          ),
+                        if (_pendingNewMessageCount > 0 && !_locatedMode)
+                          Positioned(
+                            left: 0,
+                            right: 0,
+                            bottom: 12,
+                            child: Center(
+                              child: Material(
+                                color: Colors.transparent,
+                                elevation: 0,
+                                borderRadius: BorderRadius.circular(999),
+                                child: InkWell(
+                                  onTap: _jumpToPendingMessages,
+                                  borderRadius: BorderRadius.circular(999),
+                                  child: Ink(
+                                    decoration: BoxDecoration(
+                                      borderRadius: BorderRadius.circular(999),
+                                      color: const Color(0xFF7E64BD),
                                     ),
-                                  ],
-                                ),
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 14,
-                                  vertical: 8,
-                                ),
-                                child: Text(
-                                  '${_pendingNewMessageCount > 99 ? '99+' : _pendingNewMessageCount} 条新消息 ↓',
-                                  style: DunesTypography.sans(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w600,
-                                    color: Colors.white,
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 14,
+                                      vertical: 8,
+                                    ),
+                                    child: Text(
+                                      '${_pendingNewMessageCount > 99 ? '99+' : _pendingNewMessageCount} 条新消息 ↓',
+                                      style: DunesTypography.sans(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
+                                        color: Colors.white,
+                                      ),
+                                    ),
                                   ),
                                 ),
                               ),
                             ),
                           ),
-                        ),
-                      ),
-                    if (_locatedMode)
-                      Positioned(
-                        left: 0,
-                        right: 0,
-                        bottom: 8,
-                        child: Center(
-                          child: Material(
-                            elevation: 2,
-                            borderRadius: BorderRadius.circular(20),
-                            color: DunesColors.bgApp,
-                            child: InkWell(
-                              onTap: _jumpToLatest,
-                              borderRadius: BorderRadius.circular(20),
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 14,
-                                  vertical: 8,
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    const Icon(
-                                      Icons.arrow_downward,
-                                      size: 14,
-                                      color: DunesColors.accentDeep,
+                        if (_locatedMode)
+                          Positioned(
+                            left: 0,
+                            right: 0,
+                            bottom: 8,
+                            child: Center(
+                              child: Material(
+                                elevation: 0,
+                                borderRadius: BorderRadius.circular(20),
+                                color: Colors.white,
+                                child: InkWell(
+                                  onTap: _jumpToLatest,
+                                  borderRadius: BorderRadius.circular(20),
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 14,
+                                      vertical: 8,
                                     ),
-                                    const SizedBox(width: 6),
-                                    Text(
-                                      '回到最新消息',
-                                      style: DunesTypography.sans(
-                                        fontSize: 12,
-                                        color: DunesColors.accentDeep,
-                                      ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        const Icon(
+                                          Icons.arrow_downward,
+                                          size: 14,
+                                          color: DunesColors.accentDeep,
+                                        ),
+                                        const SizedBox(width: 6),
+                                        Text(
+                                          '回到最新消息',
+                                          style: DunesTypography.sans(
+                                            fontSize: 12,
+                                            color: DunesColors.accentDeep,
+                                          ),
+                                        ),
+                                      ],
                                     ),
-                                  ],
+                                  ),
                                 ),
                               ),
                             ),
                           ),
-                        ),
-                      ),
-                    if (_recording)
-                      Positioned.fill(
-                        child: IgnorePointer(
-                          child: Container(
-                            color: Colors.black26,
-                            alignment: Alignment.center,
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 20,
-                                vertical: 14,
-                              ),
-                              decoration: BoxDecoration(
-                                color: _recordWillCancel
-                                    ? DunesColors.coral
-                                    : const Color(0xE61F2421),
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Text(
-                                _recordWillCancel ? '松开取消' : '松开发送',
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    if (_uploadLabel != null) _buildUploadOverlay(),
-                    if (_downloadingMedia) _buildDownloadOverlay(),
-                  ],
-                ),
-              ),
-              if (selecting)
-                _buildMultiSelectBottomBar()
-              else
-                SafeArea(
-                  top: false,
-                  child: _buildComposerDock(
-                    locked: locked,
-                    inputHint: inputHint,
+                        if (_downloadingMedia) _buildDownloadOverlay(),
+                      ],
+                    ),
                   ),
-                ),
-            ],
-          ),
+                  if (selecting)
+                    _buildMultiSelectBottomBar()
+                  else
+                    SafeArea(
+                      top: false,
+                      child: _buildComposerDock(
+                        locked: locked,
+                        inputHint: inputHint,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            if (_recording)
+              VoiceRecordingOverlay(
+                durationMs: _recordDurationMs,
+                willCancel: _recordWillCancel,
+                focalPoint: _recordFocalPoint,
+              ),
+          ],
         ),
       ),
     );
@@ -5243,10 +5754,7 @@ class _ChatScrollPhysics extends ScrollPhysics {
 
   @override
   double applyPhysicsToUserOffset(ScrollMetrics position, double offset) {
-    return super.applyPhysicsToUserOffset(
-      position,
-      offset * dragDampingFactor,
-    );
+    return super.applyPhysicsToUserOffset(position, offset * dragDampingFactor);
   }
 
   @override

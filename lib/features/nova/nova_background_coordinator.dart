@@ -13,7 +13,8 @@ import 'nova_web_storage.dart';
 class NovaBackgroundCoordinator extends ChangeNotifier {
   NovaBackgroundCoordinator._();
 
-  static final NovaBackgroundCoordinator instance = NovaBackgroundCoordinator._();
+  static final NovaBackgroundCoordinator instance =
+      NovaBackgroundCoordinator._();
 
   AuthSession? _session;
   NativeNovaService? _service;
@@ -22,6 +23,8 @@ class NovaBackgroundCoordinator extends ChangeNotifier {
   bool _pendingCommBadgeBump = false;
   bool _novaPageActive = false;
   final Set<int> _finalizedConvIds = <int>{};
+  final Set<int> _seenReplyConversationIds = <int>{};
+  final Set<int> _unreadReplyConversationIds = <int>{};
 
   /// C4 页面可见时为 true；用于区分「用户已在 NOVA 内看到回复」与「后台完成需通知」。
   void setNovaPageActive(bool active) {
@@ -33,8 +36,21 @@ class NovaBackgroundCoordinator extends ChangeNotifier {
   }
 
   void clearFinalizedConversation(int conversationId) {
-    if (conversationId > 0) _finalizedConvIds.remove(conversationId);
+    if (conversationId > 0) {
+      _finalizedConvIds.remove(conversationId);
+      _seenReplyConversationIds.remove(conversationId);
+      _unreadReplyConversationIds.remove(conversationId);
+    }
   }
+
+  /// NOVA 会话是否有用户尚未进入会话查看的最终回复。
+  bool hasUnreadReplyFor(int conversationId) =>
+      conversationId > 0 &&
+      _unreadReplyConversationIds.contains(conversationId);
+
+  bool get hasUnreadReply => _unreadReplyConversationIds.isNotEmpty;
+
+  bool get isNovaPageActive => _novaPageActive;
 
   bool takePendingCommBadgeBump() {
     if (!_pendingCommBadgeBump) return false;
@@ -42,13 +58,30 @@ class NovaBackgroundCoordinator extends ChangeNotifier {
     return true;
   }
 
-  void markPendingCommBadgeBump() {
+  void markPendingCommBadgeBump({int conversationId = 0}) {
+    // 已读只针对上一轮已完成回复。不能因为用户看过同一会话的旧消息，
+    // 就抑制下一轮在后台完成时的提醒。
     if (_novaPageActive) return;
     _pendingCommBadgeBump = true;
+    if (conversationId > 0) {
+      _unreadReplyConversationIds.add(conversationId);
+    }
   }
 
   void clearPendingCommBadgeBump() {
     _pendingCommBadgeBump = false;
+  }
+
+  /// 页面已展示该会话的回答；之后离开不会再将同一回答标成未读。
+  void markReplySeen(int conversationId) {
+    if (conversationId > 0) {
+      _seenReplyConversationIds.add(conversationId);
+    }
+    // 通讯列表的 IM 会话 ID 与原生 NOVA 的历史会话 ID 曾经来自不同
+    // 服务；用户只要进入 NOVA，就应视为已查看所有 NOVA 完成提醒。
+    _unreadReplyConversationIds.clear();
+    _pendingCommBadgeBump = false;
+    notifyListeners();
   }
 
   NativeNovaService serviceFor(AuthSession session) {
@@ -79,6 +112,9 @@ class NovaBackgroundCoordinator extends ChangeNotifier {
     unawaited(_startPoll(session));
   }
 
+  bool get isThinking =>
+      _pollTimer != null || (_service?.isStreamInFlight ?? false);
+
   Future<void> _startPoll(AuthSession session) async {
     if (_pollTimer != null) return;
     var convId = _pollConvId;
@@ -92,6 +128,7 @@ class NovaBackgroundCoordinator extends ChangeNotifier {
     _pollTimer = Timer.periodic(const Duration(milliseconds: 2500), (_) {
       unawaited(_pollTick(svc, session, convId));
     });
+    notifyListeners();
     unawaited(_pollTick(svc, session, convId));
   }
 
@@ -171,7 +208,8 @@ class NovaBackgroundCoordinator extends ChangeNotifier {
     try {
       final history = await svc.fetchFullHistory(convId);
       final after = localGen.afterMessageId;
-      if (history.assistantGenerating && !_hasAiReplyAfter(history.messages, after)) {
+      if (history.assistantGenerating &&
+          !_hasAiReplyAfter(history.messages, after)) {
         notifyListeners();
         return;
       }
@@ -194,7 +232,9 @@ class NovaBackgroundCoordinator extends ChangeNotifier {
         }
         if ((draft?.text ?? '').trim().isNotEmpty) {
           if (kDebugMode) {
-            debugPrint('[NovaBackground] finalize from draft-only conv=$convId');
+            debugPrint(
+              '[NovaBackground] finalize from draft-only conv=$convId',
+            );
           }
           await onGenerationComplete(
             session: session,
@@ -203,7 +243,10 @@ class NovaBackgroundCoordinator extends ChangeNotifier {
           );
           return;
         }
-        if (history.messages.any((m) => m.role == 'assistant' && !m.streaming && m.text.trim().isNotEmpty)) {
+        if (history.messages.any(
+          (m) =>
+              m.role == 'assistant' && !m.streaming && m.text.trim().isNotEmpty,
+        )) {
           if (svc.isStreamInFlight) {
             notifyListeners();
             return;
@@ -246,11 +289,18 @@ class NovaBackgroundCoordinator extends ChangeNotifier {
     final draftReplyText = (draft?.text ?? '').trim();
     final draftThinkText = (draft?.thinkText ?? '').trim();
 
-    final initialRows = messages.where((m) => !m.isWelcome).toList(growable: false);
-    final needsFinalize = (draftReplyText.isNotEmpty &&
-            !initialRows.any((m) => m.role == 'assistant' && m.text.trim() == draftReplyText)) ||
+    final initialRows = messages
+        .where((m) => !m.isWelcome)
+        .toList(growable: false);
+    final needsFinalize =
+        (draftReplyText.isNotEmpty &&
+            !initialRows.any(
+              (m) => m.role == 'assistant' && m.text.trim() == draftReplyText,
+            )) ||
         (draftUserText.isNotEmpty &&
-            !initialRows.any((m) => m.role == 'user' && m.text.trim() == draftUserText));
+            !initialRows.any(
+              (m) => m.role == 'user' && m.text.trim() == draftUserText,
+            ));
 
     if (needsFinalize) {
       if (kDebugMode) {
@@ -275,7 +325,9 @@ class NovaBackgroundCoordinator extends ChangeNotifier {
           conversationId,
           applyViewSinceFilter: false,
         );
-        resolvedRows = refreshed.messages.where((m) => !m.isWelcome).toList(growable: false);
+        resolvedRows = refreshed.messages
+            .where((m) => !m.isWelcome)
+            .toList(growable: false);
       } catch (_) {}
     }
     resolvedRows = await _ensureRecoverableRows(
@@ -331,15 +383,12 @@ class NovaBackgroundCoordinator extends ChangeNotifier {
       await svc.flushConvToLocalHistory(conversationId, rows);
       await svc.flushHistorySyncQueue();
     }
-    await NovaWebStorage.removeKeys(
-      session.userId,
-      [novaStreamDraftStorageKey(conversationId)],
-    );
+    await NovaWebStorage.removeKeys(session.userId, [
+      novaStreamDraftStorageKey(conversationId),
+    ]);
     stopPoll();
     _finalizedConvIds.add(conversationId);
-    if (!_novaPageActive) {
-      _pendingCommBadgeBump = true;
-    }
+    markPendingCommBadgeBump(conversationId: conversationId);
     notifyListeners();
     if (kDebugMode) {
       debugPrint('[NovaBackground] generation complete conv=$conversationId');
@@ -354,13 +403,15 @@ class NovaBackgroundCoordinator extends ChangeNotifier {
     String fallbackUserText = '',
     String fallbackAssistantText = '',
     String fallbackThinkText = '',
-  }
-  ) async {
+  }) async {
     NativeNovaMessage? assistant;
     NativeNovaMessage? user;
     for (var i = rows.length - 1; i >= 0; i--) {
       final m = rows[i];
-      if (assistant == null && m.role == 'assistant' && !m.streaming && m.text.trim().isNotEmpty) {
+      if (assistant == null &&
+          m.role == 'assistant' &&
+          !m.streaming &&
+          m.text.trim().isNotEmpty) {
         assistant = m;
       } else if (user == null && m.role == 'user') {
         user = m;
@@ -379,7 +430,9 @@ class NovaBackgroundCoordinator extends ChangeNotifier {
         );
       } else {
         if (kDebugMode) {
-          debugPrint('[NovaBackground] skip history sync: no assistant conv=$conversationId');
+          debugPrint(
+            '[NovaBackground] skip history sync: no assistant conv=$conversationId',
+          );
         }
         return;
       }
@@ -394,7 +447,9 @@ class NovaBackgroundCoordinator extends ChangeNotifier {
     );
     if (effectiveUser == null) {
       if (kDebugMode) {
-        debugPrint('[NovaBackground] skip history sync: no user conv=$conversationId');
+        debugPrint(
+          '[NovaBackground] skip history sync: no user conv=$conversationId',
+        );
       }
       return;
     }
@@ -402,12 +457,15 @@ class NovaBackgroundCoordinator extends ChangeNotifier {
       conversationId: conversationId,
       messageId: effectiveUser.id > 0
           ? effectiveUser.id
-          : (assistant.id > 0 ? assistant.id : DateTime.now().millisecondsSinceEpoch),
+          : (assistant.id > 0
+                ? assistant.id
+                : DateTime.now().millisecondsSinceEpoch),
       userMessage: effectiveUser.text,
       assistantMessage: assistant.text,
-      lastMessageAt: (assistant.createdAt ?? effectiveUser.createdAt ?? DateTime.now())
-          .toUtc()
-          .toIso8601String(),
+      lastMessageAt:
+          (assistant.createdAt ?? effectiveUser.createdAt ?? DateTime.now())
+              .toUtc()
+              .toIso8601String(),
       userPayload: effectiveUser.payload,
     );
     if (kDebugMode) {
@@ -437,7 +495,9 @@ class NovaBackgroundCoordinator extends ChangeNotifier {
     );
     if (persisted != null) {
       if (kDebugMode) {
-        debugPrint('[NovaBackground] recovered user from persisted session conv=$conversationId');
+        debugPrint(
+          '[NovaBackground] recovered user from persisted session conv=$conversationId',
+        );
       }
       return persisted;
     }
@@ -462,8 +522,12 @@ class NovaBackgroundCoordinator extends ChangeNotifier {
     String draftThinkText = '',
   }) async {
     final out = [...rows];
-    final hasUser = out.any((m) => m.role == 'user' && m.text.trim().isNotEmpty);
-    final hasAssistant = out.any((m) => m.role == 'assistant' && m.text.trim().isNotEmpty);
+    final hasUser = out.any(
+      (m) => m.role == 'user' && m.text.trim().isNotEmpty,
+    );
+    final hasAssistant = out.any(
+      (m) => m.role == 'assistant' && m.text.trim().isNotEmpty,
+    );
     if (!hasUser) {
       final recovered = await svc.resolveLatestUserMessage(
         conversationId,
@@ -471,14 +535,18 @@ class NovaBackgroundCoordinator extends ChangeNotifier {
       );
       if (recovered != null) {
         if (kDebugMode) {
-          debugPrint('[NovaBackground] injected recovered user conv=$conversationId');
+          debugPrint(
+            '[NovaBackground] injected recovered user conv=$conversationId',
+          );
         }
         out.insert(0, recovered);
       }
     }
     if (!hasAssistant && draftReplyText.trim().isNotEmpty) {
       if (kDebugMode) {
-        debugPrint('[NovaBackground] injected draft assistant conv=$conversationId');
+        debugPrint(
+          '[NovaBackground] injected draft assistant conv=$conversationId',
+        );
       }
       out.add(
         NativeNovaMessage(
@@ -519,8 +587,10 @@ class NovaBackgroundCoordinator extends ChangeNotifier {
   void notifyInboxRefresh() => notifyListeners();
 
   void stopPoll() {
+    final wasPolling = _pollTimer != null;
     _pollTimer?.cancel();
     _pollTimer = null;
+    if (wasPolling) notifyListeners();
   }
 
   void resetForUser(int userId) {
@@ -528,5 +598,7 @@ class NovaBackgroundCoordinator extends ChangeNotifier {
     stopPoll();
     _pollConvId = 0;
     _finalizedConvIds.clear();
+    _seenReplyConversationIds.clear();
+    _unreadReplyConversationIds.clear();
   }
 }

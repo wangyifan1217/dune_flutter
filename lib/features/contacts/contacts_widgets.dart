@@ -72,6 +72,35 @@ class ContactsHeader extends StatelessWidget {
   }
 }
 
+class ExternalSectionLabel extends StatelessWidget {
+  const ExternalSectionLabel({super.key, required this.total});
+
+  final int total;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 6),
+      child: Row(
+        children: [
+          Text(
+            '外部用户',
+            style: DunesTypography.sans(fontSize: 12, fontWeight: FontWeight.w600, color: DunesColors.accent),
+          ),
+          Expanded(
+            child: Container(
+              margin: const EdgeInsets.symmetric(horizontal: 8),
+              height: 1,
+              color: DunesColors.borderSoft,
+            ),
+          ),
+          Text('$total 人', style: DunesTypography.mono(fontSize: 9.5, color: DunesColors.text3)),
+        ],
+      ),
+    );
+  }
+}
+
 class OrgSectionLabel extends StatelessWidget {
   const OrgSectionLabel({super.key, required this.total});
 
@@ -84,7 +113,7 @@ class OrgSectionLabel extends StatelessWidget {
       child: Row(
         children: [
           Text(
-            '组织树',
+            'HeUnion',
             style: DunesTypography.sans(
               fontSize: 12,
               fontWeight: FontWeight.w600,
@@ -444,9 +473,9 @@ class _HeaderIconBtn extends StatelessWidget {
           customBorder: const CircleBorder(),
           onTap: onTap,
           child: SizedBox(
-            width: 34,
-            height: 34,
-            child: Icon(icon, size: 16, color: DunesColors.text2),
+            width: 44,
+            height: 44,
+            child: Icon(icon, size: 22, color: DunesColors.text2),
           ),
         ),
       ),

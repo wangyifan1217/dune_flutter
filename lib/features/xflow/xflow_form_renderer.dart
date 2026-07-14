@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../core/theme/dunes_theme.dart';
@@ -9,6 +11,7 @@ import 'xflow_upload_field.dart';
 
 typedef XflowFieldChanged = void Function(String key, dynamic value);
 typedef XflowFormAction = Future<void> Function(String actionKind);
+typedef XflowFieldOverride = Widget? Function(XflowField field);
 
 class XflowFormRenderer extends StatefulWidget {
   const XflowFormRenderer({
@@ -21,6 +24,9 @@ class XflowFormRenderer extends StatefulWidget {
     this.onAction,
     this.embedded = true,
     this.allowedActionKinds,
+    this.showProgressCard = true,
+    this.showActionBar = true,
+    this.fieldOverride,
   });
 
   final List<XflowField> fields;
@@ -31,6 +37,9 @@ class XflowFormRenderer extends StatefulWidget {
   final XflowFormAction? onAction;
   final bool embedded;
   final Set<String>? allowedActionKinds;
+  final bool showProgressCard;
+  final bool showActionBar;
+  final XflowFieldOverride? fieldOverride;
 
   @override
   State<XflowFormRenderer> createState() => _XflowFormRendererState();
@@ -57,14 +66,14 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _progressCard(),
-        _actionBar(actionKeys),
+        if (widget.showProgressCard) _progressCard(),
+        if (widget.showActionBar) _actionBar(actionKeys),
         Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: XfProposalUi.card,
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: DunesColors.borderSoft),
+            border: Border.all(color: XfProposalUi.lineSoft),
           ),
           child: Column(
             children: [
@@ -99,7 +108,8 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
     return (got?.toString() ?? '') == want;
   }
 
-  ({int pct, int bizDone, int bizTotal, int finDone, int finTotal}) _progress() {
+  ({int pct, int bizDone, int bizTotal, int finDone, int finTotal})
+  _progress() {
     final prog = widget.layout['progress'];
     final biz = _keyList(prog is Map ? prog['biz'] : null);
     final fin = _keyList(prog is Map ? prog['fin'] : null);
@@ -114,7 +124,13 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
     final total = biz.length + fin.length;
     final done = bizDone + finDone;
     final pct = total == 0 ? 0 : ((done / total) * 100).round();
-    return (pct: pct, bizDone: bizDone, bizTotal: biz.length, finDone: finDone, finTotal: fin.length);
+    return (
+      pct: pct,
+      bizDone: bizDone,
+      bizTotal: biz.length,
+      finDone: finDone,
+      finTotal: fin.length,
+    );
   }
 
   List<String> _keyList(dynamic raw) {
@@ -129,9 +145,9 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
       padding: const EdgeInsets.all(10),
       margin: const EdgeInsets.only(bottom: 10),
       decoration: BoxDecoration(
-        color: DunesColors.bgSoft,
+        color: XfProposalUi.cardAlt,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: DunesColors.borderSoft),
+        border: Border.all(color: XfProposalUi.line),
       ),
       child: Column(
         children: [
@@ -149,7 +165,7 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
               value: p.pct / 100,
               minHeight: 4,
               backgroundColor: Colors.black.withValues(alpha: 0.06),
-              color: DunesColors.accent,
+              color: XfProposalUi.coral,
             ),
           ),
           const SizedBox(height: 6),
@@ -158,13 +174,19 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
               Expanded(
                 child: Text(
                   '业务 ${p.bizDone} / ${p.bizTotal}',
-                  style: DunesTypography.sans(fontSize: 10, color: DunesColors.text3),
+                  style: DunesTypography.sans(
+                    fontSize: 10,
+                    color: DunesColors.text3,
+                  ),
                 ),
               ),
               Expanded(
                 child: Text(
                   '财务 ${p.finDone} / ${p.finTotal}',
-                  style: DunesTypography.sans(fontSize: 10, color: DunesColors.text3),
+                  style: DunesTypography.sans(
+                    fontSize: 10,
+                    color: DunesColors.text3,
+                  ),
                 ),
               ),
             ],
@@ -188,8 +210,9 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(
-        color: DunesColors.bgSoft,
+        color: XfProposalUi.cardAlt,
         borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: XfProposalUi.line),
       ),
       child: Wrap(
         spacing: 6,
@@ -199,7 +222,11 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
             XfActionButton(
               label: field.label.isEmpty ? '操作' : field.label,
               actionKind: (field.raw['actionKind'] ?? 'custom').toString(),
-              onTap: widget.onAction == null ? null : () => widget.onAction!((field.raw['actionKind'] ?? 'custom').toString()),
+              onTap: widget.onAction == null
+                  ? null
+                  : () => widget.onAction!(
+                      (field.raw['actionKind'] ?? 'custom').toString(),
+                    ),
             ),
         ],
       ),
@@ -207,7 +234,11 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
   }
 
   Widget _fieldWidget(XflowField field, {bool inRow = false}) {
+    final override = widget.fieldOverride?.call(field);
+    if (override != null) return override;
     if (field.type == 'row') return _rowField(field);
+    if (_isUserField(field)) return _userField(field, inRow: inRow);
+    if (field.type == 'proposal') return _proposalField(field, inRow: inRow);
     switch (field.type) {
       case 'section':
         return _sectionField(field);
@@ -270,9 +301,16 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
       children: [
         for (var start = 0; start < children.length; start += maxPerRow)
           Padding(
-            padding: EdgeInsets.only(bottom: start + maxPerRow < children.length ? 8 : 0),
+            padding: EdgeInsets.only(
+              bottom: start + maxPerRow < children.length ? 8 : 0,
+            ),
             child: _rowChunk(
-              children.sublist(start, start + maxPerRow > children.length ? children.length : start + maxPerRow),
+              children.sublist(
+                start,
+                start + maxPerRow > children.length
+                    ? children.length
+                    : start + maxPerRow,
+              ),
               connector: connector.isNotEmpty && start == 0 ? connector : '',
             ),
           ),
@@ -287,7 +325,9 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
       final parsed = int.tryParse(fromRaw);
       if (parsed != null && parsed > 0) return parsed;
     }
-    if (children.isNotEmpty && children.every((c) => c.type == 'date') && children.length > 2) {
+    if (children.isNotEmpty &&
+        children.every((c) => c.type == 'date') &&
+        children.length > 2) {
       return 2;
     }
     return children.length;
@@ -322,7 +362,8 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
   }
 
   Widget _sectionField(XflowField field) {
-    final tone = (field.raw['tone'] ?? field.raw['sectionStyle'] ?? '').toString();
+    final tone = (field.raw['tone'] ?? field.raw['sectionStyle'] ?? '')
+        .toString();
     Color borderColor = DunesColors.accent;
     if (tone == 'green' || tone == 'fin') borderColor = DunesColors.green;
     if (tone == 'amber') borderColor = DunesColors.amber;
@@ -345,7 +386,11 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
     );
   }
 
-  InputDecoration _inputDecoration({String? hint, bool readonly = false, bool mono = false}) {
+  InputDecoration _inputDecoration({
+    String? hint,
+    bool readonly = false,
+    bool mono = false,
+  }) {
     return xfInputDecoration(hint: hint, readonly: readonly, mono: mono);
   }
 
@@ -353,24 +398,12 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
     final current = widget.values[field.key]?.toString() ?? '';
     return _fieldWrap(
       field,
-      xfFixedHeightControl(
-        child: DropdownButtonHideUnderline(
-          child: DropdownButtonFormField<String>(
-            value: current.isEmpty ? null : current,
-            isExpanded: true,
-            style: xfInputTextStyle(),
-            icon: const Icon(Icons.keyboard_arrow_down_rounded, size: 18, color: DunesColors.text3),
-            decoration: _inputDecoration(hint: field.placeholder.isEmpty ? '请选择' : field.placeholder),
-            items: [
-              for (final option in field.options)
-                DropdownMenuItem(
-                  value: option.value,
-                  child: Text(option.label, style: xfInputTextStyle()),
-                ),
-            ],
-            onChanged: field.readonly ? null : (v) => widget.onChanged(field.key, v ?? ''),
-          ),
-        ),
+      _XflowSelectPicker(
+        options: field.options,
+        value: current,
+        placeholder: field.placeholder.isEmpty ? '请选择' : field.placeholder,
+        readonly: field.readonly,
+        onChanged: (v) => widget.onChanged(field.key, v),
       ),
       inRow: inRow,
     );
@@ -403,7 +436,9 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
               child: Padding(
                 padding: EdgeInsets.only(right: lv == levels.last ? 0 : 3),
                 child: InkWell(
-                  onTap: field.readonly ? null : () => widget.onChanged(field.key, lv),
+                  onTap: field.readonly
+                      ? null
+                      : () => widget.onChanged(field.key, lv),
                   borderRadius: BorderRadius.circular(5),
                   child: Container(
                     alignment: Alignment.center,
@@ -436,7 +471,8 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
   Widget _basicField(XflowField field, {bool inRow = false}) {
     final value = widget.values[field.key];
     final keyboardType = switch (field.type) {
-      'number' || 'money' => const TextInputType.numberWithOptions(decimal: true),
+      'number' ||
+      'money' => const TextInputType.numberWithOptions(decimal: true),
       _ => TextInputType.text,
     };
     final maxLines = field.type == 'textarea' ? 5 : 1;
@@ -454,7 +490,10 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
         style: field.type == 'money' || field.type == 'number'
             ? xfInputTextStyle(mono: true)
             : xfInputTextStyle(),
-        decoration: _inputDecoration(hint: field.placeholder, readonly: field.readonly),
+        decoration: _inputDecoration(
+          hint: field.placeholder,
+          readonly: field.readonly,
+        ),
         onChanged: (text) => widget.onChanged(field.key, text),
       ),
       inRow: inRow,
@@ -469,8 +508,8 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
     final autoHint = (field.raw['hint'] ?? '').toString().trim();
     final label = date == null
         ? (readonly
-            ? '待流程写入'
-            : (field.placeholder.isEmpty ? '年 / 月 / 日' : field.placeholder))
+              ? '待流程写入'
+              : (field.placeholder.isEmpty ? '年 / 月 / 日' : field.placeholder))
         : '${date.year} / ${date.month.toString().padLeft(2, '0')} / ${date.day.toString().padLeft(2, '0')}';
     final decoration = _inputDecoration(
       hint: readonly ? null : field.placeholder,
@@ -494,9 +533,13 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
               ),
             ),
             Icon(
-              readonly ? Icons.lock_clock_outlined : Icons.calendar_today_outlined,
+              readonly
+                  ? Icons.lock_clock_outlined
+                  : Icons.calendar_today_outlined,
               size: 14,
-              color: readonly ? DunesColors.text3.withValues(alpha: 0.65) : DunesColors.text3,
+              color: readonly
+                  ? DunesColors.text3.withValues(alpha: 0.65)
+                  : DunesColors.text3,
             ),
           ],
         ),
@@ -551,14 +594,50 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
     );
   }
 
+  bool _isUserField(XflowField field) {
+    if (field.type == 'user' || field.type == 'userSelect') return true;
+    return field.raw['dataSource']?.toString() == 'org_user';
+  }
+
+  String? _userRoleFilter(XflowField field) {
+    final raw = field.raw;
+    for (final key in ['roleCode', 'allowedRole', 'userRoleCode']) {
+      final v = (raw[key] ?? '').toString().trim();
+      if (v.isNotEmpty) return v;
+    }
+    // 技术负责人：仅可选 TECH 审批角色
+    if (field.key == 'respTech') return 'TECH';
+    return null;
+  }
+
+  Widget _proposalField(XflowField field, {bool inRow = false}) {
+    final hint = field.placeholder.isEmpty ? '搜索已通过的销售提案' : field.placeholder;
+    return _fieldWrap(
+      field,
+      _XflowProposalPicker(
+        service: widget.service,
+        value: widget.values[field.key],
+        placeholder: hint,
+        readonly: field.readonly,
+        onChanged: (v) => widget.onChanged(field.key, v),
+      ),
+      inRow: inRow,
+    );
+  }
+
   Widget _userField(XflowField field, {bool inRow = false}) {
+    final roleCode = _userRoleFilter(field);
+    final hint = field.placeholder.isEmpty
+        ? (roleCode == 'TECH' ? '搜索技术审批人' : '搜索姓名/部门')
+        : field.placeholder;
     return _fieldWrap(
       field,
       _XflowUserPicker(
         service: widget.service,
         value: widget.values[field.key],
-        placeholder: field.placeholder.isEmpty ? '搜索姓名/部门' : field.placeholder,
+        placeholder: hint,
         readonly: field.readonly,
+        roleCode: roleCode,
         onChanged: (v) => widget.onChanged(field.key, v),
       ),
       inRow: inRow,
@@ -569,7 +648,11 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
     final raw = widget.values[key];
     if (raw is List) {
       return raw
-          .map((e) => e is Map<String, dynamic> ? e : Map<String, dynamic>.from(e as Map))
+          .map(
+            (e) => e is Map<String, dynamic>
+                ? e
+                : Map<String, dynamic>.from(e as Map),
+          )
           .toList(growable: true);
     }
     if (raw is Map) return [Map<String, dynamic>.from(raw)];
@@ -601,11 +684,17 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
             Column(
               children: [
                 for (var ri = 0; ri < rows.length; ri++)
-                  _dynRow(field.key, cols, rows, ri, onRemove: () {
-                    rows.removeAt(ri);
-                    widget.onChanged(field.key, rows);
-                    setState(() {});
-                  }),
+                  _dynRow(
+                    field.key,
+                    cols,
+                    rows,
+                    ri,
+                    onRemove: () {
+                      rows.removeAt(ri);
+                      widget.onChanged(field.key, rows);
+                      setState(() {});
+                    },
+                  ),
               ],
             ),
           _addRowButton('+ 添加一行', () {
@@ -684,14 +773,21 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
             const SizedBox(height: 6),
             Text(
               '达量阶梯 · 机构保费',
-              style: DunesTypography.sans(fontSize: 10, fontWeight: FontWeight.w600, color: DunesColors.text3),
+              style: DunesTypography.sans(
+                fontSize: 10,
+                fontWeight: FontWeight.w600,
+                color: DunesColors.text3,
+              ),
             ),
             const SizedBox(height: 4),
             ..._nestedRows(field.key, nestedKey, nestedCols, rows, ri),
             XfAddRowButton(
               label: '+ 添加档位',
               onTap: () {
-                final tiers = rows[ri].putIfAbsent(nestedKey, () => <dynamic>[]);
+                final tiers = rows[ri].putIfAbsent(
+                  nestedKey,
+                  () => <dynamic>[],
+                );
                 if (tiers is List) {
                   tiers.add(_emptyRow(nestedCols));
                   widget.onChanged(field.key, rows);
@@ -708,7 +804,10 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
   List<Map<String, dynamic>> _nestedColumns(XflowField field) {
     final raw = field.raw['nestedColumns'];
     if (raw is! List) return const [];
-    return raw.whereType<Map>().map((c) => Map<String, dynamic>.from(c)).toList(growable: false);
+    return raw
+        .whereType<Map>()
+        .map((c) => Map<String, dynamic>.from(c))
+        .toList(growable: false);
   }
 
   List<Widget> _nestedRows(
@@ -720,7 +819,13 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
   ) {
     final tiersRaw = rows[ri][nestedKey];
     final tiers = tiersRaw is List
-        ? tiersRaw.map((e) => e is Map<String, dynamic> ? e : Map<String, dynamic>.from(e as Map)).toList()
+        ? tiersRaw
+              .map(
+                (e) => e is Map<String, dynamic>
+                    ? e
+                    : Map<String, dynamic>.from(e as Map),
+              )
+              .toList()
         : <Map<String, dynamic>>[];
     return [
       for (var ti = 0; ti < tiers.length; ti++)
@@ -769,7 +874,10 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
                 border: Border.all(color: DunesColors.borderSoft),
               ),
               child: Table(
-                border: TableBorder.all(color: DunesColors.borderSoft, width: 1),
+                border: TableBorder.all(
+                  color: DunesColors.borderSoft,
+                  width: 1,
+                ),
                 defaultVerticalAlignment: TableCellVerticalAlignment.middle,
                 columnWidths: {
                   for (var i = 0; i < cols.length; i++)
@@ -800,7 +908,10 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
                       children: [
                         for (final col in cols)
                           Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 4,
+                              vertical: 2,
+                            ),
                             child: _matrixCellInput(field.key, col, rows, ri),
                           ),
                         Padding(
@@ -874,7 +985,9 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
       decoration: BoxDecoration(
         color: DunesColors.bgSoft,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: DunesColors.borderSoft.withValues(alpha: 0.6)),
+        border: Border.all(
+          color: DunesColors.borderSoft.withValues(alpha: 0.6),
+        ),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
@@ -936,7 +1049,10 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
               for (final o in _colOptions(col))
                 DropdownMenuItem(
                   value: o.value,
-                  child: Text(o.label, style: xfDynInputTextStyle().copyWith(fontSize: 11)),
+                  child: Text(
+                    o.label,
+                    style: xfDynInputTextStyle().copyWith(fontSize: 11),
+                  ),
                 ),
             ],
             onChanged: (v) => setVal(v ?? ''),
@@ -945,7 +1061,9 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
             key: ValueKey('dyn_${fieldKey}_${ri}_$colKey'),
             initialValue: value,
             decoration: decoration,
-            style: matrix ? DunesTypography.sans(fontSize: 11, color: DunesColors.text) : xfDynInputTextStyle(),
+            style: matrix
+                ? DunesTypography.sans(fontSize: 11, color: DunesColors.text)
+                : xfDynInputTextStyle(),
             onTapOutside: _dismissKeyboardOnTapOutside,
             onChanged: setVal,
           );
@@ -982,7 +1100,8 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
       selected.add(current.toString());
     }
     final isProvinceGrid =
-        field.raw['layout']?.toString() == 'provinceGrid' || field.raw['dictKey']?.toString() == 'provinces';
+        field.raw['layout']?.toString() == 'provinceGrid' ||
+        field.raw['dictKey']?.toString() == 'provinces';
     return _fieldWrap(
       field,
       isProvinceGrid
@@ -999,7 +1118,8 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
                     text: option.label,
                     selected: selected.contains(option.value),
                     compact: true,
-                    onTap: () => _togglePill(field.key, option.value, multi, selected),
+                    onTap: () =>
+                        _togglePill(field.key, option.value, multi, selected),
                   ),
               ],
             )
@@ -1011,7 +1131,8 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
                   _pill(
                     text: option.label,
                     selected: selected.contains(option.value),
-                    onTap: () => _togglePill(field.key, option.value, multi, selected),
+                    onTap: () =>
+                        _togglePill(field.key, option.value, multi, selected),
                   ),
               ],
             ),
@@ -1061,11 +1182,18 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
                     InputChip(
                       label: Text(
                         tag,
-                        style: DunesTypography.sans(fontSize: 11, color: DunesColors.accentDeep),
+                        style: DunesTypography.sans(
+                          fontSize: 11,
+                          color: DunesColors.accentDeep,
+                        ),
                       ),
                       deleteIcon: field.readonly
                           ? null
-                          : const Icon(Icons.close, size: 14, color: DunesColors.text3),
+                          : const Icon(
+                              Icons.close,
+                              size: 14,
+                              color: DunesColors.text3,
+                            ),
                       onDeleted: field.readonly ? null : () => removeTag(tag),
                       backgroundColor: DunesColors.accentSoft,
                       side: const BorderSide(color: DunesColors.accentLine),
@@ -1078,7 +1206,9 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
           if (!field.readonly)
             _XflowTagInput(
               key: ValueKey('tags_input_${field.key}'),
-              hint: field.placeholder.isEmpty ? '输入关键词后按回车添加' : field.placeholder,
+              hint: field.placeholder.isEmpty
+                  ? '输入关键词后按回车添加'
+                  : field.placeholder,
               onSubmit: addTag,
             )
           else if (tags.isEmpty)
@@ -1092,7 +1222,10 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
               ),
               child: Text(
                 field.placeholder.isEmpty ? '—' : field.placeholder,
-                style: DunesTypography.sans(fontSize: 12.5, color: DunesColors.text3),
+                style: DunesTypography.sans(
+                  fontSize: 12.5,
+                  color: DunesColors.text3,
+                ),
               ),
             ),
         ],
@@ -1131,11 +1264,16 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
       borderRadius: BorderRadius.circular(7),
       child: Container(
         alignment: Alignment.center,
-        padding: EdgeInsets.symmetric(horizontal: compact ? 4 : 10, vertical: compact ? 5 : 5),
+        padding: EdgeInsets.symmetric(
+          horizontal: compact ? 4 : 10,
+          vertical: compact ? 5 : 5,
+        ),
         decoration: BoxDecoration(
           color: selected ? DunesColors.accentSoft : DunesColors.bgSoft,
           borderRadius: BorderRadius.circular(7),
-          border: Border.all(color: selected ? DunesColors.accent : DunesColors.border),
+          border: Border.all(
+            color: selected ? DunesColors.accent : DunesColors.border,
+          ),
         ),
         child: Text(
           text,
@@ -1150,7 +1288,12 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
     );
   }
 
-  Widget _fieldWrap(XflowField field, Widget child, {bool inRow = false, String? hint}) {
+  Widget _fieldWrap(
+    XflowField field,
+    Widget child, {
+    bool inRow = false,
+    String? hint,
+  }) {
     final label = field.label.isEmpty ? field.key : field.label;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1165,7 +1308,11 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
               hint,
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
-              style: DunesTypography.sans(fontSize: 9.5, color: DunesColors.text3, height: 1.3),
+              style: DunesTypography.sans(
+                fontSize: 9.5,
+                color: DunesColors.text3,
+                height: 1.3,
+              ),
             ),
           ),
       ],
@@ -1174,7 +1321,9 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
 
   bool _hasValue(dynamic v) {
     if (v == null) return false;
-    if (v is Map && (v['userId'] != null || v['id'] != null || v['name'] != null)) return true;
+    if (v is Map &&
+        (v['userId'] != null || v['id'] != null || v['name'] != null))
+      return true;
     if (v is String) return v.trim().isNotEmpty;
     if (v is List) return v.isNotEmpty;
     if (v is Map) return v.isNotEmpty;
@@ -1189,16 +1338,231 @@ class _XflowUserPicker extends StatefulWidget {
     required this.placeholder,
     required this.readonly,
     required this.onChanged,
+    this.roleCode,
   });
 
   final XflowService? service;
   final dynamic value;
   final String placeholder;
   final bool readonly;
+  final String? roleCode;
   final void Function(dynamic value) onChanged;
 
   @override
   State<_XflowUserPicker> createState() => _XflowUserPickerState();
+}
+
+class _XflowSelectPicker extends StatefulWidget {
+  const _XflowSelectPicker({
+    required this.options,
+    required this.value,
+    required this.placeholder,
+    required this.readonly,
+    required this.onChanged,
+  });
+
+  final List<XflowFieldOption> options;
+  final String value;
+  final String placeholder;
+  final bool readonly;
+  final ValueChanged<String> onChanged;
+
+  @override
+  State<_XflowSelectPicker> createState() => _XflowSelectPickerState();
+}
+
+class _XflowSelectPickerState extends State<_XflowSelectPicker> {
+  final TextEditingController _controller = TextEditingController();
+  List<XflowFieldOption> _filtered = const [];
+  bool _touched = false;
+  bool _expanded = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller.text = _labelForValue(widget.value);
+  }
+
+  @override
+  void didUpdateWidget(covariant _XflowSelectPicker oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.value != widget.value || oldWidget.options != widget.options) {
+      final next = _labelForValue(widget.value);
+      if (_controller.text != next) {
+        _controller.text = next;
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  String _labelForValue(String value) {
+    if (value.trim().isEmpty) return '';
+    for (final option in widget.options) {
+      if (option.value == value) return option.label;
+    }
+    return value;
+  }
+
+  void _applyFilter(String query, {bool markTouched = true}) {
+    final q = query.trim().toLowerCase();
+    final out = q.isEmpty
+        ? widget.options
+        : widget.options.where((o) {
+            final label = o.label.toLowerCase();
+            final value = o.value.toLowerCase();
+            return label.contains(q) || value.contains(q);
+          }).toList(growable: false);
+    setState(() {
+      _filtered = out;
+      if (markTouched) _touched = true;
+    });
+  }
+
+  void _select(XflowFieldOption option) {
+    widget.onChanged(option.value);
+    setState(() {
+      _controller.text = option.label;
+      _filtered = const [];
+      _touched = false;
+      _expanded = false;
+    });
+  }
+
+  void _clear() {
+    widget.onChanged('');
+    setState(() {
+      _controller.clear();
+      _filtered = widget.options;
+      _touched = false;
+      _expanded = true;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final hasText = _controller.text.trim().isNotEmpty;
+    final showMenu = !widget.readonly && _expanded && _filtered.isNotEmpty;
+    return TapRegion(
+      onTapOutside: (_) {
+        FocusManager.instance.primaryFocus?.unfocus();
+        if (_expanded) setState(() => _expanded = false);
+      },
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          xfFixedHeightControl(
+            child: TextField(
+              controller: _controller,
+              onTap: widget.readonly
+                  ? null
+                  : () {
+                      if (!_expanded) {
+                        setState(() => _expanded = true);
+                        _applyFilter('', markTouched: false);
+                      }
+                    },
+              readOnly: true,
+              enableInteractiveSelection: false,
+              style: xfInputTextStyle(),
+              decoration: xfInputDecoration(
+                hint: widget.placeholder,
+                readonly: widget.readonly,
+              ).copyWith(
+                suffixIconConstraints: const BoxConstraints(minWidth: 72),
+                suffixIcon: widget.readonly
+                    ? const Icon(
+                        Icons.keyboard_arrow_down_rounded,
+                        size: 18,
+                        color: DunesColors.text3,
+                      )
+                    : Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (hasText)
+                            IconButton(
+                              tooltip: '清除',
+                              icon: const Icon(
+                                Icons.close_rounded,
+                                size: 18,
+                                color: DunesColors.text3,
+                              ),
+                              onPressed: _clear,
+                            ),
+                          IconButton(
+                            tooltip: _expanded ? '收起' : '展开',
+                            icon: Icon(
+                              _expanded
+                                  ? Icons.keyboard_arrow_up_rounded
+                                  : Icons.keyboard_arrow_down_rounded,
+                              size: 18,
+                              color: DunesColors.text3,
+                            ),
+                            onPressed: () {
+                              if (_expanded) {
+                                setState(() => _expanded = false);
+                              } else {
+                                setState(() => _expanded = true);
+                                _applyFilter('', markTouched: false);
+                              }
+                            },
+                          ),
+                        ],
+                      ),
+              ),
+            ),
+          ),
+        if (showMenu) ...[
+          const SizedBox(height: 6),
+          Container(
+            constraints: const BoxConstraints(maxHeight: 220),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: DunesColors.border),
+            ),
+            child: ListView.separated(
+              padding: EdgeInsets.zero,
+              shrinkWrap: true,
+              itemCount: _filtered.length.clamp(0, 8),
+              separatorBuilder: (_, _) =>
+                  Divider(height: 1, color: DunesColors.borderSoft),
+              itemBuilder: (context, index) {
+                final option = _filtered[index];
+                return ListTile(
+                  dense: true,
+                  title: Text(
+                    option.label,
+                    style: DunesTypography.sans(fontSize: 12),
+                  ),
+                  trailing: const Icon(
+                    Icons.keyboard_arrow_right_rounded,
+                    size: 16,
+                    color: DunesColors.text3,
+                  ),
+                  onTap: () => _select(option),
+                );
+              },
+            ),
+          ),
+        ] else if (!widget.readonly &&
+            _touched &&
+            _expanded &&
+            _controller.text.trim().isNotEmpty) ...[
+          const SizedBox(height: 6),
+          Text(
+            '未找到匹配选项，请换个关键词',
+            style: DunesTypography.sans(fontSize: 11, color: DunesColors.text3),
+          ),
+        ],
+        ],
+      ),
+    );
+  }
 }
 
 class _XflowUserPickerState extends State<_XflowUserPicker> {
@@ -1206,7 +1570,8 @@ class _XflowUserPickerState extends State<_XflowUserPicker> {
   final _focus = FocusNode();
   List<Map<String, dynamic>> _results = const [];
   bool _loading = false;
-  OverlayEntry? _overlay;
+  bool _searched = false;
+  Timer? _debounce;
 
   @override
   void initState() {
@@ -1215,17 +1580,29 @@ class _XflowUserPickerState extends State<_XflowUserPicker> {
     _focus.addListener(_onFocusChange);
   }
 
+  void _onFocusChange() {
+    if (!_focus.hasFocus || widget.readonly) return;
+    final role = widget.roleCode?.trim() ?? '';
+    if (role.isEmpty) return;
+    if (_controller.text.trim().isNotEmpty) return;
+    if (_results.isNotEmpty || _loading) return;
+    _search('');
+  }
+
   @override
   void didUpdateWidget(covariant _XflowUserPicker oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.value != widget.value) {
-      _controller.text = _displayName(widget.value);
+      final next = _displayName(widget.value);
+      if (_controller.text != next) {
+        _controller.text = next;
+      }
     }
   }
 
   @override
   void dispose() {
-    _removeOverlay();
+    _debounce?.cancel();
     _focus.removeListener(_onFocusChange);
     _focus.dispose();
     _controller.dispose();
@@ -1239,114 +1616,164 @@ class _XflowUserPickerState extends State<_XflowUserPicker> {
     return val?.toString() ?? '';
   }
 
-  void _onFocusChange() {
-    if (!_focus.hasFocus) {
-      Future.delayed(const Duration(milliseconds: 200), _removeOverlay);
-    }
+  void _clearSelection() {
+    _debounce?.cancel();
+    setState(() {
+      _controller.clear();
+      _results = const [];
+      _searched = false;
+      _loading = false;
+    });
+    widget.onChanged(null);
   }
 
-  void _removeOverlay() {
-    _overlay?.remove();
-    _overlay = null;
+  void _selectUser(Map<String, dynamic> u) {
+    final name = (u['displayName'] ?? u['name'] ?? '').toString();
+    widget.onChanged({
+      'userId': u['userId'] ?? u['id'],
+      'name': name,
+      'dept': u['departmentName'] ?? u['dept'] ?? '',
+      'title': u['title'] ?? '',
+    });
+    setState(() {
+      _controller.text = name;
+      _results = const [];
+      _searched = false;
+      _loading = false;
+    });
+    _focus.unfocus();
   }
 
   Future<void> _search(String q) async {
-    if (widget.service == null || q.trim().isEmpty) {
-      setState(() => _results = const []);
-      _removeOverlay();
+    final query = q.trim();
+    final role = widget.roleCode?.trim() ?? '';
+    if (widget.service == null || (query.isEmpty && role.isEmpty)) {
+      setState(() {
+        _results = const [];
+        _searched = false;
+        _loading = false;
+      });
       return;
     }
     setState(() => _loading = true);
     try {
-      final rows = await widget.service!.searchOrgUsers(q);
-      if (!mounted) return;
+      final rows = await widget.service!.searchOrgUsers(
+        query,
+        roleCode: widget.roleCode,
+      );
+      if (!mounted || _controller.text.trim() != query) return;
       setState(() {
         _results = rows;
+        _searched = true;
         _loading = false;
       });
-      _showOverlay();
     } catch (_) {
       if (!mounted) return;
-      setState(() => _loading = false);
+      setState(() {
+        _loading = false;
+        _searched = true;
+        _results = const [];
+      });
       showDunesToast(context, '人员搜索失败', kind: DunesToastKind.error);
     }
   }
 
-  void _showOverlay() {
-    _removeOverlay();
-    if (_results.isEmpty) return;
-    final box = context.findRenderObject() as RenderBox?;
-    if (box == null) return;
-    final offset = box.localToGlobal(Offset.zero);
-    _overlay = OverlayEntry(
-      builder: (ctx) => Positioned(
-        left: offset.dx,
-        top: offset.dy + box.size.height + 4,
-        width: box.size.width,
-        child: Material(
-          elevation: 4,
-          borderRadius: BorderRadius.circular(8),
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxHeight: 220),
-            child: ListView(
-              padding: EdgeInsets.zero,
-              shrinkWrap: true,
-              children: [
-                for (final u in _results.take(8))
-                  ListTile(
-                    dense: true,
-                    title: Text(
-                      '${u['displayName'] ?? u['name'] ?? ''}${u['departmentName'] != null ? ' · ${u['departmentName']}' : ''}',
-                      style: DunesTypography.sans(fontSize: 11.5),
-                    ),
-                    onTap: () {
-                      widget.onChanged({
-                        'userId': u['userId'] ?? u['id'],
-                        'name': u['displayName'] ?? u['name'],
-                        'dept': u['departmentName'] ?? u['dept'] ?? '',
-                        'title': u['title'] ?? '',
-                      });
-                      _controller.text = (u['displayName'] ?? u['name'] ?? '').toString();
-                      _removeOverlay();
-                      _focus.unfocus();
-                    },
-                  ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-    Overlay.of(context).insert(_overlay!);
+  void _onQueryChanged(String q) {
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 280), () {
+      if (!mounted) return;
+      if (_controller.text.trim() == q.trim()) _search(q);
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    return TextField(
-      controller: _controller,
-      focusNode: _focus,
-      readOnly: widget.readonly,
-      enableInteractiveSelection: true,
-      contextMenuBuilder: (context, editableTextState) {
-        return AdaptiveTextSelectionToolbar.editableText(
-          editableTextState: editableTextState,
-        );
-      },
-      onTapOutside: (_) => FocusManager.instance.primaryFocus?.unfocus(),
-      decoration: xfInputDecoration(hint: widget.placeholder).copyWith(
-        suffixIcon: _loading
-            ? const Padding(
-                padding: EdgeInsets.all(10),
-                child: SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2)),
-              )
-            : null,
-      ),
-      style: xfInputTextStyle(),
-      onChanged: (q) {
-        Future.delayed(const Duration(milliseconds: 220), () {
-          if (_controller.text.trim() == q.trim()) _search(q);
-        });
-      },
+    final hasText = _controller.text.trim().isNotEmpty;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        TextField(
+          controller: _controller,
+          focusNode: _focus,
+          readOnly: widget.readonly,
+          enableInteractiveSelection: true,
+          contextMenuBuilder: (context, editableTextState) {
+            return AdaptiveTextSelectionToolbar.editableText(
+              editableTextState: editableTextState,
+            );
+          },
+          decoration: xfInputDecoration(hint: widget.placeholder).copyWith(
+            suffixIcon: _loading
+                ? const Padding(
+                    padding: EdgeInsets.all(10),
+                    child: SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  )
+                : hasText && !widget.readonly
+                ? IconButton(
+                    icon: const Icon(
+                      Icons.close_rounded,
+                      size: 18,
+                      color: DunesColors.text3,
+                    ),
+                    onPressed: _clearSelection,
+                    tooltip: '清除',
+                  )
+                : const Icon(
+                    Icons.search,
+                    size: 18,
+                    color: DunesColors.text3,
+                  ),
+          ),
+          style: xfInputTextStyle(),
+          onChanged: widget.readonly ? null : _onQueryChanged,
+        ),
+        if (_results.isNotEmpty) ...[
+          const SizedBox(height: 6),
+          Container(
+            constraints: const BoxConstraints(maxHeight: 220),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: DunesColors.border),
+            ),
+            child: ListView.separated(
+              padding: EdgeInsets.zero,
+              shrinkWrap: true,
+              itemCount: _results.length.clamp(0, 8),
+              separatorBuilder: (_, _) =>
+                  Divider(height: 1, color: DunesColors.borderSoft),
+              itemBuilder: (context, index) {
+                final u = _results[index];
+                final name = (u['displayName'] ?? u['name'] ?? '').toString();
+                final dept = (u['departmentName'] ?? u['dept'] ?? '').toString();
+                return ListTile(
+                  dense: true,
+                  title: Text(
+                    dept.isEmpty ? name : '$name · $dept',
+                    style: DunesTypography.sans(fontSize: 12),
+                  ),
+                  trailing: const Icon(
+                    Icons.person_add_alt_1_outlined,
+                    size: 16,
+                    color: DunesColors.text3,
+                  ),
+                  onTap: () => _selectUser(u),
+                );
+              },
+            ),
+          ),
+        ] else if (_searched && !_loading && hasText) ...[
+          const SizedBox(height: 6),
+          Text(
+            '未找到匹配人员，请换个关键词',
+            style: DunesTypography.sans(fontSize: 11, color: DunesColors.text3),
+          ),
+        ],
+      ],
     );
   }
 }
@@ -1380,8 +1807,9 @@ class _XflowTextField extends StatefulWidget {
 }
 
 class _XflowTextFieldState extends State<_XflowTextField> {
-  late final TextEditingController _controller =
-      TextEditingController(text: widget.value);
+  late final TextEditingController _controller = TextEditingController(
+    text: widget.value,
+  );
 
   @override
   void didUpdateWidget(covariant _XflowTextField oldWidget) {
@@ -1424,6 +1852,235 @@ class _XflowTextFieldState extends State<_XflowTextField> {
   }
 }
 
+class _XflowProposalPicker extends StatefulWidget {
+  const _XflowProposalPicker({
+    required this.service,
+    required this.value,
+    required this.placeholder,
+    required this.readonly,
+    required this.onChanged,
+  });
+
+  final XflowService? service;
+  final dynamic value;
+  final String placeholder;
+  final bool readonly;
+  final void Function(dynamic value) onChanged;
+
+  @override
+  State<_XflowProposalPicker> createState() => _XflowProposalPickerState();
+}
+
+class _XflowProposalPickerState extends State<_XflowProposalPicker> {
+  final _controller = TextEditingController();
+  final _focus = FocusNode();
+  List<Map<String, dynamic>> _results = const [];
+  bool _loading = false;
+  bool _searched = false;
+  Timer? _debounce;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller.text = _displayText(widget.value);
+    _focus.addListener(_onFocusChange);
+  }
+
+  void _onFocusChange() {
+    if (!_focus.hasFocus || widget.readonly) return;
+    if (_controller.text.trim().isNotEmpty) return;
+    if (_results.isNotEmpty || _loading) return;
+    _search('');
+  }
+
+  @override
+  void didUpdateWidget(covariant _XflowProposalPicker oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.value != widget.value) {
+      final next = _displayText(widget.value);
+      if (_controller.text != next) {
+        _controller.text = next;
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _debounce?.cancel();
+    _focus.removeListener(_onFocusChange);
+    _focus.dispose();
+    _controller.dispose();
+    super.dispose();
+  }
+
+  String _displayText(dynamic val) {
+    if (val is Map) {
+      final code = (val['code'] ?? val['proposalCode'] ?? '').toString().trim();
+      final title = (val['title'] ?? val['name'] ?? '').toString().trim();
+      if (code.isNotEmpty && title.isNotEmpty) return '$code · $title';
+      if (code.isNotEmpty) return code;
+      if (title.isNotEmpty) return title;
+    }
+    return val?.toString() ?? '';
+  }
+
+  void _clearSelection() {
+    _debounce?.cancel();
+    setState(() {
+      _controller.clear();
+      _results = const [];
+      _searched = false;
+      _loading = false;
+    });
+    widget.onChanged(null);
+  }
+
+  void _selectProposal(Map<String, dynamic> row) {
+    final id = _int(row['proposalId'] ?? row['id']);
+    final code = (row['code'] ?? '').toString().trim();
+    final title = (row['title'] ?? row['name'] ?? '').toString().trim();
+    widget.onChanged({
+      'proposalId': id,
+      'code': code,
+      'title': title,
+    });
+    setState(() {
+      _controller.text = code.isNotEmpty && title.isNotEmpty
+          ? '$code · $title'
+          : (code.isNotEmpty ? code : title);
+      _results = const [];
+      _searched = false;
+      _loading = false;
+    });
+    _focus.unfocus();
+  }
+
+  int _int(dynamic v) {
+    if (v is num) return v.toInt();
+    return int.tryParse('$v') ?? 0;
+  }
+
+  Future<void> _search(String q) async {
+    if (widget.service == null) {
+      setState(() {
+        _results = const [];
+        _searched = false;
+        _loading = false;
+      });
+      return;
+    }
+    setState(() => _loading = true);
+    try {
+      final rows = await widget.service!.searchApprovedProposals(q);
+      if (!mounted || _controller.text.trim() != q.trim()) return;
+      setState(() {
+        _results = rows;
+        _searched = true;
+        _loading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _searched = true;
+        _results = const [];
+      });
+      showDunesToast(context, '提案搜索失败', kind: DunesToastKind.error);
+    }
+  }
+
+  void _onQueryChanged(String q) {
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 280), () {
+      if (!mounted) return;
+      if (_controller.text.trim() == q.trim()) _search(q);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final hasText = _controller.text.trim().isNotEmpty;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        TextField(
+          controller: _controller,
+          focusNode: _focus,
+          readOnly: widget.readonly,
+          decoration: xfInputDecoration(hint: widget.placeholder).copyWith(
+            suffixIcon: _loading
+                ? const Padding(
+                    padding: EdgeInsets.all(10),
+                    child: SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  )
+                : hasText && !widget.readonly
+                ? IconButton(
+                    icon: const Icon(
+                      Icons.close_rounded,
+                      size: 18,
+                      color: DunesColors.text3,
+                    ),
+                    onPressed: _clearSelection,
+                    tooltip: '清除',
+                  )
+                : const Icon(
+                    Icons.search,
+                    size: 18,
+                    color: DunesColors.text3,
+                  ),
+          ),
+          style: xfInputTextStyle(),
+          onChanged: widget.readonly ? null : _onQueryChanged,
+        ),
+        if (_results.isNotEmpty) ...[
+          const SizedBox(height: 6),
+          Container(
+            constraints: const BoxConstraints(maxHeight: 220),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: DunesColors.border),
+            ),
+            child: ListView.separated(
+              padding: EdgeInsets.zero,
+              shrinkWrap: true,
+              itemCount: _results.length.clamp(0, 8),
+              separatorBuilder: (_, _) =>
+                  Divider(height: 1, color: DunesColors.borderSoft),
+              itemBuilder: (context, index) {
+                final row = _results[index];
+                final code = (row['code'] ?? '').toString();
+                final title = (row['title'] ?? row['name'] ?? '').toString();
+                final label = code.isNotEmpty && title.isNotEmpty
+                    ? '$code · $title'
+                    : (code.isNotEmpty ? code : title);
+                return ListTile(
+                  dense: true,
+                  title: Text(
+                    label,
+                    style: DunesTypography.sans(fontSize: 12),
+                  ),
+                  onTap: () => _selectProposal(row),
+                );
+              },
+            ),
+          ),
+        ] else if (_searched && !_loading && hasText) ...[
+          const SizedBox(height: 6),
+          Text(
+            '无匹配提案',
+            style: DunesTypography.sans(fontSize: 11, color: DunesColors.text3),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
 extension on Iterable<XflowField> {
   XflowField? get firstOrNull {
     if (isEmpty) return null;
@@ -1432,11 +2089,7 @@ extension on Iterable<XflowField> {
 }
 
 class _XflowTagInput extends StatefulWidget {
-  const _XflowTagInput({
-    super.key,
-    required this.hint,
-    required this.onSubmit,
-  });
+  const _XflowTagInput({super.key, required this.hint, required this.onSubmit});
 
   final String hint;
   final ValueChanged<String> onSubmit;
@@ -1477,7 +2130,9 @@ class _XflowTagInputState extends State<_XflowTagInput> {
             _submit(parts[i]);
           }
           _controller.text = parts.last;
-          _controller.selection = TextSelection.collapsed(offset: _controller.text.length);
+          _controller.selection = TextSelection.collapsed(
+            offset: _controller.text.length,
+          );
         }
       },
     );

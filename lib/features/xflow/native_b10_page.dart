@@ -105,7 +105,11 @@ class _NativeB10PageState extends State<NativeB10Page> {
   Future<void> _approve(String comment) async {
     final todo = _bundle?.myTodo;
     if (todo == null) return;
-    await _service.completeTodo(todoId: todo.id, approve: true, comment: comment);
+    await _service.completeTodo(
+      todoId: todo.id,
+      approve: true,
+      comment: comment,
+    );
     if (!mounted) return;
     showDunesToast(context, '已通过审批');
     await _load();
@@ -114,7 +118,11 @@ class _NativeB10PageState extends State<NativeB10Page> {
   Future<void> _reject(String comment) async {
     final todo = _bundle?.myTodo;
     if (todo == null) return;
-    await _service.completeTodo(todoId: todo.id, approve: false, comment: comment);
+    await _service.completeTodo(
+      todoId: todo.id,
+      approve: false,
+      comment: comment,
+    );
     if (!mounted) return;
     showDunesToast(context, '已驳回');
     await _load();
@@ -129,8 +137,14 @@ class _NativeB10PageState extends State<NativeB10Page> {
         title: const Text('作废提案'),
         content: const Text('确认作废此提案？作废后不可恢复。'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('取消')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('确认作废')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('确认作废'),
+          ),
         ],
       ),
     );
@@ -139,6 +153,42 @@ class _NativeB10PageState extends State<NativeB10Page> {
     if (!mounted) return;
     showDunesToast(context, '提案已作废');
     await _load();
+  }
+
+  Future<void> _withdrawProposal() async {
+    final id = _bundle?.detail.id ?? 0;
+    if (id <= 0) return;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('撤回审批'),
+        content: const Text('确认撤回此审批？撤回后将保存为草稿，可修改后重新提交。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('确认撤回'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    try {
+      await _service.withdrawProposal(id);
+      if (!mounted) return;
+      showDunesToast(context, '审批已撤回，已保存到草稿');
+      widget.navigation.popTo(widget.backScreen);
+    } catch (e) {
+      if (!mounted) return;
+      showDunesToast(
+        context,
+        '撤回失败：${friendlyErrorText(e)}',
+        kind: DunesToastKind.error,
+      );
+    }
   }
 
   Future<void> _deleteDraft() async {
@@ -150,8 +200,14 @@ class _NativeB10PageState extends State<NativeB10Page> {
         title: const Text('删除草稿'),
         content: const Text('确认删除此草稿？删除后不可恢复。'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('取消')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('删除')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('删除'),
+          ),
         ],
       ),
     );
@@ -163,7 +219,11 @@ class _NativeB10PageState extends State<NativeB10Page> {
       widget.navigation.popTo(widget.backScreen);
     } catch (e) {
       if (!mounted) return;
-      showDunesToast(context, '删除失败：${friendlyErrorText(e)}', kind: DunesToastKind.error);
+      showDunesToast(
+        context,
+        '删除失败：${friendlyErrorText(e)}',
+        kind: DunesToastKind.error,
+      );
     }
   }
 
@@ -183,7 +243,11 @@ class _NativeB10PageState extends State<NativeB10Page> {
       await _load();
     } catch (e) {
       if (!mounted) return;
-      showDunesToast(context, '发起失败：${friendlyErrorText(e)}', kind: DunesToastKind.error);
+      showDunesToast(
+        context,
+        '发起失败：${friendlyErrorText(e)}',
+        kind: DunesToastKind.error,
+      );
     }
   }
 
@@ -196,8 +260,14 @@ class _NativeB10PageState extends State<NativeB10Page> {
         title: const Text('退回给推送人'),
         content: const Text('确认退回此提案？退回后将回到推送人的草稿，由其继续提交或删除。'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('取消')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('确认退回')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('确认退回'),
+          ),
         ],
       ),
     );
@@ -209,7 +279,11 @@ class _NativeB10PageState extends State<NativeB10Page> {
       widget.navigation.popTo(widget.backScreen);
     } catch (e) {
       if (!mounted) return;
-      showDunesToast(context, '退回失败：${friendlyErrorText(e)}', kind: DunesToastKind.error);
+      showDunesToast(
+        context,
+        '退回失败：${friendlyErrorText(e)}',
+        kind: DunesToastKind.error,
+      );
     }
   }
 
@@ -237,7 +311,11 @@ class _NativeB10PageState extends State<NativeB10Page> {
       await _load();
     } catch (e) {
       if (!mounted) return;
-      showDunesToast(context, '推送失败：${friendlyErrorText(e)}', kind: DunesToastKind.error);
+      showDunesToast(
+        context,
+        '推送失败：${friendlyErrorText(e)}',
+        kind: DunesToastKind.error,
+      );
     }
   }
 
@@ -251,7 +329,11 @@ class _NativeB10PageState extends State<NativeB10Page> {
         if (uid <= 0) continue;
         users.add(<String, dynamic>{
           'userId': uid,
-          'displayName': rule['displayName'] ?? rule['userName'] ?? rule['name'] ?? '用户#$uid',
+          'displayName':
+              rule['displayName'] ??
+              rule['userName'] ??
+              rule['name'] ??
+              '用户#$uid',
           'departmentName': rule['department'] ?? rule['departmentName'] ?? '',
         });
       }
@@ -279,34 +361,37 @@ class _NativeB10PageState extends State<NativeB10Page> {
             ),
             Expanded(
               child: _loading
-                  ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
+                  ? const Center(
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
                   : _error != null
-                      ? _buildError()
-                      : RefreshIndicator(
-                          onRefresh: _load,
-                          child: ListView(
-                            padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
-                            children: [
-                              XflowDetailRenderer(
-                                bundle: _bundle!,
-                                service: _service,
-                                onApprove: _approve,
-                                onReject: _reject,
-                                onDelete: _deleteDraft,
-                                onPush: _push,
-                                onInitiate: _initiate,
-                                onReedit: () => widget.onReedit(_bundle!.detail.id),
-                                onVoid: _voidProposal,
-                                onReturn: _return,
-                              ),
-                              XflowCcRulesCard(
-                                rules: _ccRules,
-                                loading: _ccLoading,
-                                error: _ccError,
-                              ),
-                            ],
+                  ? _buildError()
+                  : RefreshIndicator(
+                      onRefresh: _load,
+                      child: ListView(
+                        padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+                        children: [
+                          XflowDetailRenderer(
+                            bundle: _bundle!,
+                            service: _service,
+                            onApprove: _approve,
+                            onReject: _reject,
+                            onDelete: _deleteDraft,
+                            onPush: _push,
+                            onInitiate: _initiate,
+                            onReedit: () => widget.onReedit(_bundle!.detail.id),
+                            onVoid: _voidProposal,
+                            onWithdraw: _withdrawProposal,
+                            onReturn: _return,
                           ),
-                        ),
+                          XflowCcRulesCard(
+                            rules: _ccRules,
+                            loading: _ccLoading,
+                            error: _ccError,
+                          ),
+                        ],
+                      ),
+                    ),
             ),
           ],
         ),

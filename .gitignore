@@ -43,3 +43,33 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# ---------- 本地安装包 / 发布产物（勿提交；用 Actions Artifact 或自有服务器分发）----------
+/dist/
+*.apk
+*.aab
+*.ipa
+*.dmg
+*.msix
+# 安装器 / 解压包（不含源码）
+DunesSetup*.exe
+*Setup*.exe
+innosetup*.exe
+*.zip
+
+# 证书与密钥（只放本机或 GitHub Secrets，勿进仓库）
+*.p12
+*.pfx
+*.mobileprovision
+*.certSigningRequest
+*.csr
+*_base64.txt
+*.p12.base64.txt
+**/MACOS_SIGNING_IDENTITY.txt
+# Apple / 推送等本机证书（若误放在仓库根或配置目录）
+developerID*.cer
+developerID*.pem
+ios_distribution.key
+ios_distribution.csr
+macos_developer_id.key
+macos_developer_id.p12

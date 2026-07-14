@@ -49,7 +49,51 @@ bool shouldUseNovaAgentFileDownload({
 String _fileExtFromName(String name) {
   final path = name.split('?').first;
   final i = path.lastIndexOf('.');
-  return i >= 0 ? path.substring(i + 1).toLowerCase() : '';
+  if (i < 0 || i == path.length - 1) return '';
+  return path.substring(i + 1).toLowerCase();
+}
+
+/// 对话页当轮文件提问：支持扩展名（与 NOVA `/v1/app/chat/attachments` 一致）。
+const kNovaChatAttachmentMaxBytes = 15 * 1024 * 1024;
+
+const kNovaChatAttachmentExts = <String>{
+  'txt',
+  'md',
+  'csv',
+  'tsv',
+  'json',
+  'xml',
+  'html',
+  'log',
+  'yaml',
+  'yml',
+  'toml',
+  'docx',
+  'xlsx',
+  'pdf',
+};
+
+bool isNovaChatAttachmentSupported(String fileName) {
+  final ext = _fileExtFromName(fileName);
+  return ext.isNotEmpty && kNovaChatAttachmentExts.contains(ext);
+}
+
+String? novaChatAttachmentRejectReason({
+  required String fileName,
+  required int byteLength,
+}) {
+  if (byteLength <= 0) return '文件为空，请重新选择';
+  if (byteLength > kNovaChatAttachmentMaxBytes) {
+    return '文件超过 15MB，请压缩后再试';
+  }
+  final ext = _fileExtFromName(fileName);
+  if (ext == 'doc' || ext == 'xls' || ext == 'ppt' || ext == 'pptx') {
+    return '暂不支持 .$ext，请先转成 docx/xlsx/pdf/txt';
+  }
+  if (!isNovaChatAttachmentSupported(fileName)) {
+    return '暂不支持该文件格式，请使用 Word/Excel/PDF/文本等';
+  }
+  return null;
 }
 
 /// 手机端能否直连该 URL（MinIO 签名常指向 127.0.0.1 / 内网 / Docker 主机名，不可达）。

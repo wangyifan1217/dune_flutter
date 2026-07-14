@@ -1,7 +1,11 @@
 import 'dart:async';
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:url_launcher/url_launcher.dart';
 
+import '../../core/layout/chat_layout.dart';
 import '../../core/theme/dunes_theme.dart';
 import '../../core/util/friendly_error.dart';
 import 'chat_quote.dart';
@@ -19,6 +23,7 @@ class ChatConvHeader extends StatelessWidget {
     this.actions = const <Widget>[],
     this.leadingAvatar,
     this.showOnlineDot = false,
+    this.showBackButton = true,
   });
 
   final String title;
@@ -28,22 +33,24 @@ class ChatConvHeader extends StatelessWidget {
   final List<Widget> actions;
   final Widget? leadingAvatar;
   final bool showOnlineDot;
+  final bool showBackButton;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.fromLTRB(4, 8, 8, 10),
+      padding: EdgeInsets.fromLTRB(showBackButton ? 4 : 12, 8, 8, 10),
       decoration: const BoxDecoration(
         color: DunesColors.bgApp,
         border: Border(bottom: BorderSide(color: DunesColors.borderSoft)),
       ),
       child: Row(
         children: [
-          IconButton(
-            onPressed: onBack,
-            icon: const Icon(Icons.chevron_left_rounded, size: 28),
-            color: DunesColors.text2,
-          ),
+          if (showBackButton)
+            IconButton(
+              onPressed: onBack,
+              icon: const Icon(Icons.chevron_left_rounded, size: 28),
+              color: DunesColors.text2,
+            ),
           if (leadingAvatar != null) ...[
             GestureDetector(onTap: onTapTitle, child: leadingAvatar!),
             const SizedBox(width: 8),
@@ -132,9 +139,9 @@ class ChatQuickActions extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cells = <_QaCell>[
+      _QaCell(icon: Icons.photo_outlined, label: '相册', onTap: onAlbum),
       _QaCell(icon: Icons.photo_camera_outlined, label: '拍照', onTap: onCamera),
-      _QaCell(icon: Icons.photo_library_outlined, label: '相册', onTap: onAlbum),
-      _QaCell(icon: Icons.attach_file, label: '文件', onTap: onFile),
+      _QaCell(icon: Icons.folder_outlined, label: '文件', onTap: onFile),
       _QaCell(
         icon: Icons.assignment_outlined,
         label: '转发审批',
@@ -143,49 +150,76 @@ class ChatQuickActions extends StatelessWidget {
       if (showAt && onAt != null)
         _QaCell(icon: Icons.alternate_email, label: '@', onTap: onAt!),
       if (showVideo && onVideo != null)
-        _QaCell(icon: Icons.videocam_outlined, label: '视频', onTap: onVideo!)
-      else if (onEmoji != null)
-        _QaCell(
-          icon: Icons.emoji_emotions_outlined,
-          label: '表情',
-          onTap: onEmoji!,
-        ),
+        _QaCell(icon: Icons.videocam_outlined, label: '视频', onTap: onVideo!),
     ];
+    // 微信式宫格：每行最多 4 个白底圆角方块。
+    // 表情已在输入栏，不再放入工具面板。
+    const cols = 4;
+    final rows = <List<_QaCell>>[];
+    for (var i = 0; i < cells.length; i += cols) {
+      rows.add(
+        cells.sublist(i, i + cols > cells.length ? cells.length : i + cols),
+      );
+    }
     return Container(
-      padding: const EdgeInsets.fromLTRB(14, 6, 14, 4),
-      decoration: const BoxDecoration(
-        color: DunesColors.bgApp,
-        border: Border(top: BorderSide(color: DunesColors.borderSoft)),
-      ),
-      // 固定单行高度：避免在更宽的屏幕（如大屏 iPhone）上按宽高比把整排撑高。
-      child: Row(
-        children: cells
-            .map(
-              (c) => Expanded(
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(10),
-                  onTap: c.onTap,
-                  child: SizedBox(
-                    height: 46,
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(c.icon, size: 18, color: DunesColors.text2),
-                        const SizedBox(height: 3),
-                        Text(
-                          c.label,
-                          style: DunesTypography.sans(
-                            fontSize: 9.5,
-                            color: DunesColors.text3,
-                          ),
-                        ),
-                      ],
-                    ),
+      width: double.infinity,
+      color: const Color(0xFFF7F7F7),
+      padding: const EdgeInsets.fromLTRB(18, 16, 18, 10),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (var r = 0; r < rows.length; r++) ...[
+            if (r > 0) const SizedBox(height: 14),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                for (var c = 0; c < cols; c++)
+                  Expanded(
+                    child: c < rows[r].length
+                        ? _WeChatToolTile(cell: rows[r][c])
+                        : const SizedBox.shrink(),
                   ),
-                ),
-              ),
-            )
-            .toList(),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _WeChatToolTile extends StatelessWidget {
+  const _WeChatToolTile({required this.cell});
+
+  final _QaCell cell;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(14),
+      onTap: cell.onTap,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 58,
+            height: 58,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Icon(cell.icon, size: 28, color: const Color(0xFF353535)),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            cell.label,
+            style: DunesTypography.sans(
+              fontSize: 12,
+              color: const Color(0xFF7A7A7A),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -203,9 +237,12 @@ class ChatInputBar extends StatelessWidget {
     super.key,
     required this.controller,
     required this.voiceMode,
+    this.voiceEnabled = true,
     required this.sending,
     required this.onToggleVoice,
-    required     this.onSend,
+    required this.onSend,
+    this.onPlus,
+    this.plusOpen = false,
     this.onEmoji,
     this.emojiPicker,
     this.secondaryIcon,
@@ -221,13 +258,19 @@ class ChatInputBar extends StatelessWidget {
     this.hintText,
     this.focusNode,
     this.onInputFocused,
+    this.backgroundColor,
+    this.onAttemptPasteImage,
   });
 
   final TextEditingController controller;
   final bool voiceMode;
+  final bool voiceEnabled;
   final bool sending;
   final VoidCallback onToggleVoice;
   final VoidCallback onSend;
+  /// 右侧「+」：展开/收起工具面板（发送改由键盘「发送」键完成）。
+  final VoidCallback? onPlus;
+  final bool plusOpen;
   final VoidCallback? onEmoji;
   final Widget? emojiPicker;
   final IconData? secondaryIcon;
@@ -243,35 +286,48 @@ class ChatInputBar extends StatelessWidget {
   final String? hintText;
   final FocusNode? focusNode;
   final VoidCallback? onInputFocused;
+  final Color? backgroundColor;
+  /// 返回 true 表示已处理图片粘贴；false 则回退插入剪贴板文本。
+  final Future<bool> Function()? onAttemptPasteImage;
 
   @override
   Widget build(BuildContext context) {
     final showStop = sending && onStop != null;
     final interactionLocked = !enabled || (sending && !showStop);
+    final effectiveVoiceMode = voiceEnabled && voiceMode;
+    final wide = isWideChatLayout(context);
+    final showEmojiControl =
+        !wide && (emojiPicker != null || onEmoji != null);
+    final minLines = wide ? 3 : 1;
+    final maxLines = wide ? 8 : 4;
+    final fieldPadV = wide ? 14.0 : 10.0;
     // 发送按钮在最底部，必须避开 iOS home indicator，否则会被底部横条盖住。
-    // 有安全区时用安全区作为下内边距（刚好托起按钮、不额外叠加），安卓为 0 时回退 9px。
     final bottomInset = MediaQuery.paddingOf(context).bottom;
     return Container(
       padding: EdgeInsets.fromLTRB(
-        12,
-        9,
-        12,
-        bottomInset > 0 ? bottomInset : 9,
+        wide ? 12 : 10,
+        wide ? 10 : 8,
+        wide ? 12 : 10,
+        bottomInset > 0 ? bottomInset + 4 : (wide ? 12.0 : 8.0),
       ),
-      decoration: const BoxDecoration(
-        color: DunesColors.bgApp,
-        border: Border(top: BorderSide(color: DunesColors.borderSoft)),
+      decoration: BoxDecoration(
+        color: backgroundColor ?? const Color(0xFFF7F7F7),
+        border: const Border(top: BorderSide(color: Color(0xFFE8E8E8))),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
-          _RoundIconBtn(
-            icon: voiceMode ? Icons.keyboard_outlined : Icons.mic_none_rounded,
-            onTap: interactionLocked ? null : onToggleVoice,
-          ),
-          const SizedBox(width: 8),
+          if (voiceEnabled) ...[
+            _WeChatCircleIconBtn(
+              icon: effectiveVoiceMode
+                  ? Icons.keyboard_alt_outlined
+                  : Icons.mic_none_rounded,
+              onTap: interactionLocked ? null : onToggleVoice,
+            ),
+            const SizedBox(width: 8),
+          ],
           Expanded(
-            child: voiceMode
+            child: effectiveVoiceMode
                 ? GestureDetector(
                     onLongPressStart: interactionLocked
                         ? null
@@ -290,9 +346,9 @@ class ChatInputBar extends StatelessWidget {
                         color: recording
                             ? (recordWillCancel
                                   ? DunesColors.coral
-                                  : const Color(0xFF7E64BD))
-                            : DunesColors.bgSoft,
-                        borderRadius: BorderRadius.circular(18),
+                                  : const Color(0xFF8B72B7))
+                            : Colors.white,
+                        borderRadius: BorderRadius.circular(8),
                       ),
                       child: Text(
                         recording
@@ -301,109 +357,49 @@ class ChatInputBar extends StatelessWidget {
                                   : '松开发送 ${(recordDurationMs / 1000).toStringAsFixed(1)}s')
                             : '按住 说话',
                         style: DunesTypography.sans(
-                          fontSize: 13.5,
+                          fontSize: 15,
                           fontWeight: FontWeight.w500,
                           color: recording ? Colors.white : DunesColors.text2,
                         ),
                       ),
                     ),
                   )
-                : TextField(
+                : _ChatTextField(
                     controller: controller,
                     focusNode: focusNode,
                     enabled: enabled && !showStop,
-                    minLines: 1,
-                    maxLines: 4,
-                    enableInteractiveSelection: true,
-                    onTap: onInputFocused,
-                    contextMenuBuilder: (context, editableTextState) {
-                      return AdaptiveTextSelectionToolbar.editableText(
-                        editableTextState: editableTextState,
-                      );
-                    },
-                    style: DunesTypography.sans(
-                      fontSize: 13.5,
-                      color: DunesColors.text,
-                    ),
-                    decoration: InputDecoration(
-                      hintText: hintText ?? '输入消息…',
-                      hintStyle: DunesTypography.sans(
-                        fontSize: 13.5,
-                        color: DunesColors.text3,
-                      ),
-                      filled: true,
-                      fillColor: DunesColors.bgSoft,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(18),
-                        borderSide: BorderSide.none,
-                      ),
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 10,
-                      ),
-                      isDense: true,
-                    ),
-                    onSubmitted: interactionLocked ? null : (_) => onSend(),
+                    minLines: minLines,
+                    maxLines: maxLines,
+                    wide: wide,
+                    fieldPadV: fieldPadV,
+                    hintText: hintText,
+                    onInputFocused: onInputFocused,
+                    onSend: interactionLocked ? null : onSend,
+                    onAttemptPasteImage: interactionLocked
+                        ? null
+                        : onAttemptPasteImage,
                   ),
           ),
-          if (!voiceMode) ...[
-            const SizedBox(width: 8),
-            if (emojiPicker != null)
-              emojiPicker!
-            else if (onEmoji != null)
-              _RoundIconBtn(
-                icon: secondaryIcon ?? Icons.emoji_emotions_outlined,
-                onTap: interactionLocked ? null : onEmoji,
-              ),
-            const SizedBox(width: 8),
-            Material(
-              color: Colors.transparent,
-              child: InkWell(
-                customBorder: const CircleBorder(),
-                onTap: showStop ? onStop : (interactionLocked ? null : onSend),
-                child: Ink(
-                  width: 34,
-                  height: 34,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    gradient: showStop
-                        ? const LinearGradient(
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                            colors: [Color(0xFF8A4A4A), Color(0xFF6A3333)],
-                          )
-                        : interactionLocked
-                        ? null
-                        : const LinearGradient(
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                            colors: [Color(0xFF7E64BD), Color(0xFF553B96)],
-                          ),
-                    color: interactionLocked && !showStop
-                        ? DunesColors.text3.withValues(alpha: 0.35)
-                        : null,
-                  ),
-                  child: showStop
-                      ? const Icon(
-                          Icons.stop_rounded,
-                          size: 18,
-                          color: Colors.white,
-                        )
-                      : sending
-                      ? const Padding(
-                          padding: EdgeInsets.all(8),
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        )
-                      : const Icon(
-                          Icons.arrow_upward_rounded,
-                          size: 20,
-                          color: Colors.white,
-                        ),
+          if (!effectiveVoiceMode) ...[
+            if (showEmojiControl) ...[
+              const SizedBox(width: 6),
+              if (emojiPicker != null)
+                emojiPicker!
+              else if (onEmoji != null)
+                _WeChatCircleIconBtn(
+                  icon: secondaryIcon ?? Icons.emoji_emotions_outlined,
+                  onTap: interactionLocked ? null : onEmoji,
                 ),
-              ),
+            ],
+            const SizedBox(width: 6),
+            _WeChatPlusBtn(
+              showStop: showStop,
+              sending: sending,
+              locked: interactionLocked,
+              plusOpen: plusOpen,
+              onTap: showStop
+                  ? onStop
+                  : (interactionLocked ? null : (onPlus ?? onSend)),
             ),
           ],
         ],
@@ -412,8 +408,10 @@ class ChatInputBar extends StatelessWidget {
   }
 }
 
-class _RoundIconBtn extends StatelessWidget {
-  const _RoundIconBtn({required this.icon, required this.onTap});
+/// 微信风格圆形图标按钮（语音 / 表情）。
+class _WeChatCircleIconBtn extends StatelessWidget {
+  const _WeChatCircleIconBtn({required this.icon, required this.onTap});
+
   final IconData icon;
   final VoidCallback? onTap;
 
@@ -425,9 +423,229 @@ class _RoundIconBtn extends StatelessWidget {
         customBorder: const CircleBorder(),
         onTap: onTap,
         child: SizedBox(
-          width: 34,
-          height: 34,
-          child: Icon(icon, size: 18, color: DunesColors.text2),
+          width: 36,
+          height: 36,
+          child: Icon(icon, size: 26, color: const Color(0xFF1A1A1A)),
+        ),
+      ),
+    );
+  }
+}
+
+/// 微信风格圆形「+」按钮（主题紫）。
+class _WeChatPlusBtn extends StatelessWidget {
+  const _WeChatPlusBtn({
+    required this.showStop,
+    required this.sending,
+    required this.locked,
+    required this.plusOpen,
+    required this.onTap,
+  });
+
+  final bool showStop;
+  final bool sending;
+  final bool locked;
+  final bool plusOpen;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final bg = showStop
+        ? const Color(0xFFB65252)
+        : locked
+        ? const Color(0xFFC9BEDD)
+        : (plusOpen ? const Color(0xFF553B96) : const Color(0xFF7E64BD));
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        customBorder: const CircleBorder(),
+        onTap: onTap,
+        child: Ink(
+          width: 36,
+          height: 36,
+          decoration: BoxDecoration(color: bg, shape: BoxShape.circle),
+          child: Center(
+            child: showStop
+                ? const Icon(Icons.stop_rounded, size: 18, color: Colors.white)
+                : sending
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
+                  )
+                : Icon(
+                    plusOpen ? Icons.close_rounded : Icons.add_rounded,
+                    size: 22,
+                    color: Colors.white,
+                  ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ChatTextField extends StatefulWidget {
+  const _ChatTextField({
+    required this.controller,
+    required this.focusNode,
+    required this.enabled,
+    required this.minLines,
+    required this.maxLines,
+    required this.wide,
+    required this.fieldPadV,
+    required this.hintText,
+    required this.onInputFocused,
+    required this.onSend,
+    required this.onAttemptPasteImage,
+  });
+
+  final TextEditingController controller;
+  final FocusNode? focusNode;
+  final bool enabled;
+  final int minLines;
+  final int maxLines;
+  final bool wide;
+  final double fieldPadV;
+  final String? hintText;
+  final VoidCallback? onInputFocused;
+  final VoidCallback? onSend;
+  final Future<bool> Function()? onAttemptPasteImage;
+
+  @override
+  State<_ChatTextField> createState() => _ChatTextFieldState();
+}
+
+class _ChatTextFieldState extends State<_ChatTextField> {
+  bool _handlingPaste = false;
+
+  bool _isPasteKey(KeyEvent event) {
+    if (event is! KeyDownEvent) return false;
+    if (event.logicalKey != LogicalKeyboardKey.keyV) return false;
+    return HardwareKeyboard.instance.isControlPressed ||
+        HardwareKeyboard.instance.isMetaPressed;
+  }
+
+  bool _isSendKey(KeyEvent event) {
+    if (event is! KeyDownEvent) return false;
+    if (event.logicalKey != LogicalKeyboardKey.enter &&
+        event.logicalKey != LogicalKeyboardKey.numpadEnter) {
+      return false;
+    }
+    // 宽屏：Enter 发送，Shift+Enter 换行（对齐微信 PC / admin-web）。
+    return widget.wide && !HardwareKeyboard.instance.isShiftPressed;
+  }
+
+  KeyEventResult _onKeyEvent(FocusNode node, KeyEvent event) {
+    if (_isSendKey(event)) {
+      widget.onSend?.call();
+      return KeyEventResult.handled;
+    }
+    if (!_isPasteKey(event) || widget.onAttemptPasteImage == null) {
+      return KeyEventResult.ignored;
+    }
+    if (_handlingPaste) return KeyEventResult.ignored;
+    _handlingPaste = true;
+    unawaited(() async {
+      try {
+        final handled = await widget.onAttemptPasteImage!();
+        if (handled || !mounted) return;
+        // 无图片时手动插入文本，因本事件已拦截默认粘贴。
+        final data = await Clipboard.getData(Clipboard.kTextPlain);
+        final text = data?.text;
+        if (text == null || text.isEmpty) return;
+        final value = widget.controller.value;
+        final selection = value.selection;
+        final start = selection.isValid
+            ? selection.start
+            : value.text.length;
+        final end = selection.isValid ? selection.end : value.text.length;
+        final next = value.text.replaceRange(start, end, text);
+        widget.controller.value = TextEditingValue(
+          text: next,
+          selection: TextSelection.collapsed(offset: start + text.length),
+        );
+      } finally {
+        _handlingPaste = false;
+      }
+    }());
+    return KeyEventResult.handled;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Focus(
+      onKeyEvent: _onKeyEvent,
+      child: TextField(
+        controller: widget.controller,
+        focusNode: widget.focusNode,
+        enabled: widget.enabled,
+        minLines: widget.minLines,
+        maxLines: widget.maxLines,
+        enableInteractiveSelection: true,
+        // iOS / Android：键盘右下角显示「发送」（随系统键盘语言），
+        // 宽屏仍可用 Enter 发送、Shift+Enter 换行（见 _isSendKey）。
+        textInputAction: TextInputAction.send,
+        onSubmitted: (_) => widget.onSend?.call(),
+        onTap: widget.onInputFocused,
+        contextMenuBuilder: (context, editableTextState) {
+          final value = editableTextState.textEditingValue;
+          final selection = value.selection;
+          final canInsertNewline = widget.enabled && selection.isValid;
+          return AdaptiveTextSelectionToolbar.buttonItems(
+            anchors: editableTextState.contextMenuAnchors,
+            buttonItems: <ContextMenuButtonItem>[
+              if (canInsertNewline)
+                ContextMenuButtonItem(
+                  label: '换行',
+                  onPressed: () {
+                    final start = selection.start;
+                    final end = selection.end;
+                    final next = value.text.replaceRange(start, end, '\n');
+                    widget.controller.value = TextEditingValue(
+                      text: next,
+                      selection: TextSelection.collapsed(offset: start + 1),
+                    );
+                    editableTextState.hideToolbar();
+                  },
+                ),
+              ...editableTextState.contextMenuButtonItems,
+            ],
+          );
+        },
+        style: DunesTypography.sans(
+          fontSize: widget.wide ? 15 : 16,
+          height: widget.wide ? 1.55 : 1.35,
+          color: DunesColors.text,
+        ),
+        decoration: InputDecoration(
+          hintText: widget.hintText ?? '输入消息…',
+          hintStyle: DunesTypography.sans(
+            fontSize: widget.wide ? 15 : 16,
+            color: const Color(0xFFB0B0B0),
+          ),
+          filled: true,
+          fillColor: Colors.white,
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+            borderSide: BorderSide.none,
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+            borderSide: BorderSide.none,
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+            borderSide: BorderSide.none,
+          ),
+          contentPadding: EdgeInsets.symmetric(
+            horizontal: 12,
+            vertical: widget.fieldPadV,
+          ),
+          isDense: !widget.wide,
         ),
       ),
     );
@@ -444,6 +662,7 @@ class ChatMessageRow extends StatelessWidget {
     required this.content,
     this.onLongPress,
     this.onLongPressStart,
+    this.onSecondaryTapDown,
     this.onReadTap,
     this.readTapLabel,
     this.avatar,
@@ -459,6 +678,7 @@ class ChatMessageRow extends StatelessWidget {
   final Widget content;
   final VoidCallback? onLongPress;
   final GestureLongPressStartCallback? onLongPressStart;
+  final GestureTapDownCallback? onSecondaryTapDown;
   final VoidCallback? onReadTap;
   final String? readTapLabel;
   final Widget? avatar;
@@ -479,6 +699,7 @@ class ChatMessageRow extends StatelessWidget {
       child: GestureDetector(
         onLongPress: onLongPress,
         onLongPressStart: onLongPressStart,
+        onSecondaryTapDown: onSecondaryTapDown,
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisAlignment: mine
@@ -548,45 +769,45 @@ class ChatMessageRow extends StatelessWidget {
                       ),
                     ),
                   content,
-                if (readLabel != null)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 3, right: 2),
-                    child: Text(
-                      readLabel!,
-                      style: DunesTypography.mono(
-                        fontSize: 10.5,
-                        fontWeight: FontWeight.w500,
-                        color: readLabel == '已读'
-                            ? DunesColors.readReceipt
-                            : DunesColors.text3,
-                      ),
-                    ),
-                  )
-                else if (onReadTap != null)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 3, right: 2),
-                    child: GestureDetector(
-                      onTap: onReadTap,
+                  if (readLabel != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 3, right: 2),
                       child: Text(
-                        (readTapLabel ?? '查看已读').trim(),
+                        readLabel!,
                         style: DunesTypography.mono(
                           fontSize: 10.5,
                           fontWeight: FontWeight.w500,
-                          color: (readTapLabel ?? '').trim() != '未读'
+                          color: readLabel == '已读'
                               ? DunesColors.readReceipt
                               : DunesColors.text3,
                         ),
                       ),
+                    )
+                  else if (onReadTap != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 3, right: 2),
+                      child: GestureDetector(
+                        onTap: onReadTap,
+                        child: Text(
+                          (readTapLabel ?? '查看已读').trim(),
+                          style: DunesTypography.mono(
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w500,
+                            color: (readTapLabel ?? '').trim() != '未读'
+                                ? DunesColors.readReceipt
+                                : DunesColors.text3,
+                          ),
+                        ),
+                      ),
                     ),
-                  ),
-              ],
+                ],
+              ),
             ),
-          ),
-          if (mine) ...[
-            const SizedBox(width: 8),
-            trailingAvatar ?? avatar ?? const SizedBox(width: 32),
+            if (mine) ...[
+              const SizedBox(width: 8),
+              trailingAvatar ?? avatar ?? const SizedBox(width: 32),
+            ],
           ],
-        ],
         ),
       ),
     );
@@ -636,16 +857,55 @@ class ChatTextBubble extends StatelessWidget {
       color: mine ? Colors.white : const Color(0xFF3B5BDB),
       fontWeight: FontWeight.w600,
     );
+    final linkStyle = baseStyle.copyWith(
+      color: mine ? const Color(0xFFE8DEFF) : const Color(0xFF3B5BDB),
+      decoration: TextDecoration.underline,
+      decorationColor: mine ? const Color(0xFFE8DEFF) : const Color(0xFF3B5BDB),
+    );
     final spans = <InlineSpan>[];
-    final regex = RegExp(r'@[^@\s]+');
+    // URL 优先于 @mention，避免把链接里的 @ 误高亮。
+    final tokenRe = RegExp(
+      r'(https?:\/\/\S+)|(@[^@\s]+)',
+      caseSensitive: false,
+    );
     var start = 0;
-    for (final match in regex.allMatches(text)) {
+    for (final match in tokenRe.allMatches(text)) {
       if (match.start > start) {
         spans.add(
           TextSpan(text: text.substring(start, match.start), style: baseStyle),
         );
       }
-      spans.add(TextSpan(text: match.group(0), style: mentionStyle));
+      final url = match.group(1);
+      final mention = match.group(2);
+      if (url != null && url.isNotEmpty) {
+        // 去掉尾部常见标点，避免把句号/逗号带进链接。
+        var href = url;
+        var trailing = '';
+        while (href.isNotEmpty &&
+            '.,;:!?)]》」』、'.contains(href[href.length - 1])) {
+          trailing = href[href.length - 1] + trailing;
+          href = href.substring(0, href.length - 1);
+        }
+        spans.add(
+          TextSpan(
+            text: href,
+            style: linkStyle,
+            recognizer: TapGestureRecognizer()
+              ..onTap = () {
+                final uri = Uri.tryParse(href);
+                if (uri == null) return;
+                unawaited(
+                  launchUrl(uri, mode: LaunchMode.externalApplication),
+                );
+              },
+          ),
+        );
+        if (trailing.isNotEmpty) {
+          spans.add(TextSpan(text: trailing, style: baseStyle));
+        }
+      } else if (mention != null) {
+        spans.add(TextSpan(text: mention, style: mentionStyle));
+      }
       start = match.end;
     }
     if (start < text.length) {
@@ -663,30 +923,15 @@ class ChatTextBubble extends StatelessWidget {
       constraints: const BoxConstraints(maxWidth: 280),
       padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 9),
       decoration: BoxDecoration(
-        color: mine ? null : DunesColors.bgApp,
-        gradient: mine
-            ? const LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [Color(0xFF7E64BD), Color(0xFF553B96)],
-              )
-            : null,
+        // 扁平化：己方纯色；对方浅底 + 细描边，避免与聊天背景融在一起。
+        color: mine ? const Color(0xFF7E64BD) : DunesColors.bgApp,
         border: mine ? null : Border.all(color: DunesColors.borderSoft),
         borderRadius: BorderRadius.only(
-          topLeft: Radius.circular(mine ? 16 : 4),
-          topRight: Radius.circular(mine ? 4 : 16),
-          bottomLeft: const Radius.circular(16),
-          bottomRight: const Radius.circular(16),
+          topLeft: Radius.circular(mine ? 12 : 4),
+          topRight: Radius.circular(mine ? 4 : 12),
+          bottomLeft: const Radius.circular(12),
+          bottomRight: const Radius.circular(12),
         ),
-        boxShadow: mine
-            ? const [
-                BoxShadow(
-                  color: Color(0x4D553B96),
-                  blurRadius: 10,
-                  offset: Offset(0, 2),
-                ),
-              ]
-            : null,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -696,7 +941,9 @@ class ChatTextBubble extends StatelessWidget {
             SelectableText.rich(
               _buildMentionTextSpan(),
               contextMenuBuilder: (context, editableTextState) {
-                final selected = _selectedText(editableTextState.textEditingValue);
+                final selected = _selectedText(
+                  editableTextState.textEditingValue,
+                );
                 return AdaptiveTextSelectionToolbar.buttonItems(
                   anchors: editableTextState.contextMenuAnchors,
                   buttonItems: <ContextMenuButtonItem>[
@@ -712,30 +959,30 @@ class ChatTextBubble extends StatelessWidget {
                     ContextMenuButtonItem(
                       label: '引用',
                       onPressed: () {
-                        if (selected.isNotEmpty) onSelectionQuote?.call(selected);
+                        onSelectionQuote?.call(selected);
                         editableTextState.hideToolbar();
                       },
                     ),
                     ContextMenuButtonItem(
                       label: '转发',
                       onPressed: () {
-                        if (selected.isNotEmpty) {
-                          onSelectionForward?.call(selected);
-                        }
+                        onSelectionForward?.call(selected);
                         editableTextState.hideToolbar();
                       },
                     ),
                     ContextMenuButtonItem(
                       label: '多选',
                       onPressed: () {
-                        if (selected.isNotEmpty) onSelectionMulti?.call(selected);
+                        onSelectionMulti?.call(selected);
                         editableTextState.hideToolbar();
                       },
                     ),
                     ContextMenuButtonItem(
                       label: '全选',
                       onPressed: () {
-                        editableTextState.selectAll(SelectionChangedCause.toolbar);
+                        editableTextState.selectAll(
+                          SelectionChangedCause.toolbar,
+                        );
                       },
                     ),
                     if (onSelectionRecall != null)
@@ -751,9 +998,7 @@ class ChatTextBubble extends StatelessWidget {
               },
             )
           else
-            RichText(
-              text: _buildMentionTextSpan(),
-            ),
+            RichText(text: _buildMentionTextSpan()),
           if (quote != null && !quote!.isEmpty) ...[
             const SizedBox(height: 6),
             ChatQuoteBlock(quote: quote!, mine: mine, onTap: onQuoteTap),
@@ -984,7 +1229,6 @@ class ChatSystemPill extends StatelessWidget {
         decoration: BoxDecoration(
           color: DunesColors.bgSoft,
           borderRadius: BorderRadius.circular(99),
-          border: Border.all(color: DunesColors.borderSoft),
         ),
         child: Text(
           text,
@@ -1054,16 +1298,11 @@ class _ChatVoiceBubbleState extends State<ChatVoiceBubble> {
         ),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
         decoration: BoxDecoration(
-          gradient: widget.mine
-              ? const LinearGradient(
-                  colors: [Color(0xFF7E64BD), Color(0xFF553B96)],
-                )
-              : null,
-          color: widget.mine ? null : DunesColors.bgApp,
+          color: widget.mine ? const Color(0xFF7E64BD) : DunesColors.bgApp,
           border: widget.mine
               ? null
               : Border.all(color: DunesColors.borderSoft),
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(12),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -1107,53 +1346,98 @@ class ChatFileAttach extends StatelessWidget {
     required this.fileName,
     required this.mine,
     required this.onTap,
+    this.onSecondaryTapDown,
     this.isPdf = false,
+    this.uploadProgress,
   });
 
   final String fileName;
   final bool mine;
   final VoidCallback onTap;
+  final GestureTapDownCallback? onSecondaryTapDown;
   final bool isPdf;
+  /// 0~1；非空时在图标上展示圆形上传进度。
+  final double? uploadProgress;
 
   @override
   Widget build(BuildContext context) {
+    final progress = uploadProgress;
+    final uploading = progress != null;
     return GestureDetector(
-      onTap: onTap,
+      onTap: uploading ? null : onTap,
+      onSecondaryTapDown: uploading ? null : onSecondaryTapDown,
       child: Container(
         constraints: const BoxConstraints(minWidth: 210, maxWidth: 280),
         padding: const EdgeInsets.all(11),
         decoration: BoxDecoration(
-          color: DunesColors.bgApp,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: DunesColors.borderSoft),
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(10),
         ),
         child: Row(
           children: [
-            Container(
+            SizedBox(
               width: 36,
               height: 36,
-              decoration: BoxDecoration(
-                color: DunesColors.bgSoft,
-                borderRadius: BorderRadius.circular(9),
-              ),
-              child: Icon(
-                isPdf
-                    ? Icons.picture_as_pdf_outlined
-                    : Icons.insert_drive_file_outlined,
-                size: 16,
-                color: isPdf ? DunesColors.coral : DunesColors.text2,
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  Container(
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      color: DunesColors.bgSoft,
+                      borderRadius: BorderRadius.circular(9),
+                    ),
+                    child: Icon(
+                      isPdf
+                          ? Icons.picture_as_pdf_outlined
+                          : Icons.insert_drive_file_outlined,
+                      size: 16,
+                      color: isPdf ? DunesColors.coral : DunesColors.text2,
+                    ),
+                  ),
+                  if (uploading)
+                    SizedBox(
+                      width: 36,
+                      height: 36,
+                      child: CircularProgressIndicator(
+                        value: progress > 0 && progress < 1 ? progress : null,
+                        strokeWidth: 2.5,
+                        color: const Color(0xFF7E64BD),
+                        backgroundColor: Colors.white54,
+                      ),
+                    ),
+                ],
               ),
             ),
             const SizedBox(width: 11),
             Expanded(
-              child: Text(
-                fileName,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: DunesTypography.sans(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w500,
-                ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    fileName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: DunesTypography.sans(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  if (uploading) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      progress > 0
+                          ? '上传中 ${(progress * 100).round()}%'
+                          : '上传中…',
+                      style: DunesTypography.sans(
+                        fontSize: 11,
+                        color: DunesColors.text3,
+                      ),
+                    ),
+                  ],
+                ],
               ),
             ),
           ],
@@ -1188,8 +1472,8 @@ class ChatPersonAvatar extends StatelessWidget {
           height: size,
           alignment: Alignment.center,
           decoration: BoxDecoration(
-            gradient: LinearGradient(colors: style.gradient),
-            borderRadius: BorderRadius.circular(size / 2),
+            color: style.gradient.first,
+            borderRadius: BorderRadius.circular(size * 0.18),
           ),
           child: Text(
             initial.isEmpty ? '?' : initial,

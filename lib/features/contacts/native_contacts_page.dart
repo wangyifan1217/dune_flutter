@@ -45,6 +45,8 @@ class _NativeContactsPageState extends State<NativeContactsPage> {
   int _total = 0;
   List<NativeDepartment> _departments = const <NativeDepartment>[];
   List<NativeContact> _searchItems = const <NativeContact>[];
+  List<NativeContact> _externalContacts = const <NativeContact>[];
+  int _externalTotal = 0;
   Set<int> _onlineUsers = <int>{};
 
   @override
@@ -81,14 +83,18 @@ class _NativeContactsPageState extends State<NativeContactsPage> {
       _error = null;
     });
     try {
-      final data = await _service.fetchOrgContacts(
-        keyword: _searchController.text,
-      );
+      final keyword = _searchController.text;
+      final data = await _service.fetchOrgContacts(keyword: keyword);
+      final external = keyword.trim().isEmpty
+          ? await _service.fetchExternalContacts()
+          : await _service.fetchExternalContacts(keyword: keyword);
       if (!mounted) return;
       setState(() {
         _total = data.total;
         _departments = data.departments;
         _searchItems = data.searchItems;
+        _externalContacts = external;
+        _externalTotal = external.length;
         _loading = false;
       });
     } catch (e) {
@@ -301,6 +307,26 @@ class _NativeContactsPageState extends State<NativeContactsPage> {
                     .toList(),
               ),
             ),
+          if (!searching && _externalContacts.isNotEmpty) ...[
+            ExternalSectionLabel(total: _externalTotal),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              child: Column(
+                children: _externalContacts
+                    .map(
+                      (c) => ContactRowTile(
+                        contact: c,
+                        currentUserId: widget.session.userId,
+                        showOnline: _onlineUsers.contains(c.userId),
+                        onOpenProfile: () => widget.onOpenContact(c),
+                        onMessage: () => _startPrivateChat(c),
+                        avatarService: _convService,
+                      ),
+                    )
+                    .toList(),
+              ),
+            ),
+          ],
         ],
       ),
     );

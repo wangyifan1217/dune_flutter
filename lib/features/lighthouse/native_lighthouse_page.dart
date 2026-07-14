@@ -99,6 +99,30 @@ extension _LhAnchorX on _LhAnchor {
   String get labelEn => this == _LhAnchor.verified ? 'VERIFIED' : 'GROSS';
 }
 
+// ═════════════════════════════════════════════════════════════════════════════
+// 淡紫编辑体调色板 (Plum Editorial Palette) — v2 重设计
+// 与《会议纪要》/《沙丘 · 我的》页对齐的重设计色板。
+// 保留 LhColors 中的中性色（ink / mute / line / cream / paper），
+// 替换所有 copper 系为 plum 系。逐层平移，语义色留到第 3 层再统一处理。
+// ═════════════════════════════════════════════════════════════════════════════
+class _LhPlum {
+  _LhPlum._();
+
+  // Hero — 深紫（顶部胶囊卡底色、CTA、语义锚点色）
+  static const Color deep = Color(0xFF524783); // 深紫墨 (hero card 底色)
+  static const Color ink = Color(0xFF5D4E8B); // 主紫墨 (品牌字重色 · 语义锚点)
+
+  // Primary — 主紫（icon / accent / active tab underline）
+  static const Color primary = Color(0xFF8B7BC4); // 主紫 (icon / active)
+  static const Color soft = Color(0xFFB5AAD5); // 柔紫 (secondary accent)
+
+  // Surface — 面（卡片背景 / 徽章底）
+  static const Color lavender = Color(0xFFEDE7F5); // 淡紫 (卡片背景 · badge 底)
+  static const Color mist = Color(0xFFF5F2FA); // 雾紫 (section bg · hover)
+
+  // 状态色不动，沿用 LhColors.pos / neg 中性
+}
+
 // Hero 语义色：核销规模 / 已核销利差 全页统一
 const String _kHeroTermVerifiedScale = '核销规模';
 const String _kHeroTermVerifiedSpread = '已核销利差';
@@ -275,7 +299,6 @@ class _LhBiz {
     final profit = (row['profit'] as num?)?.toDouble() ?? 0;
     return profit / anchor * 100;
   }
-
 }
 
 // Hero metric cell definitions per tab
@@ -319,13 +342,13 @@ class _HunInfo {
 Color _lhColorFromKey(String? key) {
   switch (key) {
     case 'pos':
-      return LhColors.pos;
-    case 'neg':
       return LhColors.neg;
+    case 'neg':
+      return LhColors.pos;
     case 'product':
       return LhColors.product;
     case 'copper':
-      return LhColors.copper;
+      return _LhPlum.primary;
     case 'cnpc':
       return LhColors.cnpc;
     case 'pingan':
@@ -616,13 +639,13 @@ String _fmtPermille(double? r) {
   }
 }
 
-// period bar / 趋势卡标题（纯 UI 文案，非业务数据）
+// period bar / 趋势卡标题（纯 UI 文案，非业务数据；跟随日周月季年，无环比上月）
 const _kPeriodTitle = {
-  'day': '环比上月',
-  'week': '近 5 周走势',
-  'month': '近 7 日走势',
-  'quarter': '近 7 日走势',
-  'year': '近 7 日走势',
+  'day': '近 7 日走势',
+  'week': '近 7 周走势',
+  'month': '近 7 个月走势',
+  'quarter': '近 7 个月走势',
+  'year': '近 7 个月走势',
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -732,7 +755,7 @@ class _DiscountRow {
 Color _discountTypeColor(_DiscountRow r) {
   switch (r.ruleType) {
     case '固定':
-      return LhColors.copper;
+      return _LhPlum.primary;
     case '月阶梯':
       return LhColors.cnpc;
     case '年阶梯':
@@ -793,6 +816,260 @@ _TrendBounds _computeBounds(_TrendSeries s) {
   );
 }
 
+// ═════════════════════════════════════════════════════════════════════════════
+// 平滑折线 helper (v2.8 · Chart smoothing)
+//   把点序 → cubic bezier path,用 Catmull-Rom → Bezier 换算。tension=1.0 等价
+//   uniform Catmull-Rom;每段控制点 = 邻居的 1/6 位差。端点镜像自身避开端头翘尾。
+//   替换掉此前 `path.lineTo` 的尖角折线,给"编辑体财报"折线一个自然呼吸。
+// ═════════════════════════════════════════════════════════════════════════════
+void _addSmoothPath(Path path, List<Offset> points, {double tension = 1.0}) {
+  final n = points.length;
+  if (n == 0) return;
+  path.moveTo(points[0].dx, points[0].dy);
+  if (n == 1) return;
+  if (n == 2) {
+    path.lineTo(points[1].dx, points[1].dy);
+    return;
+  }
+  final t = tension / 6.0;
+  for (int i = 0; i < n - 1; i++) {
+    final p0 = points[i == 0 ? 0 : i - 1];
+    final p1 = points[i];
+    final p2 = points[i + 1];
+    final p3 = points[i + 2 < n ? i + 2 : n - 1];
+    final c1x = p1.dx + (p2.dx - p0.dx) * t;
+    final c1y = p1.dy + (p2.dy - p0.dy) * t;
+    final c2x = p2.dx - (p3.dx - p1.dx) * t;
+    final c2y = p2.dy - (p3.dy - p1.dy) * t;
+    path.cubicTo(c1x, c1y, c2x, c2y, p2.dx, p2.dy);
+  }
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// _LhAurora · Hero 淡紫极光底层 (v2.9)
+//   双层 RadialGradient 交叠,右上主紫入射光 + 左下深紫墨 grounding,
+//   给雾紫 mist canvas 加"能量源"深度感。alpha 都极淡 (≤40/255),
+//   不抢 typography 层级,只是让 hero 从"扁平雾底"变成"有光的空间"。
+//   静态无动画,零耗电。IgnorePointer 永不吃事件。
+// ═════════════════════════════════════════════════════════════════════════════
+class _LhAurora extends StatelessWidget {
+  const _LhAurora();
+
+  @override
+  Widget build(BuildContext context) {
+    return Positioned.fill(
+      child: IgnorePointer(
+        child: Stack(
+          children: [
+            // 层 1: 右上主紫入射光 (primary, "光从右上照进来")
+            Positioned.fill(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: RadialGradient(
+                    center: const Alignment(0.95, -0.85),
+                    radius: 1.2,
+                    colors: [
+                      _LhPlum.primary.withAlpha(38),
+                      _LhPlum.primary.withAlpha(0),
+                    ],
+                    stops: const [0.0, 0.7],
+                  ),
+                ),
+              ),
+            ),
+            // 层 2: 左下深紫墨光晕 (deep, grounding)
+            Positioned.fill(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: RadialGradient(
+                    center: const Alignment(-0.9, 1.0),
+                    radius: 0.95,
+                    colors: [
+                      _LhPlum.deep.withAlpha(26),
+                      _LhPlum.deep.withAlpha(0),
+                    ],
+                    stops: const [0.0, 0.75],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// _LhPulseDot · 呼吸扩散圆点 (v2.9)
+//   核心实心圆 (size) + 外围呼吸环 (0 → size·2.4 扩散,alpha 90→0 淡出)
+//   周期 1600ms,easeOut。表意"数据实时/活体"—— 跟 Twitter live / Bloomberg
+//   terminal 的 live indicator 一个语言。淡紫色,不打扰但有生命。
+// ═════════════════════════════════════════════════════════════════════════════
+class _LhPulseDot extends StatefulWidget {
+  const _LhPulseDot({
+    required this.color,
+    this.size = 5,
+    this.period = const Duration(milliseconds: 1600),
+  });
+  final Color color;
+  final double size;
+  final Duration period;
+
+  @override
+  State<_LhPulseDot> createState() => _LhPulseDotState();
+}
+
+class _LhPulseDotState extends State<_LhPulseDot>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _c;
+
+  @override
+  void initState() {
+    super.initState();
+    _c = AnimationController(vsync: this, duration: widget.period)..repeat();
+  }
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ringMax = widget.size * 2.4;
+    return SizedBox(
+      width: ringMax,
+      height: ringMax,
+      child: AnimatedBuilder(
+        animation: _c,
+        builder: (ctx, _) {
+          // easeOut: 快速扩散,末端缓和
+          final t = Curves.easeOutCubic.transform(_c.value);
+          final ringSize = widget.size + (ringMax - widget.size) * t;
+          final ringAlpha = ((1.0 - t) * 90).round().clamp(0, 255);
+          return Stack(
+            alignment: Alignment.center,
+            children: [
+              // 呼吸环
+              Container(
+                width: ringSize,
+                height: ringSize,
+                decoration: BoxDecoration(
+                  color: widget.color.withAlpha(ringAlpha),
+                  shape: BoxShape.circle,
+                ),
+              ),
+              // 核心实心圆 + 微弱 glow
+              Container(
+                width: widget.size,
+                height: widget.size,
+                decoration: BoxDecoration(
+                  color: widget.color,
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: widget.color.withAlpha(120),
+                      blurRadius: 3,
+                      spreadRadius: 0.5,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// _LhAnimatedNumber · 数字 count-up 动画 (v2.9)
+//   切换 period/tab/anchor 时,数字从上一个显示值 tween 到新值,
+//   easeOutQuart 曲线 · 900ms · 给"数据正在计算"的科技感。
+//   builder(ctx, currentValue) 允许调用方自定义格式化 + 单位组合。
+//   didUpdateWidget 里以当前 tween 位置作为下一段起点,
+//   避免用户连续切换时的"回弹"感。
+// ═════════════════════════════════════════════════════════════════════════════
+class _LhAnimatedNumber extends StatefulWidget {
+  const _LhAnimatedNumber({
+    required this.value,
+    required this.builder,
+    this.duration = const Duration(milliseconds: 900),
+    this.curve = Curves.easeOutQuart,
+    this.immediate = false,
+  });
+  final double value;
+  final Widget Function(BuildContext, double) builder;
+  final Duration duration;
+  final Curve curve;
+  /// true 时数字直接显示,不 tween。用于高频 setState 场景 (如拖动选点),
+  /// 避免 tween 追着手指跑造成"永远在追赶"的观感。
+  final bool immediate;
+
+  @override
+  State<_LhAnimatedNumber> createState() => _LhAnimatedNumberState();
+}
+
+class _LhAnimatedNumberState extends State<_LhAnimatedNumber>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _c;
+  late double _from;
+  late double _to;
+
+  @override
+  void initState() {
+    super.initState();
+    _from = widget.value;
+    _to = widget.value;
+    _c = AnimationController(vsync: this, duration: widget.duration)
+      ..value = 1.0;
+  }
+
+  @override
+  void didUpdateWidget(_LhAnimatedNumber old) {
+    super.didUpdateWidget(old);
+    if (old.value != widget.value) {
+      if (widget.immediate) {
+        _from = widget.value;
+        _to = widget.value;
+        _c.value = 1.0;
+        return;
+      }
+      // 用当前 tween 位置作为起点,避免连续切换回弹
+      final curved = widget.curve.transform(_c.value);
+      _from = _from + (_to - _from) * curved;
+      _to = widget.value;
+      _c
+        ..duration = widget.duration
+        ..forward(from: 0);
+    }
+  }
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (widget.immediate) {
+      return widget.builder(context, widget.value);
+    }
+    return AnimatedBuilder(
+      animation: _c,
+      builder: (ctx, _) {
+        final t = widget.curve.transform(_c.value);
+        final v = _from + (_to - _from) * t;
+        return widget.builder(ctx, v);
+      },
+    );
+  }
+}
+
 // ── Lines painter (heavy, but RepaintBoundary'd; only repaints on data change) ─
 class _TrendLinesPainter extends CustomPainter {
   const _TrendLinesPainter({
@@ -819,9 +1096,9 @@ class _TrendLinesPainter extends CustomPainter {
     double yOf(double v, _SeriesRange r) =>
         padTop + (r.max - v) / r.span * usableH;
 
-    // 水平网格 4 条 (chart 高度等分,独立于数据)
+    // v2.8 · 水平网格 3 档淡紫 hairline(原 4 条中性灰),更薄更冷,不抢线
     final gridPaint = Paint()
-      ..color = LhColors.line2
+      ..color = _LhPlum.lavender
       ..strokeWidth = 0.5
       ..style = PaintingStyle.stroke;
     for (int i = 0; i <= 3; i++) {
@@ -829,26 +1106,95 @@ class _TrendLinesPainter extends CustomPainter {
       canvas.drawLine(Offset(0, y), Offset(size.width, y), gridPaint);
     }
 
-    void drawLine(List<double> pts, Color color, _SeriesRange range) {
+    // v2.10 · 主线 (收入) 下方渐变 fill area —— 深紫 α38 → 0,让主线有"体积/支撑"
+    void drawFillArea(List<double> pts, Color color, _SeriesRange range) {
       if (pts.length < 2) return;
-      final path = Path()..moveTo(xOf(0), yOf(pts[0], range));
-      for (int i = 1; i < pts.length; i++) {
-        path.lineTo(xOf(i), yOf(pts[i], range));
-      }
+      final offsets = <Offset>[
+        for (int i = 0; i < pts.length; i++) Offset(xOf(i), yOf(pts[i], range)),
+      ];
+      final path = Path();
+      _addSmoothPath(path, offsets);
+      final baselineY = padTop + usableH;
+      path.lineTo(offsets.last.dx, baselineY);
+      path.lineTo(offsets.first.dx, baselineY);
+      path.close();
+      final rect = Rect.fromLTWH(0, padTop, size.width, usableH);
+      canvas.drawPath(
+        path,
+        Paint()
+          ..shader = LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [color.withAlpha(38), color.withAlpha(0)],
+          ).createShader(rect)
+          ..style = PaintingStyle.fill,
+      );
+    }
+
+    // v2.8 · Catmull-Rom 平滑 + 差异化粗细:收入 1.8px(主线)、成本/毛利 1.4px(副)
+    void drawLine(
+      List<double> pts,
+      Color color,
+      _SeriesRange range, {
+      double strokeWidth = 1.4,
+    }) {
+      if (pts.length < 2) return;
+      final offsets = <Offset>[
+        for (int i = 0; i < pts.length; i++) Offset(xOf(i), yOf(pts[i], range)),
+      ];
+      final path = Path();
+      _addSmoothPath(path, offsets);
       canvas.drawPath(
         path,
         Paint()
           ..color = color
-          ..strokeWidth = 1.6
+          ..strokeWidth = strokeWidth
           ..style = PaintingStyle.stroke
           ..strokeCap = StrokeCap.round
           ..strokeJoin = StrokeJoin.round,
       );
     }
 
-    drawLine(series.revenue, colors[0], bounds.revenue);
+    // v2.10 · 数据点小空心圆(仅少点 pts.length ≤ 10 时画,避免密集图拥挤)
+    void drawDataDots(List<double> pts, Color color, _SeriesRange range) {
+      if (pts.length < 2 || pts.length > 10) return;
+      final fillWhite = Paint()..color = Colors.white;
+      final strokePaint = Paint()
+        ..color = color
+        ..strokeWidth = 1.0
+        ..style = PaintingStyle.stroke;
+      for (int i = 0; i < pts.length; i++) {
+        final o = Offset(xOf(i), yOf(pts[i], range));
+        canvas.drawCircle(o, 1.8, fillWhite);
+        canvas.drawCircle(o, 1.8, strokePaint);
+      }
+    }
+
+    // v2.10 · 末端 today halo dot —— 每条线尾端"当前值"锚点,跟 hero 大图一致
+    void drawEndDot(List<double> pts, Color color, _SeriesRange range) {
+      if (pts.isEmpty) return;
+      final i = pts.length - 1;
+      final o = Offset(xOf(i), yOf(pts[i], range));
+      // 外层 halo (color α40)
+      canvas.drawCircle(o, 5.0, Paint()..color = color.withAlpha(40));
+      // 白 halo
+      canvas.drawCircle(o, 3.4, Paint()..color = Colors.white);
+      // 实心 dot
+      canvas.drawCircle(o, 2.4, Paint()..color = color);
+    }
+
+    // 绘制顺序:fill area 垫底 → 副线(成本/毛利) → 主线(收入)
+    // → 数据点小圆(所有线) → 末端 today dot(所有线)
+    drawFillArea(series.revenue, colors[0], bounds.revenue);
     drawLine(series.cost, colors[1], bounds.cost);
     drawLine(series.profit, colors[2], bounds.profit);
+    drawLine(series.revenue, colors[0], bounds.revenue, strokeWidth: 1.8);
+    drawDataDots(series.cost, colors[1], bounds.cost);
+    drawDataDots(series.profit, colors[2], bounds.profit);
+    drawDataDots(series.revenue, colors[0], bounds.revenue);
+    drawEndDot(series.cost, colors[1], bounds.cost);
+    drawEndDot(series.profit, colors[2], bounds.profit);
+    drawEndDot(series.revenue, colors[0], bounds.revenue);
   }
 
   @override
@@ -891,8 +1237,9 @@ class _TrendOverlayPainter extends CustomPainter {
     double yOf(double v, _SeriesRange r) =>
         padTop + (r.max - v) / r.span * usableH;
 
+    // v2.10 · 竖 crosshair 换深紫墨 (原 ink2 中性灰)
     final dashPaint = Paint()
-      ..color = LhColors.ink2.withAlpha(140)
+      ..color = _LhPlum.deep.withAlpha(150)
       ..strokeWidth = 0.9
       ..style = PaintingStyle.stroke;
     const dashH = 3.0;
@@ -908,8 +1255,10 @@ class _TrendOverlayPainter extends CustomPainter {
       y += dashH + dashGap;
     }
 
+    // v2.10 · 三层 marker:外 halo (色 α45) + 白 halo + 描边 + 内实心
     void marker(double v, Color color, _SeriesRange range) {
       final cy = yOf(v, range);
+      canvas.drawCircle(Offset(x, cy), 6.0, Paint()..color = color.withAlpha(45));
       canvas.drawCircle(Offset(x, cy), 4.0, Paint()..color = Colors.white);
       canvas.drawCircle(
         Offset(x, cy),
@@ -922,9 +1271,9 @@ class _TrendOverlayPainter extends CustomPainter {
       canvas.drawCircle(Offset(x, cy), 1.8, Paint()..color = color);
     }
 
-    marker(series.revenue[si], colors[0], bounds.revenue);
     marker(series.cost[si], colors[1], bounds.cost);
     marker(series.profit[si], colors[2], bounds.profit);
+    marker(series.revenue[si], colors[0], bounds.revenue);
   }
 
   @override
@@ -1020,8 +1369,9 @@ class _LhBigTrendPainter extends CustomPainter {
     this.xLabels,
     this.compareData,
     this.compareColor,
-    this.axisTextColor = const Color(0xFF9E988E),
-    this.gridColor = const Color(0xFFE1DBCC),
+    // v2.8 · 默认参数改冷紫系(此前暖调 0xFF9E988E / 0xFFE1DBCC 是 v1 编辑体铜纸墨遗留)
+    this.axisTextColor = const Color(0xFF9995AA),
+    this.gridColor = const Color(0xFFEDE7F5), // = _LhPlum.lavender
   });
 
   final List<double> data; // 数据序列(按时间正序)
@@ -1046,16 +1396,16 @@ class _LhBigTrendPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     if (data.length < 2) return;
 
-    // ═════ 科研论文风配色 (暖米底 + ink 主轴 + copper 提案) ═════════
-    // 跟 hero 外部 sheet 底色 (LhColors.paper) 无缝连接, 不再有"独立仪表"感.
-    // ink 深色轴, copper accent, 无 gradient 无 tint block, 让"数据点自己说话".
-    final paperWhite = LhColors.paper;    // sheet 同色暖米底
-    const axisInk = Color(0xFF3D3A34);    // ink2 深灰 (坐标轴)
-    const axisMute = Color(0xFF9E988E);   // mute2 灰 (副 tick, 刻度值)
-    const gridSoft = Color(0xFFEDE7D8);   // 极淡纸色 (水平参考线)
-    const copperMain = Color(0xFFB8763A); // copper (提案线)
-    const negMain = Color(0xFFB4443D);    // neg (违背阈值线)
-    final lineColor = color;               // 主线 (通常 ink 或 copper, 外部传入)
+    // ═════ v2.8 · 紫编辑体配色 (白底 + ink 主轴 + plum accent) ═════════
+    // v1 编辑体铜纸墨已 sunset,底色跟 sheet(现在是白 or _LhPlum.mist) 无缝连接,
+    // 深紫墨 accent 替代 copper,让"数据点自己说话"—— 无 gradient 无 tint block.
+    const paperWhite = Colors.white; // 白底,对齐 v2.6 页面白
+    const axisInk = Color(0xFF3D3A34); // ink2 深灰 (坐标轴保留中性)
+    const axisMute = Color(0xFF9995AA); // 冷紫灰 (副 tick, 刻度值)
+    const gridSoft = Color(0xFFEDE7F5); // = _LhPlum.lavender (水平参考线)
+    const plumMain = Color(0xFF8B7BC4); // = _LhPlum.primary (提案基线 accent)
+    const negMain = Color(0xFFB4443D); // neg (违背阈值线,保留业务语义)
+    final lineColor = color; // 主线 (通常 _LhPlum.deep 或 primary, 外部传入)
 
     // ─── 1. 白底铺满 ───────────────────────────────
     canvas.drawRect(
@@ -1088,7 +1438,7 @@ class _LhBigTrendPainter extends CustomPainter {
     maxV += valPad;
     final valRange = (maxV - minV).abs() < 1e-9 ? 1.0 : (maxV - minV);
 
-    const padLeft = 38.0;   // Y 轴数值区
+    const padLeft = 38.0; // Y 轴数值区
     const padRight = 10.0;
     const padTop = 12.0;
     const padBottom = 22.0; // x 轴刻度区
@@ -1134,10 +1484,7 @@ class _LhBigTrendPainter extends CustomPainter {
         ),
         textDirection: TextDirection.ltr,
       )..layout();
-      tp.paint(
-        canvas,
-        Offset(padLeft - 5 - tp.width, y - tp.height / 2),
-      );
+      tp.paint(canvas, Offset(padLeft - 5 - tp.width, y - tp.height / 2));
     }
 
     // ─── 5. 提案基线 + ±20% 违背阈值线 ─────────────
@@ -1146,7 +1493,7 @@ class _LhBigTrendPainter extends CustomPainter {
       final absEx = ex.abs() < 1e-9 ? 1.0 : ex.abs();
       final ub = ex + absEx * breachPct / 100;
       final lb = ex - absEx * breachPct / 100;
-      final expColor = expectedColor ?? copperMain;
+      final expColor = expectedColor ?? plumMain;
 
       // 提案主线 (稍粗虚线)
       _drawDashedLine(
@@ -1207,16 +1554,17 @@ class _LhBigTrendPainter extends CustomPainter {
       }
     }
 
-    // ─── 6. 主折线 (1.4px, 圆角连接, 简洁) ─────────
-    final path = Path()..moveTo(xOf(0), yOf(data[0]));
-    for (int i = 1; i < data.length; i++) {
-      path.lineTo(xOf(i), yOf(data[i]));
-    }
+    // ─── 6. 主折线 (v2.8 · Catmull-Rom 平滑, 1.6px 更 hero 感) ─
+    final mainOffsets = <Offset>[
+      for (int i = 0; i < data.length; i++) Offset(xOf(i), yOf(data[i])),
+    ];
+    final path = Path();
+    _addSmoothPath(path, mainOffsets);
     canvas.drawPath(
       path,
       Paint()
         ..color = lineColor
-        ..strokeWidth = 1.4
+        ..strokeWidth = 1.6
         ..style = PaintingStyle.stroke
         ..strokeCap = StrokeCap.round
         ..strokeJoin = StrokeJoin.round,
@@ -1261,8 +1609,8 @@ class _LhBigTrendPainter extends CustomPainter {
           solid = true;
           radius = 2.6;
         } else if (absDev > warnPct) {
-          dotStroke = copperMain;
-          dotFill = copperMain;
+          dotStroke = plumMain;
+          dotFill = plumMain;
           solid = true;
           radius = 2.3;
         }
@@ -1330,11 +1678,7 @@ class _LhBigTrendPainter extends CustomPainter {
     );
     for (int i = 0; i < yTicks.length; i++) {
       final y = yOf(yTicks[i]);
-      canvas.drawLine(
-        Offset(padLeft - 3, y),
-        Offset(padLeft, y),
-        axisPaint,
-      );
+      canvas.drawLine(Offset(padLeft - 3, y), Offset(padLeft, y), axisPaint);
     }
 
     // ─── 10. X 轴主轴 + 每周 tick ─────────────────
@@ -1422,7 +1766,6 @@ class _LhBigTrendPainter extends CustomPainter {
       travelled += dashW + gapW;
     }
   }
-
 
   /// Y 轴数值格式化: 比率类 → X.XX%, 金额 → 保留 2 位有效 + 万/亿 后缀
   String _formatAxisValue(double v) {
@@ -1721,7 +2064,7 @@ class _MetaCompareStageState extends State<_MetaCompareStage> {
                 onTap: () => _tapHeader(m.key),
                 child: Container(
                   color: _sortKey == m.key
-                      ? LhColors.copper.withAlpha(18)
+                      ? _LhPlum.primary.withAlpha(18)
                       : Colors.transparent,
                   alignment: Alignment.centerRight,
                   padding: const EdgeInsets.only(right: 6),
@@ -1734,7 +2077,7 @@ class _MetaCompareStageState extends State<_MetaCompareStage> {
                         style: LhTypography.mono(
                           size: 9,
                           color: _sortKey == m.key
-                              ? LhColors.copper
+                              ? _LhPlum.primary
                               : LhColors.mute2,
                           weight: FontWeight.w700,
                           letterSpacing: 0.5,
@@ -1746,7 +2089,7 @@ class _MetaCompareStageState extends State<_MetaCompareStage> {
                           _sortDesc ? '↓' : '↑',
                           style: LhTypography.mono(
                             size: 8.5,
-                            color: LhColors.copper,
+                            color: _LhPlum.primary,
                             weight: FontWeight.w700,
                           ),
                         ),
@@ -1784,7 +2127,7 @@ class _MetaCompareStageState extends State<_MetaCompareStage> {
               (i + 1).toString().padLeft(2, '0'),
               style: LhTypography.mono(
                 size: 10.5,
-                color: isTop3 ? LhColors.copper : LhColors.mute2,
+                color: isTop3 ? _LhPlum.primary : LhColors.mute2,
                 weight: isTop3 ? FontWeight.w700 : FontWeight.w500,
                 letterSpacing: 0.2,
               ),
@@ -1828,7 +2171,7 @@ class _MetaCompareStageState extends State<_MetaCompareStage> {
               width: metricW,
               child: Container(
                 color: _sortKey == m.key
-                    ? LhColors.copper.withAlpha(10)
+                    ? _LhPlum.primary.withAlpha(10)
                     : Colors.transparent,
                 alignment: Alignment.centerRight,
                 padding: const EdgeInsets.only(right: 6),
@@ -1847,7 +2190,7 @@ class _MetaCompareStageState extends State<_MetaCompareStage> {
         '${v.toStringAsFixed(1)}%',
         style: LhTypography.mono(
           size: 10.5,
-          color: isNeg ? LhColors.neg : LhColors.ink,
+          color: isNeg ? LhColors.pos : LhColors.ink,
           weight: FontWeight.w600,
         ),
       );
@@ -1860,7 +2203,7 @@ class _MetaCompareStageState extends State<_MetaCompareStage> {
             text: '${isNeg ? "-" : ""}${_fmt(v.abs())}',
             style: LhTypography.mono(
               size: 10.5,
-              color: isNeg ? LhColors.neg : LhColors.ink,
+              color: isNeg ? LhColors.pos : LhColors.ink,
               weight: FontWeight.w600,
             ),
           ),
@@ -1910,9 +2253,11 @@ class _TrendChart extends StatefulWidget {
 
 class _TrendChartState extends State<_TrendChart> {
   static const double _kChartPadH = 6.0;
-  static const Color _cRev = LhColors.product;
-  static const Color _cCost = LhColors.neg;
-  static const Color _cProf = LhColors.pos;
+  // v2.8 · 紫编辑体单色系:三条线用深/主/柔三档紫,靠深浅+粗细区分,不再借 pos/neg 语义色。
+  // 收入 = deep(最重要,顶层),成本 = primary(中),毛利 = soft(浅)。
+  static const Color _cRev = _LhPlum.deep;
+  static const Color _cCost = _LhPlum.primary;
+  static const Color _cProf = _LhPlum.soft;
   static const List<Color> _kColors = [_cRev, _cCost, _cProf];
 
   int? _selectedIndex;
@@ -2000,15 +2345,30 @@ class _TrendChartState extends State<_TrendChart> {
     widget.onInteractionChanged?.call(active);
   }
 
-  Widget _legendChip(String label, double value, Color color) {
+  Widget _legendChip(String label, double value, Color color, bool isSelected) {
     final isNeg = value < 0;
+    final absVal = value.abs();
+    final valueColor = isNeg ? LhColors.pos : LhColors.ink2;
+    // v2.10 · 数字 count-up;拖动态 (isSelected=true) immediate 直接显示,
+    //         避免每帧 tween 追手指。合计态切换时 900ms 滑动到位。
     return Row(
       mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         Container(
           width: 5,
           height: 5,
-          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+          decoration: BoxDecoration(
+            color: color,
+            shape: BoxShape.circle,
+            boxShadow: [
+              BoxShadow(
+                color: color.withAlpha(90),
+                blurRadius: 2,
+                spreadRadius: 0.5,
+              ),
+            ],
+          ),
         ),
         const SizedBox(width: 4),
         Text(
@@ -2021,30 +2381,36 @@ class _TrendChartState extends State<_TrendChart> {
           ),
         ),
         const SizedBox(width: 3),
-        RichText(
-          text: TextSpan(
+        if (isNeg)
+          Text(
+            '-',
+            style: LhTypography.sans(
+              size: 10,
+              weight: FontWeight.w600,
+              color: LhColors.pos,
+              letterSpacing: -0.1,
+            ),
+          ),
+        _LhAnimatedNumber(
+          value: absVal,
+          immediate: isSelected,
+          duration: const Duration(milliseconds: 700),
+          builder: (ctx, v) => Row(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.baseline,
+            textBaseline: TextBaseline.alphabetic,
             children: [
-              if (isNeg)
-                TextSpan(
-                  text: '-',
-                  style: LhTypography.sans(
-                    size: 10,
-                    weight: FontWeight.w600,
-                    color: LhColors.neg,
-                    letterSpacing: -0.1,
-                  ),
-                ),
-              TextSpan(
-                text: _fmt(value.abs()),
+              Text(
+                _fmt(v),
                 style: LhTypography.sans(
                   size: 10,
                   weight: FontWeight.w600,
-                  color: isNeg ? LhColors.neg : LhColors.ink2,
+                  color: valueColor,
                   letterSpacing: -0.1,
                 ),
               ),
-              TextSpan(
-                text: _unit(value.abs()),
+              Text(
+                _unit(v),
                 style: LhTypography.mono(
                   size: 8,
                   color: LhColors.mute,
@@ -2102,9 +2468,9 @@ class _TrendChartState extends State<_TrendChart> {
             runSpacing: 3,
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              _legendChip('收入', rVal, _cRev),
-              _legendChip('成本', cVal, _cCost),
-              _legendChip('毛利', pVal, _cProf),
+              _legendChip('收入', rVal, _cRev, isSelected),
+              _legendChip('成本', cVal, _cCost, isSelected),
+              _legendChip('毛利', pVal, _cProf, isSelected),
             ],
           ),
         ),
@@ -2447,17 +2813,24 @@ class _HeroMetricTrendChartState extends State<_HeroMetricTrendChart> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        // v2.8 · header 卡对齐 v2 紫气泡系统:白→mist 竖向渐变 + lavender hairline + 深紫墨影
         Container(
           padding: const EdgeInsets.fromLTRB(12, 11, 12, 11),
           decoration: BoxDecoration(
-            color: LhColors.paper,
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: LhColors.line2, width: 0.8),
-            boxShadow: const [
+            gradient: const LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [Colors.white, _LhPlum.mist],
+              stops: [0.0, 1.0],
+            ),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: _LhPlum.lavender, width: 1),
+            boxShadow: [
               BoxShadow(
-                color: Color(0x0E140A00),
-                blurRadius: 8,
-                offset: Offset(0, 2),
+                color: _LhPlum.deep.withAlpha(20),
+                blurRadius: 14,
+                spreadRadius: -4,
+                offset: const Offset(0, 4),
               ),
             ],
           ),
@@ -2487,7 +2860,7 @@ class _HeroMetricTrendChartState extends State<_HeroMetricTrendChart> {
                           decoration: BoxDecoration(
                             color: isSelected
                                 ? widget.color.withAlpha(24)
-                                : LhColors.cream,
+                                : _LhPlum.mist,
                             borderRadius: BorderRadius.circular(999),
                             border: Border.all(
                               color: isSelected
@@ -2506,15 +2879,23 @@ class _HeroMetricTrendChartState extends State<_HeroMetricTrendChart> {
                             ),
                           ),
                         ),
-                        const Spacer(),
-                        if (isSelected)
+                        // 公式内联 (本期合计右边, 科研论文式): ≡ 收入 ÷ 核销规模 × 100%
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: _buildFormulaInline(
+                            widget.metricLabel,
+                            widget.color,
+                          ),
+                        ),
+                        if (isSelected) ...[
+                          const SizedBox(width: 8),
                           GestureDetector(
                             behavior: HitTestBehavior.opaque,
                             onTap: _clearSelection,
                             child: Container(
                               padding: const EdgeInsets.all(4),
                               decoration: BoxDecoration(
-                                color: LhColors.cream,
+                                color: _LhPlum.mist,
                                 borderRadius: BorderRadius.circular(999),
                                 border: Border.all(
                                   color: LhColors.line2,
@@ -2528,6 +2909,7 @@ class _HeroMetricTrendChartState extends State<_HeroMetricTrendChart> {
                               ),
                             ),
                           ),
+                        ],
                       ],
                     ),
                     const SizedBox(height: 8),
@@ -2595,25 +2977,24 @@ class _HeroMetricTrendChartState extends State<_HeroMetricTrendChart> {
               },
               onHorizontalDragEnd: (_) => _notifyInteraction(false),
               onHorizontalDragCancel: () => _notifyInteraction(false),
+              // v2.8 · chart 大卡对齐紫气泡系统,底改白配合 painter 内部 paperWhite
               child: Container(
                 height: widget.chartHeight,
                 decoration: BoxDecoration(
-                  color: LhColors.paper,
-                  border: Border.all(
-                    color: LhColors.line2,
-                    width: 0.8,
-                  ),
-                  borderRadius: BorderRadius.circular(10),
-                  boxShadow: const [
+                  color: Colors.white,
+                  border: Border.all(color: _LhPlum.lavender, width: 1),
+                  borderRadius: BorderRadius.circular(12),
+                  boxShadow: [
                     BoxShadow(
-                      color: Color(0x0E140A00),
-                      blurRadius: 8,
-                      offset: Offset(0, 2),
+                      color: _LhPlum.deep.withAlpha(22),
+                      blurRadius: 18,
+                      spreadRadius: -4,
+                      offset: const Offset(0, 6),
                     ),
                   ],
                 ),
                 child: ClipRRect(
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: BorderRadius.circular(12),
                   child: RepaintBoundary(
                     child: CustomPaint(
                       painter: _LhBigTrendPainter(
@@ -2639,37 +3020,36 @@ class _HeroMetricTrendChartState extends State<_HeroMetricTrendChart> {
         ),
         const SizedBox(height: 4),
         Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-            decoration: BoxDecoration(
-              color: LhColors.cream,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: LhColors.line2, width: 0.8),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  Icons.swipe_rounded,
-                  size: 13,
-                  color: widget.color.withAlpha(180),
-                ),
-                const SizedBox(width: 6),
-                Text(
-                  isSelected ? '已选中单日读数' : '拖动或点击查看每日读数',
-                  style: LhTypography.sans(
-                    size: 9.5,
-                    color: LhColors.mute,
-                    weight: FontWeight.w600,
-                  ),
-                ),
-              ],
-            ),
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+          decoration: BoxDecoration(
+            color: _LhPlum.mist,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: LhColors.line2, width: 0.8),
           ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.swipe_rounded,
+                size: 13,
+                color: widget.color.withAlpha(180),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                isSelected ? '已选中单日读数' : '拖动或点击查看每日读数',
+                style: LhTypography.sans(
+                  size: 9.5,
+                  color: LhColors.mute,
+                  weight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
       ],
     );
   }
-
 }
 
 /// 仅在手指几乎未移动时触发点击，避免列表滑动/拖动误触进入指标页。
@@ -2773,7 +3153,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   String _supplyFuelFilter = '全部';
   String _hunFilter = '全部'; // '全部' | 'U' | 'N' | 'H' | '混合' — 仅 supply/channel
   String _anomalyFilter = '全部'; // 亏损 / ROI低于目标 / 成本异常 / 利差倒挂
-  final Set<String> _expanded = {};
+  final Set<String> _collapsed = {};
   final Set<String> _metaExpanded =
       {}; // 列表行 meta 指标（销售/税/成本等）默认收起；tap"指标 N"按钮展开的 trendKey 进入此 set
   String? _metaHighlightKey; // 跨行"列聚焦"：点某个 meta 指标 → 所有行同一指标高亮成色块，便于纵向比较
@@ -4443,7 +4823,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 final isOn = g == _groupFilter;
                 // 单选：每个分类有自己的颜色 (lhGroupColor) 做 accent,
                 // 用户在这里选出的分类, 在主列表 tag 上就是同色, 视觉闭环.
-                final accent = g == '全部' ? LhColors.copper : lhGroupColor(g);
+                final accent = g == '全部' ? _LhPlum.primary : lhGroupColor(g);
                 return _ddChip(
                   label: g,
                   isOn: isOn,
@@ -4744,7 +5124,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         duration: const Duration(milliseconds: 140),
         padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
         decoration: BoxDecoration(
-          color: isOn ? LhColors.copper.withAlpha(24) : Colors.transparent,
+          color: isOn ? _LhPlum.primary.withAlpha(24) : Colors.transparent,
           borderRadius: BorderRadius.circular(4),
         ),
         child: Center(
@@ -4752,7 +5132,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             label,
             style: LhTypography.mono(
               size: 9.5,
-              color: isOn ? LhColors.copper : LhColors.mute2,
+              color: isOn ? _LhPlum.primary : LhColors.mute2,
               weight: isOn ? FontWeight.w700 : FontWeight.w500,
               letterSpacing: 0.1,
             ),
@@ -4821,7 +5201,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 resetLabel,
                 style: LhTypography.mono(
                   size: 7.5,
-                  color: LhColors.copper,
+                  color: _LhPlum.primary,
                   weight: FontWeight.w600,
                   letterSpacing: 0.5,
                 ),
@@ -4879,7 +5259,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     Color? accent,
     Color? offColor,
   }) {
-    final acc = accent ?? LhColors.copper;
+    final acc = accent ?? _LhPlum.primary;
     final off = offColor ?? LhColors.ink2;
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
@@ -4988,7 +5368,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         _handleInternalBack();
       },
       child: Scaffold(
-        backgroundColor: LhColors.cream,
+        backgroundColor: Colors.white,
         // 键盘弹出时不顶起底部 Column —— SKU 搜索时
         // 通讯/千机/灯塔/我的 这条主 tab bar 保持在屏幕底部，
         // 不会被怼到键盘正上方。搜索框本身在页面中上部，
@@ -5051,38 +5431,91 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   }
 
   // ───── AppBar ─────────────────────────────────────────────────────────────
+  // v2 淡紫改造：删掉 _LhBrandMark，改成纯 typographic 极简布局。
+  // 品牌感由 sans+mono 反差承担，右侧胶囊按钮承载 busy loader / 手动刷新。
   Widget _buildAppBar() {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(22, 4, 22, 2),
+      padding: const EdgeInsets.fromLTRB(22, 10, 22, 6),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          _LhBrandMark(size: 42),
-          const SizedBox(width: 9),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                '灯塔',
-                style: LhTypography.sans(
-                  size: 13.5,
-                  weight: FontWeight.w700,
-                  color: LhColors.ink,
-                  letterSpacing: 1.4,
-                ),
-              ),
-              Text(
-                'LIGHTHOUSE',
-                style: LhTypography.mono(
-                  size: 7.8,
-                  color: LhColors.mute,
-                  letterSpacing: 1.2,
-                ),
-              ),
-            ],
+          // 灯塔 (sans 主标题，紫墨)
+          Text(
+            '灯塔',
+            style: LhTypography.sans(
+              size: 17,
+              weight: FontWeight.w700,
+              color: _LhPlum.ink,
+              letterSpacing: 0.6,
+            ),
           ),
-          if (_isPageBusy) ...[const Spacer(), const _LhBrandLoader(size: 33)],
+          const SizedBox(width: 8),
+          // LIGHTHOUSE (mono, 底部基线对齐主标题)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 2),
+            child: Text(
+              'LIGHTHOUSE',
+              style: LhTypography.mono(
+                size: 9,
+                color: LhColors.mute,
+                letterSpacing: 1.4,
+              ),
+            ),
+          ),
+          const Spacer(),
+          // 右侧胶囊按钮：busy 时展示 loader，否则展示手动刷新
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: (_isPageBusy || _refreshing || _loading) ? null : _refresh,
+            child: Container(
+              width: 32,
+              height: 32,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: _LhPlum.lavender, width: 1),
+                boxShadow: [
+                  BoxShadow(
+                    color: _LhPlum.deep.withAlpha(14),
+                    blurRadius: 6,
+                    spreadRadius: -1,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: Center(
+                child: _isPageBusy
+                    ? const _LhBrandLoader(size: 16)
+                    : Icon(
+                        Icons.refresh_rounded,
+                        size: 16,
+                        color: _LhPlum.primary,
+                      ),
+              ),
+            ),
+          ),
         ],
       ),
+    );
+  }
+
+  /// 一级切 tab / 二级进详情共用的载入特效：大号品牌 spinner + mono 文案。
+  Widget _buildBrandBusyContent({required String label}) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const _LhBrandLoader(size: 72),
+        const SizedBox(height: 14),
+        Text(
+          label,
+          style: LhTypography.mono(
+            size: 10,
+            color: LhColors.mute,
+            weight: FontWeight.w600,
+            letterSpacing: 1.6,
+          ),
+        ),
+      ],
     );
   }
 
@@ -5090,25 +5523,8 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     final label = _cubeLoading && !_loading ? '分析加载中' : '数据同步中';
     return Positioned.fill(
       child: ColoredBox(
-        color: LhColors.cream.withAlpha(210),
-        child: Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const _LhBrandLoader(size: 72),
-              const SizedBox(height: 14),
-              Text(
-                label,
-                style: LhTypography.mono(
-                  size: 10,
-                  color: LhColors.mute,
-                  weight: FontWeight.w600,
-                  letterSpacing: 1.6,
-                ),
-              ),
-            ],
-          ),
-        ),
+        color: Colors.white.withAlpha(210),
+        child: Center(child: _buildBrandBusyContent(label: label)),
       ),
     );
   }
@@ -5138,28 +5554,25 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   }
 
   // ───── Greeting ───────────────────────────────────────────────────────────
+  // v2 淡紫改造：日期用 mono 加强编辑体节奏；pill 保留状态指示但去掉冗余
+  // refresh icon（刷新入口已挪至 AppBar 右侧胶囊按钮）。
   Widget _buildGreeting() {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(22, 3, 22, 6),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      padding: const EdgeInsets.fromLTRB(22, 4, 22, 10),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Text(
-                _formatDateLabel(),
-                style: LhTypography.sans(
-                  size: 10.5,
-                  color: LhColors.mute,
-                  weight: FontWeight.w500,
-                  letterSpacing: 0.2,
-                ),
-              ),
-              const Spacer(),
-              _buildPill(),
-            ],
+          Text(
+            _formatDateLabel(),
+            style: LhTypography.mono(
+              size: 10.5,
+              color: LhColors.mute,
+              weight: FontWeight.w500,
+              letterSpacing: 0.6,
+            ),
           ),
+          const Spacer(),
+          _buildPill(),
         ],
       ),
     );
@@ -5167,54 +5580,31 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
 
   Widget _buildPill() {
     final busy = _refreshing || _loading;
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: busy ? null : _refresh,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-        decoration: BoxDecoration(
-          color: LhColors.paper,
-          borderRadius: BorderRadius.circular(999),
-          border: Border.all(color: LhColors.line, width: 1),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (busy)
-              const _LhBrandLoader(size: 9)
-            else
-              Container(
-                width: 5,
-                height: 5,
-                decoration: BoxDecoration(
-                  color: LhColors.pos,
-                  shape: BoxShape.circle,
-                  boxShadow: [
-                    BoxShadow(
-                      color: LhColors.pos.withAlpha(46),
-                      blurRadius: 0,
-                      spreadRadius: 3,
-                    ),
-                  ],
-                ),
-              ),
-            const SizedBox(width: 6),
-            Text(
-              busy ? '数据同步中…' : '数据已同步 · ${_syncedAtLabel()}',
-              style: LhTypography.sans(
-                size: 9.8,
-                color: LhColors.ink2,
-                weight: FontWeight.w500,
-              ),
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: _LhPlum.mist,
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: _LhPlum.lavender, width: 1),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (busy)
+            const _LhBrandLoader(size: 9)
+          else
+            // v2.9 · 静态圆点 → 呼吸 pulse,数据实时的产品语言
+            const _LhPulseDot(color: _LhPlum.primary, size: 5),
+          const SizedBox(width: 7),
+          Text(
+            busy ? '数据同步中…' : '数据已同步 · ${_syncedAtLabel()}',
+            style: LhTypography.sans(
+              size: 9.8,
+              color: _LhPlum.ink,
+              weight: FontWeight.w500,
             ),
-            const SizedBox(width: 5),
-            Icon(
-              Icons.refresh_rounded,
-              size: 12,
-              color: busy ? LhColors.mute2 : LhColors.copper,
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -5222,79 +5612,39 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   // ───── Panel (Hero + Tabs + Sortbar) ──────────────────────────────────────
   Widget _buildPanel() {
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 22),
+      margin: const EdgeInsets.fromLTRB(22, 2, 22, 18),
       decoration: BoxDecoration(
-        // v3.7: line2 (冷灰) → #DDD5C0 (暖 hairline) 跟全局 chrome 统一
-        border: Border.all(color: const Color(0xFFDDD5C0), width: 1),
-        borderRadius: BorderRadius.circular(14),
+        // v2.1 气泡感 —— 底色从纯白换回 _LhPlum.mist（雾紫），
+        // 里面白色 metric 卡才能真正"浮"上来。
+        // hairline 加宽半档，圆角 14→18，阴影加深加大 blur —— 编辑体气泡而非扁平白盒。
+        color: _LhPlum.mist,
+        border: Border.all(color: _LhPlum.lavender, width: 1),
+        borderRadius: BorderRadius.circular(18),
         boxShadow: [
+          // 主阴影：深紫墨影，大 blur 小 offset，看起来"托"起来
           BoxShadow(
-            color: const Color(0x07140A00),
-            blurRadius: 2,
-            offset: const Offset(0, 1),
+            color: _LhPlum.deep.withAlpha(30),
+            blurRadius: 28,
+            spreadRadius: -8,
+            offset: const Offset(0, 10),
           ),
+          // 辅阴影：更淡更贴近，模拟卡片跟页面的接触点
           BoxShadow(
-            color: const Color(0x10140A00),
-            blurRadius: 20,
-            spreadRadius: -10,
-            offset: const Offset(0, 6),
+            color: _LhPlum.deep.withAlpha(14),
+            blurRadius: 8,
+            spreadRadius: -4,
+            offset: const Offset(0, 2),
           ),
         ],
       ),
-      // 渐变分两层：base 暖 cream 对角 + 铜色 radial 高光。ClipRRect 裁圆角。
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(13),
-        child: Stack(
+        borderRadius: BorderRadius.circular(17),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // ── Layer 1：base 暖 cream 对角渐变 —────────────────────────────
-            //    4 stop，起点用 warm off-white（不是纯白，避免暖色调里的冷点），
-            //    终点比原来略深 1 档（#EBE2CC vs 原 #F2EEE3），
-            //    只在肉眼几乎察觉的程度上加深，为的是让高光有对比、而不是变深
-            Positioned.fill(
-              child: Container(
-                decoration: const BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment(-0.9, -1.0),
-                    end: Alignment(0.5, 1.0),
-                    colors: [
-                      Color(0xFFFAF7EF), // 略压亮度，降低与底色的对比
-                      Color(0xFFF3ECDF),
-                      Color(0xFFEBE3D2),
-                      Color(0xFFE0D6C2), // 终点再深半档，整体更沉
-                    ],
-                    stops: [0, 0.32, 0.7, 1],
-                  ),
-                ),
-              ),
-            ),
-            // ── Layer 2：右上角铜色高光 —──────────────────────────────────
-            //    模拟暖光源从右上照下来。alpha ~6%，肉眼几乎察觉不到"这是铜"，
-            //    但视觉上会感觉纸面被暖光点亮——高端印刷品的常见手法
-            Positioned.fill(
-              child: Container(
-                decoration: BoxDecoration(
-                  gradient: RadialGradient(
-                    center: const Alignment(0.95, -0.85),
-                    radius: 1.1,
-                    colors: [
-                      LhColors.copper.withAlpha(0x08), // ~3%（压低右上暖光）
-                      LhColors.copper.withAlpha(0x03), // ~1%
-                      LhColors.copper.withAlpha(0), // 完全消失
-                    ],
-                    stops: const [0, 0.35, 0.7],
-                  ),
-                ),
-              ),
-            ),
-            // ── Layer 3：内容 —────────────────────────────────────────────
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _buildHero(),
-                _buildTabSegment(),
-                if (_tab != 'analysis') _buildSortbar(),
-              ],
-            ),
+            _buildHero(),
+            _buildTabSegment(),
+            if (_tab != 'analysis') _buildSortbar(),
           ],
         ),
       ),
@@ -5305,7 +5655,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   Widget _buildHero() {
     final p = _heroInfo;
     final isUp = p.deltaDir == 'up';
-    final deltaColor = isUp ? LhColors.pos : LhColors.neg;
+    final deltaColor = isUp ? LhColors.neg : LhColors.pos;
     final deltaArrow = isUp ? '↑' : '↓';
 
     // Compute totals from data
@@ -5341,6 +5691,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         ? heroVerified
         : heroSales;
     final sumRate = anchorTotal > 0 ? sumProfit / anchorTotal * 100 : 0.0;
+    final spreadRate = anchorTotal > 0 ? sumRevenue / anchorTotal * 100 : 0.0;
     // 预收 = 销售 − 核销
     final sumPrepaid = (heroSales - heroVerified).clamp(0.0, double.infinity);
     final totals = {
@@ -5353,6 +5704,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       'profit': sumProfit,
       'revenue': sumRevenue,
       'tax': sumTax,
+      'spreadRate': spreadRate,
       'rate': sumRate,
     };
 
@@ -5382,6 +5734,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     return Stack(
       clipBehavior: Clip.hardEdge,
       children: [
+        // v2.9 · Aurora 极光底 —— 淡紫入射光 + 深紫墨 grounding,
+        // 给雾紫 mist canvas 加"能量源"深度感 (最底层, 品牌水印之下)
+        const _LhAurora(),
         // ─── 品牌水印 ────────────────────────────────────────────────
         // 三片纸飞机 mark 落在 hero 右上，与大数字/角标区域重叠。
         // alpha 0.05 —— "纸上落款"手势，可辨认，不干扰阅读。
@@ -5401,13 +5756,13 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         ),
         // ─── Hero 内容 ────────────────────────────────────────────────
         Padding(
-          padding: const EdgeInsets.fromLTRB(14, 6, 14, 12),
+          padding: const EdgeInsets.fromLTRB(18, 12, 18, 18),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               // Period bar — 日/周/月/季/年（下划线 tab 风格，含实例选择）
               _buildPeriodBar(),
-              const SizedBox(height: 8),
+              const SizedBox(height: 12),
               // Label + delta inline (saves a row of vertical real-estate)
               Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
@@ -5426,7 +5781,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                   // 取代原 pnl grid 里独立占一行的 anchor selector card
                   _buildInlineAnchorChips(),
                   const SizedBox(width: 8),
-                  Expanded(child: Container(height: 1, color: LhColors.line2)),
+                  Expanded(
+                    child: Container(height: 1, color: _LhPlum.lavender),
+                  ),
                   const SizedBox(width: 6),
                   Text(
                     p.hasDelta ? '$deltaArrow ${p.deltaVal}%' : '—',
@@ -5439,47 +5796,84 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                   ),
                 ],
               ),
-              const SizedBox(height: 5),
+              const SizedBox(height: 8),
               // Big number + 右侧板报式筛选角标
+              // v2.9 · count-up 动画:切换 period/tab/anchor 时数字滑动到位,
+              //       tween 用原始 double (heroVerified/heroSales),
+              //       mock 场景 (数据为 0) fallback 原字符串。
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   // 数字组 (baseline 对齐)
                   Expanded(
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.baseline,
-                      textBaseline: TextBaseline.alphabetic,
-                      children: [
-                        Flexible(
-                          child: Text(
-                            bigV,
-                            style: LhTypography.number(
-                              size: 25,
-                              color: LhColors.ink,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
+                    child: (useVerifiedBig ? heroVerified : heroSales) > 0
+                        ? _LhAnimatedNumber(
+                            value: useVerifiedBig ? heroVerified : heroSales,
+                            builder: (ctx, v) {
+                              final av = _fmt(v);
+                              final rawU = _unit(v);
+                              final au = rawU.endsWith('元') ? rawU : '${rawU}元';
+                              return Row(
+                                crossAxisAlignment: CrossAxisAlignment.baseline,
+                                textBaseline: TextBaseline.alphabetic,
+                                children: [
+                                  Flexible(
+                                    child: Text(
+                                      av,
+                                      style: LhTypography.number(
+                                        size: 30,
+                                        color: LhColors.ink,
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 2),
+                                  Text(
+                                    au,
+                                    style: LhTypography.sans(
+                                      size: 13,
+                                      color: LhColors.ink2,
+                                      weight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ],
+                              );
+                            },
+                          )
+                        : Row(
+                            crossAxisAlignment: CrossAxisAlignment.baseline,
+                            textBaseline: TextBaseline.alphabetic,
+                            children: [
+                              Flexible(
+                                child: Text(
+                                  bigV,
+                                  style: LhTypography.number(
+                                    size: 30,
+                                    color: LhColors.ink,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              const SizedBox(width: 2),
+                              Text(
+                                bigU,
+                                style: LhTypography.sans(
+                                  size: 13,
+                                  color: LhColors.ink2,
+                                  weight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
                           ),
-                        ),
-                        const SizedBox(width: 1),
-                        Text(
-                          bigU,
-                          style: LhTypography.sans(
-                            size: 12,
-                            color: LhColors.ink2,
-                            weight: FontWeight.w600,
-                          ),
-                        ),
-                        // 核销规模直读 verify_amount，不再展示「估」角标
-                      ],
-                    ),
                   ),
                   // v4.1: filter stack 平行大数字右侧 (汉字, 大字, 好看)
                   //       取代原板报牌 (v4 拿掉) 和原下方内联面包屑 (v4.1 拿掉)
                   _buildHeroFilterStack(),
                 ],
               ),
-              const SizedBox(height: 3),
+              const SizedBox(height: 5),
               Text(
                 p.hasDelta
                     ? '环比 $deltaArrow ${p.deltaVal.toStringAsFixed(1)}% · ${p.deltaVs}'
@@ -5490,20 +5884,19 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                   letterSpacing: 0.2,
                 ),
               ),
-              const SizedBox(height: 10),
+              const SizedBox(height: 14),
               // Compose bar (业务盘子构成: 供 / 销 / 渠道 分片)
               _buildComposeBar(p),
               // HUN 占比（仅 supply / channel）
               if (_tab == 'supply' || _tab == 'channel') ...[
-                const SizedBox(height: 8),
+                const SizedBox(height: 10),
                 _buildHunComposeBar(rows),
               ],
-              const SizedBox(height: 12),
-              // 损益指标按钮网格 —— 替换原竖向 LossProfitFlow (v4 案例更新)
+              const SizedBox(height: 18),
+              // 损益指标编辑体表格 —— v2.5 从方格 grid 改成 hairline table
               //   3×2 布局: 利差率·收入·毛利 / 经营·税务·效率(★)
-              //   每格独立可点弹折线, accent 色编码语义:
-              //     铜 = 收入侧驱动 · 绿 = 正向结果 · 红 = 成本/违背结果
-              //   顶部内嵌锚点 toggle, 底部公式条锁定 3 步推演关系
+              //   每格独立可点弹折线, accent 色仅在展开态标 4px 深紫圆点
+              //   格间用 hairline 分隔（垂直/水平），去掉方格 chrome
               // 会议原话: "点那个数字就能看到日的"
               _buildPnlButtonGrid(totals),
             ],
@@ -5540,7 +5933,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             const SizedBox(width: 12),
             _heroKicker('预收'),
             const SizedBox(width: 5),
-            _heroInlineAmount(sumPrepaid, color: LhColors.copper),
+            _heroInlineAmount(sumPrepaid, color: _LhPlum.primary),
           ],
         ] else
           Text(
@@ -5595,7 +5988,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         key: 'profit',
         label: '毛利',
         isRate: false,
-        cellColor: LhColors.pos,
+        cellColor: LhColors.neg,
       ),
       _HeroMetric(
         key: 'revenue',
@@ -5607,13 +6000,13 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         key: 'rate',
         label: '效率（ROI）',
         isRate: true,
-        cellColor: LhColors.copper,
+        cellColor: _LhPlum.primary,
       ),
       _HeroMetric(
         key: 'cost',
         label: '经营成本',
         isRate: false,
-        cellColor: LhColors.neg,
+        cellColor: LhColors.pos,
       ),
       _HeroMetric(
         key: 'tax',
@@ -5858,26 +6251,26 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           crossAxisAlignment: CrossAxisAlignment.end,
           mainAxisSize: MainAxisSize.min,
           children: [
-              for (int i = 0; i < filters.length; i++) ...[
-                if (i > 0) const SizedBox(height: 3),
-                Text(
-                  filters[i].value,
-                  style: LhTypography.sans(
-                    size: 15,
-                    color: LhColors.ink,
-                    weight: FontWeight.w700,
-                    letterSpacing: 0.2,
-                    height: 1.15,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  textAlign: TextAlign.right,
+            for (int i = 0; i < filters.length; i++) ...[
+              if (i > 0) const SizedBox(height: 3),
+              Text(
+                filters[i].value,
+                style: LhTypography.sans(
+                  size: 15,
+                  color: LhColors.ink,
+                  weight: FontWeight.w700,
+                  letterSpacing: 0.2,
+                  height: 1.15,
                 ),
-              ],
-              // v5: 清除按钮拿掉 —— 点击已选中的 filter 即取消, 不需要独立入口
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.right,
+              ),
             ],
-          ),
+            // v5: 清除按钮拿掉 —— 点击已选中的 filter 即取消, 不需要独立入口
+          ],
         ),
+      ),
     );
   }
 
@@ -5897,7 +6290,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           Container(
             width: 2,
             height: 12,
-            color: LhColors.copper.withAlpha(220),
+            color: _LhPlum.primary.withAlpha(220),
           ),
           const SizedBox(width: 7),
           // 中间: 汉字面包屑 (values 用中点分隔, 每个 value 深色, 分隔浅色)
@@ -5959,8 +6352,8 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           child: Container(
             constraints: const BoxConstraints(minWidth: 78, maxWidth: 130),
             decoration: BoxDecoration(
-              color: LhColors.copperSoft,
-              border: Border.all(color: LhColors.copper, width: 1.5),
+              color: _LhPlum.soft,
+              border: Border.all(color: _LhPlum.primary, width: 1.5),
               borderRadius: BorderRadius.circular(3),
             ),
             child: Column(
@@ -5969,7 +6362,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               children: [
                 // 顶部 copper 实色 stripe
                 Container(
-                  color: LhColors.copper,
+                  color: _LhPlum.primary,
                   padding: const EdgeInsets.fromLTRB(7, 3, 7, 3),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
@@ -6016,7 +6409,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                               filters[i].label,
                               style: LhTypography.sans(
                                 size: 8,
-                                color: LhColors.copper.withAlpha(180),
+                                color: _LhPlum.primary.withAlpha(180),
                                 weight: FontWeight.w600,
                                 letterSpacing: 0.4,
                               ),
@@ -6046,14 +6439,14 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                           Icon(
                             Icons.close_rounded,
                             size: 9,
-                            color: LhColors.copper.withAlpha(160),
+                            color: _LhPlum.primary.withAlpha(160),
                           ),
                           const SizedBox(width: 2),
                           Text(
                             '点击清除',
                             style: LhTypography.mono(
                               size: 8,
-                              color: LhColors.copper.withAlpha(160),
+                              color: _LhPlum.primary.withAlpha(160),
                               weight: FontWeight.w500,
                               letterSpacing: 0.4,
                             ),
@@ -6268,7 +6661,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                   height: 28,
                   alignment: Alignment.center,
                   decoration: BoxDecoration(
-                    color: enabled ? LhColors.paper : LhColors.cream,
+                    color: enabled ? LhColors.paper : _LhPlum.mist,
                     border: Border.all(color: LhColors.line, width: 1),
                     borderRadius: BorderRadius.circular(7),
                   ),
@@ -6399,7 +6792,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                                     color: selected
                                         ? LhColors.ink
                                         : isToday
-                                        ? LhColors.copper.withAlpha(120)
+                                        ? _LhPlum.primary.withAlpha(120)
                                         : Colors.transparent,
                                     width: 1,
                                   ),
@@ -6469,7 +6862,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                   decoration: BoxDecoration(
                     border: Border(
                       bottom: BorderSide(
-                        color: isOn ? LhColors.copper : Colors.transparent,
+                        color: isOn ? _LhPlum.primary : Colors.transparent,
                         width: 1.5,
                       ),
                     ),
@@ -6495,7 +6888,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                               ? Icons.keyboard_arrow_up_rounded
                               : Icons.keyboard_arrow_down_rounded,
                           size: 13,
-                          color: LhColors.copper,
+                          color: _LhPlum.primary,
                         ),
                       ],
                     ],
@@ -6511,13 +6904,13 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             padding: const EdgeInsets.only(top: 4),
             child: Row(
               children: [
-                Icon(Icons.history_rounded, size: 9, color: LhColors.copper),
+                Icon(Icons.history_rounded, size: 9, color: _LhPlum.primary),
                 const SizedBox(width: 4),
                 Text(
                   '${_periodInstanceLabel(_period, _periodOffset)} · ${_periodInstanceDetail(_period, _periodOffset)}',
                   style: LhTypography.mono(
                     size: 8.8,
-                    color: LhColors.copper,
+                    color: _LhPlum.primary,
                     weight: FontWeight.w600,
                     letterSpacing: 0.3,
                   ),
@@ -6607,7 +7000,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           decoration: BoxDecoration(
             border: Border(
               bottom: BorderSide(
-                color: on ? LhColors.copper : Colors.transparent,
+                color: on ? _LhPlum.primary : Colors.transparent,
                 width: 1.2,
               ),
             ),
@@ -6630,7 +7023,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 _periodInstanceDetail(_period, off),
                 style: LhTypography.mono(
                   size: 8.5,
-                  color: on ? LhColors.copper : LhColors.mute2,
+                  color: on ? _LhPlum.primary : LhColors.mute2,
                   weight: FontWeight.w500,
                   height: 1.2,
                   letterSpacing: 0.2,
@@ -6901,89 +7294,122 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     // 派生比率 —— 让"利差率"格子有真实值可展示 (不用心算)
     final spreadRate = anchor > 0 ? revenue / anchor * 100 : 0.0;
 
+    // v2.5 简洁大气：从 3×2 方格 grid 改成编辑体 hairline table
+    //   · 垂直 lavender hairline 分隔列
+    //   · 水平 lavender hairline 分隔两行
+    //   · 单元格自己无 chrome (transparent bg + 无 border)
+    //   · 展开态用 4px 深紫圆点标数字前，不再靠加粗边框
+    Widget colDivider() => Container(
+      width: 1,
+      margin: const EdgeInsets.symmetric(vertical: 4),
+      color: _LhPlum.lavender,
+    );
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // v5: 锚点已内嵌到 hero label 行 (跟 "核销规模" kicker 挨着), 这里不再占独立一行
         // ── Row 1: 利差率 · 收入 · 毛利 (收入侧 + 结果) ─
-        Row(
-          children: [
-            Expanded(
-              child: _pnlButton(
-                keyId: 'spreadRate',
-                label: '利差率',
-                subLabel: '收入 ÷ $anchorLabel',
-                value: spreadRate,
-                isRate: true,
-                accent: LhColors.copper,
+        IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(
+                child: _pnlButton(
+                  keyId: 'spreadRate',
+                  label: '利差率',
+                  subLabel: '收入 ÷ $anchorLabel',
+                  value: spreadRate,
+                  isRate: true,
+                  accent: _LhPlum.primary,
+                ),
               ),
-            ),
-            const SizedBox(width: 6),
-            Expanded(
-              child: _pnlButton(
-                keyId: 'revenue',
-                label: '收入（已核销利差）',
-                subLabel: '已核销利差',
-                value: revenue,
-                isRate: false,
-                accent: LhColors.copper,
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+                child: colDivider(),
               ),
-            ),
-            const SizedBox(width: 6),
-            Expanded(
-              child: _pnlButton(
-                keyId: 'profit',
-                label: '毛利',
-                subLabel: '净毛利',
-                value: profit,
-                isRate: false,
-                accent: LhColors.pos,
-                valueColor: LhColors.pos,
+              Expanded(
+                child: _pnlButton(
+                  keyId: 'revenue',
+                  label: '收入（已核销利差）',
+                  subLabel: '已核销利差',
+                  value: revenue,
+                  isRate: false,
+                  accent: _LhPlum.primary,
+                ),
               ),
-            ),
-          ],
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+                child: colDivider(),
+              ),
+              Expanded(
+                child: _pnlButton(
+                  keyId: 'profit',
+                  label: '毛利',
+                  subLabel: '净毛利',
+                  value: profit,
+                  isRate: false,
+                  accent: LhColors.neg,
+                  valueColor: LhColors.neg,
+                ),
+              ),
+            ],
+          ),
         ),
-        const SizedBox(height: 6),
+        // 行间水平 hairline
+        Container(
+          height: 1,
+          margin: const EdgeInsets.symmetric(vertical: 12),
+          color: _LhPlum.lavender,
+        ),
         // ── Row 2: 经营 · 税务 · 效率(★) ────────────────
-        Row(
-          children: [
-            Expanded(
-              child: _pnlButton(
-                keyId: 'cost',
-                label: '经营成本',
-                subLabel: '业务成本',
-                value: cost,
-                isRate: false,
-                accent: LhColors.neg,
+        IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(
+                child: _pnlButton(
+                  keyId: 'cost',
+                  label: '经营成本',
+                  subLabel: '业务成本',
+                  value: cost,
+                  isRate: false,
+                  accent: LhColors.pos,
+                ),
               ),
-            ),
-            const SizedBox(width: 6),
-            Expanded(
-              child: _pnlButton(
-                keyId: 'tax',
-                label: '税务成本',
-                subLabel: '已核销利差 x 税率',
-                value: tax,
-                isRate: false,
-                accent: LhColors.neg,
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+                child: colDivider(),
               ),
-            ),
-            const SizedBox(width: 6),
-            Expanded(
-              child: _pnlButton(
-                keyId: 'rate',
-                label: '效率（ROI） ★',
-                subLabel: '毛利 ÷ $anchorLabel',
-                value: rate,
-                isRate: true,
-                accent: LhColors.copper,
+              Expanded(
+                child: _pnlButton(
+                  keyId: 'tax',
+                  label: '税务成本',
+                  subLabel: '已核销利差 x 税率',
+                  value: tax,
+                  isRate: false,
+                  accent: LhColors.pos,
+                ),
               ),
-            ),
-          ],
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+                child: colDivider(),
+              ),
+              Expanded(
+                child: _pnlButton(
+                  keyId: 'rate',
+                  label: '效率（ROI） ★',
+                  subLabel: '毛利 ÷ $anchorLabel',
+                  value: rate,
+                  isRate: true,
+                  accent: _LhPlum.primary,
+                ),
+              ),
+            ],
+          ),
         ),
         // v7 内嵌折线图 — 会议原话"点那个数字就能看到日的"
         //   点 pnl button → 下方展开该指标的走势 (不再弹 sheet)
-        //   Period 联动: 日→30天/环比上月, 周→4-5周, 月→5-7天 (后端下发)
+        //   Period 联动: 日/周/月/季/年 单线走势（后端下发，无环比对比线）
         AnimatedSize(
           duration: const Duration(milliseconds: 220),
           curve: Curves.easeOutCubic,
@@ -6991,11 +7417,8 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           child: _expandedTrendKey == null
               ? const SizedBox.shrink()
               : Padding(
-                  padding: const EdgeInsets.only(top: 10),
-                  child: _buildInlineTrendPanel(
-                    _expandedTrendKey!,
-                    totals,
-                  ),
+                  padding: const EdgeInsets.only(top: 14),
+                  child: _buildInlineTrendPanel(_expandedTrendKey!, totals),
                 ),
         ),
       ],
@@ -7020,16 +7443,12 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     final isRateLike = entry.$2 || keyId == 'rate' || keyId == 'spreadRate';
 
     final rawSeries = _seriesForMetric(keyId);
-    final rawCompare = _seriesPrevForMetric(keyId);
     final series = _normalizeTrendSeriesForChart(rawSeries);
-    final compareSeries = _alignCompareSeriesLengths(series, rawCompare);
     final labels = _heroTrendLabels(series.length);
     final rangeLabel = _heroTrendRangeLabel(labels);
     final trendTitle = _heroTrendTitle();
     final periodValue = totals[keyId] ?? 0.0;
     final chartColor = _heroMetricTrendColor(keyId, totals);
-    final showMomLegend =
-        _heroTrendIsMom && compareSeries.isNotEmpty && series.isNotEmpty;
 
     return Container(
       padding: const EdgeInsets.fromLTRB(12, 12, 12, 14),
@@ -7098,14 +7517,12 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                   horizontal: 5,
                   vertical: 1.5,
                 ),
-                decoration: BoxDecoration(
-                  color: LhColors.copper.withAlpha(24),
-                ),
+                decoration: BoxDecoration(color: _LhPlum.primary.withAlpha(24)),
                 child: Text(
                   '锚 · ${_anchor.labelCn}',
                   style: LhTypography.mono(
                     size: 8,
-                    color: LhColors.copper,
+                    color: _LhPlum.primary,
                     weight: FontWeight.w700,
                     letterSpacing: 1.0,
                   ),
@@ -7114,7 +7531,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             ),
           ],
           const SizedBox(height: 10),
-          // 折线图主体
+          // 折线图主体（单线，跟随日周月季年，无环比对比线）
           _HeroMetricTrendChart(
             labels: labels,
             data: series,
@@ -7122,53 +7539,17 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             color: chartColor,
             isRate: isRateLike,
             periodValue: periodValue,
-            compareData: showMomLegend ? compareSeries : null,
             chartHeight: 140,
           ),
-          // 环比 legend (仅日→环比上月时)
-          if (showMomLegend) ...[
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Container(width: 12, height: 2, color: chartColor),
-                const SizedBox(width: 5),
-                Text(
-                  '本期',
-                  style: LhTypography.sans(
-                    size: 9,
-                    color: LhColors.mute,
-                    weight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Text(
-                  '- - -',
-                  style: LhTypography.mono(
-                    size: 8.5,
-                    color: LhColors.mute2,
-                    weight: FontWeight.w700,
-                    letterSpacing: 1.0,
-                  ),
-                ),
-                const SizedBox(width: 5),
-                Text(
-                  '上期',
-                  style: LhTypography.sans(
-                    size: 9,
-                    color: LhColors.mute,
-                    weight: FontWeight.w600,
-                  ),
-                ),
-              ],
-            ),
-          ],
         ],
       ),
     );
   }
 
-  /// 单个 P&L 按钮 — 6 格统一高度/结构，左侧 accent 条区分语义色
-  ///   铜 = 利差率/收入/效率 · 绿 = 毛利 · 红 = 成本
+  /// 单个 P&L 单元 — v2.5 编辑体简洁大气版
+  ///   老版: paper 底 + 左侧 accent bar + 4 边 hairline，78px 固定高度，形似 6 个方格
+  ///   新版: 无 chrome，纯 typography。方格 chrome 靠外层 hairline table (垂直/水平 hairline) 承担
+  ///        展开态用 4px 深紫圆点标数字前，accent 参数继续接收供未来语义扩展但不驱动填色
   static const double _pnlCellHeight = 78;
 
   Widget _pnlButton({
@@ -7187,147 +7568,138 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         : LhColors.ink2;
     final delta = _deltaForMetric(keyId);
     final deltaUnit = (keyId == 'rate' || keyId == 'spreadRate') ? 'pp' : '%';
-    // v7: 展开状态 —— 已选中的 button 底色加深, 边框加粗, 视觉提示"这个格子对应下方折线"
     final isExpanded = _expandedTrendKey == keyId;
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: () {
         setState(() {
-          // 二次点击已展开的 → 收起; 点其他的 → 切换
           _expandedTrendKey = isExpanded ? null : keyId;
         });
       },
-      child: SizedBox(
-        height: _pnlCellHeight,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 160),
-          padding: const EdgeInsets.fromLTRB(9, 8, 9, 9),
-          decoration: BoxDecoration(
-            color: isExpanded ? Colors.white : LhColors.paper,
-            border: Border(
-              left: BorderSide(color: accent, width: isExpanded ? 3 : 2),
-              top: BorderSide(
-                color: isExpanded ? accent.withAlpha(90) : LhColors.line2,
-                width: isExpanded ? 0.8 : 0.5,
-              ),
-              right: BorderSide(
-                color: isExpanded ? accent.withAlpha(90) : LhColors.line2,
-                width: isExpanded ? 0.8 : 0.5,
-              ),
-              bottom: BorderSide(
-                color: isExpanded ? accent.withAlpha(90) : LhColors.line2,
-                width: isExpanded ? 0.8 : 0.5,
-              ),
-            ),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              SizedBox(
-                height: 14,
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: _heroSemanticText(
-                        label,
-                        baseColor: badge != null ? LhColors.ink : LhColors.ink2,
-                        size: 8.5,
-                        baseWeight: badge != null
-                            ? FontWeight.w700
-                            : FontWeight.w700,
-                        termWeight: FontWeight.w700,
-                        letterSpacing: 1.2,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // ── Label 行 ────────────────────────────────────────
+            Row(
+              children: [
+                Expanded(
+                  child: _heroSemanticText(
+                    label,
+                    baseColor: LhColors.ink2,
+                    size: 8.5,
+                    baseWeight: FontWeight.w700,
+                    termWeight: FontWeight.w700,
+                    letterSpacing: 1.2,
+                  ),
+                ),
+                if (badge != null && badge.isNotEmpty)
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 4,
+                      vertical: 1,
+                    ),
+                    decoration: BoxDecoration(
+                      color: accent.withAlpha(30),
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                    child: Text(
+                      badge,
+                      style: LhTypography.mono(
+                        size: 7,
+                        color: accent,
+                        weight: FontWeight.w700,
+                        letterSpacing: 0.4,
                       ),
                     ),
-                    if (badge != null && badge.isNotEmpty)
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 4,
-                          vertical: 1,
-                        ),
-                        decoration: BoxDecoration(
-                          color: accent.withAlpha(30),
-                          borderRadius: BorderRadius.circular(2),
-                        ),
-                        child: Text(
-                          badge,
-                          style: LhTypography.mono(
-                            size: 7,
-                            color: accent,
-                            weight: FontWeight.w700,
-                            letterSpacing: 0.4,
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 5),
-              SizedBox(
-                height: 17,
-                child: Align(
-                  alignment: Alignment.centerLeft,
+                  ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            // ── 数字行（含 expanded 态 4px 深紫圆点） ────────────
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                if (isExpanded) ...[
+                  Container(
+                    width: 4,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: _LhPlum.primary,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  const SizedBox(width: 5),
+                ],
+                Flexible(
                   child: FittedBox(
                     fit: BoxFit.scaleDown,
                     alignment: Alignment.centerLeft,
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.baseline,
-                      textBaseline: TextBaseline.alphabetic,
-                      children: [
-                        Text(
-                          isRate ? value.toStringAsFixed(2) : _fmt(value),
-                          style: LhTypography.number(size: 14, color: fg),
-                          maxLines: 1,
-                        ),
-                        const SizedBox(width: 1),
-                        Text(
-                          isRate ? '%' : _unitCn(value).replaceAll('元', ''),
-                          style: LhTypography.sans(
-                            size: 9,
-                            color: unitColor,
-                            weight: FontWeight.w500,
+                    // v2.9 · count-up:切换 period/tab/anchor 时每格数字滑动到位
+                    child: _LhAnimatedNumber(
+                      value: value,
+                      builder: (ctx, v) => Row(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.baseline,
+                        textBaseline: TextBaseline.alphabetic,
+                        children: [
+                          Text(
+                            isRate ? v.toStringAsFixed(2) : _fmt(v),
+                            style: LhTypography.number(size: 18, color: fg),
+                            maxLines: 1,
                           ),
-                        ),
-                      ],
+                          const SizedBox(width: 2),
+                          Text(
+                            isRate ? '%' : _unitCn(v).replaceAll('元', ''),
+                            style: LhTypography.sans(
+                              size: 10,
+                              color: unitColor,
+                              weight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
-              ),
-              const Spacer(),
-              Row(
-                children: [
-                  Expanded(
-                    child: _heroSemanticText(
-                      subLabel,
-                      baseColor: LhColors.mute,
-                      size: 7.3,
-                      baseWeight: FontWeight.w600,
-                      termWeight: FontWeight.w700,
-                      letterSpacing: 0.2,
-                    ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            // ── Sub-label + delta 行 ────────────────────────────
+            Row(
+              children: [
+                Expanded(
+                  child: _heroSemanticText(
+                    subLabel,
+                    baseColor: LhColors.mute,
+                    size: 7.3,
+                    baseWeight: FontWeight.w600,
+                    termWeight: FontWeight.w700,
+                    letterSpacing: 0.2,
                   ),
-                  const SizedBox(width: 4),
-                  Text(
-                    delta == null
-                        ? '环比 —'
-                        : '环比 ${delta.isUp ? '↑' : '↓'} ${delta.pct.toStringAsFixed(1)}$deltaUnit',
-                    style: LhTypography.mono(
-                      size: 7.2,
-                      color: delta == null
-                          ? LhColors.mute
-                          : (delta.isUp ? LhColors.pos : LhColors.neg),
-                      weight: FontWeight.w700,
-                      letterSpacing: 0.1,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  delta == null
+                      ? '环比 —'
+                      : '环比 ${delta.isUp ? '↑' : '↓'} ${delta.pct.toStringAsFixed(1)}$deltaUnit',
+                  style: LhTypography.mono(
+                    size: 7.2,
+                    color: delta == null
+                        ? LhColors.mute
+                        : (delta.isUp ? LhColors.neg : LhColors.pos),
+                    weight: FontWeight.w700,
+                    letterSpacing: 0.1,
                   ),
-                ],
-              ),
-            ],
-          ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ],
         ),
       ),
     );
@@ -7386,19 +7758,19 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               Container(
                 width: 2,
                 height: 5,
-                color: LhColors.copper.withAlpha(160),
+                color: _LhPlum.primary.withAlpha(160),
               ),
               const SizedBox(height: 1),
               Container(
                 width: 2,
                 height: 4,
-                color: LhColors.copper.withAlpha(96),
+                color: _LhPlum.primary.withAlpha(96),
               ),
               const SizedBox(height: 1),
               Container(
                 width: 2,
                 height: 3,
-                color: LhColors.copper.withAlpha(40),
+                color: _LhPlum.primary.withAlpha(40),
               ),
             ],
           ),
@@ -7411,9 +7783,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 vertical: 0.5,
               ),
               decoration: BoxDecoration(
-                color: LhColors.copperSoft,
+                color: _LhPlum.soft,
                 border: Border.all(
-                  color: LhColors.copper.withAlpha(90),
+                  color: _LhPlum.primary.withAlpha(90),
                   width: 0.6,
                 ),
                 borderRadius: BorderRadius.circular(2.5),
@@ -7422,7 +7794,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 op,
                 style: LhTypography.mono(
                   size: 10.5,
-                  color: LhColors.copper,
+                  color: _LhPlum.primary,
                   weight: FontWeight.w800,
                 ),
               ),
@@ -7470,8 +7842,8 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         break;
       case _FlowRole.intermediate:
         // 中间态: copperSoft 底 + copper 2px 左边框 —— 温暖、"派生态"
-        leftAccent = LhColors.copper.withAlpha(160);
-        bg = LhColors.copperSoft.withAlpha(80);
+        leftAccent = _LhPlum.primary.withAlpha(160);
+        bg = _LhPlum.soft.withAlpha(80);
         leftWidth = 2;
         break;
       case _FlowRole.result:
@@ -7637,7 +8009,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       key: key,
       label: label,
       isRate: isRate,
-      cellColor: LhColors.copper,
+      cellColor: _LhPlum.primary,
     );
     _showMetricTrendSheet(metric, totals);
   }
@@ -7809,7 +8181,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                     size: 8.6,
                     color: d == null
                         ? LhColors.mute2
-                        : (d.isUp ? LhColors.pos : LhColors.neg),
+                        : (d.isUp ? LhColors.neg : LhColors.pos),
                     weight: FontWeight.w600,
                     letterSpacing: 0.2,
                   ),
@@ -7846,7 +8218,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
 
   String _heroTrendTitle() {
     final title = _bundle?.metrics['heroSeriesTitle']?.toString();
-    if (title != null && title.isNotEmpty) return title;
+    if (title != null &&
+        title.isNotEmpty &&
+        title != '环比上月') {
+      return title;
+    }
     return _kPeriodTitle[_period] ?? '走势';
   }
 
@@ -7858,9 +8234,6 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     return '${labels.first} — ${labels.last}';
   }
 
-  bool get _heroTrendIsMom =>
-      _bundle?.metrics['heroSeriesGranularity']?.toString() == 'mom';
-
   // ═══════════════════════════════════════════════════════════════════════
   // 折线图 sheet —— 点 hero 数字后弹出（单指标 + 拖动选点，交互同列表 _TrendChart）
   // ═══════════════════════════════════════════════════════════════════════
@@ -7870,16 +8243,16 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     switch (key) {
       case 'spreadRate':
       case 'revenue':
-        return LhColors.copper;
+        return _LhPlum.primary;
       case 'profit':
-        return LhColors.pos;
+        return LhColors.neg;
       case 'cost':
       case 'tax':
-        return LhColors.neg;
+        return LhColors.pos;
       case 'rate':
-        return LhColors.copper;
+        return _LhPlum.primary;
       default:
-        return LhColors.copper;
+        return _LhPlum.primary;
     }
   }
 
@@ -7889,29 +8262,15 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     return [series.first, series.first];
   }
 
-  List<double> _alignCompareSeriesLengths(
-    List<double> primary,
-    List<double> compare,
-  ) {
-    if (compare.isEmpty) return const <double>[];
-    final n = primary.length > compare.length ? primary.length : compare.length;
-    double at(List<double> src, int i) => i < src.length ? src[i] : 0.0;
-    return List<double>.generate(n, (i) => at(compare, i), growable: false);
-  }
-
   void _showMetricTrendSheet(_HeroMetric m, Map<String, double> totals) {
     final rawSeries = _seriesForMetric(m.key);
-    final rawCompare = _seriesPrevForMetric(m.key);
     final series = _normalizeTrendSeriesForChart(rawSeries);
-    final compareSeries = _alignCompareSeriesLengths(series, rawCompare);
     final labels = _heroTrendLabels(series.length);
     final rangeLabel = _heroTrendRangeLabel(labels);
     final trendTitle = _heroTrendTitle();
     final isRateLike = m.isRate || m.key == 'rate' || m.key == 'spreadRate';
     final periodValue = totals[m.key] ?? 0.0;
     final chartColor = _heroMetricTrendColor(m.key, totals);
-    final showMomLegend =
-        _heroTrendIsMom && compareSeries.isNotEmpty && series.isNotEmpty;
 
     showModalBottomSheet(
       context: context,
@@ -7986,13 +8345,13 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                                 vertical: 2,
                               ),
                               decoration: BoxDecoration(
-                                color: LhColors.copper.withAlpha(28),
+                                color: _LhPlum.primary.withAlpha(28),
                               ),
                               child: Text(
                                 '锚 · ${_anchor.labelCn}',
                                 style: LhTypography.mono(
                                   size: 8.5,
-                                  color: LhColors.copper,
+                                  color: _LhPlum.primary,
                                   weight: FontWeight.w700,
                                   letterSpacing: 1.2,
                                 ),
@@ -8008,49 +8367,12 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                           color: chartColor,
                           isRate: isRateLike,
                           periodValue: periodValue,
-                          compareData: showMomLegend ? compareSeries : null,
                           chartHeight: 168,
                           onInteractionChanged: (active) {
                             if (chartScrollLocked == active) return;
                             setSheetState(() => chartScrollLocked = active);
                           },
                         ),
-                        if (showMomLegend) ...[
-                          const SizedBox(height: 8),
-                          Row(
-                            children: [
-                              Container(width: 14, height: 2, color: chartColor),
-                              const SizedBox(width: 6),
-                              Text(
-                                '本月',
-                                style: LhTypography.sans(
-                                  size: 9.5,
-                                  color: LhColors.mute,
-                                  weight: FontWeight.w600,
-                                ),
-                              ),
-                              const SizedBox(width: 14),
-                              Text(
-                                '- - -',
-                                style: LhTypography.mono(
-                                  size: 9,
-                                  color: LhColors.mute2,
-                                  weight: FontWeight.w700,
-                                  letterSpacing: 1.2,
-                                ),
-                              ),
-                              const SizedBox(width: 6),
-                              Text(
-                                '上月',
-                                style: LhTypography.sans(
-                                  size: 9.5,
-                                  color: LhColors.mute,
-                                  weight: FontWeight.w600,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
                         const SizedBox(height: 12),
                         _buildTrendFormulaPanel(m.key),
                       ],
@@ -8108,19 +8430,16 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             children: [
               // 铜色小 badge 做身份标记 (替代之前的左侧 accent 条)
               Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 6,
-                  vertical: 2,
-                ),
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                 decoration: BoxDecoration(
-                  color: LhColors.copper.withAlpha(28),
+                  color: _LhPlum.primary.withAlpha(28),
                   borderRadius: BorderRadius.circular(3),
                 ),
                 child: Text(
                   '计算公式',
                   style: LhTypography.mono(
                     size: 8.5,
-                    color: LhColors.copper,
+                    color: _LhPlum.primary,
                     weight: FontWeight.w700,
                     letterSpacing: 1.1,
                   ),
@@ -8155,10 +8474,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
       decoration: highlighted
           ? BoxDecoration(
-              color: LhColors.copper.withAlpha(14),
+              color: _LhPlum.primary.withAlpha(14),
               borderRadius: BorderRadius.circular(6),
               border: Border.all(
-                color: LhColors.copper.withAlpha(120),
+                color: _LhPlum.primary.withAlpha(120),
                 width: 0.6,
               ),
             )
@@ -8173,7 +8492,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 width: 4,
                 height: 4,
                 decoration: BoxDecoration(
-                  color: LhColors.copper,
+                  color: _LhPlum.primary,
                   borderRadius: BorderRadius.circular(1),
                 ),
               ),
@@ -8274,7 +8593,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 txt,
                 style: LhTypography.number(
                   size: highlight ? 14 : 12,
-                  color: highlight ? LhColors.copper : LhColors.ink,
+                  color: highlight ? _LhPlum.primary : LhColors.ink,
                 ),
               ),
               if (unit.isNotEmpty) ...[
@@ -8366,57 +8685,6 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     }
   }
 
-  List<double> _seriesPrevForMetric(String key) {
-    switch (key) {
-      case 'cost':
-        final operating = _readMetricSeries('operatingCostSeriesPrev');
-        if (operating.isNotEmpty) return operating;
-        return _readMetricSeries('costSeriesPrev');
-      case 'spreadRate':
-        final direct = _readMetricSeries('spreadRateSeriesPrev');
-        if (direct.isNotEmpty) return direct;
-        final revenue = _readMetricSeries('revenueSeriesPrev');
-        final anchor = _anchorMetricSeriesPrev();
-        final n = revenue.length < anchor.length
-            ? revenue.length
-            : anchor.length;
-        if (n > 0) {
-          return List<double>.generate(n, (i) {
-            final a = anchor[i];
-            return a > 0 ? revenue[i] / a * 100 : 0.0;
-          }, growable: false);
-        }
-        return const <double>[];
-      case 'rate':
-        final direct = _readMetricSeries('rateSeriesPrev');
-        if (direct.isNotEmpty) return direct;
-        final profit = _readMetricSeries('profitSeriesPrev');
-        final anchor = _anchorMetricSeriesPrev();
-        final n = profit.length < anchor.length ? profit.length : anchor.length;
-        if (n > 0) {
-          return List<double>.generate(n, (i) {
-            final a = anchor[i];
-            return a > 0 ? profit[i] / a * 100 : 0.0;
-          }, growable: false);
-        }
-        return const <double>[];
-      default:
-        return _readMetricSeries('${key}SeriesPrev');
-    }
-  }
-
-  List<double> _anchorMetricSeriesPrev() {
-    final verified = _readMetricSeries('verifiedSalesSeriesPrev');
-    final sales = _readMetricSeries('salesSeriesPrev');
-    final n = verified.isNotEmpty ? verified.length : sales.length;
-    if (n == 0) return const <double>[];
-    return List<double>.generate(n, (i) {
-      final v = i < verified.length ? verified[i] : 0.0;
-      if (_anchor == _LhAnchor.verified) return v;
-      return i < sales.length ? sales[i] : v;
-    }, growable: false);
-  }
-
   // ═══════════════════════════════════════════════════════════════════════
   // 指标分析页（per-metric drill-down）—— 保留原逻辑做备份, 现在 hero cell
   // 已改为直接弹折线图 sheet, 这个页面暂无入口, 可作为深度分析二级页
@@ -8443,9 +8711,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       case 'sales':
         return LhColors.ink2;
       case 'profit':
-        return LhColors.pos;
+        return LhColors.neg;
       case 'rate':
-        return LhColors.copper;
+        return _LhPlum.primary;
       case 'gmv':
         return LhColors.product;
       case 'revenue':
@@ -8453,7 +8721,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       case 'cost':
       case 'totalCost':
       case 'tax':
-        return LhColors.neg;
+        return LhColors.pos;
       default:
         return LhColors.ink;
     }
@@ -8480,13 +8748,13 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             if (isNeg)
               TextSpan(
                 text: '-',
-                style: LhTypography.number(size: numSize, color: LhColors.neg),
+                style: LhTypography.number(size: numSize, color: LhColors.pos),
               ),
             TextSpan(
               text: rate.abs().toStringAsFixed(2),
               style: LhTypography.number(
                 size: numSize,
-                color: isNeg ? LhColors.neg : LhColors.ink,
+                color: isNeg ? LhColors.pos : LhColors.ink,
               ),
             ),
             TextSpan(
@@ -8512,13 +8780,13 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             if (isNeg)
               TextSpan(
                 text: '-',
-                style: LhTypography.number(size: numSize, color: LhColors.neg),
+                style: LhTypography.number(size: numSize, color: LhColors.pos),
               ),
             TextSpan(
               text: v,
               style: LhTypography.number(
                 size: numSize,
-                color: isNeg ? LhColors.neg : LhColors.ink,
+                color: isNeg ? LhColors.pos : LhColors.ink,
               ),
             ),
             if (unit.isNotEmpty)
@@ -8546,13 +8814,13 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           if (isNeg)
             TextSpan(
               text: '-',
-              style: LhTypography.number(size: numSize, color: LhColors.neg),
+              style: LhTypography.number(size: numSize, color: LhColors.pos),
             ),
           TextSpan(
             text: _fmt(sum.abs()),
             style: LhTypography.number(
               size: numSize,
-              color: isNeg ? LhColors.neg : LhColors.ink,
+              color: isNeg ? LhColors.pos : LhColors.ink,
             ),
           ),
           TextSpan(
@@ -8754,7 +9022,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         padding: const EdgeInsets.symmetric(horizontal: 6),
         labelPadding: const EdgeInsets.symmetric(horizontal: 12),
         indicator: UnderlineTabIndicator(
-          borderSide: BorderSide(color: LhColors.copper, width: 2),
+          borderSide: BorderSide(color: _LhPlum.primary, width: 2),
           insets: const EdgeInsets.symmetric(horizontal: 8),
         ),
         indicatorSize: TabBarIndicatorSize.label,
@@ -8807,7 +9075,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             height: 1.0,
             color: delta == null
                 ? LhColors.mute2
-                : (delta.isUp ? LhColors.pos : LhColors.neg),
+                : (delta.isUp ? LhColors.neg : LhColors.pos),
             weight: FontWeight.w700,
             letterSpacing: 0.2,
           ),
@@ -8848,10 +9116,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       }
       final isNeg = rate < 0;
       return stripRich([
-        if (isNeg) TextSpan(text: '-', style: numStyle(LhColors.neg)),
+        if (isNeg) TextSpan(text: '-', style: numStyle(LhColors.pos)),
         TextSpan(
           text: rate.abs().toStringAsFixed(2),
-          style: numStyle(isNeg ? LhColors.neg : LhColors.ink),
+          style: numStyle(isNeg ? LhColors.pos : LhColors.ink),
         ),
         TextSpan(text: ' %', style: unitStyle()),
       ]);
@@ -8862,8 +9130,8 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       final isNeg = raw < 0;
       final v = raw.abs().toString().replaceAll(RegExp(r'\.0$'), '');
       return stripRich([
-        if (isNeg) TextSpan(text: '-', style: numStyle(LhColors.neg)),
-        TextSpan(text: v, style: numStyle(isNeg ? LhColors.neg : LhColors.ink)),
+        if (isNeg) TextSpan(text: '-', style: numStyle(LhColors.pos)),
+        TextSpan(text: v, style: numStyle(isNeg ? LhColors.pos : LhColors.ink)),
         if (unit.isNotEmpty) TextSpan(text: ' $unit', style: unitStyle()),
       ]);
     }
@@ -8875,10 +9143,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     }
     final isNeg = sum < 0;
     return stripRich([
-      if (isNeg) TextSpan(text: '-', style: numStyle(LhColors.neg)),
+      if (isNeg) TextSpan(text: '-', style: numStyle(LhColors.pos)),
       TextSpan(
         text: _fmt(sum.abs()),
-        style: numStyle(isNeg ? LhColors.neg : LhColors.ink),
+        style: numStyle(isNeg ? LhColors.pos : LhColors.ink),
       ),
       TextSpan(text: ' ${_unit(sum.abs())}元', style: unitStyle()),
     ]);
@@ -8951,7 +9219,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               '${delta.isUp ? '▲' : '▼'} ${delta.pct.toStringAsFixed(1)}$deltaUnit',
               style: LhTypography.mono(
                 size: 9.5,
-                color: delta.isUp ? LhColors.pos : LhColors.neg,
+                color: delta.isUp ? LhColors.neg : LhColors.pos,
                 weight: FontWeight.w600,
                 letterSpacing: 0.2,
               ),
@@ -9171,7 +9439,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                   flex: (ratio * 1000).round().clamp(1, 1000),
                   child: Container(
                     height: 3,
-                    color: isNeg ? LhColors.neg : accent,
+                    color: isNeg ? LhColors.pos : accent,
                   ),
                 ),
                 Expanded(
@@ -9195,13 +9463,13 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             if (isNeg)
               TextSpan(
                 text: '-',
-                style: LhTypography.number(size: 20, color: LhColors.neg),
+                style: LhTypography.number(size: 20, color: LhColors.pos),
               ),
             TextSpan(
               text: v.abs().toStringAsFixed(2),
               style: LhTypography.number(
                 size: 20,
-                color: isNeg ? LhColors.neg : LhColors.ink,
+                color: isNeg ? LhColors.pos : LhColors.ink,
               ),
             ),
             TextSpan(
@@ -9222,13 +9490,13 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           if (isNeg)
             TextSpan(
               text: '-',
-              style: LhTypography.number(size: 20, color: LhColors.neg),
+              style: LhTypography.number(size: 20, color: LhColors.pos),
             ),
           TextSpan(
             text: _fmt(v.abs()),
             style: LhTypography.number(
               size: 20,
-              color: isNeg ? LhColors.neg : LhColors.ink,
+              color: isNeg ? LhColors.pos : LhColors.ink,
             ),
           ),
           TextSpan(
@@ -9282,7 +9550,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         spans.add(
           TextSpan(
             text: '-',
-            style: LhTypography.number(size: 11, color: LhColors.neg),
+            style: LhTypography.number(size: 11, color: LhColors.pos),
           ),
         );
       }
@@ -9292,7 +9560,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             text: '${val.abs().toStringAsFixed(1)}%',
             style: LhTypography.number(
               size: 11,
-              color: isNeg ? LhColors.neg : LhColors.ink,
+              color: isNeg ? LhColors.pos : LhColors.ink,
             ),
           ),
         );
@@ -9302,7 +9570,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             text: '${_fmt(val.abs())}${_unit(val.abs())}',
             style: LhTypography.number(
               size: 11,
-              color: isNeg ? LhColors.neg : LhColors.ink,
+              color: isNeg ? LhColors.pos : LhColors.ink,
             ),
           ),
         );
@@ -9358,7 +9626,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               style: LhTypography.sans(
                 size: 16,
                 weight: FontWeight.w700,
-                color: LhColors.neg,
+                color: LhColors.pos,
                 letterSpacing: -0.3,
               ),
             ),
@@ -9367,7 +9635,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             style: LhTypography.sans(
               size: 16,
               weight: FontWeight.w700,
-              color: isNeg ? LhColors.neg : LhColors.ink,
+              color: isNeg ? LhColors.pos : LhColors.ink,
               letterSpacing: -0.3,
             ),
           ),
@@ -9399,7 +9667,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               style: LhTypography.sans(
                 size: 16,
                 weight: FontWeight.w700,
-                color: LhColors.neg,
+                color: LhColors.pos,
                 letterSpacing: -0.3,
               ),
             ),
@@ -9408,7 +9676,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             style: LhTypography.sans(
               size: 16,
               weight: FontWeight.w700,
-              color: isNeg ? LhColors.neg : LhColors.ink,
+              color: isNeg ? LhColors.pos : LhColors.ink,
               letterSpacing: -0.3,
             ),
           ),
@@ -9444,11 +9712,13 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
 
   // ───── Tab Segment ────────────────────────────────────────────────────────
   Widget _buildTabSegment() {
+    // v2 淡紫改造：tabs 表里 accent 列已不再驱动填色（v3.7 后就只留 typography），
+    // 只是保留字段避免影响外部引用。真实使用只有 active 下划线 & count 高亮。
     final tabs = [
       {'key': 'product', 'label': '产品', 'accent': LhColors.product},
       {'key': 'supply', 'label': '供给方', 'accent': LhColors.sinopec},
       {'key': 'channel', 'label': '渠道', 'accent': LhColors.carrier},
-      {'key': 'analysis', 'label': '分析', 'accent': LhColors.copper},
+      {'key': 'analysis', 'label': '分析', 'accent': _LhPlum.primary},
     ];
     final counts = {
       'product': _bundle?.rowsOf('product').length ?? 0,
@@ -9460,8 +9730,14 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     return Container(
       clipBehavior: Clip.hardEdge,
       decoration: BoxDecoration(
+        // v2 淡紫改造：line2 (冷灰) → _LhPlum.lavender（淡紫 hairline）
+        // v2.1 气泡感：Panel 底改雾紫后 lavender 在此几乎不可见，
+        //             用 _LhPlum.soft.withAlpha 加半档存在感
         border: Border.symmetric(
-          horizontal: BorderSide(color: LhColors.line2, width: 1),
+          horizontal: BorderSide(
+            color: _LhPlum.soft.withAlpha(110),
+            width: 1,
+          ),
         ),
       ),
       child: Padding(
@@ -9503,6 +9779,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                     //   顶到底 20 alpha 渐变, 视觉 4 色打架, 违反编辑室"copper only chrome"原则。
                     //   现在: 无填色, 仅底 2px copper 下划线 (active), typography 承担分辨。
                     //   跟 detail sub-tabs / period bar / cube fullscreen top bar 全线统一。
+                    // v2 淡紫改造：copper → _LhPlum.primary（下划线 + active count 数字）。
                     Padding(
                       padding: const EdgeInsets.symmetric(vertical: 9),
                       child: Row(
@@ -9525,7 +9802,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                               '$count',
                               style: LhTypography.mono(
                                 size: 9,
-                                color: isOn ? LhColors.copper : LhColors.mute2,
+                                color: isOn ? _LhPlum.primary : LhColors.mute2,
                                 weight: isOn
                                     ? FontWeight.w600
                                     : FontWeight.w500,
@@ -9541,7 +9818,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                         bottom: 0,
                         left: 0,
                         right: 0,
-                        child: Container(height: 2, color: LhColors.copper),
+                        child: Container(height: 2, color: _LhPlum.primary),
                       ),
                   ],
                 ),
@@ -9639,7 +9916,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         : (active ? LhColors.ink : LhColors.ink2);
     final countColor = muted
         ? LhColors.mute2
-        : LhColors.neg.withAlpha(active ? 255 : 210);
+        : LhColors.pos.withAlpha(active ? 255 : 210);
 
     return Opacity(
       opacity: muted ? 0.42 : 1.0,
@@ -9747,12 +10024,12 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     final active = _groupFilter == label;
     final muted = count == 0;
     final fgColor = active
-        ? LhColors.copper
+        ? _LhPlum.primary
         : muted
         ? LhColors.mute2
         : LhColors.ink2;
-    final bgColor = active ? LhColors.copperSoft.withAlpha(80) : Colors.white;
-    final borderColor = active ? LhColors.copper : LhColors.line2;
+    final bgColor = active ? _LhPlum.soft.withAlpha(80) : Colors.white;
+    final borderColor = active ? _LhPlum.primary : LhColors.line2;
 
     return Opacity(
       opacity: muted ? 0.42 : 1.0,
@@ -9797,7 +10074,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 '$count',
                 style: LhTypography.mono(
                   size: 8.5,
-                  color: active ? LhColors.copper : LhColors.mute2,
+                  color: active ? _LhPlum.primary : LhColors.mute2,
                   weight: FontWeight.w700,
                   letterSpacing: 0.2,
                 ),
@@ -9866,8 +10143,8 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     final active = _anomalyFilter == label;
     final muted = label != '全部' && count == 0;
     final color = label == '亏损' || label == '成本异常' || label == '利差倒挂'
-        ? LhColors.neg
-        : LhColors.copper;
+        ? LhColors.pos
+        : _LhPlum.primary;
     final fg = active ? color : (muted ? LhColors.mute2 : LhColors.mute);
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
@@ -10006,7 +10283,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     //   现在: 无 border 无 fill, icon+label 直接, active = copper 全线;
     //   badge = 中点分隔的 inline mono 数字 (指标 · 3), 无 pill 无填。
     //   跟 _CubeChipButton v3.7 完全同款。
-    final fg = active ? LhColors.copper : LhColors.mute;
+    final fg = active ? _LhPlum.primary : LhColors.mute;
     return GestureDetector(
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
@@ -10042,7 +10319,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 badge,
                 style: LhTypography.mono(
                   size: 9.5,
-                  color: LhColors.copper,
+                  color: _LhPlum.primary,
                   weight: FontWeight.w700,
                   letterSpacing: 0.2,
                 ),
@@ -10136,7 +10413,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                         _discountExpanded ? '收起' : '展开全部',
                         style: LhTypography.sans(
                           size: 10,
-                          color: LhColors.copper,
+                          color: _LhPlum.primary,
                           weight: FontWeight.w500,
                         ),
                       ),
@@ -10146,7 +10423,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                         child: const Icon(
                           Icons.keyboard_arrow_down_rounded,
                           size: 16,
-                          color: LhColors.copper,
+                          color: _LhPlum.primary,
                         ),
                       ),
                     ],
@@ -10168,7 +10445,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             spacing: 8,
             runSpacing: 4,
             children: [
-              _buildDiscountLegendChip('固定', LhColors.copper, fixedCount),
+              _buildDiscountLegendChip('固定', _LhPlum.primary, fixedCount),
               _buildDiscountLegendChip('月/年阶梯', LhColors.cnpc, ladderCount),
               if (otherCount > 0)
                 _buildDiscountLegendChip('无规则', LhColors.mute, otherCount),
@@ -10209,7 +10486,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                       _discountExpanded ? '收起' : '展开剩余 $remaining 家',
                       style: LhTypography.sans(
                         size: 10.5,
-                        color: LhColors.copper,
+                        color: _LhPlum.primary,
                         weight: FontWeight.w500,
                         letterSpacing: 0.3,
                       ),
@@ -10222,7 +10499,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                         child: const Icon(
                           Icons.keyboard_arrow_down_rounded,
                           size: 14,
-                          color: LhColors.copper,
+                          color: _LhPlum.primary,
                         ),
                       ),
                     ],
@@ -10355,7 +10632,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                         ),
                         style: LhTypography.sans(
                           size: 10,
-                          color: LhColors.pos,
+                          color: LhColors.neg,
                           weight: FontWeight.w700,
                         ),
                       ),
@@ -10462,15 +10739,15 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                   vertical: 8,
                 ),
                 decoration: BoxDecoration(
-                  color: LhColors.copperSoft,
-                  border: Border.all(color: LhColors.copper),
+                  color: _LhPlum.soft,
+                  border: Border.all(color: _LhPlum.primary),
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: Text(
                   '重试',
                   style: LhTypography.sans(
                     size: 12,
-                    color: LhColors.copper,
+                    color: _LhPlum.primary,
                     weight: FontWeight.w600,
                   ),
                 ),
@@ -10512,15 +10789,15 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                   vertical: 8,
                 ),
                 decoration: BoxDecoration(
-                  color: LhColors.copperSoft,
-                  border: Border.all(color: LhColors.copper),
+                  color: _LhPlum.soft,
+                  border: Border.all(color: _LhPlum.primary),
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: Text(
                   '重试当前分类',
                   style: LhTypography.sans(
                     size: 12,
-                    color: LhColors.copper,
+                    color: _LhPlum.primary,
                     weight: FontWeight.w600,
                   ),
                 ),
@@ -10649,7 +10926,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               _projectDecisionPill(
                 '目标ROI',
                 targetROI == null ? '—' : '${targetROI.toStringAsFixed(1)}%',
-                LhColors.copper,
+                _LhPlum.primary,
               ),
               const SizedBox(width: 6),
               _projectDecisionPill(
@@ -10661,7 +10938,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               _projectDecisionPill(
                 '甩包袱',
                 '${burden.length}项',
-                burden.isEmpty ? LhColors.pos : LhColors.neg,
+                burden.isEmpty ? LhColors.neg : LhColors.pos,
               ),
             ],
           ),
@@ -10812,7 +11089,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 style: LhTypography.mono(
                   size: 7.5,
                   color: days != null && days < 0
-                      ? LhColors.neg
+                      ? LhColors.pos
                       : LhColors.mute2,
                   weight: FontWeight.w600,
                 ),
@@ -10840,11 +11117,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   Color _projectStatusColor(String status) {
     switch (status) {
       case 'healthy':
-        return LhColors.pos;
-      case 'watch':
-        return LhColors.copper;
-      case 'burden':
         return LhColors.neg;
+      case 'watch':
+        return _LhPlum.primary;
+      case 'burden':
+        return LhColors.pos;
       default:
         return LhColors.mute;
     }
@@ -10890,7 +11167,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                   width: 5,
                   height: 5,
                   decoration: BoxDecoration(
-                    color: LhColors.pos.withAlpha(220),
+                    color: LhColors.neg.withAlpha(220),
                     shape: BoxShape.circle,
                   ),
                 ),
@@ -11372,7 +11649,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               Icon(
                 icon,
                 size: 12,
-                color: value ? LhColors.copper : LhColors.mute2,
+                color: value ? _LhPlum.primary : LhColors.mute2,
               ),
               const SizedBox(width: 7),
               Column(
@@ -11407,7 +11684,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 padding: const EdgeInsets.all(1.5),
                 decoration: BoxDecoration(
                   color: value
-                      ? LhColors.copper.withAlpha(200)
+                      ? _LhPlum.primary.withAlpha(200)
                       : LhColors.line2,
                   borderRadius: BorderRadius.circular(7),
                 ),
@@ -11443,7 +11720,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     return Container(
       decoration: BoxDecoration(
         color: LhColors.paper,
-        border: Border.all(color: LhColors.copper.withAlpha(110), width: 0.8),
+        border: Border.all(color: _LhPlum.primary.withAlpha(110), width: 0.8),
         borderRadius: BorderRadius.circular(8),
         boxShadow: [
           BoxShadow(
@@ -11465,7 +11742,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 'LABELS · 文字显示',
                 style: LhTypography.mono(
                   size: 8.5,
-                  color: LhColors.copper,
+                  color: _LhPlum.primary,
                   weight: FontWeight.w800,
                   letterSpacing: 1.4,
                 ),
@@ -11583,7 +11860,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                       decoration: const BoxDecoration(
                         border: Border(
                           bottom: BorderSide(
-                            color: Color(0xFFDDD5C0),
+                            color: _LhPlum.lavender,
                             width: 1,
                           ),
                         ),
@@ -11620,10 +11897,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                                 : Icons.tune_rounded,
                             label: '筛选',
                             color: filterOpen
-                                ? LhColors.copper
+                                ? _LhPlum.primary
                                 : (_cubeHasActiveFilter ||
                                           _cubeSelectedOwner != null
-                                      ? LhColors.copper
+                                      ? _LhPlum.primary
                                       : LhColors.ink),
                             onTap: () => setDlg(() {
                               filterOpen = !filterOpen;
@@ -11664,7 +11941,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                             color: Color(0xFFFDF9EC),
                             border: Border(
                               bottom: BorderSide(
-                                color: Color(0xFFDDD5C0),
+                                color: _LhPlum.lavender,
                                 width: 1,
                               ),
                             ),
@@ -11880,7 +12157,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     final ownerColors = _CubePainter.ownerColorMap(cube.lit);
     final accent =
         ownerColors[p.owner] ??
-        (p.owner.isEmpty ? LhColors.mute : LhColors.copper);
+        (p.owner.isEmpty ? LhColors.mute : _LhPlum.primary);
 
     String fmtValue(double v) {
       final abs = v.abs();
@@ -12158,7 +12435,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             width: 6,
             height: 6,
             decoration: const BoxDecoration(
-              color: LhColors.copper,
+              color: _LhPlum.primary,
               shape: BoxShape.circle,
             ),
           ),
@@ -12177,10 +12454,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             width: 7,
             height: 7,
             decoration: BoxDecoration(
-              color: LhColors.copper,
+              color: _LhPlum.primary,
               shape: BoxShape.circle,
               boxShadow: [
-                BoxShadow(color: LhColors.copper.withAlpha(80), blurRadius: 5),
+                BoxShadow(color: _LhPlum.primary.withAlpha(80), blurRadius: 5),
               ],
             ),
           ),
@@ -12199,7 +12476,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             '$litTotal',
             style: LhTypography.mono(
               size: 11,
-              color: LhColors.copper,
+              color: _LhPlum.primary,
               weight: FontWeight.w700,
               letterSpacing: 0.2,
             ),
@@ -12245,7 +12522,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 child: Container(
                   height: 3,
                   decoration: BoxDecoration(
-                    color: LhColors.copper,
+                    color: _LhPlum.primary,
                     borderRadius: BorderRadius.circular(2),
                   ),
                 ),
@@ -12298,13 +12575,13 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     }) {
       final isOpen = _cubeFilterOpen == dim;
       final isActive = current != '全部';
-      final accent = isActive ? LhColors.copper : LhColors.ink2;
+      final accent = isActive ? _LhPlum.primary : LhColors.ink2;
       // v3.7: 收敛跟 dropdown / hero 系统同一门语言 ——
       //   off 态无 border 无 bg (silent), open 态用极浅 bg 提示"打开中",
       //   active 态用 copper.withAlpha(24) fill (跟 _ddChip 完全对齐).
       //   prefix label 换 mono UPPER letterSpacing 0.5, 跟 hero kicker 同族.
       final bg = isActive
-          ? LhColors.copper.withAlpha(24)
+          ? _LhPlum.primary.withAlpha(24)
           : (isOpen ? const Color(0x080A0A0F) : Colors.transparent);
       return GestureDetector(
         behavior: HitTestBehavior.opaque,
@@ -12346,7 +12623,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                     ? Icons.keyboard_arrow_up_rounded
                     : Icons.keyboard_arrow_down_rounded,
                 size: 12,
-                color: isActive || isOpen ? LhColors.copper : LhColors.mute2,
+                color: isActive || isOpen ? _LhPlum.primary : LhColors.mute2,
               ),
             ],
           ),
@@ -12413,10 +12690,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                         padding: const EdgeInsets.fromLTRB(9, 3, 9, 3),
                         decoration: BoxDecoration(
                           color: on
-                              ? LhColors.copper.withAlpha(13)
+                              ? _LhPlum.primary.withAlpha(13)
                               : Colors.transparent,
                           border: Border.all(
-                            color: on ? LhColors.copper : LhColors.line,
+                            color: on ? _LhPlum.primary : LhColors.line,
                             width: 1,
                           ),
                           borderRadius: BorderRadius.circular(5),
@@ -12427,7 +12704,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                               : opt,
                           style: LhTypography.sans(
                             size: 9.3,
-                            color: on ? LhColors.copper : LhColors.ink2,
+                            color: on ? _LhPlum.primary : LhColors.ink2,
                             weight: on ? FontWeight.w600 : FontWeight.w500,
                             letterSpacing: 0.1,
                           ),
@@ -12492,7 +12769,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                       '重置',
                       style: LhTypography.sans(
                         size: 9.2,
-                        color: LhColors.copper,
+                        color: _LhPlum.primary,
                         weight: FontWeight.w500,
                         letterSpacing: 0.2,
                       ),
@@ -12648,7 +12925,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           rank,
           style: LhTypography.mono(
             size: 11.5,
-            color: isTop3 ? LhColors.copper : LhColors.mute2,
+            color: isTop3 ? _LhPlum.primary : LhColors.mute2,
             weight: isTop3 ? FontWeight.w700 : FontWeight.w500,
             letterSpacing: 0.2,
             height: 1.0,
@@ -12668,7 +12945,8 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     final isTop3 = idx < 3;
     final isNeg = profit < 0;
     final trendKey = '$_tab::$name::$group';
-    final isExpanded = _expanded.contains(trendKey);
+    // v2.8 · 默认展开:_collapsed set 记录"已手动收起"的行,不在集内即展开
+    final isExpanded = !_collapsed.contains(trendKey);
     final vsLabel = _kPeriodVs[_period] ?? 'vs 上月';
 
     // 效率（ROI）= 毛利 / 核销规模 × 100%
@@ -12682,7 +12960,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     final showDelta = deltaRaw != null;
     final delta = deltaRaw ?? 0;
     final dArrow = delta >= 0 ? '↑' : '↓';
-    final dColor = delta >= 0 ? LhColors.pos : LhColors.neg;
+    final dColor = delta >= 0 ? LhColors.neg : LhColors.pos;
     final canExpand = _tab == 'product' || _tab == 'supply' || _tab == 'channel';
     final isMetaExpanded = _metaExpanded.contains(trendKey);
 
@@ -12753,457 +13031,449 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         ? LhColors.ink2.withAlpha(40)
         : LhColors.line2;
     // Hero 签名圆点色：正毛利 → pos(绿), 负毛利 → neg(红)
-    final profitDotColor = isNeg ? LhColors.neg : LhColors.pos;
+    final profitDotColor = isNeg ? LhColors.pos : LhColors.neg;
 
-    // v3.5 —— 暖 near-white cream + paper 质感
-    //   v3.4 cool sage 被否 —— 好丑, 掉进 cream 底像发霉。
-    //   回到 (a) 暖 near-white: 同 hero panel warm 家族, 但更亮更 desaturated。
-    //   质感三件套:
-    //     · 3-stop 非线性渐变: FDFBF3 (顶亮) → F6F1DE (中) → EBE4CD (底暗)
-    //       给纸面一个"上亮下暗"的 catch-light 曲线, 不是 2-stop 平铺
-    //     · Border 换更暖更深的 DDD5C0（原 line2 偏中性）—— "印刷成品"的边线
-    //     · 阴影稍加: blur 2 → 3 —— 卡片沉下去一点点, 不飘
-    //   结果: 暖调纸感, 页面 warm cream 上"更亮的一张宣纸", 有质感有区分。
+    // v3.5 —— 暖 near-white cream + paper 质感（旧版记录，保留供追溯）
+    // v2 淡紫改造 ——
+    //   跟 Panel Level 2 一致：3-stop cream 渐变 + 暖阴影 全部拿掉。
+    // v2.1 气泡感 ——
+    //   反馈"太白太扁没气泡感"。回补：
+    //     · 白→_LhPlum.mist 极轻竖向 2-stop 渐变（比原 cream 版轻 3 档），
+    //       上白（高光带）下浅雾紫（跟 Panel 底融合），气泡"坐"在 Panel 上
+    //     · 圆角 10→14, margin bottom 6→8, padding 加半档
+    //     · 深紫墨影 blur+alpha 一起加深，卡片明显浮起
     return Container(
-      margin: const EdgeInsets.only(bottom: 4),
+      margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(7),
+        borderRadius: BorderRadius.circular(14),
         boxShadow: [
           BoxShadow(
             color: isExpanded
-                ? const Color(0x140A0A0F)
-                : const Color(0x0C0A0A0F),
-            blurRadius: isExpanded ? 6 : 3,
-            offset: Offset(0, isExpanded ? 2 : 1),
+                ? _LhPlum.deep.withAlpha(38)
+                : _LhPlum.deep.withAlpha(20),
+            blurRadius: isExpanded ? 22 : 14,
+            spreadRadius: -4,
+            offset: Offset(0, isExpanded ? 6 : 4),
           ),
         ],
       ),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(7),
+        borderRadius: BorderRadius.circular(14),
         child: Stack(
           children: [
             Container(
-              padding: const EdgeInsets.fromLTRB(9, 7, 9, 7),
+              padding: const EdgeInsets.fromLTRB(11, 9, 11, 9),
               decoration: BoxDecoration(
-                gradient: const LinearGradient(
+                gradient: LinearGradient(
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
                   colors: [
-                    Color(0xFFFFFFFC), // 顶: 近纯白, 仅一丝暖底
-                    Color(0xFFFAF8F0), // 中: 极淡 warm-white
-                    Color(0xFFF2EFDF), // 底: 轻纸质 vignette (克制)
+                    Colors.white, // 顶：白高光
+                    _LhPlum.mist, // 底：融进 Panel 雾紫
                   ],
-                  stops: [0.0, 0.6, 1.0],
+                  stops: const [0.0, 1.0],
                 ),
                 border: Border.all(
                   color: isExpanded
-                      ? LhColors.ink2.withAlpha(50)
-                      : const Color(0xFFDDD5C0), // 暖 hairline
+                      ? _LhPlum.primary.withAlpha(90)
+                      : _LhPlum.lavender,
                   width: 1,
                 ),
               ),
               // 左栏点名称进详情；右栏毛利块点数字看走势。
               child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // ── Rank ─────────────────────────────────────────────
-                        _buildListRankBadge(rank, isTop3: isTop3),
-                        const SizedBox(width: 6),
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // ── Rank ─────────────────────────────────────────────
+                      _buildListRankBadge(rank, isTop3: isTop3),
+                      const SizedBox(width: 6),
 
-                        // ── 中栏：身份 (name + HUN + group tag) ────────────
-                        //   flex 3:2 保证名字宽度, chevron 不再在这里 (移到 hero 尾)
-                        Expanded(
-                          flex: 3,
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              GestureDetector(
-                                behavior: HitTestBehavior.opaque,
-                                onTap: canDetail ? openDetail : null,
-                                child: Align(
-                                  alignment: Alignment.centerLeft,
-                                  child: Text.rich(
-                                    TextSpan(
-                                      children: [
-                                        TextSpan(
-                                          text: name,
-                                          style: LhTypography.sans(
-                                            size: 11.2,
-                                            weight: FontWeight.w700,
-                                            color: LhColors.ink,
-                                            height: 1.2,
-                                            letterSpacing: -0.1,
+                      // ── 中栏：身份 (name + HUN + group tag) ────────────
+                      //   flex 3:2 保证名字宽度, chevron 不再在这里 (移到 hero 尾)
+                      Expanded(
+                        flex: 3,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            GestureDetector(
+                              behavior: HitTestBehavior.opaque,
+                              onTap: canDetail ? openDetail : null,
+                              child: Align(
+                                alignment: Alignment.centerLeft,
+                                child: Text.rich(
+                                  TextSpan(
+                                    children: [
+                                      TextSpan(
+                                        text: name,
+                                        style: LhTypography.sans(
+                                          size: 11.2,
+                                          weight: FontWeight.w700,
+                                          color: LhColors.ink,
+                                          height: 1.2,
+                                          letterSpacing: -0.1,
+                                        ),
+                                      ),
+                                      if (canDetail)
+                                        WidgetSpan(
+                                          alignment:
+                                              PlaceholderAlignment.middle,
+                                          child: Padding(
+                                            padding: const EdgeInsets.only(
+                                              left: 1,
+                                            ),
+                                            child: Icon(
+                                              Icons.chevron_right_rounded,
+                                              size: 14,
+                                              color: LhColors.mute2,
+                                            ),
                                           ),
                                         ),
-                                        if (canDetail)
-                                          WidgetSpan(
-                                            alignment:
-                                                PlaceholderAlignment.middle,
-                                            child: Padding(
-                                              padding: const EdgeInsets.only(
-                                                left: 1,
-                                              ),
-                                              child: Icon(
-                                                Icons.chevron_right_rounded,
-                                                size: 14,
-                                                color: LhColors.mute2,
-                                              ),
-                                            ),
-                                          ),
-                                      ],
-                                    ),
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis,
+                                    ],
                                   ),
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
                                 ),
                               ),
-                              const SizedBox(height: 5),
-                              Row(
-                                children: [
-                                  // HUN badge (仅 supply / channel)
-                                  if (_tab == 'supply' || _tab == 'channel')
-                                    Builder(
-                                      builder: (_) {
-                                        final h = _hunOf(r);
-                                        if (!h.hasAny)
-                                          return const SizedBox.shrink();
-                                        final col = _hunColorFor(h.primary);
-                                        final lbl = _hunBadgeFor(h.primary);
-                                        return Padding(
-                                          padding: const EdgeInsets.only(
-                                            right: 4,
+                            ),
+                            const SizedBox(height: 5),
+                            Row(
+                              children: [
+                                // HUN badge (仅 supply / channel)
+                                if (_tab == 'supply' || _tab == 'channel')
+                                  Builder(
+                                    builder: (_) {
+                                      final h = _hunOf(r);
+                                      if (!h.hasAny)
+                                        return const SizedBox.shrink();
+                                      final col = _hunColorFor(h.primary);
+                                      final lbl = _hunBadgeFor(h.primary);
+                                      return Padding(
+                                        padding: const EdgeInsets.only(
+                                          right: 4,
+                                        ),
+                                        child: Container(
+                                          padding: EdgeInsets.symmetric(
+                                            horizontal: lbl.length > 2 ? 4 : 5,
+                                            vertical: 1,
                                           ),
-                                          child: Container(
-                                            padding: EdgeInsets.symmetric(
-                                              horizontal: lbl.length > 2
-                                                  ? 4
-                                                  : 5,
-                                              vertical: 1,
+                                          decoration: BoxDecoration(
+                                            color: col.withAlpha(20),
+                                            border: Border.all(
+                                              color: col.withAlpha(80),
+                                              width: 0.8,
                                             ),
-                                            decoration: BoxDecoration(
-                                              color: col.withAlpha(20),
-                                              border: Border.all(
-                                                color: col.withAlpha(80),
-                                                width: 0.8,
-                                              ),
-                                              borderRadius:
-                                                  BorderRadius.circular(3),
-                                            ),
-                                            child: Text(
-                                              lbl,
-                                              style: LhTypography.mono(
-                                                size: lbl.length > 2
-                                                    ? 7.5
-                                                    : 8.2,
-                                                color: col,
-                                                weight: FontWeight.w700,
-                                                letterSpacing: 0.3,
-                                              ),
+                                            borderRadius: BorderRadius.circular(
+                                              3,
                                             ),
                                           ),
-                                        );
-                                      },
-                                    ),
-                                  // Group tag
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 5,
-                                      vertical: 1,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: tagBg,
-                                      borderRadius: BorderRadius.circular(3),
-                                    ),
-                                    child: Text(
-                                      group,
-                                      style: LhTypography.sans(
-                                        size: 7.8,
-                                        color: tagFg,
-                                        weight: FontWeight.w600,
-                                        letterSpacing: 0.2,
-                                      ),
+                                          child: Text(
+                                            lbl,
+                                            style: LhTypography.mono(
+                                              size: lbl.length > 2 ? 7.5 : 8.2,
+                                              color: col,
+                                              weight: FontWeight.w700,
+                                              letterSpacing: 0.3,
+                                            ),
+                                          ),
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                // Group tag
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 5,
+                                    vertical: 1,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: tagBg,
+                                    borderRadius: BorderRadius.circular(3),
+                                  ),
+                                  child: Text(
+                                    group,
+                                    style: LhTypography.sans(
+                                      size: 7.8,
+                                      color: tagFg,
+                                      weight: FontWeight.w600,
+                                      letterSpacing: 0.2,
                                     ),
                                   ),
-                                ],
-                              ),
-                              // ═══════════════════════════════════════════════════
-                              // ── v4: 占比 SHARE viz —— 填 identity 下半的天窗 ──
-                              // ═══════════════════════════════════════════════════
-                              //   问题：v3 里 identity 只有 2 层 (name + tag),
-                              //         右栏 hero 有 5 层 (spark + kicker + num + rate + delta),
-                              //         左下 40px 空 —— 用户实拍图指出来了。
-                              //   诊断：这个空不能靠装饰填 (会掉 editorial 感);
-                              //         得填一个真数据元素 —— 用户扫列表 5 个问题里,
-                              //         唯一没被答的是"这一行有多大"(占全 tab 毛利多少)。
-                              //   方案：占比条 —— |profit| / Σ|profit|_currentRows.
-                              //         label "占比 SHARE" bilingual mono UPPER (跟右栏
-                              //         "毛利 PROFIT" 同一族), value sans w700 -0.3 (hero
-                              //         数字迷你版), 58×3 填充条 (top3 用 copper 继承信号).
-                              //         整个卡片变成: 右栏"这行有多好" | 左栏"这行有多重要",
-                              //         两根轴各占一栏几何就平了。
-                              Builder(
-                                builder: (_) {
-                                  final rows = _currentRows;
-                                  if (rows.isEmpty)
-                                    return const SizedBox.shrink();
-                                  final totalMag = rows.fold<double>(
-                                    0,
-                                    (s, x) =>
-                                        s +
-                                        ((x['profit'] as num?)?.toDouble() ?? 0)
-                                            .abs(),
-                                  );
-                                  if (totalMag == 0)
-                                    return const SizedBox.shrink();
-                                  final share = profit.abs() / totalMag;
-                                  final sharePct = share * 100;
-                                  const barW = 58.0;
-                                  const barH = 3.0;
-                                  final barFillColor = isTop3
-                                      ? LhColors.copper
-                                      : LhColors.ink2;
-                                  // 小于 0.1% 显示 "<0.1"，避免 "0.0" 看起来像 bug
-                                  final pctText = sharePct < 0.1
-                                      ? '<0.1'
-                                      : sharePct.toStringAsFixed(1);
-                                  return Padding(
-                                    padding: const EdgeInsets.only(top: 10),
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        // ── kicker + value (跟 hero 系统同族) ──
-                                        Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.baseline,
-                                          textBaseline: TextBaseline.alphabetic,
+                                ),
+                              ],
+                            ),
+                            // ═══════════════════════════════════════════════════
+                            // ── v4: 占比 SHARE viz —— 填 identity 下半的天窗 ──
+                            // ═══════════════════════════════════════════════════
+                            //   问题：v3 里 identity 只有 2 层 (name + tag),
+                            //         右栏 hero 有 5 层 (spark + kicker + num + rate + delta),
+                            //         左下 40px 空 —— 用户实拍图指出来了。
+                            //   诊断：这个空不能靠装饰填 (会掉 editorial 感);
+                            //         得填一个真数据元素 —— 用户扫列表 5 个问题里,
+                            //         唯一没被答的是"这一行有多大"(占全 tab 毛利多少)。
+                            //   方案：占比条 —— |profit| / Σ|profit|_currentRows.
+                            //         label "占比 SHARE" bilingual mono UPPER (跟右栏
+                            //         "毛利 PROFIT" 同一族), value sans w700 -0.3 (hero
+                            //         数字迷你版), 58×3 填充条 (top3 用 copper 继承信号).
+                            //         整个卡片变成: 右栏"这行有多好" | 左栏"这行有多重要",
+                            //         两根轴各占一栏几何就平了。
+                            Builder(
+                              builder: (_) {
+                                final rows = _currentRows;
+                                if (rows.isEmpty)
+                                  return const SizedBox.shrink();
+                                final totalMag = rows.fold<double>(
+                                  0,
+                                  (s, x) =>
+                                      s +
+                                      ((x['profit'] as num?)?.toDouble() ?? 0)
+                                          .abs(),
+                                );
+                                if (totalMag == 0)
+                                  return const SizedBox.shrink();
+                                final share = profit.abs() / totalMag;
+                                final sharePct = share * 100;
+                                const barW = 58.0;
+                                const barH = 3.0;
+                                final barFillColor = isTop3
+                                    ? _LhPlum.primary
+                                    : LhColors.ink2;
+                                // 小于 0.1% 显示 "<0.1"，避免 "0.0" 看起来像 bug
+                                final pctText = sharePct < 0.1
+                                    ? '<0.1'
+                                    : sharePct.toStringAsFixed(1);
+                                return Padding(
+                                  padding: const EdgeInsets.only(top: 10),
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      // ── kicker + value (跟 hero 系统同族) ──
+                                      Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.baseline,
+                                        textBaseline: TextBaseline.alphabetic,
+                                        children: [
+                                          Text(
+                                            '占比',
+                                            style: LhTypography.mono(
+                                              size: 7.5,
+                                              color: LhColors.mute2,
+                                              weight: FontWeight.w600,
+                                              letterSpacing: 0.5,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 6),
+                                          Text(
+                                            pctText,
+                                            style: LhTypography.sans(
+                                              size: 10.5,
+                                              color: LhColors.ink2,
+                                              weight: FontWeight.w700,
+                                              letterSpacing: -0.3,
+                                            ),
+                                          ),
+                                          Text(
+                                            '%',
+                                            style: LhTypography.mono(
+                                              size: 8,
+                                              color: LhColors.mute,
+                                              weight: FontWeight.w500,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 5),
+                                      // ── 填充条 (Stack: 底 line2, 面 pos/copper) ──
+                                      SizedBox(
+                                        width: barW,
+                                        height: barH,
+                                        child: Stack(
                                           children: [
-                                            Text(
-                                              '占比',
-                                              style: LhTypography.mono(
-                                                size: 7.5,
-                                                color: LhColors.mute2,
-                                                weight: FontWeight.w600,
-                                                letterSpacing: 0.5,
+                                            Container(
+                                              width: barW,
+                                              height: barH,
+                                              decoration: BoxDecoration(
+                                                color: LhColors.line2,
+                                                borderRadius:
+                                                    BorderRadius.circular(1.5),
                                               ),
                                             ),
-                                            const SizedBox(width: 6),
-                                            Text(
-                                              pctText,
-                                              style: LhTypography.sans(
-                                                size: 10.5,
-                                                color: LhColors.ink2,
-                                                weight: FontWeight.w700,
-                                                letterSpacing: -0.3,
-                                              ),
-                                            ),
-                                            Text(
-                                              '%',
-                                              style: LhTypography.mono(
-                                                size: 8,
-                                                color: LhColors.mute,
-                                                weight: FontWeight.w500,
+                                            Container(
+                                              width:
+                                                  barW * share.clamp(0.0, 1.0),
+                                              height: barH,
+                                              decoration: BoxDecoration(
+                                                color: barFillColor,
+                                                borderRadius:
+                                                    BorderRadius.circular(1.5),
                                               ),
                                             ),
                                           ],
                                         ),
-                                        const SizedBox(height: 5),
-                                        // ── 填充条 (Stack: 底 line2, 面 pos/copper) ──
-                                        SizedBox(
-                                          width: barW,
-                                          height: barH,
-                                          child: Stack(
-                                            children: [
-                                              Container(
-                                                width: barW,
-                                                height: barH,
-                                                decoration: BoxDecoration(
-                                                  color: LhColors.line2,
-                                                  borderRadius:
-                                                      BorderRadius.circular(
-                                                        1.5,
-                                                      ),
-                                                ),
-                                              ),
-                                              Container(
-                                                width:
-                                                    barW *
-                                                    share.clamp(0.0, 1.0),
-                                                height: barH,
-                                                decoration: BoxDecoration(
-                                                  color: barFillColor,
-                                                  borderRadius:
-                                                      BorderRadius.circular(
-                                                        1.5,
-                                                      ),
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  );
-                                },
-                              ),
-                              // ═══════════════════════════════════════════════════
-                              // ── v3.5: 内联 controls (从底部 band 搬到 LEFT 栏尾) ──
-                              // ═══════════════════════════════════════════════════
-                              //   RIGHT 栏 hero 更高 (spark+kicker+num+rate+vsLabel),
-                              //   LEFT 栏 SHARE 之后有 ~14px 天窗 —— [指标 N ▾] [趋势 ▾]
-                              //   停进来正好, 卡片不用再开一层 footer 就"矮"了。
-                              if (metaItems.isNotEmpty || canExpand)
-                                Padding(
-                                  padding: const EdgeInsets.only(top: 6),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      if (metaItems.isNotEmpty)
-                                        GestureDetector(
-                                          behavior: HitTestBehavior.opaque,
-                                          onTap: () => setState(() {
-                                            if (_metaExpanded.contains(
-                                              trendKey,
-                                            )) {
-                                              _metaExpanded.remove(trendKey);
-                                            } else {
-                                              _metaExpanded.add(trendKey);
-                                            }
-                                          }),
-                                          child: Padding(
-                                            padding: const EdgeInsets.fromLTRB(
-                                              2,
-                                              3,
-                                              4,
-                                              3,
-                                            ),
-                                            child: RichText(
-                                              text: TextSpan(
-                                                children: [
-                                                  TextSpan(
-                                                    text: '指标 ',
-                                                    style: LhTypography.mono(
-                                                      size: 8,
-                                                      color: isMetaExpanded
-                                                          ? LhColors.ink2
-                                                          : LhColors.mute2,
-                                                      weight: FontWeight.w600,
-                                                      letterSpacing: 0.5,
-                                                    ),
-                                                  ),
-                                                  TextSpan(
-                                                    text: '${metaItems.length}',
-                                                    style: LhTypography.mono(
-                                                      size: 8,
-                                                      color: isMetaExpanded
-                                                          ? LhColors.ink2
-                                                          : LhColors.mute2,
-                                                      weight: FontWeight.w500,
-                                                    ),
-                                                  ),
-                                                  TextSpan(
-                                                    text: isMetaExpanded
-                                                        ? ' ▴'
-                                                        : ' ▾',
-                                                    style: LhTypography.mono(
-                                                      size: 8.2,
-                                                      color: isMetaExpanded
-                                                          ? LhColors.ink2
-                                                          : LhColors.mute2,
-                                                      weight: FontWeight.w600,
-                                                    ),
-                                                  ),
-                                                ],
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                      if (canExpand) ...[
-                                        const SizedBox(width: 2),
-                                        GestureDetector(
-                                          behavior: HitTestBehavior.opaque,
-                                          onTap: () {
-                                            setState(() {
-                                              if (_expanded.contains(trendKey)) {
-                                                _expanded.remove(trendKey);
-                                              } else {
-                                                _expanded.add(trendKey);
-                                              }
-                                            });
-                                          },
-                                          child: Padding(
-                                            padding: const EdgeInsets.fromLTRB(
-                                              4,
-                                              3,
-                                              4,
-                                              3,
-                                            ),
-                                            child: RichText(
-                                              text: TextSpan(
-                                                children: [
-                                                  TextSpan(
-                                                    text: '走势',
-                                                    style: LhTypography.mono(
-                                                      size: 8,
-                                                      color: LhColors.copper,
-                                                      weight: FontWeight.w700,
-                                                      letterSpacing: 0.5,
-                                                    ),
-                                                  ),
-                                                  TextSpan(
-                                                    text: isExpanded
-                                                        ? ' △'
-                                                        : ' ▽',
-                                                    style: const TextStyle(
-                                                      fontSize: 8.2,
-                                                      color: LhColors.copper,
-                                                      fontWeight: FontWeight.w700,
-                                                    ),
-                                                  ),
-                                                ],
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                      ],
+                                      ),
                                     ],
                                   ),
+                                );
+                              },
+                            ),
+                            // ═══════════════════════════════════════════════════
+                            // ── v3.5: 内联 controls (从底部 band 搬到 LEFT 栏尾) ──
+                            // ═══════════════════════════════════════════════════
+                            //   RIGHT 栏 hero 更高 (spark+kicker+num+rate+vsLabel),
+                            //   LEFT 栏 SHARE 之后有 ~14px 天窗 —— [指标 N ▾] [趋势 ▾]
+                            //   停进来正好, 卡片不用再开一层 footer 就"矮"了。
+                            if (metaItems.isNotEmpty || canExpand)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 6),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    if (metaItems.isNotEmpty)
+                                      GestureDetector(
+                                        behavior: HitTestBehavior.opaque,
+                                        onTap: () => setState(() {
+                                          if (_metaExpanded.contains(
+                                            trendKey,
+                                          )) {
+                                            _metaExpanded.remove(trendKey);
+                                          } else {
+                                            _metaExpanded.add(trendKey);
+                                          }
+                                        }),
+                                        child: Padding(
+                                          padding: const EdgeInsets.fromLTRB(
+                                            2,
+                                            3,
+                                            4,
+                                            3,
+                                          ),
+                                          child: RichText(
+                                            text: TextSpan(
+                                              children: [
+                                                TextSpan(
+                                                  text: '指标 ',
+                                                  style: LhTypography.mono(
+                                                    size: 8,
+                                                    color: isMetaExpanded
+                                                        ? LhColors.ink2
+                                                        : LhColors.mute2,
+                                                    weight: FontWeight.w600,
+                                                    letterSpacing: 0.5,
+                                                  ),
+                                                ),
+                                                TextSpan(
+                                                  text: '${metaItems.length}',
+                                                  style: LhTypography.mono(
+                                                    size: 8,
+                                                    color: isMetaExpanded
+                                                        ? LhColors.ink2
+                                                        : LhColors.mute2,
+                                                    weight: FontWeight.w500,
+                                                  ),
+                                                ),
+                                                TextSpan(
+                                                  text: isMetaExpanded
+                                                      ? ' ▴'
+                                                      : ' ▾',
+                                                  style: LhTypography.mono(
+                                                    size: 8.2,
+                                                    color: isMetaExpanded
+                                                        ? LhColors.ink2
+                                                        : LhColors.mute2,
+                                                    weight: FontWeight.w600,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    if (canExpand) ...[
+                                      const SizedBox(width: 2),
+                                      GestureDetector(
+                                        behavior: HitTestBehavior.opaque,
+                                        onTap: () {
+                                          setState(() {
+                                            if (_collapsed.contains(trendKey)) {
+                                              _collapsed.remove(trendKey);
+                                            } else {
+                                              _collapsed.add(trendKey);
+                                            }
+                                          });
+                                        },
+                                        child: Padding(
+                                          padding: const EdgeInsets.fromLTRB(
+                                            4,
+                                            3,
+                                            4,
+                                            3,
+                                          ),
+                                          child: RichText(
+                                            text: TextSpan(
+                                              children: [
+                                                TextSpan(
+                                                  text: '走势',
+                                                  style: LhTypography.mono(
+                                                    size: 8,
+                                                    color: _LhPlum.primary,
+                                                    weight: FontWeight.w700,
+                                                    letterSpacing: 0.5,
+                                                  ),
+                                                ),
+                                                TextSpan(
+                                                  text: isExpanded
+                                                      ? ' △'
+                                                      : ' ▽',
+                                                  style: const TextStyle(
+                                                    fontSize: 8.2,
+                                                    color: _LhPlum.primary,
+                                                    fontWeight: FontWeight.w700,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ],
                                 ),
-                            ],
-                          ),
+                              ),
+                          ],
                         ),
-                        const SizedBox(width: 10),
+                      ),
+                      const SizedBox(width: 10),
 
-                        // ═══════════════════════════════════════════════════════
-                        // ── 右栏：Hero 毛利块 (完全对齐 _buildHeroCell 语言) ──
-                        // ═══════════════════════════════════════════════════════
-                        //   [sparkline 40×12]        ← v2 已加, 保留
-                        //   毛利 PROFIT              ← mono 7.8 UPPER mute2 w600 spacing 0.5
-                        //                              (hero cell 的 label 完全一样规格)
-                        //   ¥ 12.4 万  •            ← sans 17 w700 ink letterSpacing -0.3
-                        //                              + mono 9 mute 单位
-                        //                              + 3.5×3.5 pos/neg 圆点 (hero 签名)
-                        //   率 30.0%                 ← mono kicker + sans w700 -0.3 数字
-                        //   ↑ 2.4%  vs 上月    ›     ← mono 8.6 delta + vsLabel + chevron_right_rounded
-                        //                              (chevron 从原左栏搬到这里, 跟 hero pattern 完全一致)
-                        GestureDetector(
-                          behavior: HitTestBehavior.opaque,
-                          onTap: () {
-                            setState(() {
-                              if (_expanded.contains(trendKey)) {
-                                _expanded.remove(trendKey);
-                              } else {
-                                _expanded.add(trendKey);
-                              }
-                            });
-                          },
-                          child: SizedBox(
+                      // ═══════════════════════════════════════════════════════
+                      // ── 右栏：Hero 毛利块 (完全对齐 _buildHeroCell 语言) ──
+                      // ═══════════════════════════════════════════════════════
+                      //   [sparkline 40×12]        ← v2 已加, 保留
+                      //   毛利 PROFIT              ← mono 7.8 UPPER mute2 w600 spacing 0.5
+                      //                              (hero cell 的 label 完全一样规格)
+                      //   ¥ 12.4 万  •            ← sans 17 w700 ink letterSpacing -0.3
+                      //                              + mono 9 mute 单位
+                      //                              + 3.5×3.5 pos/neg 圆点 (hero 签名)
+                      //   率 30.0%                 ← mono kicker + sans w700 -0.3 数字
+                      //   ↑ 2.4%  vs 上月    ›     ← mono 8.6 delta + vsLabel + chevron_right_rounded
+                      //                              (chevron 从原左栏搬到这里, 跟 hero pattern 完全一致)
+                      GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: () {
+                          setState(() {
+                            if (_collapsed.contains(trendKey)) {
+                              _collapsed.remove(trendKey);
+                            } else {
+                              _collapsed.add(trendKey);
+                            }
+                          });
+                        },
+                        child: SizedBox(
                           width: 102,
                           child: Builder(
                             builder: (ctx) {
@@ -13266,7 +13536,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                                                   style: LhTypography.sans(
                                                     size: 14.5,
                                                     weight: FontWeight.w700,
-                                                    color: LhColors.neg,
+                                                    color: LhColors.pos,
                                                     letterSpacing: -0.3,
                                                   ),
                                                 ),
@@ -13276,7 +13546,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                                                   size: 14.5,
                                                   weight: FontWeight.w700,
                                                   color: isNeg
-                                                      ? LhColors.neg
+                                                      ? LhColors.pos
                                                       : LhColors.ink,
                                                   letterSpacing: -0.3,
                                                 ),
@@ -13342,7 +13612,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                                                       size: 10,
                                                       weight: FontWeight.w700,
                                                       color: rateValue < 0
-                                                          ? LhColors.neg
+                                                          ? LhColors.pos
                                                           : LhColors.ink,
                                                       letterSpacing: -0.2,
                                                     ),
@@ -13402,7 +13672,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                                       Icon(
                                         Icons.chevron_right_rounded,
                                         size: 11,
-                                        color: LhColors.copper.withAlpha(180),
+                                        color: _LhPlum.primary.withAlpha(180),
                                       ),
                                     ],
                                   ),
@@ -13411,149 +13681,149 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                             },
                           ),
                         ),
-                        ),
-                      ],
-                    ),
+                      ),
+                    ],
+                  ),
 
-                    // ═══════════════════════════════════════════════════════════
-                    // BOTTOM: Meta 条 (mini-hero cells) + 静音 controls
-                    // ═══════════════════════════════════════════════════════════
-                    // BOTTOM: Meta 条 (mini-hero cells)
-                    //   v3.5: 静音 controls 已搬到 LEFT 栏内联 (share viz 下方)。
-                    //   这个 spread 现在只包 meta 条 —— canExpand 不再需要,
-                    //   趋势的 toggle 也不在这里了。
-                    // ═══════════════════════════════════════════════════════════
-                    if (metaItems.isNotEmpty && isMetaExpanded) ...[
-                      const SizedBox(height: 8),
-                      Container(height: 1, color: LhColors.line2),
-                      const SizedBox(height: 8),
-                      SizedBox(
-                        height: 34,
-                        child: ListView.separated(
-                          scrollDirection: Axis.horizontal,
-                          padding: EdgeInsets.zero,
-                          physics: const BouncingScrollPhysics(),
-                          itemCount: metaItems.length,
-                          itemBuilder: (ctx, i) {
-                            final m = metaItems[i];
-                            final isHighlighted = _metaHighlightKey == m.key;
-                            // 拆 value 成 数字部分 + 单位部分 (末尾非数字/点/负/逗号 = 单位)
-                            final vStr = m.value;
-                            final unitMatch = RegExp(
-                              r'[^\d\.\-,]+$',
-                            ).firstMatch(vStr);
-                            final unit = unitMatch?.group(0) ?? '';
-                            final numPart = unit.isEmpty
-                                ? vStr
-                                : vStr.substring(0, vStr.length - unit.length);
-                            final labelColor = isHighlighted
-                                ? LhColors.copper
-                                : LhColors.mute2;
-                            final numColor = isHighlighted
-                                ? LhColors.copper
-                                : LhColors.ink;
-                            final unitColor = isHighlighted
-                                ? LhColors.copper.withAlpha(180)
-                                : LhColors.mute;
-                            return GestureDetector(
-                              behavior: HitTestBehavior.opaque,
-                              onTap: () => _openMetaCompare(m.key),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 2,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: isHighlighted
-                                      ? LhColors.copper.withAlpha(24)
-                                      : Colors.transparent,
-                                  borderRadius: BorderRadius.circular(4),
-                                ),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    // Mini-hero label (mono UPPER wide-track)
-                                    Text(
-                                      m.label,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: LhTypography.mono(
-                                        size: 7.5,
-                                        height: 1.0,
-                                        color: labelColor,
-                                        weight: FontWeight.w600,
-                                        letterSpacing: 0.5,
-                                      ),
+                  // ═══════════════════════════════════════════════════════════
+                  // BOTTOM: Meta 条 (mini-hero cells) + 静音 controls
+                  // ═══════════════════════════════════════════════════════════
+                  // BOTTOM: Meta 条 (mini-hero cells)
+                  //   v3.5: 静音 controls 已搬到 LEFT 栏内联 (share viz 下方)。
+                  //   这个 spread 现在只包 meta 条 —— canExpand 不再需要,
+                  //   趋势的 toggle 也不在这里了。
+                  // ═══════════════════════════════════════════════════════════
+                  if (metaItems.isNotEmpty && isMetaExpanded) ...[
+                    const SizedBox(height: 8),
+                    Container(height: 1, color: LhColors.line2),
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      height: 34,
+                      child: ListView.separated(
+                        scrollDirection: Axis.horizontal,
+                        padding: EdgeInsets.zero,
+                        physics: const BouncingScrollPhysics(),
+                        itemCount: metaItems.length,
+                        itemBuilder: (ctx, i) {
+                          final m = metaItems[i];
+                          final isHighlighted = _metaHighlightKey == m.key;
+                          // 拆 value 成 数字部分 + 单位部分 (末尾非数字/点/负/逗号 = 单位)
+                          final vStr = m.value;
+                          final unitMatch = RegExp(
+                            r'[^\d\.\-,]+$',
+                          ).firstMatch(vStr);
+                          final unit = unitMatch?.group(0) ?? '';
+                          final numPart = unit.isEmpty
+                              ? vStr
+                              : vStr.substring(0, vStr.length - unit.length);
+                          final labelColor = isHighlighted
+                              ? _LhPlum.primary
+                              : LhColors.mute2;
+                          final numColor = isHighlighted
+                              ? _LhPlum.primary
+                              : LhColors.ink;
+                          final unitColor = isHighlighted
+                              ? _LhPlum.primary.withAlpha(180)
+                              : LhColors.mute;
+                          return GestureDetector(
+                            behavior: HitTestBehavior.opaque,
+                            onTap: () => _openMetaCompare(m.key),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: isHighlighted
+                                    ? _LhPlum.primary.withAlpha(24)
+                                    : Colors.transparent,
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  // Mini-hero label (mono UPPER wide-track)
+                                  Text(
+                                    m.label,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: LhTypography.mono(
+                                      size: 7.5,
+                                      height: 1.0,
+                                      color: labelColor,
+                                      weight: FontWeight.w600,
+                                      letterSpacing: 0.5,
                                     ),
-                                    const SizedBox(height: 4),
-                                    // Mini-hero number + unit (sans -0.3 + mono unit)
-                                    RichText(
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      text: TextSpan(
-                                        children: [
+                                  ),
+                                  const SizedBox(height: 4),
+                                  // Mini-hero number + unit (sans -0.3 + mono unit)
+                                  RichText(
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    text: TextSpan(
+                                      children: [
+                                        TextSpan(
+                                          text: numPart,
+                                          style: LhTypography.sans(
+                                            size: 12,
+                                            color: numColor,
+                                            weight: FontWeight.w700,
+                                            letterSpacing: -0.3,
+                                            height: 1.0,
+                                          ),
+                                        ),
+                                        if (unit.isNotEmpty)
                                           TextSpan(
-                                            text: numPart,
-                                            style: LhTypography.sans(
-                                              size: 12,
-                                              color: numColor,
-                                              weight: FontWeight.w700,
-                                              letterSpacing: -0.3,
+                                            text: unit,
+                                            style: LhTypography.mono(
+                                              size: 8,
+                                              color: unitColor,
+                                              weight: FontWeight.w500,
                                               height: 1.0,
                                             ),
                                           ),
-                                          if (unit.isNotEmpty)
-                                            TextSpan(
-                                              text: unit,
-                                              style: LhTypography.mono(
-                                                size: 8,
-                                                color: unitColor,
-                                                weight: FontWeight.w500,
-                                                height: 1.0,
-                                              ),
-                                            ),
-                                        ],
-                                      ),
+                                      ],
                                     ),
-                                  ],
-                                ),
+                                  ),
+                                ],
                               ),
-                            );
-                          },
-                          // Dot 分隔 (v2 已定案, 保留)
-                          separatorBuilder: (ctx, i) => Center(
-                            child: Container(
-                              margin: const EdgeInsets.symmetric(horizontal: 6),
-                              width: 2,
-                              height: 2,
-                              decoration: BoxDecoration(
-                                color: LhColors.mute2.withAlpha(120),
-                                borderRadius: BorderRadius.circular(1),
-                              ),
+                            ),
+                          );
+                        },
+                        // Dot 分隔 (v2 已定案, 保留)
+                        separatorBuilder: (ctx, i) => Center(
+                          child: Container(
+                            margin: const EdgeInsets.symmetric(horizontal: 6),
+                            width: 2,
+                            height: 2,
+                            decoration: BoxDecoration(
+                              color: LhColors.mute2.withAlpha(120),
+                              borderRadius: BorderRadius.circular(1),
                             ),
                           ),
                         ),
                       ),
-                    ],
+                    ),
+                  ],
 
-                    // Expanded body (趋势图) —— tap 吸收避免触发行导航
-                    if (isExpanded)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 4),
-                        child: GestureDetector(
-                          onTap: () {},
-                          child: _buildInlineExpanded(
-                            trendKey,
-                            name,
-                            r,
-                            groupColor,
-                          ),
+                  // Expanded body (趋势图) —— tap 吸收避免触发行导航
+                  if (isExpanded)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: GestureDetector(
+                        onTap: () {},
+                        child: _buildInlineExpanded(
+                          trendKey,
+                          name,
+                          r,
+                          groupColor,
                         ),
                       ),
-                  ],
-                ),
+                    ),
+                ],
+              ),
             ),
           ],
         ),
@@ -13794,7 +14064,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 clipBehavior: Clip.antiAlias,
                 decoration: BoxDecoration(
                   color: const Color(0xFFF7F4EC),
-                  border: Border.all(color: const Color(0xFFDDD5C0), width: 1),
+                  border: Border.all(color: _LhPlum.lavender, width: 1),
                   borderRadius: BorderRadius.circular(12),
                   boxShadow: [
                     BoxShadow(
@@ -13871,14 +14141,14 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                     vertical: 2,
                   ),
                   decoration: BoxDecoration(
-                    color: LhColors.copper.withAlpha(28),
+                    color: _LhPlum.primary.withAlpha(28),
                     borderRadius: BorderRadius.circular(3),
                   ),
                   child: Text(
                     '走势',
                     style: LhTypography.mono(
                       size: 8,
-                      color: LhColors.copper,
+                      color: _LhPlum.primary,
                       weight: FontWeight.w700,
                       letterSpacing: 1,
                     ),
@@ -13912,8 +14182,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 GestureDetector(
                   behavior: HitTestBehavior.opaque,
                   onTap: () {
+                    // v2.8 · set 语义反转:"收起"=加入 _collapsed 集
                     setState(() {
-                      _expanded.remove(trendKey);
+                      _collapsed.add(trendKey);
                     });
                   },
                   child: Padding(
@@ -13928,7 +14199,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                             text: '收起',
                             style: LhTypography.mono(
                               size: 8,
-                              color: LhColors.copper,
+                              color: _LhPlum.primary,
                               weight: FontWeight.w700,
                               letterSpacing: 0.5,
                             ),
@@ -13937,7 +14208,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                             text: ' △',
                             style: TextStyle(
                               fontSize: 8.2,
-                              color: LhColors.copper,
+                              color: _LhPlum.primary,
                               fontWeight: FontWeight.w700,
                             ),
                           ),
@@ -13977,7 +14248,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           Container(
             width: 28,
             height: 0.5,
-            color: LhColors.copper.withAlpha(140),
+            color: _LhPlum.primary.withAlpha(140),
           ),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 10),
@@ -13994,7 +14265,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           Container(
             width: 28,
             height: 0.5,
-            color: LhColors.copper.withAlpha(140),
+            color: _LhPlum.primary.withAlpha(140),
           ),
         ],
       ),
@@ -14008,19 +14279,19 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     'product': [
       _SubTabInfo(key: 'supply', label: '供给', color: LhColors.sinopec),
       _SubTabInfo(key: 'channel', label: '渠道', color: LhColors.carrier),
-      _SubTabInfo(key: 'project', label: '项目', color: LhColors.copper),
+      _SubTabInfo(key: 'project', label: '项目', color: _LhPlum.primary),
       _SubTabInfo(key: 'productName', label: 'SKU', color: LhColors.product),
     ],
     'supply': [
       _SubTabInfo(key: 'product', label: '产品', color: LhColors.product),
       _SubTabInfo(key: 'channel', label: '渠道', color: LhColors.carrier),
-      _SubTabInfo(key: 'project', label: '项目', color: LhColors.copper),
+      _SubTabInfo(key: 'project', label: '项目', color: _LhPlum.primary),
       _SubTabInfo(key: 'productName', label: 'SKU', color: LhColors.product),
     ],
     'channel': [
       _SubTabInfo(key: 'product', label: '产品', color: LhColors.product),
       _SubTabInfo(key: 'supply', label: '供给', color: LhColors.sinopec),
-      _SubTabInfo(key: 'project', label: '项目', color: LhColors.copper),
+      _SubTabInfo(key: 'project', label: '项目', color: _LhPlum.primary),
       _SubTabInfo(key: 'productName', label: 'SKU', color: LhColors.product),
     ],
   };
@@ -14029,17 +14300,17 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   static const _kDrillSubTabs = {
     'product': [
       _SubTabInfo(key: 'channel', label: '渠道', color: LhColors.carrier),
-      _SubTabInfo(key: 'project', label: '项目', color: LhColors.copper),
+      _SubTabInfo(key: 'project', label: '项目', color: _LhPlum.primary),
       _SubTabInfo(key: 'productName', label: 'SKU', color: LhColors.product),
     ],
     'supply': [
       _SubTabInfo(key: 'channel', label: '渠道', color: LhColors.carrier),
-      _SubTabInfo(key: 'project', label: '项目', color: LhColors.copper),
+      _SubTabInfo(key: 'project', label: '项目', color: _LhPlum.primary),
       _SubTabInfo(key: 'productName', label: 'SKU', color: LhColors.product),
     ],
     'channel': [
       _SubTabInfo(key: 'product', label: '产品', color: LhColors.product),
-      _SubTabInfo(key: 'project', label: '项目', color: LhColors.copper),
+      _SubTabInfo(key: 'project', label: '项目', color: _LhPlum.primary),
       _SubTabInfo(key: 'productName', label: 'SKU', color: LhColors.product),
     ],
     'project': [
@@ -14051,7 +14322,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       _SubTabInfo(key: 'product', label: '产品', color: LhColors.product),
       _SubTabInfo(key: 'supply', label: '供给', color: LhColors.sinopec),
       _SubTabInfo(key: 'channel', label: '渠道', color: LhColors.carrier),
-      _SubTabInfo(key: 'project', label: '项目', color: LhColors.copper),
+      _SubTabInfo(key: 'project', label: '项目', color: _LhPlum.primary),
     ],
   };
 
@@ -14099,39 +14370,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     );
   }
 
-  /// 详情载入中骨架 —— editorial minimalist, 不闪不跳.
-  /// 用极小的 copper progress ring + "载入中 · LOADING" mono kicker,
-  /// 260px 固定高度避免 AnimatedSwitcher 交叉淡入时的高度抖动.
+  /// 二级详情首次载入 —— 与一级切 tab 同一套品牌 loader 遮罩特效。
   Widget _buildDetailLoadingSkeleton() {
-    return Container(
-      height: 260,
-      alignment: Alignment.center,
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 26,
-            height: 26,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: LhColors.copperSoft.withAlpha(120),
-              borderRadius: BorderRadius.circular(5),
-            ),
-            child: const _LhBrandLoader(size: 16),
-          ),
-          const SizedBox(height: 10),
-          Text(
-            '载入中 · LOADING',
-            style: LhTypography.mono(
-              size: 8,
-              color: LhColors.mute2,
-              weight: FontWeight.w600,
-              letterSpacing: 0.5,
-            ),
-          ),
-        ],
-      ),
+    return ColoredBox(
+      color: Colors.white.withAlpha(210),
+      child: Center(child: _buildBrandBusyContent(label: '数据同步中')),
     );
   }
 
@@ -14331,7 +14574,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         // ── Sticky header ──────────────────────────────────────────────────
         Container(
           decoration: const BoxDecoration(
-            color: LhColors.cream,
+            color: _LhPlum.mist,
             border: Border(bottom: BorderSide(color: LhColors.line2, width: 1)),
           ),
           padding: const EdgeInsets.fromLTRB(20, 12, 22, 10),
@@ -14368,7 +14611,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                     ),
                     decoration: BoxDecoration(
                       color: isDrill
-                          ? LhColors.copper.withAlpha(40)
+                          ? _LhPlum.primary.withAlpha(40)
                           : LhColors.ink2.withAlpha(30),
                       borderRadius: BorderRadius.circular(4),
                     ),
@@ -14376,7 +14619,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                       levelBadge,
                       style: LhTypography.mono(
                         size: 8.5,
-                        color: isDrill ? LhColors.copper : LhColors.ink2,
+                        color: isDrill ? _LhPlum.primary : LhColors.ink2,
                         weight: FontWeight.w700,
                         letterSpacing: 0.5,
                       ),
@@ -14442,23 +14685,20 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 decoration: BoxDecoration(
                   // v3.7: 从 4-stop rotation gradient (复杂) → 3-stop 竖向暖 cream
                   //   跟 hero panel 同族 (页面 cream 家族); 简单, editorial
-                  gradient: const LinearGradient(
+                  gradient: LinearGradient(
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
-                    colors: [
-                      Color(0xFFFFFDF7), // 顶 (同页面 cream 顶)
-                      Color(0xFFF8F0DA), // 中
-                      Color(0xFFEFE4C6), // 底 (暖 vignette)
-                    ],
-                    stops: [0.0, 0.6, 1.0],
+                    colors: [Colors.white, _LhPlum.mist],
+                    stops: const [0.0, 1.0],
                   ),
-                  border: Border.all(color: const Color(0xFFDDD5C0), width: 1),
-                  borderRadius: BorderRadius.circular(10),
-                  boxShadow: const [
+                  border: Border.all(color: _LhPlum.lavender, width: 1),
+                  borderRadius: BorderRadius.circular(14),
+                  boxShadow: [
                     BoxShadow(
-                      color: Color(0x0F0A0A0F),
-                      blurRadius: 4,
-                      offset: Offset(0, 1),
+                      color: _LhPlum.deep.withAlpha(20),
+                      blurRadius: 14,
+                      spreadRadius: -4,
+                      offset: const Offset(0, 4),
                     ),
                   ],
                 ),
@@ -14564,7 +14804,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                                     text: '-',
                                     style: LhTypography.number(
                                       size: 22,
-                                      color: LhColors.neg,
+                                      color: LhColors.pos,
                                     ),
                                   ),
                                 TextSpan(
@@ -14572,7 +14812,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                                   style: LhTypography.number(
                                     size: 22,
                                     color: entityProfitIsNeg
-                                        ? LhColors.neg
+                                        ? LhColors.pos
                                         : LhColors.ink,
                                   ),
                                 ),
@@ -14640,15 +14880,15 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                       vertical: 10,
                     ),
                     decoration: BoxDecoration(
-                      color: LhColors.copperSoft,
-                      border: Border.all(color: LhColors.copper.withAlpha(100)),
+                      color: _LhPlum.soft,
+                      border: Border.all(color: _LhPlum.primary.withAlpha(100)),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Text(
                       '三级下钻需要新版 lighthouse-go。远程网关尚未更新时无法下钻；本地联调请用 --dart-define=DUNES_API_HOST=127.0.0.1 重启 App。',
                       style: LhTypography.sans(
                         size: 11.5,
-                        color: LhColors.copper,
+                        color: _LhPlum.primary,
                         weight: FontWeight.w500,
                         height: 1.35,
                       ),
@@ -14715,7 +14955,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                                       style: LhTypography.mono(
                                         size: 9,
                                         color: isOn
-                                            ? LhColors.copper
+                                            ? _LhPlum.primary
                                             : LhColors.mute2,
                                         weight: isOn
                                             ? FontWeight.w600
@@ -14733,7 +14973,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                                   right: 0,
                                   child: Container(
                                     height: 2,
-                                    color: LhColors.copper,
+                                    color: _LhPlum.primary,
                                   ),
                                 ),
                             ],
@@ -14888,7 +15128,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         // ── Sticky header ──────────────────────────────────────────────────
         Container(
           decoration: const BoxDecoration(
-            color: LhColors.cream,
+            color: _LhPlum.mist,
             border: Border(bottom: BorderSide(color: LhColors.line2, width: 1)),
           ),
           padding: const EdgeInsets.fromLTRB(20, 12, 22, 10),
@@ -14935,23 +15175,20 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 padding: const EdgeInsets.fromLTRB(14, 12, 14, 11),
                 decoration: BoxDecoration(
                   // v3.7: 同 L2 summary, 3-stop 竖向暖 cream
-                  gradient: const LinearGradient(
+                  gradient: LinearGradient(
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
-                    colors: [
-                      Color(0xFFFFFDF7),
-                      Color(0xFFF8F0DA),
-                      Color(0xFFEFE4C6),
-                    ],
-                    stops: [0.0, 0.6, 1.0],
+                    colors: [Colors.white, _LhPlum.mist],
+                    stops: const [0.0, 1.0],
                   ),
-                  border: Border.all(color: const Color(0xFFDDD5C0), width: 1),
-                  borderRadius: BorderRadius.circular(10),
-                  boxShadow: const [
+                  border: Border.all(color: _LhPlum.lavender, width: 1),
+                  borderRadius: BorderRadius.circular(14),
+                  boxShadow: [
                     BoxShadow(
-                      color: Color(0x0F0A0A0F),
-                      blurRadius: 4,
-                      offset: Offset(0, 1),
+                      color: _LhPlum.deep.withAlpha(20),
+                      blurRadius: 14,
+                      spreadRadius: -4,
+                      offset: const Offset(0, 4),
                     ),
                   ],
                 ),
@@ -15100,7 +15337,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           style: LhTypography.sans(
             size: 11.5,
             weight: FontWeight.w600,
-            color: isNeg ? LhColors.neg : LhColors.ink2,
+            color: isNeg ? LhColors.pos : LhColors.ink2,
             letterSpacing: -0.1,
           ),
         ),
@@ -15145,7 +15382,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 width: 3,
                 height: 10,
                 decoration: BoxDecoration(
-                  color: LhColors.copper,
+                  color: _LhPlum.primary,
                   borderRadius: BorderRadius.circular(1.5),
                 ),
               ),
@@ -15181,7 +15418,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             width: 32,
             padding: const EdgeInsets.symmetric(vertical: 2),
             decoration: BoxDecoration(
-              color: LhColors.copper.withAlpha(38),
+              color: _LhPlum.primary.withAlpha(38),
               borderRadius: BorderRadius.circular(3),
             ),
             child: Text(
@@ -15189,7 +15426,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               textAlign: TextAlign.center,
               style: LhTypography.mono(
                 size: 8.4,
-                color: LhColors.copper,
+                color: _LhPlum.primary,
                 weight: FontWeight.w800,
                 letterSpacing: 0.4,
               ),
@@ -15272,14 +15509,14 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                         vertical: 1.5,
                       ),
                       decoration: BoxDecoration(
-                        color: LhColors.copper.withAlpha(40),
+                        color: _LhPlum.primary.withAlpha(40),
                         borderRadius: BorderRadius.circular(3),
                       ),
                       child: Text(
                         'CODE',
                         style: LhTypography.mono(
                           size: 7.4,
-                          color: LhColors.copper,
+                          color: _LhPlum.primary,
                           weight: FontWeight.w800,
                           letterSpacing: 0.6,
                         ),
@@ -15341,7 +15578,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                             text: '${_fmt(profit.abs())}${_unit(profit.abs())}',
                             style: LhTypography.mono(
                               size: 8.6,
-                              color: isNeg ? LhColors.neg : LhColors.ink2,
+                              color: isNeg ? LhColors.pos : LhColors.ink2,
                               weight: FontWeight.w600,
                             ),
                           ),
@@ -15370,7 +15607,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                               style: LhTypography.mono(
                                 size: 9.2,
                                 color: rateValue < 0
-                                    ? LhColors.neg
+                                    ? LhColors.pos
                                     : LhColors.ink2,
                                 weight: FontWeight.w600,
                               ),
@@ -15539,13 +15776,13 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     Color verdictColor;
     String verdictText;
     if (roi >= benchmark * 1.3) {
-      verdictColor = LhColors.pos;
+      verdictColor = LhColors.neg;
       verdictText = '优秀';
     } else if (roi >= benchmark * 0.7) {
-      verdictColor = LhColors.copper;
+      verdictColor = _LhPlum.primary;
       verdictText = '良好';
     } else {
-      verdictColor = LhColors.neg;
+      verdictColor = LhColors.pos;
       verdictText = '待提升';
     }
 
@@ -15634,7 +15871,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               width: 4,
               height: 4,
               decoration: BoxDecoration(
-                color: diff >= 0 ? LhColors.pos : LhColors.neg,
+                color: diff >= 0 ? LhColors.neg : LhColors.pos,
                 shape: BoxShape.circle,
               ),
             ),
@@ -15651,7 +15888,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               ' · ${diff >= 0 ? "+" : ""}${diff.toStringAsFixed(1)}pp',
               style: LhTypography.mono(
                 size: 10,
-                color: diff >= 0 ? LhColors.pos : LhColors.neg,
+                color: diff >= 0 ? LhColors.neg : LhColors.pos,
                 weight: FontWeight.w700,
                 letterSpacing: 0.3,
               ),
@@ -15781,7 +16018,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                     '${(s.value / sales * 100).toStringAsFixed(0)}%',
                     style: LhTypography.mono(
                       size: 9,
-                      color: s.label == '毛利' ? LhColors.pos : LhColors.mute,
+                      color: s.label == '毛利' ? LhColors.neg : LhColors.mute,
                       weight: FontWeight.w700,
                       letterSpacing: 0.2,
                     ),
@@ -15799,9 +16036,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     final h = _calcHealthScores(r, type);
 
     Color scoreColor(int s) {
-      if (s >= 70) return LhColors.pos;
-      if (s >= 40) return LhColors.copper;
-      return LhColors.neg;
+      if (s >= 70) return LhColors.neg;
+      if (s >= 40) return _LhPlum.primary;
+      return LhColors.pos;
     }
 
     Widget bar(String label, int score) {
@@ -15953,7 +16190,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               '第 ${ranking.rank}/${ranking.total} · 前 ${ranking.percentile.toStringAsFixed(0)}%',
               style: LhTypography.mono(
                 size: 10,
-                color: LhColors.copper,
+                color: _LhPlum.primary,
                 weight: FontWeight.w700,
                 letterSpacing: 0.3,
               ),
@@ -15981,7 +16218,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                           ),
                           decoration: BoxDecoration(
                             color: p.isMe
-                                ? LhColors.copper
+                                ? _LhPlum.primary
                                 : LhColors.mute2.withAlpha(70),
                             borderRadius: const BorderRadius.vertical(
                               top: Radius.circular(1.5),
@@ -15994,7 +16231,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                             width: 7,
                             height: 2,
                             decoration: BoxDecoration(
-                              color: LhColors.copper,
+                              color: _LhPlum.primary,
                               borderRadius: BorderRadius.circular(1),
                             ),
                           )
@@ -16027,11 +16264,13 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   //   entity 里没有的字段 (tax 等) 直接为 0 —— L2 侧后端未下发时优雅降级
   // ═════════════════════════════════════════════════════════════════════════
   Widget _buildDetailPnlButtonGrid(Map<String, dynamic> entity) {
-    final anchor = (entity['verifiedSales'] as num?)?.toDouble() ??
+    final anchor =
+        (entity['verifiedSales'] as num?)?.toDouble() ??
         (entity['sales'] as num?)?.toDouble() ??
         0.0;
     final anchorLabel = _anchor == _LhAnchor.verified ? '核销规模' : '销售规模';
-    final revenue = (entity['revenue'] as num?)?.toDouble() ??
+    final revenue =
+        (entity['revenue'] as num?)?.toDouble() ??
         (entity['sales'] as num?)?.toDouble() ??
         0.0;
     final cost = (entity['cost'] as num?)?.toDouble() ?? 0.0;
@@ -16041,105 +16280,135 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     final spreadRate = anchor > 0 ? revenue / anchor * 100 : 0.0;
 
     // 从 entity 读环比 deltas (L2 侧后端下发结构)
-    final deltas = (entity['deltas'] as Map?)?.cast<String, dynamic>() ?? const {};
+    final deltas =
+        (entity['deltas'] as Map?)?.cast<String, dynamic>() ?? const {};
     ({double pct, bool isUp})? deltaFor(String k) {
       final v = (deltas[k] as num?)?.toDouble();
       if (v == null || v.abs() < 1e-9) return null;
       return (pct: v.abs(), isUp: v >= 0);
     }
 
+    // v2.5 简洁大气：跟主 hero P&L grid 一致，用 hairline table 承担分隔
+    Widget colDivider() => Container(
+      width: 1,
+      margin: const EdgeInsets.symmetric(vertical: 4),
+      color: _LhPlum.lavender,
+    );
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         // ─── Row 1: 利差率 · 收入（已核销利差）· 毛利 ─────
-        Row(
-          children: [
-            Expanded(
-              child: _detailPnlButton(
-                label: '利差率',
-                subLabel: '收入 ÷ $anchorLabel',
-                value: spreadRate,
-                isRate: true,
-                accent: LhColors.copper,
-                delta: deltaFor('spreadRate'),
-                deltaUnit: 'pp',
+        IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(
+                child: _detailPnlButton(
+                  label: '利差率',
+                  subLabel: '收入 ÷ $anchorLabel',
+                  value: spreadRate,
+                  isRate: true,
+                  accent: _LhPlum.primary,
+                  delta: deltaFor('spreadRate'),
+                  deltaUnit: 'pp',
+                ),
               ),
-            ),
-            const SizedBox(width: 6),
-            Expanded(
-              child: _detailPnlButton(
-                label: '收入（已核销利差）',
-                subLabel: '已核销利差',
-                value: revenue,
-                isRate: false,
-                accent: LhColors.copper,
-                delta: deltaFor('revenue'),
-                deltaUnit: '%',
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+                child: colDivider(),
               ),
-            ),
-            const SizedBox(width: 6),
-            Expanded(
-              child: _detailPnlButton(
-                label: '毛利',
-                subLabel: '净毛利',
-                value: profit,
-                isRate: false,
-                accent: LhColors.pos,
-                valueColor: profit >= 0 ? LhColors.pos : LhColors.neg,
-                delta: deltaFor('profit'),
-                deltaUnit: '%',
+              Expanded(
+                child: _detailPnlButton(
+                  label: '收入（已核销利差）',
+                  subLabel: '已核销利差',
+                  value: revenue,
+                  isRate: false,
+                  accent: _LhPlum.primary,
+                  delta: deltaFor('revenue'),
+                  deltaUnit: '%',
+                ),
               ),
-            ),
-          ],
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+                child: colDivider(),
+              ),
+              Expanded(
+                child: _detailPnlButton(
+                  label: '毛利',
+                  subLabel: '净毛利',
+                  value: profit,
+                  isRate: false,
+                  accent: LhColors.neg,
+                  valueColor: profit >= 0 ? LhColors.neg : LhColors.pos,
+                  delta: deltaFor('profit'),
+                  deltaUnit: '%',
+                ),
+              ),
+            ],
+          ),
         ),
-        const SizedBox(height: 6),
+        Container(
+          height: 1,
+          margin: const EdgeInsets.symmetric(vertical: 12),
+          color: _LhPlum.lavender,
+        ),
         // ─── Row 2: 经营成本 · 税务成本 · 效率(★) ─────
-        Row(
-          children: [
-            Expanded(
-              child: _detailPnlButton(
-                label: '经营成本',
-                subLabel: '业务 + 项目',
-                value: cost,
-                isRate: false,
-                accent: LhColors.neg,
-                delta: deltaFor('cost'),
-                deltaUnit: '%',
+        IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(
+                child: _detailPnlButton(
+                  label: '经营成本',
+                  subLabel: '业务 + 项目',
+                  value: cost,
+                  isRate: false,
+                  accent: LhColors.pos,
+                  delta: deltaFor('cost'),
+                  deltaUnit: '%',
+                ),
               ),
-            ),
-            const SizedBox(width: 6),
-            Expanded(
-              child: _detailPnlButton(
-                label: '税务成本',
-                subLabel: '已核销利差 × 税率',
-                value: tax,
-                isRate: false,
-                accent: LhColors.neg,
-                delta: deltaFor('tax'),
-                deltaUnit: '%',
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+                child: colDivider(),
               ),
-            ),
-            const SizedBox(width: 6),
-            Expanded(
-              child: _detailPnlButton(
-                label: '效率（ROI） ★',
-                subLabel: '毛利 ÷ $anchorLabel',
-                value: rate,
-                isRate: true,
-                accent: LhColors.copper,
-                delta: deltaFor('rate'),
-                deltaUnit: 'pp',
+              Expanded(
+                child: _detailPnlButton(
+                  label: '税务成本',
+                  subLabel: '已核销利差 × 税率',
+                  value: tax,
+                  isRate: false,
+                  accent: LhColors.pos,
+                  delta: deltaFor('tax'),
+                  deltaUnit: '%',
+                ),
               ),
-            ),
-          ],
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+                child: colDivider(),
+              ),
+              Expanded(
+                child: _detailPnlButton(
+                  label: '效率（ROI） ★',
+                  subLabel: '毛利 ÷ $anchorLabel',
+                  value: rate,
+                  isRate: true,
+                  accent: _LhPlum.primary,
+                  delta: deltaFor('rate'),
+                  deltaUnit: 'pp',
+                ),
+              ),
+            ],
+          ),
         ),
       ],
     );
   }
 
-  /// L2 详情用 P&L 按钮 —— _pnlButton 的视觉复刻, 去掉 L1 的 expand-trend state.
-  ///   L2 不需要点击展开折线 (L2 有自己独立的 trend 卡, 且不共享 L1 的
-  ///   _expandedTrendKey 状态), 所以这里是纯展示 widget.
+  /// L2 详情用 P&L 单元 —— _pnlButton 的视觉复刻 (无 expand-trend state)
+  ///   v2.5 简洁大气: 跟主 _pnlButton 一致，无 chrome, 纯 typography.
+  ///                 方格 chrome 由外层 hairline table 承担.
   Widget _detailPnlButton({
     required String label,
     required String subLabel,
@@ -16152,98 +16421,81 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   }) {
     final fg = valueColor ?? LhColors.ink;
     final unitColor = isRate && valueColor != null ? valueColor : LhColors.ink2;
-    return SizedBox(
-      height: _pnlCellHeight,
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(9, 8, 9, 9),
-        decoration: BoxDecoration(
-          color: LhColors.paper,
-          border: Border(
-            left: BorderSide(color: accent, width: 2),
-            top: BorderSide(color: LhColors.line2, width: 0.5),
-            right: BorderSide(color: LhColors.line2, width: 0.5),
-            bottom: BorderSide(color: LhColors.line2, width: 0.5),
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _heroSemanticText(
+            label,
+            baseColor: LhColors.ink2,
+            size: 8.5,
+            baseWeight: FontWeight.w700,
+            termWeight: FontWeight.w700,
+            letterSpacing: 1.2,
           ),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            SizedBox(
-              height: 14,
-              child: _heroSemanticText(
-                label,
-                baseColor: LhColors.ink2,
-                size: 8.5,
-                baseWeight: FontWeight.w700,
-                termWeight: FontWeight.w700,
-                letterSpacing: 1.2,
+          const SizedBox(height: 8),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.baseline,
+                textBaseline: TextBaseline.alphabetic,
+                children: [
+                  Text(
+                    isRate ? value.toStringAsFixed(2) : _fmt(value),
+                    style: LhTypography.number(size: 18, color: fg),
+                    maxLines: 1,
+                  ),
+                  const SizedBox(width: 2),
+                  Text(
+                    isRate ? '%' : _unitCn(value).replaceAll('元', ''),
+                    style: LhTypography.sans(
+                      size: 10,
+                      color: unitColor,
+                      weight: FontWeight.w500,
+                    ),
+                  ),
+                ],
               ),
             ),
-            const SizedBox(height: 5),
-            SizedBox(
-              height: 17,
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: FittedBox(
-                  fit: BoxFit.scaleDown,
-                  alignment: Alignment.centerLeft,
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.baseline,
-                    textBaseline: TextBaseline.alphabetic,
-                    children: [
-                      Text(
-                        isRate ? value.toStringAsFixed(2) : _fmt(value),
-                        style: LhTypography.number(size: 14, color: fg),
-                        maxLines: 1,
-                      ),
-                      const SizedBox(width: 1),
-                      Text(
-                        isRate ? '%' : _unitCn(value).replaceAll('元', ''),
-                        style: LhTypography.sans(
-                          size: 9,
-                          color: unitColor,
-                          weight: FontWeight.w500,
-                        ),
-                      ),
-                    ],
-                  ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: _heroSemanticText(
+                  subLabel,
+                  baseColor: LhColors.mute,
+                  size: 7.3,
+                  baseWeight: FontWeight.w600,
+                  termWeight: FontWeight.w700,
+                  letterSpacing: 0.2,
                 ),
               ),
-            ),
-            const Spacer(),
-            Row(
-              children: [
-                Expanded(
-                  child: _heroSemanticText(
-                    subLabel,
-                    baseColor: LhColors.mute,
-                    size: 7.3,
-                    baseWeight: FontWeight.w600,
-                    termWeight: FontWeight.w700,
-                    letterSpacing: 0.2,
-                  ),
+              const SizedBox(width: 4),
+              Text(
+                delta == null
+                    ? '环比 —'
+                    : '环比 ${delta.isUp ? '↑' : '↓'} ${delta.pct.toStringAsFixed(1)}$deltaUnit',
+                style: LhTypography.mono(
+                  size: 7.2,
+                  color: delta == null
+                      ? LhColors.mute
+                      : (delta.isUp ? LhColors.neg : LhColors.pos),
+                  weight: FontWeight.w700,
+                  letterSpacing: 0.1,
                 ),
-                const SizedBox(width: 4),
-                Text(
-                  delta == null
-                      ? '环比 —'
-                      : '环比 ${delta.isUp ? '↑' : '↓'} ${delta.pct.toStringAsFixed(1)}$deltaUnit',
-                  style: LhTypography.mono(
-                    size: 7.2,
-                    color: delta == null
-                        ? LhColors.mute
-                        : (delta.isUp ? LhColors.pos : LhColors.neg),
-                    weight: FontWeight.w700,
-                    letterSpacing: 0.1,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
-            ),
-          ],
-        ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
@@ -16350,24 +16602,26 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         onTap: onDrillTap,
         borderRadius: BorderRadius.circular(7),
         child: Container(
-          margin: const EdgeInsets.only(bottom: 4),
-          padding: const EdgeInsets.fromLTRB(9, 7, 9, 7),
+          margin: const EdgeInsets.only(bottom: 8),
+          padding: const EdgeInsets.fromLTRB(11, 9, 11, 9),
           decoration: BoxDecoration(
-            // v3.7: 二级页面卡片跟主列表 v3.6 完全同族
-            //   3-stop 近纯白暖 gradient + 暖 hairline border + 轻阴影
-            gradient: const LinearGradient(
+            // v3.7: 二级页面卡片跟主列表 v3.6 完全同族（旧版记录）
+            // v2 淡紫改造：跟主列表 v2 一致（旧版记录）
+            // v2.1 气泡感：白→_LhPlum.mist 极轻 2-stop 竖向渐变 + 加深深紫墨影
+            gradient: LinearGradient(
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
-              colors: [Color(0xFFFFFFFC), Color(0xFFFAF8F0), Color(0xFFF2EFDF)],
-              stops: [0.0, 0.6, 1.0],
+              colors: [Colors.white, _LhPlum.mist],
+              stops: const [0.0, 1.0],
             ),
-            border: Border.all(color: const Color(0xFFDDD5C0), width: 1),
-            borderRadius: BorderRadius.circular(7),
-            boxShadow: const [
+            border: Border.all(color: _LhPlum.lavender, width: 1),
+            borderRadius: BorderRadius.circular(14),
+            boxShadow: [
               BoxShadow(
-                color: Color(0x0C0A0A0F),
-                blurRadius: 3,
-                offset: Offset(0, 1),
+                color: _LhPlum.deep.withAlpha(20),
+                blurRadius: 14,
+                spreadRadius: -4,
+                offset: const Offset(0, 4),
               ),
             ],
           ),
@@ -16504,7 +16758,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                               style: LhTypography.sans(
                                 size: 10.5,
                                 weight: FontWeight.w600,
-                                color: LhColors.neg,
+                                color: LhColors.pos,
                                 letterSpacing: -0.1,
                               ),
                             ),
@@ -16513,7 +16767,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                             style: LhTypography.sans(
                               size: 10.5,
                               weight: FontWeight.w600,
-                              color: isNeg ? LhColors.neg : LhColors.ink2,
+                              color: isNeg ? LhColors.pos : LhColors.ink2,
                               letterSpacing: -0.1,
                             ),
                           ),
@@ -16550,7 +16804,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                                   style: LhTypography.mono(
                                     size: 8.4,
                                     color: rateValue < 0
-                                        ? LhColors.neg
+                                        ? LhColors.pos
                                         : LhColors.ink2,
                                     weight: FontWeight.w600,
                                   ),
@@ -16632,11 +16886,11 @@ class _LighthouseLogoPainter extends CustomPainter {
     final ringPaint = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = math.max(0.45, minSide * 0.012)
-      ..color = LhColors.copper.withAlpha((82 * a).round());
+      ..color = _LhPlum.primary.withAlpha((82 * a).round());
     final innerRingPaint = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = math.max(0.65, minSide * 0.018)
-      ..color = LhColors.copper.withAlpha((118 * a).round());
+      ..color = _LhPlum.primary.withAlpha((118 * a).round());
 
     canvas.drawCircle(c, minSide * 0.44, ringPaint);
     canvas.drawCircle(c, minSide * 0.28, ringPaint);
@@ -16645,8 +16899,8 @@ class _LighthouseLogoPainter extends CustomPainter {
     final glowPaint = Paint()
       ..shader = RadialGradient(
         colors: [
-          LhColors.copper.withAlpha((70 * a).round()),
-          LhColors.copper.withAlpha(0),
+          _LhPlum.primary.withAlpha((70 * a).round()),
+          _LhPlum.primary.withAlpha(0),
         ],
       ).createShader(Rect.fromCircle(center: c, radius: minSide * 0.16));
     canvas.drawCircle(c, minSide * 0.16, glowPaint);
@@ -16654,7 +16908,7 @@ class _LighthouseLogoPainter extends CustomPainter {
     canvas.drawCircle(
       c,
       minSide * 0.075,
-      Paint()..color = LhColors.copper.withAlpha((255 * a).round()),
+      Paint()..color = _LhPlum.primary.withAlpha((255 * a).round()),
     );
   }
 
@@ -16852,25 +17106,22 @@ class _AnalysisCard extends StatelessWidget {
         //   cube 是分析 tab 的 hero content, 外框跟 hero panel / summary card 同一
         //   editorial 语言, 而不是像"list 卡片"那样近纯白。3-stop 竖向暖 cream
         //   + 暖 hairline #DDD5C0 + 单层克制阴影。
-        gradient: const LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [
-            Color(0xFFFFFDF7), // 顶 (同页面 cream 顶)
-            Color(0xFFF8F0DA), // 中
-            Color(0xFFEFE4C6), // 底 (暖 vignette)
-          ],
-          stops: [0.0, 0.6, 1.0],
-        ),
-        border: Border.all(color: const Color(0xFFDDD5C0), width: 1),
-        borderRadius: BorderRadius.circular(10),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x0F0A0A0F),
-            blurRadius: 4,
-            offset: Offset(0, 1),
-          ),
-        ],
+        gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [Colors.white, _LhPlum.mist],
+                    stops: const [0.0, 1.0],
+                  ),
+                  border: Border.all(color: _LhPlum.lavender, width: 1),
+                  borderRadius: BorderRadius.circular(14),
+                  boxShadow: [
+                    BoxShadow(
+                      color: _LhPlum.deep.withAlpha(20),
+                      blurRadius: 14,
+                      spreadRadius: -4,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(10),
@@ -16883,7 +17134,7 @@ class _AnalysisCard extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
               decoration: const BoxDecoration(
                 border: Border(
-                  bottom: BorderSide(color: Color(0xFFDDD5C0), width: 1),
+                  bottom: BorderSide(color: _LhPlum.lavender, width: 1),
                 ),
               ),
               child: Row(
@@ -17965,7 +18216,7 @@ class _CubePainter extends CustomPainter {
     canvas.drawCircle(
       origin,
       gRadius + 8,
-      Paint()..color = const Color(0xFFFFFDF7).withAlpha(190),
+      Paint()..color = Colors.white.withAlpha(190),
     );
     canvas.drawCircle(
       origin,
@@ -17997,7 +18248,7 @@ class _CubePainter extends CustomPainter {
       {
         'end': xEnd,
         'label': 'X',
-        'color': LhColors.copper,
+        'color': _LhPlum.primary,
         'depth': dOf(1, 0, 0),
       },
       {
@@ -18191,8 +18442,8 @@ class _CubeChipButton extends StatelessWidget {
     //   跟 rank badge / meta chip / detail sub-tabs 全线同族: chrome 减法, 靠 typography 承担
     //   active(传入 copper) = copper 文字 + 图标; 默认 = mute
     //   点击热区靠 padding 保证 tap target 够
-    final active = color == LhColors.copper;
-    final fg = active ? LhColors.copper : LhColors.mute;
+    final active = color == _LhPlum.primary;
+    final fg = active ? _LhPlum.primary : LhColors.mute;
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: onTap,

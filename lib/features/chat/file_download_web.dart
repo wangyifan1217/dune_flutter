@@ -14,10 +14,23 @@ Future<String?> saveBytesAsFileImpl(Uint8List bytes, String fileName) async {
   return null;
 }
 
+Future<String?> saveBytesAsCachedFileImpl(
+  Uint8List bytes,
+  String cacheKey,
+  String fileName,
+) async {
+  return saveBytesAsFileImpl(bytes, fileName);
+}
+
+Future<String?> findCachedChatFileImpl(String cacheKey, String fileName) async {
+  return null;
+}
+
 Future<String?> openUrlAsFileImpl(
   String url,
   String fileName, {
   void Function(double progress)? onProgress,
+  String? cacheKey,
 }) async {
   onProgress?.call(0);
   try {
@@ -47,6 +60,14 @@ Future<String?> openUrlAsFileImpl(
   anchor.remove();
   onProgress?.call(1);
   return null;
+}
+
+Future<void> openLocalFileImpl(String path) async {
+  // Web 无本地路径可打开。
+}
+
+Future<void> revealLocalFileImpl(String path) async {
+  // Web 无本地路径可显示。
 }
 
 Future<List<int>> _blobToBytes(html.Blob blob) async {

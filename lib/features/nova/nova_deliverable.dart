@@ -27,7 +27,9 @@ class NovaDeliverableItem {
 
   NovaDeliverableItem copyWithExt() {
     if (ext.isNotEmpty) return this;
-    final e = novaFileExt(name).isNotEmpty ? novaFileExt(name) : novaFileExt(url.split('?').first);
+    final e = novaFileExt(name).isNotEmpty
+        ? novaFileExt(name)
+        : novaFileExt(url.split('?').first);
     return NovaDeliverableItem(
       url: url,
       name: name,
@@ -60,7 +62,9 @@ bool novaImageUrlNeedsAuthFetch(String url) {
 }
 
 String normalizeNovaBodyText(String text) {
-  return text.replaceAll(RegExp(r'<br\s*/?>', caseSensitive: false), '\n').trim();
+  return text
+      .replaceAll(RegExp(r'<br\s*/?>', caseSensitive: false), '\n')
+      .trim();
 }
 
 String sanitizeNovaBody(String text) {
@@ -73,12 +77,30 @@ String sanitizeNovaBody(String text) {
 String stripNovaToolCallLeak(String text) {
   if (text.isEmpty) return '';
   var s = text;
-  s = s.replaceAll(RegExp(r'<\s*tool_calls[\s\S]*?<\s*/\s*tool_calls\s*>', caseSensitive: false), '');
-  s = s.replaceAll(RegExp(r'<\s*tool_call[\s\S]*?<\s*/\s*tool_call\s*>', caseSensitive: false), '');
-  s = s.replaceAll(RegExp(r'<\s*invoke[\s\S]*?<\s*/\s*invoke\s*>', caseSensitive: false), '');
-  s = s.replaceAll(RegExp(r'<\s*parameter[\s\S]*?<\s*/\s*parameter\s*>', caseSensitive: false), '');
   s = s.replaceAll(
-    RegExp(r'\btool_calls\s*>[\s\S]*?(?:>\s*/\s*tool_calls\s*>|>\s*tool_calls\s*>)', caseSensitive: false),
+    RegExp(
+      r'<\s*tool_calls[\s\S]*?<\s*/\s*tool_calls\s*>',
+      caseSensitive: false,
+    ),
+    '',
+  );
+  s = s.replaceAll(
+    RegExp(r'<\s*tool_call[\s\S]*?<\s*/\s*tool_call\s*>', caseSensitive: false),
+    '',
+  );
+  s = s.replaceAll(
+    RegExp(r'<\s*invoke[\s\S]*?<\s*/\s*invoke\s*>', caseSensitive: false),
+    '',
+  );
+  s = s.replaceAll(
+    RegExp(r'<\s*parameter[\s\S]*?<\s*/\s*parameter\s*>', caseSensitive: false),
+    '',
+  );
+  s = s.replaceAll(
+    RegExp(
+      r'\btool_calls\s*>[\s\S]*?(?:>\s*/\s*tool_calls\s*>|>\s*tool_calls\s*>)',
+      caseSensitive: false,
+    ),
     '',
   );
   s = s.replaceAll(
@@ -103,7 +125,9 @@ String stripNovaToolCallLeak(String text) {
 
 ({String raw, String toolRaw}) prepareNovaAssistantBody(String body) {
   final split = splitNovaReasoningReply(body, finalPass: true);
-  final reply = stripHermesProgressLines(sanitizeNovaBody(split.reply.isNotEmpty ? split.reply : body));
+  final reply = stripHermesProgressLines(
+    sanitizeNovaBody(split.reply.isNotEmpty ? split.reply : body),
+  );
   if (reply.isEmpty) return (raw: '', toolRaw: '');
   return (raw: stripNovaToolCallLeak(reply), toolRaw: reply);
 }
@@ -115,12 +139,17 @@ String novaFileExt(String name) {
 }
 
 bool novaIsImageExt(String ext) {
-  return RegExp(r'^(jpe?g|png|gif|webp|svg|bmp)$', caseSensitive: false).hasMatch(ext);
+  return RegExp(
+    r'^(jpe?g|png|gif|webp|svg|bmp)$',
+    caseSensitive: false,
+  ).hasMatch(ext);
 }
 
 bool novaIsDeliverableFileExt(String ext) {
-  return RegExp(r'^(md|txt|html?|pdf|docx?|xlsx?|csv|json|xml|yaml|yml|zip|rar|7z|pptx?)$', caseSensitive: false)
-      .hasMatch(ext);
+  return RegExp(
+    r'^(md|txt|html?|pdf|docx?|xlsx?|csv|json|xml|yaml|yml|zip|rar|7z|pptx?)$',
+    caseSensitive: false,
+  ).hasMatch(ext);
 }
 
 bool novaIsImageFile(NovaDeliverableItem file) {
@@ -130,8 +159,12 @@ bool novaIsImageFile(NovaDeliverableItem file) {
 
 bool novaShouldRenderLinkAsFileCard(String label, String url) {
   if (!RegExp(r'^https?:', caseSensitive: false).hasMatch(url)) return false;
-  final ext = novaFileExt(label).isNotEmpty ? novaFileExt(label) : novaFileExt(url.split('?').first);
-  return ext.isNotEmpty && !novaIsImageExt(ext) && novaIsDeliverableFileExt(ext);
+  final ext = novaFileExt(label).isNotEmpty
+      ? novaFileExt(label)
+      : novaFileExt(url.split('?').first);
+  return ext.isNotEmpty &&
+      !novaIsImageExt(ext) &&
+      novaIsDeliverableFileExt(ext);
 }
 
 IconData novaFileIconData(String ext) {
@@ -177,11 +210,17 @@ NovaDeliverableItem? tryParseHermesFileJson(String text) {
   NovaDeliverableItem? fromObj(Map<String, dynamic> o) {
     var url = (o['download_url'] ?? o['downloadUrl'] ?? '').toString().trim();
     if (url.isEmpty) {
-      url = _extractUrlFromMarkdownLink((o['chat_link'] ?? o['chatLink'] ?? '').toString());
+      url = _extractUrlFromMarkdownLink(
+        (o['chat_link'] ?? o['chatLink'] ?? '').toString(),
+      );
     }
-    var name = (o['display_filename'] ?? o['displayFilename'] ?? '').toString().trim();
+    var name = (o['display_filename'] ?? o['displayFilename'] ?? '')
+        .toString()
+        .trim();
     if (name.isEmpty) {
-      name = _extractNameFromMarkdownLink((o['chat_link'] ?? o['chatLink'] ?? '').toString());
+      name = _extractNameFromMarkdownLink(
+        (o['chat_link'] ?? o['chatLink'] ?? '').toString(),
+      );
     }
     if (url.isEmpty && name.isEmpty) return null;
     if (name.isEmpty && url.isNotEmpty) {
@@ -200,10 +239,14 @@ NovaDeliverableItem? tryParseHermesFileJson(String text) {
     if (direct != null && direct.url.isNotEmpty) return direct;
   } catch (_) {}
 
-  final block = RegExp(r'\{[\s\S]*"(?:download_url|chat_link|display_filename)"[\s\S]*\}').firstMatch(raw);
+  final block = RegExp(
+    r'\{[\s\S]*"(?:download_url|chat_link|display_filename)"[\s\S]*\}',
+  ).firstMatch(raw);
   if (block != null) {
     try {
-      final inner = fromObj(jsonDecode(block.group(0)!) as Map<String, dynamic>);
+      final inner = fromObj(
+        jsonDecode(block.group(0)!) as Map<String, dynamic>,
+      );
       if (inner != null && inner.url.isNotEmpty) return inner;
     } catch (_) {}
   }
@@ -217,7 +260,9 @@ NovaDeliverableItem? tryParseMarkdownFileLink(String text) {
   return NovaDeliverableItem(
     url: m.group(2)!,
     name: m.group(1)!,
-    ext: novaFileExt(m.group(1)!).isNotEmpty ? novaFileExt(m.group(1)!) : novaFileExt(m.group(2)!),
+    ext: novaFileExt(m.group(1)!).isNotEmpty
+        ? novaFileExt(m.group(1)!)
+        : novaFileExt(m.group(2)!),
   );
 }
 
@@ -239,8 +284,11 @@ List<NovaDeliverableItem> extractNovaMarkdownFileLinks(String text) {
     final name = m.group(1)?.trim() ?? '文件';
     final url = m.group(2)?.trim() ?? '';
     if (url.isEmpty) continue;
-    final ext = novaFileExt(name).isNotEmpty ? novaFileExt(name) : novaFileExt(url.split('?').first);
-    if (ext.isEmpty || novaIsImageExt(ext) || !novaIsDeliverableFileExt(ext)) continue;
+    final ext = novaFileExt(name).isNotEmpty
+        ? novaFileExt(name)
+        : novaFileExt(url.split('?').first);
+    if (ext.isEmpty || novaIsImageExt(ext) || !novaIsDeliverableFileExt(ext))
+      continue;
     if (seen.contains(url)) continue;
     seen.add(url);
     files.add(NovaDeliverableItem(url: url, name: name, ext: ext));
@@ -249,7 +297,10 @@ List<NovaDeliverableItem> extractNovaMarkdownFileLinks(String text) {
 }
 
 List<NovaDeliverableItem> extractNovaToolCallFiles(String text) {
-  if (!RegExp(r'tool_calls|invoke|write_file|parametername', caseSensitive: false).hasMatch(text)) {
+  if (!RegExp(
+    r'tool_calls|invoke|write_file|parametername',
+    caseSensitive: false,
+  ).hasMatch(text)) {
     return const [];
   }
   final files = <NovaDeliverableItem>[];
@@ -263,7 +314,14 @@ List<NovaDeliverableItem> extractNovaToolCallFiles(String text) {
     if (path.isEmpty || seen.contains(path)) continue;
     seen.add(path);
     final name = path.split('/').last;
-    files.add(NovaDeliverableItem(path: path, agentPath: path, name: name, ext: novaFileExt(name)));
+    files.add(
+      NovaDeliverableItem(
+        path: path,
+        agentPath: path,
+        name: name,
+        ext: novaFileExt(name),
+      ),
+    );
   }
   return files;
 }
@@ -279,7 +337,14 @@ List<NovaDeliverableItem> extractNovaGeneratedFiles(String text) {
     if (seen.contains(path)) continue;
     seen.add(path);
     final name = path.split('/').last;
-    files.add(NovaDeliverableItem(path: path, agentPath: path, name: name, ext: novaFileExt(name)));
+    files.add(
+      NovaDeliverableItem(
+        path: path,
+        agentPath: path,
+        name: name,
+        ext: novaFileExt(name),
+      ),
+    );
   }
   return files;
 }
@@ -289,7 +354,14 @@ List<String> guessNovaAgentPaths(String name) {
   if (name.isEmpty) return const [];
   final base = name.split('/').last;
   final out = <String>[];
-  for (final p in [name, base, '/opt/data/$base', '/workspace/$base', '/tmp/$base', '/root/$base']) {
+  for (final p in [
+    name,
+    base,
+    '/opt/data/$base',
+    '/workspace/$base',
+    '/tmp/$base',
+    '/root/$base',
+  ]) {
     if (p.isNotEmpty && !out.contains(p)) out.add(p);
   }
   return out;
@@ -341,7 +413,8 @@ List<NovaDeliverableItem> extractNovaNamedDownloadFiles(String text) {
   ).hasMatch(raw)) {
     return const [];
   }
-  if (tryParseHermesFileJson(raw) != null || extractNovaMarkdownFileLinks(raw).isNotEmpty) {
+  if (tryParseHermesFileJson(raw) != null ||
+      extractNovaMarkdownFileLinks(raw).isNotEmpty) {
     return const [];
   }
   final files = <NovaDeliverableItem>[];
@@ -358,12 +431,14 @@ List<NovaDeliverableItem> extractNovaNamedDownloadFiles(String text) {
     if (!novaIsDeliverableFileExt(novaFileExt(name))) continue;
     seen.add(name);
     final paths = guessNovaAgentPaths(name);
-    files.add(NovaDeliverableItem(
-      name: name,
-      ext: novaFileExt(name),
-      agentPath: paths.isNotEmpty ? paths.first : name,
-      agentPathCandidates: paths,
-    ));
+    files.add(
+      NovaDeliverableItem(
+        name: name,
+        ext: novaFileExt(name),
+        agentPath: paths.isNotEmpty ? paths.first : name,
+        agentPathCandidates: paths,
+      ),
+    );
   }
   return files;
 }
@@ -410,14 +485,51 @@ List<NovaDeliverableItem> collectNovaExtraFiles(
 
 String normalizeNovaMarkdownLayout(String text) {
   var s = text;
+  // Normalize headings like "##标题" / "###标题" to "## 标题" so they are parsed as headings.
+  s = s.replaceAllMapped(
+    RegExp(r'(^|\n)(\s*#{1,3})([^\s#\n])'),
+    (m) => '${m.group(1)}${m.group(2)} ${m.group(3)}',
+  );
   s = s.replaceAll(
-    RegExp(r'(\.(?:md|txt|html?|pdf|docx?|xlsx?|csv|json|yaml|yml|zip|rar|7z))(#\s*)', caseSensitive: false),
+    RegExp(
+      r'(\.(?:md|txt|html?|pdf|docx?|xlsx?|csv|json|yaml|yml|zip|rar|7z))(#\s*)',
+      caseSensitive: false,
+    ),
     r'$1\n\n$2',
   );
-  s = s.replaceAllMapped(RegExp(r'([。！？!?.])(#\s*[^\n#]+)'), (m) => '${m.group(1)}\n\n${m.group(2)}');
-  s = s.replaceAllMapped(RegExp(r'([^\n])(#[#]?\s*[🔍✅🎯💡][^\n]*)'), (m) => '${m.group(1)}\n\n${m.group(2)}');
-  s = s.replaceAllMapped(RegExp(r'([^\n])(-\s*[✅🎯💡])'), (m) => '${m.group(1)}\n${m.group(2)}');
+  s = s.replaceAllMapped(
+    RegExp(r'([。！？!?.])(#\s*[^\n#]+)'),
+    (m) => '${m.group(1)}\n\n${m.group(2)}',
+  );
+  s = s.replaceAllMapped(
+    RegExp(r'([^\n])(#[#]?\s*[🔍✅🎯💡][^\n]*)'),
+    (m) => '${m.group(1)}\n\n${m.group(2)}',
+  );
+  s = s.replaceAllMapped(
+    RegExp(r'([^\n])(-\s*[✅🎯💡])'),
+    (m) => '${m.group(1)}\n${m.group(2)}',
+  );
+  // 有些模型把列表压成“说明 -项目：内容。 -项目：内容”。这些项目名
+  // 带冒号，和普通连字符（日期、范围、负数等）可区分，拆开后交给 Markdown
+  // block renderer 呈现，避免整段回复挤成一行。
+  s = s.replaceAllMapped(
+    RegExp(
+      r'([。！？!?；;）)])\s*[-－—]\s*(?=[\u4e00-\u9fff][\u4e00-\u9fffA-Za-z0-9（）()·、]{0,15}[：:])',
+    ),
+    (m) => '${m.group(1)}\n- ',
+  );
+  // Generic heading normalization: if "## " appears mid-line, split it into a new block.
+  // Do not split on consecutive '#' (e.g. "## 标题" must not become "#\n\n## 标题").
+  s = s.replaceAllMapped(
+    RegExp(r'([^\n#])\s*(#{1,3}\s+)'),
+    (m) => '${m.group(1)}\n\n${m.group(2)}',
+  );
   s = s.replaceAllMapped(RegExp(r'([：:])\s*-\s*'), (m) => '${m.group(1)}\n- ');
+  // Drop orphan heading markers left on their own line (legacy bad splits).
+  s = s
+      .split('\n')
+      .where((line) => !RegExp(r'^\s*#{1,3}\s*$').hasMatch(line))
+      .join('\n');
   return s.trim();
 }
 
@@ -442,28 +554,34 @@ List<NovaFencePart> splitNovaMarkdownFences(String text) {
   var hit = false;
   for (final m in re.allMatches(text)) {
     hit = true;
-    if (m.start > last) parts.add(NovaFencePart(body: text.substring(last, m.start)));
-    parts.add(NovaFencePart(
-      lang: m.group(1)?.trim() ?? '',
-      body: (m.group(2) ?? '').replaceAll(RegExp(r'\n$'), ''),
-      isCode: true,
-    ));
+    if (m.start > last)
+      parts.add(NovaFencePart(body: text.substring(last, m.start)));
+    parts.add(
+      NovaFencePart(
+        lang: m.group(1)?.trim() ?? '',
+        body: (m.group(2) ?? '').replaceAll(RegExp(r'\n$'), ''),
+        isCode: true,
+      ),
+    );
     last = m.end;
   }
   if (hit) {
-    if (last < text.length) parts.add(NovaFencePart(body: text.substring(last)));
+    if (last < text.length)
+      parts.add(NovaFencePart(body: text.substring(last)));
     return parts;
   }
   final open = RegExp(r'```(\w*)\n?([\s\S]*)$').firstMatch(text);
   if (open != null && text.indexOf('```') == text.lastIndexOf('```')) {
     final before = text.substring(0, open.start);
     if (before.isNotEmpty) parts.add(NovaFencePart(body: before));
-    parts.add(NovaFencePart(
-      lang: open.group(1)?.trim() ?? '',
-      body: open.group(2) ?? '',
-      isCode: true,
-      open: true,
-    ));
+    parts.add(
+      NovaFencePart(
+        lang: open.group(1)?.trim() ?? '',
+        body: open.group(2) ?? '',
+        isCode: true,
+        open: true,
+      ),
+    );
     return parts;
   }
   parts.add(NovaFencePart(body: text));

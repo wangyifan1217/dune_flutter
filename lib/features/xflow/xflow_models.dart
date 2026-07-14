@@ -37,17 +37,14 @@ class XflowTemplateCard {
 }
 
 class XflowFieldOption {
-  const XflowFieldOption({
-    required this.label,
-    required this.value,
-  });
+  const XflowFieldOption({required this.label, required this.value});
 
   final String label;
   final String value;
 
   factory XflowFieldOption.fromJson(Map<String, dynamic> json) {
-    final label =
-        (json['label'] ?? json['name'] ?? json['text'] ?? '').toString();
+    final label = (json['label'] ?? json['name'] ?? json['text'] ?? '')
+        .toString();
     final value = (json['value'] ?? json['id'] ?? label).toString();
     return XflowFieldOption(label: label, value: value);
   }
@@ -162,6 +159,8 @@ class XflowProposalItem {
     this.todoHint,
     this.tag1,
     this.txType,
+    this.proposalType,
+    this.templateKey,
     this.scaleWan,
     this.currentStep = 0,
     this.totalSteps = 0,
@@ -178,6 +177,8 @@ class XflowProposalItem {
   final XflowTodoHint? todoHint;
   final String? tag1;
   final String? txType;
+  final String? proposalType;
+  final String? templateKey;
   final String? scaleWan;
   final int currentStep;
   final int totalSteps;
@@ -194,6 +195,8 @@ class XflowProposalItem {
     DateTime? createdAt,
     String? tag1,
     String? txType,
+    String? proposalType,
+    String? templateKey,
     String? scaleWan,
     int? currentStep,
     int? totalSteps,
@@ -207,15 +210,61 @@ class XflowProposalItem {
       status: status ?? this.status,
       createdByName: createdByName ?? this.createdByName,
       createdAt: createdAt ?? this.createdAt,
-      todoHint: todoHint,
       tag1: tag1 ?? this.tag1,
       txType: txType ?? this.txType,
+      proposalType: proposalType ?? this.proposalType,
+      templateKey: templateKey ?? this.templateKey,
       scaleWan: scaleWan ?? this.scaleWan,
       currentStep: currentStep ?? this.currentStep,
       totalSteps: totalSteps ?? this.totalSteps,
       canRefedit: canRefedit ?? this.canRefedit,
+      todoHint: todoHint,
     );
   }
+}
+
+class XflowSubmissionDetail {
+  const XflowSubmissionDetail({
+    required this.id,
+    required this.templateKey,
+    required this.businessType,
+    required this.businessId,
+    required this.title,
+    required this.status,
+    required this.formData,
+    required this.createdById,
+    required this.createdAt,
+  });
+
+  final int id;
+  final String templateKey;
+  final String businessType;
+  final int businessId;
+  final String title;
+  final String status;
+  final Map<String, dynamic> formData;
+  final int createdById;
+  final DateTime? createdAt;
+
+  factory XflowSubmissionDetail.fromJson(Map<String, dynamic> json) {
+    final form = json['formData'];
+    return XflowSubmissionDetail(
+      id: _xflowInt(json['id']),
+      templateKey: (json['templateKey'] ?? '').toString(),
+      businessType: (json['businessType'] ?? '').toString(),
+      businessId: _xflowInt(json['businessId']),
+      title: (json['title'] ?? '动态审批').toString(),
+      status: (json['status'] ?? '').toString(),
+      formData: form is Map ? Map<String, dynamic>.from(form) : const {},
+      createdById: _xflowInt(json['createdById']),
+      createdAt: DateTime.tryParse((json['createdAt'] ?? '').toString()),
+    );
+  }
+}
+
+int _xflowInt(dynamic value) {
+  if (value is num) return value.toInt();
+  return int.tryParse('$value') ?? 0;
 }
 
 class XflowProduct {
@@ -331,6 +380,7 @@ class XflowDetailBundle {
     this.isDesignatedInitiator = false,
     this.isPusher = false,
     this.canDeleteDraft = false,
+    this.canWithdraw = false,
   });
 
   final XflowProposalDetail detail;
@@ -352,6 +402,9 @@ class XflowDetailBundle {
 
   /// 创建人本人的草稿(DRAFT)可删除。
   final bool canDeleteDraft;
+
+  /// 创建人的待审批提案，在尚未产生任何审批意见前可撤回。
+  final bool canWithdraw;
 }
 
 extension XflowApprovalTrailExt on XflowApprovalTrail {
@@ -367,7 +420,8 @@ extension XflowApprovalTrailExt on XflowApprovalTrail {
 
 extension XflowApprovalStepExt on XflowApprovalStep {
   String get stepType => (raw['stepType'] ?? '').toString();
-  String get decidedAtRaw => (raw['decidedAt'] ?? raw['updatedAt'] ?? '').toString();
+  String get decidedAtRaw =>
+      (raw['decidedAt'] ?? raw['updatedAt'] ?? '').toString();
 }
 
 Map<String, dynamic> parseLayout(dynamic rawLayout) {

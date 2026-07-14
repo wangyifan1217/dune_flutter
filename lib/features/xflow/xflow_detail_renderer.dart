@@ -3,7 +3,9 @@ import 'package:flutter/material.dart';
 import 'xflow_detail_logic.dart';
 import 'xflow_detail_widgets.dart';
 import 'xflow_models.dart';
+import 'proposal_recognition_panel.dart';
 import 'xflow_service.dart';
+import 'xflow_template_runtime.dart';
 
 /// 与 WebView `renderDetail()` 结构 1:1 对齐
 class XflowDetailRenderer extends StatelessWidget {
@@ -18,6 +20,7 @@ class XflowDetailRenderer extends StatelessWidget {
     this.onInitiate,
     this.onReedit,
     this.onVoid,
+    this.onWithdraw,
     this.onReturn,
   });
 
@@ -30,6 +33,7 @@ class XflowDetailRenderer extends StatelessWidget {
   final VoidCallback? onInitiate;
   final VoidCallback? onReedit;
   final VoidCallback? onVoid;
+  final VoidCallback? onWithdraw;
   final VoidCallback? onReturn;
 
   @override
@@ -39,6 +43,10 @@ class XflowDetailRenderer extends StatelessWidget {
     final showCc = cfg['showCcCard'] != false;
     final showTrack = cfg['showApprovalFlow'] != false;
     final rejectInfo = lastRejectStep(bundle.trail, bundle.assigneeNames);
+    final showRecognition = isUploadTemplateConfig(
+      detailConfig: cfg,
+      fields: bundle.fields,
+    );
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -49,6 +57,14 @@ class XflowDetailRenderer extends StatelessWidget {
         XfDetPeopleCard(bundle: bundle),
         XfDetPendingHint(bundle: bundle),
         if (showPush) XfDetPushContext(detail: bundle.detail),
+        if (showRecognition)
+          XfDetRecognitionPanel(
+            service: service,
+            detailConfig: cfg,
+            formValues: bundle.detail.formValues,
+            fields: bundle.fields,
+            detailRaw: bundle.detail.raw,
+          ),
         XfDetTabsWrap(bundle: bundle, service: service, showTrack: showTrack),
         if (showCc) XfDetCcCard(ccList: bundle.ccList),
         if (bundle.myTodo != null)
@@ -57,11 +73,13 @@ class XflowDetailRenderer extends StatelessWidget {
           detail: bundle.detail,
           canReedit: bundle.canReedit,
           canDeleteDraft: bundle.canDeleteDraft,
+          canWithdraw: bundle.canWithdraw,
           onDelete: onDelete,
           onPush: onPush,
           onInitiate: onInitiate,
           onReedit: onReedit,
           onVoid: onVoid,
+          onWithdraw: onWithdraw,
           onReturn: onReturn,
           isDesignatedInitiator: bundle.isDesignatedInitiator,
           isPusher: bundle.isPusher,

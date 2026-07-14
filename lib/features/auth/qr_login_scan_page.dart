@@ -48,6 +48,24 @@ class _QrLoginScanPageState extends State<QrLoginScanPage> {
   @override
   void initState() {
     super.initState();
+    if (widget.session.isExternalUser) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        showDialog<void>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('无法扫码登录'),
+            content: const Text('外部用户不支持登录 PC 工作台'),
+            actions: [
+              TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('知道了')),
+            ],
+          ),
+        ).then((_) {
+          if (mounted) Navigator.of(context).pop(false);
+        });
+      });
+      return;
+    }
     _prepareCamera();
   }
 

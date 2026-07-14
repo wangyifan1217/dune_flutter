@@ -61,6 +61,8 @@ class NativeAudioRecorder {
     if (!isSupported) return;
     try {
       await _channel.invokeMethod<void>('resume');
+    } on PlatformException catch (e) {
+      throw Exception(e.message ?? '继续录音失败');
     } on MissingPluginException {
       // Web / 桌面调试忽略
     }
@@ -88,6 +90,8 @@ class NativeAudioRecorder {
         path: path,
         durationMs: (data['durationMs'] as num?)?.toInt() ?? 0,
       );
+    } on PlatformException catch (e) {
+      throw Exception(e.message ?? '录音保存失败');
     } on MissingPluginException {
       return null;
     }

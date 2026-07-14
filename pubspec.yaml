@@ -2,7 +2,7 @@ name: dunes_app
 description: "沙丘 · 统一审批 App — 基于 index.html 原型 100% 还原的 Flutter 壳"
 publish_to: 'none'
 
-version: 1.0.5+2
+version: 1.0.6+1
 
 environment:
   sdk: ^3.11.0
@@ -34,6 +34,12 @@ dependencies:
   mobile_scanner: ^7.2.0
   emoji_picker_flutter: ^4.4.0
   pro_image_editor: 11.23.0
+  flutter_markdown: ^0.7.7+1
+  webview_flutter: ^4.14.1
+  window_manager: ^0.5.1
+  tray_manager: ^0.5.2
+  pasteboard: ^0.5.0
+  qr_flutter: ^4.1.0
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -64,6 +70,10 @@ flutter:
   assets:
     - assets/images/app_logo.png
     - assets/images/lighthouse_logo.png
+    - assets/images/tray_icon.ico
+    - assets/images/tray_icon_blank.ico
+    - assets/images/tray_icon.png
+    - assets/images/tray_icon_blank.png
     - assets/prototype/
     - assets/prototype/dunes_app_ui.js
     - assets/prototype/workbench_live.js

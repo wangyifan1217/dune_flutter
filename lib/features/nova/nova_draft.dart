@@ -14,6 +14,8 @@ class NovaDraftAttachment {
     this.uploadProgress = 0,
     this.uploading = false,
     this.payload,
+    this.novaAttachmentId,
+    this.textPreview = '',
   });
 
   final String id;
@@ -24,6 +26,10 @@ class NovaDraftAttachment {
   double uploadProgress;
   bool uploading;
   Map<String, dynamic>? payload;
+
+  /// NOVA 当轮文件提问：`POST /v1/app/chat/attachments` 返回的 id。
+  String? novaAttachmentId;
+  String textPreview;
 
   String get kind => isImage ? 'IMAGE' : 'FILE';
 }

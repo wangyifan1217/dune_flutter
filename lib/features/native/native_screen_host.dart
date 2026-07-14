@@ -5,8 +5,11 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/http/session_http.dart';
+import '../../core/layout/chat_layout.dart';
 import '../../core/navigation/navigation_controller.dart';
 import '../../core/navigation/generated/screen_registry.dart';
+import '../../core/platform/desktop_features.dart';
+import '../../core/theme/app_text_scale.dart';
 import '../../core/theme/dunes_theme.dart';
 import '../../core/widgets/cached_network_image.dart';
 import '../approval/native_approval_page.dart';
@@ -17,12 +20,13 @@ import '../chat/native_chat_search_page.dart';
 import '../chat/native_group_chat_page.dart';
 import '../chat/native_group_info_page.dart';
 import '../chat/native_group_media_page.dart';
+import '../chat/native_message_center_page.dart';
 import '../chat/native_new_chat_page.dart';
-import '../chat/native_notifications_page.dart';
 import '../chat/native_private_chat_page.dart';
 import '../contacts/contact_models.dart';
 import '../contacts/native_contact_profile_page.dart';
 import '../contacts/native_contacts_page.dart';
+import '../conversation/chat_dual_pane_shell.dart';
 import '../conversation/comm_unread_notifier.dart';
 import '../conversation/conversation_models.dart';
 import '../conversation/conversation_mention_utils.dart';
@@ -33,6 +37,7 @@ import '../conversation/conversation_service.dart';
 import '../conversation/inbox_hidden_storage.dart';
 import '../conversation/native_conversation_page.dart';
 import '../conversation/notification_service.dart';
+import '../desktop/windows_desktop_tray.dart';
 import '../kb/native_kb_chat_page.dart';
 import '../kb/native_kb_doc_page.dart';
 import '../kb/native_kb_home_page.dart';
@@ -40,7 +45,8 @@ import '../kb/native_kb_models.dart';
 import '../kb/native_kb_service.dart';
 import '../xflow/native_b10_page.dart';
 import '../xflow/native_b3_page.dart';
-import '../xflow/native_xflow_form_page.dart';
+import '../xflow/native_xflow_proposal_page.dart';
+import '../xflow/native_xflow_submission_page.dart';
 import '../xflow/proposal_launch_config.dart';
 import '../xflow/xflow_models.dart';
 import '../xflow/xflow_service.dart';
@@ -52,6 +58,8 @@ import '../push/push_service.dart';
 import '../conversation/message_preview_text.dart';
 import '../shell/dunes_main_tab_bar.dart';
 import '../shell/dunes_toast.dart';
+import '../update/app_update_dialog.dart';
+import '../update/app_update_service.dart';
 import '../workbench/native_avatar_sheet.dart';
 import '../workbench/native_my_workbench_pages.dart';
 import '../workbench/native_team_board_page.dart';
@@ -110,9 +118,14 @@ class _NativeScreenHostState extends State<NativeScreenHost>
   int _selectedProposalId = 0;
   XflowTodoHint? _selectedTodoHint;
   String _b10BackScreen = 'P1';
-  String _xflowTemplateKey = 'sales-proposal';
+  String _xflowTemplateKey = XflowService.boundTemplateKeyForMenu(
+    '/business/proposals/new',
+  );
   String _b3InitialCategory = 'biz';
   int? _xflowEditProposalId;
+  String _xflowEditBusinessType = 'PROPOSAL';
+  String _selectedSubmissionBusinessType = '';
+  int _selectedSubmissionBusinessId = 0;
   String _xflowFormBackScreen = 'B3';
   String? _b14InitialFilter;
   int _meetingId = 0;
@@ -122,6 +135,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
   Timer? _commBadgeRecorrectTimer;
   Timer? _workbenchBadgeRefreshDebounce;
   final Map<int, bool> _mutedConvIds = <int, bool>{};
+  String? _lastScreen;
+  int _lastHistoryDepth = 0;
 
   /// 仅在一次 markConversationRead 成功后允许把桌面角标同步为 0。
   bool _pendingBadgeZeroSync = false;
@@ -247,6 +262,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       }
       if (!isMuted) {
         _notifyAndroidPushForEvent(event);
+        windowsTrayNotifyIncomingMessage();
       }
       _scheduleCommBadgeRefresh();
       return;
@@ -254,6 +270,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
 
     if (event.type == 'notification') {
       _notifyAndroidPushForEvent(event);
+      windowsTrayNotifyIncomingMessage();
     }
 
     _scheduleCommBadgeRefresh();
@@ -271,8 +288,9 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       final msg = event.raw['message'];
       if (msg is Map) {
         final kind = (msg['kind'] ?? '').toString();
-        final rawBody = (msg['bodyText'] ?? msg['content'] ?? msg['text'] ?? body)
-            .toString();
+        final rawBody =
+            (msg['bodyText'] ?? msg['content'] ?? msg['text'] ?? body)
+                .toString();
         body = compactMessagePushPreview(kind: kind, body: rawBody);
         final sender = msg['sender'];
         if (sender is Map) {
@@ -353,11 +371,16 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       }
       _workbenchRefresh.bump();
       if (delta > 0 && !notifyRejected) {
+        final body = delta == 1 ? '你有新的审批待办，请及时处理' : '您有 $delta 条新的待审批，请及时处理';
         showDunesToast(context, '您有 $delta 条新的待审批，请及时处理');
+        // 与 APP TPNS（title=审批待办）对齐：桌面本地系统通知。
+        notifyPushRealtimeMessage(title: '审批待办', body: body);
+        windowsTrayNotifyIncomingMessage();
       } else if (pendingInitiateDelta > 0) {
+        final body = '有 $pendingInitiateDelta 条同事推送的提案待您确认发起';
         showDunesActionToast(
           context,
-          '有 $pendingInitiateDelta 条同事推送的提案待您确认发起',
+          body,
           actionLabel: '去查看',
           icon: Icons.assignment_ind_outlined,
           onTap: () {
@@ -365,10 +388,13 @@ class _NativeScreenHostState extends State<NativeScreenHost>
             _goB14(filter: 'PENDING_INITIATE');
           },
         );
+        notifyPushRealtimeMessage(title: '待确认发起', body: body);
+        windowsTrayNotifyIncomingMessage();
       } else if (notifyRejected) {
+        const body = '您有 1 条审批被驳回，请及时查看';
         showDunesActionToast(
           context,
-          '您有 1 条审批被驳回，请及时查看',
+          body,
           actionLabel: '去查看',
           icon: Icons.warning_amber_rounded,
           onTap: () {
@@ -376,6 +402,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
             _goB14();
           },
         );
+        notifyPushRealtimeMessage(title: '审批驳回', body: body);
+        windowsTrayNotifyIncomingMessage();
       }
     } catch (_) {
       // Workbench badge is best-effort.
@@ -471,6 +499,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           'unreadRows=[$unreadRows]',
         );
         _commUnread.update(serverTotal);
+        windowsTrayUpdateUnread(serverTotal);
         if (serverTotal == 0) {
           if (!_pendingBadgeZeroSync) {
             print('[Badge] skip sync 0 (no read ack)');
@@ -486,8 +515,214 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
+  /// 宽屏双栏：在 C2/C5 之间切换时替换栈顶，避免历史栈堆积。
+  void _goChatScreen(String screenId) {
+    final current = widget.navigation.currentScreen;
+    if (current == 'C2' || current == 'C5') {
+      widget.navigation.replaceTop(screenId);
+    } else {
+      widget.navigation.go(screenId);
+    }
+  }
+
+  void _openPrivateConversation(NativeConversation conv) {
+    setState(() {
+      _selectedPrivate = conv;
+      _selectedPrivatePeerUserId = conv.peerUserId;
+      _selectedGroup = null;
+      _focusMessageId = null;
+      _focusMessageHint = null;
+    });
+    _markUserEnteredChat();
+    _goChatScreen('C5');
+  }
+
+  void _openGroupConversation(NativeConversation conv) {
+    setState(() {
+      _selectedGroup = conv;
+      _selectedPrivate = null;
+      _selectedPrivatePeerUserId = null;
+      _focusMessageId = null;
+      _focusMessageHint = null;
+    });
+    _markUserEnteredChat();
+    _goChatScreen('C2');
+  }
+
+  void _openPrivateByPeerId(int peerUserId) {
+    setState(() {
+      _selectedPrivate = null;
+      _selectedPrivatePeerUserId = peerUserId;
+      _selectedGroup = null;
+      _focusMessageId = null;
+      _focusMessageHint = null;
+    });
+    _markUserEnteredChat();
+    _goChatScreen('C5');
+  }
+
+  void _leaveChatToInbox({required bool clearSelection}) {
+    setState(() {
+      _focusMessageId = null;
+      _focusMessageHint = null;
+      if (clearSelection) {
+        _selectedPrivate = null;
+        _selectedPrivatePeerUserId = null;
+        _selectedGroup = null;
+      }
+    });
+    _markUserLeftChat();
+    widget.navigation.popTo('C1');
+  }
+
+  int? get _dualPaneSelectedConversationId {
+    final chatScreen = _dualPaneChatScreen;
+    if (chatScreen == 'C5') return _selectedPrivate?.id;
+    if (chatScreen == 'C2') return _selectedGroup?.id;
+    return null;
+  }
+
+  /// 从「我的」回到桌面端通讯时，保留原来打开的会话，而不是重置右侧聊天栏。
+  String get _dualPaneChatScreen {
+    final screen = widget.navigation.currentScreen;
+    if (screen == 'C2' || screen == 'C5') return screen;
+    if (_selectedPrivate != null || _selectedPrivatePeerUserId != null) {
+      return 'C5';
+    }
+    if (_selectedGroup != null) return 'C2';
+    return 'C1';
+  }
+
+  bool _isDualPaneChatRoute(String screen) {
+    return screen == 'C1' || screen == 'C2' || screen == 'C5';
+  }
+
+  Widget _buildConversationListPage({
+    required bool showBottomTabBar,
+    int? selectedConversationId,
+  }) {
+    return NativeConversationPage(
+      session: widget.session,
+      navigation: widget.navigation,
+      commUnread: _commUnread,
+      workbenchBadge: _workbenchBadge,
+      selectedConversationId: selectedConversationId,
+      showBottomTabBar: showBottomTabBar,
+      onOpenPrivate: _openPrivateConversation,
+      onOpenGroup: _openGroupConversation,
+      onOpenContacts: () => widget.navigation.go('C3'),
+      onOpenNova: () {
+        NovaBackgroundCoordinator.instance.clearPendingCommBadgeBump();
+        setState(() {
+          _novaFocusConversationId = null;
+          _novaFocusMessageId = null;
+        });
+        widget.navigation.go('C4');
+      },
+      onOpenNotifications: () => widget.navigation.go('Z2'),
+      onOpenNewChat: () => widget.navigation.go('C7'),
+    );
+  }
+
+  Widget _buildDualPaneChatPane() {
+    switch (_dualPaneChatScreen) {
+      case 'C2':
+        return NativeGroupChatPage(
+          key: ValueKey<String>('dual-group-${_selectedGroup?.id ?? 0}'),
+          session: widget.session,
+          conversationHint: _selectedGroup,
+          focusMessageId: _focusMessageId,
+          focusMessageHint: _focusMessageHint,
+          autoMarkRead: _userActivelyInChat,
+          showBackButton: false,
+          onBack: () => _leaveChatToInbox(clearSelection: true),
+          onOpenSearch: (convId) {
+            setState(() {
+              _searchConversationId = convId;
+              _searchTitle = _selectedGroup?.title ?? '群聊搜索';
+              _searchReturnScreen = 'C2';
+              _focusMessageId = null;
+              _focusMessageHint = null;
+            });
+            widget.navigation.go('C12');
+          },
+          onOpenMedia: (convId) {
+            setState(() {
+              _mediaConversationId = convId;
+              _mediaTitle = _selectedGroup?.title ?? '群聊';
+            });
+            widget.navigation.go('C13');
+          },
+          onOpenGroupInfo: () => widget.navigation.go('C6'),
+          onConversationRead: _handleConversationRead,
+        );
+      case 'C5':
+        return NativePrivateChatPage(
+          key: ValueKey<String>(
+            'dual-private-${_selectedPrivate?.id ?? _selectedPrivatePeerUserId ?? 0}',
+          ),
+          session: widget.session,
+          conversationHint: _selectedPrivate,
+          peerUserIdHint: _selectedPrivatePeerUserId,
+          focusMessageId: _focusMessageId,
+          focusMessageHint: _focusMessageHint,
+          autoMarkRead: _userActivelyInChat,
+          showBackButton: false,
+          onBack: () => _leaveChatToInbox(clearSelection: true),
+          onOpenProfile: () {
+            final peerId =
+                _selectedPrivate?.peerUserId ?? _selectedPrivatePeerUserId;
+            if (peerId != null && peerId > 0) {
+              setState(() {
+                _selectedContact = NativeContact(
+                  userId: peerId,
+                  displayName:
+                      _selectedPrivate?.peerDisplayName ??
+                      _selectedPrivate?.title ??
+                      '',
+                );
+              });
+            }
+            widget.navigation.go('C9');
+          },
+          onOpenSearch: (convId) {
+            setState(() {
+              _searchConversationId = convId;
+              _searchTitle = '${_selectedPrivate?.displayTitle ?? '私聊'} · 搜索';
+              _searchReturnScreen = 'C5';
+              _focusMessageId = null;
+              _focusMessageHint = null;
+            });
+            widget.navigation.go('C12');
+          },
+          onConversationRead: _handleConversationRead,
+        );
+      case 'C1':
+      default:
+        return const ChatDualPaneEmpty();
+    }
+  }
+
+  Widget _buildChatDualPane() {
+    return ChatDualPaneShell(
+      listPane: _buildConversationListPage(
+        showBottomTabBar: false,
+        selectedConversationId: _dualPaneSelectedConversationId,
+      ),
+      chatPane: _buildDualPaneChatPane(),
+      sideRail: DunesMainTabBar(
+        navigation: widget.navigation,
+        activeScreen: 'C1',
+        axis: Axis.vertical,
+        commUnread: _commUnread,
+        workbenchBadge: _workbenchBadge,
+        lighthouseAccess: widget.session.lighthouseAccess,
+        chatOnlyMode: widget.session.isExternalUser,
+      ),
+    );
+  }
+
+  Widget _buildCurrentScreen(BuildContext context) {
     switch (widget.navigation.currentScreen) {
       case 'LH':
         return NativeLighthousePage(
@@ -509,51 +744,13 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           onLogout: widget.onLogout,
         );
       case 'C1':
-        return NativeConversationPage(
-          session: widget.session,
-          navigation: widget.navigation,
-          commUnread: _commUnread,
-          workbenchBadge: _workbenchBadge,
-          onOpenPrivate: (conv) {
-            setState(() {
-              _selectedPrivate = conv;
-              _selectedPrivatePeerUserId = conv.peerUserId;
-              _focusMessageId = null;
-              _focusMessageHint = null;
-            });
-            _markUserEnteredChat();
-            widget.navigation.go('C5');
-          },
-          onOpenGroup: (conv) {
-            setState(() {
-              _selectedGroup = conv;
-              _focusMessageId = null;
-              _focusMessageHint = null;
-            });
-            _markUserEnteredChat();
-            widget.navigation.go('C2');
-          },
-          onOpenContacts: () => widget.navigation.go('C3'),
-          onOpenNova: () {
-            NovaBackgroundCoordinator.instance.clearPendingCommBadgeBump();
-            setState(() {
-              _novaFocusConversationId = null;
-              _novaFocusMessageId = null;
-            });
-            widget.navigation.go('C4');
-          },
-          onOpenNotifications: () => widget.navigation.go('Z2'),
-          onOpenBroadcast: (conv) {
-            setState(() => _selectedBroadcast = conv);
-            widget.navigation.go('C10');
-          },
-          onOpenNewChat: () => widget.navigation.go('C7'),
-        );
+        return _buildConversationListPage(showBottomTabBar: true);
       case 'Z2':
-        return NativeNotificationsPage(
+        return NativeMessageCenterPage(
           session: widget.session,
           onBack: widget.navigation.back,
           onNotificationsRead: _handleNotificationsRead,
+          onBroadcastRead: _handleConversationRead,
         );
       case 'C10':
         return NativeBroadcastPage(
@@ -566,25 +763,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         return NativeNewChatPage(
           session: widget.session,
           onBack: widget.navigation.back,
-          onOpenPrivateChat: (peerUserId) {
-            setState(() {
-              _selectedPrivate = null;
-              _selectedPrivatePeerUserId = peerUserId;
-              _focusMessageId = null;
-              _focusMessageHint = null;
-            });
-            _markUserEnteredChat();
-            widget.navigation.go('C5');
-          },
-          onOpenGroupChat: (conversation) {
-            setState(() {
-              _selectedGroup = conversation;
-              _focusMessageId = null;
-              _focusMessageHint = null;
-            });
-            _markUserEnteredChat();
-            widget.navigation.go('C2');
-          },
+          onOpenPrivateChat: _openPrivateByPeerId,
+          onOpenGroupChat: _openGroupConversation,
         );
       case 'C6':
         if (_selectedGroup == null) {
@@ -622,7 +802,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
             widget.navigation.go('C9');
           },
           onOpenApproval: () => _goB14(),
-          onExitedGroup: () => widget.navigation.go('C1'),
+          onExitedGroup: () => widget.navigation.popTo('C1'),
         );
       case 'C3':
         return NativeContactsPage(
@@ -632,32 +812,14 @@ class _NativeScreenHostState extends State<NativeScreenHost>
             setState(() => _selectedContact = contact);
             widget.navigation.go('C9');
           },
-          onStartPrivateChat: (peerUserId) {
-            setState(() {
-              _selectedPrivate = null;
-              _selectedPrivatePeerUserId = peerUserId;
-              _focusMessageId = null;
-              _focusMessageHint = null;
-            });
-            _markUserEnteredChat();
-            widget.navigation.go('C5');
-          },
+          onStartPrivateChat: _openPrivateByPeerId,
         );
       case 'C9':
         return NativeContactProfilePage(
           session: widget.session,
           contactHint: _selectedContact,
           onBack: widget.navigation.back,
-          onOpenPrivateChat: (peerUserId) {
-            setState(() {
-              _selectedPrivate = null;
-              _selectedPrivatePeerUserId = peerUserId;
-              _focusMessageId = null;
-              _focusMessageHint = null;
-            });
-            _markUserEnteredChat();
-            widget.navigation.go('C5');
-          },
+          onOpenPrivateChat: _openPrivateByPeerId,
         );
       case 'B13':
         return NativeApprovalPage(
@@ -693,36 +855,61 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           session: widget.session,
           navigation: widget.navigation,
           initialCategory: _b3InitialCategory,
+          onCategoryChanged: (category) {
+            _b3InitialCategory = category;
+          },
           onOpenForm: (templateKey) {
-            setState(() {
-              _xflowTemplateKey = templateKey;
-              _xflowEditProposalId = null;
-              _xflowFormBackScreen = 'B3';
-            });
-            widget.navigation.go('XF');
+            _openProposalEntry(templateKey: templateKey, backScreen: 'B3');
           },
         );
+      case 'XFP':
+      case 'XFU':
       case 'XF':
-        return NativeXflowFormPage(
+        return NativeXflowProposalPage(
           session: widget.session,
           navigation: widget.navigation,
           templateKey: _xflowTemplateKey,
           editProposalId: _xflowEditProposalId,
+          editBusinessType: _xflowEditBusinessType,
           backScreen: _xflowFormBackScreen,
           onDeleted: () {
             setState(() {
               _xflowEditProposalId = null;
+              _xflowEditBusinessType = 'PROPOSAL';
             });
           },
           onSubmitted: (proposalId) {
             setState(() {
-              _selectedProposalId = proposalId;
               _selectedTodoHint = null;
+              if (_xflowEditBusinessType != 'PROPOSAL') {
+                _selectedSubmissionBusinessType = _xflowEditBusinessType;
+                _selectedSubmissionBusinessId = proposalId;
+              } else {
+                _selectedProposalId = proposalId;
+              }
               if (_xflowEditProposalId == null) {
                 _b10BackScreen = 'B3';
               }
             });
-            widget.navigation.go('B10');
+            widget.navigation.go(
+              _xflowEditBusinessType == 'PROPOSAL' ? 'B10' : 'XFS',
+            );
+          },
+        );
+      case 'XFS':
+        return NativeXflowSubmissionPage(
+          session: widget.session,
+          navigation: widget.navigation,
+          businessType: _selectedSubmissionBusinessType,
+          businessId: _selectedSubmissionBusinessId,
+          backScreen: _b10BackScreen,
+          onEdit: () {
+            _openProposalEntry(
+              templateKey: _xflowTemplateKey,
+              backScreen: _b10BackScreen,
+              editProposalId: _selectedSubmissionBusinessId,
+              editBusinessType: _selectedSubmissionBusinessType,
+            );
           },
         );
       case 'B10':
@@ -733,12 +920,13 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           todoHint: _selectedTodoHint,
           backScreen: _b10BackScreen,
           onReedit: (proposalId) {
-            setState(() {
-              _xflowTemplateKey = 'sales-proposal';
-              _xflowEditProposalId = proposalId;
-              _xflowFormBackScreen = _b10BackScreen;
-            });
-            widget.navigation.go('XF');
+            _openProposalEntry(
+              templateKey: XflowService.boundTemplateKeyForMenu(
+                '/business/proposals/new',
+              ),
+              backScreen: _b10BackScreen,
+              editProposalId: proposalId,
+            );
           },
         );
       case 'C4':
@@ -746,11 +934,21 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           session: widget.session,
           onBack: () {
             NovaBackgroundCoordinator.instance.clearPendingCommBadgeBump();
-            widget.navigation.go('C1');
+            setState(() {
+              _novaFocusConversationId = null;
+              _novaFocusMessageId = null;
+            });
+            widget.navigation.popTo('C1');
           },
           onHistory: () => widget.navigation.go('C11'),
           onOpenKb: () => widget.navigation.go('K1'),
-          onOpenMeeting: () => widget.navigation.go('MM-L'),
+          onOpenMeeting: () {
+            if (isWindowsDesktopCommOnly) {
+              showDunesToast(context, '桌面端暂不支持会议纪要');
+              return;
+            }
+            widget.navigation.go('MM-L');
+          },
           focusConversationId: _novaFocusConversationId,
           focusMessageId: _novaFocusMessageId,
           onClearHistoryFocus: () {
@@ -767,7 +965,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           onOpenConversation: (convId, messageId, title, preview) {
             setState(() {
               _novaFocusConversationId = convId;
-              // 从历史列表进入会话时默认展示到最底部（最新消息），不跳到某条中间消息。
+              // 历史会话恢复完整内容后默认滚动到底部，不定位到单条中间消息。
               _novaFocusMessageId = null;
             });
             widget.navigation.go('C4');
@@ -868,14 +1066,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           focusMessageId: _focusMessageId,
           focusMessageHint: _focusMessageHint,
           autoMarkRead: _userActivelyInChat,
-          onBack: () {
-            setState(() {
-              _focusMessageId = null;
-              _focusMessageHint = null;
-            });
-            _markUserLeftChat();
-            widget.navigation.popTo('C1');
-          },
+          onBack: () => _leaveChatToInbox(clearSelection: false),
           onOpenSearch: (convId) {
             setState(() {
               _searchConversationId = convId;
@@ -904,14 +1095,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           focusMessageId: _focusMessageId,
           focusMessageHint: _focusMessageHint,
           autoMarkRead: _userActivelyInChat,
-          onBack: () {
-            setState(() {
-              _focusMessageId = null;
-              _focusMessageHint = null;
-            });
-            _markUserLeftChat();
-            widget.navigation.popTo('C1');
-          },
+          onBack: () => _leaveChatToInbox(clearSelection: false),
           onOpenProfile: () {
             final peerId =
                 _selectedPrivate?.peerUserId ?? _selectedPrivatePeerUserId;
@@ -975,6 +1159,120 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     }
   }
 
+  @override
+  Widget build(BuildContext context) {
+    final screen = widget.navigation.currentScreen;
+    final depth = widget.navigation.history.length;
+    final previousScreen = _lastScreen;
+    final isBack = previousScreen != null && depth < _lastHistoryDepth;
+
+    // Windows 桌面暂时只开放通讯：误入其它板块时拉回会话首页。
+    if (isWindowsDesktopCommOnly && !isWindowsAllowedCommScreen(screen)) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        if (!isWindowsAllowedCommScreen(widget.navigation.currentScreen)) {
+          widget.navigation.popTo('C1');
+        }
+      });
+      _lastScreen = 'C1';
+      _lastHistoryDepth = depth;
+      if (isWideChatLayout(context)) {
+        return _buildChatDualPane();
+      }
+      return _buildConversationListPage(showBottomTabBar: false);
+    }
+
+    // 宽屏：C1/C2/C5 使用双栏，不走移动端整页切换动画。
+    if (isWideChatLayout(context) && _isDualPaneChatRoute(screen)) {
+      _lastScreen = screen;
+      _lastHistoryDepth = depth;
+      return _buildChatDualPane();
+    }
+
+    final useSlide =
+        (_isChatRoute(screen) && _isChatRoute(previousScreen)) ||
+        (_isMyRoute(screen) && _isMyRoute(previousScreen));
+    final child = KeyedSubtree(
+      key: ValueKey<String>('screen-$screen'),
+      child: _buildCurrentScreen(context),
+    );
+
+    _lastScreen = screen;
+    _lastHistoryDepth = depth;
+
+    return AnimatedSwitcher(
+      duration: useSlide ? const Duration(milliseconds: 280) : Duration.zero,
+      reverseDuration: useSlide
+          ? const Duration(milliseconds: 240)
+          : Duration.zero,
+      switchInCurve: Curves.easeOutCubic,
+      switchOutCurve: Curves.easeInCubic,
+      layoutBuilder: (currentChild, previousChildren) {
+        return Stack(
+          fit: StackFit.expand,
+          clipBehavior: Clip.hardEdge,
+          // 返回时让离场页位于上层向右退出，避免它在入场页右侧留下残影。
+          children: isBack
+              ? [?currentChild, ...previousChildren]
+              : [...previousChildren, ?currentChild],
+        );
+      },
+      transitionBuilder: (transitionChild, animation) {
+        final isIncoming = transitionChild.key == child.key;
+        // AnimatedSwitcher 会反向驱动离场 child 的 animation：离场 Tween 必须
+        // 以「目标位置 -> 原位」定义，才能从原位自然滑出而不是闪现/重复一帧。
+        final begin = !useSlide
+            ? Offset.zero
+            : isIncoming
+            ? (isBack ? const Offset(-0.18, 0) : const Offset(1, 0))
+            : (isBack ? const Offset(1, 0) : const Offset(-0.18, 0));
+        final end = Offset.zero;
+        return SlideTransition(
+          position: Tween<Offset>(begin: begin, end: end).animate(animation),
+          child: transitionChild,
+        );
+      },
+      child: child,
+    );
+  }
+
+  bool _isChatRoute(String? screen) {
+    return const <String>{
+      // 通讯首页及其顶部入口（消息中心、联系人、新建聊天、NOVA）。
+      'C1',
+      'C2',
+      'C3',
+      'C4',
+      'C5',
+      'C7',
+      'C11',
+      'C12',
+      'C13',
+      'Z2',
+    }.contains(screen);
+  }
+
+  bool _isMyRoute(String? screen) {
+    return const <String>{
+      'B2',
+      'B1',
+      'B3',
+      'B10',
+      'B14',
+      'P1',
+      'XFP',
+      'XFU',
+      'XF',
+      'XFS',
+      'K1',
+      'K2',
+      'K3',
+      'MM-L',
+      'MM0',
+      'MM',
+    }.contains(screen);
+  }
+
   /// 进入「我发起的(B14)」并可选预置筛选（如「待发起」用于代发起人入口）。
   void _goB14({String? filter}) {
     setState(() => _b14InitialFilter = filter);
@@ -986,24 +1284,47 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     widget.navigation.go('B3');
   }
 
-  void _openXflowFormFromB2(String templateKey) {
+  void _openProposalEntry({
+    required String templateKey,
+    required String backScreen,
+    int? editProposalId,
+    String editBusinessType = 'PROPOSAL',
+  }) {
     setState(() {
       _xflowTemplateKey = templateKey;
-      _xflowEditProposalId = null;
-      _xflowFormBackScreen = 'B2';
+      _xflowEditProposalId = editProposalId;
+      _xflowEditBusinessType = editBusinessType;
+      _xflowFormBackScreen = backScreen;
     });
-    widget.navigation.go('XF');
+    widget.navigation.go('XFP');
+  }
+
+  void _openXflowFormFromB2(String templateKey) {
+    _openProposalEntry(templateKey: templateKey, backScreen: 'B2');
   }
 
   void _openProposalDetail(XflowProposalItem item, {required String from}) {
     // 「我发起的」列表点击草稿 → 进入可继续填写的表单（与提交页一致），并可删除草稿。
     if (from == 'B14' && item.status.toUpperCase() == 'DRAFT') {
+      final templateKey = (item.templateKey ?? '').trim().isNotEmpty
+          ? item.templateKey!.trim()
+          : XflowService.boundTemplateKeyForMenu('/business/proposals/new');
+      _openProposalEntry(
+        templateKey: templateKey,
+        backScreen: from,
+        editProposalId: item.id,
+        editBusinessType: item.businessType,
+      );
+      return;
+    }
+    if (from == 'B14' && item.businessType.toUpperCase() != 'PROPOSAL') {
       setState(() {
-        _xflowTemplateKey = 'sales-proposal';
-        _xflowEditProposalId = item.id;
-        _xflowFormBackScreen = from;
+        _selectedSubmissionBusinessType = item.businessType;
+        _selectedSubmissionBusinessId = item.id;
+        _xflowTemplateKey = item.templateKey ?? '';
+        _b10BackScreen = from;
       });
-      widget.navigation.go('XF');
+      widget.navigation.go('XFS');
       return;
     }
     setState(() {
@@ -1043,6 +1364,10 @@ class _NativeB2Page extends StatefulWidget {
 }
 
 class _NativeB2PageState extends State<_NativeB2Page> {
+  static bool get _showDeferredTools => false;
+  static bool get _showQuickStats => false;
+  static bool get _showItemBadges => false;
+
   _NativeMyStats? _stats;
   NativeKbSummary? _kbSummary;
   _NativeB2Profile? _profile;
@@ -1053,6 +1378,9 @@ class _NativeB2PageState extends State<_NativeB2Page> {
   bool _qrLoginOpening = false;
   int _avatarRefreshVersion = 0;
   List<ProposalLaunchItem> _quickLaunchItems = const <ProposalLaunchItem>[];
+  String _defaultSalesTemplateKey = XflowService.boundTemplateKeyForMenu(
+    '/business/proposals/new',
+  );
   final MeetingLiveController _live = MeetingLiveController.instance;
 
   @override
@@ -1063,21 +1391,25 @@ class _NativeB2PageState extends State<_NativeB2Page> {
       bizTemplates: XflowService.cachedTemplatesByCategory('biz'),
       admTemplates: XflowService.cachedTemplatesByCategory('adm'),
       maxItems: 4,
+      defaultSalesTemplateKey: _defaultSalesTemplateKey,
     );
     widget.workbenchRefresh.addListener(_onWorkbenchDataRefresh);
     _live.active.addListener(_onLiveStateChanged);
     _live.paused.addListener(_onLiveStateChanged);
     _live.elapsed.addListener(_onLiveStateChanged);
-    unawaited(XflowService.hydrateTemplateCache().then((_) {
-      if (!mounted) return;
-      setState(() {
-        _quickLaunchItems = buildQuickLaunchItems(
-          bizTemplates: XflowService.cachedTemplatesByCategory('biz'),
-          admTemplates: XflowService.cachedTemplatesByCategory('adm'),
-          maxItems: 4,
-        );
-      });
-    }));
+    unawaited(
+      XflowService.hydrateTemplateCache().then((_) {
+        if (!mounted) return;
+        setState(() {
+          _quickLaunchItems = buildQuickLaunchItems(
+            bizTemplates: XflowService.cachedTemplatesByCategory('biz'),
+            admTemplates: XflowService.cachedTemplatesByCategory('adm'),
+            maxItems: 4,
+            defaultSalesTemplateKey: _defaultSalesTemplateKey,
+          );
+        });
+      }),
+    );
     _loadStats(silent: _profile != null);
     _refreshCommBadge();
   }
@@ -1197,11 +1529,18 @@ class _NativeB2PageState extends State<_NativeB2Page> {
             .fetchB14Initiated()
             .then<List<XflowProposalItem>?>((v) => v)
             .catchError((_) => null),
-        NativeMeetingService(session: widget.session)
-            .fetchMyCount()
-            .catchError((_) => 0),
-        xflow.fetchTemplatesByCategory('biz').catchError((_) => const <XflowTemplateCard>[]),
-        xflow.fetchTemplatesByCategory('adm').catchError((_) => const <XflowTemplateCard>[]),
+        NativeMeetingService(
+          session: widget.session,
+        ).fetchMyCount().catchError((_) => 0),
+        xflow
+            .fetchTemplatesByCategory('biz')
+            .catchError((_) => const <XflowTemplateCard>[]),
+        xflow
+            .fetchTemplatesByCategory('adm')
+            .catchError((_) => const <XflowTemplateCard>[]),
+        xflow.fetchWorkbenchConfig().catchError(
+          (_) => const <String, dynamic>{},
+        ),
       ]);
       final resp = results[0] as http.Response;
       final kbSummary = results[1] as NativeKbSummary?;
@@ -1210,6 +1549,15 @@ class _NativeB2PageState extends State<_NativeB2Page> {
       final meetingCount = results[4] as int;
       final bizTemplates = results[5] as List<XflowTemplateCard>;
       final admTemplates = results[6] as List<XflowTemplateCard>;
+      final wbConfig = results[7] as Map<String, dynamic>;
+      final bindings = wbConfig['templateBindings'];
+      String defaultTemplate = _defaultSalesTemplateKey;
+      if (bindings is Map) {
+        final hit = (bindings['/business/proposals/new'] ?? '')
+            .toString()
+            .trim();
+        if (hit.isNotEmpty) defaultTemplate = hit;
+      }
       if (resp.statusCode < 200 || resp.statusCode >= 300) {
         throw Exception('HTTP ${resp.statusCode}');
       }
@@ -1229,10 +1577,12 @@ class _NativeB2PageState extends State<_NativeB2Page> {
         _kbSummary = kbSummary;
         _profile = profile;
         _meetingCount = meetingCount;
+        _defaultSalesTemplateKey = defaultTemplate;
         _quickLaunchItems = buildQuickLaunchItems(
           bizTemplates: bizTemplates,
           admTemplates: admTemplates,
           maxItems: 4,
+          defaultSalesTemplateKey: defaultTemplate,
         );
         _loading = false;
       });
@@ -1253,6 +1603,23 @@ class _NativeB2PageState extends State<_NativeB2Page> {
   }
 
   Future<void> _openQrLoginScanner() async {
+    if (widget.session.isExternalUser) {
+      if (!mounted) return;
+      showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('无法扫码登录'),
+          content: const Text('外部用户不支持登录 PC 工作台'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('知道了'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
     if (_qrLoginOpening) return;
     setState(() => _qrLoginOpening = true);
     try {
@@ -1264,6 +1631,21 @@ class _NativeB2PageState extends State<_NativeB2Page> {
     } finally {
       if (mounted) setState(() => _qrLoginOpening = false);
     }
+  }
+
+  Future<void> _checkDesktopAppUpdate() async {
+    showDunesToast(context, '正在检查更新…');
+    final result = await AppUpdateService.instance.checkUpdate();
+    if (!mounted) return;
+    if (result == null) {
+      showDunesToast(context, '暂无法检查更新，请稍后重试');
+      return;
+    }
+    if (!result.updateAvailable) {
+      showDunesToast(context, '当前已是最新版本');
+      return;
+    }
+    await showAppUpdateDialog(context, result);
   }
 
   Future<_NativeB2Profile> _loadProfile() async {
@@ -1283,17 +1665,19 @@ class _NativeB2PageState extends State<_NativeB2Page> {
       final objectKey =
           (data['avatarObjectKey'] ?? data['peerAvatarObjectKey'] ?? '')
               .toString();
-      String avatarUrl = (data['avatarUrl'] ??
-              data['avatarFullUrl'] ??
-              data['avatarImageUrl'] ??
-              data['avatar'] ??
-              data['avatarSrc'] ??
-              data['avatarImage'] ??
-              '')
-          .toString()
-          .trim();
+      String avatarUrl =
+          (data['avatarUrl'] ??
+                  data['avatarFullUrl'] ??
+                  data['avatarImageUrl'] ??
+                  data['avatar'] ??
+                  data['avatarSrc'] ??
+                  data['avatarImage'] ??
+                  '')
+              .toString()
+              .trim();
       if (avatarUrl.isEmpty) {
-        avatarUrl = cachedMyPageAvatarUrl(
+        avatarUrl =
+            cachedMyPageAvatarUrl(
               widget.session.userId,
               preset: avatarPreset,
               objectKey: objectKey,
@@ -1422,23 +1806,24 @@ class _NativeB2PageState extends State<_NativeB2Page> {
     _NativeB2Profile base,
     Map<String, dynamic> payload,
   ) {
-    final preset = (payload['avatarPreset'] ?? payload['peerAvatarPreset'] ?? '')
-        .toString()
-        .trim();
-    final objectKey = (payload['avatarObjectKey'] ??
-            payload['peerAvatarObjectKey'] ??
-            '')
-        .toString()
-        .trim();
-    var avatarUrl = (payload['avatarUrl'] ??
-            payload['avatarFullUrl'] ??
-            payload['avatarImageUrl'] ??
-            payload['avatar'] ??
-            payload['avatarSrc'] ??
-            payload['avatarImage'] ??
-            '')
-        .toString()
-        .trim();
+    final preset =
+        (payload['avatarPreset'] ?? payload['peerAvatarPreset'] ?? '')
+            .toString()
+            .trim();
+    final objectKey =
+        (payload['avatarObjectKey'] ?? payload['peerAvatarObjectKey'] ?? '')
+            .toString()
+            .trim();
+    var avatarUrl =
+        (payload['avatarUrl'] ??
+                payload['avatarFullUrl'] ??
+                payload['avatarImageUrl'] ??
+                payload['avatar'] ??
+                payload['avatarSrc'] ??
+                payload['avatarImage'] ??
+                '')
+            .toString()
+            .trim();
     if (avatarUrl.isNotEmpty) {
       avatarUrl = _avatarProxyUrl(avatarUrl);
     } else if (objectKey.isNotEmpty) {
@@ -1475,19 +1860,26 @@ class _NativeB2PageState extends State<_NativeB2Page> {
         stats.approvalPending +
         stats.approvalRejected;
     final profile = _profile ?? _NativeB2Profile.fromSession(widget.session);
+    final isExternal = widget.session.isExternalUser;
     final kb = _kbSummary;
     final kbDocCount = kb != null && kb.documents.isNotEmpty
         ? kb.documents.length
         : (kb?.documentCount ?? 0);
     final kbCategoryCount = kb?.categoryCount ?? 0;
     final kbUnreadCount = kb?.unreadCount ?? 0;
-    return ColoredBox(
-      color: DunesColors.bgApp,
-      child: SafeArea(
-        bottom: false,
-        child: Stack(
-          children: [
-            Column(
+    final useSideRail = isDesktopCommOnly;
+    final tabBar = DunesMainTabBar(
+      navigation: widget.navigation,
+      activeScreen: 'B2',
+      axis: useSideRail ? Axis.vertical : Axis.horizontal,
+      commUnread: widget.commUnread,
+      workbenchBadge: widget.workbenchBadge,
+      lighthouseAccess: widget.session.lighthouseAccess,
+      chatOnlyMode: widget.session.isExternalUser,
+    );
+    final body = Stack(
+      children: [
+        Column(
           children: [
             _buildB2TopBar(),
             Expanded(
@@ -1497,168 +1889,194 @@ class _NativeB2PageState extends State<_NativeB2Page> {
                   padding: const EdgeInsets.fromLTRB(12, 10, 12, 14),
                   children: [
                     _buildProfileCard(stats, profile),
-                    const SizedBox(height: 10),
-                    _buildQuickStats(stats),
-                    const SizedBox(height: 14),
-                    _buildQuickLaunch(),
-                    const SizedBox(height: 14),
-                    _buildSectionLabel('灯塔 · 合同行政'),
-                    const SizedBox(height: 4),
-                    const ContractSealingEntryCard(pendingCount: 2),
-                    const ContractBorrowEntryCard(),
-                    const SizedBox(height: 14),
-                    _buildSectionLabel('团队协作'),
-                    const SizedBox(height: 4),
-                    const TeamBoardEntryCard(),
-                    const SizedBox(height: 14),
-                    if (stats.pendingForMe > 0)
-                      _buildReminderBanner(
-                        icon: Icons.notifications_active_outlined,
-                        text: '您有 ${stats.pendingForMe} 条待审批，点击进入「我审批的」',
-                        onTap: () => widget.navigation.go('B1'),
+                    if (isExternal) ...[
+                      const SizedBox(height: 12),
+                      Text(
+                        '外部用户仅可使用通讯聊天功能',
+                        textAlign: TextAlign.center,
+                        style: DunesTypography.sans(
+                          fontSize: 14,
+                          color: DunesColors.text3,
+                        ),
                       ),
-                    if (stats.approvalRejected > 0) ...[
-                      const SizedBox(height: 8),
-                      _buildReminderBanner(
-                        icon: Icons.warning_amber_rounded,
-                        text:
-                            '您有 ${stats.approvalRejected} 条审批被驳回，点击进入「我发起的审批」',
-                        onTap: () => widget.onOpenB14(),
-                      ),
-                    ],
-                    if (stats.pendingInitiateForMe > 0) ...[
-                      const SizedBox(height: 8),
-                      _buildReminderBanner(
-                        icon: Icons.assignment_ind_outlined,
-                        text:
-                            '有 ${stats.pendingInitiateForMe} 条同事推送给您、待您确认发起的提案',
-                        onTap: () =>
-                            widget.onOpenB14(filter: 'PENDING_INITIATE'),
-                      ),
-                    ],
-                    if (stats.pendingForMe > 0 ||
-                        stats.approvalRejected > 0 ||
-                        stats.pendingInitiateForMe > 0)
-                      const SizedBox(height: 14),
-                    _buildSectionLabel('我的事项 · 审批与穿透'),
-                    const SizedBox(height: 8),
-                    _buildMenuList(<Widget>[
-                      _buildMenuItem(
-                        icon: Icons.send_outlined,
-                        title: '我发起的审批',
-                        desc:
-                            '$initiatedTotal 条总数 · ${stats.pendingInitiateForMe} 条代发起 · ${stats.approvalPending} 审批中',
-                        badge: initiatedTotal,
-                        onTap: () => widget.onOpenB14(),
-                      ),
-                      _buildMenuItem(
-                        icon: Icons.assignment_outlined,
-                        title: '抄送我的提案',
-                        desc:
-                            '${stats.ccProposalCount} 份抄送 · ${stats.ccProposalPending} 审批中',
-                        badge: stats.ccProposalCount,
-                        onTap: () => widget.navigation.go('P1'),
-                      ),
-                      _buildMenuItem(
-                        icon: Icons.fact_check_outlined,
-                        title: '我审批的',
-                        desc:
-                            '${stats.pendingForMe} 待我审 · ${stats.handledThisMonth} 已审核',
-                        badge: stats.pendingForMe,
-                        tint: const Color(0xFFDFF1E8),
-                        onTap: () => widget.navigation.go('B1'),
-                      ),
-                      _buildMenuItem(
-                        icon: Icons.menu_book_outlined,
-                        title: '知识库',
-                        desc:
-                            '$kbDocCount 文档 · $kbCategoryCount 分类 · $kbUnreadCount 未读',
-                        badge: kbUnreadCount,
-                        onTap: () => widget.navigation.go('K1'),
-                      ),
-                      _buildMenuItem(
-                        icon: Icons.edit_outlined,
-                        title: '写汇报',
-                        desc: '0 篇 · 0 草稿 · 日 / 周 / 月 / 季',
-                        badge: 0,
-                        comingSoon: true,
-                        onTap: () => _showSoonToast(),
-                      ),
-                      _buildMenuItem(
-                        icon: Icons.mic_none_rounded,
-                        title: '会议纪要',
-                        desc:
-                            '$_meetingCount 场 · 录音转写 · 纪要生成',
-                        badge: _meetingCount,
-                        onTap: () => widget.navigation.go('MM-L'),
-                      ),
-                    ]),
-                    const SizedBox(height: 10),
-                    _buildMenuList(<Widget>[
-                      _buildMenuItem(
-                        icon: Icons.receipt_long_outlined,
-                        title: '应付账单',
-                        desc: '${stats.outstandingInvoices} 待处理 · 总 ¥0 · 灯塔联动',
-                        badge: stats.outstandingInvoices,
-                        tint: const Color(0xFFE1ECF7),
-                        comingSoon: true,
-                        onTap: () => _showSoonToast(),
-                      ),
-                      _buildMenuItem(
-                        icon: Icons.warning_amber_rounded,
-                        title: '欠票催办',
-                        desc: '0 笔 · ¥0 · 欠 0 天',
-                        badge: 0,
-                        tint: const Color(0xFFF5E5DC),
-                        comingSoon: true,
-                        onTap: () => _showSoonToast(),
-                      ),
-                    ]),
-                    const SizedBox(height: 12),
-                    if (_loading)
-                      const Center(
-                        child: Padding(
-                          padding: EdgeInsets.only(top: 12),
-                          child: SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2),
+                    ] else ...[
+                          const SizedBox(height: 10),
+                          if (_showQuickStats) ...[
+                            _buildQuickStats(stats),
+                            const SizedBox(height: 14),
+                          ],
+                          _buildQuickLaunch(),
+                          const SizedBox(height: 14),
+                          if (stats.pendingForMe > 0)
+                            _buildReminderBanner(
+                              icon: Icons.notifications_active_outlined,
+                              text: '您有 ${stats.pendingForMe} 条待审批，点击进入「我审批的」',
+                              onTap: () => widget.navigation.go('B1'),
+                            ),
+                          if (stats.approvalRejected > 0) ...[
+                            const SizedBox(height: 8),
+                            _buildReminderBanner(
+                              icon: Icons.warning_amber_rounded,
+                              text:
+                                  '您有 ${stats.approvalRejected} 条审批被驳回，点击进入「我发起的审批」',
+                              onTap: () => widget.onOpenB14(),
+                            ),
+                          ],
+                          if (stats.pendingInitiateForMe > 0) ...[
+                            const SizedBox(height: 8),
+                            _buildReminderBanner(
+                              icon: Icons.assignment_ind_outlined,
+                              text:
+                                  '有 ${stats.pendingInitiateForMe} 条同事推送给您、待您确认发起的提案',
+                              onTap: () =>
+                                  widget.onOpenB14(filter: 'PENDING_INITIATE'),
+                            ),
+                          ],
+                          if (stats.pendingForMe > 0 ||
+                              stats.approvalRejected > 0 ||
+                              stats.pendingInitiateForMe > 0)
+                            const SizedBox(height: 14),
+                          _buildSectionLabel('我的事项'),
+                          const SizedBox(height: 8),
+                          _buildMenuList(<Widget>[
+                            _buildMenuItem(
+                              icon: Icons.description_outlined,
+                              title: '我发起的审批',
+                              desc:
+                                  '$initiatedTotal 条总数 · ${stats.approvalPending} 审批中',
+                              badge: initiatedTotal,
+                              onTap: () => widget.onOpenB14(),
+                            ),
+                            _buildMenuItem(
+                              icon: Icons.edit_note_outlined,
+                              title: '我审批的',
+                              desc:
+                                  '${stats.pendingForMe} 待我审 · ${stats.handledThisMonth} 已审核',
+                              badge: stats.pendingForMe,
+                              onTap: () => widget.navigation.go('B1'),
+                            ),
+                            _buildMenuItem(
+                              icon: Icons.check_box_outlined,
+                              title: '抄送我的',
+                              desc:
+                                  '${stats.ccProposalCount} 份抄送 · ${stats.ccProposalPending} 审批中',
+                              badge: stats.ccProposalCount,
+                              onTap: () => widget.navigation.go('P1'),
+                            ),
+                          ]),
+                          const SizedBox(height: 10),
+                          _buildMenuList(<Widget>[
+                            _buildMenuItem(
+                              icon: Icons.auto_stories_outlined,
+                              title: '知识库',
+                              desc: '$kbDocCount 文档 · $kbCategoryCount 分类',
+                              badge: kbUnreadCount,
+                              onTap: () => widget.navigation.go('K1'),
+                            ),
+                            if (_showDeferredTools)
+                              _buildMenuItem(
+                                icon: Icons.edit_outlined,
+                                title: '写汇报',
+                                desc: '0 篇 · 0 草稿 · 日 / 周 / 月 / 季',
+                                badge: 0,
+                                comingSoon: true,
+                                onTap: () => _showSoonToast(),
+                              ),
+                            if (!isWindowsDesktopCommOnly)
+                              _buildMenuItem(
+                                icon: Icons.article_outlined,
+                                title: '会议纪要',
+                                desc: '$_meetingCount 场 · 录音转写 · 纪要生成',
+                                badge: _meetingCount,
+                                onTap: () => widget.navigation.go('MM-L'),
+                              ),
+                          ]),
+                          if (_showDeferredTools) ...[
+                            const SizedBox(height: 10),
+                            _buildMenuList(<Widget>[
+                              _buildMenuItem(
+                                icon: Icons.receipt_long_outlined,
+                                title: '应付账单',
+                                desc:
+                                    '${stats.outstandingInvoices} 待处理 · 总 ¥0 · 灯塔联动',
+                                badge: stats.outstandingInvoices,
+                                comingSoon: true,
+                                onTap: () => _showSoonToast(),
+                              ),
+                              _buildMenuItem(
+                                icon: Icons.warning_amber_rounded,
+                                title: '欠票催办',
+                                desc: '0 笔 · ¥0 · 欠 0 天',
+                                badge: 0,
+                                comingSoon: true,
+                                onTap: () => _showSoonToast(),
+                              ),
+                            ]),
+                          ],
+                          const SizedBox(height: 12),
+                          if (_loading)
+                            const Center(
+                              child: Padding(
+                                padding: EdgeInsets.only(top: 12),
+                                child: SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                ),
+                              ),
+                            ),
+                        ],
+                        if (_loadError != null)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 8),
+                            child: TextButton(
+                              onPressed: _loadStats,
+                              child: const Text('数据同步失败，点击重试'),
+                            ),
                           ),
-                        ),
-                      ),
-                    if (_loadError != null)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 8),
-                        child: TextButton(
-                          onPressed: _loadStats,
-                          child: const Text('数据同步失败，点击重试'),
-                        ),
-                      ),
-                    if (widget.onLogout != null) ...[
-                      const SizedBox(height: 8),
-                      _buildLogoutButton(),
-                    ],
-                  ],
+                      ],
+                    ),
+                  ),
                 ),
-              ),
+                if (!useSideRail) tabBar,
+              ],
             ),
-            DunesMainTabBar(
-              navigation: widget.navigation,
-              activeScreen: 'B2',
-              commUnread: widget.commUnread,
-              workbenchBadge: widget.workbenchBadge,
-              lighthouseAccess: widget.session.lighthouseAccess,
-            ),
-          ],
-            ),
-            if (_live.active.value)
+            if (_live.active.value && !isWindowsDesktopCommOnly)
               Positioned(
                 right: 16,
-                bottom: kDunesMainTabBarHeight + 12,
+                bottom:
+                    kDunesMainTabBarHeight +
+                    MediaQuery.viewPaddingOf(context).bottom +
+                    12,
                 child: _buildLiveTranscribeFab(),
               ),
           ],
+        );
+    if (useSideRail) {
+      return ColoredBox(
+        color: DunesColors.bgApp,
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            tabBar,
+            Expanded(
+              child: SafeArea(
+                left: false,
+                bottom: false,
+                child: body,
+              ),
+            ),
+          ],
         ),
+      );
+    }
+    return ColoredBox(
+      color: DunesColors.bgApp,
+      child: SafeArea(
+        bottom: false,
+        child: body,
       ),
     );
   }
@@ -1730,35 +2148,6 @@ class _NativeB2PageState extends State<_NativeB2Page> {
     return '$url${sep}dunes_avatar_v=$_avatarRefreshVersion';
   }
 
-  Widget _buildLogoutButton() {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(0, 20, 0, 28),
-      child: SizedBox(
-        width: double.infinity,
-        child: OutlinedButton.icon(
-          onPressed: widget.onLogout,
-          icon: const Icon(Icons.logout, size: 18, color: DunesColors.coral),
-          label: Text(
-            '退出登录',
-            style: DunesTypography.sans(
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-              color: DunesColors.coral,
-            ),
-          ),
-          style: OutlinedButton.styleFrom(
-            padding: const EdgeInsets.symmetric(vertical: 12),
-            side: BorderSide(color: DunesColors.coral.withValues(alpha: 0.28)),
-            backgroundColor: DunesColors.coral.withValues(alpha: 0.08),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
   Widget _buildB2TopBar() {
     return Container(
       height: 56,
@@ -1776,102 +2165,218 @@ class _NativeB2PageState extends State<_NativeB2Page> {
                   text: '沙丘',
                   style: TextStyle(
                     color: Color(0xFF7C5CE6),
-                    fontSize: 17,
+                    fontSize: 19,
                     fontWeight: FontWeight.w500,
                     letterSpacing: -0.2,
                   ),
                 ),
                 TextSpan(
                   text: ' DUNES',
-                  style: TextStyle(color: DunesColors.text3, fontSize: 10),
+                  style: TextStyle(color: DunesColors.text3, fontSize: 11),
                 ),
                 TextSpan(
                   text: '  ·  我的',
-                  style: TextStyle(color: DunesColors.text2, fontSize: 10),
+                  style: TextStyle(color: DunesColors.text2, fontSize: 11),
                 ),
               ],
             ),
           ),
           const Spacer(),
-          Tooltip(
-            message: '扫码登录工作台',
-            child: InkWell(
-              borderRadius: BorderRadius.circular(14),
-              onTap: _qrLoginOpening ? null : _openQrLoginScanner,
-              child: Container(
-                margin: const EdgeInsets.only(right: 8),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: DunesColors.borderSoft),
-                ),
-                child: Icon(
-                  _qrLoginOpening
-                      ? Icons.hourglass_top
-                      : Icons.qr_code_scanner_rounded,
-                  size: 16,
-                  color: DunesColors.text2,
-                ),
-              ),
-            ),
+          IconButton(
+            tooltip: '字体大小',
+            onPressed: _openTextScalePicker,
+            icon: const Icon(Icons.format_size_rounded, size: 22),
+            color: DunesColors.text2,
           ),
-          Tooltip(
-            message: '清除本地缓存',
-            child: InkWell(
-              borderRadius: BorderRadius.circular(14),
-              onTap: _clearLocalCache,
-              child: Container(
-                margin: const EdgeInsets.only(right: 8),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: DunesColors.borderSoft),
-                ),
-                child: const Icon(
-                  Icons.cleaning_services_outlined,
-                  size: 16,
-                  color: DunesColors.text2,
-                ),
-              ),
-            ),
-          ),
-          InkWell(
-            borderRadius: BorderRadius.circular(14),
-            onTap: () => widget.onOpenB3(),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
-              decoration: BoxDecoration(
-                color: DunesColors.accentSoft,
-                borderRadius: BorderRadius.circular(14),
-              ),
-              child: const Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.add, size: 15, color: DunesColors.accentDeep),
-                  SizedBox(width: 2),
-                  Text(
-                    '发起',
-                    style: TextStyle(
-                      color: DunesColors.accentDeep,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
+          _buildB2OverflowMenu(),
         ],
       ),
     );
+  }
+
+  Future<void> _openTextScalePicker() async {
+    final controller = AppTextScaleController.instance;
+    final picked = await showModalBottomSheet<int>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return SafeArea(
+          top: false,
+          child: Container(
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+            ),
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Center(
+                  child: Container(
+                    width: 36,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: DunesColors.borderSoft,
+                      borderRadius: BorderRadius.circular(99),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Text(
+                  '字体大小',
+                  style: DunesTypography.sans(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: DunesColors.text,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  '调整后将作用于整个 App',
+                  style: DunesTypography.sans(
+                    fontSize: 13,
+                    color: DunesColors.text3,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                for (var i = 0; i < AppTextScaleController.presets.length; i++)
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(
+                      AppTextScaleController.labels[i],
+                      style: DunesTypography.sans(
+                        fontSize: 15 * AppTextScaleController.presets[i],
+                        fontWeight: FontWeight.w600,
+                        color: DunesColors.text,
+                      ),
+                    ),
+                    trailing: i == controller.presetIndex
+                        ? const Icon(
+                            Icons.check_rounded,
+                            color: Color(0xFF7E64BD),
+                          )
+                        : null,
+                    onTap: () => Navigator.pop(ctx, i),
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+    if (picked == null) return;
+    await controller.setPresetIndex(picked);
+    if (!mounted) return;
+    showDunesToast(context, '已切换为「${AppTextScaleController.labels[picked]}」字号');
+  }
+
+  Widget _buildB2OverflowMenu() {
+    return PopupMenuButton<_B2MenuAction>(
+      tooltip: '更多功能',
+      position: PopupMenuPosition.under,
+      offset: const Offset(0, 4),
+      shape: const _WechatMenuShape(),
+      menuPadding: const EdgeInsets.only(top: 12, bottom: 8),
+      color: const Color(0xFFF2F2F2),
+      onSelected: (action) {
+        switch (action) {
+          case _B2MenuAction.scanWorkstation:
+            _openQrLoginScanner();
+          case _B2MenuAction.checkUpdate:
+            unawaited(_checkDesktopAppUpdate());
+          case _B2MenuAction.clearCache:
+            _clearLocalCache();
+          case _B2MenuAction.startProposal:
+            widget.onOpenB3();
+          case _B2MenuAction.logout:
+            unawaited(_confirmLogout());
+        }
+      },
+      itemBuilder: (context) => [
+        if (isWindowsDesktopCommOnly)
+          const PopupMenuItem(
+            value: _B2MenuAction.checkUpdate,
+            child: _B2MenuEntry(
+              icon: Icons.system_update_alt_rounded,
+              label: '检查更新',
+            ),
+          )
+        else if (!widget.session.isExternalUser)
+          PopupMenuItem(
+            value: _B2MenuAction.scanWorkstation,
+            enabled: !_qrLoginOpening,
+            child: const _B2MenuEntry(
+              icon: Icons.qr_code_scanner_rounded,
+              label: '扫码登录工作台',
+            ),
+          ),
+        const PopupMenuItem(
+          value: _B2MenuAction.clearCache,
+          child: _B2MenuEntry(
+            icon: Icons.cleaning_services_outlined,
+            label: '清除本地缓存',
+          ),
+        ),
+        if (!widget.session.isExternalUser)
+          const PopupMenuItem(
+            value: _B2MenuAction.startProposal,
+            child: _B2MenuEntry(
+              icon: Icons.add_circle_outline_rounded,
+              label: '发起提案',
+            ),
+          ),
+        if (widget.onLogout != null) ...[
+          const PopupMenuDivider(),
+          const PopupMenuItem(
+            value: _B2MenuAction.logout,
+            child: _B2MenuEntry(
+              icon: Icons.logout_rounded,
+              label: '退出登录',
+              color: DunesColors.coral,
+            ),
+          ),
+        ],
+      ],
+      child: Container(
+        width: 42,
+        height: 42,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: DunesColors.borderSoft),
+        ),
+        child: const Icon(
+          Icons.more_horiz_rounded,
+          size: 24,
+          color: DunesColors.text2,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _confirmLogout() async {
+    final confirmed =
+        await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('确认退出登录？'),
+            content: const Text('退出后需要重新登录才能继续使用。'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text('取消'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                child: const Text('退出登录'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+    if (confirmed && mounted) widget.onLogout?.call();
   }
 
   Widget _buildProfileCard(_NativeMyStats stats, _NativeB2Profile profile) {
@@ -1936,7 +2441,7 @@ class _NativeB2PageState extends State<_NativeB2Page> {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
-                    fontSize: 16,
+                    fontSize: 18,
                     fontWeight: FontWeight.w500,
                   ),
                 ),
@@ -1946,7 +2451,7 @@ class _NativeB2PageState extends State<_NativeB2Page> {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
-                    fontSize: 10,
+                    fontSize: 12,
                     color: DunesColors.text2,
                   ),
                 ),
@@ -1992,7 +2497,7 @@ class _NativeB2PageState extends State<_NativeB2Page> {
         borderRadius: BorderRadius.circular(10),
         onTap: onTap,
         child: Container(
-          height: 70,
+          height: 76,
           decoration: BoxDecoration(
             color: const Color(0xFFF0EEE8),
             borderRadius: BorderRadius.circular(10),
@@ -2009,7 +2514,7 @@ class _NativeB2PageState extends State<_NativeB2Page> {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
-                        fontSize: 8.5,
+                        fontSize: 10,
                         color: DunesColors.text3,
                       ),
                     ),
@@ -2019,7 +2524,7 @@ class _NativeB2PageState extends State<_NativeB2Page> {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
-                        fontSize: 15,
+                        fontSize: 17,
                         fontWeight: FontWeight.w500,
                         height: .9,
                       ),
@@ -2101,7 +2606,7 @@ class _NativeB2PageState extends State<_NativeB2Page> {
           children: [
             const Text(
               '快速发起',
-              style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w500),
+              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
             ),
             const Spacer(),
             TextButton(
@@ -2111,7 +2616,7 @@ class _NativeB2PageState extends State<_NativeB2Page> {
                 minimumSize: Size.zero,
                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
               ),
-              child: const Text('更多提案  →', style: TextStyle(fontSize: 10)),
+              child: const Text('更多审批  →', style: TextStyle(fontSize: 11.5)),
             ),
           ],
         ),
@@ -2156,7 +2661,7 @@ class _NativeB2PageState extends State<_NativeB2Page> {
       text,
       style: const TextStyle(
         color: DunesColors.text2,
-        fontSize: 12,
+        fontSize: 14,
         fontWeight: FontWeight.w500,
       ),
     );
@@ -2177,13 +2682,13 @@ class _NativeB2PageState extends State<_NativeB2Page> {
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
           child: Row(
             children: [
-              Icon(icon, size: 14, color: const Color(0xFF8A5A14)),
+              Icon(icon, size: 16, color: const Color(0xFF8A5A14)),
               const SizedBox(width: 6),
               Expanded(
                 child: Text(
                   text,
                   style: const TextStyle(
-                    fontSize: 10.5,
+                    fontSize: 12,
                     color: Color(0xFF6E4A11),
                   ),
                 ),
@@ -2217,27 +2722,18 @@ class _NativeB2PageState extends State<_NativeB2Page> {
     VoidCallback? onTap,
     int? badge,
     bool comingSoon = false,
-    Color tint = const Color(0xFFE9E4F5),
   }) {
     final row = Material(
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
         child: SizedBox(
-          height: 68,
+          height: 66,
           child: Row(
             children: [
-              const SizedBox(width: 12),
-              Container(
-                width: 28,
-                height: 28,
-                decoration: BoxDecoration(
-                  color: tint,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Icon(icon, size: 15, color: DunesColors.accentDeep),
-              ),
-              const SizedBox(width: 11),
+              const SizedBox(width: 14),
+              Icon(icon, size: 21, color: DunesColors.text2),
+              const SizedBox(width: 13),
               Expanded(
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
@@ -2246,11 +2742,11 @@ class _NativeB2PageState extends State<_NativeB2Page> {
                     Text(
                       title,
                       style: const TextStyle(
-                        fontSize: 12.5,
+                        fontSize: 14,
                         fontWeight: FontWeight.w500,
                       ),
                     ),
-                    const SizedBox(height: 2),
+                    const SizedBox(height: 3),
                     Text(
                       desc,
                       style: const TextStyle(
@@ -2261,7 +2757,7 @@ class _NativeB2PageState extends State<_NativeB2Page> {
                   ],
                 ),
               ),
-              if (badge != null)
+              if (_showItemBadges && badge != null && badge > 0)
                 Container(
                   margin: const EdgeInsets.only(right: 8),
                   padding: const EdgeInsets.symmetric(
@@ -2275,7 +2771,7 @@ class _NativeB2PageState extends State<_NativeB2Page> {
                   child: Text(
                     '$badge',
                     style: const TextStyle(
-                      fontSize: 9,
+                      fontSize: 10,
                       color: Colors.white,
                       fontWeight: FontWeight.w700,
                     ),
@@ -2324,6 +2820,99 @@ class _NativeB2PageState extends State<_NativeB2Page> {
           ),
         ),
       ],
+    );
+  }
+}
+
+enum _B2MenuAction {
+  scanWorkstation,
+  checkUpdate,
+  clearCache,
+  startProposal,
+  logout,
+}
+
+class _B2MenuEntry extends StatelessWidget {
+  const _B2MenuEntry({
+    required this.icon,
+    required this.label,
+    this.color = DunesColors.text,
+  });
+
+  final IconData icon;
+  final String label;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Icon(icon, size: 20, color: color),
+        const SizedBox(width: 10),
+        Text(label, style: DunesTypography.sans(fontSize: 14, color: color)),
+      ],
+    );
+  }
+}
+
+class _WechatMenuShape extends ShapeBorder {
+  const _WechatMenuShape({
+    this.radius = 12,
+    this.tipWidth = 14,
+    this.tipHeight = 8,
+  });
+
+  final double radius;
+  final double tipWidth;
+  final double tipHeight;
+
+  @override
+  EdgeInsetsGeometry get dimensions => EdgeInsets.zero;
+
+  @override
+  Path getInnerPath(Rect rect, {TextDirection? textDirection}) =>
+      getOuterPath(rect, textDirection: textDirection);
+
+  @override
+  Path getOuterPath(Rect rect, {TextDirection? textDirection}) {
+    final top = rect.top + tipHeight;
+    final tipCenter = rect.right - 28;
+    final path = Path()
+      ..moveTo(rect.left + radius, top)
+      ..lineTo(tipCenter - tipWidth / 2, top)
+      ..lineTo(tipCenter, rect.top)
+      ..lineTo(tipCenter + tipWidth / 2, top)
+      ..lineTo(rect.right - radius, top)
+      ..quadraticBezierTo(rect.right, top, rect.right, top + radius)
+      ..lineTo(rect.right, rect.bottom - radius)
+      ..quadraticBezierTo(
+        rect.right,
+        rect.bottom,
+        rect.right - radius,
+        rect.bottom,
+      )
+      ..lineTo(rect.left + radius, rect.bottom)
+      ..quadraticBezierTo(
+        rect.left,
+        rect.bottom,
+        rect.left,
+        rect.bottom - radius,
+      )
+      ..lineTo(rect.left, top + radius)
+      ..quadraticBezierTo(rect.left, top, rect.left + radius, top)
+      ..close();
+    return path;
+  }
+
+  @override
+  void paint(Canvas canvas, Rect rect, {TextDirection? textDirection}) {}
+
+  @override
+  ShapeBorder scale(double t) {
+    return _WechatMenuShape(
+      radius: radius * t,
+      tipWidth: tipWidth * t,
+      tipHeight: tipHeight * t,
     );
   }
 }

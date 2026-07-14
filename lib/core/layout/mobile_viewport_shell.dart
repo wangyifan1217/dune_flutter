@@ -10,8 +10,11 @@ class MobileViewportShell extends StatelessWidget {
   final Widget child;
 
   static bool shouldConstrain(BuildContext context) {
+    // 真机与桌面端用全窗口；仅 Web / Linux 等预览时约束为手机宽度。
     if (defaultTargetPlatform == TargetPlatform.iOS ||
-        defaultTargetPlatform == TargetPlatform.android) {
+        defaultTargetPlatform == TargetPlatform.android ||
+        defaultTargetPlatform == TargetPlatform.windows ||
+        defaultTargetPlatform == TargetPlatform.macOS) {
       return false;
     }
     return MediaQuery.sizeOf(context).width > phoneWidth;

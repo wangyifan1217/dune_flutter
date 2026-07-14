@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../auth/auth_session.dart';
 import 'xflow_models.dart';
+import 'xflow_template_runtime.dart';
 
 class XflowService {
   XflowService({
@@ -16,10 +17,15 @@ class XflowService {
   }) : _client = client ?? http.Client();
 
   static const salesTemplateKey = 'sales-proposal';
+  static const salesProposalMenuKey = '/business/proposals/new';
+  static const pageModeExcelUpload = 'excel-upload';
+  static const pageModeXflowForm = 'xflow-form';
   static const contractSealTemplateKey = 'contract-seal';
   static const _templateCachePrefsKey = 'xflow_templates_cache_v1';
+  static const _workbenchConfigCachePrefsKey = 'xflow_workbench_config_v1';
 
   static final Map<String, List<XflowTemplateCard>> _templateMemoryCache = {};
+  static Map<String, dynamic>? _workbenchConfigCache;
   static bool _templatePrefsHydrated = false;
 
   /// 启动后尽早调用，从本地恢复模板列表，避免「我的」页快捷入口闪烁。
@@ -52,6 +58,13 @@ class XflowService {
         }
         if (cards.isNotEmpty) _templateMemoryCache[key] = cards;
       }
+      final wbRaw = prefs.getString(_workbenchConfigCachePrefsKey);
+      if (wbRaw != null && wbRaw.isNotEmpty) {
+        final wbDecoded = jsonDecode(wbRaw);
+        if (wbDecoded is Map) {
+          _workbenchConfigCache = Map<String, dynamic>.from(wbDecoded);
+        }
+      }
     } catch (_) {
       return;
     }
@@ -62,6 +75,99 @@ class XflowService {
     final cached = _templateMemoryCache[cat];
     if (cached != null && cached.isNotEmpty) return cached;
     return const [];
+  }
+
+  static String boundTemplateKeyForMenu(
+    String menuKey, {
+    String fallback = salesTemplateKey,
+  }) {
+    final cfg = _workbenchConfigCache;
+    if (cfg == null) return fallback;
+    final bindings = cfg['templateBindings'];
+    if (bindings is! Map) return fallback;
+    final hit = (bindings[menuKey] ?? '').toString().trim();
+    return hit.isEmpty ? fallback : hit;
+  }
+
+  static Map<String, dynamic>? pageConfigForMenu(String menuKey) {
+    final cfg = _workbenchConfigCache;
+    if (cfg == null) return null;
+    final bindings = cfg['pageBindings'];
+    if (bindings is Map) {
+      final hit = bindings[menuKey];
+      if (hit is Map<String, dynamic>) return hit;
+      if (hit is Map) return Map<String, dynamic>.from(hit);
+    }
+    return _pageConfigFromMenuTree(cfg['menuTree'], menuKey);
+  }
+
+  static Map<String, dynamic>? _pageConfigFromMenuTree(
+    Object? tree,
+    String menuKey,
+  ) {
+    if (tree is! List) return null;
+    for (final node in tree) {
+      if (node is! Map) continue;
+      final map = Map<String, dynamic>.from(node);
+      if (map['menuKey'] == menuKey) {
+        final pageConfig = map['pageConfig'];
+        if (pageConfig is Map<String, dynamic>) return pageConfig;
+        if (pageConfig is Map) return Map<String, dynamic>.from(pageConfig);
+      }
+      final childHit = _pageConfigFromMenuTree(map['children'], menuKey);
+      if (childHit != null) return childHit;
+    }
+    return null;
+  }
+
+  static String pageModeForMenu(
+    String menuKey, {
+    String fallback = pageModeXflowForm,
+  }) {
+    final pageConfig = pageConfigForMenu(menuKey);
+    final mode = (pageConfig?['pageMode'] ?? '').toString().trim();
+    return mode.isEmpty ? fallback : mode;
+  }
+
+  /// 根据工作台配置 + 模板 detail-config + fields_json 判断是否走上传识别流。
+  Future<bool> resolveUseUploadFlow(String templateKey) async {
+    final key = templateKey.trim();
+    if (key.isEmpty) return false;
+
+    final boundMenuKey = salesProposalMenuKey;
+    final boundTemplate = boundTemplateKeyForMenu(boundMenuKey);
+    String? menuPageMode;
+    if (key == boundTemplate || key == salesTemplateKey) {
+      menuPageMode = pageModeForMenu(boundMenuKey, fallback: '');
+    }
+
+    final detailConfig = await fetchDetailConfig(templateKey: key);
+    XflowTemplateDetail? template;
+    try {
+      template = await fetchTemplateDetail(
+        templateKey: key,
+        includeDictEnrich: false,
+      );
+    } catch (_) {
+      template = null;
+    }
+
+    return isUploadTemplateConfig(
+      detailConfig: detailConfig,
+      fields: template?.fields,
+      pageMode: menuPageMode,
+    );
+  }
+
+  @Deprecated(
+    'Use resolveUseUploadFlow(templateKey) which reads backend config.',
+  )
+  static bool shouldUseExcelUploadForTemplate(String templateKey) {
+    final key = templateKey.trim();
+    if (key.isEmpty) return false;
+    final bound = boundTemplateKeyForMenu(salesProposalMenuKey);
+    if (key != salesTemplateKey && key != bound) return false;
+    return pageModeForMenu(salesProposalMenuKey) == pageModeExcelUpload;
   }
 
   static Future<void> _persistTemplateCache(
@@ -91,6 +197,16 @@ class XflowService {
           )
           .toList(growable: false);
       await prefs.setString(_templateCachePrefsKey, jsonEncode(map));
+    } catch (_) {}
+  }
+
+  static Future<void> _persistWorkbenchConfigCache(
+    Map<String, dynamic> config,
+  ) async {
+    _workbenchConfigCache = config;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_workbenchConfigCachePrefsKey, jsonEncode(config));
     } catch (_) {}
   }
 
@@ -148,7 +264,7 @@ class XflowService {
   }
 
   Future<List<XflowProposalItem>> fetchB14Initiated() async {
-    final byId = <int, XflowProposalItem>{};
+    final byId = <String, XflowProposalItem>{};
     Object? err1;
     Object? err2;
     // `my-initiated`：我已正式发起、进入审批流的提案。
@@ -156,7 +272,7 @@ class XflowService {
       final rows = await _requestList('/workbench/my-initiated');
       for (final row in rows.whereType<Map<String, dynamic>>()) {
         final it = _mapB14Item(row);
-        if (it.id > 0) byId[it.id] = it;
+        if (it.id > 0) byId[_itemKey(it)] = it;
       }
     } catch (e) {
       err1 = e;
@@ -171,13 +287,25 @@ class XflowService {
         final it = _mapProposalItem(row);
         if (it.id <= 0) continue;
         final st = it.status.toUpperCase();
-        final prev = byId[it.id];
+        final key = _itemKey(it);
+        final prev = byId[key];
         // mine 仅新增补入“草稿/待发起”，避免他人已提交审批混入“我发起的”。
         if (prev == null && st != 'DRAFT' && st != 'PENDING_INITIATE') continue;
-        byId[it.id] = prev == null ? it : _fillB14Missing(prev, it);
+        byId[key] = prev == null ? it : _fillB14Missing(prev, it);
       }
     } catch (e) {
       err2 = e;
+    }
+    try {
+      final rows = await _requestList('/xflow/submissions/mine');
+      for (final row in rows.whereType<Map<String, dynamic>>()) {
+        final it = _mapSubmissionItem(row);
+        if (it.id > 0) byId[_itemKey(it)] = it;
+      }
+    } catch (e) {
+      // The proposal APIs remain usable while an older server lacks this
+      // additive endpoint; report only if every source failed.
+      err2 ??= e;
     }
     // 两个来源都失败且无数据时才视为错误，交给上层展示错误态。
     if (byId.isEmpty && (err1 != null || err2 != null)) {
@@ -189,8 +317,17 @@ class XflowService {
         final bt = b.createdAt?.millisecondsSinceEpoch ?? 0;
         return bt.compareTo(at);
       });
-    return Future.wait(items.map(_enrichB14Item));
+    return Future.wait(
+      items.map(
+        (item) => item.businessType.toUpperCase() == 'PROPOSAL'
+            ? _enrichB14Item(item)
+            : Future.value(item),
+      ),
+    );
   }
+
+  String _itemKey(XflowProposalItem item) =>
+      '${item.businessType.toUpperCase()}:${item.id}';
 
   bool _shouldIncludeMyInitiatedRow(Map<String, dynamic> row) {
     final uid = session.userId;
@@ -235,6 +372,12 @@ class XflowService {
       rows.whereType<Map<String, dynamic>>().map(_mapProposalItem).toList(),
     );
     return Future.wait(items.map(_enrichP1Item));
+  }
+
+  Future<Map<String, dynamic>> fetchWorkbenchConfig() async {
+    final raw = await _request('/workbench/config');
+    unawaited(_persistWorkbenchConfigCache(raw));
+    return raw;
   }
 
   Future<List<XflowTemplateCard>> fetchTemplatesByCategory(
@@ -323,10 +466,37 @@ class XflowService {
       'stages',
       'dicts',
       'templateKey',
+      'recognitionConfig',
     ]) {
       if (raw[key] != null) merged[key] = raw[key];
     }
     return merged;
+  }
+
+  /// 读取 proposal-archive 归档（与上传解析返回结构一致）。
+  Future<Map<String, dynamic>> fetchProposalArchive(String archiveId) async {
+    final id = archiveId.trim();
+    if (id.isEmpty) {
+      throw Exception('归档 ID 为空');
+    }
+    return _request('/proposals/${Uri.encodeComponent(id)}');
+  }
+
+  /// 按提案编号取最新归档（兼容提交时未持久化 archiveId 的历史单据）。
+  Future<Map<String, dynamic>?> fetchLatestProposalArchiveByCode(
+    String proposalCode,
+  ) async {
+    final code = proposalCode.trim();
+    if (code.isEmpty) return null;
+    final raw = await _request(
+      '/proposals?code=${Uri.encodeQueryComponent(code)}&page=1&size=1',
+    );
+    final items = raw['items'];
+    if (items is! List || items.isEmpty) return null;
+    final first = items.first;
+    if (first is Map<String, dynamic>) return first;
+    if (first is Map) return Map<String, dynamic>.from(first);
+    return null;
   }
 
   Future<Map<String, dynamic>> fetchCcRules({
@@ -336,6 +506,36 @@ class XflowService {
       '/xflow/templates/${Uri.encodeComponent(templateKey)}/cc-rules',
     );
   }
+
+  Future<List<Map<String, dynamic>>> searchApprovedProposals(String query) async {
+    final q = query.trim();
+    final path = q.isEmpty
+        ? '/xflow/proposals/approved'
+        : '/xflow/proposals/approved?q=${Uri.encodeQueryComponent(q)}';
+    final rows = await _requestList(path);
+    return rows
+        .whereType<Map>()
+        .map((row) => Map<String, dynamic>.from(row))
+        .toList(growable: false);
+  }
+
+  String resolveProposalAssetUrl(String urlOrPath) {
+    final value = urlOrPath.trim();
+    if (value.isEmpty) return '';
+    if (value.startsWith('http://') || value.startsWith('https://')) {
+      return value;
+    }
+    if (value.startsWith('/api/v1/')) {
+      final uri = Uri.parse(session.apiBase);
+      return '${uri.scheme}://${uri.host}${uri.hasPort ? ':${uri.port}' : ''}$value';
+    }
+    if (value.startsWith('/')) return '${session.apiBase}$value';
+    return '${session.apiBase}/$value';
+  }
+
+  Map<String, String> get authImageHeaders => <String, String>{
+    'Authorization': 'Bearer ${session.token}',
+  };
 
   Future<List<Map<String, dynamic>>> fetchCcRulesList({
     String templateKey = salesTemplateKey,
@@ -368,6 +568,31 @@ class XflowService {
   Future<XflowProposalDetail> fetchProposalDetail(int proposalId) async {
     final raw = await _request('/xflow/proposals/$proposalId/detail');
     return _mapProposalDetail(raw);
+  }
+
+  Future<XflowSubmissionDetail> fetchSubmissionDetail({
+    required String businessType,
+    required int businessId,
+  }) async {
+    final raw = await _request(
+      '/xflow/submissions/${Uri.encodeComponent(businessType)}/$businessId',
+    );
+    return XflowSubmissionDetail.fromJson(raw);
+  }
+
+  Future<XflowApprovalTrail?> fetchSubmissionTrail({
+    required String businessType,
+    required int businessId,
+  }) async {
+    try {
+      return _mapTrail(
+        await _request(
+          '/approvals/${Uri.encodeComponent(businessType)}/$businessId',
+        ),
+      );
+    } catch (_) {
+      return null;
+    }
   }
 
   Future<XflowApprovalTrail?> fetchProposalTrail(int proposalId) async {
@@ -445,6 +670,12 @@ class XflowService {
         ownerId != uid;
     final canDeleteDraft =
         st == 'draft' && uid > 0 && detail.createdById == uid;
+    final canWithdraw =
+        st == 'pending' &&
+        uid > 0 &&
+        (detail.createdById == uid || initiator == uid) &&
+        trail != null &&
+        !trail.steps.any((step) => step.decision.trim().isNotEmpty);
     return XflowDetailBundle(
       detail: detail,
       trail: trail,
@@ -459,6 +690,7 @@ class XflowService {
       isDesignatedInitiator: isDesignatedInitiator,
       isPusher: isPusher,
       canDeleteDraft: canDeleteDraft,
+      canWithdraw: canWithdraw,
     );
   }
 
@@ -582,6 +814,50 @@ class XflowService {
     );
   }
 
+  Future<Map<String, dynamic>> withdrawProposal(int proposalId) {
+    return _request(
+      '/xflow/proposals/$proposalId/withdraw',
+      method: 'POST',
+      body: const <String, dynamic>{},
+    );
+  }
+
+  Future<Map<String, dynamic>> withdrawSubmission({
+    required String businessType,
+    required int businessId,
+  }) {
+    return _request(
+      '/xflow/submissions/${Uri.encodeComponent(businessType)}/$businessId/withdraw',
+      method: 'POST',
+      body: const <String, dynamic>{},
+    );
+  }
+
+  Future<XflowSubmissionDetail> updateSubmissionDraft({
+    required String businessType,
+    required int businessId,
+    required Map<String, dynamic> formValues,
+  }) async {
+    final raw = await _request(
+      '/xflow/submissions/${Uri.encodeComponent(businessType)}/$businessId/draft',
+      method: 'PUT',
+      body: formValues,
+    );
+    return XflowSubmissionDetail.fromJson(raw);
+  }
+
+  Future<Map<String, dynamic>> resubmitSubmission({
+    required String businessType,
+    required int businessId,
+    required Map<String, dynamic> formValues,
+  }) {
+    return _request(
+      '/xflow/submissions/${Uri.encodeComponent(businessType)}/$businessId/resubmit',
+      method: 'POST',
+      body: formValues,
+    );
+  }
+
   Future<void> deleteProposal(int proposalId) async {
     await _request('/xflow/proposals/$proposalId', method: 'DELETE');
   }
@@ -616,12 +892,22 @@ class XflowService {
     );
   }
 
-  Future<List<Map<String, dynamic>>> searchOrgUsers(String keyword) async {
+  Future<List<Map<String, dynamic>>> searchOrgUsers(
+    String keyword, {
+    String? roleCode,
+  }) async {
     final q = keyword.trim();
-    if (q.isEmpty) return const [];
-    final rows = await _requestList(
-      '/org/users?q=${Uri.encodeQueryComponent(q)}&size=20',
-    );
+    final role = roleCode?.trim() ?? '';
+    // 无角色筛选时可空搜，列出该角色全部候选人
+    if (q.isEmpty && role.isEmpty) return const [];
+    final params = <String>['size=50'];
+    if (q.isNotEmpty) {
+      params.add('q=${Uri.encodeQueryComponent(q)}');
+    }
+    if (role.isNotEmpty) {
+      params.add('roleCode=${Uri.encodeQueryComponent(role)}');
+    }
+    final rows = await _requestList('/org/users?${params.join('&')}');
     return rows.whereType<Map<String, dynamic>>().toList(growable: false);
   }
 
@@ -925,6 +1211,13 @@ class XflowService {
       if (trailStatus.isNotEmpty && status == 'PENDING') {
         status = trailStatus;
       }
+      final proposalType =
+          (detail.formValues['proposalType'] ??
+                  detail.raw['proposalType'] ??
+                  item.proposalType)
+              ?.toString();
+      final templateKey = (detail.raw['templateKey'] ?? item.templateKey)
+          ?.toString();
       return item.copyWith(
         title: detail.title,
         code: detail.code,
@@ -932,6 +1225,8 @@ class XflowService {
         canRefedit: st == 'rejected',
         tag1: (detail.raw['tag1'] ?? item.tag1)?.toString(),
         txType: (detail.raw['txType'] ?? item.txType)?.toString(),
+        proposalType: proposalType,
+        templateKey: templateKey,
         scaleWan: _scaleWanFromDetail(detail) ?? item.scaleWan,
         currentStep: trail?.raw['currentStep'] is num
             ? (trail!.raw['currentStep'] as num).toInt()
@@ -1023,6 +1318,14 @@ class XflowService {
       createdAt: DateTime.tryParse(
         (json['createdAt'] ?? json['updatedAt'] ?? '').toString(),
       ),
+      templateKey: (json['templateKey'] ?? 'sales-proposal').toString(),
+      proposalType:
+          (json['proposalType'] ?? json['txType'] ?? '')
+              .toString()
+              .trim()
+              .isEmpty
+          ? null
+          : (json['proposalType'] ?? json['txType']).toString(),
       todoHint:
           _int(json['todoId']) > 0 &&
               (json['todoStatus'] ?? '').toString().toUpperCase() == 'OPEN'
@@ -1036,6 +1339,20 @@ class XflowService {
               status: (json['todoStatus'] ?? '').toString(),
             )
           : null,
+    );
+  }
+
+  XflowProposalItem _mapSubmissionItem(Map<String, dynamic> json) {
+    final businessId = _int(json['businessId']);
+    return XflowProposalItem(
+      id: businessId,
+      businessType: (json['businessType'] ?? '').toString(),
+      code: '#$businessId',
+      title: (json['title'] ?? '动态审批').toString(),
+      status: (json['status'] ?? '').toString(),
+      createdByName: '',
+      createdAt: DateTime.tryParse((json['createdAt'] ?? '').toString()),
+      templateKey: (json['templateKey'] ?? '').toString(),
     );
   }
 

@@ -22,16 +22,37 @@ import 'package:flutter/material.dart';
 
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/config/dunes_defaults.dart';
 import '../auth/auth_session.dart';
+import '../shell/dunes_toast.dart';
+import 'proposal_archive_models.dart';
+import 'proposal_excel_preview_page.dart';
+import 'proposal_recognition_ui.dart';
+import 'proposal_upload_config.dart';
+import 'xflow_approval_flow_ui.dart';
+import 'xflow_form_renderer.dart';
+import 'xflow_linkage.dart';
+import 'xflow_models.dart';
+import 'xflow_service.dart';
+import 'xflow_shared_widgets.dart';
+import 'xflow_template_runtime.dart';
 
 class ProposalUploadPage extends StatefulWidget {
-  const ProposalUploadPage({super.key, this.onBack, this.session});
+  const ProposalUploadPage({
+    super.key,
+    this.onBack,
+    required this.session,
+    this.service,
+    required this.templateKey,
+    this.onSubmitted,
+  });
 
   final VoidCallback? onBack;
-  final AuthSession? session;
+  final AuthSession session;
+  final XflowService? service;
+  final String templateKey;
+  final void Function(int proposalId)? onSubmitted;
 
   @override
   State<ProposalUploadPage> createState() => _ProposalUploadPageState();
@@ -60,8 +81,6 @@ class _PDColors {
 // ══════════════════════════════════════════════════════════════════════
 enum _UploadState { empty, uploading, parsed }
 
-enum _ApprovalStatus { done, current, pending }
-
 class _ParsedProposal {
   final String archiveId;
   final String fileName;
@@ -76,7 +95,6 @@ class _ParsedProposal {
   final List<_ProposalSection> sections;
   final double baselineMarginRate;
   final double baselineDiscountRate;
-  final List<_Approver> approvers;
   final Map<String, dynamic> owners;
 
   _ParsedProposal({
@@ -93,7 +111,6 @@ class _ParsedProposal {
     required this.sections,
     required this.baselineMarginRate,
     required this.baselineDiscountRate,
-    required this.approvers,
     required this.owners,
   });
 
@@ -129,27 +146,36 @@ class _ParsedProposal {
       sections: sections,
       baselineMarginRate: _double(baseline['margin_rate']),
       baselineDiscountRate: _double(baseline['discount_rate']),
-      approvers: _buildApprovers(owners),
       owners: owners,
     );
   }
 
-  Map<String, dynamic> toXflowSubmitValues() {
-    final financeScale = _sectionValue(sections, const [
-      '销售规模',
-      '承诺月规模',
-      '月规模',
-    ]);
-    final financeProfit = _sectionValue(sections, const ['利润', '承诺月毛利', '月毛利']);
-    final launchDate = _sectionValue(sections, const ['上线日期', '计划上线日期']);
-    final txType = _sectionValue(sections, const ['交易类型']);
+  Map<String, dynamic> toXflowSubmitValues({
+    Map<String, List<String>>? extractRules,
+  }) {
+    final rules = extractRules ?? defaultUploadExtractRules;
+    List<String> labels(String key, List<String> fallback) =>
+        rules[key] ?? fallback;
+    final financeScale = _sectionValue(
+      sections,
+      labels('targetMonthlyScaleWan', const ['销售规模', '承诺月规模', '月规模']),
+    );
+    final financeProfit = _sectionValue(
+      sections,
+      labels('targetMonthlyProfitWan', const ['利润', '承诺月毛利', '月毛利']),
+    );
+    final launchDate = _sectionValue(
+      sections,
+      labels('launchDate', const ['上线日期', '计划上线日期']),
+    );
+    final txType = _sectionValue(sections, labels('txType', const ['交易类型']));
     final goodType =
-        _sectionValue(sections, const ['商品类型']) ?? _inferGoodType(productTags);
-    final techPlatform = _sectionValue(sections, const [
-      '技术平台',
-      '技术标签',
-      '技术能力',
-    ]);
+        _sectionValue(sections, labels('goodType', const ['商品类型'])) ??
+        _inferGoodType(productTags);
+    final techPlatform = _sectionValue(
+      sections,
+      labels('techPlatform', const ['技术平台', '技术标签', '技术能力']),
+    );
     final owner1 = _firstNonEmpty([
       _string(owners['national']),
       _string(owners['regional']),
@@ -172,9 +198,19 @@ class _ParsedProposal {
       'tag1': productTags.map(_tagCode).where((tag) => tag.isNotEmpty).toList(),
       'provinces': _splitListText(province),
       'owner1': owner1,
-      'owner1Level': _sectionValue(sections, const ['第一责任人等级', '任务等级']) ?? '',
+      'owner1Level':
+          _sectionValue(
+            sections,
+            labels('owner1Level', const ['第一责任人等级', '任务等级']),
+          ) ??
+          '',
       'owner2': owner2,
-      'owner2Level': _sectionValue(sections, const ['第二责任人等级']) ?? '',
+      'owner2Level':
+          _sectionValue(
+            sections,
+            labels('owner2Level', const ['第二责任人等级']),
+          ) ??
+          '',
       'techPlatform': techPlatform ?? '',
       'respNational': _string(owners['national']),
       'respOps': _string(owners['regional']),
@@ -223,9 +259,20 @@ class _ProposalSection {
     final rows = _asList(json['rows'])
         .map((row) {
           final map = _asMap(row) ?? const <String, dynamic>{};
-          return _SectionRow(_string(map['label']), _string(map['value']));
+          final images = _asList(map['images'])
+              .map(ProposalArchiveImage.fromJson)
+              .where((img) => img.url.isNotEmpty || img.blobKey.isNotEmpty)
+              .toList(growable: false);
+          return _SectionRow(
+            _string(map['label']),
+            _string(map['value']),
+            images: images,
+          );
         })
-        .where((row) => row.label.isNotEmpty || row.value.isNotEmpty)
+        .where((row) =>
+            row.label.isNotEmpty ||
+            row.value.isNotEmpty ||
+            row.images.isNotEmpty)
         .toList(growable: false);
     final sectionTierRows =
         tierRows ??
@@ -247,7 +294,9 @@ class _ProposalSection {
 class _SectionRow {
   final String label;
   final String value;
-  const _SectionRow(this.label, this.value);
+  final List<ProposalArchiveImage> images;
+
+  const _SectionRow(this.label, this.value, {this.images = const []});
 }
 
 class _TierRow {
@@ -272,20 +321,6 @@ class _TierRow {
       netProfit: _double(json['net_profit']),
     );
   }
-}
-
-class _Approver {
-  final String role;
-  final String name;
-  final String? subLabel;
-  final _ApprovalStatus status;
-
-  const _Approver({
-    required this.role,
-    required this.name,
-    this.subLabel,
-    required this.status,
-  });
 }
 
 class _UploadException implements Exception {
@@ -442,54 +477,167 @@ String _friendlySubmitError(Object err) {
   return text.startsWith(prefix) ? text.substring(prefix.length) : text;
 }
 
-List<_Approver> _buildApprovers(Map<String, dynamic> owners) {
-  final rows = <_Approver>[];
-  void addOwner(String role, Object? raw) {
-    final name = _string(raw);
-    if (name.isEmpty) return;
-    rows.add(
-      _Approver(role: role, name: name, status: _ApprovalStatus.pending),
-    );
-  }
-
-  addOwner('国线负责人', owners['national']);
-  addOwner('大区负责人', owners['regional']);
-  addOwner('分省负责人', owners['provincial']);
-  addOwner('技术负责人', owners['tech']);
-  if (rows.isEmpty) {
-    return const [
-      _Approver(
-        role: '审批人',
-        name: 'Excel 未识别审批人',
-        subLabel: '请在原表补充负责人后重新上传',
-        status: _ApprovalStatus.pending,
-      ),
-    ];
-  }
-  return rows;
-}
-
 // ══════════════════════════════════════════════════════════════════════
 // State
 // ══════════════════════════════════════════════════════════════════════
 class _ProposalUploadPageState extends State<ProposalUploadPage> {
   _UploadState _state = _UploadState.empty;
   _ParsedProposal? _parsed;
-  final Set<String> _expandedIds = <String>{'finance'}; // 财务默认展开
+  final Set<String> _expandedIds = <String>{};
   bool _submitting = false;
+  late final XflowService _service;
+  XflowTemplateDetail? _template;
+  Map<String, dynamic> _detailConfig = const {};
+  final Map<String, dynamic> _supplementalValues = <String, dynamic>{};
+  bool _configLoading = true;
+  String? _configError;
+  bool _pickingFile = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _service =
+        widget.service ??
+        XflowService(session: widget.session, templateKey: widget.templateKey);
+    _loadTemplateConfig();
+  }
+
+  Future<void> _loadTemplateConfig() async {
+    setState(() {
+      _configLoading = true;
+      _configError = null;
+    });
+    try {
+      final results = await Future.wait([
+        _service.fetchTemplateDetail(
+          templateKey: widget.templateKey,
+          includeDictEnrich: true,
+        ),
+        _service.fetchDetailConfig(templateKey: widget.templateKey),
+      ]);
+      if (!mounted) return;
+      final template = results[0] as XflowTemplateDetail;
+      final detailConfig = Map<String, dynamic>.from(results[1] as Map);
+      final supplemental = supplementalFormFields(template.fields);
+      if (!mounted) return;
+      setState(() {
+        _template = template;
+        _detailConfig = detailConfig;
+        _configLoading = false;
+        for (final field in supplemental) {
+          _supplementalValues.putIfAbsent(field.key, () => '');
+        }
+        _supplementalValues.removeWhere(
+          (key, _) => supplemental.every((field) => field.key != key),
+        );
+        _expandedIds
+          ..clear()
+          ..addAll(
+            previewSectionsFromDetailConfig(detailConfig)
+                .where((section) => section.expanded)
+                .map((section) => section.id),
+          );
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _configError = e.toString();
+        _configLoading = false;
+      });
+    }
+  }
+
+  String get _pageTitle => templateTitleFromDetail(_template, fallback: '销售提案');
+
+  String get _pageSubtitle => templateSubtitleFromDetail(_template);
+
+  XflowField? get _uploadField =>
+      findPrimaryUploadField(_template?.fields ?? const []);
+
+  List<XflowField> get _supplementalFields =>
+      supplementalFormFields(_template?.fields ?? const []);
+
+  Map<String, List<String>> get _extractRules =>
+      extractRulesFromDetailConfig(_detailConfig);
+
+  List<UploadPreviewSectionConfig> get _previewSectionConfig =>
+      previewSectionsFromDetailConfig(_detailConfig);
+
+  List<UploadSummaryFieldConfig> get _summaryFields =>
+      summaryFieldsFromDetailConfig(_detailConfig);
+
+  List<Map<String, dynamic>> get _approvalStages =>
+      approvalStagesFromDetailConfig(_detailConfig);
+
+  bool get _canSubmit =>
+      _state == _UploadState.parsed && _parsed != null && !_submitting;
+
+  String get _apiBase {
+    final base = widget.session.apiBase.trim();
+    if (base.isNotEmpty) return base.replaceAll(RegExp(r'/$'), '');
+    return DunesDefaults.apiBase;
+  }
+
+  String get _templateKey {
+    final key = widget.templateKey.trim();
+    return key.isEmpty ? XflowService.salesTemplateKey : key;
+  }
+
+  Map<String, String> get _authHeaders {
+    final headers = <String, String>{};
+    final token = widget.session.token.trim();
+    if (token.isNotEmpty) {
+      headers['Authorization'] = 'Bearer $token';
+    }
+    return headers;
+  }
+
+  void _applyParsedToForm(_ParsedProposal parsed) {
+    final extracted = parsed.toXflowSubmitValues(extractRules: _extractRules);
+    for (final field in _supplementalFields) {
+      final key = field.key;
+      if (!extracted.containsKey(key)) continue;
+      // 人员字段（如技术负责人）不回填，由用户自行搜索选择。
+      final isUser = field.type == 'user' ||
+          field.type == 'userSelect' ||
+          field.raw['dataSource']?.toString() == 'org_user';
+      if (isUser) continue;
+      final next = extracted[key];
+      if (next == null) continue;
+      if (next is String && next.trim().isEmpty) continue;
+      if (next is Iterable && next.isEmpty) continue;
+      _supplementalValues[key] = next;
+    }
+    final template = _template;
+    if (template != null) {
+      XflowLinkage.recompute(template.fields, template.layout, _supplementalValues);
+    }
+  }
+
+  void _onFormFieldChanged(String key, dynamic value) {
+    setState(() {
+      _supplementalValues[key] = value;
+      final template = _template;
+      if (template != null) {
+        XflowLinkage.recompute(template.fields, template.layout, _supplementalValues);
+      }
+    });
+  }
 
   Future<void> _handleUpload() async {
-    final file = await openFile(
-      acceptedTypeGroups: const [
-        XTypeGroup(
-          label: 'Excel 提案',
-          extensions: ['xlsx'],
-          mimeTypes: [
-            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-          ],
-        ),
-      ],
-    );
+    if (_pickingFile || _state == _UploadState.uploading) return;
+    setState(() => _pickingFile = true);
+    XFile? file;
+    try {
+      file = await _pickExcelFile();
+    } catch (_) {
+      if (mounted) {
+        _showUploadError('无法打开文件选择器，请重试');
+      }
+      return;
+    } finally {
+      if (mounted) setState(() => _pickingFile = false);
+    }
     if (file == null) return;
 
     if (!file.name.toLowerCase().endsWith('.xlsx')) {
@@ -500,14 +648,28 @@ class _ProposalUploadPageState extends State<ProposalUploadPage> {
     setState(() => _state = _UploadState.uploading);
     try {
       final bytes = await file.readAsBytes();
-      if (bytes.length > 5 * 1024 * 1024) {
-        throw const _UploadException('文件超过 5 MB 限制');
+      final uploadField = _uploadField;
+      final maxBytes = uploadField != null
+          ? _uploadMaxBytes(uploadField)
+          : 5 * 1024 * 1024;
+      if (bytes.length > maxBytes) {
+        throw _UploadException(
+          '文件超过 ${(maxBytes / (1024 * 1024)).toStringAsFixed(0)} MB 限制',
+        );
       }
       final parsed = await _uploadAndParse(file.name, bytes);
       if (!mounted) return;
       setState(() {
         _parsed = parsed;
         _state = _UploadState.parsed;
+        _applyParsedToForm(parsed);
+        _expandedIds
+          ..clear()
+          ..addAll(
+            _previewSectionConfig
+                .where((section) => section.expanded)
+                .map((section) => section.id),
+          );
       });
     } catch (err) {
       if (!mounted) return;
@@ -516,12 +678,41 @@ class _ProposalUploadPageState extends State<ProposalUploadPage> {
     }
   }
 
+  /// iOS 需声明 UTI；类型组合异常时逐级降级，避免选择器无法弹出。
+  Future<XFile?> _pickExcelFile() async {
+    const primary = XTypeGroup(
+      label: 'Excel 提案',
+      extensions: ['xlsx'],
+      mimeTypes: [
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      ],
+      uniformTypeIdentifiers: [
+        'org.openxmlformats.spreadsheetml.sheet',
+        'com.microsoft.excel.xlsx',
+      ],
+    );
+    try {
+      return await openFile(acceptedTypeGroups: const [primary]);
+    } catch (_) {
+      try {
+        const fallback = XTypeGroup(
+          label: 'Excel 提案',
+          extensions: ['xlsx'],
+        );
+        return await openFile(acceptedTypeGroups: const [fallback]);
+      } catch (_) {
+        return openFile();
+      }
+    }
+  }
+
   Future<_ParsedProposal> _uploadAndParse(
     String fileName,
     Uint8List bytes,
   ) async {
-    final uri = Uri.parse('${DunesDefaults.apiBase}/proposals/upload');
+    final uri = Uri.parse('$_apiBase/proposals/upload');
     final req = http.MultipartRequest('POST', uri);
+    req.headers.addAll(_authHeaders);
     req.files.add(
       http.MultipartFile.fromBytes(
         'file',
@@ -571,27 +762,56 @@ class _ProposalUploadPageState extends State<ProposalUploadPage> {
   }
 
   void _showUploadError(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), duration: const Duration(seconds: 3)),
-    );
+    showDunesToast(context, message, kind: DunesToastKind.error);
+  }
+
+  void _showUploadSuccess(String message) {
+    showDunesToast(context, message);
   }
 
   Future<void> _handleSubmit() async {
     final parsed = _parsed;
     if (parsed == null || _submitting) return;
+    final missing = firstMissingRequiredSupplementalField(
+      _supplementalFields,
+      _supplementalValues,
+    );
+    if (missing != null) {
+      _showUploadError('请填写$missing');
+      return;
+    }
+    final ok = await confirmSubmitForApproval(context);
+    if (!ok || !mounted) return;
     setState(() => _submitting = true);
     try {
-      final res = await _submitToXflow(parsed.toXflowSubmitValues());
+      final values = parsed.toXflowSubmitValues(extractRules: _extractRules);
+      // 人员类字段不走 Excel 回填值，只认用户在表单里选择的结果。
+      for (final field in _supplementalFields) {
+        final isUser = field.type == 'user' ||
+            field.type == 'userSelect' ||
+            field.raw['dataSource']?.toString() == 'org_user';
+        if (isUser) values.remove(field.key);
+      }
+      final uploadKey = _uploadField?.key.trim() ?? '';
+      if (uploadKey.isNotEmpty && parsed.archiveId.isNotEmpty) {
+        values[uploadKey] = parsed.archiveId;
+      }
+      for (final field in _supplementalFields) {
+        final value = _supplementalValues[field.key];
+        if (!supplementalFieldHasValue(value, field: field)) continue;
+        values[field.key] = value;
+      }
+      final res = await _submitToXflow(values);
       final businessId = _int(
         res['businessId'] ?? res['proposalId'] ?? res['id'],
       );
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(businessId > 0 ? '已提交审批 · 提案 #$businessId' : '已提交审批'),
-          duration: const Duration(seconds: 2),
-        ),
+      _showUploadSuccess(
+        businessId > 0 ? '已提交审批 · 提案 #$businessId' : '已提交审批',
       );
+      if (businessId > 0) {
+        widget.onSubmitted?.call(businessId);
+      }
     } catch (err) {
       if (!mounted) return;
       _showUploadError('提交审批失败：${_friendlySubmitError(err)}');
@@ -604,13 +824,12 @@ class _ProposalUploadPageState extends State<ProposalUploadPage> {
     Map<String, dynamic> values,
   ) async {
     final uri = Uri.parse(
-      '${DunesDefaults.flowApiBase}/xflow/templates/sales-proposal/submit',
+      '$_apiBase/xflow/templates/${Uri.encodeComponent(_templateKey)}/submit',
     );
-    final headers = <String, String>{'Content-Type': 'application/json'};
-    final token = widget.session?.token.trim() ?? '';
-    if (token.isNotEmpty) {
-      headers['Authorization'] = 'Bearer $token';
-    }
+    final headers = <String, String>{
+      'Content-Type': 'application/json',
+      ..._authHeaders,
+    };
     final resp = await http.post(
       uri,
       headers: headers,
@@ -652,6 +871,59 @@ class _ProposalUploadPageState extends State<ProposalUploadPage> {
 
   @override
   Widget build(BuildContext context) {
+    if (_configLoading) {
+      return Scaffold(
+        backgroundColor: _PDColors.bg,
+        appBar: AppBar(
+          backgroundColor: _PDColors.bg,
+          elevation: 0,
+          leading: IconButton(
+            icon: const Icon(
+              Icons.arrow_back_ios_rounded,
+              size: 18,
+              color: _PDColors.ink,
+            ),
+            onPressed: widget.onBack ?? () => Navigator.of(context).maybePop(),
+          ),
+          title: const Text(
+            '加载模板',
+            style: TextStyle(
+              color: _PDColors.ink,
+              fontSize: 15,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          centerTitle: true,
+        ),
+        body: const Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    if (_configError != null) {
+      return Scaffold(
+        backgroundColor: _PDColors.bg,
+        appBar: AppBar(
+          backgroundColor: _PDColors.bg,
+          elevation: 0,
+          leading: IconButton(
+            icon: const Icon(
+              Icons.arrow_back_ios_rounded,
+              size: 18,
+              color: _PDColors.ink,
+            ),
+            onPressed: widget.onBack ?? () => Navigator.of(context).maybePop(),
+          ),
+          title: const Text('加载失败'),
+        ),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Text(_configError!, textAlign: TextAlign.center),
+          ),
+        ),
+      );
+    }
+
     return Scaffold(
       backgroundColor: _PDColors.bg,
       appBar: AppBar(
@@ -669,9 +941,9 @@ class _ProposalUploadPageState extends State<ProposalUploadPage> {
           ),
           onPressed: widget.onBack ?? () => Navigator.of(context).maybePop(),
         ),
-        title: const Text(
-          '提案归档',
-          style: TextStyle(
+        title: Text(
+          _pageTitle,
+          style: const TextStyle(
             color: _PDColors.ink,
             fontSize: 15,
             fontWeight: FontWeight.w600,
@@ -679,214 +951,361 @@ class _ProposalUploadPageState extends State<ProposalUploadPage> {
         ),
         centerTitle: true,
       ),
-      body: switch (_state) {
-        _UploadState.empty => _buildEmpty(),
-        _UploadState.uploading => _buildUploading(),
-        _UploadState.parsed => _buildParsed(_parsed!),
-      },
-    );
-  }
-
-  // ────────── Empty state ──────────
-  Widget _buildEmpty() {
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(14, 16, 14, 24),
-      children: [
-        Row(
-          children: [
-            const Text(
-              'PROPOSAL ARCHIVE · 提案归档',
-              style: TextStyle(
-                fontFamily: 'monospace',
-                fontSize: 8.5,
-                color: _PDColors.mute,
-                letterSpacing: 1.4,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(child: Container(height: 0.5, color: _PDColors.line)),
-          ],
-        ),
-        const SizedBox(height: 6),
-        const Text(
-          '上传新提案',
-          style: TextStyle(
-            fontSize: 17,
-            fontWeight: FontWeight.w500,
-            color: _PDColors.ink,
-            height: 1.25,
-          ),
-        ),
-        const SizedBox(height: 4),
-        const Text(
-          '把 Excel 提案拖进来，系统自动识别字段、启动 6 步签字。',
-          style: TextStyle(fontSize: 12, color: _PDColors.mute, height: 1.6),
-        ),
-        const SizedBox(height: 18),
-        GestureDetector(
-          onTap: _handleUpload,
-          child: CustomPaint(
-            painter: _DashedBorderPainter(
-              color: _PDColors.ink.withAlpha(78),
-              strokeWidth: 1.4,
-              radius: 12,
-              dashLen: 6,
-              gapLen: 4,
-            ),
-            child: Container(
-              padding: const EdgeInsets.symmetric(vertical: 34, horizontal: 20),
-              child: Column(
-                children: [
-                  Container(
-                    width: 54,
-                    height: 54,
-                    decoration: BoxDecoration(
-                      color: _PDColors.ink.withAlpha(14),
-                      borderRadius: BorderRadius.circular(27),
-                    ),
-                    child: const Icon(
-                      Icons.cloud_upload_outlined,
-                      size: 28,
-                      color: _PDColors.ink,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  const Text(
-                    '点击选择 · 或拖拽到此处',
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: _PDColors.ink,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  const Text(
-                    '.xlsx · 单文件 ≤ 5 MB',
-                    style: TextStyle(
-                      fontSize: 10,
-                      color: _PDColors.mute,
-                      letterSpacing: 0.3,
-                      fontFamily: 'monospace',
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-        const SizedBox(height: 14),
-        Container(
-          padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-          decoration: BoxDecoration(
-            color: _PDColors.coral.withAlpha(13),
-            border: const Border(
-              left: BorderSide(color: _PDColors.coral, width: 1.5),
-            ),
-          ),
-          child: RichText(
-            text: const TextSpan(
-              style: TextStyle(
-                fontSize: 10,
-                color: _PDColors.mute,
-                height: 1.6,
-                letterSpacing: 0.2,
-                fontFamily: 'monospace',
-              ),
-              children: [
-                TextSpan(
-                  text: '命名规则  ',
-                  style: TextStyle(
-                    color: _PDColors.coral,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                TextSpan(text: 'NY / YYS − 项目简称 − YYYYMMDD\n'),
-                TextSpan(
-                  text: '示例  ',
-                  style: TextStyle(color: _PDColors.mute2),
-                ),
-                TextSpan(text: 'NY-ZSHPAYWTA-20260413'),
-              ],
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  // ────────── Uploading state ──────────
-  Widget _buildUploading() {
-    return const Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
+      body: Column(
         children: [
-          SizedBox(
-            width: 32,
-            height: 32,
-            child: CircularProgressIndicator(
-              color: _PDColors.coral,
-              strokeWidth: 2.2,
-              backgroundColor: _PDColors.line,
-            ),
-          ),
-          SizedBox(height: 14),
-          Text(
-            '解析中',
-            style: TextStyle(
-              color: _PDColors.ink,
-              fontSize: 13,
-              fontWeight: FontWeight.w500,
-              letterSpacing: 0.4,
-            ),
-          ),
-          SizedBox(height: 4),
-          Text(
-            'PARSING EXCEL · 提取 5 个板块字段',
-            style: TextStyle(
-              color: _PDColors.mute2,
-              fontSize: 9,
-              letterSpacing: 1.2,
-              fontFamily: 'monospace',
-              fontWeight: FontWeight.w600,
-            ),
+          Expanded(child: _buildScrollContent()),
+          XflowXfActionBar(
+            label: '提交审批',
+            loading: _submitting,
+            onPressed: _canSubmit ? _handleSubmit : null,
+            onDisabledTap: () =>
+                _showUploadError('请先上传并识别 Excel 提案'),
           ),
         ],
       ),
     );
   }
 
-  // ────────── Parsed state ──────────
-  Widget _buildParsed(_ParsedProposal p) {
+  Widget _buildScrollContent() {
+    final parsed = _parsed;
     return ListView(
-      padding: const EdgeInsets.fromLTRB(14, 12, 14, 24),
+      padding: const EdgeInsets.fromLTRB(14, 16, 14, 8),
       children: [
-        _buildFileHeader(p),
-        const SizedBox(height: 10),
-        _buildExcelPreviewButton(p),
-        const SizedBox(height: 16),
-        _badgeKicker('已识别', 'EXTRACTED'),
-        const SizedBox(height: 10),
-        _buildExtractedFields(p),
-        const SizedBox(height: 18),
-        _badgeKicker('内容预览', 'PREVIEW · ${p.sections.length} SECTIONS'),
-        const SizedBox(height: 10),
-        for (final s in p.sections) ...[
-          _buildSectionCard(s),
-          const SizedBox(height: 6),
+        if (_pageSubtitle.isNotEmpty) ...[
+          Text(
+            _pageSubtitle,
+            style: const TextStyle(
+              fontSize: 12,
+              color: _PDColors.mute,
+              height: 1.6,
+            ),
+          ),
+          const SizedBox(height: 14),
         ],
-        const SizedBox(height: 12),
-        _badgeKicker(
-          '审批',
-          '6-STEP FLOW',
-          trailing: '1 / ${p.approvers.length}',
-        ),
-        const SizedBox(height: 10),
-        _buildWorkflow(p),
-        const SizedBox(height: 20),
-        _buildSubmitButton(),
+        _buildTemplateForm(),
+        if (parsed != null) ...[
+          const SizedBox(height: 14),
+          ProposalRecognitionView(
+            summaryFields: _summaryFields,
+            previewSectionConfig: _previewSectionConfig,
+            summaryData: uploadSummaryData(
+              proposalId: parsed.proposalId,
+              proposalType: parsed.proposalType,
+              productTags: parsed.productTags,
+              channel: parsed.channel,
+              province: parsed.province,
+              profitModel: parsed.profitModel,
+              fileName: parsed.fileName,
+            ),
+            sections: _previewSectionsFor(parsed)
+                .map(
+                  (s) => ProposalArchiveSection(
+                    id: s.id,
+                    orderCn: s.orderCn,
+                    title: s.title,
+                    preview: s.preview,
+                    rows: s.rows
+                        .map(
+                          (r) => ProposalArchiveRow(
+                            r.label,
+                            r.value,
+                            images: r.images,
+                          ),
+                        )
+                        .toList(),
+                    isFinancial: s.isFinancial,
+                    tierRows: (s.tierRows ?? const [])
+                        .map(
+                          (t) => ProposalArchiveTierRow(
+                            scale: t.scale,
+                            supply: t.supply,
+                            sell: t.sell,
+                            netProfit: t.netProfit,
+                          ),
+                        )
+                        .toList(),
+                  ),
+                )
+                .toList(),
+            archiveId: parsed.archiveId,
+            fileName: parsed.fileName,
+            fileSize: parsed.fileSize,
+            sheetCount: parsed.sheetCount,
+            initialExpandedSectionIds: _previewSectionConfig
+                .where((section) => section.expanded)
+                .map((section) => section.id)
+                .toSet(),
+            resolveAssetUrl: _service.resolveProposalAssetUrl,
+            authenticatedImageHeaders: _service.authImageHeaders,
+            onPreviewTap: parsed.archiveId.isEmpty
+                ? null
+                : () => _openExcelPreview(parsed),
+          ),
+        ],
+        _buildWorkflowSection(),
       ],
     );
+  }
+
+  Widget _buildTemplateForm() {
+    final template = _template;
+    if (template == null) return const SizedBox.shrink();
+    return XflowFormRenderer(
+      fields: template.fields,
+      values: _supplementalValues,
+      layout: template.layout,
+      service: _service,
+      embedded: true,
+      showProgressCard: false,
+      showActionBar: false,
+      fieldOverride: _overrideFormField,
+      onChanged: _onFormFieldChanged,
+    );
+  }
+
+  Widget? _overrideFormField(XflowField field) {
+    if (field.type != 'upload' &&
+        field.raw['actionKind']?.toString() != 'excel-import') {
+      return null;
+    }
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: _buildExcelImportField(field),
+    );
+  }
+
+  String? _uploadHelpText(XflowField field) {
+    final meta = field.raw['meta'];
+    if (meta is Map) {
+      final fromMeta =
+          (meta['helpText'] ?? meta['namingRule'] ?? meta['hint'] ?? '')
+              .toString()
+              .trim();
+      if (fromMeta.isNotEmpty) return fromMeta;
+    }
+    final help = (field.raw['helpText'] ?? field.raw['hint'] ?? '')
+        .toString()
+        .trim();
+    return help.isEmpty ? null : help;
+  }
+
+  String _uploadAcceptHint(XflowField field) {
+    final custom = (field.raw['acceptHint'] ?? '').toString().trim();
+    if (custom.isNotEmpty) return custom;
+    final exts = field.raw['accept'] ?? field.raw['extensions'];
+    if (exts is List && exts.isNotEmpty) {
+      return exts.map((e) => e.toString()).join(' · ');
+    }
+    if (field.raw['actionKind']?.toString() == 'excel-import') {
+      return '.xlsx';
+    }
+    return '';
+  }
+
+  int _uploadMaxBytes(XflowField field) {
+    final raw = field.raw['maxSizeBytes'] ?? field.raw['maxBytes'];
+    if (raw is num) return raw.toInt();
+    return 5 * 1024 * 1024;
+  }
+
+  Widget _buildExcelImportField(XflowField field) {
+    if (_state == _UploadState.uploading || _pickingFile) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (field.label.trim().isNotEmpty) ...[
+            Text(
+              field.label.trim(),
+              style: const TextStyle(
+                fontSize: 11.5,
+                fontWeight: FontWeight.w600,
+                color: _PDColors.ink,
+              ),
+            ),
+            const SizedBox(height: 10),
+          ],
+          Container(
+            padding: const EdgeInsets.symmetric(vertical: 28),
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: _PDColors.card,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: _PDColors.line2, width: 0.6),
+            ),
+            child: const SizedBox(
+              width: 24,
+              height: 24,
+              child: CircularProgressIndicator(
+                color: _PDColors.coral,
+                strokeWidth: 2,
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+
+    final parsed = _parsed;
+    if (_state == _UploadState.parsed && parsed != null) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (field.label.trim().isNotEmpty) ...[
+            Text(
+              field.label.trim(),
+              style: const TextStyle(
+                fontSize: 11.5,
+                fontWeight: FontWeight.w600,
+                color: _PDColors.ink,
+              ),
+            ),
+            const SizedBox(height: 8),
+          ],
+          _buildFileHeader(parsed),
+        ],
+      );
+    }
+
+    final placeholder = field.placeholder.trim();
+    final acceptHint = _uploadAcceptHint(field);
+    final helpText = _uploadHelpText(field);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (field.label.trim().isNotEmpty) ...[
+          Row(
+            children: [
+              Text(
+                field.label.trim(),
+                style: const TextStyle(
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w600,
+                  color: _PDColors.ink,
+                ),
+              ),
+              if (field.required)
+                const Text(
+                  ' *',
+                  style: TextStyle(fontSize: 11.5, color: _PDColors.coral),
+                ),
+            ],
+          ),
+          const SizedBox(height: 6),
+        ],
+        if (placeholder.isNotEmpty) ...[
+          Text(
+            placeholder,
+            style: const TextStyle(
+              fontSize: 12,
+              color: _PDColors.mute,
+              height: 1.6,
+            ),
+          ),
+          const SizedBox(height: 10),
+        ],
+        Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: _pickingFile || _state == _UploadState.uploading
+                ? null
+                : _handleUpload,
+            borderRadius: BorderRadius.circular(12),
+            child: CustomPaint(
+              painter: _DashedBorderPainter(
+                color: _PDColors.ink.withAlpha(78),
+                strokeWidth: 1.4,
+                radius: 12,
+                dashLen: 6,
+                gapLen: 4,
+              ),
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 28, horizontal: 20),
+                child: Column(
+                  children: [
+                    Container(
+                      width: 48,
+                      height: 48,
+                      decoration: BoxDecoration(
+                        color: _PDColors.ink.withAlpha(14),
+                        borderRadius: BorderRadius.circular(24),
+                      ),
+                      child: Icon(
+                        _pickingFile
+                            ? Icons.hourglass_top_outlined
+                            : Icons.cloud_upload_outlined,
+                        size: 26,
+                        color: _PDColors.ink,
+                      ),
+                    ),
+                    if (acceptHint.isNotEmpty) ...[
+                      const SizedBox(height: 10),
+                      Text(
+                        acceptHint,
+                        style: const TextStyle(
+                          fontSize: 10,
+                          color: _PDColors.mute,
+                          letterSpacing: 0.3,
+                          fontFamily: 'monospace',
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+        if (helpText != null) ...[
+          const SizedBox(height: 10),
+          Container(
+            padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+            decoration: BoxDecoration(
+              color: _PDColors.coral.withAlpha(13),
+              border: const Border(
+                left: BorderSide(color: _PDColors.coral, width: 1.5),
+              ),
+            ),
+            child: Text(
+              helpText,
+              style: const TextStyle(
+                fontSize: 10,
+                color: _PDColors.mute,
+                height: 1.6,
+                letterSpacing: 0.2,
+              ),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildWorkflowSection() {
+    return XflowApprovalFlowSection(stages: _approvalStages);
+  }
+
+  List<_ProposalSection> _previewSectionsFor(_ParsedProposal parsed) {
+    final byId = <String, _ProposalSection>{
+      for (final section in parsed.sections) section.id: section,
+    };
+    final out = <_ProposalSection>[];
+    for (final cfg in _previewSectionConfig) {
+      final section = byId[cfg.id];
+      if (section == null) continue;
+      out.add(
+        _ProposalSection(
+          id: section.id,
+          orderCn: cfg.orderCn.isNotEmpty ? cfg.orderCn : section.orderCn,
+          title: cfg.title.isNotEmpty ? cfg.title : section.title,
+          preview: section.preview,
+          rows: section.rows,
+          isFinancial: cfg.accent,
+          tierRows: section.tierRows,
+        ),
+      );
+    }
+    return out;
   }
 
   Widget _buildFileHeader(_ParsedProposal p) {
@@ -938,22 +1357,26 @@ class _ProposalUploadPageState extends State<ProposalUploadPage> {
               ],
             ),
           ),
-          GestureDetector(
-            onTap: _resetUpload,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-              decoration: BoxDecoration(
-                border: Border.all(color: _PDColors.line, width: 0.6),
-                borderRadius: BorderRadius.circular(4),
-              ),
-              child: const Text(
-                '重新',
-                style: TextStyle(
-                  fontSize: 9,
-                  color: _PDColors.mute,
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: 0.4,
-                  fontFamily: 'monospace',
+          Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: _resetUpload,
+              borderRadius: BorderRadius.circular(4),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  border: Border.all(color: _PDColors.line, width: 0.6),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: const Text(
+                  '重新',
+                  style: TextStyle(
+                    fontSize: 9,
+                    color: _PDColors.mute,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 0.4,
+                    fontFamily: 'monospace',
+                  ),
                 ),
               ),
             ),
@@ -1017,8 +1440,8 @@ class _ProposalUploadPageState extends State<ProposalUploadPage> {
                 ),
               ),
               const Icon(
-                Icons.open_in_new_rounded,
-                size: 16,
+                Icons.chevron_right_rounded,
+                size: 18,
                 color: _PDColors.mute2,
               ),
             ],
@@ -1029,16 +1452,40 @@ class _ProposalUploadPageState extends State<ProposalUploadPage> {
   }
 
   Future<void> _openExcelPreview(_ParsedProposal p) async {
-    final uri = Uri.parse(
-      '${DunesDefaults.apiBase}/proposals/${Uri.encodeComponent(p.archiveId)}/preview.html',
+    await openProposalExcelPreview(
+      context: context,
+      session: widget.session,
+      archiveId: p.archiveId,
+      fileName: p.fileName,
     );
-    final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
-    if (!ok && mounted) {
-      _showUploadError('无法打开 Excel 预览');
-    }
   }
 
   Widget _buildExtractedFields(_ParsedProposal p) {
+    final summaryData = uploadSummaryData(
+      proposalId: p.proposalId,
+      proposalType: p.proposalType,
+      productTags: p.productTags,
+      channel: p.channel,
+      province: p.province,
+      profitModel: p.profitModel,
+      fileName: p.fileName,
+    );
+    final fields = _summaryFields;
+    final rows = <Widget>[];
+    for (final field in fields) {
+      final value = summaryFieldValue(summaryData, field);
+      if (!summaryFieldHasDisplayValue(value)) continue;
+      if (rows.isNotEmpty) rows.add(const SizedBox(height: 7));
+      rows.add(_buildSummaryFieldRow(field, value));
+    }
+    if (rows.isEmpty) {
+      rows.add(
+        const Text(
+          '未配置识别摘要字段（recognitionConfig.summaryFields）',
+          style: TextStyle(fontSize: 11, color: _PDColors.mute, height: 1.5),
+        ),
+      );
+    }
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -1048,27 +1495,34 @@ class _ProposalUploadPageState extends State<ProposalUploadPage> {
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _fieldRow('提案编号', valueMono: p.proposalId),
-          const SizedBox(height: 7),
-          _fieldRow('提案类型', child: _coralChip(p.proposalType)),
-          const SizedBox(height: 7),
-          _fieldRow(
-            '产品属性',
-            child: Wrap(
-              alignment: WrapAlignment.end,
-              spacing: 4,
-              runSpacing: 4,
-              children: p.productTags.map(_neutralChip).toList(),
-            ),
-          ),
-          const SizedBox(height: 7),
-          _fieldRow('上线渠道', valueText: '${p.channel} · ${p.province}'),
-          const SizedBox(height: 7),
-          _fieldRow('盈利模式', valueText: p.profitModel),
-        ],
+        children: rows,
       ),
     );
+  }
+
+  Widget _buildSummaryFieldRow(UploadSummaryFieldConfig field, dynamic value) {
+    final label = field.label.isNotEmpty ? field.label : field.source;
+    switch (field.display) {
+      case 'mono':
+        return _fieldRow(label, valueMono: value.toString());
+      case 'chip':
+        return _fieldRow(label, child: _coralChip(value.toString()));
+      case 'tags':
+        final tags = value is Iterable
+            ? value.map((e) => e.toString()).where((e) => e.isNotEmpty).toList()
+            : <String>[value.toString()];
+        return _fieldRow(
+          label,
+          child: Wrap(
+            alignment: WrapAlignment.end,
+            spacing: 4,
+            runSpacing: 4,
+            children: tags.map(_neutralChip).toList(),
+          ),
+        );
+      default:
+        return _fieldRow(label, valueText: value.toString());
+    }
   }
 
   Widget _buildSectionCard(_ProposalSection s) {
@@ -1205,494 +1659,8 @@ class _ProposalUploadPageState extends State<ProposalUploadPage> {
             _rowKV(s.rows[i].label, s.rows[i].value),
             if (i != s.rows.length - 1) const SizedBox(height: 5),
           ],
-          if (s.tierRows != null && s.tierRows!.isNotEmpty) ...[
-            const SizedBox(height: 10),
-            const Text(
-              '阶梯利润测算 · TIER MODEL',
-              style: TextStyle(
-                fontFamily: 'monospace',
-                fontSize: 8,
-                color: _PDColors.mute2,
-                letterSpacing: 1.2,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            const SizedBox(height: 5),
-            _buildTierTable(s.tierRows!),
-          ],
-          if (s.isFinancial) ...[
-            const SizedBox(height: 12),
-            _buildBaselineEmbed(
-              _parsed!.baselineMarginRate,
-              _parsed!.baselineDiscountRate,
-            ),
-          ],
         ],
       ),
-    );
-  }
-
-  Widget _buildTierTable(List<_TierRow> rows) {
-    return Container(
-      decoration: BoxDecoration(
-        color: _PDColors.cardAlt,
-        border: Border.all(color: _PDColors.line2, width: 0.5),
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Column(
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-            decoration: BoxDecoration(
-              color: _PDColors.ink.withAlpha(8),
-              border: const Border(
-                bottom: BorderSide(color: _PDColors.line2, width: 0.5),
-              ),
-            ),
-            child: Row(
-              children: const [
-                Expanded(child: _TierHeaderCell('规模', Alignment.centerLeft)),
-                Expanded(child: _TierHeaderCell('供货', Alignment.centerRight)),
-                Expanded(child: _TierHeaderCell('销售', Alignment.centerRight)),
-                Expanded(child: _TierHeaderCell('净利', Alignment.centerRight)),
-              ],
-            ),
-          ),
-          for (int i = 0; i < rows.length; i++)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                border: i != rows.length - 1
-                    ? const Border(
-                        bottom: BorderSide(
-                          color: Color(0xFFF2EFE6),
-                          width: 0.5,
-                        ),
-                      )
-                    : null,
-              ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: _TierCell(
-                      rows[i].scale,
-                      Alignment.centerLeft,
-                      color: _PDColors.ink,
-                    ),
-                  ),
-                  Expanded(
-                    child: _TierCell(
-                      '${rows[i].supply.toStringAsFixed(1)}%',
-                      Alignment.centerRight,
-                      color: _PDColors.ink,
-                    ),
-                  ),
-                  Expanded(
-                    child: _TierCell(
-                      '${rows[i].sell.toStringAsFixed(1)}%',
-                      Alignment.centerRight,
-                      color: _PDColors.ink,
-                    ),
-                  ),
-                  Expanded(
-                    child: _TierCell(
-                      rows[i].netProfit.toStringAsFixed(0),
-                      Alignment.centerRight,
-                      color: rows[i].netProfit < 0
-                          ? _PDColors.danger
-                          : (rows[i].netProfit >= 2000
-                                ? _PDColors.success
-                                : _PDColors.ink),
-                      weight: rows[i].netProfit >= 5000
-                          ? FontWeight.w700
-                          : FontWeight.w500,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildBaselineEmbed(double marginRate, double discountRate) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(11, 9, 11, 9),
-      decoration: BoxDecoration(
-        color: _PDColors.card,
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: _PDColors.coral.withAlpha(90), width: 0.6),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            children: [
-              Expanded(child: _baselineStat('目标毛利率', marginRate)),
-              const SizedBox(width: 12),
-              Expanded(child: _baselineStat('目标销售折扣', discountRate)),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Container(height: 0.5, color: _PDColors.coral.withAlpha(60)),
-          const SizedBox(height: 8),
-          RichText(
-            text: const TextSpan(
-              style: TextStyle(
-                fontSize: 9,
-                color: Color(0xFF5F5C55),
-                fontFamily: 'monospace',
-                height: 1.5,
-                letterSpacing: 0.2,
-              ),
-              children: [
-                TextSpan(text: '→ 归档后作为该产品在灯塔的'),
-                TextSpan(
-                  text: '违背检测基准',
-                  style: TextStyle(
-                    color: _PDColors.coral,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _baselineStat(String label, double value) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: const TextStyle(
-            fontFamily: 'monospace',
-            fontSize: 8,
-            color: _PDColors.mute,
-            letterSpacing: 0.7,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-        const SizedBox(height: 2),
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.baseline,
-          textBaseline: TextBaseline.alphabetic,
-          children: [
-            Text(
-              value.toStringAsFixed(1),
-              style: const TextStyle(
-                fontFamily: 'monospace',
-                fontSize: 16,
-                color: _PDColors.coral,
-                fontWeight: FontWeight.w700,
-                letterSpacing: -0.3,
-              ),
-            ),
-            const SizedBox(width: 1),
-            const Text(
-              '%',
-              style: TextStyle(
-                fontFamily: 'monospace',
-                fontSize: 10,
-                color: _PDColors.coral,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-
-  Widget _buildWorkflow(_ParsedProposal p) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-      decoration: BoxDecoration(
-        color: _PDColors.card,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: _PDColors.line2, width: 0.6),
-      ),
-      child: Column(
-        children: [
-          for (int i = 0; i < p.approvers.length; i++)
-            _buildApproverRow(
-              p.approvers[i],
-              isLast: i == p.approvers.length - 1,
-            ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildApproverRow(_Approver a, {required bool isLast}) {
-    const dotSize = 12.0;
-    return IntrinsicHeight(
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: dotSize + 2,
-            child: Column(
-              children: [
-                _statusDot(a.status),
-                if (!isLast)
-                  Expanded(
-                    child: Container(
-                      width: 0.5,
-                      color: _PDColors.line2,
-                      margin: const EdgeInsets.symmetric(vertical: 2),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Padding(
-              padding: EdgeInsets.only(bottom: isLast ? 0 : 10),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.baseline,
-                    textBaseline: TextBaseline.alphabetic,
-                    children: [
-                      Expanded(
-                        child: Text(
-                          '${a.role} · ${a.name}',
-                          style: TextStyle(
-                            fontSize: 11.5,
-                            color: a.status == _ApprovalStatus.pending
-                                ? _PDColors.mute
-                                : _PDColors.ink,
-                            fontWeight: a.status == _ApprovalStatus.current
-                                ? FontWeight.w700
-                                : FontWeight.w500,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      const SizedBox(width: 6),
-                      _statusChip(a),
-                    ],
-                  ),
-                  if (a.subLabel != null && a.subLabel!.isNotEmpty) ...[
-                    const SizedBox(height: 2),
-                    Text(
-                      a.subLabel!,
-                      style: const TextStyle(
-                        fontFamily: 'monospace',
-                        fontSize: 9,
-                        color: _PDColors.mute2,
-                        letterSpacing: 0.2,
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _statusDot(_ApprovalStatus s) {
-    switch (s) {
-      case _ApprovalStatus.done:
-        return Container(
-          width: 12,
-          height: 12,
-          decoration: BoxDecoration(
-            color: _PDColors.success,
-            shape: BoxShape.circle,
-            border: Border.all(color: _PDColors.card, width: 2),
-          ),
-        );
-      case _ApprovalStatus.current:
-        return Container(
-          width: 12,
-          height: 12,
-          decoration: BoxDecoration(
-            color: _PDColors.card,
-            shape: BoxShape.circle,
-            border: Border.all(color: _PDColors.coral, width: 2),
-            boxShadow: [
-              BoxShadow(
-                color: _PDColors.coral.withAlpha(45),
-                blurRadius: 0,
-                spreadRadius: 3,
-              ),
-            ],
-          ),
-        );
-      case _ApprovalStatus.pending:
-        return Container(
-          width: 12,
-          height: 12,
-          decoration: BoxDecoration(
-            color: _PDColors.card,
-            shape: BoxShape.circle,
-            border: Border.all(color: const Color(0xFFC9C3B7), width: 1),
-          ),
-        );
-    }
-  }
-
-  Widget _statusChip(_Approver a) {
-    switch (a.status) {
-      case _ApprovalStatus.done:
-        return const Text(
-          '已完成',
-          style: TextStyle(
-            fontFamily: 'monospace',
-            fontSize: 8,
-            color: _PDColors.success,
-            fontWeight: FontWeight.w600,
-            letterSpacing: 0.4,
-          ),
-        );
-      case _ApprovalStatus.current:
-        return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-          decoration: BoxDecoration(
-            color: _PDColors.coral.withAlpha(38),
-            borderRadius: BorderRadius.circular(2),
-          ),
-          child: const Text(
-            '当前',
-            style: TextStyle(
-              fontFamily: 'monospace',
-              fontSize: 8,
-              color: _PDColors.coral,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 0.4,
-            ),
-          ),
-        );
-      case _ApprovalStatus.pending:
-        return const Text(
-          '待',
-          style: TextStyle(
-            fontFamily: 'monospace',
-            fontSize: 8,
-            color: _PDColors.mute2,
-            fontWeight: FontWeight.w600,
-            letterSpacing: 0.4,
-          ),
-        );
-    }
-  }
-
-  Widget _buildSubmitButton() {
-    return GestureDetector(
-      onTap: _submitting ? null : _handleSubmit,
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 15),
-        decoration: BoxDecoration(
-          color: _PDColors.ink,
-          borderRadius: BorderRadius.circular(10),
-        ),
-        child: Column(
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                if (_submitting)
-                  const SizedBox(
-                    width: 15,
-                    height: 15,
-                    child: CircularProgressIndicator(
-                      color: _PDColors.bg,
-                      strokeWidth: 1.8,
-                    ),
-                  )
-                else
-                  const Icon(
-                    Icons.check_rounded,
-                    size: 15,
-                    color: _PDColors.bg,
-                  ),
-                const SizedBox(width: 8),
-                Text(
-                  _submitting ? '提交中' : '提交归档',
-                  style: const TextStyle(
-                    color: _PDColors.bg,
-                    fontSize: 13.5,
-                    fontWeight: FontWeight.w500,
-                    letterSpacing: 1.5,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 5),
-            Text(
-              'SUBMIT · 提交后进入业务签字环节',
-              style: TextStyle(
-                fontFamily: 'monospace',
-                fontSize: 8.5,
-                color: _PDColors.bg.withAlpha(140),
-                letterSpacing: 0.5,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // ────────── helpers ──────────
-
-  Widget _badgeKicker(String label, String subLabel, {String? trailing}) {
-    return Row(
-      children: [
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-          decoration: BoxDecoration(
-            color: _PDColors.coral.withAlpha(31),
-            borderRadius: BorderRadius.circular(3),
-          ),
-          child: Text(
-            label,
-            style: const TextStyle(
-              fontFamily: 'monospace',
-              fontSize: 8,
-              color: _PDColors.coral,
-              letterSpacing: 1,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ),
-        const SizedBox(width: 6),
-        Text(
-          subLabel,
-          style: const TextStyle(
-            fontFamily: 'monospace',
-            fontSize: 8.5,
-            color: _PDColors.mute2,
-            letterSpacing: 1.4,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(child: Container(height: 0.5, color: _PDColors.line)),
-        if (trailing != null) ...[
-          const SizedBox(width: 8),
-          Text(
-            trailing,
-            style: const TextStyle(
-              fontFamily: 'monospace',
-              fontSize: 9,
-              color: _PDColors.coral,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ],
-      ],
     );
   }
 
@@ -1799,61 +1767,6 @@ class _ProposalUploadPageState extends State<ProposalUploadPage> {
           fontSize: 10.5,
           color: _PDColors.ink,
           fontWeight: FontWeight.w500,
-        ),
-      ),
-    );
-  }
-}
-
-// ══════════════════════════════════════════════════════════════════════
-// Tier table cells (extracted to reduce main class size)
-// ══════════════════════════════════════════════════════════════════════
-class _TierHeaderCell extends StatelessWidget {
-  final String text;
-  final Alignment align;
-  const _TierHeaderCell(this.text, this.align);
-
-  @override
-  Widget build(BuildContext context) {
-    return Align(
-      alignment: align,
-      child: Text(
-        text,
-        style: const TextStyle(
-          fontFamily: 'monospace',
-          fontSize: 8,
-          color: _PDColors.mute,
-          letterSpacing: 0.5,
-          fontWeight: FontWeight.w700,
-        ),
-      ),
-    );
-  }
-}
-
-class _TierCell extends StatelessWidget {
-  final String text;
-  final Alignment align;
-  final Color color;
-  final FontWeight weight;
-  const _TierCell(
-    this.text,
-    this.align, {
-    required this.color,
-    this.weight = FontWeight.w500,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Align(
-      alignment: align,
-      child: Text(
-        text,
-        style: TextStyle(
-          fontFamily: 'monospace',
-          fontSize: 9.5,
-          color: color,
-          fontWeight: weight,
         ),
       ),
     );

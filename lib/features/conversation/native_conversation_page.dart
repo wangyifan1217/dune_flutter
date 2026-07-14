@@ -415,10 +415,12 @@ class _NativeConversationPageState extends State<NativeConversationPage>
   }
 
   void _updateCommBadge(List<NativeConversation> rows, int notifUnread) {
+    final selected = widget.selectedConversationId ?? 0;
     widget.commUnread.update(
       widget.commUnread.sumConversationUnread(
         rows: rows,
         notifUnread: notifUnread,
+        treatAsReadIds: selected > 0 ? <int>{selected} : const <int>{},
       ),
     );
   }
@@ -537,16 +539,6 @@ class _NativeConversationPageState extends State<NativeConversationPage>
 
   String _privateTitle(NativeConversation c) => c.displayTitle;
 
-  String? _privateSubtitle(NativeConversation c) {
-    final parts = <String>[];
-    final dept = c.peerDepartment?.trim();
-    final role = c.peerRoleLabel?.trim();
-    if (dept != null && dept.isNotEmpty) parts.add(dept);
-    if (role != null && role.isNotEmpty) parts.add(role);
-    if (parts.isEmpty) return null;
-    return parts.join(' · ');
-  }
-
   int? _peerUserId(NativeConversation c) {
     final id = c.peerUserId;
     if (id == null || id <= 0 || id == widget.session.userId) return null;
@@ -600,7 +592,7 @@ class _NativeConversationPageState extends State<NativeConversationPage>
     final row = ChatInboxRow(
       kind: rowKind,
       title: c.isAiAssistant ? _yunshuName : title,
-      subtitle: c.isPrivate ? _privateSubtitle(c) : null,
+      subtitle: null,
       preview: c.isAiAssistant
           ? resolveNovaInboxPreview(
               storage: _novaStorage,

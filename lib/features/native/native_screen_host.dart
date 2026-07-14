@@ -441,6 +441,26 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     return false;
   }
 
+  /// 当前正在查看的会话（双栏选中 / 窄屏聊天页），角标汇总时应视为已读。
+  int? _activeViewingConversationId() {
+    final dualId = _dualPaneSelectedConversationId;
+    if (dualId != null && dualId > 0) return dualId;
+    final screen = widget.navigation.currentScreen;
+    if (screen == 'C5') {
+      final id = _selectedPrivate?.id ?? 0;
+      return id > 0 ? id : null;
+    }
+    if (screen == 'C2') {
+      final id = _selectedGroup?.id ?? 0;
+      return id > 0 ? id : null;
+    }
+    if (screen == 'C10') {
+      final id = _selectedBroadcast?.id ?? 0;
+      return id > 0 ? id : null;
+    }
+    return null;
+  }
+
   void _onNovaCoordinatorUpdate() {
     final shouldBump = NovaBackgroundCoordinator.instance
         .takePendingCommBadgeBump();
@@ -488,21 +508,39 @@ class _NativeScreenHostState extends State<NativeScreenHost>
               .map((c) => MapEntry(c.id, true)),
         );
       if (mounted) {
+        final viewingId = _activeViewingConversationId() ?? 0;
+        final treatAsRead = viewingId > 0
+            ? <int>{viewingId}
+            : const <int>{};
+        var viewingUnread = 0;
+        if (viewingId > 0) {
+          for (final c in rows) {
+            if (c.id == viewingId) {
+              viewingUnread = _commUnread.effectiveUnreadCount(c);
+              break;
+            }
+          }
+        }
         final summedTotal = _commUnread.sumConversationUnread(
           rows: rows,
           notifUnread: notif.unreadCount,
+          treatAsReadIds: treatAsRead,
         );
         // 取服务端总数与本地汇总的较大值：服务端 /comm/unread-total 会漏算
         // 广播等场景（返回 0），若盲信它的 0 会在仍有未读时误清角标。
-        final apiVal = apiTotal ?? 0;
+        // 当前正在查看的会话已 mark-read / 不计入角标，需从 apiTotal 扣掉。
+        final apiRaw = apiTotal ?? 0;
+        final apiVal =
+            apiRaw > viewingUnread ? apiRaw - viewingUnread : 0;
         final serverTotal = apiVal > summedTotal ? apiVal : summedTotal;
         final localBadge = await readPushBadgeCount();
         final unreadRows = rows
-            .where((c) => c.unreadCount > 0)
+            .where((c) => c.unreadCount > 0 && c.id != viewingId)
             .map((c) => 'id=${c.id} kind=${c.kind} unread=${c.unreadCount}')
             .join('; ');
         print(
-          '[Badge] refresh apiTotal=$apiTotal summed=$summedTotal notif=${notif.unreadCount} '
+          '[Badge] refresh apiTotal=$apiTotal viewing=$viewingId viewingUnread=$viewingUnread '
+          'summed=$summedTotal notif=${notif.unreadCount} '
           'next=$serverTotal local=$localBadge pendingZero=$_pendingBadgeZeroSync '
           'unreadRows=[$unreadRows]',
         );

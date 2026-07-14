@@ -120,13 +120,6 @@ class ImUserAvatar extends StatelessWidget {
           color: DunesColors.green,
           borderRadius: BorderRadius.circular(99),
           border: Border.all(color: DunesColors.bgApp, width: border),
-          boxShadow: const [
-            BoxShadow(
-              color: Color(0x22000000),
-              blurRadius: 2,
-              offset: Offset(0, 1),
-            ),
-          ],
         ),
       ),
     );
@@ -162,7 +155,8 @@ class ImUserAvatar extends StatelessWidget {
       height: size,
       alignment: Alignment.center,
       decoration: BoxDecoration(
-        gradient: LinearGradient(colors: style.gradient),
+        // 会话页扁平化：首字头像用纯色，避免渐变纵深感。
+        color: style.gradient.first,
         borderRadius: _effectiveBorderRadius,
       ),
       child: Text(

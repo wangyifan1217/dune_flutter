@@ -17,8 +17,27 @@ import 'nova_history_sync.dart';
 import 'nova_history_utils.dart';
 import 'nova_image_utils.dart';
 import 'nova_inbox_preview.dart';
+import 'nova_model_utils.dart';
 import 'nova_stream_parser.dart';
 import 'nova_web_storage.dart';
+
+class NovaChatAttachmentUpload {
+  const NovaChatAttachmentUpload({
+    required this.attachmentId,
+    required this.fileName,
+    this.chars = 0,
+    this.truncated = false,
+    this.preview = '',
+    this.expiresAt = 0,
+  });
+
+  final String attachmentId;
+  final String fileName;
+  final int chars;
+  final bool truncated;
+  final String preview;
+  final int expiresAt;
+}
 
 class NovaMessageAttachment {
   const NovaMessageAttachment({
@@ -301,24 +320,82 @@ bool isDuplicateNovaHistoryMessage(NativeNovaMessage a, NativeNovaMessage b) {
   if (a.role != b.role) return false;
   final ta = a.createdAt;
   final tb = b.createdAt;
-  if (ta != null && tb != null && ta.difference(tb).inMinutes.abs() > 5)
+  if (ta != null && tb != null && ta.difference(tb).inMinutes.abs() > 5) {
     return false;
+  }
   final at = a.text.trim();
   final bt = b.text.trim();
+  final secondsApart = (ta != null && tb != null)
+      ? ta.difference(tb).inSeconds.abs()
+      : 999;
+
+  // 不同 id：短窗口内同文案=本地/服务端镜像（退出再进会翻倍）；
+  // 间隔更长则视为另一轮提问，保留。
+  if (a.id > 0 && b.id > 0 && a.id != b.id) {
+    if (at.isNotEmpty && bt.isNotEmpty && secondsApart <= 12) {
+      if (at == bt) return true;
+      if (a.role == 'assistant' &&
+          at.length > 40 &&
+          bt.length > 40 &&
+          at.substring(0, 40) == bt.substring(0, 40)) {
+        return true;
+      }
+    }
+    if (a.role == 'user' &&
+        ((a.attachments.isNotEmpty) != (b.attachments.isNotEmpty)) &&
+        secondsApart < 90) {
+      if (at == bt ||
+          at.isEmpty ||
+          bt.isEmpty ||
+          at == '[图片]' ||
+          bt == '[图片]' ||
+          at == '[附件消息]' ||
+          bt == '[附件消息]' ||
+          at == '[文件]' ||
+          bt == '[文件]') {
+        return true;
+      }
+    }
+    return false;
+  }
+
   if (at.isNotEmpty && bt.isNotEmpty) {
-    if (at == bt) return true;
-    if (a.role == 'assistant' && at.length > 40 && bt.length > 40) {
-      if (at.substring(0, 40) == bt.substring(0, 40)) return true;
+    // 无稳定 id 时也只用短窗口，避免把稍后的另一次提问合并掉。
+    if (at == bt && secondsApart <= 12) return true;
+    if (a.role == 'assistant' &&
+        secondsApart <= 12 &&
+        at.length > 40 &&
+        bt.length > 40 &&
+        at.substring(0, 40) == bt.substring(0, 40)) {
+      return true;
     }
   }
   if (a.role == 'user' &&
-      ta != null &&
-      tb != null &&
-      ta.difference(tb).inSeconds.abs() < 90 &&
+      secondsApart < 90 &&
       ((a.attachments.isNotEmpty) != (b.attachments.isNotEmpty))) {
     return true;
   }
   return false;
+}
+
+/// 去掉同一条消息里重复渲染的附件（解析时 raw + payload 双读、历史重建等会导致翻倍）。
+List<NovaMessageAttachment> dedupeNovaMessageAttachments(
+  List<NovaMessageAttachment> items,
+) {
+  if (items.length <= 1) return items;
+  final out = <NovaMessageAttachment>[];
+  final seen = <String>{};
+  for (final a in items) {
+    final key = [
+      a.kind.toUpperCase(),
+      a.objectKey.trim().isNotEmpty ? a.objectKey.trim() : a.url.trim(),
+      a.fileName.trim().toLowerCase(),
+      a.mimeType.trim().toLowerCase(),
+    ].join('\u0001');
+    if (!seen.add(key)) continue;
+    out.add(a);
+  }
+  return out;
 }
 
 List<NativeNovaMessage> dedupeNovaHistoryMessages(
@@ -487,6 +564,7 @@ class NativeNovaService {
   final http.Client _client;
   String? _cachedApiKey;
   String? _selectedModelOverride;
+  List<String> _availableChatModels = const <String>[];
   http.Client? _streamClient;
   bool userStoppedStream = false;
   NovaConversationSnapshot? _lastSessionSnapshot;
@@ -549,6 +627,38 @@ class NativeNovaService {
     if (uid > 0) {
       unawaited(NovaWebStorage.merge(uid, {'dunes_nova_chat_model': trimmed}));
     }
+  }
+
+  /// 同步岗位可用对话模型，供多模态静默挑视觉模型。
+  void setAvailableChatModels(List<String> models) {
+    _availableChatModels = resolveNovaChatModels(models);
+  }
+
+  List<String> get availableChatModels {
+    if (_availableChatModels.isNotEmpty) return _availableChatModels;
+    final raw = session.novaLocalStorage?['dunes_allowed_models'];
+    if (raw == null || raw.trim().isEmpty) return const <String>[];
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is List) {
+        return resolveNovaChatModels(
+          decoded.map((e) => e.toString()).toList(),
+        );
+      }
+    } catch (_) {}
+    return const <String>[];
+  }
+
+  /// 有图片时若当前模型不支持视觉，返回原模型（由 UI 提示切换，不再静默改派）。
+  String resolveModelForContent(dynamic userContent, {String? preferred}) {
+    final selected = (preferred ?? selectedModel).trim().isEmpty
+        ? NovaConfig.defaultChatModel
+        : (preferred ?? selectedModel).trim();
+    return selected;
+  }
+
+  String resolveModelForVision({required bool needsVision, String? preferred}) {
+    return resolveModelForContent(null, preferred: preferred);
   }
 
   /// 进入 C4 时重试失败的历史同步队列。
@@ -720,7 +830,20 @@ class NativeNovaService {
       return '附件内容过大，请缩短会议纪要或稍后重试';
     }
     if (low.contains('unsupported') && low.contains('file')) {
-      return '当前模型不支持该文件类型，请切换模型后重试';
+      return '当前内容暂无法处理，请稍后重试或换一张图片';
+    }
+    if ((low.contains('vision') || low.contains('image')) &&
+        (low.contains('not support') ||
+            low.contains('unsupported') ||
+            msg.contains('不支持'))) {
+      return '图片识别暂时不可用，请稍后重试';
+    }
+    if (low.contains('attachment') &&
+        (low.contains('expir') ||
+            low.contains('not found') ||
+            low.contains('invalid') ||
+            msg.contains('过期'))) {
+      return '附件已过期，请重新上传';
     }
     return friendlyErrorText(msg, fallback: 'NOVA 请求失败，请稍后重试');
   }
@@ -1233,16 +1356,10 @@ class NativeNovaService {
 
     final localMsgs = await _loadPersistedSessionMessages(effectiveConvId);
     var msgs = server.messages;
-    final shouldUseLocalFallback =
-        generating ||
-        server.assistantGenerating ||
-        isStreamInFlight ||
-        shouldPersistNovaGenerating(
-          localGen: localGen,
-          draft: streamDraft,
-          streamInFlight: isStreamInFlight,
-        );
-    if (msgs.isEmpty && shouldUseLocalFallback) {
+
+    // 多模态提问不走 im assistant/messages，服务端会话常为空；必须优先恢复本地会话，
+    // 否则退出再进会变成空白「新会话」。
+    if (msgs.isEmpty && localMsgs.isNotEmpty) {
       msgs = localMsgs;
     }
 
@@ -1256,32 +1373,37 @@ class NativeNovaService {
       draft: streamDraft,
       streamInFlight: isStreamInFlight,
     );
-    if (localMsgs.isNotEmpty &&
-        (shouldUseLocalFallback || preserveGeneratingSnapshot)) {
+    if (localMsgs.isNotEmpty) {
       msgs = _mergeTurnsWithSessionCache(msgs, localMsgs);
     }
 
-    // 审计 history/turns 是跨设备恢复的辅助数据，不能在普通 C4 打开时
-    // 反向重建会话；历史服务一旦返回错误的 conversationId 集合，就会把所有
-    // 旧会话拼到当前窗口。仅在明确定位历史消息时才允许使用该兜底。
-    if ((restoreFromHistory ||
-            (aroundMessageId != null && aroundMessageId > 0)) &&
-        _shouldRebuildFromTurns(msgs)) {
+    // history/turns 按 conversationId 过滤后，可作为空会话/多模态会话的恢复兜底。
+    final allowTurnsRebuild = restoreFromHistory ||
+        (aroundMessageId != null && aroundMessageId > 0) ||
+        msgs.isEmpty ||
+        _shouldRebuildFromTurns(msgs);
+    if (allowTurnsRebuild) {
       final turns = await _fetchTurnRows(200, conversationId: conversationId);
-      if (turns.isNotEmpty) {
+      final scoped = _filterTurnsForConversation(turns, conversationId);
+      if (scoped.isNotEmpty) {
         final turnMsgs = _novaMsgsFromTurns(
-          _dedupeNovaTurns(turns),
+          _dedupeNovaTurns(scoped),
           conversationId,
         );
         if (turnMsgs.isNotEmpty) {
           if (kDebugMode) {
             debugPrint(
               '[NativeNova] rebuilt history from turns conv=$conversationId '
-              'turns=${turns.length} msgs=${turnMsgs.length}',
+              'turns=${scoped.length}/${turns.length} msgs=${turnMsgs.length}',
             );
           }
           msgs = _mergeTurnsWithSessionCache(turnMsgs, localMsgs);
         }
+      } else if (turns.isNotEmpty && kDebugMode) {
+        debugPrint(
+          '[NativeNova] skip turns rebuild: none match conv=$conversationId '
+          '(got ${turns.length})',
+        );
       }
     }
 
@@ -1407,8 +1529,7 @@ class NativeNovaService {
     }
     for (final m in local) {
       if (m.id <= 0 || map.containsKey(m.id)) continue;
-      // 避免把仅存在本地缓存、服务端未正式落库的 assistant 假消息重新拼回详情页。
-      if (m.role == 'assistant' && !m.streaming) continue;
+      // 多模态走 chat/completions 时用户/助手可能仅落本地；必须保留，否则退出再进会丢会话。
       map[m.id] = m;
     }
     var out = map.values.toList()
@@ -1500,7 +1621,7 @@ class NativeNovaService {
       for (final item in items) {
         if (item is! Map) continue;
         final map = Map<String, dynamic>.from(item);
-        final attachments = <NovaMessageAttachment>[];
+        var attachments = <NovaMessageAttachment>[];
         final payloadRaw = map['payload'];
         final metadataRaw = map['metadata'];
         Map<String, dynamic>? payload;
@@ -1522,6 +1643,7 @@ class NativeNovaService {
         if (attachments.isEmpty && payload != null) {
           attachments.addAll(_attachmentsFromPayload(payload, kind));
         }
+        attachments = dedupeNovaMessageAttachments(attachments);
         final role = (map['role'] ?? 'user').toString().toLowerCase();
         final text = (map['bodyText'] ?? map['content'] ?? '').toString();
         final streaming = map['streaming'] == true;
@@ -1710,7 +1832,7 @@ class NativeNovaService {
         userPayload = Map<String, dynamic>.from(payloadRaw);
       }
       var attachments = _parseAttachmentsFromRaw(
-        userPayload ?? const <String, dynamic>{},
+        const <String, dynamic>{},
         userPayload,
         'TEXT',
       );
@@ -1804,7 +1926,11 @@ class NativeNovaService {
       );
       if (resp.statusCode >= 200 && resp.statusCode < 300) {
         final rows = _extractTurns(_decode(resp.body));
-        if (rows.isNotEmpty) return rows;
+        if (rows.isNotEmpty) {
+          return conversationId != null && conversationId > 0
+              ? _filterTurnsForConversation(rows, conversationId)
+              : rows;
+        }
       }
     } catch (_) {}
     try {
@@ -1813,10 +1939,37 @@ class NativeNovaService {
         headers: _dunesHeaders,
       );
       if (resp.statusCode >= 200 && resp.statusCode < 300) {
-        return _extractTurns(_decode(resp.body));
+        final rows = _extractTurns(_decode(resp.body));
+        return conversationId != null && conversationId > 0
+            ? _filterTurnsForConversation(rows, conversationId)
+            : rows;
       }
     } catch (_) {}
     return const <Map<String, dynamic>>[];
+  }
+
+  /// 防止 history/turns 未按 conversationId 过滤时把其它会话拼进当前窗口。
+  List<Map<String, dynamic>> _filterTurnsForConversation(
+    List<Map<String, dynamic>> turns,
+    int conversationId,
+  ) {
+    if (conversationId <= 0 || turns.isEmpty) return turns;
+    final matched = <Map<String, dynamic>>[];
+    var tagged = 0;
+    for (final t in turns) {
+      final cid =
+          (t['conversationId'] as num?)?.toInt() ??
+          (t['imConversationId'] as num?)?.toInt() ??
+          (t['conversation_id'] as num?)?.toInt() ??
+          0;
+      if (cid > 0) {
+        tagged += 1;
+        if (cid == conversationId) matched.add(t);
+      }
+    }
+    // 全部无 conversationId 字段时保持原样（兼容旧数据）。
+    if (tagged == 0) return turns;
+    return matched;
   }
 
   Future<void> persistSession(
@@ -1978,7 +2131,9 @@ class NativeNovaService {
         createdAt: createdAt,
         kind: 'TEXT',
         payload: metadata,
-        attachments: const <NovaMessageAttachment>[],
+        attachments: hasAttachments
+            ? _parseAttachmentsFromRaw(const <String, dynamic>{}, metadata, 'TEXT')
+            : const <NovaMessageAttachment>[],
       ),
     );
     return conversationId;
@@ -2388,8 +2543,16 @@ class NativeNovaService {
     String kind,
   ) {
     final out = <NovaMessageAttachment>[];
-    for (final source in [raw['attachments'], payload?['attachments']]) {
-      if (source is! List) continue;
+    // 只读一处附件列表，避免 raw/payload 同含 attachments 时翻倍。
+    List? source;
+    final top = raw['attachments'];
+    if (top is List && top.isNotEmpty) {
+      source = top;
+    } else if (!identical(raw, payload)) {
+      final nested = payload?['attachments'];
+      if (nested is List && nested.isNotEmpty) source = nested;
+    }
+    if (source is List) {
       for (final row in source) {
         if (row is Map) {
           out.add(
@@ -2401,7 +2564,7 @@ class NativeNovaService {
     if (out.isEmpty) {
       out.addAll(_attachmentsFromPayload(payload, kind));
     }
-    return out;
+    return dedupeNovaMessageAttachments(out);
   }
 
   bool _attachmentIsImage(NovaMessageAttachment a) {
@@ -2617,6 +2780,82 @@ class NativeNovaService {
     );
   }
 
+  /// 当轮文件提问：上传到 Nova 抽文本缓存，返回 `attachment_id`（不进知识库）。
+  Future<NovaChatAttachmentUpload> uploadNovaChatAttachment({
+    required Uint8List bytes,
+    required String fileName,
+    void Function(double progress)? onProgress,
+  }) async {
+    final reject = novaChatAttachmentRejectReason(
+      fileName: fileName,
+      byteLength: bytes.length,
+    );
+    if (reject != null) throw Exception(reject);
+    if (novaApiKey.isEmpty) {
+      throw Exception('NOVA账号尚未就绪，请重新登录后再试');
+    }
+    onProgress?.call(5);
+    final req = http.MultipartRequest(
+      'POST',
+      Uri.parse('$novaBase/v1/app/chat/attachments'),
+    );
+    req.headers.addAll(novaHeaders());
+    req.files.add(
+      http.MultipartFile.fromBytes('file', bytes, filename: fileName),
+    );
+    onProgress?.call(35);
+    final streamed = await _client.send(req);
+    final bodyText = await streamed.stream.bytesToString();
+    onProgress?.call(85);
+    if (streamed.statusCode < 200 || streamed.statusCode >= 300) {
+      throw Exception(_parseNovaHttpError(streamed.statusCode, bodyText));
+    }
+    final body = _decode(bodyText);
+    if (body['success'] == false) {
+      throw Exception(
+        _friendlyChatAttachmentMessage(
+          (body['message'] ?? '文件上传失败').toString(),
+        ),
+      );
+    }
+    final data = body['data'];
+    if (data is! Map) {
+      throw Exception('文件上传失败: 返回数据异常');
+    }
+    final map = Map<String, dynamic>.from(data);
+    final id = (map['attachment_id'] ?? map['attachmentId'] ?? '').toString().trim();
+    if (id.isEmpty) throw Exception('文件上传失败: 未返回 attachment_id');
+    onProgress?.call(100);
+    return NovaChatAttachmentUpload(
+      attachmentId: id,
+      fileName: (map['filename'] ?? fileName).toString(),
+      chars: (map['chars'] as num?)?.toInt() ?? 0,
+      truncated: map['truncated'] == true,
+      preview: (map['preview'] ?? '').toString(),
+      expiresAt: (map['expires_at'] as num?)?.toInt() ?? 0,
+    );
+  }
+
+  String _friendlyChatAttachmentMessage(String raw) {
+    final msg = raw.trim();
+    final low = msg.toLowerCase();
+    if (low.contains('file is required')) return '未选到文件，请重新选择';
+    if (low.contains('too large') || low.contains('15mb')) {
+      return '文件超过 15MB，请压缩后再试';
+    }
+    if (low.contains('unsupported format')) {
+      return '暂不支持该格式，请转成 docx/xlsx/pdf/txt';
+    }
+    if (low.contains('no extractable text')) {
+      return '未能从文件中提取文字，请换一份有文字的文件';
+    }
+    if (low.contains('no text layer')) {
+      return '该 PDF 为扫描件，暂不支持 OCR，请换有文字层的 PDF';
+    }
+    if (low.contains('unauthorized')) return 'NOVA 登录已失效，请重新登录';
+    return msg.isNotEmpty ? msg : '文件上传失败';
+  }
+
   MediaType _audioMediaType(String fileName) {
     final lower = fileName.toLowerCase();
     if (lower.endsWith('.mp3')) return MediaType('audio', 'mpeg');
@@ -2705,44 +2944,44 @@ class NativeNovaService {
     final imagePartType = imagePartTypeForModel(model ?? selectedModel);
     final parts = <Map<String, dynamic>>[];
     final trimmed = text.trim();
-    if (trimmed.isNotEmpty)
+    if (trimmed.isNotEmpty) {
       parts.add(<String, dynamic>{'type': 'text', 'text': trimmed});
-    for (final a in attachments) {
-      if (a.isImage) {
-        final normalized = await normalizeImageForVision(
-          a.bytes,
-          fileName: a.fileName,
-        );
-        final b64 = base64Encode(normalized.bytes);
-        final dataUrl = 'data:${normalized.mimeType};base64,$b64';
-        // 优先用已上传的公网/签名 URL（对齐 WebView resolveMultimodalFile），否则 data URL。
-        final uploadedUrl = _resolveVisionImageUrl(a);
-        final visionUrl = uploadedUrl ?? dataUrl;
-        parts.add(_visionImagePart(imagePartType, visionUrl));
-      } else {
-        final bytes = await _resolveMultimodalFileBytes(a);
-        if (bytes.isEmpty) continue;
-        final b64 = base64Encode(bytes);
-        parts.add(<String, dynamic>{
-          'type': 'file',
-          'file': <String, dynamic>{'filename': a.fileName, 'file_data': b64},
-        });
-      }
     }
+    for (final a in attachments) {
+      if (!a.isImage) continue;
+      // 对齐 admin-web / 旧 WebView：视觉部分始终走 data URL。
+      var imageBytes = a.bytes;
+      if (imageBytes.isEmpty) {
+        imageBytes = await _resolveMultimodalFileBytes(a);
+      }
+      if (imageBytes.isEmpty) continue;
+      final normalized = await normalizeImageForVision(
+        imageBytes,
+        fileName: a.fileName,
+      );
+      if (normalized.bytes.isEmpty) continue;
+      final b64 = base64Encode(normalized.bytes);
+      final dataUrl = 'data:${normalized.mimeType};base64,$b64';
+      parts.add(_visionImagePart(imagePartType, dataUrl));
+    }
+    // 文档类走 attachment_ids，不再往 content 塞 type=file（Hermes 不接受）。
     if (parts.isEmpty) return '';
-    if (parts.length == 1 && parts.first['type'] == 'text')
+    if (parts.length == 1 && parts.first['type'] == 'text') {
       return parts.first['text'];
+    }
     return parts;
   }
 
-  String? _resolveVisionImageUrl(NovaDraftAttachment draft) {
-    final payload = draft.payload;
-    if (payload == null) return null;
-    for (final key in ['url', 'accessUrl', 'publicUrl', 'previewUrl']) {
-      final raw = (payload[key] ?? '').toString().trim();
-      if (raw.startsWith('http://') || raw.startsWith('https://')) return raw;
+  List<String> collectNovaAttachmentIds(List<NovaDraftAttachment> attachments) {
+    final out = <String>[];
+    final seen = <String>{};
+    for (final a in attachments) {
+      if (a.isImage) continue;
+      final id = (a.novaAttachmentId ?? '').trim();
+      if (id.isEmpty || !seen.add(id)) continue;
+      out.add(id);
     }
-    return null;
+    return out;
   }
 
   /// 云枢 API 上下文：仅 system（当前用户）+ 本条 user；历史靠 X-Nova-Chat-Session-Id 服务端记忆。
@@ -2802,6 +3041,7 @@ class NativeNovaService {
     required dynamic userContent,
     String? displayText,
     Map<String, dynamic>? userMetadata,
+    List<String> attachmentIds = const <String>[],
     int? userMessageId,
     bool skipUserPersist = false,
     bool stream = true,
@@ -2826,9 +3066,12 @@ class NativeNovaService {
     _streamClient = http.Client();
     final streamClient = _streamClient!;
 
-    final model = selectedModel.isEmpty
-        ? NovaConfig.defaultChatModel
-        : selectedModel;
+    final model = resolveModelForContent(
+      userContent,
+      preferred: selectedModel.isEmpty
+          ? NovaConfig.defaultChatModel
+          : selectedModel,
+    );
 
     var replyBuffer = '';
     var thinkBuffer = '';
@@ -2882,6 +3125,28 @@ class NativeNovaService {
     }
 
     try {
+      // 图片 parts 或当轮 attachment_ids：走云枢 chat/completions。
+      final novaAttachmentIds = attachmentIds
+          .map((e) => e.trim())
+          .where((e) => e.isNotEmpty)
+          .toList(growable: false);
+      if (userContent is List || novaAttachmentIds.isNotEmpty) {
+        return await _streamMultimodalViaNovaCompletions(
+          conversationId: activeConvId,
+          userContent: userContent is String && userContent.trim().isEmpty
+              ? contentLabel.toString()
+              : userContent,
+          displayText: contentLabel.toString(),
+          userMetadata: userMetadata,
+          attachmentIds: novaAttachmentIds,
+          userMessageId: userMessageId,
+          model: model,
+          onUpdate: onUpdate,
+          onConversationId: onConversationId,
+          streamClient: streamClient,
+        );
+      }
+
       // 通过 im-svc 执行生成并持久化完整问答。服务端使用不随客户端断开的
       // context 继续处理，因此离开 C4 或 SSE 断开后仍可从会话历史恢复。
       final req = http.Request('POST', _dunesUri('/ai/assistant/messages'));
@@ -3030,6 +3295,210 @@ class NativeNovaService {
     } finally {
       if (_streamClient == streamClient) _streamClient = null;
     }
+  }
+
+  /// 多模态附件：直接走云枢 `/v1/chat/completions`（与 admin-web 一致），
+  /// 避免 im-svc 纯文本通道丢掉 image_url / file parts。
+  Future<String> _streamMultimodalViaNovaCompletions({
+    required int conversationId,
+    required dynamic userContent,
+    required String displayText,
+    required Map<String, dynamic>? userMetadata,
+    List<String> attachmentIds = const <String>[],
+    required int? userMessageId,
+    required String model,
+    required void Function(NovaStreamUpdate update) onUpdate,
+    required void Function(int conversationId)? onConversationId,
+    required http.Client streamClient,
+  }) async {
+    if (novaApiKey.isEmpty) {
+      throw Exception('NOVA账号尚未就绪，请重新登录后再试');
+    }
+    var activeConvId = conversationId;
+    final userPrompt = _extractUserPromptText(
+      userContent,
+      displayText: displayText,
+    );
+
+    // 先落本地用户气泡（含附件元数据），保证会话内能立刻看到图片/文件。
+    if (userMessageId != null && userMessageId > 0) {
+      final attachments = <NovaMessageAttachment>[];
+      final rawAtt = userMetadata?['attachments'];
+      if (rawAtt is List) {
+        for (final row in rawAtt) {
+          if (row is Map) {
+            attachments.add(
+              NovaMessageAttachment.fromJson(Map<String, dynamic>.from(row)),
+            );
+          }
+        }
+      }
+      await _upsertLocalSessionMessage(
+        activeConvId,
+        NativeNovaMessage(
+          id: userMessageId,
+          role: 'user',
+          text: displayText,
+          createdAt: DateTime.fromMillisecondsSinceEpoch(userMessageId),
+          kind: 'TEXT',
+          attachments: attachments,
+          payload: userMetadata,
+        ),
+      );
+    }
+
+    var replyBuffer = '';
+    var thinkBuffer = '';
+    var hadOutput = false;
+    String? streamError;
+
+    void applySseEvent(NovaOpenAiSseEvent event) {
+      if (event.error != null && event.error!.isNotEmpty) {
+        streamError = event.error;
+        return;
+      }
+      if (event.conversationId > 0 && event.conversationId != activeConvId) {
+        final previous = activeConvId;
+        activeConvId = event.conversationId;
+        unawaited(remapConversationId(previous, activeConvId));
+        onConversationId?.call(activeConvId);
+      }
+      if (event.think.isNotEmpty) {
+        hadOutput = true;
+        thinkBuffer += event.think;
+        onUpdate(
+          NovaStreamUpdate(
+            replyText: replyBuffer,
+            thinkText: thinkBuffer.trim(),
+            thinkStatus: event.status.isNotEmpty ? event.status : '思考中…',
+          ),
+        );
+      }
+      if (event.text.isNotEmpty) {
+        hadOutput = true;
+        if (isHermesThinkLine(event.text)) {
+          thinkBuffer += event.text;
+          onUpdate(
+            NovaStreamUpdate(
+              replyText: replyBuffer,
+              thinkText: thinkBuffer.trim(),
+              thinkStatus: event.status.isNotEmpty ? event.status : '思考中…',
+            ),
+          );
+        } else {
+          replyBuffer += event.text;
+          onUpdate(
+            NovaStreamUpdate(
+              replyText: replyBuffer,
+              thinkText: thinkBuffer.trim(),
+              thinkStatus: event.status,
+            ),
+          );
+        }
+      }
+    }
+
+    final requestMessages = buildNovaChatMessages(userContent);
+    final headers = novaHeaders(<String, String>{
+      'Content-Type': 'application/json',
+      'Accept': 'text/event-stream',
+    });
+    final sessionId = novaProfileSessionId.trim();
+    if (sessionId.isNotEmpty) headers['X-Nova-Chat-Session-Id'] = sessionId;
+    final requestBody = <String, dynamic>{
+      'model': model,
+      'stream': true,
+      'messages': requestMessages,
+      if (attachmentIds.isNotEmpty) 'attachment_ids': attachmentIds,
+    };
+    final bizUser = novaBizUserId.trim();
+    if (bizUser.isNotEmpty) requestBody['user'] = bizUser;
+
+    if (kDebugMode) {
+      debugPrint(
+        '[NativeNova] POST chat/completions (multimodal) conv=$activeConvId '
+        'model=$model parts=${userContent is List ? userContent.length : 0} '
+        'attachmentIds=${attachmentIds.length}',
+      );
+    }
+
+    onUpdate(const NovaStreamUpdate(replyText: '', thinkStatus: '正在分析…'));
+    final req = http.Request(
+      'POST',
+      Uri.parse('$novaBase/v1/chat/completions'),
+    );
+    req.headers.addAll(headers);
+    req.body = jsonEncode(requestBody);
+
+    final streamed = await streamClient.send(req);
+    if (streamed.statusCode < 200 || streamed.statusCode >= 300) {
+      final errBody = await streamed.stream.bytesToString();
+      throw Exception(_parseNovaHttpError(streamed.statusCode, errBody));
+    }
+
+    final sseAcc = NovaOpenAiSseAccumulator();
+    try {
+      await for (final chunk in streamed.stream.transform(utf8.decoder)) {
+        if (userStoppedStream) break;
+        sseAcc.feed(chunk, applySseEvent);
+        if (streamError != null) break;
+      }
+      if (!userStoppedStream) sseAcc.flush(applySseEvent);
+    } on http.ClientException {
+      if (!userStoppedStream) {
+        await stripStreamingFromSession(activeConvId);
+        rethrow;
+      }
+    }
+
+    if (streamError != null && streamError!.isNotEmpty) {
+      throw Exception(streamError);
+    }
+
+    if (userStoppedStream) {
+      final partial = novaFinalReplyText(
+        replyBuffer,
+        thinkBuffer,
+        finalPass: true,
+      );
+      if (partial.isNotEmpty &&
+          partial != '已停止生成' &&
+          partial.trim() != userPrompt.trim()) {
+        await commitAssistantReplyToSession(
+          activeConvId,
+          replyText: partial,
+          thinkText: thinkBuffer.trim(),
+        );
+      }
+      await _clearGeneratingMarkersForConversation(activeConvId);
+      return partial;
+    }
+
+    final finalParts = splitNovaStreamText(replyBuffer, finalPass: true);
+    var reply = novaFinalReplyText(
+      finalParts.reply,
+      thinkBuffer,
+      finalPass: true,
+    );
+    if (reply.isEmpty && thinkBuffer.trim().isNotEmpty) {
+      reply = thinkBuffer.trim();
+    }
+    if (reply.isEmpty && replyBuffer.trim().isNotEmpty) {
+      reply = stripHermesProgressLines(replyBuffer.trim());
+    }
+    if (reply.isEmpty && finalParts.thinking.trim().isNotEmpty) {
+      reply = finalParts.thinking.trim();
+    }
+    if (!hadOutput || reply.isEmpty) {
+      throw Exception('NOVA未返回正文，请重试');
+    }
+    await commitAssistantReplyToSession(
+      activeConvId,
+      replyText: reply,
+      thinkText: thinkBuffer.trim(),
+    );
+    await _clearGeneratingMarkersForConversation(activeConvId);
+    return reply;
   }
 
   Map<String, dynamic>? _parseSseBlock(String block) {

@@ -91,6 +91,7 @@ class NovaHistorySync {
     String? lastMessagePreview,
     String? lastMessageAt,
     String? model,
+    Map<String, dynamic>? userPayload,
   }) {
     final assistant = stripHermesProgressLines(assistantMessage.trim());
     final user = userMessage.trim();
@@ -123,6 +124,10 @@ class NovaHistorySync {
       'assistantMessage': assistant.length > 32000
           ? assistant.substring(0, 32000)
           : assistant,
+      if (userPayload != null && userPayload.isNotEmpty)
+        'userPayload': userPayload,
+      if (userPayload != null && userPayload.isNotEmpty)
+        'metadata': userPayload,
     };
   }
 
@@ -245,6 +250,7 @@ class NovaHistorySync {
       lastMessagePreview: lastMessagePreview ?? reply,
       lastMessageAt: lastMessageAt,
       model: model,
+      userPayload: userPayload,
     );
     final sig = _payloadSig(payload);
     if (sig == _lastServerSyncSig) return;

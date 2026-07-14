@@ -919,7 +919,7 @@ class _NovaEye extends StatelessWidget {
         width: 8,
         height: 8,
         decoration: BoxDecoration(
-          color: const Color(0xFF07C160),
+          color: const Color(0xFF7E64BD),
           shape: BoxShape.circle,
         ),
       ),

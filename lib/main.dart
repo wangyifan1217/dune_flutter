@@ -7,6 +7,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 
 import 'core/layout/mobile_viewport_shell.dart';
 import 'core/platform/desktop_features.dart';
+import 'core/theme/app_text_scale.dart';
 import 'core/theme/dunes_theme.dart';
 import 'features/desktop/windows_desktop_tray.dart';
 import 'features/push/push_service.dart';
@@ -34,9 +35,21 @@ class DunesApp extends StatelessWidget {
         Locale('zh', 'CN'),
         Locale('en', 'US'),
       ],
-      builder: (context, child) => MobileViewportShell(
-        child: child ?? const SizedBox.shrink(),
-      ),
+      builder: (context, child) {
+        return ListenableBuilder(
+          listenable: AppTextScaleController.instance,
+          builder: (context, _) {
+            final scale = AppTextScaleController.instance.scale;
+            final media = MediaQuery.of(context);
+            return MediaQuery(
+              data: media.copyWith(textScaler: TextScaler.linear(scale)),
+              child: MobileViewportShell(
+                child: child ?? const SizedBox.shrink(),
+              ),
+            );
+          },
+        );
+      },
       home: const AppBootGate(),
     );
   }
@@ -45,6 +58,7 @@ class DunesApp extends StatelessWidget {
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   installWebTextInputGuard();
+  await AppTextScaleController.instance.load();
   if (isDesktopCommOnly) {
     await initWindowsDesktopTray();
   }

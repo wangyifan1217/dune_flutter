@@ -3804,7 +3804,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       final detail = Map<String, dynamic>.from(
         data['detail'] as Map? ?? const {},
       );
-      if (!mounted || detail.isEmpty) return;
+      if (!mounted) return;
+      if (detail.isEmpty) {
+        setState(() => _loadingDetails.remove(detailKey));
+        return;
+      }
       setState(() {
         final base = _bundle ?? LighthouseDataBundle.empty();
         _bundle = base.withDetail(type, key, detail);
@@ -14191,9 +14195,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       }
     }
 
-    final rootDisplayName = type == 'channel' ? key.split('::').first : key;
-    final rootGroupLabel = type == 'channel' && key.contains('::')
-        ? key.split('::').last
+    final rootDisplayName = key.contains('::') ? key.split('::').first : key;
+    final rootGroupLabel = key.contains('::')
+        ? key.substring(key.indexOf('::') + 2)
         : '';
 
     final isCodeDrill = _codeDrillKey != null;
@@ -14208,24 +14212,29 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       );
     }
 
-    // Find entity row in main DATA
+    // Find entity row in main DATA (list keys are name + group → detail key is name::group)
     Map<String, dynamic> entity = {};
     if (_bundle != null) {
       final rows = _bundle!.rowsOf(type);
-      if (type == 'channel') {
-        final parts = key.split('::');
-        final n = parts.isNotEmpty ? parts[0] : '';
-        final g = parts.length > 1 ? parts[1] : '';
-        entity = rows.firstWhere(
-          (r) => r['name'] == n && r['group'] == g,
-          orElse: () => {},
-        );
-      } else {
-        entity = rows.firstWhere((r) => r['name'] == key, orElse: () => {});
-      }
+      final parts = key.split('::');
+      final n = parts.isNotEmpty ? parts[0] : '';
+      final g = parts.length > 1 ? parts.sublist(1).join('::') : '';
+      entity = rows.firstWhere(
+        (r) {
+          if ((r['name']?.toString() ?? '') != n) return false;
+          if (g.isEmpty) return true;
+          return (r['group']?.toString() ?? '') == g;
+        },
+        orElse: () => {},
+      );
     }
 
-    final summaryEntity = isDrill ? viewDict : entity;
+    final summaryEntity = isDrill
+        ? viewDict
+        : (entity.isNotEmpty
+              ? entity
+              // 列表行偶发对不上时，用详情接口自带的汇总字段兜底，避免点进去全是 0。
+              : Map<String, dynamic>.from(detailDict));
     final displayName = isDrill ? _drillDisplayName : rootDisplayName;
     final groupLabel = isDrill ? _drillGroup : rootGroupLabel;
 

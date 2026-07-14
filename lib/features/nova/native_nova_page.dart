@@ -30,11 +30,13 @@ import '../shell/dunes_toast.dart';
 import 'native_nova_service.dart';
 import 'nova_background_coordinator.dart';
 import 'nova_draft.dart';
+import 'nova_file_utils.dart';
 import 'nova_generating_storage.dart';
 import 'nova_history_utils.dart';
 import 'nova_image_utils.dart';
 import 'nova_media.dart';
 import 'nova_meeting_prd.dart';
+import 'nova_model_utils.dart';
 import 'nova_models_service.dart';
 import 'nova_web_storage.dart';
 import 'nova_stream_parser.dart';
@@ -463,6 +465,7 @@ class _NativeNovaPageState extends State<NativeNovaPage>
           ? stored
           : payload.defaultModel;
       _service.setSelectedChatModel(selected);
+      _service.setAvailableChatModels(payload.chatModels);
       setState(() {
         _chatModels = payload.chatModels;
         _selectedModel = selected;
@@ -1236,10 +1239,13 @@ class _NativeNovaPageState extends State<NativeNovaPage>
     List<NativeNovaMessage> rows, {
     NativeNovaMessage? preferred,
   }) async {
-    if (preferred != null && preferred.text.trim().isNotEmpty) return preferred;
+    bool usable(NativeNovaMessage m) =>
+        m.role == 'user' &&
+        (m.text.trim().isNotEmpty || m.attachments.isNotEmpty);
+    if (preferred != null && usable(preferred)) return preferred;
     for (var i = rows.length - 1; i >= 0; i--) {
       final m = rows[i];
-      if (m.role != 'assistant' && m.text.trim().isNotEmpty) return m;
+      if (usable(m)) return m;
     }
     if (_conversationId > 0) {
       final storage = await NovaWebStorage.load(widget.session.userId);
@@ -1358,6 +1364,8 @@ class _NativeNovaPageState extends State<NativeNovaPage>
 
   Future<void> _pollGenerating() async {
     if (_conversationId <= 0 || !_serverGenerating) return;
+    // 流式生成中（尤其多模态直连 Nova）不要用服务端快照覆盖 UI，否则重发/附件气泡会被冲掉。
+    if (_service.isStreamInFlight) return;
     try {
       final history = await _service.fetchFullHistory(_conversationId);
       if (!mounted) return;
@@ -1640,13 +1648,29 @@ class _NativeNovaPageState extends State<NativeNovaPage>
     final bytes = await file.readAsBytes();
     final fileName = file.name;
     final mimeType = lookupMimeType(fileName) ?? 'application/octet-stream';
+    final isImage = mimeType.startsWith('image/') ||
+        RegExp(r'\.(jpe?g|png|gif|webp|bmp|heic|heif)$', caseSensitive: false)
+            .hasMatch(fileName);
+    if (!isImage) {
+      final reject = novaChatAttachmentRejectReason(
+        fileName: fileName,
+        byteLength: bytes.length,
+      );
+      if (reject != null) {
+        _toast(reject);
+        return;
+      }
+    } else if (bytes.length > kNovaChatAttachmentMaxBytes) {
+      _toast('文件超过 15MB，请压缩后再试');
+      return;
+    }
     _addDraft(
       NovaDraftAttachment(
         id: 'draft-${++_draftSeq}',
         bytes: bytes,
         fileName: fileName,
         mimeType: mimeType,
-        isImage: mimeType.startsWith('image/'),
+        isImage: isImage,
       ),
     );
   }
@@ -1661,9 +1685,140 @@ class _NativeNovaPageState extends State<NativeNovaPage>
     if (!_novaReady) return;
 
     final drafts = [..._drafts];
+    if (!_ensureVisionModelForDrafts(drafts)) return;
+
     _inputController.clear();
     setState(() => _drafts = const <NovaDraftAttachment>[]);
     await _sendMessage(text: text, drafts: drafts);
+  }
+
+  /// 有图片时要求用户手动切换到视觉模型，不再静默改派。
+  bool _ensureVisionModelForDrafts(List<NovaDraftAttachment> drafts) {
+    final hasImages = drafts.any((d) => d.isImage);
+    if (!hasImages) return true;
+    if (novaModelSupportsVision(_selectedModel)) return true;
+    _toast('当前模型不支持图片识别，请先切换到 GPT5.5 等视觉模型');
+    _pickModel();
+    return false;
+  }
+
+  Future<void> _resendUserMessage(NativeNovaMessage message) async {
+    if (_sending || !_novaReady || message.role != 'user') return;
+    final drafts = await _draftsFromMessage(message);
+    if (!_ensureVisionModelForDrafts(drafts)) return;
+    final text = message.text.trim();
+    final prompt = text.isNotEmpty
+        ? text
+        : (drafts.isNotEmpty ? novaDraftPrompt('', drafts) : '');
+    if (prompt.isEmpty && drafts.isEmpty) {
+      _toast('无法重新发送：缺少消息内容');
+      return;
+    }
+
+    // 原地重新生成：复用原用户气泡与 messageId，避免再插一条相同提问导致
+    // 退出再进翻倍、工作台按文案合并后只剩回复看不到提问。
+    var assistantMsgId = 0;
+    final userIdx = _messages.indexWhere((m) => m.id == message.id);
+    if (userIdx >= 0) {
+      for (var i = userIdx + 1; i < _messages.length; i++) {
+        final m = _messages[i];
+        if (m.role == 'user') break;
+        if (m.role == 'assistant') {
+          assistantMsgId = m.id;
+          break;
+        }
+      }
+    }
+    if (assistantMsgId <= 0) {
+      assistantMsgId = message.id > 0
+          ? message.id + 1
+          : DateTime.now().millisecondsSinceEpoch + 1;
+      if (userIdx >= 0 && mounted) {
+        setState(() {
+          final copy = [..._messages];
+          copy.insert(
+            userIdx + 1,
+            NativeNovaMessage(
+              id: assistantMsgId,
+              role: 'assistant',
+              text: '',
+              createdAt: DateTime.now(),
+              streaming: true,
+              thinkStatus: '正在生成…',
+            ),
+          );
+          _messages = copy;
+        });
+      }
+    }
+
+    await _sendMessage(
+      text: prompt,
+      drafts: drafts,
+      userAlreadyPersisted: true,
+      existingUserMsgId: message.id,
+      existingAssistantMsgId: assistantMsgId,
+    );
+  }
+
+  Future<List<NovaDraftAttachment>> _draftsFromMessage(
+    NativeNovaMessage message,
+  ) async {
+    final out = <NovaDraftAttachment>[];
+    final payloadAttIds = <String>[];
+    final rawIds = message.payload?['attachment_ids'];
+    if (rawIds is List) {
+      for (final id in rawIds) {
+        final s = id.toString().trim();
+        if (s.isNotEmpty) payloadAttIds.add(s);
+      }
+    }
+    var fileIndex = 0;
+    for (final a in message.attachments) {
+      var bytes = a.previewBytes ?? Uint8List(0);
+      if (bytes.isEmpty &&
+          (a.url.trim().isNotEmpty || a.objectKey.trim().isNotEmpty)) {
+        try {
+          bytes = await _avatarService.downloadAttachmentBytes(
+            objectKey: a.objectKey.trim().isNotEmpty ? a.objectKey : a.url,
+            fileName: a.fileName,
+          );
+        } catch (_) {
+          try {
+            final loaded = await _mediaResolver.loadAttachmentImageBytes(
+              url: a.url,
+              objectKey: a.objectKey,
+            );
+            if (loaded != null && loaded.isNotEmpty) bytes = loaded;
+          } catch (_) {}
+        }
+      }
+      if (bytes.isEmpty) continue;
+      final isImage = a.kind.toUpperCase() == 'IMAGE' ||
+          a.mimeType.startsWith('image/') ||
+          RegExp(
+            r'\.(jpe?g|png|gif|webp|bmp|heic|heif)$',
+            caseSensitive: false,
+          ).hasMatch(a.fileName);
+      String? novaAttId;
+      if (!isImage && fileIndex < payloadAttIds.length) {
+        novaAttId = payloadAttIds[fileIndex];
+      }
+      if (!isImage) fileIndex += 1;
+      out.add(
+        NovaDraftAttachment(
+          id: 'resend-${++_draftSeq}',
+          bytes: bytes,
+          fileName: a.fileName.isNotEmpty ? a.fileName : 'file',
+          mimeType: a.mimeType.isNotEmpty
+              ? a.mimeType
+              : (isImage ? 'image/jpeg' : 'application/octet-stream'),
+          isImage: isImage,
+          novaAttachmentId: novaAttId,
+        ),
+      );
+    }
+    return out;
   }
 
   void _onInputFocusChanged() {
@@ -1758,6 +1913,8 @@ class _NativeNovaPageState extends State<NativeNovaPage>
     if (reusingTurn) {
       _prdNovaSendStarted = true;
     }
+
+    if (!_ensureVisionModelForDrafts(drafts)) return;
 
     final promptSource = novaPrompt ?? text;
     final prompt = novaDraftPrompt(promptSource, drafts);
@@ -1907,13 +2064,18 @@ class _NativeNovaPageState extends State<NativeNovaPage>
       // when the user navigated away during a stream.
       var userPersistedToServer = skipUserBubble || userAlreadyPersisted;
 
+      final previewByDraftId = <String, Uint8List>{};
       for (final d in drafts) {
-        if (d.payload != null) continue;
+        if (d.payload != null &&
+            (d.isImage || (d.novaAttachmentId ?? '').trim().isNotEmpty)) {
+          if (d.bytes.isNotEmpty) previewByDraftId[d.id] = d.bytes;
+          continue;
+        }
         setState(() {
           d.uploading = true;
           d.uploadProgress = 1;
         });
-        // 图片上传前压缩（最长边 1568px / JPEG 82%），减小体积与流量；文件保持原样。
+        // 图片上传前压缩；文档走 Nova 当轮抽文本接口。
         var uploadBytes = d.bytes;
         var uploadName = d.fileName;
         var uploadMime = d.mimeType;
@@ -1923,20 +2085,46 @@ class _NativeNovaPageState extends State<NativeNovaPage>
               d.bytes,
               fileName: d.fileName,
             );
-            if (normalized.bytes.isNotEmpty &&
-                normalized.bytes.length < d.bytes.length) {
+            if (normalized.bytes.isNotEmpty) {
+              previewByDraftId[d.id] = normalized.bytes;
               uploadBytes = normalized.bytes;
               uploadName = normalized.fileName;
               uploadMime = normalized.mimeType;
             }
           } catch (_) {}
+        } else {
+          final novaAtt = await _service.uploadNovaChatAttachment(
+            bytes: d.bytes,
+            fileName: d.fileName,
+            onProgress: (p) {
+              if (mounted) {
+                setState(() {
+                  d.uploadProgress = (p * 0.6).clamp(1, 60).toDouble();
+                });
+              }
+            },
+          );
+          d.novaAttachmentId = novaAtt.attachmentId;
+          d.textPreview = novaAtt.preview;
+          if (novaAtt.truncated) {
+            _toast('文件较长，已截取部分内容用于提问');
+          }
         }
+        if (!previewByDraftId.containsKey(d.id) && d.bytes.isNotEmpty) {
+          previewByDraftId[d.id] = d.bytes;
+        }
+        // 同步上传到沙丘存储，供气泡展示/历史回看。
         final uploaded = await _service.uploadAttachment(
           conversationId: _conversationId,
           bytes: uploadBytes,
           fileName: uploadName,
           onProgress: (p) {
-            if (mounted) setState(() => d.uploadProgress = p);
+            if (!mounted) return;
+            final base = d.isImage ? 0.0 : 60.0;
+            setState(() {
+              d.uploadProgress =
+                  (base + p * (d.isImage ? 1 : 0.4)).clamp(1, 100).toDouble();
+            });
           },
         );
         d.payload = _service.buildUploadedAttachmentPayload(
@@ -1946,6 +2134,13 @@ class _NativeNovaPageState extends State<NativeNovaPage>
           mimeType: uploadMime,
           kind: d.kind,
         );
+        if ((d.novaAttachmentId ?? '').trim().isNotEmpty) {
+          d.payload = <String, dynamic>{
+            ...?d.payload,
+            'novaAttachmentId': d.novaAttachmentId,
+            if (d.textPreview.trim().isNotEmpty) 'preview': d.textPreview,
+          };
+        }
         d.uploading = false;
       }
 
@@ -1953,6 +2148,7 @@ class _NativeNovaPageState extends State<NativeNovaPage>
           .where((d) => d.payload != null)
           .map((d) => NovaMessageAttachment.fromJson(d.payload!))
           .toList();
+      final novaAttachmentIds = _service.collectNovaAttachmentIds(drafts);
 
       if ((!skipUserBubble || reusingTurn) && attachments.isNotEmpty) {
         setState(() {
@@ -1961,19 +2157,26 @@ class _NativeNovaPageState extends State<NativeNovaPage>
             final copy = [..._messages];
             final payload = <String, dynamic>{
               'attachments': attachments.map((a) => a.toJson()).toList(),
+              if (novaAttachmentIds.isNotEmpty)
+                'attachment_ids': novaAttachmentIds,
             };
+            // 按 payload 对应回 drafts，避免 where 过滤后 index 错位丢掉 previewBytes。
+            final withPreview = <NovaMessageAttachment>[];
+            for (final d in drafts) {
+              if (d.payload == null) continue;
+              final preview =
+                  previewByDraftId[d.id] ??
+                  (d.bytes.isNotEmpty ? d.bytes : null);
+              withPreview.add(
+                NovaMessageAttachment.fromJson(d.payload!).copyWith(
+                  previewBytes: preview,
+                ),
+              );
+            }
             copy[idx] = copy[idx].copyWith(
-              attachments: attachments
-                  .asMap()
-                  .entries
-                  .map(
-                    (e) => e.value.copyWith(
-                      previewBytes: e.key < drafts.length
-                          ? drafts[e.key].bytes
-                          : null,
-                    ),
-                  )
-                  .toList(growable: false),
+              attachments: dedupeNovaMessageAttachments(
+                withPreview.isNotEmpty ? withPreview : attachments,
+              ),
               kind: 'TEXT',
               payload: payload,
             );
@@ -1987,6 +2190,8 @@ class _NativeNovaPageState extends State<NativeNovaPage>
           ? null
           : <String, dynamic>{
               'attachments': attachments.map((a) => a.toJson()).toList(),
+              if (novaAttachmentIds.isNotEmpty)
+                'attachment_ids': novaAttachmentIds,
             };
 
       final userContent = drafts.isEmpty
@@ -1999,11 +2204,20 @@ class _NativeNovaPageState extends State<NativeNovaPage>
               model: _selectedModel,
             );
 
+      // 仅有文档 attachment_ids、无图片 parts 时，保证 content 至少是问题文本。
+      final effectiveContent =
+          (userContent is String &&
+              userContent.toString().trim().isEmpty &&
+              novaAttachmentIds.isNotEmpty)
+          ? prompt
+          : userContent;
+
       var reply = await _service.sendAndReplyStream(
         conversationId: _conversationId,
-        userContent: userContent,
+        userContent: effectiveContent,
         displayText: displayText,
         userMetadata: userMetadata,
+        attachmentIds: novaAttachmentIds,
         userMessageId: userMsgId,
         skipUserPersist: userPersistedToServer,
         onConversationId: (id) {
@@ -2151,6 +2365,9 @@ class _NativeNovaPageState extends State<NativeNovaPage>
         await _service.stripStreamingFromSession(convId);
       }
     } finally {
+      if (_conversationId > 0) {
+        unawaited(_service.persistActiveConversationId(_conversationId));
+      }
       if (_conversationId > 0 && _messages.isNotEmpty) {
         unawaited(_service.persistSession(_conversationId, _messages));
       }
@@ -2596,7 +2813,22 @@ class _NativeNovaPageState extends State<NativeNovaPage>
     }
 
     try {
-      await _ensureKbAndSendPrdToNova(job: job);
+      if (job.meetingId <= 0) {
+        final displayText = buildMeetingPrdDisplayText(job.kbFileName);
+        final novaPrompt = job.messageText.trim().isNotEmpty
+            ? job.messageText.trim()
+            : buildMeetingPrdNovaMessage(
+                kbFileName: job.kbFileName,
+                prdFileName: job.prdFileName,
+              );
+        await _sendPrdFromKbFileName(
+          job: job,
+          displayText: displayText,
+          novaPrompt: novaPrompt,
+        );
+      } else {
+        await _ensureKbAndSendPrdToNova(job: job);
+      }
     } catch (e) {
       if (mounted) {
         final err = NativeNovaService.friendlyError(e);
@@ -2773,7 +3005,7 @@ class _NativeNovaPageState extends State<NativeNovaPage>
     int? prdAssistantMsgId;
     try {
       final meetingService = NativeMeetingService(session: widget.session);
-      setState(() => _busyHint = '正在加载可生成 PRD 的会议纪要…');
+      setState(() => _busyHint = '正在加载可生成 PRD 的知识库文档…');
       final meetings = await meetingService.fetchList(page: 0, size: 50);
       await _kbService.ensureNovaReady();
       final exportable = meetings
@@ -2782,97 +3014,38 @@ class _NativeNovaPageState extends State<NativeNovaPage>
       final kbIndexedMeetings = await _kbService.filterMeetingsWithIndexedKb(
         exportable,
       );
+      final kbDocs = await _kbService.listIndexedDocumentsForPrd();
       if (!mounted) return;
       setState(() => _busyHint = '');
 
-      final picked = await showMeetingMinutesPickerDialog(
+      // 优先会议列表；若无匹配会议则回退展示知识库已索引文档。
+      if (kbIndexedMeetings.isNotEmpty) {
+        final picked = await showMeetingMinutesPickerDialog(
+          context,
+          meetings: kbIndexedMeetings,
+        );
+        if (picked == null || !mounted) return;
+        prdAssistantMsgId = await _startPrdFromMeeting(
+          meetingService: meetingService,
+          meetingId: picked.meetingId,
+        );
+        return;
+      }
+
+      if (kbDocs.isEmpty) {
+        await showMeetingMinutesPickerDialog(
+          context,
+          meetings: const <NativeMeetingSummary>[],
+        );
+        return;
+      }
+
+      final kbPicked = await showKbDocumentPickerDialog(
         context,
-        meetings: kbIndexedMeetings,
+        documents: kbDocs,
       );
-      if (picked == null || !mounted) return;
-
-      final detail = await meetingService.fetchDetail(picked.meetingId);
-      if (!mounted) return;
-      if (!MeetingMinutesExport.canExport(detail)) {
-        _toast('该会议纪要尚未生成完成', error: true);
-        return;
-      }
-
-      final kbDoc = await _kbService.findIndexedMeetingMinutesDocument(
-        meetingId: detail.meetingId,
-        kbFileName: MeetingMinutesExport.kbUploadFileName(detail),
-        kbTitle: MeetingMinutesExport.kbUploadTitle(detail),
-      );
-      if (kbDoc == null) {
-        _toast('该会议纪要尚未在知识库中完成索引，请稍后再试', error: true);
-        return;
-      }
-
-      final prdModel = await _pickPrdGenerationModel();
-      if (!mounted || prdModel == null || prdModel.trim().isEmpty) return;
-
-      final meetingTitle = detail.title.trim().isNotEmpty
-          ? detail.title.trim()
-          : '未命名会议';
-      final confirmed = await showMeetingPrdConfirmDialog(
-        context,
-        meetingTitle: meetingTitle,
-        modelName: novaModelDisplayName(prdModel),
-      );
-      if (!confirmed || !mounted) return;
-
-      _applySelectedChatModel(prdModel);
-
-      if (detail.summary.trim().isEmpty) {
-        _toast('该会议纪要尚无摘要，无法生成 PRD', error: true);
-        return;
-      }
-
-      final kbFileName = kbDoc.fileName.trim().isNotEmpty
-          ? kbDoc.fileName.trim()
-          : MeetingMinutesExport.kbUploadFileName(detail);
-      final kbTitle = MeetingMinutesExport.kbUploadTitle(detail);
-      final prdFileName = MeetingMinutesExport.prdFileName(detail);
-      final displayText = buildMeetingPrdDisplayText(kbFileName);
-      final messageText = buildMeetingPrdNovaMessage(
-        kbFileName: kbFileName,
-        prdFileName: prdFileName,
-      );
-
-      final userMsgId = DateTime.now().millisecondsSinceEpoch;
-      final assistantMsgId = userMsgId + 1;
-      prdAssistantMsgId = assistantMsgId;
-      final pendingJob = NovaPrdPendingJob(
-        at: DateTime.now().millisecondsSinceEpoch,
-        meetingId: detail.meetingId,
-        prdModel: prdModel,
-        userMsgId: userMsgId,
-        assistantMsgId: assistantMsgId,
-        messageText: messageText,
-        kbFileName: kbFileName,
-        kbTitle: kbTitle,
-        prdFileName: prdFileName,
-        meetingTitle: meetingTitle,
-      );
-      _showPrdPendingTurnInChat(
-        userMsgId: userMsgId,
-        assistantMsgId: assistantMsgId,
-        displayText: displayText,
-      );
-      await _persistPrdPendingTurn(
-        userMsgId: userMsgId,
-        assistantMsgId: assistantMsgId,
-        displayText: displayText,
-        pendingJob: pendingJob,
-      );
-      if (!mounted) return;
-
-      _prdResumeInFlight = true;
-      try {
-        await _ensureKbAndSendPrdToNova(job: pendingJob, detail: detail);
-      } finally {
-        _prdResumeInFlight = false;
-      }
+      if (kbPicked == null || !mounted) return;
+      prdAssistantMsgId = await _startPrdFromKbDocument(kbPicked);
     } catch (e) {
       if (mounted) {
         final err = NativeNovaService.friendlyError(e);
@@ -2882,6 +3055,209 @@ class _NativeNovaPageState extends State<NativeNovaPage>
         if (err.isNotEmpty) _toast(err, error: true);
       }
     }
+  }
+
+  Future<int?> _startPrdFromMeeting({
+    required NativeMeetingService meetingService,
+    required int meetingId,
+  }) async {
+    final detail = await meetingService.fetchDetail(meetingId);
+    if (!mounted) return null;
+    if (!MeetingMinutesExport.canExport(detail)) {
+      _toast('该会议纪要尚未生成完成', error: true);
+      return null;
+    }
+
+    final kbDoc = await _kbService.findIndexedMeetingMinutesDocument(
+      meetingId: detail.meetingId,
+      kbFileName: MeetingMinutesExport.kbUploadFileName(detail),
+      kbTitle: MeetingMinutesExport.kbUploadTitle(detail),
+    );
+    if (kbDoc == null) {
+      _toast('该会议纪要尚未在知识库中完成索引，请稍后再试', error: true);
+      return null;
+    }
+
+    final prdModel = await _pickPrdGenerationModel();
+    if (!mounted || prdModel == null || prdModel.trim().isEmpty) return null;
+
+    final meetingTitle = detail.title.trim().isNotEmpty
+        ? detail.title.trim()
+        : '未命名会议';
+    final confirmed = await showMeetingPrdConfirmDialog(
+      context,
+      meetingTitle: meetingTitle,
+      modelName: novaModelDisplayName(prdModel),
+    );
+    if (!confirmed || !mounted) return null;
+
+    _applySelectedChatModel(prdModel);
+
+    if (detail.summary.trim().isEmpty) {
+      _toast('该会议纪要尚无摘要，无法生成 PRD', error: true);
+      return null;
+    }
+
+    final kbFileName = kbDoc.fileName.trim().isNotEmpty
+        ? kbDoc.fileName.trim()
+        : MeetingMinutesExport.kbUploadFileName(detail);
+    final kbTitle = MeetingMinutesExport.kbUploadTitle(detail);
+    final prdFileName = MeetingMinutesExport.prdFileName(detail);
+    final displayText = buildMeetingPrdDisplayText(kbFileName);
+    final messageText = buildMeetingPrdNovaMessage(
+      kbFileName: kbFileName,
+      prdFileName: prdFileName,
+    );
+
+    final userMsgId = DateTime.now().millisecondsSinceEpoch;
+    final assistantMsgId = userMsgId + 1;
+    final pendingJob = NovaPrdPendingJob(
+      at: DateTime.now().millisecondsSinceEpoch,
+      meetingId: detail.meetingId,
+      prdModel: prdModel,
+      userMsgId: userMsgId,
+      assistantMsgId: assistantMsgId,
+      messageText: messageText,
+      kbFileName: kbFileName,
+      kbTitle: kbTitle,
+      prdFileName: prdFileName,
+      meetingTitle: meetingTitle,
+    );
+    _showPrdPendingTurnInChat(
+      userMsgId: userMsgId,
+      assistantMsgId: assistantMsgId,
+      displayText: displayText,
+    );
+    await _persistPrdPendingTurn(
+      userMsgId: userMsgId,
+      assistantMsgId: assistantMsgId,
+      displayText: displayText,
+      pendingJob: pendingJob,
+    );
+    if (!mounted) return assistantMsgId;
+
+    _prdResumeInFlight = true;
+    try {
+      await _ensureKbAndSendPrdToNova(job: pendingJob, detail: detail);
+    } finally {
+      _prdResumeInFlight = false;
+    }
+    return assistantMsgId;
+  }
+
+  Future<int?> _startPrdFromKbDocument(NativeKbDocument kbDoc) async {
+    final prdModel = await _pickPrdGenerationModel();
+    if (!mounted || prdModel == null || prdModel.trim().isEmpty) return null;
+
+    final title = kbDoc.title.trim().isNotEmpty
+        ? kbDoc.title.trim()
+        : (kbDoc.fileName.trim().isNotEmpty
+              ? kbDoc.fileName.trim()
+              : '知识库文档');
+    final confirmed = await showMeetingPrdConfirmDialog(
+      context,
+      meetingTitle: title,
+      modelName: novaModelDisplayName(prdModel),
+    );
+    if (!confirmed || !mounted) return null;
+
+    _applySelectedChatModel(prdModel);
+
+    final kbFileName = kbDoc.fileName.trim().isNotEmpty
+        ? kbDoc.fileName.trim()
+        : title;
+    final safeBase = title.replaceAll(RegExp(r'[\\/:*?"<>|\n\r]'), '_');
+    final prdFileName = 'PRD-$safeBase.md';
+    final displayText = buildMeetingPrdDisplayText(kbFileName);
+    final messageText = buildMeetingPrdNovaMessage(
+      kbFileName: kbFileName,
+      prdFileName: prdFileName,
+    );
+
+    final userMsgId = DateTime.now().millisecondsSinceEpoch;
+    final assistantMsgId = userMsgId + 1;
+    final pendingJob = NovaPrdPendingJob(
+      at: DateTime.now().millisecondsSinceEpoch,
+      meetingId: 0,
+      prdModel: prdModel,
+      userMsgId: userMsgId,
+      assistantMsgId: assistantMsgId,
+      messageText: messageText,
+      kbFileName: kbFileName,
+      kbTitle: title,
+      prdFileName: prdFileName,
+      meetingTitle: title,
+    );
+    _showPrdPendingTurnInChat(
+      userMsgId: userMsgId,
+      assistantMsgId: assistantMsgId,
+      displayText: displayText,
+    );
+    await _persistPrdPendingTurn(
+      userMsgId: userMsgId,
+      assistantMsgId: assistantMsgId,
+      displayText: displayText,
+      pendingJob: pendingJob,
+    );
+    if (!mounted) return assistantMsgId;
+
+    _prdResumeInFlight = true;
+    try {
+      await _sendPrdFromKbFileName(
+        job: pendingJob,
+        displayText: displayText,
+        novaPrompt: messageText,
+      );
+    } finally {
+      _prdResumeInFlight = false;
+    }
+    return assistantMsgId;
+  }
+
+  Future<void> _sendPrdFromKbFileName({
+    required NovaPrdPendingJob job,
+    required String displayText,
+    required String novaPrompt,
+  }) async {
+    await _ensureConversationId();
+    if (!mounted || _conversationId <= 0) {
+      throw Exception('无法创建 NOVA 会话，请稍后重试');
+    }
+
+    _updatePrdAssistantThinkStatus(job.assistantMsgId, '正在生成 PRD…');
+    if (mounted) {
+      setState(() {
+        final userIdx = _messages.indexWhere((m) => m.id == job.userMsgId);
+        if (userIdx >= 0) {
+          final copy = [..._messages];
+          copy[userIdx] = copy[userIdx].copyWith(text: displayText);
+          _messages = copy;
+        }
+      });
+    }
+
+    var userPersisted = false;
+    try {
+      await _service.persistUserMessage(
+        conversationId: _conversationId,
+        messageId: job.userMsgId,
+        content: displayText,
+      );
+      userPersisted = true;
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('[NativeNovaPage] PRD user persist skipped: $e');
+      }
+    }
+
+    await _sendMessage(
+      text: displayText,
+      novaPrompt: novaPrompt,
+      existingUserMsgId: job.userMsgId,
+      existingAssistantMsgId: job.assistantMsgId,
+      userAlreadyPersisted: userPersisted,
+      assistantThinkStatus: '正在生成 PRD…',
+    );
   }
 
   void _toast(String msg, {bool error = false}) {
@@ -3085,6 +3461,9 @@ class _NativeNovaPageState extends State<NativeNovaPage>
         mediaResolver: _mediaResolver,
         highlighted: m.id > 0 && m.id == _highlightMessageId,
         ragUsed: m.ragUsed,
+        onResend: mine && !_sending && !_serverGenerating
+            ? () => unawaited(_resendUserMessage(m))
+            : null,
       ),
     );
   }

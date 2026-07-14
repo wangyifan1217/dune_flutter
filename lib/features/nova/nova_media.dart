@@ -288,6 +288,73 @@ class NovaMediaResolver {
     throw lastError ?? Exception('无法读取文档内容');
   }
 
+  /// 用户上传附件缩略图：优先公网直取，失败则走 dunes storage 代理（带 Bearer）。
+  Future<Uint8List?> loadAttachmentImageBytes({
+    required String url,
+    required String objectKey,
+    String bucket = 'im-attachments',
+  }) async {
+    final tried = <String>{};
+
+    Future<Uint8List?> tryGet(
+      String u, {
+      Map<String, String>? headers,
+    }) async {
+      final trimmed = u.trim();
+      if (trimmed.isEmpty || !tried.add(trimmed)) return null;
+      if (!RegExp(r'^https?:', caseSensitive: false).hasMatch(trimmed)) {
+        return null;
+      }
+      try {
+        final resp = await http.get(
+          Uri.parse(trimmed),
+          headers: headers ?? const <String, String>{'Accept': 'image/*,*/*'},
+        );
+        if (resp.statusCode >= 200 &&
+            resp.statusCode < 300 &&
+            resp.bodyBytes.isNotEmpty) {
+          return resp.bodyBytes;
+        }
+      } catch (_) {}
+      return null;
+    }
+
+    final source = pickNovaMediaSource(url: url, objectKey: objectKey);
+    if (source.isNotEmpty && isDirectHttpUrl(source)) {
+      final bytes = await tryGet(source);
+      if (bytes != null) return bytes;
+    }
+
+    final key = objectKey.trim().isNotEmpty
+        ? objectKey.trim()
+        : (isDirectHttpUrl(source) ? '' : source);
+    if (key.isNotEmpty) {
+      final proxy = _service.mediaProxyUrl(key, bucket: bucket);
+      final bytes = await tryGet(
+        proxy,
+        headers: <String, String>{
+          'Authorization': 'Bearer ${session.token}',
+          'Accept': 'image/*,*/*',
+        },
+      );
+      if (bytes != null) return bytes;
+      try {
+        final resolved = await resolve(key, bucket: bucket);
+        final viaResolved = await tryGet(resolved);
+        if (viaResolved != null) return viaResolved;
+      } catch (_) {}
+    }
+
+    if (source.isNotEmpty && !isDirectHttpUrl(source)) {
+      try {
+        final resolved = await resolve(source, bucket: bucket);
+        final bytes = await tryGet(resolved);
+        if (bytes != null) return bytes;
+      } catch (_) {}
+    }
+    return null;
+  }
+
   /// Nova 绘图等返回的 `/v1/files/download` 需带 Bearer，不能直接用 Image.network。
   Future<Uint8List?> loadNovaImageBytes({
     required String url,
@@ -800,7 +867,9 @@ class _NovaC4ImageCardState extends State<NovaC4ImageCard> {
     if (oldWidget.url != widget.url ||
         oldWidget.fileName != widget.fileName ||
         oldWidget.agentPath != widget.agentPath) {
-      setState(() => _loadFuture = _resolveImage());
+      setState(() {
+        _loadFuture = _resolveImage();
+      });
     }
   }
 
@@ -1102,7 +1171,7 @@ class NovaC4DeliverableFileCard extends StatelessWidget {
   }
 }
 
-class NovaC4ImageThumb extends StatelessWidget {
+class NovaC4ImageThumb extends StatefulWidget {
   const NovaC4ImageThumb({
     super.key,
     required this.resolver,
@@ -1122,87 +1191,127 @@ class NovaC4ImageThumb extends StatelessWidget {
   final String bucket;
   final Uint8List? previewBytes;
 
+  @override
+  State<NovaC4ImageThumb> createState() => _NovaC4ImageThumbState();
+}
+
+class _NovaC4ImageThumbState extends State<NovaC4ImageThumb> {
+  late Future<_NovaResolvedImage> _loadFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadFuture = _resolve();
+  }
+
+  @override
+  void didUpdateWidget(NovaC4ImageThumb oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.url != widget.url ||
+        oldWidget.objectKey != widget.objectKey ||
+        oldWidget.previewBytes != widget.previewBytes) {
+      setState(() {
+        _loadFuture = _resolve();
+      });
+    }
+  }
+
+  Future<_NovaResolvedImage> _resolve() async {
+    final local = widget.previewBytes;
+    if (local != null && local.isNotEmpty) {
+      return _NovaResolvedImage.bytes(local);
+    }
+    final bytes = await widget.resolver.loadAttachmentImageBytes(
+      url: widget.url,
+      objectKey: widget.objectKey,
+      bucket: widget.bucket,
+    );
+    if (bytes != null && bytes.isNotEmpty) {
+      return _NovaResolvedImage.bytes(bytes);
+    }
+    try {
+      final resolved = await widget.resolver.resolveAttachmentAccessUrl(
+        url: widget.url,
+        objectKey: widget.objectKey,
+        bucket: widget.bucket,
+      );
+      if (resolved.startsWith('http')) {
+        return _NovaResolvedImage.publicUrl(resolved);
+      }
+    } catch (_) {}
+    return const _NovaResolvedImage.failed();
+  }
+
   Widget _imageWidget(Widget image) {
     return ClipRRect(
       borderRadius: BorderRadius.circular(10),
-      child: SizedBox(
-        width: maxWidth,
-        child: image,
+      child: SizedBox(width: widget.maxWidth, child: image),
+    );
+  }
+
+  Widget _broken() {
+    return SizedBox(
+      width: widget.maxWidth,
+      height: 96,
+      child: Icon(
+        Icons.broken_image_outlined,
+        color: DunesColors.text3.withValues(alpha: 0.9),
       ),
+    );
+  }
+
+  Widget _body(_NovaResolvedImage image) {
+    if (image.bytes != null && image.bytes!.isNotEmpty) {
+      return Image.memory(
+        image.bytes!,
+        width: widget.maxWidth,
+        fit: BoxFit.cover,
+        errorBuilder: (_, _, _) => _broken(),
+      );
+    }
+    final publicUrl = image.publicUrl ?? '';
+    if (publicUrl.isEmpty) return _broken();
+    if (kIsWeb) {
+      return buildCorsSafeImage(
+        url: publicUrl,
+        width: widget.maxWidth,
+        height: 120,
+        fit: BoxFit.cover,
+      );
+    }
+    return Image.network(
+      publicUrl,
+      width: widget.maxWidth,
+      fit: BoxFit.cover,
+      errorBuilder: (_, _, _) => _broken(),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    if (previewBytes != null && previewBytes!.isNotEmpty) {
-      return GestureDetector(
-        onTap: () => showNovaImagePreview(
-          context,
-          resolver: resolver,
-          url: url,
-          objectKey: objectKey,
-          fileName: fileName,
-          bucket: bucket,
-          previewBytes: previewBytes,
-        ),
-        child: _imageWidget(
-          Image.memory(
-            previewBytes!,
-            width: maxWidth,
-            fit: BoxFit.cover,
-          ),
-        ),
-      );
-    }
-
-    // 公网 URL 直用；否则走 presigned-get 重新签名。
-    final source = pickNovaMediaSource(url: url, objectKey: objectKey);
-    if (source.isEmpty) {
-      return Icon(Icons.image_not_supported_outlined, color: DunesColors.text3, size: 32);
-    }
-    return FutureBuilder<String>(
-      future: resolver.resolveAttachmentAccessUrl(
-        url: url,
-        objectKey: objectKey,
-        bucket: bucket,
-      ),
-      builder: (_, snap) {
+    return FutureBuilder<_NovaResolvedImage>(
+      future: _loadFuture,
+      builder: (context, snap) {
         if (snap.connectionState != ConnectionState.done) {
           return SizedBox(
-            width: maxWidth,
+            width: widget.maxWidth,
             height: 96,
             child: const Center(child: CircularProgressIndicator(strokeWidth: 2)),
           );
         }
-        if (snap.hasError || !(snap.data ?? '').startsWith('http')) {
-          return Container(
-            width: maxWidth,
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: DunesColors.bgSoft,
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Text(fileName, style: DunesTypography.sans(fontSize: 11, color: DunesColors.text3)),
-          );
-        }
-        final resolved = snap.data!;
+        final image = snap.data ?? const _NovaResolvedImage.failed();
+        if (image.failed) return _broken();
         return GestureDetector(
           onTap: () => showNovaImagePreview(
             context,
-            resolver: resolver,
-            url: resolved,
-            objectKey: objectKey,
-            fileName: fileName,
-            bucket: bucket,
+            resolver: widget.resolver,
+            url: image.publicUrl ?? widget.url,
+            objectKey: widget.objectKey,
+            fileName: widget.fileName,
+            bucket: widget.bucket,
+            previewBytes: image.bytes ?? widget.previewBytes,
           ),
-          child: _imageWidget(
-            Image.network(
-              resolved,
-              width: maxWidth,
-              fit: BoxFit.cover,
-              errorBuilder: (_, _, _) => Icon(Icons.broken_image_outlined, color: DunesColors.text3),
-            ),
-          ),
+          child: _imageWidget(_body(image)),
         );
       },
     );

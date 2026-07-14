@@ -383,6 +383,32 @@ class NativeKbService {
     return out;
   }
 
+  /// 已完成索引、可用于「基于知识库生成 PRD」的文档列表。
+  Future<List<NativeKbDocument>> listIndexedDocumentsForPrd() async {
+    await ensureNovaReady();
+    final summary = await fetchSummary();
+    final docs = summary.documents
+        .where(nativeKbDocumentIndexed)
+        .toList();
+    // 会议纪要类文档优先，其余已索引文档排后。
+    docs.sort((a, b) {
+      final aScore = _prdDocSortScore(a);
+      final bScore = _prdDocSortScore(b);
+      if (aScore != bScore) return bScore.compareTo(aScore);
+      return a.title.toLowerCase().compareTo(b.title.toLowerCase());
+    });
+    return docs;
+  }
+
+  int _prdDocSortScore(NativeKbDocument doc) {
+    final name = '${doc.fileName} ${doc.title}'.toLowerCase();
+    if (name.contains('会议纪要') || name.contains('meeting-minutes')) return 2;
+    if (name.contains('会议') || name.contains('纪要') || name.contains('prd')) {
+      return 1;
+    }
+    return 0;
+  }
+
   bool _matchesMeetingMinutesDocument(
     NativeKbDocument doc, {
     required int meetingId,

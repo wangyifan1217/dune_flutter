@@ -9,6 +9,7 @@ import '../../core/layout/chat_layout.dart';
 import '../../core/navigation/navigation_controller.dart';
 import '../../core/navigation/generated/screen_registry.dart';
 import '../../core/platform/desktop_features.dart';
+import '../../core/theme/app_text_scale.dart';
 import '../../core/theme/dunes_theme.dart';
 import '../../core/widgets/cached_network_image.dart';
 import '../approval/native_approval_page.dart';
@@ -2181,10 +2182,93 @@ class _NativeB2PageState extends State<_NativeB2Page> {
             ),
           ),
           const Spacer(),
+          IconButton(
+            tooltip: '字体大小',
+            onPressed: _openTextScalePicker,
+            icon: const Icon(Icons.format_size_rounded, size: 22),
+            color: DunesColors.text2,
+          ),
           _buildB2OverflowMenu(),
         ],
       ),
     );
+  }
+
+  Future<void> _openTextScalePicker() async {
+    final controller = AppTextScaleController.instance;
+    final picked = await showModalBottomSheet<int>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return SafeArea(
+          top: false,
+          child: Container(
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+            ),
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Center(
+                  child: Container(
+                    width: 36,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: DunesColors.borderSoft,
+                      borderRadius: BorderRadius.circular(99),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Text(
+                  '字体大小',
+                  style: DunesTypography.sans(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: DunesColors.text,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  '调整后将作用于整个 App',
+                  style: DunesTypography.sans(
+                    fontSize: 13,
+                    color: DunesColors.text3,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                for (var i = 0; i < AppTextScaleController.presets.length; i++)
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(
+                      AppTextScaleController.labels[i],
+                      style: DunesTypography.sans(
+                        fontSize: 15 * AppTextScaleController.presets[i],
+                        fontWeight: FontWeight.w600,
+                        color: DunesColors.text,
+                      ),
+                    ),
+                    trailing: i == controller.presetIndex
+                        ? const Icon(
+                            Icons.check_rounded,
+                            color: Color(0xFF7E64BD),
+                          )
+                        : null,
+                    onTap: () => Navigator.pop(ctx, i),
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+    if (picked == null) return;
+    await controller.setPresetIndex(picked);
+    if (!mounted) return;
+    showDunesToast(context, '已切换为「${AppTextScaleController.labels[picked]}」字号');
   }
 
   Widget _buildB2OverflowMenu() {

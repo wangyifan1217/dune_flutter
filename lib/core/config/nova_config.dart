@@ -11,8 +11,8 @@ abstract final class NovaConfig {
   /// 产品对外名称。
   static const displayName = 'NOVA';
 
-  /// Nova 聊天输入栏「上传文件」按钮（临时关闭）。
-  static const fileUploadInChatEnabled = false;
+  /// Nova 聊天输入栏「上传文件」按钮（当轮文件提问）。
+  static const fileUploadInChatEnabled = true;
 
   /// JS 注入占位符，由 [bindNovaBase] 在运行时替换为 [baseUrl]。
   static const baseUrlPlaceholder = '__NOVA_BASE_URL__';

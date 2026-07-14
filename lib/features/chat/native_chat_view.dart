@@ -265,12 +265,17 @@ class _NativeChatViewState extends State<NativeChatView>
   Timer? _highlightTimer;
   bool _voiceMode = false;
   bool _emojiOpen = false;
+  bool _toolsOpen = false;
   bool _peerOnline = false;
   int _recordDurationMs = 0;
   String? _error;
   String? _selfAvatarPreset;
   String? _selfAvatarObjectKey;
   String? _selfAvatarUrl;
+  /// 上传中气泡预览（微信式圆形进度）。
+  Uint8List? _pendingUploadBytes;
+  String _pendingUploadKind = '';
+  String _pendingUploadName = '';
   NativeConversation? _conversation;
   List<NativeChatMessage> _messages = const <NativeChatMessage>[];
   List<Map<String, dynamic>> _groupMembers = const <Map<String, dynamic>>[];
@@ -1721,7 +1726,12 @@ class _NativeChatViewState extends State<NativeChatView>
     }
     if (!_checkSizeLimit(bytes.length, _maxImageBytes, fileName)) return;
     await _guardSend(() async {
-      _beginUpload('上传图片');
+      _beginUpload(
+        '上传图片',
+        previewBytes: bytes,
+        kind: 'IMAGE',
+        fileName: fileName,
+      );
       await _service.sendImage(
         conversationId: conv.id,
         bytes: bytes,
@@ -1790,7 +1800,12 @@ class _NativeChatViewState extends State<NativeChatView>
     }
     if (!_checkSizeLimit(bytes.length, _maxImageBytes, name)) return;
     await _guardSend(() async {
-      _beginUpload('上传图片');
+      _beginUpload(
+        '上传图片',
+        previewBytes: bytes,
+        kind: 'IMAGE',
+        fileName: name,
+      );
       await _service.sendImage(
         conversationId: conv.id,
         bytes: bytes,
@@ -1858,7 +1873,12 @@ class _NativeChatViewState extends State<NativeChatView>
         }
         final mimeType = lookupMimeType(fileName) ?? 'image/jpeg';
         final baseDone = done;
-        _beginUpload(total > 1 ? '上传图片 (${baseDone + 1}/$total)' : '上传图片');
+        _beginUpload(
+          total > 1 ? '上传图片 (${baseDone + 1}/$total)' : '上传图片',
+          previewBytes: bytes,
+          kind: 'IMAGE',
+          fileName: fileName,
+        );
         await _service.sendImage(
           conversationId: conv.id,
           bytes: bytes,
@@ -1886,7 +1906,11 @@ class _NativeChatViewState extends State<NativeChatView>
     if (!_checkSizeLimit(bytes.length, _maxFileBytes, fileName)) return;
     final mimeType = lookupMimeType(fileName) ?? 'application/octet-stream';
     await _guardSend(() async {
-      _beginUpload('上传文件');
+      _beginUpload(
+        '上传文件',
+        kind: 'FILE',
+        fileName: fileName,
+      );
       await _service.sendFile(
         conversationId: conv.id,
         bytes: bytes,
@@ -2002,53 +2026,6 @@ class _NativeChatViewState extends State<NativeChatView>
     });
   }
 
-  Widget _buildUploadOverlay() {
-    final label = _uploadLabel ?? '上传中';
-    final hasProgress = _uploadProgress > 0;
-    final pct = (_uploadProgress * 100).round();
-    return Positioned.fill(
-      child: IgnorePointer(
-        child: Container(
-          color: Colors.black26,
-          alignment: Alignment.center,
-          child: Container(
-            width: 220,
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-            decoration: BoxDecoration(
-              color: const Color(0xE61F2421),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  hasProgress ? '$label  $pct%' : '$label…',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w600,
-                    fontSize: 13,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(4),
-                  child: LinearProgressIndicator(
-                    value: hasProgress ? _uploadProgress : null,
-                    minHeight: 6,
-                    backgroundColor: Colors.white24,
-                    valueColor: const AlwaysStoppedAnimation<Color>(
-                      DunesColors.accentLine,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
   Widget _buildDownloadOverlay() {
     final label = _downloadLabel ?? '下载中';
     final hasProgress = _downloadProgress > 0;
@@ -2121,11 +2098,19 @@ class _NativeChatViewState extends State<NativeChatView>
     });
   }
 
-  void _beginUpload(String label) {
+  void _beginUpload(
+    String label, {
+    Uint8List? previewBytes,
+    String kind = '',
+    String fileName = '',
+  }) {
     if (!mounted) return;
     setState(() {
       _uploadLabel = label;
       _uploadProgress = 0;
+      _pendingUploadBytes = previewBytes;
+      _pendingUploadKind = kind.toUpperCase();
+      _pendingUploadName = fileName;
     });
   }
 
@@ -2150,9 +2135,83 @@ class _NativeChatViewState extends State<NativeChatView>
           _sending = false;
           _uploadLabel = null;
           _uploadProgress = 0;
+          _pendingUploadBytes = null;
+          _pendingUploadKind = '';
+          _pendingUploadName = '';
         });
       }
     }
+  }
+
+  Widget _buildPendingUploadBubble() {
+    final progress = _uploadProgress;
+    final kind = _pendingUploadKind;
+    final name = _pendingUploadName.isNotEmpty
+        ? _pendingUploadName
+        : (_uploadLabel ?? '上传中');
+    final bytes = _pendingUploadBytes;
+    if (kind == 'IMAGE' && bytes != null && bytes.isNotEmpty) {
+      final box = chatImageBubbleMaxSize(context);
+      return Align(
+        alignment: Alignment.centerRight,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 4, 14, 8),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: SizedBox(
+              width: box.width * 0.72,
+              height: box.width * 0.72,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  Image.memory(bytes, fit: BoxFit.cover),
+                  Container(color: Colors.black45),
+                  Center(
+                    child: SizedBox(
+                      width: 44,
+                      height: 44,
+                      child: CircularProgressIndicator(
+                        value: progress > 0 && progress < 1 ? progress : null,
+                        strokeWidth: 3,
+                        color: Colors.white,
+                        backgroundColor: Colors.white24,
+                      ),
+                    ),
+                  ),
+                  if (progress > 0)
+                    Positioned(
+                      bottom: 8,
+                      left: 0,
+                      right: 0,
+                      child: Text(
+                        '${(progress * 100).round()}%',
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+    return Align(
+      alignment: Alignment.centerRight,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 4, 14, 8),
+        child: ChatFileAttach(
+          fileName: name,
+          mine: true,
+          onTap: () {},
+          uploadProgress: progress <= 0 ? 0.01 : progress,
+        ),
+      ),
+    );
   }
 
   Future<void> _tryRecallMessage(NativeChatMessage m) async {
@@ -2638,54 +2697,69 @@ class _NativeChatViewState extends State<NativeChatView>
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        ChatQuickActions(
-          onCamera: locked || _sending
-              ? () {}
-              : () => _sendImageFrom(ImageSource.camera, '拍照'),
-          onAlbum: locked || _sending ? () {} : _sendMultiImagesFromGallery,
-          onFile: locked || _sending ? () {} : _sendFile,
-          onApproval: () => showDunesSoonToast(context),
-          onAt: locked ? null : _pickAtMember,
-          onEmoji: locked ? null : _toggleEmojiPicker,
-          onVideo: () => showDunesSoonToast(context, '视频通话敬请期待'),
-          showAt: !_isPrivate,
-          showVideo: !_isPrivate,
-        ),
+        if (_uploadLabel != null) _buildPendingUploadBubble(),
         if (_quoteDraft != null && !_quoteDraft!.isEmpty && !locked)
           ChatQuotePreviewBar(quote: _quoteDraft!, onCancel: _clearQuoteDraft),
         ValueListenableBuilder<bool>(
           valueListenable: MeetingLiveController.instance.active,
           builder: (context, meetingLive, _) {
-            // Windows desktop MVP deliberately has no recorder implementation.
-            // Keep the text/file/image IM path identical to mobile while hiding
-            // the mobile hold-to-record control entirely.
-            final voiceEnabled = !kIsWeb &&
+            // 录音能力仅移动端可用；Chrome/桌面仍显示语音按钮，点击时提示。
+            final voiceSupported = !kIsWeb &&
                 defaultTargetPlatform != TargetPlatform.windows &&
                 defaultTargetPlatform != TargetPlatform.macOS;
-            final voiceBlocked = !voiceEnabled || locked || meetingLive;
+            final voiceBlocked = !voiceSupported || locked || meetingLive;
             final effectiveVoiceMode = voiceBlocked ? false : _voiceMode;
             return ChatInputBar(
               controller: _inputController,
               focusNode: _inputFocusNode,
-              onInputFocused: _scrollToLatestAfterKeyboard,
+              onInputFocused: () {
+                // 点输入框：收起工具栏。
+                if (_toolsOpen) setState(() => _toolsOpen = false);
+                _scrollToLatestAfterKeyboard();
+              },
               voiceMode: effectiveVoiceMode,
-              voiceEnabled: voiceEnabled,
+              // 始终展示语音入口，避免 Web 预览时按钮消失。
+              voiceEnabled: true,
               sending: _sending,
               enabled: !locked,
               hintText: inputHint,
               onAttemptPasteImage: locked ? null : _attemptPasteImage,
-              onToggleVoice: voiceBlocked
-                  ? () {
-                      if (meetingLive) {
-                        _showToast('会议录音进行中，暂无法发送语音');
-                      }
-                    }
+              onToggleVoice: () {
+                // 点语音：收起工具栏。
+                if (_toolsOpen) setState(() => _toolsOpen = false);
+                if (meetingLive) {
+                  _showToast('会议录音进行中，暂无法发送语音');
+                  return;
+                }
+                if (!voiceSupported) {
+                  _showToast('当前环境不支持录音');
+                  return;
+                }
+                if (locked) return;
+                setState(() {
+                  _voiceMode = !_voiceMode;
+                  _emojiOpen = false;
+                });
+              },
+              onSend: () {
+                _send();
+              },
+              onPlus: locked || _sending
+                  ? null
                   : () => setState(() {
-                      _voiceMode = !_voiceMode;
-                      _emojiOpen = false;
+                      _toolsOpen = !_toolsOpen;
+                      if (_toolsOpen) {
+                        _emojiOpen = false;
+                        FocusScope.of(context).unfocus();
+                      }
                     }),
-              onSend: _send,
-              onEmoji: locked ? null : _toggleEmojiPicker,
+              plusOpen: _toolsOpen,
+              onEmoji: locked
+                  ? null
+                  : () {
+                      setState(() => _toolsOpen = false);
+                      _toggleEmojiPicker();
+                    },
               recording: _recording,
               recordWillCancel: _recordWillCancel,
               recordDurationMs: _recordDurationMs,
@@ -2699,6 +2773,23 @@ class _NativeChatViewState extends State<NativeChatView>
             );
           },
         ),
+        // 微信式：工具宫格在输入栏下方展开。
+        // 相册/拍照/文件等点击后保持展开，仅语音、输入框、会话区点击时关闭。
+        if (_toolsOpen && !locked)
+          ChatQuickActions(
+            onCamera: locked || _sending
+                ? () {}
+                : () => _sendImageFrom(ImageSource.camera, '拍照'),
+            onAlbum: locked || _sending
+                ? () {}
+                : _sendMultiImagesFromGallery,
+            onFile: locked || _sending ? () {} : _sendFile,
+            onApproval: () => showDunesSoonToast(context),
+            onAt: locked ? null : _pickAtMember,
+            onVideo: () => showDunesSoonToast(context, '视频通话敬请期待'),
+            showAt: !_isPrivate,
+            showVideo: !_isPrivate,
+          ),
         if (_emojiOpen && !locked)
           ChatEmojiGifPanel(
             controller: _inputController,
@@ -2716,7 +2807,6 @@ class _NativeChatViewState extends State<NativeChatView>
     setState(() => _emojiOpen = false);
 
     await _guardSend(() async {
-      _beginUpload('发送 GIF');
       final bytes = await _giphyService.downloadGifBytes(gif);
       if (!_checkSizeLimit(
         bytes.length,
@@ -2728,6 +2818,12 @@ class _NativeChatViewState extends State<NativeChatView>
       final fileName = gif.id.isNotEmpty
           ? 'giphy_${gif.id}.gif'
           : 'giphy_${DateTime.now().millisecondsSinceEpoch}.gif';
+      _beginUpload(
+        '发送 GIF',
+        previewBytes: bytes,
+        kind: 'IMAGE',
+        fileName: fileName,
+      );
       await _service.sendImage(
         conversationId: conv.id,
         bytes: bytes,
@@ -3750,7 +3846,7 @@ class _NativeChatViewState extends State<NativeChatView>
       initial: name.isNotEmpty ? name.substring(0, 1) : '?',
       seed: seed,
       size: 32,
-      showOnline: _isPrivate && _peerOnline && seed == (conv?.peerUserId ?? 0),
+      showOnline: false,
       avatarPreset: preset,
       avatarObjectKey: objectKey,
       avatarService: _service,
@@ -4411,6 +4507,8 @@ class _NativeChatViewState extends State<NativeChatView>
               onTap: () {
                 FocusScope.of(context).unfocus();
                 _closeEmojiPicker();
+                // 点会话区域：收起工具栏。
+                if (_toolsOpen) setState(() => _toolsOpen = false);
               },
               child: Column(
                 children: [
@@ -4432,7 +4530,7 @@ class _NativeChatViewState extends State<NativeChatView>
                                   ? title.substring(0, 1)
                                   : '?',
                               seed: conv.peerUserId ?? conv.id,
-                              showOnline: _peerOnline,
+                              showOnline: false,
                               avatarPreset: conv.peerAvatarPreset,
                               avatarObjectKey: conv.peerAvatarObjectKey,
                               avatarService: _service,
@@ -4811,7 +4909,7 @@ class _NativeChatViewState extends State<NativeChatView>
                             child: Center(
                               child: Material(
                                 color: Colors.transparent,
-                                elevation: 4,
+                                elevation: 0,
                                 borderRadius: BorderRadius.circular(999),
                                 child: InkWell(
                                   onTap: _jumpToPendingMessages,
@@ -4819,21 +4917,7 @@ class _NativeChatViewState extends State<NativeChatView>
                                   child: Ink(
                                     decoration: BoxDecoration(
                                       borderRadius: BorderRadius.circular(999),
-                                      gradient: const LinearGradient(
-                                        begin: Alignment.topLeft,
-                                        end: Alignment.bottomRight,
-                                        colors: [
-                                          Color(0xFF7E64BD),
-                                          Color(0xFF553B96),
-                                        ],
-                                      ),
-                                      boxShadow: const [
-                                        BoxShadow(
-                                          color: Color(0x59553B96),
-                                          blurRadius: 12,
-                                          offset: Offset(0, 4),
-                                        ),
-                                      ],
+                                      color: const Color(0xFF7E64BD),
                                     ),
                                     padding: const EdgeInsets.symmetric(
                                       horizontal: 14,
@@ -4859,9 +4943,9 @@ class _NativeChatViewState extends State<NativeChatView>
                             bottom: 8,
                             child: Center(
                               child: Material(
-                                elevation: 2,
+                                elevation: 0,
                                 borderRadius: BorderRadius.circular(20),
-                                color: DunesColors.bgApp,
+                                color: Colors.white,
                                 child: InkWell(
                                   onTap: _jumpToLatest,
                                   borderRadius: BorderRadius.circular(20),
@@ -4893,7 +4977,6 @@ class _NativeChatViewState extends State<NativeChatView>
                               ),
                             ),
                           ),
-                        if (_uploadLabel != null) _buildUploadOverlay(),
                         if (_downloadingMedia) _buildDownloadOverlay(),
                       ],
                     ),

@@ -216,9 +216,9 @@ class NovaC4ModelPicker extends StatelessWidget {
             borderRadius: BorderRadius.circular(18),
             child: Ink(
               decoration: BoxDecoration(
-                color: const Color(0xFFF3F6FF),
+                color: const Color(0xFFF5F1FB),
                 borderRadius: BorderRadius.circular(18),
-                border: Border.all(color: const Color(0xFFDBE5FF)),
+                border: Border.all(color: const Color(0xFFDFD4F0)),
               ),
               child: Padding(
                 padding: const EdgeInsets.symmetric(
@@ -231,7 +231,7 @@ class NovaC4ModelPicker extends StatelessWidget {
                     const Icon(
                       Icons.bolt_rounded,
                       size: 15,
-                      color: Color(0xFF4D7FFF),
+                      color: Color(0xFF7E64BD),
                     ),
                     const SizedBox(width: 4),
                     Text(
@@ -241,14 +241,14 @@ class NovaC4ModelPicker extends StatelessWidget {
                       style: DunesTypography.sans(
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
-                        color: const Color(0xFF4D7FFF),
+                        color: const Color(0xFF553B96),
                       ),
                     ),
                     if (multi)
                       const Icon(
                         Icons.keyboard_arrow_down_rounded,
                         size: 16,
-                        color: Color(0xFF4D7FFF),
+                        color: Color(0xFF7E64BD),
                       ),
                   ],
                 ),
@@ -505,11 +505,15 @@ class NovaC4BusyHint extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (text.isEmpty) return const SizedBox.shrink();
+    final t = text.trim();
+    // 「正在分析」类状态不再展示，避免输入栏上方多余灰字。
+    if (t.isEmpty || t.contains('正在分析')) {
+      return const SizedBox.shrink();
+    }
     return Padding(
       padding: const EdgeInsets.fromLTRB(14, 6, 14, 0),
       child: Text(
-        text,
+        t,
         textAlign: TextAlign.center,
         style: DunesTypography.sans(
           fontSize: 12,
@@ -780,13 +784,14 @@ class _NovaC4ThinkingDotsState extends State<NovaC4ThinkingDots>
             },
           );
         }),
-        Text(
-          widget.label,
-          style: DunesTypography.mono(
-            fontSize: 10,
-            color: DunesColors.text3,
-          ).copyWith(fontStyle: FontStyle.italic),
-        ),
+        if (widget.label.trim().isNotEmpty)
+          Text(
+            widget.label,
+            style: DunesTypography.mono(
+              fontSize: 10,
+              color: DunesColors.text3,
+            ).copyWith(fontStyle: FontStyle.italic),
+          ),
       ],
     );
   }
@@ -873,7 +878,7 @@ class _NovaC4EmptyStateState extends State<NovaC4EmptyState>
                                   fontSize: 25,
                                   fontWeight: FontWeight.w700,
                                   letterSpacing: 3,
-                                  color: const Color(0xFF07C160),
+                                  color: const Color(0xFF7E64BD),
                                 ),
                               )
                             : Row(
@@ -929,7 +934,7 @@ class _NovaAnimatedEye extends StatelessWidget {
         width: 12,
         height: 12,
         decoration: const BoxDecoration(
-          color: Color(0xFF07C160),
+          color: Color(0xFF7E64BD),
           shape: BoxShape.circle,
         ),
       ),
@@ -1205,6 +1210,7 @@ class NovaC4MessageRow extends StatelessWidget {
     this.mediaResolver,
     this.highlighted = false,
     this.ragUsed = false,
+    this.onResend,
   });
 
   final bool mine;
@@ -1229,6 +1235,7 @@ class NovaC4MessageRow extends StatelessWidget {
   final NovaMediaResolver? mediaResolver;
   final bool highlighted;
   final bool ragUsed;
+  final VoidCallback? onResend;
 
   bool _isImageAttachment(NovaMessageAttachment a) {
     final k = a.kind.toUpperCase();
@@ -1318,14 +1325,16 @@ class NovaC4MessageRow extends StatelessWidget {
     final hasAttachments = attachments.isNotEmpty;
 
     // WebView sendNovaDraftMessage：TEXT + combined attachments 同气泡。
-    if (upperKind == 'TEXT' && hasAttachments && resolver != null) {
+    // 有本地 previewBytes 时即使 resolver 暂不可用也先展示缩略图。
+    if (upperKind == 'TEXT' && hasAttachments) {
+      final uniqueAttachments = dedupeNovaMessageAttachments(attachments);
       return NovaC4SentBubble(
         highlighted: highlighted,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            if (_shouldShowUserText(text, attachments))
+            if (_shouldShowUserText(text, uniqueAttachments))
               Text(
                 text,
                 style: DunesTypography.sans(
@@ -1334,8 +1343,10 @@ class NovaC4MessageRow extends StatelessWidget {
                   height: 1.5,
                 ),
               ),
-            ...attachments.map(
-              (a) => _combinedAttachment(context, resolver, a),
+            ...uniqueAttachments.map(
+              (a) => resolver != null
+                  ? _combinedAttachment(context, resolver, a)
+                  : _localAttachmentFallback(a),
             ),
           ],
         ),
@@ -1353,6 +1364,32 @@ class NovaC4MessageRow extends StatelessWidget {
     return NovaC4SentBubble(text: text, highlighted: highlighted);
   }
 
+  Widget _localAttachmentFallback(NovaMessageAttachment a) {
+    if (_isImageAttachment(a) &&
+        a.previewBytes != null &&
+        a.previewBytes!.isNotEmpty) {
+      return Padding(
+        padding: const EdgeInsets.only(top: 6),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(10),
+          child: Image.memory(
+            a.previewBytes!,
+            width: 170,
+            fit: BoxFit.cover,
+          ),
+        ),
+      );
+    }
+    final name = a.fileName.trim().isNotEmpty ? a.fileName.trim() : '附件';
+    return Padding(
+      padding: const EdgeInsets.only(top: 6),
+      child: Text(
+        name,
+        style: DunesTypography.sans(fontSize: 12, color: Colors.white70),
+      ),
+    );
+  }
+
   Widget _buildAiBubbleContent(BuildContext context) {
     final resolver = mediaResolver;
     final kindMedia = _buildKindMedia(context, resolver, onDarkBubble: false);
@@ -1364,7 +1401,7 @@ class NovaC4MessageRow extends StatelessWidget {
         if (thinking)
           const Padding(
             padding: EdgeInsets.symmetric(vertical: 4),
-            child: NovaC4ThinkingDots(label: '正在分析思考…'),
+            child: NovaC4ThinkingDots(label: ''),
           )
         else ...[
           NovaMarkdownBody(
@@ -1488,16 +1525,45 @@ class NovaC4MessageRow extends StatelessWidget {
     if (mine) {
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 5),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.end,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.end,
           children: [
-            Flexible(
-              child: _wrapCopyable(
-                context,
-                _buildUserBubbleContent(context),
-                _userCopyText,
-              ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                Flexible(
+                  child: _wrapCopyable(
+                    context,
+                    _buildUserBubbleContent(context),
+                    _userCopyText,
+                  ),
+                ),
+              ],
             ),
+            if (onResend != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 4, right: 2),
+                child: TextButton(
+                  onPressed: onResend,
+                  style: TextButton.styleFrom(
+                    foregroundColor: DunesColors.text3,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 0,
+                    ),
+                    minimumSize: Size.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    visualDensity: VisualDensity.compact,
+                  ),
+                  child: Text(
+                    '重新发送',
+                    style: DunesTypography.sans(
+                      fontSize: 12,
+                      color: DunesColors.text3,
+                    ),
+                  ),
+                ),
+              ),
           ],
         ),
       );
@@ -1912,9 +1978,9 @@ class _NovaModelChip extends StatelessWidget {
         child: Ink(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
           decoration: BoxDecoration(
-            color: const Color(0xFFF1F5FF),
+            color: const Color(0xFFF5F1FB),
             borderRadius: BorderRadius.circular(15),
-            border: Border.all(color: const Color(0xFFDDE7FF)),
+            border: Border.all(color: const Color(0xFFDFD4F0)),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
@@ -1922,7 +1988,7 @@ class _NovaModelChip extends StatelessWidget {
               const Icon(
                 Icons.auto_awesome_rounded,
                 size: 13,
-                color: Color(0xFF4D7FFF),
+                color: Color(0xFF7E64BD),
               ),
               const SizedBox(width: 4),
               ConstrainedBox(
@@ -1934,7 +2000,7 @@ class _NovaModelChip extends StatelessWidget {
                   style: DunesTypography.sans(
                     fontSize: 11.5,
                     fontWeight: FontWeight.w600,
-                    color: const Color(0xFF4D7FFF),
+                    color: const Color(0xFF553B96),
                   ),
                 ),
               ),
@@ -1972,14 +2038,14 @@ class _NovaInputIcon extends StatelessWidget {
           decoration: BoxDecoration(
             color: filled
                 ? (accentBlue
-                      ? const Color(0xFF4D7FFF)
+                      ? const Color(0xFF7E64BD)
                       : const Color(0xFFB65252))
                 : Colors.white,
             shape: BoxShape.circle,
             border: Border.all(
               color: filled
                   ? (accentBlue
-                        ? const Color(0xFF4D7FFF)
+                        ? const Color(0xFF7E64BD)
                         : const Color(0xFFB65252))
                   : const Color(0xFF323232),
             ),

@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 
 import '../../core/theme/dunes_theme.dart';
+import '../kb/native_kb_models.dart';
 import '../meeting/native_meeting_models.dart';
 import 'nova_web_storage.dart';
 
@@ -346,6 +347,151 @@ Future<NativeMeetingSummary?> showMeetingMinutesPickerDialog(
         ),
       ),
     ),
+  );
+}
+
+Future<NativeKbDocument?> showKbDocumentPickerDialog(
+  BuildContext context, {
+  required List<NativeKbDocument> documents,
+}) {
+  final selectable = documents
+      .where(nativeKbDocumentIndexed)
+      .toList(growable: false);
+
+  return _showNovaPrdBottomSheet<NativeKbDocument>(
+    context: context,
+    title: '选择知识库文档',
+    body: selectable.isEmpty
+        ? Padding(
+            padding: const EdgeInsets.fromLTRB(24, 24, 24, 32),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 52,
+                  height: 52,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: DunesColors.bgApp,
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Icon(
+                    Icons.cloud_off_outlined,
+                    size: 26,
+                    color: DunesColors.text3,
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Text(
+                  '暂无已索引的知识库文档',
+                  style: DunesTypography.sans(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    color: DunesColors.text,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  '请先在知识库上传会议纪要等文档，并等待索引完成后再试',
+                  textAlign: TextAlign.center,
+                  style: DunesTypography.sans(
+                    fontSize: 13,
+                    color: DunesColors.text3,
+                    height: 1.5,
+                  ),
+                ),
+              ],
+            ),
+          )
+        : ConstrainedBox(
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.of(context).size.height * 0.58,
+            ),
+            child: ListView.separated(
+              shrinkWrap: true,
+              padding: const EdgeInsets.fromLTRB(10, 4, 10, 8),
+              itemCount: selectable.length,
+              separatorBuilder: (_, _) => const SizedBox(height: 6),
+              itemBuilder: (ctx, i) {
+                final row = selectable[i];
+                final title = row.title.trim().isNotEmpty
+                    ? row.title.trim()
+                    : (row.fileName.trim().isNotEmpty
+                          ? row.fileName.trim()
+                          : '未命名文档');
+                final subtitle = row.fileName.trim().isNotEmpty &&
+                        row.fileName.trim() != title
+                    ? row.fileName.trim()
+                    : row.statusLabel;
+                return Material(
+                  color: Colors.transparent,
+                  borderRadius: BorderRadius.circular(14),
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(14),
+                    onTap: () => Navigator.pop(ctx, row),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 12,
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 40,
+                            height: 40,
+                            alignment: Alignment.center,
+                            decoration: BoxDecoration(
+                              color: DunesColors.bgApp,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Icon(
+                              Icons.menu_book_outlined,
+                              size: 18,
+                              color: DunesColors.accent,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  title,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: DunesTypography.sans(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w600,
+                                    color: DunesColors.text,
+                                  ),
+                                ),
+                                if (subtitle.isNotEmpty) ...[
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    subtitle,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: DunesTypography.sans(
+                                      fontSize: 12,
+                                      color: DunesColors.text3,
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                          Icon(
+                            Icons.chevron_right_rounded,
+                            color: DunesColors.text3,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
   );
 }
 

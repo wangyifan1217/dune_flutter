@@ -1613,6 +1613,9 @@ class _NativeChatViewState extends State<NativeChatView>
     }
     final payloadOrNull = payload.isEmpty ? null : payload;
     setState(() => _sending = true);
+    // 键盘「发送」会先 unfocus；连发场景下保持输入焦点。
+    final keepKeyboard = !isWideChatLayout(context);
+    if (keepKeyboard) _inputFocusNode.requestFocus();
     try {
       await _service.sendText(conv.id, text, payload: payloadOrNull);
       _inputController.clear();
@@ -1625,11 +1628,19 @@ class _NativeChatViewState extends State<NativeChatView>
       if (mounted) {
         setState(_clearPendingNewMessages);
         _scrollToPreferredAnchor(force: true);
+        if (keepKeyboard) _inputFocusNode.requestFocus();
       }
     } catch (e) {
       _showToast('发送失败：${friendlyErrorText(e)}');
     } finally {
-      if (mounted) setState(() => _sending = false);
+      if (mounted) {
+        setState(() => _sending = false);
+        if (keepKeyboard) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) _inputFocusNode.requestFocus();
+          });
+        }
+      }
     }
   }
 

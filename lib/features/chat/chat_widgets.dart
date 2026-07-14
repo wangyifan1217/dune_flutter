@@ -734,7 +734,15 @@ class _ChatTextFieldState extends State<_ChatTextField> {
             : TextInputAction.send,
         onSubmitted: widget.wide || widget.onSend == null
             ? null
-            : (_) => widget.onSend!(),
+            : (_) {
+                widget.onSend!();
+                // TextInputAction.send 会在 onSubmitted 之后主动 unfocus；
+                // 发送后立刻抢回焦点，保持键盘不收起（对齐微信连发）。
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (!context.mounted) return;
+                  widget.focusNode?.requestFocus();
+                });
+              },
         onTap: widget.onInputFocused,
         contextMenuBuilder: (context, editableTextState) {
           if (widget.wide) {

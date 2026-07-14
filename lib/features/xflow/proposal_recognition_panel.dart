@@ -212,8 +212,6 @@ class _XfDetRecognitionPanelState extends State<XfDetRecognitionPanel> {
                   fileName: _archive?.fileName ?? '',
                   fileSize: _archive?.fileSize ?? '',
                   sheetCount: _archive?.sheetCount ?? 0,
-                  baselineMarginRate: _archive?.baselineMarginRate ?? 0,
-                  baselineDiscountRate: _archive?.baselineDiscountRate ?? 0,
                   initialExpandedSectionIds: _initialExpandedIds,
                   resolveAssetUrl: widget.service.resolveProposalAssetUrl,
                   authenticatedImageHeaders: widget.service.authImageHeaders,

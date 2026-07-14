@@ -4184,7 +4184,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       final detail = Map<String, dynamic>.from(
         data['detail'] as Map? ?? const {},
       );
-      if (!mounted || detail.isEmpty) return;
+      if (!mounted) return;
+      if (detail.isEmpty) {
+        setState(() => _loadingDetails.remove(detailKey));
+        return;
+      }
       setState(() {
         final base = _bundle ?? LighthouseDataBundle.empty();
         _bundle = base.withDetail(type, key, detail);
@@ -5495,29 +5499,32 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     );
   }
 
+  /// 一级切 tab / 二级进详情共用的载入特效：大号品牌 spinner + mono 文案。
+  Widget _buildBrandBusyContent({required String label}) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const _LhBrandLoader(size: 72),
+        const SizedBox(height: 14),
+        Text(
+          label,
+          style: LhTypography.mono(
+            size: 10,
+            color: LhColors.mute,
+            weight: FontWeight.w600,
+            letterSpacing: 1.6,
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildLoadingOverlay() {
     final label = _cubeLoading && !_loading ? '分析加载中' : '数据同步中';
     return Positioned.fill(
       child: ColoredBox(
         color: Colors.white.withAlpha(210),
-        child: Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const _LhBrandLoader(size: 72),
-              const SizedBox(height: 14),
-              Text(
-                label,
-                style: LhTypography.mono(
-                  size: 10,
-                  color: LhColors.mute,
-                  weight: FontWeight.w600,
-                  letterSpacing: 1.6,
-                ),
-              ),
-            ],
-          ),
-        ),
+        child: Center(child: _buildBrandBusyContent(label: label)),
       ),
     );
   }
@@ -14363,39 +14370,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     );
   }
 
-  /// 详情载入中骨架 —— editorial minimalist, 不闪不跳.
-  /// 用极小的 copper progress ring + "载入中 · LOADING" mono kicker,
-  /// 260px 固定高度避免 AnimatedSwitcher 交叉淡入时的高度抖动.
+  /// 二级详情首次载入 —— 与一级切 tab 同一套品牌 loader 遮罩特效。
   Widget _buildDetailLoadingSkeleton() {
-    return Container(
-      height: 260,
-      alignment: Alignment.center,
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 26,
-            height: 26,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: _LhPlum.soft.withAlpha(120),
-              borderRadius: BorderRadius.circular(5),
-            ),
-            child: const _LhBrandLoader(size: 16),
-          ),
-          const SizedBox(height: 10),
-          Text(
-            '载入中 · LOADING',
-            style: LhTypography.mono(
-              size: 8,
-              color: LhColors.mute2,
-              weight: FontWeight.w600,
-              letterSpacing: 0.5,
-            ),
-          ),
-        ],
-      ),
+    return ColoredBox(
+      color: Colors.white.withAlpha(210),
+      child: Center(child: _buildBrandBusyContent(label: '数据同步中')),
     );
   }
 
@@ -14459,9 +14438,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       }
     }
 
-    final rootDisplayName = type == 'channel' ? key.split('::').first : key;
-    final rootGroupLabel = type == 'channel' && key.contains('::')
-        ? key.split('::').last
+    final rootDisplayName = key.contains('::') ? key.split('::').first : key;
+    final rootGroupLabel = key.contains('::')
+        ? key.substring(key.indexOf('::') + 2)
         : '';
 
     final isCodeDrill = _codeDrillKey != null;
@@ -14476,24 +14455,29 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       );
     }
 
-    // Find entity row in main DATA
+    // Find entity row in main DATA (list keys are name + group → detail key is name::group)
     Map<String, dynamic> entity = {};
     if (_bundle != null) {
       final rows = _bundle!.rowsOf(type);
-      if (type == 'channel') {
-        final parts = key.split('::');
-        final n = parts.isNotEmpty ? parts[0] : '';
-        final g = parts.length > 1 ? parts[1] : '';
-        entity = rows.firstWhere(
-          (r) => r['name'] == n && r['group'] == g,
-          orElse: () => {},
-        );
-      } else {
-        entity = rows.firstWhere((r) => r['name'] == key, orElse: () => {});
-      }
+      final parts = key.split('::');
+      final n = parts.isNotEmpty ? parts[0] : '';
+      final g = parts.length > 1 ? parts.sublist(1).join('::') : '';
+      entity = rows.firstWhere(
+        (r) {
+          if ((r['name']?.toString() ?? '') != n) return false;
+          if (g.isEmpty) return true;
+          return (r['group']?.toString() ?? '') == g;
+        },
+        orElse: () => {},
+      );
     }
 
-    final summaryEntity = isDrill ? viewDict : entity;
+    final summaryEntity = isDrill
+        ? viewDict
+        : (entity.isNotEmpty
+              ? entity
+              // 列表行偶发对不上时，用详情接口自带的汇总字段兜底，避免点进去全是 0。
+              : Map<String, dynamic>.from(detailDict));
     final displayName = isDrill ? _drillDisplayName : rootDisplayName;
     final groupLabel = isDrill ? _drillGroup : rootGroupLabel;
 

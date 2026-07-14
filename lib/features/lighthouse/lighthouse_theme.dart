@@ -1,41 +1,59 @@
 import 'package:flutter/material.dart';
 
-// lighthouse_v13.html :root CSS variables
+import '../../core/theme/dunes_theme.dart';
+
+/// 灯塔色板 —— 中性色 / 语义色对齐沙丘全站 [DunesColors]；
+/// 分组标签色（中石油/中石化等）保留业务语义。
 abstract final class LhColors {
-  static const cream = Color(0xFFE7DCC6);
+  // Surfaces · 对齐沙丘纸色
+  static const cream = DunesColors.bgPage; // 0xFFF4F1EA
   static const paper = Color(0xFFFFFFFF);
-  static const ink = Color(0xFF1A1816);
-  static const ink2 = Color(0xFF3D3A35);
-  static const mute = Color(0xFF6B6862);
-  static const mute2 = Color(0xFF9A968F);
-  static const line = Color(0xFFE9E5DD);
-  static const line2 = Color(0xFFF1EDE5);
-  static const purple = Color(0xFF5B47E8);
-  static const purpleSoft = Color(0xFFEFEBFE);
-  static const copper = Color(0xFFB8884A);
-  static const copperSoft = Color(0xFFF4ECDC);
+  static const mist = DunesColors.bgApp; // 0xFFFBFAF6
+
+  // Ink · 对齐沙丘字色
+  static const ink = DunesColors.text; // 0xFF1F2421
+  static const ink2 = DunesColors.text2; // 0xFF5A5C56
+  static const mute = DunesColors.text2;
+  static const mute2 = DunesColors.text3; // 0xFF94938A
+
+  // Hairlines · 对齐沙丘边框
+  static const line = DunesColors.border; // 0xFFDAD5C7
+  static const line2 = DunesColors.borderSoft; // 0xFFE5E1D3
+
+  // Chrome · 与底部 Tab 激活紫一致（沙丘主导航）
+  static const purple = Color(0xFF7B5CD8);
+  static const purpleSoft = Color(0xFFF0ECF6);
+
+  // Accent · 沙丘 teal / amber（图表偶用）
+  static const accent = DunesColors.accent; // 0xFF2F5D62
+  static const copper = DunesColors.amber; // 0xFFB07A2B
+  static const copperSoft = DunesColors.amberSoft;
+
+  // Domain tags（业务语义色，保留）
   static const cnpc = Color(0xFFA33A2A);
   static const sinopec = Color(0xFF1F6B4A);
   static const private = Color(0xFF4A8A7B);
-  static const carrier = Color(0xFF5B47E8);
-  static const pingan = Color(0xFF5B47E8);
-  static const dict = Color(0xFFC9842A);
+  static const carrier = Color(0xFF7B5CD8);
+  static const pingan = Color(0xFF7B5CD8);
+  static const dict = DunesColors.amber;
   static const multi = Color(0xFF7A6CC4);
-  static const unk = Color(0xFF9A968F);
-  static const product = Color(0xFF2A4A6B);
-  static const pos = Color(0xFF3F7A4F);
-  static const neg = Color(0xFFB0463E);
+  static const unk = DunesColors.text3;
+  static const product = DunesColors.blue; // 0xFF3B6E96
+
+  // 涨跌 · 对齐沙丘 green / coral
+  static const pos = DunesColors.green; // 0xFF5D8A4E
+  static const neg = DunesColors.coral; // 0xFFBC5C40
 }
 
+/// 灯塔排版 —— 与全站 [DunesTypography] 同一套 Geist / Geist Mono。
 abstract final class LhTypography {
   static TextStyle number({double size = 30, Color color = LhColors.ink}) =>
-      TextStyle(
-        fontFamily: 'PingFang SC',
-        fontFamilyFallback: const ['HarmonyOS Sans SC', 'Noto Sans SC', 'Microsoft YaHei'],
-        fontWeight: FontWeight.w700,
+      DunesTypography.sans(
         fontSize: size,
-        color: color,
+        fontWeight: FontWeight.w700,
         letterSpacing: -0.3,
+        color: color,
+      ).copyWith(
         fontFeatures: const [FontFeature.tabularFigures()],
       );
 
@@ -46,14 +64,13 @@ abstract final class LhTypography {
     FontWeight weight = FontWeight.w500,
     double? height,
   }) =>
-      TextStyle(
-        fontFamily: 'Geist Mono',
-        fontFamilyFallback: const ['JetBrains Mono', 'SF Mono', 'Menlo', 'monospace'],
+      DunesTypography.mono(
         fontSize: size,
-        color: color,
-        letterSpacing: letterSpacing,
         fontWeight: weight,
+        letterSpacing: letterSpacing,
+        color: color,
         height: height,
+      ).copyWith(
         fontFeatures: const [FontFeature.tabularFigures()],
       );
 
@@ -65,16 +82,13 @@ abstract final class LhTypography {
     double? height,
     FontStyle? fontStyle,
   }) =>
-      TextStyle(
-        fontFamily: 'PingFang SC',
-        fontFamilyFallback: const ['HarmonyOS Sans SC', 'Noto Sans SC', 'Microsoft YaHei', 'sans-serif'],
+      DunesTypography.sans(
         fontSize: size,
-        color: color,
         fontWeight: weight,
         letterSpacing: letterSpacing,
+        color: color,
         height: height,
-        fontStyle: fontStyle,
-      );
+      ).copyWith(fontStyle: fontStyle);
 }
 
 Color lhGroupColor(String group) {

@@ -66,6 +66,7 @@ import '../workbench/native_team_board_page.dart';
 import '../workbench/workbench_badge_notifier.dart';
 import '../lighthouse/contract_sealing_page.dart';
 import '../lighthouse/native_lighthouse_page.dart';
+import '../lighthouse/platform_tree.dart';
 import '../meeting/meeting_live_controller.dart';
 import '../meeting/meeting_upload_coordinator.dart';
 import '../meeting/native_meeting_create_page.dart';
@@ -745,6 +746,13 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           commUnread: _commUnread,
           workbenchBadge: _workbenchBadge,
         );
+      case 'LM':
+        return _NativePlatformTreeShell(
+          session: widget.session,
+          navigation: widget.navigation,
+          commUnread: _commUnread,
+          workbenchBadge: _workbenchBadge,
+        );
       case 'B2':
         return _NativeB2Page(
           session: widget.session,
@@ -1347,6 +1355,118 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       _b10BackScreen = from;
     });
     widget.navigation.go('B10');
+  }
+}
+
+/// 沙丘平台生态树（与灯塔同栈，底部 Tab 仍高亮「灯塔」）。
+class _NativePlatformTreeShell extends StatelessWidget {
+  const _NativePlatformTreeShell({
+    required this.session,
+    required this.navigation,
+    required this.commUnread,
+    required this.workbenchBadge,
+  });
+
+  final AuthSession session;
+  final DunesNavigationController navigation;
+  final CommUnreadNotifier commUnread;
+  final WorkbenchBadgeNotifier workbenchBadge;
+
+  void _soon(BuildContext context, String label) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('$label · 敬请期待'),
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(milliseconds: 1400),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Theme(
+      data: DunesTheme.light(),
+      child: Scaffold(
+        backgroundColor: const Color(0xFFE8D5B8),
+        body: Column(
+          children: [
+            Expanded(
+              child: DecoratedBox(
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Color(0xFFE8F0F4),
+                      Color(0xFFF3E8D4),
+                      Color(0xFFE8D5B8),
+                      Color(0xFFD4B896),
+                    ],
+                    stops: [0.0, 0.35, 0.72, 1.0],
+                  ),
+                ),
+                child: SafeArea(
+                  bottom: false,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(8, 4, 16, 0),
+                        child: Row(
+                          children: [
+                            IconButton(
+                              visualDensity: VisualDensity.compact,
+                              onPressed: () => navigation.back(),
+                              icon: const Icon(Icons.chevron_left_rounded),
+                            ),
+                            Text(
+                              '沙丘',
+                              style: DunesTypography.sans(
+                                fontSize: 17,
+                                fontWeight: FontWeight.w700,
+                                color: DunesColors.text,
+                                letterSpacing: 0.6,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              '生态树',
+                              style: DunesTypography.mono(
+                                fontSize: 11,
+                                color: DunesColors.text3,
+                                letterSpacing: 1.2,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Expanded(
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(8, 0, 8, 4),
+                          child: PlatformTree(
+                            onLighthouseTap: () => navigation.popTo('LH'),
+                            onQianjiTap: () => _soon(context, '千机'),
+                            onAssetTap: () => _soon(context, '资管'),
+                            onNovaTap: () => _soon(context, 'NOVA'),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            DunesMainTabBar(
+              navigation: navigation,
+              activeScreen: 'LH',
+              commUnread: commUnread,
+              workbenchBadge: workbenchBadge,
+              lighthouseAccess: session.effectiveLighthouseAccess,
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 

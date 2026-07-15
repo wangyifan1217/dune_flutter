@@ -113,7 +113,10 @@ const defaultUploadExtractRules = <String, List<String>>{
 
 List<String> _stringList(Object? value) {
   if (value is! List) return const [];
-  return value.map((e) => e.toString().trim()).where((e) => e.isNotEmpty).toList();
+  return value
+      .map((e) => e.toString().trim())
+      .where((e) => e.isNotEmpty)
+      .toList();
 }
 
 /// 从 detail-config / layout detailConfig 解析 Excel 行标签匹配规则。
@@ -167,9 +170,7 @@ List<UploadPreviewSectionConfig> _parsePreviewSectionList(Object? raw) {
   for (final item in raw) {
     if (item is! Map) continue;
     final cfg = UploadPreviewSectionConfig.fromJson(
-      item is Map<String, dynamic>
-          ? item
-          : Map<String, dynamic>.from(item),
+      item is Map<String, dynamic> ? item : Map<String, dynamic>.from(item),
     );
     if (cfg.id.isNotEmpty && cfg.title.isNotEmpty) out.add(cfg);
   }
@@ -200,9 +201,7 @@ List<UploadSummaryFieldConfig> _parseSummaryFieldList(Object? raw) {
   for (final item in raw) {
     if (item is! Map) continue;
     final cfg = UploadSummaryFieldConfig.fromJson(
-      item is Map<String, dynamic>
-          ? item
-          : Map<String, dynamic>.from(item),
+      item is Map<String, dynamic> ? item : Map<String, dynamic>.from(item),
     );
     if (cfg.label.isNotEmpty && cfg.source.isNotEmpty) out.add(cfg);
   }
@@ -252,9 +251,7 @@ bool summaryFieldHasDisplayValue(dynamic value) {
   if (value == null) return false;
   if (value is String) return value.trim().isNotEmpty;
   if (value is Iterable) {
-    return value
-        .map((e) => e.toString().trim())
-        .any((e) => e.isNotEmpty);
+    return value.map((e) => e.toString().trim()).any((e) => e.isNotEmpty);
   }
   return true;
 }
@@ -285,11 +282,17 @@ List<Map<String, dynamic>> approvalStagesFromDetailConfig(
   return out;
 }
 
-String uploadStageMetaLabel(Map<String, dynamic> stage) {
+String uploadStageMetaLabel(
+  Map<String, dynamic> stage, {
+  Map<int, String>? userNames,
+}) {
   final approverType = (stage['approverType'] ?? '').toString();
   final mode = (stage['mode'] ?? 'SINGLE').toString();
+  final named = stageApproverDisplayNames(stage, userNames);
   String meta;
-  if (approverType == 'SYSTEM') {
+  if (named.isNotEmpty) {
+    meta = named.join('、');
+  } else if (approverType == 'SYSTEM') {
     meta = '系统自动';
   } else if (approverType == 'ROLE') {
     final role = (stage['roleCode'] ?? '').toString();
@@ -301,24 +304,62 @@ String uploadStageMetaLabel(Map<String, dynamic> stage) {
   } else if (approverType == 'USER') {
     meta = '指定人员';
   } else {
-    final ids = stage['approverIds'];
-    meta = ids is List && ids.isNotEmpty ? '${ids.length} 人' : '指定审批人';
+    final ids = stageApproverIds(stage);
+    meta = ids.isNotEmpty ? '${ids.length} 人' : '指定审批人';
   }
   return '$mode · $meta';
+}
+
+List<int> stageApproverIds(Map<String, dynamic> stage) {
+  final raw = stage['approverIds'] ?? stage['approver_ids'];
+  if (raw is! List) return const [];
+  final out = <int>[];
+  for (final item in raw) {
+    final id = item is int
+        ? item
+        : int.tryParse('${item is Map ? (item['userId'] ?? item['id']) : item}') ??
+              0;
+    if (id > 0) out.add(id);
+  }
+  return out;
+}
+
+List<String> stageApproverDisplayNames(
+  Map<String, dynamic> stage,
+  Map<int, String>? userNames,
+) {
+  if (userNames == null || userNames.isEmpty) return const [];
+  final names = <String>[];
+  for (final id in stageApproverIds(stage)) {
+    final name = (userNames[id] ?? '').trim();
+    if (name.isNotEmpty) names.add(name);
+  }
+  return names;
+}
+
+List<int> collectApproverIdsFromStages(Iterable<Map<String, dynamic>> stages) {
+  final ids = <int>{};
+  for (final stage in stages) {
+    ids.addAll(stageApproverIds(stage));
+  }
+  return ids.toList(growable: false);
 }
 
 /// 上传型模板中除 Excel 上传字段外的可填字段（如备注）。
 List<XflowField> supplementalFormFields(List<XflowField> fields) {
   final upload = findPrimaryUploadField(fields);
   final uploadKey = upload?.key.trim() ?? '';
-  return fields.where((field) {
-    if (!isRenderableField(field)) return false;
-    if (field.type == 'upload' || field.raw['actionKind'] == 'excel-import') {
-      return false;
-    }
-    if (uploadKey.isNotEmpty && field.key == uploadKey) return false;
-    return true;
-  }).toList(growable: false);
+  return fields
+      .where((field) {
+        if (!isRenderableField(field)) return false;
+        if (field.type == 'upload' ||
+            field.raw['actionKind'] == 'excel-import') {
+          return false;
+        }
+        if (uploadKey.isNotEmpty && field.key == uploadKey) return false;
+        return true;
+      })
+      .toList(growable: false);
 }
 
 bool supplementalFieldHasValue(dynamic value, {XflowField? field}) {
@@ -329,7 +370,9 @@ bool supplementalFieldHasValue(dynamic value, {XflowField? field}) {
           field.raw['dataSource']?.toString() == 'org_user')) {
     if (value is Map) {
       final uid = value['userId'] ?? value['id'];
-      final name = (value['name'] ?? value['displayName'] ?? '').toString().trim();
+      final name = (value['name'] ?? value['displayName'] ?? '')
+          .toString()
+          .trim();
       if (uid != null && '$uid'.trim().isNotEmpty && uid != 0) return true;
       return name.isNotEmpty;
     }
@@ -366,8 +409,11 @@ String proposalKindLabel({String? templateKey, String? businessType}) {
       return '采购提案';
     case 'project-proposal':
       return '项目提案';
+    case 'finance-business-procurement':
+      return '业务采购申请单';
     default:
-      if ((businessType ?? '').toUpperCase() == 'CONTRACT_SEAL') {
+      final bt = (businessType ?? '').toUpperCase();
+      if (bt == 'CONTRACT_SEAL') {
         return '合同用印';
       }
       if (key.isNotEmpty) {
@@ -377,6 +423,10 @@ String proposalKindLabel({String? templateKey, String? businessType}) {
             .map((part) => part[0].toUpperCase() + part.substring(1))
             .join(' ')
             .replaceAll(RegExp(r'Proposal', caseSensitive: false), '提案');
+      }
+      // 非销售业务线不要默认成「销售提案」，否则列表种类会误导。
+      if (bt.isNotEmpty && bt != 'PROPOSAL') {
+        return '审批';
       }
       return '销售提案';
   }

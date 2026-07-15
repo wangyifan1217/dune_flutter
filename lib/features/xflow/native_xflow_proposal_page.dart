@@ -26,7 +26,7 @@ class NativeXflowProposalPage extends StatefulWidget {
   final DunesNavigationController navigation;
   final String templateKey;
   final int? editProposalId;
-  final void Function(int proposalId) onSubmitted;
+  final void Function(int businessId, String businessType) onSubmitted;
   final String backScreen;
   final VoidCallback? onDeleted;
   final String editBusinessType;
@@ -114,7 +114,9 @@ class _NativeXflowProposalPageState extends State<NativeXflowProposalPage> {
         templateKey: widget.templateKey,
         editProposalId: widget.editProposalId,
         onBack: widget.navigation.back,
-        onSubmitted: widget.onSubmitted,
+        onSubmitted: (proposalId) {
+          widget.onSubmitted(proposalId, 'PROPOSAL');
+        },
       );
     }
 

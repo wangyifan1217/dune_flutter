@@ -385,6 +385,7 @@ class XflowApprovalSubmitButton extends StatelessWidget {
     this.loadingLabel = '提交中',
     this.onDisabledTap,
     this.fullWidth = true,
+    this.icon = Icons.check_rounded,
   });
 
   final VoidCallback? onPressed;
@@ -394,6 +395,7 @@ class XflowApprovalSubmitButton extends StatelessWidget {
   final String loadingLabel;
   final VoidCallback? onDisabledTap;
   final bool fullWidth;
+  final IconData icon;
 
   @override
   Widget build(BuildContext context) {
@@ -433,7 +435,7 @@ class XflowApprovalSubmitButton extends StatelessWidget {
               )
             else
               Icon(
-                Icons.check_rounded,
+                icon,
                 size: 14,
                 color: fgColor.withAlpha(fgAlpha),
               ),

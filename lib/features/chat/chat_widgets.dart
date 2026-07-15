@@ -142,12 +142,24 @@ class ChatQuickActions extends StatelessWidget {
     // PC 宽屏：恢复原单行工具条（含表情入口）；APP：微信式宫格，表情在输入栏。
     final cells = <_QaCell>[
       if (wide) ...[
-        _QaCell(icon: Icons.photo_camera_outlined, label: '拍照', onTap: onCamera),
-        _QaCell(icon: Icons.photo_library_outlined, label: '相册', onTap: onAlbum),
+        _QaCell(
+          icon: Icons.photo_camera_outlined,
+          label: '拍照',
+          onTap: onCamera,
+        ),
+        _QaCell(
+          icon: Icons.photo_library_outlined,
+          label: '相册',
+          onTap: onAlbum,
+        ),
         _QaCell(icon: Icons.attach_file, label: '文件', onTap: onFile),
       ] else ...[
         _QaCell(icon: Icons.photo_outlined, label: '相册', onTap: onAlbum),
-        _QaCell(icon: Icons.photo_camera_outlined, label: '拍照', onTap: onCamera),
+        _QaCell(
+          icon: Icons.photo_camera_outlined,
+          label: '拍照',
+          onTap: onCamera,
+        ),
         _QaCell(icon: Icons.folder_outlined, label: '文件', onTap: onFile),
       ],
       _QaCell(
@@ -319,6 +331,7 @@ class ChatInputBar extends StatelessWidget {
   final bool sending;
   final VoidCallback onToggleVoice;
   final VoidCallback onSend;
+
   /// 右侧「+」：展开/收起工具面板（发送改由键盘「发送」键完成）。
   final VoidCallback? onPlus;
   final bool plusOpen;
@@ -338,6 +351,7 @@ class ChatInputBar extends StatelessWidget {
   final FocusNode? focusNode;
   final VoidCallback? onInputFocused;
   final Color? backgroundColor;
+
   /// 返回 true 表示已处理图片粘贴；false 则回退插入剪贴板文本。
   final Future<bool> Function()? onAttemptPasteImage;
 
@@ -347,8 +361,7 @@ class ChatInputBar extends StatelessWidget {
     final interactionLocked = !enabled || (sending && !showStop);
     final effectiveVoiceMode = voiceEnabled && voiceMode;
     final wide = isWideChatLayout(context);
-    final showEmojiControl =
-        !wide && (emojiPicker != null || onEmoji != null);
+    final showEmojiControl = !wide && (emojiPicker != null || onEmoji != null);
     final minLines = wide ? 3 : 1;
     final maxLines = wide ? 8 : 4;
     final fieldPadV = wide ? 14.0 : 10.0;
@@ -360,12 +373,11 @@ class ChatInputBar extends StatelessWidget {
         wide ? 12 : 10,
         wide ? 10 : 8,
         wide ? 12 : 10,
-        bottomInset > 0
-            ? bottomInset + (wide ? 6 : 4)
-            : (wide ? 12.0 : 8.0),
+        bottomInset > 0 ? bottomInset + (wide ? 6 : 4) : (wide ? 12.0 : 8.0),
       ),
       decoration: BoxDecoration(
-        color: backgroundColor ??
+        color:
+            backgroundColor ??
             (wide ? DunesColors.bgApp : const Color(0xFFF7F7F7)),
         border: Border(
           top: BorderSide(
@@ -701,9 +713,7 @@ class _ChatTextFieldState extends State<_ChatTextField> {
         if (text == null || text.isEmpty) return;
         final value = widget.controller.value;
         final selection = value.selection;
-        final start = selection.isValid
-            ? selection.start
-            : value.text.length;
+        final start = selection.isValid ? selection.start : value.text.length;
         final end = selection.isValid ? selection.end : value.text.length;
         final next = value.text.replaceRange(start, end, text);
         widget.controller.value = TextEditingValue(
@@ -1058,9 +1068,7 @@ class ChatTextBubble extends StatelessWidget {
               ..onTap = () {
                 final uri = Uri.tryParse(href);
                 if (uri == null) return;
-                unawaited(
-                  launchUrl(uri, mode: LaunchMode.externalApplication),
-                );
+                unawaited(launchUrl(uri, mode: LaunchMode.externalApplication));
               },
           ),
         );
@@ -1520,6 +1528,7 @@ class ChatFileAttach extends StatelessWidget {
   final VoidCallback onTap;
   final GestureTapDownCallback? onSecondaryTapDown;
   final bool isPdf;
+
   /// 0~1；非空时在图标上展示圆形上传进度。
   final double? uploadProgress;
 
@@ -1747,6 +1756,7 @@ class CommBackScaffold extends StatelessWidget {
     return Scaffold(
       backgroundColor: DunesColors.bgApp,
       body: SafeArea(
+        bottom: false,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [

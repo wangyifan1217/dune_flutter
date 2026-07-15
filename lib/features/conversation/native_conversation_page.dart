@@ -11,7 +11,6 @@ import '../nova/nova_web_storage.dart';
 import '../../core/theme/dunes_theme.dart';
 import '../../core/util/friendly_error.dart';
 import '../auth/auth_session.dart';
-import '../shell/dunes_main_tab_bar.dart';
 import '../workbench/workbench_badge_notifier.dart';
 import 'comm_unread_notifier.dart';
 import 'conversation_inbox_merge.dart';
@@ -42,7 +41,6 @@ class NativeConversationPage extends StatefulWidget {
     required this.onOpenNewChat,
     this.selectedConversationId,
     this.conversationReadSignal,
-    this.showBottomTabBar = true,
   });
 
   final AuthSession session;
@@ -55,12 +53,12 @@ class NativeConversationPage extends StatefulWidget {
   final VoidCallback onOpenNova;
   final VoidCallback onOpenNotifications;
   final VoidCallback onOpenNewChat;
+
   /// 双栏布局中当前选中的会话，用于列表高亮。
   final int? selectedConversationId;
+
   /// Host 在 mark-read 成功后通知列表清零对应未读角标。
   final ConversationReadSignal? conversationReadSignal;
-  /// 双栏壳已提供底部 Tab 时关闭页内 Tab，避免重复。
-  final bool showBottomTabBar;
 
   @override
   State<NativeConversationPage> createState() => _NativeConversationPageState();
@@ -144,7 +142,9 @@ class _NativeConversationPageState extends State<NativeConversationPage>
   void didUpdateWidget(covariant NativeConversationPage oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.conversationReadSignal != widget.conversationReadSignal) {
-      oldWidget.conversationReadSignal?.removeListener(_onConversationReadSignal);
+      oldWidget.conversationReadSignal?.removeListener(
+        _onConversationReadSignal,
+      );
       widget.conversationReadSignal?.addListener(_onConversationReadSignal);
     }
     final selected = widget.selectedConversationId ?? 0;
@@ -755,15 +755,6 @@ class _NativeConversationPageState extends State<NativeConversationPage>
                 onChanged: _onSearchChanged,
               ),
               Expanded(child: _buildBody()),
-              if (widget.showBottomTabBar)
-                DunesMainTabBar(
-                  navigation: widget.navigation,
-                  activeScreen: 'C1',
-                  commUnread: widget.commUnread,
-                  workbenchBadge: widget.workbenchBadge,
-                  lighthouseAccess: widget.session.lighthouseAccess,
-                  chatOnlyMode: widget.session.isExternalUser,
-                ),
             ],
           ),
         ),

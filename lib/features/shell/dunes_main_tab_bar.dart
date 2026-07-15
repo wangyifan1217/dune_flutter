@@ -24,6 +24,7 @@ class DunesMainTabBar extends StatefulWidget {
     this.lighthouseAccess = false,
     this.chatOnlyMode = false,
     this.axis = Axis.horizontal,
+    this.onSwitchMainTab,
   });
 
   final DunesNavigationController navigation;
@@ -35,6 +36,9 @@ class DunesMainTabBar extends StatefulWidget {
 
   /// [Axis.horizontal]：底部横栏（移动端）；[Axis.vertical]：左侧竖栏（PC）。
   final Axis axis;
+
+  /// 由宿主处理主 Tab 切换时使用，可保留板块的子页面状态。
+  final ValueChanged<String>? onSwitchMainTab;
 
   @override
   State<DunesMainTabBar> createState() => _DunesMainTabBarState();
@@ -77,37 +81,32 @@ class _DunesMainTabBarState extends State<DunesMainTabBar> {
   bool get _showMyDot => (widget.workbenchBadge?.pendingForMe ?? 0) > 0;
 
   /// 外部用户或桌面端：不展示千机 / 灯塔。
-  bool get _hideWorkbenchTabs =>
-      widget.chatOnlyMode || isDesktopCommOnly;
+  bool get _hideWorkbenchTabs => widget.chatOnlyMode || isDesktopCommOnly;
 
   bool get _isVertical => widget.axis == Axis.vertical;
 
   List<Widget> get _tabs => [
-        _tab(
-          icon: Icons.forum_outlined,
-          label: '通讯',
-          screen: 'C1',
-          showRedDot: _showCommDot,
-        ),
-        if (!_hideWorkbenchTabs) ...[
-          _tab(
-            icon: Icons.grid_view_rounded,
-            label: '千机',
-            onTap: () => showDunesSoonToast(context),
-          ),
-          _tab(
-            icon: Icons.explore_outlined,
-            label: '灯塔',
-            screen: 'LH',
-          ),
-        ],
-        _tab(
-          icon: Icons.person_outline_rounded,
-          label: '我的',
-          screen: 'B2',
-          showRedDot: widget.chatOnlyMode ? false : _showMyDot,
-        ),
-      ];
+    _tab(
+      icon: Icons.forum_outlined,
+      label: '通讯',
+      screen: 'C1',
+      showRedDot: _showCommDot,
+    ),
+    if (!_hideWorkbenchTabs) ...[
+      _tab(
+        icon: Icons.grid_view_rounded,
+        label: '千机',
+        onTap: () => showDunesSoonToast(context),
+      ),
+      _tab(icon: Icons.explore_outlined, label: '灯塔', screen: 'LH'),
+    ],
+    _tab(
+      icon: Icons.person_outline_rounded,
+      label: '我的',
+      screen: 'B2',
+      showRedDot: widget.chatOnlyMode ? false : _showMyDot,
+    ),
+  ];
 
   @override
   Widget build(BuildContext context) {
@@ -150,12 +149,7 @@ class _DunesMainTabBarState extends State<DunesMainTabBar> {
             color: DunesColors.bgApp,
             border: Border(right: BorderSide(color: DunesColors.borderSoft)),
           ),
-          child: Column(
-            children: [
-              const SizedBox(height: 12),
-              ..._tabs,
-            ],
-          ),
+          child: Column(children: [const SizedBox(height: 12), ..._tabs]),
         ),
       ),
     );
@@ -176,7 +170,12 @@ class _DunesMainTabBarState extends State<DunesMainTabBar> {
           onTap ??
           () {
             FocusManager.instance.primaryFocus?.unfocus();
-            widget.navigation.switchMainTab(screen!);
+            final switchMainTab = widget.onSwitchMainTab;
+            if (switchMainTab != null) {
+              switchMainTab(screen!);
+            } else {
+              widget.navigation.switchMainTab(screen!);
+            }
           },
       child: SizedBox(
         width: _isVertical ? kDunesMainSideRailWidth : null,
@@ -193,11 +192,7 @@ class _DunesMainTabBarState extends State<DunesMainTabBar> {
                   children: [
                     Icon(icon, size: 24, color: color),
                     if (showRedDot)
-                      const Positioned(
-                        top: -3,
-                        right: -5,
-                        child: _PulseDot(),
-                      ),
+                      const Positioned(top: -3, right: -5, child: _PulseDot()),
                   ],
                 ),
                 const SizedBox(height: 3),

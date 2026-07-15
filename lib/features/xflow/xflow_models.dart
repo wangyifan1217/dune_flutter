@@ -234,6 +234,7 @@ class XflowSubmissionDetail {
     required this.formData,
     required this.createdById,
     required this.createdAt,
+    this.createdByName = '',
   });
 
   final int id;
@@ -244,6 +245,7 @@ class XflowSubmissionDetail {
   final String status;
   final Map<String, dynamic> formData;
   final int createdById;
+  final String createdByName;
   final DateTime? createdAt;
 
   factory XflowSubmissionDetail.fromJson(Map<String, dynamic> json) {
@@ -257,13 +259,24 @@ class XflowSubmissionDetail {
       status: (json['status'] ?? '').toString(),
       formData: form is Map ? Map<String, dynamic>.from(form) : const {},
       createdById: _xflowInt(json['createdById']),
+      createdByName: (json['createdByName'] ?? json['initiatorName'] ?? '')
+          .toString(),
       createdAt: DateTime.tryParse((json['createdAt'] ?? '').toString()),
     );
   }
 }
 
 int _xflowInt(dynamic value) {
-  if (value is num) return value.toInt();
+  if (value == null) return 0;
+  if (value is int) return value;
+  if (value is String) {
+    final s = value.trim();
+    if (s.isEmpty) return 0;
+    return int.tryParse(s) ?? 0;
+  }
+  if (value is num) {
+    return int.tryParse(value.toString().split('.').first) ?? value.toInt();
+  }
   return int.tryParse('$value') ?? 0;
 }
 

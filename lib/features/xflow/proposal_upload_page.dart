@@ -546,6 +546,7 @@ class _ProposalUploadPageState extends State<ProposalUploadPage>
   bool _autosaving = false;
   String _autosaveHint = '';
   bool _recognitionHydrating = false;
+  Map<int, String> _stageUserNames = const {};
 
   int? get _activeDraftId {
     final draft = _draftProposalId;
@@ -729,9 +730,16 @@ class _ProposalUploadPageState extends State<ProposalUploadPage>
       }
 
       if (!mounted) return;
+      final stageNames = await _service.fetchUserDisplayNames(
+        collectApproverIdsFromStages(
+          approvalStagesFromDetailConfig(detailConfig),
+        ),
+      );
+      if (!mounted) return;
       setState(() {
         _template = template;
         _detailConfig = detailConfig;
+        _stageUserNames = stageNames;
         _configLoading = false;
         for (final field in supplemental) {
           _supplementalValues.putIfAbsent(field.key, () => '');
@@ -1593,7 +1601,10 @@ class _ProposalUploadPageState extends State<ProposalUploadPage>
   }
 
   Widget _buildWorkflowSection() {
-    return XflowApprovalFlowSection(stages: _approvalStages);
+    return XflowApprovalFlowSection(
+      stages: _approvalStages,
+      userNames: _stageUserNames,
+    );
   }
 
   List<_ProposalSection> _previewSectionsFor(_ParsedProposal parsed) {

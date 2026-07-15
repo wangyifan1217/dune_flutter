@@ -3,7 +3,10 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../core/platform/desktop_features.dart';
 import '../../core/theme/dunes_theme.dart';
+import '../../core/util/friendly_error.dart';
+import '../chat/file_download.dart' as file_dl;
 import '../shell/dunes_toast.dart';
 import 'xflow_approval_flow_ui.dart';
 import 'xflow_detail_logic.dart';
@@ -1088,11 +1091,21 @@ class XfDetFileList extends StatelessWidget {
   }
 }
 
-class _FileItem extends StatelessWidget {
+class _FileItem extends StatefulWidget {
   const _FileItem({required this.item, required this.service});
 
   final Map<String, dynamic> item;
   final XflowService service;
+
+  @override
+  State<_FileItem> createState() => _FileItemState();
+}
+
+class _FileItemState extends State<_FileItem> {
+  bool _busy = false;
+
+  Map<String, dynamic> get item => widget.item;
+  XflowService get service => widget.service;
 
   bool get _isImage {
     final name = (item['fileName'] ?? '').toString().toLowerCase();
@@ -1109,6 +1122,7 @@ class _FileItem extends StatelessWidget {
   }
 
   Future<void> _open(BuildContext context, {required bool download}) async {
+    if (_busy) return;
     final url = await service.resolveFileUrl(item);
     if (url.isEmpty) {
       if (context.mounted) {
@@ -1116,6 +1130,55 @@ class _FileItem extends StatelessWidget {
       }
       return;
     }
+    final name = (item['fileName'] ?? item['name'] ?? '未命名文件').toString();
+    final cacheKey = (item['objectKey'] ?? item['url'] ?? url)
+        .toString()
+        .trim();
+
+    // PC：下载到本地后用系统默认应用打开，避免走浏览器下载。
+    if (isDesktopCommOnly) {
+      setState(() => _busy = true);
+      try {
+        if (cacheKey.isNotEmpty) {
+          final cached = await file_dl.findCachedChatFile(cacheKey, name);
+          if (cached != null && cached.isNotEmpty) {
+            await file_dl.openLocalFile(cached);
+            return;
+          }
+        }
+        if (context.mounted) {
+          showDunesToast(context, '正在打开 $name…');
+        }
+        final path = await file_dl.openUrlAsFile(
+          url,
+          name,
+          cacheKey: cacheKey.isEmpty ? null : cacheKey,
+        );
+        if (path == null || path.isEmpty) {
+          if (context.mounted) {
+            showDunesToast(
+              context,
+              '文件已保存，但无法自动打开',
+              kind: DunesToastKind.error,
+            );
+          }
+          return;
+        }
+        await file_dl.openLocalFile(path);
+      } catch (e) {
+        if (context.mounted) {
+          showDunesToast(
+            context,
+            '打开失败：${friendlyErrorText(e)}',
+            kind: DunesToastKind.error,
+          );
+        }
+      } finally {
+        if (mounted) setState(() => _busy = false);
+      }
+      return;
+    }
+
     final uri = Uri.parse(url);
     if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
       if (context.mounted) {
@@ -1187,12 +1250,15 @@ class _FileItem extends StatelessWidget {
           ),
           if (_isImage)
             TextButton(
-              onPressed: () => _open(context, download: false),
+              onPressed: _busy ? null : () => _open(context, download: false),
               child: const Text('预览', style: TextStyle(fontSize: 11)),
             ),
           TextButton(
-            onPressed: () => _open(context, download: true),
-            child: const Text('下载', style: TextStyle(fontSize: 11)),
+            onPressed: _busy ? null : () => _open(context, download: true),
+            child: Text(
+              _busy ? '打开中…' : (isDesktopCommOnly ? '打开' : '下载'),
+              style: const TextStyle(fontSize: 11),
+            ),
           ),
         ],
       ),

@@ -62,6 +62,34 @@ String friendlyErrorText(Object? error, {String fallback = '操作失败，请�
       low.contains('服务端未支持存草稿')) {
     return '草稿保存失败，请检查网络后重试';
   }
+  if (low.contains('pending approval not found')) {
+    return '暂无可撤回的审批流，请稍后重试或刷新页面';
+  }
+  if (low.contains('only creator can delete draft') ||
+      low.contains('only creator can delete')) {
+    return '仅创建人可删除草稿';
+  }
+  if (low.contains('only draft can be deleted')) {
+    return '仅草稿状态可删除';
+  }
+  if (low.contains('xflow submission not found') ||
+      low.contains('submission not found')) {
+    return '未找到该审批单，请刷新后重试';
+  }
+  if (low.contains('only creator can withdraw') ||
+      low.contains('only approval initiator can withdraw')) {
+    return '仅发起人可撤回';
+  }
+  if (low.contains('cannot be withdrawn after review')) {
+    return '审批已开始处理，无法撤回';
+  }
+  if (low.contains('only pending') && low.contains('withdraw')) {
+    return '仅审批中的单据可撤回';
+  }
+  if (low.contains('template has no') ||
+      low.contains('no human approval steps')) {
+    return '审批流程未配置完整，请联系管理员';
+  }
   // 其它纯英文技术错误统一兜底，不直接暴露给用户。
   return fallback;
 }

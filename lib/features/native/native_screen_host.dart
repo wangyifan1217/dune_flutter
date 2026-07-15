@@ -130,6 +130,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
   String _xflowFormBackScreen = 'B3';
   String? _b14InitialFilter;
   int _meetingId = 0;
+  String _lastMyScreen = 'B2';
   final ConversationRealtimeDedup _commBadgeDedup = ConversationRealtimeDedup();
   StreamSubscription<ConversationRealtimeEvent>? _commBadgeRtSub;
   Timer? _commBadgeRefreshDebounce;
@@ -675,10 +676,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     return screen == 'C1' || screen == 'C2' || screen == 'C5';
   }
 
-  Widget _buildConversationListPage({
-    required bool showBottomTabBar,
-    int? selectedConversationId,
-  }) {
+  Widget _buildConversationListPage({int? selectedConversationId}) {
     return NativeConversationPage(
       session: widget.session,
       navigation: widget.navigation,
@@ -686,7 +684,6 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       workbenchBadge: _workbenchBadge,
       selectedConversationId: selectedConversationId,
       conversationReadSignal: _conversationReadSignal,
-      showBottomTabBar: showBottomTabBar,
       onOpenPrivate: _openPrivateConversation,
       onOpenGroup: _openGroupConversation,
       onOpenContacts: () => widget.navigation.go('C3'),
@@ -785,7 +782,6 @@ class _NativeScreenHostState extends State<NativeScreenHost>
   Widget _buildChatDualPane() {
     return ChatDualPaneShell(
       listPane: _buildConversationListPage(
-        showBottomTabBar: false,
         selectedConversationId: _dualPaneSelectedConversationId,
       ),
       chatPane: _buildDualPaneChatPane(),
@@ -797,6 +793,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         workbenchBadge: _workbenchBadge,
         lighthouseAccess: widget.session.lighthouseAccess,
         chatOnlyMode: widget.session.isExternalUser,
+        onSwitchMainTab: _switchMainTab,
       ),
     );
   }
@@ -811,12 +808,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           workbenchBadge: _workbenchBadge,
         );
       case 'LM':
-        return _NativePlatformTreeShell(
-          session: widget.session,
-          navigation: widget.navigation,
-          commUnread: _commUnread,
-          workbenchBadge: _workbenchBadge,
-        );
+        return _NativePlatformTreeShell(navigation: widget.navigation);
       case 'B2':
         return _NativeB2Page(
           session: widget.session,
@@ -830,7 +822,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           onLogout: widget.onLogout,
         );
       case 'C1':
-        return _buildConversationListPage(showBottomTabBar: true);
+        return _buildConversationListPage();
       case 'Z2':
         return NativeMessageCenterPage(
           session: widget.session,
@@ -911,21 +903,21 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         return NativeApprovalPage(
           session: widget.session,
           onOpenProposal: (item) => _openProposalDetail(item, from: 'B13'),
-          onBack: widget.navigation.back,
+          onBack: () => widget.navigation.popTo('B2'),
           workbenchRefresh: _workbenchRefresh,
         );
       case 'B1':
         return NativeMyApprovalWorkbenchPage(
           session: widget.session,
           onOpenProposal: (item) => _openProposalDetail(item, from: 'B1'),
-          onBack: widget.navigation.back,
+          onBack: () => widget.navigation.popTo('B2'),
           workbenchRefresh: _workbenchRefresh,
         );
       case 'B14':
         return NativeMyInitiatedPage(
           session: widget.session,
           onOpenProposal: (item) => _openProposalDetail(item, from: 'B14'),
-          onBack: widget.navigation.back,
+          onBack: () => widget.navigation.popTo('B2'),
           initialStatusFilter: _b14InitialFilter,
           workbenchRefresh: _workbenchRefresh,
         );
@@ -933,7 +925,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         return NativeMyCcProposalPage(
           session: widget.session,
           onOpenProposal: (item) => _openProposalDetail(item, from: 'P1'),
-          onBack: widget.navigation.back,
+          onBack: () => widget.navigation.popTo('B2'),
           workbenchRefresh: _workbenchRefresh,
         );
       case 'B3':
@@ -964,22 +956,18 @@ class _NativeScreenHostState extends State<NativeScreenHost>
               _xflowEditBusinessType = 'PROPOSAL';
             });
           },
-          onSubmitted: (proposalId) {
+          onSubmitted: (proposalId, businessType) {
+            // 提交成功后回到「我发起的」，便于立即看到新单据。
             setState(() {
               _selectedTodoHint = null;
-              if (_xflowEditBusinessType != 'PROPOSAL') {
-                _selectedSubmissionBusinessType = _xflowEditBusinessType;
-                _selectedSubmissionBusinessId = proposalId;
-              } else {
-                _selectedProposalId = proposalId;
-              }
-              if (_xflowEditProposalId == null) {
-                _b10BackScreen = 'B3';
-              }
+              _xflowEditProposalId = null;
+              _xflowEditBusinessType = businessType.trim().isEmpty
+                  ? 'PROPOSAL'
+                  : businessType;
+              _lastMyScreen = 'B14';
+              _b14InitialFilter = null;
             });
-            widget.navigation.go(
-              _xflowEditBusinessType == 'PROPOSAL' ? 'B10' : 'XFS',
-            );
+            _goB14();
           },
         );
       case 'XFS':
@@ -1265,7 +1253,10 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       if (isWideChatLayout(context)) {
         return _buildChatDualPane();
       }
-      return _buildConversationListPage(showBottomTabBar: false);
+      return _wrapWithMainNavigation(
+        _buildConversationListPage(),
+        screen: 'C1',
+      );
     }
 
     // 宽屏：C1/C2/C5 使用双栏，不走移动端整页切换动画。
@@ -1278,15 +1269,16 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     final useSlide =
         (_isChatRoute(screen) && _isChatRoute(previousScreen)) ||
         (_isMyRoute(screen) && _isMyRoute(previousScreen));
+    final currentScreen = _buildCurrentScreen(context);
     final child = KeyedSubtree(
       key: ValueKey<String>('screen-$screen'),
-      child: _buildCurrentScreen(context),
+      child: currentScreen,
     );
 
     _lastScreen = screen;
     _lastHistoryDepth = depth;
 
-    return AnimatedSwitcher(
+    final animatedContent = AnimatedSwitcher(
       duration: useSlide ? const Duration(milliseconds: 280) : Duration.zero,
       reverseDuration: useSlide
           ? const Duration(milliseconds: 240)
@@ -1320,6 +1312,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       },
       child: child,
     );
+    return _wrapWithMainNavigation(animatedContent, screen: screen);
   }
 
   bool _isChatRoute(String? screen) {
@@ -1344,6 +1337,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       'B1',
       'B3',
       'B10',
+      'B13',
       'B14',
       'P1',
       'XFP',
@@ -1359,9 +1353,78 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     }.contains(screen);
   }
 
+  /// 所有普通页面共享同一条主导航；宽屏通讯双栏已自带侧栏，不重复包裹。
+  Widget _wrapWithMainNavigation(Widget content, {required String screen}) {
+    final tabBar = DunesMainTabBar(
+      navigation: widget.navigation,
+      activeScreen: _mainTabScreenFor(screen),
+      axis: isDesktopCommOnly ? Axis.vertical : Axis.horizontal,
+      commUnread: _commUnread,
+      workbenchBadge: _workbenchBadge,
+      lighthouseAccess: widget.session.lighthouseAccess,
+      chatOnlyMode: widget.session.isExternalUser,
+      onSwitchMainTab: _switchMainTab,
+    );
+
+    if (isDesktopCommOnly) {
+      return ColoredBox(
+        color: DunesColors.bgApp,
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            tabBar,
+            Expanded(child: content),
+          ],
+        ),
+      );
+    }
+
+    return ColoredBox(
+      color: DunesColors.bgApp,
+      child: Column(
+        children: [
+          Expanded(child: content),
+          tabBar,
+        ],
+      ),
+    );
+  }
+
+  String _mainTabScreenFor(String screen) {
+    if (_isMyRoute(screen)) return 'B2';
+    if (screen == 'LH' || screen == 'LM') return 'LH';
+    return 'C1';
+  }
+
+  /// 主 Tab 在板块之间切换时，保留「我的」最后打开的子页面。
+  void _switchMainTab(String screen) {
+    final current = widget.navigation.currentScreen;
+    if (_isMyRoute(current)) {
+      _lastMyScreen = current;
+    }
+
+    if (screen == 'B2') {
+      final target = _isMyRoute(_lastMyScreen) ? _lastMyScreen : 'B2';
+      if (current != target) {
+        widget.navigation.go('B2');
+        if (target != 'B2') {
+          widget.navigation.go(target);
+        }
+      }
+      return;
+    }
+
+    widget.navigation.switchMainTab(screen);
+  }
+
   /// 进入「我发起的(B14)」并可选预置筛选（如「待发起」用于代发起人入口）。
   void _goB14({String? filter}) {
-    setState(() => _b14InitialFilter = filter);
+    setState(() {
+      _b14InitialFilter = filter;
+      _lastMyScreen = 'B14';
+    });
+    // 先回到「我的」再进列表，避免从新建表单提交后返回又跳回表单页。
+    widget.navigation.popTo('B2');
     widget.navigation.go('B14');
   }
 
@@ -1422,19 +1485,11 @@ class _NativeScreenHostState extends State<NativeScreenHost>
   }
 }
 
-/// 沙丘平台生态树（与灯塔同栈，底部 Tab 仍高亮「灯塔」）。
+/// 沙丘平台生态树（与灯塔同栈，主导航由宿主统一提供）。
 class _NativePlatformTreeShell extends StatelessWidget {
-  const _NativePlatformTreeShell({
-    required this.session,
-    required this.navigation,
-    required this.commUnread,
-    required this.workbenchBadge,
-  });
+  const _NativePlatformTreeShell({required this.navigation});
 
-  final AuthSession session;
   final DunesNavigationController navigation;
-  final CommUnreadNotifier commUnread;
-  final WorkbenchBadgeNotifier workbenchBadge;
 
   void _soon(BuildContext context, String label) {
     ScaffoldMessenger.of(context).showSnackBar(
@@ -1519,13 +1574,6 @@ class _NativePlatformTreeShell extends StatelessWidget {
                   ),
                 ),
               ),
-            ),
-            DunesMainTabBar(
-              navigation: navigation,
-              activeScreen: 'LH',
-              commUnread: commUnread,
-              workbenchBadge: workbenchBadge,
-              lighthouseAccess: session.effectiveLighthouseAccess,
             ),
           ],
         ),
@@ -2065,16 +2113,6 @@ class _NativeB2PageState extends State<_NativeB2Page> {
         : (kb?.documentCount ?? 0);
     final kbCategoryCount = kb?.categoryCount ?? 0;
     final kbUnreadCount = kb?.unreadCount ?? 0;
-    final useSideRail = isDesktopCommOnly;
-    final tabBar = DunesMainTabBar(
-      navigation: widget.navigation,
-      activeScreen: 'B2',
-      axis: useSideRail ? Axis.vertical : Axis.horizontal,
-      commUnread: widget.commUnread,
-      workbenchBadge: widget.workbenchBadge,
-      lighthouseAccess: widget.session.lighthouseAccess,
-      chatOnlyMode: widget.session.isExternalUser,
-    );
     final body = Stack(
       children: [
         Column(
@@ -2236,7 +2274,6 @@ class _NativeB2PageState extends State<_NativeB2Page> {
                 ),
               ),
             ),
-            if (!useSideRail) tabBar,
           ],
         ),
         if (_live.active.value && !isWindowsDesktopCommOnly)
@@ -2250,18 +2287,6 @@ class _NativeB2PageState extends State<_NativeB2Page> {
           ),
       ],
     );
-    if (useSideRail) {
-      return ColoredBox(
-        color: DunesColors.bgApp,
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            tabBar,
-            Expanded(child: SafeArea(left: false, bottom: false, child: body)),
-          ],
-        ),
-      );
-    }
     return ColoredBox(
       color: DunesColors.bgApp,
       child: SafeArea(bottom: false, child: body),

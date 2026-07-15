@@ -14,6 +14,7 @@ import 'xflow_linkage.dart';
 import 'xflow_models.dart';
 import 'xflow_service.dart';
 import 'xflow_shared_widgets.dart';
+import 'proposal_upload_config.dart';
 
 class NativeXflowFormPage extends StatefulWidget {
   const NativeXflowFormPage({
@@ -32,7 +33,8 @@ class NativeXflowFormPage extends StatefulWidget {
   final DunesNavigationController navigation;
   final String templateKey;
   final int? editProposalId;
-  final void Function(int proposalId) onSubmitted;
+  /// 第二个参数为业务类型；非 PROPOSAL 时应跳转动态审批详情。
+  final void Function(int businessId, String businessType) onSubmitted;
   final String editBusinessType;
 
   /// 返回 / 删除后跳转的目标屏（新建来自 B3，编辑草稿来自 B14）。
@@ -59,11 +61,13 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage>
   String? _error;
   String? _ccError;
   bool _submitting = false;
+  bool _submitSucceeded = false;
   int? _draftProposalId;
   Timer? _autosaveTimer;
   int _autosaveSeq = 0;
   String _autosaveHint = '填写中将自动保存草稿';
   bool _autosaving = false;
+  Map<int, String> _stageUserNames = const {};
 
   void _dismissKeyboard() {
     final focus = FocusManager.instance.primaryFocus;
@@ -78,6 +82,26 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage>
       widget.editProposalId != null && widget.editProposalId! > 0;
   bool get _isDynamicSubmission =>
       _isEditing && widget.editBusinessType.toUpperCase() != 'PROPOSAL';
+
+  /// 模板自身的业务类型（新建非销售表单时 editBusinessType 仍可能是 PROPOSAL）。
+  String get _templateBusinessType {
+    final raw = _template?.raw;
+    if (raw != null) {
+      final nested = raw['template'];
+      if (nested is Map) {
+        final bt = (nested['businessType'] ?? '').toString().trim();
+        if (bt.isNotEmpty) return bt;
+      }
+      final bt = (raw['businessType'] ?? '').toString().trim();
+      if (bt.isNotEmpty) return bt;
+    }
+    final edit = widget.editBusinessType.trim();
+    return edit.isEmpty ? 'PROPOSAL' : edit;
+  }
+
+  bool get _isNonProposalTemplate =>
+      _templateBusinessType.toUpperCase() != 'PROPOSAL';
+
   String get _editingStatus => _isDynamicSubmission
       ? (_editingSubmission?.status.toLowerCase() ?? '')
       : (_editingDetail?.status.toLowerCase() ?? '');
@@ -92,7 +116,12 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage>
           : null);
 
   bool get _canAutosave {
-    if (_loading || _submitting || _isDelegatedPendingInitiate) return false;
+    if (_loading ||
+        _submitting ||
+        _submitSucceeded ||
+        _isDelegatedPendingInitiate) {
+      return false;
+    }
     final st = _editingStatus;
     if (st.isEmpty) return true;
     return st == 'draft' ||
@@ -111,8 +140,13 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage>
 
   /// 仅创建人本人的草稿(DRAFT)可删除；已推送的「待发起」由代发起人处理，不在此删除。
   bool get _canDeleteDraft {
-    if (_isDynamicSubmission) return false;
     if (!_isEditing) return false;
+    if (_isDynamicSubmission) {
+      final st = _editingSubmission?.status.toUpperCase() ?? '';
+      if (st != 'DRAFT') return false;
+      final createdBy = _editingSubmission?.createdById ?? 0;
+      return createdBy > 0 && createdBy == widget.session.userId;
+    }
     final st = _editingDetail?.status.toUpperCase() ?? '';
     if (st != 'DRAFT') return false;
     final createdBy = _editingDetail?.createdById ?? 0;
@@ -139,7 +173,9 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage>
       unawaited(
         _service.saveLocalDraft(
           Map<String, dynamic>.from(_values),
-          businessType: widget.editBusinessType,
+          businessType: _isNonProposalTemplate
+              ? _templateBusinessType
+              : widget.editBusinessType,
           businessId: _activeDraftId,
         ),
       );
@@ -181,7 +217,9 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage>
       if (forceLocalFirst) {
         await _service.saveLocalDraft(
           Map<String, dynamic>.from(_values),
-          businessType: widget.editBusinessType,
+          businessType: _isNonProposalTemplate
+              ? _templateBusinessType
+              : widget.editBusinessType,
           businessId: _activeDraftId,
         );
       }
@@ -190,6 +228,13 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage>
           businessType: widget.editBusinessType,
           businessId: widget.editProposalId!,
           formValues: Map<String, dynamic>.from(_values),
+        );
+      } else if (_isNonProposalTemplate) {
+        // 非销售模板不要写进 proposal 草稿表，否则提交后会残留假草稿。
+        await _service.saveLocalDraft(
+          Map<String, dynamic>.from(_values),
+          businessType: _templateBusinessType,
+          businessId: _activeDraftId,
         );
       } else {
         final res = await _service.submitDraft(
@@ -206,7 +251,9 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage>
     } catch (_) {
       await _service.saveLocalDraft(
         Map<String, dynamic>.from(_values),
-        businessType: widget.editBusinessType,
+        businessType: _isNonProposalTemplate
+            ? _templateBusinessType
+            : widget.editBusinessType,
         businessId: _activeDraftId,
       );
       if (!mounted || seq != _autosaveSeq) return;
@@ -259,11 +306,15 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage>
       } catch (_) {}
       // 初次渲染前先重算计算字段（如印花税），避免编辑/草稿预填时显示为空。
       XflowLinkage.recompute(template.fields, template.layout, _values);
+      final stageNames = await _service.fetchUserDisplayNames(
+        collectApproverIdsFromStages(template.stages),
+      );
       if (!mounted) return;
       setState(() {
         _template = template;
         _editingDetail = detail;
         _detailConfig = detailCfg;
+        _stageUserNames = stageNames;
         _loading = false;
         _autosaveHint = _canAutosave ? '填写中将自动保存草稿' : '';
       });
@@ -323,6 +374,8 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage>
       final ok = await confirmSubmitForApproval(context);
       if (!ok || !mounted) return;
     }
+    _autosaveTimer?.cancel();
+    _autosaveSeq++;
     setState(() => _submitting = true);
     try {
       Map<String, dynamic> res;
@@ -345,27 +398,37 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage>
         );
         await _service.initiateProposal(widget.editProposalId!);
         if (!mounted) return;
+        _submitSucceeded = true;
+        await _clearDraftsAfterSubmit(
+          businessType: 'PROPOSAL',
+          businessId: widget.editProposalId,
+        );
         showDunesToast(context, '已提交审批');
-        widget.onSubmitted(widget.editProposalId!);
+        widget.onSubmitted(widget.editProposalId!, 'PROPOSAL');
         return;
       } else {
         res = await _service.submitProposal(
           formValues: _values,
           templateKey: widget.templateKey,
           clearDraftBusinessId: _activeDraftId,
+          clearDraftBusinessType: _isNonProposalTemplate
+              ? _templateBusinessType
+              : widget.editBusinessType,
         );
-        // 继续填写的服务端草稿在提交后会生成新的正式提案，
-        // 删除原草稿以避免「我发起的」列表里残留重复的草稿项。
-        if (_isEditing && status == 'draft' && !_isDynamicSubmission) {
-          try {
-            await _service.deleteProposal(widget.editProposalId!);
-          } catch (_) {}
-        }
       }
       final pid = _int(res['businessId'] ?? res['proposalId'] ?? res['id']);
+      final bt = (res['businessType'] ?? _templateBusinessType)
+          .toString()
+          .trim();
+      final businessType = bt.isEmpty ? 'PROPOSAL' : bt;
       if (!mounted) return;
+      _submitSucceeded = true;
+      await _clearDraftsAfterSubmit(
+        businessType: businessType,
+        businessId: pid > 0 ? pid : _activeDraftId,
+      );
       showDunesToast(context, '已提交审批');
-      if (pid > 0) widget.onSubmitted(pid);
+      if (pid > 0) widget.onSubmitted(pid, businessType);
     } catch (e) {
       if (!mounted) return;
       showDunesToast(
@@ -375,6 +438,46 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage>
       );
     } finally {
       if (mounted) setState(() => _submitting = false);
+    }
+  }
+
+  /// 提交成功后清理：本地草稿 + 自动保存误写入的 proposal 草稿。
+  Future<void> _clearDraftsAfterSubmit({
+    required String businessType,
+    int? businessId,
+  }) async {
+    final draftId = _draftProposalId;
+    if (draftId != null && draftId > 0) {
+      try {
+        await _service.deleteProposal(draftId);
+      } catch (_) {}
+      _draftProposalId = null;
+    } else if (_isEditing &&
+        !_isDynamicSubmission &&
+        (_editingStatus == 'draft') &&
+        widget.editProposalId != null) {
+      try {
+        await _service.deleteProposal(widget.editProposalId!);
+      } catch (_) {}
+    }
+    await _service.clearLocalDraft(
+      businessType: businessType,
+      businessId: businessId,
+    );
+    await _service.clearLocalDraft(
+      businessType: businessType,
+      businessId: null,
+    );
+    await _service.clearLocalDraft(
+      businessType: widget.editBusinessType,
+      businessId: null,
+    );
+    if (_templateBusinessType.toUpperCase() !=
+        widget.editBusinessType.toUpperCase()) {
+      await _service.clearLocalDraft(
+        businessType: _templateBusinessType,
+        businessId: null,
+      );
     }
   }
 
@@ -400,7 +503,10 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage>
     );
     if (confirm != true) return;
     try {
-      await _service.deleteProposal(id);
+      await _service.deleteDraft(
+        businessType: widget.editBusinessType,
+        businessId: id,
+      );
       await _service.clearLocalDraft(
         businessType: widget.editBusinessType,
         businessId: id,
@@ -692,6 +798,7 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage>
                             XflowApprovalFlowSection(
                               stages: _template!.stages,
                               layout: _template!.layout,
+                              userNames: _stageUserNames,
                             ),
                             XflowCcRulesCard(
                               rules: _ccRules,

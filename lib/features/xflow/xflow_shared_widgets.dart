@@ -689,7 +689,8 @@ class XflowProposalListCard extends StatelessWidget {
       templateKey: item.templateKey,
       businessType: item.businessType,
     );
-    final typeLabel = excelProposalTypeLabel(item.proposalType);
+    final typeLabel = _compactProposalTypeLabel(item, kindLabel);
+    final title = _compactApprovalTitle(item, kindLabel);
     final timeText = item.createdAt != null
         ? _formatShortDate(item.createdAt!)
         : '—';
@@ -713,7 +714,7 @@ class XflowProposalListCard extends StatelessWidget {
                 children: [
                   Expanded(
                     child: Text(
-                      item.title.trim().isEmpty ? '未命名提案' : item.title.trim(),
+                      title,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: DunesTypography.sans(
@@ -771,7 +772,8 @@ class XflowProposalListCard extends StatelessWidget {
       templateKey: item.templateKey,
       businessType: item.businessType,
     );
-    final typeLabel = excelProposalTypeLabel(item.proposalType);
+    final typeLabel = _compactProposalTypeLabel(item, kindLabel);
+    final title = _compactApprovalTitle(item, kindLabel);
     final timeText = item.createdAt != null
         ? _formatShortDate(item.createdAt!)
         : '—';
@@ -796,7 +798,7 @@ class XflowProposalListCard extends StatelessWidget {
                 children: [
                   Expanded(
                     child: Text(
-                      item.title.trim().isEmpty ? '未命名提案' : item.title.trim(),
+                      title,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: DunesTypography.sans(
@@ -830,7 +832,12 @@ class XflowProposalListCard extends StatelessWidget {
     );
   }
 
-  Widget _compactMetaRow(String label, String value, {bool mono = false, String? status}) {
+  Widget _compactMetaRow(
+    String label,
+    String value, {
+    bool mono = false,
+    String? status,
+  }) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -856,7 +863,10 @@ class XflowProposalListCard extends StatelessWidget {
                           fontWeight: FontWeight.w600,
                           color: DunesColors.text2,
                         )
-                      : DunesTypography.sans(fontSize: 11.5, color: DunesColors.text2),
+                      : DunesTypography.sans(
+                          fontSize: 11.5,
+                          color: DunesColors.text2,
+                        ),
                 ),
         ),
       ],
@@ -1085,11 +1095,13 @@ class XflowStageList extends StatelessWidget {
     required this.stages,
     this.layout = const {},
     this.onStageHelp,
+    this.userNames = const {},
   });
 
   final List<Map<String, dynamic>> stages;
   final Map<String, dynamic> layout;
   final Future<void> Function(int stageIndex)? onStageHelp;
+  final Map<int, String> userNames;
 
   @override
   Widget build(BuildContext context) {
@@ -1097,6 +1109,7 @@ class XflowStageList extends StatelessWidget {
       stages: stages,
       layout: layout,
       onStageHelp: onStageHelp,
+      userNames: userNames,
       topSpacing: 0,
       showHeader: false,
     );
@@ -1311,6 +1324,7 @@ class XflowXfActionBar extends StatelessWidget {
     this.onSecondaryPressed,
     this.secondaryDanger = false,
     this.onDisabledTap,
+    this.icon,
   });
 
   final String label;
@@ -1320,9 +1334,12 @@ class XflowXfActionBar extends StatelessWidget {
   final VoidCallback? onSecondaryPressed;
   final bool secondaryDanger;
   final VoidCallback? onDisabledTap;
+  final IconData? icon;
 
   @override
   Widget build(BuildContext context) {
+    final resolvedIcon = icon ??
+        (label.contains('撤回') ? Icons.undo_rounded : Icons.check_rounded);
     return Padding(
       padding: const EdgeInsets.fromLTRB(14, 0, 14, 12),
       child: Column(
@@ -1360,6 +1377,7 @@ class XflowXfActionBar extends StatelessWidget {
               enabled: onPressed != null,
               label: label == '重新提交' ? '提交审批' : label,
               onDisabledTap: onDisabledTap,
+              icon: resolvedIcon,
             ),
           ),
         ],
@@ -1700,6 +1718,27 @@ _ProgressFoot _progressFoot(XflowProposalItem item) {
     hint = '¥${item.scaleWan}万';
   }
   return _ProgressFoot(pct: pct, px: px, hint: hint);
+}
+
+String _compactApprovalTitle(XflowProposalItem item, String kindLabel) {
+  final businessType = item.businessType.trim();
+  final rawTitle = item.title.trim();
+  final isGenericSubmissionTitle =
+      rawTitle.isEmpty ||
+      rawTitle == businessType ||
+      rawTitle.startsWith('$businessType #');
+  final templateName =
+      item.businessType.toUpperCase() == 'PROPOSAL' || isGenericSubmissionTitle
+      ? kindLabel
+      : rawTitle;
+  final submitter = item.createdByName.trim();
+  return submitter.isEmpty ? templateName : '$submitter - $templateName';
+}
+
+String _compactProposalTypeLabel(XflowProposalItem item, String kindLabel) {
+  final proposalType = excelProposalTypeLabel(item.proposalType);
+  if (proposalType != '—') return proposalType;
+  return item.businessType.toUpperCase() == 'PROPOSAL' ? '—' : kindLabel;
 }
 
 String _proposalTypeLabel(XflowProposalItem item) {

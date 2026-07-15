@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:webview_flutter/webview_flutter.dart';
 
+import '../../core/platform/desktop_features.dart';
 import '../../core/theme/dunes_theme.dart';
 import '../auth/auth_session.dart';
 import '../chat/file_download.dart' as file_dl;
@@ -90,9 +91,7 @@ class _ProposalExcelPreviewPageState extends State<ProposalExcelPreviewPage> {
             if (!mounted) return;
             setState(() {
               _loading = false;
-              _error = err.description.isNotEmpty
-                  ? err.description
-                  : '预览加载失败';
+              _error = err.description.isNotEmpty ? err.description : '预览加载失败';
             });
           },
         ),
@@ -107,7 +106,10 @@ class _ProposalExcelPreviewPageState extends State<ProposalExcelPreviewPage> {
     });
     try {
       // 带鉴权头加载 HTML，避免 WebView 直接 GET 丢 token。
-      final resp = await http.get(Uri.parse(_previewUrl), headers: _authHeaders);
+      final resp = await http.get(
+        Uri.parse(_previewUrl),
+        headers: _authHeaders,
+      );
       if (!mounted) return;
       if (resp.statusCode < 200 || resp.statusCode >= 300) {
         setState(() {
@@ -147,6 +149,15 @@ class _ProposalExcelPreviewPageState extends State<ProposalExcelPreviewPage> {
       if (!mounted) return;
       if (path == null || path.isEmpty) {
         showDunesToast(context, '下载失败', kind: DunesToastKind.error);
+      } else if (isDesktopCommOnly) {
+        try {
+          await file_dl.openLocalFile(path);
+          if (!mounted) return;
+          showDunesToast(context, '已打开：$name');
+        } catch (_) {
+          if (!mounted) return;
+          showDunesToast(context, '已保存：$path');
+        }
       } else {
         showDunesToast(context, '已保存：$path');
       }

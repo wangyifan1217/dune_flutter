@@ -251,7 +251,10 @@ class _NativeProposalListPageState extends State<_NativeProposalListPage> {
     );
     if (ok != true) return;
     try {
-      await _service.deleteProposal(item.id);
+      await _service.deleteDraft(
+        businessType: item.businessType,
+        businessId: item.id,
+      );
       if (!mounted) return;
       showDunesToast(context, '草稿已删除');
       await _load(silent: true);

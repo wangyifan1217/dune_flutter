@@ -6,6 +6,7 @@ import '../../core/util/friendly_error.dart';
 import '../auth/auth_session.dart';
 import '../shell/dunes_toast.dart';
 import 'xflow_detail_logic.dart';
+import 'xflow_detail_widgets.dart';
 import 'xflow_models.dart';
 import 'xflow_service.dart';
 import 'xflow_shared_widgets.dart';
@@ -40,6 +41,7 @@ class _NativeXflowSubmissionPageState extends State<NativeXflowSubmissionPage> {
   XflowSubmissionDetail? _detail;
   XflowTemplateDetail? _template;
   XflowApprovalTrail? _trail;
+  Map<int, String> _assigneeNames = const {};
   String? _error;
   bool _loading = true;
 
@@ -67,11 +69,17 @@ class _NativeXflowSubmissionPageState extends State<NativeXflowSubmissionPage> {
           businessId: detail.businessId,
         ),
       ]);
+      final trail = results[1] as XflowApprovalTrail?;
+      final assigneeNames = await _service.fetchSubmissionAssigneeNames(
+        trail: trail,
+        createdById: detail.createdById,
+      );
       if (!mounted) return;
       setState(() {
         _detail = detail;
         _template = results[0] as XflowTemplateDetail;
-        _trail = results[1] as XflowApprovalTrail?;
+        _trail = trail;
+        _assigneeNames = assigneeNames;
         _loading = false;
       });
     } catch (e) {
@@ -129,10 +137,58 @@ class _NativeXflowSubmissionPageState extends State<NativeXflowSubmissionPage> {
     }
   }
 
-  String _valueText(XflowField field, dynamic value) {
-    final text = formatFieldValue(field, value);
-    if (text.isEmpty) return '-';
-    return text;
+  String get _submitterName {
+    final detail = _detail;
+    if (detail == null) return '';
+    final fromDetail = detail.createdByName.trim();
+    if (fromDetail.isNotEmpty) return fromDetail;
+    if (detail.createdById > 0) {
+      final fromMap = _assigneeNames[detail.createdById]?.trim() ?? '';
+      if (fromMap.isNotEmpty) return fromMap;
+    }
+    final trail = _trail;
+    if (trail != null && trail.initiatorId > 0) {
+      return _assigneeNames[trail.initiatorId]?.trim() ?? '';
+    }
+    return '';
+  }
+
+  XflowDetailBundle? get _detailBundle {
+    final detail = _detail;
+    final template = _template;
+    if (detail == null || template == null) return null;
+    final submitter = _submitterName;
+    final proposalDetail = XflowProposalDetail(
+      id: detail.businessId,
+      code: '#${detail.businessId}',
+      title: template.title,
+      status: detail.status,
+      summary: '',
+      beaconId: '',
+      ownerName: submitter,
+      amountText: '',
+      formValues: detail.formData,
+      products: const [],
+      slots: const [],
+      createdById: detail.createdById,
+      raw: <String, dynamic>{
+        'createdAt': detail.createdAt?.toIso8601String(),
+        'createdById': detail.createdById,
+        'createdBy': submitter,
+        'createdByName': submitter,
+      },
+    );
+    return XflowDetailBundle(
+      detail: proposalDetail,
+      trail: _trail,
+      fields: template.fields,
+      // 动态审批详情始终应展示审批进度，不受旧模板配置影响。
+      detailConfig: <String, dynamic>{'showApprovalFlow': true},
+      stages: template.stages,
+      myTodo: null,
+      assigneeNames: _assigneeNames,
+      layout: template.layout,
+    );
   }
 
   @override
@@ -141,11 +197,12 @@ class _NativeXflowSubmissionPageState extends State<NativeXflowSubmissionPage> {
     return ColoredBox(
       color: DunesColors.bgApp,
       child: SafeArea(
+        bottom: false,
         child: Column(
           children: [
             XflowDsBar(
               crumb: '动态审批 · 返回列表',
-              title: detail?.title ?? '提交详情',
+              title: _template?.title ?? detail?.title ?? '提交详情',
               onBack: () => widget.navigation.popTo(widget.backScreen),
             ),
             Expanded(
@@ -159,55 +216,24 @@ class _NativeXflowSubmissionPageState extends State<NativeXflowSubmissionPage> {
                       padding: const EdgeInsets.all(14),
                       children: [
                         XflowFormCard(
-                          title: detail!.title,
-                          tag: detail.status.toUpperCase() == 'DRAFT'
+                          title: _template?.title ?? detail!.title,
+                          tag: detail!.status.toUpperCase() == 'DRAFT'
                               ? '草稿'
                               : '审批',
-                          child: Column(
-                            children: _template!.fields
-                                .where(
-                                  (field) =>
-                                      field.key.isNotEmpty &&
-                                      field.type != 'section' &&
-                                      field.type != 'action',
-                                )
-                                .map(
-                                  (field) => Padding(
-                                    padding: const EdgeInsets.only(bottom: 12),
-                                    child: Row(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        SizedBox(
-                                          width: 112,
-                                          child: Text(
-                                            field.label.isEmpty
-                                                ? field.key
-                                                : field.label,
-                                            style: DunesTypography.sans(
-                                              fontSize: 12,
-                                              color: DunesColors.text3,
-                                            ),
-                                          ),
-                                        ),
-                                        Expanded(
-                                          child: Text(
-                                            _valueText(
-                                              field,
-                                              detail.formData[field.key],
-                                            ),
-                                            style: DunesTypography.sans(
-                                              fontSize: 13,
-                                              color: DunesColors.text,
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                )
-                                .toList(growable: false),
+                          child: XfDetFormSections(
+                            sections: buildFieldSections(
+                              _template!.fields,
+                              detail.formData,
+                              _detailBundle!.detail,
+                            ),
+                            service: _service,
                           ),
+                        ),
+                        const SizedBox(height: 12),
+                        XflowFormCard(
+                          title: '审批进度',
+                          tag: _trail == null ? '待同步' : '流程追踪',
+                          child: XfDetTrackTimeline(bundle: _detailBundle!),
                         ),
                       ],
                     ),

@@ -7,6 +7,7 @@ import Foundation
 
 import app_badge_plus
 import audio_session
+import desktop_drop
 import emoji_picker_flutter
 import file_selector_macos
 import flutter_local_notifications
@@ -26,6 +27,7 @@ import window_manager
 func RegisterGeneratedPlugins(registry: FlutterPluginRegistry) {
   AppBadgePlusPlugin.register(with: registry.registrar(forPlugin: "AppBadgePlusPlugin"))
   AudioSessionPlugin.register(with: registry.registrar(forPlugin: "AudioSessionPlugin"))
+  DesktopDropPlugin.register(with: registry.registrar(forPlugin: "DesktopDropPlugin"))
   EmojiPickerFlutterPlugin.register(with: registry.registrar(forPlugin: "EmojiPickerFlutterPlugin"))
   FileSelectorPlugin.register(with: registry.registrar(forPlugin: "FileSelectorPlugin"))
   FlutterLocalNotificationsPlugin.register(with: registry.registrar(forPlugin: "FlutterLocalNotificationsPlugin"))

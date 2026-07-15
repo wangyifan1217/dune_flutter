@@ -277,12 +277,37 @@ class XflowService {
     final byId = <String, XflowProposalItem>{};
     Object? err1;
     Object? err2;
+    // 非 PROPOSAL 以 submissions/mine 为准；先拉它，再决定是否跳过 my-initiated
+    // 中的同类项，避免 19 位 businessId 精度差导致「假重复」两条。
+    var submissionsOk = false;
+    try {
+      final rows = await _requestList('/xflow/submissions/mine');
+      submissionsOk = true;
+      for (final row in rows.whereType<Map>()) {
+        final it = _mapSubmissionItem(Map<String, dynamic>.from(row));
+        if (it.id > 0) byId[_itemKey(it)] = it;
+      }
+    } catch (e) {
+      // 旧服可能没有该接口；失败时回退用 my-initiated 展示非销售审批。
+      err2 = e;
+    }
     // `my-initiated`：我已正式发起、进入审批流的提案。
     try {
       final rows = await _requestList('/workbench/my-initiated');
-      for (final row in rows.whereType<Map<String, dynamic>>()) {
-        final it = _mapB14Item(row);
-        if (it.id > 0) byId[_itemKey(it)] = it;
+      for (final row in rows.whereType<Map>()) {
+        final map = Map<String, dynamic>.from(row);
+        final bt = (map['businessType'] ?? map['business_type'] ?? 'PROPOSAL')
+            .toString()
+            .toUpperCase();
+        if (bt != 'PROPOSAL' && submissionsOk) continue;
+        final it = _mapB14Item(map);
+        if (it.id <= 0) continue;
+        final key = _itemKey(it);
+        if (bt == 'PROPOSAL') {
+          byId[key] = it;
+        } else {
+          byId.putIfAbsent(key, () => it);
+        }
       }
     } catch (e) {
       err1 = e;
@@ -292,9 +317,10 @@ class XflowService {
     // 否则在「我发起的」列表里看不到被推送过来的提案（与 WebView loadB14Initiated 对齐）。
     try {
       final rows = await _requestList('/xflow/proposals/mine');
-      for (final row in rows.whereType<Map<String, dynamic>>()) {
-        if (!_shouldIncludeMyInitiatedRow(row)) continue;
-        final it = _mapProposalItem(row);
+      for (final row in rows.whereType<Map>()) {
+        final map = Map<String, dynamic>.from(row);
+        if (!_shouldIncludeMyInitiatedRow(map)) continue;
+        final it = _mapProposalItem(map);
         if (it.id <= 0) continue;
         final st = it.status.toUpperCase();
         final key = _itemKey(it);
@@ -304,17 +330,6 @@ class XflowService {
         byId[key] = prev == null ? it : _fillB14Missing(prev, it);
       }
     } catch (e) {
-      err2 = e;
-    }
-    try {
-      final rows = await _requestList('/xflow/submissions/mine');
-      for (final row in rows.whereType<Map<String, dynamic>>()) {
-        final it = _mapSubmissionItem(row);
-        if (it.id > 0) byId[_itemKey(it)] = it;
-      }
-    } catch (e) {
-      // The proposal APIs remain usable while an older server lacks this
-      // additive endpoint; report only if every source failed.
       err2 ??= e;
     }
     // 两个来源都失败且无数据时才视为错误，交给上层展示错误态。
@@ -517,7 +532,9 @@ class XflowService {
     );
   }
 
-  Future<List<Map<String, dynamic>>> searchApprovedProposals(String query) async {
+  Future<List<Map<String, dynamic>>> searchApprovedProposals(
+    String query,
+  ) async {
     final q = query.trim();
     final path = q.isEmpty
         ? '/xflow/proposals/approved'
@@ -705,9 +722,10 @@ class XflowService {
   }
 
   Future<Map<int, String>> _fetchAssigneeNames(
-    XflowApprovalTrail? trail,
-  ) async {
-    final ids = <int>{};
+    XflowApprovalTrail? trail, {
+    Iterable<int> extraUserIds = const [],
+  }) async {
+    final ids = <int>{...extraUserIds.where((id) => id > 0)};
     if (trail != null) {
       if (trail.initiatorId > 0) ids.add(trail.initiatorId);
       for (final step in trail.steps) {
@@ -727,6 +745,19 @@ class XflowService {
     } catch (_) {
       return const {};
     }
+  }
+
+  /// 解析审批链与创建人显示名，供动态审批详情流程追踪使用。
+  Future<Map<int, String>> fetchSubmissionAssigneeNames({
+    required XflowApprovalTrail? trail,
+    int createdById = 0,
+  }) {
+    return _fetchAssigneeNames(trail, extraUserIds: [createdById]);
+  }
+
+  /// 批量解析用户显示名（审批流程预览等）。
+  Future<Map<int, String>> fetchUserDisplayNames(Iterable<int> userIds) {
+    return _fetchAssigneeNames(null, extraUserIds: userIds);
   }
 
   Future<String> resolveFileUrl(Map<String, dynamic> item) async {
@@ -759,10 +790,7 @@ class XflowService {
       body: body,
     );
     final pid = _int(raw['proposalId'] ?? raw['businessId'] ?? raw['id']);
-    await saveLocalDraft(
-      formValues,
-      businessId: pid > 0 ? pid : proposalId,
-    );
+    await saveLocalDraft(formValues, businessId: pid > 0 ? pid : proposalId);
     if (pid > 0 && (proposalId == null || proposalId <= 0)) {
       await clearLocalDraft(businessId: null);
     }
@@ -773,6 +801,7 @@ class XflowService {
     required Map<String, dynamic> formValues,
     String templateKey = salesTemplateKey,
     int? clearDraftBusinessId,
+    String clearDraftBusinessType = 'PROPOSAL',
   }) async {
     final raw = await _request(
       '/xflow/templates/${Uri.encodeComponent(templateKey)}/submit',
@@ -780,8 +809,15 @@ class XflowService {
       body: formValues,
     );
     if (clearDraftBusinessId != null && clearDraftBusinessId > 0) {
-      await clearLocalDraft(businessId: clearDraftBusinessId);
+      await clearLocalDraft(
+        businessType: clearDraftBusinessType,
+        businessId: clearDraftBusinessId,
+      );
     }
+    await clearLocalDraft(
+      businessType: clearDraftBusinessType,
+      businessId: null,
+    );
     await clearLocalDraft(businessId: null);
     return raw;
   }
@@ -877,16 +913,46 @@ class XflowService {
     required String businessType,
     required int businessId,
     required Map<String, dynamic> formValues,
-  }) {
-    return _request(
+  }) async {
+    final raw = await _request(
       '/xflow/submissions/${Uri.encodeComponent(businessType)}/$businessId/resubmit',
       method: 'POST',
       body: formValues,
     );
+    await clearLocalDraft(businessType: businessType, businessId: businessId);
+    await clearLocalDraft(businessType: businessType, businessId: null);
+    return raw;
   }
 
   Future<void> deleteProposal(int proposalId) async {
     await _request('/xflow/proposals/$proposalId', method: 'DELETE');
+  }
+
+  Future<void> deleteSubmission({
+    required String businessType,
+    required int businessId,
+  }) async {
+    await _request(
+      '/xflow/submissions/${Uri.encodeComponent(businessType)}/$businessId',
+      method: 'DELETE',
+    );
+    await clearLocalDraft(businessType: businessType, businessId: businessId);
+    await clearLocalDraft(businessType: businessType, businessId: null);
+  }
+
+  /// 按业务类型删除草稿：销售提案走 proposals，其它走 submissions。
+  Future<void> deleteDraft({
+    required String businessType,
+    required int businessId,
+  }) async {
+    final bt = businessType.trim().toUpperCase();
+    if (bt.isEmpty || bt == 'PROPOSAL') {
+      await deleteProposal(businessId);
+      await clearLocalDraft(businessType: 'PROPOSAL', businessId: businessId);
+      await clearLocalDraft(businessType: 'PROPOSAL', businessId: null);
+      return;
+    }
+    await deleteSubmission(businessType: businessType, businessId: businessId);
   }
 
   Future<Map<String, dynamic>> pushProposal({
@@ -1360,11 +1426,12 @@ class XflowService {
   }
 
   XflowProposalItem _mapProposalItem(Map<String, dynamic> json) {
-    final id = _int(json['id'] ?? json['businessId']);
+    final idText = _businessIdText(json['id'] ?? json['businessId']);
+    final id = _businessId(json['id'] ?? json['businessId']);
     return XflowProposalItem(
       id: id,
       businessType: (json['businessType'] ?? 'PROPOSAL').toString(),
-      code: (json['code'] ?? '#$id').toString(),
+      code: _preferCode(json['code'], idText, id),
       title: (json['title'] ?? json['name'] ?? '未命名提案').toString(),
       status: (json['status'] ?? '').toString(),
       createdByName: (json['createdByName'] ?? json['initiatorName'] ?? '')
@@ -1376,13 +1443,15 @@ class XflowService {
   }
 
   XflowProposalItem _mapB14Item(Map<String, dynamic> json) {
-    final bid = _int(json['businessId'] ?? json['business_id'] ?? json['id']);
+    final bidRaw = json['businessId'] ?? json['business_id'] ?? json['id'];
+    final bidText = _businessIdText(bidRaw);
+    final bid = _businessId(bidRaw);
     return XflowProposalItem(
       id: bid,
       businessType:
           (json['businessType'] ?? json['business_type'] ?? 'PROPOSAL')
               .toString(),
-      code: (json['code'] ?? '#$bid').toString(),
+      code: _preferCode(json['code'], bidText, bid),
       title: (json['title'] ?? json['name'] ?? '提案').toString(),
       status: (json['status'] ?? '').toString(),
       createdByName: (json['createdByName'] ?? json['initiatorName'] ?? '')
@@ -1390,7 +1459,7 @@ class XflowService {
       createdAt: DateTime.tryParse(
         (json['createdAt'] ?? json['updatedAt'] ?? '').toString(),
       ),
-      templateKey: (json['templateKey'] ?? 'sales-proposal').toString(),
+      templateKey: (json['templateKey'] ?? '').toString(),
       proposalType:
           (json['proposalType'] ?? json['txType'] ?? '')
               .toString()
@@ -1399,11 +1468,11 @@ class XflowService {
           ? null
           : (json['proposalType'] ?? json['txType']).toString(),
       todoHint:
-          _int(json['todoId']) > 0 &&
+          _businessId(json['todoId']) > 0 &&
               (json['todoStatus'] ?? '').toString().toUpperCase() == 'OPEN'
           ? XflowTodoHint(
-              id: _int(json['todoId']),
-              sourceStepId: _intNullable(json['sourceStepId']),
+              id: _businessId(json['todoId']),
+              sourceStepId: _businessIdNullable(json['sourceStepId']),
               businessType:
                   (json['businessType'] ?? json['business_type'] ?? 'PROPOSAL')
                       .toString(),
@@ -1415,17 +1484,49 @@ class XflowService {
   }
 
   XflowProposalItem _mapSubmissionItem(Map<String, dynamic> json) {
-    final businessId = _int(json['businessId']);
+    final businessIdText = _businessIdText(json['businessId']);
+    final businessId = _businessId(json['businessId']);
     return XflowProposalItem(
       id: businessId,
       businessType: (json['businessType'] ?? '').toString(),
-      code: '#$businessId',
+      code: _preferCode(json['code'], businessIdText, businessId),
       title: (json['title'] ?? '动态审批').toString(),
       status: (json['status'] ?? '').toString(),
-      createdByName: '',
+      createdByName: (json['createdByName'] ?? json['initiatorName'] ?? '')
+          .toString(),
       createdAt: DateTime.tryParse((json['createdAt'] ?? '').toString()),
       templateKey: (json['templateKey'] ?? '').toString(),
     );
+  }
+
+  /// 业务编号必须按字符串保留；禁止经 double/`Number` 再转，否则 19 位会丢精度。
+  String _businessIdText(dynamic value) {
+    if (value == null) return '';
+    if (value is String) return value.trim();
+    if (value is int) return '$value';
+    if (value is num) {
+      // 上游若已用 float64，这里只能尽力按整数字面还原（可能仍已损坏）。
+      return value.toString().split('.').first;
+    }
+    return '$value'.trim();
+  }
+
+  int _businessId(dynamic value) {
+    final text = _businessIdText(value);
+    if (text.isEmpty) return 0;
+    return int.tryParse(text) ?? 0;
+  }
+
+  int? _businessIdNullable(dynamic value) {
+    final v = _businessId(value);
+    return v > 0 ? v : null;
+  }
+
+  String _preferCode(dynamic codeRaw, String idText, int id) {
+    final code = (codeRaw ?? '').toString().trim();
+    if (code.isNotEmpty) return code;
+    if (idText.isNotEmpty) return '#$idText';
+    return id > 0 ? '#$id' : '';
   }
 
   XflowProposalDetail _mapProposalDetail(Map<String, dynamic> raw) {
@@ -1542,14 +1643,7 @@ class XflowService {
     return out;
   }
 
-  int _int(dynamic value) {
-    if (value is num) return value.toInt();
-    return int.tryParse('$value') ?? 0;
-  }
+  int _int(dynamic value) => _businessId(value);
 
-  int? _intNullable(dynamic value) {
-    final v = _int(value);
-    if (v == 0) return null;
-    return v;
-  }
+  int? _intNullable(dynamic value) => _businessIdNullable(value);
 }

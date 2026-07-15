@@ -1,8 +1,9 @@
+import 'dart:async';
 import 'dart:io';
 
-import 'dart:typed_data';
-
+import 'package:desktop_drop/desktop_drop.dart';
 import 'package:file_selector/file_selector.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:mime/mime.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -34,6 +35,7 @@ class XflowUploadField extends StatefulWidget {
 
 class _XflowUploadFieldState extends State<XflowUploadField> {
   bool _picking = false;
+  bool _dragging = false;
 
   static const _meta = <String, Map<String, dynamic>>{
     'planFiles': {
@@ -81,6 +83,12 @@ class _XflowUploadFieldState extends State<XflowUploadField> {
     return widget.field.label.isEmpty ? widget.field.key : widget.field.label;
   }
 
+  bool get _supportsDesktopDrop {
+    if (kIsWeb) return true;
+    return !kIsWeb &&
+        (Platform.isWindows || Platform.isMacOS || Platform.isLinux);
+  }
+
   Future<void> _pickFiles() async {
     if (_picking) return;
     final active = widget.items.where((it) => it['status'] != 'error').length;
@@ -100,33 +108,103 @@ class _XflowUploadFieldState extends State<XflowUploadField> {
       }
       final picked = await _openFilesWithFallback(exts);
       if (picked.isEmpty) return;
-      final next = List<Map<String, dynamic>>.from(widget.items);
-      for (final file in picked.take(room)) {
-        final bytes = await file.readAsBytes();
-        final name = file.name;
-        final maxBytes = meta['maxBytes'] as int;
-        if (bytes.length > maxBytes) {
-          _toast('$name 超过大小限制');
-          continue;
-        }
-        final id = 'uf-${DateTime.now().millisecondsSinceEpoch}-${next.length}';
-        final item = <String, dynamic>{
-          'id': id,
-          'fileName': name,
-          'size': bytes.length,
-          'mimeType': lookupMimeType(name, headerBytes: bytes) ?? '',
-          'status': 'uploading',
-          'progress': 0,
-        };
-        next.add(item);
-        widget.onChanged(next);
-        await _uploadOne(next, item, bytes, name);
-      }
+      await _ingestFiles(picked, room: room);
     } catch (e) {
       _toast('选择文件失败：${friendlyErrorText(e, fallback: '无法打开文件选择器，请重试')}');
     } finally {
       if (mounted) setState(() => _picking = false);
     }
+  }
+
+  Future<void> _onDesktopDrop(DropDoneDetails detail) async {
+    if (_picking) return;
+    final active = widget.items.where((it) => it['status'] != 'error').length;
+    final room = _maxFiles - active;
+    if (room <= 0) {
+      _toast('最多上传 $_maxFiles 个文件');
+      return;
+    }
+    setState(() {
+      _picking = true;
+      _dragging = false;
+    });
+    final accessed = <Uint8List>[];
+    try {
+      final files = <XFile>[];
+      for (final item in detail.files) {
+        if (item is DropItemDirectory) continue;
+        // macOS 沙盒：开启 security-scoped 访问，避免拖入后读文件失败。
+        final bookmark = item.extraAppleBookmark;
+        if (bookmark != null && bookmark.isNotEmpty) {
+          try {
+            final ok = await DesktopDrop.instance
+                .startAccessingSecurityScopedResource(bookmark: bookmark);
+            if (ok) accessed.add(bookmark);
+          } catch (_) {}
+        }
+        files.add(XFile(item.path, name: item.name));
+      }
+      if (files.isEmpty) {
+        _toast('请拖入文件（不支持文件夹）');
+        return;
+      }
+      await _ingestFiles(files, room: room);
+    } catch (e) {
+      _toast('拖拽上传失败：${friendlyErrorText(e, fallback: '无法读取拖入的文件')}');
+    } finally {
+      for (final bookmark in accessed) {
+        try {
+          await DesktopDrop.instance
+              .stopAccessingSecurityScopedResource(bookmark: bookmark);
+        } catch (_) {}
+      }
+      if (mounted) setState(() => _picking = false);
+    }
+  }
+
+  Future<void> _ingestFiles(List<XFile> picked, {required int room}) async {
+    final meta = _uploadMeta;
+    final exts = (meta['extensions'] as List).cast<String>();
+    final next = List<Map<String, dynamic>>.from(widget.items);
+    var accepted = 0;
+    for (final file in picked) {
+      if (accepted >= room) {
+        _toast('最多上传 $_maxFiles 个文件');
+        break;
+      }
+      final name = file.name;
+      if (!_isAllowedExtension(name, exts)) {
+        _toast('$name 类型不支持');
+        continue;
+      }
+      final bytes = await file.readAsBytes();
+      final maxBytes = meta['maxBytes'] as int;
+      if (bytes.length > maxBytes) {
+        _toast('$name 超过大小限制');
+        continue;
+      }
+      final id = 'uf-${DateTime.now().millisecondsSinceEpoch}-${next.length}';
+      final item = <String, dynamic>{
+        'id': id,
+        'fileName': name,
+        'size': bytes.length,
+        'mimeType': lookupMimeType(name, headerBytes: bytes) ?? '',
+        'status': 'uploading',
+        'progress': 0,
+      };
+      next.add(item);
+      accepted++;
+      widget.onChanged(next);
+      await _uploadOne(next, item, bytes, name);
+    }
+  }
+
+  bool _isAllowedExtension(String fileName, List<String> exts) {
+    if (exts.isEmpty) return true;
+    final dot = fileName.lastIndexOf('.');
+    if (dot < 0 || dot >= fileName.length - 1) return false;
+    final ext = fileName.substring(dot + 1).toLowerCase();
+    return exts.any((e) => e.toLowerCase() == ext);
   }
 
   Future<List<XFile>> _openFilesWithFallback(List<String> exts) async {
@@ -228,6 +306,76 @@ class _XflowUploadFieldState extends State<XflowUploadField> {
     final meta = _uploadMeta;
     final variant = meta['variant'] as String;
     final isContract = variant == 'contract';
+    final dropChild = Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: _picking ? null : _pickFiles,
+        borderRadius: BorderRadius.circular(14),
+        child: Ink(
+          width: double.infinity,
+          padding: const EdgeInsets.fromLTRB(16, 26, 16, 22),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: isContract
+                  ? const [Color(0xFFF5EBE0), Color(0xFFEFE2D2)]
+                  : const [Color(0xFFF8F1E8), Color(0xFFF3EBE0)],
+            ),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: _dragging
+                  ? const Color(0xFF3B82F6)
+                  : isContract
+                      ? const Color(0x6BBE965A)
+                      : const Color(0x59A0825A),
+              width: _dragging ? 1.5 : 1,
+            ),
+          ),
+          child: Column(
+            children: [
+              Icon(
+                meta['icon'] as IconData,
+                size: 30,
+                color: _dragging ? const Color(0xFF2563EB) : DunesColors.text3,
+              ),
+              const SizedBox(height: 10),
+              Text(
+                _dragging ? '松开即可上传' : meta['title'] as String,
+                textAlign: TextAlign.center,
+                style: DunesTypography.sans(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color:
+                      _dragging ? const Color(0xFF1D4ED8) : DunesColors.text2,
+                  height: 1.45,
+                ),
+              ),
+              const SizedBox(height: 5),
+              Text(
+                meta['desc'] as String,
+                textAlign: TextAlign.center,
+                style: DunesTypography.mono(
+                  fontSize: 9,
+                  color: DunesColors.text3,
+                  letterSpacing: 0.03 * 9,
+                  height: 1.5,
+                ),
+              ),
+              if (_picking) ...[
+                const SizedBox(height: 10),
+                const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -254,71 +402,19 @@ class _XflowUploadFieldState extends State<XflowUploadField> {
             ),
           ),
         ),
-        Material(
-          color: Colors.transparent,
-          child: InkWell(
-            onTap: _picking ? null : _pickFiles,
-            borderRadius: BorderRadius.circular(14),
-            child: Ink(
-              width: double.infinity,
-              padding: const EdgeInsets.fromLTRB(16, 26, 16, 22),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: isContract
-                      ? const [Color(0xFFF5EBE0), Color(0xFFEFE2D2)]
-                      : const [Color(0xFFF8F1E8), Color(0xFFF3EBE0)],
-                ),
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(
-                  color: isContract
-                      ? const Color(0x6BBE965A)
-                      : const Color(0x59A0825A),
-                ),
-              ),
-              child: Column(
-                children: [
-                  Icon(
-                    meta['icon'] as IconData,
-                    size: 30,
-                    color: DunesColors.text3,
-                  ),
-                  const SizedBox(height: 10),
-                  Text(
-                    meta['title'] as String,
-                    textAlign: TextAlign.center,
-                    style: DunesTypography.sans(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: DunesColors.text2,
-                      height: 1.45,
-                    ),
-                  ),
-                  const SizedBox(height: 5),
-                  Text(
-                    meta['desc'] as String,
-                    textAlign: TextAlign.center,
-                    style: DunesTypography.mono(
-                      fontSize: 9,
-                      color: DunesColors.text3,
-                      letterSpacing: 0.03 * 9,
-                      height: 1.5,
-                    ),
-                  ),
-                  if (_picking) ...[
-                    const SizedBox(height: 10),
-                    const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ),
-        ),
+        if (_supportsDesktopDrop)
+          DropTarget(
+            onDragEntered: (_) {
+              if (!_picking) setState(() => _dragging = true);
+            },
+            onDragExited: (_) => setState(() => _dragging = false),
+            onDragDone: (detail) {
+              unawaited(_onDesktopDrop(detail));
+            },
+            child: dropChild,
+          )
+        else
+          dropChild,
         if (widget.items.isNotEmpty) ...[
           const SizedBox(height: 8),
           for (final item in widget.items) _fileRow(item),

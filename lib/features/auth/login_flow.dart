@@ -428,21 +428,6 @@ class _PhoneStepState extends State<_PhoneStep> {
               style: authPrimaryButtonStyle,              child: const Text('获取验证码'),
             ),
           ),
-          const SizedBox(height: 16),
-          if (!isDesktopCommOnly)
-            TextButton(
-              onPressed: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute<void>(
-                    builder: (_) => RegistrationFlowPage(
-                      auth: widget.auth,
-                      onSignedIn: widget.onSignedIn,
-                    ),
-                  ),
-                );
-              },
-              child: const Text('没有账号？立即注册'),
-            ),
         ],
       ),
     );

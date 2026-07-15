@@ -1353,7 +1353,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     }.contains(screen);
   }
 
-  /// 所有普通页面共享同一条主导航；宽屏通讯双栏已自带侧栏，不重复包裹。
+  /// PC：任意业务页保留侧边主导航；宽屏通讯双栏已自带侧栏，不重复包裹。
+  /// APP：仅在主 Tab 根页显示底部栏，进入子页后隐藏（恢复非固定行为）。
   Widget _wrapWithMainNavigation(Widget content, {required String screen}) {
     final tabBar = DunesMainTabBar(
       navigation: widget.navigation,
@@ -1379,6 +1380,10 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       );
     }
 
+    if (!_showsAppBottomTabBar(screen)) {
+      return content;
+    }
+
     return ColoredBox(
       color: DunesColors.bgApp,
       child: Column(
@@ -1388,6 +1393,14 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         ],
       ),
     );
+  }
+
+  /// APP 底部 Tab 仅出现在主板块根页。
+  bool _showsAppBottomTabBar(String screen) {
+    return screen == 'C1' ||
+        screen == 'B2' ||
+        screen == 'LH' ||
+        screen == 'LM';
   }
 
   String _mainTabScreenFor(String screen) {

@@ -21,6 +21,10 @@ void windowsTrayNotifyIncomingMessage() {
   WindowsDesktopTray.instance.notifyIncomingMessage();
 }
 
+/// 窗口未处于用户可见且聚焦的前台状态。
+bool windowsTrayIsWindowInactive() =>
+    WindowsDesktopTray.instance.isWindowInactive;
+
 void windowsTrayReveal() {
   unawaited(WindowsDesktopTray.instance.reveal());
 }
@@ -36,6 +40,8 @@ class WindowsDesktopTray with WindowListener, TrayListener {
 
   bool _ready = false;
   bool _hidden = false;
+  bool _minimized = false;
+  bool _focused = true;
   bool _allowQuit = false;
   bool _flashing = false;
   bool _flashVisible = true;
@@ -45,6 +51,9 @@ class WindowsDesktopTray with WindowListener, TrayListener {
   String _trayIcon = _trayIconWin;
   String _trayIconBlank = _trayIconWinBlank;
   Future<void> Function()? onBeforeQuit;
+
+  /// 最小化、失焦和关闭到托盘时，当前会话不应被视为“正在查看”。
+  bool get isWindowInactive => _hidden || _minimized || !_focused;
 
   Future<void> init() async {
     if (kIsWeb || !(Platform.isWindows || Platform.isMacOS) || _ready) return;
@@ -106,7 +115,7 @@ class WindowsDesktopTray with WindowListener, TrayListener {
   }
 
   void notifyIncomingMessage() {
-    if (!_ready || !_hidden) return;
+    if (!_ready || !isWindowInactive) return;
     _pendingAlert = true;
     unawaited(_syncFlash());
   }
@@ -125,6 +134,8 @@ class WindowsDesktopTray with WindowListener, TrayListener {
 
   Future<void> _showFromTray() async {
     _hidden = false;
+    _minimized = false;
+    _focused = true;
     _pendingAlert = false;
     await _stopFlash();
     await windowManager.setSkipTaskbar(false);
@@ -157,8 +168,10 @@ class WindowsDesktopTray with WindowListener, TrayListener {
   }
 
   Future<void> _syncFlash() async {
-    final shouldFlash = _hidden && (_unread > 0 || _pendingAlert);
-    if (shouldFlash) {
+    final hasAttention = _unread > 0 || _pendingAlert;
+    // 最小化或失焦时同样闪烁托盘图标；关闭到托盘时沿用原有行为。
+    final shouldFlashTray = isWindowInactive && hasAttention;
+    if (shouldFlashTray) {
       await _startFlash();
     } else {
       await _stopFlash();
@@ -216,12 +229,26 @@ class WindowsDesktopTray with WindowListener, TrayListener {
   @override
   void onWindowRestore() {
     _hidden = false;
+    _minimized = false;
+    _focused = true;
     _pendingAlert = false;
     unawaited(_stopFlash());
   }
 
   @override
+  void onWindowMinimize() {
+    _minimized = true;
+  }
+
+  @override
+  void onWindowBlur() {
+    _focused = false;
+  }
+
+  @override
   void onWindowFocus() {
+    _focused = true;
+    _minimized = false;
     if (!_hidden) {
       _pendingAlert = false;
       unawaited(_stopFlash());

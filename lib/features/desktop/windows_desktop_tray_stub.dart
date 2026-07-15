@@ -4,6 +4,8 @@ void windowsTrayUpdateUnread(int total) {}
 
 void windowsTrayNotifyIncomingMessage() {}
 
+bool windowsTrayIsWindowInactive() => false;
+
 void windowsTrayReveal() {}
 
 void setWindowsTrayOnBeforeQuit(Future<void> Function()? callback) {}

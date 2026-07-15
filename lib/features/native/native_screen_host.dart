@@ -146,7 +146,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
   bool _userActivelyInChat = false;
 
   /// mark-read 成功后通知双栏列表清零对应未读角标。
-  final ConversationReadSignal _conversationReadSignal = ConversationReadSignal();
+  final ConversationReadSignal _conversationReadSignal =
+      ConversationReadSignal();
 
   void _markUserEnteredChat() {
     _userActivelyInChat = true;
@@ -246,8 +247,23 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     if (!_commBadgeDedup.consume(event)) return;
 
     if (event.type == 'read') {
+      final userId = (event.raw['userId'] as num?)?.toInt() ?? 0;
+      final convId = event.conversationId ?? 0;
+      if (userId == widget.session.userId) {
+        // 同账号在其他设备已读时，也允许将本机的系统角标清零。
+        _pendingBadgeZeroSync = true;
+        _commUnread.clearMutedMention(convId);
+      }
       _scheduleCommBadgeRefresh();
       return;
+    }
+
+    if (event.type == 'conversation_updated') {
+      final totalUnread = (event.raw['totalUnread'] as num?)?.toInt();
+      if (totalUnread != null) {
+        _applyRealtimeUnreadTotal(totalUnread);
+        return;
+      }
     }
 
     if (event.type == 'message' || event.type == 'system_flow') {
@@ -338,6 +354,16 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     _pendingBadgeZeroSync = true;
     print('[Badge] handleNotificationsRead pendingZero=true');
     unawaited(_refreshCommUnreadBadge());
+  }
+
+  /// 服务端在同账号其他端完成已读后推送精确总未读，立即同步 Tab、
+  /// 桌面托盘和移动端应用图标，避免等待 REST 刷新而残留旧角标。
+  void _applyRealtimeUnreadTotal(int totalUnread) {
+    final total = totalUnread < 0 ? 0 : totalUnread;
+    _commUnread.update(total);
+    windowsTrayUpdateUnread(total);
+    if (total == 0) _pendingBadgeZeroSync = false;
+    syncPushBadgeCount(total);
   }
 
   void _scheduleWorkbenchBadgeRefresh({bool rejected = false}) {
@@ -432,6 +458,9 @@ class _NativeScreenHostState extends State<NativeScreenHost>
 
   bool _isViewingConversation(int convId) {
     if (convId <= 0) return false;
+    // 桌面窗口最小化、失焦或隐藏到托盘后，不能继续视为用户正在看此会话。
+    // 否则新消息会在此提前返回，既没有系统通知也不会触发闪烁提醒。
+    if (windowsTrayIsWindowInactive()) return false;
     // 双栏：右侧正在展示该会话时，Tab 角标不再累加。
     if (_dualPaneSelectedConversationId == convId) return true;
     final screen = widget.navigation.currentScreen;
@@ -509,9 +538,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         );
       if (mounted) {
         final viewingId = _activeViewingConversationId() ?? 0;
-        final treatAsRead = viewingId > 0
-            ? <int>{viewingId}
-            : const <int>{};
+        final treatAsRead = viewingId > 0 ? <int>{viewingId} : const <int>{};
         var viewingUnread = 0;
         if (viewingId > 0) {
           for (final c in rows) {
@@ -530,8 +557,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         // 广播等场景（返回 0），若盲信它的 0 会在仍有未读时误清角标。
         // 当前正在查看的会话已 mark-read / 不计入角标，需从 apiTotal 扣掉。
         final apiRaw = apiTotal ?? 0;
-        final apiVal =
-            apiRaw > viewingUnread ? apiRaw - viewingUnread : 0;
+        final apiVal = apiRaw > viewingUnread ? apiRaw - viewingUnread : 0;
         final serverTotal = apiVal > summedTotal ? apiVal : summedTotal;
         final localBadge = await readPushBadgeCount();
         final unreadRows = rows
@@ -2072,160 +2098,158 @@ class _NativeB2PageState extends State<_NativeB2Page> {
                         ),
                       ),
                     ] else ...[
-                          const SizedBox(height: 10),
-                          if (_showQuickStats) ...[
-                            _buildQuickStats(stats),
-                            const SizedBox(height: 14),
-                          ],
-                          _buildQuickLaunch(),
-                          const SizedBox(height: 14),
-                          if (stats.pendingForMe > 0)
-                            _buildReminderBanner(
-                              icon: Icons.notifications_active_outlined,
-                              text: '您有 ${stats.pendingForMe} 条待审批，点击进入「我审批的」',
-                              onTap: () => widget.navigation.go('B1'),
-                            ),
-                          if (stats.approvalRejected > 0) ...[
-                            const SizedBox(height: 8),
-                            _buildReminderBanner(
-                              icon: Icons.warning_amber_rounded,
-                              text:
-                                  '您有 ${stats.approvalRejected} 条审批被驳回，点击进入「我发起的审批」',
-                              onTap: () => widget.onOpenB14(),
-                            ),
-                          ],
-                          if (stats.pendingInitiateForMe > 0) ...[
-                            const SizedBox(height: 8),
-                            _buildReminderBanner(
-                              icon: Icons.assignment_ind_outlined,
-                              text:
-                                  '有 ${stats.pendingInitiateForMe} 条同事推送给您、待您确认发起的提案',
-                              onTap: () =>
-                                  widget.onOpenB14(filter: 'PENDING_INITIATE'),
-                            ),
-                          ],
-                          if (stats.pendingForMe > 0 ||
-                              stats.approvalRejected > 0 ||
-                              stats.pendingInitiateForMe > 0)
-                            const SizedBox(height: 14),
-                          _buildSectionLabel('我的事项'),
-                          const SizedBox(height: 8),
-                          _buildMenuList(<Widget>[
-                            _buildMenuItem(
-                              icon: Icons.description_outlined,
-                              title: '我发起的审批',
-                              desc:
-                                  '$initiatedTotal 条总数 · ${stats.approvalPending} 审批中',
-                              badge: initiatedTotal,
-                              onTap: () => widget.onOpenB14(),
-                            ),
-                            _buildMenuItem(
-                              icon: Icons.edit_note_outlined,
-                              title: '我审批的',
-                              desc:
-                                  '${stats.pendingForMe} 待我审 · ${stats.handledThisMonth} 已审核',
-                              badge: stats.pendingForMe,
-                              onTap: () => widget.navigation.go('B1'),
-                            ),
-                            _buildMenuItem(
-                              icon: Icons.check_box_outlined,
-                              title: '抄送我的',
-                              desc:
-                                  '${stats.ccProposalCount} 份抄送 · ${stats.ccProposalPending} 审批中',
-                              badge: stats.ccProposalCount,
-                              onTap: () => widget.navigation.go('P1'),
-                            ),
-                          ]),
-                          const SizedBox(height: 10),
-                          _buildMenuList(<Widget>[
-                            _buildMenuItem(
-                              icon: Icons.auto_stories_outlined,
-                              title: '知识库',
-                              desc: '$kbDocCount 文档 · $kbCategoryCount 分类',
-                              badge: kbUnreadCount,
-                              onTap: () => widget.navigation.go('K1'),
-                            ),
-                            if (_showDeferredTools)
-                              _buildMenuItem(
-                                icon: Icons.edit_outlined,
-                                title: '写汇报',
-                                desc: '0 篇 · 0 草稿 · 日 / 周 / 月 / 季',
-                                badge: 0,
-                                comingSoon: true,
-                                onTap: () => _showSoonToast(),
-                              ),
-                            if (!isWindowsDesktopCommOnly)
-                              _buildMenuItem(
-                                icon: Icons.article_outlined,
-                                title: '会议纪要',
-                                desc: '$_meetingCount 场 · 录音转写 · 纪要生成',
-                                badge: _meetingCount,
-                                onTap: () => widget.navigation.go('MM-L'),
-                              ),
-                          ]),
-                          if (_showDeferredTools) ...[
-                            const SizedBox(height: 10),
-                            _buildMenuList(<Widget>[
-                              _buildMenuItem(
-                                icon: Icons.receipt_long_outlined,
-                                title: '应付账单',
-                                desc:
-                                    '${stats.outstandingInvoices} 待处理 · 总 ¥0 · 灯塔联动',
-                                badge: stats.outstandingInvoices,
-                                comingSoon: true,
-                                onTap: () => _showSoonToast(),
-                              ),
-                              _buildMenuItem(
-                                icon: Icons.warning_amber_rounded,
-                                title: '欠票催办',
-                                desc: '0 笔 · ¥0 · 欠 0 天',
-                                badge: 0,
-                                comingSoon: true,
-                                onTap: () => _showSoonToast(),
-                              ),
-                            ]),
-                          ],
-                          const SizedBox(height: 12),
-                          if (_loading)
-                            const Center(
-                              child: Padding(
-                                padding: EdgeInsets.only(top: 12),
-                                child: SizedBox(
-                                  width: 20,
-                                  height: 20,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                  ),
-                                ),
-                              ),
-                            ),
-                        ],
-                        if (_loadError != null)
-                          Padding(
-                            padding: const EdgeInsets.only(top: 8),
-                            child: TextButton(
-                              onPressed: _loadStats,
-                              child: const Text('数据同步失败，点击重试'),
+                      const SizedBox(height: 10),
+                      if (_showQuickStats) ...[
+                        _buildQuickStats(stats),
+                        const SizedBox(height: 14),
+                      ],
+                      _buildQuickLaunch(),
+                      const SizedBox(height: 14),
+                      if (stats.pendingForMe > 0)
+                        _buildReminderBanner(
+                          icon: Icons.notifications_active_outlined,
+                          text: '您有 ${stats.pendingForMe} 条待审批，点击进入「我审批的」',
+                          onTap: () => widget.navigation.go('B1'),
+                        ),
+                      if (stats.approvalRejected > 0) ...[
+                        const SizedBox(height: 8),
+                        _buildReminderBanner(
+                          icon: Icons.warning_amber_rounded,
+                          text:
+                              '您有 ${stats.approvalRejected} 条审批被驳回，点击进入「我发起的审批」',
+                          onTap: () => widget.onOpenB14(),
+                        ),
+                      ],
+                      if (stats.pendingInitiateForMe > 0) ...[
+                        const SizedBox(height: 8),
+                        _buildReminderBanner(
+                          icon: Icons.assignment_ind_outlined,
+                          text:
+                              '有 ${stats.pendingInitiateForMe} 条同事推送给您、待您确认发起的提案',
+                          onTap: () =>
+                              widget.onOpenB14(filter: 'PENDING_INITIATE'),
+                        ),
+                      ],
+                      if (stats.pendingForMe > 0 ||
+                          stats.approvalRejected > 0 ||
+                          stats.pendingInitiateForMe > 0)
+                        const SizedBox(height: 14),
+                      _buildSectionLabel('我的事项'),
+                      const SizedBox(height: 8),
+                      _buildMenuList(<Widget>[
+                        _buildMenuItem(
+                          icon: Icons.description_outlined,
+                          title: '我发起的审批',
+                          desc:
+                              '$initiatedTotal 条总数 · ${stats.approvalPending} 审批中',
+                          badge: initiatedTotal,
+                          onTap: () => widget.onOpenB14(),
+                        ),
+                        _buildMenuItem(
+                          icon: Icons.edit_note_outlined,
+                          title: '我审批的',
+                          desc:
+                              '${stats.pendingForMe} 待我审 · ${stats.handledThisMonth} 已审核',
+                          badge: stats.pendingForMe,
+                          onTap: () => widget.navigation.go('B1'),
+                        ),
+                        _buildMenuItem(
+                          icon: Icons.check_box_outlined,
+                          title: '抄送我的',
+                          desc:
+                              '${stats.ccProposalCount} 份抄送 · ${stats.ccProposalPending} 审批中',
+                          badge: stats.ccProposalCount,
+                          onTap: () => widget.navigation.go('P1'),
+                        ),
+                      ]),
+                      const SizedBox(height: 10),
+                      _buildMenuList(<Widget>[
+                        _buildMenuItem(
+                          icon: Icons.auto_stories_outlined,
+                          title: '知识库',
+                          desc: '$kbDocCount 文档 · $kbCategoryCount 分类',
+                          badge: kbUnreadCount,
+                          onTap: () => widget.navigation.go('K1'),
+                        ),
+                        if (_showDeferredTools)
+                          _buildMenuItem(
+                            icon: Icons.edit_outlined,
+                            title: '写汇报',
+                            desc: '0 篇 · 0 草稿 · 日 / 周 / 月 / 季',
+                            badge: 0,
+                            comingSoon: true,
+                            onTap: () => _showSoonToast(),
+                          ),
+                        if (!isWindowsDesktopCommOnly)
+                          _buildMenuItem(
+                            icon: Icons.article_outlined,
+                            title: '会议纪要',
+                            desc: '$_meetingCount 场 · 录音转写 · 纪要生成',
+                            badge: _meetingCount,
+                            onTap: () => widget.navigation.go('MM-L'),
+                          ),
+                      ]),
+                      if (_showDeferredTools) ...[
+                        const SizedBox(height: 10),
+                        _buildMenuList(<Widget>[
+                          _buildMenuItem(
+                            icon: Icons.receipt_long_outlined,
+                            title: '应付账单',
+                            desc:
+                                '${stats.outstandingInvoices} 待处理 · 总 ¥0 · 灯塔联动',
+                            badge: stats.outstandingInvoices,
+                            comingSoon: true,
+                            onTap: () => _showSoonToast(),
+                          ),
+                          _buildMenuItem(
+                            icon: Icons.warning_amber_rounded,
+                            title: '欠票催办',
+                            desc: '0 笔 · ¥0 · 欠 0 天',
+                            badge: 0,
+                            comingSoon: true,
+                            onTap: () => _showSoonToast(),
+                          ),
+                        ]),
+                      ],
+                      const SizedBox(height: 12),
+                      if (_loading)
+                        const Center(
+                          child: Padding(
+                            padding: EdgeInsets.only(top: 12),
+                            child: SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2),
                             ),
                           ),
-                      ],
-                    ),
-                  ),
+                        ),
+                    ],
+                    if (_loadError != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: TextButton(
+                          onPressed: _loadStats,
+                          child: const Text('数据同步失败，点击重试'),
+                        ),
+                      ),
+                  ],
                 ),
-                if (!useSideRail) tabBar,
-              ],
-            ),
-            if (_live.active.value && !isWindowsDesktopCommOnly)
-              Positioned(
-                right: 16,
-                bottom:
-                    kDunesMainTabBarHeight +
-                    MediaQuery.viewPaddingOf(context).bottom +
-                    12,
-                child: _buildLiveTranscribeFab(),
               ),
+            ),
+            if (!useSideRail) tabBar,
           ],
-        );
+        ),
+        if (_live.active.value && !isWindowsDesktopCommOnly)
+          Positioned(
+            right: 16,
+            bottom:
+                kDunesMainTabBarHeight +
+                MediaQuery.viewPaddingOf(context).bottom +
+                12,
+            child: _buildLiveTranscribeFab(),
+          ),
+      ],
+    );
     if (useSideRail) {
       return ColoredBox(
         color: DunesColors.bgApp,
@@ -2233,23 +2257,14 @@ class _NativeB2PageState extends State<_NativeB2Page> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             tabBar,
-            Expanded(
-              child: SafeArea(
-                left: false,
-                bottom: false,
-                child: body,
-              ),
-            ),
+            Expanded(child: SafeArea(left: false, bottom: false, child: body)),
           ],
         ),
       );
     }
     return ColoredBox(
       color: DunesColors.bgApp,
-      child: SafeArea(
-        bottom: false,
-        child: body,
-      ),
+      child: SafeArea(bottom: false, child: body),
     );
   }
 

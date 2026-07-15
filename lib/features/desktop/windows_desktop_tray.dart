@@ -3,7 +3,8 @@
 library;
 
 import 'windows_desktop_tray_stub.dart'
-    if (dart.library.io) 'windows_desktop_tray_io.dart' as impl;
+    if (dart.library.io) 'windows_desktop_tray_io.dart'
+    as impl;
 
 Future<void> initWindowsDesktopTray() => impl.initWindowsDesktopTray();
 
@@ -11,6 +12,9 @@ void windowsTrayUpdateUnread(int total) => impl.windowsTrayUpdateUnread(total);
 
 void windowsTrayNotifyIncomingMessage() =>
     impl.windowsTrayNotifyIncomingMessage();
+
+/// 当前桌面窗口是否最小化、失焦或已隐藏到托盘。
+bool windowsTrayIsWindowInactive() => impl.windowsTrayIsWindowInactive();
 
 /// 从托盘/通知点击恢复窗口。
 void windowsTrayReveal() => impl.windowsTrayReveal();

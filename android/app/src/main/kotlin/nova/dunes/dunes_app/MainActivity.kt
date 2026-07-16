@@ -46,6 +46,8 @@ class MainActivity : FlutterActivity() {
     private var accumulatedDurationMs: Long = 0L
     private var wakeLock: PowerManager.WakeLock? = null
     private var consecutiveReadErrors = 0
+    /** 开录/续录后短时间内的空读不视为抢麦（设备刚就绪时常有短暂静音）。 */
+    private var ignoreSilentConflictUntilMs: Long = 0L
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -142,6 +144,7 @@ class MainActivity : FlutterActivity() {
             isPaused = false
             accumulatedDurationMs = 0L
             startedAtMs = System.currentTimeMillis()
+            ignoreSilentConflictUntilMs = System.currentTimeMillis() + 3_000L
             ensureWakeLock()
 
             recordThread = Thread { writePcmLoop() }.also { it.start() }
@@ -284,6 +287,7 @@ class MainActivity : FlutterActivity() {
             consecutiveReadErrors = 0
             isPaused = false
             startedAtMs = System.currentTimeMillis()
+            ignoreSilentConflictUntilMs = System.currentTimeMillis() + 3_000L
             // 录音线程可能已因冲突退出，必要时重启。
             if (recordThread?.isAlive != true) {
                 recordThread = Thread { writePcmLoop() }.also { it.start() }
@@ -336,8 +340,10 @@ class MainActivity : FlutterActivity() {
                     }
                     read == 0 -> {
                         consecutiveReadErrors++
-                        if (consecutiveReadErrors >= 40) {
-                            // 连续空读：麦克风可能被其他 App 静默占用。
+                        // 约 3s 连续空读，且不在开录宽限期内，才判定为静默抢麦。
+                        if (consecutiveReadErrors >= 150 &&
+                            System.currentTimeMillis() >= ignoreSilentConflictUntilMs
+                        ) {
                             handleMicConflict("audioRecordSilent")
                             break
                         }

@@ -21,6 +21,8 @@ import UserNotifications
   private var needsCaptureRebuild = false
   private var isRecording = false
   private var isPaused = false
+  /// 忽略自身 setCategory / defaultToSpeaker 触发的路由回调，避免误报「被其他软件占用」。
+  private var ignoreRouteChangeUntil: Date?
   private var streamSink: FlutterEventSink?
   private let streamLock = NSLock()
   private var recorderEventSink: FlutterEventSink?
@@ -166,7 +168,11 @@ import UserNotifications
     case .began:
       autoPauseForInterruption(reason: "interruption")
     case .ended:
-      if isRecording {
+      guard isRecording else { return }
+      // 仅在系统建议恢复时通知 Flutter 自动续录。
+      let optionsRaw = info[AVAudioSessionInterruptionOptionKey] as? UInt ?? 0
+      let options = AVAudioSession.InterruptionOptions(rawValue: optionsRaw)
+      if options.contains(.shouldResume) || optionsRaw == 0 {
         emitRecorderEvent(["kind": "interruptionEnded"])
       }
     @unknown default:
@@ -209,9 +215,14 @@ import UserNotifications
     autoPauseForInterruption(reason: "mediaServicesReset")
   }
 
-  /// 其他语音 App 切走音频路由时，也要落盘并暂停，避免 stop 时文件损坏。
+  /// 外设断开等真实路由丢失时落盘暂停。
+  /// 注意：不要把 `.categoryChange` / `.override` 当成抢麦——它们会在本 App
+  /// 调用 setCategory、defaultToSpeaker 时触发，会造成误报并弄丢空片段。
   @objc private func handleAudioRouteChange(_ note: Notification) {
     guard isRecording, !isPaused else { return }
+    if let until = ignoreRouteChangeUntil, Date() < until {
+      return
+    }
     guard let info = note.userInfo,
       let reasonRaw = info[AVAudioSessionRouteChangeReasonKey] as? UInt,
       let reason = AVAudioSession.RouteChangeReason(rawValue: reasonRaw)
@@ -219,8 +230,9 @@ import UserNotifications
       return
     }
     switch reason {
-    case .oldDeviceUnavailable, .categoryChange, .override:
-      autoPauseForInterruption(reason: "routeChange")
+    case .oldDeviceUnavailable:
+      // 耳机拔出等：采集可能中断，先落盘暂停，由用户点继续。
+      autoPauseForInterruption(reason: "routeDeviceLost")
     default:
       break
     }
@@ -376,6 +388,8 @@ import UserNotifications
   private func prepareAudioSessionForRecording() throws {
     let session = AVAudioSession.sharedInstance()
     // 不使用 mixWithOthers：会议录音需要独占麦克风，其他语音软件抢麦时才能收到中断通知。
+    // 自身改 category / 扬声器会触发 routeChange，短暂忽略以免误暂停。
+    ignoreRouteChangeUntil = Date().addingTimeInterval(1.5)
     try session.setCategory(
       .playAndRecord,
       mode: .spokenAudio,
@@ -507,6 +521,7 @@ import UserNotifications
     isRecording = false
     isPaused = false
     needsCaptureRebuild = false
+    ignoreRouteChangeUntil = nil
     teardownAudioEngine()
     recordStartedAt = nil
     activeSegmentStartedAt = nil
@@ -1029,6 +1044,11 @@ final class StreamingAacM4aWriter {
   }
 
   func finish() -> Bool {
+    // 尚未写入任何 PCM 时不能 finishWriting（未 startSession），否则会失败并删掉空文件。
+    if !startedSession || sampleCount <= 0 {
+      abort()
+      return false
+    }
     input?.markAsFinished()
     let group = DispatchGroup()
     group.enter()
@@ -1040,10 +1060,17 @@ final class StreamingAacM4aWriter {
     group.wait()
     let path = writer?.outputURL.path ?? ""
     cleanup()
-    guard ok else { return false }
+    guard ok else {
+      try? FileManager.default.removeItem(atPath: path)
+      return false
+    }
     let attrs = try? FileManager.default.attributesOfItem(atPath: path)
     let size = (attrs?[.size] as? NSNumber)?.intValue ?? 0
-    return size > 0
+    if size <= 0 {
+      try? FileManager.default.removeItem(atPath: path)
+      return false
+    }
+    return true
   }
 
   func abort() {

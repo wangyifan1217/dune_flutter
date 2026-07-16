@@ -289,7 +289,7 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
         _error = null;
       });
       if (path == null || path.isEmpty) {
-        setState(() => _error = '录音文件保存失败，请重试');
+        setState(() => _error = '录音文件为空或未成功落盘，请重新录制后再保存');
         return;
       }
       await _promptPersistAfterEnd(filePath: path);

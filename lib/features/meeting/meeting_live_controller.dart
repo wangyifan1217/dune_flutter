@@ -36,9 +36,14 @@ class MeetingLiveController {
 
   final List<String> _lines = <String>[];
   Timer? _elapsedTicker;
+  Timer? _autoResumeTimer;
   Duration _elapsedCommitted = Duration.zero;
   DateTime? _elapsedRunStartedAt;
   StreamSubscription<Map<String, dynamic>>? _recorderEventSub;
+
+  /// 仅系统中断（来电/其他语音软件）触发的暂停才会在恢复后自动续录。
+  bool _pausedByInterruption = false;
+  bool _autoResuming = false;
 
   bool get isActive => active.value;
 
@@ -70,6 +75,8 @@ class MeetingLiveController {
         NativeAudioRecorder.instance.recorderEvents().listen(_onRecorderEvent);
     paused.value = false;
     active.value = true;
+    _pausedByInterruption = false;
+    _cancelAutoResume();
     _elapsedCommitted = Duration.zero;
     elapsed.value = Duration.zero;
     _elapsedRunStartedAt = DateTime.now();
@@ -77,28 +84,33 @@ class MeetingLiveController {
     NativeAudioRecorder.isStartBlocked = () => active.value;
   }
 
-  Future<void> pause() async {
+  Future<void> pause({bool fromInterruption = false}) async {
     if (!active.value || paused.value) return;
+    _cancelAutoResume();
     await _recording.pause();
     await _realtime?.pause();
     _commitElapsedRun();
     _stopElapsedTicker();
+    _pausedByInterruption = fromInterruption;
     paused.value = true;
     partial.value = '';
   }
 
   Future<void> resume() async {
     if (!active.value || !paused.value) return;
+    _cancelAutoResume();
     await _recording.resume();
     await _realtime?.resume();
     _elapsedRunStartedAt = DateTime.now();
     _startElapsedTicker();
+    _pausedByInterruption = false;
     paused.value = false;
     interruptionHint.value = null;
   }
 
   /// 结束并保存，返回录音文件路径（可能为空）。
   Future<String?> end() async {
+    _cancelAutoResume();
     String? path;
     try {
       final audio = await _recording.stop();
@@ -115,6 +127,7 @@ class MeetingLiveController {
     _stopElapsedTicker();
     _elapsedRunStartedAt = null;
     interruptionHint.value = null;
+    _pausedByInterruption = false;
     active.value = false;
     paused.value = false;
     NativeAudioRecorder.isStartBlocked = null;
@@ -200,13 +213,51 @@ class MeetingLiveController {
     if (kind == 'paused') {
       if (active.value && !paused.value) {
         interruptionHint.value = _pauseHintForReason(reason);
-        unawaited(pause());
+        unawaited(pause(fromInterruption: true));
       }
       return;
     }
-    if (kind == 'interruptionEnded' && active.value && paused.value) {
-      interruptionHint.value = '麦克风已可用，可点击继续录音';
+    if (kind == 'interruptionEnded' &&
+        active.value &&
+        paused.value &&
+        _pausedByInterruption) {
+      _scheduleAutoResume();
     }
+  }
+
+  void _scheduleAutoResume() {
+    if (_autoResuming || !active.value || !paused.value || !_pausedByInterruption) {
+      return;
+    }
+    interruptionHint.value = '麦克风已恢复，正在自动继续录音…';
+    _cancelAutoResume();
+    // 稍等会话稳定，再尝试续录（失败则提示手动继续）。
+    _autoResumeTimer = Timer(const Duration(milliseconds: 600), () {
+      unawaited(_tryAutoResume());
+    });
+  }
+
+  Future<void> _tryAutoResume() async {
+    if (_autoResuming ||
+        !active.value ||
+        !paused.value ||
+        !_pausedByInterruption) {
+      return;
+    }
+    _autoResuming = true;
+    try {
+      await resume();
+      interruptionHint.value = '已自动继续录音';
+    } catch (_) {
+      interruptionHint.value = '麦克风已可用，自动继续失败，请点击继续录音';
+    } finally {
+      _autoResuming = false;
+    }
+  }
+
+  void _cancelAutoResume() {
+    _autoResumeTimer?.cancel();
+    _autoResumeTimer = null;
   }
 
   String _pauseHintForReason(String reason) {
@@ -216,13 +267,15 @@ class MeetingLiveController {
       case 'audioRecordGone':
       case 'audioRecordSilent':
       case 'audioRecordException':
+        return '麦克风被其他语音软件占用，录音已自动暂停；对方结束后将自动继续';
+      case 'routeDeviceLost':
       case 'routeChange':
-        return '麦克风被其他语音软件占用，录音已自动暂停并保存';
+        return '音频设备已断开，录音已自动暂停；请重新连接后点击继续';
       case 'interruption':
       case 'mediaServicesReset':
-        return '来电或系统中断，录音已自动暂停并保存';
+        return '来电或系统中断，录音已自动暂停；结束后将自动继续';
       default:
-        return '麦克风被占用，录音已自动暂停并保存';
+        return '录音已自动暂停；恢复后将尝试自动继续';
     }
   }
 }

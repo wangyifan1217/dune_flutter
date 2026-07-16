@@ -478,6 +478,15 @@ Map<String, dynamic> _fallbackUiRoot() {
           'tax',
         ],
         ['profit', 'gmv', 'rate', 'revenue', 'cost', 'tax'],
+        // 与后端 ProductLineGroupCaseSQL(sync_source) 对齐
+        categories: const [
+          '全部',
+          '能源',
+          '能源积分返费',
+          '公共出行',
+          '民营',
+          '运营商',
+        ],
       ),
       'supply': tab(
         'supply',
@@ -1109,16 +1118,19 @@ class _TrendLinesPainter extends CustomPainter {
     required this.bounds,
     required this.colors,
     required this.padH,
+    this.available = const [true, true, true],
   });
   final _TrendSeries series;
   final _TrendBounds bounds;
   final List<Color> colors;
   final double padH;
+  // v3.9 · [revenue, cost, profit] 每条序列是否可见 (缺数据的不画)
+  final List<bool> available;
 
   @override
   void paint(Canvas canvas, Size size) {
-    const padTop = 8.0;
-    const padBottom = 6.0;
+    const padTop = 12.0;    // v3.8 · 上留白多 4px 给 MAX 数字标注
+    const padBottom = 10.0; // v3.8 · 下留白多 4px 给 MIN 数字标注
     final usableH = size.height - padTop - padBottom;
     final usableW = size.width - padH * 2;
     final n = series.revenue.length;
@@ -1128,17 +1140,44 @@ class _TrendLinesPainter extends CustomPainter {
     double yOf(double v, _SeriesRange r) =>
         padTop + (r.max - v) / r.span * usableH;
 
-    // v2.8 · 水平网格 3 档淡紫 hairline(原 4 条中性灰),更薄更冷,不抢线
-    final gridPaint = Paint()
-      ..color = _LhPlum.lavender
-      ..strokeWidth = 0.5
+    // v3.8 · MAX/MIN 虚线 hairline —— 只画毛利这条(hero series)的 max/min,
+    //   editorial 手法,比 3 条 grid 更聚焦."这行的毛利在哪里到顶/触底"一眼可读.
+    final profitBounds = bounds.profit;
+    final actualMaxProfit = series.profit.isEmpty
+        ? 0.0
+        : series.profit.reduce(math.max);
+    final actualMinProfit = series.profit.isEmpty
+        ? 0.0
+        : series.profit.reduce(math.min);
+    // 换算成 y 坐标 (用 profit bounds,跟画线保持一致)
+    final maxY = yOf(actualMaxProfit, profitBounds);
+    final minY = yOf(actualMinProfit, profitBounds);
+
+    final hairPaint = Paint()
+      ..color = _LhPlum.deep.withAlpha(38)
+      ..strokeWidth = 0.6
       ..style = PaintingStyle.stroke;
-    for (int i = 0; i <= 3; i++) {
-      final y = padTop + usableH * i / 3;
-      canvas.drawLine(Offset(0, y), Offset(size.width, y), gridPaint);
+    // 短划线,4px on 3px off
+    void drawDashedH(double y) {
+      double x = 0;
+      while (x < size.width) {
+        canvas.drawLine(
+          Offset(x, y),
+          Offset(math.min(x + 4, size.width), y),
+          hairPaint,
+        );
+        x += 7;
+      }
     }
 
-    // v2.10 · 主线 (收入) 下方渐变 fill area —— 深紫 α38 → 0,让主线有"体积/支撑"
+    // 只在 max ≠ min 时画,防止叠成一根
+    if ((actualMaxProfit - actualMinProfit).abs() > 1e-6) {
+      drawDashedH(maxY);
+      drawDashedH(minY);
+    }
+
+    // v3.8 · 毛利线下方 fill area (原来在收入,现移到毛利 hero series).
+    //   deep α42 → 0, 让主线有"体积感".
     void drawFillArea(List<double> pts, Color color, _SeriesRange range) {
       if (pts.length < 2) return;
       final offsets = <Offset>[
@@ -1157,18 +1196,19 @@ class _TrendLinesPainter extends CustomPainter {
           ..shader = LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: [color.withAlpha(38), color.withAlpha(0)],
+            colors: [color.withAlpha(42), color.withAlpha(0)],
           ).createShader(rect)
           ..style = PaintingStyle.fill,
       );
     }
 
-    // v2.8 · Catmull-Rom 平滑 + 差异化粗细:收入 1.8px(主线)、成本/毛利 1.4px(副)
+    // v3.8 · 差异化粗细:毛利 (hero) 2.0px, 收入/成本 (secondary) 0.9px + α180.
     void drawLine(
       List<double> pts,
       Color color,
       _SeriesRange range, {
-      double strokeWidth = 1.4,
+      double strokeWidth = 0.9,
+      int alpha = 255,
     }) {
       if (pts.length < 2) return;
       final offsets = <Offset>[
@@ -1179,7 +1219,7 @@ class _TrendLinesPainter extends CustomPainter {
       canvas.drawPath(
         path,
         Paint()
-          ..color = color
+          ..color = alpha == 255 ? color : color.withAlpha(alpha)
           ..strokeWidth = strokeWidth
           ..style = PaintingStyle.stroke
           ..strokeCap = StrokeCap.round
@@ -1187,46 +1227,71 @@ class _TrendLinesPainter extends CustomPainter {
       );
     }
 
-    // v2.10 · 数据点小空心圆(仅少点 pts.length ≤ 10 时画,避免密集图拥挤)
+    // v3.8 · 数据点:副线不画(降噪),主线画小空心圆保留可读性.
     void drawDataDots(List<double> pts, Color color, _SeriesRange range) {
       if (pts.length < 2 || pts.length > 10) return;
       final fillWhite = Paint()..color = Colors.white;
       final strokePaint = Paint()
         ..color = color
-        ..strokeWidth = 1.0
+        ..strokeWidth = 1.2
         ..style = PaintingStyle.stroke;
       for (int i = 0; i < pts.length; i++) {
         final o = Offset(xOf(i), yOf(pts[i], range));
-        canvas.drawCircle(o, 1.8, fillWhite);
-        canvas.drawCircle(o, 1.8, strokePaint);
+        canvas.drawCircle(o, 2.0, fillWhite);
+        canvas.drawCircle(o, 2.0, strokePaint);
       }
     }
 
-    // v2.10 · 末端 today halo dot —— 每条线尾端"当前值"锚点,跟 hero 大图一致
-    void drawEndDot(List<double> pts, Color color, _SeriesRange range) {
+    // v3.8 · 末端 halo dot —— 主线 halo 大且有双圈(hero 语言),副线仅 3px 小点.
+    void drawEndDot(
+      List<double> pts,
+      Color color,
+      _SeriesRange range, {
+      bool hero = false,
+    }) {
       if (pts.isEmpty) return;
       final i = pts.length - 1;
       final o = Offset(xOf(i), yOf(pts[i], range));
-      // 外层 halo (color α40)
-      canvas.drawCircle(o, 5.0, Paint()..color = color.withAlpha(40));
-      // 白 halo
-      canvas.drawCircle(o, 3.4, Paint()..color = Colors.white);
-      // 实心 dot
-      canvas.drawCircle(o, 2.4, Paint()..color = color);
+      if (hero) {
+        // 双圈 halo: 外柔色 α40 + 中柔色 α70 + 白 + 实心 (跟 _LhPulseDot 同族)
+        canvas.drawCircle(o, 7.0, Paint()..color = color.withAlpha(28));
+        canvas.drawCircle(o, 5.0, Paint()..color = color.withAlpha(60));
+        canvas.drawCircle(o, 3.6, Paint()..color = Colors.white);
+        canvas.drawCircle(o, 2.6, Paint()..color = color);
+      } else {
+        // 副线 end dot 简化:白底 + 小实心
+        canvas.drawCircle(o, 2.4, Paint()..color = Colors.white);
+        canvas.drawCircle(o, 1.6, Paint()..color = color.withAlpha(200));
+      }
     }
 
-    // 绘制顺序:fill area 垫底 → 副线(成本/毛利) → 主线(收入)
-    // → 数据点小圆(所有线) → 末端 today dot(所有线)
-    drawFillArea(series.revenue, colors[0], bounds.revenue);
-    drawLine(series.cost, colors[1], bounds.cost);
-    drawLine(series.profit, colors[2], bounds.profit);
-    drawLine(series.revenue, colors[0], bounds.revenue, strokeWidth: 1.8);
-    drawDataDots(series.cost, colors[1], bounds.cost);
-    drawDataDots(series.profit, colors[2], bounds.profit);
-    drawDataDots(series.revenue, colors[0], bounds.revenue);
-    drawEndDot(series.cost, colors[1], bounds.cost);
-    drawEndDot(series.profit, colors[2], bounds.profit);
-    drawEndDot(series.revenue, colors[0], bounds.revenue);
+    // 绘制顺序:MAX/MIN hairline (已画) → fill area (毛利) → 副线 (收入/成本 浅描)
+    //   → 主线 (毛利粗) → 数据点 (仅主线) → 末端 dot (主线双圈,副线小点)
+    // v3.9 · 每条线绘制前检查 available —— 缺数据的序列完全跳过, 不再画零基线.
+    if (available.length > 2 && available[2]) {
+      drawFillArea(series.profit, colors[2], bounds.profit);
+    }
+    if (available.isNotEmpty && available[0]) {
+      drawLine(series.revenue, colors[0], bounds.revenue,
+          strokeWidth: 0.9, alpha: 180);
+    }
+    if (available.length > 1 && available[1]) {
+      drawLine(series.cost, colors[1], bounds.cost,
+          strokeWidth: 0.9, alpha: 180);
+    }
+    if (available.length > 2 && available[2]) {
+      drawLine(series.profit, colors[2], bounds.profit, strokeWidth: 2.0);
+      drawDataDots(series.profit, colors[2], bounds.profit);
+    }
+    if (available.isNotEmpty && available[0]) {
+      drawEndDot(series.revenue, colors[0], bounds.revenue);
+    }
+    if (available.length > 1 && available[1]) {
+      drawEndDot(series.cost, colors[1], bounds.cost);
+    }
+    if (available.length > 2 && available[2]) {
+      drawEndDot(series.profit, colors[2], bounds.profit, hero: true);
+    }
   }
 
   @override
@@ -1234,7 +1299,8 @@ class _TrendLinesPainter extends CustomPainter {
       !identical(old.series, series) ||
       !identical(old.bounds, bounds) ||
       old.padH != padH ||
-      !identical(old.colors, colors);
+      !identical(old.colors, colors) ||
+      !listEquals(old.available, available);
 }
 
 // ── Overlay painter (light; runs every drag frame) ───────────────────────────
@@ -1245,12 +1311,14 @@ class _TrendOverlayPainter extends CustomPainter {
     required this.colors,
     required this.padH,
     required this.selectedIndex,
+    this.available = const [true, true, true],
   });
   final _TrendSeries series;
   final _TrendBounds bounds;
   final List<Color> colors;
   final double padH;
   final int? selectedIndex;
+  final List<bool> available;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -1259,8 +1327,8 @@ class _TrendOverlayPainter extends CustomPainter {
     final n = series.revenue.length;
     if (si < 0 || si >= n) return;
 
-    const padTop = 8.0;
-    const padBottom = 6.0;
+    const padTop = 12.0;    // 跟 lines painter 同步 (v3.8)
+    const padBottom = 10.0;
     final usableH = size.height - padTop - padBottom;
     final usableW = size.width - padH * 2;
     final step = n <= 1 ? 0.0 : usableW / (n - 1);
@@ -1269,10 +1337,10 @@ class _TrendOverlayPainter extends CustomPainter {
     double yOf(double v, _SeriesRange r) =>
         padTop + (r.max - v) / r.span * usableH;
 
-    // v2.10 · 竖 crosshair 换深紫墨 (原 ink2 中性灰)
+    // v3.8 · 竖 crosshair 保留,颜色微降 α 免抢线
     final dashPaint = Paint()
-      ..color = _LhPlum.deep.withAlpha(150)
-      ..strokeWidth = 0.9
+      ..color = _LhPlum.deep.withAlpha(120)
+      ..strokeWidth = 0.8
       ..style = PaintingStyle.stroke;
     const dashH = 3.0;
     const dashGap = 2.0;
@@ -1287,29 +1355,50 @@ class _TrendOverlayPainter extends CustomPainter {
       y += dashH + dashGap;
     }
 
-    // v2.10 · 三层 marker:外 halo (色 α45) + 白 halo + 描边 + 内实心
-    void marker(double v, Color color, _SeriesRange range) {
+    // v3.8 · marker 主副分层:副线 (收入/成本) = 白底+色描边小圆 3px,
+    //   主线 (毛利) = 三层 halo+描边+实心,焦点全在毛利.
+    void softMarker(double v, Color color, _SeriesRange range) {
+      final cy = yOf(v, range);
+      canvas.drawCircle(Offset(x, cy), 3.0, Paint()..color = Colors.white);
+      canvas.drawCircle(
+        Offset(x, cy),
+        3.0,
+        Paint()
+          ..color = color.withAlpha(200)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.0,
+      );
+    }
+
+    void heroMarker(double v, Color color, _SeriesRange range) {
       final cy = yOf(v, range);
       canvas.drawCircle(
         Offset(x, cy),
-        6.0,
-        Paint()..color = color.withAlpha(45),
+        7.0,
+        Paint()..color = color.withAlpha(50),
       );
-      canvas.drawCircle(Offset(x, cy), 4.0, Paint()..color = Colors.white);
+      canvas.drawCircle(Offset(x, cy), 4.5, Paint()..color = Colors.white);
       canvas.drawCircle(
         Offset(x, cy),
-        4.0,
+        4.5,
         Paint()
           ..color = color
           ..style = PaintingStyle.stroke
-          ..strokeWidth = 1.4,
+          ..strokeWidth = 1.6,
       );
-      canvas.drawCircle(Offset(x, cy), 1.8, Paint()..color = color);
+      canvas.drawCircle(Offset(x, cy), 2.2, Paint()..color = color);
     }
 
-    marker(series.cost[si], colors[1], bounds.cost);
-    marker(series.profit[si], colors[2], bounds.profit);
-    marker(series.revenue[si], colors[0], bounds.revenue);
+    // v3.9 · marker 只画有数据的序列
+    if (available.isNotEmpty && available[0]) {
+      softMarker(series.revenue[si], colors[0], bounds.revenue);
+    }
+    if (available.length > 1 && available[1]) {
+      softMarker(series.cost[si], colors[1], bounds.cost);
+    }
+    if (available.length > 2 && available[2]) {
+      heroMarker(series.profit[si], colors[2], bounds.profit);
+    }
   }
 
   @override
@@ -1317,7 +1406,8 @@ class _TrendOverlayPainter extends CustomPainter {
       old.selectedIndex != selectedIndex ||
       !identical(old.series, series) ||
       !identical(old.bounds, bounds) ||
-      old.padH != padH;
+      old.padH != padH ||
+      !listEquals(old.available, available);
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -1608,36 +1698,34 @@ class _HeroBigSparkPainter extends CustomPainter {
       _drawDashedPath(canvas, ghostPath, ghostPaint, dash: 2, gap: 2.5);
     }
 
-    // ── § 3. 主线 (tween 绘出) ────────────────────────
-    final total = data.length - 1;
-    final upto = (total * progress).clamp(0.0, total.toDouble());
-    final fullSegs = upto.floor();
-    final frac = upto - fullSegs;
+    // ── § 3. 主线 (Catmull-Rom 平滑 · tween 绘出) ─────
+    // v3.1 · 主线换 smooth 曲线, tween 绘出改用 PathMetric.extractPath
+    //        —— shimmer 光点沿曲线跑 = 无硬转折; 主线本身也不再"崎岖".
+    final offsets = <Offset>[
+      for (int i = 0; i < data.length; i++) Offset(xOf(i), yOf(data[i])),
+    ];
+    final smoothFull = Path();
+    _addSmoothPath(smoothFull, offsets);
 
-    final linePath = Path()..moveTo(xOf(0), yOf(data[0]));
-    for (int i = 1; i <= fullSegs; i++) {
-      linePath.lineTo(xOf(i), yOf(data[i]));
-    }
-    Offset? lastPt;
-    if (fullSegs < total && frac > 0) {
-      final x0 = xOf(fullSegs);
-      final y0 = yOf(data[fullSegs]);
-      final x1 = xOf(fullSegs + 1);
-      final y1 = yOf(data[fullSegs + 1]);
-      final px = x0 + (x1 - x0) * frac;
-      final py = y0 + (y1 - y0) * frac;
-      linePath.lineTo(px, py);
-      lastPt = Offset(px, py);
-    } else if (fullSegs > 0) {
-      lastPt = Offset(xOf(fullSegs), yOf(data[fullSegs]));
+    final metricsList = smoothFull.computeMetrics().toList(growable: false);
+    Path linePath;
+    Offset lastPt;
+    if (metricsList.isEmpty) {
+      // 极端情况: 数据 <2 已在前面短路; 兜底
+      linePath = smoothFull;
+      lastPt = offsets.last;
     } else {
-      lastPt = Offset(xOf(0), yOf(data[0]));
+      final m = metricsList.first;
+      final drawLen = m.length * progress.clamp(0.0, 1.0);
+      linePath = m.extractPath(0, drawLen);
+      final tan = m.getTangentForOffset(drawLen);
+      lastPt = tan?.position ?? offsets.last;
     }
 
-    // 渐变填充 (fill under line)
+    // 渐变填充 (fill under line) —— 用 extractPath 得到的 partial 曲线做上边界
     final fillPath = Path.from(linePath)
       ..lineTo(lastPt.dx, size.height)
-      ..lineTo(xOf(0), size.height)
+      ..lineTo(offsets.first.dx, size.height)
       ..close();
     final rect = Rect.fromLTWH(0, 0, size.width, size.height);
     canvas.drawPath(
@@ -1757,10 +1845,10 @@ class _HeroBigSparkPainter extends CustomPainter {
         alpha = 1.0;
       }
       alpha *= idleFade;
-      final metrics = linePath.computeMetrics().toList(growable: false);
-      if (metrics.isNotEmpty && alpha > 0.02) {
-        // 主线只是一条 (未分段), 直接取第一条
-        final metric = metrics.first;
+      // v3.1 · Shimmer 沿完整平滑曲线跑 (metricsList 已算过), 与主线共享同一 metric —
+      // 避免 extractPath 之后 computeMetrics 重算带来的小抖动.
+      if (metricsList.isNotEmpty && alpha > 0.02) {
+        final metric = metricsList.first;
         final tangent = metric.getTangentForOffset(t * metric.length);
         if (tangent != null) {
           final pt = tangent.position;
@@ -2001,10 +2089,12 @@ class _HeroSparkPainter extends CustomPainter {
     double xOf(int i) => i * step;
     double yOf(double v) => padY + (maxV - v) / range * usableH;
 
-    final path = Path()..moveTo(xOf(0), yOf(data[0]));
-    for (int i = 1; i < data.length; i++) {
-      path.lineTo(xOf(i), yOf(data[i]));
-    }
+    // v3 · Catmull-Rom 平滑 (跟 _TrendChart / hero big spark 一致的编辑体呼吸感)
+    final offsets = <Offset>[
+      for (int i = 0; i < data.length; i++) Offset(xOf(i), yOf(data[i])),
+    ];
+    final path = Path();
+    _addSmoothPath(path, offsets);
     canvas.drawPath(
       path,
       Paint()
@@ -2520,12 +2610,12 @@ class _MetaEntry {
     required this.name,
     required this.group,
     required this.values,
-    required this.delta,
+    required this.deltas,
   });
   final String name;
   final String group;
   final Map<String, double> values; // metric key → value
-  final double? delta;
+  final Map<String, double> deltas; // metric key → delta% (vs 上期), 缺失即 null 视为无数据
 }
 
 class _MetaMetricCol {
@@ -2572,11 +2662,23 @@ class _MetaCompareStageState extends State<_MetaCompareStage> {
   late String _sortKey;
   bool _sortDesc = true;
 
+  // ═════════════════ 布局常量 (v3.8 editorial) ═════════════════
+  static const double _rankW = 34;
+  static const double _nameW = 116;
+  static const double _leftW = _rankW + _nameW; // 150
+  static const double _metricW = 78;
+  static const double _activeMetricW = 108;
+  static const double _headerH = 46;
+  static const double _rowH = 58;
+  static const double _footerRowH = 34;
+
   @override
   void initState() {
     super.initState();
     _sortKey = widget.activeMetricKey;
   }
+
+  // ─── 数据派生 ───
 
   List<_MetaEntry> get _sortedEntries {
     final list = List<_MetaEntry>.from(widget.entries);
@@ -2589,6 +2691,43 @@ class _MetaCompareStageState extends State<_MetaCompareStage> {
     return list;
   }
 
+  // 当前活跃列 sum abs (name 列显示 share%)
+  double get _activeColSumAbs {
+    double s = 0;
+    for (final e in widget.entries) {
+      s += (e.values[_sortKey] ?? 0).abs();
+    }
+    return s;
+  }
+
+  Map<String, double> get _colTotals {
+    final r = <String, double>{};
+    for (final m in widget.metrics) {
+      double sum = 0;
+      for (final e in widget.entries) {
+        sum += (e.values[m.key] ?? 0);
+      }
+      r[m.key] = sum;
+    }
+    return r;
+  }
+
+  Map<String, double> get _colAvgs {
+    final r = <String, double>{};
+    final n = widget.entries.length;
+    if (n == 0) return r;
+    for (final m in widget.metrics) {
+      double sum = 0;
+      for (final e in widget.entries) {
+        sum += (e.values[m.key] ?? 0);
+      }
+      r[m.key] = sum / n;
+    }
+    return r;
+  }
+
+  // ─── 交互 ───
+
   void _tapHeader(String key) {
     setState(() {
       if (_sortKey == key) {
@@ -2600,114 +2739,106 @@ class _MetaCompareStageState extends State<_MetaCompareStage> {
     });
   }
 
+  double _metricColWidth(String key) =>
+      key == _sortKey ? _activeMetricW : _metricW;
+
+  double get _tableW {
+    return _leftW +
+        widget.metrics.fold<double>(0, (s, m) => s + _metricColWidth(m.key));
+  }
+
+  // ─── 英文标签 map ───
+  //
+  // 小地图, 常见指标 key → UPPER 英文.没命中的直接 upper key 用兜底.
+  static const Map<String, String> _kMetricEn = {
+    'profit': 'PROFIT',
+    'grossProfit': 'GROSS PROFIT',
+    'revenue': 'REVENUE',
+    'sales': 'SALES',
+    'salesVolume': 'VOLUME',
+    'cost': 'COST',
+    'tax': 'TAX',
+    'rate': 'RATE',
+    'grossRate': 'GROSS RATE',
+    'profitRate': 'PROFIT RATE',
+    'spreadRate': 'SPREAD',
+    'discount': 'DISCOUNT',
+    'rebate': 'REBATE',
+    'settlement': 'SETTLEMENT',
+    'verifiedScale': 'VERIFIED',
+  };
+
+  String _metricEnKey(String k) =>
+      _kMetricEn[k] ?? k.toUpperCase();
+
+  String _metricUnitLabel(_MetaMetricCol m) =>
+      m.isRate ? '%' : '万元';
+
+  // ═════════════════════════════════════════════════════════════════════════
+  // Build
+  // ═════════════════════════════════════════════════════════════════════════
+
   @override
   Widget build(BuildContext context) {
     final sorted = _sortedEntries;
+    final totals = _colTotals;
+    final avgs = _colAvgs;
+    final sumAbs = _activeColSumAbs;
     final n = sorted.length;
+    final tableWidth = _tableW;
 
-    // 列宽
-    const rankW = 26.0;
-    const nameW = 130.0;
-    const metricW = 68.0;
-    final tableW = rankW + nameW + widget.metrics.length * metricW;
+    // Editorial rule — 冷灰分隔，避免暖米色被看成「金色线」
+    final ruleThick = Container(
+      height: 1.5,
+      width: tableWidth,
+      color: LhColors.ink.withAlpha(215),
+    );
+    final ruleThin = Container(
+      height: 0.5,
+      width: tableWidth,
+      color: const Color(0xFFE6E2EE),
+    );
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         // ═════════════════ Masthead ═════════════════
-        Padding(
-          padding: const EdgeInsets.fromLTRB(18, 14, 8, 12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  Text(
-                    '全部指标 · ALL METRICS',
-                    style: LhTypography.mono(
-                      size: 8.5,
-                      color: LhColors.mute,
-                      weight: FontWeight.w700,
-                      letterSpacing: 1.6,
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(child: Container(height: 1, color: LhColors.line2)),
-                  const SizedBox(width: 4),
-                  GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTap: widget.onClose,
-                    child: const Padding(
-                      padding: EdgeInsets.all(8),
-                      child: Icon(
-                        Icons.close_rounded,
-                        size: 16,
-                        color: LhColors.mute,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 6),
-              Text.rich(
-                TextSpan(
-                  children: [
-                    TextSpan(
-                      text: '$n 项',
-                      style: LhTypography.sans(
-                        size: 10.5,
-                        color: LhColors.mute,
-                      ),
-                    ),
-                    if (widget.vsLabel.isNotEmpty)
-                      TextSpan(
-                        text: '  ·  ${widget.vsLabel}',
-                        style: LhTypography.mono(
-                          size: 9.5,
-                          color: LhColors.mute2,
-                          weight: FontWeight.w500,
-                          letterSpacing: 0.3,
-                        ),
-                      ),
-                    TextSpan(
-                      text: '  ·  tap 表头切换排序',
-                      style: LhTypography.mono(
-                        size: 9,
-                        color: LhColors.mute2,
-                        weight: FontWeight.w500,
-                        letterSpacing: 0.3,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
+        _buildMasthead(n),
 
-        Container(height: 1, color: const Color(0xFFE5DFD4)),
-
-        // ═════════════════ 表格 ═════════════════
+        // ═════════════════ 表格 (整体一个 horizontal scroll) ═════════════════
         Expanded(
           child: SingleChildScrollView(
             scrollDirection: Axis.horizontal,
+            physics: const ClampingScrollPhysics(),
             padding: EdgeInsets.zero,
             child: SizedBox(
-              width: tableW,
+              width: tableWidth,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _buildHeaderRow(rankW, nameW, metricW),
-                  Container(height: 1, color: const Color(0xFFE5DFD4)),
+                  // Top 编辑体 rule (1.5px ink)
+                  ruleThick,
+                  _buildHeaderRow(),
+                  ruleThin,
+                  // Body: ListView.builder 保留 lazy 加载
                   Expanded(
                     child: ListView.builder(
-                      padding: const EdgeInsets.only(bottom: 24),
+                      padding: EdgeInsets.zero,
                       itemCount: sorted.length,
-                      itemBuilder: (ctx, i) =>
-                          _buildDataRow(i, sorted[i], rankW, nameW, metricW),
+                      itemExtent: _rowH,
+                      itemBuilder: (ctx, i) => _buildDataRow(
+                        i,
+                        sorted[i],
+                        sumAbs,
+                        isLast: i == sorted.length - 1,
+                      ),
                     ),
                   ),
+                  // Footer: 1.5px rule → 合计 · Σ → 均值 · μ → 1.5px rule
+                  ruleThick,
+                  _buildFooterRow('合计', 'Σ', totals, isTotal: true),
+                  _buildFooterRow('均值', 'μ', avgs, isTotal: false),
+                  ruleThick,
                 ],
               ),
             ),
@@ -2717,148 +2848,459 @@ class _MetaCompareStageState extends State<_MetaCompareStage> {
     );
   }
 
-  Widget _buildHeaderRow(double rankW, double nameW, double metricW) {
-    return Container(
-      height: 32,
-      padding: const EdgeInsets.symmetric(horizontal: 12),
-      child: Row(
-        children: [
-          SizedBox(width: rankW),
-          SizedBox(
-            width: nameW,
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: Text(
-                '名称 · NAME',
-                style: LhTypography.mono(
-                  size: 8.5,
-                  color: LhColors.mute2,
-                  weight: FontWeight.w700,
-                  letterSpacing: 1.0,
-                ),
-              ),
-            ),
-          ),
-          for (final m in widget.metrics)
-            SizedBox(
-              width: metricW,
-              child: GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTap: () => _tapHeader(m.key),
-                child: Container(
-                  color: _sortKey == m.key
-                      ? _LhPlum.primary.withAlpha(18)
-                      : Colors.transparent,
-                  alignment: Alignment.centerRight,
-                  padding: const EdgeInsets.only(right: 6),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      Text(
-                        m.short,
-                        style: LhTypography.mono(
-                          size: 9,
-                          color: _sortKey == m.key
-                              ? _LhPlum.primary
-                              : LhColors.mute2,
-                          weight: FontWeight.w700,
-                          letterSpacing: 0.5,
-                        ),
-                      ),
-                      if (_sortKey == m.key) ...[
-                        const SizedBox(width: 2),
-                        Text(
-                          _sortDesc ? '↓' : '↑',
-                          style: LhTypography.mono(
-                            size: 8.5,
-                            color: _LhPlum.primary,
-                            weight: FontWeight.w700,
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
+  // ═════════════════════════════════════════════════════════════════════════
+  // Masthead
+  // ═════════════════════════════════════════════════════════════════════════
 
-  Widget _buildDataRow(
-    int i,
-    _MetaEntry e,
-    double rankW,
-    double nameW,
-    double metricW,
-  ) {
-    final isTop3 = i < 3;
-    return Container(
-      constraints: const BoxConstraints(minHeight: 44),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: const BoxDecoration(
-        border: Border(bottom: BorderSide(color: Color(0xFFECE6D5), width: 1)),
-      ),
+  Widget _buildMasthead(int n) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(18, 14, 8, 12),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          SizedBox(
-            width: rankW,
-            child: Text(
-              (i + 1).toString().padLeft(2, '0'),
-              style: LhTypography.mono(
-                size: 10.5,
-                color: isTop3 ? _LhPlum.primary : LhColors.mute2,
-                weight: isTop3 ? FontWeight.w700 : FontWeight.w500,
-                letterSpacing: 0.2,
-              ),
-            ),
-          ),
-          SizedBox(
-            width: nameW,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  e.name,
-                  style: LhTypography.sans(
-                    size: 11.5,
-                    color: LhColors.ink,
-                    weight: FontWeight.w700,
-                    height: 1.15,
-                    letterSpacing: -0.1,
+          Expanded(
+            child: Text.rich(
+              TextSpan(
+                children: [
+                  TextSpan(
+                    text: '$n 项',
+                    style: LhTypography.sans(
+                      size: 10.5,
+                      color: LhColors.mute,
+                    ),
                   ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                if (e.group.isNotEmpty) ...[
-                  const SizedBox(height: 2),
-                  Text(
-                    e.group,
+                  if (widget.vsLabel.isNotEmpty)
+                    TextSpan(
+                      text: '  ·  ${widget.vsLabel}',
+                      style: LhTypography.mono(
+                        size: 9.5,
+                        color: LhColors.mute2,
+                        weight: FontWeight.w500,
+                        letterSpacing: 0.3,
+                      ),
+                    ),
+                  TextSpan(
+                    text: '  ·  tap 表头切列排序',
                     style: LhTypography.mono(
-                      size: 7.5,
+                      size: 9,
                       color: LhColors.mute2,
                       weight: FontWeight.w500,
                       letterSpacing: 0.3,
                     ),
                   ),
                 ],
+              ),
+            ),
+          ),
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: widget.onClose,
+            child: const Padding(
+              padding: EdgeInsets.all(8),
+              child: Icon(
+                Icons.close_rounded,
+                size: 16,
+                color: LhColors.mute,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ═════════════════════════════════════════════════════════════════════════
+  // Header Row (two-layer: sans main + mono kicker)
+  // ═════════════════════════════════════════════════════════════════════════
+
+  Widget _buildHeaderRow() {
+    return SizedBox(
+      height: _headerH,
+      child: Row(
+        children: [
+          // ── Rank header ('# / RANK') ──
+          SizedBox(
+            width: _rankW,
+            child: Padding(
+              padding: const EdgeInsets.only(left: 8, right: 2),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    '#',
+                    style: LhTypography.sans(
+                      size: 12,
+                      weight: FontWeight.w700,
+                      color: LhColors.ink,
+                      letterSpacing: -0.1,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    'RANK',
+                    style: LhTypography.mono(
+                      size: 7.5,
+                      color: LhColors.mute2,
+                      weight: FontWeight.w700,
+                      letterSpacing: 1.0,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          // ── Name header (名称 / NAME) ──
+          SizedBox(
+            width: _nameW,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    '名称',
+                    style: LhTypography.sans(
+                      size: 12,
+                      weight: FontWeight.w700,
+                      color: LhColors.ink,
+                      letterSpacing: -0.1,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    'NAME',
+                    style: LhTypography.mono(
+                      size: 7.5,
+                      color: LhColors.mute2,
+                      weight: FontWeight.w700,
+                      letterSpacing: 1.0,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          // ── Metric headers ──
+          for (final m in widget.metrics) _buildMetricHeader(m),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMetricHeader(_MetaMetricCol m) {
+    final isActive = _sortKey == m.key;
+    final w = _metricColWidth(m.key);
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () => _tapHeader(m.key),
+      child: Container(
+        width: w,
+        height: _headerH,
+        color: isActive ? _LhPlum.mist : Colors.transparent,
+        padding: const EdgeInsets.only(right: 8, left: 4),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Text(
+                  m.short,
+                  style: LhTypography.sans(
+                    size: 12,
+                    weight: FontWeight.w700,
+                    color: isActive ? _LhPlum.deep : LhColors.ink,
+                    letterSpacing: -0.1,
+                  ),
+                ),
+                if (isActive) ...[
+                  const SizedBox(width: 3),
+                  Text(
+                    _sortDesc ? '▾' : '▴',
+                    style: LhTypography.mono(
+                      size: 9,
+                      color: _LhPlum.primary,
+                      weight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+            const SizedBox(height: 3),
+            Text(
+              '${_metricEnKey(m.key)} · ${_metricUnitLabel(m)}',
+              style: LhTypography.mono(
+                size: 7.5,
+                color: isActive ? _LhPlum.primary : LhColors.mute2,
+                weight: FontWeight.w700,
+                letterSpacing: 1.0,
+              ),
+              overflow: TextOverflow.ellipsis,
+              maxLines: 1,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ═════════════════════════════════════════════════════════════════════════
+  // Data Row
+  // ═════════════════════════════════════════════════════════════════════════
+
+  Widget _buildDataRow(
+    int i,
+    _MetaEntry e,
+    double sumAbs, {
+    required bool isLast,
+  }) {
+    final isTop3 = i < 3;
+    final isAlt = i.isOdd;
+    // 微 zebra: 奇数行 mist, 偶数白, 主副对比不失彩
+    final rowBg = isAlt ? _LhPlum.mist : Colors.white;
+    final shareOfActive =
+        sumAbs > 0 ? (e.values[_sortKey] ?? 0).abs() / sumAbs * 100 : 0.0;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: rowBg,
+        border: isLast
+            ? null
+            : const Border(
+                bottom: BorderSide(color: Color(0xFFE6E2EE), width: 0.5),
+              ),
+      ),
+      child: Row(
+        children: [
+          // ── Rank cell (top3: 2px plum stripe + plum 数字) ──
+          SizedBox(
+            width: _rankW,
+            child: Row(
+              children: [
+                if (isTop3)
+                  Container(
+                    width: 2,
+                    color: _LhPlum.primary,
+                  )
+                else
+                  const SizedBox(width: 2),
+                Expanded(
+                  child: Center(
+                    child: isTop3
+                        ? Text(
+                            (i + 1).toString(),
+                            style: LhTypography.sans(
+                              size: 15,
+                              weight: FontWeight.w700,
+                              color: _LhPlum.primary,
+                              letterSpacing: -0.3,
+                            ),
+                          )
+                        : Text(
+                            (i + 1).toString().padLeft(2, '0'),
+                            style: LhTypography.mono(
+                              size: 11,
+                              color: LhColors.mute2,
+                              weight: FontWeight.w500,
+                              letterSpacing: 0.3,
+                            ),
+                          ),
+                  ),
+                ),
               ],
             ),
           ),
-          for (final m in widget.metrics)
-            SizedBox(
-              width: metricW,
-              child: Container(
-                color: _sortKey == m.key
-                    ? _LhPlum.primary.withAlpha(10)
-                    : Colors.transparent,
-                alignment: Alignment.centerRight,
-                padding: const EdgeInsets.only(right: 6),
-                child: _buildCell(e.values[m.key] ?? 0, m.isRate),
+          // ── Name cell (name + group · share%) ──
+          SizedBox(
+            width: _nameW,
+            child: Padding(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    e.name,
+                    style: LhTypography.sans(
+                      size: 11.5,
+                      weight: FontWeight.w700,
+                      color: LhColors.ink,
+                      letterSpacing: -0.1,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    _buildGroupShareText(e.group, shareOfActive),
+                    style: LhTypography.mono(
+                      size: 8,
+                      color: LhColors.mute2,
+                      weight: FontWeight.w500,
+                      letterSpacing: 0.3,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+          ),
+          // ── Metric value cells ──
+          for (final m in widget.metrics) _buildMetricCell(e, m),
+        ],
+      ),
+    );
+  }
+
+  String _buildGroupShareText(String group, double sharePct) {
+    final g = group.trim();
+    final share = '${sharePct.toStringAsFixed(1)}%';
+    if (g.isEmpty) return share;
+    return '$g · $share';
+  }
+
+  Widget _buildMetricCell(
+    _MetaEntry e,
+    _MetaMetricCol m,
+  ) {
+    final isActive = _sortKey == m.key;
+    final v = e.values[m.key] ?? 0;
+    final isNeg = v < 0;
+    final w = _metricColWidth(m.key);
+    final valColor = isNeg ? LhColors.pos : LhColors.ink;
+
+    if (!isActive) {
+      // ── 非活跃列: mono 单值,右对齐,简洁 ──
+      return Container(
+        width: w,
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.only(right: 8, left: 4),
+        child: m.isRate
+            ? Text(
+                '${v.toStringAsFixed(1)}%',
+                style: LhTypography.mono(
+                  size: 10.5,
+                  color: valColor,
+                  weight: FontWeight.w600,
+                ),
+              )
+            : RichText(
+                text: TextSpan(
+                  children: [
+                    if (isNeg)
+                      TextSpan(
+                        text: '-',
+                        style: LhTypography.mono(
+                          size: 10.5,
+                          color: LhColors.pos,
+                          weight: FontWeight.w600,
+                        ),
+                      ),
+                    TextSpan(
+                      text: _fmt(v.abs()),
+                      style: LhTypography.mono(
+                        size: 10.5,
+                        color: valColor,
+                        weight: FontWeight.w600,
+                      ),
+                    ),
+                    TextSpan(
+                      text: _unit(v.abs()),
+                      style: LhTypography.mono(
+                        size: 8,
+                        color: LhColors.mute,
+                        weight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+      );
+    }
+
+    // ── 活跃列: hero 两层 (数字 + delta)
+    final delta = e.deltas[m.key];
+    final absV = v.abs();
+
+    return Container(
+      width: w,
+      // 通用 plum 浅底,叠加在 zebra 上,视觉锁定活跃列
+      color: _LhPlum.deep.withAlpha(10),
+      padding: const EdgeInsets.only(right: 8, left: 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        mainAxisAlignment: MainAxisAlignment.center,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Hero 值
+          m.isRate
+              ? Text(
+                  '${v.toStringAsFixed(1)}%',
+                  style: LhTypography.sans(
+                    size: 14,
+                    weight: FontWeight.w700,
+                    color: valColor,
+                    letterSpacing: -0.2,
+                  ),
+                )
+              : RichText(
+                  text: TextSpan(
+                    children: [
+                      if (isNeg)
+                        TextSpan(
+                          text: '-',
+                          style: LhTypography.sans(
+                            size: 14,
+                            weight: FontWeight.w700,
+                            color: LhColors.pos,
+                            letterSpacing: -0.2,
+                          ),
+                        ),
+                      TextSpan(
+                        text: _fmt(absV),
+                        style: LhTypography.sans(
+                          size: 14,
+                          weight: FontWeight.w700,
+                          color: valColor,
+                          letterSpacing: -0.2,
+                        ),
+                      ),
+                      TextSpan(
+                        text: _unit(absV),
+                        style: LhTypography.mono(
+                          size: 8.5,
+                          color: LhColors.mute,
+                          weight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+          const SizedBox(height: 3),
+          // Delta (中国金融色: ↑ 红涨, ↓ 绿跌)
+          if (delta != null)
+            Text(
+              '${delta >= 0 ? '↑' : '↓'} ${delta.abs().toStringAsFixed(1)}${m.isRate ? 'pp' : '%'}',
+              style: LhTypography.mono(
+                size: 8.5,
+                color: delta >= 0 ? LhColors.neg : LhColors.pos,
+                weight: FontWeight.w600,
+                letterSpacing: 0.2,
+              ),
+            )
+          else
+            Text(
+              '—',
+              style: LhTypography.mono(
+                size: 8.5,
+                color: LhColors.mute2,
+                weight: FontWeight.w500,
               ),
             ),
         ],
@@ -2866,40 +3308,128 @@ class _MetaCompareStageState extends State<_MetaCompareStage> {
     );
   }
 
-  Widget _buildCell(double v, bool isRate) {
+  // ═════════════════════════════════════════════════════════════════════════
+  // Footer Row (Σ / μ)
+  // ═════════════════════════════════════════════════════════════════════════
+
+  Widget _buildFooterRow(
+    String label,
+    String glyph,
+    Map<String, double> vals, {
+    required bool isTotal,
+  }) {
+    return SizedBox(
+      height: _footerRowH,
+      child: Row(
+        children: [
+          // rank col: 空
+          const SizedBox(width: _rankW),
+          // name col: label · glyph
+          SizedBox(
+            width: _nameW,
+            child: Padding(
+              padding: const EdgeInsets.only(left: 4),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                mainAxisAlignment: MainAxisAlignment.start,
+                children: [
+                  Text(
+                    label,
+                    style: LhTypography.sans(
+                      size: 11,
+                      color: LhColors.mute,
+                      weight: FontWeight.w600,
+                      letterSpacing: 0.2,
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    '· $glyph',
+                    style: LhTypography.mono(
+                      size: 8.5,
+                      color: LhColors.mute2,
+                      weight: FontWeight.w700,
+                      letterSpacing: 1.0,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          // metric cells
+          for (final m in widget.metrics)
+            _buildFooterCell(m, vals[m.key] ?? 0, isTotal),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFooterCell(_MetaMetricCol m, double v, bool isTotal) {
+    final isActive = _sortKey == m.key;
+    final w = _metricColWidth(m.key);
     final isNeg = v < 0;
-    if (isRate) {
-      return Text(
+    final valColor = isNeg ? LhColors.pos : LhColors.ink2;
+
+    // isRate + isTotal: Σ 无意义,dash
+    Widget content;
+    if (m.isRate && isTotal) {
+      content = Text(
+        '—',
+        style: LhTypography.mono(
+          size: 10,
+          color: LhColors.mute2,
+          weight: FontWeight.w500,
+        ),
+      );
+    } else if (m.isRate) {
+      content = Text(
         '${v.toStringAsFixed(1)}%',
         style: LhTypography.mono(
           size: 10.5,
-          color: isNeg ? LhColors.pos : LhColors.ink,
+          color: valColor,
           weight: FontWeight.w600,
         ),
       );
+    } else {
+      content = RichText(
+        text: TextSpan(
+          children: [
+            if (isNeg)
+              TextSpan(
+                text: '-',
+                style: LhTypography.mono(
+                  size: 10.5,
+                  color: LhColors.pos,
+                  weight: FontWeight.w600,
+                ),
+              ),
+            TextSpan(
+              text: _fmt(v.abs()),
+              style: LhTypography.mono(
+                size: 10.5,
+                color: valColor,
+                weight: FontWeight.w600,
+              ),
+            ),
+            TextSpan(
+              text: _unit(v.abs()),
+              style: LhTypography.mono(
+                size: 8,
+                color: LhColors.mute,
+                weight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
+      );
     }
-    return RichText(
-      textAlign: TextAlign.right,
-      text: TextSpan(
-        children: [
-          TextSpan(
-            text: '${isNeg ? "-" : ""}${_fmt(v.abs())}',
-            style: LhTypography.mono(
-              size: 10.5,
-              color: isNeg ? LhColors.pos : LhColors.ink,
-              weight: FontWeight.w600,
-            ),
-          ),
-          TextSpan(
-            text: _unit(v.abs()),
-            style: LhTypography.mono(
-              size: 8.4,
-              color: LhColors.mute,
-              weight: FontWeight.w500,
-            ),
-          ),
-        ],
-      ),
+
+    return Container(
+      width: w,
+      alignment: Alignment.centerRight,
+      padding: const EdgeInsets.only(right: 8, left: 4),
+      color: isActive ? _LhPlum.deep.withAlpha(10) : null,
+      child: content,
     );
   }
 }
@@ -2936,11 +3466,11 @@ class _TrendChart extends StatefulWidget {
 
 class _TrendChartState extends State<_TrendChart> {
   static const double _kChartPadH = 6.0;
-  // v2.8 · 紫编辑体单色系:三条线用深/主/柔三档紫,靠深浅+粗细区分,不再借 pos/neg 语义色。
-  // 收入 = deep(最重要,顶层),成本 = primary(中),毛利 = soft(浅)。
-  static const Color _cRev = _LhPlum.deep;
-  static const Color _cCost = _LhPlum.primary;
-  static const Color _cProf = _LhPlum.soft;
+  // v3.8 · 反转层级:行 context 是"这一行的毛利趋势",毛利上升为 hero deep,
+  // 收入/成本降为柔粉描线,视觉上让毛利粗线主导.color 顺序不变,只是深浅换位.
+  static const Color _cRev = _LhPlum.soft;         // 收入 = 柔粉描线
+  static const Color _cCost = Color(0xFFC7BADF);   // 成本 = 更淡描线
+  static const Color _cProf = _LhPlum.deep;        // 毛利 = 主线 hero
   static const List<Color> _kColors = [_cRev, _cCost, _cProf];
 
   int? _selectedIndex;
@@ -2950,6 +3480,15 @@ class _TrendChartState extends State<_TrendChart> {
   late List<String> _xLabels;
   late List<int> _xAnchors;
   double _totRev = 0, _totCost = 0, _totProf = 0;
+  // v3.9 · 每条序列是否"真的有数据"(非空 & 非全 0). 后端有时只下发 profit,
+  //         revenue/cost 缺 → 之前 pad(0) 后 painter 恒画 3 条线, legend 恒
+  //         3 chip, 视觉上"只有一条动". 现在改成: 缺的序列 legend 不显示,
+  //         painter 不画 —— 直接呈现"当前维度只有毛利可看".
+  bool _hasRev = false;
+  bool _hasCost = false;
+  bool _hasProf = false;
+  int get _visibleCount =>
+      (_hasRev ? 1 : 0) + (_hasCost ? 1 : 0) + (_hasProf ? 1 : 0);
 
   int get _n => _series.profit.length;
 
@@ -2971,7 +3510,20 @@ class _TrendChartState extends State<_TrendChart> {
     }
   }
 
+  static bool _seriesHasData(List<double> l) {
+    if (l.isEmpty) return false;
+    for (final v in l) {
+      if (v.abs() > 1e-9) return true;
+    }
+    return false;
+  }
+
   void _recompute() {
+    // Availability 判断: 空或全 0 视为"该维度不可用"
+    _hasRev = _seriesHasData(widget.revenue);
+    _hasCost = _seriesHasData(widget.cost);
+    _hasProf = _seriesHasData(widget.profit);
+
     final n = [
       widget.revenue.length,
       widget.cost.length,
@@ -3120,61 +3672,238 @@ class _TrendChartState extends State<_TrendChart> {
         ? _pointLabels[si]
         : '本期合计';
 
-    // 顶部 header（稳定 Row 结构：状态 chip + 3 legend + 占位关闭按钮）
-    final headerRow = Row(
+    // v3.8 · Editorial 单行 legend —— 干掉旧 3 chip + 状态 pill + 关闭按钮.
+    //   [统计状态]  毛利 4.30万  ↑ 15.2%    收入 12.4万 · 成本 8.1万   [× 选中态]
+    //   毛利用 hero 语言 (sans 12.5 w700 -0.2), 收/成 mono 小字降为 context.
+    //
+    // 首末点比较 delta —— 数据自足, 不依赖后端 vs 上月字段
+    double? profitFirstLastDelta;
+    if (_series.profit.length >= 2 && _series.profit.first.abs() > 1e-6) {
+      final first = _series.profit.first;
+      final last = _series.profit.last;
+      profitFirstLastDelta = (last - first) / first.abs() * 100;
+    }
+    final trendUp = profitFirstLastDelta != null && profitFirstLastDelta >= 0;
+    final trendColor = profitFirstLastDelta == null
+        ? LhColors.mute2
+        : (trendUp ? LhColors.neg : LhColors.pos); // 中国金融色: 上=红, 下=绿
+    final pIsNeg = pVal < 0;
+    final pAbsFmt = _fmtMoney(pVal.abs());
+    final pUnitFmt = _unitMoney(pVal.abs());
+    final rAbsFmt = _fmtMoney(rVal.abs());
+    final rUnitFmt = _unitMoney(rVal.abs());
+    final cAbsFmt = _fmtMoney(cVal.abs());
+    final cUnitFmt = _unitMoney(cVal.abs());
+
+    final editorialLegend = Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
+        // ── 状态锚 (本期合计 / 选中日期) —— mono UPPER, 无边框, 极简 ──
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
           decoration: BoxDecoration(
-            color: isSelected ? LhColors.ink.withAlpha(13) : Colors.transparent,
-            border: Border.all(
-              color: isSelected ? LhColors.line : LhColors.line2,
-              width: 0.5,
-            ),
-            borderRadius: BorderRadius.circular(4),
+            color: isSelected
+                ? _LhPlum.deep.withAlpha(22)
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(3),
           ),
           child: Text(
             statusText,
             style: LhTypography.mono(
-              size: 9,
-              color: isSelected ? LhColors.ink : LhColors.mute,
-              weight: FontWeight.w600,
-              letterSpacing: isSelected ? 0.4 : 0.8,
+              size: 8.5,
+              color: isSelected ? _LhPlum.deep : LhColors.mute2,
+              weight: FontWeight.w700,
+              letterSpacing: 0.8,
             ),
           ),
         ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Wrap(
-            spacing: 7,
-            runSpacing: 3,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              _legendChip('收入', rVal, _cRev, isSelected),
-              _legendChip('成本', cVal, _cCost, isSelected),
-              _legendChip('毛利', pVal, _cProf, isSelected),
-            ],
-          ),
-        ),
-        SizedBox(
-          width: 15,
-          height: 15,
-          child: isSelected
-              ? GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTap: _clearSelection,
-                  child: const Padding(
-                    padding: EdgeInsets.all(2),
-                    child: Icon(
-                      Icons.close_rounded,
-                      size: 11,
-                      color: LhColors.mute2,
+        const SizedBox(width: 10),
+        // ── 毛利 hero 块 —— label + 大数字 + 单位 + delta 箭头 ──
+        _LhAnimatedNumber(
+          value: pVal.abs(),
+          immediate: isSelected,
+          duration: const Duration(milliseconds: 700),
+          builder: (ctx, v) => RichText(
+            text: TextSpan(
+              children: [
+                TextSpan(
+                  text: '毛利 ',
+                  style: LhTypography.mono(
+                    size: 7.5,
+                    color: LhColors.mute2,
+                    weight: FontWeight.w600,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+                if (pIsNeg)
+                  TextSpan(
+                    text: '-',
+                    style: LhTypography.sans(
+                      size: 12.5,
+                      weight: FontWeight.w700,
+                      color: LhColors.pos,
+                      letterSpacing: -0.2,
                     ),
                   ),
-                )
-              : const SizedBox.shrink(),
+                TextSpan(
+                  text: _fmtMoney(v),
+                  style: LhTypography.sans(
+                    size: 12.5,
+                    weight: FontWeight.w700,
+                    color: pIsNeg ? LhColors.pos : _LhPlum.deep,
+                    letterSpacing: -0.2,
+                  ),
+                ),
+                TextSpan(
+                  text: _unitMoney(v),
+                  style: LhTypography.mono(
+                    size: 8,
+                    color: LhColors.mute,
+                    weight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
+        if (profitFirstLastDelta != null && !isSelected) ...[
+          const SizedBox(width: 5),
+          Text(
+            '${trendUp ? '↑' : '↓'} ${profitFirstLastDelta.abs().toStringAsFixed(1)}%',
+            style: LhTypography.mono(
+              size: 8.5,
+              color: trendColor,
+              weight: FontWeight.w700,
+              letterSpacing: 0.2,
+            ),
+          ),
+        ],
+        const Spacer(),
+        // ── 收入/成本 secondary block (mono 灰字, 主副分明) ──
+        //     v3.9 · 缺数据的序列不显示 (跟 painter 一致, 避免"三条其中两条是零"的误导)
+        if (_hasRev || _hasCost)
+          Flexible(
+            child: RichText(
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.right,
+              text: TextSpan(
+                children: [
+                  if (_hasRev) ...[
+                    TextSpan(
+                      text: '收入 ',
+                      style: LhTypography.mono(
+                        size: 7.5,
+                        color: LhColors.mute2,
+                        weight: FontWeight.w500,
+                      ),
+                    ),
+                    if (rVal < 0)
+                      TextSpan(
+                        text: '-',
+                        style: LhTypography.mono(
+                          size: 9,
+                          color: LhColors.pos,
+                          weight: FontWeight.w600,
+                        ),
+                      ),
+                    TextSpan(
+                      text: rAbsFmt,
+                      style: LhTypography.mono(
+                        size: 9,
+                        color: rVal < 0 ? LhColors.pos : LhColors.ink2,
+                        weight: FontWeight.w600,
+                      ),
+                    ),
+                    TextSpan(
+                      text: rUnitFmt,
+                      style: LhTypography.mono(
+                        size: 7.5,
+                        color: LhColors.mute,
+                        weight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                  if (_hasRev && _hasCost)
+                    TextSpan(
+                      text: '   ·   ',
+                      style: LhTypography.mono(
+                        size: 7.5,
+                        color: LhColors.mute2,
+                        weight: FontWeight.w500,
+                        letterSpacing: 0.2,
+                      ),
+                    ),
+                  if (_hasCost) ...[
+                    TextSpan(
+                      text: '成本 ',
+                      style: LhTypography.mono(
+                        size: 7.5,
+                        color: LhColors.mute2,
+                        weight: FontWeight.w500,
+                        letterSpacing: 0.2,
+                      ),
+                    ),
+                    if (cVal < 0)
+                      TextSpan(
+                        text: '-',
+                        style: LhTypography.mono(
+                          size: 9,
+                          color: LhColors.pos,
+                          weight: FontWeight.w600,
+                        ),
+                      ),
+                    TextSpan(
+                      text: cAbsFmt,
+                      style: LhTypography.mono(
+                        size: 9,
+                        color: cVal < 0 ? LhColors.pos : LhColors.ink2,
+                        weight: FontWeight.w600,
+                      ),
+                    ),
+                    TextSpan(
+                      text: cUnitFmt,
+                      style: LhTypography.mono(
+                        size: 7.5,
+                        color: LhColors.mute,
+                        weight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          )
+        else
+          // 只有毛利: 用一小段 mono 副文案说明 "单指标视图", 而非留白
+          Flexible(
+            child: Align(
+              alignment: Alignment.centerRight,
+              child: Text(
+                'PROFIT ONLY',
+                style: LhTypography.mono(
+                  size: 7.5,
+                  color: LhColors.mute2,
+                  weight: FontWeight.w700,
+                  letterSpacing: 1.0,
+                ),
+              ),
+            ),
+          ),
+        if (isSelected) ...[
+          const SizedBox(width: 6),
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: _clearSelection,
+            child: const Padding(
+              padding: EdgeInsets.all(2),
+              child: Icon(
+                Icons.close_rounded,
+                size: 11,
+                color: LhColors.mute2,
+              ),
+            ),
+          ),
+        ],
       ],
     );
 
@@ -3207,12 +3936,33 @@ class _TrendChartState extends State<_TrendChart> {
           ),
           const SizedBox(height: 8),
         ],
-        headerRow,
-        const SizedBox(height: 8),
-        // 双 Painter Stack：折线层用 RepaintBoundary 隔离
+        editorialLegend,
+        const SizedBox(height: 10),
+        // v3.8 · 双 Painter Stack + MAX/MIN Positioned 标注:
+        //   • 主线毛利: 顶部/底部 dashed hairline 已在 painter 画
+        //   • 数字标注: 这里 Stack 里加 Positioned Text (画布外做,好维护)
         LayoutBuilder(
           builder: (ctx, c) {
             final w = c.maxWidth;
+            const padTop = 12.0;
+            const padBottom = 10.0;
+            final usableH = widget.chartHeight - padTop - padBottom;
+            final profitBounds = _bounds.profit;
+            final hasProfit = _series.profit.isNotEmpty;
+            final actualMaxP = hasProfit
+                ? _series.profit.reduce(math.max)
+                : 0.0;
+            final actualMinP = hasProfit
+                ? _series.profit.reduce(math.min)
+                : 0.0;
+            double yOf(double v) =>
+                padTop + (profitBounds.max - v) / profitBounds.span * usableH;
+            final maxY = yOf(actualMaxP);
+            final minY = yOf(actualMinP);
+            // MAX/MIN 数字标注: 只在 max/min 拉开距离时展示,否则叠一起丑
+            final showExtremes =
+                hasProfit && (actualMaxP - actualMinP).abs() > 1e-6 &&
+                (minY - maxY) > 22;
             return GestureDetector(
               behavior: HitTestBehavior.opaque,
               onTapDown: (d) {
@@ -3236,6 +3986,7 @@ class _TrendChartState extends State<_TrendChart> {
               child: SizedBox(
                 height: widget.chartHeight,
                 child: Stack(
+                  clipBehavior: Clip.none,
                   children: [
                     Positioned.fill(
                       child: RepaintBoundary(
@@ -3245,6 +3996,7 @@ class _TrendChartState extends State<_TrendChart> {
                             bounds: _bounds,
                             colors: _kColors,
                             padH: _kChartPadH,
+                            available: [_hasRev, _hasCost, _hasProf],
                           ),
                         ),
                       ),
@@ -3257,9 +4009,70 @@ class _TrendChartState extends State<_TrendChart> {
                           colors: _kColors,
                           padH: _kChartPadH,
                           selectedIndex: _selectedIndex,
+                          available: [_hasRev, _hasCost, _hasProf],
                         ),
                       ),
                     ),
+                    // ── MAX 数字 (顶右,虚线上方) ──
+                    if (showExtremes)
+                      Positioned(
+                        right: 2,
+                        top: (maxY - 10).clamp(-2.0, widget.chartHeight - 12),
+                        child: RichText(
+                          text: TextSpan(
+                            children: [
+                              TextSpan(
+                                text: 'MAX ',
+                                style: LhTypography.mono(
+                                  size: 6.8,
+                                  color: LhColors.mute2,
+                                  weight: FontWeight.w700,
+                                  letterSpacing: 0.8,
+                                ),
+                              ),
+                              TextSpan(
+                                text: _fmtChartShort(actualMaxP),
+                                style: LhTypography.mono(
+                                  size: 8,
+                                  color: _LhPlum.deep,
+                                  weight: FontWeight.w700,
+                                  letterSpacing: 0.1,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    // ── MIN 数字 (底右,虚线下方) ──
+                    if (showExtremes)
+                      Positioned(
+                        right: 2,
+                        top: (minY + 2).clamp(0.0, widget.chartHeight - 10),
+                        child: RichText(
+                          text: TextSpan(
+                            children: [
+                              TextSpan(
+                                text: 'MIN ',
+                                style: LhTypography.mono(
+                                  size: 6.8,
+                                  color: LhColors.mute2,
+                                  weight: FontWeight.w700,
+                                  letterSpacing: 0.8,
+                                ),
+                              ),
+                              TextSpan(
+                                text: _fmtChartShort(actualMinP),
+                                style: LhTypography.mono(
+                                  size: 8,
+                                  color: _LhPlum.deep,
+                                  weight: FontWeight.w700,
+                                  letterSpacing: 0.1,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
                   ],
                 ),
               ),
@@ -4237,8 +5050,8 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
 
   String _tab = 'product';
   String _period = 'day';
-  String _groupFilter = '全部'; // L1 分类（*_category_l1_name / row.group）
-  /// 默认展开分类：Row2=L1；供给/渠道下再跟 HUN 方框。再点当前维可收起。
+  String _groupFilter = '全部'; // 产品=sync_source 映射名；供给/渠道=*_l1 / row.group
+  /// 默认展开分类：Row2；供给/渠道下再跟 HUN 方框。再点当前维可收起。
   bool _tabBarShowsGroups = true;
   String _hunFilter = '全部'; // '全部' | 'U' | 'N' | 'H' | '混合' — 仅 supply/channel
   String _anomalyFilter = '全部'; // 亏损 / ROI低于目标 / 成本异常 / 利差倒挂
@@ -4560,6 +5373,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     final seen = <String>{};
     final out = <String>['全部'];
     seen.add('全部');
+    // 保留 UI/后端下发顺序，再由 _pinPreferredCategory 置顶指定项
     for (final list in [a, b]) {
       for (final g in list) {
         if (g.isEmpty || g == '全部' || seen.contains(g)) continue;
@@ -4567,25 +5381,64 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         out.add(g);
       }
     }
-    if (out.length > 1) {
-      final tail = out.sublist(1)..sort();
-      return ['全部', ...tail];
-    }
     return out;
+  }
+
+  /// 各维度分类条置顶项：产品能源(sync_source) / 供给中石油 / 渠道平安
+  static const _kPreferredCategoryFirst = <String, String>{
+    'product': '能源',
+    'supply': '中石油',
+    'channel': '平安',
+  };
+
+  /// 把指定分类挪到「全部」之后第一位（存在才挪）
+  List<String> _pinPreferredCategory(String tab, List<String> cats) {
+    final preferred = _kPreferredCategoryFirst[tab];
+    if (preferred == null || preferred.isEmpty || cats.length <= 1) {
+      return cats;
+    }
+    final idx = cats.indexWhere(
+      (g) => g != '全部' && (g == preferred || g.contains(preferred)),
+    );
+    if (idx <= 1) return cats; // 已是第一或找不到
+    final pinned = cats[idx];
+    final next = List<String>.from(cats)..removeAt(idx);
+    final insertAt = next.isNotEmpty && next.first == '全部' ? 1 : 0;
+    next.insert(insertAt, pinned);
+    return next;
+  }
+
+  /// 默认分类 =「全部」（不自动落到能源/中石油/平安）
+  String _defaultGroupFilter(String tab) => '全部';
+
+  /// 展开分类条或切 Tab：无效选中项回退到「全部」
+  void _ensureDefaultGroupFilter() {
+    if (_tab == 'analysis') return;
+    final opts = _categoryOptions(_tab);
+    if (_groupFilter != '全部' && !opts.contains(_groupFilter)) {
+      _groupFilter = '全部';
+    }
   }
 
   List<String> _categoryOptions(String tab) {
     final fromUi =
         (_uiTab(tab)?['categories'] as List?)?.cast<String>() ?? const [];
+    List<String> raw;
     if (_bundle != null) {
       final fromRows = _getGroups(tab, _bundle!.rowsOf(tab));
       if (fromUi.isNotEmpty || fromRows.length > 1) {
-        return _mergeCategoryLists(fromUi, fromRows);
+        raw = _mergeCategoryLists(fromUi, fromRows);
+      } else if (fromUi.isNotEmpty) {
+        raw = fromUi;
+      } else {
+        raw = _getGroups(tab, _bundle!.rowsOf(tab));
       }
+    } else if (fromUi.isNotEmpty) {
+      raw = fromUi;
+    } else {
+      return const ['全部'];
     }
-    if (fromUi.isNotEmpty) return fromUi;
-    if (_bundle == null) return const ['全部'];
-    return _getGroups(tab, _bundle!.rowsOf(tab));
+    return _pinPreferredCategory(tab, raw);
   }
 
   void _syncMetricsFromUI() {
@@ -5142,6 +5995,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             _cubeError = false;
             _lastSyncedAt = _nowCST();
             _syncMetricsFromUI();
+            _ensureDefaultGroupFilter();
           });
         }
       } catch (_) {
@@ -5214,6 +6068,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         _rowsCacheKey = '';
         _rowsCache = null;
         _syncMetricsFromUI();
+        if (tab == _tab) _ensureDefaultGroupFilter();
       });
       unawaited(_loadTrend(tab));
       if (tab == 'supply') unawaited(_loadDiscounts());
@@ -5709,19 +6564,16 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       ((_tab == 'supply' || _tab == 'channel') && _hunFilter != '全部') ||
       _anomalyFilter != '全部';
 
-  /// 当前 hero 上方激活的所有筛选 → 返回 (label, value) 列表用于渲染 pills
-  /// 顺序按重要性：tab group → HUN
+  /// 主 Hero 是否按筛选行重算：L1 分类只影响列表，不改 Hero 全量口径。
+  bool get _heroFilterActive =>
+      ((_tab == 'supply' || _tab == 'channel') && _hunFilter != '全部') ||
+      _anomalyFilter != '全部';
+
+  /// Hero 上方 pills：不展示 L1 分类（默认能源等只筛列表，不在主 Hero 上冒字）。
+  /// 仅展示 HUN / 异常这类非默认筛选。
   List<({String label, String value, VoidCallback onClear})>
   _activeHeroFilters() {
     final list = <({String label, String value, VoidCallback onClear})>[];
-    const tabName = {'product': '产品', 'supply': '供给', 'channel': '渠道'};
-    if (_groupFilter != '全部') {
-      list.add((
-        label: tabName[_tab] ?? '分类',
-        value: _groupFilter,
-        onClear: () => setState(() => _groupFilter = '全部'),
-      ));
-    }
     if ((_tab == 'supply' || _tab == 'channel') && _hunFilter != '全部') {
       list.add((
         label: _uiFilterDef(_tab, 'hun')?['label'] as String? ?? 'U/N',
@@ -6620,7 +7472,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           padding: const EdgeInsets.fromLTRB(22, 2, 22, 10),
           child: _buildPeriodBar(),
         ),
-        // Hero card 现在对所有 tab 显示 (分析 tab 上 hero + 3D 立方体 一起)
+        // Hero：始终展示；L1 分类只筛列表，不在 Hero 上贴「能源」等标签
         Container(
           margin: const EdgeInsets.fromLTRB(22, 0, 22, 0),
           padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
@@ -6738,7 +7590,8 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       sumProfit += (r['profit'] as num?)?.toDouble() ?? 0;
       sumRevenue += (r['revenue'] as num?)?.toDouble() ?? 0;
     }
-    final filterActive = _listFilterActive;
+    // L1 分类只筛列表；Hero 仅在 HUN/异常筛选时按行重算
+    final filterActive = _heroFilterActive;
     final metricsVerified =
         (metrics['verifiedSales'] as num?)?.toDouble() ?? sumVerifiedSales;
     final heroSales = filterActive
@@ -6752,8 +7605,14 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     final anchorTotal = _anchor == _LhAnchor.verified && heroVerified > 0
         ? heroVerified
         : heroSales;
+    final heroRevenue = filterActive
+        ? sumRevenue
+        : ((metrics['revenue'] as num?)?.toDouble() ?? sumRevenue);
     final sumRate = anchorTotal > 0 ? heroProfit / anchorTotal * 100 : 0.0;
-    final spreadRate = anchorTotal > 0 ? sumRevenue / anchorTotal * 100 : 0.0;
+    final spreadRate = filterActive
+        ? (anchorTotal > 0 ? heroRevenue / anchorTotal * 100 : 0.0)
+        : ((metrics['spreadRate'] as num?)?.toDouble() ??
+            (anchorTotal > 0 ? heroRevenue / anchorTotal * 100 : 0.0));
     // 预收 = 销售 − 核销
     final sumPrepaid = (heroSales - heroVerified).clamp(0.0, double.infinity);
     final totals = {
@@ -6773,9 +7632,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           : ((metrics['totalCost'] as num?)?.toDouble() ?? sumTotalCost),
       'businessCost': sumCost,
       'profit': heroProfit,
-      'revenue': filterActive
-          ? sumRevenue
-          : ((metrics['revenue'] as num?)?.toDouble() ?? sumRevenue),
+      'revenue': heroRevenue,
       'spreadRate': spreadRate,
       'rate': sumRate,
     };
@@ -9372,26 +10229,34 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       sumProfit += (r['profit'] as num?)?.toDouble() ?? 0;
       sumRevenue += (r['revenue'] as num?)?.toDouble() ?? 0;
     }
-    final filterActive = _listFilterActive;
+    final filterActive = _heroFilterActive;
     final metricsVerified =
         (metrics['verifiedSales'] as num?)?.toDouble() ?? sumVerifiedSales;
     final heroSales = filterActive
         ? sumSales
         : ((metrics['sales'] as num?)?.toDouble() ?? sumSales);
     final heroVerified = filterActive ? sumVerifiedSales : metricsVerified;
+    final metricsProfit = (metrics['profit'] as num?)?.toDouble();
+    final heroProfit = filterActive ? sumProfit : (metricsProfit ?? sumProfit);
+    final heroRevenue = filterActive
+        ? sumRevenue
+        : ((metrics['revenue'] as num?)?.toDouble() ?? sumRevenue);
     final anchorTotal = _anchor == _LhAnchor.verified && heroVerified > 0
         ? heroVerified
         : heroSales;
-    final sumRate = anchorTotal > 0 ? sumProfit / anchorTotal * 100 : 0.0;
-    final spreadRate = anchorTotal > 0 ? sumRevenue / anchorTotal * 100 : 0.0;
+    final sumRate = anchorTotal > 0 ? heroProfit / anchorTotal * 100 : 0.0;
+    final spreadRate = filterActive
+        ? (anchorTotal > 0 ? heroRevenue / anchorTotal * 100 : 0.0)
+        : ((metrics['spreadRate'] as num?)?.toDouble() ??
+            (anchorTotal > 0 ? heroRevenue / anchorTotal * 100 : 0.0));
     final totals = {
       'sales': heroSales,
       'verifiedSales': heroVerified,
       'cost': sumCost,
       'totalCost': sumTotalCost,
       'businessCost': sumCost,
-      'profit': sumProfit,
-      'revenue': sumRevenue,
+      'profit': heroProfit,
+      'revenue': heroRevenue,
       'spreadRate': spreadRate,
       'rate': sumRate,
     };
@@ -10291,7 +11156,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     if (key == 'verifiedSales') {
       return _verifiedSalesOf(r);
     }
-    return (r[key] as num?)?.toDouble() ?? 0;
+    // discount 等字段是 Map，不能按 num 强转
+    final raw = r[key];
+    if (raw is num) return raw.toDouble();
+    return 0;
   }
 
   /// 某行的"权重值" — rate 页用 profit 做排序权重（避免低销量小行被高 rate 排前）
@@ -11179,7 +12047,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   /// 对齐「我的」页：白底圆角分段 + 选中淡紫填色（非下划线）。
   ///
   /// 默认展开分类：
-  ///   Row1 维度 · Row2 = *_category_l1_name · Row3 = HUN 方框（供给/渠道）
+  ///   Row1 维度 · Row2 = 产品 sync_source 映射 / 供给·渠道 L1 · Row3 = HUN（供给/渠道）
   /// 再点当前维可收起 Row2/Row3。列表列本身是 L2 / province_name。
   Widget _buildTabSegment() {
     const dims = [
@@ -11239,7 +12107,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                   _hunFilter = '全部';
                 } else {
                   _tabBarShowsGroups = true;
-                  _groupFilter = '全部';
+                  _ensureDefaultGroupFilter();
                 }
                 _listPage = 1;
               });
@@ -11247,8 +12115,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             }
             setState(() {
               _tab = key;
-              _groupFilter = '全部';
               _tabBarShowsGroups = true; // 切维仍默认展开分类
+              _groupFilter = '全部';
+              _ensureDefaultGroupFilter();
               if (key != 'supply' && key != 'channel') _hunFilter = '全部';
               _listPage = 1;
               _closeMetricPage();
@@ -11259,7 +12128,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       );
     }).toList();
 
-    // ── ROW 2 · L1 分类 (*_category_l1_name) — 多分类时用 Wrap 全展示 ──
+    // ── ROW 2 · 分类（产品=sync_source 映射；供给/渠道=L1）— Wrap 全展示 ──
     Widget row2 = Padding(
       padding: const EdgeInsets.symmetric(horizontal: 2),
       child: groups.length <= 4
@@ -11403,12 +12272,14 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   }
 
 
-  /// 展开分类行时的默认选中：优先「能源」（若库里有），否则取 category_l1_name 第一项。
-  /// 板块筛选条用的轻量色（淡底 + 色字，避免和左侧维度锚点抢同一片淡紫）
+  /// 板块筛选条用的轻量色（淡底 + 色字）。
+  /// 产品分类来自 sync_source 映射：能源 / 能源积分返费 / 公共出行 / 民营 / 运营商。
   Color _panelGroupAccent(String group) {
     switch (group) {
       case '能源':
         return const Color(0xFF3D7A5A);
+      case '能源积分返费':
+        return const Color(0xFF2F6B4F);
       case '公共出行':
       case '出行':
         return LhColors.product;
@@ -14982,7 +15853,12 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                     ],
                   ),
                 ),
-                const SizedBox(width: 10),
+                // v9 · Middle KPI strip —— 填 identity 与 hero 之间的天窗
+                //     用户实拍反馈: "字集中在两端, 中间没东西"
+                //     方案: 常驻显示 top-3 meta 指标 (label + value + delta),
+                //           每行 hairline 分隔, 编辑体 mono UPPER 语言.
+                //     不吃掉展开态 —— "指标 N" 按钮继续展开全部, 中段只是"给中间的字装满".
+                _buildRowMidStrip(r, metaItems),
 
                 // ═══════════════════════════════════════════════════════
                 // ── 右栏：Hero 毛利块 (完全对齐 _buildHeroCell 语言) ──
@@ -15512,6 +16388,132 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   }
 
   // ═══════════════════════════════════════════════════════════════════════
+  // v9 · 列表行中段 KPI 栈 —— 填 identity 与 hero 之间的天窗.
+  //   显示 top-3 meta 指标 (label · value · optional delta), 每行 hairline 分.
+  //   宽度 92px 固定, 保留 identity flex 3 撑名字, hero 右栏 width 102 不变.
+  //   —— 编辑体 mono UPPER, 数字 sans w700 letter -0.2, delta 语义色.
+  // ═══════════════════════════════════════════════════════════════════════
+  Widget _buildRowMidStrip(Map<String, dynamic> r, List<_MetaItem> metaItems) {
+    if (metaItems.isEmpty) {
+      // 无 meta → 保持原来的空隙 (SizedBox 10)
+      return const SizedBox(width: 10);
+    }
+    final take = metaItems.take(3).toList();
+    final deltas = (r['deltas'] as Map?)?.cast<String, dynamic>() ?? const {};
+
+    return Padding(
+      padding: const EdgeInsets.only(left: 8, right: 10),
+      child: SizedBox(
+        width: 84,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (int i = 0; i < take.length; i++) ...[
+              if (i > 0)
+                Container(
+                  height: 0.6,
+                  color: LhColors.line2,
+                  margin: const EdgeInsets.symmetric(vertical: 5),
+                ),
+              _buildMidKpiRow(take[i], deltas),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMidKpiRow(_MetaItem m, Map<String, dynamic> deltas) {
+    // 拆 value → numPart + unit (跟 meta expanded 面板同款拆法)
+    final vStr = m.value;
+    final unitMatch = RegExp(r'[^\d\.\-,]+$').firstMatch(vStr);
+    final unit = unitMatch?.group(0) ?? '';
+    final numPart = unit.isEmpty
+        ? vStr
+        : vStr.substring(0, vStr.length - unit.length);
+
+    // Delta (可选)
+    final rawDelta = deltas[m.key];
+    double? dPct;
+    if (rawDelta is num) {
+      dPct = rawDelta.toDouble();
+    } else if (rawDelta is Map) {
+      final p = rawDelta['pct'];
+      if (p is num) dPct = p.toDouble();
+    }
+    final hasDelta = dPct != null && dPct.abs() >= 0.05;
+    // 财报语义: 正向 → pos(绿), 负向 → neg(红) —— 但成本/税这种"越小越好"的应反向.
+    // 保守做法: 用符号本身, 不做反向 (跟外面 hero delta 一致).
+    final Color dColor = !hasDelta
+        ? LhColors.mute2
+        : (dPct > 0 ? LhColors.neg : LhColors.pos);
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.baseline,
+      textBaseline: TextBaseline.alphabetic,
+      children: [
+        // ── Label (mono UPPER, letter-spaced) ──
+        Text(
+          m.label,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: LhTypography.mono(
+            size: 7.5,
+            color: LhColors.mute2,
+            weight: FontWeight.w700,
+            letterSpacing: 0.5,
+          ),
+        ),
+        const Spacer(),
+        // ── Value + unit (sans w700 -0.2) ──
+        Text.rich(
+          TextSpan(
+            children: [
+              TextSpan(
+                text: numPart,
+                style: LhTypography.sans(
+                  size: 10,
+                  color: LhColors.ink2,
+                  weight: FontWeight.w700,
+                  letterSpacing: -0.2,
+                ),
+              ),
+              if (unit.isNotEmpty)
+                TextSpan(
+                  text: unit,
+                  style: LhTypography.mono(
+                    size: 7,
+                    color: LhColors.mute,
+                    weight: FontWeight.w500,
+                  ),
+                ),
+            ],
+          ),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+        // ── Delta (可选, 靠右) ──
+        if (hasDelta) ...[
+          const SizedBox(width: 3),
+          Text(
+            (dPct > 0 ? '↑' : '↓') +
+                dPct.abs().toStringAsFixed(dPct.abs() >= 10 ? 0 : 1) +
+                '%',
+            style: LhTypography.mono(
+              size: 6.8,
+              color: dColor,
+              weight: FontWeight.w700,
+              letterSpacing: 0.1,
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════
   // 跨行 meta 指标"列聚焦"侧边栏比较视图
   //   在任一行的 meta chip 上点击 → 从右侧滑入的全高 drawer，
   //   展示当前筛选下"所有行"在该指标上的分布：总/均/涨跌数 +
@@ -15523,8 +16525,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     setState(() => _metaHighlightKey = metricKey);
 
     // 数据准备: 全指标列 + 每行携带全部指标值
+    // discount 是结构化 Map（非金额标量），列表 meta 也已排除，这里同步跳过
     final rows = _currentRows;
-    final metricKeys = _metrics[_tab] ?? const <String>[];
+    final metricKeys = (_metrics[_tab] ?? const <String>[])
+        .where((k) => k != 'discount')
+        .toList(growable: false);
     final defMap = _uiMetricDefMap(_tab);
     final metrics = <_MetaMetricCol>[];
     for (final k in metricKeys) {
@@ -15543,17 +16548,23 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     for (final r in rows) {
       final values = <String, double>{};
       for (final k in metricKeys) {
-        final v = (r[k] as num?)?.toDouble() ?? 0;
-        values[k] = v;
+        values[k] = _rowMetricValue(r, k);
       }
-      final deltas = (r['deltas'] as Map?)?.cast<String, dynamic>();
-      final d = (deltas?[metricKey] as num?)?.toDouble();
+      // v3.8: 全指标 deltas → 支持用户在 drawer 里切列后 delta 依然显示
+      final deltasRaw = (r['deltas'] as Map?)?.cast<String, dynamic>();
+      final deltasMap = <String, double>{};
+      if (deltasRaw != null) {
+        for (final k in metricKeys) {
+          final d = (deltasRaw[k] as num?)?.toDouble();
+          if (d != null) deltasMap[k] = d;
+        }
+      }
       entries.add(
         _MetaEntry(
           name: r['name']?.toString() ?? '—',
           group: r['group']?.toString() ?? '',
           values: values,
-          delta: d,
+          deltas: deltasMap,
         ),
       );
     }
@@ -18511,14 +19522,14 @@ class _OwnerStat {
   double totalValue = 0;
 }
 
-/// 按「产品组（业务线）」把坐标派生到负责人（mock）：
-///   能源   → 王一凡
-///   运营商 → 石淼 / 徐峥（按供给方名稳定二分，同一供给方永远同一负责人）
-///   其他   → ""（未分配，不 mock 假名字）
-/// 同一 (productGroup, supplyName) 永远归同一负责人。
+/// 按「产品组（sync_source 映射）」把坐标派生到负责人（mock）：
+///   能源 / 能源积分返费 → 王一凡
+///   运营商 → 石淼 / 徐峥（按供给方名稳定二分）
+///   其他   → ""（未分配）
 String _deriveCubeOwner(String productGroup, String supplyName) {
   switch (productGroup) {
     case '能源':
+    case '能源积分返费':
       return '王一凡';
     case '运营商':
       return supplyName.isEmpty || supplyName.hashCode.isEven ? '石淼' : '徐峥';

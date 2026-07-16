@@ -54,6 +54,7 @@ abstract final class LhTypography {
         letterSpacing: -0.3,
         color: color,
       ).copyWith(
+        decoration: TextDecoration.none,
         fontFeatures: const [FontFeature.tabularFigures()],
       );
 
@@ -71,6 +72,7 @@ abstract final class LhTypography {
         color: color,
         height: height,
       ).copyWith(
+        decoration: TextDecoration.none,
         fontFeatures: const [FontFeature.tabularFigures()],
       );
 
@@ -88,10 +90,18 @@ abstract final class LhTypography {
         letterSpacing: letterSpacing,
         color: color,
         height: height,
-      ).copyWith(fontStyle: fontStyle);
+      ).copyWith(
+        decoration: TextDecoration.none,
+        fontStyle: fontStyle,
+      );
 }
 
 Color lhGroupColor(String group) {
+  // 产品 Tab：sync_source 映射分类
+  if (group == '能源' || group.contains('能源积分返费')) {
+    return const Color(0xFF3D7A5A);
+  }
+  if (group.contains('公共出行') || group == '出行') return LhColors.product;
   if (group.contains('中石油')) return LhColors.cnpc;
   if (group.contains('中石化')) return LhColors.sinopec;
   if (group.contains('民营')) return LhColors.private;
@@ -103,6 +113,8 @@ Color lhGroupColor(String group) {
 }
 
 String lhGroupTagClass(String group) {
+  if (group == '能源' || group.contains('能源积分返费')) return 'cnpc';
+  if (group.contains('公共出行') || group == '出行') return 'product';
   if (group.contains('中石油')) return 'cnpc';
   if (group.contains('中石化')) return 'sinopec';
   if (group.contains('民营')) return 'private';

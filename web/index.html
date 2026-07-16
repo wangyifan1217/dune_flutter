@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html>
+<html lang="zh-CN" spellcheck="false">
 <head>
   <!--
     If you are serving your web app in a path other than the root, change the
@@ -33,8 +33,13 @@
 
   <title>dunes_app</title>
   <link rel="manifest" href="manifest.json">
+  <style>
+    /* Chrome DOM 拼写/语法黄线；比较表英文/数字特别容易中招 */
+    ::spelling-error { text-decoration: none !important; }
+    ::grammar-error { text-decoration: none !important; }
+  </style>
 </head>
-<body>
+<body spellcheck="false">
   <script src='https://cdn.jsdelivr.net/npm/pdfjs-dist@4.6.82/build/pdf.min.mjs' type='module'></script>
   <script type='module'>
   var { pdfjsLib } = globalThis;

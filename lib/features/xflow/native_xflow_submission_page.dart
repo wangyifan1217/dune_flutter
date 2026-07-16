@@ -11,8 +11,8 @@ import 'xflow_models.dart';
 import 'xflow_service.dart';
 import 'xflow_shared_widgets.dart';
 
-/// Detail view for creator-owned dynamic submissions (everything except
-/// PROPOSAL). It renders configured field labels rather than a raw JSON dump.
+/// Detail view for dynamic submissions (everything except PROPOSAL).
+/// Supports both initiator actions and approver actions from inbox.
 class NativeXflowSubmissionPage extends StatefulWidget {
   const NativeXflowSubmissionPage({
     super.key,
@@ -22,6 +22,7 @@ class NativeXflowSubmissionPage extends StatefulWidget {
     required this.businessId,
     required this.backScreen,
     required this.onEdit,
+    this.onApprovalCompleted,
   });
 
   final AuthSession session;
@@ -30,6 +31,7 @@ class NativeXflowSubmissionPage extends StatefulWidget {
   final int businessId;
   final String backScreen;
   final VoidCallback onEdit;
+  final VoidCallback? onApprovalCompleted;
 
   @override
   State<NativeXflowSubmissionPage> createState() =>
@@ -41,6 +43,7 @@ class _NativeXflowSubmissionPageState extends State<NativeXflowSubmissionPage> {
   XflowSubmissionDetail? _detail;
   XflowTemplateDetail? _template;
   XflowApprovalTrail? _trail;
+  XflowTodoHint? _myTodo;
   Map<int, String> _assigneeNames = const {};
   String? _error;
   bool _loading = true;
@@ -68,6 +71,10 @@ class _NativeXflowSubmissionPageState extends State<NativeXflowSubmissionPage> {
           businessType: detail.businessType,
           businessId: detail.businessId,
         ),
+        _service.findMyOpenTodo(
+          businessType: widget.businessType,
+          businessId: widget.businessId,
+        ),
       ]);
       final trail = results[1] as XflowApprovalTrail?;
       final assigneeNames = await _service.fetchSubmissionAssigneeNames(
@@ -79,6 +86,7 @@ class _NativeXflowSubmissionPageState extends State<NativeXflowSubmissionPage> {
         _detail = detail;
         _template = results[0] as XflowTemplateDetail;
         _trail = trail;
+        _myTodo = results[2] as XflowTodoHint?;
         _assigneeNames = assigneeNames;
         _loading = false;
       });
@@ -91,7 +99,10 @@ class _NativeXflowSubmissionPageState extends State<NativeXflowSubmissionPage> {
     }
   }
 
+  bool get _isApprover => _myTodo != null;
+
   bool get _canWithdraw {
+    if (_isApprover) return false;
     final detail = _detail;
     return detail != null &&
         detail.status.toUpperCase() == 'PENDING' &&
@@ -137,18 +148,51 @@ class _NativeXflowSubmissionPageState extends State<NativeXflowSubmissionPage> {
     }
   }
 
+  Future<void> _approve(String comment) async {
+    final todo = _myTodo;
+    if (todo == null) return;
+    await _service.completeTodo(
+      todoId: todo.id,
+      approve: true,
+      comment: comment,
+    );
+    if (!mounted) return;
+    showDunesToast(context, '已通过审批');
+    widget.onApprovalCompleted?.call();
+    await _load();
+  }
+
+  Future<void> _reject(String comment) async {
+    final todo = _myTodo;
+    if (todo == null) return;
+    await _service.completeTodo(
+      todoId: todo.id,
+      approve: false,
+      comment: comment,
+    );
+    if (!mounted) return;
+    showDunesToast(context, '已驳回');
+    widget.onApprovalCompleted?.call();
+    await _load();
+  }
+
   String get _submitterName {
     final detail = _detail;
-    if (detail == null) return '';
-    final fromDetail = detail.createdByName.trim();
-    if (fromDetail.isNotEmpty) return fromDetail;
-    if (detail.createdById > 0) {
-      final fromMap = _assigneeNames[detail.createdById]?.trim() ?? '';
-      if (fromMap.isNotEmpty) return fromMap;
+    if (detail != null) {
+      final fromDetail = detail.createdByName.trim();
+      if (fromDetail.isNotEmpty) return fromDetail;
+      if (detail.createdById > 0) {
+        final fromMap = _assigneeNames[detail.createdById]?.trim() ?? '';
+        if (fromMap.isNotEmpty) return fromMap;
+      }
     }
     final trail = _trail;
-    if (trail != null && trail.initiatorId > 0) {
-      return _assigneeNames[trail.initiatorId]?.trim() ?? '';
+    if (trail != null) {
+      final fromTrail = (trail.raw['initiatorName'] ?? '').toString().trim();
+      if (fromTrail.isNotEmpty) return fromTrail;
+      if (trail.initiatorId > 0) {
+        return _assigneeNames[trail.initiatorId]?.trim() ?? '';
+      }
     }
     return '';
   }
@@ -182,10 +226,9 @@ class _NativeXflowSubmissionPageState extends State<NativeXflowSubmissionPage> {
       detail: proposalDetail,
       trail: _trail,
       fields: template.fields,
-      // 动态审批详情始终应展示审批进度，不受旧模板配置影响。
-      detailConfig: <String, dynamic>{'showApprovalFlow': true},
+      detailConfig: const <String, dynamic>{'showApprovalFlow': true},
       stages: template.stages,
-      myTodo: null,
+      myTodo: _myTodo,
       assigneeNames: _assigneeNames,
       layout: template.layout,
     );
@@ -194,6 +237,7 @@ class _NativeXflowSubmissionPageState extends State<NativeXflowSubmissionPage> {
   @override
   Widget build(BuildContext context) {
     final detail = _detail;
+    final bundle = _detailBundle;
     return ColoredBox(
       color: DunesColors.bgApp,
       child: SafeArea(
@@ -224,7 +268,7 @@ class _NativeXflowSubmissionPageState extends State<NativeXflowSubmissionPage> {
                             sections: buildFieldSections(
                               _template!.fields,
                               detail.formData,
-                              _detailBundle!.detail,
+                              bundle!.detail,
                             ),
                             service: _service,
                           ),
@@ -233,12 +277,20 @@ class _NativeXflowSubmissionPageState extends State<NativeXflowSubmissionPage> {
                         XflowFormCard(
                           title: '审批进度',
                           tag: _trail == null ? '待同步' : '流程追踪',
-                          child: XfDetTrackTimeline(bundle: _detailBundle!),
+                          child: XfDetTrackTimeline(bundle: bundle),
                         ),
+                        if (_myTodo != null) ...[
+                          const SizedBox(height: 12),
+                          XfDetApproveCard(
+                            onApprove: _approve,
+                            onReject: _reject,
+                          ),
+                        ],
                       ],
                     ),
             ),
-            if (_canWithdraw || detail?.status.toUpperCase() == 'DRAFT')
+            if (!_isApprover &&
+                (_canWithdraw || detail?.status.toUpperCase() == 'DRAFT'))
               XflowXfActionBar(
                 label: detail?.status.toUpperCase() == 'DRAFT'
                     ? '编辑并重新提交'

@@ -201,6 +201,7 @@ class XflowProposalItem {
     int? currentStep,
     int? totalSteps,
     bool? canRefedit,
+    XflowTodoHint? todoHint,
   }) {
     return XflowProposalItem(
       id: id,
@@ -218,7 +219,7 @@ class XflowProposalItem {
       currentStep: currentStep ?? this.currentStep,
       totalSteps: totalSteps ?? this.totalSteps,
       canRefedit: canRefedit ?? this.canRefedit,
-      todoHint: todoHint,
+      todoHint: todoHint ?? this.todoHint,
     );
   }
 }

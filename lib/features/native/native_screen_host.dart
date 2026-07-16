@@ -73,6 +73,7 @@ import '../meeting/native_meeting_create_page.dart';
 import '../meeting/native_meeting_detail_page.dart';
 import '../meeting/native_meeting_list_page.dart';
 import '../meeting/native_meeting_service.dart';
+import '../wechat/native_wechat_bot_page.dart';
 
 class NativeScreenHost extends StatefulWidget {
   const NativeScreenHost({
@@ -977,6 +978,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           businessType: _selectedSubmissionBusinessType,
           businessId: _selectedSubmissionBusinessId,
           backScreen: _b10BackScreen,
+          onApprovalCompleted: () => _scheduleWorkbenchBadgeRefresh(),
           onEdit: () {
             _openProposalEntry(
               templateKey: _xflowTemplateKey,
@@ -993,6 +995,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           proposalId: _selectedProposalId,
           todoHint: _selectedTodoHint,
           backScreen: _b10BackScreen,
+          onApprovalCompleted: () => _scheduleWorkbenchBadgeRefresh(),
           onReedit: (proposalId) {
             _openProposalEntry(
               templateKey: XflowService.boundTemplateKeyForMenu(
@@ -1078,6 +1081,11 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           navigation: widget.navigation,
           chatKind: _kbChatKind,
           docId: _kbChatDocId,
+        );
+      case 'WX':
+        return NativeWechatBotPage(
+          session: widget.session,
+          onBack: widget.navigation.back,
         );
       case 'MM-L':
         return NativeMeetingListPage(
@@ -1350,6 +1358,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       'MM-L',
       'MM0',
       'MM',
+      'WX',
     }.contains(screen);
   }
 
@@ -1397,10 +1406,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
 
   /// APP 底部 Tab 仅出现在主板块根页。
   bool _showsAppBottomTabBar(String screen) {
-    return screen == 'C1' ||
-        screen == 'B2' ||
-        screen == 'LH' ||
-        screen == 'LM';
+    return screen == 'C1' || screen == 'B2' || screen == 'LH' || screen == 'LM';
   }
 
   String _mainTabScreenFor(String screen) {
@@ -1479,12 +1485,16 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       );
       return;
     }
-    if (from == 'B14' && item.businessType.toUpperCase() != 'PROPOSAL') {
+    if (item.businessType.toUpperCase() != 'PROPOSAL') {
+      final bid = item.todoHint?.businessId ?? 0;
       setState(() {
         _selectedSubmissionBusinessType = item.businessType;
-        _selectedSubmissionBusinessId = item.id;
+        _selectedSubmissionBusinessId = bid > 0 ? bid : item.id;
         _xflowTemplateKey = item.templateKey ?? '';
         _b10BackScreen = from;
+        _selectedTodoHint = (from == 'B1' || from == 'B13')
+            ? item.todoHint
+            : null;
       });
       widget.navigation.go('XFS');
       return;
@@ -1656,6 +1666,7 @@ class _NativeB2PageState extends State<_NativeB2Page> {
     _live.active.addListener(_onLiveStateChanged);
     _live.paused.addListener(_onLiveStateChanged);
     _live.elapsed.addListener(_onLiveStateChanged);
+    _live.interruptionHint.addListener(_onLiveInterruptionHint);
     unawaited(
       XflowService.hydrateTemplateCache().then((_) {
         if (!mounted) return;
@@ -1675,6 +1686,12 @@ class _NativeB2PageState extends State<_NativeB2Page> {
 
   void _onLiveStateChanged() {
     if (mounted) setState(() {});
+  }
+
+  void _onLiveInterruptionHint() {
+    final hint = _live.interruptionHint.value?.trim() ?? '';
+    if (hint.isEmpty || !mounted) return;
+    showDunesToast(context, hint);
   }
 
   _NativeB2Profile? _restoreCachedProfile() {
@@ -1718,6 +1735,7 @@ class _NativeB2PageState extends State<_NativeB2Page> {
     _live.active.removeListener(_onLiveStateChanged);
     _live.paused.removeListener(_onLiveStateChanged);
     _live.elapsed.removeListener(_onLiveStateChanged);
+    _live.interruptionHint.removeListener(_onLiveInterruptionHint);
     super.dispose();
   }
 
@@ -2508,6 +2526,8 @@ class _NativeB2PageState extends State<_NativeB2Page> {
         switch (action) {
           case _B2MenuAction.scanWorkstation:
             _openQrLoginScanner();
+          case _B2MenuAction.wechatBot:
+            widget.navigation.go('WX');
           case _B2MenuAction.checkUpdate:
             unawaited(_checkDesktopAppUpdate());
           case _B2MenuAction.clearCache:
@@ -2534,6 +2554,14 @@ class _NativeB2PageState extends State<_NativeB2Page> {
             child: const _B2MenuEntry(
               icon: Icons.qr_code_scanner_rounded,
               label: '扫码登录工作台',
+            ),
+          ),
+        if (!widget.session.isExternalUser)
+          const PopupMenuItem(
+            value: _B2MenuAction.wechatBot,
+            child: _B2MenuEntry(
+              icon: Icons.chat_rounded,
+              label: '微信 Bot',
             ),
           ),
         const PopupMenuItem(
@@ -3051,6 +3079,7 @@ class _NativeB2PageState extends State<_NativeB2Page> {
 
 enum _B2MenuAction {
   scanWorkstation,
+  wechatBot,
   checkUpdate,
   clearCache,
   startProposal,

@@ -32,11 +32,13 @@ class MeetingLiveController {
   final ValueNotifier<String?> recordedFilePath = ValueNotifier<String?>(null);
   final ValueNotifier<String> meetingTitle = ValueNotifier<String>('');
   final ValueNotifier<Duration> elapsed = ValueNotifier<Duration>(Duration.zero);
+  final ValueNotifier<String?> interruptionHint = ValueNotifier<String?>(null);
 
   final List<String> _lines = <String>[];
   Timer? _elapsedTicker;
   Duration _elapsedCommitted = Duration.zero;
   DateTime? _elapsedRunStartedAt;
+  StreamSubscription<Map<String, dynamic>>? _recorderEventSub;
 
   bool get isActive => active.value;
 
@@ -64,6 +66,8 @@ class MeetingLiveController {
     });
     _recording.attach();
     await _recording.start();
+    _recorderEventSub ??=
+        NativeAudioRecorder.instance.recorderEvents().listen(_onRecorderEvent);
     paused.value = false;
     active.value = true;
     _elapsedCommitted = Duration.zero;
@@ -90,6 +94,7 @@ class MeetingLiveController {
     _elapsedRunStartedAt = DateTime.now();
     _startElapsedTicker();
     paused.value = false;
+    interruptionHint.value = null;
   }
 
   /// 结束并保存，返回录音文件路径（可能为空）。
@@ -109,6 +114,7 @@ class MeetingLiveController {
     _commitElapsedRun();
     _stopElapsedTicker();
     _elapsedRunStartedAt = null;
+    interruptionHint.value = null;
     active.value = false;
     paused.value = false;
     NativeAudioRecorder.isStartBlocked = null;
@@ -185,6 +191,38 @@ class MeetingLiveController {
       lines.value = List<String>.unmodifiable(_lines);
     } else {
       partial.value = update.text;
+    }
+  }
+
+  void _onRecorderEvent(Map<String, dynamic> event) {
+    final kind = (event['kind'] ?? '').toString();
+    final reason = (event['reason'] ?? '').toString();
+    if (kind == 'paused') {
+      if (active.value && !paused.value) {
+        interruptionHint.value = _pauseHintForReason(reason);
+        unawaited(pause());
+      }
+      return;
+    }
+    if (kind == 'interruptionEnded' && active.value && paused.value) {
+      interruptionHint.value = '麦克风已可用，可点击继续录音';
+    }
+  }
+
+  String _pauseHintForReason(String reason) {
+    switch (reason) {
+      case 'audioFocusLoss':
+      case 'audioRecordError':
+      case 'audioRecordGone':
+      case 'audioRecordSilent':
+      case 'audioRecordException':
+      case 'routeChange':
+        return '麦克风被其他语音软件占用，录音已自动暂停并保存';
+      case 'interruption':
+      case 'mediaServicesReset':
+        return '来电或系统中断，录音已自动暂停并保存';
+      default:
+        return '麦克风被占用，录音已自动暂停并保存';
     }
   }
 }

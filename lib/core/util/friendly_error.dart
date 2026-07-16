@@ -76,6 +76,17 @@ String friendlyErrorText(Object? error, {String fallback = '操作失败，请�
       low.contains('submission not found')) {
     return '未找到该审批单，请刷新后重试';
   }
+  if (low.contains('only creator can void') ||
+      low.contains('only creator can resubmit')) {
+    return '仅提交人可作废或重新提交';
+  }
+  if (low.contains('only rejected proposal can be voided') ||
+      low.contains('proposal not rejected')) {
+    return '仅已驳回的提案可作废';
+  }
+  if (low.contains('proposal already closed') || low.contains('proposal voided')) {
+    return '该提案已关闭，无法作废';
+  }
   if (low.contains('only creator can withdraw') ||
       low.contains('only approval initiator can withdraw')) {
     return '仅发起人可撤回';

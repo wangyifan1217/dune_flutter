@@ -91,7 +91,14 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
     _live.lines.addListener(_onLiveChanged);
     _live.partial.addListener(_onLiveChanged);
     _live.elapsed.addListener(_onLiveChanged);
+    _live.interruptionHint.addListener(_onLiveInterruptionHint);
     _recordingCtrl.state.addListener(_onLiveChanged);
+  }
+
+  void _onLiveInterruptionHint() {
+    final hint = _live.interruptionHint.value?.trim() ?? '';
+    if (hint.isEmpty || !mounted) return;
+    showDunesToast(context, hint);
   }
 
   void _onLiveChanged() {
@@ -113,6 +120,7 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
     _live.lines.removeListener(_onLiveChanged);
     _live.partial.removeListener(_onLiveChanged);
     _live.elapsed.removeListener(_onLiveChanged);
+    _live.interruptionHint.removeListener(_onLiveInterruptionHint);
     _recordingCtrl.state.removeListener(_onLiveChanged);
     _livePreviewScrollController.dispose();
     _titleCtrl.dispose();

@@ -40,6 +40,7 @@ bool isDesktopAllowedCommScreen(String screenId) {
     'K1',
     'K2',
     'K3',
+    'WX',
   }.contains(screenId);
 }
 

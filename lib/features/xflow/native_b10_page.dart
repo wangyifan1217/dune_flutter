@@ -19,6 +19,7 @@ class NativeB10Page extends StatefulWidget {
     required this.todoHint,
     required this.backScreen,
     required this.onReedit,
+    this.onApprovalCompleted,
   });
 
   final AuthSession session;
@@ -27,6 +28,7 @@ class NativeB10Page extends StatefulWidget {
   final XflowTodoHint? todoHint;
   final String backScreen;
   final void Function(int proposalId) onReedit;
+  final VoidCallback? onApprovalCompleted;
 
   @override
   State<NativeB10Page> createState() => _NativeB10PageState();
@@ -84,7 +86,6 @@ class _NativeB10PageState extends State<NativeB10Page> {
     try {
       final bundle = await _service.fetchB10Bundle(
         proposalId: widget.proposalId,
-        todoHint: widget.todoHint,
         currentUserId: widget.session.userId,
       );
       if (!mounted) return;
@@ -112,6 +113,7 @@ class _NativeB10PageState extends State<NativeB10Page> {
     );
     if (!mounted) return;
     showDunesToast(context, '已通过审批');
+    widget.onApprovalCompleted?.call();
     await _load();
   }
 
@@ -125,6 +127,7 @@ class _NativeB10PageState extends State<NativeB10Page> {
     );
     if (!mounted) return;
     showDunesToast(context, '已驳回');
+    widget.onApprovalCompleted?.call();
     await _load();
   }
 
@@ -149,10 +152,19 @@ class _NativeB10PageState extends State<NativeB10Page> {
       ),
     );
     if (ok != true) return;
-    await _service.voidProposal(id);
-    if (!mounted) return;
-    showDunesToast(context, '提案已作废');
-    await _load();
+    try {
+      await _service.voidProposal(id);
+      if (!mounted) return;
+      showDunesToast(context, '提案已作废');
+      await _load();
+    } catch (e) {
+      if (!mounted) return;
+      showDunesToast(
+        context,
+        friendlyErrorText(e, fallback: '作废失败，请稍后重试'),
+        kind: DunesToastKind.error,
+      );
+    }
   }
 
   Future<void> _withdrawProposal() async {

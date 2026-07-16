@@ -88,6 +88,21 @@ class LighthouseDataBundle {
     return copyWith(data: nextData);
   }
 
+  /// Merge dimension 接口下发的 tab UI（含完整 categories）到 metrics.ui。
+  LighthouseDataBundle withTabUi(String tab, Map<String, dynamic> tabUi) {
+    final nextMetrics = Map<String, dynamic>.from(metrics);
+    final ui = Map<String, dynamic>.from(
+      nextMetrics['ui'] as Map? ?? const {},
+    );
+    final tabs = Map<String, dynamic>.from(
+      ui['tabs'] as Map? ?? const {},
+    );
+    tabs[tab] = Map<String, dynamic>.from(tabUi);
+    ui['tabs'] = tabs;
+    nextMetrics['ui'] = ui;
+    return copyWith(metrics: nextMetrics);
+  }
+
   LighthouseDataBundle withDetail(
     String tab,
     String key,

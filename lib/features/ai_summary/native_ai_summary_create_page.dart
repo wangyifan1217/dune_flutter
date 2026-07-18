@@ -10,6 +10,7 @@ import '../shell/dunes_toast.dart';
 import 'ai_summary_models.dart';
 import 'ai_summary_participants.dart';
 import 'ai_summary_service.dart';
+import 'ai_summary_status_bus.dart';
 
 /// 发起智能总结：主题 / 模板 / 多选会话 / 日期。
 class NativeAiSummaryCreatePage extends StatefulWidget {
@@ -273,6 +274,11 @@ class _NativeAiSummaryCreatePageState extends State<NativeAiSummaryCreatePage> {
         to: range.$2,
       );
       if (!mounted) return;
+      AiSummaryStatusBus.instance.publish(
+        item.isGenerating
+            ? item.copyWith(summaryPreview: '正在生成…')
+            : item,
+      );
       widget.onCreated(item);
     } catch (e) {
       if (!mounted) return;

@@ -15,6 +15,7 @@ import '../shell/dunes_toast.dart';
 import 'ai_summary_models.dart';
 import 'ai_summary_participants.dart';
 import 'ai_summary_service.dart';
+import 'ai_summary_status_bus.dart';
 
 /// 智能总结详情：Markdown 正文 + 参与会话 + 异步刷新。
 class NativeAiSummaryDetailPage extends StatefulWidget {
@@ -70,6 +71,21 @@ class _NativeAiSummaryDetailPageState extends State<NativeAiSummaryDetailPage> {
     if (event.type != 'ai_summary_updated') return;
     final update = AiSummaryRealtimeUpdate.fromPayload(event.raw);
     if (update.id != widget.summaryId) return;
+    final cur = _item;
+    if (cur != null &&
+        (update.status == 'PENDING' || update.status == 'RUNNING')) {
+      final next = cur.copyWith(
+        status: update.status,
+        summaryPreview: update.preview?.trim().isNotEmpty == true
+            ? update.preview
+            : '正在重新生成…',
+        resultMarkdown: null,
+        finishedAt: null,
+      );
+      setState(() => _item = next);
+      _syncPoll(next);
+      return;
+    }
     unawaited(_load(silent: true));
   }
 
@@ -97,6 +113,7 @@ class _NativeAiSummaryDetailPageState extends State<NativeAiSummaryDetailPage> {
         _loading = false;
         _error = null;
       });
+      AiSummaryStatusBus.instance.publish(item);
       _syncPoll(item);
       unawaited(_hydrateParticipants(item));
     } catch (e) {
@@ -187,7 +204,19 @@ class _NativeAiSummaryDetailPageState extends State<NativeAiSummaryDetailPage> {
     DateTime? to,
   }) async {
     if (_refreshing) return;
-    setState(() => _refreshing = true);
+    final prev = _item;
+    // 先乐观切到「生成中」，避免列表/详情仍显示旧正文。
+    if (prev != null) {
+      final optimistic = prev.asGenerating(conversationIds: conversationIds);
+      setState(() {
+        _refreshing = true;
+        _item = optimistic;
+      });
+      AiSummaryStatusBus.instance.publish(optimistic);
+      _syncPoll(optimistic);
+    } else {
+      setState(() => _refreshing = true);
+    }
     try {
       final item = await _service.refresh(
         widget.summaryId,
@@ -196,12 +225,27 @@ class _NativeAiSummaryDetailPageState extends State<NativeAiSummaryDetailPage> {
         to: to,
       );
       if (!mounted) return;
-      setState(() => _item = item);
-      _syncPoll(item);
-      unawaited(_hydrateParticipants(item));
-      showDunesToast(context, '已重新开始生成');
+      // 若接口已返回终态（极快失败/完成）用接口结果；否则保持生成中态。
+      final next = item.isGenerating
+          ? item.copyWith(
+              summaryPreview: item.summaryPreview?.trim().isNotEmpty == true
+                  ? item.summaryPreview
+                  : '正在重新生成…',
+            )
+          : item;
+      setState(() => _item = next);
+      AiSummaryStatusBus.instance.publish(next);
+      _syncPoll(next);
+      unawaited(_hydrateParticipants(next));
+      if (next.isGenerating) {
+        showDunesToast(context, '已开始重新生成');
+      }
     } catch (e) {
       if (!mounted) return;
+      if (prev != null) {
+        setState(() => _item = prev);
+        AiSummaryStatusBus.instance.publish(prev);
+      }
       showDunesToast(
         context,
         friendlyErrorText(e, fallback: '重新生成失败'),
@@ -274,18 +318,44 @@ class _NativeAiSummaryDetailPageState extends State<NativeAiSummaryDetailPage> {
   }
 
   Widget _buildParticipantsHeader() {
+    final item = _item;
+    final rangeLabel = item == null
+        ? ''
+        : aiSummaryRangeDetailLabel(item.from, item.to);
     return Padding(
       padding: const EdgeInsets.fromLTRB(18, 4, 18, 8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          if (rangeLabel.isNotEmpty) ...[
+            Row(
+              children: [
+                const Icon(
+                  Icons.date_range_outlined,
+                  size: 16,
+                  color: Color(0xFF9CA3AF),
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    '总结周期：$rangeLabel',
+                    style: DunesTypography.sans(
+                      fontSize: 13,
+                      color: const Color(0xFF6B7280),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+          ],
           AiSummaryParticipantsRow(
             conversations: _participantConversations,
             service: _conversations,
             onTap: _openParticipantsSheet,
             dense: true,
           ),
-          if (_item != null && !_item!.isGenerating)
+          if (item != null && !item.isGenerating)
             TextButton.icon(
               onPressed: _pickConversations,
               icon: const Icon(Icons.person_add_alt_1_outlined, size: 18),
@@ -326,31 +396,47 @@ class _NativeAiSummaryDetailPageState extends State<NativeAiSummaryDetailPage> {
           _buildParticipantsHeader(),
           Expanded(
             child: Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const SizedBox(
-                    width: 28,
-                    height: 28,
-                    child: CircularProgressIndicator(strokeWidth: 2.2),
-                  ),
-                  const SizedBox(height: 14),
-                  Text(
-                    item.statusLabel,
-                    style: DunesTypography.sans(
-                      fontSize: 15,
-                      color: DunesColors.brandPurple,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 28),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const SizedBox(
+                      width: 32,
+                      height: 32,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2.4,
+                        color: DunesColors.brandPurple,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    '可离开此页，完成后会在会话列表提醒',
-                    style: DunesTypography.sans(
-                      fontSize: 12.5,
-                      color: DunesColors.text3,
+                    const SizedBox(height: 16),
+                    Text(
+                      item.isPending ? '正在重新生成…' : '正在生成总结…',
+                      style: DunesTypography.sans(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        color: DunesColors.brandPurple,
+                      ),
                     ),
-                  ),
-                ],
+                    const SizedBox(height: 8),
+                    Text(
+                      item.statusLabel,
+                      style: DunesTypography.sans(
+                        fontSize: 13,
+                        color: const Color(0xFF6B7280),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      '可离开此页，完成后会在列表更新并提醒',
+                      textAlign: TextAlign.center,
+                      style: DunesTypography.sans(
+                        fontSize: 12.5,
+                        color: DunesColors.text3,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),

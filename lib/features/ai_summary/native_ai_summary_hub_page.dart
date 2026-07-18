@@ -16,6 +16,7 @@ import 'ai_summary_models.dart';
 import 'ai_summary_participants.dart';
 import 'ai_summary_service.dart';
 import 'ai_summary_sparkle_icon.dart';
+import 'ai_summary_status_bus.dart';
 
 /// 「智能总结 AI+」列表页（企微式卡片流）。
 class NativeAiSummaryHubPage extends StatefulWidget {
@@ -43,6 +44,7 @@ class _NativeAiSummaryHubPageState extends State<NativeAiSummaryHubPage> {
   late final AiSummaryService _service;
   late final ConversationService _conversations;
   StreamSubscription<ConversationRealtimeEvent>? _rtSub;
+  StreamSubscription<AiSummaryItem>? _localStatusSub;
   Timer? _pollTimer;
 
   bool _loading = true;
@@ -62,6 +64,7 @@ class _NativeAiSummaryHubPageState extends State<NativeAiSummaryHubPage> {
         .of(widget.session)
         .events
         .listen(_onRealtime);
+    _localStatusSub = AiSummaryStatusBus.instance.stream.listen(_applyItemUpdate);
     unawaited(_markNotificationsRead());
     unawaited(_load());
     widget.onOpened?.call();
@@ -78,8 +81,22 @@ class _NativeAiSummaryHubPageState extends State<NativeAiSummaryHubPage> {
   @override
   void dispose() {
     _rtSub?.cancel();
+    _localStatusSub?.cancel();
     _pollTimer?.cancel();
     super.dispose();
+  }
+
+  void _applyItemUpdate(AiSummaryItem item) {
+    if (!mounted || item.id <= 0) return;
+    final idx = _items.indexWhere((e) => e.id == item.id);
+    setState(() {
+      if (idx < 0) {
+        _items = [item, ..._items];
+      } else {
+        _items = List<AiSummaryItem>.from(_items)..[idx] = item;
+      }
+    });
+    _syncPoll();
   }
 
   void _onRealtime(ConversationRealtimeEvent event) {
@@ -94,11 +111,19 @@ class _NativeAiSummaryHubPageState extends State<NativeAiSummaryHubPage> {
       unawaited(_load(silent: true));
       return;
     }
+    final generating =
+        update.status == 'PENDING' || update.status == 'RUNNING';
     setState(() {
       _items = List<AiSummaryItem>.from(_items)
         ..[idx] = _items[idx].copyWith(
           status: update.status,
-          summaryPreview: update.preview ?? _items[idx].summaryPreview,
+          summaryPreview: generating
+              ? (update.preview?.trim().isNotEmpty == true
+                    ? update.preview
+                    : '正在生成…')
+              : (update.preview ?? _items[idx].summaryPreview),
+          resultMarkdown: generating ? null : _items[idx].resultMarkdown,
+          finishedAt: generating ? null : _items[idx].finishedAt,
         );
     });
     _syncPoll();
@@ -464,7 +489,9 @@ class _SummaryCard extends StatelessWidget {
         ? '我'
         : item.initiator.displayName;
     final preview = item.isGenerating
-        ? item.statusLabel
+        ? (item.summaryPreview?.trim().isNotEmpty == true
+              ? item.summaryPreview!
+              : item.statusLabel)
         : item.isFailed
         ? (item.errorMessage?.trim().isNotEmpty == true
               ? item.errorMessage!
@@ -476,6 +503,7 @@ class _SummaryCard extends StatelessWidget {
     final participantCount = item.conversationIds.isNotEmpty
         ? item.conversationIds.length
         : conversations.length;
+    final badge = item.statusBadgeLabel;
 
     return Material(
       color: Colors.white,
@@ -488,12 +516,57 @@ class _SummaryCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                '$initiator 发起',
-                style: DunesTypography.sans(
-                  fontSize: 12,
-                  color: const Color(0xFF9CA3AF),
-                ),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      '$initiator 发起',
+                      style: DunesTypography.sans(
+                        fontSize: 12,
+                        color: const Color(0xFF9CA3AF),
+                      ),
+                    ),
+                  ),
+                  if (badge.isNotEmpty)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 3,
+                      ),
+                      decoration: BoxDecoration(
+                        color: item.isFailed
+                            ? const Color(0xFFFEE2E2)
+                            : DunesColors.brandPurpleSoft,
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (item.isGenerating) ...[
+                            SizedBox(
+                              width: 10,
+                              height: 10,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 1.6,
+                                color: DunesColors.brandPurple,
+                              ),
+                            ),
+                            const SizedBox(width: 5),
+                          ],
+                          Text(
+                            badge,
+                            style: DunesTypography.sans(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: item.isFailed
+                                  ? const Color(0xFFB91C1C)
+                                  : DunesColors.brandPurpleDeep,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                ],
               ),
               const SizedBox(height: 6),
               Text(

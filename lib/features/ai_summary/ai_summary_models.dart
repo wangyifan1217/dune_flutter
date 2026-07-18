@@ -94,7 +94,7 @@ class AiSummaryItem {
   String get statusLabel {
     switch (status) {
       case 'PENDING':
-        return '排队中';
+        return '排队中…';
       case 'RUNNING':
         return '生成中…';
       case 'SUCCESS':
@@ -104,6 +104,14 @@ class AiSummaryItem {
       default:
         return status;
     }
+  }
+
+  /// 列表角标文案。
+  String get statusBadgeLabel {
+    if (isPending) return '排队中';
+    if (isRunning) return '生成中';
+    if (isFailed) return '失败';
+    return '';
   }
 
   String get inboxPreview {
@@ -116,26 +124,35 @@ class AiSummaryItem {
 
   DateTime? get sortTime => finishedAt ?? createdAt;
 
+  static const Object _unset = Object();
+
   AiSummaryItem copyWith({
     String? status,
-    String? summaryPreview,
-    String? resultMarkdown,
-    String? errorMessage,
-    DateTime? finishedAt,
+    Object? summaryPreview = _unset,
+    Object? resultMarkdown = _unset,
+    Object? errorMessage = _unset,
+    Object? finishedAt = _unset,
+    List<int>? conversationIds,
   }) {
     return AiSummaryItem(
       id: id,
       theme: theme,
       template: template,
-      conversationIds: conversationIds,
+      conversationIds: conversationIds ?? this.conversationIds,
       memberUserIds: memberUserIds,
       memberCount: memberCount,
       from: from,
       to: to,
       status: status ?? this.status,
-      summaryPreview: summaryPreview ?? this.summaryPreview,
-      resultMarkdown: resultMarkdown ?? this.resultMarkdown,
-      errorMessage: errorMessage ?? this.errorMessage,
+      summaryPreview: identical(summaryPreview, _unset)
+          ? this.summaryPreview
+          : summaryPreview as String?,
+      resultMarkdown: identical(resultMarkdown, _unset)
+          ? this.resultMarkdown
+          : resultMarkdown as String?,
+      errorMessage: identical(errorMessage, _unset)
+          ? this.errorMessage
+          : errorMessage as String?,
       model: model,
       messageCount: messageCount,
       skippedCount: skippedCount,
@@ -143,8 +160,22 @@ class AiSummaryItem {
       chunked: chunked,
       createdAt: createdAt,
       startedAt: startedAt,
-      finishedAt: finishedAt ?? this.finishedAt,
+      finishedAt: identical(finishedAt, _unset)
+          ? this.finishedAt
+          : finishedAt as DateTime?,
       initiator: initiator,
+    );
+  }
+
+  /// 进入重新生成 / 排队时的乐观态。
+  AiSummaryItem asGenerating({List<int>? conversationIds}) {
+    return copyWith(
+      status: 'PENDING',
+      summaryPreview: '正在重新生成…',
+      resultMarkdown: null,
+      errorMessage: null,
+      finishedAt: null,
+      conversationIds: conversationIds,
     );
   }
 

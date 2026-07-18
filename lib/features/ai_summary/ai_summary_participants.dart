@@ -501,6 +501,22 @@ String aiSummaryRangeLabel(DateTimeRange range) {
   return '${fmt(range.start)} – ${fmt(range.end)}';
 }
 
+/// 详情页展示用的完整周期文案，如「2026年7月1日 – 7月18日」。
+String aiSummaryRangeDetailLabel(DateTime? from, DateTime? to) {
+  if (from == null && to == null) return '';
+  final range = aiSummaryInclusiveRangeFromApi(from, to);
+  String fmt(DateTime d, {required bool withYear}) {
+    final md = '${d.month}月${d.day}日';
+    return withYear ? '${d.year}年$md' : md;
+  }
+
+  final start = range.start;
+  final end = range.end;
+  if (start == end) return fmt(start, withYear: true);
+  final sameYear = start.year == end.year;
+  return '${fmt(start, withYear: true)} – ${fmt(end, withYear: !sameYear)}';
+}
+
 /// 选择总结周期；取消返回 null。
 Future<DateTimeRange?> pickAiSummaryDateRange({
   required BuildContext context,

@@ -1,7 +1,10 @@
+import 'dart:async';
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
+import '../../core/platform/desktop_features.dart';
 import '../../core/theme/dunes_theme.dart';
 import '../../core/util/friendly_error.dart';
 import '../auth/auth_session.dart';
@@ -9,6 +12,7 @@ import '../conversation/conversation_models.dart';
 import '../conversation/conversation_service.dart';
 import '../shell/dunes_toast.dart';
 import 'chat_media_widgets.dart';
+import 'chat_video_widgets.dart';
 import 'cors_safe_image.dart';
 import 'file_download.dart' as file_dl;
 
@@ -36,6 +40,9 @@ class _NativeGroupMediaPageState extends State<NativeGroupMediaPage> {
   String? _error;
   List<NativeChatMessage> _items = const <NativeChatMessage>[];
   final Map<int, Future<Uint8List>> _imageBytesCache = <int, Future<Uint8List>>{};
+  final Set<int> _downloadingIds = <int>{};
+  /// 已落盘本地的媒体 key（避免二次下载）。
+  final Set<int> _downloadedIds = <int>{};
 
   @override
   void initState() {
@@ -63,10 +70,21 @@ class _NativeGroupMediaPageState extends State<NativeGroupMediaPage> {
     try {
       final rows = await _service.fetchConversationMedia(widget.conversationId, size: 80);
       if (!mounted) return;
+      final items = rows
+          .where(
+            (m) =>
+                m.kind == 'IMAGE' ||
+                m.kind == 'FILE' ||
+                m.kind == 'AUDIO' ||
+                m.kind == 'VIDEO',
+          )
+          .toList(growable: false);
+      if (!mounted) return;
       setState(() {
-        _items = rows.where((m) => m.kind == 'IMAGE' || m.kind == 'FILE' || m.kind == 'AUDIO').toList(growable: false);
+        _items = items;
         _loading = false;
       });
+      unawaited(_refreshDownloadedFlags(items));
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -81,7 +99,51 @@ class _NativeGroupMediaPageState extends State<NativeGroupMediaPage> {
     return _imageBytesCache.putIfAbsent(key, () => _service.loadCachedChatMediaBytes(message.payload));
   }
 
+  int _mediaKey(NativeChatMessage message) =>
+      message.id > 0 ? message.id : Object.hash(message.kind, message.bodyText, message.createdAt);
+
+  bool _isDownloading(NativeChatMessage message) =>
+      _downloadingIds.contains(_mediaKey(message));
+
+  bool _isDownloaded(NativeChatMessage message) =>
+      _downloadedIds.contains(_mediaKey(message));
+
+  String _fileCacheKey(Map<String, dynamic>? payload) {
+    if (payload == null) return '';
+    final objectKey = (payload['objectKey'] ?? '').toString().trim();
+    if (objectKey.isNotEmpty) return objectKey;
+    return ConversationService.mediaDirectUrl(payload);
+  }
+
+  Future<void> _refreshDownloadedFlags(List<NativeChatMessage> items) async {
+    if (kIsWeb) return;
+    final next = <int>{};
+    for (final m in items) {
+      final payload = m.payload;
+      final cacheKey = _fileCacheKey(payload);
+      if (cacheKey.isEmpty || payload == null) continue;
+      final fileName = ConversationService.mediaFileName(
+        payload,
+        fallback: m.kind == 'IMAGE'
+            ? 'image.jpg'
+            : (m.bodyText.isEmpty ? 'download' : m.bodyText),
+      );
+      final cached = await file_dl.findCachedChatFile(cacheKey, fileName);
+      if (cached != null && cached.isNotEmpty) {
+        next.add(_mediaKey(m));
+      }
+    }
+    if (!mounted) return;
+    setState(() {
+      _downloadedIds
+        ..clear()
+        ..addAll(next);
+    });
+  }
+
   Future<void> _downloadMedia(NativeChatMessage message) async {
+    final key = _mediaKey(message);
+    if (_downloadingIds.contains(key)) return;
     final payload = message.payload;
     if (payload == null) {
       _toast('附件地址为空');
@@ -91,26 +153,69 @@ class _NativeGroupMediaPageState extends State<NativeGroupMediaPage> {
       payload,
       fallback: message.kind == 'IMAGE' ? 'image.jpg' : (message.bodyText.isEmpty ? 'download' : message.bodyText),
     );
+    final cacheKey = _fileCacheKey(payload);
+
+    // 已下载：直接打开本地文件，不再重新拉网络。
+    if (cacheKey.isNotEmpty && !kIsWeb) {
+      final cached = await file_dl.findCachedChatFile(cacheKey, fileName);
+      if (cached != null && cached.isNotEmpty) {
+        if (!mounted) return;
+        setState(() => _downloadedIds.add(key));
+        try {
+          if (isDesktopCommOnly) {
+            await file_dl.openLocalFile(cached);
+          } else {
+            _toast('已下载到本地');
+          }
+        } catch (_) {
+          _toast('已下载到本地');
+        }
+        return;
+      }
+    }
+
+    setState(() => _downloadingIds.add(key));
     try {
+      String? savedPath;
       if (ConversationService.hasAuthMedia(payload)) {
         final bytes = await _service.downloadAttachmentBytes(
           objectKey: ConversationService.mediaObjectKey(payload),
           fileName: fileName,
         );
-        await file_dl.saveBytesAsFile(bytes, fileName);
+        if (cacheKey.isNotEmpty) {
+          savedPath = await file_dl.saveBytesAsCachedFile(bytes, cacheKey, fileName);
+        } else {
+          savedPath = await file_dl.saveBytesAsFile(bytes, fileName);
+        }
       } else {
         final url = ConversationService.mediaDirectUrl(payload);
         if (url.isEmpty) {
           _toast('附件地址为空');
           return;
         }
-        await file_dl.openUrlAsFile(url, fileName);
+        savedPath = await file_dl.openUrlAsFile(
+          url,
+          fileName,
+          cacheKey: cacheKey.isEmpty ? null : cacheKey,
+        );
       }
       if (!mounted) return;
-      _toast('已开始下载');
+      setState(() => _downloadedIds.add(key));
+      if (savedPath != null && savedPath.isNotEmpty && isDesktopCommOnly) {
+        _toast('下载完成');
+        try {
+          await file_dl.openLocalFile(savedPath);
+        } catch (_) {}
+      } else {
+        _toast('下载完成');
+      }
     } catch (e) {
       if (!mounted) return;
       _toast('下载失败：${friendlyErrorText(e)}');
+    } finally {
+      if (mounted) {
+        setState(() => _downloadingIds.remove(key));
+      }
     }
   }
 
@@ -198,13 +303,28 @@ class _NativeGroupMediaPageState extends State<NativeGroupMediaPage> {
                 ? _ImageMediaRow(
                     message: m,
                     loadBytes: () => _imageBytesFor(m),
+                    downloading: _isDownloading(m),
+                    downloaded: _isDownloaded(m),
                     onTap: () => _previewImage(m),
                     onDownload: () => _downloadMedia(m),
                   )
-                : _FileMediaRow(
-                    message: m,
-                    onTap: () => _downloadMedia(m),
-                  ),
+                : m.kind == 'VIDEO'
+                    ? _FileMediaRow(
+                        message: m,
+                        downloading: _isDownloading(m),
+                        downloaded: _isDownloaded(m),
+                        onTap: () => showChatVideoPlayer(
+                          context,
+                          service: _service,
+                          payload: m.payload,
+                        ),
+                      )
+                    : _FileMediaRow(
+                        message: m,
+                        downloading: _isDownloading(m),
+                        downloaded: _isDownloaded(m),
+                        onTap: () => _downloadMedia(m),
+                      ),
           ),
         ),
       ],
@@ -399,7 +519,7 @@ class _FilledMediaSlot extends StatelessWidget {
   final Widget leading;
   final String title;
   final String meta;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
   final Widget trailing;
 
   @override
@@ -447,12 +567,16 @@ class _ImageMediaRow extends StatelessWidget {
   const _ImageMediaRow({
     required this.message,
     required this.loadBytes,
+    required this.downloading,
+    required this.downloaded,
     required this.onTap,
     required this.onDownload,
   });
 
   final NativeChatMessage message;
   final Future<Uint8List> Function() loadBytes;
+  final bool downloading;
+  final bool downloaded;
   final VoidCallback onTap;
   final VoidCallback onDownload;
 
@@ -495,15 +619,49 @@ class _ImageMediaRow extends StatelessWidget {
     }
 
     return _FilledMediaSlot(
-      leading: thumb,
+      leading: Stack(
+        alignment: Alignment.center,
+        children: [
+          thumb,
+          if (downloading)
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: Colors.black.withValues(alpha: 0.35),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Center(
+                child: SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
       title: message.bodyText.isEmpty ? '[图片]' : message.bodyText,
       meta: '${message.senderName} · ${_timeLabel(message.createdAt)}',
-      onTap: onTap,
+      onTap: downloading ? null : onTap,
       trailing: IconButton(
-        onPressed: onDownload,
-        icon: const Icon(Icons.download_rounded, size: 18, color: DunesColors.text3),
+        onPressed: downloading ? null : onDownload,
+        icon: downloading
+            ? const SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(strokeWidth: 2, color: DunesColors.accent),
+              )
+            : Icon(
+                downloaded ? Icons.check_circle_rounded : Icons.download_rounded,
+                size: 18,
+                color: downloaded ? DunesColors.accent : DunesColors.text3,
+              ),
         splashRadius: 18,
-        tooltip: '下载',
+        tooltip: downloaded ? '已下载' : '下载',
       ),
     );
   }
@@ -532,10 +690,14 @@ class _ImageMediaRow extends StatelessWidget {
 class _FileMediaRow extends StatelessWidget {
   const _FileMediaRow({
     required this.message,
+    required this.downloading,
+    required this.downloaded,
     required this.onTap,
   });
 
   final NativeChatMessage message;
+  final bool downloading;
+  final bool downloaded;
   final VoidCallback onTap;
 
   @override
@@ -543,13 +705,59 @@ class _FileMediaRow extends StatelessWidget {
     final icon = message.kind == 'AUDIO' ? Icons.audiotrack_outlined : _fileIconForName(message.bodyText);
     final color = message.kind == 'AUDIO' ? DunesColors.accent : _fileIconColor(message.bodyText);
     return _FilledMediaSlot(
-      leading: Icon(icon, color: color, size: 20),
+      leading: SizedBox(
+        width: 36,
+        height: 36,
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: DunesColors.bgSoft,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(icon, color: color, size: 20),
+            ),
+            if (downloading)
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.28),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Center(
+                  child: SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
       title: message.bodyText.isEmpty ? '[${message.kind}]' : message.bodyText,
       meta: '${message.senderName} · ${_timeLabel(message.createdAt)}',
-      onTap: onTap,
-      trailing: const Padding(
-        padding: EdgeInsets.only(left: 4),
-        child: Icon(Icons.download_rounded, size: 18, color: DunesColors.text3),
+      onTap: downloading ? null : onTap,
+      trailing: Padding(
+        padding: const EdgeInsets.only(left: 4),
+        child: downloading
+            ? const SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(strokeWidth: 2, color: DunesColors.accent),
+              )
+            : Icon(
+                downloaded ? Icons.check_circle_rounded : Icons.download_rounded,
+                size: 18,
+                color: downloaded ? DunesColors.accent : DunesColors.text3,
+              ),
       ),
     );
   }

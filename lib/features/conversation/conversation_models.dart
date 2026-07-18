@@ -171,6 +171,8 @@ class NativeGroupMember {
     required this.displayName,
     this.role,
     this.roleLabel,
+    this.department,
+    this.title,
     this.avatarPreset,
     this.avatarObjectKey,
   });
@@ -179,6 +181,8 @@ class NativeGroupMember {
   final String displayName;
   final String? role;
   final String? roleLabel;
+  final String? department;
+  final String? title;
   final String? avatarPreset;
   final String? avatarObjectKey;
 

@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -57,7 +57,7 @@ class MeetingMinutesMarkdown extends StatelessWidget {
         height: 1.6,
       ),
       a: const TextStyle(
-        color: DunesColors.accentDeep,
+        color: DunesColors.brandPurpleDeep,
         decoration: TextDecoration.underline,
       ),
     );

@@ -12,6 +12,7 @@ import 'chat_quote.dart';
 import '../conversation/conversation_models.dart';
 import '../conversation/inbox_format.dart';
 import 'chat_voice_player.dart';
+import 'voice_asr_store.dart';
 
 class ChatConvHeader extends StatelessWidget {
   const ChatConvHeader({
@@ -119,6 +120,7 @@ class ChatQuickActions extends StatelessWidget {
     required this.onAlbum,
     required this.onFile,
     required this.onApproval,
+    this.onCameraLongPress,
     this.onAt,
     this.onEmoji,
     this.onVideo,
@@ -130,6 +132,8 @@ class ChatQuickActions extends StatelessWidget {
   final VoidCallback onAlbum;
   final VoidCallback onFile;
   final VoidCallback onApproval;
+  /// 长按拍照：录制小视频（微信式）。
+  final VoidCallback? onCameraLongPress;
   final VoidCallback? onAt;
   final VoidCallback? onEmoji;
   final VoidCallback? onVideo;
@@ -139,17 +143,12 @@ class ChatQuickActions extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final wide = isWideChatLayout(context);
-    // PC 宽屏：恢复原单行工具条（含表情入口）；APP：微信式宫格，表情在输入栏。
+    // PC 宽屏：图片(含视频) + 文件；APP：微信式宫格（相册 / 拍照长按拍视频 / 文件）。
     final cells = <_QaCell>[
       if (wide) ...[
         _QaCell(
-          icon: Icons.photo_camera_outlined,
-          label: '拍照',
-          onTap: onCamera,
-        ),
-        _QaCell(
-          icon: Icons.photo_library_outlined,
-          label: '相册',
+          icon: Icons.photo_outlined,
+          label: '图片',
           onTap: onAlbum,
         ),
         _QaCell(icon: Icons.attach_file, label: '文件', onTap: onFile),
@@ -159,6 +158,8 @@ class ChatQuickActions extends StatelessWidget {
           icon: Icons.photo_camera_outlined,
           label: '拍照',
           onTap: onCamera,
+          onLongPress: onCameraLongPress,
+          hint: onCameraLongPress == null ? null : '长按拍视频',
         ),
         _QaCell(icon: Icons.folder_outlined, label: '文件', onTap: onFile),
       ],
@@ -261,6 +262,7 @@ class _WeChatToolTile extends StatelessWidget {
     return InkWell(
       borderRadius: BorderRadius.circular(14),
       onTap: cell.onTap,
+      onLongPress: cell.onLongPress,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -282,6 +284,16 @@ class _WeChatToolTile extends StatelessWidget {
               color: const Color(0xFF7A7A7A),
             ),
           ),
+          if ((cell.hint ?? '').isNotEmpty) ...[
+            const SizedBox(height: 2),
+            Text(
+              cell.hint!,
+              style: DunesTypography.sans(
+                fontSize: 9,
+                color: const Color(0xFFAAAAAA),
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -289,10 +301,18 @@ class _WeChatToolTile extends StatelessWidget {
 }
 
 class _QaCell {
-  const _QaCell({required this.icon, required this.label, required this.onTap});
+  const _QaCell({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.onLongPress,
+    this.hint,
+  });
   final IconData icon;
   final String label;
   final VoidCallback onTap;
+  final VoidCallback? onLongPress;
+  final String? hint;
 }
 
 class ChatInputBar extends StatelessWidget {
@@ -1418,6 +1438,7 @@ class ChatVoiceBubble extends StatefulWidget {
     required this.durationSec,
     required this.mine,
     required this.resolveUrl,
+    this.asrKey,
     this.onPlayError,
   });
 
@@ -1425,6 +1446,8 @@ class ChatVoiceBubble extends StatefulWidget {
   final int durationSec;
   final bool mine;
   final Future<String> Function() resolveUrl;
+  /// 本地转写缓存 key；有值时在气泡下方展示转写结果。
+  final String? asrKey;
   final ValueChanged<String>? onPlayError;
 
   @override
@@ -1436,15 +1459,20 @@ class _ChatVoiceBubbleState extends State<ChatVoiceBubble> {
   void initState() {
     super.initState();
     ChatVoicePlayer.instance.addListener(_onPlayerChanged);
+    VoiceAsrStore.instance.addListener(_onAsrChanged);
+    unawaited(VoiceAsrStore.instance.ensureLoaded());
   }
 
   @override
   void dispose() {
     ChatVoicePlayer.instance.removeListener(_onPlayerChanged);
+    VoiceAsrStore.instance.removeListener(_onAsrChanged);
     super.dispose();
   }
 
   void _onPlayerChanged() => setState(() {});
+
+  void _onAsrChanged() => setState(() {});
 
   Future<void> _toggle() async {
     try {
@@ -1462,52 +1490,114 @@ class _ChatVoiceBubbleState extends State<ChatVoiceBubble> {
   @override
   Widget build(BuildContext context) {
     final playing = ChatVoicePlayer.instance.playingKey == widget.playKey;
-    return GestureDetector(
-      onTap: () => unawaited(_toggle()),
-      child: Container(
-        constraints: BoxConstraints(
-          minWidth: 80 + (widget.durationSec * 4).clamp(0, 80).toDouble(),
-        ),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-        decoration: BoxDecoration(
-          color: widget.mine ? const Color(0xFF7E64BD) : DunesColors.bgApp,
-          border: widget.mine
-              ? null
-              : Border.all(color: DunesColors.borderSoft),
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              playing ? Icons.pause_rounded : Icons.play_arrow_rounded,
-              size: 18,
-              color: widget.mine ? Colors.white : DunesColors.accent,
-            ),
-            const SizedBox(width: 6),
-            ...List.generate(4, (i) {
-              return Container(
-                width: 3,
-                height: playing ? 8.0 + (i * 3) : 6.0 + i,
-                margin: const EdgeInsets.symmetric(horizontal: 1),
-                decoration: BoxDecoration(
-                  color: (widget.mine ? Colors.white : DunesColors.accent)
-                      .withValues(alpha: 0.75),
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              );
-            }),
-            const SizedBox(width: 8),
-            Text(
-              '${widget.durationSec}s',
-              style: DunesTypography.mono(
-                fontSize: 10,
-                color: widget.mine ? Colors.white70 : DunesColors.text3,
+    final asrKey = (widget.asrKey ?? '').trim();
+    final transcript =
+        asrKey.isEmpty ? null : VoiceAsrStore.instance.textFor(asrKey);
+    final transcribing =
+        asrKey.isNotEmpty && VoiceAsrStore.instance.isLoading(asrKey);
+
+    return Column(
+      crossAxisAlignment:
+          widget.mine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () => unawaited(_toggle()),
+          child: MouseRegion(
+            cursor: SystemMouseCursors.click,
+            child: Container(
+              constraints: BoxConstraints(
+                minWidth:
+                    80 + (widget.durationSec * 4).clamp(0, 80).toDouble(),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+              decoration: BoxDecoration(
+                color:
+                    widget.mine ? const Color(0xFF7E64BD) : DunesColors.bgApp,
+                border: widget.mine
+                    ? null
+                    : Border.all(color: DunesColors.borderSoft),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    playing ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                    size: 18,
+                    color: widget.mine ? Colors.white : DunesColors.accent,
+                  ),
+                  const SizedBox(width: 6),
+                  ...List.generate(4, (i) {
+                    return Container(
+                      width: 3,
+                      height: playing ? 8.0 + (i * 3) : 6.0 + i,
+                      margin: const EdgeInsets.symmetric(horizontal: 1),
+                      decoration: BoxDecoration(
+                        color: (widget.mine ? Colors.white : DunesColors.accent)
+                            .withValues(alpha: 0.75),
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    );
+                  }),
+                  const SizedBox(width: 8),
+                  Text(
+                    '${widget.durationSec}s',
+                    style: DunesTypography.mono(
+                      fontSize: 10,
+                      color: widget.mine ? Colors.white70 : DunesColors.text3,
+                    ),
+                  ),
+                ],
               ),
             ),
-          ],
+          ),
         ),
-      ),
+        if (transcribing) ...[
+          const SizedBox(height: 6),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(
+                width: 12,
+                height: 12,
+                child: CircularProgressIndicator(strokeWidth: 1.6),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                '转写中…',
+                style: DunesTypography.sans(
+                  fontSize: 12,
+                  color: DunesColors.text3,
+                ),
+              ),
+            ],
+          ),
+        ],
+        if (transcript != null && transcript.isNotEmpty) ...[
+          const SizedBox(height: 6),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 260),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              decoration: BoxDecoration(
+                color: DunesColors.bgApp,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: DunesColors.borderSoft),
+              ),
+              child: Text(
+                transcript,
+                style: DunesTypography.sans(
+                  fontSize: 13,
+                  color: DunesColors.text2,
+                  height: 1.45,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ],
     );
   }
 }
@@ -1521,6 +1611,7 @@ class ChatFileAttach extends StatelessWidget {
     this.onSecondaryTapDown,
     this.isPdf = false,
     this.uploadProgress,
+    this.downloadProgress,
   });
 
   final String fileName;
@@ -1532,13 +1623,28 @@ class ChatFileAttach extends StatelessWidget {
   /// 0~1；非空时在图标上展示圆形上传进度。
   final double? uploadProgress;
 
+  /// 0~1；非空时在图标上展示圆形下载进度（与上传互斥优先上传）。
+  final double? downloadProgress;
+
   @override
   Widget build(BuildContext context) {
-    final progress = uploadProgress;
-    final uploading = progress != null;
+    final upload = uploadProgress;
+    final download = downloadProgress;
+    final busyProgress = upload ?? download;
+    final uploading = upload != null;
+    final downloading = !uploading && download != null;
+    final busy = busyProgress != null;
+    String? statusLabel;
+    if (uploading) {
+      final p = upload;
+      statusLabel = p > 0 ? '上传中 ${(p * 100).round()}%' : '上传中…';
+    } else if (downloading) {
+      final p = download;
+      statusLabel = p > 0 ? '下载中 ${(p * 100).round()}%' : '下载中…';
+    }
     return GestureDetector(
-      onTap: uploading ? null : onTap,
-      onSecondaryTapDown: uploading ? null : onSecondaryTapDown,
+      onTap: busy ? null : onTap,
+      onSecondaryTapDown: busy ? null : onSecondaryTapDown,
       child: Container(
         constraints: const BoxConstraints(minWidth: 210, maxWidth: 280),
         padding: const EdgeInsets.all(11),
@@ -1569,12 +1675,14 @@ class ChatFileAttach extends StatelessWidget {
                       color: isPdf ? DunesColors.coral : DunesColors.text2,
                     ),
                   ),
-                  if (uploading)
+                  if (busy)
                     SizedBox(
                       width: 36,
                       height: 36,
                       child: CircularProgressIndicator(
-                        value: progress > 0 && progress < 1 ? progress : null,
+                        value: busyProgress > 0 && busyProgress < 1
+                            ? busyProgress
+                            : null,
                         strokeWidth: 2.5,
                         color: const Color(0xFF7E64BD),
                         backgroundColor: Colors.white54,
@@ -1598,12 +1706,10 @@ class ChatFileAttach extends StatelessWidget {
                       fontWeight: FontWeight.w500,
                     ),
                   ),
-                  if (uploading) ...[
+                  if (statusLabel != null) ...[
                     const SizedBox(height: 2),
                     Text(
-                      progress > 0
-                          ? '上传中 ${(progress * 100).round()}%'
-                          : '上传中…',
+                      statusLabel,
                       style: DunesTypography.sans(
                         fontSize: 11,
                         color: DunesColors.text3,

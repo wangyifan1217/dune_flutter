@@ -16,6 +16,10 @@ void windowsTrayNotifyIncomingMessage() =>
 /// 当前桌面窗口是否最小化、失焦或已隐藏到托盘。
 bool windowsTrayIsWindowInactive() => impl.windowsTrayIsWindowInactive();
 
+/// 窗口前后台状态变化（最小化 / 失焦 / 托盘隐藏 ↔ 恢复）。
+void setWindowsTrayOnInactiveChanged(void Function(bool inactive)? callback) =>
+    impl.setWindowsTrayOnInactiveChanged(callback);
+
 /// 从托盘/通知点击恢复窗口。
 void windowsTrayReveal() => impl.windowsTrayReveal();
 

@@ -436,6 +436,28 @@ class ConversationService {
     if (resp.statusCode < 200 || resp.statusCode >= 300) return;
   }
 
+  /// 登记「正在前台查看该会话」，用于服务端抑制该会话的 APP TPNS。
+  Future<void> reportActiveView(int conversationId) async {
+    if (conversationId <= 0) return;
+    try {
+      await _client.put(
+        _uri('/conversations/$conversationId/active-view'),
+        headers: _headers,
+      );
+    } catch (_) {}
+  }
+
+  /// 离开会话或切后台时清除 active-view 登记。
+  Future<void> clearActiveView(int conversationId) async {
+    if (conversationId <= 0) return;
+    try {
+      await _client.delete(
+        _uri('/conversations/$conversationId/active-view'),
+        headers: _headers,
+      );
+    } catch (_) {}
+  }
+
   Future<void> sendImage({
     required int conversationId,
     required Uint8List bytes,
@@ -550,6 +572,66 @@ class ConversationService {
         'size': bytes.length,
       },
     );
+  }
+
+  /// 发送小视频（kind=VIDEO），传输进度与文件一致。
+  Future<void> sendVideo({
+    required int conversationId,
+    required Uint8List bytes,
+    required String fileName,
+    required String mimeType,
+    required int durationSec,
+    Uint8List? thumbnailBytes,
+    int? width,
+    int? height,
+    void Function(double progress)? onProgress,
+  }) async {
+    onProgress?.call(0.02);
+    final uploaded = await uploadAttachment(
+      conversationId: conversationId,
+      bytes: bytes,
+      fileName: fileName,
+      mimeType: mimeType,
+      onProgress: (p) => onProgress?.call(0.05 + p * 0.8),
+    );
+    final url = uploaded.bestUrl;
+    final objectKey = uploaded.objectKey.trim();
+    String? previewUrl;
+    String? previewObjectKey;
+    if (thumbnailBytes != null && thumbnailBytes.isNotEmpty) {
+      try {
+        onProgress?.call(0.88);
+        final thumbName =
+            '${fileName.replaceAll(RegExp(r'\.[^.]+$'), '')}_cover.jpg';
+        final thumb = await uploadAttachment(
+          conversationId: conversationId,
+          bytes: thumbnailBytes,
+          fileName: thumbName,
+          mimeType: 'image/jpeg',
+        );
+        previewUrl = thumb.bestUrl;
+        previewObjectKey = thumb.objectKey.trim();
+      } catch (_) {}
+    }
+    onProgress?.call(0.97);
+    await _sendAttachment(
+      conversationId: conversationId,
+      kind: 'VIDEO',
+      bodyText: '[视频] $fileName',
+      payload: <String, dynamic>{
+        'url': url,
+        'objectKey': objectKey,
+        'previewUrl': previewUrl,
+        'previewObjectKey': previewObjectKey,
+        'mimeType': mimeType,
+        'fileName': fileName,
+        'size': bytes.length,
+        'durationSec': durationSec,
+        if (width != null) 'width': width,
+        if (height != null) 'height': height,
+      },
+    );
+    onProgress?.call(1.0);
   }
 
   Future<void> sendAudio({
@@ -1036,7 +1118,11 @@ class ConversationService {
                   displayName: (m['displayName'] ?? m['name'] ?? '成员')
                       .toString(),
                   role: m['role']?.toString(),
-                  roleLabel: (m['roleLabel'] ?? m['title'])?.toString(),
+                  roleLabel: m['roleLabel']?.toString(),
+                  department: (m['department'] ?? m['departmentName'])
+                      ?.toString(),
+                  title: (m['title'] ?? m['jobTitle'] ?? m['position'])
+                      ?.toString(),
                   avatarPreset:
                       (m['avatarPreset'] ?? '').toString().trim().isEmpty
                       ? null
@@ -1498,6 +1584,7 @@ class ConversationService {
     final s = text.trim();
     if (RegExp(r'^\[(相册|拍照|图片|GIF)\]', caseSensitive: false).hasMatch(s))
       return 'IMAGE';
+    if (RegExp(r'^\[视频\]').hasMatch(s)) return 'VIDEO';
     if (RegExp(r'^\[文件\]').hasMatch(s)) return 'FILE';
     if (RegExp(r'^\[语音\]').hasMatch(s)) return 'AUDIO';
     return 'TEXT';
@@ -1777,6 +1864,69 @@ class ConversationService {
       onProgress?.call(1.0);
     }
     return Uint8List.fromList(chunks);
+  }
+
+  /// IM 语音转文字：上传音频到后端，由服务端代理 SiliconFlow。
+  Future<String> transcribeVoice({
+    required Uint8List bytes,
+    required String fileName,
+  }) async {
+    if (bytes.isEmpty) throw Exception('语音文件为空');
+    final name = fileName.trim().isEmpty ? 'voice.m4a' : fileName.trim();
+    final req = http.MultipartRequest(
+      'POST',
+      _uri('/conversations/voice/transcribe'),
+    );
+    req.headers.addAll(_headers);
+    req.fields['fileName'] = name;
+    final mime = _guessAudioMime(name);
+    final parts = mime.split('/');
+    req.files.add(
+      http.MultipartFile.fromBytes(
+        'file',
+        bytes,
+        filename: name,
+        contentType: MediaType(
+          parts.isNotEmpty ? parts.first : 'audio',
+          parts.length > 1 ? parts[1] : 'mp4',
+        ),
+      ),
+    );
+    final streamed = await _client.send(req).timeout(const Duration(minutes: 2));
+    final bodyText = await streamed.stream.bytesToString();
+    if (streamed.statusCode < 200 || streamed.statusCode >= 300) {
+      var msg = '转写失败（${streamed.statusCode}）';
+      try {
+        final decoded = _decode(bodyText);
+        final m = (decoded['message'] ?? '').toString().trim();
+        if (m.isNotEmpty) msg = m;
+      } catch (_) {}
+      throw Exception(msg);
+    }
+    final body = _decode(bodyText);
+    if (body['success'] == false) {
+      throw Exception((body['message'] ?? '转写失败').toString());
+    }
+    final data = body['data'];
+    if (data is Map) {
+      final text = (data['text'] ?? '').toString().trim();
+      if (text.isNotEmpty) return text;
+    }
+    throw Exception('转写结果无效');
+  }
+
+  static String _guessAudioMime(String fileName) {
+    final lower = fileName.toLowerCase();
+    if (lower.endsWith('.mp3') || lower.endsWith('.mpeg')) return 'audio/mpeg';
+    if (lower.endsWith('.wav')) return 'audio/wav';
+    if (lower.endsWith('.webm')) return 'audio/webm';
+    if (lower.endsWith('.ogg') || lower.endsWith('.opus')) return 'audio/ogg';
+    if (lower.endsWith('.m4a') ||
+        lower.endsWith('.mp4') ||
+        lower.endsWith('.aac')) {
+      return 'audio/mp4';
+    }
+    return 'audio/mp4';
   }
 
   Future<Uint8List> loadChatMediaBytes(

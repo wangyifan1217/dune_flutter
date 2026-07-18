@@ -15,6 +15,7 @@ class NativeGroupChatPage extends StatelessWidget {
     required this.onOpenSearch,
     required this.onOpenMedia,
     required this.onOpenGroupInfo,
+    this.onOpenAiSummary,
     this.onConversationRead,
     this.autoMarkRead = false,
     this.showBackButton = true,
@@ -28,6 +29,7 @@ class NativeGroupChatPage extends StatelessWidget {
   final ValueChanged<int> onOpenSearch;
   final ValueChanged<int> onOpenMedia;
   final VoidCallback onOpenGroupInfo;
+  final ValueChanged<int>? onOpenAiSummary;
   final ValueChanged<int>? onConversationRead;
   final bool autoMarkRead;
   final bool showBackButton;
@@ -44,6 +46,7 @@ class NativeGroupChatPage extends StatelessWidget {
       onOpenSearch: onOpenSearch,
       onOpenMedia: onOpenMedia,
       onOpenGroupInfo: onOpenGroupInfo,
+      onOpenAiSummary: onOpenAiSummary,
       onConversationRead: onConversationRead,
       autoMarkRead: autoMarkRead,
       showBackButton: showBackButton,

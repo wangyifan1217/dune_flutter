@@ -15,6 +15,12 @@ abstract final class DunesColors {
   static const accentSoft = Color(0xFFE4ECEB);
   static const accentDeep = Color(0xFF1B3A3F);
   static const accentLine = Color(0xFFB8CECD);
+
+  /// 通讯 / 会议纪要等业务页主题紫（对齐 IM 入口）。
+  static const brandPurple = Color(0xFF7B5CD8);
+  static const brandPurpleSoft = Color(0xFFF3EEFA);
+  static const brandPurpleDeep = Color(0xFF6A4FA0);
+  static const brandPurpleLine = Color(0xFFC2AEE7);
   static const green = Color(0xFF5D8A4E);
   static const greenSoft = Color(0xFFEAEFDF);
   /// 会话/消息已读提示色

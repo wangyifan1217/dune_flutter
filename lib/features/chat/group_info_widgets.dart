@@ -1,19 +1,45 @@
 import 'package:flutter/material.dart';
 
+import '../../core/layout/chat_layout.dart';
 import '../../core/theme/dunes_theme.dart';
 import '../conversation/conversation_models.dart';
 import '../conversation/conversation_service.dart';
 import 'user_avatar_widget.dart';
 
-const _bgSunken = Color(0xFFE8E4D9);
+/// 企微风格浅灰底。
+const _bgPage = Color(0xFFF2F2F2);
+const _bgCard = Colors.white;
+const _rowDivider = Color(0xFFEFEFEF);
+const _textPrimary = Color(0xFF191919);
+const _textSecondary = Color(0xFF888888);
 
-/// 群信息 hero，对齐 `.group-info-hero`。
+/// PC 群信息内容左右内边距（全宽铺平，不再居中限宽）。
+const double kGroupInfoWidePadding = 24;
+
+/// 群信息页壳：宽屏全宽铺平，窄屏保持原样。
+Widget groupInfoPageShell({required Widget child}) {
+  return ColoredBox(
+    color: _bgPage,
+    child: LayoutBuilder(
+      builder: (context, constraints) {
+        final wide = isWideChatLayout(context);
+        if (!wide) return child;
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: kGroupInfoWidePadding),
+          child: child,
+        );
+      },
+    ),
+  );
+}
+
+/// 企微式群信息顶部：无渐变 hero，仅白底成员区上方的轻提示。
 class GroupInfoHero extends StatelessWidget {
   const GroupInfoHero({
     super.key,
     required this.title,
     required this.subtitle,
-    this.icon = Icons.assignment_outlined,
+    this.icon = Icons.groups_outlined,
   });
 
   final String title;
@@ -24,70 +50,26 @@ class GroupInfoHero extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(14, 16, 14, 14),
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [DunesColors.accentDeep, DunesColors.accent],
-        ),
-      ),
-      child: Stack(
-        clipBehavior: Clip.none,
+      color: _bgCard,
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+      child: Column(
         children: [
-          Positioned(
-            top: -40,
-            right: -30,
-            child: Container(
-              width: 160,
-              height: 160,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: RadialGradient(
-                  colors: [Colors.white.withValues(alpha: 0.16), Colors.transparent],
-                  stops: const [0.0, 0.65],
-                ),
-              ),
+          Text(
+            title,
+            textAlign: TextAlign.center,
+            style: DunesTypography.sans(
+              fontSize: 17,
+              fontWeight: FontWeight.w600,
+              color: _textPrimary,
             ),
           ),
-          Align(
-            alignment: Alignment.center,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 54,
-                  height: 54,
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.18),
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: Colors.white.withValues(alpha: 0.22)),
-                  ),
-                  child: Icon(icon, color: Colors.white, size: 24),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  title,
-                  textAlign: TextAlign.center,
-                  style: DunesTypography.sans(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.white,
-                    letterSpacing: -0.01 * 14,
-                    height: 1.3,
-                  ),
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  subtitle,
-                  textAlign: TextAlign.center,
-                  style: DunesTypography.mono(
-                    fontSize: 9.5,
-                    color: Colors.white.withValues(alpha: 0.7),
-                    letterSpacing: 0.02 * 9.5,
-                  ),
-                ),
-              ],
+          const SizedBox(height: 6),
+          Text(
+            subtitle,
+            textAlign: TextAlign.center,
+            style: DunesTypography.sans(
+              fontSize: 12,
+              color: _textSecondary,
             ),
           ),
         ],
@@ -96,7 +78,7 @@ class GroupInfoHero extends StatelessWidget {
   }
 }
 
-/// 对齐 `.gi-section`。
+/// 区块间距（企微灰条）。
 class GroupInfoSectionLabel extends StatelessWidget {
   const GroupInfoSectionLabel(this.label, {super.key});
 
@@ -105,41 +87,22 @@ class GroupInfoSectionLabel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (label.trim().isEmpty) {
-      return Container(
-        height: 8,
-        decoration: const BoxDecoration(
-          color: _bgSunken,
-          border: Border(
-            top: BorderSide(color: DunesColors.borderSoft),
-            bottom: BorderSide(color: DunesColors.borderSoft),
-          ),
-        ),
-      );
+      return const SizedBox(height: 10);
     }
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(11, 9, 11, 7),
-      decoration: const BoxDecoration(
-        color: _bgSunken,
-        border: Border(
-          top: BorderSide(color: DunesColors.borderSoft),
-          bottom: BorderSide(color: DunesColors.borderSoft),
-        ),
-      ),
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
       child: Text(
-        label.toUpperCase(),
-        style: DunesTypography.mono(
-          fontSize: 8.5,
-          fontWeight: FontWeight.w700,
-          color: DunesColors.text3,
-          letterSpacing: 0.06 * 8.5,
+        label,
+        style: DunesTypography.sans(
+          fontSize: 13,
+          color: _textSecondary,
         ),
       ),
     );
   }
 }
 
-/// 对齐 `.gi-row`。
+/// 企微式设置行：左文案，右值/开关 + 箭头。
 class GroupInfoRow extends StatelessWidget {
   const GroupInfoRow({
     super.key,
@@ -161,24 +124,10 @@ class GroupInfoRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final row = Container(
-      padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 11),
-      decoration: const BoxDecoration(
-        color: DunesColors.bgApp,
-        border: Border(bottom: BorderSide(color: DunesColors.borderSoft)),
-      ),
+      color: _bgCard,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       child: Row(
         children: [
-          Container(
-            width: 28,
-            height: 28,
-            decoration: BoxDecoration(
-              color: accentIcon ? DunesColors.accentSoft : DunesColors.bgSoft,
-              borderRadius: BorderRadius.circular(7),
-              border: Border.all(color: accentIcon ? DunesColors.accentLine : DunesColors.borderSoft),
-            ),
-            child: Icon(icon, size: 14, color: accentIcon ? DunesColors.accentDeep : DunesColors.text2),
-          ),
-          const SizedBox(width: 10),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -186,18 +135,19 @@ class GroupInfoRow extends StatelessWidget {
                 Text(
                   title,
                   style: DunesTypography.sans(
-                    fontSize: 11.5,
-                    fontWeight: FontWeight.w500,
-                    color: DunesColors.text,
-                    letterSpacing: -0.005 * 11.5,
-                    height: 1.3,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w400,
+                    color: _textPrimary,
                   ),
                 ),
                 if (subtitle != null && subtitle!.isNotEmpty) ...[
-                  const SizedBox(height: 1),
+                  const SizedBox(height: 3),
                   Text(
                     subtitle!,
-                    style: DunesTypography.mono(fontSize: 9, color: DunesColors.text3, letterSpacing: 0.02 * 9),
+                    style: DunesTypography.sans(
+                      fontSize: 12,
+                      color: _textSecondary,
+                    ),
                   ),
                 ],
               ],
@@ -207,15 +157,21 @@ class GroupInfoRow extends StatelessWidget {
         ],
       ),
     );
-    if (onTap == null) return row;
+    final bordered = DecoratedBox(
+      decoration: const BoxDecoration(
+        color: _bgCard,
+        border: Border(bottom: BorderSide(color: _rowDivider, width: 0.5)),
+      ),
+      child: row,
+    );
+    if (onTap == null) return bordered;
     return Material(
-      color: Colors.transparent,
-      child: InkWell(onTap: onTap, child: row),
+      color: _bgCard,
+      child: InkWell(onTap: onTap, child: bordered),
     );
   }
 }
 
-/// 对齐 `.toggle`。
 class GroupInfoToggle extends StatelessWidget {
   const GroupInfoToggle({super.key, required this.value});
 
@@ -225,24 +181,29 @@ class GroupInfoToggle extends StatelessWidget {
   Widget build(BuildContext context) {
     return AnimatedContainer(
       duration: const Duration(milliseconds: 150),
-      width: 32,
-      height: 18,
+      width: 46,
+      height: 28,
+      padding: const EdgeInsets.all(2),
       decoration: BoxDecoration(
-        color: value ? DunesColors.accent : DunesColors.bgSoft,
-        borderRadius: BorderRadius.circular(9),
-        border: Border.all(color: value ? DunesColors.accent : DunesColors.border),
+        color: value ? const Color(0xFF07C160) : const Color(0xFFE5E5E5),
+        borderRadius: BorderRadius.circular(14),
       ),
       child: AnimatedAlign(
         duration: const Duration(milliseconds: 150),
         alignment: value ? Alignment.centerRight : Alignment.centerLeft,
         child: Container(
-          width: 14,
-          height: 14,
-          margin: const EdgeInsets.symmetric(horizontal: 1),
+          width: 24,
+          height: 24,
           decoration: BoxDecoration(
             color: Colors.white,
             shape: BoxShape.circle,
-            boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 2, offset: const Offset(0, 1))],
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.12),
+                blurRadius: 2,
+                offset: const Offset(0, 1),
+              ),
+            ],
           ),
         ),
       ),
@@ -257,12 +218,12 @@ class GroupInfoChevron extends StatelessWidget {
   Widget build(BuildContext context) {
     return const Padding(
       padding: EdgeInsets.only(left: 4),
-      child: Icon(Icons.chevron_right_rounded, size: 16, color: DunesColors.text3),
+      child: Icon(Icons.chevron_right_rounded, size: 18, color: Color(0xFFC7C7C7)),
     );
   }
 }
 
-/// 对齐 `.gi-member-grid`。
+/// 企微式成员网格；PC 宽屏固定单元格，避免拉伸。
 class GroupInfoMemberGrid extends StatelessWidget {
   const GroupInfoMemberGrid({
     super.key,
@@ -276,6 +237,9 @@ class GroupInfoMemberGrid extends StatelessWidget {
     this.onRemove,
   });
 
+  static const double cellWidth = 64;
+  static const double cellGap = 12;
+
   final List<NativeGroupMember> members;
   final int selfUserId;
   final ConversationService avatarService;
@@ -287,48 +251,50 @@ class GroupInfoMemberGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(11, 10, 11, 10),
-      decoration: const BoxDecoration(
-        color: DunesColors.bgApp,
-        border: Border(bottom: BorderSide(color: DunesColors.borderSoft)),
-      ),
-      child: GridView.builder(
-        shrinkWrap: true,
-        physics: const NeverScrollableScrollPhysics(),
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 5,
-          mainAxisSpacing: 9,
-          crossAxisSpacing: 9,
-          childAspectRatio: 0.72,
+    final cells = <Widget>[
+      for (final m in members)
+        SizedBox(
+          width: cellWidth,
+          child: _MemberCell(
+            label: m.displayName,
+            seed: m.userId,
+            avatarPreset: m.avatarPreset,
+            avatarObjectKey: m.avatarObjectKey,
+            avatarService: avatarService,
+            isOwner: m.isOwner,
+            isSelf: m.userId == selfUserId,
+            onTap: onMemberTap == null ? null : () => onMemberTap!(m),
+          ),
         ),
-        itemCount: members.length + (showAdd ? 1 : 0) + (showRemove ? 1 : 0),
-        itemBuilder: (_, i) {
-          var idx = i;
-          if (idx < members.length) {
-            final m = members[idx];
-            return _MemberCell(
-              label: m.displayName,
-              seed: m.userId,
-              avatarPreset: m.avatarPreset,
-              avatarObjectKey: m.avatarObjectKey,
-              avatarService: avatarService,
-              suffix: m.userId == selfUserId ? '·我' : null,
-              onTap: onMemberTap == null ? null : () => onMemberTap!(m),
-            );
-          }
-          idx -= members.length;
-          if (showAdd && idx == 0) {
-            return _ActionMemberCell(icon: Icons.add, label: '添加', dashed: true, onTap: onAdd);
-          }
-          return _ActionMemberCell(
+      if (showAdd)
+        SizedBox(
+          width: cellWidth,
+          child: _ActionMemberCell(
+            icon: Icons.add,
+            label: '添加',
+            onTap: onAdd,
+          ),
+        ),
+      if (showRemove)
+        SizedBox(
+          width: cellWidth,
+          child: _ActionMemberCell(
             icon: Icons.remove,
             label: '移除',
-            dashed: true,
-            danger: true,
             onTap: onRemove,
-          );
-        },
+          ),
+        ),
+    ];
+
+    return Container(
+      width: double.infinity,
+      color: _bgCard,
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+      child: Wrap(
+        spacing: cellGap,
+        runSpacing: 14,
+        crossAxisAlignment: WrapCrossAlignment.start,
+        children: cells,
       ),
     );
   }
@@ -341,7 +307,8 @@ class _MemberCell extends StatelessWidget {
     required this.avatarService,
     this.avatarPreset,
     this.avatarObjectKey,
-    this.suffix,
+    this.isOwner = false,
+    this.isSelf = false,
     this.onTap,
   });
 
@@ -350,7 +317,8 @@ class _MemberCell extends StatelessWidget {
   final ConversationService avatarService;
   final String? avatarPreset;
   final String? avatarObjectKey;
-  final String? suffix;
+  final bool isOwner;
+  final bool isSelf;
   final VoidCallback? onTap;
 
   @override
@@ -360,40 +328,39 @@ class _MemberCell extends StatelessWidget {
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
           ImUserAvatar(
             initial: initial,
             seed: seed,
-            size: 38,
+            size: 48,
             avatarPreset: avatarPreset,
             avatarObjectKey: avatarObjectKey,
             avatarService: avatarService,
-            borderRadius: 38 * 0.18,
+            borderRadius: 6,
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: 6),
           SizedBox(
-            width: 48,
-            child: RichText(
+            width: 56,
+            child: Text(
+              label,
               textAlign: TextAlign.center,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              text: TextSpan(
-                style: DunesTypography.sans(fontSize: 9.5, fontWeight: FontWeight.w500, color: DunesColors.text2),
-                children: [
-                  TextSpan(text: label),
-                  if (suffix != null)
-                    TextSpan(
-                      text: suffix,
-                      style: DunesTypography.sans(
-                        fontSize: 7,
-                        fontWeight: FontWeight.w700,
-                        color: DunesColors.accent,
-                      ),
-                    ),
-                ],
+              style: DunesTypography.sans(
+                fontSize: 12,
+                color: _textPrimary,
               ),
             ),
           ),
+          if (isOwner || isSelf)
+            Text(
+              isOwner ? '群主' : '我',
+              style: DunesTypography.sans(
+                fontSize: 10,
+                color: _textSecondary,
+              ),
+            ),
         ],
       ),
     );
@@ -404,15 +371,11 @@ class _ActionMemberCell extends StatelessWidget {
   const _ActionMemberCell({
     required this.icon,
     required this.label,
-    this.dashed = false,
-    this.danger = false,
     this.onTap,
   });
 
   final IconData icon;
   final String label;
-  final bool dashed;
-  final bool danger;
   final VoidCallback? onTap;
 
   @override
@@ -421,29 +384,24 @@ class _ActionMemberCell extends StatelessWidget {
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
           Container(
-            width: 38,
-            height: 38,
+            width: 48,
+            height: 48,
             decoration: BoxDecoration(
-              color: DunesColors.bgSoft,
-              shape: BoxShape.circle,
-              border: dashed
-                  ? Border.all(
-                      color: danger ? DunesColors.coral : DunesColors.border,
-                      width: 1.5,
-                      strokeAlign: BorderSide.strokeAlignInside,
-                    )
-                  : null,
+              color: const Color(0xFFF7F7F7),
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(color: const Color(0xFFE5E5E5)),
             ),
-            child: Icon(icon, size: 18, color: danger ? DunesColors.coral : DunesColors.text3),
+            child: Icon(icon, size: 22, color: _textSecondary),
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: 6),
           Text(
             label,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: DunesTypography.sans(fontSize: 9.5, fontWeight: FontWeight.w500, color: DunesColors.text2),
+            style: DunesTypography.sans(fontSize: 12, color: _textPrimary),
           ),
         ],
       ),
@@ -451,7 +409,6 @@ class _ActionMemberCell extends StatelessWidget {
   }
 }
 
-/// 对齐 `.gi-danger`。
 class GroupInfoDangerRow extends StatelessWidget {
   const GroupInfoDangerRow({super.key, required this.label, required this.onTap});
 
@@ -460,24 +417,23 @@ class GroupInfoDangerRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: DunesColors.bgApp,
-      child: InkWell(
-        onTap: onTap,
-        child: Container(
-          width: double.infinity,
-          padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 11),
-          alignment: Alignment.center,
-          decoration: const BoxDecoration(
-            border: Border(bottom: BorderSide(color: DunesColors.borderSoft)),
-          ),
-          child: Text(
-            label,
-            style: DunesTypography.sans(
-              fontSize: 11.5,
-              fontWeight: FontWeight.w500,
-              color: DunesColors.coral,
-              letterSpacing: -0.005 * 11.5,
+    return Padding(
+      padding: const EdgeInsets.only(top: 10),
+      child: Material(
+        color: _bgCard,
+        child: InkWell(
+          onTap: onTap,
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
+            alignment: Alignment.center,
+            child: Text(
+              label,
+              style: DunesTypography.sans(
+                fontSize: 16,
+                fontWeight: FontWeight.w400,
+                color: const Color(0xFFFA5151),
+              ),
             ),
           ),
         ),
@@ -498,16 +454,17 @@ List<NativeGroupMember> sortGroupMembers(List<NativeGroupMember> members) {
 String groupInfoHeroSubtitle(NativeGroupInfo info) {
   final bits = <String>[];
   if (info.dissolved) bits.add('已解散');
-  bits.add(info.kindLabel);
-  if (info.createdAt != null) {
-    final d = info.createdAt!.toLocal();
-    final date = '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
-    bits.add('创建于 $date');
-  }
+  bits.add('${info.members.length} 名成员');
   return bits.join(' · ');
 }
 
 IconData groupInfoHeroIcon(String kind) {
-  if (kind == 'WORKGROUP_APPROVAL') return Icons.assignment_outlined;
-  return Icons.groups_outlined;
+  switch (kind.toUpperCase()) {
+    case 'APPROVAL':
+      return Icons.assignment_outlined;
+    case 'BROADCAST':
+      return Icons.campaign_outlined;
+    default:
+      return Icons.groups_outlined;
+  }
 }

@@ -1,13 +1,11 @@
 import 'package:flutter/material.dart';
 
 import '../../core/navigation/navigation_controller.dart';
-import '../../core/platform/desktop_features.dart';
 import '../../core/theme/dunes_theme.dart';
 import '../conversation/comm_unread_notifier.dart';
 import '../workbench/workbench_badge_notifier.dart';
-import 'dunes_toast.dart';
 
-/// 底部主 Tab：通讯 · 千机 · 灯塔 · 我的。
+/// 底部主 Tab：通讯 · 千机 · 灯塔 · 我的；PC 竖栏末尾另有「工作台」。
 /// 此为 Tab 内容区高度；iOS Home Indicator 的安全区由组件自身额外处理。
 const double kDunesMainTabBarHeight = 64;
 
@@ -22,6 +20,8 @@ class DunesMainTabBar extends StatefulWidget {
     this.commUnread,
     this.workbenchBadge,
     this.lighthouseAccess = false,
+    this.qianjiAccess = false,
+    this.qianjiAdminAccess = false,
     this.chatOnlyMode = false,
     this.axis = Axis.horizontal,
     this.onSwitchMainTab,
@@ -32,6 +32,8 @@ class DunesMainTabBar extends StatefulWidget {
   final CommUnreadNotifier? commUnread;
   final WorkbenchBadgeNotifier? workbenchBadge;
   final bool lighthouseAccess;
+  final bool qianjiAccess;
+  final bool qianjiAdminAccess;
   final bool chatOnlyMode;
 
   /// [Axis.horizontal]：底部横栏（移动端）；[Axis.vertical]：左侧竖栏（PC）。
@@ -80,8 +82,8 @@ class _DunesMainTabBarState extends State<DunesMainTabBar> {
 
   bool get _showMyDot => (widget.workbenchBadge?.pendingForMe ?? 0) > 0;
 
-  /// 外部用户或桌面端：不展示千机 / 灯塔。
-  bool get _hideWorkbenchTabs => widget.chatOnlyMode || isDesktopCommOnly;
+  /// 外部用户：不展示千机 / 灯塔 / 工作台。
+  bool get _hideWorkbenchTabs => widget.chatOnlyMode;
 
   bool get _isVertical => widget.axis == Axis.vertical;
 
@@ -92,20 +94,26 @@ class _DunesMainTabBarState extends State<DunesMainTabBar> {
       screen: 'C1',
       showRedDot: _showCommDot,
     ),
-    if (!_hideWorkbenchTabs) ...[
+    if (!_hideWorkbenchTabs)
       _tab(
         icon: Icons.grid_view_rounded,
         label: '千机',
-        onTap: () => showDunesSoonToast(context),
+        screen: 'QJ',
       ),
+    if (!_hideWorkbenchTabs)
       _tab(icon: Icons.explore_outlined, label: '灯塔', screen: 'LH'),
-    ],
     _tab(
       icon: Icons.person_outline_rounded,
       label: '我的',
       screen: 'B2',
       showRedDot: widget.chatOnlyMode ? false : _showMyDot,
     ),
+    if (_isVertical && !_hideWorkbenchTabs)
+      _tab(
+        icon: Icons.apps_rounded,
+        label: '工作台',
+        screen: 'QJA',
+      ),
   ];
 
   @override

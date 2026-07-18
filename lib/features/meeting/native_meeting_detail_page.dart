@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as math;
 
@@ -578,7 +578,7 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
                       : Icons.cloud_upload_outlined,
                   size: 20,
                   color: stale
-                      ? DunesColors.accentDeep
+                      ? DunesColors.brandPurpleDeep
                       : uploaded
                       ? DunesColors.readReceipt
                       : null,
@@ -881,7 +881,7 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
       decoration: BoxDecoration(
         color: failed
             ? DunesColors.coral.withValues(alpha: 0.08)
-            : DunesColors.accentSoft,
+            : DunesColors.brandPurpleSoft,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
           color: failed
@@ -929,7 +929,7 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
                     minHeight: 4,
                     backgroundColor: DunesColors.borderSoft,
                     valueColor: const AlwaysStoppedAnimation<Color>(
-                      DunesColors.accent,
+                      DunesColors.brandPurple,
                     ),
                   ),
                 ],
@@ -1023,7 +1023,7 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
                                   : Icons.check_circle_outline,
                               size: 14,
                               color: _isKbUploadStale(d)
-                                  ? DunesColors.accentDeep
+                                  ? DunesColors.brandPurpleDeep
                                   : DunesColors.readReceipt,
                             ),
                             const SizedBox(width: 4),
@@ -1034,7 +1034,7 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
                               style: DunesTypography.sans(
                                 fontSize: 12,
                                 color: _isKbUploadStale(d)
-                                    ? DunesColors.accentDeep
+                                    ? DunesColors.brandPurpleDeep
                                     : DunesColors.readReceipt,
                               ),
                             ),
@@ -1062,7 +1062,7 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
                         style: DunesTypography.sans(
                           fontSize: 14,
                           color: d.status.toUpperCase() == 'DRAFT'
-                              ? DunesColors.accentDeep
+                              ? DunesColors.brandPurpleDeep
                               : DunesColors.text2,
                           height: 1.7,
                         ),
@@ -1193,7 +1193,7 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
                       : const Icon(Icons.play_arrow_rounded),
                   label: Text(_startingTranscription ? '启动中...' : '开始转写并生成纪要'),
                   style: FilledButton.styleFrom(
-                    backgroundColor: DunesColors.accent,
+                    backgroundColor: DunesColors.brandPurple,
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     shape: RoundedRectangleBorder(
@@ -1215,8 +1215,8 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
                       : const Icon(Icons.refresh_rounded),
                   label: Text(_regenerating ? '处理中...' : _regenerateLabel(d)),
                   style: OutlinedButton.styleFrom(
-                    foregroundColor: DunesColors.accentDeep,
-                    side: const BorderSide(color: DunesColors.accentLine),
+                    foregroundColor: DunesColors.brandPurpleDeep,
+                    side: const BorderSide(color: DunesColors.brandPurpleLine),
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
@@ -1263,7 +1263,7 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
                     minHeight: 6,
                     backgroundColor: Colors.white24,
                     valueColor: const AlwaysStoppedAnimation<Color>(
-                      DunesColors.accentLine,
+                      DunesColors.brandPurpleLine,
                     ),
                   ),
                 ),
@@ -1309,7 +1309,7 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
             FilledButton(
               onPressed: _load,
               style: FilledButton.styleFrom(
-                backgroundColor: DunesColors.accent,
+                backgroundColor: DunesColors.brandPurple,
                 foregroundColor: Colors.white,
               ),
               child: const Text('重新加载'),
@@ -1350,7 +1350,7 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
             FilledButton(
               onPressed: _load,
               style: FilledButton.styleFrom(
-                backgroundColor: DunesColors.accent,
+                backgroundColor: DunesColors.brandPurple,
                 foregroundColor: Colors.white,
               ),
               child: const Text('重试'),
@@ -1379,12 +1379,12 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
                 width: 48,
                 height: 48,
                 decoration: BoxDecoration(
-                  color: DunesColors.accentSoft,
+                  color: DunesColors.brandPurpleSoft,
                   borderRadius: BorderRadius.circular(14),
                 ),
                 child: const Icon(
                   Icons.mic_rounded,
-                  color: DunesColors.accent,
+                  color: DunesColors.brandPurple,
                   size: 26,
                 ),
               ),
@@ -1440,7 +1440,7 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
                 value: (d!.asrProgress.clamp(0, 100)) / 100,
                 minHeight: 6,
                 backgroundColor: DunesColors.bgSoft,
-                color: DunesColors.accent,
+                color: DunesColors.brandPurple,
               ),
             ),
             const SizedBox(height: 6),
@@ -1472,7 +1472,7 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
             builder: (context, snapshot) {
               final playing = snapshot.data?.playing ?? false;
               return Material(
-                color: DunesColors.accent,
+                color: DunesColors.brandPurple,
                 borderRadius: BorderRadius.circular(999),
                 child: InkWell(
                   borderRadius: BorderRadius.circular(999),
@@ -1566,7 +1566,7 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
           IconButton(
             onPressed: _downloadingAudio ? null : _downloadAudio,
             icon: const Icon(Icons.download_rounded),
-            color: DunesColors.accent,
+            color: DunesColors.brandPurple,
             tooltip: '下载录音',
           ),
         ],
@@ -1593,7 +1593,7 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
         children: [
           Row(
             children: [
-              Icon(icon, size: 18, color: DunesColors.accent),
+              Icon(icon, size: 18, color: DunesColors.brandPurple),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(

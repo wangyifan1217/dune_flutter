@@ -21,7 +21,6 @@ import '../chat/native_group_chat_page.dart';
 import '../chat/native_group_info_page.dart';
 import '../chat/native_group_media_page.dart';
 import '../chat/native_message_center_page.dart';
-import '../chat/native_new_chat_page.dart';
 import '../chat/native_private_chat_page.dart';
 import '../contacts/contact_models.dart';
 import '../contacts/native_contact_profile_page.dart';
@@ -56,6 +55,17 @@ import '../nova/nova_background_coordinator.dart';
 import '../nova/nova_web_storage.dart';
 import '../push/push_service.dart';
 import '../conversation/message_preview_text.dart';
+import '../qianji/native_qianji_detail_page.dart';
+import '../qianji/native_qianji_hub_page.dart';
+import '../qianji/native_qianji_iteration_page.dart';
+import '../qianji/native_qianji_my_perf_page.dart';
+import '../qianji/native_qianji_project_tasks_page.dart';
+import '../qianji/native_qianji_projects_page.dart';
+import '../qianji/native_qianji_task_detail_page.dart';
+import '../qianji/native_qianji_team_perf_page.dart';
+import '../qianji/qianji_models.dart';
+import '../qianji/qianji_project_models.dart';
+import '../qianji_admin/native_qianji_admin_shell.dart';
 import '../shell/dunes_main_tab_bar.dart';
 import '../shell/dunes_toast.dart';
 import '../update/app_update_dialog.dart';
@@ -74,6 +84,9 @@ import '../meeting/native_meeting_detail_page.dart';
 import '../meeting/native_meeting_list_page.dart';
 import '../meeting/native_meeting_service.dart';
 import '../wechat/native_wechat_bot_page.dart';
+import '../ai_summary/native_ai_summary_create_page.dart';
+import '../ai_summary/native_ai_summary_detail_page.dart';
+import '../ai_summary/native_ai_summary_hub_page.dart';
 
 class NativeScreenHost extends StatefulWidget {
   const NativeScreenHost({
@@ -103,7 +116,10 @@ class _NativeScreenHostState extends State<NativeScreenHost>
   NativeConversation? _selectedGroup;
   NativeConversation? _selectedBroadcast;
   NativeContact? _selectedContact;
+  bool _contactsGroupPickMode = false;
   int? _selectedPrivatePeerUserId;
+  int? _selectedAiSummaryId;
+  List<int> _aiSummaryPrefillConversationIds = const <int>[];
   int _searchConversationId = 0;
   String _searchTitle = '聊天搜索';
   String _searchReturnScreen = 'C5';
@@ -132,6 +148,10 @@ class _NativeScreenHostState extends State<NativeScreenHost>
   String? _b14InitialFilter;
   int _meetingId = 0;
   String _lastMyScreen = 'B2';
+  QianjiEntity? _selectedQianjiEntity;
+  QianjiIteration? _selectedQianjiIteration;
+  QianjiProjectItem? _selectedQianjiProject;
+  QianjiTaskItem? _selectedQianjiTask;
   final ConversationRealtimeDedup _commBadgeDedup = ConversationRealtimeDedup();
   StreamSubscription<ConversationRealtimeEvent>? _commBadgeRtSub;
   Timer? _commBadgeRefreshDebounce;
@@ -147,16 +167,82 @@ class _NativeScreenHostState extends State<NativeScreenHost>
   /// 用户本次前台会话内主动点进聊天；切后台后清零，避免 resume 误触已读。
   bool _userActivelyInChat = false;
 
+  /// 已上报给服务端的「正在查看」会话，用于抑制该会话 APP TPNS。
+  int _reportedActiveViewConvId = 0;
+  Timer? _activeViewHeartbeat;
+
   /// mark-read 成功后通知双栏列表清零对应未读角标。
   final ConversationReadSignal _conversationReadSignal =
       ConversationReadSignal();
 
   void _markUserEnteredChat() {
     _userActivelyInChat = true;
+    _syncActiveViewReport();
   }
 
   void _markUserLeftChat() {
     _userActivelyInChat = false;
+    _syncActiveViewReport();
+  }
+
+  /// 当前打开的会话 id（不判断窗口前后台）。
+  int? _peekViewingConversationId() {
+    final dualId = _dualPaneSelectedConversationId;
+    if (dualId != null && dualId > 0) return dualId;
+    final screen = widget.navigation.currentScreen;
+    if (screen == 'C5') {
+      final id = _selectedPrivate?.id ?? 0;
+      return id > 0 ? id : null;
+    }
+    if (screen == 'C2') {
+      final id = _selectedGroup?.id ?? 0;
+      return id > 0 ? id : null;
+    }
+    if (screen == 'C10') {
+      final id = _selectedBroadcast?.id ?? 0;
+      return id > 0 ? id : null;
+    }
+    return null;
+  }
+
+  void _syncActiveViewReport() {
+    final shouldReport =
+        _userActivelyInChat && !windowsTrayIsWindowInactive();
+    final nextId = shouldReport ? (_peekViewingConversationId() ?? 0) : 0;
+    final prevId = _reportedActiveViewConvId;
+    if (nextId == prevId) {
+      if (nextId > 0 && _activeViewHeartbeat == null) {
+        _startActiveViewHeartbeat();
+      }
+      return;
+    }
+    final service = ConversationService(session: widget.session);
+    if (prevId > 0) {
+      unawaited(service.clearActiveView(prevId));
+    }
+    _reportedActiveViewConvId = nextId;
+    _activeViewHeartbeat?.cancel();
+    _activeViewHeartbeat = null;
+    if (nextId > 0) {
+      unawaited(service.reportActiveView(nextId));
+      _startActiveViewHeartbeat();
+    }
+  }
+
+  void _startActiveViewHeartbeat() {
+    _activeViewHeartbeat?.cancel();
+    _activeViewHeartbeat = Timer.periodic(const Duration(seconds: 25), (_) {
+      final id = _reportedActiveViewConvId;
+      if (id <= 0 ||
+          !_userActivelyInChat ||
+          windowsTrayIsWindowInactive()) {
+        _syncActiveViewReport();
+        return;
+      }
+      unawaited(
+        ConversationService(session: widget.session).reportActiveView(id),
+      );
+    });
   }
 
   @override
@@ -181,6 +267,34 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       ),
     );
     registerPushLifecycleObserver();
+    setWindowsTrayOnInactiveChanged(_onDesktopWindowInactiveChanged);
+  }
+
+  void _onDesktopWindowInactiveChanged(bool inactive) {
+    if (!mounted) return;
+    if (inactive) {
+      // 最小化/失焦/托盘：停止 autoMarkRead，避免后台把消息标成已读。
+      if (_userActivelyInChat) {
+        setState(() => _userActivelyInChat = false);
+      } else {
+        _userActivelyInChat = false;
+      }
+      _syncActiveViewReport();
+      _scheduleCommBadgeRefresh();
+      return;
+    }
+    // 恢复前台且仍停在会话页时，重新允许已读上报。
+    final screen = widget.navigation.currentScreen;
+    final onChat =
+        screen == 'C5' ||
+        screen == 'C2' ||
+        screen == 'C10' ||
+        (_dualPaneSelectedConversationId ?? 0) > 0;
+    if (onChat && !_userActivelyInChat) {
+      setState(() => _userActivelyInChat = true);
+    }
+    _syncActiveViewReport();
+    _scheduleCommBadgeRefresh();
   }
 
   void _requestCommBadgeRefreshFromServer() {
@@ -199,13 +313,36 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       } else {
         _userActivelyInChat = false;
       }
+      _syncActiveViewReport();
+    } else if (state == AppLifecycleState.resumed) {
+      final screen = widget.navigation.currentScreen;
+      final onChat =
+          screen == 'C5' ||
+          screen == 'C2' ||
+          screen == 'C10' ||
+          (_dualPaneSelectedConversationId ?? 0) > 0;
+      if (onChat && !_userActivelyInChat) {
+        setState(() => _userActivelyInChat = true);
+      }
+      _syncActiveViewReport();
     }
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    setWindowsTrayOnInactiveChanged(null);
     setPushBadgeRefreshHandler(null);
+    _activeViewHeartbeat?.cancel();
+    _activeViewHeartbeat = null;
+    if (_reportedActiveViewConvId > 0) {
+      unawaited(
+        ConversationService(
+          session: widget.session,
+        ).clearActiveView(_reportedActiveViewConvId),
+      );
+      _reportedActiveViewConvId = 0;
+    }
     _commBadgeRefreshDebounce?.cancel();
     _commBadgeRecorrectTimer?.cancel();
     _workbenchBadgeRefreshDebounce?.cancel();
@@ -244,9 +381,40 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       'read',
       'conversation_updated',
       'notification',
+      'ai_summary_updated',
     };
     if (!relevant.contains(event.type)) return;
     if (!_commBadgeDedup.consume(event)) return;
+
+    // 智能总结完成：写入了 notification，刷新 Tab 红点；未在总结页时补推送。
+    if (event.type == 'ai_summary_updated') {
+      final data = event.raw['data'];
+      final map = data is Map ? data : event.raw;
+      final status = (map['status'] ?? '').toString().toUpperCase();
+      if (status == 'SUCCESS') {
+        final onSummary = const <String>{'AS1', 'AS2', 'AS3'}
+            .contains(widget.navigation.currentScreen);
+        if (!onSummary) {
+          final theme = (map['theme'] ?? '').toString().trim();
+          final body = (map['body'] ?? map['preview'] ?? '总结已更新').toString();
+          notifyPushRealtimeMessage(
+            title: '智能总结',
+            body: theme.isEmpty ? body : '「$theme」总结已更新',
+          );
+          windowsTrayNotifyIncomingMessage();
+        } else {
+          // 正在看总结页：直接消未读，避免红点残留。
+          unawaited(
+            NotificationService(session: widget.session)
+                .markAiSummaryNotificationsRead()
+                .whenComplete(_scheduleCommBadgeRefresh),
+          );
+          return;
+        }
+      }
+      _scheduleCommBadgeRefresh();
+      return;
+    }
 
     if (event.type == 'read') {
       final userId = (event.raw['userId'] as num?)?.toInt() ?? 0;
@@ -345,6 +513,20 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       _pendingBadgeZeroSync = true;
       _commUnread.clearMutedMention(conversationId);
       _conversationReadSignal.notifyRead(conversationId);
+      // 按 peer 打开私聊时 Host 可能尚无 conversationId；已读回调补一次 active-view。
+      if (_userActivelyInChat &&
+          !windowsTrayIsWindowInactive() &&
+          (_peekViewingConversationId() ?? 0) <= 0 &&
+          _reportedActiveViewConvId != conversationId) {
+        final prev = _reportedActiveViewConvId;
+        final service = ConversationService(session: widget.session);
+        if (prev > 0) unawaited(service.clearActiveView(prev));
+        _reportedActiveViewConvId = conversationId;
+        unawaited(service.reportActiveView(conversationId));
+        _startActiveViewHeartbeat();
+      } else {
+        _syncActiveViewReport();
+      }
     }
     print(
       '[Badge] handleConversationRead conv=$conversationId pendingZero=$_pendingBadgeZeroSync',
@@ -474,6 +656,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
 
   /// 当前正在查看的会话（双栏选中 / 窄屏聊天页），角标汇总时应视为已读。
   int? _activeViewingConversationId() {
+    // 窗口后台时不能把当前会话当已读，否则未读角标/托盘提示会被清掉。
+    if (windowsTrayIsWindowInactive()) return null;
     final dualId = _dualPaneSelectedConversationId;
     if (dualId != null && dualId > 0) return dualId;
     final screen = widget.navigation.currentScreen;
@@ -655,6 +839,16 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     widget.navigation.popTo('C1');
   }
 
+  void _openAiSummaryCreate({int? conversationId}) {
+    setState(() {
+      _aiSummaryPrefillConversationIds =
+          conversationId != null && conversationId > 0
+          ? <int>[conversationId]
+          : const <int>[];
+    });
+    widget.navigation.go('AS2');
+  }
+
   int? get _dualPaneSelectedConversationId {
     final chatScreen = _dualPaneChatScreen;
     if (chatScreen == 'C5') return _selectedPrivate?.id;
@@ -687,7 +881,10 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       conversationReadSignal: _conversationReadSignal,
       onOpenPrivate: _openPrivateConversation,
       onOpenGroup: _openGroupConversation,
-      onOpenContacts: () => widget.navigation.go('C3'),
+      onOpenContacts: () {
+        setState(() => _contactsGroupPickMode = false);
+        widget.navigation.go('C3');
+      },
       onOpenNova: () {
         NovaBackgroundCoordinator.instance.clearPendingCommBadgeBump();
         setState(() {
@@ -697,7 +894,11 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         widget.navigation.go('C4');
       },
       onOpenNotifications: () => widget.navigation.go('Z2'),
-      onOpenNewChat: () => widget.navigation.go('C7'),
+      onOpenNewChat: () {
+        setState(() => _contactsGroupPickMode = true);
+        widget.navigation.go('C3');
+      },
+      onOpenAiSummary: () => widget.navigation.go('AS1'),
     );
   }
 
@@ -731,6 +932,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
             widget.navigation.go('C13');
           },
           onOpenGroupInfo: () => widget.navigation.go('C6'),
+          onOpenAiSummary: (convId) => _openAiSummaryCreate(conversationId: convId),
           onConversationRead: _handleConversationRead,
         );
       case 'C5':
@@ -772,6 +974,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
             });
             widget.navigation.go('C12');
           },
+          onOpenAiSummary: (convId) => _openAiSummaryCreate(conversationId: convId),
           onConversationRead: _handleConversationRead,
         );
       case 'C1':
@@ -793,6 +996,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         commUnread: _commUnread,
         workbenchBadge: _workbenchBadge,
         lighthouseAccess: widget.session.lighthouseAccess,
+        qianjiAccess: widget.session.effectiveQianjiAccess,
+        qianjiAdminAccess: widget.session.effectiveQianjiAdminAccess,
         chatOnlyMode: widget.session.isExternalUser,
         onSwitchMainTab: _switchMainTab,
       ),
@@ -801,6 +1006,78 @@ class _NativeScreenHostState extends State<NativeScreenHost>
 
   Widget _buildCurrentScreen(BuildContext context) {
     switch (widget.navigation.currentScreen) {
+      case 'QJ':
+        return NativeQianjiHubPage(
+          session: widget.session,
+          onOpenDetail: (entity) {
+            setState(() => _selectedQianjiEntity = entity);
+            widget.navigation.go('QJD');
+          },
+        );
+      case 'QJA':
+        return NativeQianjiAdminShell(session: widget.session);
+      case 'QJD':
+        final entity = _selectedQianjiEntity ?? QianjiStaticCatalog.entities.first;
+        return NativeQianjiDetailPage(
+          entity: entity,
+          onBack: widget.navigation.back,
+          onOpenIteration: (iteration) {
+            setState(() {
+              _selectedQianjiEntity = entity;
+              _selectedQianjiIteration = iteration;
+            });
+            widget.navigation.go('QJI');
+          },
+        );
+      case 'QJI':
+        final entity = _selectedQianjiEntity ?? QianjiStaticCatalog.entities.first;
+        final iteration = _selectedQianjiIteration ??
+            QianjiStaticCatalog.detailFor(entity).iterations.first;
+        return NativeQianjiIterationPage(
+          entity: entity,
+          iteration: iteration,
+          onBack: widget.navigation.back,
+        );
+      case 'QJT':
+        return NativeQianjiTeamPerfPage(
+          onBack: widget.navigation.back,
+          onOpenMyPerf: () => widget.navigation.go('QJP'),
+        );
+      case 'QJP':
+        return NativeQianjiMyPerfPage(
+          onBack: widget.navigation.back,
+          onOpenTeamPerf: () => widget.navigation.go('QJT'),
+        );
+      case 'QJM':
+        return NativeQianjiProjectsPage(
+          onBack: widget.navigation.back,
+          onOpenProject: (project) {
+            setState(() => _selectedQianjiProject = project);
+            widget.navigation.go('QJMT');
+          },
+        );
+      case 'QJMT':
+        final project = _selectedQianjiProject ?? QianjiProjectCatalog.joined.last;
+        return NativeQianjiProjectTasksPage(
+          project: project,
+          onBack: widget.navigation.back,
+          onOpenTask: (task) {
+            setState(() {
+              _selectedQianjiProject = project;
+              _selectedQianjiTask = task;
+            });
+            widget.navigation.go('QJTD');
+          },
+        );
+      case 'QJTD':
+        final project = _selectedQianjiProject ?? QianjiProjectCatalog.joined.last;
+        final task = _selectedQianjiTask ??
+            QianjiProjectCatalog.detailFor(project).myTasks.first;
+        return NativeQianjiTaskDetailPage(
+          project: project,
+          task: task,
+          onBack: widget.navigation.back,
+        );
       case 'LH':
         return NativeLighthousePage(
           session: widget.session,
@@ -824,6 +1101,52 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         );
       case 'C1':
         return _buildConversationListPage();
+      case 'AS1':
+        return NativeAiSummaryHubPage(
+          session: widget.session,
+          onBack: widget.navigation.back,
+          onCreate: () => _openAiSummaryCreate(),
+          onOpenDetail: (id) {
+            setState(() => _selectedAiSummaryId = id);
+            widget.navigation.go('AS3');
+          },
+          onOpened: () {
+            _pendingBadgeZeroSync = true;
+            unawaited(_refreshCommUnreadBadge());
+          },
+        );
+      case 'AS2':
+        final prefill = _aiSummaryPrefillConversationIds;
+        return NativeAiSummaryCreatePage(
+          key: ValueKey<String>('as2-${prefill.join(',')}'),
+          session: widget.session,
+          initialConversationIds: prefill,
+          onBack: () {
+            setState(() => _aiSummaryPrefillConversationIds = const <int>[]);
+            widget.navigation.back();
+          },
+          onCreated: (item) {
+            setState(() {
+              _selectedAiSummaryId = item.id;
+              _aiSummaryPrefillConversationIds = const <int>[];
+            });
+            widget.navigation.replaceTop('AS3');
+          },
+        );
+      case 'AS3':
+        final summaryId = _selectedAiSummaryId ?? 0;
+        if (summaryId <= 0) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) widget.navigation.back();
+          });
+          return const SizedBox.shrink();
+        }
+        return NativeAiSummaryDetailPage(
+          key: ValueKey<int>(summaryId),
+          session: widget.session,
+          summaryId: summaryId,
+          onBack: widget.navigation.back,
+        );
       case 'Z2':
         return NativeMessageCenterPage(
           session: widget.session,
@@ -839,10 +1162,16 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           onConversationRead: _handleConversationRead,
         );
       case 'C7':
-        return NativeNewChatPage(
+        // 新建会话已深度合并进通讯录；保留 C7 路由以兼容旧入口。
+        return NativeContactsPage(
           session: widget.session,
+          initialGroupPickMode: true,
           onBack: widget.navigation.back,
-          onOpenPrivateChat: _openPrivateByPeerId,
+          onOpenContact: (contact) {
+            setState(() => _selectedContact = contact);
+            widget.navigation.go('C9');
+          },
+          onStartPrivateChat: _openPrivateByPeerId,
           onOpenGroupChat: _openGroupConversation,
         );
       case 'C6':
@@ -885,13 +1214,24 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         );
       case 'C3':
         return NativeContactsPage(
+          key: ValueKey<String>(
+            'contacts-group-pick-$_contactsGroupPickMode',
+          ),
           session: widget.session,
-          onBack: widget.navigation.back,
+          initialGroupPickMode: _contactsGroupPickMode,
+          onBack: () {
+            setState(() => _contactsGroupPickMode = false);
+            widget.navigation.back();
+          },
           onOpenContact: (contact) {
             setState(() => _selectedContact = contact);
             widget.navigation.go('C9');
           },
           onStartPrivateChat: _openPrivateByPeerId,
+          onOpenGroupChat: (conv) {
+            setState(() => _contactsGroupPickMode = false);
+            _openGroupConversation(conv);
+          },
         );
       case 'C9':
         return NativeContactProfilePage(
@@ -1167,6 +1507,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
             widget.navigation.go('C13');
           },
           onOpenGroupInfo: () => widget.navigation.go('C6'),
+          onOpenAiSummary: (convId) => _openAiSummaryCreate(conversationId: convId),
           onConversationRead: _handleConversationRead,
         );
       case 'C5':
@@ -1204,6 +1545,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
             });
             widget.navigation.go('C12');
           },
+          onOpenAiSummary: (convId) => _openAiSummaryCreate(conversationId: convId),
           onConversationRead: _handleConversationRead,
         );
       case 'C12':
@@ -1248,7 +1590,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     final previousScreen = _lastScreen;
     final isBack = previousScreen != null && depth < _lastHistoryDepth;
 
-    // Windows 桌面暂时只开放通讯：误入其它板块时拉回会话首页。
+    // Windows 桌面：白名单外的屏拉回会话首页。
     if (isWindowsDesktopCommOnly && !isWindowsAllowedCommScreen(screen)) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
@@ -1267,8 +1609,16 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       );
     }
 
-    // 宽屏：C1/C2/C5 使用双栏，不走移动端整页切换动画。
-    if (isWideChatLayout(context) && _isDualPaneChatRoute(screen)) {
+    final wide = isWideChatLayout(context);
+    final dualNow = wide && _isDualPaneChatRoute(screen);
+    final dualPrev =
+        previousScreen != null &&
+        wide &&
+        _isDualPaneChatRoute(previousScreen);
+
+    // 宽屏双栏内部（C1↔C2↔C5）仍瞬时切换聊天窗；
+    // 进出通讯子页（通知/通讯录/智能总结/群信息等）走整页滑动。
+    if (dualNow && dualPrev) {
       _lastScreen = screen;
       _lastHistoryDepth = depth;
       return _buildChatDualPane();
@@ -1276,10 +1626,13 @@ class _NativeScreenHostState extends State<NativeScreenHost>
 
     final useSlide =
         (_isChatRoute(screen) && _isChatRoute(previousScreen)) ||
-        (_isMyRoute(screen) && _isMyRoute(previousScreen));
-    final currentScreen = _buildCurrentScreen(context);
+        (_isMyRoute(screen) && _isMyRoute(previousScreen)) ||
+        (_isQianjiRoute(screen) && _isQianjiRoute(previousScreen));
+    final currentScreen = dualNow
+        ? _buildChatDualPane()
+        : _buildCurrentScreen(context);
     final child = KeyedSubtree(
-      key: ValueKey<String>('screen-$screen'),
+      key: ValueKey<String>(dualNow ? 'dual-$screen' : 'screen-$screen'),
       child: currentScreen,
     );
 
@@ -1320,22 +1673,34 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       },
       child: child,
     );
+    // 双栏已自带侧栏，避免再套一层主导航。
+    if (dualNow) {
+      return animatedContent;
+    }
     return _wrapWithMainNavigation(animatedContent, screen: screen);
   }
 
   bool _isChatRoute(String? screen) {
     return const <String>{
-      // 通讯首页及其顶部入口（消息中心、联系人、新建聊天、NOVA）。
+      // 通讯板块全链路：消息 / 群聊 / 通讯录 / NOVA / 私聊 / 群信息 /
+      // 新建 / 通话 / 名片 / 广播 / AI 历史 / 搜索 / 媒体 / 通知。
       'C1',
       'C2',
       'C3',
       'C4',
       'C5',
+      'C6',
       'C7',
+      'C8',
+      'C9',
+      'C10',
       'C11',
       'C12',
       'C13',
       'Z2',
+      'AS1',
+      'AS2',
+      'AS3',
     }.contains(screen);
   }
 
@@ -1359,7 +1724,16 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       'MM0',
       'MM',
       'WX',
+      'QJT',
+      'QJP',
+      'QJM',
+      'QJMT',
+      'QJTD',
     }.contains(screen);
+  }
+
+  bool _isQianjiRoute(String? screen) {
+    return const <String>{'QJ', 'QJD', 'QJI'}.contains(screen);
   }
 
   /// PC：任意业务页保留侧边主导航；宽屏通讯双栏已自带侧栏，不重复包裹。
@@ -1372,6 +1746,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       commUnread: _commUnread,
       workbenchBadge: _workbenchBadge,
       lighthouseAccess: widget.session.lighthouseAccess,
+      qianjiAccess: widget.session.effectiveQianjiAccess,
+      qianjiAdminAccess: widget.session.effectiveQianjiAdminAccess,
       chatOnlyMode: widget.session.isExternalUser,
       onSwitchMainTab: _switchMainTab,
     );
@@ -1406,11 +1782,17 @@ class _NativeScreenHostState extends State<NativeScreenHost>
 
   /// APP 底部 Tab 仅出现在主板块根页。
   bool _showsAppBottomTabBar(String screen) {
-    return screen == 'C1' || screen == 'B2' || screen == 'LH' || screen == 'LM';
+    return screen == 'C1' ||
+        screen == 'B2' ||
+        screen == 'QJ' ||
+        screen == 'LH' ||
+        screen == 'LM';
   }
 
   String _mainTabScreenFor(String screen) {
     if (_isMyRoute(screen)) return 'B2';
+    if (screen == 'QJ' || screen == 'QJD' || screen == 'QJI') return 'QJ';
+    if (screen == 'QJA') return 'QJA';
     if (screen == 'LH' || screen == 'LM') return 'LH';
     return 'C1';
   }
@@ -2258,6 +2640,57 @@ class _NativeB2PageState extends State<_NativeB2Page> {
                             onTap: () => widget.navigation.go('MM-L'),
                           ),
                       ]),
+                      const SizedBox(height: 10),
+                      _buildSectionLabel('千机'),
+                      const SizedBox(height: 8),
+                      _buildMenuList(<Widget>[
+                        _buildMenuItem(
+                          icon: Icons.inbox_outlined,
+                          title: '需求任务池',
+                          desc: '待处理 · 已处理 · 接收人队列',
+                          comingSoon: true,
+                          onTap: () => _showSoonToast('需求任务池'),
+                        ),
+                        _buildMenuItem(
+                          icon: Icons.person_add_alt_1_outlined,
+                          title: '人员需求录入',
+                          desc: '提交平台 / 产品 / 能力需求',
+                          comingSoon: true,
+                          onTap: () => _showSoonToast('人员需求录入'),
+                        ),
+                        _buildMenuItem(
+                          icon: Icons.collections_bookmark_outlined,
+                          title: '案例库',
+                          desc: '行业案例 · 产品 / 能力关联',
+                          comingSoon: true,
+                          onTap: () => _showSoonToast('案例库'),
+                        ),
+                        _buildMenuItem(
+                          icon: Icons.folder_special_outlined,
+                          title: '我的项目',
+                          desc: '敬请期待',
+                          comingSoon: true,
+                        ),
+                        _buildMenuItem(
+                          icon: Icons.leaderboard_outlined,
+                          title: '团队考核',
+                          desc: '敬请期待',
+                          comingSoon: true,
+                        ),
+                        _buildMenuItem(
+                          icon: Icons.assessment_outlined,
+                          title: '我的绩效',
+                          desc: '敬请期待',
+                          comingSoon: true,
+                        ),
+                        _buildMenuItem(
+                          icon: Icons.visibility_outlined,
+                          title: '展示设置',
+                          desc: '对内全量 · 对外展厅',
+                          comingSoon: true,
+                          onTap: () => _showSoonToast('展示设置'),
+                        ),
+                      ]),
                       if (_showDeferredTools) ...[
                         const SizedBox(height: 10),
                         _buildMenuList(<Widget>[
@@ -2979,7 +3412,7 @@ class _NativeB2PageState extends State<_NativeB2Page> {
     final row = Material(
       color: Colors.transparent,
       child: InkWell(
-        onTap: onTap,
+        onTap: comingSoon && onTap == null ? null : onTap,
         child: SizedBox(
           height: 66,
           child: Row(
@@ -3046,26 +3479,29 @@ class _NativeB2PageState extends State<_NativeB2Page> {
     if (!comingSoon) return withBorder;
     return Stack(
       children: [
-        withBorder,
+        IgnorePointer(ignoring: onTap == null, child: withBorder),
         Positioned.fill(
-          child: InkWell(
-            onTap: onTap,
-            child: Container(
-              color: const Color(0x38FFFFFF),
-              alignment: Alignment.centerRight,
-              padding: const EdgeInsets.only(right: 44),
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: onTap,
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: const Color(0xE61F2421),
-                  borderRadius: BorderRadius.circular(99),
-                ),
-                child: const Text(
-                  '敬请期待',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 10,
-                    fontWeight: FontWeight.w600,
+                color: const Color(0x38FFFFFF),
+                alignment: Alignment.centerRight,
+                padding: const EdgeInsets.only(right: 44),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: const Color(0xE61F2421),
+                    borderRadius: BorderRadius.circular(99),
+                  ),
+                  child: const Text(
+                    '敬请期待',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ),
               ),

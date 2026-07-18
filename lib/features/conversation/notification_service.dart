@@ -6,26 +6,36 @@ import '../auth/auth_session.dart';
 
 class NativeNotificationItem {
   const NativeNotificationItem({
+    required this.id,
     required this.title,
     required this.body,
     required this.kind,
     required this.createdAt,
+    this.clickAction,
+    this.unread = false,
   });
 
+  final int id;
   final String title;
   final String body;
   final String kind;
   final DateTime? createdAt;
+  final String? clickAction;
+  final bool unread;
+
+  bool get isAiSummary => kind.toUpperCase() == 'AI_SUMMARY';
 }
 
 class NativeNotificationSummary {
   const NativeNotificationSummary({
     required this.unreadCount,
     this.latest,
+    this.aiSummaryUnreadCount = 0,
   });
 
   final int unreadCount;
   final NativeNotificationItem? latest;
+  final int aiSummaryUnreadCount;
 }
 
 class NotificationService {
@@ -39,42 +49,14 @@ class NotificationService {
   final http.Client _client;
 
   Future<NativeNotificationSummary> fetchSummary() async {
-    final resp = await _client.get(
-      Uri.parse('${_session.apiBase}/notifications'),
-      headers: <String, String>{
-        'Authorization': 'Bearer ${_session.token}',
-        'Content-Type': 'application/json',
-      },
+    final items = await fetchAll();
+    final unread = items.where((e) => e.unread).length;
+    final aiUnread = items.where((e) => e.unread && e.isAiSummary).length;
+    return NativeNotificationSummary(
+      unreadCount: unread,
+      latest: items.isEmpty ? null : items.first,
+      aiSummaryUnreadCount: aiUnread,
     );
-    if (resp.statusCode < 200 || resp.statusCode >= 300) {
-      throw Exception('通知加载失败: HTTP ${resp.statusCode}');
-    }
-    final body = jsonDecode(resp.body);
-    if (body is! Map<String, dynamic>) {
-      return const NativeNotificationSummary(unreadCount: 0);
-    }
-    if (body['success'] == false) {
-      throw Exception((body['message'] ?? '通知加载失败').toString());
-    }
-    final data = body['data'];
-    if (data is! Map<String, dynamic>) {
-      return const NativeNotificationSummary(unreadCount: 0);
-    }
-    final unread = (data['unreadCount'] as num?)?.toInt() ?? 0;
-    final items = data['items'];
-    NativeNotificationItem? latest;
-    if (items is List && items.isNotEmpty) {
-      final first = items.first;
-      if (first is Map<String, dynamic>) {
-        latest = NativeNotificationItem(
-          title: (first['title'] ?? '').toString(),
-          body: (first['body'] ?? first['content'] ?? '').toString(),
-          kind: (first['kind'] ?? first['category'] ?? '').toString(),
-          createdAt: DateTime.tryParse((first['createdAt'] ?? '').toString()),
-        );
-      }
-    }
-    return NativeNotificationSummary(unreadCount: unread, latest: latest);
   }
 
   Future<List<NativeNotificationItem>> fetchAll() async {
@@ -98,14 +80,7 @@ class NotificationService {
     if (items is! List) return const <NativeNotificationItem>[];
     return items
         .whereType<Map<String, dynamic>>()
-        .map(
-          (first) => NativeNotificationItem(
-            title: (first['title'] ?? '').toString(),
-            body: (first['body'] ?? first['content'] ?? '').toString(),
-            kind: (first['kind'] ?? first['category'] ?? '').toString(),
-            createdAt: DateTime.tryParse((first['createdAt'] ?? '').toString()),
-          ),
-        )
+        .map(_mapItem)
         .toList(growable: false);
   }
 
@@ -120,5 +95,48 @@ class NotificationService {
     if (resp.statusCode < 200 || resp.statusCode >= 300) {
       throw Exception('标记已读失败: HTTP ${resp.statusCode}');
     }
+  }
+
+  Future<void> markRead(int id) async {
+    if (id <= 0) return;
+    final resp = await _client.post(
+      Uri.parse('${_session.apiBase}/notifications/$id/read'),
+      headers: <String, String>{
+        'Authorization': 'Bearer ${_session.token}',
+        'Content-Type': 'application/json',
+      },
+    );
+    if (resp.statusCode < 200 || resp.statusCode >= 300) {
+      throw Exception('标记已读失败: HTTP ${resp.statusCode}');
+    }
+  }
+
+  /// 将未读的智能总结通知标为已读（打开智能总结时调用，对齐 IM 进会话消未读）。
+  Future<int> markAiSummaryNotificationsRead() async {
+    final items = await fetchAll();
+    final unread = items.where((e) => e.unread && e.isAiSummary).toList();
+    for (final item in unread) {
+      try {
+        await markRead(item.id);
+      } catch (_) {}
+    }
+    return unread.length;
+  }
+
+  NativeNotificationItem _mapItem(Map<String, dynamic> first) {
+    final readAt = first['readAt'];
+    final unreadFlag = first['unread'];
+    final unread = unreadFlag is bool
+        ? unreadFlag
+        : readAt == null || readAt.toString().trim().isEmpty;
+    return NativeNotificationItem(
+      id: (first['id'] as num?)?.toInt() ?? 0,
+      title: (first['title'] ?? '').toString(),
+      body: (first['body'] ?? first['content'] ?? '').toString(),
+      kind: (first['kind'] ?? first['category'] ?? '').toString(),
+      clickAction: first['clickAction']?.toString(),
+      createdAt: DateTime.tryParse((first['createdAt'] ?? '').toString()),
+      unread: unread,
+    );
   }
 }

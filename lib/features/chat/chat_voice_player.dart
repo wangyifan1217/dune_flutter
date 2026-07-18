@@ -10,33 +10,44 @@ class ChatVoicePlayer extends ChangeNotifier {
   static final ChatVoicePlayer instance = ChatVoicePlayer._();
 
   final AudioPlayer _player = AudioPlayer();
+  StreamSubscription<ProcessingState>? _stateSub;
   String? playingKey;
 
   Future<void> toggle(String key, String url) async {
+    final trimmed = url.trim();
+    if (trimmed.isEmpty) {
+      throw Exception('语音地址为空');
+    }
     if (playingKey == key) {
       await stop();
       return;
     }
-    await _player.stop();
+    await stop();
     playingKey = key;
     notifyListeners();
     try {
-      await _player.setUrl(url);
-      unawaited(_player.play());
-      _player.processingStateStream.listen((state) {
+      await _player.setUrl(trimmed);
+      await _player.play();
+      await _stateSub?.cancel();
+      _stateSub = _player.processingStateStream.listen((state) {
         if (state == ProcessingState.completed) {
           playingKey = null;
           notifyListeners();
         }
       });
-    } catch (_) {
+    } catch (e) {
       playingKey = null;
       notifyListeners();
+      rethrow;
     }
   }
 
   Future<void> stop() async {
-    await _player.stop();
+    await _stateSub?.cancel();
+    _stateSub = null;
+    try {
+      await _player.stop();
+    } catch (_) {}
     if (playingKey != null) {
       playingKey = null;
       notifyListeners();

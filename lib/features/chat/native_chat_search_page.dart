@@ -215,6 +215,7 @@ class _NativeChatSearchPageState extends State<NativeChatSearchPage> {
   String _hitBody(NativeChatMessage m) {
     final kind = m.kind.toUpperCase();
     if (kind == 'IMAGE') return '发送了一张图片';
+    if (kind == 'VIDEO') return '发送了一个视频';
     if (kind == 'FILE') return m.bodyText.isEmpty ? '发送了一个文件' : m.bodyText;
     if (kind == 'AUDIO') return '发送了一条语音';
     return m.bodyText.isEmpty ? '[${m.kind}]' : m.bodyText;

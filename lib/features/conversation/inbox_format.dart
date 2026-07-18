@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../core/theme/dunes_theme.dart';
+
 /// 与 mobile_injection formatTime / personCls 对齐。
 abstract final class InboxFormat {
   static String formatTime(DateTime? at, {bool withClock = false}) {
@@ -50,39 +52,13 @@ abstract final class InboxFormat {
 
   static int personSeed(int seed) => (seed.abs()) % 6;
 
+  /// 无头像首字占位：统一 APP 主题紫（与通讯录一致）。
+  /// [seed] 保留兼容旧调用，颜色不再随 seed 变化。
   static PersonAvatarStyle personStyle(int seed) {
-    switch (personSeed(seed)) {
-      case 0:
-        return const PersonAvatarStyle(
-          gradient: [Color(0xFFF7F2FF), Color(0xFFECE0FB)],
-          textColor: Color(0xFF6B52C7),
-        );
-      case 1:
-        return const PersonAvatarStyle(
-          gradient: [Color(0xFFE5D7F7), Color(0xFFCFB7EB)],
-          textColor: Color(0xFF4F39A4),
-        );
-      case 2:
-        return const PersonAvatarStyle(
-          gradient: [Color(0xFFBCA4E5), Color(0xFF9377C9)],
-          textColor: Colors.white,
-        );
-      case 3:
-        return const PersonAvatarStyle(
-          gradient: [Color(0xFFEAD6F0), Color(0xFFC8A8E0)],
-          textColor: Color(0xFF5039A4),
-        );
-      case 4:
-        return const PersonAvatarStyle(
-          gradient: [Color(0xFF7E64BD), Color(0xFF553B96)],
-          textColor: Colors.white,
-        );
-      default:
-        return const PersonAvatarStyle(
-          gradient: [Color(0xFFBCA4E5), Color(0xFF9377C9)],
-          textColor: Colors.white,
-        );
-    }
+    return const PersonAvatarStyle(
+      gradient: [DunesColors.brandPurple, DunesColors.brandPurple],
+      textColor: Colors.white,
+    );
   }
 }
 

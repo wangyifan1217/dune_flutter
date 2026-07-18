@@ -33,6 +33,10 @@ void setWindowsTrayOnBeforeQuit(Future<void> Function()? callback) {
   WindowsDesktopTray.instance.onBeforeQuit = callback;
 }
 
+void setWindowsTrayOnInactiveChanged(void Function(bool inactive)? callback) {
+  WindowsDesktopTray.instance.onInactiveChanged = callback;
+}
+
 /// 关闭进托盘；隐藏且有未读/新消息时托盘图标闪烁。
 class WindowsDesktopTray with WindowListener, TrayListener {
   WindowsDesktopTray._();
@@ -47,13 +51,24 @@ class WindowsDesktopTray with WindowListener, TrayListener {
   bool _flashVisible = true;
   bool _pendingAlert = false;
   int _unread = 0;
+  bool? _lastInactiveNotified;
   Timer? _flashTimer;
   String _trayIcon = _trayIconWin;
   String _trayIconBlank = _trayIconWinBlank;
   Future<void> Function()? onBeforeQuit;
+  void Function(bool inactive)? onInactiveChanged;
 
   /// 最小化、失焦和关闭到托盘时，当前会话不应被视为“正在查看”。
   bool get isWindowInactive => _hidden || _minimized || !_focused;
+
+  void _emitInactiveChanged() {
+    final inactive = isWindowInactive;
+    if (_lastInactiveNotified == inactive) return;
+    _lastInactiveNotified = inactive;
+    try {
+      onInactiveChanged?.call(inactive);
+    } catch (_) {}
+  }
 
   Future<void> init() async {
     if (kIsWeb || !(Platform.isWindows || Platform.isMacOS) || _ready) return;
@@ -129,6 +144,7 @@ class WindowsDesktopTray with WindowListener, TrayListener {
     await windowManager.hide();
     // Windows：从任务栏隐藏；macOS：从 Dock 隐藏，仅留状态栏图标
     await windowManager.setSkipTaskbar(true);
+    _emitInactiveChanged();
     await _syncFlash();
   }
 
@@ -148,6 +164,7 @@ class WindowsDesktopTray with WindowListener, TrayListener {
     }
     await windowManager.setPreventClose(true);
     await trayManager.setIcon(_trayIcon);
+    _emitInactiveChanged();
   }
 
   Future<void> _quitApp() async {
@@ -233,16 +250,19 @@ class WindowsDesktopTray with WindowListener, TrayListener {
     _focused = true;
     _pendingAlert = false;
     unawaited(_stopFlash());
+    _emitInactiveChanged();
   }
 
   @override
   void onWindowMinimize() {
     _minimized = true;
+    _emitInactiveChanged();
   }
 
   @override
   void onWindowBlur() {
     _focused = false;
+    _emitInactiveChanged();
   }
 
   @override
@@ -253,6 +273,7 @@ class WindowsDesktopTray with WindowListener, TrayListener {
       _pendingAlert = false;
       unawaited(_stopFlash());
     }
+    _emitInactiveChanged();
   }
 
   @override

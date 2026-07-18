@@ -2,11 +2,14 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
-import '../chat/user_avatar_widget.dart';
+import '../../core/layout/chat_layout.dart';
+import '../../core/platform/desktop_features.dart';
+import '../../core/theme/dunes_theme.dart';
+import '../ai_summary/ai_summary_sparkle_icon.dart';
 import '../chat/group_composite_avatar.dart';
+import '../chat/user_avatar_widget.dart';
 import '../conversation/conversation_models.dart';
 import '../conversation/conversation_service.dart';
-import '../../core/theme/dunes_theme.dart';
 import '../nova/nova_icon.dart';
 import 'inbox_format.dart';
 
@@ -14,18 +17,20 @@ class ChatInboxHeader extends StatelessWidget {
   const ChatInboxHeader({
     super.key,
     required this.onOpenContacts,
-    required this.onNewChat,
+    this.onNewChat,
     required this.onOpenNova,
     required this.onOpenMessageCenter,
+    this.onOpenAiSummary,
     this.messageCenterUnread = 0,
     this.novaThinking = false,
     this.novaUnread = false,
   });
 
   final VoidCallback onOpenContacts;
-  final VoidCallback onNewChat;
+  final VoidCallback? onNewChat;
   final VoidCallback onOpenNova;
   final VoidCallback onOpenMessageCenter;
+  final VoidCallback? onOpenAiSummary;
   final int messageCenterUnread;
   final bool novaThinking;
   final bool novaUnread;
@@ -67,22 +72,306 @@ class ChatInboxHeader extends StatelessWidget {
             ),
             Align(
               alignment: Alignment.centerRight,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  _IconBtn(
-                    icon: Icons.notifications_none_rounded,
-                    onTap: onOpenMessageCenter,
-                    unreadCount: messageCenterUnread,
-                  ),
-                  _IconBtn(
-                    icon: Icons.people_outline_rounded,
-                    onTap: onOpenContacts,
-                  ),
-                  _IconBtn(icon: Icons.edit_outlined, onTap: onNewChat),
-                ],
+              child: _InboxHeaderActions(
+                onOpenContacts: onOpenContacts,
+                onNewChat: onNewChat,
+                onOpenMessageCenter: onOpenMessageCenter,
+                onOpenAiSummary: onOpenAiSummary,
+                messageCenterUnread: messageCenterUnread,
               ),
             ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// PC / 宽屏：右侧收成「···」，点开后在下方浮层展开；手机仍平铺。
+class _InboxHeaderActions extends StatefulWidget {
+  const _InboxHeaderActions({
+    required this.onOpenContacts,
+    required this.onOpenMessageCenter,
+    this.onNewChat,
+    this.onOpenAiSummary,
+    this.messageCenterUnread = 0,
+  });
+
+  final VoidCallback onOpenContacts;
+  final VoidCallback? onNewChat;
+  final VoidCallback onOpenMessageCenter;
+  final VoidCallback? onOpenAiSummary;
+  final int messageCenterUnread;
+
+  @override
+  State<_InboxHeaderActions> createState() => _InboxHeaderActionsState();
+}
+
+class _InboxHeaderActionsState extends State<_InboxHeaderActions> {
+  final LayerLink _layerLink = LayerLink();
+  OverlayEntry? _overlay;
+  bool _expanded = false;
+
+  bool get _useCluster {
+    return isDesktopCommOnly || isWideChatLayout(context);
+  }
+
+  int get _badgeTotal => widget.messageCenterUnread;
+
+  @override
+  void dispose() {
+    _removeOverlay();
+    super.dispose();
+  }
+
+  void _toggle() {
+    if (_expanded) {
+      _removeOverlay();
+    } else {
+      _showOverlay();
+    }
+  }
+
+  void _removeOverlay() {
+    _overlay?.remove();
+    _overlay = null;
+    if (_expanded && mounted) {
+      setState(() => _expanded = false);
+    } else {
+      _expanded = false;
+    }
+  }
+
+  void _runAndClose(VoidCallback action) {
+    _removeOverlay();
+    action();
+  }
+
+  void _showOverlay() {
+    final overlay = Overlay.of(context);
+    _overlay = OverlayEntry(
+      builder: (ctx) {
+        return Stack(
+          children: [
+            Positioned.fill(
+              child: GestureDetector(
+                behavior: HitTestBehavior.translucent,
+                onTap: _removeOverlay,
+                child: const SizedBox.expand(),
+              ),
+            ),
+            CompositedTransformFollower(
+              link: _layerLink,
+              showWhenUnlinked: false,
+              targetAnchor: Alignment.bottomRight,
+              followerAnchor: Alignment.topRight,
+              offset: const Offset(0, 6),
+              child: _InboxActionsDropdown(
+                messageCenterUnread: widget.messageCenterUnread,
+                showAiSummary: widget.onOpenAiSummary != null,
+                showNewChat: widget.onNewChat != null,
+                onAiSummary: widget.onOpenAiSummary == null
+                    ? null
+                    : () => _runAndClose(widget.onOpenAiSummary!),
+                onMessageCenter: () =>
+                    _runAndClose(widget.onOpenMessageCenter),
+                onContacts: () => _runAndClose(widget.onOpenContacts),
+                onNewChat: widget.onNewChat == null
+                    ? null
+                    : () => _runAndClose(widget.onNewChat!),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+    overlay.insert(_overlay!);
+    setState(() => _expanded = true);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_useCluster) {
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (widget.onOpenAiSummary != null)
+            AiSummarySparkleIcon(onTap: widget.onOpenAiSummary!),
+          _IconBtn(
+            icon: Icons.notifications_none_rounded,
+            onTap: widget.onOpenMessageCenter,
+            unreadCount: widget.messageCenterUnread,
+          ),
+          _IconBtn(
+            icon: Icons.people_outline_rounded,
+            onTap: widget.onOpenContacts,
+          ),
+          if (widget.onNewChat != null)
+            _IconBtn(icon: Icons.edit_outlined, onTap: widget.onNewChat!),
+        ],
+      );
+    }
+
+    return CompositedTransformTarget(
+      link: _layerLink,
+      child: _IconBtn(
+        icon: _expanded ? Icons.close_rounded : Icons.more_horiz_rounded,
+        onTap: _toggle,
+        unreadCount: _expanded ? 0 : _badgeTotal,
+      ),
+    );
+  }
+}
+
+class _InboxActionsDropdown extends StatelessWidget {
+  const _InboxActionsDropdown({
+    required this.messageCenterUnread,
+    required this.showAiSummary,
+    required this.showNewChat,
+    required this.onMessageCenter,
+    required this.onContacts,
+    this.onAiSummary,
+    this.onNewChat,
+  });
+
+  final int messageCenterUnread;
+  final bool showAiSummary;
+  final bool showNewChat;
+  final VoidCallback? onAiSummary;
+  final VoidCallback onMessageCenter;
+  final VoidCallback onContacts;
+  final VoidCallback? onNewChat;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: const [
+            BoxShadow(
+              color: Color(0x28000000),
+              blurRadius: 18,
+              offset: Offset(0, 8),
+            ),
+          ],
+          border: Border.all(color: const Color(0xFFECECEC)),
+        ),
+        child: IntrinsicWidth(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (showAiSummary && onAiSummary != null)
+                _DropdownItem(
+                  leading: const SizedBox(
+                    width: 22,
+                    height: 22,
+                    child: CustomPaint(
+                      painter: GeminiSparklePainter(
+                        colors: kAiSummaryPurpleGradient,
+                        showCompanion: true,
+                        pulse: 1,
+                      ),
+                    ),
+                  ),
+                  label: '智能总结',
+                  onTap: onAiSummary!,
+                ),
+              _DropdownItem(
+                leading: const Icon(
+                  Icons.notifications_none_rounded,
+                  size: 20,
+                  color: Color(0xFF4B5563),
+                ),
+                label: '通知',
+                badge: messageCenterUnread,
+                onTap: onMessageCenter,
+              ),
+              _DropdownItem(
+                leading: const Icon(
+                  Icons.people_outline_rounded,
+                  size: 20,
+                  color: Color(0xFF4B5563),
+                ),
+                label: '通讯录',
+                onTap: onContacts,
+              ),
+              if (showNewChat && onNewChat != null)
+                _DropdownItem(
+                  leading: const Icon(
+                    Icons.edit_outlined,
+                    size: 20,
+                    color: Color(0xFF4B5563),
+                  ),
+                  label: '发起聊天',
+                  onTap: onNewChat!,
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _DropdownItem extends StatelessWidget {
+  const _DropdownItem({
+    required this.leading,
+    required this.label,
+    required this.onTap,
+    this.badge = 0,
+  });
+
+  final Widget leading;
+  final String label;
+  final VoidCallback onTap;
+  final int badge;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+        child: Row(
+          children: [
+            leading,
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                label,
+                style: DunesTypography.sans(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                  color: const Color(0xFF1C1C1C),
+                ),
+              ),
+            ),
+            if (badge > 0) ...[
+              const SizedBox(width: 8),
+              Container(
+                constraints: const BoxConstraints(minWidth: 18),
+                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                decoration: BoxDecoration(
+                  color: DunesColors.coral,
+                  borderRadius: BorderRadius.circular(9),
+                ),
+                alignment: Alignment.center,
+                child: Text(
+                  badge > 99 ? '99+' : '$badge',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                    height: 1.2,
+                  ),
+                ),
+              ),
+            ],
           ],
         ),
       ),
@@ -102,42 +391,45 @@ class ChatInboxSearchBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      color: const Color(0xFFF5F5F5),
-      padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+    // 与顶栏动画隔离，避免 Web 合成层把搜索栏一起带动。
+    return RepaintBoundary(
       child: Container(
-        height: 34,
-        padding: const EdgeInsets.symmetric(horizontal: 12),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(6),
-        ),
-        child: Row(
-          children: [
-            const Icon(Icons.search, size: 17, color: Color(0xFFB2B2B2)),
-            const SizedBox(width: 6),
-            Expanded(
-              child: TextField(
-                controller: controller,
-                onChanged: onChanged,
-                style: DunesTypography.sans(
-                  fontSize: 13,
-                  color: DunesColors.text,
-                ),
-                textInputAction: TextInputAction.search,
-                decoration: InputDecoration(
-                  isDense: true,
-                  border: InputBorder.none,
-                  hintText: '搜索',
-                  hintStyle: DunesTypography.sans(
+        color: const Color(0xFFF5F5F5),
+        padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+        child: Container(
+          height: 34,
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: Row(
+            children: [
+              const Icon(Icons.search, size: 17, color: Color(0xFFB2B2B2)),
+              const SizedBox(width: 6),
+              Expanded(
+                child: TextField(
+                  controller: controller,
+                  onChanged: onChanged,
+                  style: DunesTypography.sans(
                     fontSize: 13,
-                    color: const Color(0xFFB2B2B2),
+                    color: DunesColors.text,
                   ),
-                  contentPadding: EdgeInsets.zero,
+                  textInputAction: TextInputAction.search,
+                  decoration: InputDecoration(
+                    isDense: true,
+                    border: InputBorder.none,
+                    hintText: '搜索',
+                    hintStyle: DunesTypography.sans(
+                      fontSize: 13,
+                      color: const Color(0xFFB2B2B2),
+                    ),
+                    contentPadding: EdgeInsets.zero,
+                  ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -222,6 +514,7 @@ class ChatInboxSectionHeader extends StatelessWidget {
 
 enum ChatInboxRowKind {
   aiAssistant,
+  aiSummary,
   systemNotification,
   broadcast,
   workgroupApproval,
@@ -283,7 +576,9 @@ class ChatInboxRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final unreadText = unreadCount > 99 ? '99+' : '$unreadCount';
     final unreadColor =
-        kind == ChatInboxRowKind.private || kind == ChatInboxRowKind.aiAssistant
+        kind == ChatInboxRowKind.private ||
+            kind == ChatInboxRowKind.aiAssistant ||
+            kind == ChatInboxRowKind.aiSummary
         ? const Color(0xFF7B5CD8)
         : DunesColors.coral;
     return Column(
@@ -612,6 +907,8 @@ class _Avatar extends StatelessWidget {
     switch (kind) {
       case ChatInboxRowKind.aiAssistant:
         return const NovaIconImage(size: _inboxAvatarSize, borderRadius: 12);
+      case ChatInboxRowKind.aiSummary:
+        return const AiSummaryAvatarMark(size: _inboxAvatarSize);
       case ChatInboxRowKind.systemNotification:
         decoration = BoxDecoration(
           borderRadius: borderRadius,

@@ -1,0 +1,585 @@
+import 'dart:async';
+
+import 'package:flutter/material.dart';
+
+import '../../core/theme/dunes_theme.dart';
+import '../../core/util/friendly_error.dart';
+import '../auth/auth_session.dart';
+import '../conversation/conversation_models.dart';
+import '../conversation/conversation_realtime_hub.dart';
+import '../conversation/conversation_realtime_service.dart';
+import '../conversation/conversation_service.dart';
+import '../conversation/inbox_format.dart';
+import '../conversation/notification_service.dart';
+import '../shell/dunes_toast.dart';
+import 'ai_summary_models.dart';
+import 'ai_summary_participants.dart';
+import 'ai_summary_service.dart';
+import 'ai_summary_sparkle_icon.dart';
+
+/// 「智能总结 AI+」列表页（企微式卡片流）。
+class NativeAiSummaryHubPage extends StatefulWidget {
+  const NativeAiSummaryHubPage({
+    super.key,
+    required this.session,
+    required this.onBack,
+    required this.onCreate,
+    required this.onOpenDetail,
+    this.onOpened,
+  });
+
+  final AuthSession session;
+  final VoidCallback onBack;
+  final VoidCallback onCreate;
+  final ValueChanged<int> onOpenDetail;
+  /// 进入页时回调（用于 Host 刷新通讯 Tab 未读）。
+  final VoidCallback? onOpened;
+
+  @override
+  State<NativeAiSummaryHubPage> createState() => _NativeAiSummaryHubPageState();
+}
+
+class _NativeAiSummaryHubPageState extends State<NativeAiSummaryHubPage> {
+  late final AiSummaryService _service;
+  late final ConversationService _conversations;
+  StreamSubscription<ConversationRealtimeEvent>? _rtSub;
+  Timer? _pollTimer;
+
+  bool _loading = true;
+  String? _error;
+  List<AiSummaryItem> _items = const <AiSummaryItem>[];
+  Map<int, NativeConversation> _convById = const <int, NativeConversation>{};
+  bool _hasMore = false;
+  int _page = 1;
+  bool _loadingMore = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _service = AiSummaryService(session: widget.session);
+    _conversations = ConversationService(session: widget.session);
+    _rtSub = ConversationRealtimeHub.instance
+        .of(widget.session)
+        .events
+        .listen(_onRealtime);
+    unawaited(_markNotificationsRead());
+    unawaited(_load());
+    widget.onOpened?.call();
+  }
+
+  Future<void> _markNotificationsRead() async {
+    try {
+      await NotificationService(session: widget.session)
+          .markAiSummaryNotificationsRead();
+      widget.onOpened?.call();
+    } catch (_) {}
+  }
+
+  @override
+  void dispose() {
+    _rtSub?.cancel();
+    _pollTimer?.cancel();
+    super.dispose();
+  }
+
+  void _onRealtime(ConversationRealtimeEvent event) {
+    if (event.type != 'ai_summary_updated') return;
+    final update = AiSummaryRealtimeUpdate.fromPayload(event.raw);
+    if (update.id <= 0) {
+      unawaited(_load(silent: true));
+      return;
+    }
+    final idx = _items.indexWhere((e) => e.id == update.id);
+    if (idx < 0) {
+      unawaited(_load(silent: true));
+      return;
+    }
+    setState(() {
+      _items = List<AiSummaryItem>.from(_items)
+        ..[idx] = _items[idx].copyWith(
+          status: update.status,
+          summaryPreview: update.preview ?? _items[idx].summaryPreview,
+        );
+    });
+    _syncPoll();
+  }
+
+  Future<void> _load({bool silent = false}) async {
+    if (!silent) {
+      setState(() {
+        _loading = true;
+        _error = null;
+      });
+    }
+    try {
+      final results = await Future.wait([
+        _service.fetchList(page: 1, size: 20),
+        _conversations.fetchConversations(),
+      ]);
+      final page = results[0] as AiSummaryListPage;
+      final convs = results[1] as List<NativeConversation>;
+      if (!mounted) return;
+      setState(() {
+        _items = page.items;
+        _convById = {for (final c in convs) c.id: c};
+        _page = 1;
+        _hasMore = page.hasMore;
+        _loading = false;
+        _error = null;
+      });
+      _syncPoll();
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _error = friendlyErrorText(e, fallback: '总结列表加载失败');
+      });
+    }
+  }
+
+  Future<void> _loadMore() async {
+    if (!_hasMore || _loadingMore) return;
+    setState(() => _loadingMore = true);
+    try {
+      final page = await _service.fetchList(page: _page + 1, size: 20);
+      if (!mounted) return;
+      setState(() {
+        _items = [..._items, ...page.items];
+        _page = page.page;
+        _hasMore = page.hasMore;
+        _loadingMore = false;
+      });
+      _syncPoll();
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _loadingMore = false);
+      showDunesToast(
+        context,
+        friendlyErrorText(e, fallback: '加载更多失败'),
+        kind: DunesToastKind.error,
+      );
+    }
+  }
+
+  void _syncPoll() {
+    final generating = _items.any((e) => e.isGenerating);
+    if (!generating) {
+      _pollTimer?.cancel();
+      _pollTimer = null;
+      return;
+    }
+    _pollTimer ??= Timer.periodic(const Duration(seconds: 3), (_) {
+      unawaited(_pollGenerating());
+    });
+  }
+
+  Future<void> _pollGenerating() async {
+    final pending = _items.where((e) => e.isGenerating).toList();
+    if (pending.isEmpty) {
+      _syncPoll();
+      return;
+    }
+    // 并发轮询多个进行中的任务
+    final results = await Future.wait(
+      pending.map((e) async {
+        try {
+          return await _service.fetchDetail(e.id);
+        } catch (_) {
+          return e;
+        }
+      }),
+    );
+    if (!mounted) return;
+    final map = {for (final r in results) r.id: r};
+    setState(() {
+      _items = _items.map((e) => map[e.id] ?? e).toList(growable: false);
+    });
+    _syncPoll();
+  }
+
+  Future<void> _delete(AiSummaryItem item) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('删除总结'),
+        content: Text('确定删除「${item.theme}」吗？'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('删除'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    try {
+      await _service.delete(item.id);
+      if (!mounted) return;
+      setState(() => _items = _items.where((e) => e.id != item.id).toList());
+      showDunesToast(context, '已删除');
+    } catch (e) {
+      if (!mounted) return;
+      showDunesToast(
+        context,
+        friendlyErrorText(e, fallback: '删除失败'),
+        kind: DunesToastKind.error,
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFFF2F4F7),
+      body: Column(
+        children: [
+          _buildHeader(),
+          Expanded(child: _buildBody()),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHeader() {
+    return Container(
+      width: double.infinity,
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Color(0xFFEDE6F8), Color(0xFFF2F4F7)],
+        ),
+      ),
+      child: SafeArea(
+        bottom: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(8, 4, 8, 16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  IconButton(
+                    onPressed: widget.onBack,
+                    icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18),
+                  ),
+                  const Spacer(),
+                  IconButton(
+                    onPressed: widget.onCreate,
+                    tooltip: '新建总结',
+                    icon: const Icon(Icons.add_rounded),
+                  ),
+                ],
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
+                child: Row(
+                  children: [
+                    const AiSummaryAvatarMark(size: 36),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        '智能总结 AI+',
+                        style: DunesTypography.sans(
+                          fontSize: 22,
+                          fontWeight: FontWeight.w700,
+                          color: const Color(0xFF1C1C1C),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 8),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Text(
+                  '选择聊天会话与日期，根据聊天记录自动总结。',
+                  style: DunesTypography.sans(
+                    fontSize: 13,
+                    height: 1.45,
+                    color: const Color(0xFF6B7280),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBody() {
+    if (_loading) {
+      return const Center(child: CircularProgressIndicator(strokeWidth: 2));
+    }
+    if (_error != null) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(_error!, style: DunesTypography.sans(color: DunesColors.text3)),
+            const SizedBox(height: 12),
+            TextButton(
+              onPressed: () => _load(),
+              style: TextButton.styleFrom(
+                foregroundColor: const Color(0xFF7B5CD8),
+              ),
+              child: const Text('重试'),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return RefreshIndicator(
+      onRefresh: () => _load(silent: true),
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(12, 4, 12, 24),
+        children: [
+          _NewSummaryCard(onTap: widget.onCreate),
+          const SizedBox(height: 10),
+          if (_items.isEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 48),
+              child: Center(
+                child: Text(
+                  '还没有总结，点上方新建开始',
+                  style: DunesTypography.sans(
+                    fontSize: 13,
+                    color: DunesColors.text3,
+                  ),
+                ),
+              ),
+            )
+          else
+            ..._items.map(
+              (item) => Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: _SummaryCard(
+                  item: item,
+                  conversations: [
+                    for (final id in item.conversationIds)
+                      if (_convById[id] != null) _convById[id]!,
+                  ],
+                  service: _conversations,
+                  onTap: () => widget.onOpenDetail(item.id),
+                  onMore: () => _delete(item),
+                  onParticipantsTap: () {
+                    final list = [
+                      for (final id in item.conversationIds)
+                        if (_convById[id] != null) _convById[id]!,
+                    ];
+                    unawaited(
+                      showAiSummaryParticipantsSheet(
+                        context: context,
+                        service: _conversations,
+                        conversations: list,
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ),
+          if (_hasMore)
+            Center(
+              child: TextButton(
+                onPressed: _loadingMore ? null : _loadMore,
+                child: Text(_loadingMore ? '加载中…' : '加载更多'),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _NewSummaryCard extends StatelessWidget {
+  const _NewSummaryCard({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+          child: Row(
+            children: [
+              Container(
+                width: 36,
+                height: 36,
+                decoration: const BoxDecoration(
+                  color: Color(0xFF1C1C1C),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.add, color: Colors.white, size: 20),
+              ),
+              const SizedBox(width: 12),
+              Text(
+                '新建总结',
+                style: DunesTypography.sans(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: const Color(0xFF1C1C1C),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SummaryCard extends StatelessWidget {
+  const _SummaryCard({
+    required this.item,
+    required this.conversations,
+    required this.service,
+    required this.onTap,
+    required this.onMore,
+    required this.onParticipantsTap,
+  });
+
+  final AiSummaryItem item;
+  final List<NativeConversation> conversations;
+  final ConversationService service;
+  final VoidCallback onTap;
+  final VoidCallback onMore;
+  final VoidCallback onParticipantsTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final initiator = item.initiator.displayName.trim().isEmpty
+        ? '我'
+        : item.initiator.displayName;
+    final preview = item.isGenerating
+        ? item.statusLabel
+        : item.isFailed
+        ? (item.errorMessage?.trim().isNotEmpty == true
+              ? item.errorMessage!
+              : '生成失败，可重新生成')
+        : (item.summaryPreview?.trim().isNotEmpty == true
+              ? item.summaryPreview!
+              : '点击查看详情');
+    final time = InboxFormat.formatTime(item.sortTime);
+    final participantCount = item.conversationIds.isNotEmpty
+        ? item.conversationIds.length
+        : conversations.length;
+
+    return Material(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 14, 8, 12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '$initiator 发起',
+                style: DunesTypography.sans(
+                  fontSize: 12,
+                  color: const Color(0xFF9CA3AF),
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                item.theme,
+                style: DunesTypography.sans(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w700,
+                  color: const Color(0xFF111827),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                preview,
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+                style: DunesTypography.sans(
+                  fontSize: 13.5,
+                  height: 1.5,
+                  color: item.isGenerating
+                      ? DunesColors.brandPurple
+                      : const Color(0xFF6B7280),
+                ),
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  if (conversations.isNotEmpty) ...[
+                    GestureDetector(
+                      onTap: onParticipantsTap,
+                      behavior: HitTestBehavior.opaque,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          AiSummaryAvatarStack(
+                            conversations: conversations,
+                            service: service,
+                            size: 20,
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            '$participantCount位成员',
+                            style: DunesTypography.sans(
+                              fontSize: 12,
+                              color: const Color(0xFF9CA3AF),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                  ] else if (participantCount > 0) ...[
+                    GestureDetector(
+                      onTap: onParticipantsTap,
+                      child: Text(
+                        '$participantCount位成员',
+                        style: DunesTypography.sans(
+                          fontSize: 12,
+                          color: const Color(0xFF9CA3AF),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                  ],
+                  Text(
+                    time,
+                    style: DunesTypography.sans(
+                      fontSize: 12,
+                      color: const Color(0xFF9CA3AF),
+                    ),
+                  ),
+                  const Spacer(),
+                  IconButton(
+                    onPressed: onMore,
+                    icon: const Icon(
+                      Icons.more_horiz_rounded,
+                      size: 18,
+                      color: Color(0xFF9CA3AF),
+                    ),
+                    visualDensity: VisualDensity.compact,
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}

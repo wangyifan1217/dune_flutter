@@ -108,9 +108,8 @@ class ContactService {
     return NativeDepartment(
       id: (raw['id'] as num?)?.toInt() ?? 0,
       name: (raw['name'] ?? raw['departmentName'] ?? '部门').toString(),
-      subtitle: (raw['subtitle'] ?? raw['code'] ?? '').toString().trim().isEmpty
-          ? null
-          : (raw['subtitle'] ?? raw['code']).toString(),
+      // 不展示部门编码（如 D_xxxxx）
+      subtitle: null,
       userCount: (raw['userCount'] as num?)?.toInt() ?? _contactList(raw['users']).length,
       expanded: raw['expanded'] != false,
       users: _contactList(raw['users']),

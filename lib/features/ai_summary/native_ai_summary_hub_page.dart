@@ -43,9 +43,12 @@ class NativeAiSummaryHubPage extends StatefulWidget {
 class _NativeAiSummaryHubPageState extends State<NativeAiSummaryHubPage> {
   late final AiSummaryService _service;
   late final ConversationService _conversations;
+  final TextEditingController _searchController = TextEditingController();
+  final ScrollController _scrollController = ScrollController();
   StreamSubscription<ConversationRealtimeEvent>? _rtSub;
   StreamSubscription<AiSummaryItem>? _localStatusSub;
   Timer? _pollTimer;
+  Timer? _searchDebounce;
 
   bool _loading = true;
   String? _error;
@@ -54,6 +57,7 @@ class _NativeAiSummaryHubPageState extends State<NativeAiSummaryHubPage> {
   bool _hasMore = false;
   int _page = 1;
   bool _loadingMore = false;
+  String _query = '';
 
   @override
   void initState() {
@@ -65,6 +69,8 @@ class _NativeAiSummaryHubPageState extends State<NativeAiSummaryHubPage> {
         .events
         .listen(_onRealtime);
     _localStatusSub = AiSummaryStatusBus.instance.stream.listen(_applyItemUpdate);
+    _scrollController.addListener(_onScroll);
+    _searchController.addListener(_onSearchChanged);
     unawaited(_markNotificationsRead());
     unawaited(_load());
     widget.onOpened?.call();
@@ -83,7 +89,57 @@ class _NativeAiSummaryHubPageState extends State<NativeAiSummaryHubPage> {
     _rtSub?.cancel();
     _localStatusSub?.cancel();
     _pollTimer?.cancel();
+    _searchDebounce?.cancel();
+    _scrollController
+      ..removeListener(_onScroll)
+      ..dispose();
+    _searchController
+      ..removeListener(_onSearchChanged)
+      ..dispose();
     super.dispose();
+  }
+
+  void _onScroll() {
+    if (!_hasMore || _loadingMore || _loading) return;
+    if (!_scrollController.hasClients) return;
+    final pos = _scrollController.position;
+    if (pos.pixels >= pos.maxScrollExtent - 240) {
+      unawaited(_loadMore());
+    }
+  }
+
+  void _onSearchChanged() {
+    setState(() {}); // 刷新清除按钮等
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(const Duration(milliseconds: 320), () {
+      final next = _searchController.text.trim();
+      if (next == _query) return;
+      setState(() => _query = next);
+      unawaited(_load());
+    });
+  }
+
+  bool _itemMatchesQuery(AiSummaryItem item, String keyword) {
+    if (keyword.isEmpty) return true;
+    final q = keyword.toLowerCase();
+    if (item.theme.toLowerCase().contains(q)) return true;
+    if (item.initiator.displayName.toLowerCase().contains(q)) return true;
+    final matched = _matchingConversationIds(keyword).toSet();
+    return item.conversationIds.any(matched.contains);
+  }
+
+  /// 关键词匹配的会话（私聊人名 / 群名），供后端按参与会话过滤。
+  List<int> _matchingConversationIds(String keyword) {
+    if (keyword.isEmpty) return const <int>[];
+    final q = keyword.toLowerCase();
+    return _convById.values
+        .where((c) {
+          final title = c.displayTitle.toLowerCase();
+          final peer = (c.peerDisplayName ?? '').toLowerCase();
+          return title.contains(q) || peer.contains(q);
+        })
+        .map((c) => c.id)
+        .toList(growable: false);
   }
 
   void _applyItemUpdate(AiSummaryItem item) {
@@ -91,7 +147,11 @@ class _NativeAiSummaryHubPageState extends State<NativeAiSummaryHubPage> {
     final idx = _items.indexWhere((e) => e.id == item.id);
     setState(() {
       if (idx < 0) {
-        _items = [item, ..._items];
+        if (_itemMatchesQuery(item, _query)) {
+          _items = [item, ..._items];
+        }
+      } else if (!_itemMatchesQuery(item, _query) && _query.isNotEmpty) {
+        _items = List<AiSummaryItem>.from(_items)..removeAt(idx);
       } else {
         _items = List<AiSummaryItem>.from(_items)..[idx] = item;
       }
@@ -137,16 +197,21 @@ class _NativeAiSummaryHubPageState extends State<NativeAiSummaryHubPage> {
       });
     }
     try {
-      final results = await Future.wait([
-        _service.fetchList(page: 1, size: 20),
-        _conversations.fetchConversations(),
-      ]);
-      final page = results[0] as AiSummaryListPage;
-      final convs = results[1] as List<NativeConversation>;
+      // 先确保会话缓存可用，便于按人名/群名解析 conversationIds。
+      if (_convById.isEmpty) {
+        final convs = await _conversations.fetchConversations();
+        if (!mounted) return;
+        setState(() => _convById = {for (final c in convs) c.id: c});
+      }
+      final page = await _service.fetchList(
+        page: 1,
+        size: 20,
+        q: _query,
+        conversationIds: _matchingConversationIds(_query),
+      );
       if (!mounted) return;
       setState(() {
         _items = page.items;
-        _convById = {for (final c in convs) c.id: c};
         _page = 1;
         _hasMore = page.hasMore;
         _loading = false;
@@ -166,7 +231,12 @@ class _NativeAiSummaryHubPageState extends State<NativeAiSummaryHubPage> {
     if (!_hasMore || _loadingMore) return;
     setState(() => _loadingMore = true);
     try {
-      final page = await _service.fetchList(page: _page + 1, size: 20);
+      final page = await _service.fetchList(
+        page: _page + 1,
+        size: 20,
+        q: _query,
+        conversationIds: _matchingConversationIds(_query),
+      );
       if (!mounted) return;
       setState(() {
         _items = [..._items, ...page.items];
@@ -331,6 +401,54 @@ class _NativeAiSummaryHubPageState extends State<NativeAiSummaryHubPage> {
                   ),
                 ),
               ),
+              const SizedBox(height: 12),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+                child: TextField(
+                  controller: _searchController,
+                  textInputAction: TextInputAction.search,
+                  decoration: InputDecoration(
+                    hintText: '搜索主题、发起人或会话（人/群）',
+                    hintStyle: DunesTypography.sans(
+                      fontSize: 13.5,
+                      color: const Color(0xFF9CA3AF),
+                    ),
+                    prefixIcon: const Icon(
+                      Icons.search_rounded,
+                      size: 20,
+                      color: Color(0xFF9CA3AF),
+                    ),
+                    suffixIcon: _searchController.text.isEmpty
+                        ? null
+                        : IconButton(
+                            tooltip: '清除',
+                            onPressed: () => _searchController.clear(),
+                            icon: const Icon(Icons.close_rounded, size: 18),
+                          ),
+                    filled: true,
+                    fillColor: Colors.white,
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 10,
+                    ),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(
+                        color: DunesColors.brandPurple,
+                      ),
+                    ),
+                  ),
+                  style: DunesTypography.sans(fontSize: 14),
+                ),
+              ),
             ],
           ),
         ),
@@ -361,9 +479,14 @@ class _NativeAiSummaryHubPageState extends State<NativeAiSummaryHubPage> {
       );
     }
 
+    final emptyHint = _query.isEmpty
+        ? '还没有总结，点上方新建开始'
+        : '未找到与「$_query」相关的总结';
+
     return RefreshIndicator(
       onRefresh: () => _load(silent: true),
       child: ListView(
+        controller: _scrollController,
         padding: const EdgeInsets.fromLTRB(12, 4, 12, 24),
         children: [
           _NewSummaryCard(onTap: widget.onCreate),
@@ -373,7 +496,7 @@ class _NativeAiSummaryHubPageState extends State<NativeAiSummaryHubPage> {
               padding: const EdgeInsets.only(top: 48),
               child: Center(
                 child: Text(
-                  '还没有总结，点上方新建开始',
+                  emptyHint,
                   style: DunesTypography.sans(
                     fontSize: 13,
                     color: DunesColors.text3,
@@ -410,11 +533,28 @@ class _NativeAiSummaryHubPageState extends State<NativeAiSummaryHubPage> {
                 ),
               ),
             ),
-          if (_hasMore)
-            Center(
-              child: TextButton(
-                onPressed: _loadingMore ? null : _loadMore,
-                child: Text(_loadingMore ? '加载中…' : '加载更多'),
+          if (_loadingMore)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 16),
+              child: Center(
+                child: SizedBox(
+                  width: 22,
+                  height: 22,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              ),
+            )
+          else if (!_hasMore && _items.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              child: Center(
+                child: Text(
+                  '没有更多了',
+                  style: DunesTypography.sans(
+                    fontSize: 12,
+                    color: const Color(0xFF9CA3AF),
+                  ),
+                ),
               ),
             ),
         ],

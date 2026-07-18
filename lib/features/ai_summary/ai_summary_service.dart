@@ -29,10 +29,28 @@ class AiSummaryService {
         .toList(growable: false);
   }
 
-  Future<AiSummaryListPage> fetchList({int page = 1, int size = 20}) async {
+  Future<AiSummaryListPage> fetchList({
+    int page = 1,
+    int size = 20,
+    String q = '',
+    List<int> conversationIds = const <int>[],
+  }) async {
+    final params = <String, String>{
+      'page': '$page',
+      'size': '$size',
+    };
+    final keyword = q.trim();
+    if (keyword.isNotEmpty) params['q'] = keyword;
+    if (conversationIds.isNotEmpty) {
+      params['conversationIds'] = conversationIds.join(',');
+    }
+    final query = params.entries
+        .map((e) =>
+            '${Uri.encodeQueryComponent(e.key)}=${Uri.encodeQueryComponent(e.value)}')
+        .join('&');
     final resp = await dunesHttpGet(
       _session,
-      '/ai/summaries?page=$page&size=$size',
+      '/ai/summaries?$query',
       client: _client,
     );
     final data = _unwrap(resp, fallback: '总结列表加载失败');

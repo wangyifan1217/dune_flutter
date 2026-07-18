@@ -61,6 +61,7 @@ class AiSummaryItem {
     this.startedAt,
     this.finishedAt,
     this.initiator = const AiSummaryInitiator(userId: 0, displayName: ''),
+    this.unread = false,
   });
 
   final int id;
@@ -84,6 +85,9 @@ class AiSummaryItem {
   final DateTime? startedAt;
   final DateTime? finishedAt;
   final AiSummaryInitiator initiator;
+  final bool unread;
+
+  bool get isUnread => unread && (isSuccess || isFailed);
 
   bool get isPending => status == 'PENDING';
   bool get isRunning => status == 'RUNNING';
@@ -132,6 +136,7 @@ class AiSummaryItem {
     Object? resultMarkdown = _unset,
     Object? errorMessage = _unset,
     Object? finishedAt = _unset,
+    Object? unread = _unset,
     List<int>? conversationIds,
   }) {
     return AiSummaryItem(
@@ -164,6 +169,7 @@ class AiSummaryItem {
           ? this.finishedAt
           : finishedAt as DateTime?,
       initiator: initiator,
+      unread: identical(unread, _unset) ? this.unread : unread as bool,
     );
   }
 
@@ -176,6 +182,7 @@ class AiSummaryItem {
       errorMessage: null,
       finishedAt: null,
       conversationIds: conversationIds,
+      unread: false,
     );
   }
 
@@ -219,6 +226,7 @@ class AiSummaryItem {
             ? json['initiator'] as Map<String, dynamic>
             : null,
       ),
+      unread: json['unread'] == true,
     );
   }
 }
@@ -282,4 +290,11 @@ class AiSummaryRealtimeUpdate {
       body: map['body']?.toString(),
     );
   }
+}
+
+/// TPNS / 桌面本地通知：不展示主题与摘要，仅通用提示。
+const String kAiSummaryPushTitle = '智能总结';
+
+String aiSummaryPushBody({required bool failed}) {
+  return failed ? '你有一个AI智能总结生成失败' : '你有一个AI智能总结生成了';
 }

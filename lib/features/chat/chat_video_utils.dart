@@ -2,7 +2,10 @@ import 'dart:typed_data';
 
 import 'package:cross_file/cross_file.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 import 'package:mime/mime.dart';
+
+import 'chat_image_utils.dart';
 
 import 'chat_video_compress_stub.dart'
     if (dart.library.io) 'chat_video_compress_io.dart' as compress;
@@ -14,6 +17,21 @@ const Duration kChatVideoRecordMaxDuration = Duration(seconds: 60);
 
 /// 发送前体积上限（压缩后仍超限则拒绝）。
 const int kChatVideoMaxBytes = 80 * 1024 * 1024;
+
+/// 会话内视频气泡尺寸：与图片同一上限框，按原视频比例缩放（对齐微信）。
+Size chatVideoBubbleDisplaySize(
+  BuildContext context, {
+  int? sourceWidth,
+  int? sourceHeight,
+}) {
+  final box = chatImageBubbleMaxSize(context);
+  return chatImageBubbleDisplaySize(
+    (sourceWidth ?? 0).toDouble(),
+    (sourceHeight ?? 0).toDouble(),
+    maxWidth: box.width,
+    maxHeight: box.height,
+  );
+}
 
 class ChatVideoPrepared {
   const ChatVideoPrepared({

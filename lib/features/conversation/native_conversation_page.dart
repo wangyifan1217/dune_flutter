@@ -283,13 +283,11 @@ class _NativeConversationPageState extends State<NativeConversationPage>
   void _onAiSummaryRealtime(ConversationRealtimeEvent event) {
     final update = AiSummaryRealtimeUpdate.fromPayload(event.raw);
     if (!mounted) return;
-    // 仅成功结果进入通讯列表；生成中不插占位行。
-    if (update.status == 'SUCCESS') {
-      final viewing = _isViewingAiSummary;
+    final terminal =
+        update.status == 'SUCCESS' || update.status == 'FAILED';
+    // 仅终态更新通讯列表预览；未读由服务端 read_at 统计。
+    if (terminal) {
       setState(() {
-        if (!viewing) {
-          _aiSummaryUnread = _aiSummaryUnread > 0 ? _aiSummaryUnread + 1 : 1;
-        }
         if (update.id > 0) {
           final prev = _aiSummaryPreview;
           _aiSummaryPreview = AiSummaryItem(
@@ -303,7 +301,7 @@ class _NativeConversationPageState extends State<NativeConversationPage>
             memberCount: prev?.memberCount ?? 0,
             from: prev?.from,
             to: prev?.to,
-            status: 'SUCCESS',
+            status: update.status,
             summaryPreview: update.preview ??
                 update.body ??
                 prev?.summaryPreview,
@@ -314,42 +312,25 @@ class _NativeConversationPageState extends State<NativeConversationPage>
           );
         }
       });
-      // 通知未读会计入 Tab；本地先乐观 +1，Host 随后会按服务端校正。
-      if (!viewing) {
-        widget.commUnread.bump(1);
-        _updateCommBadge(_items, _notif.unreadCount + 1);
-      } else {
-        unawaited(_clearAiSummaryUnread(openHub: false));
-      }
+      unawaited(_syncAiSummaryUnreadFromServer());
     }
     unawaited(_refreshAiSummaryPreview());
   }
 
-  Future<void> _clearAiSummaryUnread({bool openHub = true}) async {
-    final had = _aiSummaryUnread;
-    if (mounted && had > 0) {
-      setState(() => _aiSummaryUnread = 0);
-    } else if (mounted) {
-      _aiSummaryUnread = 0;
-    }
+  Future<void> _syncAiSummaryUnreadFromServer() async {
+    if (widget.session.isExternalUser) return;
     try {
-      final cleared =
-          await _notificationService.markAiSummaryNotificationsRead();
+      final unread = await _aiSummaryService.fetchUnreadCount();
       if (!mounted) return;
-      final nextNotif = (_notif.unreadCount - (cleared > 0 ? cleared : had))
-          .clamp(0, 1 << 30);
-      setState(() {
-        _notif = NativeNotificationSummary(
-          unreadCount: nextNotif,
-          latest: _notif.latest,
-          aiSummaryUnreadCount: 0,
-        );
-      });
-      _updateCommBadge(_items, nextNotif);
+      setState(() => _aiSummaryUnread = unread);
+      _updateCommBadge(_items, _notif.unreadCount);
     } catch (_) {
       if (mounted) _updateCommBadge(_items, _notif.unreadCount);
     }
-    if (openHub) widget.onOpenAiSummary();
+  }
+
+  Future<void> _openAiSummaryHub() async {
+    widget.onOpenAiSummary();
   }
 
   Future<AiSummaryItem?> _safeFetchAiSummaryPreview() async {
@@ -474,6 +455,7 @@ class _NativeConversationPageState extends State<NativeConversationPage>
         _notificationService.fetchSummary(),
         NovaWebStorage.load(widget.session.userId),
         if (!widget.session.isExternalUser) _safeFetchAiSummaryPreview(),
+        if (!widget.session.isExternalUser) _aiSummaryService.fetchUnreadCount(),
       ]);
       final rows = (results[0] as List<NativeConversation>)
           .where((c) => c.isVisible && !isConversationHidden(hidden, c.id))
@@ -488,7 +470,13 @@ class _NativeConversationPageState extends State<NativeConversationPage>
       final notif = results[1] as NativeNotificationSummary;
       final novaStorage = results[2] as Map<String, String>;
       final aiPreview =
-          results.length > 3 ? results[3] as AiSummaryItem? : null;
+          !widget.session.isExternalUser && results.length > 3
+              ? results[3] as AiSummaryItem?
+              : null;
+      final aiUnread =
+          !widget.session.isExternalUser && results.length > 4
+              ? (results[4] as int? ?? 0)
+              : 0;
       final refreshedHidden = await InboxHiddenStorage.load();
       if (!mounted) return;
       final selfAvatar = userAvatarRefresh.snapshotFor(widget.session.userId);
@@ -504,9 +492,9 @@ class _NativeConversationPageState extends State<NativeConversationPage>
         if (aiPreview != null || !silent) {
           _aiSummaryPreview = aiPreview;
         }
-        // 与 IM 一致：用未读 AI_SUMMARY 通知驱动会话条角标。
+        // 智能总结未读：走 /ai/summaries/unread-count，不再依赖 AI_SUMMARY 通知。
         if (!_isViewingAiSummary) {
-          _aiSummaryUnread = notif.aiSummaryUnreadCount;
+          _aiSummaryUnread = aiUnread;
         } else {
           _aiSummaryUnread = 0;
         }
@@ -536,6 +524,7 @@ class _NativeConversationPageState extends State<NativeConversationPage>
       widget.commUnread.sumConversationUnread(
         rows: rows,
         notifUnread: notifUnread,
+        aiSummaryUnread: _isViewingAiSummary ? 0 : _aiSummaryUnread,
         treatAsReadIds: selected > 0 ? <int>{selected} : const <int>{},
       ),
     );
@@ -884,7 +873,7 @@ class _NativeConversationPageState extends State<NativeConversationPage>
         timeLabel: InboxFormat.formatTime(preview.sortTime),
         unreadCount: _aiSummaryUnread,
         previewGenerating: false,
-        onTap: () => unawaited(_clearAiSummaryUnread()),
+        onTap: () => unawaited(_openAiSummaryHub()),
       ),
     );
   }
@@ -915,7 +904,7 @@ class _NativeConversationPageState extends State<NativeConversationPage>
                 onOpenMessageCenter: widget.onOpenNotifications,
                 onOpenAiSummary: widget.session.isExternalUser
                     ? null
-                    : () => unawaited(_clearAiSummaryUnread()),
+                    : () => unawaited(_openAiSummaryHub()),
                 messageCenterUnread: _messageCenterUnread,
                 novaThinking: _novaGeneratingFor(
                   _primaryAiConversation(_items),

@@ -84,6 +84,8 @@ import '../meeting/native_meeting_detail_page.dart';
 import '../meeting/native_meeting_list_page.dart';
 import '../meeting/native_meeting_service.dart';
 import '../wechat/native_wechat_bot_page.dart';
+import '../ai_summary/ai_summary_models.dart';
+import '../ai_summary/ai_summary_service.dart';
 import '../ai_summary/native_ai_summary_create_page.dart';
 import '../ai_summary/native_ai_summary_detail_page.dart';
 import '../ai_summary/native_ai_summary_hub_page.dart';
@@ -386,31 +388,36 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     if (!relevant.contains(event.type)) return;
     if (!_commBadgeDedup.consume(event)) return;
 
-    // 智能总结完成：写入了 notification，刷新 Tab 红点；未在总结页时补推送。
+    // 智能总结终态：Centrifugo +（后台）TPNS；未读走 chat_summary.read_at，不再写 notification。
     if (event.type == 'ai_summary_updated') {
       final data = event.raw['data'];
       final map = data is Map ? data : event.raw;
       final status = (map['status'] ?? '').toString().toUpperCase();
-      if (status == 'SUCCESS') {
+      if (status == 'SUCCESS' || status == 'FAILED') {
         final onSummary = const <String>{'AS1', 'AS2', 'AS3'}
             .contains(widget.navigation.currentScreen);
-        if (!onSummary) {
-          final theme = (map['theme'] ?? '').toString().trim();
-          final body = (map['body'] ?? map['preview'] ?? '总结已更新').toString();
-          notifyPushRealtimeMessage(
-            title: '智能总结',
-            body: theme.isEmpty ? body : '「$theme」总结已更新',
-          );
-          windowsTrayNotifyIncomingMessage();
-        } else {
-          // 正在看总结页：直接消未读，避免红点残留。
-          unawaited(
-            NotificationService(session: widget.session)
-                .markAiSummaryNotificationsRead()
-                .whenComplete(_scheduleCommBadgeRefresh),
-          );
+        if (onSummary) {
+          final screen = widget.navigation.currentScreen;
+          if (screen == 'AS3') {
+            final summaryId = (map['id'] as num?)?.toInt() ?? 0;
+            if (summaryId > 0 &&
+                summaryId == (_selectedAiSummaryId ?? 0)) {
+              unawaited(
+                AiSummaryService(session: widget.session)
+                    .markRead(summaryId)
+                    .whenComplete(_scheduleCommBadgeRefresh),
+              );
+              return;
+            }
+          }
+          _scheduleCommBadgeRefresh();
           return;
         }
+        notifyPushRealtimeMessage(
+          title: kAiSummaryPushTitle,
+          body: aiSummaryPushBody(failed: status == 'FAILED'),
+        );
+        windowsTrayNotifyIncomingMessage();
       }
       _scheduleCommBadgeRefresh();
       return;
@@ -702,16 +709,28 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     try {
       final convService = ConversationService(session: widget.session);
       final notifService = NotificationService(session: widget.session);
-      final results = await Future.wait(<Future<Object?>>[
+      final aiSummaryService = AiSummaryService(session: widget.session);
+      final futures = <Future<Object?>>[
         convService.fetchConversations(),
         notifService.fetchSummary(),
         InboxHiddenStorage.load(),
         convService.fetchTotalUnread(),
-      ]);
+      ];
+      if (!widget.session.isExternalUser) {
+        futures.add(aiSummaryService.fetchUnreadCount());
+      }
+      final results = await Future.wait<Object?>(futures);
       final allRows = results[0] as List<NativeConversation>;
       final notif = results[1] as NativeNotificationSummary;
       final hidden = results[2] as Map<String, InboxHiddenEntry>;
       final apiTotal = results[3] as int?;
+      final aiSummaryUnread = !widget.session.isExternalUser && results.length > 4
+          ? (results[4] as int? ?? 0)
+          : 0;
+      final onSummaryScreen = const <String>{'AS1', 'AS2', 'AS3'}
+          .contains(widget.navigation.currentScreen);
+      final effectiveAiUnread =
+          onSummaryScreen || widget.session.isExternalUser ? 0 : aiSummaryUnread;
       final rows = allRows
           .where((c) => c.isVisible && !isConversationHidden(hidden, c.id))
           .toList(growable: false);
@@ -737,6 +756,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         final summedTotal = _commUnread.sumConversationUnread(
           rows: rows,
           notifUnread: notif.unreadCount,
+          aiSummaryUnread: effectiveAiUnread,
           treatAsReadIds: treatAsRead,
         );
         // 取服务端总数与本地汇总的较大值：服务端 /comm/unread-total 会漏算
@@ -1765,16 +1785,14 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       );
     }
 
-    if (!_showsAppBottomTabBar(screen)) {
-      return content;
-    }
-
+    // APP：始终保持 Column > Expanded(content) 结构，避免进出子页时
+    // 卸掉 AnimatedSwitcher 导致滑动动画丢失（此前直接 return content 会瞬切）。
     return ColoredBox(
       color: DunesColors.bgApp,
       child: Column(
         children: [
           Expanded(child: content),
-          tabBar,
+          if (_showsAppBottomTabBar(screen)) tabBar,
         ],
       ),
     );

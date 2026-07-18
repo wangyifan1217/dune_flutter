@@ -10,7 +10,6 @@ import '../conversation/conversation_realtime_hub.dart';
 import '../conversation/conversation_realtime_service.dart';
 import '../conversation/conversation_service.dart';
 import '../conversation/inbox_format.dart';
-import '../conversation/notification_service.dart';
 import '../shell/dunes_toast.dart';
 import 'ai_summary_models.dart';
 import 'ai_summary_participants.dart';
@@ -71,17 +70,27 @@ class _NativeAiSummaryHubPageState extends State<NativeAiSummaryHubPage> {
     _localStatusSub = AiSummaryStatusBus.instance.stream.listen(_applyItemUpdate);
     _scrollController.addListener(_onScroll);
     _searchController.addListener(_onSearchChanged);
-    unawaited(_markNotificationsRead());
     unawaited(_load());
     widget.onOpened?.call();
   }
 
-  Future<void> _markNotificationsRead() async {
-    try {
-      await NotificationService(session: widget.session)
-          .markAiSummaryNotificationsRead();
-      widget.onOpened?.call();
-    } catch (_) {}
+  Future<void> _openDetail(AiSummaryItem item) async {
+    if (item.isUnread) {
+      try {
+        await _service.markRead(item.id);
+      } catch (_) {}
+      if (mounted) {
+        setState(() {
+          final idx = _items.indexWhere((e) => e.id == item.id);
+          if (idx >= 0) {
+            _items = List<AiSummaryItem>.from(_items)
+              ..[idx] = _items[idx].copyWith(unread: false);
+          }
+        });
+        widget.onOpened?.call();
+      }
+    }
+    widget.onOpenDetail(item.id);
   }
 
   @override
@@ -173,6 +182,8 @@ class _NativeAiSummaryHubPageState extends State<NativeAiSummaryHubPage> {
     }
     final generating =
         update.status == 'PENDING' || update.status == 'RUNNING';
+    final terminal =
+        update.status == 'SUCCESS' || update.status == 'FAILED';
     setState(() {
       _items = List<AiSummaryItem>.from(_items)
         ..[idx] = _items[idx].copyWith(
@@ -183,7 +194,8 @@ class _NativeAiSummaryHubPageState extends State<NativeAiSummaryHubPage> {
                     : '正在生成…')
               : (update.preview ?? _items[idx].summaryPreview),
           resultMarkdown: generating ? null : _items[idx].resultMarkdown,
-          finishedAt: generating ? null : _items[idx].finishedAt,
+          finishedAt: generating ? null : DateTime.now(),
+          unread: terminal,
         );
     });
     _syncPoll();
@@ -515,7 +527,7 @@ class _NativeAiSummaryHubPageState extends State<NativeAiSummaryHubPage> {
                       if (_convById[id] != null) _convById[id]!,
                   ],
                   service: _conversations,
-                  onTap: () => widget.onOpenDetail(item.id),
+                  onTap: () => unawaited(_openDetail(item)),
                   onMore: () => _delete(item),
                   onParticipantsTap: () {
                     final list = [
@@ -709,13 +721,32 @@ class _SummaryCard extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 6),
-              Text(
-                item.theme,
-                style: DunesTypography.sans(
-                  fontSize: 17,
-                  fontWeight: FontWeight.w700,
-                  color: const Color(0xFF111827),
-                ),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (item.isUnread)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 7, right: 8),
+                      child: Container(
+                        width: 8,
+                        height: 8,
+                        decoration: const BoxDecoration(
+                          color: DunesColors.brandPurple,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                    ),
+                  Expanded(
+                    child: Text(
+                      item.theme,
+                      style: DunesTypography.sans(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w700,
+                        color: const Color(0xFF111827),
+                      ),
+                    ),
+                  ),
+                ],
               ),
               const SizedBox(height: 8),
               Text(

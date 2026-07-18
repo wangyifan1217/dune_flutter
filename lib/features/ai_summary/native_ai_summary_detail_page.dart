@@ -116,6 +116,9 @@ class _NativeAiSummaryDetailPageState extends State<NativeAiSummaryDetailPage> {
       AiSummaryStatusBus.instance.publish(item);
       _syncPoll(item);
       unawaited(_hydrateParticipants(item));
+      if (!item.isGenerating) {
+        unawaited(_service.markRead(item.id));
+      }
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -301,15 +304,24 @@ class _NativeAiSummaryDetailPageState extends State<NativeAiSummaryDetailPage> {
         ),
         actions: [
           if (item != null && !item.isGenerating)
-            TextButton(
+            IconButton(
               onPressed: _canRegenerate ? _confirmRefresh : null,
-              child: Text(
-                _refreshing
-                    ? '提交中…'
-                    : (_participantConversations.isEmpty
-                        ? '请先选择会话'
-                        : '重新生成'),
-              ),
+              tooltip: _participantConversations.isEmpty
+                  ? '请先选择会话'
+                  : '重新生成',
+              icon: _refreshing
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : Icon(
+                      Icons.refresh_rounded,
+                      size: 22,
+                      color: _canRegenerate
+                          ? DunesColors.brandPurple
+                          : const Color(0xFFD1D5DB),
+                    ),
             ),
         ],
       ),

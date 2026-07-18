@@ -7,6 +7,7 @@ import 'package:video_player/video_player.dart';
 
 import '../../core/theme/dunes_theme.dart';
 import '../conversation/conversation_service.dart';
+import 'chat_video_utils.dart';
 import 'chat_video_controller_stub.dart'
     if (dart.library.io) 'chat_video_controller_io.dart' as video_io;
 
@@ -137,24 +138,21 @@ class ChatVideoBubble extends StatelessWidget {
     final download = downloadProgress;
     final busyProgress = upload ?? download;
     final busy = busyProgress != null;
-    final box = MediaQuery.sizeOf(context);
-    final maxW = (box.width * 0.62).clamp(160.0, 280.0);
-    final aspect = (width != null &&
-            height != null &&
-            width! > 0 &&
-            height! > 0)
-        ? width! / height!
-        : 3 / 4;
-    final w = maxW;
-    final h = (w / aspect).clamp(120.0, 320.0);
+    final display = chatVideoBubbleDisplaySize(
+      context,
+      sourceWidth: width,
+      sourceHeight: height,
+    );
+    final playOuter = (display.width * 0.36).clamp(34.0, 48.0);
+    final playIcon = (playOuter * 0.72).clamp(22.0, 34.0);
 
     return GestureDetector(
       onTap: busy ? null : onTap,
       child: ClipRRect(
         borderRadius: BorderRadius.circular(12),
         child: SizedBox(
-          width: w,
-          height: h,
+          width: display.width,
+          height: display.height,
           child: Stack(
             fit: StackFit.expand,
             children: [
@@ -172,16 +170,16 @@ class ChatVideoBubble extends StatelessWidget {
               if (!busy)
                 Center(
                   child: Container(
-                    width: 48,
-                    height: 48,
+                    width: playOuter,
+                    height: playOuter,
                     decoration: BoxDecoration(
                       color: Colors.black.withValues(alpha: 0.45),
                       shape: BoxShape.circle,
                     ),
-                    child: const Icon(
+                    child: Icon(
                       Icons.play_arrow_rounded,
                       color: Colors.white,
-                      size: 34,
+                      size: playIcon,
                     ),
                   ),
                 ),

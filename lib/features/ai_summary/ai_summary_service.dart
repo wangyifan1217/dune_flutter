@@ -156,6 +156,49 @@ class AiSummaryService {
     _unwrap(resp, fallback: '删除失败');
   }
 
+  /// 未读总结数（终态 SUCCESS/FAILED 且未读；不再依赖 notification 表）。
+  Future<int> fetchUnreadCount() async {
+    final resp = await dunesHttpGet(
+      _session,
+      '/ai/summaries/unread-count',
+      client: _client,
+    );
+    final data = _unwrap(resp, fallback: '未读数加载失败');
+    if (data is Map<String, dynamic>) {
+      return (data['unreadCount'] as num?)?.toInt() ?? 0;
+    }
+    return 0;
+  }
+
+  Future<int> markRead(int id) async {
+    if (id <= 0) return 0;
+    final resp = await dunesHttpPost(
+      _session,
+      '/ai/summaries/$id/read',
+      body: '{}',
+      client: _client,
+    );
+    final data = _unwrap(resp, fallback: '标记已读失败');
+    if (data is Map<String, dynamic>) {
+      return (data['cleared'] as num?)?.toInt() ?? 0;
+    }
+    return 0;
+  }
+
+  Future<int> markAllRead() async {
+    final resp = await dunesHttpPost(
+      _session,
+      '/ai/summaries/read-all',
+      body: '{}',
+      client: _client,
+    );
+    final data = _unwrap(resp, fallback: '标记已读失败');
+    if (data is Map<String, dynamic>) {
+      return (data['cleared'] as num?)?.toInt() ?? 0;
+    }
+    return 0;
+  }
+
   /// 轮询直到终态；可并发多个任务各自调用。
   Future<AiSummaryItem> pollUntilDone(
     int id, {

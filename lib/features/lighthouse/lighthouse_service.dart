@@ -39,11 +39,25 @@ class LighthouseService {
     'Content-Type': 'application/json',
   };
 
+  static String _fmtDate(DateTime d) {
+    final y = d.year.toString().padLeft(4, '0');
+    final m = d.month.toString().padLeft(2, '0');
+    final day = d.day.toString().padLeft(2, '0');
+    return '$y-$m-$day';
+  }
+
+  Map<String, String> _rangeQuery(DateTime? startDate, DateTime? endDate) => {
+    if (startDate != null) 'start_date': _fmtDate(startDate),
+    if (endDate != null) 'end_date': _fmtDate(endDate),
+  };
+
   Future<LighthouseDataBundle> fetchOverview({
     String? period,
     String? date,
     String? fuel,
     int? offset,
+    DateTime? startDate,
+    DateTime? endDate,
   }) async {
     final resp = await _client.get(
       _uri('/lighthouse/overview', {
@@ -51,6 +65,7 @@ class LighthouseService {
         if (date != null && date.isNotEmpty) 'date': date,
         if (fuel != null && fuel.isNotEmpty && fuel != '全部') 'fuel': fuel,
         if (offset != null && offset != 0) 'offset': '$offset',
+        ..._rangeQuery(startDate, endDate),
       }),
       headers: _headers,
     );
@@ -76,12 +91,15 @@ class LighthouseService {
     String? date,
     String? fuel,
     int? offset,
+    DateTime? startDate,
+    DateTime? endDate,
   }) {
     return _getData('/lighthouse/summary', {
       if (period != null && period.isNotEmpty) 'period': period,
       if (date != null && date.isNotEmpty) 'date': date,
       if (fuel != null && fuel.isNotEmpty && fuel != '全部') 'fuel': fuel,
       if (offset != null && offset != 0) 'offset': '$offset',
+      ..._rangeQuery(startDate, endDate),
     }, '灯塔摘要加载失败');
   }
 
@@ -91,6 +109,8 @@ class LighthouseService {
     String? date,
     String? fuel,
     int? offset,
+    DateTime? startDate,
+    DateTime? endDate,
   }) {
     return _getData('/lighthouse/dimension', {
       'tab': tab,
@@ -98,6 +118,7 @@ class LighthouseService {
       if (date != null && date.isNotEmpty) 'date': date,
       if (fuel != null && fuel.isNotEmpty && fuel != '全部') 'fuel': fuel,
       if (offset != null && offset != 0) 'offset': '$offset',
+      ..._rangeQuery(startDate, endDate),
     }, '灯塔列表加载失败');
   }
 
@@ -108,6 +129,8 @@ class LighthouseService {
     String? date,
     String? fuel,
     int? offset,
+    DateTime? startDate,
+    DateTime? endDate,
   }) {
     return _getData('/lighthouse/detail', {
       'tab': tab,
@@ -116,6 +139,7 @@ class LighthouseService {
       if (date != null && date.isNotEmpty) 'date': date,
       if (fuel != null && fuel.isNotEmpty && fuel != '全部') 'fuel': fuel,
       if (offset != null && offset != 0) 'offset': '$offset',
+      ..._rangeQuery(startDate, endDate),
     }, '灯塔详情加载失败');
   }
 
@@ -125,6 +149,8 @@ class LighthouseService {
     String? date,
     String? fuel,
     int? offset,
+    DateTime? startDate,
+    DateTime? endDate,
   }) {
     return _getData('/lighthouse/trend', {
       'tab': tab,
@@ -132,6 +158,7 @@ class LighthouseService {
       if (date != null && date.isNotEmpty) 'date': date,
       if (fuel != null && fuel.isNotEmpty && fuel != '全部') 'fuel': fuel,
       if (offset != null && offset != 0) 'offset': '$offset',
+      ..._rangeQuery(startDate, endDate),
     }, '灯塔趋势加载失败');
   }
 
@@ -140,12 +167,15 @@ class LighthouseService {
     String? date,
     String? fuel,
     int? offset,
+    DateTime? startDate,
+    DateTime? endDate,
   }) {
     return _getData('/lighthouse/discounts', {
       if (period != null && period.isNotEmpty) 'period': period,
       if (date != null && date.isNotEmpty) 'date': date,
       if (fuel != null && fuel.isNotEmpty && fuel != '全部') 'fuel': fuel,
       if (offset != null && offset != 0) 'offset': '$offset',
+      ..._rangeQuery(startDate, endDate),
     }, '灯塔折扣加载失败');
   }
 
@@ -155,6 +185,8 @@ class LighthouseService {
     String? date,
     String? fuel,
     int? offset,
+    DateTime? startDate,
+    DateTime? endDate,
     int topP = 12,
     int topS = 10,
     int topC = 10,
@@ -166,6 +198,7 @@ class LighthouseService {
         if (date != null && date.isNotEmpty) 'date': date,
         if (fuel != null && fuel.isNotEmpty && fuel != '全部') 'fuel': fuel,
         if (offset != null && offset != 0) 'offset': '$offset',
+        ..._rangeQuery(startDate, endDate),
         'top_p': '$topP',
         'top_s': '$topS',
         'top_c': '$topC',

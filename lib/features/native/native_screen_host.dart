@@ -165,10 +165,6 @@ class _NativeScreenHostState extends State<NativeScreenHost>
   String? _lastScreen;
   int _lastHistoryDepth = 0;
 
-  /// Keep lighthouse subtree alive across 通讯/我的 tab switches so L2/filters
-  /// are not wiped by AnimatedSwitcher dispose. Created on first LH visit.
-  bool _lighthouseMounted = false;
-
   /// 仅在一次 markConversationRead 成功后允许把桌面角标同步为 0。
   bool _pendingBadgeZeroSync = false;
 
@@ -1164,8 +1160,12 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           onBack: widget.navigation.back,
         );
       case 'LH':
-        // Built via keep-alive in [build]; placeholder for switcher when unused.
-        return const SizedBox.shrink();
+        return NativeLighthousePage(
+          session: widget.session,
+          navigation: widget.navigation,
+          commUnread: _commUnread,
+          workbenchBadge: _workbenchBadge,
+        );
       case 'LM':
         return _NativePlatformTreeShell(navigation: widget.navigation);
       case 'B2':
@@ -1723,14 +1723,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         (_isChatRoute(screen) && _isChatRoute(previousScreen)) ||
         (_isMyRoute(screen) && _isMyRoute(previousScreen)) ||
         (_isQianjiRoute(screen) && _isQianjiRoute(previousScreen));
-    final isLighthouse = screen == 'LH';
-    if (isLighthouse) {
-      _lighthouseMounted = true;
-    }
     final currentScreen = dualNow
         ? _buildChatDualPane()
-        : isLighthouse
-        ? const SizedBox.shrink()
         : _buildCurrentScreen(context);
     final child = KeyedSubtree(
       key: ValueKey<String>(dualNow ? 'dual-$screen' : 'screen-$screen'),
@@ -1774,33 +1768,11 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       },
       child: child,
     );
-
-    final body = Stack(
-      fit: StackFit.expand,
-      children: [
-        if (_lighthouseMounted)
-          Offstage(
-            offstage: !isLighthouse,
-            child: TickerMode(
-              enabled: isLighthouse,
-              child: NativeLighthousePage(
-                key: const ValueKey<String>('lighthouse-keep-alive'),
-                active: isLighthouse,
-                session: widget.session,
-                navigation: widget.navigation,
-                commUnread: _commUnread,
-                workbenchBadge: _workbenchBadge,
-              ),
-            ),
-          ),
-        if (!isLighthouse) animatedContent,
-      ],
-    );
     // 双栏已自带侧栏，避免再套一层主导航。
     if (dualNow) {
-      return body;
+      return animatedContent;
     }
-    return _wrapWithMainNavigation(body, screen: screen);
+    return _wrapWithMainNavigation(animatedContent, screen: screen);
   }
 
   bool _isChatRoute(String? screen) {

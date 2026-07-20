@@ -56,6 +56,7 @@ import '../nova/nova_background_coordinator.dart';
 import '../nova/nova_web_storage.dart';
 import '../push/push_service.dart';
 import '../conversation/message_preview_text.dart';
+import '../qianji/native_qianji_cursor_account_page.dart';
 import '../qianji/native_qianji_detail_page.dart';
 import '../qianji/native_qianji_hub_page.dart';
 import '../qianji/native_qianji_iteration_page.dart';
@@ -1092,10 +1093,11 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       case 'QJ':
         return NativeQianjiHubPage(
           session: widget.session,
-          onOpenDetail: (entity) {
-            setState(() => _selectedQianjiEntity = entity);
-            widget.navigation.go('QJD');
-          },
+          onOpenCursorAccount: () => widget.navigation.go('QJC'),
+        );
+      case 'QJC':
+        return NativeQianjiCursorAccountPage(
+          onBack: widget.navigation.back,
         );
       case 'QJA':
         return NativeQianjiAdminShell(session: widget.session);
@@ -1854,7 +1856,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
   }
 
   bool _isQianjiRoute(String? screen) {
-    return const <String>{'QJ', 'QJD', 'QJI'}.contains(screen);
+    return const <String>{'QJ', 'QJC', 'QJD', 'QJI'}.contains(screen);
   }
 
   /// PC：任意业务页保留侧边主导航；宽屏通讯双栏已自带侧栏，不重复包裹。
@@ -1911,7 +1913,12 @@ class _NativeScreenHostState extends State<NativeScreenHost>
 
   String _mainTabScreenFor(String screen) {
     if (_isMyRoute(screen)) return 'B2';
-    if (screen == 'QJ' || screen == 'QJD' || screen == 'QJI') return 'QJ';
+    if (screen == 'QJ' ||
+        screen == 'QJC' ||
+        screen == 'QJD' ||
+        screen == 'QJI') {
+      return 'QJ';
+    }
     if (screen == 'QJA') return 'QJA';
     if (screen == 'LH' || screen == 'LM') return 'LH';
     return 'C1';

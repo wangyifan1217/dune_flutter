@@ -46,6 +46,7 @@ bool isDesktopAllowedCommScreen(String screenId) {
     'WX',
     // 千机 / 灯塔
     'QJ',
+    'QJC',
     'QJD',
     'QJI',
     'QJA',

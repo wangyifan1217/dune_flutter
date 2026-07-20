@@ -399,11 +399,11 @@ class _WorkbenchCard extends StatelessWidget {
           onTap: tile.enabled ? tile.onTap : null,
           child: SizedBox(
             width: 132,
-            height: 96,
             child: Padding(
               padding: const EdgeInsets.fromLTRB(12, 12, 12, 10),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   Container(
                     width: 34,
@@ -414,13 +414,14 @@ class _WorkbenchCard extends StatelessWidget {
                     ),
                     child: Icon(tile.icon, color: tile.color, size: 18),
                   ),
-                  const Spacer(),
+                  const SizedBox(height: 12),
                   Text(
                     tile.title,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
                       fontSize: 13,
+                      height: 1.25,
                       fontWeight: FontWeight.w600,
                       color: DunesColors.text,
                     ),
@@ -430,7 +431,11 @@ class _WorkbenchCard extends StatelessWidget {
                     tile.subtitle,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: 11, color: DunesColors.text3),
+                    style: const TextStyle(
+                      fontSize: 11,
+                      height: 1.25,
+                      color: DunesColors.text3,
+                    ),
                   ),
                 ],
               ),

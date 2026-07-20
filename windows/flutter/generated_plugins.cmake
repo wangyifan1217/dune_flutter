@@ -8,6 +8,7 @@ list(APPEND FLUTTER_PLUGIN_LIST
   file_selector_windows
   gal
   just_audio_windows
+  just_screenshot
   pasteboard
   pdfx
   permission_handler_windows

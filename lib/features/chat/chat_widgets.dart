@@ -121,6 +121,7 @@ class ChatQuickActions extends StatelessWidget {
     required this.onFile,
     required this.onApproval,
     this.onCameraLongPress,
+    this.onScreenshot,
     this.onAt,
     this.onEmoji,
     this.onVideo,
@@ -134,6 +135,8 @@ class ChatQuickActions extends StatelessWidget {
   final VoidCallback onApproval;
   /// 长按拍照：录制小视频（微信式）。
   final VoidCallback? onCameraLongPress;
+  /// PC：微信式区域截图（截完可裁剪编辑后发送）。
+  final VoidCallback? onScreenshot;
   final VoidCallback? onAt;
   final VoidCallback? onEmoji;
   final VoidCallback? onVideo;
@@ -143,7 +146,7 @@ class ChatQuickActions extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final wide = isWideChatLayout(context);
-    // PC 宽屏：图片(含视频) + 文件；APP：微信式宫格（相册 / 拍照长按拍视频 / 文件）。
+    // PC 宽屏：图片(含视频) + 截图 + 文件；APP：微信式宫格（相册 / 拍照长按拍视频 / 文件）。
     final cells = <_QaCell>[
       if (wide) ...[
         _QaCell(
@@ -151,6 +154,12 @@ class ChatQuickActions extends StatelessWidget {
           label: '图片',
           onTap: onAlbum,
         ),
+        if (onScreenshot != null)
+          _QaCell(
+            icon: Icons.crop_free_rounded,
+            label: '截图',
+            onTap: onScreenshot!,
+          ),
         _QaCell(icon: Icons.attach_file, label: '文件', onTap: onFile),
       ] else ...[
         _QaCell(icon: Icons.photo_outlined, label: '相册', onTap: onAlbum),
@@ -1610,6 +1619,7 @@ class ChatFileAttach extends StatelessWidget {
     required this.onTap,
     this.onSecondaryTapDown,
     this.isPdf = false,
+    this.downloaded = false,
     this.uploadProgress,
     this.downloadProgress,
   });
@@ -1619,6 +1629,9 @@ class ChatFileAttach extends StatelessWidget {
   final VoidCallback onTap;
   final GestureTapDownCallback? onSecondaryTapDown;
   final bool isPdf;
+
+  /// 本地已缓存时在气泡右侧显示勾。
+  final bool downloaded;
 
   /// 0~1；非空时在图标上展示圆形上传进度。
   final double? uploadProgress;
@@ -1719,6 +1732,14 @@ class ChatFileAttach extends StatelessWidget {
                 ],
               ),
             ),
+            if (downloaded && !busy) ...[
+              const SizedBox(width: 8),
+              const Icon(
+                Icons.check_circle,
+                size: 18,
+                color: Color(0xFF07C160),
+              ),
+            ],
           ],
         ),
       ),

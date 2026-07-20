@@ -128,7 +128,11 @@ class _NativeGroupMediaPageState extends State<NativeGroupMediaPage> {
             ? 'image.jpg'
             : (m.bodyText.isEmpty ? 'download' : m.bodyText),
       );
-      final cached = await file_dl.findCachedChatFile(cacheKey, fileName);
+      final cached = await file_dl.findCachedChatFile(
+        cacheKey,
+        fileName,
+        conversationId: widget.conversationId,
+      );
       if (cached != null && cached.isNotEmpty) {
         next.add(_mediaKey(m));
       }
@@ -156,8 +160,12 @@ class _NativeGroupMediaPageState extends State<NativeGroupMediaPage> {
     final cacheKey = _fileCacheKey(payload);
 
     // 已下载：直接打开本地文件，不再重新拉网络。
-    if (cacheKey.isNotEmpty && !kIsWeb) {
-      final cached = await file_dl.findCachedChatFile(cacheKey, fileName);
+    if ((cacheKey.isNotEmpty || widget.conversationId > 0) && !kIsWeb) {
+      final cached = await file_dl.findCachedChatFile(
+        cacheKey,
+        fileName,
+        conversationId: widget.conversationId,
+      );
       if (cached != null && cached.isNotEmpty) {
         if (!mounted) return;
         setState(() => _downloadedIds.add(key));
@@ -182,8 +190,13 @@ class _NativeGroupMediaPageState extends State<NativeGroupMediaPage> {
           objectKey: ConversationService.mediaObjectKey(payload),
           fileName: fileName,
         );
-        if (cacheKey.isNotEmpty) {
-          savedPath = await file_dl.saveBytesAsCachedFile(bytes, cacheKey, fileName);
+        if (cacheKey.isNotEmpty || widget.conversationId > 0) {
+          savedPath = await file_dl.saveBytesAsCachedFile(
+            bytes,
+            cacheKey,
+            fileName,
+            conversationId: widget.conversationId,
+          );
         } else {
           savedPath = await file_dl.saveBytesAsFile(bytes, fileName);
         }
@@ -197,6 +210,7 @@ class _NativeGroupMediaPageState extends State<NativeGroupMediaPage> {
           url,
           fileName,
           cacheKey: cacheKey.isEmpty ? null : cacheKey,
+          conversationId: widget.conversationId,
         );
       }
       if (!mounted) return;
@@ -224,12 +238,13 @@ class _NativeGroupMediaPageState extends State<NativeGroupMediaPage> {
     if (payload == null) return;
     final fileName = ConversationService.mediaFileName(payload, fallback: 'image.jpg');
     try {
-      // 与会话内图片点击放大完全一致的 UI 与「保存到相册」逻辑。
+      // 与会话内图片点击放大完全一致的 UI 与保存/下载逻辑。
       await showChatImagePreview(
         context,
         service: _service,
         payload: payload,
         fileName: fileName,
+        conversationId: widget.conversationId,
       );
     } catch (e) {
       if (!mounted) return;

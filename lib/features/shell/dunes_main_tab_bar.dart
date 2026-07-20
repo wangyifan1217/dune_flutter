@@ -25,6 +25,7 @@ class DunesMainTabBar extends StatefulWidget {
     this.chatOnlyMode = false,
     this.axis = Axis.horizontal,
     this.onSwitchMainTab,
+    this.onDesktopSettingsTap,
   });
 
   final DunesNavigationController navigation;
@@ -41,6 +42,9 @@ class DunesMainTabBar extends StatefulWidget {
 
   /// 由宿主处理主 Tab 切换时使用，可保留板块的子页面状态。
   final ValueChanged<String>? onSwitchMainTab;
+
+  /// PC 侧栏底部：打开桌面设置页。
+  final VoidCallback? onDesktopSettingsTap;
 
   @override
   State<DunesMainTabBar> createState() => _DunesMainTabBarState();
@@ -145,6 +149,7 @@ class _DunesMainTabBarState extends State<DunesMainTabBar> {
 
   /// PC 左侧竖栏。标准标题栏下内容区绘制，不与 macOS 红绿灯重叠。
   Widget _buildSideRail() {
+    final settingsTap = widget.onDesktopSettingsTap;
     return Container(
       width: kDunesMainSideRailWidth,
       color: DunesColors.bgApp,
@@ -157,19 +162,35 @@ class _DunesMainTabBarState extends State<DunesMainTabBar> {
             color: DunesColors.bgApp,
             border: Border(right: BorderSide(color: DunesColors.borderSoft)),
           ),
-          child: Column(children: [const SizedBox(height: 12), ..._tabs]),
+          child: Column(
+            children: [
+              const SizedBox(height: 12),
+              ..._tabs,
+              const Spacer(),
+              if (settingsTap != null) ...[
+                _tab(
+                  icon: Icons.settings_outlined,
+                  label: '设置',
+                  onTap: settingsTap,
+                ),
+                const SizedBox(height: 10),
+              ],
+            ],
+          ),
         ),
       ),
     );
   }
 
   Widget _tab({
-    required IconData icon,
+    IconData? icon,
+    Widget? iconWidget,
     required String label,
     String? screen,
     VoidCallback? onTap,
     bool showRedDot = false,
   }) {
+    assert(icon != null || iconWidget != null);
     final active = screen != null && widget.activeScreen == screen;
     final color = active ? const Color(0xFF7B5CD8) : DunesColors.text3;
 
@@ -198,7 +219,16 @@ class _DunesMainTabBarState extends State<DunesMainTabBar> {
                 Stack(
                   clipBehavior: Clip.none,
                   children: [
-                    Icon(icon, size: 24, color: color),
+                    iconWidget != null
+                        ? IconTheme(
+                            data: IconThemeData(color: color, size: 24),
+                            child: SizedBox(
+                              width: 24,
+                              height: 24,
+                              child: iconWidget,
+                            ),
+                          )
+                        : Icon(icon, size: 24, color: color),
                     if (showRedDot)
                       const Positioned(top: -3, right: -5, child: _PulseDot()),
                   ],

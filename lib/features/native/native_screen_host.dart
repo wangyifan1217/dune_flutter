@@ -16,6 +16,7 @@ import '../approval/native_approval_page.dart';
 import '../auth/auth_session.dart';
 import '../auth/qr_login_scan_page.dart';
 import '../chat/native_broadcast_page.dart';
+import '../desktop/native_desktop_settings_page.dart';
 import '../chat/native_chat_search_page.dart';
 import '../chat/native_group_chat_page.dart';
 import '../chat/native_group_info_page.dart';
@@ -176,6 +177,9 @@ class _NativeScreenHostState extends State<NativeScreenHost>
   /// mark-read 成功后通知双栏列表清零对应未读角标。
   final ConversationReadSignal _conversationReadSignal =
       ConversationReadSignal();
+
+  /// PC 侧栏「设置」页（保留侧栏，内容区切换）。
+  bool _desktopSettingsOpen = false;
 
   void _markUserEnteredChat() {
     _userActivelyInChat = true;
@@ -869,8 +873,22 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     widget.navigation.go('AS2');
   }
 
+  void _clearChatFocusMessage() {
+    if (_focusMessageId == null && _focusMessageHint == null) return;
+    setState(() {
+      _focusMessageId = null;
+      _focusMessageHint = null;
+    });
+  }
+
   int? get _dualPaneSelectedConversationId {
     final chatScreen = _dualPaneChatScreen;
+    if (chatScreen == 'C12' && _searchConversationId > 0) {
+      return _searchConversationId;
+    }
+    if (chatScreen == 'C13' && _mediaConversationId > 0) {
+      return _mediaConversationId;
+    }
     if (chatScreen == 'C5') return _selectedPrivate?.id;
     if (chatScreen == 'C2') return _selectedGroup?.id;
     return null;
@@ -879,6 +897,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
   /// 从「我的」回到桌面端通讯时，保留原来打开的会话，而不是重置右侧聊天栏。
   String get _dualPaneChatScreen {
     final screen = widget.navigation.currentScreen;
+    // 历史 / 媒体：嵌在右侧会话栏，不撑满整页。
+    if (screen == 'C12' || screen == 'C13') return screen;
     if (screen == 'C2' || screen == 'C5') return screen;
     if (_selectedPrivate != null || _selectedPrivatePeerUserId != null) {
       return 'C5';
@@ -888,7 +908,39 @@ class _NativeScreenHostState extends State<NativeScreenHost>
   }
 
   bool _isDualPaneChatRoute(String screen) {
-    return screen == 'C1' || screen == 'C2' || screen == 'C5';
+    return screen == 'C1' ||
+        screen == 'C2' ||
+        screen == 'C5' ||
+        screen == 'C12' ||
+        screen == 'C13';
+  }
+
+  Widget _buildDualPaneSearchPage() {
+    return NativeChatSearchPage(
+      session: widget.session,
+      conversationId: _searchConversationId,
+      title: _searchTitle,
+      onBack: widget.navigation.back,
+      onLocateMessage: (message) {
+        setState(() {
+          _focusMessageId = message.id;
+          _focusMessageHint = message;
+        });
+        if (_searchReturnScreen == 'C5' || _searchReturnScreen == 'C2') {
+          _markUserEnteredChat();
+        }
+        widget.navigation.popTo(_searchReturnScreen);
+      },
+    );
+  }
+
+  Widget _buildDualPaneMediaPage() {
+    return NativeGroupMediaPage(
+      session: widget.session,
+      conversationId: _mediaConversationId,
+      title: _mediaTitle,
+      onBack: widget.navigation.back,
+    );
   }
 
   Widget _buildConversationListPage({int? selectedConversationId}) {
@@ -924,6 +976,10 @@ class _NativeScreenHostState extends State<NativeScreenHost>
 
   Widget _buildDualPaneChatPane() {
     switch (_dualPaneChatScreen) {
+      case 'C12':
+        return _buildDualPaneSearchPage();
+      case 'C13':
+        return _buildDualPaneMediaPage();
       case 'C2':
         return NativeGroupChatPage(
           key: ValueKey<String>('dual-group-${_selectedGroup?.id ?? 0}'),
@@ -954,6 +1010,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           onOpenGroupInfo: () => widget.navigation.go('C6'),
           onOpenAiSummary: (convId) => _openAiSummaryCreate(conversationId: convId),
           onConversationRead: _handleConversationRead,
+          onClearFocusMessage: _clearChatFocusMessage,
         );
       case 'C5':
         return NativePrivateChatPage(
@@ -996,6 +1053,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           },
           onOpenAiSummary: (convId) => _openAiSummaryCreate(conversationId: convId),
           onConversationRead: _handleConversationRead,
+          onClearFocusMessage: _clearChatFocusMessage,
         );
       case 'C1':
       default:
@@ -1020,6 +1078,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         qianjiAdminAccess: widget.session.effectiveQianjiAdminAccess,
         chatOnlyMode: widget.session.isExternalUser,
         onSwitchMainTab: _switchMainTab,
+        onDesktopSettingsTap: _openDesktopSettings,
       ),
     );
   }
@@ -1529,6 +1588,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           onOpenGroupInfo: () => widget.navigation.go('C6'),
           onOpenAiSummary: (convId) => _openAiSummaryCreate(conversationId: convId),
           onConversationRead: _handleConversationRead,
+          onClearFocusMessage: _clearChatFocusMessage,
         );
       case 'C5':
         return NativePrivateChatPage(
@@ -1567,6 +1627,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           },
           onOpenAiSummary: (convId) => _openAiSummaryCreate(conversationId: convId),
           onConversationRead: _handleConversationRead,
+          onClearFocusMessage: _clearChatFocusMessage,
         );
       case 'C12':
         return NativeChatSearchPage(
@@ -1609,6 +1670,18 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     final depth = widget.navigation.history.length;
     final previousScreen = _lastScreen;
     final isBack = previousScreen != null && depth < _lastHistoryDepth;
+
+    if (isDesktopCommOnly && _desktopSettingsOpen) {
+      return _wrapWithMainNavigation(
+        NativeDesktopSettingsPage(
+          onBack: () {
+            if (!mounted) return;
+            setState(() => _desktopSettingsOpen = false);
+          },
+        ),
+        screen: screen,
+      );
+    }
 
     // Windows 桌面：白名单外的屏拉回会话首页。
     if (isWindowsDesktopCommOnly && !isWindowsAllowedCommScreen(screen)) {
@@ -1770,6 +1843,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       qianjiAdminAccess: widget.session.effectiveQianjiAdminAccess,
       chatOnlyMode: widget.session.isExternalUser,
       onSwitchMainTab: _switchMainTab,
+      onDesktopSettingsTap: isDesktopCommOnly ? _openDesktopSettings : null,
     );
 
     if (isDesktopCommOnly) {
@@ -1817,6 +1891,9 @@ class _NativeScreenHostState extends State<NativeScreenHost>
 
   /// 主 Tab 在板块之间切换时，保留「我的」最后打开的子页面。
   void _switchMainTab(String screen) {
+    if (_desktopSettingsOpen) {
+      setState(() => _desktopSettingsOpen = false);
+    }
     final current = widget.navigation.currentScreen;
     if (_isMyRoute(current)) {
       _lastMyScreen = current;
@@ -1905,6 +1982,11 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       _b10BackScreen = from;
     });
     widget.navigation.go('B10');
+  }
+
+  void _openDesktopSettings() {
+    if (!isDesktopCommOnly || !mounted) return;
+    setState(() => _desktopSettingsOpen = true);
   }
 }
 
@@ -2096,15 +2178,33 @@ class _NativeB2PageState extends State<_NativeB2Page> {
 
   _NativeB2Profile? _restoreCachedProfile() {
     final cached = getCachedMyPageProfile(widget.session.userId);
-    if (cached == null) return null;
+    if (cached != null) {
+      return _NativeB2Profile(
+        displayName: cached.displayName,
+        phone: cached.phone,
+        departmentName: cached.departmentName,
+        title: cached.title,
+        avatarPreset: cached.avatarPreset,
+        avatarObjectKey: cached.avatarObjectKey,
+        avatarUrl: cached.avatarUrl,
+      );
+    }
+    // 与聊天/Nova 共用进程内最新头像，避免「我的」冷启动再等一轮 /users/me。
+    final snap = userAvatarRefresh.snapshotFor(widget.session.userId);
+    if (snap == null) return null;
+    var url = snap.avatarUrl.trim();
+    final objectKey = snap.avatarObjectKey.trim();
+    if (url.isEmpty && objectKey.isNotEmpty) {
+      url = dunesAvatarResolvedUrlCache[objectKey] ?? _avatarProxyUrl(objectKey);
+    }
     return _NativeB2Profile(
-      displayName: cached.displayName,
-      phone: cached.phone,
-      departmentName: cached.departmentName,
-      title: cached.title,
-      avatarPreset: cached.avatarPreset,
-      avatarObjectKey: cached.avatarObjectKey,
-      avatarUrl: cached.avatarUrl,
+      displayName: (widget.session.displayName ?? '').trim(),
+      phone: widget.session.phone,
+      departmentName: '',
+      title: '',
+      avatarPreset: snap.avatarPreset,
+      avatarObjectKey: objectKey,
+      avatarUrl: url,
     );
   }
 
@@ -2195,13 +2295,14 @@ class _NativeB2PageState extends State<_NativeB2Page> {
         _loadError = null;
       });
     }
+    // 头像/资料与工作台统计解耦，避免被其它接口拖慢首帧。
+    unawaited(_loadAndApplyProfile());
     try {
       final xflow = XflowService(session: widget.session);
       List<XflowProposalItem>? initiatedRows;
       final results = await Future.wait<Object?>(<Future<Object?>>[
         dunesHttpGet(widget.session, '/workbench/my-stats'),
         _fetchKbSummary(),
-        _loadProfile(),
         xflow
             .fetchB14Initiated()
             .then<List<XflowProposalItem>?>((v) => v)
@@ -2221,12 +2322,11 @@ class _NativeB2PageState extends State<_NativeB2Page> {
       ]);
       final resp = results[0] as http.Response;
       final kbSummary = results[1] as NativeKbSummary?;
-      final profile = results[2] as _NativeB2Profile;
-      initiatedRows = results[3] as List<XflowProposalItem>?;
-      final meetingCount = results[4] as int;
-      final bizTemplates = results[5] as List<XflowTemplateCard>;
-      final admTemplates = results[6] as List<XflowTemplateCard>;
-      final wbConfig = results[7] as Map<String, dynamic>;
+      initiatedRows = results[2] as List<XflowProposalItem>?;
+      final meetingCount = results[3] as int;
+      final bizTemplates = results[4] as List<XflowTemplateCard>;
+      final admTemplates = results[5] as List<XflowTemplateCard>;
+      final wbConfig = results[6] as Map<String, dynamic>;
       final bindings = wbConfig['templateBindings'];
       String defaultTemplate = _defaultSalesTemplateKey;
       if (bindings is Map) {
@@ -2252,7 +2352,6 @@ class _NativeB2PageState extends State<_NativeB2Page> {
       setState(() {
         _stats = stats;
         _kbSummary = kbSummary;
-        _profile = profile;
         _meetingCount = meetingCount;
         _defaultSalesTemplateKey = defaultTemplate;
         _quickLaunchItems = buildQuickLaunchItems(
@@ -2263,7 +2362,6 @@ class _NativeB2PageState extends State<_NativeB2Page> {
         );
         _loading = false;
       });
-      _persistProfileCache(profile);
       widget.workbenchBadge.update(_stats?.pendingForMe ?? 0);
     } catch (error) {
       if (!mounted) return;
@@ -2273,6 +2371,18 @@ class _NativeB2PageState extends State<_NativeB2Page> {
         _loadError = error.toString();
       });
     }
+  }
+
+  Future<void> _loadAndApplyProfile() async {
+    final profile = await _loadProfile();
+    if (!mounted) return;
+    setState(() => _profile = profile);
+    _persistProfileCache(profile);
+    final url = _avatarUrlWithVersion(profile.avatarUrl);
+    if (url.isEmpty) return;
+    try {
+      await precacheImage(NetworkImage(url), context);
+    } catch (_) {}
   }
 
   void _showSoonToast([String label = '敬请期待']) {
@@ -2364,29 +2474,7 @@ class _NativeB2PageState extends State<_NativeB2Page> {
       if (avatarUrl.isEmpty && _looksLikeUrl(objectKey)) {
         avatarUrl = objectKey;
       }
-      if (objectKey.isNotEmpty &&
-          avatarUrl.isEmpty &&
-          !_looksLikeUrl(objectKey)) {
-        try {
-          final preResp = await dunesHttpGet(
-            widget.session,
-            '/storage/presigned-get?bucket=user-avatars&objectKey=${Uri.encodeQueryComponent(objectKey)}',
-          );
-          if (preResp.statusCode >= 200 && preResp.statusCode < 300) {
-            final preBody = jsonDecode(preResp.body);
-            if (preBody is Map<String, dynamic>) {
-              final preData = preBody['data'];
-              if (preData is Map<String, dynamic>) {
-                avatarUrl = (preData['url'] ?? preData['downloadUrl'] ?? '')
-                    .toString();
-              } else {
-                avatarUrl = (preBody['url'] ?? preBody['downloadUrl'] ?? '')
-                    .toString();
-              }
-            }
-          }
-        } catch (_) {}
-      }
+      // 与 IM 一致：user-avatars 同步拼 proxy URL，不再等 presigned-get。
       if (avatarUrl.isNotEmpty) {
         avatarUrl = _avatarProxyUrl(avatarUrl);
       } else if (objectKey.isNotEmpty) {
@@ -2831,13 +2919,16 @@ class _NativeB2PageState extends State<_NativeB2Page> {
     final raw = source.trim();
     if (raw.isEmpty) return raw;
     final apiBase = widget.session.apiBase;
-    if (raw.startsWith(apiBase)) return raw;
+    // 已是完整 URL 时直接用，避免被误当成 objectKey。
+    if (raw.startsWith(apiBase) || _looksLikeUrl(raw)) return raw;
     return '$apiBase/storage/download?bucket=user-avatars&objectKey=${Uri.encodeQueryComponent(raw)}&proxy=1';
   }
 
   String _avatarUrlWithVersion(String rawUrl) {
     final url = rawUrl.trim();
     if (url.isEmpty) return url;
+    // 仅换头像后加版本戳；平时与 IM 共用同一 URL，复用 ImageCache。
+    if (_avatarRefreshVersion <= 0) return url;
     final sep = url.contains('?') ? '&' : '?';
     return '$url${sep}dunes_avatar_v=$_avatarRefreshVersion';
   }

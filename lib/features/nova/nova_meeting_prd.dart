@@ -23,6 +23,7 @@ class NovaPrdPendingJob {
     required this.meetingTitle,
     this.minutesMarkdown = '',
     this.minutesFileName = '',
+    this.sendStarted = false,
   });
 
   final int at;
@@ -41,9 +42,29 @@ class NovaPrdPendingJob {
   final String minutesMarkdown;
   @Deprecated('Legacy PRD flow: inline markdown attachment')
   final String minutesFileName;
+  /// 已对 NOVA/`/ai/assistant/messages` 发起请求；再进会话不得重发。
+  final bool sendStarted;
 
   bool get expired =>
       DateTime.now().millisecondsSinceEpoch - at > 15 * 60 * 1000;
+
+  NovaPrdPendingJob copyWith({bool? sendStarted}) {
+    return NovaPrdPendingJob(
+      at: at,
+      meetingId: meetingId,
+      prdModel: prdModel,
+      userMsgId: userMsgId,
+      assistantMsgId: assistantMsgId,
+      messageText: messageText,
+      kbFileName: kbFileName,
+      kbTitle: kbTitle,
+      prdFileName: prdFileName,
+      meetingTitle: meetingTitle,
+      minutesMarkdown: minutesMarkdown,
+      minutesFileName: minutesFileName,
+      sendStarted: sendStarted ?? this.sendStarted,
+    );
+  }
 
   factory NovaPrdPendingJob.fromJson(Map<String, dynamic> json) {
     final legacyMinutesFile =
@@ -63,6 +84,7 @@ class NovaPrdPendingJob {
       meetingTitle: (json['meetingTitle'] ?? '').toString(),
       minutesMarkdown: (json['minutesMarkdown'] ?? '').toString(),
       minutesFileName: legacyMinutesFile,
+      sendStarted: json['sendStarted'] == true,
     );
   }
 
@@ -77,6 +99,7 @@ class NovaPrdPendingJob {
         'kbTitle': kbTitle,
         'prdFileName': prdFileName,
         'meetingTitle': meetingTitle,
+        'sendStarted': sendStarted,
       };
 }
 

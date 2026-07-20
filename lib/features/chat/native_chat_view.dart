@@ -37,6 +37,7 @@ import 'chat_emoji_gif_panel.dart';
 import 'chat_image_batch_preview.dart';
 import 'chat_image_editor.dart';
 import 'chat_image_utils.dart';
+import 'chat_file_preview_page.dart';
 import 'chat_pdf_preview.dart';
 import 'giphy_proxy_service.dart';
 import 'chat_media_widgets.dart';
@@ -47,6 +48,7 @@ import 'chat_voice_player.dart';
 import 'voice_asr_store.dart';
 import 'voice_recording_overlay.dart';
 import 'chat_widgets.dart';
+import 'desktop_screenshot.dart';
 import 'file_download.dart' as file_dl;
 import 'group_composite_avatar.dart';
 import 'user_avatar_widget.dart';
@@ -189,6 +191,7 @@ class NativeChatView extends StatefulWidget {
     this.onOpenCall,
     this.onOpenAiSummary,
     this.onConversationRead,
+    this.onClearFocusMessage,
     this.autoMarkRead = false,
     this.showBackButton = true,
   });
@@ -208,6 +211,8 @@ class NativeChatView extends StatefulWidget {
   /// 对本会话发起智能总结（回调参数为当前 conversationId）。
   final ValueChanged<int>? onOpenAiSummary;
   final ValueChanged<int>? onConversationRead;
+  /// 「回到最新」时清掉上层 focus，避免后续静默刷新又跳回定位消息。
+  final VoidCallback? onClearFocusMessage;
   final bool autoMarkRead;
   /// 双栏布局下列表已可见时隐藏返回按钮。
   final bool showBackButton;
@@ -247,6 +252,9 @@ class _NativeChatViewState extends State<NativeChatView>
   /// 当前正在下载的附件 cacheKey；非空时仅该文件气泡转圈。
   String? _downloadingFileKey;
   double _downloadProgress = 0;
+
+  /// 本地已缓存的文件 cacheKey（或 fileName 兜底），用于气泡勾选。
+  final Set<String> _downloadedFileKeys = <String>{};
   bool _recordWillCancel = false;
   Offset? _recordFocalPoint;
   bool _loadingOlder = false;
@@ -262,6 +270,10 @@ class _NativeChatViewState extends State<NativeChatView>
   bool _loadingNewer = false;
   bool _locatedMode = false;
   bool _forceLatestMode = false;
+  /// 用户已点「回到最新」后忽略的 focusMessageId，防止父级未清掉时再次定位。
+  int _suppressedFocusMessageId = 0;
+  /// 递增后作废仍在排队的定位滚动，避免「回到最新」被旧 ensureVisible 拉回去。
+  int _messageScrollGen = 0;
 
   /// 进入会话后需持续尝试滚到底，直到成功或用户手动滚动（解决 ListView/图片懒加载竞态）。
   bool _enterStickBottomPending = true;
@@ -429,6 +441,7 @@ class _NativeChatViewState extends State<NativeChatView>
     final oldFocus = oldWidget.focusMessageId ?? 0;
     if (newFocus > 0 && newFocus != oldFocus) {
       _forceLatestMode = false;
+      _suppressedFocusMessageId = 0;
       _enterStickBottomPending = false;
       unawaited(_load(silent: _bootstrapped));
     }
@@ -439,6 +452,7 @@ class _NativeChatViewState extends State<NativeChatView>
       _userInteractedWithScroll = false;
       _locatedMode = false;
       _forceLatestMode = true;
+      _suppressedFocusMessageId = 0;
       unawaited(_load(silent: _bootstrapped));
     }
     if (!oldWidget.autoMarkRead && widget.autoMarkRead) {
@@ -964,9 +978,17 @@ class _NativeChatViewState extends State<NativeChatView>
   /// reverse 列表下默认最新消息贴底，无需再滚到 maxScrollExtent。
   bool get _shouldAnchorMessagesAtTop => false;
 
+  /// 当前应生效的定位消息；「回到最新」后抑制旧 focus。
+  int get _effectiveFocusMessageId {
+    if (_forceLatestMode) return 0;
+    final focusId = widget.focusMessageId ?? 0;
+    if (focusId > 0 && focusId == _suppressedFocusMessageId) return 0;
+    return focusId;
+  }
+
   bool get _shouldStickToLatestOnLoad {
     if (_locatedMode) return false;
-    if ((widget.focusMessageId ?? 0) > 0) return false;
+    if (_effectiveFocusMessageId > 0) return false;
     return _enterStickBottomPending ||
         !_userInteractedWithScroll ||
         _isNearBottom;
@@ -1143,8 +1165,9 @@ class _NativeChatViewState extends State<NativeChatView>
   }
 
   Future<void> _load({bool silent = false}) async {
-    final focusId = _forceLatestMode ? 0 : (widget.focusMessageId ?? 0);
+    final focusId = _effectiveFocusMessageId;
     final locating = focusId > 0;
+    final forceLatest = _forceLatestMode;
     if (!silent && !_bootstrapped) {
       setState(() {
         _loading = true;
@@ -1219,11 +1242,13 @@ class _NativeChatViewState extends State<NativeChatView>
         ..sort((a, b) => a.id.compareTo(b.id));
       if (!mounted) return;
       final conversationChanged = _conversation?.id != conv.id;
+      // 「回到最新」必须整页替换，不能与定位窗口合并，否则仍停在历史位置。
       final preservePaginatedHistory =
           silent &&
           _bootstrapped &&
           !conversationChanged &&
           focusId <= 0 &&
+          !forceLatest &&
           !_isNearBottom;
       final nextMessages = preservePaginatedHistory
           ? (_enrichMessages(_mergeMessages(_messages, msgs), conv)
@@ -1250,11 +1275,12 @@ class _NativeChatViewState extends State<NativeChatView>
             page.peerLastReadMessageId ?? _peerLastReadMessageId;
         if (!silent) _error = null;
       });
+      unawaited(_refreshDownloadedFileFlags());
       final stickLatest = focusId <= 0 && _shouldStickToLatestOnLoad;
       _forceLatestMode = false;
       if (focusId > 0) {
         _highlightAndScroll(focusId);
-      } else if (stickLatest) {
+      } else if (stickLatest || forceLatest) {
         _scrollToLatestOnEnter();
       } else {
         _recountPendingNewMessages();
@@ -1321,9 +1347,18 @@ class _NativeChatViewState extends State<NativeChatView>
     int attempt = 0,
     double? fallbackPixels,
     double? fallbackOldMax,
+    required int gen,
   }) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || !_scrollController.hasClients) {
+      if (!mounted) return;
+      if (gen != _messageScrollGen) {
+        _olderScrollHold?.cancel();
+        _olderScrollHold = null;
+        _scrollRestoreAnchorId = null;
+        _releaseOlderScrollRestoreGate();
+        return;
+      }
+      if (!_scrollController.hasClients) {
         _finishOlderScrollRestore();
         return;
       }
@@ -1339,6 +1374,7 @@ class _NativeChatViewState extends State<NativeChatView>
           attempt: attempt + 1,
           fallbackPixels: fallbackPixels,
           fallbackOldMax: fallbackOldMax,
+          gen: gen,
         );
         return;
       }
@@ -1403,18 +1439,39 @@ class _NativeChatViewState extends State<NativeChatView>
       }
       final merged = _enrichMessages(_mergeMessages(page.items, _messages));
       if (!mounted) return;
+      // 贴底看最新时补历史：只钉在最新端，不要 ensureVisible 把视口往上拽。
+      final stickBottom = _enterStickBottomPending || _isNearBottom;
+      if (stickBottom) {
+        _olderScrollHold?.cancel();
+        _olderScrollHold = null;
+        _scrollRestoreAnchorId = null;
+        setState(() {
+          _messages = merged;
+          _hasMore = page.hasMore;
+          _loadingOlder = false;
+        });
+        unawaited(_refreshDownloadedFileFlags());
+        _olderLoadCooldownUntilMs =
+            DateTime.now().millisecondsSinceEpoch + 600;
+        _releaseOlderScrollRestoreGate();
+        _scrollBottom(force: true, gentle: false);
+        _scheduleAutoloadOlderToFill();
+        return;
+      }
       _scrollRestoreAnchorId = anchorMessageId;
       setState(() {
         _messages = merged;
         _hasMore = page.hasMore;
         _loadingOlder = false;
       });
+      unawaited(_refreshDownloadedFileFlags());
       _olderScrollRestorePending = true;
       _olderLoadCooldownUntilMs = DateTime.now().millisecondsSinceEpoch + 600;
       _ensureAnchorVisibleAfterOlderLoad(
         anchorMessageId,
         fallbackPixels: _olderScrollHoldPixels,
         fallbackOldMax: _olderScrollHoldMax,
+        gen: _messageScrollGen,
       );
     } catch (e) {
       _olderScrollHold?.cancel();
@@ -1460,6 +1517,7 @@ class _NativeChatViewState extends State<NativeChatView>
         _messages = merged;
         _hasNewer = page.hasNewer;
       });
+      unawaited(_refreshDownloadedFileFlags());
       if (_isNearBottom) {
         setState(_clearPendingNewMessages);
         _scrollBottom(gentle: true, force: true);
@@ -1485,14 +1543,23 @@ class _NativeChatViewState extends State<NativeChatView>
   }
 
   Future<void> _jumpToLatest() async {
+    final focusToSuppress = widget.focusMessageId ?? 0;
+    _messageScrollGen++;
+    _highlightTimer?.cancel();
+    _olderScrollHold?.cancel();
+    _olderScrollHold = null;
+    _olderScrollRestorePending = false;
+    _scrollRestoreAnchorId = null;
     setState(() {
       _locatedMode = false;
       _highlightMessageId = null;
       _hasNewer = false;
       _forceLatestMode = true;
+      _suppressedFocusMessageId = focusToSuppress;
       _enterStickBottomPending = true;
       _userInteractedWithScroll = false;
     });
+    widget.onClearFocusMessage?.call();
     await _load(silent: _bootstrapped);
     if (!mounted) return;
     _scrollToLatestOnEnter();
@@ -1514,17 +1581,22 @@ class _NativeChatViewState extends State<NativeChatView>
   }
 
   void _highlightAndScroll(int messageId) {
+    final gen = ++_messageScrollGen;
     setState(() => _highlightMessageId = messageId);
     _highlightTimer?.cancel();
     _highlightTimer = Timer(const Duration(seconds: 2), () {
       if (mounted) setState(() => _highlightMessageId = null);
     });
-    _ensureMessageVisible(messageId);
+    _ensureMessageVisible(messageId, gen: gen);
   }
 
-  void _ensureMessageVisible(int messageId, {int attempt = 0}) {
+  void _ensureMessageVisible(
+    int messageId, {
+    int attempt = 0,
+    required int gen,
+  }) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
+      if (!mounted || gen != _messageScrollGen) return;
       if (attempt == 0) {
         _preScrollTowardMessage(messageId);
       }
@@ -1547,7 +1619,7 @@ class _NativeChatViewState extends State<NativeChatView>
         return;
       }
       if (attempt < 8) {
-        _ensureMessageVisible(messageId, attempt: attempt + 1);
+        _ensureMessageVisible(messageId, attempt: attempt + 1, gen: gen);
         return;
       }
       if (_messages.any((m) => m.id == messageId)) {
@@ -1907,6 +1979,41 @@ class _NativeChatViewState extends State<NativeChatView>
         onProgress: (p) => _setUploadProgress(p),
       );
     });
+  }
+
+  /// PC：微信式应用内框选截图 → 裁剪编辑 → 发送。
+  Future<void> _desktopScreenshotAndSend() async {
+    if (!isDesktopCommOnly || _mediaBusy || _conversation == null) return;
+    if (_conversation!.dissolved) {
+      _showToast('会话已解散，无法发送');
+      return;
+    }
+
+    Uint8List? image;
+    try {
+      image = await captureDesktopRegionScreenshot();
+    } catch (e) {
+      if (!mounted) return;
+      final msg = friendlyErrorText(e);
+      if (msg.contains('取消')) {
+        _showToast('已取消截图');
+      } else {
+        _showToast('截图失败：$msg', error: true);
+      }
+      return;
+    }
+    if (!mounted) return;
+    if (image == null || image.isEmpty) {
+      _showToast('已取消截图');
+      return;
+    }
+
+    await _sendPastedImageBytes(
+      image,
+      fileName: 'screenshot-${DateTime.now().millisecondsSinceEpoch}.png',
+      sourceLabel: '截图',
+      openEditor: true,
+    );
   }
 
   Future<void> _sendMultiImagesFromGallery() async {
@@ -2629,9 +2736,12 @@ class _NativeChatViewState extends State<NativeChatView>
   }) async {
     if (_isSystemKind(m.kind)) return;
     final copyText = _messageCopyText(m);
-    final isFile = m.kind.toUpperCase() == 'FILE';
-    final isAudio = m.kind.toUpperCase() == 'AUDIO';
+    final kind = m.kind.toUpperCase();
+    final isFile = kind == 'FILE';
+    final isImage = kind == 'IMAGE';
+    final isAudio = kind == 'AUDIO';
     final desktop = isDesktopCommOnly;
+    final fileDownloaded = isFile && _isFileDownloaded(m.payload, _mediaDownloadFileName(m));
     final actions = <_MessageQuickAction>[
       if (desktop && isFile) ...[
         const _MessageQuickAction(
@@ -2645,6 +2755,12 @@ class _NativeChatViewState extends State<NativeChatView>
           icon: Icons.folder_open_rounded,
         ),
       ],
+      if (desktop && isImage)
+        const _MessageQuickAction(
+          id: 'reveal_file',
+          label: '打开文件夹',
+          icon: Icons.folder_open_rounded,
+        ),
       if (isAudio)
         const _MessageQuickAction(
           id: 'transcribe',
@@ -2667,7 +2783,13 @@ class _NativeChatViewState extends State<NativeChatView>
           label: '复制',
           icon: Icons.copy_rounded,
         ),
-      if (_canDownloadMessage(m))
+      if (isFile && fileDownloaded)
+        const _MessageQuickAction(
+          id: 'redownload',
+          label: '重新下载',
+          icon: Icons.refresh_rounded,
+        )
+      else if (_canDownloadMessage(m))
         const _MessageQuickAction(
           id: 'download',
           label: '下载',
@@ -2709,6 +2831,9 @@ class _NativeChatViewState extends State<NativeChatView>
         break;
       case 'download':
         await _downloadFile(m.payload, _mediaDownloadFileName(m));
+        break;
+      case 'redownload':
+        await _redownloadFile(m.payload, _mediaDownloadFileName(m));
         break;
       case 'multi_msg':
         _enterMessageMultiSelect(initialMessageId: m.id);
@@ -3006,6 +3131,9 @@ class _NativeChatViewState extends State<NativeChatView>
             onAlbum: locked || _mediaBusy
                 ? () {}
                 : _sendMultiImagesFromGallery,
+            onScreenshot: !isDesktopCommOnly || locked || _mediaBusy
+                ? null
+                : _desktopScreenshotAndSend,
             onFile: locked || _mediaBusy ? () {} : _sendFile,
             onApproval: () => showDunesSoonToast(context),
             onAt: locked ? null : _pickAtMember,
@@ -3900,14 +4028,25 @@ class _NativeChatViewState extends State<NativeChatView>
       );
       return;
     }
-    // PC：像企微一样，点击后下载并用系统默认应用直接打开（已缓存则跳过下载）。
+    // PC：下载后直接用系统默认应用打开（已缓存则跳过下载）。
     if (isDesktopCommOnly) {
       await _openOrDownloadFileOnDesktop(payload, fileName);
       return;
     }
-    final confirmed = await _confirmFileDownload(fileName, payload: payload);
-    if (!confirmed || !mounted) return;
-    await _downloadFile(payload, fileName);
+    // APP：微信式文件页，用其他应用打开。
+    if (!mounted) return;
+    await showChatFilePreview(
+      context: context,
+      service: _service,
+      payload: payload,
+      fileName: fileName,
+      conversationId: _chatConversationId,
+      onDownloaded: () {
+        final key = _downloadedKey(payload, fileName);
+        if (key.isEmpty || !mounted) return;
+        setState(() => _downloadedFileKeys.add(key));
+      },
+    );
   }
 
   String _fileCacheKey(Map<String, dynamic>? payload) {
@@ -3917,16 +4056,78 @@ class _NativeChatViewState extends State<NativeChatView>
     return ConversationService.mediaDirectUrl(payload);
   }
 
+  String _downloadedKey(Map<String, dynamic>? payload, String fileName) {
+    final cacheKey = _fileCacheKey(payload);
+    if (cacheKey.isNotEmpty) return cacheKey;
+    return fileName.trim();
+  }
+
+  bool _isFileDownloaded(Map<String, dynamic>? payload, String fileName) {
+    final key = _downloadedKey(payload, fileName);
+    return key.isNotEmpty && _downloadedFileKeys.contains(key);
+  }
+
+  int? get _chatConversationId {
+    final id = _conversation?.id ?? 0;
+    return id > 0 ? id : null;
+  }
+
+  Future<void> _refreshDownloadedFileFlags() async {
+    if (kIsWeb) return;
+    final conversationId = _chatConversationId;
+    final next = <String>{};
+    for (final m in _messages) {
+      if (m.kind.toUpperCase() != 'FILE') continue;
+      final fileName = _mediaDownloadFileName(m);
+      final cacheKey = _fileCacheKey(m.payload);
+      final cached = await file_dl.findCachedChatFile(
+        cacheKey,
+        fileName,
+        conversationId: conversationId,
+      );
+      if (cached != null && cached.isNotEmpty) {
+        final key = _downloadedKey(m.payload, fileName);
+        if (key.isNotEmpty) next.add(key);
+      }
+    }
+    if (!mounted) return;
+    final changed = next.length != _downloadedFileKeys.length ||
+        !next.containsAll(_downloadedFileKeys);
+    if (!changed) return;
+    setState(() {
+      _downloadedFileKeys
+        ..clear()
+        ..addAll(next);
+    });
+  }
+
+  void _markFileDownloaded(Map<String, dynamic>? payload, String fileName) {
+    final key = _downloadedKey(payload, fileName);
+    if (key.isEmpty) return;
+    if (_downloadedFileKeys.contains(key)) return;
+    if (!mounted) {
+      _downloadedFileKeys.add(key);
+      return;
+    }
+    setState(() => _downloadedFileKeys.add(key));
+  }
+
   Future<void> _openOrDownloadFileOnDesktop(
     Map<String, dynamic>? payload,
     String fileName,
   ) async {
     final cacheKey = _fileCacheKey(payload);
-    if (cacheKey.isNotEmpty) {
-      final cached = await file_dl.findCachedChatFile(cacheKey, fileName);
+    final conversationId = _chatConversationId;
+    if (cacheKey.isNotEmpty || conversationId != null) {
+      final cached = await file_dl.findCachedChatFile(
+        cacheKey,
+        fileName,
+        conversationId: conversationId,
+      );
       if (cached != null && cached.isNotEmpty) {
         try {
           await file_dl.openLocalFile(cached);
+          _markFileDownloaded(payload, fileName);
           return;
         } catch (_) {
           // 缓存损坏或关联应用失败时重新下载。
@@ -3949,6 +4150,7 @@ class _NativeChatViewState extends State<NativeChatView>
         _showToast('文件已保存，但无法自动打开');
         return;
       }
+      _markFileDownloaded(payload, fileName);
       await file_dl.openLocalFile(savedPath);
     } catch (e) {
       _showToast('打开失败：${friendlyErrorText(e)}', error: true);
@@ -3963,9 +4165,14 @@ class _NativeChatViewState extends State<NativeChatView>
     String fileName,
   ) async {
     final cacheKey = _fileCacheKey(payload);
+    final conversationId = _chatConversationId;
     String? path;
-    if (cacheKey.isNotEmpty) {
-      path = await file_dl.findCachedChatFile(cacheKey, fileName);
+    if (cacheKey.isNotEmpty || conversationId != null) {
+      path = await file_dl.findCachedChatFile(
+        cacheKey,
+        fileName,
+        conversationId: conversationId,
+      );
     }
     if (path == null || path.isEmpty) {
       if (_downloadingMedia) {
@@ -4003,13 +4210,19 @@ class _NativeChatViewState extends State<NativeChatView>
     String fileName, {
     String cacheKey = '',
   }) async {
+    final conversationId = _chatConversationId;
     if (ConversationService.hasAuthMedia(payload)) {
       final bytes = await _service.loadChatMediaBytes(
         payload,
         onProgress: _setDownloadProgress,
       );
-      if (cacheKey.isNotEmpty) {
-        return file_dl.saveBytesAsCachedFile(bytes, cacheKey, fileName);
+      if (cacheKey.isNotEmpty || conversationId != null) {
+        return file_dl.saveBytesAsCachedFile(
+          bytes,
+          cacheKey,
+          fileName,
+          conversationId: conversationId,
+        );
       }
       return file_dl.saveBytesAsFile(bytes, fileName);
     }
@@ -4022,6 +4235,7 @@ class _NativeChatViewState extends State<NativeChatView>
       fileName,
       onProgress: _setDownloadProgress,
       cacheKey: cacheKey.isEmpty ? null : cacheKey,
+      conversationId: conversationId,
     );
   }
 
@@ -4068,8 +4282,10 @@ class _NativeChatViewState extends State<NativeChatView>
 
   Future<void> _downloadFile(
     Map<String, dynamic>? payload,
-    String fileName,
-  ) async {
+    String fileName, {
+    bool force = false,
+    bool showSuccessDialog = true,
+  }) async {
     if (_downloadingMedia) {
       _showToast('正在下载，请稍候…');
       return;
@@ -4077,22 +4293,46 @@ class _NativeChatViewState extends State<NativeChatView>
     final cacheKey = _fileCacheKey(payload);
     _beginDownload(cacheKey);
     try {
+      if (force) {
+        await file_dl.deleteCachedChatFile(
+          cacheKey,
+          fileName,
+          conversationId: _chatConversationId,
+        );
+      }
       final savedPath = await _saveAttachmentToDisk(
         payload,
         fileName,
         cacheKey: cacheKey,
       );
       if (!mounted) return;
+      _markFileDownloaded(payload, fileName);
       if (savedPath == null || savedPath.isEmpty) {
         _showToast('已保存 $fileName');
         return;
       }
-      _showDownloadSuccessDialog(savedPath, fileName);
+      if (showSuccessDialog) {
+        _showDownloadSuccessDialog(savedPath, fileName);
+      } else {
+        _showToast(force ? '已重新下载 $fileName' : '已保存 $fileName');
+      }
     } catch (e) {
       _showToast('下载失败：${friendlyErrorText(e)}', error: true);
     } finally {
       _endDownload();
     }
+  }
+
+  Future<void> _redownloadFile(
+    Map<String, dynamic>? payload,
+    String fileName,
+  ) async {
+    await _downloadFile(
+      payload,
+      fileName,
+      force: true,
+      showSuccessDialog: !isDesktopCommOnly,
+    );
   }
 
   String _formatSavedPath(String path) {
@@ -4265,7 +4505,12 @@ class _NativeChatViewState extends State<NativeChatView>
       return _wrapQuotedContent(
         m,
         mine,
-        ChatAuthImageBubble(service: _service, payload: m.payload, mine: mine),
+        ChatAuthImageBubble(
+          service: _service,
+          payload: m.payload,
+          mine: mine,
+          conversationId: _chatConversationId,
+        ),
       );
     }
     if (kind == 'VIDEO') {
@@ -4301,6 +4546,7 @@ class _NativeChatViewState extends State<NativeChatView>
           fileName: fileName,
           mine: mine,
           isPdf: chatPayloadIsPdf(m.payload, fileName),
+          downloaded: _isFileDownloaded(m.payload, fileName),
           downloadProgress: _downloadProgressFor(m.payload),
           onTap: () => _openFileAttachment(m.payload, fileName),
           onSecondaryTapDown: isDesktopCommOnly && !_messageMultiSelectMode
@@ -4400,6 +4646,7 @@ class _NativeChatViewState extends State<NativeChatView>
         service: _service,
         payload: e.payload,
         mine: mine,
+        conversationId: _chatConversationId,
       );
     }
     if (kind == 'VIDEO') {

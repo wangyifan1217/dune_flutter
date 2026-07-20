@@ -17,12 +17,17 @@ Future<String?> saveBytesAsFileImpl(Uint8List bytes, String fileName) async {
 Future<String?> saveBytesAsCachedFileImpl(
   Uint8List bytes,
   String cacheKey,
-  String fileName,
-) async {
+  String fileName, {
+  int? conversationId,
+}) async {
   return saveBytesAsFileImpl(bytes, fileName);
 }
 
-Future<String?> findCachedChatFileImpl(String cacheKey, String fileName) async {
+Future<String?> findCachedChatFileImpl(
+  String cacheKey,
+  String fileName, {
+  int? conversationId,
+}) async {
   return null;
 }
 
@@ -31,6 +36,7 @@ Future<String?> openUrlAsFileImpl(
   String fileName, {
   void Function(double progress)? onProgress,
   String? cacheKey,
+  int? conversationId,
 }) async {
   onProgress?.call(0);
   try {
@@ -69,6 +75,16 @@ Future<void> openLocalFileImpl(String path) async {
 Future<void> revealLocalFileImpl(String path) async {
   // Web 无本地路径可显示。
 }
+
+Future<String> resolveImSaveDirPathImpl() async {
+  throw UnsupportedError('Web 不支持本地保存目录');
+}
+
+Future<void> deleteCachedChatFileImpl(
+  String cacheKey,
+  String fileName, {
+  int? conversationId,
+}) async {}
 
 Future<List<int>> _blobToBytes(html.Blob blob) async {
   final reader = html.FileReader();

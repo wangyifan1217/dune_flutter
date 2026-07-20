@@ -140,6 +140,10 @@ class _NativeScreenHostState extends State<NativeScreenHost>
   String? _lastScreen;
   int _lastHistoryDepth = 0;
 
+  /// Keep lighthouse subtree alive across 通讯/我的 tab switches so L2/filters
+  /// are not wiped by AnimatedSwitcher dispose. Created on first LH visit.
+  bool _lighthouseMounted = false;
+
   /// 仅在一次 markConversationRead 成功后允许把桌面角标同步为 0。
   bool _pendingBadgeZeroSync = false;
 
@@ -801,12 +805,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
   Widget _buildCurrentScreen(BuildContext context) {
     switch (widget.navigation.currentScreen) {
       case 'LH':
-        return NativeLighthousePage(
-          session: widget.session,
-          navigation: widget.navigation,
-          commUnread: _commUnread,
-          workbenchBadge: _workbenchBadge,
-        );
+        // Built via keep-alive in [build]; placeholder for switcher when unused.
+        return const SizedBox.shrink();
       case 'LM':
         return _NativePlatformTreeShell(navigation: widget.navigation);
       case 'B2':
@@ -1269,7 +1269,13 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     final useSlide =
         (_isChatRoute(screen) && _isChatRoute(previousScreen)) ||
         (_isMyRoute(screen) && _isMyRoute(previousScreen));
-    final currentScreen = _buildCurrentScreen(context);
+    final isLighthouse = screen == 'LH';
+    if (isLighthouse) {
+      _lighthouseMounted = true;
+    }
+    final currentScreen = isLighthouse
+        ? const SizedBox.shrink()
+        : _buildCurrentScreen(context);
     final child = KeyedSubtree(
       key: ValueKey<String>('screen-$screen'),
       child: currentScreen,
@@ -1312,7 +1318,29 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       },
       child: child,
     );
-    return _wrapWithMainNavigation(animatedContent, screen: screen);
+
+    final body = Stack(
+      fit: StackFit.expand,
+      children: [
+        if (_lighthouseMounted)
+          Offstage(
+            offstage: !isLighthouse,
+            child: TickerMode(
+              enabled: isLighthouse,
+              child: NativeLighthousePage(
+                key: const ValueKey<String>('lighthouse-keep-alive'),
+                active: isLighthouse,
+                session: widget.session,
+                navigation: widget.navigation,
+                commUnread: _commUnread,
+                workbenchBadge: _workbenchBadge,
+              ),
+            ),
+          ),
+        if (!isLighthouse) animatedContent,
+      ],
+    );
+    return _wrapWithMainNavigation(body, screen: screen);
   }
 
   bool _isChatRoute(String? screen) {

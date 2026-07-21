@@ -17,8 +17,6 @@ class AppUpdateInstaller {
 
   static const instance = AppUpdateInstaller._();
 
-  static const _macOpenTimeout = Duration(seconds: 20);
-
   bool get supportsInAppInstall => isDesktopCommOnly;
 
   Future<void> applyUpdate(
@@ -37,6 +35,8 @@ class AppUpdateInstaller {
 
     final file = await downloadInstaller(url, onProgress: onProgress);
     onLaunching?.call();
+    // 让 UI 先切到「正在打开…」，避免一直停在下载 100%。
+    await Future<void>.delayed(const Duration(milliseconds: 80));
     await launchInstaller(file);
   }
 
@@ -109,41 +109,45 @@ class AppUpdateInstaller {
     await _openExternal(path);
   }
 
-  /// Mac：用 `open` 挂载/打开 DMG。不无限等待，避免 UI 卡在 100%。
+  /// Mac：打开 DMG 给用户拖装。绝不能同步等待 Gatekeeper/挂载，否则 UI 会卡在 100%。
+  ///
+  /// 非 App Store（Developer ID）分发时，系统会做公证/隔离检查，`open` 可能很久才返回；
+  /// 因此这里只「发起打开」并立刻返回，由 Finder 继续处理。
   Future<void> _launchMacInstaller(String path) async {
     final file = File(path);
     if (await file.length() <= 0) {
       throw StateError('安装包无效');
     }
 
+    // 下载到临时目录常带 quarantine，清掉可减少 Gatekeeper 首次卡住概率（仍需已签名/公证）。
     try {
-      // 分离启动，避免阻塞在 Gatekeeper / 挂载过程。
-      await Process.start(
-        'open',
-        [path],
-        mode: ProcessStartMode.detached,
-      ).timeout(_macOpenTimeout);
-    } on TimeoutException {
-      // 已交给系统；超时仍视为已发起打开，由 UI 引导用户手动安装。
-      return;
-    } catch (_) {
-      // 分离启动失败时回退到同步 open，并限制等待时间。
-      try {
-        final result = await Process.run(
+      await Process.run(
+        'xattr',
+        ['-dr', 'com.apple.quarantine', path],
+      ).timeout(const Duration(seconds: 2));
+    } catch (_) {}
+
+    // 优先走系统打开（不阻塞等挂载完成）。
+    try {
+      final opened = await launchUrl(
+        Uri.file(path),
+        mode: LaunchMode.externalApplication,
+      ).timeout(const Duration(seconds: 3));
+      if (opened) return;
+    } catch (_) {}
+
+    // 回退：真正 fire-and-forget，不再 await Gatekeeper。
+    try {
+      unawaited(
+        Process.start(
           'open',
           [path],
-        ).timeout(_macOpenTimeout);
-        if (result.exitCode != 0) {
-          throw ProcessException(
-            'open',
-            [path],
-            result.stderr.toString(),
-            result.exitCode,
-          );
-        }
-      } on TimeoutException {
-        return;
-      }
+          mode: ProcessStartMode.detached,
+        ),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 400));
+    } catch (e) {
+      throw StateError('无法打开安装包，请改用浏览器下载');
     }
   }
 

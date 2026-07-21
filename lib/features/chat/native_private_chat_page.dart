@@ -15,7 +15,9 @@ class NativePrivateChatPage extends StatelessWidget {
     required this.onBack,
     required this.onOpenProfile,
     required this.onOpenSearch,
+    this.onOpenAiSummary,
     this.onConversationRead,
+    this.onClearFocusMessage,
     this.autoMarkRead = false,
     this.showBackButton = true,
   });
@@ -28,7 +30,9 @@ class NativePrivateChatPage extends StatelessWidget {
   final VoidCallback onBack;
   final VoidCallback onOpenProfile;
   final ValueChanged<int> onOpenSearch;
+  final ValueChanged<int>? onOpenAiSummary;
   final ValueChanged<int>? onConversationRead;
+  final VoidCallback? onClearFocusMessage;
   final bool autoMarkRead;
   final bool showBackButton;
 
@@ -44,7 +48,9 @@ class NativePrivateChatPage extends StatelessWidget {
       onBack: onBack,
       onOpenProfile: onOpenProfile,
       onOpenSearch: onOpenSearch,
+      onOpenAiSummary: onOpenAiSummary,
       onConversationRead: onConversationRead,
+      onClearFocusMessage: onClearFocusMessage,
       autoMarkRead: autoMarkRead,
       showBackButton: showBackButton,
     );

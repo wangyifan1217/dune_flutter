@@ -14,6 +14,8 @@ class AuthSession {
     this.userType = 'ORG',
     this.novaLocalStorage,
     this.lighthouseAccess = false,
+    this.qianjiAccess = false,
+    this.qianjiAdminAccess = false,
   });
 
   final String phone;
@@ -25,6 +27,8 @@ class AuthSession {
   final int? departmentId;
   final String userType;
   final bool lighthouseAccess;
+  final bool qianjiAccess;
+  final bool qianjiAdminAccess;
 
   bool get isExternalUser => userType.toUpperCase() == 'EXTERNAL';
 
@@ -32,11 +36,26 @@ class AuthSession {
   bool get effectiveLighthouseAccess =>
       lighthouseAccess || DunesDefaults.localLighthouseAccessBypass;
 
+  bool get effectiveQianjiAccess =>
+      qianjiAccess || DunesDefaults.localLighthouseAccessBypass;
+
+  bool get effectiveQianjiAdminAccess =>
+      qianjiAdminAccess || DunesDefaults.localLighthouseAccessBypass;
+
   AuthSession withLocalDevGrants() {
-    if (!DunesDefaults.localLighthouseAccessBypass || lighthouseAccess) {
-      return this;
+    var next = this;
+    if (DunesDefaults.localLighthouseAccessBypass) {
+      if (!next.lighthouseAccess) {
+        next = next.copyWith(lighthouseAccess: true);
+      }
+      if (!next.qianjiAccess) {
+        next = next.copyWith(qianjiAccess: true);
+      }
+      if (!next.qianjiAdminAccess) {
+        next = next.copyWith(qianjiAdminAccess: true);
+      }
     }
-    return copyWith(lighthouseAccess: true);
+    return next;
   }
 
   /// Nova Provisioning 结果，注入 WebView localStorage（与 dunes JWT 分离）。
@@ -64,6 +83,8 @@ class AuthSession {
     String? userType,
     Map<String, String>? novaLocalStorage,
     bool? lighthouseAccess,
+    bool? qianjiAccess,
+    bool? qianjiAdminAccess,
   }) {
     return AuthSession(
       phone: phone ?? this.phone,
@@ -76,6 +97,8 @@ class AuthSession {
       userType: userType ?? this.userType,
       novaLocalStorage: novaLocalStorage ?? this.novaLocalStorage,
       lighthouseAccess: lighthouseAccess ?? this.lighthouseAccess,
+      qianjiAccess: qianjiAccess ?? this.qianjiAccess,
+      qianjiAdminAccess: qianjiAdminAccess ?? this.qianjiAdminAccess,
     );
   }
 
@@ -88,6 +111,8 @@ class AuthSession {
       departmentId: (data['departmentId'] as num?)?.toInt() ?? session.departmentId,
       userType: (data['userType'] ?? session.userType)?.toString() ?? session.userType,
       lighthouseAccess: data['lighthouseAccess'] == true,
+      qianjiAccess: data['qianjiAccess'] == true,
+      qianjiAdminAccess: data['qianjiAdminAccess'] == true,
     );
   }
 
@@ -113,6 +138,8 @@ class AuthSession {
       departmentId: (claims['departmentId'] as num?)?.toInt(),
       userType: _resolveUserType(claims),
       lighthouseAccess: claims['lighthouseAccess'] == true,
+      qianjiAccess: claims['qianjiAccess'] == true,
+      qianjiAdminAccess: claims['qianjiAdminAccess'] == true,
     );
   }
 
@@ -145,6 +172,8 @@ class AuthSession {
       if (novaLocalStorage != null && novaLocalStorage!.isNotEmpty)
         'novaLocalStorage': novaLocalStorage,
       'lighthouseAccess': lighthouseAccess,
+      'qianjiAccess': qianjiAccess,
+      'qianjiAdminAccess': qianjiAdminAccess,
     };
   }
 
@@ -163,6 +192,8 @@ class AuthSession {
       userType: (json['userType'] as String?)?.toUpperCase() ?? 'ORG',
       novaLocalStorage: _parseNovaStorage(json['novaLocalStorage']),
       lighthouseAccess: json['lighthouseAccess'] == true,
+      qianjiAccess: json['qianjiAccess'] == true,
+      qianjiAdminAccess: json['qianjiAdminAccess'] == true,
     );
   }
 

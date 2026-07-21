@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/cupertino.dart';
@@ -91,7 +91,14 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
     _live.lines.addListener(_onLiveChanged);
     _live.partial.addListener(_onLiveChanged);
     _live.elapsed.addListener(_onLiveChanged);
+    _live.interruptionHint.addListener(_onLiveInterruptionHint);
     _recordingCtrl.state.addListener(_onLiveChanged);
+  }
+
+  void _onLiveInterruptionHint() {
+    final hint = _live.interruptionHint.value?.trim() ?? '';
+    if (hint.isEmpty || !mounted) return;
+    showDunesToast(context, hint);
   }
 
   void _onLiveChanged() {
@@ -113,6 +120,7 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
     _live.lines.removeListener(_onLiveChanged);
     _live.partial.removeListener(_onLiveChanged);
     _live.elapsed.removeListener(_onLiveChanged);
+    _live.interruptionHint.removeListener(_onLiveInterruptionHint);
     _recordingCtrl.state.removeListener(_onLiveChanged);
     _livePreviewScrollController.dispose();
     _titleCtrl.dispose();
@@ -281,7 +289,7 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
         _error = null;
       });
       if (path == null || path.isEmpty) {
-        setState(() => _error = '录音文件保存失败，请重试');
+        setState(() => _error = '录音文件为空或未成功落盘，请重新录制后再保存');
         return;
       }
       await _promptPersistAfterEnd(filePath: path);
@@ -644,7 +652,7 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(18),
               gradient: const LinearGradient(
-                colors: [Color(0xFF2F5D62), Color(0xFF1B3A3F)],
+                colors: [Color(0xFF7B5CD8), Color(0xFF6A4FA0)],
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
               ),
@@ -704,7 +712,7 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
             ),
             child: CupertinoSlidingSegmentedControl<_CreateMode>(
               groupValue: _mode,
-              thumbColor: DunesColors.accent,
+              thumbColor: DunesColors.brandPurple,
               backgroundColor: DunesColors.bgSoft,
               children: {
                 _CreateMode.upload: Padding(
@@ -842,7 +850,7 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
                       vertical: 10,
                     ),
                     borderRadius: BorderRadius.circular(12),
-                    color: DunesColors.accentSoft,
+                    color: DunesColors.brandPurpleSoft,
                     onPressed: _pickFile,
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
@@ -850,7 +858,7 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
                         const Icon(
                           Icons.upload_rounded,
                           size: 18,
-                          color: DunesColors.accentDeep,
+                          color: DunesColors.brandPurpleDeep,
                         ),
                         const SizedBox(width: 4),
                         Text(
@@ -858,7 +866,7 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
                           style: DunesTypography.sans(
                             fontSize: 13,
                             fontWeight: FontWeight.w600,
-                            color: DunesColors.accentDeep,
+                            color: DunesColors.brandPurpleDeep,
                           ),
                         ),
                       ],
@@ -922,7 +930,7 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
                           style: DunesTypography.sans(
                             fontSize: 13,
                             fontWeight: FontWeight.w600,
-                            color: DunesColors.accentDeep,
+                            color: DunesColors.brandPurpleDeep,
                           ),
                         ),
                       ],
@@ -937,8 +945,8 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
                         icon: const Icon(Icons.mic_rounded),
                         label: const Text('开始实时转写'),
                         style: OutlinedButton.styleFrom(
-                          foregroundColor: DunesColors.accentDeep,
-                          side: const BorderSide(color: DunesColors.accentLine),
+                          foregroundColor: DunesColors.brandPurpleDeep,
+                          side: const BorderSide(color: DunesColors.brandPurpleLine),
                           padding: const EdgeInsets.symmetric(vertical: 12),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12),
@@ -959,8 +967,8 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
                             ),
                             label: Text(livePaused ? '继续录音' : '暂停录音'),
                             style: OutlinedButton.styleFrom(
-                              foregroundColor: DunesColors.accentDeep,
-                              side: const BorderSide(color: DunesColors.accentLine),
+                              foregroundColor: DunesColors.brandPurpleDeep,
+                              side: const BorderSide(color: DunesColors.brandPurpleLine),
                               padding: const EdgeInsets.symmetric(vertical: 12),
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(12),
@@ -1077,7 +1085,7 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
                   : '开始转写并生成纪要',
             ),
             style: FilledButton.styleFrom(
-              backgroundColor: DunesColors.accent,
+              backgroundColor: DunesColors.brandPurple,
               foregroundColor: Colors.white,
               padding: const EdgeInsets.symmetric(vertical: 14),
               shape: RoundedRectangleBorder(
@@ -1134,7 +1142,7 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
                     livePartial,
                     style: DunesTypography.sans(
                       fontSize: 13,
-                      color: DunesColors.accent,
+                      color: DunesColors.brandPurple,
                       height: 1.5,
                     ).copyWith(fontStyle: FontStyle.italic),
                   ),
@@ -1177,7 +1185,7 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
         children: [
           Row(
             children: [
-              Icon(icon, size: 18, color: DunesColors.accent),
+              Icon(icon, size: 18, color: DunesColors.brandPurple),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(

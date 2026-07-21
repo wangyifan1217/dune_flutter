@@ -755,7 +755,12 @@ class _NativeNovaPageState extends State<NativeNovaPage>
       // 后端 IM 分配的 message ID 与前端临时 afterMessageId 不同。重入
       // 流式会话时，只要当前会话已有同文本用户消息就不能再插入一次。
       final hasUser =
-          out.any((m) => m.role == 'user' && m.text.trim() == draftUserText) ||
+          out.any(
+            (m) =>
+                m.role == 'user' &&
+                (m.text.trim() == draftUserText ||
+                    isNovaPrdDisplayAndPromptPair(m.text, draftUserText)),
+          ) ||
           novaHasMatchingUserMessage(
             out,
             afterMessageId: effectiveAfter,
@@ -965,17 +970,58 @@ class _NativeNovaPageState extends State<NativeNovaPage>
           _conversationId,
         );
         if (canonicalRows.isNotEmpty) {
-          rows = canonicalRows;
-          if (mounted) {
-            setState(() {
-              _messages = _withWelcome(canonicalRows);
-            });
+          final syncHasReply = canonicalRows.any(
+            (m) =>
+                m.role == 'assistant' &&
+                !m.streaming &&
+                m.text.trim().isNotEmpty &&
+                (m.text.trim() == reply ||
+                    (reply.length >= 24 &&
+                        m.text.contains(reply.substring(0, 24)))),
+          );
+          if (syncHasReply) {
+            rows = canonicalRows;
+            if (mounted) {
+              setState(() {
+                _messages = _withWelcome(canonicalRows);
+              });
+            }
+          } else {
+            // IM 尚未回显本轮（PRD / 慢落库常见）：保留本地气泡并强制写 IM+审计，
+            // 避免用旧快照冲掉刚生成的回复，导致「对话记录看不到」。
+            if (kDebugMode) {
+              debugPrint(
+                '[NativeNovaPage] IM sync missing latest reply, '
+                'force-persist turn conv=$_conversationId',
+              );
+            }
+            await _registerLastTurnFromRows(
+              rows,
+              userMsgId: _genAfterMessageId > 0 ? _genAfterMessageId : null,
+              fallbackAssistantText: reply,
+              fallbackThinkText: thinkText,
+            );
           }
+        } else {
+          await _registerLastTurnFromRows(
+            rows,
+            userMsgId: _genAfterMessageId > 0 ? _genAfterMessageId : null,
+            fallbackAssistantText: reply,
+            fallbackThinkText: thinkText,
+          );
         }
       } catch (e) {
         if (kDebugMode) {
           debugPrint('[NativeNovaPage] canonical history sync skipped: $e');
         }
+        try {
+          await _registerLastTurnFromRows(
+            rows,
+            userMsgId: _genAfterMessageId > 0 ? _genAfterMessageId : null,
+            fallbackAssistantText: reply,
+            fallbackThinkText: thinkText,
+          );
+        } catch (_) {}
       }
     }
     if (_conversationId > 0 && rows.isNotEmpty) {
@@ -1887,6 +1933,7 @@ class _NativeNovaPageState extends State<NativeNovaPage>
 
     if (reusingTurn) {
       _prdNovaSendStarted = true;
+      unawaited(_markPrdPendingSendStarted());
     }
 
     if (!_ensureVisionModelForDrafts(drafts)) return;
@@ -2753,6 +2800,24 @@ class _NativeNovaPageState extends State<NativeNovaPage>
     );
   }
 
+  Future<void> _markPrdPendingSendStarted() async {
+    if (_conversationId <= 0) return;
+    try {
+      final storage = await NovaWebStorage.load(widget.session.userId);
+      final job = readNovaPrdPendingJob(storage, _conversationId);
+      if (job == null || job.sendStarted) return;
+      await persistNovaPrdPendingJob(
+        userId: widget.session.userId,
+        conversationId: _conversationId,
+        job: job.copyWith(sendStarted: true),
+      );
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('[NativeNovaPage] mark PRD sendStarted failed: $e');
+      }
+    }
+  }
+
   Future<void> _maybeResumePrdGeneration() async {
     if (!mounted || _conversationId <= 0 || _prdResumeInFlight || _sending) {
       return;
@@ -2769,6 +2834,18 @@ class _NativeNovaPageState extends State<NativeNovaPage>
       return;
     }
 
+    // 本地短文案 + 服务端长指令可能并存；先合并再决定是否续发。
+    _collapsePrdDuplicateUserBubbles();
+
+    // 已对 NOVA 发起过请求：只靠 generating/poll 续流，禁止再发一轮。
+    if (job.sendStarted ||
+        _prdNovaSendStarted ||
+        _serverGenerating ||
+        _service.isStreamInFlight ||
+        _hasActiveAssistantStream()) {
+      return;
+    }
+
     _prdResumeInFlight = true;
     try {
       _applySelectedChatModel(job.prdModel);
@@ -2776,6 +2853,26 @@ class _NativeNovaPageState extends State<NativeNovaPage>
     } finally {
       _prdResumeInFlight = false;
     }
+  }
+
+  void _collapsePrdDuplicateUserBubbles() {
+    if (!mounted) return;
+    final next = dedupeNovaHistoryMessages(_messages);
+    if (identical(next, _messages) || next.length == _messages.length) {
+      // 长度相同也可能替换了文案；比对末尾用户气泡文本。
+      var changed = next.length != _messages.length;
+      if (!changed) {
+        for (var i = 0; i < next.length; i++) {
+          if (next[i].id != _messages[i].id ||
+              next[i].text != _messages[i].text) {
+            changed = true;
+            break;
+          }
+        }
+      }
+      if (!changed) return;
+    }
+    setState(() => _messages = next);
   }
 
   Future<void> _continuePrdGeneration(NovaPrdPendingJob job) async {
@@ -2904,12 +3001,12 @@ class _NativeNovaPageState extends State<NativeNovaPage>
 
     var userPersisted = false;
     try {
+      // `_saveLocalMessage` 已停用 messages/local，这里只更新本地缓存，不能算「已落库」。
       await _service.persistUserMessage(
         conversationId: _conversationId,
         messageId: job.userMsgId,
         content: displayText,
       );
-      userPersisted = true;
     } catch (e) {
       if (kDebugMode) {
         debugPrint('[NativeNovaPage] PRD user persist skipped: $e');
@@ -3213,12 +3310,12 @@ class _NativeNovaPageState extends State<NativeNovaPage>
 
     var userPersisted = false;
     try {
+      // `_saveLocalMessage` 已停用 messages/local，这里只更新本地缓存，不能算「已落库」。
       await _service.persistUserMessage(
         conversationId: _conversationId,
         messageId: job.userMsgId,
         content: displayText,
       );
-      userPersisted = true;
     } catch (e) {
       if (kDebugMode) {
         debugPrint('[NativeNovaPage] PRD user persist skipped: $e');

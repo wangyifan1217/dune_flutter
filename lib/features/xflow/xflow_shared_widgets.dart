@@ -9,6 +9,50 @@ import 'xflow_form_styles.dart';
 import 'xflow_models.dart';
 import 'xflow_service.dart';
 
+/// 审批通过前的二次确认。
+Future<bool> confirmApproveDecision(BuildContext context) async {
+  final ok = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: const Text('确认通过'),
+      content: const Text('确认通过该审批？提交后不可撤销。'),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(ctx, false),
+          child: const Text('取消'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(ctx, true),
+          child: const Text('确认通过'),
+        ),
+      ],
+    ),
+  );
+  return ok == true;
+}
+
+/// 审批驳回前的二次确认。
+Future<bool> confirmRejectDecision(BuildContext context) async {
+  final ok = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: const Text('确认驳回'),
+      content: const Text('确认驳回该审批？驳回后流程将终止，发起人需修改后重新提交。'),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(ctx, false),
+          child: const Text('取消'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(ctx, true),
+          child: const Text('确认驳回'),
+        ),
+      ],
+    ),
+  );
+  return ok == true;
+}
+
 /// 提交审批前的二次确认。
 Future<bool> confirmSubmitForApproval(
   BuildContext context, {
@@ -778,6 +822,7 @@ class XflowProposalListCard extends StatelessWidget {
         ? _formatShortDate(item.createdAt!)
         : '—';
     final submitter = item.createdByName.trim();
+    final isProposal = item.businessType.toUpperCase() == 'PROPOSAL';
     return Material(
       color: DunesColors.bgApp,
       borderRadius: BorderRadius.circular(12),
@@ -814,9 +859,9 @@ class XflowProposalListCard extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 8),
-              _compactMetaRow('提案种类', kindLabel),
+              _compactMetaRow(isProposal ? '提案种类' : '审批种类', kindLabel),
               const SizedBox(height: 4),
-              _compactMetaRow('提案编码', code, mono: true),
+              _compactMetaRow(isProposal ? '提案编码' : '业务编号', code, mono: true),
               const SizedBox(height: 4),
               _compactMetaRow('提案类型', typeLabel),
               if (mode == XflowListCardMode.b1 && submitter.isNotEmpty) ...[
@@ -1338,7 +1383,8 @@ class XflowXfActionBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final resolvedIcon = icon ??
+    final resolvedIcon =
+        icon ??
         (label.contains('撤回') ? Icons.undo_rounded : Icons.check_rounded);
     return Padding(
       padding: const EdgeInsets.fromLTRB(14, 0, 14, 12),

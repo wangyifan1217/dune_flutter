@@ -9,6 +9,7 @@ import UserNotifications
 {
   private let voiceChannelName = "dunes/audio_recorder"
   private let voiceStreamChannelName = "dunes/audio_recorder_stream"
+  private let voiceEventsChannelName = "dunes/audio_recorder_events"
   private let meetingAudioChannelName = "dunes/meeting_audio"
   private var audioEngine: AVAudioEngine?
   private var m4aWriter: StreamingAacM4aWriter?
@@ -20,8 +21,13 @@ import UserNotifications
   private var needsCaptureRebuild = false
   private var isRecording = false
   private var isPaused = false
+  /// 忽略自身 setCategory / defaultToSpeaker 触发的路由回调，避免误报「被其他软件占用」。
+  private var ignoreRouteChangeUntil: Date?
   private var streamSink: FlutterEventSink?
   private let streamLock = NSLock()
+  private var recorderEventSink: FlutterEventSink?
+  private let recorderEventLock = NSLock()
+  private let recorderEventHandler = AudioRecorderEventHandler()
   private var tpnsBridge: TpnsPushBridge?
   private var audioConverter: AVAudioConverter?
   private let targetFormat = AVAudioFormat(
@@ -83,6 +89,13 @@ import UserNotifications
     )
     streamChannel.setStreamHandler(self)
 
+    recorderEventHandler.owner = self
+    let eventsChannel = FlutterEventChannel(
+      name: voiceEventsChannelName,
+      binaryMessenger: messenger
+    )
+    eventsChannel.setStreamHandler(recorderEventHandler)
+
     let meetingAudioChannel = FlutterMethodChannel(
       name: meetingAudioChannelName,
       binaryMessenger: messenger
@@ -123,6 +136,12 @@ import UserNotifications
     )
     NotificationCenter.default.addObserver(
       self,
+      selector: #selector(handleAudioRouteChange(_:)),
+      name: AVAudioSession.routeChangeNotification,
+      object: nil
+    )
+    NotificationCenter.default.addObserver(
+      self,
       selector: #selector(handleAppDidEnterBackground(_:)),
       name: UIApplication.didEnterBackgroundNotification,
       object: nil
@@ -147,35 +166,76 @@ import UserNotifications
     }
     switch type {
     case .began:
-      needsCaptureRebuild = true
-      audioEngine?.pause()
-      if isPaused {
-        finalizeCurrentSegmentIfNeeded()
-        teardownAudioEngine()
-      }
+      autoPauseForInterruption(reason: "interruption")
     case .ended:
-      var shouldResume = true
-      if let optRaw = info[AVAudioSessionInterruptionOptionKey] as? UInt {
-        shouldResume = AVAudioSession.InterruptionOptions(rawValue: optRaw)
-          .contains(.shouldResume)
-      }
-      if shouldResume {
-        resumeEngineAfterInterruption()
+      guard isRecording else { return }
+      // 仅在系统建议恢复时通知 Flutter 自动续录。
+      let optionsRaw = info[AVAudioSessionInterruptionOptionKey] as? UInt ?? 0
+      let options = AVAudioSession.InterruptionOptions(rawValue: optionsRaw)
+      if options.contains(.shouldResume) || optionsRaw == 0 {
+        emitRecorderEvent(["kind": "interruptionEnded"])
       }
     @unknown default:
       break
     }
   }
 
+  /// 来电等系统音频中断：立即落盘当前片段并暂停，避免 stop 时录音丢失。
+  private func autoPauseForInterruption(reason: String) {
+    guard isRecording else { return }
+    if !isPaused {
+      accumulatedDurationMs += currentSegmentDurationMs()
+      activeSegmentStartedAt = nil
+      isPaused = true
+      emitRecorderEvent(["kind": "paused", "reason": reason])
+    }
+    needsCaptureRebuild = true
+    finalizeCurrentSegmentIfNeeded()
+    teardownAudioEngine()
+  }
+
+  fileprivate func setRecorderEventSink(_ sink: FlutterEventSink?) {
+    recorderEventLock.lock()
+    recorderEventSink = sink
+    recorderEventLock.unlock()
+  }
+
+  private func emitRecorderEvent(_ payload: [String: Any]) {
+    recorderEventLock.lock()
+    let sink = recorderEventSink
+    recorderEventLock.unlock()
+    guard let sink else { return }
+    DispatchQueue.main.async {
+      sink(payload)
+    }
+  }
+
   @objc private func handleMediaServicesReset(_ note: Notification) {
     guard isRecording else { return }
-    needsCaptureRebuild = true
-    if isPaused {
-      finalizeCurrentSegmentIfNeeded()
-      teardownAudioEngine()
+    autoPauseForInterruption(reason: "mediaServicesReset")
+  }
+
+  /// 外设断开等真实路由丢失时落盘暂停。
+  /// 注意：不要把 `.categoryChange` / `.override` 当成抢麦——它们会在本 App
+  /// 调用 setCategory、defaultToSpeaker 时触发，会造成误报并弄丢空片段。
+  @objc private func handleAudioRouteChange(_ note: Notification) {
+    guard isRecording, !isPaused else { return }
+    if let until = ignoreRouteChangeUntil, Date() < until {
       return
     }
-    resumeEngineAfterInterruption()
+    guard let info = note.userInfo,
+      let reasonRaw = info[AVAudioSessionRouteChangeReasonKey] as? UInt,
+      let reason = AVAudioSession.RouteChangeReason(rawValue: reasonRaw)
+    else {
+      return
+    }
+    switch reason {
+    case .oldDeviceUnavailable:
+      // 耳机拔出等：采集可能中断，先落盘暂停，由用户点继续。
+      autoPauseForInterruption(reason: "routeDeviceLost")
+    default:
+      break
+    }
   }
 
   @objc private func handleAppDidEnterBackground(_ note: Notification) {
@@ -327,13 +387,16 @@ import UserNotifications
 
   private func prepareAudioSessionForRecording() throws {
     let session = AVAudioSession.sharedInstance()
+    // 不使用 mixWithOthers：会议录音需要独占麦克风，其他语音软件抢麦时才能收到中断通知。
+    // 自身改 category / 扬声器会触发 routeChange，短暂忽略以免误暂停。
+    ignoreRouteChangeUntil = Date().addingTimeInterval(1.5)
     try session.setCategory(
       .playAndRecord,
       mode: .spokenAudio,
-      options: [.defaultToSpeaker, .allowBluetooth, .allowBluetoothA2DP, .mixWithOthers]
+      options: [.defaultToSpeaker, .allowBluetooth, .allowBluetoothA2DP]
     )
     try session.setPreferredSampleRate(16000)
-    try session.setActive(true)
+    try session.setActive(true, options: [])
   }
 
   private func setupAudioEngine() throws {
@@ -458,6 +521,7 @@ import UserNotifications
     isRecording = false
     isPaused = false
     needsCaptureRebuild = false
+    ignoreRouteChangeUntil = nil
     teardownAudioEngine()
     recordStartedAt = nil
     activeSegmentStartedAt = nil
@@ -892,6 +956,21 @@ import UserNotifications
   }
 }
 
+private final class AudioRecorderEventHandler: NSObject, FlutterStreamHandler {
+  weak var owner: AppDelegate?
+
+  func onListen(withArguments arguments: Any?, eventSink events: @escaping FlutterEventSink) -> FlutterError?
+  {
+    owner?.setRecorderEventSink(events)
+    return nil
+  }
+
+  func onCancel(withArguments arguments: Any?) -> FlutterError? {
+    owner?.setRecorderEventSink(nil)
+    return nil
+  }
+}
+
 private extension FixedWidthInteger {
   var leData: Data {
     var v = self.littleEndian
@@ -965,6 +1044,11 @@ final class StreamingAacM4aWriter {
   }
 
   func finish() -> Bool {
+    // 尚未写入任何 PCM 时不能 finishWriting（未 startSession），否则会失败并删掉空文件。
+    if !startedSession || sampleCount <= 0 {
+      abort()
+      return false
+    }
     input?.markAsFinished()
     let group = DispatchGroup()
     group.enter()
@@ -976,10 +1060,17 @@ final class StreamingAacM4aWriter {
     group.wait()
     let path = writer?.outputURL.path ?? ""
     cleanup()
-    guard ok else { return false }
+    guard ok else {
+      try? FileManager.default.removeItem(atPath: path)
+      return false
+    }
     let attrs = try? FileManager.default.attributesOfItem(atPath: path)
     let size = (attrs?[.size] as? NSNumber)?.intValue ?? 0
-    return size > 0
+    if size <= 0 {
+      try? FileManager.default.removeItem(atPath: path)
+      return false
+    }
+    return true
   }
 
   func abort() {

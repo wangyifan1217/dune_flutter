@@ -14,6 +14,28 @@ Future<int?> showConversationPickerSheet({
   String title = '选择会话',
   int? highlightConversationId,
 }) async {
+  final result = await showConversationMultiPickerSheet(
+    context: context,
+    service: service,
+    title: title,
+    multiSelect: false,
+    highlightConversationId: highlightConversationId,
+  );
+  if (result == null || result.isEmpty) return null;
+  return result.first;
+}
+
+/// 多选会话（UI 与会议纪要「转发至」一致：搜索 + 头像 + 标题/预览）。
+/// 取消返回 null；确认返回选中 ID 集合（可为 empty 若未选）。
+Future<Set<int>?> showConversationMultiPickerSheet({
+  required BuildContext context,
+  required ConversationService service,
+  String title = '选择聊天',
+  bool multiSelect = true,
+  Set<int>? initialSelected,
+  int maxCount = 20,
+  int? highlightConversationId,
+}) async {
   List<NativeConversation> rows;
   try {
     rows = await service.fetchConversations();
@@ -27,7 +49,7 @@ Future<int?> showConversationPickerSheet({
   }
   if (!context.mounted) return null;
 
-  final allowedKinds = <String>{
+  const allowedKinds = <String>{
     'PRIVATE',
     'GROUP',
     'WORKGROUP',
@@ -43,8 +65,9 @@ Future<int?> showConversationPickerSheet({
       .toList(growable: false);
   final searchController = TextEditingController();
   var keyword = '';
+  final selected = <int>{...?initialSelected};
 
-  return showModalBottomSheet<int>(
+  return showModalBottomSheet<Set<int>>(
     context: context,
     isScrollControlled: true,
     showDragHandle: true,
@@ -55,12 +78,12 @@ Future<int?> showConversationPickerSheet({
           final filtered = q.isEmpty
               ? candidates
               : candidates
-                  .where((c) {
-                    final t = c.displayTitle.toLowerCase();
-                    final p = c.preview.toLowerCase();
-                    return t.contains(q) || p.contains(q);
-                  })
-                  .toList(growable: false);
+                    .where((c) {
+                      final t = c.displayTitle.toLowerCase();
+                      final p = c.preview.toLowerCase();
+                      return t.contains(q) || p.contains(q);
+                    })
+                    .toList(growable: false);
           return ConstrainedBox(
             constraints: BoxConstraints(
               maxHeight: MediaQuery.of(context).size.height * 0.72,
@@ -68,13 +91,28 @@ Future<int?> showConversationPickerSheet({
             child: Column(
               children: [
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-                  child: Text(
-                    title,
-                    style: DunesTypography.sans(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                    ),
+                  padding: const EdgeInsets.fromLTRB(16, 8, 12, 8),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          title,
+                          style: DunesTypography.sans(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                      if (multiSelect)
+                        TextButton(
+                          onPressed: () =>
+                              Navigator.of(context).pop(Set<int>.from(selected)),
+                          style: TextButton.styleFrom(
+                            foregroundColor: DunesColors.brandPurple,
+                          ),
+                          child: Text('完成(${selected.length})'),
+                        ),
+                    ],
                   ),
                 ),
                 Padding(
@@ -117,7 +155,10 @@ Future<int?> showConversationPickerSheet({
                           itemBuilder: (context, index) {
                             final c = filtered[index];
                             final subtitle = c.preview.trim();
+                            final checked = selected.contains(c.id);
                             return ListTile(
+                              selected: multiSelect && checked,
+                              selectedTileColor: DunesColors.brandPurpleSoft,
                               leading: _ConversationPickerAvatar(
                                 conversation: c,
                                 service: service,
@@ -134,14 +175,47 @@ Future<int?> showConversationPickerSheet({
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
                                     ),
-                              trailing: highlightConversationId != null &&
-                                      c.id == highlightConversationId
-                                  ? const Text(
-                                      '当前',
-                                      style: TextStyle(color: DunesColors.text3),
+                              trailing: multiSelect
+                                  ? Icon(
+                                      checked
+                                          ? Icons.check_circle_rounded
+                                          : Icons.circle_outlined,
+                                      size: 22,
+                                      color: checked
+                                          ? DunesColors.brandPurple
+                                          : DunesColors.text3,
                                     )
-                                  : null,
-                              onTap: () => Navigator.of(context).pop(c.id),
+                                  : (highlightConversationId != null &&
+                                            c.id == highlightConversationId
+                                        ? const Text(
+                                            '当前',
+                                            style: TextStyle(
+                                              color: DunesColors.text3,
+                                            ),
+                                          )
+                                        : null),
+                              onTap: () {
+                                if (!multiSelect) {
+                                  Navigator.of(context).pop(<int>{c.id});
+                                  return;
+                                }
+                                setModalState(() {
+                                  if (checked) {
+                                    selected.remove(c.id);
+                                  } else {
+                                    if (selected.length >= maxCount) {
+                                      ScaffoldMessenger.of(context)
+                                          .showSnackBar(
+                                        SnackBar(
+                                          content: Text('最多选择 $maxCount 个会话'),
+                                        ),
+                                      );
+                                      return;
+                                    }
+                                    selected.add(c.id);
+                                  }
+                                });
+                              },
                             );
                           },
                         ),

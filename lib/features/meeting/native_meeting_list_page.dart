@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 
 import 'package:flutter/material.dart';
 
@@ -176,7 +176,7 @@ class _NativeMeetingListPageState extends State<NativeMeetingListPage> {
     return switch (job.phase) {
       MeetingUploadPhase.failed => DunesColors.coral,
       MeetingUploadPhase.attaching => DunesColors.amber,
-      _ => DunesColors.accent,
+      _ => DunesColors.brandPurple,
     };
   }
 
@@ -206,7 +206,7 @@ class _NativeMeetingListPageState extends State<NativeMeetingListPage> {
       ),
       floatingActionButton: FloatingActionButton.large(
         onPressed: widget.onCreate,
-        backgroundColor: DunesColors.accent,
+        backgroundColor: DunesColors.brandPurple,
         foregroundColor: Colors.white,
         child: const Icon(Icons.mic_rounded),
       ),
@@ -316,7 +316,7 @@ class _NativeMeetingListPageState extends State<NativeMeetingListPage> {
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(18),
         gradient: const LinearGradient(
-          colors: [Color(0xFF2F5D62), Color(0xFF1B3A3F)],
+          colors: [Color(0xFF7B5CD8), Color(0xFF6A4FA0)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -378,7 +378,7 @@ class _NativeMeetingListPageState extends State<NativeMeetingListPage> {
       ),
       child: Column(
         children: [
-          Icon(icon, size: 36, color: DunesColors.accent),
+          Icon(icon, size: 36, color: DunesColors.brandPurple),
           const SizedBox(height: 12),
           Text(
             title,
@@ -402,7 +402,7 @@ class _NativeMeetingListPageState extends State<NativeMeetingListPage> {
           FilledButton(
             onPressed: onAction,
             style: FilledButton.styleFrom(
-              backgroundColor: DunesColors.accent,
+              backgroundColor: DunesColors.brandPurple,
               foregroundColor: Colors.white,
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
               shape: RoundedRectangleBorder(
@@ -453,12 +453,12 @@ class _NativeMeetingListPageState extends State<NativeMeetingListPage> {
                   width: 42,
                   height: 42,
                   decoration: BoxDecoration(
-                    color: DunesColors.accentSoft,
+                    color: DunesColors.brandPurpleSoft,
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: const Icon(
                     Icons.graphic_eq_rounded,
-                    color: DunesColors.accent,
+                    color: DunesColors.brandPurple,
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -493,7 +493,7 @@ class _NativeMeetingListPageState extends State<NativeMeetingListPage> {
                             minHeight: 4,
                             backgroundColor: DunesColors.borderSoft,
                             valueColor: const AlwaysStoppedAnimation<Color>(
-                              DunesColors.accent,
+                              DunesColors.brandPurple,
                             ),
                           ),
                         ),

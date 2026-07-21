@@ -326,6 +326,40 @@ bool isEchoAssistantOfUserMessage(
   return false;
 }
 
+/// 短展示文案 vs 长模型指令：退出再进时常被当成两条用户消息。
+bool isNovaPrdDisplayAndPromptPair(String a, String b) {
+  final at = a.trim();
+  final bt = b.trim();
+  if (at.isEmpty || bt.isEmpty || at == bt) return false;
+  bool looksPrd(String t) =>
+      t.contains('PRD') && (t.contains('知识库') || t.contains('文档'));
+  if (!looksPrd(at) || !looksPrd(bt)) return false;
+  if (at.contains(bt) || bt.contains(at)) return true;
+  final re = RegExp(r'「([^」]+)」');
+  final am = re.firstMatch(at);
+  final bm = re.firstMatch(bt);
+  return am != null && bm != null && am.group(1) == bm.group(1);
+}
+
+NativeNovaMessage preferNovaPrdUserBubble(
+  NativeNovaMessage a,
+  NativeNovaMessage b,
+) {
+  final short = a.text.trim().length <= b.text.trim().length ? a : b;
+  bool tempId(int id) => id >= 1000000000000;
+  final keepId = (!tempId(a.id) && tempId(b.id))
+      ? a
+      : ((!tempId(b.id) && tempId(a.id)) ? b : short);
+  return keepId.copyWith(
+    text: short.text,
+    createdAt: keepId.createdAt ?? short.createdAt,
+    streaming: keepId.streaming || short.streaming,
+    thinkStatus: keepId.thinkStatus.isNotEmpty
+        ? keepId.thinkStatus
+        : short.thinkStatus,
+  );
+}
+
 bool isDuplicateNovaHistoryMessage(NativeNovaMessage a, NativeNovaMessage b) {
   if (a.id > 0 && b.id > 0 && a.id == b.id) return true;
   if (a.role != b.role) return false;
@@ -339,6 +373,13 @@ bool isDuplicateNovaHistoryMessage(NativeNovaMessage a, NativeNovaMessage b) {
   final secondsApart = (ta != null && tb != null)
       ? ta.difference(tb).inSeconds.abs()
       : 999;
+
+  // PRD：本地短展示 + IM 长指令，退出再进必须合并。
+  if (a.role == 'user' &&
+      secondsApart <= 180 &&
+      isNovaPrdDisplayAndPromptPair(at, bt)) {
+    return true;
+  }
 
   // 不同 id：短窗口内同文案=本地/服务端镜像（退出再进会翻倍）；
   // 间隔更长则视为另一轮提问，保留。
@@ -427,7 +468,9 @@ List<NativeNovaMessage> dedupeNovaHistoryMessages(
   for (final m in sorted) {
     final dup = out.indexWhere((e) => isDuplicateNovaHistoryMessage(e, m));
     if (dup >= 0) {
-      if (novaHistoryRichness(m) > novaHistoryRichness(out[dup])) {
+      if (isNovaPrdDisplayAndPromptPair(out[dup].text, m.text)) {
+        out[dup] = preferNovaPrdUserBubble(out[dup], m);
+      } else if (novaHistoryRichness(m) > novaHistoryRichness(out[dup])) {
         out[dup] = m;
       }
     } else if (isEchoAssistantOfUserMessage(out, m)) {
@@ -453,7 +496,8 @@ bool novaHasMatchingUserMessage(
   final draftAt = DateTime.fromMillisecondsSinceEpoch(afterMessageId);
   return rows.any((m) {
     if (m.role != 'user') return false;
-    if (m.text.trim() != text) return false;
+    final mt = m.text.trim();
+    if (mt != text && !isNovaPrdDisplayAndPromptPair(mt, text)) return false;
     final at = m.createdAt;
     if (at == null) return true;
     return at.difference(draftAt).inSeconds.abs() <= 180;
@@ -1763,6 +1807,7 @@ class NativeNovaService {
       final textMatch =
           sText == lText ||
           (lText.isEmpty && sText.isEmpty) ||
+          isNovaPrdDisplayAndPromptPair(sText, lText) ||
           (local.attachments.isNotEmpty &&
               (sText.isEmpty ||
                   _isNovaImagePlaceholderText(sText) ||
@@ -1918,6 +1963,11 @@ class NativeNovaService {
     NativeNovaMessage base,
     NativeNovaMessage incoming,
   ) {
+    if (base.role == 'user' &&
+        incoming.role == 'user' &&
+        isNovaPrdDisplayAndPromptPair(base.text, incoming.text)) {
+      return preferNovaPrdUserBubble(base, incoming);
+    }
     final preferIncoming =
         novaHistoryRichness(incoming) > novaHistoryRichness(base);
     final rich = preferIncoming ? incoming : base;
@@ -2506,19 +2556,16 @@ class NativeNovaService {
       userPayload: payloadForHistory,
     );
 
-    // 多模态直连 completions 时 IM 不会自动落库；补写一轮，避免回看只剩审计表。
-    if (payloadForHistory != null &&
-        payloadForHistory['attachments'] is List &&
-        (payloadForHistory['attachments'] as List).isNotEmpty) {
-      unawaited(
-        persistImAssistantTurn(
-          conversationId: activeConvId,
-          userMessage: effectiveUser,
-          assistantMessage: reply,
-          userPayload: payloadForHistory,
-        ),
-      );
-    }
+    // 直连 completions / PRD 等场景 IM 不会自动落库；统一补写一轮，
+    // 避免回看只剩审计表或本地气泡。
+    unawaited(
+      persistImAssistantTurn(
+        conversationId: activeConvId,
+        userMessage: effectiveUser,
+        assistantMessage: reply,
+        userPayload: payloadForHistory,
+      ),
+    );
   }
 
   /// 将已完成的多模态轮次写入 IM（不调用模型）。

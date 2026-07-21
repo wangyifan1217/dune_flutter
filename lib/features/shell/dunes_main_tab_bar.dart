@@ -1,13 +1,11 @@
 import 'package:flutter/material.dart';
 
 import '../../core/navigation/navigation_controller.dart';
-import '../../core/platform/desktop_features.dart';
 import '../../core/theme/dunes_theme.dart';
 import '../conversation/comm_unread_notifier.dart';
 import '../workbench/workbench_badge_notifier.dart';
-import 'dunes_toast.dart';
 
-/// 底部主 Tab：通讯 · 千机 · 灯塔 · 我的。
+/// 底部主 Tab：通讯 · 千机 · 灯塔 · 我的；PC 竖栏末尾另有「工作台」。
 /// 此为 Tab 内容区高度；iOS Home Indicator 的安全区由组件自身额外处理。
 const double kDunesMainTabBarHeight = 64;
 
@@ -22,9 +20,12 @@ class DunesMainTabBar extends StatefulWidget {
     this.commUnread,
     this.workbenchBadge,
     this.lighthouseAccess = false,
+    this.qianjiAccess = false,
+    this.qianjiAdminAccess = false,
     this.chatOnlyMode = false,
     this.axis = Axis.horizontal,
     this.onSwitchMainTab,
+    this.onDesktopSettingsTap,
   });
 
   final DunesNavigationController navigation;
@@ -32,6 +33,8 @@ class DunesMainTabBar extends StatefulWidget {
   final CommUnreadNotifier? commUnread;
   final WorkbenchBadgeNotifier? workbenchBadge;
   final bool lighthouseAccess;
+  final bool qianjiAccess;
+  final bool qianjiAdminAccess;
   final bool chatOnlyMode;
 
   /// [Axis.horizontal]：底部横栏（移动端）；[Axis.vertical]：左侧竖栏（PC）。
@@ -39,6 +42,9 @@ class DunesMainTabBar extends StatefulWidget {
 
   /// 由宿主处理主 Tab 切换时使用，可保留板块的子页面状态。
   final ValueChanged<String>? onSwitchMainTab;
+
+  /// PC 侧栏底部：打开桌面设置页。
+  final VoidCallback? onDesktopSettingsTap;
 
   @override
   State<DunesMainTabBar> createState() => _DunesMainTabBarState();
@@ -80,8 +86,8 @@ class _DunesMainTabBarState extends State<DunesMainTabBar> {
 
   bool get _showMyDot => (widget.workbenchBadge?.pendingForMe ?? 0) > 0;
 
-  /// 外部用户或桌面端：不展示千机 / 灯塔。
-  bool get _hideWorkbenchTabs => widget.chatOnlyMode || isDesktopCommOnly;
+  /// 外部用户：不展示千机 / 灯塔 / 工作台。
+  bool get _hideWorkbenchTabs => widget.chatOnlyMode;
 
   bool get _isVertical => widget.axis == Axis.vertical;
 
@@ -92,20 +98,26 @@ class _DunesMainTabBarState extends State<DunesMainTabBar> {
       screen: 'C1',
       showRedDot: _showCommDot,
     ),
-    if (!_hideWorkbenchTabs) ...[
+    if (!_hideWorkbenchTabs)
       _tab(
         icon: Icons.grid_view_rounded,
         label: '千机',
-        onTap: () => showDunesSoonToast(context),
+        screen: 'QJ',
       ),
+    if (!_hideWorkbenchTabs)
       _tab(icon: Icons.explore_outlined, label: '灯塔', screen: 'LH'),
-    ],
     _tab(
       icon: Icons.person_outline_rounded,
       label: '我的',
       screen: 'B2',
       showRedDot: widget.chatOnlyMode ? false : _showMyDot,
     ),
+    if (_isVertical && !_hideWorkbenchTabs)
+      _tab(
+        icon: Icons.apps_rounded,
+        label: '工作台',
+        screen: 'QJA',
+      ),
   ];
 
   @override
@@ -137,6 +149,7 @@ class _DunesMainTabBarState extends State<DunesMainTabBar> {
 
   /// PC 左侧竖栏。标准标题栏下内容区绘制，不与 macOS 红绿灯重叠。
   Widget _buildSideRail() {
+    final settingsTap = widget.onDesktopSettingsTap;
     return Container(
       width: kDunesMainSideRailWidth,
       color: DunesColors.bgApp,
@@ -149,19 +162,35 @@ class _DunesMainTabBarState extends State<DunesMainTabBar> {
             color: DunesColors.bgApp,
             border: Border(right: BorderSide(color: DunesColors.borderSoft)),
           ),
-          child: Column(children: [const SizedBox(height: 12), ..._tabs]),
+          child: Column(
+            children: [
+              const SizedBox(height: 12),
+              ..._tabs,
+              const Spacer(),
+              if (settingsTap != null) ...[
+                _tab(
+                  icon: Icons.settings_outlined,
+                  label: '设置',
+                  onTap: settingsTap,
+                ),
+                const SizedBox(height: 10),
+              ],
+            ],
+          ),
         ),
       ),
     );
   }
 
   Widget _tab({
-    required IconData icon,
+    IconData? icon,
+    Widget? iconWidget,
     required String label,
     String? screen,
     VoidCallback? onTap,
     bool showRedDot = false,
   }) {
+    assert(icon != null || iconWidget != null);
     final active = screen != null && widget.activeScreen == screen;
     final color = active ? const Color(0xFF7B5CD8) : DunesColors.text3;
 
@@ -190,7 +219,16 @@ class _DunesMainTabBarState extends State<DunesMainTabBar> {
                 Stack(
                   clipBehavior: Clip.none,
                   children: [
-                    Icon(icon, size: 24, color: color),
+                    iconWidget != null
+                        ? IconTheme(
+                            data: IconThemeData(color: color, size: 24),
+                            child: SizedBox(
+                              width: 24,
+                              height: 24,
+                              child: iconWidget,
+                            ),
+                          )
+                        : Icon(icon, size: 24, color: color),
                     if (showRedDot)
                       const Positioned(top: -3, right: -5, child: _PulseDot()),
                   ],

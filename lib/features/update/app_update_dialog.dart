@@ -185,7 +185,8 @@ class _AppUpdateDialogState extends State<_AppUpdateDialog> {
             if (_macOpened) ...[
               const SizedBox(height: 12),
               Text(
-                '安装包已打开。请将「沙丘」拖到「应用程序」，然后退出并重新打开本软件。',
+                '已请求系统打开安装包。若 Finder 未弹出，请到「下载/临时目录」手动打开 DMG；'
+                '将「沙丘」拖到「应用程序」后，退出并重新打开本软件。',
                 style: DunesTypography.sans(
                   fontSize: 13,
                   color: DunesColors.text2,

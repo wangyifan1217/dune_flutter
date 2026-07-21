@@ -4,10 +4,12 @@ import 'dart:typed_data';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 
+import '../../core/platform/desktop_features.dart';
 import '../../core/theme/dunes_theme.dart';
 import '../../core/util/friendly_error.dart';
 import '../conversation/conversation_service.dart';
 import '../shell/dunes_toast.dart';
+import 'chat_image_editor.dart';
 import 'chat_image_utils.dart';
 import 'cors_safe_image.dart';
 import 'file_download.dart' as file_dl;
@@ -21,11 +23,13 @@ class ChatAuthImageBubble extends StatefulWidget {
     required this.service,
     required this.payload,
     required this.mine,
+    this.conversationId,
   });
 
   final ConversationService service;
   final Map<String, dynamic>? payload;
   final bool mine;
+  final int? conversationId;
 
   @override
   State<ChatAuthImageBubble> createState() => _ChatAuthImageBubbleState();
@@ -113,6 +117,7 @@ class _ChatAuthImageBubbleState extends State<ChatAuthImageBubble> {
       service: widget.service,
       payload: widget.payload,
       fileName: fileName,
+      conversationId: widget.conversationId,
     );
   }
 
@@ -463,6 +468,7 @@ Future<void> showChatImagePreview(
   required ConversationService service,
   required Map<String, dynamic>? payload,
   required String fileName,
+  int? conversationId,
 }) {
   return showDialog<void>(
     context: context,
@@ -471,21 +477,24 @@ Future<void> showChatImagePreview(
       service: service,
       payload: payload,
       fileName: fileName,
+      conversationId: conversationId,
     ),
   );
 }
 
-/// 全屏图片预览：加载并展示原图，支持缩放、保存到相册、下载。
+/// 全屏图片预览：缩放；APP 保存到相册；PC 下载 / 裁剪编辑。
 class _ImagePreviewDialog extends StatefulWidget {
   const _ImagePreviewDialog({
     required this.service,
     required this.payload,
     required this.fileName,
+    this.conversationId,
   });
 
   final ConversationService service;
   final Map<String, dynamic>? payload;
   final String fileName;
+  final int? conversationId;
 
   @override
   State<_ImagePreviewDialog> createState() => _ImagePreviewDialogState();
@@ -495,6 +504,16 @@ class _ImagePreviewDialogState extends State<_ImagePreviewDialog> {
   Future<Uint8List>? _future;
   String? _webPublicUrl;
   bool _saving = false;
+  bool _editing = false;
+  Uint8List? _editedBytes;
+
+  bool get _desktop => isDesktopCommOnly;
+
+  String get _cacheKey {
+    final objectKey = (widget.payload?['objectKey'] ?? '').toString().trim();
+    if (objectKey.isNotEmpty) return objectKey;
+    return ConversationService.mediaDirectUrl(widget.payload);
+  }
 
   @override
   void initState() {
@@ -521,19 +540,42 @@ class _ImagePreviewDialogState extends State<_ImagePreviewDialog> {
     );
   }
 
-  Future<void> _save(Uint8List bytes) async {
+  Future<void> _save(Uint8List bytes, {String? fileName}) async {
     if (_saving) return;
+    final name = (fileName ?? widget.fileName).trim().isEmpty
+        ? widget.fileName
+        : (fileName ?? widget.fileName);
     setState(() => _saving = true);
     try {
-      await gallery.saveImageToGallery(bytes, widget.fileName);
-      _toast('已保存到相册');
+      if (_desktop) {
+        final key = _cacheKey;
+        if (key.isNotEmpty ||
+            (widget.conversationId != null && widget.conversationId! > 0)) {
+          await file_dl.saveBytesAsCachedFile(
+            bytes,
+            key,
+            name,
+            conversationId: widget.conversationId,
+          );
+        } else {
+          await file_dl.saveBytesAsFile(bytes, name);
+        }
+        _toast('已下载');
+      } else {
+        await gallery.saveImageToGallery(bytes, name);
+        _toast('已保存到相册');
+      }
     } catch (e) {
-      // 桌面端等不支持相册的平台，回退为普通文件保存/下载。
-      try {
-        await file_dl.saveBytesAsFile(bytes, widget.fileName);
-        _toast('已保存');
-      } catch (_) {
-        _toast('保存失败：${friendlyErrorText(e)}');
+      if (_desktop) {
+        _toast('下载失败：${friendlyErrorText(e)}');
+      } else {
+        // 不支持相册的平台，回退为普通文件保存。
+        try {
+          await file_dl.saveBytesAsFile(bytes, name);
+          _toast('已保存');
+        } catch (_) {
+          _toast('保存失败：${friendlyErrorText(e)}');
+        }
       }
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -544,11 +586,34 @@ class _ImagePreviewDialogState extends State<_ImagePreviewDialog> {
     if (_saving) return;
     setState(() => _saving = true);
     try {
-      await file_dl.openUrlAsFile(url, widget.fileName);
+      await file_dl.openUrlAsFile(
+        url,
+        widget.fileName,
+        cacheKey: _cacheKey.isEmpty ? null : _cacheKey,
+        conversationId: widget.conversationId,
+      );
+      _toast(_desktop ? '已下载' : '已保存');
     } catch (e) {
       _toast('保存失败：${friendlyErrorText(e)}');
     } finally {
       if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  Future<void> _editAndMaybeDownload(Uint8List source) async {
+    if (_editing || !_desktop) return;
+    setState(() => _editing = true);
+    try {
+      final edited = await openChatImageEditor(
+        context,
+        bytes: source,
+        doneLabel: '完成',
+      );
+      if (!mounted || edited == null || edited.isEmpty) return;
+      setState(() => _editedBytes = edited);
+      await _save(edited, fileName: chatImageEditedFileName(widget.fileName));
+    } finally {
+      if (mounted) setState(() => _editing = false);
     }
   }
 
@@ -586,8 +651,8 @@ class _ImagePreviewDialogState extends State<_ImagePreviewDialog> {
               left: 4,
               bottom: 4,
               child: _PreviewActionButton(
-                icon: Icons.save_alt_rounded,
-                label: _saving ? '保存中…' : '保存图片',
+                icon: Icons.download_rounded,
+                label: _saving ? '下载中…' : (_desktop ? '下载' : '保存图片'),
                 onTap: _saving ? null : () => _saveWebUrl(webUrl),
               ),
             ),
@@ -603,22 +668,31 @@ class _ImagePreviewDialogState extends State<_ImagePreviewDialog> {
         future: _future,
         builder: (context, snap) {
           final loading = snap.connectionState != ConnectionState.done;
-          final bytes = snap.data;
-          final failed = snap.hasError || (!loading && (bytes == null || bytes.isEmpty));
+          final loaded = snap.data;
+          final bytes = _editedBytes ?? loaded;
+          final failed =
+              snap.hasError || (!loading && (loaded == null || loaded.isEmpty));
 
           final Widget content;
           if (loading) {
             content = const Center(
-              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white70),
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: Colors.white70,
+              ),
             );
-          } else if (failed) {
+          } else if (failed || bytes == null) {
             content = const Center(
-              child: Icon(Icons.broken_image_outlined, color: Colors.white54, size: 48),
+              child: Icon(
+                Icons.broken_image_outlined,
+                color: Colors.white54,
+                size: 48,
+              ),
             );
           } else {
             content = InteractiveViewer(
               maxScale: 5,
-              child: Center(child: Image.memory(bytes!, fit: BoxFit.contain)),
+              child: Center(child: Image.memory(bytes, fit: BoxFit.contain)),
             );
           }
 
@@ -635,16 +709,47 @@ class _ImagePreviewDialogState extends State<_ImagePreviewDialog> {
               ),
               if (!loading && !failed && bytes != null)
                 Positioned(
-                  left: 4,
-                  bottom: 4,
-                  child: Row(
-                    children: [
-                      _PreviewActionButton(
-                        icon: Icons.save_alt_rounded,
-                        label: _saving ? '保存中…' : '保存到相册',
-                        onTap: _saving ? null : () => _save(bytes),
+                  left: 12,
+                  right: 12,
+                  bottom: 12,
+                  child: Align(
+                    alignment: Alignment.bottomCenter,
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.55),
+                        borderRadius: BorderRadius.circular(24),
                       ),
-                    ],
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 8,
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (_desktop) ...[
+                              _PreviewActionButton(
+                                icon: Icons.crop_rounded,
+                                label: _editing ? '编辑中…' : '裁剪',
+                                onTap: (_saving || _editing)
+                                    ? null
+                                    : () => _editAndMaybeDownload(bytes),
+                              ),
+                              const SizedBox(width: 8),
+                            ],
+                            _PreviewActionButton(
+                              icon: Icons.download_rounded,
+                              label: _saving
+                                  ? (_desktop ? '下载中…' : '保存中…')
+                                  : (_desktop ? '下载' : '保存到相册'),
+                              onTap: (_saving || _editing)
+                                  ? null
+                                  : () => _save(bytes),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
                   ),
                 ),
             ],

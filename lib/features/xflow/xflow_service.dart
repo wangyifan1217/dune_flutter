@@ -234,24 +234,38 @@ class XflowService {
   Uri _uri(String path) => Uri.parse('${session.apiBase}$path');
 
   Future<List<XflowProposalItem>> fetchB1Approvals() async {
-    final rows = await _requestList(
-      '/workbench/inbox?kind=APPROVAL&status=ALL',
-    );
+    // 「我审批的」同时展示待办和我已处理的审批：OPEN 仍是唯一的可审批依据，
+    // DONE 则仅用于“已通过 / 已驳回”历史筛选。
+    final results = await Future.wait([
+      _requestList('/workbench/inbox?kind=APPROVAL&status=OPEN'),
+      _requestList('/workbench/inbox?kind=APPROVAL&status=DONE'),
+    ]);
+    final rows = <dynamic>[...results[0], ...results[1]];
     final out = <XflowProposalItem>[];
     for (final row in rows.whereType<Map<String, dynamic>>()) {
       if ((row['kind'] ?? 'APPROVAL').toString().toUpperCase() != 'APPROVAL') {
         continue;
       }
       final businessType = (row['businessType'] ?? '').toString().toUpperCase();
-      if (businessType != 'PROPOSAL') continue;
-      final businessId = _int(row['businessId']);
-      if (businessId <= 0) continue;
+      if (businessType.isEmpty) continue;
+      final idText = _businessIdText(row['businessId']);
+      if (idText.isEmpty) continue;
+      final businessId = _businessId(row['businessId']);
+      final todoId = _int(row['id']);
       out.add(
         XflowProposalItem(
-          id: businessId,
+          id: businessId > 0 ? businessId : todoId,
           businessType: businessType,
-          code: '#$businessId',
-          title: (row['title'] ?? row['businessTitle'] ?? '提案').toString(),
+          code: _preferCode(row['code'], idText, businessId > 0 ? businessId : todoId),
+          title:
+              (row['title'] ??
+                      row['businessTitle'] ??
+                      row['description'] ??
+                      businessType)
+                  .toString(),
+          templateKey: (row['templateKey'] ?? '').toString().trim().isEmpty
+              ? null
+              : row['templateKey'].toString(),
           status: (row['status'] ?? 'PENDING').toString(),
           createdByName: (row['createdByName'] ?? row['subtitle'] ?? '')
               .toString(),
@@ -259,18 +273,37 @@ class XflowService {
             (row['createdAt'] ?? row['updatedAt'] ?? '').toString(),
           ),
           todoHint: XflowTodoHint(
-            id: _int(row['id']),
+            id: todoId,
             sourceStepId: _intNullable(row['sourceStepId']),
             kind: (row['kind'] ?? 'APPROVAL').toString(),
             businessType: businessType,
-            businessId: businessId,
+            businessId: businessId > 0 ? businessId : todoId,
             status: (row['status'] ?? '').toString(),
           ),
         ),
       );
     }
-    final deduped = _dedupeById(out);
+    final deduped = _dedupeB1Todos(out);
     return Future.wait(deduped.map(_enrichB1Item));
+  }
+
+  /// 已办与待办可能属于同一业务，必须按 todoId 去重，不能只按业务 ID 去重。
+  List<XflowProposalItem> _dedupeB1Todos(List<XflowProposalItem> rows) {
+    final map = <String, XflowProposalItem>{};
+    for (final row in rows) {
+      final todoId = row.todoHint?.id ?? 0;
+      final key = todoId > 0
+          ? 'todo:$todoId'
+          : '${row.businessType}:${row.id}:${row.todoHint?.sourceStepId ?? 0}';
+      map[key] = row;
+    }
+    final out = map.values.toList(growable: false);
+    out.sort((a, b) {
+      final at = a.createdAt?.millisecondsSinceEpoch ?? 0;
+      final bt = b.createdAt?.millisecondsSinceEpoch ?? 0;
+      return bt.compareTo(at);
+    });
+    return out;
   }
 
   Future<List<XflowProposalItem>> fetchB14Initiated() async {
@@ -635,7 +668,11 @@ class XflowService {
     required String businessType,
     required int businessId,
   }) async {
-    final rows = await _requestList('/workbench/inbox?kind=APPROVAL');
+    // 详情审批权限只由当前用户的 OPEN todo 决定。不能复用列表带入的
+    // todoHint：并行审批中，其他人驳回后该 hint 可能已经被服务端取消。
+    final rows = await _requestList(
+      '/todos?assignee=me&status=OPEN&kind=APPROVAL',
+    );
     for (final row in rows.whereType<Map<String, dynamic>>()) {
       final bt = (row['businessType'] ?? '').toString().toUpperCase();
       final bid = _int(row['businessId']);
@@ -658,16 +695,17 @@ class XflowService {
 
   Future<XflowDetailBundle> fetchB10Bundle({
     required int proposalId,
-    XflowTodoHint? todoHint,
     int? currentUserId,
   }) async {
     final template = await fetchTemplateDetail();
     final detailCfg = await fetchDetailConfig();
     final detail = await fetchProposalDetail(proposalId);
     final trail = await fetchProposalTrail(proposalId);
-    final myTodo =
-        todoHint ??
-        await findMyOpenTodo(businessType: 'PROPOSAL', businessId: proposalId);
+    // 每次进入详情均重新确认待办仍为 OPEN；todoHint 仅用于导航，不是权限依据。
+    final myTodo = await findMyOpenTodo(
+      businessType: 'PROPOSAL',
+      businessId: proposalId,
+    );
     final stages = _mapStages(detailCfg['stages'] ?? template.stages);
     final assigneeNames = await _fetchAssigneeNames(trail);
     final ccRaw = detail.raw['ccList'];
@@ -679,14 +717,12 @@ class XflowService {
         : const <Map<String, dynamic>>[];
     final uid = currentUserId ?? 0;
     final st = detail.status.toLowerCase();
-    final initiator = trail?.initiatorId ?? detail.createdById;
-    final canReedit =
-        uid > 0 &&
-        (detail.createdById == uid || initiator == uid) &&
-        st == 'rejected' &&
-        st != 'voided';
-    // 「待发起」角色：owner_id 为代发起人（被推送人），created_by 为推送人。
     final ownerId = _int(detail.raw['ownerId']);
+    final initiator = trail?.initiatorId ?? detail.createdById;
+    final isSubmitter =
+        detail.createdById == uid || ownerId == uid || initiator == uid;
+    final canReedit = uid > 0 && isSubmitter && st == 'rejected';
+    // 「待发起」角色：owner_id 为代发起人（被推送人），created_by 为推送人。
     final isPendingInitiate = st == 'pending_initiate';
     final isDesignatedInitiator =
         isPendingInitiate && uid > 0 && ownerId == uid;
@@ -1297,43 +1333,108 @@ class XflowService {
   }
 
   Future<XflowProposalItem> _enrichB1Item(XflowProposalItem item) async {
+    final bt = item.businessType.toUpperCase();
+    if (bt == 'PROPOSAL') {
+      try {
+        final detail = await fetchProposalDetail(item.id);
+        final trail = await fetchProposalTrail(item.id);
+        final status = _resolveB1ListStatus(
+          item,
+          trail,
+          detailStatus: detail.status,
+        );
+        final initiator = detail.ownerName.isNotEmpty
+            ? detail.ownerName
+            : (detail.raw['createdBy'] ??
+                      detail.raw['initiator'] ??
+                      item.createdByName)
+                  .toString();
+        return item.copyWith(
+          code: detail.code,
+          title: detail.title,
+          status: status,
+          createdByName: initiator,
+          createdAt: detail.raw['createdAt'] != null
+              ? DateTime.tryParse(detail.raw['createdAt'].toString()) ??
+                    item.createdAt
+              : item.createdAt,
+          tag1: (detail.raw['tag1'] ?? '').toString().isEmpty
+              ? null
+              : detail.raw['tag1'].toString(),
+          txType: (detail.raw['txType'] ?? '').toString().isEmpty
+              ? null
+              : detail.raw['txType'].toString(),
+          scaleWan: _scaleWanFromDetail(detail),
+          currentStep: trail?.raw['currentStep'] is num
+              ? (trail!.raw['currentStep'] as num).toInt()
+              : (trail?.steps.isNotEmpty == true ? 1 : 0),
+          totalSteps: trail?.steps.length ?? 0,
+        );
+      } catch (_) {
+        return _fallbackB1ItemStatus(item);
+      }
+    }
+
     try {
-      final detail = await fetchProposalDetail(item.id);
-      final trail = await fetchProposalTrail(item.id);
-      final status = _resolveB1Status(item, detail, trail);
-      final initiator = detail.ownerName.isNotEmpty
-          ? detail.ownerName
-          : (detail.raw['createdBy'] ??
-                    detail.raw['initiator'] ??
-                    item.createdByName)
-                .toString();
+      final detail = await fetchSubmissionDetail(
+        businessType: item.businessType,
+        businessId: item.id,
+      );
+      final trail = await fetchSubmissionTrail(
+        businessType: item.businessType,
+        businessId: item.id,
+      );
       return item.copyWith(
-        code: detail.code,
-        title: detail.title,
-        status: status,
-        createdByName: initiator,
-        createdAt: detail.raw['createdAt'] != null
-            ? DateTime.tryParse(detail.raw['createdAt'].toString()) ??
-                  item.createdAt
-            : item.createdAt,
-        tag1: (detail.raw['tag1'] ?? '').toString().isEmpty
-            ? null
-            : detail.raw['tag1'].toString(),
-        txType: (detail.raw['txType'] ?? '').toString().isEmpty
-            ? null
-            : detail.raw['txType'].toString(),
-        scaleWan: _scaleWanFromDetail(detail),
-        currentStep: trail?.raw['currentStep'] is num
-            ? (trail!.raw['currentStep'] as num).toInt()
-            : (trail?.steps.isNotEmpty == true ? 1 : 0),
-        totalSteps: trail?.steps.length ?? 0,
+        title: detail.title.isNotEmpty ? detail.title : item.title,
+        code: detail.businessId > 0 ? '#${detail.businessId}' : item.code,
+        status: _resolveB1ListStatus(item, trail, detailStatus: detail.status),
+        createdByName: detail.createdByName.isNotEmpty
+            ? detail.createdByName
+            : item.createdByName,
+        createdAt: detail.createdAt ?? item.createdAt,
+        templateKey: detail.templateKey.isNotEmpty
+            ? detail.templateKey
+            : item.templateKey,
+        currentStep: trail?.currentStep ?? item.currentStep,
+        totalSteps: trail?.steps.length ?? item.totalSteps,
       );
     } catch (_) {
-      final st = item.todoHint?.status.toUpperCase() == 'OPEN'
-          ? 'PENDING'
-          : 'APPROVED';
-      return item.copyWith(status: st);
+      try {
+        final trail = await fetchSubmissionTrail(
+          businessType: item.businessType,
+          businessId: item.id,
+        );
+        var createdByName = item.createdByName;
+        if (trail != null) {
+          final fromTrail =
+              (trail.raw['initiatorName'] ?? '').toString().trim();
+          if (fromTrail.isNotEmpty) {
+            createdByName = fromTrail;
+          } else if (trail.initiatorId > 0) {
+            final names = await fetchUserDisplayNames([trail.initiatorId]);
+            createdByName =
+                names[trail.initiatorId]?.trim().isNotEmpty == true
+                ? names[trail.initiatorId]!.trim()
+                : createdByName;
+          }
+        }
+        return item.copyWith(
+          status: _resolveB1ListStatus(item, trail),
+          createdByName: createdByName,
+          currentStep: trail?.currentStep ?? item.currentStep,
+          totalSteps: trail?.steps.length ?? item.totalSteps,
+        );
+      } catch (_) {
+        return _fallbackB1ItemStatus(item);
+      }
     }
+  }
+
+  XflowProposalItem _fallbackB1ItemStatus(XflowProposalItem item) {
+    final st = item.todoHint?.status.toUpperCase() == 'OPEN'
+        ? 'PENDING'
+        : 'APPROVED';
+    return item.copyWith(status: st);
   }
 
   Future<XflowProposalItem> _enrichB14Item(XflowProposalItem item) async {
@@ -1397,16 +1498,25 @@ class XflowService {
     }
   }
 
-  String _resolveB1Status(
+  String _resolveB1ListStatus(
     XflowProposalItem item,
-    XflowProposalDetail detail,
-    XflowApprovalTrail? trail,
-  ) {
+    XflowApprovalTrail? trail, {
+    String detailStatus = '',
+  }) {
     if (item.todoHint?.status.toUpperCase() == 'OPEN') return 'PENDING';
-    if (trail != null && trail.status.isNotEmpty) {
-      return trail.status.toUpperCase();
+    final sourceStepId = item.todoHint?.sourceStepId;
+    if (sourceStepId != null && trail != null) {
+      for (final step in trail.steps) {
+        final stepId = _int(step.raw['id']);
+        if (stepId != sourceStepId) continue;
+        final decision = step.decision.toUpperCase();
+        if (decision == 'APPROVED' || decision == 'REJECTED') {
+          return decision;
+        }
+        break;
+      }
     }
-    final st = detail.status.toUpperCase();
+    final st = detailStatus.toUpperCase();
     if (st.isNotEmpty) return st;
     return 'APPROVED';
   }

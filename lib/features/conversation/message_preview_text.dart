@@ -9,6 +9,9 @@ String compactMessagePushPreview({
   if (upperKind == 'IMAGE' || _isImageLikeBody(trimmed)) {
     return '发送了一张图片';
   }
+  if (upperKind == 'VIDEO' || trimmed.startsWith('[视频]')) {
+    return '发送了一个视频';
+  }
   if (upperKind == 'AUDIO' ||
       upperKind == 'VOICE' ||
       trimmed.startsWith('[语音]')) {
@@ -21,6 +24,8 @@ String compactMessagePushPreview({
     switch (upperKind) {
       case 'IMAGE':
         return '发送了一张图片';
+      case 'VIDEO':
+        return '发送了一个视频';
       case 'FILE':
         return '发送了一个文件';
       case 'AUDIO':

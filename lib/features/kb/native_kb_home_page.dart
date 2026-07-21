@@ -279,80 +279,112 @@ class _NativeKbHomePageState extends State<NativeKbHomePage> {
     return Container(
       decoration: const BoxDecoration(
         gradient: LinearGradient(
-          colors: [Color(0xFF1B3A3F), Color(0xFF2F5D62), Color(0xFF5F8B8F)],
+          colors: [Color(0xFF8B7BE0), Color(0xFF7B5CD8), Color(0xFF5B3FB0)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.vertical(bottom: Radius.circular(18)),
       ),
+      clipBehavior: Clip.antiAlias,
       padding: const EdgeInsets.fromLTRB(14, 8, 14, 12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Stack(
         children: [
-          Row(
-            children: [
-              IconButton(
-                onPressed: widget.onBack,
-                icon: const Icon(Icons.chevron_left, color: Colors.white),
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+          Positioned(
+            right: -28,
+            top: -36,
+            child: Container(
+              width: 120,
+              height: 120,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.white.withValues(alpha: 0.10),
               ),
+            ),
+          ),
+          Positioned(
+            right: 40,
+            bottom: -50,
+            child: Container(
+              width: 100,
+              height: 100,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.white.withValues(alpha: 0.07),
+              ),
+            ),
+          ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  IconButton(
+                    onPressed: widget.onBack,
+                    icon: const Icon(Icons.chevron_left, color: Colors.white),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(
+                      minWidth: 36,
+                      minHeight: 36,
+                    ),
+                  ),
+                ],
+              ),
+              const Text(
+                'DUNES KNOWLEDGE · 企业知识库',
+                style: TextStyle(
+                  color: Colors.white70,
+                  fontSize: 9,
+                  letterSpacing: 0.6,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const Text(
+                '知识库',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 21,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 5),
+              const Text(
+                '公司制度 / 流程 SOP / 合同模板 / 法务条款 / 财务规则 — 一处查全',
+                style: TextStyle(
+                  color: Colors.white70,
+                  fontSize: 10.5,
+                  height: 1.45,
+                ),
+              ),
+              const SizedBox(height: 11),
+              Container(
+                padding: const EdgeInsets.only(top: 10),
+                decoration: BoxDecoration(
+                  border: Border(
+                    top: BorderSide(color: Colors.white.withValues(alpha: 0.13)),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    _heroStat('${s?.documentCount ?? 0}', '文档'),
+                    const SizedBox(width: 14),
+                    _heroStat('${s?.categoryCount ?? 0}', '分类'),
+                    const SizedBox(width: 14),
+                    _heroStat('${s?.unreadCount ?? 0}', '未读'),
+                  ],
+                ),
+              ),
+              if (phone.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Text(
+                  '我的知识库（$phone）',
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.65),
+                    fontSize: 10,
+                  ),
+                ),
+              ],
             ],
           ),
-          const Text(
-            'DUNES KNOWLEDGE · 企业知识库',
-            style: TextStyle(
-              color: Colors.white70,
-              fontSize: 9,
-              letterSpacing: 0.6,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const Text(
-            '知识库',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 21,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 5),
-          const Text(
-            '公司制度 / 流程 SOP / 合同模板 / 法务条款 / 财务规则 — 一处查全',
-            style: TextStyle(
-              color: Colors.white70,
-              fontSize: 10.5,
-              height: 1.45,
-            ),
-          ),
-          const SizedBox(height: 11),
-          Container(
-            padding: const EdgeInsets.only(top: 10),
-            decoration: BoxDecoration(
-              border: Border(
-                top: BorderSide(color: Colors.white.withValues(alpha: 0.13)),
-              ),
-            ),
-            child: Row(
-              children: [
-                _heroStat('${s?.documentCount ?? 0}', '文档'),
-                const SizedBox(width: 14),
-                _heroStat('${s?.categoryCount ?? 0}', '分类'),
-                const SizedBox(width: 14),
-                _heroStat('${s?.unreadCount ?? 0}', '未读'),
-              ],
-            ),
-          ),
-          if (phone.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            Text(
-              '我的知识库（$phone）',
-              style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.65),
-                fontSize: 10,
-              ),
-            ),
-          ],
         ],
       ),
     );
@@ -418,7 +450,7 @@ class _NativeKbHomePageState extends State<NativeKbHomePage> {
           style: const TextStyle(
             fontSize: 11,
             fontWeight: FontWeight.w600,
-            color: DunesColors.accentDeep,
+            color: Color(0xFF7B5CD8),
           ),
         ),
         Text(
@@ -467,7 +499,7 @@ class _NativeKbHomePageState extends State<NativeKbHomePage> {
                 children: [
                   Icon(
                     Icons.upload_file,
-                    color: ready ? DunesColors.accentDeep : DunesColors.text3,
+                    color: ready ? const Color(0xFF7B5CD8) : DunesColors.text3,
                     size: 28,
                   ),
                   const SizedBox(height: 6),

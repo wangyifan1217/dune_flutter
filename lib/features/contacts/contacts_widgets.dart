@@ -5,6 +5,10 @@ import '../chat/user_avatar_widget.dart';
 import '../conversation/conversation_service.dart';
 import 'contact_models.dart';
 
+/// 通讯录无自定义头像时的统一底色（与 [InboxFormat.personStyle] 一致）。
+const _contactsFallbackBg = DunesColors.brandPurple;
+const _contactsFallbackFg = Colors.white;
+
 class ContactsHeader extends StatelessWidget {
   const ContactsHeader({
     super.key,
@@ -12,61 +16,106 @@ class ContactsHeader extends StatelessWidget {
     required this.onBack,
     required this.onToggleSearch,
     this.searchOpen = false,
+    this.groupPickMode = false,
+    this.creating = false,
+    this.onCreateGroup,
+    this.onConfirmCreate,
   });
 
   final int total;
   final VoidCallback onBack;
   final VoidCallback onToggleSearch;
   final bool searchOpen;
+  final bool groupPickMode;
+  final bool creating;
+  final VoidCallback? onCreateGroup;
+  final VoidCallback? onConfirmCreate;
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 14, 16, 11),
-      child: Row(
-        children: [
-          RichText(
-            text: TextSpan(
-              style: DunesTypography.sans(
-                fontSize: 21,
-                fontWeight: FontWeight.w600,
-                letterSpacing: -0.025 * 21,
-                color: DunesColors.text,
+      padding: const EdgeInsets.fromLTRB(4, 6, 4, 4),
+      child: SizedBox(
+        height: 48,
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            Align(
+              alignment: Alignment.centerLeft,
+              child: _HeaderIconBtn(
+                icon: Icons.arrow_back_ios_new_rounded,
+                onTap: onBack,
+                tooltip: '返回',
               ),
+            ),
+            Column(
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const TextSpan(text: '通讯录'),
-                WidgetSpan(
-                  alignment: PlaceholderAlignment.baseline,
-                  baseline: TextBaseline.alphabetic,
-                  child: Padding(
-                    padding: const EdgeInsets.only(left: 8),
-                    child: Text(
-                      'CONTACTS · $total',
-                      style: DunesTypography.mono(
-                        fontSize: 9.5,
-                        fontWeight: FontWeight.w500,
-                        letterSpacing: 0.06 * 9.5,
-                        color: DunesColors.text3,
-                      ),
-                    ),
+                Text(
+                  groupPickMode ? '创建群聊' : '通讯录',
+                  style: DunesTypography.sans(
+                    fontSize: 17,
+                    fontWeight: FontWeight.w700,
+                    color: DunesColors.text,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  groupPickMode ? '选择成员' : '$total 人',
+                  style: DunesTypography.sans(
+                    fontSize: 11,
+                    color: DunesColors.text3,
                   ),
                 ),
               ],
             ),
-          ),
-          const Spacer(),
-          _HeaderIconBtn(
-            icon: Icons.arrow_back_rounded,
-            onTap: onBack,
-            tooltip: '返回消息',
-          ),
-          _HeaderIconBtn(
-            icon: Icons.search,
-            onTap: onToggleSearch,
-            tooltip: '搜索人',
-            active: searchOpen,
-          ),
-        ],
+            Align(
+              alignment: Alignment.centerRight,
+              child: groupPickMode
+                  ? Padding(
+                      padding: const EdgeInsets.only(right: 4),
+                      child: creating
+                          ? const SizedBox(
+                              width: 44,
+                              height: 44,
+                              child: Center(
+                                child: SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                ),
+                              ),
+                            )
+                          : _HeaderIconBtn(
+                              icon: Icons.check_rounded,
+                              onTap: onConfirmCreate ?? () {},
+                              tooltip: '完成',
+                              active: true,
+                              activeColor: DunesColors.accent,
+                            ),
+                    )
+                  : Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (onCreateGroup != null)
+                          _HeaderIconBtn(
+                            icon: Icons.group_add_outlined,
+                            onTap: onCreateGroup!,
+                            tooltip: '创建群聊',
+                          ),
+                        _HeaderIconBtn(
+                          icon: Icons.search_rounded,
+                          onTap: onToggleSearch,
+                          tooltip: '搜索',
+                          active: searchOpen,
+                        ),
+                      ],
+                    ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -80,21 +129,22 @@ class ExternalSectionLabel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 14, 16, 6),
+      padding: const EdgeInsets.fromLTRB(16, 18, 16, 8),
       child: Row(
         children: [
           Text(
             '外部用户',
-            style: DunesTypography.sans(fontSize: 12, fontWeight: FontWeight.w600, color: DunesColors.accent),
-          ),
-          Expanded(
-            child: Container(
-              margin: const EdgeInsets.symmetric(horizontal: 8),
-              height: 1,
-              color: DunesColors.borderSoft,
+            style: DunesTypography.sans(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: DunesColors.text2,
             ),
           ),
-          Text('$total 人', style: DunesTypography.mono(fontSize: 9.5, color: DunesColors.text3)),
+          const SizedBox(width: 8),
+          Text(
+            '$total',
+            style: DunesTypography.sans(fontSize: 12, color: DunesColors.text3),
+          ),
         ],
       ),
     );
@@ -109,30 +159,30 @@ class OrgSectionLabel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 9, 16, 6),
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 8),
       child: Row(
         children: [
+          Container(
+            width: 3,
+            height: 14,
+            decoration: BoxDecoration(
+              color: const Color(0xFF7B5CD8),
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          const SizedBox(width: 8),
           Text(
-            'HeUnion',
+            '组织架构',
             style: DunesTypography.sans(
-              fontSize: 12,
+              fontSize: 13,
               fontWeight: FontWeight.w600,
-              color: DunesColors.accent,
+              color: DunesColors.text2,
             ),
           ),
-          Expanded(
-            child: Container(
-              margin: const EdgeInsets.symmetric(horizontal: 8),
-              height: 1,
-              color: DunesColors.borderSoft,
-            ),
-          ),
+          const Spacer(),
           Text(
             '$total 人',
-            style: DunesTypography.mono(
-              fontSize: 9.5,
-              color: DunesColors.text3,
-            ),
+            style: DunesTypography.sans(fontSize: 12, color: DunesColors.text3),
           ),
         ],
       ),
@@ -149,6 +199,9 @@ class ContactRowTile extends StatelessWidget {
     required this.onMessage,
     this.showOnline = false,
     this.avatarService,
+    this.pickMode = false,
+    this.selected = false,
+    this.onToggleSelect,
   });
 
   final NativeContact contact;
@@ -157,39 +210,59 @@ class ContactRowTile extends StatelessWidget {
   final VoidCallback onMessage;
   final bool showOnline;
   final ConversationService? avatarService;
+  final bool pickMode;
+  final bool selected;
+  final VoidCallback? onToggleSelect;
 
   @override
   Widget build(BuildContext context) {
     final isMe = contact.userId == currentUserId;
-    final disabled = !contact.enabled;
+    final disabled = !contact.enabled || (pickMode && isMe);
+    final onTap = pickMode
+        ? (disabled ? null : onToggleSelect)
+        : onOpenProfile;
     return Opacity(
       opacity: disabled ? 0.55 : 1,
       child: Material(
-        color: DunesColors.bgApp,
+        color: Colors.transparent,
         child: InkWell(
-          onTap: onOpenProfile,
-          child: Container(
-            margin: const EdgeInsets.only(bottom: 4),
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-            decoration: BoxDecoration(
-              border: Border.all(color: DunesColors.borderSoft),
-              borderRadius: BorderRadius.circular(9),
-            ),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
             child: Row(
               children: [
+                if (pickMode) ...[
+                  Container(
+                    width: 22,
+                    height: 22,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: selected ? DunesColors.accent : Colors.white,
+                      border: Border.all(
+                        color: selected ? DunesColors.accent : DunesColors.border,
+                      ),
+                    ),
+                    child: selected
+                        ? const Icon(Icons.check_rounded, size: 14, color: Colors.white)
+                        : null,
+                  ),
+                  const SizedBox(width: 10),
+                ],
                 ImUserAvatar(
                   initial: contact.displayLabel.isNotEmpty
                       ? contact.displayLabel.substring(0, 1)
                       : '?',
                   seed: contact.userId,
-                  size: 34,
+                  size: 40,
                   showOnline: showOnline,
                   avatarPreset: contact.avatarPreset,
                   avatarObjectKey: contact.avatarObjectKey,
                   avatarService: avatarService,
-                  borderRadius: 34 * 0.18,
+                  borderRadius: 10,
+                  fallbackBackground: _contactsFallbackBg,
+                  fallbackForeground: _contactsFallbackFg,
                 ),
-                const SizedBox(width: 9),
+                const SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -200,8 +273,8 @@ class ContactRowTile extends StatelessWidget {
                             child: Text(
                               contact.displayLabel,
                               style: DunesTypography.sans(
-                                fontSize: 11.5,
-                                fontWeight: FontWeight.w500,
+                                fontSize: 15,
+                                fontWeight: FontWeight.w600,
                                 color: disabled
                                     ? DunesColors.text3
                                     : DunesColors.text,
@@ -210,61 +283,56 @@ class ContactRowTile extends StatelessWidget {
                             ),
                           ),
                           if (isMe) ...[
-                            const SizedBox(width: 5),
+                            const SizedBox(width: 6),
                             Container(
                               padding: const EdgeInsets.symmetric(
-                                horizontal: 4,
+                                horizontal: 6,
                                 vertical: 1,
                               ),
                               decoration: BoxDecoration(
-                                color: DunesColors.accent,
-                                borderRadius: BorderRadius.circular(3),
+                                color: const Color(0xFF7B5CD8).withValues(alpha: 0.12),
+                                borderRadius: BorderRadius.circular(4),
                               ),
                               child: Text(
                                 '我',
-                                style: DunesTypography.mono(
-                                  fontSize: 7.5,
+                                style: DunesTypography.sans(
+                                  fontSize: 10,
                                   fontWeight: FontWeight.w700,
-                                  color: Colors.white,
+                                  color: const Color(0xFF7B5CD8),
                                 ),
                               ),
                             ),
                           ],
                         ],
                       ),
-                      const SizedBox(height: 2),
-                      Wrap(
-                        spacing: 5,
-                        runSpacing: 2,
-                        crossAxisAlignment: WrapCrossAlignment.center,
-                        children: [
-                          if (contact.primaryRole.isNotEmpty)
-                            _RoleChip(label: contact.primaryRole),
+                      const SizedBox(height: 3),
+                      Text(
+                        [
+                          if (contact.primaryRole.isNotEmpty) contact.primaryRole,
                           if ((contact.department ?? '').trim().isNotEmpty)
-                            Text(
-                              contact.department!.trim(),
-                              style: DunesTypography.mono(
-                                fontSize: 9,
-                                color: DunesColors.text3,
-                              ),
-                            ),
-                        ],
+                            contact.department!.trim(),
+                        ].join(' · '),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: DunesTypography.sans(
+                          fontSize: 12,
+                          color: DunesColors.text3,
+                        ),
                       ),
                     ],
                   ),
                 ),
-                if (!isMe && contact.enabled) ...[
+                if (!pickMode && !isMe && contact.enabled)
                   _ActionIconBtn(
-                    icon: Icons.chat_bubble_outline,
+                    icon: Icons.chat_bubble_outline_rounded,
                     primary: true,
                     onTap: onMessage,
-                  ),
-                ] else if (isMe) ...[
+                  )
+                else if (!pickMode && isMe)
                   _ActionIconBtn(
-                    icon: Icons.person_outline,
+                    icon: Icons.person_outline_rounded,
                     onTap: onOpenProfile,
                   ),
-                ],
               ],
             ),
           ),
@@ -283,6 +351,9 @@ class DeptBlockTile extends StatefulWidget {
     required this.onMessageContact,
     this.onlineUsers = const <int>{},
     this.avatarService,
+    this.pickMode = false,
+    this.selectedUserIds = const <int>{},
+    this.onToggleContact,
   });
 
   final NativeDepartment department;
@@ -291,6 +362,9 @@ class DeptBlockTile extends StatefulWidget {
   final ValueChanged<NativeContact> onMessageContact;
   final Set<int> onlineUsers;
   final ConversationService? avatarService;
+  final bool pickMode;
+  final Set<int> selectedUserIds;
+  final ValueChanged<NativeContact>? onToggleContact;
 
   @override
   State<DeptBlockTile> createState() => _DeptBlockTileState();
@@ -315,73 +389,48 @@ class _DeptBlockTileState extends State<DeptBlockTile> {
           color: Colors.transparent,
           child: InkWell(
             onTap: () => setState(() => _expanded = !_expanded),
-            borderRadius: BorderRadius.circular(9),
-            child: Container(
-              margin: const EdgeInsets.only(bottom: 5),
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [
-                    DunesColors.bgSoft,
-                    DunesColors.bgApp.withValues(alpha: 0.2),
-                  ],
-                ),
-                border: Border.all(color: DunesColors.border),
-                borderRadius: BorderRadius.circular(9),
-              ),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
               child: Row(
                 children: [
                   AnimatedRotation(
                     turns: _expanded ? 0.25 : 0,
-                    duration: const Duration(milliseconds: 200),
-                    child: Icon(
-                      Icons.chevron_right,
-                      size: 13,
+                    duration: const Duration(milliseconds: 180),
+                    child: const Icon(
+                      Icons.chevron_right_rounded,
+                      size: 18,
                       color: DunesColors.text3,
                     ),
                   ),
-                  const SizedBox(width: 7),
+                  const SizedBox(width: 8),
                   Container(
-                    width: 28,
-                    height: 28,
+                    width: 32,
+                    height: 32,
                     decoration: BoxDecoration(
-                      color: DunesColors.accentSoft,
-                      borderRadius: BorderRadius.circular(7),
-                      border: Border.all(color: DunesColors.borderSoft),
+                      color: const Color(0xFF7B5CD8).withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(8),
                     ),
                     child: const Icon(
-                      Icons.business_outlined,
-                      size: 13,
-                      color: DunesColors.accentDeep,
+                      Icons.apartment_rounded,
+                      size: 16,
+                      color: Color(0xFF7B5CD8),
                     ),
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: 10),
                   Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          dep.name,
-                          style: DunesTypography.sans(
-                            fontSize: 11.5,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        if ((dep.subtitle ?? '').isNotEmpty)
-                          Text(
-                            dep.subtitle!,
-                            style: DunesTypography.mono(
-                              fontSize: 9,
-                              color: DunesColors.text3,
-                            ),
-                          ),
-                      ],
+                    child: Text(
+                      dep.name,
+                      style: DunesTypography.sans(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: DunesColors.text,
+                      ),
                     ),
                   ),
                   Text(
                     '${dep.userCount}',
-                    style: DunesTypography.mono(
-                      fontSize: 9,
+                    style: DunesTypography.sans(
+                      fontSize: 12,
                       color: DunesColors.text3,
                     ),
                   ),
@@ -391,60 +440,53 @@ class _DeptBlockTileState extends State<DeptBlockTile> {
           ),
         ),
         if (_expanded) ...[
-          Padding(
-            padding: const EdgeInsets.only(left: 8, bottom: 8),
+          Container(
+            margin: const EdgeInsets.fromLTRB(14, 0, 14, 8),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF8F7FB),
+              borderRadius: BorderRadius.circular(12),
+            ),
             child: Column(
               children: [
-                ...dep.users.map(
-                  (c) => ContactRowTile(
-                    contact: c,
+                for (var i = 0; i < dep.users.length; i++) ...[
+                  if (i > 0)
+                    const Divider(
+                      height: 1,
+                      thickness: 1,
+                      indent: 66,
+                      color: Color(0xFFEDECF2),
+                    ),
+                  ContactRowTile(
+                    contact: dep.users[i],
                     currentUserId: widget.currentUserId,
-                    showOnline: widget.onlineUsers.contains(c.userId),
-                    onOpenProfile: () => widget.onOpenContact(c),
-                    onMessage: () => widget.onMessageContact(c),
+                    showOnline: widget.onlineUsers.contains(dep.users[i].userId),
+                    onOpenProfile: () => widget.onOpenContact(dep.users[i]),
+                    onMessage: () => widget.onMessageContact(dep.users[i]),
                     avatarService: widget.avatarService,
+                    pickMode: widget.pickMode,
+                    selected: widget.selectedUserIds.contains(dep.users[i].userId),
+                    onToggleSelect: widget.onToggleContact == null
+                        ? null
+                        : () => widget.onToggleContact!(dep.users[i]),
                   ),
-                ),
-                ...dep.children.map(
-                  (child) => DeptBlockTile(
+                ],
+                for (final child in dep.children)
+                  DeptBlockTile(
                     department: child,
                     currentUserId: widget.currentUserId,
                     onOpenContact: widget.onOpenContact,
                     onMessageContact: widget.onMessageContact,
                     onlineUsers: widget.onlineUsers,
                     avatarService: widget.avatarService,
+                    pickMode: widget.pickMode,
+                    selectedUserIds: widget.selectedUserIds,
+                    onToggleContact: widget.onToggleContact,
                   ),
-                ),
               ],
             ),
           ),
         ],
       ],
-    );
-  }
-}
-
-class _RoleChip extends StatelessWidget {
-  const _RoleChip({required this.label});
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-      decoration: BoxDecoration(
-        color: DunesColors.bgSoft,
-        borderRadius: BorderRadius.circular(3),
-        border: Border.all(color: DunesColors.borderSoft),
-      ),
-      child: Text(
-        label,
-        style: DunesTypography.mono(
-          fontSize: 9,
-          fontWeight: FontWeight.w600,
-          color: DunesColors.text3,
-        ),
-      ),
     );
   }
 }
@@ -455,27 +497,34 @@ class _HeaderIconBtn extends StatelessWidget {
     required this.onTap,
     required this.tooltip,
     this.active = false,
+    this.activeColor,
   });
 
   final IconData icon;
   final VoidCallback onTap;
   final String tooltip;
   final bool active;
+  final Color? activeColor;
 
   @override
   Widget build(BuildContext context) {
+    final accent = activeColor ?? const Color(0xFF7B5CD8);
     return Tooltip(
       message: tooltip,
       child: Material(
-        color: active ? DunesColors.bgSoft : Colors.transparent,
-        shape: const CircleBorder(),
+        color: active ? accent.withValues(alpha: 0.12) : Colors.transparent,
+        borderRadius: BorderRadius.circular(10),
         child: InkWell(
-          customBorder: const CircleBorder(),
+          borderRadius: BorderRadius.circular(10),
           onTap: onTap,
           child: SizedBox(
             width: 44,
             height: 44,
-            child: Icon(icon, size: 22, color: DunesColors.text2),
+            child: Icon(
+              icon,
+              size: icon == Icons.arrow_back_ios_new_rounded ? 18 : 22,
+              color: active ? accent : DunesColors.text2,
+            ),
           ),
         ),
       ),
@@ -497,24 +546,20 @@ class _ActionIconBtn extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: primary ? DunesColors.accentSoft : DunesColors.bgSoft,
+      color: primary
+          ? const Color(0xFF7B5CD8).withValues(alpha: 0.1)
+          : const Color(0xFFF0F1F3),
       shape: const CircleBorder(),
       child: InkWell(
         customBorder: const CircleBorder(),
         onTap: onTap,
-        child: Container(
-          width: 28,
-          height: 28,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            border: Border.all(
-              color: primary ? DunesColors.accent : DunesColors.borderSoft,
-            ),
-          ),
+        child: SizedBox(
+          width: 34,
+          height: 34,
           child: Icon(
             icon,
-            size: 13,
-            color: primary ? DunesColors.accentDeep : DunesColors.text2,
+            size: 16,
+            color: primary ? const Color(0xFF7B5CD8) : DunesColors.text2,
           ),
         ),
       ),

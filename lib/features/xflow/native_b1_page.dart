@@ -222,8 +222,7 @@ class _NativeProposalListPageState extends State<_NativeProposalListPage> {
     final list = _all.where((it) {
       if (_statusFilter != 'ALL') {
         if (_statusFilter == 'MINE') {
-          // 待我审批：当前存在分配给我、状态为 OPEN 的审批待办。
-          if (it.todoHint?.status.toUpperCase() != 'OPEN') return false;
+          if (!_isMyOpenTodo(it)) return false;
         } else if (_normalizeStatus(it.status) != _statusFilter) {
           return false;
         }
@@ -268,6 +267,7 @@ class _NativeProposalListPageState extends State<_NativeProposalListPage> {
   Widget build(BuildContext context) {
     final counts = _statusCounts(_all);
     final visible = _visible;
+    final mine = counts['MINE'] ?? 0;
     final pending = counts['PENDING'] ?? 0;
     final isB1 = widget.type == _ListType.b1 || widget.type == _ListType.b13;
     return ColoredBox(
@@ -293,17 +293,17 @@ class _NativeProposalListPageState extends State<_NativeProposalListPage> {
                                         ? '我发起 · ${_all.length} 份'
                                         : '抄送提案 · ${_all.length} 份',
                                 badgeText: isB1
-                                    ? (pending > 0 ? '$pending 待处理' : '无待办')
+                                    ? (mine > 0 ? '$mine 待处理' : '无待办')
                                     : (counts['REJECTED']! > 0 && widget.type == _ListType.b14)
                                         ? '${counts['REJECTED']} 已驳回'
                                         : pending > 0
                                             ? '$pending 审批中'
                                             : '无待审',
-                                bigValue: isB1 ? '$pending' : '${_all.length}',
+                                bigValue: isB1 ? '$mine' : '${_all.length}',
                                 bigUnit: isB1 ? '项' : '份',
                                 footItems: isB1
                                     ? <(String, String, String?)>[
-                                        ('待审批', '$pending', pending > 0 ? 'urge' : null),
+                                        ('待审批', '$mine', mine > 0 ? 'urge' : null),
                                         ('抄送', '0', null),
                                         ('任务', '0', null),
                                         ('执行', '0', null),
@@ -465,6 +465,31 @@ class _NativeProposalListPageState extends State<_NativeProposalListPage> {
   }
 }
 
+String _normalizeStatus(String raw) {
+  final status = raw.toUpperCase();
+  if (status == 'OPEN' || status == 'PENDING') return 'PENDING';
+  if (status == 'APPROVED' || status == 'DONE') return 'APPROVED';
+  if (status == 'LIVE') return 'LIVE';
+  if (status == 'REJECTED') return 'REJECTED';
+  if (status == 'DRAFT') return 'DRAFT';
+  if (status == 'PENDING_INITIATE') return 'PENDING_INITIATE';
+  if (status == 'VOIDED') return 'VOIDED';
+  if (status == 'SUPERSEDED') return 'SUPERSEDED';
+  return 'OTHER';
+}
+
+bool _isMyOpenTodo(XflowProposalItem row) {
+  final todoStatus = row.todoHint?.status.toUpperCase() ?? '';
+  if (todoStatus == 'OPEN') return true;
+  // 部分 inbox 行未带 status，但仍有有效 todo 且展示为待审批。
+  if (todoStatus.isEmpty &&
+      (row.todoHint?.id ?? 0) > 0 &&
+      _normalizeStatus(row.status) == 'PENDING') {
+    return true;
+  }
+  return false;
+}
+
 Map<String, int> _statusCounts(List<XflowProposalItem> rows) {
   var mine = 0;
   var draft = 0;
@@ -475,7 +500,7 @@ Map<String, int> _statusCounts(List<XflowProposalItem> rows) {
   var live = 0;
   var voided = 0;
   for (final row in rows) {
-    if (row.todoHint?.status.toUpperCase() == 'OPEN') mine++;
+    if (_isMyOpenTodo(row)) mine++;
     switch (_normalizeStatus(row.status)) {
       case 'DRAFT':
         draft++;
@@ -513,17 +538,4 @@ Map<String, int> _statusCounts(List<XflowProposalItem> rows) {
     'LIVE': live,
     'VOIDED': voided,
   };
-}
-
-String _normalizeStatus(String raw) {
-  final status = raw.toUpperCase();
-  if (status == 'OPEN' || status == 'PENDING') return 'PENDING';
-  if (status == 'APPROVED' || status == 'DONE') return 'APPROVED';
-  if (status == 'LIVE') return 'LIVE';
-  if (status == 'REJECTED') return 'REJECTED';
-  if (status == 'DRAFT') return 'DRAFT';
-  if (status == 'PENDING_INITIATE') return 'PENDING_INITIATE';
-  if (status == 'VOIDED') return 'VOIDED';
-  if (status == 'SUPERSEDED') return 'SUPERSEDED';
-  return 'OTHER';
 }

@@ -45,9 +45,10 @@ class CommUnreadNotifier extends ChangeNotifier {
   int sumConversationUnread({
     required List<NativeConversation> rows,
     required int notifUnread,
+    int aiSummaryUnread = 0,
     Set<int> treatAsReadIds = const <int>{},
   }) {
-    var total = notifUnread;
+    var total = notifUnread + aiSummaryUnread;
     for (final conversation in rows) {
       if (!conversation.isVisible) continue;
       if (treatAsReadIds.contains(conversation.id)) continue;

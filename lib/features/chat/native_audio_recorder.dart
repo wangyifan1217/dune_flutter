@@ -24,6 +24,7 @@ class NativeAudioRecorder {
   static final NativeAudioRecorder instance = NativeAudioRecorder._();
   static const MethodChannel _channel = MethodChannel('dunes/audio_recorder');
   static const EventChannel _streamChannel = EventChannel('dunes/audio_recorder_stream');
+  static const EventChannel _eventsChannel = EventChannel('dunes/audio_recorder_events');
 
   /// 由会议录音模块注册：返回 true 时拒绝其它入口占用麦克风。
   static bool Function()? isStartBlocked;
@@ -76,6 +77,15 @@ class NativeAudioRecorder {
       if (event is List<int>) return Uint8List.fromList(event);
       return Uint8List(0);
     }).where((chunk) => chunk.isNotEmpty);
+  }
+
+  /// 原生录音事件：来电/系统中断时自动暂停、中断结束可继续。
+  Stream<Map<String, dynamic>> recorderEvents() {
+    if (!isSupported) return const Stream<Map<String, dynamic>>.empty();
+    return _eventsChannel.receiveBroadcastStream().map((event) {
+      if (event is Map) return Map<String, dynamic>.from(event);
+      return const <String, dynamic>{};
+    }).where((event) => event.isNotEmpty);
   }
 
   Future<NativeRecordedAudio?> stop() async {

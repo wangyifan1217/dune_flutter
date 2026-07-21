@@ -399,6 +399,8 @@ class NativeAvatarCircle extends StatelessWidget {
         height: size,
         fit: BoxFit.cover,
         borderRadius: _radius,
+        // 与 IM 一致：加载中先出首字，避免空白黄底空等。
+        placeholder: () => _letter(fallbackText),
         errorBuilder: () => _letter(fallbackText),
       );
     } else if (avatarPreset.isNotEmpty) {

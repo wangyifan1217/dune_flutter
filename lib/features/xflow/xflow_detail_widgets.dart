@@ -12,6 +12,7 @@ import 'xflow_approval_flow_ui.dart';
 import 'xflow_detail_logic.dart';
 import 'xflow_models.dart';
 import 'xflow_service.dart';
+import 'xflow_shared_widgets.dart';
 import 'xflow_upload_field.dart';
 
 /// WebView `.xf-det-card` 容器
@@ -1486,6 +1487,10 @@ class _XfDetApproveCardState extends State<XfDetApproveCard> {
       showDunesToast(context, '请填写审批意见', kind: DunesToastKind.error);
       return;
     }
+    final ok = approve
+        ? await confirmApproveDecision(context)
+        : await confirmRejectDecision(context);
+    if (!ok) return;
     setState(() => _submitting = true);
     try {
       if (approve) {

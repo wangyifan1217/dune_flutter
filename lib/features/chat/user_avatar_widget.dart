@@ -20,6 +20,8 @@ class ImUserAvatar extends StatelessWidget {
     this.avatarUrl,
     this.avatarService,
     this.borderRadius,
+    this.fallbackBackground,
+    this.fallbackForeground,
   });
 
   final String initial;
@@ -33,6 +35,10 @@ class ImUserAvatar extends StatelessWidget {
 
   /// 为空时圆形；通讯板块统一用 [commBorderRadius]。
   final double? borderRadius;
+
+  /// 无预设/自定义头像时的统一底色；为空则按 [seed] 取色。
+  final Color? fallbackBackground;
+  final Color? fallbackForeground;
 
   /// 通讯列表/群聊拼贴用的圆角方形（与 [GroupCompositeAvatar] 外框一致）。
   static BorderRadius commBorderRadius(double size) =>
@@ -150,19 +156,21 @@ class ImUserAvatar extends StatelessWidget {
 
   Widget _initialAvatar() {
     final style = InboxFormat.personStyle(seed);
+    final bg = fallbackBackground ?? style.gradient.first;
+    final fg = fallbackForeground ?? style.textColor;
     return Container(
       width: size,
       height: size,
       alignment: Alignment.center,
       decoration: BoxDecoration(
         // 会话页扁平化：首字头像用纯色，避免渐变纵深感。
-        color: style.gradient.first,
+        color: bg,
         borderRadius: _effectiveBorderRadius,
       ),
       child: Text(
         initial.isEmpty ? '?' : initial,
         style: TextStyle(
-          color: style.textColor,
+          color: fg,
           fontSize: size * 0.38,
           fontWeight: FontWeight.w500,
         ),

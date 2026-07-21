@@ -2,12 +2,23 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
+import 'package:open_filex/open_filex.dart';
 import 'package:path_provider/path_provider.dart';
+
+import 'im_file_save_dir.dart';
+
+Future<Directory> _defaultDesktopSaveDir() async {
+  final downloads = await getDownloadsDirectory();
+  final base = downloads ?? await getApplicationDocumentsDirectory();
+  final dir = Directory('${base.path}${Platform.pathSeparator}沙丘文件');
+  await dir.create(recursive: true);
+  return dir;
+}
 
 Future<Directory> _resolveSaveDir() async {
   if (Platform.isAndroid) {
-    // Prefer public Download so system file pickers can find saved files.
-    final public = Directory('/storage/emulated/0/Download');
+    // 公共 Download/沙丘文件，会话子目录为 conversationId。
+    final public = Directory('/storage/emulated/0/Download/沙丘文件');
     try {
       if (!await public.exists()) {
         await public.create(recursive: true);
@@ -17,26 +28,65 @@ Future<Directory> _resolveSaveDir() async {
       // Fall back to platform directory when public path is unavailable.
     }
     final downloads = await getDownloadsDirectory();
-    if (downloads != null) return downloads;
+    if (downloads != null) {
+      final dir = Directory('${downloads.path}${Platform.pathSeparator}沙丘文件');
+      await dir.create(recursive: true);
+      return dir;
+    }
   }
   if (Platform.isIOS) {
     final docs = await getApplicationDocumentsDirectory();
-    return Directory('${docs.path}/Downloads')..createSync(recursive: true);
+    return Directory('${docs.path}/沙丘文件')..createSync(recursive: true);
   }
-  // Windows / macOS：放到系统「下载/沙丘文件」，便于 Finder / 资源管理器找到。
+  // Windows / macOS：优先用户自选目录，否则「下载/沙丘文件」。
   if (Platform.isWindows || Platform.isMacOS) {
-    final downloads = await getDownloadsDirectory();
-    final base = downloads ?? await getApplicationDocumentsDirectory();
-    final dir = Directory('${base.path}${Platform.pathSeparator}沙丘文件');
-    await dir.create(recursive: true);
-    return dir;
+    final custom = await ImFileSaveDir.getPath();
+    if (custom != null && custom.isNotEmpty) {
+      final dir = Directory(custom);
+      await dir.create(recursive: true);
+      return dir;
+    }
+    return _defaultDesktopSaveDir();
   }
   return await getApplicationDocumentsDirectory();
+}
+
+/// 查找缓存时额外检查的根目录（含默认目录，避免改路径后旧文件打不开）。
+Future<List<Directory>> _cacheSearchDirs() async {
+  final primary = await _resolveSaveDir();
+  final dirs = <Directory>[primary];
+  if (Platform.isAndroid) {
+    final legacyRoots = <Directory>[
+      Directory('/storage/emulated/0/Download'),
+      Directory('/storage/emulated/0/Download/沙丘文件'),
+    ];
+    for (final legacy in legacyRoots) {
+      if (legacy.path.toLowerCase() != primary.path.toLowerCase()) {
+        dirs.add(legacy);
+      }
+    }
+  } else if (Platform.isIOS) {
+    final docs = await getApplicationDocumentsDirectory();
+    final legacy = Directory('${docs.path}/Downloads');
+    if (legacy.path != primary.path) dirs.add(legacy);
+  } else if (Platform.isWindows || Platform.isMacOS) {
+    final fallback = await _defaultDesktopSaveDir();
+    if (fallback.path.toLowerCase() != primary.path.toLowerCase()) {
+      dirs.add(fallback);
+    }
+  }
+  return dirs;
 }
 
 String _safeFileName(String fileName) {
   final trimmed = fileName.trim();
   if (trimmed.isEmpty) return 'download';
+  return trimmed.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
+}
+
+String _safeFolderName(String name) {
+  final trimmed = name.trim();
+  if (trimmed.isEmpty) return 'unknown';
   return trimmed.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
 }
 
@@ -56,9 +106,8 @@ String _uniqueFilePath(Directory dir, String fileName) {
   }
 }
 
-/// 用 objectKey / url 生成稳定子目录，便于二次点击直接打开。
-String _cacheFolderName(String cacheKey) {
-  // FNV-1a 32-bit：跨进程稳定，避免 String.hashCode 重启后变化。
+/// 旧版：用 objectKey / url 的 FNV-1a 哈希做子目录（兼容已下载文件）。
+String _legacyCacheFolderName(String cacheKey) {
   var hash = 0x811c9dc5;
   for (final unit in cacheKey.codeUnits) {
     hash ^= unit;
@@ -67,33 +116,80 @@ String _cacheFolderName(String cacheKey) {
   return hash.toRadixString(16).padLeft(8, '0');
 }
 
-String _cachedFilePath(Directory dir, String cacheKey, String fileName) {
+String _conversationFolderPath(Directory dir, int conversationId) {
+  return '${dir.path}${Platform.pathSeparator}${_safeFolderName('$conversationId')}';
+}
+
+String _legacyCachedFilePath(Directory dir, String cacheKey, String fileName) {
   final folder =
-      '${dir.path}${Platform.pathSeparator}${_cacheFolderName(cacheKey)}';
+      '${dir.path}${Platform.pathSeparator}${_legacyCacheFolderName(cacheKey)}';
   return '$folder${Platform.pathSeparator}${_safeFileName(fileName)}';
 }
 
-Future<String?> findCachedChatFileImpl(String cacheKey, String fileName) async {
+String _conversationCachedFilePath(
+  Directory dir,
+  int conversationId,
+  String fileName,
+) {
+  final folder = _conversationFolderPath(dir, conversationId);
+  return '$folder${Platform.pathSeparator}${_safeFileName(fileName)}';
+}
+
+Future<String?> _findInDir(
+  Directory dir, {
+  required String cacheKey,
+  required String fileName,
+  int? conversationId,
+}) async {
+  if (conversationId != null && conversationId > 0) {
+    final path = _conversationCachedFilePath(dir, conversationId, fileName);
+    final file = File(path);
+    if (await file.exists() && await file.length() > 0) return path;
+  }
+  if (cacheKey.isNotEmpty) {
+    final legacy = _legacyCachedFilePath(dir, cacheKey, fileName);
+    final file = File(legacy);
+    if (await file.exists() && await file.length() > 0) return legacy;
+  }
+  return null;
+}
+
+Future<String?> findCachedChatFileImpl(
+  String cacheKey,
+  String fileName, {
+  int? conversationId,
+}) async {
   final key = cacheKey.trim();
-  if (key.isEmpty) return null;
-  final dir = await _resolveSaveDir();
-  final path = _cachedFilePath(dir, key, fileName);
-  final file = File(path);
-  if (await file.exists() && await file.length() > 0) return path;
+  final dirs = await _cacheSearchDirs();
+  for (final dir in dirs) {
+    final hit = await _findInDir(
+      dir,
+      cacheKey: key,
+      fileName: fileName,
+      conversationId: conversationId,
+    );
+    if (hit != null) return hit;
+  }
   return null;
 }
 
 Future<String> saveBytesAsCachedFileImpl(
   Uint8List bytes,
   String cacheKey,
-  String fileName,
-) async {
+  String fileName, {
+  int? conversationId,
+}) async {
   final key = cacheKey.trim();
-  if (key.isEmpty) {
+  if (key.isEmpty && (conversationId == null || conversationId <= 0)) {
     return saveBytesAsFileImpl(bytes, fileName);
   }
   final dir = await _resolveSaveDir();
-  final path = _cachedFilePath(dir, key, fileName);
+  final String path;
+  if (conversationId != null && conversationId > 0) {
+    path = _conversationCachedFilePath(dir, conversationId, fileName);
+  } else {
+    path = _legacyCachedFilePath(dir, key, fileName);
+  }
   await Directory(File(path).parent.path).create(recursive: true);
   await File(path).writeAsBytes(bytes, flush: true);
   return path;
@@ -111,6 +207,7 @@ Future<String> openUrlAsFileImpl(
   String fileName, {
   void Function(double progress)? onProgress,
   String? cacheKey,
+  int? conversationId,
 }) async {
   final uri = Uri.tryParse(url);
   if (uri == null) throw Exception('下载链接无效');
@@ -134,8 +231,13 @@ Future<String> openUrlAsFileImpl(
     if (total <= 0) onProgress?.call(1.0);
     final bytes = Uint8List.fromList(chunks);
     final key = (cacheKey ?? '').trim();
-    if (key.isNotEmpty) {
-      return saveBytesAsCachedFileImpl(bytes, key, fileName);
+    if (key.isNotEmpty || (conversationId != null && conversationId > 0)) {
+      return saveBytesAsCachedFileImpl(
+        bytes,
+        key,
+        fileName,
+        conversationId: conversationId,
+      );
     }
     return saveBytesAsFileImpl(bytes, fileName);
   } finally {
@@ -143,11 +245,17 @@ Future<String> openUrlAsFileImpl(
   }
 }
 
-/// 用系统默认应用打开本地文件（Win / macOS / Linux）。
+/// 用系统默认应用打开本地文件（含 APP 的「用其他应用打开」）。
 Future<void> openLocalFileImpl(String path) async {
   final file = File(path);
   if (!await file.exists()) {
     throw Exception('文件不存在');
+  }
+  if (Platform.isAndroid || Platform.isIOS) {
+    final result = await OpenFilex.open(path);
+    if (result.type == ResultType.done) return;
+    final msg = result.message.trim();
+    throw Exception(msg.isEmpty ? '无法打开文件' : msg);
   }
   if (Platform.isMacOS) {
     final result = await Process.run('open', [path]);
@@ -185,6 +293,23 @@ Future<void> openLocalFileImpl(String path) async {
   throw UnsupportedError('当前平台不支持打开本地文件');
 }
 
+Future<void> deleteCachedChatFileImpl(
+  String cacheKey,
+  String fileName, {
+  int? conversationId,
+}) async {
+  final hit = await findCachedChatFileImpl(
+    cacheKey,
+    fileName,
+    conversationId: conversationId,
+  );
+  if (hit == null || hit.isEmpty) return;
+  final file = File(hit);
+  if (await file.exists()) {
+    await file.delete();
+  }
+}
+
 /// 在资源管理器 / Finder 中显示文件。
 Future<void> revealLocalFileImpl(String path) async {
   final file = File(path);
@@ -199,16 +324,17 @@ Future<void> revealLocalFileImpl(String path) async {
     return;
   }
   if (Platform.isWindows) {
-    final result = await Process.run(
-      'explorer.exe',
-      <String>['/select,', path],
-    );
-    if (result.exitCode != 0) {
-      throw Exception('无法在资源管理器中显示');
-    }
+    // `/select,path` 必须是单个参数；explorer.exe 即使成功也常返回非 0，不能据此报错。
+    final normalized = path.replaceAll('/', '\\');
+    await Process.run('explorer.exe', <String>['/select,$normalized']);
     return;
   }
   // Linux：至少打开所在目录。
   final parent = file.parent.path;
   await Process.run('xdg-open', [parent]);
+}
+
+Future<String> resolveImSaveDirPathImpl() async {
+  final dir = await _resolveSaveDir();
+  return dir.path;
 }

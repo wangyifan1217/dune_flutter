@@ -10,6 +10,8 @@ import '../nova/nova_inbox_preview.dart';
 import '../nova/nova_web_storage.dart';
 import '../../core/theme/dunes_theme.dart';
 import '../../core/util/friendly_error.dart';
+import '../ai_summary/ai_summary_models.dart';
+import '../ai_summary/ai_summary_service.dart';
 import '../auth/auth_session.dart';
 import '../workbench/workbench_badge_notifier.dart';
 import 'comm_unread_notifier.dart';
@@ -39,6 +41,7 @@ class NativeConversationPage extends StatefulWidget {
     required this.onOpenNova,
     required this.onOpenNotifications,
     required this.onOpenNewChat,
+    required this.onOpenAiSummary,
     this.selectedConversationId,
     this.conversationReadSignal,
   });
@@ -53,6 +56,7 @@ class NativeConversationPage extends StatefulWidget {
   final VoidCallback onOpenNova;
   final VoidCallback onOpenNotifications;
   final VoidCallback onOpenNewChat;
+  final VoidCallback onOpenAiSummary;
 
   /// 双栏布局中当前选中的会话，用于列表高亮。
   final int? selectedConversationId;
@@ -103,6 +107,7 @@ class _NativeConversationPageState extends State<NativeConversationPage>
 
   late final ConversationService _service;
   late final NotificationService _notificationService;
+  late final AiSummaryService _aiSummaryService;
   late final ConversationRealtimeService _realtime;
   final ConversationRealtimeDedup _realtimeDedup = ConversationRealtimeDedup();
   final TextEditingController _searchController = TextEditingController();
@@ -116,6 +121,8 @@ class _NativeConversationPageState extends State<NativeConversationPage>
   bool _loading = true;
   String? _error;
   List<NativeConversation> _items = const <NativeConversation>[];
+  AiSummaryItem? _aiSummaryPreview;
+  int _aiSummaryUnread = 0;
   NativeNotificationSummary _notif = const NativeNotificationSummary(
     unreadCount: 0,
   );
@@ -129,6 +136,7 @@ class _NativeConversationPageState extends State<NativeConversationPage>
     super.initState();
     _service = ConversationService(session: widget.session);
     _notificationService = NotificationService(session: widget.session);
+    _aiSummaryService = AiSummaryService(session: widget.session);
     _realtime = ConversationRealtimeHub.instance.of(widget.session);
     WidgetsBinding.instance.addObserver(this);
     userAvatarRefresh.addListener(_onSelfAvatarUpdated);
@@ -246,6 +254,10 @@ class _NativeConversationPageState extends State<NativeConversationPage>
         setState(() => _onlineUsers = ids);
       });
       _rtSub = _realtime.events.listen((event) {
+        if (event.type == 'ai_summary_updated') {
+          _onAiSummaryRealtime(event);
+          return;
+        }
         const liveEvents = <String>{
           'message',
           'system_flow',
@@ -261,6 +273,79 @@ class _NativeConversationPageState extends State<NativeConversationPage>
     } catch (_) {
       // Realtime is best-effort.
     }
+  }
+
+  bool get _isViewingAiSummary {
+    final screen = widget.navigation.currentScreen;
+    return screen == 'AS1' || screen == 'AS2' || screen == 'AS3';
+  }
+
+  void _onAiSummaryRealtime(ConversationRealtimeEvent event) {
+    final update = AiSummaryRealtimeUpdate.fromPayload(event.raw);
+    if (!mounted) return;
+    final terminal =
+        update.status == 'SUCCESS' || update.status == 'FAILED';
+    // 仅终态更新通讯列表预览；未读由服务端 read_at 统计。
+    if (terminal) {
+      setState(() {
+        if (update.id > 0) {
+          final prev = _aiSummaryPreview;
+          _aiSummaryPreview = AiSummaryItem(
+            id: update.id,
+            theme: update.theme.isNotEmpty
+                ? update.theme
+                : (prev?.theme ?? '智能总结'),
+            template: prev?.template ?? 'custom',
+            conversationIds: prev?.conversationIds ?? const <int>[],
+            memberUserIds: prev?.memberUserIds ?? const <int>[],
+            memberCount: prev?.memberCount ?? 0,
+            from: prev?.from,
+            to: prev?.to,
+            status: update.status,
+            summaryPreview: update.preview ??
+                update.body ??
+                prev?.summaryPreview,
+            createdAt: DateTime.now(),
+            finishedAt: DateTime.now(),
+            initiator: prev?.initiator ??
+                const AiSummaryInitiator(userId: 0, displayName: ''),
+          );
+        }
+      });
+      unawaited(_syncAiSummaryUnreadFromServer());
+    }
+    unawaited(_refreshAiSummaryPreview());
+  }
+
+  Future<void> _syncAiSummaryUnreadFromServer() async {
+    if (widget.session.isExternalUser) return;
+    try {
+      final unread = await _aiSummaryService.fetchUnreadCount();
+      if (!mounted) return;
+      setState(() => _aiSummaryUnread = unread);
+      _updateCommBadge(_items, _notif.unreadCount);
+    } catch (_) {
+      if (mounted) _updateCommBadge(_items, _notif.unreadCount);
+    }
+  }
+
+  Future<void> _openAiSummaryHub() async {
+    widget.onOpenAiSummary();
+  }
+
+  Future<AiSummaryItem?> _safeFetchAiSummaryPreview() async {
+    try {
+      return await _aiSummaryService.fetchLatestPreview();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _refreshAiSummaryPreview() async {
+    if (widget.session.isExternalUser) return;
+    final latest = await _safeFetchAiSummaryPreview();
+    if (!mounted) return;
+    setState(() => _aiSummaryPreview = latest);
   }
 
   void _onInboxRealtimeEvent(ConversationRealtimeEvent event) {
@@ -369,6 +454,8 @@ class _NativeConversationPageState extends State<NativeConversationPage>
         _service.fetchConversations(),
         _notificationService.fetchSummary(),
         NovaWebStorage.load(widget.session.userId),
+        if (!widget.session.isExternalUser) _safeFetchAiSummaryPreview(),
+        if (!widget.session.isExternalUser) _aiSummaryService.fetchUnreadCount(),
       ]);
       final rows = (results[0] as List<NativeConversation>)
           .where((c) => c.isVisible && !isConversationHidden(hidden, c.id))
@@ -382,6 +469,14 @@ class _NativeConversationPageState extends State<NativeConversationPage>
       }
       final notif = results[1] as NativeNotificationSummary;
       final novaStorage = results[2] as Map<String, String>;
+      final aiPreview =
+          !widget.session.isExternalUser && results.length > 3
+              ? results[3] as AiSummaryItem?
+              : null;
+      final aiUnread =
+          !widget.session.isExternalUser && results.length > 4
+              ? (results[4] as int? ?? 0)
+              : 0;
       final refreshedHidden = await InboxHiddenStorage.load();
       if (!mounted) return;
       final selfAvatar = userAvatarRefresh.snapshotFor(widget.session.userId);
@@ -394,6 +489,15 @@ class _NativeConversationPageState extends State<NativeConversationPage>
         _notif = notif;
         _novaStorage = novaStorage;
         _hiddenConversations = refreshedHidden;
+        if (aiPreview != null || !silent) {
+          _aiSummaryPreview = aiPreview;
+        }
+        // 智能总结未读：走 /ai/summaries/unread-count，不再依赖 AI_SUMMARY 通知。
+        if (!_isViewingAiSummary) {
+          _aiSummaryUnread = aiUnread;
+        } else {
+          _aiSummaryUnread = 0;
+        }
         _loading = false;
         if (!silent) _error = null;
       });
@@ -420,6 +524,7 @@ class _NativeConversationPageState extends State<NativeConversationPage>
       widget.commUnread.sumConversationUnread(
         rows: rows,
         notifUnread: notifUnread,
+        aiSummaryUnread: _isViewingAiSummary ? 0 : _aiSummaryUnread,
         treatAsReadIds: selected > 0 ? <int>{selected} : const <int>{},
       ),
     );
@@ -684,6 +789,14 @@ class _NativeConversationPageState extends State<NativeConversationPage>
       return sections;
     }
 
+    final chatRows = _buildChatRowsMergedWithAiSummary(chats);
+    final aiTs = _aiSummaryPreview?.sortTime?.millisecondsSinceEpoch ?? 0;
+    final chatTs = chats.isNotEmpty
+        ? (chats.first.sortTimestamp > aiTs
+              ? chats.first.sortTimestamp
+              : aiTs)
+        : aiTs;
+
     final sections = <_InboxSection>[
       if (approvals.isNotEmpty)
         _InboxSection(
@@ -699,24 +812,70 @@ class _NativeConversationPageState extends State<NativeConversationPage>
           ),
           rows: convRows(approvals),
         ),
-      if (chats.isNotEmpty)
+      if (chatRows.isNotEmpty)
         _InboxSection(
           key: 'chat',
           label: '聊天',
-          count: chats.length,
-          timestamp: chats.first.sortTimestamp,
+          count: chatRows.length,
+          timestamp: chatTs,
           pinned: false,
           leading: const Icon(
             Icons.chat_bubble_outline,
             size: 11,
             color: DunesColors.text3,
           ),
-          rows: convRows(chats),
+          rows: chatRows,
         ),
     ];
 
     sections.sort((a, b) => b.timestamp.compareTo(a.timestamp));
     return sections;
+  }
+
+  /// 智能总结与私聊/群聊同一排序：置顶优先，再按最近时间。
+  /// 仅在已有分析结果时显示（默认不占位）。
+  List<Widget> _buildChatRowsMergedWithAiSummary(
+    List<NativeConversation> chats,
+  ) {
+    final entries = <({int ts, bool pinned, Widget row})>[];
+    for (final c in chats) {
+      final row = _buildConvRow(c);
+      if (row == null) continue;
+      entries.add((ts: c.sortTimestamp, pinned: c.pinned, row: row));
+    }
+    final aiRow = _buildAiSummaryInboxRow();
+    if (aiRow != null) {
+      final ts = _aiSummaryPreview?.sortTime?.millisecondsSinceEpoch ?? 0;
+      entries.add((ts: ts, pinned: false, row: aiRow));
+    }
+    entries.sort((a, b) {
+      final ap = a.pinned ? 1 : 0;
+      final bp = b.pinned ? 1 : 0;
+      if (ap != bp) return bp.compareTo(ap);
+      return b.ts.compareTo(a.ts);
+    });
+    return entries.map((e) => e.row).toList(growable: false);
+  }
+
+  Widget? _buildAiSummaryInboxRow() {
+    if (widget.session.isExternalUser) return null;
+    final preview = _aiSummaryPreview;
+    // 默认不展示；仅分析产出结果（SUCCESS）后出现在通讯页。
+    if (preview == null || !preview.isSuccess) return null;
+    final previewText = preview.inboxPreview;
+    if (!_matchesSearch('智能总结', previewText)) return null;
+    return KeyedSubtree(
+      key: const ValueKey<String>('ai-summary-inbox'),
+      child: ChatInboxRow(
+        kind: ChatInboxRowKind.aiSummary,
+        title: '智能总结',
+        preview: previewText,
+        timeLabel: InboxFormat.formatTime(preview.sortTime),
+        unreadCount: _aiSummaryUnread,
+        previewGenerating: false,
+        onTap: () => unawaited(_openAiSummaryHub()),
+      ),
+    );
   }
 
   int get _messageCenterUnread {
@@ -741,9 +900,11 @@ class _NativeConversationPageState extends State<NativeConversationPage>
             children: [
               ChatInboxHeader(
                 onOpenContacts: widget.onOpenContacts,
-                onNewChat: widget.onOpenNewChat,
                 onOpenNova: _openNovaConversation,
                 onOpenMessageCenter: widget.onOpenNotifications,
+                onOpenAiSummary: widget.session.isExternalUser
+                    ? null
+                    : () => unawaited(_openAiSummaryHub()),
                 messageCenterUnread: _messageCenterUnread,
                 novaThinking: _novaGeneratingFor(
                   _primaryAiConversation(_items),

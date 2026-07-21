@@ -75,26 +75,31 @@ class StreamingAacM4aEncoder(
     fun finish(): Boolean {
         if (inputClosed) return outputLooksValid()
         inputClosed = true
-        val encoder = codec ?: return false
-        var attempts = 0
-        while (attempts < 8) {
-            val inIndex = encoder.dequeueInputBuffer(timeoutUs)
-            if (inIndex >= 0) {
-                encoder.queueInputBuffer(
-                    inIndex,
-                    0,
-                    0,
-                    presentationUs,
-                    MediaCodec.BUFFER_FLAG_END_OF_STREAM,
-                )
-                break
+        return try {
+            val encoder = codec ?: return false
+            var attempts = 0
+            while (attempts < 8) {
+                val inIndex = encoder.dequeueInputBuffer(timeoutUs)
+                if (inIndex >= 0) {
+                    encoder.queueInputBuffer(
+                        inIndex,
+                        0,
+                        0,
+                        presentationUs,
+                        MediaCodec.BUFFER_FLAG_END_OF_STREAM,
+                    )
+                    break
+                }
+                drainEncoder(endOfStream = true)
+                attempts++
             }
             drainEncoder(endOfStream = true)
-            attempts++
+            releaseInternal(deleteOutput = false)
+            outputLooksValid()
+        } catch (_: Exception) {
+            releaseInternal(deleteOutput = false)
+            outputLooksValid()
         }
-        drainEncoder(endOfStream = true)
-        releaseInternal(deleteOutput = false)
-        return outputLooksValid()
     }
 
     fun abort() {

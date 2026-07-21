@@ -1,6 +1,6 @@
 import 'package:flutter/foundation.dart';
 
-/// 桌面端（Windows / macOS）：与手机 APP 分 channel，仅开放通讯 + 我的。
+/// 桌面端（Windows / macOS）：与手机 APP 分 channel；侧栏含通讯 / 千机 / 灯塔 / 我的。
 bool get isDesktopCommOnly =>
     !kIsWeb &&
     (defaultTargetPlatform == TargetPlatform.windows ||
@@ -9,7 +9,7 @@ bool get isDesktopCommOnly =>
 /// 兼容旧命名。
 bool get isWindowsDesktopCommOnly => isDesktopCommOnly;
 
-/// 桌面端允许进入的屏：通讯 + 我的（不含灯塔 / 会议纪要）。
+/// 桌面端允许进入的屏。
 bool isDesktopAllowedCommScreen(String screenId) {
   return const <String>{
     // 通讯
@@ -26,6 +26,9 @@ bool isDesktopAllowedCommScreen(String screenId) {
     'C12',
     'C13',
     'Z2',
+    'AS1',
+    'AS2',
+    'AS3',
     // 我的及审批 / 知识库
     'B2',
     'B1',
@@ -40,6 +43,20 @@ bool isDesktopAllowedCommScreen(String screenId) {
     'K1',
     'K2',
     'K3',
+    'WX',
+    // 千机 / 灯塔
+    'QJ',
+    'QJC',
+    'QJD',
+    'QJI',
+    'QJA',
+    'QJT',
+    'QJP',
+    'QJM',
+    'QJMT',
+    'QJTD',
+    'LH',
+    'LM',
   }.contains(screenId);
 }
 

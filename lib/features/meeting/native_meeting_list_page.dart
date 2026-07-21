@@ -2,6 +2,7 @@
 
 import 'package:flutter/material.dart';
 
+import '../../core/platform/desktop_features.dart';
 import '../../core/theme/dunes_theme.dart';
 import '../../core/util/friendly_error.dart';
 import '../auth/auth_session.dart';
@@ -15,13 +16,13 @@ class NativeMeetingListPage extends StatefulWidget {
     super.key,
     required this.session,
     required this.onBack,
-    required this.onCreate,
     required this.onOpenDetail,
+    this.onCreate,
   });
 
   final AuthSession session;
   final VoidCallback onBack;
-  final VoidCallback onCreate;
+  final VoidCallback? onCreate;
   final ValueChanged<int> onOpenDetail;
 
   @override
@@ -191,33 +192,37 @@ class _NativeMeetingListPageState extends State<NativeMeetingListPage> {
 
   @override
   Widget build(BuildContext context) {
+    final canCreate = widget.onCreate != null && !isDesktopCommOnly;
     return Scaffold(
       backgroundColor: DunesColors.bgApp,
       appBar: AppBar(
         leading: BackButton(onPressed: widget.onBack),
         title: const Text('会议纪要'),
         actions: [
-          IconButton(
-            onPressed: widget.onCreate,
-            icon: const Icon(Icons.add_rounded),
-            tooltip: '新建会议',
-          ),
+          if (canCreate)
+            IconButton(
+              onPressed: widget.onCreate,
+              icon: const Icon(Icons.add_rounded),
+              tooltip: '新建会议',
+            ),
         ],
       ),
-      floatingActionButton: FloatingActionButton.large(
-        onPressed: widget.onCreate,
-        backgroundColor: DunesColors.brandPurple,
-        foregroundColor: Colors.white,
-        child: const Icon(Icons.mic_rounded),
-      ),
+      floatingActionButton: canCreate
+          ? FloatingActionButton.large(
+              onPressed: widget.onCreate,
+              backgroundColor: DunesColors.brandPurple,
+              foregroundColor: Colors.white,
+              child: const Icon(Icons.mic_rounded),
+            )
+          : null,
       body: RefreshIndicator(
         onRefresh: () => _load(reset: true),
-        child: _buildBody(),
+        child: _buildBody(canCreate: canCreate),
       ),
     );
   }
 
-  Widget _buildBody() {
+  Widget _buildBody({required bool canCreate}) {
     if (_loading) {
       return ListView(
         physics: const AlwaysScrollableScrollPhysics(),
@@ -257,9 +262,11 @@ class _NativeMeetingListPageState extends State<NativeMeetingListPage> {
           _buildMessageCard(
             icon: Icons.history_rounded,
             title: '暂无会议记录',
-            message: '点击下方麦克风按钮，上传录音并开始 AI 转写',
-            actionLabel: '新建会议',
-            onAction: widget.onCreate,
+            message: canCreate
+                ? '点击下方麦克风按钮，上传录音并开始 AI 转写'
+                : '暂无会议纪要，请在手机端录制或上传后查看',
+            actionLabel: canCreate ? '新建会议' : null,
+            onAction: canCreate ? widget.onCreate : null,
           ),
         ],
       );
@@ -365,8 +372,8 @@ class _NativeMeetingListPageState extends State<NativeMeetingListPage> {
     required IconData icon,
     required String title,
     required String message,
-    required String actionLabel,
-    required VoidCallback onAction,
+    String? actionLabel,
+    VoidCallback? onAction,
   }) {
     return Container(
       width: double.infinity,
@@ -398,19 +405,22 @@ class _NativeMeetingListPageState extends State<NativeMeetingListPage> {
               height: 1.5,
             ),
           ),
-          const SizedBox(height: 16),
-          FilledButton(
-            onPressed: onAction,
-            style: FilledButton.styleFrom(
-              backgroundColor: DunesColors.brandPurple,
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
+          if (actionLabel != null && onAction != null) ...[
+            const SizedBox(height: 16),
+            FilledButton(
+              onPressed: onAction,
+              style: FilledButton.styleFrom(
+                backgroundColor: DunesColors.brandPurple,
+                foregroundColor: Colors.white,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
               ),
+              child: Text(actionLabel),
             ),
-            child: Text(actionLabel),
-          ),
+          ],
         ],
       ),
     );

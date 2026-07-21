@@ -379,7 +379,7 @@ class XflowService {
       items.map(
         (item) => item.businessType.toUpperCase() == 'PROPOSAL'
             ? _enrichB14Item(item)
-            : Future.value(item),
+            : _enrichB14SubmissionItem(item),
       ),
     );
   }
@@ -1516,9 +1516,92 @@ class XflowService {
         break;
       }
     }
+    final fromTrail = _terminalStatusFromTrail(trail);
+    if (fromTrail != null) return fromTrail;
     final st = detailStatus.toUpperCase();
     if (st.isNotEmpty) return st;
     return 'APPROVED';
+  }
+
+  /// 审批轨迹终态优先于卡住的 submission/PENDING。
+  String? _terminalStatusFromTrail(XflowApprovalTrail? trail) {
+    if (trail == null) return null;
+    final trailStatus = trail.status.toUpperCase();
+    if (trailStatus == 'APPROVED' ||
+        trailStatus == 'REJECTED' ||
+        trailStatus == 'CANCELLED' ||
+        trailStatus == 'VOIDED') {
+      return trailStatus;
+    }
+    if (trail.steps.isEmpty) return null;
+    var anyRejected = false;
+    var allDecided = true;
+    for (final step in trail.steps) {
+      final d = step.decision.trim().toUpperCase();
+      if (d.isEmpty) {
+        allDecided = false;
+        continue;
+      }
+      if (d == 'REJECTED') anyRejected = true;
+    }
+    if (!allDecided) return null;
+    return anyRejected ? 'REJECTED' : 'APPROVED';
+  }
+
+  Future<XflowProposalItem> _enrichB14SubmissionItem(
+    XflowProposalItem item,
+  ) async {
+    try {
+      final detail = await fetchSubmissionDetail(
+        businessType: item.businessType,
+        businessId: item.id,
+      );
+      final trail = await fetchSubmissionTrail(
+        businessType: item.businessType,
+        businessId: item.id,
+      );
+      var status = (detail.status.isNotEmpty ? detail.status : item.status)
+          .toUpperCase();
+      final fromTrail = _terminalStatusFromTrail(trail);
+      if (fromTrail != null &&
+          (status == 'PENDING' || status == 'OPEN' || status.isEmpty)) {
+        status = fromTrail;
+      }
+      return item.copyWith(
+        title: detail.title.isNotEmpty ? detail.title : item.title,
+        code: detail.businessId > 0 ? '#${detail.businessId}' : item.code,
+        status: status,
+        createdByName: detail.createdByName.isNotEmpty
+            ? detail.createdByName
+            : item.createdByName,
+        createdAt: detail.createdAt ?? item.createdAt,
+        templateKey: detail.templateKey.isNotEmpty
+            ? detail.templateKey
+            : item.templateKey,
+        currentStep: trail?.currentStep ?? item.currentStep,
+        totalSteps: trail?.steps.length ?? item.totalSteps,
+      );
+    } catch (_) {
+      try {
+        final trail = await fetchSubmissionTrail(
+          businessType: item.businessType,
+          businessId: item.id,
+        );
+        final fromTrail = _terminalStatusFromTrail(trail);
+        if (fromTrail == null) return item;
+        final st = item.status.toUpperCase();
+        if (st == 'PENDING' || st == 'OPEN' || st.isEmpty) {
+          return item.copyWith(
+            status: fromTrail,
+            currentStep: trail?.currentStep ?? item.currentStep,
+            totalSteps: trail?.steps.length ?? item.totalSteps,
+          );
+        }
+        return item;
+      } catch (_) {
+        return item;
+      }
+    }
   }
 
   String? _scaleWanFromDetail(XflowProposalDetail detail) {

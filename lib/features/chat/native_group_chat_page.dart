@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../auth/auth_session.dart';
 import '../conversation/conversation_models.dart';
+import '../xflow/approval_chat_share.dart';
 import 'native_chat_view.dart';
 
 class NativeGroupChatPage extends StatelessWidget {
@@ -16,6 +17,7 @@ class NativeGroupChatPage extends StatelessWidget {
     required this.onOpenMedia,
     required this.onOpenGroupInfo,
     this.onOpenAiSummary,
+    this.onOpenApprovalShare,
     this.onConversationRead,
     this.onClearFocusMessage,
     this.autoMarkRead = false,
@@ -31,6 +33,7 @@ class NativeGroupChatPage extends StatelessWidget {
   final ValueChanged<int> onOpenMedia;
   final VoidCallback onOpenGroupInfo;
   final ValueChanged<int>? onOpenAiSummary;
+  final ValueChanged<ApprovalChatShare>? onOpenApprovalShare;
   final ValueChanged<int>? onConversationRead;
   final VoidCallback? onClearFocusMessage;
   final bool autoMarkRead;
@@ -49,6 +52,7 @@ class NativeGroupChatPage extends StatelessWidget {
       onOpenMedia: onOpenMedia,
       onOpenGroupInfo: onOpenGroupInfo,
       onOpenAiSummary: onOpenAiSummary,
+      onOpenApprovalShare: onOpenApprovalShare,
       onConversationRead: onConversationRead,
       onClearFocusMessage: onClearFocusMessage,
       autoMarkRead: autoMarkRead,

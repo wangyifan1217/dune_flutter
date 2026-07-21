@@ -2,12 +2,16 @@ import 'dart:async';
 
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
+import 'package:mime/mime.dart';
 
 import '../../core/navigation/navigation_controller.dart';
 import '../../core/theme/dunes_theme.dart';
 import '../../core/util/friendly_error.dart';
 import '../auth/auth_session.dart';
+import '../conversation/conversation_picker_sheet.dart';
+import '../conversation/conversation_service.dart';
 import '../shell/dunes_toast.dart';
+import 'kb_chat_share.dart';
 import 'kb_document_coordinator.dart';
 import 'native_kb_models.dart';
 import 'native_kb_service.dart';
@@ -34,10 +38,12 @@ class NativeKbHomePage extends StatefulWidget {
 
 class _NativeKbHomePageState extends State<NativeKbHomePage> {
   late final NativeKbService _service;
+  late final ConversationService _chatService;
   NativeKbSummary? _summary;
   bool _loading = true;
   bool _syncing = false;
   bool _uploading = false;
+  String? _forwardingDocId;
   String? _error;
   String _syncStatus = '打开页面自动读本地库 · 后台同步 RAGFlow · 可手动刷新';
   Timer? _parsePollTimer;
@@ -46,6 +52,7 @@ class _NativeKbHomePageState extends State<NativeKbHomePage> {
   void initState() {
     super.initState();
     _service = NativeKbService(session: widget.session);
+    _chatService = ConversationService(session: widget.session);
     _load();
   }
 
@@ -195,6 +202,49 @@ class _NativeKbHomePageState extends State<NativeKbHomePage> {
     } catch (e) {
       if (!mounted) return;
       _toast('删除失败：${friendlyErrorText(e)}', error: true);
+    }
+  }
+
+  Future<void> _forwardDoc(NativeKbDocument doc) async {
+    if (_forwardingDocId != null) return;
+    final share = KbChatDocShare.fromDocument(doc);
+    if (share.openDocId.isEmpty) {
+      _toast('文档无效，暂无法转发', error: true);
+      return;
+    }
+    final conversationId = await showConversationPickerSheet(
+      context: context,
+      service: _chatService,
+      title: '转发至',
+    );
+    if (conversationId == null || conversationId <= 0 || !mounted) return;
+
+    setState(() => _forwardingDocId = doc.id);
+    try {
+      final downloaded = await _service.downloadDocumentBytes(
+        docId: share.openDocId,
+        hint: doc,
+      );
+      final fileName = downloaded.fileName.trim().isNotEmpty
+          ? downloaded.fileName.trim()
+          : (doc.fileName.trim().isNotEmpty ? doc.fileName.trim() : share.title);
+      final mimeType = lookupMimeType(fileName) ??
+          lookupMimeType('file.${doc.fileExtension}') ??
+          'application/octet-stream';
+      await _chatService.sendFile(
+        conversationId: conversationId,
+        bytes: downloaded.bytes,
+        fileName: fileName,
+        mimeType: mimeType,
+        extraPayload: share.toMessagePayload(),
+      );
+      if (!mounted) return;
+      _toast('已转发到会话');
+    } catch (e) {
+      if (!mounted) return;
+      _toast(friendlyErrorText(e, fallback: '转发失败，请稍后重试'), error: true);
+    } finally {
+      if (mounted) setState(() => _forwardingDocId = null);
     }
   }
 
@@ -641,6 +691,34 @@ class _NativeKbHomePageState extends State<NativeKbHomePage> {
                         ],
                       ),
                     ),
+                    Material(
+                      color: DunesColors.brandPurpleSoft,
+                      borderRadius: BorderRadius.circular(8),
+                      child: InkWell(
+                        onTap: _forwardingDocId == doc.id
+                            ? null
+                            : () => unawaited(_forwardDoc(doc)),
+                        borderRadius: BorderRadius.circular(8),
+                        child: SizedBox(
+                          width: 30,
+                          height: 30,
+                          child: _forwardingDocId == doc.id
+                              ? const Padding(
+                                  padding: EdgeInsets.all(7),
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: DunesColors.brandPurple,
+                                  ),
+                                )
+                              : const Icon(
+                                  Icons.ios_share_rounded,
+                                  size: 15,
+                                  color: DunesColors.brandPurple,
+                                ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
                     Material(
                       color: DunesColors.coralSoft,
                       borderRadius: BorderRadius.circular(8),

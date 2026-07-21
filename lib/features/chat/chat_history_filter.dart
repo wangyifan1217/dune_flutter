@@ -1,3 +1,5 @@
+import 'package:flutter/material.dart';
+
 import '../conversation/conversation_models.dart';
 
 /// 微信式聊天记录分类筛选。
@@ -6,6 +8,139 @@ enum ChatHistoryFilter {
   files,
   links,
   forwards,
+}
+
+/// 聊天记录时间段筛选（含快捷预设与自定义区间）。
+enum ChatHistoryTimePreset {
+  today,
+  last7Days,
+  last30Days,
+  last90Days,
+  custom,
+}
+
+class ChatHistoryTimeRange {
+  const ChatHistoryTimeRange({
+    required this.preset,
+    required this.start,
+    required this.end,
+  });
+
+  final ChatHistoryTimePreset preset;
+  /// 含当日 00:00:00（本地）。
+  final DateTime start;
+  /// 含当日 23:59:59.999（本地）。
+  final DateTime end;
+
+  static DateTime _dayStart(DateTime d) =>
+      DateTime(d.year, d.month, d.day);
+
+  static DateTime _dayEnd(DateTime d) =>
+      DateTime(d.year, d.month, d.day, 23, 59, 59, 999);
+
+  static ChatHistoryTimeRange fromPreset(ChatHistoryTimePreset preset) {
+    final now = DateTime.now();
+    final today = _dayStart(now);
+    switch (preset) {
+      case ChatHistoryTimePreset.today:
+        return ChatHistoryTimeRange(
+          preset: preset,
+          start: today,
+          end: _dayEnd(today),
+        );
+      case ChatHistoryTimePreset.last7Days:
+        return ChatHistoryTimeRange(
+          preset: preset,
+          start: today.subtract(const Duration(days: 6)),
+          end: _dayEnd(today),
+        );
+      case ChatHistoryTimePreset.last30Days:
+        return ChatHistoryTimeRange(
+          preset: preset,
+          start: today.subtract(const Duration(days: 29)),
+          end: _dayEnd(today),
+        );
+      case ChatHistoryTimePreset.last90Days:
+        return ChatHistoryTimeRange(
+          preset: preset,
+          start: today.subtract(const Duration(days: 89)),
+          end: _dayEnd(today),
+        );
+      case ChatHistoryTimePreset.custom:
+        return ChatHistoryTimeRange(
+          preset: preset,
+          start: today,
+          end: _dayEnd(today),
+        );
+    }
+  }
+
+  static ChatHistoryTimeRange custom(DateTimeRange range) {
+    final start = _dayStart(range.start);
+    final end = _dayEnd(range.end);
+    return ChatHistoryTimeRange(
+      preset: ChatHistoryTimePreset.custom,
+      start: start,
+      end: end.isBefore(start) ? _dayEnd(start) : end,
+    );
+  }
+
+  String get label {
+    switch (preset) {
+      case ChatHistoryTimePreset.today:
+        return '今天';
+      case ChatHistoryTimePreset.last7Days:
+        return '近一周';
+      case ChatHistoryTimePreset.last30Days:
+        return '近一个月';
+      case ChatHistoryTimePreset.last90Days:
+        return '近三个月';
+      case ChatHistoryTimePreset.custom:
+        String fmt(DateTime d) =>
+            '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+        final sameDay = start.year == end.year &&
+            start.month == end.month &&
+            start.day == end.day;
+        return sameDay ? fmt(start) : '${fmt(start)} ~ ${fmt(end)}';
+    }
+  }
+
+  /// 传给搜索 API 的 from（纯日期，含当日）。
+  String get apiFrom =>
+      '${start.year}-${start.month.toString().padLeft(2, '0')}-${start.day.toString().padLeft(2, '0')}';
+
+  /// 传给搜索 API 的 to（纯日期；服务端按次日 0 点排他）。
+  String get apiTo =>
+      '${end.year}-${end.month.toString().padLeft(2, '0')}-${end.day.toString().padLeft(2, '0')}';
+
+  bool contains(DateTime? createdAt) {
+    if (createdAt == null) return false;
+    final t = createdAt.toLocal();
+    return !t.isBefore(start) && !t.isAfter(end);
+  }
+
+  /// 消息早于区间起点时，后续分页可提前结束（结果按新→旧）。
+  bool isBeforeRange(DateTime? createdAt) {
+    if (createdAt == null) return false;
+    return createdAt.toLocal().isBefore(start);
+  }
+}
+
+extension ChatHistoryTimePresetX on ChatHistoryTimePreset {
+  String get title {
+    switch (this) {
+      case ChatHistoryTimePreset.today:
+        return '今天';
+      case ChatHistoryTimePreset.last7Days:
+        return '近一周';
+      case ChatHistoryTimePreset.last30Days:
+        return '近一个月';
+      case ChatHistoryTimePreset.last90Days:
+        return '近三个月';
+      case ChatHistoryTimePreset.custom:
+        return '自定义';
+    }
+  }
 }
 
 extension ChatHistoryFilterX on ChatHistoryFilter {

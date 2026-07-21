@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
+import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
 
@@ -569,6 +570,121 @@ class NativeKbService {
     return (downloadUrl: url, fileName: fileName);
   }
 
+  /// 下载知识库文档字节，用于转发到 IM（上传到会话附件）。
+  Future<({Uint8List bytes, String fileName})> downloadDocumentBytes({
+    required String docId,
+    NativeKbDocument? hint,
+  }) async {
+    final dunesId = await resolveDunesDocumentIdAsync(doc: hint, docId: docId);
+    if (dunesId.isEmpty) {
+      throw Exception('该文档尚未关联本地知识库，请返回刷新后重试');
+    }
+    NativeKbDocument? doc = hint;
+    try {
+      doc = await fetchDunesDocument(dunesId);
+    } catch (_) {
+      doc ??= hint;
+    }
+    final fileName = () {
+      final fromDoc = (doc?.fileName.trim().isNotEmpty == true)
+          ? doc!.fileName.trim()
+          : (doc?.title.trim() ?? '');
+      if (fromDoc.isNotEmpty) return fromDoc;
+      return 'document';
+    }();
+
+    Object? lastError;
+    // 1) 优先走鉴权 storage proxy（与预览一致，不依赖预签名）。
+    final keys = <String>[
+      if (doc != null) ..._kbStorageKeyCandidates(doc),
+    ];
+    for (final key in keys) {
+      try {
+        final bytes = await _downloadBytesViaStorageProxy(key);
+        if (bytes.isNotEmpty) {
+          return (bytes: bytes, fileName: fileName);
+        }
+      } catch (e) {
+        lastError = e;
+      }
+    }
+
+    // 2) 预签名直链：切勿 cache-bust，否则签名失效会 403。
+    try {
+      final download = await fetchDocumentDownload(dunesId);
+      final name = download.fileName.trim().isNotEmpty
+          ? download.fileName.trim()
+          : fileName;
+      final bytes = await _downloadBytesFromUrl(download.downloadUrl);
+      if (bytes.isNotEmpty) {
+        return (bytes: bytes, fileName: name);
+      }
+    } catch (e) {
+      lastError = e;
+    }
+
+    throw lastError is Exception
+        ? lastError
+        : Exception(lastError?.toString() ?? '下载文档失败');
+  }
+
+  Future<Uint8List> _downloadBytesViaStorageProxy(
+    String objectKey, {
+    String bucket = 'kb-documents',
+  }) async {
+    final raw = objectKey.trim();
+    if (raw.isEmpty) {
+      throw Exception('文档路径无效');
+    }
+    final candidates = <String>[];
+    void add(String value) {
+      final v = value.trim();
+      if (v.isEmpty || candidates.contains(v)) return;
+      candidates.add(v);
+    }
+
+    add(_normalizeObjectKeyForBucket(raw, bucket: bucket));
+    add(raw);
+    final fromUrl = _extractObjectKeyFromUrl(raw, bucket: bucket);
+    if (fromUrl.isNotEmpty) {
+      add(_normalizeObjectKeyForBucket(fromUrl, bucket: bucket));
+      add(fromUrl);
+    }
+
+    Object? lastError;
+    for (final key in candidates) {
+      final resp = await _client.get(
+        _dunesUri(
+          '/storage/download?bucket=$bucket&objectKey=${Uri.encodeComponent(key)}&proxy=1',
+        ),
+        headers: _dunesHeaders,
+      );
+      if (resp.statusCode >= 200 &&
+          resp.statusCode < 300 &&
+          resp.bodyBytes.isNotEmpty) {
+        return resp.bodyBytes;
+      }
+      lastError = Exception('下载文档失败（HTTP ${resp.statusCode}）');
+    }
+    throw lastError ?? Exception('下载文档失败');
+  }
+
+  Future<Uint8List> _downloadBytesFromUrl(String downloadUrl) async {
+    final url = downloadUrl.trim();
+    if (!isDirectHttpUrl(url)) {
+      throw Exception('下载链接无效');
+    }
+    // 预签名 URL 不能追加 query，否则签名校验失败 → 403。
+    final resp = await _client.get(Uri.parse(url));
+    if (resp.statusCode < 200 || resp.statusCode >= 300) {
+      throw Exception('下载文档失败（HTTP ${resp.statusCode}）');
+    }
+    if (resp.bodyBytes.isEmpty) {
+      throw Exception('文档内容为空');
+    }
+    return resp.bodyBytes;
+  }
+
   Future<NativeKbDocument> fetchDocumentDetail(String documentId) async {
     final hint = await findDocumentById(documentId);
     final dunesId = await resolveDunesDocumentIdAsync(doc: hint, docId: documentId);
@@ -591,10 +707,11 @@ class NativeKbService {
 
   /// 使用后端签名的 downloadUrl 直读正文（签名约 1 小时有效）。
   Future<String> fetchTextFromSignedUrl(String downloadUrl) async {
-    final url = _withCacheBust(downloadUrl.trim());
+    final url = downloadUrl.trim();
     if (!isDirectHttpUrl(url)) {
       throw Exception('下载链接无效');
     }
+    // 预签名 URL 不能追加 cache-bust query，否则签名失效返回 403。
     final resp = await _client.get(Uri.parse(url));
     if (resp.statusCode < 200 || resp.statusCode >= 300) {
       throw Exception('无法读取文档内容（HTTP ${resp.statusCode}）');

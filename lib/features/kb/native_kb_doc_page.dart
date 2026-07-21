@@ -12,15 +12,18 @@ class NativeKbDocPage extends StatefulWidget {
   const NativeKbDocPage({
     super.key,
     required this.session,
-    required this.navigation,
     required this.docId,
+    this.navigation,
     this.initialDoc,
+    this.onBack,
   });
 
   final AuthSession session;
-  final DunesNavigationController navigation;
+  final DunesNavigationController? navigation;
   final String docId;
   final NativeKbDocument? initialDoc;
+  /// 从会话卡片打开时用 Navigator.pop；知识库内仍走 navigation.popTo('K1')。
+  final VoidCallback? onBack;
 
   @override
   State<NativeKbDocPage> createState() => _NativeKbDocPageState();
@@ -111,7 +114,18 @@ class _NativeKbDocPageState extends State<NativeKbDocPage> {
             tooltip: '刷新',
           ),
           IconButton(
-            onPressed: () => widget.navigation.popTo('K1'),
+            onPressed: () {
+              if (widget.onBack != null) {
+                widget.onBack!();
+                return;
+              }
+              final nav = widget.navigation;
+              if (nav != null) {
+                nav.popTo('K1');
+                return;
+              }
+              Navigator.of(context).maybePop();
+            },
             icon: const Icon(Icons.chevron_left),
           ),
           Expanded(

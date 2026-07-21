@@ -11,6 +11,13 @@ import 'app_update_service.dart';
 
 typedef UpdateDownloadProgress = void Function(double progress);
 
+class ApplyUpdateOutcome {
+  const ApplyUpdateOutcome({this.macInstallerPath});
+
+  /// Mac：已落到「下载」目录的 DMG 路径，供 UI 展示「在 Finder 中显示」。
+  final String? macInstallerPath;
+}
+
 /// 桌面端应用内下载安装包并拉起安装程序；移动端仍走浏览器 / 应用商店页。
 class AppUpdateInstaller {
   const AppUpdateInstaller._();
@@ -19,7 +26,7 @@ class AppUpdateInstaller {
 
   bool get supportsInAppInstall => isDesktopCommOnly;
 
-  Future<void> applyUpdate(
+  Future<ApplyUpdateOutcome> applyUpdate(
     AppReleaseCheckResult result, {
     UpdateDownloadProgress? onProgress,
     VoidCallback? onLaunching,
@@ -30,14 +37,25 @@ class AppUpdateInstaller {
     }
     if (!supportsInAppInstall) {
       await _openExternal(url);
-      return;
+      return const ApplyUpdateOutcome();
     }
 
     final file = await downloadInstaller(url, onProgress: onProgress);
     onLaunching?.call();
     // 让 UI 先切到「正在打开…」，避免一直停在下载 100%。
     await Future<void>.delayed(const Duration(milliseconds: 80));
+
+    if (Platform.isMacOS) {
+      final staged = await _stageMacInstaller(file);
+      // 绝不能 await launchUrl / Process.run：Gatekeeper 会堵住平台通道，
+      // Dart timeout 也救不了，界面会一直卡在 100%。
+      _spawnDetached('xattr', ['-dr', 'com.apple.quarantine', staged.path]);
+      _spawnDetached('open', [staged.path]);
+      return ApplyUpdateOutcome(macInstallerPath: staged.path);
+    }
+
     await launchInstaller(file);
+    return const ApplyUpdateOutcome();
   }
 
   Future<File> downloadInstaller(
@@ -68,7 +86,9 @@ class AppUpdateInstaller {
         sink.add(chunk);
         received += chunk.length;
         if (total > 0) {
-          onProgress?.call((received / total).clamp(0.0, 1.0));
+          // 未收完前最高显示 99%，避免「100% 却仍在写盘/打开」的假卡住感。
+          final raw = received / total;
+          onProgress?.call(raw >= 1.0 ? 0.99 : raw.clamp(0.0, 0.99));
         } else {
           onProgress?.call(-1);
         }
@@ -91,64 +111,67 @@ class AppUpdateInstaller {
     }
     final path = file.path;
     if (Platform.isWindows) {
-      // 分离进程启动安装器，再退出当前进程以便覆盖文件。
       await Process.start(
         path,
         const <String>[],
         mode: ProcessStartMode.detached,
         runInShell: false,
       );
-      // 稍等安装器起来
       await Future<void>.delayed(const Duration(milliseconds: 600));
       exit(0);
     }
     if (Platform.isMacOS) {
-      await _launchMacInstaller(path);
+      final staged = await _stageMacInstaller(file);
+      _spawnDetached('xattr', ['-dr', 'com.apple.quarantine', staged.path]);
+      _spawnDetached('open', [staged.path]);
       return;
     }
     await _openExternal(path);
   }
 
-  /// Mac：打开 DMG 给用户拖装。绝不能同步等待 Gatekeeper/挂载，否则 UI 会卡在 100%。
-  ///
-  /// 非 App Store（Developer ID）分发时，系统会做公证/隔离检查，`open` 可能很久才返回；
-  /// 因此这里只「发起打开」并立刻返回，由 Finder 继续处理。
-  Future<void> _launchMacInstaller(String path) async {
-    final file = File(path);
-    if (await file.length() <= 0) {
+  /// 把 DMG 放到「下载」目录，方便用户在 Finder 里手动双击（open 失败时仍有退路）。
+  Future<File> _stageMacInstaller(File downloaded) async {
+    if (!await downloaded.exists() || await downloaded.length() <= 0) {
       throw StateError('安装包无效');
     }
-
-    // 下载到临时目录常带 quarantine，清掉可减少 Gatekeeper 首次卡住概率（仍需已签名/公证）。
+    Directory? downloads;
     try {
-      await Process.run(
-        'xattr',
-        ['-dr', 'com.apple.quarantine', path],
-      ).timeout(const Duration(seconds: 2));
+      downloads = await getDownloadsDirectory();
     } catch (_) {}
+    final destDir = downloads ?? await getTemporaryDirectory();
+    final name = downloaded.uri.pathSegments.isNotEmpty
+        ? downloaded.uri.pathSegments.last
+        : 'DunesSetup.dmg';
+    final destPath = '${destDir.path}${Platform.pathSeparator}$name';
+    if (File(destPath).absolute.path == downloaded.absolute.path) {
+      return downloaded;
+    }
+    final dest = await downloaded.copy(destPath);
+    return dest;
+  }
 
-    // 优先走系统打开（不阻塞等挂载完成）。
-    try {
-      final opened = await launchUrl(
-        Uri.file(path),
-        mode: LaunchMode.externalApplication,
-      ).timeout(const Duration(seconds: 3));
-      if (opened) return;
-    } catch (_) {}
-
-    // 回退：真正 fire-and-forget，不再 await Gatekeeper。
+  void _spawnDetached(String executable, List<String> arguments) {
     try {
       unawaited(
         Process.start(
-          'open',
-          [path],
+          executable,
+          arguments,
           mode: ProcessStartMode.detached,
         ),
       );
-      await Future<void>.delayed(const Duration(milliseconds: 400));
-    } catch (e) {
-      throw StateError('无法打开安装包，请改用浏览器下载');
-    }
+    } catch (_) {}
+  }
+
+  /// 在 Finder 中显示已下载的安装包。
+  Future<void> revealInFinder(String path) async {
+    if (path.trim().isEmpty) return;
+    _spawnDetached('open', ['-R', path]);
+  }
+
+  Future<void> openMacInstaller(String path) async {
+    if (path.trim().isEmpty) return;
+    _spawnDetached('xattr', ['-dr', 'com.apple.quarantine', path]);
+    _spawnDetached('open', [path]);
   }
 
   Future<void> _openExternal(String urlOrPath) async {

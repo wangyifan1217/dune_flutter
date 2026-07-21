@@ -5,14 +5,14 @@ import 'package:flutter/material.dart';
 import '../../core/theme/dunes_theme.dart';
 import '../../core/util/friendly_error.dart';
 import '../auth/auth_session.dart';
-import 'cursor_supervise_models.dart';
-import 'cursor_supervise_service.dart';
+import '../meeting/native_meeting_models.dart';
+import '../meeting/native_meeting_service.dart';
 
 const _themePurple = Color(0xFF7B5CD8);
 
-/// 千机 · Cursor 账号监管：关键词（人名/账号）+ 部门筛选。
-class NativeQianjiCursorAccountPage extends StatefulWidget {
-  const NativeQianjiCursorAccountPage({
+/// 千机 · 会议纪要监管：关键词搜索 + 部门筛选（范围由后端控制）。
+class NativeQianjiMeetingSupervisePage extends StatefulWidget {
+  const NativeQianjiMeetingSupervisePage({
     super.key,
     required this.session,
     required this.onBack,
@@ -24,26 +24,28 @@ class NativeQianjiCursorAccountPage extends StatefulWidget {
   final ValueChanged<int> onOpenDetail;
 
   @override
-  State<NativeQianjiCursorAccountPage> createState() =>
-      _NativeQianjiCursorAccountPageState();
+  State<NativeQianjiMeetingSupervisePage> createState() =>
+      _NativeQianjiMeetingSupervisePageState();
 }
 
-class _NativeQianjiCursorAccountPageState
-    extends State<NativeQianjiCursorAccountPage> {
-  late final CursorSuperviseService _service =
-      CursorSuperviseService(session: widget.session);
+class _NativeQianjiMeetingSupervisePageState
+    extends State<NativeQianjiMeetingSupervisePage> {
+  late final NativeMeetingService _service = NativeMeetingService(
+    session: widget.session,
+  );
   final ScrollController _scrollController = ScrollController();
   final TextEditingController _keywordCtrl = TextEditingController();
 
-  List<CursorSuperviseRow> _rows = const [];
-  List<CursorSuperviseDeptStat> _deptStats = const [];
+  List<NativeMeetingSummary> _rows = const [];
+  List<NativeSuperviseDeptStat> _deptStats = const [];
+  /// null = 全部；-1 = 未分配部门；>0 = 指定部门
   int? _selectedDepartmentId;
   bool _loading = true;
   bool _loadingMore = false;
   bool _hasMore = true;
   bool _superviseAll = false;
   int _page = 0;
-  int _totalAccounts = 0;
+  int _totalMeetings = 0;
   static const int _pageSize = 20;
   String? _error;
   Timer? _keywordDebounce;
@@ -90,15 +92,15 @@ class _NativeQianjiCursorAccountPageState
       });
     }
     try {
-      final listFuture = _service.fetchListPage(
+      final listFuture = _service.fetchSuperviseListPage(
         page: 0,
         size: _pageSize,
         keyword: _keywordCtrl.text,
         departmentId: _selectedDepartmentId,
       );
-      final statsFuture = _service.fetchDeptStats();
+      final statsFuture = _service.fetchSuperviseDeptStats();
       final result = await listFuture;
-      CursorSuperviseDeptStatsResult? stats;
+      NativeSuperviseDeptStatsResult? stats;
       try {
         stats = await statsFuture;
       } catch (_) {
@@ -112,7 +114,7 @@ class _NativeQianjiCursorAccountPageState
             result.items.length < result.totalCount;
         if (stats != null) {
           _deptStats = stats.departments;
-          _totalAccounts = stats.totalAccounts;
+          _totalMeetings = stats.totalMeetings;
           _superviseAll = stats.superviseAll;
         }
       });
@@ -134,7 +136,7 @@ class _NativeQianjiCursorAccountPageState
     setState(() => _loadingMore = true);
     try {
       final nextPage = _page + 1;
-      final result = await _service.fetchListPage(
+      final result = await _service.fetchSuperviseListPage(
         page: nextPage,
         size: _pageSize,
         keyword: _keywordCtrl.text,
@@ -142,7 +144,7 @@ class _NativeQianjiCursorAccountPageState
       );
       if (!mounted) return;
       setState(() {
-        _rows = <CursorSuperviseRow>[..._rows, ...result.items];
+        _rows = <NativeMeetingSummary>[..._rows, ...result.items];
         _page = nextPage;
         _hasMore = result.items.length >= _pageSize;
       });
@@ -165,7 +167,25 @@ class _NativeQianjiCursorAccountPageState
     unawaited(_load(reset: true));
   }
 
-  String _pct(int? v) => v == null ? '—' : '$v%';
+  String _statusLabel(String status) {
+    return switch (status.toUpperCase()) {
+      'GENERATED' => '已生成',
+      'TRANSCRIBING' => '转写中',
+      'GENERATING' => '生成中',
+      'FAILED' => '失败',
+      'DRAFT' => '草稿',
+      _ => status.isEmpty ? '未知' : status,
+    };
+  }
+
+  Color _statusColor(String status) {
+    return switch (status.toUpperCase()) {
+      'GENERATED' => DunesColors.green,
+      'TRANSCRIBING' || 'GENERATING' => DunesColors.amber,
+      'FAILED' => DunesColors.coral,
+      _ => DunesColors.text3,
+    };
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -221,7 +241,7 @@ class _NativeQianjiCursorAccountPageState
           const SizedBox(width: 8),
           const Expanded(
             child: Text(
-              'Cursor账号监管',
+              '会议纪要监管',
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.w700,
@@ -229,9 +249,9 @@ class _NativeQianjiCursorAccountPageState
               ),
             ),
           ),
-          if (_totalAccounts > 0)
+          if (_totalMeetings > 0)
             Text(
-              '合计 $_totalAccounts',
+              '合计 $_totalMeetings',
               style: const TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
@@ -251,7 +271,7 @@ class _NativeQianjiCursorAccountPageState
         textInputAction: TextInputAction.search,
         onSubmitted: (_) => unawaited(_load(reset: true)),
         decoration: InputDecoration(
-          hintText: '搜索人名、账号',
+          hintText: '搜索人名、会议名称',
           prefixIcon: const Icon(Icons.search_rounded, size: 20),
           suffixIcon: _keywordCtrl.text.isNotEmpty
               ? IconButton(
@@ -318,7 +338,7 @@ class _NativeQianjiCursorAccountPageState
               children: [
                 _DeptChip(
                   label: '全部',
-                  count: _totalAccounts,
+                  count: _totalMeetings,
                   selected: _selectedDepartmentId == null,
                   onTap: () => _selectDepartment(null),
                 ),
@@ -326,8 +346,9 @@ class _NativeQianjiCursorAccountPageState
                 for (final d in _deptStats) ...[
                   _DeptChip(
                     label: d.departmentName,
-                    count: d.accountCount,
-                    selected: _selectedDepartmentId == (d.departmentId ?? -1),
+                    count: d.meetingCount,
+                    selected: _selectedDepartmentId ==
+                        (d.departmentId ?? -1),
                     onTap: () => _selectDepartment(d.departmentId ?? -1),
                   ),
                   const SizedBox(width: 8),
@@ -378,7 +399,7 @@ class _NativeQianjiCursorAccountPageState
           SizedBox(height: 120),
           Center(
             child: Text(
-              '暂无 Cursor 账号',
+              '暂无会议纪要',
               style: TextStyle(color: DunesColors.text3, fontSize: 14),
             ),
           ),
@@ -404,15 +425,11 @@ class _NativeQianjiCursorAccountPageState
             ),
           );
         }
-        final row = _rows[index];
-        return _AccountCard(
-          row: row,
-          remainingLabel:
-              row.remainingDays == null ? '—' : '${row.remainingDays}天',
-          autoLabel: _pct(row.autoUsagePercent),
-          apiLabel: _pct(row.apiUsagePercent),
-          totalLabel: _pct(row.totalUsagePercent),
-          onTap: () => widget.onOpenDetail(row.bindingId),
+        return _MeetingCard(
+          row: _rows[index],
+          statusLabel: _statusLabel(_rows[index].status),
+          statusColor: _statusColor(_rows[index].status),
+          onTap: () => widget.onOpenDetail(_rows[index].meetingId),
         );
       },
     );
@@ -476,25 +493,23 @@ class _DeptChip extends StatelessWidget {
   }
 }
 
-class _AccountCard extends StatelessWidget {
-  const _AccountCard({
+class _MeetingCard extends StatelessWidget {
+  const _MeetingCard({
     required this.row,
-    required this.remainingLabel,
-    required this.autoLabel,
-    required this.apiLabel,
-    required this.totalLabel,
+    required this.statusLabel,
+    required this.statusColor,
     required this.onTap,
   });
 
-  final CursorSuperviseRow row;
-  final String remainingLabel;
-  final String autoLabel;
-  final String apiLabel;
-  final String totalLabel;
+  final NativeMeetingSummary row;
+  final String statusLabel;
+  final Color statusColor;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
+    final title = row.title.trim().isEmpty ? '未命名会议' : row.title.trim();
+    final person = row.organizerLabel;
     return Material(
       color: Colors.white,
       borderRadius: BorderRadius.circular(12),
@@ -514,7 +529,7 @@ class _AccountCard extends StatelessWidget {
                 children: [
                   Expanded(
                     child: Text(
-                      row.personLabel,
+                      title,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
@@ -526,65 +541,56 @@ class _AccountCard extends StatelessWidget {
                   ),
                   const SizedBox(width: 8),
                   Text(
-                    row.membershipLabel,
-                    style: const TextStyle(
+                    statusLabel,
+                    style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
-                      color: _themePurple,
+                      color: statusColor,
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: 6),
-              Text(
-                row.accountText,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 12, color: DunesColors.text3),
-              ),
-              const SizedBox(height: 10),
-              Wrap(
-                spacing: 12,
-                runSpacing: 6,
+              const SizedBox(height: 8),
+              Row(
                 children: [
-                  _Meta(label: '剩余', value: remainingLabel),
-                  _Meta(label: 'Auto', value: autoLabel),
-                  _Meta(label: 'API', value: apiLabel),
-                  _Meta(label: '总用量', value: totalLabel),
+                  const Icon(
+                    Icons.schedule_outlined,
+                    size: 14,
+                    color: DunesColors.text3,
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    row.displayTime,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: DunesColors.text3,
+                    ),
+                  ),
+                  if (person.isNotEmpty) ...[
+                    const SizedBox(width: 14),
+                    const Icon(
+                      Icons.person_outline,
+                      size: 14,
+                      color: DunesColors.text3,
+                    ),
+                    const SizedBox(width: 4),
+                    Flexible(
+                      child: Text(
+                        person,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: DunesColors.text3,
+                        ),
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ],
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _Meta extends StatelessWidget {
-  const _Meta({required this.label, required this.value});
-
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Text.rich(
-      TextSpan(
-        children: [
-          TextSpan(
-            text: '$label ',
-            style: const TextStyle(fontSize: 12, color: DunesColors.text3),
-          ),
-          TextSpan(
-            text: value,
-            style: const TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: DunesColors.text2,
-            ),
-          ),
-        ],
       ),
     );
   }

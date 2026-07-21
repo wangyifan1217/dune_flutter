@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../core/navigation/navigation_controller.dart';
@@ -5,6 +7,8 @@ import '../../core/theme/dunes_theme.dart';
 import '../../core/util/friendly_error.dart';
 import '../auth/auth_session.dart';
 import '../shell/dunes_toast.dart';
+import 'approval_chat_forward.dart';
+import 'approval_chat_share.dart';
 import 'xflow_detail_logic.dart';
 import 'xflow_detail_widgets.dart';
 import 'xflow_models.dart';
@@ -47,6 +51,7 @@ class _NativeXflowSubmissionPageState extends State<NativeXflowSubmissionPage> {
   Map<int, String> _assigneeNames = const {};
   String? _error;
   bool _loading = true;
+  bool _forwarding = false;
 
   @override
   void initState() {
@@ -96,6 +101,33 @@ class _NativeXflowSubmissionPageState extends State<NativeXflowSubmissionPage> {
         _error = friendlyErrorText(e);
         _loading = false;
       });
+    }
+  }
+
+  Future<void> _forwardApproval() async {
+    final detail = _detail;
+    final template = _template;
+    if (detail == null || _forwarding) return;
+    setState(() => _forwarding = true);
+    try {
+      final title = (template?.title.trim().isNotEmpty == true)
+          ? template!.title.trim()
+          : (detail.title.trim().isEmpty ? '审批单' : detail.title.trim());
+      final share = ApprovalChatShare(
+        businessType: detail.businessType,
+        businessId: detail.businessId,
+        title: title,
+        status: _resolvedStatus,
+        templateKey: detail.templateKey,
+        code: detail.businessId > 0 ? '#${detail.businessId}' : '',
+      );
+      await forwardApprovalToConversation(
+        context: context,
+        session: widget.session,
+        share: share,
+      );
+    } finally {
+      if (mounted) setState(() => _forwarding = false);
     }
   }
 
@@ -206,7 +238,7 @@ class _NativeXflowSubmissionPageState extends State<NativeXflowSubmissionPage> {
       id: detail.businessId,
       code: '#${detail.businessId}',
       title: template.title,
-      status: detail.status,
+      status: _resolvedStatus,
       summary: '',
       beaconId: '',
       ownerName: submitter,
@@ -234,10 +266,81 @@ class _NativeXflowSubmissionPageState extends State<NativeXflowSubmissionPage> {
     );
   }
 
+  String get _resolvedStatus {
+    final detail = _detail;
+    final trail = _trail;
+    if (trail != null) {
+      final ts = trail.status.toUpperCase();
+      if (ts == 'APPROVED' ||
+          ts == 'REJECTED' ||
+          ts == 'CANCELLED' ||
+          ts == 'VOIDED') {
+        return ts;
+      }
+      if (trail.steps.isNotEmpty &&
+          trail.steps.every((s) => s.decision.trim().isNotEmpty)) {
+        final rejected = trail.steps.any(
+          (s) => s.decision.trim().toUpperCase() == 'REJECTED',
+        );
+        return rejected ? 'REJECTED' : 'APPROVED';
+      }
+    }
+    return (detail?.status ?? '').trim().isEmpty
+        ? 'PENDING'
+        : detail!.status;
+  }
+
+  XflowProposalDetail? get _heroDetail {
+    final detail = _detail;
+    final template = _template;
+    if (detail == null) return null;
+    final form = detail.formData;
+    final formTitle = (template?.title.trim().isNotEmpty == true)
+        ? template!.title.trim()
+        : (detail.title.trim().isEmpty ? '审批详情' : detail.title.trim());
+    final submitter = _submitterName.trim();
+    final title = submitter.isEmpty ? formTitle : '$submitter - $formTitle';
+    final code = detail.businessId > 0
+        ? 'S-${detail.businessId}'
+        : (detail.templateKey.isEmpty ? '—' : detail.templateKey);
+    // 仅展示表单里真实有的字段，不编造「C 级」等默认值。
+    final tag1 = (form['tag1'] ?? form['businessSegment'] ?? form['proposalType'] ?? '')
+        .toString()
+        .trim();
+    final taskLevel = (form['taskLevel'] ?? form['level'] ?? '').toString().trim();
+    final coverage = form['provinces'] ?? form['coverage'] ?? form['region'];
+    return XflowProposalDetail(
+      id: detail.businessId,
+      code: code,
+      title: title,
+      status: _resolvedStatus,
+      summary: '',
+      beaconId: '',
+      ownerName: submitter,
+      amountText: (form['totalAmount'] ?? form['amount'] ?? '').toString(),
+      formValues: form,
+      products: const [],
+      slots: const [],
+      createdById: detail.createdById,
+      raw: <String, dynamic>{
+        if (tag1.isNotEmpty) 'tag1': tag1,
+        if (taskLevel.isNotEmpty) 'taskLevel': taskLevel,
+        if (coverage != null) 'coverage': coverage,
+        'createdAt': detail.createdAt?.toIso8601String(),
+        'createdByName': submitter,
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final detail = _detail;
     final bundle = _detailBundle;
+    final hero = _heroDetail;
+    final formTitle = _template?.title ?? detail?.title ?? '提交详情';
+    final submitter = _submitterName.trim();
+    final titledForm =
+        submitter.isEmpty ? formTitle : '$submitter - $formTitle';
     return ColoredBox(
       color: DunesColors.bgApp,
       child: SafeArea(
@@ -246,8 +349,11 @@ class _NativeXflowSubmissionPageState extends State<NativeXflowSubmissionPage> {
           children: [
             XflowDsBar(
               crumb: '动态审批 · 返回列表',
-              title: _template?.title ?? detail?.title ?? '提交详情',
+              title: formTitle,
               onBack: () => widget.navigation.popTo(widget.backScreen),
+              onForward:
+                  detail == null ? null : () => unawaited(_forwardApproval()),
+              forwarding: _forwarding,
             ),
             Expanded(
               child: _loading
@@ -259,15 +365,14 @@ class _NativeXflowSubmissionPageState extends State<NativeXflowSubmissionPage> {
                   : ListView(
                       padding: const EdgeInsets.all(14),
                       children: [
+                        if (hero != null)
+                          XfDetHero(detail: hero, showStatus: false),
                         XflowFormCard(
-                          title: _template?.title ?? detail!.title,
-                          tag: detail!.status.toUpperCase() == 'DRAFT'
-                              ? '草稿'
-                              : '审批',
+                          title: titledForm,
                           child: XfDetFormSections(
                             sections: buildFieldSections(
                               _template!.fields,
-                              detail.formData,
+                              detail!.formData,
                               bundle!.detail,
                             ),
                             service: _service,

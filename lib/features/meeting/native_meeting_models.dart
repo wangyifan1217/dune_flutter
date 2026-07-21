@@ -10,6 +10,9 @@ class NativeMeetingSummary {
     required this.status,
     required this.asrProgress,
     this.summary,
+    this.organizerUserId,
+    this.organizerDisplayName,
+    this.organizerUsername,
   });
 
   final int meetingId;
@@ -20,6 +23,9 @@ class NativeMeetingSummary {
   final String status;
   final int asrProgress;
   final String? summary;
+  final int? organizerUserId;
+  final String? organizerDisplayName;
+  final String? organizerUsername;
 
   String get displayTime => NativeMeetingTime.formatDisplayBest(
         createdAt: createdAt,
@@ -27,7 +33,24 @@ class NativeMeetingSummary {
         meetingDate: meetingDate,
       );
 
+  String get organizerLabel {
+    final name = (organizerDisplayName ?? '').trim();
+    if (name.isNotEmpty) return name;
+    final username = (organizerUsername ?? '').trim();
+    if (username.isNotEmpty) return username;
+    final id = organizerUserId;
+    if (id != null && id > 0) return '用户$id';
+    return '';
+  }
+
   factory NativeMeetingSummary.fromJson(Map<String, dynamic> json) {
+    final organizerRaw = json['organizerUserId'] ?? json['organizer_user_id'];
+    int? organizerId;
+    if (organizerRaw is num) {
+      organizerId = organizerRaw.toInt();
+    } else if (organizerRaw != null) {
+      organizerId = int.tryParse('$organizerRaw');
+    }
     return NativeMeetingSummary(
       meetingId: _readMeetingId(json),
       title: (json['title'] ?? '').toString(),
@@ -37,6 +60,92 @@ class NativeMeetingSummary {
       status: (json['status'] ?? '').toString(),
       asrProgress: (json['asrProgress'] as num?)?.toInt() ?? 0,
       summary: json['summary']?.toString(),
+      organizerUserId: organizerId,
+      organizerDisplayName:
+          (json['organizerDisplayName'] ?? json['organizer_display_name'])
+              ?.toString(),
+      organizerUsername:
+          (json['organizerUsername'] ?? json['organizer_username'])
+              ?.toString(),
+    );
+  }
+}
+
+class NativeSupervisePerson {
+  const NativeSupervisePerson({
+    required this.userId,
+    required this.displayName,
+    this.username,
+  });
+
+  final int userId;
+  final String displayName;
+  final String? username;
+
+  factory NativeSupervisePerson.fromJson(Map<String, dynamic> json) {
+    final idRaw = json['userId'] ?? json['id'];
+    final id = idRaw is num
+        ? idRaw.toInt()
+        : int.tryParse('${idRaw ?? ''}') ?? 0;
+    return NativeSupervisePerson(
+      userId: id,
+      displayName: (json['displayName'] ?? '').toString(),
+      username: json['username']?.toString(),
+    );
+  }
+}
+
+class NativeSuperviseDeptStat {
+  const NativeSuperviseDeptStat({
+    required this.departmentName,
+    required this.meetingCount,
+    this.departmentId,
+  });
+
+  final String departmentName;
+  final int meetingCount;
+  final int? departmentId;
+
+  factory NativeSuperviseDeptStat.fromJson(Map<String, dynamic> json) {
+    final idRaw = json['departmentId'];
+    int? id;
+    if (idRaw is num) {
+      id = idRaw.toInt();
+    } else if (idRaw != null) {
+      id = int.tryParse('$idRaw');
+    }
+    return NativeSuperviseDeptStat(
+      departmentName: (json['departmentName'] ?? '未分配部门').toString(),
+      meetingCount: (json['meetingCount'] as num?)?.toInt() ?? 0,
+      departmentId: id,
+    );
+  }
+}
+
+class NativeSuperviseDeptStatsResult {
+  const NativeSuperviseDeptStatsResult({
+    required this.departments,
+    required this.totalMeetings,
+    required this.superviseAll,
+  });
+
+  final List<NativeSuperviseDeptStat> departments;
+  final int totalMeetings;
+  final bool superviseAll;
+
+  factory NativeSuperviseDeptStatsResult.fromJson(Map<String, dynamic> json) {
+    final content =
+        (json['content'] as List?) ?? (json['items'] as List?) ?? const [];
+    return NativeSuperviseDeptStatsResult(
+      departments: content
+          .whereType<Map>()
+          .map(
+            (e) =>
+                NativeSuperviseDeptStat.fromJson(Map<String, dynamic>.from(e)),
+          )
+          .toList(growable: false),
+      totalMeetings: (json['totalMeetings'] as num?)?.toInt() ?? 0,
+      superviseAll: json['superviseAll'] == true,
     );
   }
 }

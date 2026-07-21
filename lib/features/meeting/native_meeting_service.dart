@@ -55,6 +55,74 @@ class NativeMeetingService {
     );
   }
 
+  /// 千机·会议纪要监管：关键词（人名/会议名）+ 部门筛选。
+  Future<NativeMeetingListPageResult> fetchSuperviseListPage({
+    int page = 0,
+    int size = 20,
+    String keyword = '',
+    int? departmentId,
+  }) async {
+    final q = <String, String>{
+      'scope': 'supervise',
+      'page': page.toString(),
+      'size': size.toString(),
+    };
+    final k = keyword.trim();
+    if (k.isNotEmpty) {
+      q['q'] = k;
+    }
+    if (departmentId != null) {
+      q['departmentId'] = departmentId.toString();
+    }
+    final resp = await _requestMeeting(
+      'GET',
+      '?${Uri(queryParameters: q).query}',
+    );
+    _ensureSuccess(resp);
+    final data = _unwrapData(resp.body);
+    final content =
+        (data['content'] as List?) ?? (data['items'] as List?) ?? const [];
+    final items = content
+        .whereType<Map>()
+        .map((e) => NativeMeetingSummary.fromJson(Map<String, dynamic>.from(e)))
+        .toList(growable: false);
+    return NativeMeetingListPageResult(
+      items: items,
+      totalCount: _readTotalCount(data, fallback: items.length),
+    );
+  }
+
+  /// 监管范围通讯录人员（本人 + 下级），用于列表人员搜索。
+  Future<List<NativeSupervisePerson>> fetchSupervisePeople({
+    String keyword = '',
+  }) async {
+    final q = <String, String>{};
+    final k = keyword.trim();
+    if (k.isNotEmpty) {
+      q['q'] = k;
+    }
+    final suffix = q.isEmpty ? '' : '?${Uri(queryParameters: q).query}';
+    final resp = await _requestMeeting('GET', '/supervise/people$suffix');
+    _ensureSuccess(resp);
+    final data = _unwrapData(resp.body);
+    final content =
+        (data['content'] as List?) ?? (data['items'] as List?) ?? const [];
+    return content
+        .whereType<Map>()
+        .map(
+          (e) => NativeSupervisePerson.fromJson(Map<String, dynamic>.from(e)),
+        )
+        .toList(growable: false);
+  }
+
+  /// 按部门统计会议总数（全部监管则全部门，否则本人及下级范围）。
+  Future<NativeSuperviseDeptStatsResult> fetchSuperviseDeptStats() async {
+    final resp = await _requestMeeting('GET', '/supervise/dept-stats');
+    _ensureSuccess(resp);
+    final data = _unwrapData(resp.body);
+    return NativeSuperviseDeptStatsResult.fromJson(data);
+  }
+
   Future<int> fetchMyCount() async {
     try {
       final result = await fetchListPage(page: 0, size: 1);

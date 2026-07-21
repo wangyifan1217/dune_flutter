@@ -98,6 +98,21 @@ class ChatMessageQuote {
         );
         return name.isEmpty ? '[文件]' : '[文件] $name';
       default:
+        final meeting = payload?['meetingMinutes'];
+        if (meeting is Map) {
+          final title = (meeting['title'] ?? '').toString().trim();
+          return title.isEmpty ? '[会议纪要]' : '[会议纪要] $title';
+        }
+        final approval = payload?['approvalCard'];
+        if (approval is Map) {
+          final title = (approval['title'] ?? '').toString().trim();
+          return title.isEmpty ? '[审批]' : '[审批] $title';
+        }
+        final kb = payload?['kbDoc'];
+        if (kb is Map) {
+          final title = (kb['title'] ?? kb['fileName'] ?? '').toString().trim();
+          return title.isEmpty ? '[知识库]' : '[知识库] $title';
+        }
         final text = bodyText.trim();
         if (text.isEmpty) return '[消息]';
         return text.length > 80 ? '${text.substring(0, 80)}…' : text;

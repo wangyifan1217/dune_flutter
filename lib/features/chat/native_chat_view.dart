@@ -32,7 +32,14 @@ import '../conversation/conversation_realtime_service.dart';
 import '../conversation/conversation_service.dart';
 import '../conversation/inbox_format.dart';
 import '../desktop/windows_desktop_tray.dart';
+import '../kb/kb_chat_share.dart';
+import '../kb/native_kb_service.dart';
+import '../meeting/meeting_minutes_chat_share.dart';
+import '../meeting/native_meeting_detail_page.dart';
 import '../shell/dunes_toast.dart';
+import '../xflow/approval_chat_share.dart';
+import '../xflow/approval_picker_sheet.dart';
+import '../xflow/xflow_detail_logic.dart';
 import 'chat_emoji_gif_panel.dart';
 import 'chat_image_batch_preview.dart';
 import 'chat_image_editor.dart';
@@ -190,6 +197,7 @@ class NativeChatView extends StatefulWidget {
     this.onOpenMedia,
     this.onOpenCall,
     this.onOpenAiSummary,
+    this.onOpenApprovalShare,
     this.onConversationRead,
     this.onClearFocusMessage,
     this.autoMarkRead = false,
@@ -210,6 +218,8 @@ class NativeChatView extends StatefulWidget {
   final VoidCallback? onOpenCall;
   /// 对本会话发起智能总结（回调参数为当前 conversationId）。
   final ValueChanged<int>? onOpenAiSummary;
+  /// 打开转发的审批卡片详情（与「我审批的」同一套 B10 / XFS）。
+  final ValueChanged<ApprovalChatShare>? onOpenApprovalShare;
   final ValueChanged<int>? onConversationRead;
   /// 「回到最新」时清掉上层 focus，避免后续静默刷新又跳回定位消息。
   final VoidCallback? onClearFocusMessage;
@@ -3135,7 +3145,9 @@ class _NativeChatViewState extends State<NativeChatView>
                 ? null
                 : _desktopScreenshotAndSend,
             onFile: locked || _mediaBusy ? () {} : _sendFile,
-            onApproval: () => showDunesSoonToast(context),
+            onApproval: locked || _mediaBusy
+                ? () {}
+                : () => unawaited(_forwardApprovalToChat()),
             onAt: locked ? null : _pickAtMember,
             onEmoji: locked ? null : _toggleEmojiPicker,
             onVideo: null,
@@ -3227,7 +3239,9 @@ class _NativeChatViewState extends State<NativeChatView>
                 ? () {}
                 : _sendMultiImagesFromGallery,
             onFile: locked || _mediaBusy ? () {} : _sendFile,
-            onApproval: () => showDunesSoonToast(context),
+            onApproval: locked || _mediaBusy
+                ? () {}
+                : () => unawaited(_forwardApprovalToChat()),
             onAt: locked ? null : _pickAtMember,
             onVideo: null,
             showAt: !_isPrivate,
@@ -4015,6 +4029,141 @@ class _NativeChatViewState extends State<NativeChatView>
     return (payload['objectKey'] ?? '').toString().trim();
   }
 
+  Future<void> _openMeetingMinutesShare(MeetingMinutesChatShare share) async {
+    if (share.meetingId <= 0) {
+      _showToast('会议纪要无效', error: true);
+      return;
+    }
+    if (!mounted) return;
+    await showNativeMeetingDetail(
+      context: context,
+      session: widget.session,
+      meetingId: share.meetingId,
+      summaryOnly: true,
+    );
+  }
+
+  Future<void> _forwardApprovalToChat() async {
+    final conv = _conversation;
+    if (conv == null) {
+      _showToast('会话未就绪', error: true);
+      return;
+    }
+    final share = await showApprovalPickerSheet(
+      context: context,
+      session: widget.session,
+    );
+    if (share == null || !mounted) return;
+    try {
+      await _service.sendText(
+        conv.id,
+        share.bodyText,
+        payload: share.toMessagePayload(),
+      );
+      if (mounted) _showToast('已转发审批');
+    } catch (e) {
+      if (mounted) {
+        _showToast(
+          '转发失败：${friendlyErrorText(e, fallback: '请稍后重试')}',
+          error: true,
+        );
+      }
+    }
+  }
+
+  void _openApprovalShare(ApprovalChatShare share) {
+    final open = widget.onOpenApprovalShare;
+    if (open != null) {
+      open(share);
+      return;
+    }
+    _showToast('无法打开审批详情', error: true);
+  }
+
+  String _approvalStatusLabel(String status) {
+    return detailStatusLabel(status);
+  }
+
+  Future<void> _openKbDocShare(KbChatDocShare share) async {
+    final docId = share.openDocId;
+    if (docId.isEmpty) {
+      _showToast('文档无效，无法打开', error: true);
+      return;
+    }
+    try {
+      final kb = NativeKbService(session: widget.session);
+      final downloaded = await kb.downloadDocumentBytes(
+        docId: docId,
+        hint: share.toDocument(),
+      );
+      final fileName = downloaded.fileName.trim().isNotEmpty
+          ? downloaded.fileName.trim()
+          : (share.fileName.trim().isNotEmpty
+              ? share.fileName.trim()
+              : share.title);
+      final cacheKey = 'kb-forward-$docId';
+      final localPath = await file_dl.saveBytesAsCachedFile(
+        downloaded.bytes,
+        cacheKey,
+        fileName,
+        conversationId: _chatConversationId,
+      );
+      if (!mounted) return;
+      if (localPath == null || localPath.isEmpty) {
+        _showToast('保存文件失败', error: true);
+        return;
+      }
+      final payload = <String, dynamic>{
+        'fileName': fileName,
+        'mimeType': lookupMimeType(fileName) ?? 'application/octet-stream',
+        'size': downloaded.bytes.length,
+        ...share.toMessagePayload(),
+      };
+      await _openKbFileAttachment(
+        payload,
+        fileName,
+        initialLocalPath: localPath,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      _showToast(
+        friendlyErrorText(e, fallback: '打开失败，请重新转发该文档'),
+        error: true,
+      );
+    }
+  }
+
+  /// 知识库文件：PDF 预览；其它进 IM 文件详情页（下载 / 用其他应用打开）。
+  Future<void> _openKbFileAttachment(
+    Map<String, dynamic>? payload,
+    String fileName, {
+    String? initialLocalPath,
+  }) async {
+    if (chatPayloadIsPdf(payload, fileName)) {
+      await showChatPdfPreview(
+        context: context,
+        service: _service,
+        payload: payload,
+        fileName: fileName,
+      );
+      return;
+    }
+    if (!mounted) return;
+    await showChatFilePreview(
+      context: context,
+      service: _service,
+      payload: payload,
+      fileName: fileName,
+      conversationId: _chatConversationId,
+      initialLocalPath: initialLocalPath,
+      onDownloaded: () {
+        final key = _downloadedKey(payload, fileName);
+        if (key.isEmpty || !mounted) return;
+        setState(() => _downloadedFileKeys.add(key));
+      },
+    );
+  }
+
   Future<void> _openFileAttachment(
     Map<String, dynamic>? payload,
     String fileName,
@@ -4151,7 +4300,16 @@ class _NativeChatViewState extends State<NativeChatView>
         return;
       }
       _markFileDownloaded(payload, fileName);
-      await file_dl.openLocalFile(savedPath);
+      try {
+        await file_dl.openLocalFile(savedPath);
+      } catch (e) {
+        // 已下载成功但系统没有关联应用时，引导用户手动打开。
+        if (!mounted) return;
+        _showToast('已下载到本地，请用其他应用打开');
+        try {
+          await file_dl.revealLocalFile(savedPath);
+        } catch (_) {}
+      }
     } catch (e) {
       _showToast('打开失败：${friendlyErrorText(e)}', error: true);
     } finally {
@@ -4497,6 +4655,55 @@ class _NativeChatViewState extends State<NativeChatView>
     if (forward != null) {
       return _buildForwardRecordCard(forward, mine: mine);
     }
+    final meetingShare = MeetingMinutesChatShare.fromPayload(m.payload);
+    if (meetingShare != null) {
+      return ChatMeetingMinutesCard(
+        title: meetingShare.title,
+        onTap: () => unawaited(_openMeetingMinutesShare(meetingShare)),
+        onSecondaryTapDown: isDesktopCommOnly && !_messageMultiSelectMode
+            ? (details) => _onMessageActions(
+                  m,
+                  mine,
+                  anchor: details.globalPosition,
+                )
+            : null,
+      );
+    }
+    final approvalShare = ApprovalChatShare.fromPayload(m.payload);
+    if (approvalShare != null) {
+      return ChatApprovalCard(
+        title: approvalShare.title,
+        statusLabel: _approvalStatusLabel(approvalShare.status),
+        subtitle: approvalShare.businessType.toUpperCase() == 'PROPOSAL'
+            ? '销售提案'
+            : '审批单据',
+        onTap: () => _openApprovalShare(approvalShare),
+        onSecondaryTapDown: isDesktopCommOnly && !_messageMultiSelectMode
+            ? (details) => _onMessageActions(
+                  m,
+                  mine,
+                  anchor: details.globalPosition,
+                )
+            : null,
+      );
+    }
+    final kbDoc = KbChatDocShare.fromPayload(m.payload);
+    if (kbDoc != null && kind == 'TEXT') {
+      // 旧版仅发卡片未带附件：尽量走文件详情；失败再提示。
+      return ChatKbDocCard(
+        title: kbDoc.title,
+        typeLabel: kbDoc.typeLabel,
+        sizeLabel: kbDoc.sizeLabel,
+        onTap: () => unawaited(_openKbDocShare(kbDoc)),
+        onSecondaryTapDown: isDesktopCommOnly && !_messageMultiSelectMode
+            ? (details) => _onMessageActions(
+                  m,
+                  mine,
+                  anchor: details.globalPosition,
+                )
+            : null,
+      );
+    }
     final quote = ChatMessageQuote.fromPayload(m.payload);
     final onQuoteTap = quote.isEmpty
         ? null
@@ -4539,6 +4746,29 @@ class _NativeChatViewState extends State<NativeChatView>
             ? '文件'
             : m.bodyText.replaceAll(RegExp(r'^\[[^\]]+\]\s*'), ''),
       );
+      final kbDoc = KbChatDocShare.fromPayload(m.payload);
+      if (kbDoc != null) {
+        return _wrapQuotedContent(
+          m,
+          mine,
+          ChatKbDocCard(
+            title: kbDoc.title.isNotEmpty ? kbDoc.title : fileName,
+            typeLabel: kbDoc.typeLabel,
+            sizeLabel: kbDoc.sizeLabel.isNotEmpty
+                ? kbDoc.sizeLabel
+                : _fileSizeHint(m.payload) ?? '',
+            onTap: () => unawaited(_openKbFileAttachment(m.payload, fileName)),
+            onSecondaryTapDown: isDesktopCommOnly && !_messageMultiSelectMode
+                ? (details) => _onMessageActions(
+                      m,
+                      mine,
+                      anchor: details.globalPosition,
+                    )
+                : null,
+          ),
+        );
+      }
+      // meetingMinutes already handled above for any kind.
       return _wrapQuotedContent(
         m,
         mine,

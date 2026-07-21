@@ -93,13 +93,22 @@ class LighthouseService {
     int? offset,
     DateTime? startDate,
     DateTime? endDate,
+    String? tab,
+    String? group,
   }) {
+    final g = (group ?? '').trim();
+    final t = (tab ?? '').trim();
     return _getData('/lighthouse/summary', {
       if (period != null && period.isNotEmpty) 'period': period,
       if (date != null && date.isNotEmpty) 'date': date,
       if (fuel != null && fuel.isNotEmpty && fuel != '全部') 'fuel': fuel,
       if (offset != null && offset != 0) 'offset': '$offset',
       ..._rangeQuery(startDate, endDate),
+      // L1 分类：与 Hero 同口径；全部/空不传，走全量。
+      if (g.isNotEmpty && g != '全部' && t.isNotEmpty && t != 'analysis') ...{
+        'tab': t,
+        'group': g,
+      },
     }, '灯塔摘要加载失败');
   }
 

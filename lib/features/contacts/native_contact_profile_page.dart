@@ -3,9 +3,10 @@ import 'package:flutter/material.dart';
 import '../../core/theme/dunes_theme.dart';
 import '../../core/util/friendly_error.dart';
 import '../auth/auth_session.dart';
-import '../conversation/conversation_service.dart';
-import '../shell/dunes_toast.dart';
+import '../chat/chat_widgets.dart';
+import '../chat/group_info_widgets.dart';
 import '../chat/user_avatar_widget.dart';
+import '../conversation/conversation_service.dart';
 import 'contact_models.dart';
 import 'contact_service.dart';
 
@@ -43,17 +44,6 @@ class _NativeContactProfilePageState extends State<NativeContactProfilePage> {
     _load();
   }
 
-  void _toast(String message) {
-    if (!mounted) return;
-    showDunesToast(
-      context,
-      message,
-      kind: dunesToastLooksLikeError(message)
-          ? DunesToastKind.error
-          : DunesToastKind.normal,
-    );
-  }
-
   Future<void> _load() async {
     final hint = widget.contactHint;
     if (hint == null || hint.userId <= 0) {
@@ -86,27 +76,52 @@ class _NativeContactProfilePageState extends State<NativeContactProfilePage> {
 
   @override
   Widget build(BuildContext context) {
+    final hint = widget.contactHint;
+    final subtitle = (_contact?.department ?? hint?.department ?? '')
+        .trim()
+        .isNotEmpty
+        ? (_contact?.department ?? hint?.department)!.trim()
+        : '联系人';
+
+    return Scaffold(
+      backgroundColor: const Color(0xFFF2F2F2),
+      body: SafeArea(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            ChatConvHeader(
+              title: '详细资料',
+              subtitle: subtitle,
+              onBack: widget.onBack,
+            ),
+            Expanded(child: groupInfoPageShell(child: _buildBody())),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBody() {
     if (_loading) {
-      return const Scaffold(
-        backgroundColor: DunesColors.stageBg,
-        body: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+      return const Center(
+        child: CircularProgressIndicator(
+          strokeWidth: 2,
+          color: DunesColors.accent,
+        ),
       );
     }
     if (_contact == null) {
-      return Scaffold(
-        backgroundColor: DunesColors.stageBg,
-        body: Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                _error ?? '联系人不存在',
-                style: const TextStyle(color: DunesColors.text3),
-              ),
-              const SizedBox(height: 10),
-              OutlinedButton(onPressed: widget.onBack, child: const Text('返回')),
-            ],
-          ),
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              _error ?? '联系人不存在',
+              style: const TextStyle(color: DunesColors.text3, fontSize: 12),
+            ),
+            const SizedBox(height: 10),
+            OutlinedButton(onPressed: widget.onBack, child: const Text('返回')),
+          ],
         ),
       );
     }
@@ -115,223 +130,132 @@ class _NativeContactProfilePageState extends State<NativeContactProfilePage> {
     final name = c.displayLabel.isEmpty ? '未命名' : c.displayLabel;
     final title = c.primaryRole.trim();
     final department = (c.department ?? '').trim();
-    final rows = <(String, String)>[
-      ('手机', (c.phone ?? '').trim().isEmpty ? '-' : c.phone!.trim()),
-      ('部门', department.isEmpty ? '-' : department),
-      ('职位', title.isEmpty ? '-' : title),
-    ];
+    final phone = (c.phone ?? '').trim();
+    final isSelf = c.userId == widget.session.userId;
 
-    return Scaffold(
-      backgroundColor: DunesColors.stageBg,
-      body: SafeArea(
-        child: ListView(
-          padding: EdgeInsets.zero,
-          children: [
-            _ContactHero(
-              initial: name.substring(0, 1),
-              seed: c.userId,
-              name: name,
-              department: department,
-              roleTag: title,
-              avatarPreset: c.avatarPreset,
-              avatarObjectKey: c.avatarObjectKey,
-              avatarService: _avatarService,
-              onBack: widget.onBack,
-            ),
-            _ActionBar(
-              onMessage: () => widget.onOpenPrivateChat(c.userId),
-              onVoice: () => _toast('语音功能即将上线'),
-              onVideo: () => _toast('视频功能即将上线'),
-            ),
-            const SizedBox(height: 2),
-            const _SectionLabel('基本信息'),
-            ...rows.map((row) => _InfoRow(label: row.$1, value: row.$2)),
-          ],
+    return ListView(
+      padding: const EdgeInsets.only(bottom: 32),
+      children: [
+        _ProfileHero(
+          name: name,
+          department: department,
+          roleTag: title,
+          seed: c.userId,
+          avatarPreset: c.avatarPreset,
+          avatarObjectKey: c.avatarObjectKey,
+          avatarService: _avatarService,
         ),
-      ),
+        const SizedBox(height: 10),
+        GroupInfoRow(
+          icon: Icons.phone_outlined,
+          title: '手机',
+          trailing: Text(
+            phone.isEmpty ? '-' : phone,
+            style: DunesTypography.sans(
+              fontSize: 15,
+              color: const Color(0xFF888888),
+            ),
+          ),
+        ),
+        GroupInfoRow(
+          icon: Icons.apartment_outlined,
+          title: '部门',
+          trailing: Text(
+            department.isEmpty ? '-' : department,
+            style: DunesTypography.sans(
+              fontSize: 15,
+              color: const Color(0xFF888888),
+            ),
+          ),
+        ),
+        GroupInfoRow(
+          icon: Icons.badge_outlined,
+          title: '职位',
+          trailing: Text(
+            title.isEmpty ? '-' : title,
+            style: DunesTypography.sans(
+              fontSize: 15,
+              color: const Color(0xFF888888),
+            ),
+          ),
+        ),
+        if (!isSelf)
+          _ProfileMessageAction(
+            onTap: () => widget.onOpenPrivateChat(c.userId),
+          ),
+      ],
     );
   }
 }
 
-class _ContactHero extends StatelessWidget {
-  const _ContactHero({
-    required this.initial,
-    required this.seed,
+/// 企微式联系人头部：白底、左头像右信息，无渐变。
+class _ProfileHero extends StatelessWidget {
+  const _ProfileHero({
     required this.name,
     required this.department,
     required this.roleTag,
+    required this.seed,
     this.avatarPreset,
     this.avatarObjectKey,
     this.avatarService,
-    required this.onBack,
   });
 
-  final String initial;
-  final int seed;
   final String name;
   final String department;
   final String roleTag;
+  final int seed;
   final String? avatarPreset;
   final String? avatarObjectKey;
   final ConversationService? avatarService;
-  final VoidCallback onBack;
 
   @override
   Widget build(BuildContext context) {
+    final initial = name.isNotEmpty ? name.substring(0, 1) : '?';
+    final subtitleBits = <String>[
+      if (department.isNotEmpty) department,
+      if (roleTag.isNotEmpty) roleTag,
+    ];
+
     return Container(
-      padding: const EdgeInsets.fromLTRB(14, 14, 14, 22),
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            DunesColors.accent,
-            DunesColors.accentDeep,
-            Color(0xFF1A201F),
-          ],
-          stops: [0, 0.6, 1],
-        ),
-      ),
-      child: Stack(
-        clipBehavior: Clip.none,
+      width: double.infinity,
+      color: Colors.white,
+      padding: const EdgeInsets.fromLTRB(16, 20, 16, 20),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Positioned(
-            top: -50,
-            right: -40,
-            child: Container(
-              width: 240,
-              height: 240,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: RadialGradient(
-                  colors: [
-                    Color(0xFF5F8B8F).withValues(alpha: 0.25),
-                    Colors.transparent,
-                  ],
-                  stops: const [0, 0.65],
-                ),
-              ),
-            ),
+          ImUserAvatar(
+            initial: initial,
+            seed: seed,
+            size: 64,
+            avatarPreset: avatarPreset,
+            avatarObjectKey: avatarObjectKey,
+            avatarService: avatarService,
+            borderRadius: 8,
           ),
-          Positioned(
-            bottom: -30,
-            left: -20,
-            child: Container(
-              width: 160,
-              height: 160,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: RadialGradient(
-                  colors: [
-                    Color(0xFFFFB4E8).withValues(alpha: 0.18),
-                    Colors.transparent,
-                  ],
-                  stops: const [0, 0.65],
-                ),
-              ),
-            ),
-          ),
-          Positioned(
-            top: 0,
-            left: 0,
-            child: _HeroButton(icon: Icons.chevron_left_rounded, onTap: onBack),
-          ),
-          Align(
-            alignment: Alignment.center,
+          const SizedBox(width: 16),
+          Expanded(
             child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const SizedBox(height: 44),
-                Container(
-                  width: 84,
-                  height: 84,
-                  padding: const EdgeInsets.all(2),
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [Colors.white, Color(0xFFE9DEFF)],
-                    ),
-                    borderRadius: BorderRadius.circular(24),
-                    border: Border.all(
-                      color: Colors.white.withValues(alpha: 0.4),
-                      width: 2,
-                    ),
-                    boxShadow: const [
-                      BoxShadow(
-                        color: Color.fromRGBO(47, 93, 98, 0.6),
-                        blurRadius: 36,
-                        spreadRadius: -8,
-                        offset: Offset(0, 12),
-                      ),
-                    ],
-                  ),
-                  child: ImUserAvatar(
-                    initial: initial,
-                    seed: seed,
-                    size: 80,
-                    avatarPreset: avatarPreset,
-                    avatarObjectKey: avatarObjectKey,
-                    avatarService: avatarService,
-                    borderRadius: 80 * 0.18,
+                Text(
+                  name,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: DunesTypography.sans(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w600,
+                    color: const Color(0xFF191919),
                   ),
                 ),
-                const SizedBox(height: 11),
-                Wrap(
-                  alignment: WrapAlignment.center,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  spacing: 6,
-                  runSpacing: 6,
-                  children: [
-                    Text(
-                      name,
-                      textAlign: TextAlign.center,
-                      style: DunesTypography.sans(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: -0.015 * 18,
-                        color: Colors.white,
-                        height: 1.2,
-                      ),
-                    ),
-                    if (roleTag.isNotEmpty)
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 7,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(4),
-                          gradient: const LinearGradient(
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                            colors: [DunesColors.accent, Color(0xFF5F8B8F)],
-                          ),
-                        ),
-                        child: Text(
-                          roleTag,
-                          style: DunesTypography.mono(
-                            fontSize: 8.5,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: 0.05 * 8.5,
-                            color: Colors.white,
-                            height: 1.5,
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-                if (department.isNotEmpty) ...[
-                  const SizedBox(height: 5),
+                if (subtitleBits.isNotEmpty) ...[
+                  const SizedBox(height: 6),
                   Text(
-                    department,
-                    textAlign: TextAlign.center,
-                    style: DunesTypography.mono(
-                      fontSize: 10,
-                      color: Colors.white.withValues(alpha: 0.72),
-                      letterSpacing: 0.02 * 10,
-                      height: 1.4,
+                    subtitleBits.join(' · '),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: DunesTypography.sans(
+                      fontSize: 13,
+                      color: const Color(0xFF888888),
                     ),
                   ),
                 ],
@@ -344,224 +268,34 @@ class _ContactHero extends StatelessWidget {
   }
 }
 
-class _HeroButton extends StatelessWidget {
-  const _HeroButton({required this.icon, required this.onTap});
+/// 企微式底部主操作：白底居中「发消息」。
+class _ProfileMessageAction extends StatelessWidget {
+  const _ProfileMessageAction({required this.onTap});
 
-  final IconData icon;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(15),
-        child: Ink(
-          width: 30,
-          height: 30,
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.18),
-            borderRadius: BorderRadius.circular(15),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.18)),
-          ),
-          child: Icon(icon, size: 18, color: Colors.white),
-        ),
-      ),
-    );
-  }
-}
-
-class _ActionBar extends StatelessWidget {
-  const _ActionBar({
-    required this.onMessage,
-    required this.onVoice,
-    required this.onVideo,
-  });
-
-  final VoidCallback onMessage;
-  final VoidCallback onVoice;
-  final VoidCallback onVideo;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(12, 14, 12, 4),
-      color: DunesColors.bgApp,
-      child: Row(
-        children: [
-          Expanded(
-            child: _ActionCard(
-              primary: true,
-              icon: Icons.chat_bubble_outline,
-              label: '发消息',
-              onTap: onMessage,
-            ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: _ActionCard(
-              icon: Icons.call_outlined,
-              label: '语音',
-              onTap: onVoice,
-            ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: _ActionCard(
-              icon: Icons.videocam_outlined,
-              label: '视频',
-              onTap: onVideo,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ActionCard extends StatelessWidget {
-  const _ActionCard({
-    required this.icon,
-    required this.label,
-    required this.onTap,
-    this.primary = false,
-  });
-
-  final IconData icon;
-  final String label;
-  final VoidCallback onTap;
-  final bool primary;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(10),
-        child: Ink(
-          padding: const EdgeInsets.symmetric(vertical: 9, horizontal: 4),
-          decoration: BoxDecoration(
-            color: primary ? null : DunesColors.bgSoft,
-            gradient: primary
-                ? const LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [DunesColors.accent, DunesColors.accentDeep],
-                  )
-                : null,
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(
-              color: primary ? DunesColors.accentDeep : DunesColors.borderSoft,
-            ),
-            boxShadow: primary
-                ? const [
-                    BoxShadow(
-                      color: Color.fromRGBO(47, 93, 98, 0.4),
-                      blurRadius: 10,
-                      spreadRadius: -3,
-                      offset: Offset(0, 4),
-                    ),
-                  ]
-                : null,
-          ),
-          child: Column(
-            children: [
-              Icon(
-                icon,
-                size: 18,
-                color: primary ? Colors.white : DunesColors.text2,
-              ),
-              const SizedBox(height: 5),
-              Text(
-                label,
-                style: DunesTypography.sans(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w500,
-                  color: primary ? Colors.white : DunesColors.text2,
-                  letterSpacing: -0.005 * 10,
-                  height: 1.2,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _SectionLabel extends StatelessWidget {
-  const _SectionLabel(this.label);
-
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(12, 7, 12, 5),
-      decoration: const BoxDecoration(
-        color: DunesColors.stageBg,
-        border: Border(
-          top: BorderSide(color: DunesColors.borderSoft),
-          bottom: BorderSide(color: DunesColors.borderSoft),
-        ),
-      ),
-      child: Text(
-        label,
-        style: DunesTypography.mono(
-          fontSize: 8.5,
-          fontWeight: FontWeight.w700,
-          color: DunesColors.text3,
-          letterSpacing: 0.06 * 8.5,
-        ),
-      ),
-    );
-  }
-}
-
-class _InfoRow extends StatelessWidget {
-  const _InfoRow({required this.label, required this.value});
-
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 9),
-      decoration: const BoxDecoration(
-        color: DunesColors.bgApp,
-        border: Border(bottom: BorderSide(color: DunesColors.borderSoft)),
-      ),
-      child: Row(
-        children: [
-          SizedBox(
-            width: 48,
+    return Padding(
+      padding: const EdgeInsets.only(top: 10),
+      child: Material(
+        color: Colors.white,
+        child: InkWell(
+          onTap: onTap,
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
+            alignment: Alignment.center,
             child: Text(
-              label,
-              style: DunesTypography.mono(
-                fontSize: 9,
-                fontWeight: FontWeight.w700,
-                color: DunesColors.text3,
-                letterSpacing: 0.04 * 9,
-              ),
-            ),
-          ),
-          Expanded(
-            child: Text(
-              value,
-              style: DunesTypography.mono(
-                fontSize: 11,
+              '发消息',
+              style: DunesTypography.sans(
+                fontSize: 16,
                 fontWeight: FontWeight.w500,
-                color: DunesColors.text,
-                letterSpacing: 0.005 * 11,
+                color: DunesColors.accent,
               ),
             ),
           ),
-        ],
+        ),
       ),
     );
   }

@@ -9,6 +9,7 @@ import 'core/layout/mobile_viewport_shell.dart';
 import 'core/platform/desktop_features.dart';
 import 'core/theme/app_text_scale.dart';
 import 'core/theme/dunes_theme.dart';
+import 'core/widgets/app_watermark.dart';
 import 'features/desktop/windows_desktop_tray.dart';
 import 'features/push/push_service.dart';
 import 'features/shell/splash_screen.dart';
@@ -44,7 +45,9 @@ class DunesApp extends StatelessWidget {
             return MediaQuery(
               data: media.copyWith(textScaler: TextScaler.linear(scale)),
               child: MobileViewportShell(
-                child: child ?? const SizedBox.shrink(),
+                child: AppWatermark(
+                  child: child ?? const SizedBox.shrink(),
+                ),
               ),
             );
           },

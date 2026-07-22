@@ -15,6 +15,7 @@ class NativePrivateChatPage extends StatelessWidget {
     this.focusMessageHint,
     required this.onBack,
     required this.onOpenProfile,
+    this.onOpenUser,
     required this.onOpenSearch,
     this.onOpenAiSummary,
     this.onOpenApprovalShare,
@@ -31,6 +32,7 @@ class NativePrivateChatPage extends StatelessWidget {
   final NativeChatMessage? focusMessageHint;
   final VoidCallback onBack;
   final VoidCallback onOpenProfile;
+  final void Function(int userId, String displayName)? onOpenUser;
   final ValueChanged<int> onOpenSearch;
   final ValueChanged<int>? onOpenAiSummary;
   final ValueChanged<ApprovalChatShare>? onOpenApprovalShare;
@@ -50,6 +52,7 @@ class NativePrivateChatPage extends StatelessWidget {
       focusMessageHint: focusMessageHint,
       onBack: onBack,
       onOpenProfile: onOpenProfile,
+      onOpenUser: onOpenUser,
       onOpenSearch: onOpenSearch,
       onOpenAiSummary: onOpenAiSummary,
       onOpenApprovalShare: onOpenApprovalShare,

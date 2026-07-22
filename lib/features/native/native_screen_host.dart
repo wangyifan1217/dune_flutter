@@ -124,6 +124,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
   NativeConversation? _selectedGroup;
   NativeConversation? _selectedBroadcast;
   NativeContact? _selectedContact;
+  /// PC 双栏：从会话打开名片时嵌在右侧栏，返回目标为 C2/C5；通讯录等入口为 null（整页）。
+  String? _profileReturnScreen;
   bool _contactsGroupPickMode = false;
   int? _selectedPrivatePeerUserId;
   int? _selectedAiSummaryId;
@@ -859,6 +861,35 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     _goChatScreen('C5');
   }
 
+  void _openContactProfile(int userId, String displayName) {
+    if (userId <= 0) return;
+    final current = widget.navigation.currentScreen;
+    // 仅从会话（含双栏内搜索/媒体）打开时嵌在右侧会话栏；其它入口整页展示。
+    String? returnScreen;
+    if (current == 'C2' || current == 'C5') {
+      returnScreen = current;
+    } else if (current == 'C12' || current == 'C13') {
+      if (_selectedGroup != null) {
+        returnScreen = 'C2';
+      } else if (_selectedPrivate != null ||
+          _selectedPrivatePeerUserId != null) {
+        returnScreen = 'C5';
+      } else {
+        returnScreen = null;
+      }
+    } else {
+      returnScreen = null;
+    }
+    setState(() {
+      _selectedContact = NativeContact(
+        userId: userId,
+        displayName: displayName,
+      );
+      _profileReturnScreen = returnScreen;
+    });
+    widget.navigation.go('C9');
+  }
+
   void _leaveChatToInbox({required bool clearSelection}) {
     setState(() {
       _focusMessageId = null;
@@ -899,6 +930,10 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     if (chatScreen == 'C13' && _mediaConversationId > 0) {
       return _mediaConversationId;
     }
+    if (chatScreen == 'C9') {
+      if (_profileReturnScreen == 'C5') return _selectedPrivate?.id;
+      if (_profileReturnScreen == 'C2') return _selectedGroup?.id;
+    }
     if (chatScreen == 'C5') return _selectedPrivate?.id;
     if (chatScreen == 'C2') return _selectedGroup?.id;
     return null;
@@ -907,8 +942,9 @@ class _NativeScreenHostState extends State<NativeScreenHost>
   /// 从「我的」回到桌面端通讯时，保留原来打开的会话，而不是重置右侧聊天栏。
   String get _dualPaneChatScreen {
     final screen = widget.navigation.currentScreen;
-    // 历史 / 媒体：嵌在右侧会话栏，不撑满整页。
+    // 历史 / 媒体 / 会话内名片：嵌在右侧会话栏，不撑满整页。
     if (screen == 'C12' || screen == 'C13') return screen;
+    if (screen == 'C9' && _profileEmbedsInDualPane) return 'C9';
     if (screen == 'C2' || screen == 'C5') return screen;
     if (_selectedPrivate != null || _selectedPrivatePeerUserId != null) {
       return 'C5';
@@ -917,12 +953,34 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     return 'C1';
   }
 
+  bool get _profileEmbedsInDualPane =>
+      _profileReturnScreen == 'C2' || _profileReturnScreen == 'C5';
+
+  /// 双栏右侧叠在会话上的子页（名片/搜索/媒体）；有叠层时底层会话保持挂载不销毁。
+  String? get _dualPaneOverlayScreen {
+    final screen = widget.navigation.currentScreen;
+    if (screen == 'C12' || screen == 'C13') return screen;
+    if (screen == 'C9' && _profileEmbedsInDualPane) return 'C9';
+    return null;
+  }
+
   bool _isDualPaneChatRoute(String screen) {
+    if (screen == 'C9') return _profileEmbedsInDualPane;
     return screen == 'C1' ||
         screen == 'C2' ||
         screen == 'C5' ||
         screen == 'C12' ||
         screen == 'C13';
+  }
+
+  Widget _buildDualPaneContactProfilePage() {
+    return NativeContactProfilePage(
+      key: ValueKey<int>(_selectedContact?.userId ?? 0),
+      session: widget.session,
+      contactHint: _selectedContact,
+      onBack: widget.navigation.back,
+      onOpenPrivateChat: _openPrivateByPeerId,
+    );
   }
 
   Widget _buildDualPaneSearchPage() {
@@ -984,95 +1042,115 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     );
   }
 
-  Widget _buildDualPaneChatPane() {
-    switch (_dualPaneChatScreen) {
-      case 'C12':
-        return _buildDualPaneSearchPage();
-      case 'C13':
-        return _buildDualPaneMediaPage();
-      case 'C2':
-        return NativeGroupChatPage(
-          key: ValueKey<String>('dual-group-${_selectedGroup?.id ?? 0}'),
-          session: widget.session,
-          conversationHint: _selectedGroup,
-          focusMessageId: _focusMessageId,
-          focusMessageHint: _focusMessageHint,
-          autoMarkRead: _userActivelyInChat,
-          showBackButton: false,
-          onBack: () => _leaveChatToInbox(clearSelection: true),
-          onOpenSearch: (convId) {
-            setState(() {
-              _searchConversationId = convId;
-              _searchTitle = _selectedGroup?.title ?? '群聊搜索';
-              _searchReturnScreen = 'C2';
-              _focusMessageId = null;
-              _focusMessageHint = null;
-            });
-            widget.navigation.go('C12');
-          },
-          onOpenMedia: (convId) {
-            setState(() {
-              _mediaConversationId = convId;
-              _mediaTitle = _selectedGroup?.title ?? '群聊';
-            });
-            widget.navigation.go('C13');
-          },
-          onOpenGroupInfo: () => widget.navigation.go('C6'),
-          onOpenAiSummary: (convId) => _openAiSummaryCreate(conversationId: convId),
-          onOpenApprovalShare: (share) =>
-              _openApprovalFromChat(share, from: 'C2'),
-          onConversationRead: _handleConversationRead,
-          onClearFocusMessage: _clearChatFocusMessage,
-        );
-      case 'C5':
-        return NativePrivateChatPage(
-          key: ValueKey<String>(
-            'dual-private-${_selectedPrivate?.id ?? _selectedPrivatePeerUserId ?? 0}',
-          ),
-          session: widget.session,
-          conversationHint: _selectedPrivate,
-          peerUserIdHint: _selectedPrivatePeerUserId,
-          focusMessageId: _focusMessageId,
-          focusMessageHint: _focusMessageHint,
-          autoMarkRead: _userActivelyInChat,
-          showBackButton: false,
-          onBack: () => _leaveChatToInbox(clearSelection: true),
-          onOpenProfile: () {
-            final peerId =
-                _selectedPrivate?.peerUserId ?? _selectedPrivatePeerUserId;
-            if (peerId != null && peerId > 0) {
-              setState(() {
-                _selectedContact = NativeContact(
-                  userId: peerId,
-                  displayName:
-                      _selectedPrivate?.peerDisplayName ??
-                      _selectedPrivate?.title ??
-                      '',
-                );
-              });
-            }
-            widget.navigation.go('C9');
-          },
-          onOpenSearch: (convId) {
-            setState(() {
-              _searchConversationId = convId;
-              _searchTitle = '${_selectedPrivate?.displayTitle ?? '私聊'} · 搜索';
-              _searchReturnScreen = 'C5';
-              _focusMessageId = null;
-              _focusMessageHint = null;
-            });
-            widget.navigation.go('C12');
-          },
-          onOpenAiSummary: (convId) => _openAiSummaryCreate(conversationId: convId),
-          onOpenApprovalShare: (share) =>
-              _openApprovalFromChat(share, from: 'C5'),
-          onConversationRead: _handleConversationRead,
-          onClearFocusMessage: _clearChatFocusMessage,
-        );
-      case 'C1':
-      default:
-        return const ChatDualPaneEmpty();
+  /// 当前选中的底层会话（不随名片/搜索/媒体切换而卸载）。
+  Widget _buildDualPaneBaseChatPage() {
+    if (_selectedPrivate != null || _selectedPrivatePeerUserId != null) {
+      return NativePrivateChatPage(
+        key: ValueKey<String>(
+          'dual-private-${_selectedPrivate?.id ?? _selectedPrivatePeerUserId ?? 0}',
+        ),
+        session: widget.session,
+        conversationHint: _selectedPrivate,
+        peerUserIdHint: _selectedPrivatePeerUserId,
+        focusMessageId: _focusMessageId,
+        focusMessageHint: _focusMessageHint,
+        autoMarkRead: _userActivelyInChat,
+        showBackButton: false,
+        onBack: () => _leaveChatToInbox(clearSelection: true),
+        onOpenProfile: () {
+          final peerId =
+              _selectedPrivate?.peerUserId ?? _selectedPrivatePeerUserId;
+          if (peerId == null || peerId <= 0) return;
+          _openContactProfile(
+            peerId,
+            _selectedPrivate?.peerDisplayName ??
+                _selectedPrivate?.title ??
+                '',
+          );
+        },
+        onOpenUser: _openContactProfile,
+        onOpenSearch: (convId) {
+          setState(() {
+            _searchConversationId = convId;
+            _searchTitle = '${_selectedPrivate?.displayTitle ?? '私聊'} · 搜索';
+            _searchReturnScreen = 'C5';
+            _focusMessageId = null;
+            _focusMessageHint = null;
+          });
+          widget.navigation.go('C12');
+        },
+        onOpenAiSummary: (convId) =>
+            _openAiSummaryCreate(conversationId: convId),
+        onOpenApprovalShare: (share) =>
+            _openApprovalFromChat(share, from: 'C5'),
+        onConversationRead: _handleConversationRead,
+        onClearFocusMessage: _clearChatFocusMessage,
+      );
     }
+    if (_selectedGroup != null) {
+      return NativeGroupChatPage(
+        key: ValueKey<String>('dual-group-${_selectedGroup?.id ?? 0}'),
+        session: widget.session,
+        conversationHint: _selectedGroup,
+        focusMessageId: _focusMessageId,
+        focusMessageHint: _focusMessageHint,
+        autoMarkRead: _userActivelyInChat,
+        showBackButton: false,
+        onBack: () => _leaveChatToInbox(clearSelection: true),
+        onOpenSearch: (convId) {
+          setState(() {
+            _searchConversationId = convId;
+            _searchTitle = _selectedGroup?.title ?? '群聊搜索';
+            _searchReturnScreen = 'C2';
+            _focusMessageId = null;
+            _focusMessageHint = null;
+          });
+          widget.navigation.go('C12');
+        },
+        onOpenMedia: (convId) {
+          setState(() {
+            _mediaConversationId = convId;
+            _mediaTitle = _selectedGroup?.title ?? '群聊';
+          });
+          widget.navigation.go('C13');
+        },
+        onOpenGroupInfo: () => widget.navigation.go('C6'),
+        onOpenUser: _openContactProfile,
+        onOpenAiSummary: (convId) =>
+            _openAiSummaryCreate(conversationId: convId),
+        onOpenApprovalShare: (share) =>
+            _openApprovalFromChat(share, from: 'C2'),
+        onConversationRead: _handleConversationRead,
+        onClearFocusMessage: _clearChatFocusMessage,
+      );
+    }
+    return const ChatDualPaneEmpty();
+  }
+
+  Widget _buildDualPaneChatPane() {
+    final overlay = _dualPaneOverlayScreen;
+    final chat = _buildDualPaneBaseChatPage();
+    final Widget? overlayPage = switch (overlay) {
+      'C12' => _buildDualPaneSearchPage(),
+      'C13' => _buildDualPaneMediaPage(),
+      'C9' => _buildDualPaneContactProfilePage(),
+      _ => null,
+    };
+
+    // 始终用 Stack 挂载底层会话，叠层打开/关闭时不销毁聊天 State，避免返回后重新拉消息。
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        Offstage(
+          offstage: overlay != null,
+          child: TickerMode(
+            enabled: overlay == null,
+            child: chat,
+          ),
+        ),
+        if (overlayPage != null) overlayPage,
+      ],
+    );
   }
 
   Widget _buildChatDualPane() {
@@ -1322,7 +1400,10 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           initialGroupPickMode: true,
           onBack: widget.navigation.back,
           onOpenContact: (contact) {
-            setState(() => _selectedContact = contact);
+            setState(() {
+              _selectedContact = contact;
+              _profileReturnScreen = null;
+            });
             widget.navigation.go('C9');
           },
           onStartPrivateChat: _openPrivateByPeerId,
@@ -1355,13 +1436,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
             widget.navigation.go('C13');
           },
           onOpenMember: (userId, displayName) {
-            setState(() {
-              _selectedContact = NativeContact(
-                userId: userId,
-                displayName: displayName,
-              );
-            });
-            widget.navigation.go('C9');
+            _openContactProfile(userId, displayName);
           },
           onOpenApproval: () => _goB14(),
           onExitedGroup: () => widget.navigation.popTo('C1'),
@@ -1378,7 +1453,10 @@ class _NativeScreenHostState extends State<NativeScreenHost>
             widget.navigation.back();
           },
           onOpenContact: (contact) {
-            setState(() => _selectedContact = contact);
+            setState(() {
+              _selectedContact = contact;
+              _profileReturnScreen = null;
+            });
             widget.navigation.go('C9');
           },
           onStartPrivateChat: _openPrivateByPeerId,
@@ -1671,6 +1749,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
             widget.navigation.go('C13');
           },
           onOpenGroupInfo: () => widget.navigation.go('C6'),
+          onOpenUser: _openContactProfile,
           onOpenAiSummary: (convId) => _openAiSummaryCreate(conversationId: convId),
           onOpenApprovalShare: (share) =>
               _openApprovalFromChat(share, from: 'C2'),
@@ -1689,19 +1768,15 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           onOpenProfile: () {
             final peerId =
                 _selectedPrivate?.peerUserId ?? _selectedPrivatePeerUserId;
-            if (peerId != null && peerId > 0) {
-              setState(() {
-                _selectedContact = NativeContact(
-                  userId: peerId,
-                  displayName:
-                      _selectedPrivate?.peerDisplayName ??
-                      _selectedPrivate?.title ??
-                      '',
-                );
-              });
-            }
-            widget.navigation.go('C9');
+            if (peerId == null || peerId <= 0) return;
+            _openContactProfile(
+              peerId,
+              _selectedPrivate?.peerDisplayName ??
+                  _selectedPrivate?.title ??
+                  '',
+            );
           },
+          onOpenUser: _openContactProfile,
           onOpenSearch: (convId) {
             setState(() {
               _searchConversationId = convId;
@@ -1798,7 +1873,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         wide &&
         _isDualPaneChatRoute(previousScreen);
 
-    // 宽屏双栏内部（C1↔C2↔C5）仍瞬时切换聊天窗；
+    // 宽屏双栏内部（C1↔C2↔C5↔C12↔C13↔会话内C9）仍瞬时切换聊天窗；
     // 进出通讯子页（通知/通讯录/智能总结/群信息等）走整页滑动。
     if (dualNow && dualPrev) {
       _lastScreen = screen;

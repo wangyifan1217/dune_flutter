@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:http/http.dart' as http;
+import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
 
 import '../../core/theme/dunes_theme.dart';
@@ -13,6 +14,39 @@ import '../../core/widgets/cached_network_image.dart';
 import '../shell/dunes_toast.dart';
 import '../auth/auth_session.dart';
 import 'native_avatar_presets.dart';
+
+/// 头像上传边长上限。展示多为 32–96px，512 足够 Retina。
+const int _kAvatarUploadMaxEdge = 512;
+
+/// 头像 JPEG 质量。桌面端 image_picker 不压缩，必须在 Dart 侧强制编码。
+const int _kAvatarUploadJpegQuality = 80;
+
+class _AvatarEncodeRequest {
+  const _AvatarEncodeRequest(this.bytes, this.maxDim, this.quality);
+
+  final Uint8List bytes;
+  final int maxDim;
+  final int quality;
+}
+
+/// isolate 入口：解码 → 等比缩放到 [maxDim] → JPEG；解码失败返回 null。
+Uint8List? _encodeAvatarJpeg(_AvatarEncodeRequest req) {
+  final decoded = img.decodeImage(req.bytes);
+  if (decoded == null) return null;
+  final w = decoded.width;
+  final h = decoded.height;
+  final longest = w > h ? w : h;
+  final resized = longest > req.maxDim
+      ? img.copyResize(
+          decoded,
+          width: w >= h ? req.maxDim : (w * req.maxDim / h).round(),
+          height: h > w ? req.maxDim : (h * req.maxDim / w).round(),
+        )
+      : decoded;
+  return Uint8List.fromList(
+    img.encodeJpg(resized, quality: req.quality),
+  );
+}
 
 /// 与 WebView `openAvatarSheet` 一致：6 个默认头像 + 上传 + 保存。
 class NativeAvatarSheet extends StatefulWidget {
@@ -62,6 +96,7 @@ class _NativeAvatarSheetState extends State<NativeAvatarSheet> {
   String _uploadedObjectKey = '';
   String _uploadedAvatarUrl = '';
   String _uploadPreviewPath = '';
+  Uint8List? _uploadPreviewBytes;
   bool _uploading = false;
   bool _saving = false;
 
@@ -81,8 +116,39 @@ class _NativeAvatarSheetState extends State<NativeAvatarSheet> {
       _uploadedAvatarUrl.isNotEmpty ||
       _selectedPreset.isNotEmpty;
 
+  Future<({Uint8List bytes, String fileName})> _compressAvatarForUpload(
+    Uint8List raw, {
+    required String originalName,
+  }) async {
+    try {
+      final encoded = await compute(
+        _encodeAvatarJpeg,
+        _AvatarEncodeRequest(
+          raw,
+          _kAvatarUploadMaxEdge,
+          _kAvatarUploadJpegQuality,
+        ),
+      );
+      if (encoded == null || encoded.isEmpty) {
+        return (
+          bytes: raw,
+          fileName: originalName.isEmpty ? 'avatar.jpg' : originalName,
+        );
+      }
+      // 桌面端必须走这条；移动端也会得到统一小体积 JPEG。
+      return (bytes: encoded, fileName: 'avatar.jpg');
+    } catch (_) {
+      return (
+        bytes: raw,
+        fileName: originalName.isEmpty ? 'avatar.jpg' : originalName,
+      );
+    }
+  }
+
   Future<void> _pickAndUpload() async {
     try {
+      // 桌面端 image_picker 会忽略 maxWidth/maxHeight/imageQuality，
+      // 真正压缩在下方 _compressAvatarForUpload。
       final x = await _picker.pickImage(
         source: ImageSource.gallery,
         maxWidth: 1024,
@@ -91,6 +157,11 @@ class _NativeAvatarSheetState extends State<NativeAvatarSheet> {
       );
       if (x == null) return;
       setState(() => _uploading = true);
+      final raw = await x.readAsBytes();
+      final compressed = await _compressAvatarForUpload(
+        raw,
+        originalName: x.name,
+      );
       final req = http.MultipartRequest(
         'POST',
         Uri.parse('${widget.session.apiBase}/storage/upload'),
@@ -100,8 +171,8 @@ class _NativeAvatarSheetState extends State<NativeAvatarSheet> {
       req.files.add(
         http.MultipartFile.fromBytes(
           'file',
-          await x.readAsBytes(),
-          filename: x.name.isEmpty ? 'avatar.jpg' : x.name,
+          compressed.bytes,
+          filename: compressed.fileName,
         ),
       );
       final streamed = await req.send();
@@ -134,6 +205,7 @@ class _NativeAvatarSheetState extends State<NativeAvatarSheet> {
         _uploadedAvatarUrl = avatarUrl;
         _selectedPreset = '';
         _uploadPreviewPath = x.path;
+        _uploadPreviewBytes = compressed.bytes;
       });
     } catch (e) {
       if (mounted) {
@@ -203,6 +275,10 @@ class _NativeAvatarSheetState extends State<NativeAvatarSheet> {
   }
 
   Widget _uploadPreview() {
+    final previewBytes = _uploadPreviewBytes;
+    if (previewBytes != null && previewBytes.isNotEmpty) {
+      return Image.memory(previewBytes, fit: BoxFit.cover);
+    }
     if (_uploadPreviewPath.isEmpty) {
       return const Icon(Icons.check_circle, color: DunesColors.accentDeep);
     }
@@ -265,6 +341,7 @@ class _NativeAvatarSheetState extends State<NativeAvatarSheet> {
                       _uploadedObjectKey = '';
                       _uploadedAvatarUrl = '';
                       _uploadPreviewPath = '';
+                      _uploadPreviewBytes = null;
                     });
                   },
                 ),

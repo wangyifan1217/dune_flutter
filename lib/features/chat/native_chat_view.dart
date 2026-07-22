@@ -192,6 +192,7 @@ class NativeChatView extends StatefulWidget {
     this.focusMessageHint,
     required this.onBack,
     this.onOpenProfile,
+    this.onOpenUser,
     this.onOpenGroupInfo,
     this.onOpenSearch,
     this.onOpenMedia,
@@ -212,6 +213,8 @@ class NativeChatView extends StatefulWidget {
   final NativeChatMessage? focusMessageHint;
   final VoidCallback onBack;
   final VoidCallback? onOpenProfile;
+  /// 点击消息头像进入用户详情（群聊/私聊）。
+  final void Function(int userId, String displayName)? onOpenUser;
   final VoidCallback? onOpenGroupInfo;
   final ValueChanged<int>? onOpenSearch;
   final ValueChanged<int>? onOpenMedia;
@@ -292,6 +295,8 @@ class _NativeChatViewState extends State<NativeChatView>
   int _pendingNewMessageCount = 0;
   int _lastMarkedReadNewestId = 0;
   bool _wasNearBottom = true;
+  /// 用户已上滑离开最新消息端，显示「回到最新」入口。
+  bool _awayFromLatest = false;
   bool _userInteractedWithScroll = false;
   bool _userScrollActive = false;
   bool _hasMore = false;
@@ -590,24 +595,36 @@ class _NativeChatViewState extends State<NativeChatView>
 
   void _updateStickBottomState() {
     if (_locatedMode) {
-      if (_pendingNewMessageCount != 0) {
-        setState(() => _pendingNewMessageCount = 0);
+      if (_pendingNewMessageCount != 0 || _awayFromLatest) {
+        setState(() {
+          _pendingNewMessageCount = 0;
+          _awayFromLatest = false;
+        });
       }
       return;
     }
     final near = _isNearBottom;
+    final away = _isScrolledAwayFromLatest;
+    var nextPending = _pendingNewMessageCount;
     if (near) {
       _bottomAnchorMessageId = _newestMessageId;
-      if (_pendingNewMessageCount != 0) {
-        setState(() => _pendingNewMessageCount = 0);
-      }
+      nextPending = 0;
     } else {
       if (_wasNearBottom) {
         _bottomAnchorMessageId = _newestMessageId;
       }
-      _recountPendingNewMessages();
+      final anchor = _bottomAnchorMessageId;
+      if (anchor > 0) {
+        nextPending = _messages.where((m) => m.id > anchor).length;
+      }
     }
     _wasNearBottom = near;
+    if (_awayFromLatest != away || _pendingNewMessageCount != nextPending) {
+      setState(() {
+        _awayFromLatest = away;
+        _pendingNewMessageCount = nextPending;
+      });
+    }
   }
 
   void _recountPendingNewMessages() {
@@ -615,13 +632,17 @@ class _NativeChatViewState extends State<NativeChatView>
     final anchor = _bottomAnchorMessageId;
     if (anchor <= 0) return;
     final count = _messages.where((m) => m.id > anchor).length;
-    if (count == _pendingNewMessageCount) return;
-    setState(() => _pendingNewMessageCount = count);
+    if (count == _pendingNewMessageCount && _awayFromLatest) return;
+    setState(() {
+      _pendingNewMessageCount = count;
+      _awayFromLatest = true;
+    });
   }
 
   void _clearPendingNewMessages() {
     _bottomAnchorMessageId = _newestMessageId;
     _pendingNewMessageCount = 0;
+    _awayFromLatest = false;
     _wasNearBottom = true;
   }
 
@@ -898,6 +919,12 @@ class _NativeChatViewState extends State<NativeChatView>
     if (!_scrollController.hasClients) return true;
     // reverse 列表：pixels 接近 0 即在最新消息端。
     return _scrollController.position.pixels <= 72;
+  }
+
+  /// 上滑超过该阈值才显示「回到最新」，避免轻微滚动闪一下。
+  bool get _isScrolledAwayFromLatest {
+    if (!_scrollController.hasClients) return false;
+    return _scrollController.position.pixels > 140;
   }
 
   int get _listFooterCount => (_locatedMode && _hasNewer) ? 1 : 0;
@@ -4638,6 +4665,33 @@ class _NativeChatViewState extends State<NativeChatView>
     );
   }
 
+  Widget _tappableAvatarForMessage(NativeChatMessage m, {required bool mine}) {
+    final avatar = _avatarForMessage(m, mine: mine);
+    final onOpen = widget.onOpenUser;
+    if (onOpen == null) return avatar;
+
+    final conv = _conversation;
+    final userId = mine
+        ? widget.session.userId
+        : (m.senderUserId > 0
+              ? m.senderUserId
+              : (conv?.peerUserId ?? widget.peerUserIdHint ?? 0));
+    if (userId <= 0) return avatar;
+
+    final name = mine
+        ? (widget.session.displayName?.trim().isNotEmpty == true
+              ? widget.session.displayName!.trim()
+              : '我')
+        : (m.senderName.isNotEmpty
+              ? m.senderName
+              : (conv?.displayTitle ?? ''));
+    return GestureDetector(
+      onTap: () => onOpen(userId, name),
+      behavior: HitTestBehavior.opaque,
+      child: avatar,
+    );
+  }
+
   bool _isSystemKind(String kind) {
     final k = kind.toUpperCase();
     return k == 'SYSTEM' ||
@@ -5615,7 +5669,7 @@ class _NativeChatViewState extends State<NativeChatView>
                                 final timeLabel = InboxFormat.msgTimeLabel(
                                   m.createdAt,
                                 );
-                                final rowAvatar = _avatarForMessage(
+                                final rowAvatar = _tappableAvatarForMessage(
                                   m,
                                   mine: mine,
                                 );
@@ -5832,7 +5886,8 @@ class _NativeChatViewState extends State<NativeChatView>
                               ),
                             ),
                           ),
-                        if (_pendingNewMessageCount > 0 && !_locatedMode)
+                        if ((_awayFromLatest || _pendingNewMessageCount > 0) &&
+                            !_locatedMode)
                           Positioned(
                             left: 0,
                             right: 0,
@@ -5848,19 +5903,52 @@ class _NativeChatViewState extends State<NativeChatView>
                                   child: Ink(
                                     decoration: BoxDecoration(
                                       borderRadius: BorderRadius.circular(999),
-                                      color: const Color(0xFF7E64BD),
+                                      color: _pendingNewMessageCount > 0
+                                          ? const Color(0xFF7E64BD)
+                                          : Colors.white,
+                                      border: _pendingNewMessageCount > 0
+                                          ? null
+                                          : Border.all(
+                                              color: DunesColors.borderSoft,
+                                            ),
+                                      boxShadow: _pendingNewMessageCount > 0
+                                          ? null
+                                          : const [
+                                              BoxShadow(
+                                                color: Color(0x1A000000),
+                                                blurRadius: 8,
+                                                offset: Offset(0, 2),
+                                              ),
+                                            ],
                                     ),
                                     padding: const EdgeInsets.symmetric(
                                       horizontal: 14,
                                       vertical: 8,
                                     ),
-                                    child: Text(
-                                      '${_pendingNewMessageCount > 99 ? '99+' : _pendingNewMessageCount} 条新消息 ↓',
-                                      style: DunesTypography.sans(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w600,
-                                        color: Colors.white,
-                                      ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(
+                                          Icons.keyboard_arrow_down_rounded,
+                                          size: 16,
+                                          color: _pendingNewMessageCount > 0
+                                              ? Colors.white
+                                              : DunesColors.accentDeep,
+                                        ),
+                                        const SizedBox(width: 4),
+                                        Text(
+                                          _pendingNewMessageCount > 0
+                                              ? '${_pendingNewMessageCount > 99 ? '99+' : _pendingNewMessageCount} 条新消息'
+                                              : '回到最新',
+                                          style: DunesTypography.sans(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w600,
+                                            color: _pendingNewMessageCount > 0
+                                                ? Colors.white
+                                                : DunesColors.accentDeep,
+                                          ),
+                                        ),
+                                      ],
                                     ),
                                   ),
                                 ),

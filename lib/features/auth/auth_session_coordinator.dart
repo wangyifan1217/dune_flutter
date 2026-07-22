@@ -1,12 +1,13 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 import 'auth_session.dart';
 
 /// 全局会话协调：单例持有最新 token，401 时静默 refresh（不走 sms/token）。
-class AuthSessionCoordinator {
+class AuthSessionCoordinator extends ChangeNotifier {
   AuthSessionCoordinator._();
 
   static final AuthSessionCoordinator instance = AuthSessionCoordinator._();
@@ -20,16 +21,19 @@ class AuthSessionCoordinator {
   void bind(AuthSession session, {void Function(AuthSession)? onUpdated}) {
     _session = session;
     if (onUpdated != null) onSessionUpdated = onUpdated;
+    notifyListeners();
   }
 
   void updateSession(AuthSession session) {
     _session = session;
     onSessionUpdated?.call(session);
+    notifyListeners();
   }
 
   void clear() {
     _session = null;
     _refreshInFlight = null;
+    notifyListeners();
   }
 
   /// 优先返回协调器中的最新 session，否则回退到调用方传入的副本。

@@ -44,9 +44,13 @@ bool isDesktopAllowedCommScreen(String screenId) {
     'K2',
     'K3',
     'WX',
+    // 会议纪要（桌面端只读列表/详情，不含新建 MM0）
+    'MM-L',
+    'MM',
     // 千机 / 灯塔
     'QJ',
     'QJC',
+    'QJCD',
     'QJD',
     'QJI',
     'QJA',
@@ -55,6 +59,8 @@ bool isDesktopAllowedCommScreen(String screenId) {
     'QJM',
     'QJMT',
     'QJTD',
+    'QJMM',
+    'QJMD',
     'LH',
     'LM',
   }.contains(screenId);

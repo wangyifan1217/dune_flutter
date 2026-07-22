@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../core/platform/desktop_features.dart';
 import '../../core/theme/dunes_theme.dart';
 import '../../core/util/friendly_error.dart';
 import '../conversation/conversation_service.dart';
@@ -15,18 +16,47 @@ Future<void> showChatFilePreview({
   required Map<String, dynamic>? payload,
   required String fileName,
   int? conversationId,
+  String? initialLocalPath,
   VoidCallback? onDownloaded,
 }) {
+  final page = ChatFilePreviewPage(
+    service: service,
+    payload: payload,
+    fileName: fileName,
+    conversationId: conversationId,
+    initialLocalPath: initialLocalPath,
+    onDownloaded: onDownloaded,
+  );
+  if (isDesktopCommOnly) {
+    return showDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      builder: (ctx) {
+        final size = MediaQuery.sizeOf(ctx);
+        return Dialog(
+          insetPadding:
+              const EdgeInsets.symmetric(horizontal: 48, vertical: 36),
+          backgroundColor: Colors.transparent,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxWidth: 520,
+              maxHeight: size.height * 0.82,
+              minWidth: 400,
+              minHeight: 420,
+            ),
+            child: Material(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(14),
+              clipBehavior: Clip.antiAlias,
+              child: SelectionArea(child: page),
+            ),
+          ),
+        );
+      },
+    );
+  }
   return Navigator.of(context).push<void>(
-    MaterialPageRoute<void>(
-      builder: (_) => ChatFilePreviewPage(
-        service: service,
-        payload: payload,
-        fileName: fileName,
-        conversationId: conversationId,
-        onDownloaded: onDownloaded,
-      ),
-    ),
+    MaterialPageRoute<void>(builder: (_) => page),
   );
 }
 
@@ -38,6 +68,7 @@ class ChatFilePreviewPage extends StatefulWidget {
     required this.payload,
     required this.fileName,
     this.conversationId,
+    this.initialLocalPath,
     this.onDownloaded,
   });
 
@@ -45,6 +76,7 @@ class ChatFilePreviewPage extends StatefulWidget {
   final Map<String, dynamic>? payload;
   final String fileName;
   final int? conversationId;
+  final String? initialLocalPath;
   final VoidCallback? onDownloaded;
 
   @override
@@ -63,9 +95,22 @@ class _ChatFilePreviewPageState extends State<ChatFilePreviewPage> {
     return ConversationService.mediaDirectUrl(widget.payload);
   }
 
+  bool get _canRedownload {
+    final payload = widget.payload;
+    if (payload == null) return false;
+    return ConversationService.hasAuthMedia(payload) ||
+        ConversationService.mediaDirectUrl(payload).isNotEmpty;
+  }
+
   @override
   void initState() {
     super.initState();
+    final initial = widget.initialLocalPath?.trim() ?? '';
+    if (initial.isNotEmpty) {
+      _localPath = initial;
+      _status = '已下载到本地';
+      return;
+    }
     unawaited(_resolveCached());
   }
 
@@ -85,6 +130,12 @@ class _ChatFilePreviewPageState extends State<ChatFilePreviewPage> {
   Future<String?> _ensureDownloaded({bool force = false}) async {
     if (!force && _localPath != null && _localPath!.isNotEmpty) {
       return _localPath;
+    }
+    if (!_canRedownload && (_localPath == null || _localPath!.isEmpty)) {
+      if (mounted) {
+        setState(() => _status = '文件不可重新下载，请重新转发');
+      }
+      return null;
     }
     if (_busy) return null;
     setState(() {
@@ -194,8 +245,12 @@ class _ChatFilePreviewPageState extends State<ChatFilePreviewPage> {
             itemBuilder: (ctx) => [
               PopupMenuItem(
                 value: 'download',
-                enabled: !_busy,
-                child: Text(downloaded ? '重新下载' : '下载'),
+                enabled: !_busy && (_canRedownload || !downloaded),
+                child: Text(
+                  downloaded
+                      ? (_canRedownload ? '重新下载' : '已下载')
+                      : '下载',
+                ),
               ),
             ],
           ),

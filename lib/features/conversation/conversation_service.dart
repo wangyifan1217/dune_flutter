@@ -549,6 +549,7 @@ class ConversationService {
     required Uint8List bytes,
     required String fileName,
     required String mimeType,
+    Map<String, dynamic>? extraPayload,
     void Function(double progress)? onProgress,
   }) async {
     final uploaded = await uploadAttachment(
@@ -560,17 +561,19 @@ class ConversationService {
     );
     final url = uploaded.bestUrl;
     final objectKey = uploaded.objectKey.trim();
+    final payload = <String, dynamic>{
+      'url': url,
+      'objectKey': objectKey,
+      'mimeType': mimeType,
+      'fileName': fileName,
+      'size': bytes.length,
+      if (extraPayload != null) ...extraPayload,
+    };
     await _sendAttachment(
       conversationId: conversationId,
       kind: 'FILE',
       bodyText: fileName,
-      payload: <String, dynamic>{
-        'url': url,
-        'objectKey': objectKey,
-        'mimeType': mimeType,
-        'fileName': fileName,
-        'size': bytes.length,
-      },
+      payload: payload,
     );
   }
 
@@ -838,13 +841,24 @@ class ConversationService {
     int size = 20,
     int page = 1,
     int? before,
+    String? from,
+    String? to,
   }) async {
     final q = Uri.encodeQueryComponent(query.trim());
-    final beforeQ = before != null && before > 0 ? '&before=$before' : '';
+    final parts = <String>[
+      'q=$q',
+      'size=$size',
+      'page=$page',
+    ];
+    if (before != null && before > 0) parts.add('before=$before');
+    if (from != null && from.isNotEmpty) {
+      parts.add('from=${Uri.encodeQueryComponent(from)}');
+    }
+    if (to != null && to.isNotEmpty) {
+      parts.add('to=${Uri.encodeQueryComponent(to)}');
+    }
     final resp = await _client.get(
-      _uri(
-        '/conversations/$conversationId/messages/search?q=$q&size=$size&page=$page$beforeQ',
-      ),
+      _uri('/conversations/$conversationId/messages/search?${parts.join('&')}'),
       headers: _headers,
     );
     if (resp.statusCode < 200 || resp.statusCode >= 300) {
@@ -967,9 +981,17 @@ class ConversationService {
     int conversationId, {
     int size = 50,
     int? before,
+    String? from,
+    String? to,
   }) async {
     final query = <String>['size=$size'];
     if (before != null && before > 0) query.add('before=$before');
+    if (from != null && from.isNotEmpty) {
+      query.add('from=${Uri.encodeQueryComponent(from)}');
+    }
+    if (to != null && to.isNotEmpty) {
+      query.add('to=${Uri.encodeQueryComponent(to)}');
+    }
     final resp = await _client.get(
       _uri('/conversations/$conversationId/media?${query.join('&')}'),
       headers: _headers,

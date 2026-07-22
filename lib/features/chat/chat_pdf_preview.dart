@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:pdfx/pdfx.dart';
 
+import '../../core/platform/desktop_features.dart';
 import '../../core/theme/dunes_theme.dart';
 import '../../core/util/friendly_error.dart';
 import '../conversation/conversation_service.dart';
@@ -15,14 +16,41 @@ Future<void> showChatPdfPreview({
   required Map<String, dynamic>? payload,
   required String fileName,
 }) {
+  final page = ChatPdfPreviewPage(
+    service: service,
+    payload: payload,
+    fileName: fileName,
+  );
+  if (isDesktopCommOnly) {
+    return showDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      builder: (ctx) {
+        final size = MediaQuery.sizeOf(ctx);
+        return Dialog(
+          insetPadding:
+              const EdgeInsets.symmetric(horizontal: 40, vertical: 28),
+          backgroundColor: Colors.transparent,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxWidth: 920,
+              maxHeight: size.height * 0.88,
+              minWidth: 560,
+              minHeight: 480,
+            ),
+            child: Material(
+              color: DunesColors.bgApp,
+              borderRadius: BorderRadius.circular(14),
+              clipBehavior: Clip.antiAlias,
+              child: SelectionArea(child: page),
+            ),
+          ),
+        );
+      },
+    );
+  }
   return Navigator.of(context).push<void>(
-    MaterialPageRoute<void>(
-      builder: (_) => ChatPdfPreviewPage(
-        service: service,
-        payload: payload,
-        fileName: fileName,
-      ),
-    ),
+    MaterialPageRoute<void>(builder: (_) => page),
   );
 }
 

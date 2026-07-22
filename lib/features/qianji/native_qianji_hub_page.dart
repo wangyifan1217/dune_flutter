@@ -10,10 +10,12 @@ class NativeQianjiHubPage extends StatelessWidget {
   const NativeQianjiHubPage({
     super.key,
     required this.onOpenCursorAccount,
+    this.onOpenMeetingSupervise,
     this.session,
   });
 
   final VoidCallback onOpenCursorAccount;
+  final VoidCallback? onOpenMeetingSupervise;
   final AuthSession? session;
 
   bool get _hasAccess =>
@@ -37,7 +39,7 @@ class NativeQianjiHubPage extends StatelessWidget {
                 padding: const EdgeInsets.fromLTRB(16, 16, 16, 40),
                 children: [
                   _QianjiHubSection(
-                    title: '工具',
+                    title: '管理',
                     accent: _themePurple,
                     children: [
                       _QianjiHubTile(
@@ -46,6 +48,13 @@ class NativeQianjiHubPage extends StatelessWidget {
                         icon: Icons.manage_accounts_outlined,
                         color: _themePurple,
                         onTap: onOpenCursorAccount,
+                      ),
+                      _QianjiHubTile(
+                        title: '会议纪要监管',
+                        subtitle: '本人及下级',
+                        icon: Icons.fact_check_outlined,
+                        color: _themePurple,
+                        onTap: onOpenMeetingSupervise,
                       ),
                     ],
                   ),

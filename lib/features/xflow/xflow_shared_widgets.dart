@@ -87,7 +87,7 @@ Future<bool> confirmInitiateProposal(BuildContext context) {
   );
 }
 
-/// B1 / B14 / P1 暖紫居中 hero-stat（与 index.html 1:1）
+/// B1 / B14 / P1 暖色汇总卡（飞书/企微风格：标题行 + 白底指标条）。
 class XflowHeroStatCard extends StatelessWidget {
   const XflowHeroStatCard({
     super.key,
@@ -116,106 +116,190 @@ class XflowHeroStatCard extends StatelessWidget {
     return _darkHero();
   }
 
+  (String title, String? subtitle) _splitKicker() {
+    final raw = kicker.trim();
+    final parts = raw.split('·');
+    if (parts.length >= 2) {
+      final title = parts.first.trim();
+      final rest = parts.sublist(1).join('·').trim();
+      if (title.isNotEmpty && rest.isNotEmpty) {
+        return (title, rest.startsWith('共') ? rest : '共 $rest');
+      }
+    }
+    return (raw.isEmpty ? '汇总' : raw, null);
+  }
+
   Widget _warmHero() {
+    final urge = badgeUrge ||
+        (badgeText.contains('待') && !badgeText.startsWith('无'));
+    final (title, subtitle) = _splitKicker();
+
     return Container(
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(13),
+        borderRadius: BorderRadius.circular(16),
         gradient: const LinearGradient(
-          colors: [Color(0xFFF7F1E8), Color(0xFFEBE3F6)],
+          colors: [Color(0xFFF8F3EB), Color(0xFFEEE8F6)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
-        border: Border.all(color: DunesColors.accentLine),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFF553B96).withValues(alpha: 0.16),
-            blurRadius: 12,
-            offset: const Offset(0, 2),
-            spreadRadius: -8,
-          ),
-        ],
+        border: Border.all(color: const Color(0xFFE4DDD0)),
       ),
-      padding: const EdgeInsets.fromLTRB(16, 20, 16, 16),
-      child: Column(
-        children: [
-          Column(
-            children: [
-              Text(
-                kicker,
-                textAlign: TextAlign.center,
-                style: DunesTypography.mono(
-                  fontSize: 9.5,
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: 0.06 * 9.5,
-                  color: DunesColors.accentDeep,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: Stack(
+          children: [
+            // 右上柔光，避免死板色块
+            Positioned(
+              right: -36,
+              top: -40,
+              child: Container(
+                width: 120,
+                height: 120,
                 decoration: BoxDecoration(
-                  color: DunesColors.coralSoft,
-                  borderRadius: BorderRadius.circular(5),
-                ),
-                child: Text(
-                  badgeText,
-                  style: DunesTypography.mono(
-                    fontSize: 9,
-                    fontWeight: FontWeight.w600,
-                    color: DunesColors.coral,
-                  ),
+                  shape: BoxShape.circle,
+                  color: const Color(0xFFD9CFF0).withValues(alpha: 0.45),
                 ),
               ),
-            ],
-          ),
-          const SizedBox(height: 14),
-          RichText(
-            textAlign: TextAlign.center,
-            text: TextSpan(
-              children: [
-                TextSpan(
-                  text: bigValue,
-                  style: DunesTypography.sans(
-                    fontSize: 34,
-                    height: 1.05,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: -0.03 * 34,
-                    color: DunesColors.accentDeep,
-                  ),
-                ),
-                TextSpan(
-                  text: bigUnit,
-                  style: DunesTypography.sans(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
-                    color: DunesColors.text2,
-                  ),
-                ),
-              ],
             ),
-          ),
-          if (footItems.isNotEmpty) ...[
-            const SizedBox(height: 14),
-            Container(
-              padding: const EdgeInsets.only(top: 12),
-              decoration: BoxDecoration(
-                border: Border(
-                  top: BorderSide(
-                    color: const Color(0xFF7E64BD).withValues(alpha: 0.18),
-                  ),
+            Positioned(
+              left: -28,
+              bottom: -48,
+              child: Container(
+                width: 100,
+                height: 100,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: const Color(0xFFE8DFC8).withValues(alpha: 0.5),
                 ),
               ),
-              child: Row(
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  for (var i = 0; i < footItems.length; i++) ...[
-                    Expanded(child: _WarmFootItem(item: footItems[i])),
-                    if (i != footItems.length - 1) const SizedBox(width: 6),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Container(
+                        width: 3,
+                        height: 28,
+                        decoration: BoxDecoration(
+                          color: DunesColors.accent,
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              title,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: DunesTypography.sans(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w700,
+                                color: DunesColors.text,
+                                height: 1.2,
+                                letterSpacing: -0.2,
+                              ),
+                            ),
+                            if (subtitle != null) ...[
+                              const SizedBox(height: 2),
+                              Text(
+                                subtitle,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: DunesTypography.sans(
+                                  fontSize: 12,
+                                  color: DunesColors.text3,
+                                  height: 1.2,
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      _StatusSoftBadge(text: badgeText, urge: urge),
+                    ],
+                  ),
+                  if (footItems.isNotEmpty) ...[
+                    const SizedBox(height: 14),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 4,
+                        vertical: 14,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.82),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.95),
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.04),
+                            blurRadius: 10,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: Row(
+                        children: [
+                          for (var i = 0; i < footItems.length; i++) ...[
+                            if (i > 0)
+                              Container(
+                                width: 1,
+                                height: 36,
+                                margin:
+                                    const EdgeInsets.symmetric(horizontal: 2),
+                                color: const Color(0xFFE8E4DA),
+                              ),
+                            Expanded(
+                              child: _WarmMetricCell(item: footItems[i]),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ] else ...[
+                    const SizedBox(height: 12),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text(
+                          bigValue,
+                          style: DunesTypography.sans(
+                            fontSize: 36,
+                            height: 1,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: -1,
+                            color: DunesColors.text,
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 5),
+                          child: Text(
+                            bigUnit,
+                            style: DunesTypography.sans(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
+                              color: DunesColors.text3,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ],
                 ],
               ),
             ),
           ],
-        ],
+        ),
       ),
     );
   }
@@ -301,39 +385,90 @@ class XflowHeroStatCard extends StatelessWidget {
   }
 }
 
-class _WarmFootItem extends StatelessWidget {
-  const _WarmFootItem({required this.item});
+class _StatusSoftBadge extends StatelessWidget {
+  const _StatusSoftBadge({required this.text, required this.urge});
+
+  final String text;
+  final bool urge;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: urge ? const Color(0xFFFFF1E8) : const Color(0xFFF3F1EA),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 6,
+            height: 6,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: urge ? DunesColors.coral : DunesColors.text3,
+            ),
+          ),
+          const SizedBox(width: 6),
+          Text(
+            text,
+            style: DunesTypography.sans(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: urge ? const Color(0xFFC2410C) : DunesColors.text2,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _WarmMetricCell extends StatelessWidget {
+  const _WarmMetricCell({required this.item});
 
   final (String label, String value, String? tone) item;
 
   @override
   Widget build(BuildContext context) {
     Color valueColor = DunesColors.text;
-    if (item.$3 == 'pos') valueColor = DunesColors.green;
-    if (item.$3 == 'urge' || item.$3 == 'neg') valueColor = DunesColors.coral;
-    return Column(
-      children: [
-        Text(
-          item.$1,
-          textAlign: TextAlign.center,
-          style: DunesTypography.sans(
-            fontSize: 8.5,
-            fontWeight: FontWeight.w600,
-            color: DunesColors.text2,
+    if (item.$3 == 'pos') valueColor = const Color(0xFF2F7D4A);
+    if (item.$3 == 'urge') valueColor = const Color(0xFFC2410C);
+    if (item.$3 == 'neg') valueColor = const Color(0xFFC2410C);
+    final n = int.tryParse(item.$2) ?? 0;
+    if (n == 0 && item.$3 == null) {
+      valueColor = DunesColors.text3;
+    }
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 6),
+      child: Column(
+        children: [
+          Text(
+            item.$2,
+            textAlign: TextAlign.center,
+            style: DunesTypography.sans(
+              fontSize: 24,
+              fontWeight: FontWeight.w700,
+              color: valueColor,
+              height: 1.05,
+              letterSpacing: -0.6,
+            ),
           ),
-        ),
-        const SizedBox(height: 5),
-        Text(
-          item.$2,
-          textAlign: TextAlign.center,
-          style: DunesTypography.sans(
-            fontSize: 16,
-            fontWeight: FontWeight.w600,
-            color: valueColor,
-            height: 1,
+          const SizedBox(height: 6),
+          Text(
+            item.$1,
+            textAlign: TextAlign.center,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: DunesTypography.sans(
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+              color: DunesColors.text3,
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }
@@ -979,12 +1114,16 @@ class XflowDsBar extends StatelessWidget {
     required this.title,
     required this.onBack,
     this.onMore,
+    this.onForward,
+    this.forwarding = false,
   });
 
   final String crumb;
   final String title;
   final VoidCallback onBack;
   final VoidCallback? onMore;
+  final VoidCallback? onForward;
+  final bool forwarding;
 
   @override
   Widget build(BuildContext context) {
@@ -1023,6 +1162,21 @@ class XflowDsBar extends StatelessWidget {
               ],
             ),
           ),
+          if (onForward != null)
+            forwarding
+                ? const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 10),
+                    child: SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  )
+                : _CircleIconButton(
+                    onPressed: onForward!,
+                    icon: Icons.forward_outlined,
+                    filled: false,
+                  ),
           if (onMore != null)
             _CircleIconButton(
               onPressed: onMore!,
@@ -1099,7 +1253,7 @@ class XflowFormCard extends StatelessWidget {
                 child: Text(
                   title,
                   style: DunesTypography.sans(
-                    fontSize: 13,
+                    fontSize: 15,
                     fontWeight: FontWeight.w600,
                     color: XfProposalUi.ink,
                   ),
@@ -1108,8 +1262,8 @@ class XflowFormCard extends StatelessWidget {
               if (tag != null)
                 Container(
                   padding: const EdgeInsets.symmetric(
-                    horizontal: 6,
-                    vertical: 1,
+                    horizontal: 8,
+                    vertical: 3,
                   ),
                   decoration: BoxDecoration(
                     color: XfProposalUi.coralSoft,
@@ -1119,7 +1273,8 @@ class XflowFormCard extends StatelessWidget {
                   child: Text(
                     tag!,
                     style: DunesTypography.mono(
-                      fontSize: 9,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
                       color: XfProposalUi.coral,
                     ),
                   ),

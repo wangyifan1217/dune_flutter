@@ -294,32 +294,66 @@ class _NativeProposalListPageState extends State<_NativeProposalListPage> {
                                         : '抄送提案 · ${_all.length} 份',
                                 badgeText: isB1
                                     ? (mine > 0 ? '$mine 待处理' : '无待办')
-                                    : (counts['REJECTED']! > 0 && widget.type == _ListType.b14)
+                                    : (counts['REJECTED']! > 0 &&
+                                            widget.type == _ListType.b14)
                                         ? '${counts['REJECTED']} 已驳回'
                                         : pending > 0
                                             ? '$pending 审批中'
                                             : '无待审',
+                                badgeUrge: isB1
+                                    ? mine > 0
+                                    : (pending > 0 ||
+                                        (widget.type == _ListType.b14 &&
+                                            (counts['REJECTED'] ?? 0) > 0)),
                                 bigValue: isB1 ? '$mine' : '${_all.length}',
                                 bigUnit: isB1 ? '项' : '份',
                                 footItems: isB1
                                     ? <(String, String, String?)>[
-                                        ('待审批', '$mine', mine > 0 ? 'urge' : null),
+                                        (
+                                          '待审批',
+                                          '$mine',
+                                          mine > 0 ? 'urge' : null,
+                                        ),
                                         ('抄送', '0', null),
                                         ('任务', '0', null),
                                         ('执行', '0', null),
                                       ]
                                     : widget.type == _ListType.b14
                                         ? <(String, String, String?)>[
-                                            ('草稿', '${counts['DRAFT']}', null),
-                                            ('审批中', '$pending', pending > 0 ? 'urge' : null),
-                                            ('已通过', '${counts['APPROVED']}', 'pos'),
-                                            ('已驳回', '${counts['REJECTED']}', counts['REJECTED']! > 0 ? 'neg' : null),
+                                            (
+                                              '审批中',
+                                              '$pending',
+                                              pending > 0 ? 'urge' : null,
+                                            ),
+                                            (
+                                              '已通过',
+                                              '${counts['APPROVED']}',
+                                              'pos',
+                                            ),
+                                            (
+                                              '已驳回',
+                                              '${counts['REJECTED']}',
+                                              (counts['REJECTED'] ?? 0) > 0
+                                                  ? 'neg'
+                                                  : null,
+                                            ),
                                           ]
                                         : <(String, String, String?)>[
-                                            ('草稿', '${counts['DRAFT']}', null),
-                                            ('审批中', '$pending', pending > 0 ? 'urge' : null),
-                                            ('已通过', '${counts['APPROVED']}', 'pos'),
-                                            ('已上线', '${counts['LIVE']}', null),
+                                            (
+                                              '审批中',
+                                              '$pending',
+                                              pending > 0 ? 'urge' : null,
+                                            ),
+                                            (
+                                              '已通过',
+                                              '${counts['APPROVED']}',
+                                              'pos',
+                                            ),
+                                            (
+                                              '已上线',
+                                              '${counts['LIVE']}',
+                                              null,
+                                            ),
                                           ],
                               ),
                               const SizedBox(height: 10),

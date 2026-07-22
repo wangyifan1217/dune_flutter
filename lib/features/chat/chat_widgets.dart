@@ -1747,6 +1747,359 @@ class ChatFileAttach extends StatelessWidget {
   }
 }
 
+/// 知识库文档转发卡片（会话内展示）。
+class ChatKbDocCard extends StatelessWidget {
+  const ChatKbDocCard({
+    super.key,
+    required this.title,
+    required this.typeLabel,
+    required this.onTap,
+    this.sizeLabel = '',
+    this.onSecondaryTapDown,
+  });
+
+  final String title;
+  final String typeLabel;
+  final String sizeLabel;
+  final VoidCallback onTap;
+  final GestureTapDownCallback? onSecondaryTapDown;
+
+  @override
+  Widget build(BuildContext context) {
+    final meta = <String>[
+      if (typeLabel.trim().isNotEmpty) typeLabel.trim().toUpperCase(),
+      '知识库',
+      if (sizeLabel.trim().isNotEmpty) sizeLabel.trim(),
+    ].join(' · ');
+    return GestureDetector(
+      onTap: onTap,
+      onSecondaryTapDown: onSecondaryTapDown,
+      child: Container(
+        constraints: const BoxConstraints(minWidth: 220, maxWidth: 290),
+        padding: const EdgeInsets.fromLTRB(12, 11, 12, 10),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: DunesColors.brandPurpleLine.withValues(alpha: 0.45)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: DunesColors.brandPurpleSoft,
+                    borderRadius: BorderRadius.circular(9),
+                  ),
+                  child: const Icon(
+                    Icons.menu_book_outlined,
+                    size: 18,
+                    color: DunesColors.brandPurple,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: DunesTypography.sans(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w600,
+                          color: DunesColors.text,
+                          height: 1.25,
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        meta,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: DunesTypography.sans(
+                          fontSize: 10.5,
+                          color: DunesColors.text3,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 9),
+            const Divider(height: 1, color: DunesColors.borderSoft),
+            const SizedBox(height: 7),
+            Row(
+              children: [
+                Text(
+                  '沙丘知识库',
+                  style: DunesTypography.sans(
+                    fontSize: 10,
+                    color: DunesColors.brandPurpleDeep,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const Spacer(),
+                Text(
+                  '下载 / 打开',
+                  style: DunesTypography.sans(
+                    fontSize: 10,
+                    color: DunesColors.text3,
+                  ),
+                ),
+                const SizedBox(width: 2),
+                const Icon(
+                  Icons.chevron_right_rounded,
+                  size: 14,
+                  color: DunesColors.text3,
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// 会议纪要转发卡片（会话内展示）。
+class ChatMeetingMinutesCard extends StatelessWidget {
+  const ChatMeetingMinutesCard({
+    super.key,
+    required this.title,
+    required this.onTap,
+    this.onSecondaryTapDown,
+  });
+
+  final String title;
+  final VoidCallback onTap;
+  final GestureTapDownCallback? onSecondaryTapDown;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      onSecondaryTapDown: onSecondaryTapDown,
+      child: Container(
+        constraints: const BoxConstraints(minWidth: 220, maxWidth: 290),
+        padding: const EdgeInsets.fromLTRB(12, 11, 12, 10),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: DunesColors.accentLine.withValues(alpha: 0.7)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: DunesColors.accentSoft,
+                    borderRadius: BorderRadius.circular(9),
+                  ),
+                  child: const Icon(
+                    Icons.article_outlined,
+                    size: 18,
+                    color: DunesColors.accentDeep,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: DunesTypography.sans(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w600,
+                          color: DunesColors.text,
+                          height: 1.25,
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        '会议纪要 · 摘要',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: DunesTypography.sans(
+                          fontSize: 10.5,
+                          color: DunesColors.text3,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 9),
+            const Divider(height: 1, color: DunesColors.borderSoft),
+            const SizedBox(height: 7),
+            Row(
+              children: [
+                Text(
+                  '沙丘会议',
+                  style: DunesTypography.sans(
+                    fontSize: 10,
+                    color: DunesColors.accentDeep,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const Spacer(),
+                Text(
+                  '查看摘要',
+                  style: DunesTypography.sans(
+                    fontSize: 10,
+                    color: DunesColors.text3,
+                  ),
+                ),
+                const SizedBox(width: 2),
+                const Icon(
+                  Icons.chevron_right_rounded,
+                  size: 14,
+                  color: DunesColors.text3,
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// 审批转发卡片（会话内展示）。
+class ChatApprovalCard extends StatelessWidget {
+  const ChatApprovalCard({
+    super.key,
+    required this.title,
+    required this.onTap,
+    this.statusLabel = '',
+    this.subtitle = '审批单据',
+    this.onSecondaryTapDown,
+  });
+
+  final String title;
+  final String statusLabel;
+  final String subtitle;
+  final VoidCallback onTap;
+  final GestureTapDownCallback? onSecondaryTapDown;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      onSecondaryTapDown: onSecondaryTapDown,
+      child: Container(
+        constraints: const BoxConstraints(minWidth: 220, maxWidth: 290),
+        padding: const EdgeInsets.fromLTRB(12, 11, 12, 10),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: DunesColors.accentLine.withValues(alpha: 0.7)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: DunesColors.accentSoft,
+                    borderRadius: BorderRadius.circular(9),
+                  ),
+                  child: const Icon(
+                    Icons.assignment_outlined,
+                    size: 18,
+                    color: DunesColors.accentDeep,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: DunesTypography.sans(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w600,
+                          color: DunesColors.text,
+                          height: 1.25,
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        [
+                          subtitle,
+                          if (statusLabel.trim().isNotEmpty) statusLabel.trim(),
+                        ].join(' · '),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: DunesTypography.sans(
+                          fontSize: 10.5,
+                          color: DunesColors.text3,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 9),
+            const Divider(height: 1, color: DunesColors.borderSoft),
+            const SizedBox(height: 7),
+            Row(
+              children: [
+                Text(
+                  '沙丘审批',
+                  style: DunesTypography.sans(
+                    fontSize: 10,
+                    color: DunesColors.accentDeep,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const Spacer(),
+                Text(
+                  '查看详情',
+                  style: DunesTypography.sans(
+                    fontSize: 10,
+                    color: DunesColors.text3,
+                  ),
+                ),
+                const SizedBox(width: 2),
+                const Icon(
+                  Icons.chevron_right_rounded,
+                  size: 14,
+                  color: DunesColors.text3,
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class ChatPersonAvatar extends StatelessWidget {
   const ChatPersonAvatar({
     super.key,
@@ -1978,70 +2331,82 @@ class NotiCard extends StatelessWidget {
                     : DunesColors.borderSoft),
         ),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  title,
-                  style: DunesTypography.sans(
-                    fontSize: 13.5,
-                    fontWeight: FontWeight.w600,
+      child: SelectionArea(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    title,
+                    style: DunesTypography.sans(
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ),
-              ),
-              if (timeLabel.isNotEmpty)
-                Text(
-                  timeLabel,
-                  style: DunesTypography.mono(
-                    fontSize: 9.5,
-                    color: DunesColors.text3,
+                if (timeLabel.isNotEmpty)
+                  Text(
+                    timeLabel,
+                    style: DunesTypography.mono(
+                      fontSize: 9.5,
+                      color: DunesColors.text3,
+                    ),
                   ),
-                ),
-              if (showReadMark) ...[
-                const SizedBox(width: 8),
-                Icon(
-                  read ? Icons.check_circle : Icons.radio_button_unchecked,
-                  size: 16,
-                  color: read ? DunesColors.accent : DunesColors.text3,
-                ),
+                if (showReadMark) ...[
+                  const SizedBox(width: 8),
+                  GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: onTap,
+                    child: Padding(
+                      padding: const EdgeInsets.all(2),
+                      child: Icon(
+                        read
+                            ? Icons.check_circle
+                            : Icons.radio_button_unchecked,
+                        size: 16,
+                        color: read ? DunesColors.accent : DunesColors.text3,
+                      ),
+                    ),
+                  ),
+                ],
               ],
-            ],
-          ),
-          if (body.isNotEmpty) ...[
-            const SizedBox(height: 6),
-            Text(
-              body,
-              style: DunesTypography.sans(
-                fontSize: 12.5,
-                color: DunesColors.text2,
-                height: 1.45,
-              ),
             ),
-          ],
-          if (tag != null && tag!.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-              decoration: BoxDecoration(
-                color: DunesColors.accentSoft,
-                borderRadius: BorderRadius.circular(4),
-              ),
-              child: Text(
-                tag!,
-                style: DunesTypography.mono(
-                  fontSize: 9,
-                  color: DunesColors.accentDeep,
+            if (body.isNotEmpty) ...[
+              const SizedBox(height: 6),
+              Text(
+                body,
+                style: DunesTypography.sans(
+                  fontSize: 12.5,
+                  color: DunesColors.text2,
+                  height: 1.45,
                 ),
               ),
-            ),
+            ],
+            if (tag != null && tag!.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                decoration: BoxDecoration(
+                  color: DunesColors.accentSoft,
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(
+                  tag!,
+                  style: DunesTypography.mono(
+                    fontSize: 9,
+                    color: DunesColors.accentDeep,
+                  ),
+                ),
+              ),
+            ],
           ],
-        ],
+        ),
       ),
     );
-    if (onTap == null) return card;
+    // 有已读勾选时由勾选区触发 onTap；否则整卡可点（仍可选中正文）。
+    if (onTap == null || showReadMark) return card;
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: onTap,

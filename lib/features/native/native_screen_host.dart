@@ -47,6 +47,8 @@ import '../xflow/native_b10_page.dart';
 import '../xflow/native_b3_page.dart';
 import '../xflow/native_xflow_proposal_page.dart';
 import '../xflow/native_xflow_submission_page.dart';
+import '../xflow/approval_chat_share.dart';
+import '../xflow/approval_detail_dialog.dart';
 import '../xflow/proposal_launch_config.dart';
 import '../xflow/xflow_models.dart';
 import '../xflow/xflow_service.dart';
@@ -56,10 +58,12 @@ import '../nova/nova_background_coordinator.dart';
 import '../nova/nova_web_storage.dart';
 import '../push/push_service.dart';
 import '../conversation/message_preview_text.dart';
+import '../qianji/native_qianji_cursor_account_detail_page.dart';
 import '../qianji/native_qianji_cursor_account_page.dart';
 import '../qianji/native_qianji_detail_page.dart';
 import '../qianji/native_qianji_hub_page.dart';
 import '../qianji/native_qianji_iteration_page.dart';
+import '../qianji/native_qianji_meeting_supervise_page.dart';
 import '../qianji/native_qianji_my_perf_page.dart';
 import '../qianji/native_qianji_project_tasks_page.dart';
 import '../qianji/native_qianji_projects_page.dart';
@@ -151,6 +155,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
   String _xflowFormBackScreen = 'B3';
   String? _b14InitialFilter;
   int _meetingId = 0;
+  int _cursorBindingId = 0;
   String _lastMyScreen = 'B2';
   QianjiEntity? _selectedQianjiEntity;
   QianjiIteration? _selectedQianjiIteration;
@@ -1014,6 +1019,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           },
           onOpenGroupInfo: () => widget.navigation.go('C6'),
           onOpenAiSummary: (convId) => _openAiSummaryCreate(conversationId: convId),
+          onOpenApprovalShare: (share) =>
+              _openApprovalFromChat(share, from: 'C2'),
           onConversationRead: _handleConversationRead,
           onClearFocusMessage: _clearChatFocusMessage,
         );
@@ -1057,6 +1064,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
             widget.navigation.go('C12');
           },
           onOpenAiSummary: (convId) => _openAiSummaryCreate(conversationId: convId),
+          onOpenApprovalShare: (share) =>
+              _openApprovalFromChat(share, from: 'C5'),
           onConversationRead: _handleConversationRead,
           onClearFocusMessage: _clearChatFocusMessage,
         );
@@ -1094,10 +1103,74 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         return NativeQianjiHubPage(
           session: widget.session,
           onOpenCursorAccount: () => widget.navigation.go('QJC'),
+          onOpenMeetingSupervise: () => widget.navigation.go('QJMM'),
         );
       case 'QJC':
         return NativeQianjiCursorAccountPage(
+          session: widget.session,
           onBack: widget.navigation.back,
+          onOpenDetail: (bindingId) {
+            if (bindingId <= 0) return;
+            setState(() => _cursorBindingId = bindingId);
+            widget.navigation.go('QJCD');
+          },
+        );
+      case 'QJCD':
+        if (_cursorBindingId <= 0) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) widget.navigation.go('QJC');
+          });
+          return const Scaffold(
+            backgroundColor: DunesColors.bgApp,
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+        return NativeQianjiCursorAccountDetailPage(
+          key: ValueKey<String>('qianji-cursor-$_cursorBindingId'),
+          session: widget.session,
+          bindingId: _cursorBindingId,
+          onBack: () {
+            final nav = widget.navigation;
+            if (nav.history.contains('QJC')) {
+              nav.popTo('QJC');
+            } else {
+              nav.back();
+            }
+          },
+        );
+      case 'QJMM':
+        return NativeQianjiMeetingSupervisePage(
+          session: widget.session,
+          onBack: widget.navigation.back,
+          onOpenDetail: (meetingId) {
+            if (meetingId <= 0) return;
+            setState(() => _meetingId = meetingId);
+            widget.navigation.go('QJMD');
+          },
+        );
+      case 'QJMD':
+        if (_meetingId <= 0) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) widget.navigation.go('QJMM');
+          });
+          return const Scaffold(
+            backgroundColor: DunesColors.bgApp,
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+        return NativeMeetingDetailPage(
+          key: ValueKey<String>('qianji-meeting-$_meetingId'),
+          session: widget.session,
+          meetingId: _meetingId,
+          readOnly: true,
+          onBack: () {
+            final nav = widget.navigation;
+            if (nav.history.contains('QJMM')) {
+              nav.popTo('QJMM');
+            } else {
+              nav.back();
+            }
+          },
         );
       case 'QJA':
         return NativeQianjiAdminShell(session: widget.session);
@@ -1441,10 +1514,6 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           onHistory: () => widget.navigation.go('C11'),
           onOpenKb: () => widget.navigation.go('K1'),
           onOpenMeeting: () {
-            if (isWindowsDesktopCommOnly) {
-              showDunesToast(context, '桌面端暂不支持会议纪要');
-              return;
-            }
             widget.navigation.go('MM-L');
           },
           focusConversationId: _novaFocusConversationId,
@@ -1512,7 +1581,9 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         return NativeMeetingListPage(
           session: widget.session,
           onBack: widget.navigation.leaveMeetingList,
-          onCreate: () => widget.navigation.go('MM0'),
+          onCreate: isDesktopCommOnly
+              ? null
+              : () => widget.navigation.go('MM0'),
           onOpenDetail: (meetingId) {
             if (meetingId <= 0) return;
             setState(() => _meetingId = meetingId);
@@ -1520,6 +1591,18 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           },
         );
       case 'MM0':
+        if (isDesktopCommOnly) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) {
+              showDunesToast(context, '桌面端不支持新建或录制会议');
+              widget.navigation.go('MM-L');
+            }
+          });
+          return const Scaffold(
+            backgroundColor: DunesColors.bgApp,
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
         return NativeMeetingCreatePage(
           session: widget.session,
           navigation: widget.navigation,
@@ -1589,6 +1672,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           },
           onOpenGroupInfo: () => widget.navigation.go('C6'),
           onOpenAiSummary: (convId) => _openAiSummaryCreate(conversationId: convId),
+          onOpenApprovalShare: (share) =>
+              _openApprovalFromChat(share, from: 'C2'),
           onConversationRead: _handleConversationRead,
           onClearFocusMessage: _clearChatFocusMessage,
         );
@@ -1628,6 +1713,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
             widget.navigation.go('C12');
           },
           onOpenAiSummary: (convId) => _openAiSummaryCreate(conversationId: convId),
+          onOpenApprovalShare: (share) =>
+              _openApprovalFromChat(share, from: 'C5'),
           onConversationRead: _handleConversationRead,
           onClearFocusMessage: _clearChatFocusMessage,
         );
@@ -1856,7 +1943,21 @@ class _NativeScreenHostState extends State<NativeScreenHost>
   }
 
   bool _isQianjiRoute(String? screen) {
-    return const <String>{'QJ', 'QJC', 'QJD', 'QJI'}.contains(screen);
+    return const <String>{
+      'QJ',
+      'QJC',
+      'QJCD',
+      'QJD',
+      'QJI',
+      'QJA',
+      'QJT',
+      'QJP',
+      'QJM',
+      'QJMT',
+      'QJTD',
+      'QJMM',
+      'QJMD',
+    }.contains(screen);
   }
 
   /// PC：任意业务页保留侧边主导航；宽屏通讯双栏已自带侧栏，不重复包裹。
@@ -1915,8 +2016,16 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     if (_isMyRoute(screen)) return 'B2';
     if (screen == 'QJ' ||
         screen == 'QJC' ||
+        screen == 'QJCD' ||
         screen == 'QJD' ||
-        screen == 'QJI') {
+        screen == 'QJI' ||
+        screen == 'QJMM' ||
+        screen == 'QJMD' ||
+        screen == 'QJT' ||
+        screen == 'QJP' ||
+        screen == 'QJM' ||
+        screen == 'QJMT' ||
+        screen == 'QJTD') {
       return 'QJ';
     }
     if (screen == 'QJA') return 'QJA';
@@ -2017,6 +2126,39 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       _b10BackScreen = from;
     });
     widget.navigation.go('B10');
+  }
+
+  /// IM 审批卡片：不拦权限；若当前用户有 OPEN todo，详情页会自动进入可审批态。
+  /// 用覆盖层打开（PC 对话框 / APP 推页），避免切屏导致会话被重建刷新。
+  void _openApprovalFromChat(ApprovalChatShare share, {required String from}) {
+    unawaited(
+      showApprovalDetailOverlay(
+        context: context,
+        session: widget.session,
+        share: share,
+        onApprovalCompleted: () => _scheduleWorkbenchBadgeRefresh(),
+        onEditSubmission: (item) {
+          final templateKey = (item.templateKey ?? '').trim().isNotEmpty
+              ? item.templateKey!.trim()
+              : _xflowTemplateKey;
+          _openProposalEntry(
+            templateKey: templateKey,
+            backScreen: from,
+            editProposalId: item.id,
+            editBusinessType: item.businessType,
+          );
+        },
+        onReeditProposal: (proposalId) {
+          _openProposalEntry(
+            templateKey: XflowService.boundTemplateKeyForMenu(
+              '/business/proposals/new',
+            ),
+            backScreen: from,
+            editProposalId: proposalId,
+          );
+        },
+      ),
+    );
   }
 
   void _openDesktopSettings() {
@@ -2772,14 +2914,13 @@ class _NativeB2PageState extends State<_NativeB2Page> {
                             comingSoon: true,
                             onTap: () => _showSoonToast(),
                           ),
-                        if (!isWindowsDesktopCommOnly)
-                          _buildMenuItem(
-                            icon: Icons.article_outlined,
-                            title: '会议纪要',
-                            desc: '$_meetingCount 场 · 录音转写 · 纪要生成',
-                            badge: _meetingCount,
-                            onTap: () => widget.navigation.go('MM-L'),
-                          ),
+                        _buildMenuItem(
+                          icon: Icons.article_outlined,
+                          title: '会议纪要',
+                          desc: '$_meetingCount 场 · 录音转写 · 纪要生成',
+                          badge: _meetingCount,
+                          onTap: () => widget.navigation.go('MM-L'),
+                        ),
                       ]),
                       const SizedBox(height: 10),
                       _buildSectionLabel('千机'),

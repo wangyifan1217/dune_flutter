@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:just_audio/just_audio.dart';
 
+import '../../core/platform/desktop_features.dart';
 import '../../core/theme/dunes_theme.dart';
 import '../../core/util/friendly_error.dart';
 import '../auth/auth_session.dart';
@@ -15,6 +16,7 @@ import '../conversation/conversation_service.dart';
 import '../kb/kb_document_coordinator.dart';
 import '../kb/native_kb_models.dart';
 import '../kb/native_kb_service.dart';
+import 'meeting_minutes_chat_share.dart';
 import 'meeting_minutes_export.dart';
 import 'meeting_minutes_markdown.dart';
 import 'meeting_upload_coordinator.dart';
@@ -22,17 +24,74 @@ import 'meeting_upload_storage.dart';
 import 'native_meeting_models.dart';
 import 'native_meeting_service.dart';
 
+/// PC 上以对话框打开；移动端全屏推页。
+Future<void> showNativeMeetingDetail({
+  required BuildContext context,
+  required AuthSession session,
+  required int meetingId,
+  bool summaryOnly = false,
+}) {
+  Widget pageFor(VoidCallback onBack) => NativeMeetingDetailPage(
+        session: session,
+        meetingId: meetingId,
+        summaryOnly: summaryOnly,
+        onBack: onBack,
+      );
+
+  if (isDesktopCommOnly) {
+    return showDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      builder: (ctx) {
+        final size = MediaQuery.sizeOf(ctx);
+        return Dialog(
+          insetPadding:
+              const EdgeInsets.symmetric(horizontal: 40, vertical: 28),
+          backgroundColor: Colors.transparent,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxWidth: 720,
+              maxHeight: size.height * 0.88,
+              minWidth: 480,
+              minHeight: 420,
+            ),
+            child: Material(
+              color: DunesColors.bgApp,
+              borderRadius: BorderRadius.circular(14),
+              clipBehavior: Clip.antiAlias,
+              child: SelectionArea(
+                child: pageFor(() => Navigator.of(ctx).maybePop()),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+  return Navigator.of(context).push<void>(
+    MaterialPageRoute<void>(
+      builder: (ctx) => pageFor(() => Navigator.of(ctx).pop()),
+    ),
+  );
+}
+
 class NativeMeetingDetailPage extends StatefulWidget {
   const NativeMeetingDetailPage({
     super.key,
     required this.session,
     required this.meetingId,
     required this.onBack,
+    this.summaryOnly = false,
+    this.readOnly = false,
   });
 
   final AuthSession session;
   final int meetingId;
   final VoidCallback onBack;
+  /// 从会话卡片打开：只展示会议摘要，提供下载。
+  final bool summaryOnly;
+  /// 监管只读：可查看完整纪要，不可删除/转写/改写。
+  final bool readOnly;
 
   @override
   State<NativeMeetingDetailPage> createState() =>
@@ -150,11 +209,14 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
       if (!mounted) return;
       setState(() {
         _detail = detail;
-        _transcriptExpanded = false;
-        _segmentVisibleCount = math.min(
-          _segmentPageSize,
-          detail.transcriptSegments.length,
-        );
+        final total = detail.transcriptSegments.length;
+        // 静默轮询不要收起逐句转写，否则展开后滑动时会被 5s 刷新打回折叠。
+        if (!silent) {
+          _transcriptExpanded = false;
+          _segmentVisibleCount = math.min(_segmentPageSize, total);
+        } else if (_segmentVisibleCount > total) {
+          _segmentVisibleCount = total;
+        }
       });
       unawaited(_refreshKbUploadStatus(detail));
     } catch (e) {
@@ -474,6 +536,7 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
     });
 
     try {
+      final share = MeetingMinutesChatShare.fromDetail(detail);
       final bytes = await _service.exportPdfBytes(detail.meetingId);
       if (!mounted) return;
       setState(() => _downloadLabel = '发送中');
@@ -483,6 +546,7 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
         bytes: bytes,
         fileName: fileName,
         mimeType: 'application/pdf',
+        extraPayload: share.toMessagePayload(),
         onProgress: (p) {
           if (!mounted) return;
           setState(() => _downloadProgress = p.clamp(0.0, 1.0));
@@ -491,7 +555,7 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text('会议纪要 PDF 已转发')));
+      ).showSnackBar(const SnackBar(content: Text('已转发到会话')));
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -950,14 +1014,16 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
   @override
   Widget build(BuildContext context) {
     final d = _detail;
+    final summaryOnly = widget.summaryOnly;
+    final readOnly = widget.readOnly;
 
     return Scaffold(
       backgroundColor: DunesColors.bgApp,
       appBar: AppBar(
         leading: BackButton(onPressed: widget.onBack),
-        title: const Text('会议纪要'),
+        title: Text(summaryOnly ? '会议摘要' : '会议纪要'),
         actions: [
-          if (d != null && MeetingMinutesExport.canExport(d))
+          if (!summaryOnly && d != null && MeetingMinutesExport.canExport(d))
             IconButton(
               onPressed: _forwarding ? null : _forwardMeetingMinutes,
               icon: _forwarding
@@ -969,11 +1035,25 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
                   : const Icon(Icons.forward_outlined),
               tooltip: '转发',
             ),
-          IconButton(
-            onPressed: _delete,
-            icon: const Icon(Icons.delete_outline_rounded),
-            tooltip: '删除',
-          ),
+          if (!summaryOnly && !readOnly)
+            IconButton(
+              onPressed: _delete,
+              icon: const Icon(Icons.delete_outline_rounded),
+              tooltip: '删除',
+            ),
+          if (summaryOnly && d != null && MeetingMinutesExport.canExport(d))
+            PopupMenuButton<MeetingExportFormat>(
+              tooltip: '下载',
+              icon: const Icon(Icons.download_outlined),
+              onSelected: _exportSummary,
+              itemBuilder: (ctx) => [
+                for (final format in MeetingExportFormat.values)
+                  PopupMenuItem(
+                    value: format,
+                    child: Text('下载 ${format.label}'),
+                  ),
+              ],
+            ),
           IconButton(onPressed: _load, icon: const Icon(Icons.refresh_rounded)),
         ],
       ),
@@ -987,6 +1067,8 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
   }
 
   Widget _buildBody(NativeMeetingDetail? d) {
+    final summaryOnly = widget.summaryOnly;
+    final readOnly = widget.readOnly;
     return _loading && d == null
         ? const Center(child: CircularProgressIndicator())
         : _error != null && d == null
@@ -996,23 +1078,32 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
         : ListView(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
             children: [
-              if (MeetingUploadCoordinator.instance.jobForMeeting(d.meetingId)
-                  case final job?)
-                _buildUploadBanner(job),
-              _buildHero(d),
-              const SizedBox(height: 16),
-              if (d.audioPlayUrl.isNotEmpty || d.audioObjectKey.isNotEmpty) ...[
-                _buildAudioCard(),
+              if (!summaryOnly) ...[
+                if (MeetingUploadCoordinator.instance
+                        .jobForMeeting(d.meetingId)
+                    case final job?)
+                  _buildUploadBanner(job),
+                _buildHero(d),
                 const SizedBox(height: 16),
+                if (d.audioPlayUrl.isNotEmpty ||
+                    d.audioObjectKey.isNotEmpty) ...[
+                  _buildAudioCard(),
+                  const SizedBox(height: 16),
+                ],
               ],
               _buildSection(
                 title: '会议摘要',
                 icon: Icons.auto_awesome_outlined,
-                trailing: _buildSummarySectionTrailing(d),
+                trailing: summaryOnly || readOnly
+                    ? (summaryOnly
+                        ? null
+                        : _buildSummaryExportMenu(d))
+                    : _buildSummarySectionTrailing(d),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    if (_kbUploaded || _isKbUploadStale(d))
+                    if (!summaryOnly &&
+                        (_kbUploaded || _isKbUploadStale(d)))
                       Padding(
                         padding: const EdgeInsets.only(bottom: 8),
                         child: Row(
@@ -1070,6 +1161,7 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
                   ],
                 ),
               ),
+              if (!summaryOnly) ...[
               const SizedBox(height: 16),
               _buildSection(
                 title: '原始逐句转写',
@@ -1176,7 +1268,7 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
                       ),
               ),
               const SizedBox(height: 20),
-              if (_isDraftWithAudio(d)) ...[
+              if (!readOnly && _isDraftWithAudio(d)) ...[
                 FilledButton.icon(
                   onPressed: _startingTranscription
                       ? null
@@ -1203,7 +1295,7 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
                 ),
                 const SizedBox(height: 10),
               ],
-              if (_canRegenerate(d)) ...[
+              if (!readOnly && _canRegenerate(d)) ...[
                 OutlinedButton.icon(
                   onPressed: _regenerating ? null : _regenerate,
                   icon: _regenerating
@@ -1223,6 +1315,7 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
                     ),
                   ),
                 ),
+              ],
               ],
             ],
           );

@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -78,18 +79,37 @@ class XfDetCard extends StatelessWidget {
 
 /// `.xf-det-hero` — 浅色渐变，非紫色
 class XfDetHero extends StatelessWidget {
-  const XfDetHero({super.key, required this.detail});
+  const XfDetHero({
+    super.key,
+    required this.detail,
+    this.showStatus = true,
+  });
 
   final XflowProposalDetail detail;
+  /// 动态审批详情可不展示状态角标（状态已在审批进度区体现）。
+  final bool showStatus;
 
   @override
   Widget build(BuildContext context) {
     final raw = detail.raw;
-    final tag1 = (raw['tag1'] ?? detail.formValues['tag1'] ?? '—').toString();
-    final taskLevel =
-        (raw['taskLevel'] ?? detail.formValues['taskLevel'] ?? 'C').toString();
-    final coverage = raw['coverage'] ?? detail.formValues['provinces'];
+    final tag1 = (raw['tag1'] ?? detail.formValues['tag1'] ?? '')
+        .toString()
+        .trim();
+    final taskLevel = (raw['taskLevel'] ?? detail.formValues['taskLevel'] ?? '')
+        .toString()
+        .trim();
+    final coverageRaw = raw['coverage'] ?? detail.formValues['provinces'];
+    final coverageText = fmtList(coverageRaw).trim();
     final tone = detailStatusTone(detail.status);
+
+    final chips = <Widget>[
+      if (tag1.isNotEmpty && tag1 != '—')
+        _metaChip(Icons.sell_outlined, tag1),
+      if (taskLevel.isNotEmpty)
+        _metaChip(Icons.bar_chart_outlined, '$taskLevel 级'),
+      if (coverageText.isNotEmpty && coverageText != '—')
+        _metaChip(Icons.location_on_outlined, coverageText),
+    ];
 
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
@@ -116,7 +136,8 @@ class XfDetHero extends StatelessWidget {
                   color: DunesColors.text3,
                 ),
               ),
-              _StatusPill(label: detailStatusLabel(detail.status), tone: tone),
+              if (showStatus)
+                _StatusPill(label: detailStatusLabel(detail.status), tone: tone),
             ],
           ),
           const SizedBox(height: 8),
@@ -129,16 +150,14 @@ class XfDetHero extends StatelessWidget {
               color: DunesColors.text,
             ),
           ),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            runSpacing: 4,
-            children: [
-              _metaChip(Icons.sell_outlined, tag1),
-              _metaChip(Icons.bar_chart_outlined, '$taskLevel 级'),
-              _metaChip(Icons.location_on_outlined, fmtList(coverage)),
-            ],
-          ),
+          if (chips.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 4,
+              children: chips,
+            ),
+          ],
         ],
       ),
     );
@@ -727,7 +746,8 @@ class _SectionBlock extends StatefulWidget {
 }
 
 class _SectionBlockState extends State<_SectionBlock> {
-  bool _expanded = false;
+  /// 详情默认全部展开，不再折叠「展开剩余 N 项」。
+  bool _expanded = true;
 
   @override
   Widget build(BuildContext context) {
@@ -743,7 +763,7 @@ class _SectionBlockState extends State<_SectionBlock> {
           Text(
             '${widget.section.title} · ${items.length} 项',
             style: DunesTypography.sans(
-              fontSize: 13,
+              fontSize: 15,
               fontWeight: FontWeight.w600,
             ),
           ),
@@ -770,7 +790,7 @@ class _SectionBlockState extends State<_SectionBlock> {
                   '展开剩余 $hiddenCount 项',
                   textAlign: TextAlign.center,
                   style: DunesTypography.sans(
-                    fontSize: 12,
+                    fontSize: 13,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
@@ -791,7 +811,7 @@ class XfDetKv extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 8),
+      padding: const EdgeInsets.symmetric(vertical: 10),
       decoration: BoxDecoration(
         border: Border(
           bottom: BorderSide(
@@ -806,7 +826,7 @@ class XfDetKv extends StatelessWidget {
             child: Text(
               label,
               style: DunesTypography.sans(
-                fontSize: 12,
+                fontSize: 14,
                 color: DunesColors.text2,
               ),
             ),
@@ -817,7 +837,7 @@ class XfDetKv extends StatelessWidget {
               value,
               textAlign: TextAlign.right,
               style: DunesTypography.sans(
-                fontSize: 12,
+                fontSize: 14,
                 fontWeight: FontWeight.w500,
               ),
             ),
@@ -839,7 +859,8 @@ class XfDetKvExpand extends StatefulWidget {
 }
 
 class _XfDetKvExpandState extends State<XfDetKvExpand> {
-  bool _open = false;
+  /// 明细 / 附件等可展开项默认打开。
+  bool _open = true;
 
   @override
   Widget build(BuildContext context) {
@@ -856,14 +877,14 @@ class _XfDetKvExpandState extends State<XfDetKvExpand> {
           InkWell(
             onTap: () => setState(() => _open = !_open),
             child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 8),
+              padding: const EdgeInsets.symmetric(vertical: 10),
               child: Row(
                 children: [
                   Expanded(
                     child: Text(
                       widget.item.label,
                       style: DunesTypography.sans(
-                        fontSize: 12,
+                        fontSize: 14,
                         color: DunesColors.text2,
                       ),
                     ),
@@ -874,7 +895,7 @@ class _XfDetKvExpandState extends State<XfDetKvExpand> {
                       Text(
                         widget.item.value,
                         style: DunesTypography.sans(
-                          fontSize: 12,
+                          fontSize: 14,
                           fontWeight: FontWeight.w500,
                         ),
                       ),
@@ -884,7 +905,7 @@ class _XfDetKvExpandState extends State<XfDetKvExpand> {
                         duration: const Duration(milliseconds: 200),
                         child: Icon(
                           Icons.expand_more,
-                          size: 14,
+                          size: 18,
                           color: DunesColors.text3,
                         ),
                       ),
@@ -1029,7 +1050,7 @@ class XfDetTable extends StatelessWidget {
                 child: Text(
                   (col['label'] ?? col['key'] ?? '').toString(),
                   style: DunesTypography.sans(
-                    fontSize: 10.5,
+                    fontSize: 12,
                     fontWeight: FontWeight.w500,
                     color: DunesColors.text3,
                   ),
@@ -1059,7 +1080,7 @@ class XfDetTable extends StatelessWidget {
                 child: Text(
                   formatCellDisplay(row[col['key']], col, row),
                   style: DunesTypography.sans(
-                    fontSize: 11.5,
+                    fontSize: 13,
                     color: DunesColors.text2,
                     height: 1.45,
                   ),
@@ -1136,8 +1157,9 @@ class _FileItemState extends State<_FileItem> {
         .toString()
         .trim();
 
-    // PC：下载到本地后用系统默认应用打开，避免走浏览器下载。
-    if (isDesktopCommOnly) {
+    // PC / APP：下载到本地后用系统应用打开（对齐 IM「用其他应用打开」）。
+    // Web 仍走外链。
+    if (!kIsWeb) {
       setState(() => _busy = true);
       try {
         if (cacheKey.isNotEmpty) {
@@ -1148,7 +1170,10 @@ class _FileItemState extends State<_FileItem> {
           }
         }
         if (context.mounted) {
-          showDunesToast(context, '正在打开 $name…');
+          showDunesToast(
+            context,
+            isDesktopCommOnly ? '正在打开 $name…' : '正在准备用其他应用打开…',
+          );
         }
         final path = await file_dl.openUrlAsFile(
           url,
@@ -1186,6 +1211,15 @@ class _FileItemState extends State<_FileItem> {
         showDunesToast(context, '无法打开链接', kind: DunesToastKind.error);
       }
     }
+  }
+
+  String get _openActionLabel {
+    if (_busy) {
+      return isDesktopCommOnly ? '打开中…' : '准备中…';
+    }
+    if (isDesktopCommOnly) return '打开';
+    if (kIsWeb) return '下载';
+    return '用其他应用打开';
   }
 
   @override
@@ -1257,7 +1291,7 @@ class _FileItemState extends State<_FileItem> {
           TextButton(
             onPressed: _busy ? null : () => _open(context, download: true),
             child: Text(
-              _busy ? '打开中…' : (isDesktopCommOnly ? '打开' : '下载'),
+              _openActionLabel,
               style: const TextStyle(fontSize: 11),
             ),
           ),

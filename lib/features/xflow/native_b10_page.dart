@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../core/navigation/navigation_controller.dart';
@@ -5,6 +7,8 @@ import '../../core/theme/dunes_theme.dart';
 import '../../core/util/friendly_error.dart';
 import '../auth/auth_session.dart';
 import '../shell/dunes_toast.dart';
+import 'approval_chat_forward.dart';
+import 'approval_chat_share.dart';
 import 'xflow_detail_renderer.dart';
 import 'xflow_models.dart';
 import 'xflow_service.dart';
@@ -42,6 +46,7 @@ class _NativeB10PageState extends State<NativeB10Page> {
   List<Map<String, dynamic>> _ccRules = const [];
   bool _ccLoading = true;
   String? _ccError;
+  bool _forwarding = false;
 
   @override
   void initState() {
@@ -129,6 +134,29 @@ class _NativeB10PageState extends State<NativeB10Page> {
     showDunesToast(context, '已驳回');
     widget.onApprovalCompleted?.call();
     await _load();
+  }
+
+  Future<void> _forwardApproval() async {
+    final detail = _bundle?.detail;
+    if (detail == null || _forwarding) return;
+    setState(() => _forwarding = true);
+    try {
+      final share = ApprovalChatShare(
+        businessType: 'PROPOSAL',
+        businessId: detail.id,
+        title: detail.title.trim().isEmpty ? '销售提案' : detail.title.trim(),
+        status: detail.status,
+        code: detail.code,
+        templateKey: XflowService.salesTemplateKey,
+      );
+      await forwardApprovalToConversation(
+        context: context,
+        session: widget.session,
+        share: share,
+      );
+    } finally {
+      if (mounted) setState(() => _forwarding = false);
+    }
   }
 
   Future<void> _voidProposal() async {
@@ -370,6 +398,8 @@ class _NativeB10PageState extends State<NativeB10Page> {
               crumb: '提案详情 · 返回列表',
               title: detail?.code ?? 'PROP-${widget.proposalId}',
               onBack: () => widget.navigation.popTo(widget.backScreen),
+              onForward: detail == null ? null : () => unawaited(_forwardApproval()),
+              forwarding: _forwarding,
             ),
             Expanded(
               child: _loading

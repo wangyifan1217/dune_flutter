@@ -9,6 +9,8 @@ import '../contacts/contact_service.dart';
 import '../conversation/conversation_models.dart';
 import '../conversation/conversation_service.dart';
 import '../conversation/inbox_format.dart';
+import '../kb/kb_chat_share.dart';
+import '../meeting/meeting_minutes_chat_share.dart';
 import 'chat_history_filter.dart';
 import 'chat_widgets.dart';
 import 'user_avatar_widget.dart';
@@ -57,6 +59,7 @@ class _NativeChatSearchPageState extends State<NativeChatSearchPage> {
   int _oldestId = 0;
   List<NativeChatMessage> _items = const <NativeChatMessage>[];
   ChatHistoryFilter? _selectedFilter;
+  ChatHistoryTimeRange? _timeRange;
   Map<int, ({String? preset, String? objectKey})> _avatarByUserId =
       const <int, ({String? preset, String? objectKey})>{};
   String? _peerAvatarPreset;
@@ -185,15 +188,134 @@ class _NativeChatSearchPageState extends State<NativeChatSearchPage> {
     unawaited(_search());
   }
 
+  void _applyTimeRange(ChatHistoryTimeRange? range) {
+    setState(() => _timeRange = range);
+    unawaited(_search());
+  }
+
+  Future<void> _openTimeRangeSheet() async {
+    final action = await showModalBottomSheet<_TimeRangeSheetAction>(
+      context: context,
+      backgroundColor: DunesColors.bgApp,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) => _ChatHistoryTimeRangeSheet(current: _timeRange),
+    );
+    if (!mounted || action == null) return;
+    if (action.clear) {
+      _applyTimeRange(null);
+      return;
+    }
+    if (action.pickCustom) {
+      await _pickCustomTimeRange();
+      return;
+    }
+    if (action.range != null) {
+      _applyTimeRange(action.range);
+    }
+  }
+
+  Future<void> _pickCustomTimeRange() async {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final initial = _timeRange == null
+        ? DateTimeRange(
+            start: today.subtract(const Duration(days: 6)),
+            end: today,
+          )
+        : DateTimeRange(
+            start: DateTime(
+              _timeRange!.start.year,
+              _timeRange!.start.month,
+              _timeRange!.start.day,
+            ),
+            end: DateTime(
+              _timeRange!.end.year,
+              _timeRange!.end.month,
+              _timeRange!.end.day,
+            ),
+          );
+    final picked = await showDateRangePicker(
+      context: context,
+      firstDate: today.subtract(const Duration(days: 365 * 3)),
+      lastDate: today,
+      initialDateRange: initial,
+      helpText: '选择时间段',
+      saveText: '确定',
+      cancelText: '取消',
+      builder: (context, child) {
+        final base = Theme.of(context);
+        return Theme(
+          data: base.copyWith(
+            colorScheme: base.colorScheme.copyWith(
+              primary: DunesColors.accent,
+              onPrimary: Colors.white,
+              surface: DunesColors.bgApp,
+              onSurface: DunesColors.text,
+            ),
+            datePickerTheme: DatePickerThemeData(
+              backgroundColor: DunesColors.bgApp,
+              headerBackgroundColor: DunesColors.bgSoft,
+              headerForegroundColor: DunesColors.text,
+              rangeSelectionBackgroundColor: DunesColors.accentSoft,
+              rangeSelectionOverlayColor: WidgetStateProperty.all(
+                DunesColors.accent.withValues(alpha: 0.08),
+              ),
+              dayForegroundColor: WidgetStateProperty.resolveWith((states) {
+                if (states.contains(WidgetState.selected)) {
+                  return Colors.white;
+                }
+                if (states.contains(WidgetState.disabled)) {
+                  return DunesColors.text3;
+                }
+                return DunesColors.text;
+              }),
+              dayBackgroundColor: WidgetStateProperty.resolveWith((states) {
+                if (states.contains(WidgetState.selected)) {
+                  return DunesColors.accent;
+                }
+                return Colors.transparent;
+              }),
+              todayForegroundColor: WidgetStateProperty.resolveWith((states) {
+                if (states.contains(WidgetState.selected)) {
+                  return Colors.white;
+                }
+                return DunesColors.accent;
+              }),
+              todayBackgroundColor: WidgetStateProperty.resolveWith((states) {
+                if (states.contains(WidgetState.selected)) {
+                  return DunesColors.accent;
+                }
+                return Colors.transparent;
+              }),
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+    if (!mounted || picked == null) return;
+    _applyTimeRange(ChatHistoryTimeRange.custom(picked));
+  }
+
   Future<({List<NativeChatMessage> items, bool hasMore, int oldestId})>
       _fetchFilteredPage({
-    required ChatHistoryFilter filter,
+    required ChatHistoryFilter? filter,
+    required ChatHistoryTimeRange? timeRange,
+    required String query,
     required int cursor,
   }) async {
     final collected = <NativeChatMessage>[];
     var nextCursor = cursor;
     var hasMore = true;
     var guard = 0;
+    final q = query.trim();
+    final useMedia = filter != null && filter.usesMediaApi && q.isEmpty;
+    final from = timeRange?.apiFrom;
+    final to = timeRange?.apiTo;
+    // 链接/转发仍需本地匹配；时间由服务端 from/to 过滤。
+    final needsLocalTypeFilter = filter != null && !filter.usesMediaApi;
 
     while (collected.length < _filterTargetBatch && hasMore && guard < 8) {
       guard++;
@@ -201,20 +323,24 @@ class _NativeChatSearchPageState extends State<NativeChatSearchPage> {
       late final List<NativeChatMessage> pageItems;
       late final bool pageHasMore;
 
-      if (filter.usesMediaApi) {
+      if (useMedia) {
         final rows = await _service.fetchConversationMedia(
           widget.conversationId,
           size: _filterPageSize,
           before: before,
+          from: from,
+          to: to,
         );
         pageItems = rows;
         pageHasMore = rows.length >= _filterPageSize;
       } else {
         final page = await _service.searchMessagePage(
           conversationId: widget.conversationId,
-          query: '',
+          query: q,
           size: _filterPageSize,
           before: before,
+          from: from,
+          to: to,
         );
         pageItems = page.items;
         pageHasMore = page.hasMore && page.items.isNotEmpty;
@@ -224,9 +350,26 @@ class _NativeChatSearchPageState extends State<NativeChatSearchPage> {
         hasMore = false;
         break;
       }
-      collected.addAll(
-        pageItems.where((m) => chatHistoryFilterMatches(filter, m)),
-      );
+
+      if (needsLocalTypeFilter && filter != null) {
+        collected.addAll(
+          pageItems.where((m) => chatHistoryFilterMatches(filter, m)),
+        );
+      } else if (filter == ChatHistoryFilter.imageVideo) {
+        collected.addAll(
+          pageItems.where((m) {
+            final k = m.kind.toUpperCase();
+            return k == 'IMAGE' || k == 'VIDEO';
+          }),
+        );
+      } else if (filter == ChatHistoryFilter.files) {
+        collected.addAll(
+          pageItems.where((m) => m.kind.toUpperCase() == 'FILE'),
+        );
+      } else {
+        collected.addAll(pageItems);
+      }
+
       nextCursor = _oldestMessageId(pageItems);
       hasMore = pageHasMore && nextCursor > 0;
       if (!hasMore) break;
@@ -238,6 +381,8 @@ class _NativeChatSearchPageState extends State<NativeChatSearchPage> {
   Future<void> _search({bool append = false}) async {
     final q = _queryController.text.trim();
     final filter = _selectedFilter;
+    final timeRange = _timeRange;
+    final needsClientFilter = filter != null || timeRange != null;
 
     if (append) {
       if (_loadingMore || !_hasMore || _oldestId <= 0) return;
@@ -252,9 +397,11 @@ class _NativeChatSearchPageState extends State<NativeChatSearchPage> {
     }
 
     try {
-      if (filter != null && q.isEmpty) {
+      if (needsClientFilter) {
         final page = await _fetchFilteredPage(
           filter: filter,
+          timeRange: timeRange,
+          query: q,
           cursor: append && _oldestId > 0 ? _oldestId : 0,
         );
         if (!mounted) return;
@@ -312,6 +459,10 @@ class _NativeChatSearchPageState extends State<NativeChatSearchPage> {
   }
 
   String _hitBody(NativeChatMessage m) {
+    final meeting = MeetingMinutesChatShare.fromPayload(m.payload);
+    if (meeting != null) return meeting.bodyText;
+    final kb = KbChatDocShare.fromPayload(m.payload);
+    if (kb != null) return kb.bodyText;
     if (chatMessageIsForward(m)) {
       final title = chatForwardTitle(m);
       final count = chatForwardItemCount(m);
@@ -432,8 +583,16 @@ class _NativeChatSearchPageState extends State<NativeChatSearchPage> {
             ),
             _ChatHistoryCategoryGrid(
               selected: _selectedFilter,
+              timeActive: _timeRange != null,
               onSelect: _selectFilter,
+              onSelectTime: _openTimeRangeSheet,
             ),
+            if (_timeRange != null)
+              _ChatHistoryTimeRangeChip(
+                label: _timeRange!.label,
+                onClear: () => _applyTimeRange(null),
+                onTap: _openTimeRangeSheet,
+              ),
             Expanded(child: _buildResults(entries)),
           ],
         ),
@@ -455,7 +614,11 @@ class _NativeChatSearchPageState extends State<NativeChatSearchPage> {
     }
     if (entries.isEmpty) {
       final emptyText = _selectedFilter?.emptyHint ??
-          (_queryController.text.trim().isEmpty ? '暂无历史消息' : '暂无搜索结果');
+          (_timeRange != null
+              ? '该时间段暂无消息'
+              : (_queryController.text.trim().isEmpty
+                  ? '暂无历史消息'
+                  : '暂无搜索结果'));
       return Center(
         child: Text(
           emptyText,
@@ -623,15 +786,19 @@ class ChatSearchHitCard extends StatelessWidget {
   }
 }
 
-/// 微信式分类入口：图片与视频 / 文件 / 链接 / 转发（APP / PC 共用）。
+/// 微信式分类入口：日期 / 图片与视频 / 文件 / 链接 / 转发（APP / PC 共用）。
 class _ChatHistoryCategoryGrid extends StatelessWidget {
   const _ChatHistoryCategoryGrid({
     required this.selected,
+    required this.timeActive,
     required this.onSelect,
+    required this.onSelectTime,
   });
 
   final ChatHistoryFilter? selected;
+  final bool timeActive;
   final ValueChanged<ChatHistoryFilter> onSelect;
+  final VoidCallback onSelectTime;
 
   static const _items =
       <({ChatHistoryFilter filter, IconData icon, Color tint, Color soft})>[
@@ -679,56 +846,26 @@ class _ChatHistoryCategoryGrid extends StatelessWidget {
           const SizedBox(height: 10),
           Row(
             children: [
-              for (var i = 0; i < _items.length; i++) ...[
-                if (i > 0) const SizedBox(width: 8),
+              Expanded(
+                child: _CategoryTile(
+                  icon: Icons.calendar_month_outlined,
+                  tint: DunesColors.accentDeep,
+                  soft: DunesColors.accentSoft,
+                  title: '日期',
+                  selected: timeActive,
+                  onTap: onSelectTime,
+                ),
+              ),
+              for (final item in _items) ...[
+                const SizedBox(width: 8),
                 Expanded(
-                  child: InkWell(
-                    onTap: () => onSelect(_items[i].filter),
-                    borderRadius: BorderRadius.circular(12),
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 160),
-                      padding: const EdgeInsets.symmetric(vertical: 8),
-                      decoration: BoxDecoration(
-                        color: selected == _items[i].filter
-                            ? _items[i].soft
-                            : Colors.transparent,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Column(
-                        children: [
-                          Container(
-                            width: 48,
-                            height: 48,
-                            decoration: BoxDecoration(
-                              color: _items[i].soft,
-                              borderRadius: BorderRadius.circular(14),
-                            ),
-                            child: Icon(
-                              _items[i].icon,
-                              color: _items[i].tint,
-                              size: 24,
-                            ),
-                          ),
-                          const SizedBox(height: 6),
-                          Text(
-                            _items[i].filter.title,
-                            textAlign: TextAlign.center,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: DunesTypography.sans(
-                              fontSize: 11.5,
-                              fontWeight: selected == _items[i].filter
-                                  ? FontWeight.w600
-                                  : FontWeight.w400,
-                              color: selected == _items[i].filter
-                                  ? DunesColors.text
-                                  : DunesColors.text2,
-                              height: 1.15,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
+                  child: _CategoryTile(
+                    icon: item.icon,
+                    tint: item.tint,
+                    soft: item.soft,
+                    title: item.filter.title,
+                    selected: selected == item.filter,
+                    onTap: () => onSelect(item.filter),
                   ),
                 ),
               ],
@@ -737,6 +874,302 @@ class _ChatHistoryCategoryGrid extends StatelessWidget {
           const SizedBox(height: 6),
           const Divider(height: 1, color: DunesColors.borderSoft),
         ],
+      ),
+    );
+  }
+}
+
+class _CategoryTile extends StatelessWidget {
+  const _CategoryTile({
+    required this.icon,
+    required this.tint,
+    required this.soft,
+    required this.title,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final Color tint;
+  final Color soft;
+  final String title;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 160),
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        decoration: BoxDecoration(
+          color: selected ? soft : Colors.transparent,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Column(
+          children: [
+            Container(
+              width: 42,
+              height: 42,
+              decoration: BoxDecoration(
+                color: soft,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(icon, color: tint, size: 22),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              title,
+              textAlign: TextAlign.center,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: DunesTypography.sans(
+                fontSize: 10.5,
+                fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+                color: selected ? DunesColors.text : DunesColors.text2,
+                height: 1.15,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ChatHistoryTimeRangeChip extends StatelessWidget {
+  const _ChatHistoryTimeRangeChip({
+    required this.label,
+    required this.onClear,
+    required this.onTap,
+  });
+
+  final String label;
+  final VoidCallback onClear;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: Material(
+          color: DunesColors.accentSoft,
+          borderRadius: BorderRadius.circular(16),
+          child: InkWell(
+            onTap: onTap,
+            borderRadius: BorderRadius.circular(16),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(10, 6, 6, 6),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(
+                    Icons.calendar_today_outlined,
+                    size: 13,
+                    color: DunesColors.accentDeep,
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    label,
+                    style: DunesTypography.sans(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                      color: DunesColors.accentDeep,
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  GestureDetector(
+                    onTap: onClear,
+                    behavior: HitTestBehavior.opaque,
+                    child: const Padding(
+                      padding: EdgeInsets.all(4),
+                      child: Icon(
+                        Icons.close,
+                        size: 14,
+                        color: DunesColors.accentDeep,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _TimeRangeSheetAction {
+  const _TimeRangeSheetAction._({
+    this.range,
+    this.clear = false,
+    this.pickCustom = false,
+  });
+
+  const _TimeRangeSheetAction.range(ChatHistoryTimeRange range)
+      : this._(range: range);
+
+  const _TimeRangeSheetAction.clear() : this._(clear: true);
+
+  const _TimeRangeSheetAction.pickCustom() : this._(pickCustom: true);
+
+  final ChatHistoryTimeRange? range;
+  final bool clear;
+  final bool pickCustom;
+}
+
+class _ChatHistoryTimeRangeSheet extends StatelessWidget {
+  const _ChatHistoryTimeRangeSheet({required this.current});
+
+  final ChatHistoryTimeRange? current;
+
+  static const _presets = <ChatHistoryTimePreset>[
+    ChatHistoryTimePreset.today,
+    ChatHistoryTimePreset.last7Days,
+    ChatHistoryTimePreset.last30Days,
+    ChatHistoryTimePreset.last90Days,
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Center(
+              child: Container(
+                width: 36,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: DunesColors.borderSoft,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            const SizedBox(height: 14),
+            Text(
+              '按时间段筛选',
+              textAlign: TextAlign.center,
+              style: DunesTypography.sans(
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+                color: DunesColors.text,
+              ),
+            ),
+            const SizedBox(height: 14),
+            for (final preset in _presets)
+              _TimeRangeOption(
+                title: preset.title,
+                selected: current?.preset == preset,
+                onTap: () => Navigator.of(context).pop(
+                  _TimeRangeSheetAction.range(
+                    ChatHistoryTimeRange.fromPreset(preset),
+                  ),
+                ),
+              ),
+            _TimeRangeOption(
+              title: '自定义时间段',
+              selected: current?.preset == ChatHistoryTimePreset.custom,
+              subtitle: current?.preset == ChatHistoryTimePreset.custom
+                  ? current!.label
+                  : null,
+              onTap: () => Navigator.of(context).pop(
+                const _TimeRangeSheetAction.pickCustom(),
+              ),
+            ),
+            if (current != null) ...[
+              const SizedBox(height: 4),
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(
+                  const _TimeRangeSheetAction.clear(),
+                ),
+                child: Text(
+                  '清除时间筛选',
+                  style: DunesTypography.sans(
+                    fontSize: 13,
+                    color: DunesColors.text3,
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _TimeRangeOption extends StatelessWidget {
+  const _TimeRangeOption({
+    required this.title,
+    required this.selected,
+    required this.onTap,
+    this.subtitle,
+  });
+
+  final String title;
+  final String? subtitle;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Material(
+        color: selected ? DunesColors.accentSoft : DunesColors.bgSoft,
+        borderRadius: BorderRadius.circular(12),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(12),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: DunesTypography.sans(
+                          fontSize: 14,
+                          fontWeight:
+                              selected ? FontWeight.w600 : FontWeight.w400,
+                          color: DunesColors.text,
+                        ),
+                      ),
+                      if (subtitle != null) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          subtitle!,
+                          style: DunesTypography.sans(
+                            fontSize: 12,
+                            color: DunesColors.text3,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                if (selected)
+                  const Icon(
+                    Icons.check_rounded,
+                    size: 18,
+                    color: DunesColors.accentDeep,
+                  ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

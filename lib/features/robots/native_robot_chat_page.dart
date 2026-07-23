@@ -712,7 +712,7 @@ class _NativeRobotChatPageState extends State<NativeRobotChatPage> {
   }
 }
 
-/// 对方气泡样式对齐 [ChatTextBubble]，宽屏略放宽以容纳表格 Markdown。
+/// 对方气泡样式对齐 [ChatTextBubble]；宽表靠横向滚动，气泡尽量吃满可用宽度。
 class _RobotReplyBubble extends StatelessWidget {
   const _RobotReplyBubble({required this.child, this.wide = false});
 
@@ -721,8 +721,13 @@ class _RobotReplyBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final screenW = MediaQuery.sizeOf(context).width;
+    // 手机：留给头像+边距后尽量宽；宽屏：上限放宽，便于多列表格。
+    final maxW = wide
+        ? (screenW * 0.55).clamp(420.0, 640.0)
+        : (screenW - 72).clamp(260.0, 420.0);
     return Container(
-      constraints: BoxConstraints(maxWidth: wide ? 520 : 280),
+      constraints: BoxConstraints(maxWidth: maxW),
       padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 9),
       decoration: BoxDecoration(
         color: DunesColors.bgApp,

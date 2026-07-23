@@ -12,6 +12,7 @@ MarkdownStyleSheet _robotMdStyle({required bool compact}) {
   if (cached != null) return cached;
 
   final baseSize = compact ? 12.0 : 13.0;
+  final tableSize = compact ? 11.0 : 12.0;
   final sheet = MarkdownStyleSheet(
     p: TextStyle(
       fontSize: baseSize,
@@ -69,17 +70,22 @@ MarkdownStyleSheet _robotMdStyle({required bool compact}) {
       color: RobotTheme.purpleDeep,
       decoration: TextDecoration.underline,
     ),
+    // Intrinsic + 包内横向滚动：宽表不再被气泡压扁。
+    tableColumnWidth: const IntrinsicColumnWidth(),
     tableHead: TextStyle(
-      fontSize: baseSize,
+      fontSize: tableSize,
       fontWeight: FontWeight.w700,
       color: RobotTheme.text,
+      height: 1.35,
     ),
     tableBody: TextStyle(
-      fontSize: baseSize,
+      fontSize: tableSize,
       color: RobotTheme.text2,
+      height: 1.35,
     ),
     tableBorder: TableBorder.all(color: const Color(0xFFE6E6EA), width: 0.5),
-    tableCellsPadding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+    tableCellsPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+    tableHeadAlign: TextAlign.center,
   );
   if (compact) {
     _cachedCompactStyle = sheet;

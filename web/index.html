@@ -40,24 +40,17 @@
   </style>
 </head>
 <body spellcheck="false">
-  <script src='https://cdn.jsdelivr.net/npm/pdfjs-dist@4.6.82/build/pdf.min.mjs' type='module'></script>
-  <script type='module'>
-  var { pdfjsLib } = globalThis;
-  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.6.82/build/pdf.worker.mjs';
-
-  var pdfRenderOptions = {
-    cMapUrl: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.6.82/cmaps/',
-    cMapPacked: true,
-  }
+  <script type="module">
+    import * as pdfjsLib from 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.6.82/build/pdf.min.mjs';
+    // pdfx 通过 globalThis.pdfjsLib 检测；ESM 不会自动挂全局，需显式赋值
+    globalThis.pdfjsLib = pdfjsLib;
+    pdfjsLib.GlobalWorkerOptions.workerSrc =
+        'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.6.82/build/pdf.worker.mjs';
+    globalThis.pdfRenderOptions = {
+      cMapUrl: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.6.82/cmaps/',
+      cMapPacked: true,
+    };
+    await import('./flutter_bootstrap.js');
   </script>
-  <!--
-    You can customize the "flutter_bootstrap.js" script.
-    This is useful to provide a custom configuration to the Flutter loader
-    or to give the user feedback during the initialization process.
-
-    For more details:
-    * https://docs.flutter.dev/platform-integration/web/initialization
-  -->
-  <script src="flutter_bootstrap.js" async></script>
 </body>
 </html>

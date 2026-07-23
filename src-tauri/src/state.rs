@@ -68,21 +68,40 @@ impl AppState {
         Ok(())
     }
 
+    /// 关掉所有会话的 Agent 进程，但不改「已连接」状态（改模型/网关后用）。
+    pub async fn drop_all_agents(&self) {
+        let agents = {
+            let mut guard = self.agents.lock().await;
+            std::mem::take(&mut *guard)
+        };
+        for agent in agents.into_values() {
+            let _ = agent.shutdown().await;
+        }
+    }
+
     pub async fn agent_for_session(
         &self,
         thread_id: &str,
         workspace: &str,
         app: AppHandle,
     ) -> anyhow::Result<Arc<AgentHandle>> {
+        let settings = self.settings.lock().clone();
+        let wanted_fp = crate::acp::settings_fingerprint(&settings);
+
         {
-            let agents = self.agents.lock().await;
+            let mut agents = self.agents.lock().await;
             if let Some(agent) = agents.get(thread_id).cloned() {
-                return Ok(agent);
+                if agent.config_fingerprint() == wanted_fp {
+                    return Ok(agent);
+                }
+                // 设置已变：仅重建本会话进程，不影响其它正在分析的会话
+                agents.remove(thread_id);
+                drop(agents);
+                let _ = agent.shutdown().await;
             }
         }
 
         // 启动/握手可能较久：不要一直占着 agents 锁，否则其它会话也会一起卡住。
-        let settings = self.settings.lock().clone();
         let agent = Arc::new(
             AgentHandle::spawn(
                 &settings,
@@ -97,9 +116,12 @@ impl AppState {
 
         let mut agents = self.agents.lock().await;
         if let Some(existing) = agents.get(thread_id).cloned() {
-            // 并发启动时保留先登记的那个，关掉后启的。
-            let _ = agent.shutdown().await;
-            return Ok(existing);
+            if existing.config_fingerprint() == agent.config_fingerprint() {
+                let _ = agent.shutdown().await;
+                return Ok(existing);
+            }
+            agents.remove(thread_id);
+            let _ = existing.shutdown().await;
         }
         agents.insert(thread_id.to_owned(), Arc::clone(&agent));
         Ok(agent)
@@ -113,6 +135,17 @@ impl AppState {
             .ok_or_else(|| anyhow::anyhow!("该会话没有正在运行的 Agent"))?;
         drop(agents);
         agent.cancel_prompt().await
+    }
+
+    /// 删除前端会话时关掉对应 Agent，避免后台仍占用 busy 状态。
+    pub async fn drop_session_agent(&self, thread_id: &str) {
+        let agent = {
+            let mut agents = self.agents.lock().await;
+            agents.remove(thread_id)
+        };
+        if let Some(agent) = agent {
+            let _ = agent.shutdown().await;
+        }
     }
 
     pub fn resolve_permission(&self, id: &str, allow: bool) -> bool {

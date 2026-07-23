@@ -950,10 +950,19 @@ button, input, textarea {
   text-align: left;
 }
 
-.settings-model-main span {
+.settings-model-main span,
+.settings-model-id {
   font-size: 11px;
   color: var(--soft);
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.settings-model-badge {
+  font-style: normal;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text);
+  margin-top: 2px;
 }
 
 .settings-model-main.active {
@@ -966,23 +975,16 @@ button, input, textarea {
   flex-direction: column;
   gap: 8px;
   margin-bottom: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
 }
 
 .suggest-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-bottom: 8px;
+  display: none;
 }
 
 .suggest-chip {
-  border: 1px dashed var(--line-strong);
-  background: transparent;
-  border-radius: 999px;
-  padding: 4px 10px;
-  font-size: 11.5px;
-  color: var(--muted);
-  cursor: pointer;
+  display: none;
 }
 
 .suggest-chip:hover {
@@ -1061,6 +1063,60 @@ button, input, textarea {
   padding: 8px 12px;
   flex: 1;
   overflow: auto;
+}
+
+.mcp-presets {
+  padding: 4px 12px 8px;
+  border-bottom: 1px solid var(--line);
+  max-height: 42%;
+  overflow: auto;
+}
+
+.mcp-preset-group + .mcp-preset-group {
+  margin-top: 8px;
+}
+
+.mcp-preset-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--soft);
+  padding: 6px 8px 4px;
+}
+
+.mcp-preset-label.padded {
+  padding-left: 10px;
+}
+
+.mcp-preset-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 10px;
+}
+
+.mcp-preset-row:hover {
+  background: var(--surface-2);
+}
+
+.mcp-preset-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.mcp-preset-main strong {
+  font-size: 13px;
+}
+
+.mcp-preset-main span {
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.35;
 }
 
 .mcp-empty {
@@ -1485,4 +1541,248 @@ button, input, textarea {
     grid-template-columns: var(--side) minmax(0, 1fr);
   }
   .right-panel { display: none; }
+}
+
+/* —— Login —— */
+.login-page {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 32px 16px;
+  background:
+    radial-gradient(ellipse 80% 55% at 15% 0%, rgba(90, 130, 190, 0.22) 0%, transparent 60%),
+    radial-gradient(ellipse 70% 50% at 95% 10%, rgba(120, 160, 140, 0.18) 0%, transparent 55%),
+    radial-gradient(ellipse 60% 40% at 50% 100%, rgba(70, 90, 120, 0.1) 0%, transparent 50%),
+    linear-gradient(165deg, #eef2f7 0%, #e8ece8 42%, #e4e8f0 100%);
+}
+
+.login-card {
+  width: min(420px, 100%);
+  padding: 36px 32px 28px;
+  background: #fff;
+  border: 1px solid var(--line-strong);
+  border-radius: 20px;
+  box-shadow: 0 18px 50px rgba(17, 17, 17, 0.06);
+}
+
+.login-brand {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--soft);
+  margin-bottom: 12px;
+}
+
+.login-card h1 {
+  margin: 0;
+  font-size: 26px;
+  font-weight: 650;
+  letter-spacing: -0.03em;
+}
+
+.login-sub {
+  margin: 8px 0 24px;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.login-tabs {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0;
+  padding: 4px;
+  background: var(--surface-2);
+  border-radius: 12px;
+  margin-bottom: 20px;
+}
+
+.login-tabs-thumb {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  width: calc(50% - 4px);
+  height: calc(100% - 8px);
+  border-radius: 9px;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  transition: transform 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.login-tabs.sms .login-tabs-thumb {
+  transform: translateX(100%);
+}
+
+.login-tabs button {
+  position: relative;
+  z-index: 1;
+  height: 36px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  cursor: pointer;
+  color: var(--muted);
+  font-weight: 500;
+  transition: color 0.2s ease;
+}
+
+.login-tabs button.active {
+  color: var(--text);
+}
+
+.login-panels {
+  overflow: hidden;
+  touch-action: pan-y;
+}
+
+.login-panels-track {
+  display: flex;
+  width: 200%;
+  transition: transform 0.32s cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: transform;
+}
+
+.login-panels-track.mode-qr {
+  transform: translateX(0);
+}
+
+.login-panels-track.mode-sms {
+  transform: translateX(-50%);
+}
+
+.login-panel {
+  width: 50%;
+  flex-shrink: 0;
+  padding: 2px 0;
+}
+
+.login-error {
+  margin-bottom: 14px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #fff1f0;
+  border: 1px solid #ffccc7;
+  color: var(--red);
+  font-size: 13px;
+}
+
+.login-qr {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.login-qr-frame {
+  width: 236px;
+  height: 236px;
+  border: 1px solid var(--line-strong);
+  border-radius: 16px;
+  display: grid;
+  place-items: center;
+  background: #fff;
+  overflow: hidden;
+}
+
+.login-qr-placeholder {
+  padding: 24px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.login-hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  text-align: center;
+}
+
+.login-sms {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.login-sms label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.login-sms input {
+  height: 40px;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  padding: 0 12px;
+  background: #fff;
+}
+
+.login-code-field {
+  display: flex;
+  align-items: center;
+  height: 42px;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  background: #fff;
+  overflow: hidden;
+}
+
+.login-code-field:focus-within {
+  border-color: #c8c8c8;
+  box-shadow: 0 0 0 3px rgba(17, 17, 17, 0.04);
+}
+
+.login-code-field input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  border: 0;
+  border-radius: 0;
+  padding: 0 12px;
+  background: transparent;
+  outline: none;
+}
+
+.login-sms-send {
+  flex-shrink: 0;
+  height: 100%;
+  padding: 0 14px;
+  border: 0;
+  border-left: 1px solid var(--line);
+  background: transparent;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.login-sms-send:hover:not(:disabled) {
+  background: var(--surface-2);
+}
+
+.login-sms-send:disabled {
+  color: var(--soft);
+  cursor: default;
+}
+
+.login-submit {
+  width: 100%;
+  height: 42px;
+  margin-top: 4px;
+}
+
+.login-user {
+  font-size: 12px;
+  color: var(--muted);
+  padding: 0 8px 8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }

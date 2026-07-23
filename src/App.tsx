@@ -6,6 +6,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Composer } from "./components/Composer";
 import { FilePreview } from "./components/FilePreview";
 import { McpSettingsModal } from "./components/McpSettingsModal";
+import { SkillsModal } from "./components/SkillsModal";
 import {
   PermissionBanner,
   type PermissionRequest,
@@ -14,9 +15,11 @@ import { RightPanel, type GitChange } from "./components/RightPanel";
 import { Sidebar } from "./components/Sidebar";
 import { Thread } from "./components/Thread";
 import { useAgent } from "./hooks/useAgent";
+import { useAuth } from "./hooks/useAuth";
 import { useSessions } from "./hooks/useSessions";
 import type { ChatAttachment } from "./types/agent";
 import type { LeftMode, RightTab } from "./types/codex";
+import { LoginPage } from "./components/LoginPage";
 import "./App.css";
 
 const MAX_BINARY_BYTES = 10 * 1024 * 1024;
@@ -72,6 +75,17 @@ async function toAttachment(file: File): Promise<ChatAttachment> {
 
 function App() {
   const {
+    ready: authReady,
+    session: authSession,
+    logout,
+    requestSms,
+    signInSms,
+    createQrSession,
+    pollQrStatus,
+    signInQr,
+  } = useAuth();
+
+  const {
     sessions,
     activeId,
     active,
@@ -100,6 +114,7 @@ function App() {
     saveSettings,
     sendMessage,
     cancelMessage,
+    clearSessionBusy,
   } = useAgent({
     activeSessionId: activeId,
     setMessages,
@@ -109,6 +124,7 @@ function App() {
   const [rightOpen, setRightOpen] = useState(false);
   const [rightTab, setRightTab] = useState<RightTab>("diff");
   const [mcpOpen, setMcpOpen] = useState(false);
+  const [skillsOpen, setSkillsOpen] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
   const [gitChanges, setGitChanges] = useState<GitChange[]>([]);
   const [permission, setPermission] = useState<PermissionRequest | null>(null);
@@ -219,27 +235,47 @@ function App() {
         setRightOpen(true);
         setRightTab("terminal");
       }
-      // Ctrl+V 全局后备：自动聚焦输入框以确保粘贴生效
+      // Ctrl+V：仅在未聚焦可编辑控件时，才把粘贴转到会话输入框。
+      // 之前连设置里的 Base URL / API Key 输入框也被抢走，导致「框内不能粘贴」。
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "v") {
-        // 如果当前焦点不在输入框内，强制聚焦到 textarea
-        const activeEl = document.activeElement;
-        const isTextarea =
-          activeEl?.tagName === "TEXTAREA" ||
-          (activeEl as HTMLElement)?.isContentEditable;
-        if (!isTextarea) {
-          e.preventDefault();
-          const textarea = document.querySelector(
-            ".composer-card textarea",
-          ) as HTMLTextAreaElement | null;
-          if (textarea) {
-            textarea.focus();
-            // 延迟一帧让 focus 生效，然后由 textarea 的 onPaste 处理
-            requestAnimationFrame(() => {
-              // 通过 execCommand 触发粘贴（对 WebView2 兼容性更好）
-              document.execCommand("paste");
-            });
+        const activeEl = document.activeElement as HTMLElement | null;
+        const tag = activeEl?.tagName;
+        const isEditable =
+          tag === "TEXTAREA" ||
+          tag === "INPUT" ||
+          Boolean(activeEl?.isContentEditable);
+        if (isEditable) return;
+
+        e.preventDefault();
+        const textarea = document.querySelector(
+          ".composer-card textarea",
+        ) as HTMLTextAreaElement | null;
+        if (!textarea) return;
+        textarea.focus();
+        void (async () => {
+          try {
+            const { readText } = await import(
+              "@tauri-apps/plugin-clipboard-manager"
+            );
+            const text = await readText();
+            if (!text) return;
+            const start = textarea.selectionStart;
+            const end = textarea.selectionEnd;
+            const next =
+              textarea.value.slice(0, start) + text + textarea.value.slice(end);
+            const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
+              window.HTMLTextAreaElement.prototype,
+              "value",
+            )?.set;
+            nativeInputValueSetter?.call(textarea, next);
+            textarea.dispatchEvent(new Event("input", { bubbles: true }));
+            const caret = start + text.length;
+            textarea.selectionStart = caret;
+            textarea.selectionEnd = caret;
+          } catch {
+            document.execCommand("paste");
           }
-        }
+        })();
       }
     };
     window.addEventListener("keydown", onKey);
@@ -285,6 +321,22 @@ function App() {
   const askApproval = !(settings?.autoApprovePermissions ?? true);
   const isEmpty = (active?.messages.length ?? 0) === 0;
 
+  if (!authReady) {
+    return <div className="login-page"><div className="login-card">加载中…</div></div>;
+  }
+
+  if (!authSession) {
+    return (
+      <LoginPage
+        onRequestSms={requestSms}
+        onSignInSms={signInSms}
+        onCreateQr={createQrSession}
+        onPollQr={pollQrStatus}
+        onSignInQr={signInQr}
+      />
+    );
+  }
+
   return (
     <div className="codex-app">
       <Sidebar
@@ -299,15 +351,38 @@ function App() {
         error={displayError}
         rightOpen={rightOpen}
         mcpOpen={mcpOpen}
+        skillsOpen={skillsOpen}
+        authUser={authSession.displayName || authSession.phone || `用户 ${authSession.userId}`}
+        onLogout={() => void logout()}
         onMode={setLeftMode}
         onNew={() => {
           createSession();
           setLeftMode("threads");
         }}
         onToggleRight={() => setRightOpen((v) => !v)}
-        onOpenMcp={() => setMcpOpen(true)}
+        onOpenMcp={() => {
+          setSkillsOpen(false);
+          setMcpOpen(true);
+        }}
+        onOpenSkills={() => {
+          setMcpOpen(false);
+          setSkillsOpen(true);
+        }}
         onSelectSession={setActiveId}
-        onRemoveSession={removeSession}
+        onRemoveSession={(id) => {
+          void (async () => {
+            if (busyBySession[id]) {
+              await cancelMessage(id);
+            }
+            try {
+              await invoke("drop_session_agent", { threadId: id });
+            } catch {
+              /* ignore */
+            }
+            clearSessionBusy(id);
+            removeSession(id);
+          })();
+        }}
         onOpenFolder={() => void pickFolder()}
         onShowProjectFiles={() => {
           setRightOpen(true);
@@ -361,21 +436,10 @@ function App() {
               }}
               onModelChange={(modelId) => {
                 if (!settings || modelId === settings.modelId) return;
-                if (Object.values(busyBySession).some(Boolean)) {
-                  setLocalError("有任务正在执行，请等待完成后再切换模型。");
-                  return;
-                }
-                void (async () => {
-                  await saveSettings({ ...settings, modelId });
-                  // 模型由 Agent 启动环境读取。必须销毁已有 ACP 会话，
-                  // 否则 Agent 可能继续沿用旧模型。
-                  await disconnect();
-                  if (status.workspace) {
-                    await reconnect();
-                  } else if (activeId) {
-                    await connectDefaultAgent(activeId);
-                  }
-                })().catch((error) => setLocalError(`切换模型失败：${String(error)}`));
+                // 其它会话分析中也可切换：新对话下一条起用新模型，运行中的会话不受影响。
+                void saveSettings({ ...settings, modelId }).catch((error) =>
+                  setLocalError(`切换模型失败：${String(error)}`),
+                );
               }}
               onManageModels={() => setLeftMode("settings")}
               onPickProject={() => void pickFolder()}
@@ -435,11 +499,18 @@ function App() {
       <McpSettingsModal
         open={mcpOpen}
         servers={settings?.mcpServers ?? []}
+        workspace={status.workspace}
         onClose={() => setMcpOpen(false)}
         onSave={(mcpServers) => {
           if (!settings) return;
           void saveSettings({ ...settings, mcpServers });
         }}
+      />
+
+      <SkillsModal
+        open={skillsOpen}
+        workspace={status.workspace}
+        onClose={() => setSkillsOpen(false)}
       />
     </div>
   );

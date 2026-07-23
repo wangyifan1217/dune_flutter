@@ -1,14 +1,21 @@
 ﻿mod acp;
+mod auth;
 mod commands;
 mod git;
+mod mcp;
 mod memory;
+mod model_resolve;
 mod models;
+mod office;
 mod persist;
 mod process_win;
+mod skills;
 mod state;
 mod terminal;
 mod workspace;
 
+pub use mcp::run_mcp_server;
+pub use office::{run_create_blank_pptx, run_create_pptx_json};
 pub use process_win::run_hidden_child;
 
 use std::sync::Arc;
@@ -109,7 +116,23 @@ pub fn run() {
             commands::reconnect_agent,
             commands::send_prompt,
             commands::cancel_prompt,
+            commands::drop_session_agent,
             commands::open_url,
+            commands::auth_get_api_base,
+            commands::auth_set_api_base,
+            commands::auth_restore_session,
+            commands::auth_logout,
+            commands::auth_request_sms,
+            commands::auth_sign_in_sms,
+            commands::auth_create_qr_session,
+            commands::auth_poll_qr_status,
+            commands::auth_sign_in_qr,
+            commands::list_skills,
+            commands::create_skill,
+            commands::delete_skill,
+            commands::read_skill_markdown,
+            commands::write_skill_markdown,
+            commands::open_skills_folder,
             commands::list_workspace,
             commands::get_workspace_tree,
             commands::read_workspace_file,

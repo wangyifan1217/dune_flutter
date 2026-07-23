@@ -1,9 +1,16 @@
 import { useEffect, useState } from "react";
 import type { McpEnvVar, McpServerConfig } from "../types/agent";
+import {
+  MCP_PRESETS,
+  presetAlreadyAdded,
+  type McpPreset,
+} from "../constants/mcpPresets";
 
 interface McpSettingsModalProps {
   open: boolean;
   servers: McpServerConfig[];
+  /** 当前项目路径，用于 Filesystem 预设默认目录 */
+  workspace?: string | null;
   onClose: () => void;
   onSave: (servers: McpServerConfig[]) => void;
 }
@@ -51,7 +58,6 @@ function toConfig(d: DraftServer): McpServerConfig | null {
   if (d.transport === "http") {
     const url = d.url.trim();
     if (!url) return null;
-    // Agent 侧当前以 command 承载；HTTP 先记到 command，args 标记类型
     return {
       name,
       command: url,
@@ -90,6 +96,7 @@ function summarize(s: McpServerConfig): string {
 export function McpSettingsModal({
   open,
   servers,
+  workspace,
   onClose,
   onSave,
 }: McpSettingsModalProps) {
@@ -140,6 +147,17 @@ export function McpSettingsModal({
     onSave(next);
   }
 
+  function addPreset(preset: McpPreset) {
+    if (presetAlreadyAdded(list, preset)) return;
+    const next = [...list, preset.build(workspace)];
+    setList(next);
+    onSave(next);
+  }
+
+  const thinkingPresets = MCP_PRESETS.filter((p) => p.category === "thinking");
+  const filePresets = MCP_PRESETS.filter((p) => p.category === "files");
+  const officePresets = MCP_PRESETS.filter((p) => p.category === "office");
+
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div
@@ -151,7 +169,7 @@ export function McpSettingsModal({
         <div className="modal-head">
           <div>
             <h2>MCP 服务器</h2>
-            <p>连接本地或远程工具。保存后请重连 Agent。</p>
+            <p>推荐工具为应用内置，无需安装 Node.js / Office。保存后请重连 Agent。</p>
           </div>
           <button type="button" className="icon-x" onClick={onClose}>
             ×
@@ -160,9 +178,79 @@ export function McpSettingsModal({
 
         {!adding ? (
           <>
+            <div className="mcp-presets">
+              <div className="mcp-preset-group">
+                <div className="mcp-preset-label">推理</div>
+                {thinkingPresets.map((p) => {
+                  const on = presetAlreadyAdded(list, p);
+                  return (
+                    <div key={p.id} className="mcp-preset-row">
+                      <div className="mcp-preset-main">
+                        <strong>{p.title}</strong>
+                        <span>{p.description}</span>
+                      </div>
+                      <button
+                        type="button"
+                        className="text-btn"
+                        disabled={on}
+                        onClick={() => addPreset(p)}
+                      >
+                        {on ? "已添加" : "+ 添加"}
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="mcp-preset-group">
+                <div className="mcp-preset-label">文件 / 内容</div>
+                {filePresets.map((p) => {
+                  const on = presetAlreadyAdded(list, p);
+                  return (
+                    <div key={p.id} className="mcp-preset-row">
+                      <div className="mcp-preset-main">
+                        <strong>{p.title}</strong>
+                        <span>{p.description}</span>
+                      </div>
+                      <button
+                        type="button"
+                        className="text-btn"
+                        disabled={on}
+                        onClick={() => addPreset(p)}
+                      >
+                        {on ? "已添加" : "+ 添加"}
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="mcp-preset-group">
+                <div className="mcp-preset-label">Office 文档</div>
+                {officePresets.map((p) => {
+                  const on = presetAlreadyAdded(list, p);
+                  return (
+                    <div key={p.id} className="mcp-preset-row">
+                      <div className="mcp-preset-main">
+                        <strong>{p.title}</strong>
+                        <span>{p.description}</span>
+                      </div>
+                      <button
+                        type="button"
+                        className="text-btn"
+                        disabled={on}
+                        onClick={() => addPreset(p)}
+                      >
+                        {on ? "已添加" : "+ 添加"}
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
             <div className="mcp-list">
+              <div className="mcp-preset-label padded">已启用</div>
               {list.length === 0 && (
-                <div className="mcp-empty">还没有 MCP 服务器</div>
+                <div className="mcp-empty">还没有启用的 MCP，可从上方推荐添加</div>
               )}
               {list.map((s, index) => (
                 <div key={`${s.name}-${index}`} className="mcp-row">
@@ -183,7 +271,7 @@ export function McpSettingsModal({
             </div>
             <div className="modal-foot">
               <button type="button" className="primary-btn" onClick={openAdd}>
-                + 添加服务器
+                + 自定义服务器
               </button>
             </div>
           </>

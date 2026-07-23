@@ -31,14 +31,8 @@ const defaults = (): AppSettings => ({
   mcpServers: [],
 });
 
-const MODEL_PRESETS = [
-  { id: "gpt-4o", label: "GPT-4o" },
-  { id: "gpt-4.1", label: "GPT-4.1" },
-  { id: "claude-sonnet-4", label: "Claude Sonnet 4" },
-  { id: "claude-opus-4", label: "Claude Opus 4" },
-  { id: "deepseek-chat", label: "DeepSeek Chat" },
-  { id: "nova-4.5", label: "Nova Build 4.5" },
-];
+const MODEL_PRESETS: { id: string; label: string }[] = [];
+
 
 function emptyMcp(): McpServerConfig {
   return { name: "", command: "npx", args: ["-y"], env: [] };

@@ -84,8 +84,24 @@ pub struct AgentHandle {
     pending: Arc<Mutex<HashMap<String, oneshot::Sender<Result<Value>>>>>,
     session_id: Option<String>,
     workspace: String,
+    /// 启动时绑定的模型；设置变更后需重建进程。
+    model_id: String,
+    /// 模型 / 网关 / CLI 指纹；与当前设置不一致时按会话惰性重建，避免拖死其它会话。
+    config_fingerprint: String,
     supports_images: bool,
     supports_embedded_context: bool,
+}
+
+/// 用于判断已有 Agent 是否仍匹配当前运行时设置。
+pub fn settings_fingerprint(settings: &AppSettings) -> String {
+    format!(
+        "m={}|b={}|k={}|c={}|a={}",
+        settings.model_id.trim(),
+        settings.api_base_url.trim().trim_end_matches('/'),
+        settings.api_key.trim(),
+        settings.grok_command.trim(),
+        settings.grok_args.join("\u{1f}")
+    )
 }
 
 fn rpc_id_key(id: &Value) -> Option<String> {
@@ -187,9 +203,56 @@ impl AgentHandle {
         live_settings: Arc<Mutex<AppSettings>>,
     ) -> Result<Self> {
         let workspace = absolutize(workspace)?;
+        let api_key = if !settings.api_key.trim().is_empty() {
+            Some(settings.api_key.trim().to_string())
+        } else {
+            std::env::var("XAI_API_KEY")
+                .or_else(|_| std::env::var("OPENAI_API_KEY"))
+                .ok()
+        };
+        let base = settings.api_base_url.trim().trim_end_matches('/').to_string();
+
+        // 网关模型 id 区分大小写。用户填 GPT-5.6-sol、网关是 gpt-5.6-sol 时会选错模型。
+        let model_id = {
+            let raw = settings.model_id.trim().to_string();
+            if raw.is_empty() || base.is_empty() {
+                raw
+            } else {
+                let key = api_key.clone().unwrap_or_default();
+                let wanted = raw.clone();
+                let base_c = base.clone();
+                tokio::task::spawn_blocking(move || {
+                    crate::model_resolve::resolve_gateway_model_id(&base_c, &key, &wanted)
+                })
+                .await
+                .unwrap_or(raw)
+            }
+        };
+        if !model_id.is_empty() && model_id != settings.model_id.trim() {
+            warn!(
+                "模型 ID 已对齐网关：`{}` → `{}`",
+                settings.model_id.trim(),
+                model_id
+            );
+        }
+
+        // `grok agent stdio --model X` 会直接报错退出；正确写法是全局 `-m` 在子命令前：
+        //   grok -m <model> agent stdio
+        let mut args: Vec<String> = Vec::new();
+        if !model_id.is_empty()
+            && !settings
+                .grok_args
+                .iter()
+                .any(|a| a == "--model" || a == "-m")
+        {
+            args.push("-m".into());
+            args.push(model_id.clone());
+        }
+        args.extend(settings.grok_args.iter().cloned());
+
         let mut command = Command::new(&settings.grok_command);
         command
-            .args(&settings.grok_args)
+            .args(&args)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
@@ -199,28 +262,22 @@ impl AgentHandle {
         // Windows：grok / MCP 控制台程序不设此标志会弹 CMD。
         crate::process_win::hide_console_tokio(&mut command);
 
-        // new-api / 自定义网关：优先用应用内配置，其次系统环境变量
-        let api_key = if !settings.api_key.trim().is_empty() {
-            Some(settings.api_key.trim().to_string())
-        } else {
-            std::env::var("XAI_API_KEY")
-                .or_else(|_| std::env::var("OPENAI_API_KEY"))
-                .ok()
-        };
         if let Some(key) = api_key {
             command.env("XAI_API_KEY", &key);
             command.env("OPENAI_API_KEY", &key);
         }
 
-        if !settings.api_base_url.trim().is_empty() {
-            let base = settings.api_base_url.trim().trim_end_matches('/');
-            command.env("GROK_MODELS_BASE_URL", base);
-            command.env("OPENAI_BASE_URL", base);
-            command.env("OPENAI_API_BASE", base);
+        if !base.is_empty() {
+            command.env("GROK_MODELS_BASE_URL", &base);
+            command.env("OPENAI_BASE_URL", &base);
+            command.env("OPENAI_API_BASE", &base);
         }
 
-        if !settings.model_id.trim().is_empty() {
-            command.env("GROK_DEFAULT_MODEL", settings.model_id.trim());
+        if !model_id.is_empty() {
+            // 官方文档：GROK_DEFAULT_MODEL；部分发行版也认 GROK_MODEL / OPENAI_MODEL
+            command.env("GROK_DEFAULT_MODEL", &model_id);
+            command.env("GROK_MODEL", &model_id);
+            command.env("OPENAI_MODEL", &model_id);
         }
 
         let mut child = command
@@ -441,9 +498,26 @@ impl AgentHandle {
             pending,
             session_id: None,
             workspace: workspace.clone(),
+            model_id: model_id.clone(),
+            config_fingerprint: {
+                let mut s = settings.clone();
+                s.model_id = model_id;
+                settings_fingerprint(&s)
+            },
             supports_images: false,
             supports_embedded_context: false,
         };
+
+        // 参数错误时 grok 会立刻退出；尽快失败，避免 UI 卡在「正在启动」几十秒。
+        {
+            tokio::time::sleep(std::time::Duration::from_millis(120)).await;
+            let mut child = handle.child.lock().await;
+            if let Ok(Some(status)) = child.try_wait() {
+                return Err(anyhow!(
+                    "Agent 进程启动后立即退出（{status}）。请检查 Agent 命令参数；模型请用 `-m <id> agent stdio`，不要写成 `agent stdio --model`。"
+                ));
+            }
+        }
 
         handle.initialize().await?;
         let session_id = handle
@@ -528,8 +602,11 @@ impl AgentHandle {
         let servers: Vec<_> = mcp_servers
             .iter()
             .map(|s| {
-                let (command, args) =
-                    crate::process_win::wrap_mcp_command(&s.command, &s.args);
+                // nova-builtin → 当前 exe --mcp-server …（不依赖 Node）
+                let (command, args) = crate::mcp::expand_builtin_mcp(&s.command, &s.args)
+                    .unwrap_or_else(|| (s.command.clone(), s.args.clone()));
+                // Windows 再包一层无窗口启动（对本机 exe 通常会跳过）
+                let (command, args) = crate::process_win::wrap_mcp_command(&command, &args);
                 json!({
                     "name": s.name,
                     "command": command,
@@ -661,6 +738,14 @@ impl AgentHandle {
 
     pub fn workspace(&self) -> &str {
         &self.workspace
+    }
+
+    pub fn model_id(&self) -> &str {
+        &self.model_id
+    }
+
+    pub fn config_fingerprint(&self) -> &str {
+        &self.config_fingerprint
     }
 
     pub async fn shutdown(&self) -> Result<()> {

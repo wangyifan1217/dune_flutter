@@ -111,6 +111,22 @@ export function useAgent({ activeSessionId, setMessages }: Options) {
     setBusyBySession((prev) => ({ ...prev, [sessionId]: isBusy }));
   }, []);
 
+  const clearSessionBusy = useCallback((sessionId: string) => {
+    setBusyBySession((prev) => {
+      if (!(sessionId in prev)) return prev;
+      const next = { ...prev };
+      delete next[sessionId];
+      return next;
+    });
+    setProgressBySession((prev) => {
+      if (!(sessionId in prev)) return prev;
+      const next = { ...prev };
+      delete next[sessionId];
+      return next;
+    });
+    cancelledSessions.current.delete(sessionId);
+  }, []);
+
   const refreshSettings = useCallback(async () => {
     const next = await invoke<AppSettings>("get_settings");
     const normalized = normalizeSettings(next as unknown as Record<string, unknown>);
@@ -369,8 +385,10 @@ export function useAgent({ activeSessionId, setMessages }: Options) {
   );
 
   const saveSettings = useCallback(async (next: AppSettings) => {
-    await invoke("update_runtime_settings", { settings: next });
-    setSettings(next);
+    const saved = await invoke<AppSettings>("update_runtime_settings", {
+      settings: next,
+    });
+    setSettings(normalizeSettings(saved ?? next));
   }, []);
 
   const sendMessage = useCallback(
@@ -502,5 +520,6 @@ export function useAgent({ activeSessionId, setMessages }: Options) {
     saveSettings,
     sendMessage,
     cancelMessage,
+    clearSessionBusy,
   };
 }

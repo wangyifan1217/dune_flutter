@@ -1,6 +1,5 @@
 ﻿import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { MODEL_SUGGESTIONS } from "../constants/models";
 import type { AgentStatus, AppSettings, DirectoryTreeNode, ModelEntry } from "../types/agent";
 import { normalizeSettings } from "../types/agent";
 import type { LeftMode, ThreadSession } from "../types/codex";
@@ -19,10 +18,14 @@ interface SidebarProps {
   error?: string | null;
   rightOpen: boolean;
   mcpOpen?: boolean;
+  skillsOpen?: boolean;
+  authUser?: string;
   onMode: (mode: LeftMode) => void;
   onNew: () => void;
   onToggleRight: () => void;
   onOpenMcp: () => void;
+  onOpenSkills: () => void;
+  onLogout?: () => void;
   onSelectSession: (id: string) => void;
   onRemoveSession: (id: string) => void;
   onOpenFolder: () => void;
@@ -45,10 +48,14 @@ export function Sidebar({
   error,
   rightOpen,
   mcpOpen,
+  skillsOpen,
+  authUser,
   onMode,
   onNew,
   onToggleRight,
   onOpenMcp,
+  onOpenSkills,
+  onLogout,
   onSelectSession,
   onRemoveSession,
   onOpenFolder,
@@ -165,6 +172,14 @@ export function Sidebar({
         >
           <span className="nav-ico">◇</span>
           MCP
+        </button>
+        <button
+          type="button"
+          className={`nav-item ${skillsOpen ? "active" : ""}`}
+          onClick={onOpenSkills}
+        >
+          <span className="nav-ico">◎</span>
+          Skills
         </button>
         <button
           type="button"
@@ -318,13 +333,19 @@ export function Sidebar({
             </label>
 
             <div className="sidebar-label spaced">模型列表</div>
-            <p className="hint">会话框只能切换这里添加过的模型。</p>
+            <p className="hint">
+              在下方填写网关里的模型 ID 并添加（须与 new-api 完全一致，注意大小写；保存时会自动对齐）。
+              点列表项设为当前模型；会话框只能切换这里已添加的模型。
+            </p>
             <div className="settings-model-list">
               {draft.models.length === 0 && (
-                <div className="empty-hint">还没有模型，在下方添加</div>
+                <div className="empty-hint">还没有模型，请在下方添加</div>
               )}
               {draft.models.map((m) => (
-                <div key={m.id} className="settings-model-row">
+                <div
+                  key={m.id}
+                  className={`settings-model-row ${draft.modelId === m.id ? "is-current" : ""}`}
+                >
                   <button
                     type="button"
                     className={`settings-model-main ${draft.modelId === m.id ? "active" : ""}`}
@@ -332,7 +353,10 @@ export function Sidebar({
                     title="设为当前模型"
                   >
                     <strong>{m.label || m.id}</strong>
-                    {m.label && m.label !== m.id ? <span>{m.id}</span> : null}
+                    <span className="settings-model-id">{m.id}</span>
+                    {draft.modelId === m.id ? (
+                      <em className="settings-model-badge">当前</em>
+                    ) : null}
                   </button>
                   <button
                     type="button"
@@ -346,11 +370,12 @@ export function Sidebar({
             </div>
 
             <div className="add-model-box">
+              <div className="sidebar-label">添加模型</div>
               <label>
-                模型 ID
+                模型 ID（与网关一致）
                 <input
                   value={newModelId}
-                  placeholder="deepseek-v4-pro"
+                  placeholder="例如 gpt-5.6-sol"
                   onChange={(e) => setNewModelId(e.target.value)}
                   onKeyDown={(e) => {
                     if (e.key === "Enter") {
@@ -363,7 +388,7 @@ export function Sidebar({
                 显示名（可选）
                 <input
                   value={newModelLabel}
-                  placeholder="DeepSeek V4 Pro"
+                  placeholder="例如 GPT-5.6"
                   onChange={(e) => setNewModelLabel(e.target.value)}
                   onKeyDown={(e) => {
                     if (e.key === "Enter") {
@@ -380,21 +405,6 @@ export function Sidebar({
               >
                 + 添加模型
               </button>
-            </div>
-
-            <div className="suggest-row">
-              {MODEL_SUGGESTIONS.filter(
-                (s) => !draft.models.some((m) => m.id === s.id),
-              ).map((s) => (
-                <button
-                  key={s.id}
-                  type="button"
-                  className="suggest-chip"
-                  onClick={() => addModel({ id: s.id, label: s.label })}
-                >
-                  + {s.label}
-                </button>
-              ))}
             </div>
 
             <div className="sidebar-label spaced">Agent</div>
@@ -414,6 +424,8 @@ export function Sidebar({
 
       {error && <div className="error-box">{error}</div>}
 
+      {authUser ? <div className="login-user" title={authUser}>{authUser}</div> : null}
+
       <div className="sidebar-foot">
         <button
           type="button"
@@ -428,6 +440,11 @@ export function Sidebar({
           <span className="project-name">{project}</span>
         </button>
         <div className="foot-actions">
+          {onLogout ? (
+            <button type="button" className="text-btn" onClick={onLogout}>
+              退出
+            </button>
+          ) : null}
           <button
             type="button"
             className="text-btn"

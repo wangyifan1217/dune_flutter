@@ -297,6 +297,8 @@ pub async fn send_prompt(
         .await
         .map_err(|e| e.to_string())?;
 
+    let current_model = state.settings.lock().model_id.trim().to_string();
+
     // 永久记忆、产品身份与中文偏好，拼进每次提问。
     let memory_block = crate::memory::format_for_prompt(&app);
     let mut prompt = String::new();
@@ -304,7 +306,15 @@ pub async fn send_prompt(
         prompt.push_str(&memory_block);
         prompt.push_str("\n\n");
     }
-    prompt.push_str(
+    if !current_model.is_empty() {
+        prompt.push_str(&format!(
+            "【会话模型】当前请求必须使用模型 `{current_model}`（已通过启动参数配置）。\n\n"
+        ));
+    }
+    let self_exe = std::env::current_exe()
+        .map(|p| p.to_string_lossy().into_owned())
+        .unwrap_or_else(|_| "nova-desktop".into());
+    prompt.push_str(&format!(
         "你是 Nova Build 的 AI 编程助手。始终以“Nova Build”自我介绍，\
 不要声称自己是 Grok、xAI 或任何其他第三方产品；不要在回答中提及底层模型或服务提供方。\
 请始终使用简体中文回复。\n\n\
@@ -313,8 +323,14 @@ pub async fn send_prompt(
 - 不要让用户输入 /cd 等 TUI 命令；切换项目由用户点击「选择项目」完成。\n\
 - 需要打开浏览器时，在 Windows 上执行：cmd /c start \"\" \"http://127.0.0.1:端口\"\n\
 - 启动 PHP 内置服务器可用：php -S 127.0.0.1:8000 -t <项目目录>；若 php 不存在，请明确说明并给出安装/替代方案。\n\
-- 长驻后台进程可能无法在关闭应用后继续运行；请如实告知，并给出可在右侧「终端」手动执行的命令。\n\n",
-    );
+- 长驻后台进程可能无法在关闭应用后继续运行；请如实告知，并给出可在右侧「终端」手动执行的命令。\n\
+- 生成 Office 文档（.pptx / .docx / .xlsx）：客户端的 fs 写文件只能写文本，不能直接写二进制。\
+优先使用已启用的内置 MCP（excel / word / powerpoint）创建与读写；\
+这些工具由 Nova Build 内置，不依赖 Node.js、Python 或已安装的 Office。\
+若用户只要空白 PPT 且未启用 powerpoint MCP，可执行：\n\
+  \"{self_exe}\" --create-blank-pptx \"./空白演示文稿.pptx\"\n\
+不要用 write_text_file 硬写 .pptx/.docx/.xlsx。\n\n"
+    ));
 
     let history = history.unwrap_or_default();
     if !history.is_empty() {
@@ -372,6 +388,18 @@ pub async fn cancel_prompt(
 }
 
 #[tauri::command]
+pub async fn drop_session_agent(
+    state: State<'_, Arc<AppState>>,
+    thread_id: String,
+) -> Result<(), String> {
+    if thread_id.trim().is_empty() {
+        return Err("缺少会话 ID".into());
+    }
+    state.drop_session_agent(&thread_id).await;
+    Ok(())
+}
+
+#[tauri::command]
 pub fn open_url(app: AppHandle, url: String) -> Result<(), String> {
     let url = url.trim();
     if !(url.starts_with("http://") || url.starts_with("https://")) {
@@ -380,6 +408,130 @@ pub fn open_url(app: AppHandle, url: String) -> Result<(), String> {
     app.opener()
         .open_url(url, None::<String>)
         .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn auth_get_api_base(app: AppHandle) -> String {
+    crate::auth::get_api_base(&app)
+}
+
+#[tauri::command]
+pub fn auth_set_api_base(app: AppHandle, api_base: String) -> Result<(), String> {
+    crate::auth::set_api_base(&app, &api_base)
+}
+
+#[tauri::command]
+pub async fn auth_restore_session(
+    app: AppHandle,
+) -> Result<Option<crate::auth::AuthSession>, String> {
+    tokio::task::spawn_blocking(move || crate::auth::restore_session(&app))
+        .await
+        .map_err(|e| format!("恢复登录中断：{e}"))?
+}
+
+#[tauri::command]
+pub fn auth_logout(app: AppHandle) -> Result<(), String> {
+    crate::auth::clear_session(&app)
+}
+
+#[tauri::command]
+pub async fn auth_request_sms(app: AppHandle, phone: String) -> Result<(), String> {
+    tokio::task::spawn_blocking(move || crate::auth::request_sms(&app, &phone))
+        .await
+        .map_err(|e| format!("请求中断：{e}"))?
+}
+
+#[tauri::command]
+pub async fn auth_sign_in_sms(
+    app: AppHandle,
+    phone: String,
+    code: String,
+) -> Result<crate::auth::AuthSession, String> {
+    tokio::task::spawn_blocking(move || crate::auth::sign_in_sms(&app, &phone, &code))
+        .await
+        .map_err(|e| format!("登录中断：{e}"))?
+}
+
+#[tauri::command]
+pub async fn auth_create_qr_session(app: AppHandle) -> Result<crate::auth::QrSession, String> {
+    tokio::task::spawn_blocking(move || crate::auth::create_qr_session(&app))
+        .await
+        .map_err(|e| format!("创建二维码中断：{e}"))?
+}
+
+#[tauri::command]
+pub async fn auth_poll_qr_status(
+    app: AppHandle,
+    session_id: String,
+    client_secret: String,
+) -> Result<crate::auth::QrStatus, String> {
+    tokio::task::spawn_blocking(move || {
+        crate::auth::poll_qr_status(&app, &session_id, &client_secret)
+    })
+    .await
+    .map_err(|e| format!("查询扫码状态中断：{e}"))?
+}
+
+#[tauri::command]
+pub async fn auth_sign_in_qr(
+    app: AppHandle,
+    session_id: String,
+    client_secret: String,
+) -> Result<crate::auth::AuthSession, String> {
+    tokio::task::spawn_blocking(move || {
+        crate::auth::sign_in_qr(&app, &session_id, &client_secret)
+    })
+    .await
+    .map_err(|e| format!("扫码登录中断：{e}"))?
+}
+
+#[tauri::command]
+pub fn list_skills(state: State<'_, Arc<AppState>>) -> Result<Vec<crate::skills::SkillInfo>, String> {
+    let workspace = state.workspace.lock().clone();
+    Ok(crate::skills::list_skills(workspace.as_deref()))
+}
+
+#[tauri::command]
+pub fn create_skill(
+    state: State<'_, Arc<AppState>>,
+    scope: String,
+    name: String,
+    description: String,
+) -> Result<crate::skills::SkillInfo, String> {
+    let workspace = state.workspace.lock().clone();
+    crate::skills::create_skill(workspace.as_deref(), &scope, &name, &description)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn delete_skill(path: String) -> Result<(), String> {
+    crate::skills::delete_skill(&path).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn read_skill_markdown(path: String) -> Result<String, String> {
+    crate::skills::read_skill_markdown(&path).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn write_skill_markdown(path: String, content: String) -> Result<(), String> {
+    crate::skills::write_skill_markdown(&path, &content).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn open_skills_folder(
+    app: AppHandle,
+    state: State<'_, Arc<AppState>>,
+    scope: String,
+) -> Result<String, String> {
+    let workspace = state.workspace.lock().clone();
+    let dir = crate::skills::skills_folder_path(workspace.as_deref(), &scope)
+        .map_err(|e| e.to_string())?;
+    let path = dir.to_string_lossy().into_owned();
+    app.opener()
+        .open_path(path.clone(), None::<String>)
+        .map_err(|e| e.to_string())?;
+    Ok(path)
 }
 
 #[tauri::command]
@@ -450,10 +602,46 @@ pub async fn update_runtime_settings(
     app: AppHandle,
     state: State<'_, Arc<AppState>>,
     settings: AppSettings,
-) -> Result<(), String> {
+) -> Result<AppSettings, String> {
+    let prev = state.settings.lock().clone();
+    let mut settings = settings;
+
+    // 防止设置页未加载完 / 空草稿误把已有网关配置清空
+    let incoming_empty = settings.api_key.trim().is_empty()
+        && settings.api_base_url.trim().is_empty()
+        && settings.models.is_empty()
+        && settings.model_id.trim().is_empty();
+    let prev_has_config = !prev.api_key.trim().is_empty()
+        || !prev.api_base_url.trim().is_empty()
+        || !prev.models.is_empty();
+    if incoming_empty && prev_has_config {
+        return Err("已忽略空配置覆盖，避免清空现有 Base URL / API Key / 模型列表".into());
+    }
+    if !settings.model_id.trim().is_empty() && !settings.api_base_url.trim().is_empty() {
+        let base = settings.api_base_url.clone();
+        let key = settings.api_key.clone();
+        let wanted = settings.model_id.clone();
+        let resolved = tokio::task::spawn_blocking(move || {
+            crate::model_resolve::resolve_gateway_model_id(&base, &key, &wanted)
+        })
+        .await
+        .unwrap_or_else(|_| settings.model_id.clone());
+        if !resolved.is_empty() {
+            for m in &mut settings.models {
+                if m.id.eq_ignore_ascii_case(&resolved) {
+                    m.id = resolved.clone();
+                }
+            }
+            settings.model_id = resolved;
+        }
+    }
+
     save_settings(app.clone(), settings.clone())?;
-    *state.settings.lock() = settings;
-    Ok(())
+    *state.settings.lock() = settings.clone();
+
+    // 不在这里杀掉全部 Agent：其它会话可能正在分析。
+    // 各会话下次 send_prompt 时按 config_fingerprint 惰性重建进程。
+    Ok(settings)
 }
 
 #[tauri::command]

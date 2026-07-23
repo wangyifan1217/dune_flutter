@@ -76,42 +76,53 @@ export function Composer({
   }
 
   /** 处理粘贴事件：文本插入到光标位置，图片作为附件 */
-  function handlePaste(e: React.ClipboardEvent<HTMLTextAreaElement>) {
+  async function handlePaste(e: React.ClipboardEvent<HTMLTextAreaElement>) {
     const clipboardData = e.clipboardData;
-    if (!clipboardData) return;
 
     // 优先处理图片粘贴（截图）
-    const items = clipboardData.items;
-    for (let i = 0; i < items.length; i++) {
-      const item = items[i];
-      if (item.type.startsWith("image/")) {
-        e.preventDefault();
-        const file = item.getAsFile();
-        if (file) {
-          onAddFiles([file]);
-          return;
+    const items = clipboardData?.items;
+    if (items) {
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        if (item.type.startsWith("image/")) {
+          e.preventDefault();
+          const file = item.getAsFile();
+          if (file) {
+            onAddFiles([file]);
+            return;
+          }
         }
       }
     }
 
-    // 文本粘贴：插入到光标位置而非替换全部内容
-    const pastedText = clipboardData.getData("text/plain");
-    if (pastedText) {
+    // 文本：优先用事件里的数据；WebView2 有时为空，再走 Tauri 剪贴板
+    let pastedText = clipboardData?.getData("text/plain") ?? "";
+    if (!pastedText) {
       e.preventDefault();
-      const textarea = textareaRef.current;
-      if (!textarea) return;
-      const start = textarea.selectionStart;
-      const end = textarea.selectionEnd;
-      const before = value.slice(0, start);
-      const after = value.slice(end);
-      const newValue = before + pastedText + after;
-      setValue(newValue);
-      // 恢复光标位置到粘贴内容之后
-      requestAnimationFrame(() => {
-        textarea.selectionStart = start + pastedText.length;
-        textarea.selectionEnd = start + pastedText.length;
-      });
+      try {
+        const { readText } = await import(
+          "@tauri-apps/plugin-clipboard-manager"
+        );
+        pastedText = await readText();
+      } catch {
+        return;
+      }
     }
+    if (!pastedText) return;
+
+    e.preventDefault();
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const before = value.slice(0, start);
+    const after = value.slice(end);
+    const newValue = before + pastedText + after;
+    setValue(newValue);
+    requestAnimationFrame(() => {
+      textarea.selectionStart = start + pastedText.length;
+      textarea.selectionEnd = start + pastedText.length;
+    });
   }
 
   return (

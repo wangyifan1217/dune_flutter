@@ -1,3 +1,3 @@
 mod client;
 
-pub use client::AgentHandle;
+pub use client::{settings_fingerprint, AgentHandle};

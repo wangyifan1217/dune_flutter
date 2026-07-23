@@ -30,3 +30,7 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 portable-pty = "0.8"
 calamine = "0.36.0"
+ureq = { version = "2", default-features = false, features = ["json", "tls"] }
+zip = { version = "2", default-features = false, features = ["deflate"] }
+rust_xlsxwriter = "0.90"
+docx-rs = "0.4"

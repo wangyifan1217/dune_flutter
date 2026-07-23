@@ -697,17 +697,61 @@
     return name + (level ? ' · ' + String(level).toUpperCase() + '级' : '');
   }
 
+  function isParallelTrail(trail) {
+    return String((trail && trail.stageExecutionMode) || '').toUpperCase() === 'PARALLEL';
+  }
+
   function currentApproverLabel(trail, assigneeNames, stages) {
     if (!trail) return '';
+    // 并发/并行：优先用后端汇总的 currentNodeLabel，避免依赖 currentStep == 某一步
+    var nodeLabel = trail.currentNodeLabel && String(trail.currentNodeLabel).trim();
+    if (nodeLabel) return nodeLabel;
+
     assigneeNames = assigneeNames || {};
     stages = stages || [];
+    var steps = trail.steps || [];
+    var parallel = isParallelTrail(trail);
+
+    if (parallel) {
+      var openSteps = steps.filter(function (s) {
+        if (s.decision) return false;
+        if (typeof s.isCurrent === 'boolean') return s.isCurrent;
+        var curSteps = trail.currentSteps;
+        if (Array.isArray(curSteps) && curSteps.length) {
+          return curSteps.some(function (n) {
+            return Number(n) === Number(s.stepNo);
+          });
+        }
+        return true;
+      });
+      var labels = [];
+      openSteps.forEach(function (step) {
+        var sn = Number(step.stepNo) || 0;
+        var stage = stages[sn - 1];
+        var stageName =
+          (step.stageName && String(step.stageName).trim()) ||
+          (stage && stage.stageName) ||
+          (sn ? '第' + sn + '步' : '审批节点');
+        var who =
+          (step.assigneeId && assigneeNames[step.assigneeId]) ||
+          step.assigneeName ||
+          (step.assigneeId ? '用户 ' + step.assigneeId : '待分配');
+        var text = who === '待分配' || who.indexOf(stageName) >= 0 ? who : stageName + ' · ' + who;
+        if (labels.indexOf(text) < 0) labels.push(text);
+      });
+      return labels.join('、') || '待分配';
+    }
+
     var stepNo = trail.currentStep || 1;
-    var step = (trail.steps || []).find(function (s) {
+    var step = steps.find(function (s) {
       return Number(s.stepNo) === Number(stepNo);
     });
     if (step && step.assigneeId && assigneeNames[step.assigneeId]) {
       var stage = stages[stepNo - 1];
-      var stageName = stage && stage.stageName ? stage.stageName : '第' + stepNo + '步';
+      var stageName =
+        (step.stageName && String(step.stageName).trim()) ||
+        (stage && stage.stageName) ||
+        '第' + stepNo + '步';
       return stageName + ' · ' + assigneeNames[step.assigneeId];
     }
     if (step && step.decision) return '第' + stepNo + '步 · ' + step.decision;
@@ -786,23 +830,41 @@
     assigneeNames = assigneeNames || {};
     detail = detail || {};
     var steps = (trail && trail.steps) || [];
+    var parallel = isParallelTrail(trail);
     var curStep = trail && trail.currentStep ? Number(trail.currentStep) : 1;
+    var curSteps = Array.isArray(trail && trail.currentSteps) ? trail.currentSteps : [];
 
     function assigneeLabel(trailStep, fallback) {
       fallback = fallback || '审批节点';
       if (trailStep && trailStep.assigneeId && assigneeNames[trailStep.assigneeId]) {
         return assigneeNames[trailStep.assigneeId] + ' · ' + fallback;
       }
+      if (trailStep && trailStep.assigneeName) {
+        return trailStep.assigneeName + ' · ' + fallback;
+      }
       return fallback;
     }
 
-    function stageLabel(stepNo, stepType) {
+    function stageLabel(stepNo, stepType, trailStep) {
+      if (trailStep && trailStep.stageName) return trailStep.stageName;
       var st = stages[stepNo - 1];
       if (st && st.stageName) return st.stageName;
       if (stepType === 'DIRECT_SUP') return '部门主管';
       if (stepType === 'FINANCE') return '财务总监';
       if (stepType === 'ROLE') return '技术审批';
       return stepType || '审批节点';
+    }
+
+    function isCurrentStep(trailStep, stepNo) {
+      // 并行：未决步骤统一「待处理」，不单独高亮「当前处理」（勿依赖 currentStep == 某一步）
+      if (parallel) return false;
+      if (typeof trailStep.isCurrent === 'boolean') return trailStep.isCurrent;
+      if (curSteps.length) {
+        return curSteps.some(function (n) {
+          return Number(n) === Number(stepNo);
+        });
+      }
+      return stepNo === curStep;
     }
 
     function fmtTime(v) {
@@ -848,7 +910,7 @@
 
     steps.forEach(function (trailStep) {
       var stepNo = Number(trailStep.stepNo) || 0;
-      var label = stageLabel(stepNo, trailStep.stepType);
+      var label = stageLabel(stepNo, trailStep.stepType, trailStep);
       var who = assigneeLabel(trailStep, label);
       var cls = 'todo';
       var icon = String(stepNo);
@@ -861,7 +923,7 @@
         cls = 'rejected';
         icon = '<i class="ti ti-x"></i>';
         cmt = trailStep.comment || '已驳回';
-      } else if (stepNo === curStep && detail.status === 'pending') {
+      } else if (detail.status === 'pending' && isCurrentStep(trailStep, stepNo)) {
         cls = 'cur';
         icon = '<i class="ti ti-clock"></i>';
         cmt = '审批进行中';

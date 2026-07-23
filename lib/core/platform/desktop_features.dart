@@ -1,6 +1,6 @@
 import 'package:flutter/foundation.dart';
 
-/// 桌面端（Windows / macOS）：与手机 APP 分 channel；侧栏含通讯 / 千机 / 灯塔 / 我的。
+/// 桌面端（Windows / macOS）：与手机 APP 分 channel；侧栏含通讯 / NOVA / 灯塔 / 我的。
 bool get isDesktopCommOnly =>
     !kIsWeb &&
     (defaultTargetPlatform == TargetPlatform.windows ||
@@ -20,6 +20,7 @@ bool isDesktopAllowedCommScreen(String screenId) {
     'C5',
     'C6',
     'C7',
+    'CR',
     'C9',
     'C10',
     'C11',
@@ -61,6 +62,9 @@ bool isDesktopAllowedCommScreen(String screenId) {
     'QJTD',
     'QJMM',
     'QJMD',
+    'QJR',
+    'QJRA',
+    'QJRC',
     'LH',
     'LM',
   }.contains(screenId);

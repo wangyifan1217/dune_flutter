@@ -407,6 +407,100 @@ class ConversationService {
     }
   }
 
+  /// 确保一人一机 ROBOT 会话存在。
+  Future<NativeConversation> ensureRobotSession(String robotKey) async {
+    final key = robotKey.trim();
+    if (key.isEmpty) throw Exception('robotKey required');
+    final resp = await _client.post(
+      _uri('/robots/$key/sessions/ensure'),
+      headers: _headers,
+      body: '{}',
+    );
+    if (resp.statusCode < 200 || resp.statusCode >= 300) {
+      throw Exception('打开机器人会话失败: HTTP ${resp.statusCode}');
+    }
+    final body = _decode(resp.body);
+    if (body['success'] == false) {
+      throw Exception((body['message'] ?? '打开机器人会话失败').toString());
+    }
+    final data = body['data'];
+    final map = data is Map<String, dynamic>
+        ? data
+        : data is Map
+        ? Map<String, dynamic>.from(data)
+        : <String, dynamic>{};
+    final convId = (map['conversationId'] as num?)?.toInt() ?? 0;
+    if (convId <= 0) throw Exception('empty conversationId');
+    return NativeConversation(
+      id: convId,
+      kind: 'ROBOT',
+      title: (map['title'] ?? key).toString(),
+      unreadCount: 0,
+      preview: '',
+      updatedAt: DateTime.now(),
+      businessType: key,
+    );
+  }
+
+  /// 机器人会话发文本。
+  /// 优先 `/robots/{key}/messages`；网关未配（501/404）时回退
+  /// `/conversations/{id}/messages`（im 对 ROBOT 会话会触发咨询）。
+  Future<Map<String, dynamic>> sendRobotMessage({
+    required String robotKey,
+    required String text,
+    int? conversationId,
+    String? scenarioKey,
+  }) async {
+    final key = robotKey.trim();
+    final bodyText = text.trim();
+    if (key.isEmpty || bodyText.isEmpty) {
+      throw Exception('robotKey/text required');
+    }
+    final payload = <String, dynamic>{
+      'text': bodyText,
+      if (conversationId != null && conversationId > 0)
+        'conversationId': conversationId,
+      if (scenarioKey != null && scenarioKey.trim().isNotEmpty)
+        'scenarioKey': scenarioKey.trim(),
+    };
+    final resp = await _client.post(
+      _uri('/robots/$key/messages'),
+      headers: _headers,
+      body: jsonEncode(payload),
+    );
+    if (resp.statusCode == 501 || resp.statusCode == 404) {
+      if (conversationId == null || conversationId <= 0) {
+        throw Exception('发送失败: HTTP ${resp.statusCode}');
+      }
+      await sendText(
+        conversationId,
+        bodyText,
+        payload: <String, dynamic>{
+          'robotKey': key,
+          'consultPending': true,
+          if (scenarioKey != null && scenarioKey.trim().isNotEmpty)
+            'scenarioKey': scenarioKey.trim(),
+        },
+      );
+      return <String, dynamic>{
+        'conversationId': conversationId,
+        'robotKey': key,
+        'via': 'conversations',
+      };
+    }
+    if (resp.statusCode < 200 || resp.statusCode >= 300) {
+      throw Exception('发送失败: HTTP ${resp.statusCode}');
+    }
+    final body = _decode(resp.body);
+    if (body['success'] == false) {
+      throw Exception((body['message'] ?? '发送失败').toString());
+    }
+    final data = body['data'];
+    if (data is Map<String, dynamic>) return data;
+    if (data is Map) return Map<String, dynamic>.from(data);
+    return <String, dynamic>{};
+  }
+
   Future<void> sendMessageRaw({
     required int conversationId,
     required String kind,
@@ -434,6 +528,22 @@ class ConversationService {
       headers: _headers,
     );
     if (resp.statusCode < 200 || resp.statusCode >= 300) return;
+  }
+
+  /// 清空当前用户可见的会话历史（服务端按 history_cleared_before_id 截断）。
+  Future<void> clearConversationHistory(int conversationId) async {
+    if (conversationId <= 0) return;
+    final resp = await _client.post(
+      _uri('/conversations/$conversationId/clear-history'),
+      headers: _headers,
+    );
+    if (resp.statusCode < 200 || resp.statusCode >= 300) {
+      throw Exception('清空失败: HTTP ${resp.statusCode}');
+    }
+    final body = _decode(resp.body);
+    if (body['success'] == false) {
+      throw Exception((body['message'] ?? '清空失败').toString());
+    }
   }
 
   /// 登记「正在前台查看该会话」，用于服务端抑制该会话的 APP TPNS。

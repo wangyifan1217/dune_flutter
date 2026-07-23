@@ -420,10 +420,45 @@ String currentApproverLabel(
   List<Map<String, dynamic>> stages,
 ) {
   if (trail == null) return '';
+  // 并发/并行：优先用后端汇总的 currentNodeLabel，勿依赖 currentStep == 某一步
+  final nodeLabel = trail.currentNodeLabel;
+  if (nodeLabel.isNotEmpty) return nodeLabel;
+
+  if (trail.isParallel) {
+    final curSteps = trail.currentSteps.toSet();
+    final open = trail.steps.where((s) {
+      if (s.decision.trim().isNotEmpty) return false;
+      final flagged = s.isCurrent;
+      if (flagged != null) return flagged;
+      if (curSteps.isNotEmpty) return curSteps.contains(s.stepNo);
+      return true;
+    });
+    final labels = <String>[];
+    for (final step in open) {
+      final sn = step.stepNo;
+      final stage = step.stageName.isNotEmpty
+          ? step.stageName
+          : stageLabel(sn, step.stepType, stages);
+      final who = () {
+        if (step.assigneeId > 0 && assigneeNames.containsKey(step.assigneeId)) {
+          return assigneeNames[step.assigneeId]!;
+        }
+        if (step.assigneeName.isNotEmpty) return step.assigneeName;
+        if (step.assigneeId > 0) return '用户 ${step.assigneeId}';
+        return '待分配';
+      }();
+      final text = stage.isEmpty ? who : '$stage·$who';
+      if (!labels.contains(text)) labels.add(text);
+    }
+    return labels.join('、');
+  }
+
   final stepNo = trail.currentStep;
   final step = trail.steps.where((s) => s.stepNo == stepNo).firstOrNull;
   if (step == null) return stepNo > 0 ? '第$stepNo步' : '';
-  final stageName = stageLabel(stepNo, step.stepType, stages);
+  final stageName = step.stageName.isNotEmpty
+      ? step.stageName
+      : stageLabel(stepNo, step.stepType, stages);
   if (step.assigneeId > 0 && assigneeNames.containsKey(step.assigneeId)) {
     return '$stageName · ${assigneeNames[step.assigneeId]}';
   }

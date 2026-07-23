@@ -72,6 +72,10 @@ import '../qianji/native_qianji_team_perf_page.dart';
 import '../qianji/qianji_models.dart';
 import '../qianji/qianji_project_models.dart';
 import '../qianji_admin/native_qianji_admin_shell.dart';
+import '../robots/native_robot_chat_page.dart';
+import '../robots/native_robot_consult_create_page.dart';
+import '../robots/native_robot_consult_detail_page.dart';
+import '../robots/native_robot_consult_list_page.dart';
 import '../shell/dunes_main_tab_bar.dart';
 import '../shell/dunes_toast.dart';
 import '../update/app_update_dialog.dart';
@@ -122,6 +126,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
   bool _hasPendingInitiateBaseline = false;
   NativeConversation? _selectedPrivate;
   NativeConversation? _selectedGroup;
+  NativeConversation? _selectedRobot;
   NativeConversation? _selectedBroadcast;
   NativeContact? _selectedContact;
   /// PC 双栏：从会话打开名片时嵌在右侧栏，返回目标为 C2/C5；通讯录等入口为 null（整页）。
@@ -158,7 +163,14 @@ class _NativeScreenHostState extends State<NativeScreenHost>
   String? _b14InitialFilter;
   int _meetingId = 0;
   int _cursorBindingId = 0;
+  String _selectedRobotConsultId = '';
+  /// 从通讯机器人会话进入 QJR 时带上 robotKey。
+  String _qjrRobotKey = 'r_lighthouse';
+  /// true：从 IM 机器人会话进咨询明细；false：从 NOVA 板块进入。
+  bool _qjrOpenedFromChat = false;
   String _lastMyScreen = 'B2';
+  /// NOVA 板块离开时记住的子页（返回时恢复，对标 `_lastMyScreen`）。
+  String _lastQianjiScreen = 'QJ';
   QianjiEntity? _selectedQianjiEntity;
   QianjiIteration? _selectedQianjiIteration;
   QianjiProjectItem? _selectedQianjiProject;
@@ -214,6 +226,10 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     }
     if (screen == 'C2') {
       final id = _selectedGroup?.id ?? 0;
+      return id > 0 ? id : null;
+    }
+    if (screen == 'CR') {
+      final id = _selectedRobot?.id ?? 0;
       return id > 0 ? id : null;
     }
     if (screen == 'C10') {
@@ -306,6 +322,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     final onChat =
         screen == 'C5' ||
         screen == 'C2' ||
+        screen == 'CR' ||
         screen == 'C10' ||
         (_dualPaneSelectedConversationId ?? 0) > 0;
     if (onChat && !_userActivelyInChat) {
@@ -337,6 +354,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       final onChat =
           screen == 'C5' ||
           screen == 'C2' ||
+          screen == 'CR' ||
           screen == 'C10' ||
           (_dualPaneSelectedConversationId ?? 0) > 0;
       if (onChat && !_userActivelyInChat) {
@@ -652,6 +670,9 @@ class _NativeScreenHostState extends State<NativeScreenHost>
   bool _isPeerRealtimeMessage(ConversationRealtimeEvent event) {
     final msg = event.raw['message'];
     if (msg is! Map) return false;
+    final kind = (msg['kind'] ?? '').toString().toUpperCase();
+    // 机器人回复无真人 sender，仍视为对方消息（角标 / 托盘）。
+    if (kind == 'ROBOT_REPLY') return true;
     final sender = msg['sender'];
     var senderId = 0;
     if (sender is Map) {
@@ -673,6 +694,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     final screen = widget.navigation.currentScreen;
     if (screen == 'C5' && _selectedPrivate?.id == convId) return true;
     if (screen == 'C2' && _selectedGroup?.id == convId) return true;
+    if (screen == 'CR' && _selectedRobot?.id == convId) return true;
     if (screen == 'C10' && _selectedBroadcast?.id == convId) return true;
     return false;
   }
@@ -690,6 +712,10 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     }
     if (screen == 'C2') {
       final id = _selectedGroup?.id ?? 0;
+      return id > 0 ? id : null;
+    }
+    if (screen == 'CR') {
+      final id = _selectedRobot?.id ?? 0;
       return id > 0 ? id : null;
     }
     if (screen == 'C10') {
@@ -809,10 +835,10 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     }
   }
 
-  /// 宽屏双栏：在 C2/C5 之间切换时替换栈顶，避免历史栈堆积。
+  /// 宽屏双栏：在 C2/C5/CR 之间切换时替换栈顶，避免历史栈堆积。
   void _goChatScreen(String screenId) {
     final current = widget.navigation.currentScreen;
-    if (current == 'C2' || current == 'C5') {
+    if (current == 'C2' || current == 'C5' || current == 'CR') {
       widget.navigation.replaceTop(screenId);
     } else {
       widget.navigation.go(screenId);
@@ -824,6 +850,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       _selectedPrivate = conv;
       _selectedPrivatePeerUserId = conv.peerUserId;
       _selectedGroup = null;
+      _selectedRobot = null;
       _focusMessageId = null;
       _focusMessageHint = null;
     });
@@ -834,11 +861,42 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     _goChatScreen('C5');
   }
 
+  void _openRobotConversation(NativeConversation conv) {
+    setState(() {
+      _selectedRobot = conv;
+      _selectedPrivate = null;
+      _selectedPrivatePeerUserId = null;
+      _selectedGroup = null;
+      _focusMessageId = null;
+      _focusMessageHint = null;
+    });
+    _markUserEnteredChat();
+    if (conv.id > 0) {
+      _conversationReadSignal.notifyRead(conv.id);
+    }
+    _goChatScreen('CR');
+  }
+
+  void _openRobotConsultListFromChat() {
+    final key = (_selectedRobot?.robotKey ??
+            _selectedRobot?.businessType ??
+            'r_lighthouse')
+        .trim();
+    setState(() {
+      _qjrRobotKey = key.isEmpty ? 'r_lighthouse' : key;
+      _qjrOpenedFromChat = true;
+    });
+    // 离开会话页时立刻重算 active-view，避免仍登记「正在看机器人」导致推送被吞。
+    _markUserLeftChat();
+    widget.navigation.go('QJR');
+  }
+
   void _openGroupConversation(NativeConversation conv) {
     setState(() {
       _selectedGroup = conv;
       _selectedPrivate = null;
       _selectedPrivatePeerUserId = null;
+      _selectedRobot = null;
       _focusMessageId = null;
       _focusMessageHint = null;
     });
@@ -898,6 +956,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         _selectedPrivate = null;
         _selectedPrivatePeerUserId = null;
         _selectedGroup = null;
+        _selectedRobot = null;
       }
     });
     _markUserLeftChat();
@@ -936,30 +995,34 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     }
     if (chatScreen == 'C5') return _selectedPrivate?.id;
     if (chatScreen == 'C2') return _selectedGroup?.id;
+    if (chatScreen == 'CR') return _selectedRobot?.id;
     return null;
   }
 
   /// 从「我的」回到桌面端通讯时，保留原来打开的会话，而不是重置右侧聊天栏。
   String get _dualPaneChatScreen {
     final screen = widget.navigation.currentScreen;
-    // 历史 / 媒体 / 会话内名片：嵌在右侧会话栏，不撑满整页。
+    // 历史 / 媒体 / 会话内名片 / 智能总结：嵌在右侧会话栏，不撑满整页。
     if (screen == 'C12' || screen == 'C13') return screen;
+    if (screen == 'AS1' || screen == 'AS2' || screen == 'AS3') return screen;
     if (screen == 'C9' && _profileEmbedsInDualPane) return 'C9';
-    if (screen == 'C2' || screen == 'C5') return screen;
+    if (screen == 'C2' || screen == 'C5' || screen == 'CR') return screen;
     if (_selectedPrivate != null || _selectedPrivatePeerUserId != null) {
       return 'C5';
     }
     if (_selectedGroup != null) return 'C2';
+    if (_selectedRobot != null) return 'CR';
     return 'C1';
   }
 
   bool get _profileEmbedsInDualPane =>
       _profileReturnScreen == 'C2' || _profileReturnScreen == 'C5';
 
-  /// 双栏右侧叠在会话上的子页（名片/搜索/媒体）；有叠层时底层会话保持挂载不销毁。
+  /// 双栏右侧叠在会话上的子页（名片/搜索/媒体/智能总结）；有叠层时底层会话保持挂载不销毁。
   String? get _dualPaneOverlayScreen {
     final screen = widget.navigation.currentScreen;
     if (screen == 'C12' || screen == 'C13') return screen;
+    if (screen == 'AS1' || screen == 'AS2' || screen == 'AS3') return screen;
     if (screen == 'C9' && _profileEmbedsInDualPane) return 'C9';
     return null;
   }
@@ -969,8 +1032,12 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     return screen == 'C1' ||
         screen == 'C2' ||
         screen == 'C5' ||
+        screen == 'CR' ||
         screen == 'C12' ||
-        screen == 'C13';
+        screen == 'C13' ||
+        screen == 'AS1' ||
+        screen == 'AS2' ||
+        screen == 'AS3';
   }
 
   Widget _buildDualPaneContactProfilePage() {
@@ -1011,6 +1078,58 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     );
   }
 
+  Widget _buildAiSummaryHubPage() {
+    return NativeAiSummaryHubPage(
+      session: widget.session,
+      onBack: widget.navigation.back,
+      onCreate: () => _openAiSummaryCreate(),
+      onOpenDetail: (id) {
+        setState(() => _selectedAiSummaryId = id);
+        widget.navigation.go('AS3');
+      },
+      onOpened: () {
+        _pendingBadgeZeroSync = true;
+        unawaited(_refreshCommUnreadBadge());
+      },
+    );
+  }
+
+  Widget _buildAiSummaryCreatePage() {
+    final prefill = _aiSummaryPrefillConversationIds;
+    return NativeAiSummaryCreatePage(
+      key: ValueKey<String>('as2-${prefill.join(',')}'),
+      session: widget.session,
+      initialConversationIds: prefill,
+      onBack: () {
+        setState(() => _aiSummaryPrefillConversationIds = const <int>[]);
+        widget.navigation.back();
+      },
+      onCreated: (item) {
+        setState(() {
+          _selectedAiSummaryId = item.id;
+          _aiSummaryPrefillConversationIds = const <int>[];
+        });
+        widget.navigation.replaceTop('AS3');
+      },
+    );
+  }
+
+  Widget _buildAiSummaryDetailPage() {
+    final summaryId = _selectedAiSummaryId ?? 0;
+    if (summaryId <= 0) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) widget.navigation.back();
+      });
+      return const SizedBox.shrink();
+    }
+    return NativeAiSummaryDetailPage(
+      key: ValueKey<int>(summaryId),
+      session: widget.session,
+      summaryId: summaryId,
+      onBack: widget.navigation.back,
+    );
+  }
+
   Widget _buildConversationListPage({int? selectedConversationId}) {
     return NativeConversationPage(
       session: widget.session,
@@ -1021,6 +1140,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       conversationReadSignal: _conversationReadSignal,
       onOpenPrivate: _openPrivateConversation,
       onOpenGroup: _openGroupConversation,
+      onOpenRobot: _openRobotConversation,
       onOpenContacts: () {
         setState(() => _contactsGroupPickMode = false);
         widget.navigation.go('C3');
@@ -1044,6 +1164,20 @@ class _NativeScreenHostState extends State<NativeScreenHost>
 
   /// 当前选中的底层会话（不随名片/搜索/媒体切换而卸载）。
   Widget _buildDualPaneBaseChatPage() {
+    if (_selectedRobot != null) {
+      final robotId = _selectedRobot!.id;
+      return NativeRobotChatPage(
+        key: ValueKey<String>('dual-robot-$robotId'),
+        session: widget.session,
+        conversationHint: _selectedRobot!,
+        showBackButton: false,
+        autoMarkRead: _userActivelyInChat &&
+            (_peekViewingConversationId() ?? 0) == robotId,
+        onBack: () => _leaveChatToInbox(clearSelection: true),
+        onConversationRead: _handleConversationRead,
+        onOpenConsultList: _openRobotConsultListFromChat,
+      );
+    }
     if (_selectedPrivate != null || _selectedPrivatePeerUserId != null) {
       return NativePrivateChatPage(
         key: ValueKey<String>(
@@ -1134,6 +1268,9 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       'C12' => _buildDualPaneSearchPage(),
       'C13' => _buildDualPaneMediaPage(),
       'C9' => _buildDualPaneContactProfilePage(),
+      'AS1' => _buildAiSummaryHubPage(),
+      'AS2' => _buildAiSummaryCreatePage(),
+      'AS3' => _buildAiSummaryDetailPage(),
       _ => null,
     };
 
@@ -1182,6 +1319,117 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           session: widget.session,
           onOpenCursorAccount: () => widget.navigation.go('QJC'),
           onOpenMeetingSupervise: () => widget.navigation.go('QJMM'),
+          onOpenRobotHome: () {
+            setState(() {
+              _qjrOpenedFromChat = false;
+              _qjrRobotKey = 'r_lighthouse';
+            });
+            widget.navigation.go('QJR');
+          },
+        );
+      case 'QJR':
+        if (!widget.session.effectiveRobotAccess) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) widget.navigation.go('QJ');
+          });
+          return const Scaffold(
+            backgroundColor: DunesColors.bgApp,
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+        return NativeRobotConsultListPage(
+          session: widget.session,
+          robotKey: _qjrRobotKey,
+          onBack: () {
+            final nav = widget.navigation;
+            // 仅「从 IM 点咨询明细」回来才回机器人会话；NOVA 内进入应回 NOVA 首页。
+            if (_qjrOpenedFromChat) {
+              _qjrOpenedFromChat = false;
+              if (_selectedRobot != null) {
+                _markUserEnteredChat();
+                if (nav.history.contains('CR')) {
+                  nav.popTo('CR');
+                } else {
+                  _goChatScreen('CR');
+                }
+                return;
+              }
+            }
+            if (nav.history.contains('QJ')) {
+              nav.popTo('QJ');
+            } else {
+              nav.back();
+            }
+          },
+          onCreate: () => widget.navigation.go('QJRA'),
+          onOpenDetail: (consultId) {
+            setState(() => _selectedRobotConsultId = consultId);
+            widget.navigation.go('QJRC');
+          },
+        );
+      case 'QJRA':
+        if (!widget.session.effectiveRobotAccess) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) widget.navigation.go('QJ');
+          });
+          return const Scaffold(
+            backgroundColor: DunesColors.bgApp,
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+        return NativeRobotConsultCreatePage(
+          session: widget.session,
+          robotKey: _qjrRobotKey,
+          onBack: () {
+            final nav = widget.navigation;
+            if (nav.history.contains('QJR')) {
+              nav.popTo('QJR');
+            } else {
+              nav.back();
+            }
+          },
+          onStarted: (record) {
+            setState(() => _selectedRobotConsultId = record.id);
+            // 回到列表并打开详情，类似智能总结创建后的体验
+            final nav = widget.navigation;
+            if (nav.history.contains('QJR')) {
+              nav.popTo('QJR');
+            }
+            widget.navigation.go('QJRC');
+          },
+        );
+      case 'QJRC':
+        if (!widget.session.effectiveRobotAccess) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) widget.navigation.go('QJ');
+          });
+          return const Scaffold(
+            backgroundColor: DunesColors.bgApp,
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+        if (_selectedRobotConsultId.isEmpty) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) widget.navigation.go('QJR');
+          });
+          return const Scaffold(
+            backgroundColor: DunesColors.bgApp,
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+        return NativeRobotConsultDetailPage(
+          session: widget.session,
+          consultId: _selectedRobotConsultId,
+          onBack: () {
+            final nav = widget.navigation;
+            if (nav.history.contains('QJR')) {
+              nav.popTo('QJR');
+            } else if (nav.history.contains('QJ')) {
+              nav.popTo('QJ');
+            } else {
+              nav.back();
+            }
+          },
         );
       case 'QJC':
         return NativeQianjiCursorAccountPage(
@@ -1334,51 +1582,11 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       case 'C1':
         return _buildConversationListPage();
       case 'AS1':
-        return NativeAiSummaryHubPage(
-          session: widget.session,
-          onBack: widget.navigation.back,
-          onCreate: () => _openAiSummaryCreate(),
-          onOpenDetail: (id) {
-            setState(() => _selectedAiSummaryId = id);
-            widget.navigation.go('AS3');
-          },
-          onOpened: () {
-            _pendingBadgeZeroSync = true;
-            unawaited(_refreshCommUnreadBadge());
-          },
-        );
+        return _buildAiSummaryHubPage();
       case 'AS2':
-        final prefill = _aiSummaryPrefillConversationIds;
-        return NativeAiSummaryCreatePage(
-          key: ValueKey<String>('as2-${prefill.join(',')}'),
-          session: widget.session,
-          initialConversationIds: prefill,
-          onBack: () {
-            setState(() => _aiSummaryPrefillConversationIds = const <int>[]);
-            widget.navigation.back();
-          },
-          onCreated: (item) {
-            setState(() {
-              _selectedAiSummaryId = item.id;
-              _aiSummaryPrefillConversationIds = const <int>[];
-            });
-            widget.navigation.replaceTop('AS3');
-          },
-        );
+        return _buildAiSummaryCreatePage();
       case 'AS3':
-        final summaryId = _selectedAiSummaryId ?? 0;
-        if (summaryId <= 0) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) widget.navigation.back();
-          });
-          return const SizedBox.shrink();
-        }
-        return NativeAiSummaryDetailPage(
-          key: ValueKey<int>(summaryId),
-          session: widget.session,
-          summaryId: summaryId,
-          onBack: widget.navigation.back,
-        );
+        return _buildAiSummaryDetailPage();
       case 'Z2':
         return NativeMessageCenterPage(
           session: widget.session,
@@ -1392,6 +1600,24 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           conversationHint: _selectedBroadcast,
           onBack: widget.navigation.back,
           onConversationRead: _handleConversationRead,
+        );
+      case 'CR':
+        if (_selectedRobot == null) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) widget.navigation.back();
+          });
+          return const SizedBox.shrink();
+        }
+        return NativeRobotChatPage(
+          key: ValueKey<int>(_selectedRobot!.id),
+          session: widget.session,
+          conversationHint: _selectedRobot!,
+          showBackButton: true,
+          autoMarkRead: _userActivelyInChat &&
+              (_peekViewingConversationId() ?? 0) == _selectedRobot!.id,
+          onBack: () => _leaveChatToInbox(clearSelection: false),
+          onConversationRead: _handleConversationRead,
+          onOpenConsultList: _openRobotConsultListFromChat,
         );
       case 'C7':
         // 新建会话已深度合并进通讯录；保留 C7 路由以兼容旧入口。
@@ -1873,8 +2099,16 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         wide &&
         _isDualPaneChatRoute(previousScreen);
 
-    // 宽屏双栏内部（C1↔C2↔C5↔C12↔C13↔会话内C9）仍瞬时切换聊天窗；
-    // 进出通讯子页（通知/通讯录/智能总结/群信息等）走整页滑动。
+    // 路由变化时重算 active-view（CR→QJR / 切会话等），避免仍登记旧会话导致推送被吞。
+    if (previousScreen != null && previousScreen != screen) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _syncActiveViewReport();
+      });
+    }
+
+    // 宽屏双栏内部（C1↔C2↔C5↔C12↔C13↔AS*↔会话内C9）仍瞬时切换聊天窗；
+    // 进出通讯子页（通知/通讯录/群信息等）走整页滑动。
     if (dualNow && dualPrev) {
       _lastScreen = screen;
       _lastHistoryDepth = depth;
@@ -1985,6 +2219,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       'C11',
       'C12',
       'C13',
+      'CR',
       'Z2',
       'AS1',
       'AS2',
@@ -2035,6 +2270,9 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       'QJTD',
       'QJMM',
       'QJMD',
+      'QJR',
+      'QJRA',
+      'QJRC',
     }.contains(screen);
   }
 
@@ -2099,6 +2337,9 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         screen == 'QJI' ||
         screen == 'QJMM' ||
         screen == 'QJMD' ||
+        screen == 'QJR' ||
+        screen == 'QJRA' ||
+        screen == 'QJRC' ||
         screen == 'QJT' ||
         screen == 'QJP' ||
         screen == 'QJM' ||
@@ -2111,14 +2352,20 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     return 'C1';
   }
 
-  /// 主 Tab 在板块之间切换时，保留「我的」最后打开的子页面。
+  /// 主 Tab 在板块之间切换时，保留「我的 / NOVA」最后打开的子页面。
   void _switchMainTab(String screen) {
     if (_desktopSettingsOpen) {
       setState(() => _desktopSettingsOpen = false);
     }
     final current = widget.navigation.currentScreen;
+    final currentTab = _mainTabScreenFor(current);
+
     if (_isMyRoute(current)) {
       _lastMyScreen = current;
+    }
+    // 离开 NOVA 子树时记住位置（不含工作台 QJA）。
+    if (currentTab == 'QJ' && screen != 'QJ') {
+      _lastQianjiScreen = current;
     }
 
     if (screen == 'B2') {
@@ -2132,7 +2379,82 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       return;
     }
 
+    if (screen == 'QJ') {
+      // 从其它板块回到 NOVA：恢复上次子页；已在 NOVA 内再点 Tab → 回首页。
+      if (currentTab != 'QJ') {
+        setState(() => _qjrOpenedFromChat = false);
+        _restoreQianjiStack(_resolveLastQianjiScreen());
+      } else {
+        widget.navigation.switchMainTab('QJ');
+      }
+      return;
+    }
+
     widget.navigation.switchMainTab(screen);
+  }
+
+  String _resolveLastQianjiScreen() {
+    final last = _lastQianjiScreen;
+    if (!_isNovaTabScreen(last)) return 'QJ';
+    if (last == 'QJRC' && _selectedRobotConsultId.isEmpty) return 'QJR';
+    if (last == 'QJCD' && _cursorBindingId <= 0) return 'QJC';
+    if (last == 'QJI' && _selectedQianjiEntity == null) return 'QJD';
+    if (last == 'QJTD' && _selectedQianjiTask == null) {
+      return _selectedQianjiProject == null ? 'QJM' : 'QJMT';
+    }
+    if (last == 'QJMT' && _selectedQianjiProject == null) return 'QJM';
+    return last;
+  }
+
+  bool _isNovaTabScreen(String? screen) {
+    return const <String>{
+      'QJ',
+      'QJC',
+      'QJCD',
+      'QJD',
+      'QJI',
+      'QJMM',
+      'QJMD',
+      'QJR',
+      'QJRA',
+      'QJRC',
+      'QJT',
+      'QJP',
+      'QJM',
+      'QJMT',
+      'QJTD',
+    }.contains(screen);
+  }
+
+  /// 重建 NOVA 导航链，保证返回键能逐级回到列表 / 首页。
+  void _restoreQianjiStack(String target) {
+    final nav = widget.navigation;
+    if (nav.currentScreen == target) return;
+
+    final chain = switch (target) {
+      'QJR' => const ['QJ', 'QJR'],
+      'QJRA' => const ['QJ', 'QJR', 'QJRA'],
+      'QJRC' => const ['QJ', 'QJR', 'QJRC'],
+      'QJC' => const ['QJ', 'QJC'],
+      'QJCD' => const ['QJ', 'QJC', 'QJCD'],
+      'QJMM' => const ['QJ', 'QJMM'],
+      'QJMD' => const ['QJ', 'QJMM', 'QJMD'],
+      'QJD' => const ['QJ', 'QJD'],
+      'QJI' => const ['QJ', 'QJD', 'QJI'],
+      'QJM' => const ['QJ', 'QJM'],
+      'QJMT' => const ['QJ', 'QJM', 'QJMT'],
+      'QJTD' => const ['QJ', 'QJM', 'QJMT', 'QJTD'],
+      'QJT' => const ['QJ', 'QJT'],
+      'QJP' => const ['QJ', 'QJP'],
+      'QJ' => const ['QJ'],
+      _ => target == 'QJ' ? const ['QJ'] : <String>['QJ', target],
+    };
+
+    for (final s in chain) {
+      if (nav.currentScreen != s) {
+        nav.go(s);
+      }
+    }
   }
 
   /// 进入「我发起的(B14)」并可选预置筛选（如「待发起」用于代发起人入口）。

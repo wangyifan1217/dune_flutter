@@ -1271,12 +1271,32 @@
       });
       if (!candidates.length) return null;
       if (trail && Array.isArray(trail.steps)) {
-        var cur = trail.steps.find(function (s) {
-          return Number(s.stepNo) === Number(trail.currentStep || 0) && !s.decision;
-        });
-        if (cur && cur.id) {
+        var parallel = String(trail.stageExecutionMode || '').toUpperCase() === 'PARALLEL';
+        var matchSteps;
+        if (parallel) {
+          // 并行：按未决/isCurrent/currentSteps 匹配，勿依赖 currentStep == 某一步
+          var curSteps = Array.isArray(trail.currentSteps) ? trail.currentSteps : [];
+          matchSteps = trail.steps.filter(function (s) {
+            if (s.decision) return false;
+            if (typeof s.isCurrent === 'boolean') return s.isCurrent;
+            if (curSteps.length) {
+              return curSteps.some(function (n) {
+                return Number(n) === Number(s.stepNo);
+              });
+            }
+            return true;
+          });
+        } else {
+          var cur = trail.steps.find(function (s) {
+            return Number(s.stepNo) === Number(trail.currentStep || 0) && !s.decision;
+          });
+          matchSteps = cur ? [cur] : [];
+        }
+        for (var i = 0; i < matchSteps.length; i++) {
+          var step = matchSteps[i];
+          if (!step || !step.id) continue;
           var byStep = candidates.find(function (t) {
-            return String(t.sourceStepId || '') === String(cur.id);
+            return String(t.sourceStepId || '') === String(step.id);
           });
           if (byStep) return byStep;
         }

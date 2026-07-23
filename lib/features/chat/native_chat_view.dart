@@ -46,7 +46,6 @@ import 'chat_image_editor.dart';
 import 'chat_image_utils.dart';
 import 'chat_file_preview_page.dart';
 import 'chat_pdf_preview.dart';
-import 'giphy_proxy_service.dart';
 import 'chat_media_widgets.dart';
 import 'chat_quote.dart';
 import 'chat_video_utils.dart';
@@ -237,7 +236,6 @@ class NativeChatView extends StatefulWidget {
 class _NativeChatViewState extends State<NativeChatView>
     with WidgetsBindingObserver {
   late final ConversationService _service;
-  late final GiphyProxyService _giphyService;
   late final ConversationRealtimeService _realtime;
   final ConversationRealtimeDedup _realtimeDedup = ConversationRealtimeDedup();
   final ImagePicker _imagePicker = ImagePicker();
@@ -343,7 +341,6 @@ class _NativeChatViewState extends State<NativeChatView>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _service = ConversationService(session: widget.session);
-    _giphyService = GiphyProxyService(session: widget.session);
     _realtime = ConversationRealtimeHub.instance.of(widget.session);
     _scrollController.addListener(_onScroll);
     _inputController.addListener(_onComposeInputChanged);
@@ -3277,50 +3274,9 @@ class _NativeChatViewState extends State<NativeChatView>
         if (_emojiOpen && !locked)
           ChatEmojiGifPanel(
             controller: _inputController,
-            giphyService: _giphyService,
-            onGifSelected: _onGifSelected,
           ),
       ],
     );
-  }
-
-  Future<void> _onGifSelected(GiphyListItem gif) async {
-    final conv = _conversation;
-    if (!gif.isValid || conv == null || _mediaBusy || conv.dissolved) return;
-
-    setState(() => _emojiOpen = false);
-
-    await _guardSend(() async {
-      final bytes = await _giphyService.downloadGifBytes(gif);
-      if (!_checkSizeLimit(
-        bytes.length,
-        _maxImageBytes,
-        'giphy_${gif.id}.gif',
-      )) {
-        return;
-      }
-      final fileName = gif.id.isNotEmpty
-          ? 'giphy_${gif.id}.gif'
-          : 'giphy_${DateTime.now().millisecondsSinceEpoch}.gif';
-      _beginUpload(
-        '发送 GIF',
-        previewBytes: bytes,
-        kind: 'IMAGE',
-        fileName: fileName,
-      );
-      await _service.sendImage(
-        conversationId: conv.id,
-        bytes: bytes,
-        fileName: fileName,
-        mimeType: 'image/gif',
-        sourceLabel: 'GIF',
-        onProgress: (p) => _setUploadProgress(p, label: '发送 GIF'),
-      );
-      if (mounted) {
-        setState(_clearPendingNewMessages);
-        _scrollToPreferredAnchor(force: true);
-      }
-    });
   }
 
   void _clearQuoteDraft() {

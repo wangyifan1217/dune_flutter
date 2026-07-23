@@ -520,6 +520,7 @@ enum ChatInboxRowKind {
   workgroupApproval,
   group,
   private,
+  robot,
 }
 
 class ChatInboxRow extends StatelessWidget {
@@ -547,6 +548,7 @@ class ChatInboxRow extends StatelessWidget {
     this.showDivider = true,
     this.previewGenerating = false,
     this.selected = false,
+    this.robotAvatar,
   });
 
   final ChatInboxRowKind kind;
@@ -571,6 +573,7 @@ class ChatInboxRow extends StatelessWidget {
   final bool showDivider;
   final bool previewGenerating;
   final bool selected;
+  final Widget? robotAvatar;
 
   @override
   Widget build(BuildContext context) {
@@ -578,7 +581,8 @@ class ChatInboxRow extends StatelessWidget {
     final unreadColor =
         kind == ChatInboxRowKind.private ||
             kind == ChatInboxRowKind.aiAssistant ||
-            kind == ChatInboxRowKind.aiSummary
+            kind == ChatInboxRowKind.aiSummary ||
+            kind == ChatInboxRowKind.robot
         ? const Color(0xFF7B5CD8)
         : DunesColors.coral;
     return Column(
@@ -603,17 +607,18 @@ class ChatInboxRow extends StatelessWidget {
                             alignment: Alignment.center,
                             maxWidth: 56,
                             maxHeight: 56,
-                            child: _Avatar(
-                              kind: kind,
-                              initial: avatarInitial,
-                              seed: avatarSeed,
-                              showOnlineDot: showOnlineDot,
-                              avatarPreset: avatarPreset,
-                              avatarObjectKey: avatarObjectKey,
-                              avatarUrl: avatarUrl,
-                              avatarService: avatarService,
-                              groupAvatarMembers: groupAvatarMembers,
-                            ),
+                            child: robotAvatar ??
+                                _Avatar(
+                                  kind: kind,
+                                  initial: avatarInitial,
+                                  seed: avatarSeed,
+                                  showOnlineDot: showOnlineDot,
+                                  avatarPreset: avatarPreset,
+                                  avatarObjectKey: avatarObjectKey,
+                                  avatarUrl: avatarUrl,
+                                  avatarService: avatarService,
+                                  groupAvatarMembers: groupAvatarMembers,
+                                ),
                           ),
                         ),
                         if (unreadCount > 0)
@@ -907,6 +912,18 @@ class _Avatar extends StatelessWidget {
     switch (kind) {
       case ChatInboxRowKind.aiAssistant:
         return const NovaIconImage(size: _inboxAvatarSize, borderRadius: 12);
+      case ChatInboxRowKind.robot:
+        decoration = BoxDecoration(
+          borderRadius: borderRadius,
+          gradient: const LinearGradient(
+            colors: [Color(0xFFB8A4E8), Color(0xFF7B5CD8)],
+          ),
+        );
+        child = const Icon(
+          Icons.smart_toy_outlined,
+          color: Colors.white,
+          size: 20,
+        );
       case ChatInboxRowKind.aiSummary:
         return const AiSummaryAvatarMark(size: _inboxAvatarSize);
       case ChatInboxRowKind.systemNotification:

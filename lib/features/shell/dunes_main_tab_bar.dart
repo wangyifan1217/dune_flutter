@@ -5,7 +5,7 @@ import '../../core/theme/dunes_theme.dart';
 import '../conversation/comm_unread_notifier.dart';
 import '../workbench/workbench_badge_notifier.dart';
 
-/// 底部主 Tab：通讯 · 千机 · 灯塔 · 我的；PC 竖栏末尾另有「工作台」。
+/// 底部主 Tab：通讯 · NOVA · 灯塔 · 我的；PC 竖栏末尾另有「工作台」。
 /// 此为 Tab 内容区高度；iOS Home Indicator 的安全区由组件自身额外处理。
 const double kDunesMainTabBarHeight = 64;
 
@@ -86,7 +86,7 @@ class _DunesMainTabBarState extends State<DunesMainTabBar> {
 
   bool get _showMyDot => (widget.workbenchBadge?.pendingForMe ?? 0) > 0;
 
-  /// 外部用户：不展示千机 / 灯塔 / 工作台。
+  /// 外部用户：不展示 NOVA / 灯塔 / 工作台。
   bool get _hideWorkbenchTabs => widget.chatOnlyMode;
 
   bool get _isVertical => widget.axis == Axis.vertical;
@@ -101,7 +101,7 @@ class _DunesMainTabBarState extends State<DunesMainTabBar> {
     if (!_hideWorkbenchTabs)
       _tab(
         icon: Icons.grid_view_rounded,
-        label: '千机',
+        label: 'NOVA',
         screen: 'QJ',
       ),
     if (!_hideWorkbenchTabs)

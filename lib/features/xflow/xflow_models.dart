@@ -428,12 +428,39 @@ extension XflowApprovalTrailExt on XflowApprovalTrail {
     return int.tryParse('$v') ?? 1;
   }
 
+  /// 并行时后端置 0，勿再依赖其等于某一步。
+  bool get isParallel =>
+      (raw['stageExecutionMode'] ?? '').toString().toUpperCase() == 'PARALLEL';
+
+  String get currentNodeLabel =>
+      (raw['currentNodeLabel'] ?? '').toString().trim();
+
+  List<int> get currentSteps {
+    final v = raw['currentSteps'];
+    if (v is! List) return const [];
+    return v
+        .map((e) => e is num ? e.toInt() : int.tryParse('$e') ?? 0)
+        .where((n) => n > 0)
+        .toList(growable: false);
+  }
+
   String? get createdAtRaw => raw['createdAt']?.toString();
   String? get finishedAtRaw => raw['finishedAt']?.toString();
 }
 
 extension XflowApprovalStepExt on XflowApprovalStep {
   String get stepType => (raw['stepType'] ?? '').toString();
+  String get stageName => (raw['stageName'] ?? '').toString().trim();
+  bool? get isCurrent {
+    final v = raw['isCurrent'];
+    if (v is bool) return v;
+    if (v == null) return null;
+    final s = '$v'.toLowerCase();
+    if (s == 'true' || s == '1') return true;
+    if (s == 'false' || s == '0') return false;
+    return null;
+  }
+
   String get decidedAtRaw =>
       (raw['decidedAt'] ?? raw['updatedAt'] ?? '').toString();
 }

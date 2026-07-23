@@ -27,6 +27,10 @@ import 'inbox_format.dart';
 import 'inbox_hidden_storage.dart';
 import 'inbox_widgets.dart';
 import 'notification_service.dart';
+import '../robots/robot_analyzing_coordinator.dart';
+import '../robots/robot_character.dart';
+import '../robots/robot_markdown.dart';
+import '../robots/robot_models.dart';
 
 class NativeConversationPage extends StatefulWidget {
   const NativeConversationPage({
@@ -42,6 +46,7 @@ class NativeConversationPage extends StatefulWidget {
     required this.onOpenNotifications,
     required this.onOpenNewChat,
     required this.onOpenAiSummary,
+    this.onOpenRobot,
     this.selectedConversationId,
     this.conversationReadSignal,
   });
@@ -57,6 +62,7 @@ class NativeConversationPage extends StatefulWidget {
   final VoidCallback onOpenNotifications;
   final VoidCallback onOpenNewChat;
   final VoidCallback onOpenAiSummary;
+  final ValueChanged<NativeConversation>? onOpenRobot;
 
   /// 双栏布局中当前选中的会话，用于列表高亮。
   final int? selectedConversationId;
@@ -144,6 +150,8 @@ class _NativeConversationPageState extends State<NativeConversationPage>
     _load();
     _bootRealtime();
     NovaBackgroundCoordinator.instance.addListener(_onNovaBackgroundUpdate);
+    RobotAnalyzingCoordinator.instance.bindSession(widget.session);
+    RobotAnalyzingCoordinator.instance.addListener(_onRobotAnalyzingUpdate);
   }
 
   @override
@@ -231,12 +239,18 @@ class _NativeConversationPageState extends State<NativeConversationPage>
     _load(silent: true);
   }
 
+  void _onRobotAnalyzingUpdate() {
+    if (!mounted || _loading) return;
+    setState(() {});
+  }
+
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     userAvatarRefresh.removeListener(_onSelfAvatarUpdated);
     widget.conversationReadSignal?.removeListener(_onConversationReadSignal);
     NovaBackgroundCoordinator.instance.removeListener(_onNovaBackgroundUpdate);
+    RobotAnalyzingCoordinator.instance.removeListener(_onRobotAnalyzingUpdate);
     _rtRefreshDebounce?.cancel();
     _searchDebounce?.cancel();
     _novaInboxPollTimer?.cancel();
@@ -667,6 +681,9 @@ class _NativeConversationPageState extends State<NativeConversationPage>
     if (c.isPrivate) {
       rowKind = ChatInboxRowKind.private;
       onTap = () => widget.onOpenPrivate(c);
+    } else if (c.isRobot) {
+      rowKind = ChatInboxRowKind.robot;
+      onTap = () => widget.onOpenRobot?.call(c);
     } else if (c.isWorkgroupApproval) {
       rowKind = ChatInboxRowKind.workgroupApproval;
       onTap = () => widget.onOpenGroup(c);
@@ -688,38 +705,52 @@ class _NativeConversationPageState extends State<NativeConversationPage>
         ? _novaGeneratingFor(c)
         : (generating: false, status: '');
 
-    // 暂时屏蔽私聊/群聊的左滑删除功能。
+    // 暂时屏蔽私聊/群聊/机器人的左滑删除功能。
     final allowSwipeDelete =
         !(rowKind == ChatInboxRowKind.private ||
             rowKind == ChatInboxRowKind.group ||
-            rowKind == ChatInboxRowKind.workgroupApproval);
+            rowKind == ChatInboxRowKind.workgroupApproval ||
+            rowKind == ChatInboxRowKind.robot);
 
+    final robotKey = c.robotKey ?? '';
+    final analyzingRobot =
+        c.isRobot && RobotAnalyzingCoordinator.instance.isAnalyzing(c.id);
+    final selected = widget.selectedConversationId == c.id;
     final row = ChatInboxRow(
       kind: rowKind,
       title: c.isAiAssistant ? _yunshuName : title,
       subtitle: null,
-      preview: c.isAiAssistant
-          ? resolveNovaInboxPreview(
-              storage: _novaStorage,
-              convId: c.id,
-              serverPreview: c.preview,
-              generating: gen.generating,
-              generatingStatus: gen.status,
-              allowLocalCache: true,
-            )
-          : c.preview,
+      preview: analyzingRobot
+          ? '正在分析…'
+          : (c.isAiAssistant
+              ? resolveNovaInboxPreview(
+                  storage: _novaStorage,
+                  convId: c.id,
+                  serverPreview: c.preview,
+                  generating: gen.generating,
+                  generatingStatus: gen.status,
+                  allowLocalCache: true,
+                )
+              : (c.isRobot
+                  ? robotPlainPreview(c.preview, maxChars: 48)
+                  : c.preview)),
       timeLabel: InboxFormat.formatTime(c.updatedAt, withClock: c.isPrivate),
-      memberCount: c.isPrivate || kind == 'AI_ASSISTANT' || kind == 'BROADCAST'
+      memberCount: c.isPrivate ||
+              c.isRobot ||
+              kind == 'AI_ASSISTANT' ||
+              kind == 'BROADCAST'
           ? null
           : c.memberCount,
-      unreadCount:
-          c.isAiAssistant &&
-              NovaBackgroundCoordinator.instance.hasUnreadReplyFor(c.id)
-          ? (c.unreadCount > 0 ? c.unreadCount : 1)
-          : c.unreadCount,
+      unreadCount: selected
+          ? 0
+          : (c.isAiAssistant &&
+                  NovaBackgroundCoordinator.instance.hasUnreadReplyFor(c.id)
+              ? (c.unreadCount > 0 ? c.unreadCount : 1)
+              : c.unreadCount),
       muted: c.muted,
       showAiMark: c.isAiAssistant,
-      previewGenerating: c.isAiAssistant && gen.generating,
+      previewGenerating:
+          (c.isAiAssistant && gen.generating) || analyzingRobot,
       showOnlineDot: c.isPrivate && _isPeerOnline(c),
       avatarInitial: c.isPrivate
           ? (_privateTitle(c).isNotEmpty
@@ -736,9 +767,19 @@ class _NativeConversationPageState extends State<NativeConversationPage>
       groupAvatarMembers: c.isPrivate
           ? const <ConversationAvatarMember>[]
           : c.avatarMembers,
+      robotAvatar: c.isRobot
+          ? RobotFaceAvatar(
+              role: RobotCatalog.roleById(
+                robotKey.isEmpty ? 'r_lighthouse' : robotKey,
+              ),
+              size: 52,
+              animate: true,
+              busy: analyzingRobot,
+            )
+          : null,
       sysTag: c.businessType,
       showDivider: true,
-      selected: widget.selectedConversationId == c.id,
+      selected: selected,
       onTap: onTap,
     );
 
@@ -762,7 +803,7 @@ class _NativeConversationPageState extends State<NativeConversationPage>
     // 私聊与普通群聊共用一个按置顶、最近消息排序的会话流，和常见聊天
     // 应用一致；审批工作群仍保留在独立的系统分区中。
     final chats = _sorted(
-      _items.where((c) => c.isGroup || c.isPrivate).toList(),
+      _items.where((c) => c.isGroup || c.isPrivate || c.isRobot).toList(),
     );
 
     List<Widget> convRows(Iterable<NativeConversation> rows) =>
@@ -873,6 +914,7 @@ class _NativeConversationPageState extends State<NativeConversationPage>
         timeLabel: InboxFormat.formatTime(preview.sortTime),
         unreadCount: _aiSummaryUnread,
         previewGenerating: false,
+        selected: _isViewingAiSummary,
         onTap: () => unawaited(_openAiSummaryHub()),
       ),
     );

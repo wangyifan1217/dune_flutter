@@ -16,6 +16,7 @@ class AuthSession {
     this.lighthouseAccess = false,
     this.qianjiAccess = false,
     this.qianjiAdminAccess = false,
+    this.robotAccess = false,
   });
 
   final String phone;
@@ -29,6 +30,7 @@ class AuthSession {
   final bool lighthouseAccess;
   final bool qianjiAccess;
   final bool qianjiAdminAccess;
+  final bool robotAccess;
 
   bool get isExternalUser => userType.toUpperCase() == 'EXTERNAL';
 
@@ -42,6 +44,9 @@ class AuthSession {
   bool get effectiveQianjiAdminAccess =>
       qianjiAdminAccess || DunesDefaults.localLighthouseAccessBypass;
 
+  bool get effectiveRobotAccess =>
+      robotAccess || DunesDefaults.localLighthouseAccessBypass;
+
   AuthSession withLocalDevGrants() {
     var next = this;
     if (DunesDefaults.localLighthouseAccessBypass) {
@@ -53,6 +58,9 @@ class AuthSession {
       }
       if (!next.qianjiAdminAccess) {
         next = next.copyWith(qianjiAdminAccess: true);
+      }
+      if (!next.robotAccess) {
+        next = next.copyWith(robotAccess: true);
       }
     }
     return next;
@@ -85,6 +93,7 @@ class AuthSession {
     bool? lighthouseAccess,
     bool? qianjiAccess,
     bool? qianjiAdminAccess,
+    bool? robotAccess,
   }) {
     return AuthSession(
       phone: phone ?? this.phone,
@@ -99,6 +108,7 @@ class AuthSession {
       lighthouseAccess: lighthouseAccess ?? this.lighthouseAccess,
       qianjiAccess: qianjiAccess ?? this.qianjiAccess,
       qianjiAdminAccess: qianjiAdminAccess ?? this.qianjiAdminAccess,
+      robotAccess: robotAccess ?? this.robotAccess,
     );
   }
 
@@ -113,6 +123,7 @@ class AuthSession {
       lighthouseAccess: data['lighthouseAccess'] == true,
       qianjiAccess: data['qianjiAccess'] == true,
       qianjiAdminAccess: data['qianjiAdminAccess'] == true,
+      robotAccess: data['robotAccess'] == true,
     );
   }
 
@@ -140,6 +151,7 @@ class AuthSession {
       lighthouseAccess: claims['lighthouseAccess'] == true,
       qianjiAccess: claims['qianjiAccess'] == true,
       qianjiAdminAccess: claims['qianjiAdminAccess'] == true,
+      robotAccess: claims['robotAccess'] == true,
     );
   }
 
@@ -174,6 +186,7 @@ class AuthSession {
       'lighthouseAccess': lighthouseAccess,
       'qianjiAccess': qianjiAccess,
       'qianjiAdminAccess': qianjiAdminAccess,
+      'robotAccess': robotAccess,
     };
   }
 
@@ -194,6 +207,7 @@ class AuthSession {
       lighthouseAccess: json['lighthouseAccess'] == true,
       qianjiAccess: json['qianjiAccess'] == true,
       qianjiAdminAccess: json['qianjiAdminAccess'] == true,
+      robotAccess: json['robotAccess'] == true,
     );
   }
 

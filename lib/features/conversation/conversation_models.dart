@@ -52,6 +52,14 @@ class NativeConversation {
   bool get isBroadcast => kind == 'BROADCAST';
   bool get isWorkgroupApproval => kind == 'WORKGROUP_APPROVAL';
   bool get isGroup => kind == 'WORKGROUP' || kind == 'GROUP';
+  bool get isRobot => kind == 'ROBOT';
+
+  /// kind=ROBOT 时 businessType 存 robotKey。
+  String? get robotKey {
+    if (!isRobot) return null;
+    final k = businessType?.trim();
+    return (k == null || k.isEmpty) ? null : k;
+  }
 
   /// 私聊展示名：优先对端姓名（与 WebView `applyPrivateHeader` 一致）。
   String get displayTitle {

@@ -2,6 +2,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:url_launcher/url_launcher.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
 import '../../core/platform/desktop_features.dart';
@@ -10,27 +11,121 @@ import '../auth/auth_session.dart';
 import '../chat/file_download.dart' as file_dl;
 import '../shell/dunes_toast.dart';
 
-/// App 内打开 Excel 原文 HTML 预览，并支持下载原始 .xlsx。
+/// 打开 Excel 原文预览。
+///
+/// - 手机：App 内 WebView 渲染 HTML 预览。
+/// - 桌面（Win / macOS）：不用 WebView（macOS + Impeller 下 Platform View
+///   会导致整窗发灰/花屏），改为系统浏览器打开，失败则下载并用本地应用打开 .xlsx。
 Future<void> openProposalExcelPreview({
   required BuildContext context,
   required AuthSession session,
   required String archiveId,
   String fileName = '提案.xlsx',
-}) {
+}) async {
   final id = archiveId.trim();
   if (id.isEmpty) {
     showDunesToast(context, '归档 ID 无效', kind: DunesToastKind.error);
-    return Future.value();
+    return;
   }
-  return Navigator.of(context).push<void>(
+  final name = fileName.trim().isEmpty ? '提案.xlsx' : fileName.trim();
+  if (isDesktopCommOnly) {
+    await _openDesktopExcelPreview(
+      context: context,
+      session: session,
+      archiveId: id,
+      fileName: name,
+    );
+    return;
+  }
+  await Navigator.of(context).push<void>(
     MaterialPageRoute<void>(
       builder: (_) => ProposalExcelPreviewPage(
         session: session,
         archiveId: id,
-        fileName: fileName.trim().isEmpty ? '提案.xlsx' : fileName.trim(),
+        fileName: name,
       ),
     ),
   );
+}
+
+String _proposalApiBase(AuthSession session) =>
+    session.apiBase.trim().replaceAll(RegExp(r'/$'), '');
+
+Uri _previewUri(AuthSession session, String archiveId) {
+  final base = _proposalApiBase(session);
+  final url = '$base/proposals/${Uri.encodeComponent(archiveId)}/preview.html';
+  final token = session.token.trim();
+  if (token.isEmpty) return Uri.parse(url);
+  return Uri.parse('$url?token=${Uri.encodeComponent(token)}');
+}
+
+String _rawUrl(AuthSession session, String archiveId) =>
+    '${_proposalApiBase(session)}/proposals/${Uri.encodeComponent(archiveId)}/raw';
+
+Map<String, String> _authHeaders(AuthSession session) {
+  final token = session.token.trim();
+  if (token.isEmpty) return const {};
+  return {'Authorization': 'Bearer $token'};
+}
+
+Future<void> _openDesktopExcelPreview({
+  required BuildContext context,
+  required AuthSession session,
+  required String archiveId,
+  required String fileName,
+}) async {
+  final uri = _previewUri(session, archiveId);
+  try {
+    final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (ok) {
+      if (context.mounted) {
+        showDunesToast(context, '已在浏览器中打开 Excel 预览');
+      }
+      return;
+    }
+  } catch (_) {
+    // 浏览器打不开时走本地下载打开。
+  }
+
+  if (!context.mounted) return;
+  showDunesToast(context, '正在下载并用本地应用打开…');
+  try {
+    final path = await _downloadProposalExcel(
+      session: session,
+      archiveId: archiveId,
+      fileName: fileName,
+    );
+    if (!context.mounted) return;
+    if (path == null || path.isEmpty) {
+      showDunesToast(context, '打开失败', kind: DunesToastKind.error);
+      return;
+    }
+    await file_dl.openLocalFile(path);
+    if (!context.mounted) return;
+    showDunesToast(context, '已打开：$fileName');
+  } catch (e) {
+    if (!context.mounted) return;
+    showDunesToast(context, '打开失败：$e', kind: DunesToastKind.error);
+  }
+}
+
+Future<String?> _downloadProposalExcel({
+  required AuthSession session,
+  required String archiveId,
+  required String fileName,
+}) async {
+  final resp = await http.get(
+    Uri.parse(_rawUrl(session, archiveId)),
+    headers: _authHeaders(session),
+  );
+  if (resp.statusCode < 200 || resp.statusCode >= 300) {
+    throw Exception('HTTP ${resp.statusCode}');
+  }
+  var name = fileName;
+  if (!name.toLowerCase().endsWith('.xlsx')) {
+    name = '$name.xlsx';
+  }
+  return file_dl.saveBytesAsFile(Uint8List.fromList(resp.bodyBytes), name);
 }
 
 class ProposalExcelPreviewPage extends StatefulWidget {
@@ -56,22 +151,10 @@ class _ProposalExcelPreviewPageState extends State<ProposalExcelPreviewPage> {
   bool _downloading = false;
   String? _error;
 
-  String get _apiBase {
-    final base = widget.session.apiBase.trim().replaceAll(RegExp(r'/$'), '');
-    return base;
-  }
+  String get _apiBase => _proposalApiBase(widget.session);
 
   String get _previewUrl =>
       '$_apiBase/proposals/${Uri.encodeComponent(widget.archiveId)}/preview.html';
-
-  String get _rawUrl =>
-      '$_apiBase/proposals/${Uri.encodeComponent(widget.archiveId)}/raw';
-
-  Map<String, String> get _authHeaders {
-    final token = widget.session.token.trim();
-    if (token.isEmpty) return const {};
-    return {'Authorization': 'Bearer $token'};
-  }
 
   @override
   void initState() {
@@ -108,7 +191,7 @@ class _ProposalExcelPreviewPageState extends State<ProposalExcelPreviewPage> {
       // 带鉴权头加载 HTML，避免 WebView 直接 GET 丢 token。
       final resp = await http.get(
         Uri.parse(_previewUrl),
-        headers: _authHeaders,
+        headers: _authHeaders(widget.session),
       );
       if (!mounted) return;
       if (resp.statusCode < 200 || resp.statusCode >= 300) {
@@ -134,30 +217,14 @@ class _ProposalExcelPreviewPageState extends State<ProposalExcelPreviewPage> {
     if (_downloading) return;
     setState(() => _downloading = true);
     try {
-      final resp = await http.get(Uri.parse(_rawUrl), headers: _authHeaders);
-      if (resp.statusCode < 200 || resp.statusCode >= 300) {
-        throw Exception('HTTP ${resp.statusCode}');
-      }
-      var name = widget.fileName;
-      if (!name.toLowerCase().endsWith('.xlsx')) {
-        name = '$name.xlsx';
-      }
-      final path = await file_dl.saveBytesAsFile(
-        Uint8List.fromList(resp.bodyBytes),
-        name,
+      final path = await _downloadProposalExcel(
+        session: widget.session,
+        archiveId: widget.archiveId,
+        fileName: widget.fileName,
       );
       if (!mounted) return;
       if (path == null || path.isEmpty) {
         showDunesToast(context, '下载失败', kind: DunesToastKind.error);
-      } else if (isDesktopCommOnly) {
-        try {
-          await file_dl.openLocalFile(path);
-          if (!mounted) return;
-          showDunesToast(context, '已打开：$name');
-        } catch (_) {
-          if (!mounted) return;
-          showDunesToast(context, '已保存：$path');
-        }
       } else {
         showDunesToast(context, '已保存：$path');
       }

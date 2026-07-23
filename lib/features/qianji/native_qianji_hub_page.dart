@@ -1,25 +1,85 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../core/theme/dunes_theme.dart';
 import '../auth/auth_session.dart';
+import '../robots/robot_character.dart';
+import '../robots/robot_consult_store.dart';
+import '../robots/robot_models.dart';
+import '../robots/robot_service.dart';
 
 const _themePurple = Color(0xFF7B5CD8);
 
-/// 千机 Hub：与工作台一致的入口卡片布局（PC / APP 共用）。
-class NativeQianjiHubPage extends StatelessWidget {
+/// NOVA Hub：机器人（接口目录）+ 管理入口。
+class NativeQianjiHubPage extends StatefulWidget {
   const NativeQianjiHubPage({
     super.key,
     required this.onOpenCursorAccount,
     this.onOpenMeetingSupervise,
+    this.onOpenRobotHome,
     this.session,
   });
 
   final VoidCallback onOpenCursorAccount;
   final VoidCallback? onOpenMeetingSupervise;
+  final VoidCallback? onOpenRobotHome;
   final AuthSession? session;
 
+  @override
+  State<NativeQianjiHubPage> createState() => _NativeQianjiHubPageState();
+}
+
+class _NativeQianjiHubPageState extends State<NativeQianjiHubPage> {
+  List<RobotRole> _robots = const [];
+  bool _loadingRobots = false;
+
   bool get _hasAccess =>
-      session == null || session!.effectiveQianjiAccess;
+      widget.session == null || widget.session!.effectiveQianjiAccess;
+
+  bool get _canUseRobots =>
+      widget.session == null || widget.session!.effectiveRobotAccess;
+
+  @override
+  void initState() {
+    super.initState();
+    final store = RobotConsultStore.instance;
+    store.bindSession(widget.session);
+    _loadRobots();
+    if (widget.session != null && widget.session!.effectiveRobotAccess) {
+      store.refreshHub();
+    }
+  }
+
+  Future<void> _loadRobots() async {
+    final session = widget.session;
+    if (session == null || !session.effectiveRobotAccess) {
+      if (mounted) {
+        setState(() {
+          _robots = const [];
+          _loadingRobots = false;
+        });
+      }
+      return;
+    }
+    RobotConsultStore.instance.bindSession(session);
+    setState(() => _loadingRobots = true);
+    try {
+      final list = await RobotService(session: session).listRobots();
+      if (!mounted) return;
+      setState(() {
+        _robots = list;
+        _loadingRobots = false;
+      });
+      unawaited(RobotConsultStore.instance.refreshHub());
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _robots = const [];
+        _loadingRobots = false;
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -38,6 +98,14 @@ class NativeQianjiHubPage extends StatelessWidget {
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(16, 16, 16, 40),
                 children: [
+                  if (_canUseRobots && (_loadingRobots || _robots.isNotEmpty)) ...[
+                    _RobotHubPreview(
+                      robots: _robots,
+                      loading: _loadingRobots,
+                      onOpenConsultList: widget.onOpenRobotHome,
+                    ),
+                    const SizedBox(height: 16),
+                  ],
                   _QianjiHubSection(
                     title: '管理',
                     accent: _themePurple,
@@ -47,14 +115,14 @@ class NativeQianjiHubPage extends StatelessWidget {
                         subtitle: '账号与用量',
                         icon: Icons.manage_accounts_outlined,
                         color: _themePurple,
-                        onTap: onOpenCursorAccount,
+                        onTap: widget.onOpenCursorAccount,
                       ),
                       _QianjiHubTile(
                         title: '会议纪要监管',
                         subtitle: '本人及下级',
                         icon: Icons.fact_check_outlined,
                         color: _themePurple,
-                        onTap: onOpenMeetingSupervise,
+                        onTap: widget.onOpenMeetingSupervise,
                       ),
                     ],
                   ),
@@ -101,7 +169,7 @@ class NativeQianjiHubPage extends StatelessWidget {
               ),
               const SizedBox(height: 8),
               Text(
-                '当前账号未开通千机访问权限，如需使用请联系管理员。',
+                '当前账号未开通访问权限，如需使用请联系管理员。',
                 textAlign: TextAlign.center,
                 style: DunesTypography.sans(
                   fontSize: 12,
@@ -113,6 +181,228 @@ class NativeQianjiHubPage extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _RobotHubPreview extends StatelessWidget {
+  const _RobotHubPreview({
+    required this.robots,
+    this.loading = false,
+    this.onOpenConsultList,
+  });
+
+  final List<RobotRole> robots;
+  final bool loading;
+  final VoidCallback? onOpenConsultList;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFE8EAED)),
+      ),
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 4,
+                height: 16,
+                decoration: BoxDecoration(
+                  color: RobotTheme.purple,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                '机器人',
+                style: DunesTypography.sans(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                  color: RobotTheme.purple,
+                ),
+              ),
+              if (loading) ...[
+                const SizedBox(width: 10),
+                const SizedBox(
+                  width: 14,
+                  height: 14,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              ],
+            ],
+          ),
+          const SizedBox(height: 14),
+          Wrap(
+            spacing: 12,
+            runSpacing: 12,
+            children: [
+              for (final robot in robots)
+                _RobotMiniCard(
+                  role: robot,
+                  onTap: onOpenConsultList,
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RobotMiniCard extends StatelessWidget {
+  const _RobotMiniCard({
+    required this.role,
+    this.onTap,
+  });
+
+  final RobotRole role;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: RobotConsultStore.instance,
+      builder: (context, _) {
+        final store = RobotConsultStore.instance;
+        final status = store.hubStatus;
+        final active = store.activeCount;
+        return Material(
+          color: const Color(0xFFF8F7FB),
+          borderRadius: BorderRadius.circular(10),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(10),
+            onTap: onTap,
+            child: SizedBox(
+              width: 132,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(12, 12, 12, 10),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        Container(
+                          width: 44,
+                          height: 44,
+                          decoration: BoxDecoration(
+                            color: role.accent.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          alignment: Alignment.center,
+                          child: RobotFaceAvatar(
+                            role: role,
+                            size: 36,
+                            animate: true,
+                            busy: status == RobotConsultStatus.running ||
+                                status == RobotConsultStatus.queued,
+                          ),
+                        ),
+                        if (status != null)
+                          Positioned(
+                            right: -4,
+                            top: -4,
+                            child: _StatusDot(status: status),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      role.name,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        height: 1.25,
+                        fontWeight: FontWeight.w600,
+                        color: DunesColors.text,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    if (status != null)
+                      Text(
+                        active > 1
+                            ? '${status.label} · $active'
+                            : status.label,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 11,
+                          height: 1.25,
+                          fontWeight: FontWeight.w600,
+                          color: status == RobotConsultStatus.running
+                              ? RobotTheme.purple
+                              : const Color(0xFFB07A2B),
+                        ),
+                      )
+                    else
+                      Text(
+                        role.category,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 11,
+                          height: 1.25,
+                          color: DunesColors.text3,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _StatusDot extends StatelessWidget {
+  const _StatusDot({required this.status});
+
+  final RobotConsultStatus status;
+
+  @override
+  Widget build(BuildContext context) {
+    final running = status == RobotConsultStatus.running;
+    return Container(
+      width: 16,
+      height: 16,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        shape: BoxShape.circle,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.08),
+            blurRadius: 3,
+          ),
+        ],
+      ),
+      alignment: Alignment.center,
+      child: running
+          ? const SizedBox(
+              width: 10,
+              height: 10,
+              child: CircularProgressIndicator(
+                strokeWidth: 1.8,
+                color: RobotTheme.purple,
+              ),
+            )
+          : Container(
+              width: 8,
+              height: 8,
+              decoration: const BoxDecoration(
+                color: Color(0xFFB07A2B),
+                shape: BoxShape.circle,
+              ),
+            ),
     );
   }
 }

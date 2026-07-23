@@ -188,6 +188,8 @@ abstract final class ConversationInboxRealtime {
   static bool _isFromPeer(ConversationRealtimeEventLike event, int selfUserId) {
     final msg = event.message;
     if (msg == null) return false;
+    final kind = (msg['kind'] ?? '').toString().toUpperCase();
+    if (kind == 'ROBOT_REPLY') return true;
     final sender = msg['sender'];
     if (sender is Map<String, dynamic>) {
       final uid = (sender['userId'] as num?)?.toInt() ?? 0;

@@ -465,6 +465,9 @@ class XfDetPendingHint extends StatelessWidget {
       bundle.assigneeNames,
       bundle.stages,
     );
+    if (who.isEmpty) {
+      who = (bundle.detail.raw['currentNodeLabel'] ?? '').toString().trim();
+    }
     if (who.isEmpty) who = '待分配';
     return XfDetCard(
       title: '审批进行中',
@@ -1311,7 +1314,9 @@ class XfDetTrackTimeline extends StatelessWidget {
     final detail = bundle.detail;
     final trail = bundle.trail;
     final steps = trail?.steps ?? const <XflowApprovalStep>[];
+    final parallel = trail?.isParallel ?? false;
     final curStep = trail?.currentStep ?? 1;
+    final curSteps = trail?.currentSteps.toSet() ?? const <int>{};
     final st = detail.status.toLowerCase();
 
     String assigneeLabel(XflowApprovalStep step, String fallback) {
@@ -1323,6 +1328,15 @@ class XfDetTrackTimeline extends StatelessWidget {
         return '${step.assigneeName} · $fallback';
       }
       return fallback;
+    }
+
+    // 并行：未决步骤统一「待处理」，勿用 currentStep == 某一步单独高亮
+    bool isCurrentTrackStep(XflowApprovalStep step) {
+      if (parallel) return false;
+      final flagged = step.isCurrent;
+      if (flagged != null) return flagged;
+      if (curSteps.isNotEmpty) return curSteps.contains(step.stepNo);
+      return step.stepNo == curStep;
     }
 
     final rows = <XflowApprovalFlowTrackRowData>[
@@ -1337,7 +1351,9 @@ class XfDetTrackTimeline extends StatelessWidget {
     ];
 
     for (final step in steps) {
-      final label = stageLabel(step.stepNo, step.stepType, bundle.stages);
+      final label = step.stageName.isNotEmpty
+          ? step.stageName
+          : stageLabel(step.stepNo, step.stepType, bundle.stages);
       final who = assigneeLabel(step, label);
       final decision = step.decision.toUpperCase();
       late XflowApprovalFlowStepState state;
@@ -1351,7 +1367,7 @@ class XfDetTrackTimeline extends StatelessWidget {
         state = XflowApprovalFlowStepState.rejected;
         cmt = step.comment.isEmpty ? '已驳回' : step.comment;
         tm = fmtDetailTime(step.decidedAtRaw);
-      } else if (step.stepNo == curStep && st == 'pending') {
+      } else if (st == 'pending' && isCurrentTrackStep(step)) {
         state = XflowApprovalFlowStepState.current;
         cmt = '审批进行中';
         tm = '当前处理';
@@ -1383,7 +1399,9 @@ class XfDetTrackTimeline extends StatelessWidget {
         final name = bundle.assigneeNames[aid];
         if (name != null && name.isNotEmpty) who = '$name · $label';
       }
-      final isCurrent = st == 'pending' && no == curStep;
+      final isCurrent = !parallel &&
+          st == 'pending' &&
+          (curSteps.isNotEmpty ? curSteps.contains(no) : no == curStep);
       rows.add(
         XflowApprovalFlowTrackRowData(
           title: who,

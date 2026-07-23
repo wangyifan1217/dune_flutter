@@ -739,6 +739,8 @@ class _NativeLighthousePageState extends State<NativeLighthousePage>
   DateTime? _date; // null 代表今天（上海时区）
   String _group = '全部'; // L1 sector chip
   String _hunFilter = '全部'; // 渠道 U/N/混合
+  int _listLimit = 20; // L1 列表下滑分页
+  static const _listPageSize = 20;
 
   // 自定义日期区间（覆盖 period+date）
   DateTime? _customStart;
@@ -986,6 +988,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage>
       _tab = t;
       _group = '全部';
       _hunFilter = '全部';
+      _listLimit = _listPageSize;
       _rows = [];
       _trendMap = {};
       _discountMap = {};
@@ -1026,7 +1029,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage>
 
   void _switchGroup(String g) {
     if (g == _group) return;
-    setState(() => _group = g);
+    setState(() {
+      _group = g;
+      _listLimit = _listPageSize;
+    });
     // summary 按 tab+group 重拉；列表用本地 filter
     final seq = ++_loadSeq;
     _fetchSummary(
@@ -1043,7 +1049,18 @@ class _NativeLighthousePageState extends State<NativeLighthousePage>
 
   void _switchHun(String v) {
     if (_tab != 'channel') return;
-    setState(() => _hunFilter = _hunFilter == v ? '全部' : v);
+    setState(() {
+      _hunFilter = _hunFilter == v ? '全部' : v;
+      _listLimit = _listPageSize;
+    });
+  }
+
+  void _maybeLoadMoreL1() {
+    final total = _visibleRows().length;
+    if (_listLimit >= total) return;
+    setState(() {
+      _listLimit = (_listLimit + _listPageSize).clamp(0, total);
+    });
   }
 
   /// 双日期区间选择器（抄袭副本 v12.7）：点 start 再点 end，中间高亮。
@@ -1504,57 +1521,97 @@ class _NativeLighthousePageState extends State<NativeLighthousePage>
     if (_error != null && _summary == null) {
       return _ErrorState(message: _error!, onRetry: _boot);
     }
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(14, 12, 14, 20),
-      physics: const AlwaysScrollableScrollPhysics(
-          parent: BouncingScrollPhysics()),
-      children: [
-        HeroStatCard(
-          metrics: _summaryMetrics,
-          loading: _loadingSummary,
-          tab: _tab,
-        ),
-        const SizedBox(height: 10),
-        KpiGrid(metrics: _summaryMetrics, tab: _tab),
-        // § 6.1 · 渠道 tab 展示 U / N / 混合 H 份额
-        if (_tab == 'channel') ...[
-          const SizedBox(height: 8),
-          _HunShareBar(
-            u: _sumHun('hunU', rows: _groupFilteredRows()),
-            n: _sumHun('hunN', rows: _groupFilteredRows()),
-            h: _sumHun('hunH', rows: _groupFilteredRows()),
+    final allRows = _visibleRows();
+    final shownRows = allRows.take(_listLimit).toList();
+    final hasMore = _listLimit < allRows.length;
+    return NotificationListener<ScrollNotification>(
+      onNotification: (n) {
+        if (n.metrics.axis != Axis.vertical) return false;
+        if (n is ScrollUpdateNotification || n is OverscrollNotification) {
+          if (n.metrics.pixels >= n.metrics.maxScrollExtent - 160) {
+            _maybeLoadMoreL1();
+          }
+        }
+        return false;
+      },
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 14, 16, 24),
+        physics: const AlwaysScrollableScrollPhysics(
+            parent: BouncingScrollPhysics()),
+        children: [
+          HeroStatCard(
+            metrics: _summaryMetrics,
+            loading: _loadingSummary,
+            tab: _tab,
           ),
+          const SizedBox(height: 12),
+          KpiGrid(metrics: _summaryMetrics, tab: _tab),
+          // § 6.1 · 渠道 tab 展示 U / N / 混合 H 份额
+          if (_tab == 'channel') ...[
+            const SizedBox(height: 10),
+            _HunShareBar(
+              u: _sumHun('hunU', rows: _groupFilteredRows()),
+              n: _sumHun('hunN', rows: _groupFilteredRows()),
+              h: _sumHun('hunH', rows: _groupFilteredRows()),
+            ),
+          ],
+          const SizedBox(height: 16),
+          _SectorSection(
+            tab: _tab,
+            currentGroup: _group,
+            onSelect: _switchGroup,
+            rowsCount: allRows.length,
+            categories: _categoryChips(),
+            groupCounts: _groupCounts(),
+            hunFilter: _tab == 'channel' ? _hunFilter : null,
+            onHunSelect: _tab == 'channel' ? _switchHun : null,
+          ),
+          const SizedBox(height: 14),
+          _ListSection(
+            key: ValueKey('$_tab-$_group-$_hunFilter'),
+            tab: _tab,
+            rows: shownRows,
+            trendMap: _trendMap,
+            discountMap: _discountMap,
+            loading: _loadingRows,
+            onRowTap: _openDetail,
+            uiRoot: (_summaryMetrics?['ui'] as Map?)?.cast<String, dynamic>(),
+          ),
+          if (hasMore) ...[
+            const SizedBox(height: 12),
+            _ScrollLoadHint(
+              shown: shownRows.length,
+              total: allRows.length,
+            ),
+          ],
+          const SizedBox(height: 22),
+          _FootMeta(lastSyncedAt: _summaryMetrics?['lastSyncedAt'] as String?),
         ],
-        const SizedBox(height: 14),
-        _SectorSection(
-          tab: _tab,
-          currentGroup: _group,
-          onSelect: _switchGroup,
-          rowsCount: _visibleRows().length,
-          categories: _categoryChips(),
-          hunFilter: _tab == 'channel' ? _hunFilter : null,
-          onHunSelect: _tab == 'channel' ? _switchHun : null,
-        ),
-        const SizedBox(height: 12),
-        _ListSection(
-          key: ValueKey(_tab),
-          tab: _tab,
-          rows: _visibleRows(),
-          trendMap: _trendMap,
-          discountMap: _discountMap,
-          loading: _loadingRows,
-          onRowTap: _openDetail,
-          uiRoot: (_summaryMetrics?['ui'] as Map?)?.cast<String, dynamic>(),
-        ),
-        const SizedBox(height: 20),
-        _FootMeta(lastSyncedAt: _summaryMetrics?['lastSyncedAt'] as String?),
-      ],
+      ),
     );
   }
 
   List<MetricRow> _groupFilteredRows() {
     if (_group == '全部') return _rows;
     return _rows.where((r) => (r.group ?? '') == _group).toList();
+  }
+
+  /// SectorSection chip 右侧的小计数徽标。基于当前 _rows（未过滤 group）。
+  /// 若 tab == 'channel' 且启用了 hunFilter，则同时应用 hun 过滤。
+  Map<String, int> _groupCounts() {
+    Iterable<MetricRow> src = _rows;
+    if (_tab == 'channel' && _hunFilter != '全部') {
+      final match = _hunMatchToken(_hunFilter);
+      src = src.where((r) => _hunOf(r).primary == match);
+    }
+    final list = src.toList();
+    final counts = <String, int>{'全部': list.length};
+    for (final r in list) {
+      final g = (r.group ?? '').trim();
+      if (g.isEmpty) continue;
+      counts[g] = (counts[g] ?? 0) + 1;
+    }
+    return counts;
   }
 
   List<MetricRow> _visibleRows() {
@@ -1615,7 +1672,7 @@ class _AppBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.fromLTRB(18, 6, 18, 12),
+      padding: const EdgeInsets.fromLTRB(18, 8, 18, 14),
       decoration: const BoxDecoration(
         border: Border(bottom: BorderSide(color: LhTokens.borderSoft, width: 0.5)),
       ),
@@ -1624,31 +1681,32 @@ class _AppBar extends StatelessWidget {
         children: [
           RichText(
             text: TextSpan(
-              style: LhTokens.sansText(size: 17, weight: FontWeight.w500),
+              style: LhTokens.sansText(size: 18, weight: FontWeight.w500),
               children: [
                 TextSpan(
                     text: '灯塔',
                     style: LhTokens.sansText(
-                      size: 17,
+                      size: 18,
                       color: LhTokens.accent,
-                      weight: FontWeight.w500,
+                      weight: FontWeight.w600,
                     )),
                 const TextSpan(text: '工作台'),
                 TextSpan(
                     text: '  Lighthouse',
                     style: LhTokens.monoText(
-                      size: 10,
+                      size: 10.5,
                       color: LhTokens.text3,
                       letterSpacing: 0.6,
+                      weight: FontWeight.w500,
                     )),
               ],
             ),
           ),
           const Spacer(),
-          const Icon(Icons.search_rounded, size: 20, color: LhTokens.text2),
-          const SizedBox(width: 14),
+          const Icon(Icons.search_rounded, size: 22, color: LhTokens.text2),
+          const SizedBox(width: 16),
           const Icon(Icons.notifications_none_outlined,
-              size: 20, color: LhTokens.text2),
+              size: 22, color: LhTokens.text2),
         ],
       ),
     );
@@ -1669,7 +1727,7 @@ class _TabPills extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
       decoration: const BoxDecoration(
         color: LhTokens.bgApp,
         border: Border(bottom: BorderSide(color: LhTokens.borderSoft, width: 0.5)),
@@ -1678,7 +1736,7 @@ class _TabPills extends StatelessWidget {
         children: _tabs.map((t) {
           final on = t.$1 == current;
           return Padding(
-            padding: const EdgeInsets.only(right: 18),
+            padding: const EdgeInsets.only(right: 20),
             child: GestureDetector(
               behavior: HitTestBehavior.opaque,
               onTap: () => onChange(t.$1),
@@ -1694,28 +1752,47 @@ class _TabPills extends StatelessWidget {
                       children: [
                         Text(t.$2,
                             style: LhTokens.monoText(
-                              size: 10,
+                              size: 10.5,
                               color: on ? LhTokens.accent : LhTokens.text4,
-                              letterSpacing: 0.4,
+                              letterSpacing: 0.5,
+                              weight: FontWeight.w600,
                             )),
-                        const SizedBox(width: 5),
+                        const SizedBox(width: 6),
                         Text(t.$3,
                             style: LhTokens.sansText(
-                              size: 14,
+                              size: 15,
                               color: on ? LhTokens.text : LhTokens.text3,
-                              weight: FontWeight.w500,
+                              weight: on ? FontWeight.w600 : FontWeight.w500,
                             )),
                       ],
                     ),
-                    const SizedBox(height: 6),
+                    const SizedBox(height: 7),
                     AnimatedContainer(
-                      duration: const Duration(milliseconds: 220),
+                      duration: const Duration(milliseconds: 240),
                       curve: Curves.easeOutCubic,
-                      width: on ? 22 : 0,
+                      width: on ? 26 : 0,
                       height: 3,
                       decoration: BoxDecoration(
-                        color: LhTokens.accent,
+                        gradient: on
+                            ? LinearGradient(
+                                begin: Alignment.topCenter,
+                                end: Alignment.bottomCenter,
+                                colors: [
+                                  LhTokens.accent,
+                                  LhTokens.accent.withOpacity(0.75),
+                                ],
+                              )
+                            : null,
                         borderRadius: BorderRadius.circular(2),
+                        boxShadow: on
+                            ? [
+                                BoxShadow(
+                                  color: LhTokens.accent.withOpacity(0.35),
+                                  blurRadius: 4,
+                                  offset: const Offset(0, 1),
+                                ),
+                              ]
+                            : null,
                       ),
                     ),
                   ],
@@ -1778,7 +1855,7 @@ class _TimeBar extends StatelessWidget {
             : _formatByPeriod(effectiveDate, period);
 
     return Container(
-      padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
       decoration: const BoxDecoration(
         color: LhTokens.bgApp,
         border: Border(bottom: BorderSide(color: LhTokens.borderSoft, width: 0.5)),
@@ -1789,7 +1866,7 @@ class _TimeBar extends StatelessWidget {
             padding: const EdgeInsets.all(2),
             decoration: BoxDecoration(
               color: LhTokens.bgCard,
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: BorderRadius.circular(9),
             ),
             child: Row(
               children: _chips.map((c) {
@@ -1797,18 +1874,19 @@ class _TimeBar extends StatelessWidget {
                 return GestureDetector(
                   onTap: () => onChange(c.$1),
                   child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 180),
+                    duration: const Duration(milliseconds: 200),
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 10, vertical: 5),
+                        horizontal: 12, vertical: 6),
                     decoration: BoxDecoration(
                       color: on ? LhTokens.text : Colors.transparent,
-                      borderRadius: BorderRadius.circular(6),
+                      borderRadius: BorderRadius.circular(7),
                     ),
                     child: Text(c.$2,
                         style: LhTokens.monoText(
-                          size: 10.5,
-                          color: on ? Colors.white : LhTokens.text3,
+                          size: 11.5,
+                          color: on ? Colors.white : LhTokens.text2,
                           letterSpacing: 0.2,
+                          weight: on ? FontWeight.w600 : FontWeight.w500,
                         )),
                   ),
                 );
@@ -1822,7 +1900,7 @@ class _TimeBar extends StatelessWidget {
             onTap: onDateTap,
             behavior: HitTestBehavior.opaque,
             child: Container(
-              padding: const EdgeInsets.fromLTRB(9, 4, 7, 4),
+              padding: const EdgeInsets.fromLTRB(10, 5, 8, 5),
               decoration: BoxDecoration(
                 color: (isToday && !_isCustom)
                     ? LhTokens.bgSoft
@@ -1832,7 +1910,7 @@ class _TimeBar extends StatelessWidget {
                         ? LhTokens.border
                         : const Color(0xFFD9D5FA),
                     width: 0.5),
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: BorderRadius.circular(9),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
@@ -1841,30 +1919,30 @@ class _TimeBar extends StatelessWidget {
                       _isCustom
                           ? Icons.date_range_rounded
                           : Icons.calendar_today_rounded,
-                      size: 11,
+                      size: 12,
                       color: (isToday && !_isCustom)
                           ? LhTokens.text3
                           : LhTokens.accent),
-                  const SizedBox(width: 5),
+                  const SizedBox(width: 6),
                   ConstrainedBox(
                     constraints: const BoxConstraints(maxWidth: 150),
                     child: Text(display,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: LhTokens.monoText(
-                          size: 10.5,
+                          size: 11.5,
                           color: (isToday && !_isCustom)
                               ? LhTokens.text2
                               : LhTokens.accentDeep,
                           letterSpacing: 0.2,
-                          weight: FontWeight.w500,
+                          weight: FontWeight.w600,
                         )),
                   ),
                   if (!isToday || _isCustom) ...[
-                    const SizedBox(width: 3),
+                    const SizedBox(width: 4),
                     Container(
-                      width: 3,
-                      height: 3,
+                      width: 4,
+                      height: 4,
                       decoration: const BoxDecoration(
                         color: LhTokens.accent,
                         shape: BoxShape.circle,
@@ -1873,7 +1951,7 @@ class _TimeBar extends StatelessWidget {
                   ],
                   const SizedBox(width: 3),
                   Icon(Icons.keyboard_arrow_down_rounded,
-                      size: 13,
+                      size: 15,
                       color: (isToday && !_isCustom)
                           ? LhTokens.text3
                           : LhTokens.accent),
@@ -1884,20 +1962,20 @@ class _TimeBar extends StatelessWidget {
           if (!_isCustom && onNext != null)
             _navBtn(Icons.chevron_right_rounded, onNext!),
           if (!_isCustom && periodOffset < 0 && onResetOffset != null) ...[
-            const SizedBox(width: 4),
+            const SizedBox(width: 5),
             GestureDetector(
               onTap: onResetOffset,
               child: Container(
                 padding:
-                    const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+                    const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
                 decoration: BoxDecoration(
                   color: LhTokens.bgSoft,
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: BorderRadius.circular(9),
                   border: Border.all(color: LhTokens.border, width: 0.5),
                 ),
                 child: Text('今',
                     style: LhTokens.monoText(
-                      size: 10,
+                      size: 11,
                       color: LhTokens.text2,
                       weight: FontWeight.w600,
                     )),
@@ -1911,20 +1989,20 @@ class _TimeBar extends StatelessWidget {
 
   Widget _navBtn(IconData icon, VoidCallback onTap) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 2),
+      padding: const EdgeInsets.symmetric(horizontal: 3),
       child: GestureDetector(
         onTap: onTap,
         behavior: HitTestBehavior.opaque,
         child: Container(
-          width: 24,
-          height: 24,
+          width: 28,
+          height: 28,
           alignment: Alignment.center,
           decoration: BoxDecoration(
             color: LhTokens.bgSoft,
-            borderRadius: BorderRadius.circular(6),
+            borderRadius: BorderRadius.circular(7),
             border: Border.all(color: LhTokens.borderSoft, width: 0.5),
           ),
-          child: Icon(icon, size: 16, color: LhTokens.text2),
+          child: Icon(icon, size: 18, color: LhTokens.text2),
         ),
       ),
     );
@@ -2001,11 +2079,11 @@ class HeroStatCard extends StatelessWidget {
     final glowColor = isNeg ? LhTokens.coral : LhTokens.accent;
 
     return ClipRRect(
-      borderRadius: BorderRadius.circular(14),
+      borderRadius: BorderRadius.circular(16),
       child: Stack(
         children: [
           Container(
-            padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+            padding: const EdgeInsets.fromLTRB(18, 16, 18, 18),
             decoration: const BoxDecoration(
               gradient: LinearGradient(
                 begin: Alignment.topLeft,
@@ -2017,9 +2095,32 @@ class HeroStatCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 _heroHead(headline, headKicker, deltaPct, dir),
-                const SizedBox(height: 8),
+                const SizedBox(height: 10),
                 AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 260),
+                  duration: const Duration(milliseconds: 320),
+                  switchInCurve: Curves.easeOutCubic,
+                  switchOutCurve: Curves.easeInCubic,
+                  transitionBuilder: (child, anim) {
+                    // 数字进入：向上 6px 滑入 + 淡入，退出：淡出
+                    final slide = Tween<Offset>(
+                      begin: const Offset(0, 0.15),
+                      end: Offset.zero,
+                    ).animate(anim);
+                    return FadeTransition(
+                      opacity: anim,
+                      child: SlideTransition(
+                        position: slide,
+                        child: child,
+                      ),
+                    );
+                  },
+                  layoutBuilder: (currentChild, previousChildren) => Stack(
+                    alignment: Alignment.bottomLeft,
+                    children: [
+                      ...previousChildren,
+                      if (currentChild != null) currentChild,
+                    ],
+                  ),
                   child: loading && heroVal == null
                       ? _skeleton(180, 34)
                       : Row(
@@ -2027,44 +2128,61 @@ class HeroStatCard extends StatelessWidget {
                           crossAxisAlignment: CrossAxisAlignment.baseline,
                           textBaseline: TextBaseline.alphabetic,
                           children: [
-                            // 正负号前缀
+                            // 正负号前缀（细一档，光而不喧宾夺主）
                             if (heroVal != null && heroVal != 0)
-                              Text(isNeg ? '−' : '+',
-                                  style: LhTokens.sansText(
-                                    size: 28,
-                                    color: valColor.withOpacity(0.85),
-                                    weight: FontWeight.w400,
-                                    letterSpacing: -0.4,
-                                    height: 1.0,
-                                  )),
+                              Padding(
+                                padding: const EdgeInsets.only(right: 2),
+                                child: Text(isNeg ? '−' : '+',
+                                    style: LhTokens.sansText(
+                                      size: 26,
+                                      color: valColor.withOpacity(0.7),
+                                      weight: FontWeight.w300,
+                                      letterSpacing: -0.4,
+                                      height: 1.0,
+                                    )),
+                              ),
                             Text(heroFmt.value,
                                 style: LhTokens.sansText(
-                                  size: 34,
+                                  size: 38,
                                   color: valColor,
                                   weight: FontWeight.w500,
-                                  letterSpacing: -1.0,
+                                  letterSpacing: -1.2,
                                   height: 1.0,
                                 )),
-                            const SizedBox(width: 4),
+                            const SizedBox(width: 5),
                             Text(heroFmt.unit,
                                 style: LhTokens.sansText(
-                                  size: 14,
-                                  color: valColor.withOpacity(0.55),
+                                  size: 15,
+                                  color: valColor.withOpacity(0.6),
                                   weight: FontWeight.w400,
                                   letterSpacing: 0.2,
                                 )),
                           ],
                         ),
                 ),
-                const SizedBox(height: 14),
+                const SizedBox(height: 16),
+                // Editorial hairline: 中间实、两端淡（避免生硬）
                 Container(
-                    height: 1,
-                    color: Colors.white.withOpacity(0.10)),
-                const SizedBox(height: 12),
+                  height: 0.5,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.centerLeft,
+                      end: Alignment.centerRight,
+                      colors: [
+                        Colors.white.withOpacity(0.02),
+                        Colors.white.withOpacity(0.14),
+                        Colors.white.withOpacity(0.02),
+                      ],
+                      stops: const [0.0, 0.5, 1.0],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 14),
                 _heroFoot(m),
               ],
             ),
           ),
+          // 右上紫色（或珊瑚，负值时）光晕 · 对齐 HTML .hero-stat::before
           Positioned(
             top: -20,
             right: -30,
@@ -2085,6 +2203,27 @@ class HeroStatCard extends StatelessWidget {
               ),
             ),
           ),
+          // 左下白色微光 · 对齐 HTML .hero-stat::after
+          Positioned(
+            bottom: -40,
+            left: -20,
+            child: IgnorePointer(
+              child: Container(
+                width: 120,
+                height: 120,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: RadialGradient(
+                    colors: [
+                      Colors.white.withOpacity(0.06),
+                      Colors.transparent,
+                    ],
+                    stops: const [0.0, 0.65],
+                  ),
+                ),
+              ),
+            ),
+          ),
         ],
       ),
     );
@@ -2094,48 +2233,53 @@ class HeroStatCard extends StatelessWidget {
     final isUp = dir == 'up';
     final isDn = dir == 'dn' || dir == 'down';
     final showBadge = d != null;
+    // A股习惯：正红负绿
+    const upFg = Color(0xFFFCA5A5);
+    const dnFg = Color(0xFFA5F3D6);
     return Row(
       children: [
         Text('$label · $kicker',
             style: LhTokens.monoText(
-              size: 10,
-              color: Colors.white.withOpacity(0.7),
+              size: 10.5,
+              color: Colors.white.withOpacity(0.75),
               letterSpacing: 0.6,
+              weight: FontWeight.w500,
             )),
         const Spacer(),
         if (showBadge)
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
             decoration: BoxDecoration(
               color: isUp
-                  ? const Color(0xFFA5F3D6).withOpacity(0.12)
+                  ? upFg.withOpacity(0.14)
                   : isDn
-                      ? const Color(0xFFFCA5A5).withOpacity(0.12)
-                      : Colors.white.withOpacity(0.12),
-              borderRadius: BorderRadius.circular(5),
+                      ? dnFg.withOpacity(0.14)
+                      : Colors.white.withOpacity(0.14),
+              borderRadius: BorderRadius.circular(6),
             ),
             child: Row(
               children: [
                 Text(isUp ? '↑' : (isDn ? '↓' : '·'),
                     style: TextStyle(
                       color: isUp
-                          ? const Color(0xFFA5F3D6)
+                          ? upFg
                           : isDn
-                              ? const Color(0xFFFCA5A5)
+                              ? dnFg
                               : Colors.white,
-                      fontSize: 9.5,
+                      fontSize: 10.5,
                       fontWeight: FontWeight.w700,
                     )),
-                const SizedBox(width: 2),
+                const SizedBox(width: 3),
                 Text('${d!.abs().toStringAsFixed(1)}%',
                     style: LhTokens.monoText(
-                      size: 9.5,
+                      size: 10.5,
                       color: isUp
-                          ? const Color(0xFFA5F3D6)
+                          ? upFg
                           : isDn
-                              ? const Color(0xFFFCA5A5)
+                              ? dnFg
                               : Colors.white,
-                      letterSpacing: 0.4,
+                      letterSpacing: 0.3,
+                      weight: FontWeight.w600,
                     )),
               ],
             ),
@@ -2190,53 +2334,56 @@ class HeroStatCard extends StatelessWidget {
           children: [
             Text(label.toUpperCase(),
                 style: LhTokens.monoText(
-                  size: 9,
-                  color: Colors.white.withOpacity(0.6),
-                  letterSpacing: 0.6,
+                  size: 10,
+                  color: Colors.white.withOpacity(0.65),
+                  letterSpacing: 0.7,
+                  weight: FontWeight.w500,
                 )),
-            const SizedBox(height: 3),
+            const SizedBox(height: 5),
             Row(
               crossAxisAlignment: CrossAxisAlignment.baseline,
               textBaseline: TextBaseline.alphabetic,
               children: [
                 Text(value,
                     style: LhTokens.sansText(
-                      size: 14,
+                      size: 15.5,
                       color: valColor,
                       weight: FontWeight.w500,
-                      letterSpacing: -0.2,
+                      letterSpacing: -0.3,
                     )),
                 const SizedBox(width: 2),
                 Text(unit,
                     style: LhTokens.sansText(
-                      size: 10,
-                      color: valColor.withOpacity(0.65),
+                      size: 11,
+                      color: valColor.withOpacity(0.7),
                       weight: FontWeight.w400,
                     )),
               ],
             ),
             if (deltaPct != null)
               Padding(
-                padding: const EdgeInsets.only(top: 1),
+                padding: const EdgeInsets.only(top: 2),
                 child: Text(Fmt.delta(deltaPct),
                     style: LhTokens.monoText(
-                      size: 9.5,
+                      size: 10.5,
                       color: deltaPct >= 0
-                          ? const Color(0xFFA5F3D6)
-                          : const Color(0xFFFCA5A5),
+                          ? const Color(0xFFFCA5A5)
+                          : const Color(0xFFA5F3D6),
                       letterSpacing: 0.2,
+                      weight: FontWeight.w500,
                     )),
               )
             else if (deltaPP != null)
               Padding(
-                padding: const EdgeInsets.only(top: 1),
+                padding: const EdgeInsets.only(top: 2),
                 child: Text('${deltaPP >= 0 ? '+' : ''}${deltaPP.toStringAsFixed(2)}pt',
                     style: LhTokens.monoText(
-                      size: 9.5,
+                      size: 10.5,
                       color: deltaPP >= 0
-                          ? const Color(0xFFA5F3D6)
-                          : const Color(0xFFFCA5A5),
+                          ? const Color(0xFFFCA5A5)
+                          : const Color(0xFFA5F3D6),
                       letterSpacing: 0.2,
+                      weight: FontWeight.w500,
                     )),
               ),
           ],
@@ -2344,9 +2491,20 @@ class _KpiCard extends StatelessWidget {
     final valColor = item.valColor ??
         (accent ? LhTokens.accentDeep : LhTokens.text);
     return Container(
-      padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
+      padding: const EdgeInsets.fromLTRB(11, 11, 11, 11),
       decoration: BoxDecoration(
-        color: accent ? LhTokens.accentSoft : LhTokens.bgSoft,
+        // accent 卡走微渐变（对齐 HTML .kpi.accent），普通卡纯色以拉开层级
+        gradient: accent
+            ? const LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  LhTokens.accentSoft,
+                  Color(0xFFF5F4FF),
+                ],
+              )
+            : null,
+        color: accent ? null : LhTokens.bgSoft,
         border: Border.all(
           color: accent ? const Color(0xFFD9D5FA) : LhTokens.borderSoft,
           width: 0.5,
@@ -2358,13 +2516,14 @@ class _KpiCard extends StatelessWidget {
         children: [
           Text(item.label.toUpperCase(),
               style: LhTokens.monoText(
-                size: 9,
+                size: 10,
                 color: accent
-                    ? LhTokens.accentDeep.withOpacity(0.75)
-                    : LhTokens.text3,
-                letterSpacing: 0.5,
+                    ? LhTokens.accentDeep.withOpacity(0.8)
+                    : LhTokens.text2,
+                letterSpacing: 0.6,
+                weight: FontWeight.w500,
               )),
-          const SizedBox(height: 5),
+          const SizedBox(height: 7),
           Row(
             crossAxisAlignment: CrossAxisAlignment.baseline,
             textBaseline: TextBaseline.alphabetic,
@@ -2374,23 +2533,24 @@ class _KpiCard extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: LhTokens.sansText(
-                      size: 17,
+                      size: 20,
                       color: valColor,
                       weight: FontWeight.w500,
-                      letterSpacing: -0.4,
+                      letterSpacing: -0.6,
                       height: 1.0,
                     )),
               ),
               const SizedBox(width: 2),
               Text(item.value.unit,
                   style: LhTokens.sansText(
-                    size: 10,
+                    size: 11,
                     color: valColor.withOpacity(0.55),
                     weight: FontWeight.w400,
+                    letterSpacing: 0.2,
                   )),
             ],
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 7),
           _delta(item.delta, item.deltaPP),
         ],
       ),
@@ -2398,24 +2558,29 @@ class _KpiCard extends StatelessWidget {
   }
 
   Widget _delta(double? d, double? pp) {
-    if (d == null && pp == null) return const SizedBox(height: 12);
+    if (d == null && pp == null) return const SizedBox(height: 13);
     final v = d ?? pp!;
     final pos = v >= 0;
+    // A股习惯：正红负绿
+    final color = pos ? LhTokens.coral : LhTokens.green;
     return Row(
       children: [
         Text(pos ? '↑' : '↓',
             style: TextStyle(
-              fontSize: 9,
-              color: pos ? LhTokens.green : LhTokens.coral,
+              fontSize: 10,
+              color: color,
+              fontWeight: FontWeight.w700,
+              height: 1.0,
             )),
-        const SizedBox(width: 1),
+        const SizedBox(width: 2),
         Text(pp != null
             ? '${v.abs().toStringAsFixed(2)}pt'
             : '${v.abs().toStringAsFixed(1)}%',
             style: LhTokens.monoText(
-              size: 10,
-              color: pos ? LhTokens.green : LhTokens.coral,
+              size: 11,
+              color: color,
               letterSpacing: 0.2,
+              weight: FontWeight.w600,
             )),
       ],
     );
@@ -2434,6 +2599,7 @@ class _SectorSection extends StatelessWidget {
     required this.categories,
     this.hunFilter,
     this.onHunSelect,
+    this.groupCounts,
   });
   final String tab;
   final String currentGroup;
@@ -2442,6 +2608,8 @@ class _SectorSection extends StatelessWidget {
   final List<String> categories;
   final String? hunFilter;
   final ValueChanged<String>? onHunSelect;
+  /// 每个 group 的行数（含「全部」）· HTML .sector-chips .ct 精致度点
+  final Map<String, int>? groupCounts;
 
   static const _dotPalette = [
     LhTokens.coral,
@@ -2472,16 +2640,17 @@ class _SectorSection extends StatelessWidget {
     return out;
   }
 
-  String get _title {
+  ({String cn, String en}) get _titleInfo {
     switch (tab) {
       case 'supply':
-        return '供给方';
+        return (cn: '供给方', en: 'SUPPLIERS');
       case 'channel':
-        return '渠道';
+        return (cn: '渠道', en: 'CHANNELS');
       default:
-        return '业务板块';
+        return (cn: '业务板块', en: 'SECTORS');
     }
   }
+  // 保留 getter 供未来复用（如 header 展开态、L2 面包屑）；当前 build 不再引用。
 
   @override
   Widget build(BuildContext context) {
@@ -2489,33 +2658,8 @@ class _SectorSection extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 2),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Text(_title,
-                  style: LhTokens.monoText(
-                    size: 10,
-                    color: LhTokens.accent,
-                    letterSpacing: 0.6,
-                    weight: FontWeight.w500,
-                  )),
-              const SizedBox(width: 8),
-              Expanded(child: Container(height: 0.5, color: LhTokens.border)),
-              const SizedBox(width: 8),
-              Text('$rowsCount 项',
-                  style: LhTokens.monoText(
-                    size: 9.5,
-                    color: LhTokens.text3,
-                    letterSpacing: 0.2,
-                  )),
-            ],
-          ),
-        ),
-        const SizedBox(height: 10),
         SizedBox(
-          height: 32,
+          height: 34,
           child: ListView.separated(
             scrollDirection: Axis.horizontal,
             physics: const BouncingScrollPhysics(),
@@ -2525,38 +2669,69 @@ class _SectorSection extends StatelessWidget {
             itemBuilder: (_, i) {
               final s = sectors[i];
               final on = currentGroup == s.$1;
+              final ct = groupCounts?[s.$1];
               return GestureDetector(
                 onTap: () => onSelect(s.$1),
                 child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 180),
+                  duration: const Duration(milliseconds: 200),
+                  curve: Curves.easeOutCubic,
                   padding: const EdgeInsets.symmetric(
-                      horizontal: 12, vertical: 5),
+                      horizontal: 13, vertical: 7),
                   decoration: BoxDecoration(
                     color: on ? LhTokens.text : LhTokens.bgApp,
-                    borderRadius: BorderRadius.circular(14),
+                    borderRadius: BorderRadius.circular(16),
                     border: Border.all(
                         color: on ? LhTokens.text : LhTokens.border,
                         width: 0.5),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
                       if (s.$2 != null) ...[
                         Container(
-                          width: 6,
-                          height: 6,
+                          width: 7,
+                          height: 7,
                           decoration: BoxDecoration(
-                              color: s.$2, shape: BoxShape.circle),
+                              color: on
+                                  ? s.$2!.withOpacity(0.85)
+                                  : s.$2,
+                              shape: BoxShape.circle),
                         ),
-                        const SizedBox(width: 5),
+                        const SizedBox(width: 6),
+                      ] else if (on) ...[
+                        // "全部" 选中时给一个白色圆点视觉锚（对齐 HTML）
+                        Container(
+                          width: 7,
+                          height: 7,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                                color: Colors.white.withOpacity(0.7),
+                                width: 0.8),
+                          ),
+                        ),
+                        const SizedBox(width: 6),
                       ],
                       Text(s.$1,
                           style: LhTokens.sansText(
-                            size: 12,
+                            size: 13,
                             color: on ? Colors.white : LhTokens.text2,
-                            weight: FontWeight.w500,
+                            weight: on ? FontWeight.w600 : FontWeight.w500,
                             letterSpacing: -0.1,
                           )),
+                      if (ct != null) ...[
+                        const SizedBox(width: 6),
+                        Text('$ct',
+                            style: LhTokens.monoText(
+                              size: 10.5,
+                              color: on
+                                  ? Colors.white.withOpacity(0.6)
+                                  : LhTokens.text3,
+                              letterSpacing: 0.3,
+                              weight: FontWeight.w500,
+                            )),
+                      ],
                     ],
                   ),
                 ),
@@ -2565,11 +2740,11 @@ class _SectorSection extends StatelessWidget {
           ),
         ),
         if (tab == 'channel' && onHunSelect != null) ...[
-          const SizedBox(height: 8),
+          const SizedBox(height: 10),
           Container(height: 0.5, color: LhTokens.borderSoft),
-          const SizedBox(height: 8),
+          const SizedBox(height: 10),
           SizedBox(
-            height: 32,
+            height: 34,
             child: ListView.separated(
               scrollDirection: Axis.horizontal,
               physics: const BouncingScrollPhysics(),
@@ -2583,12 +2758,13 @@ class _SectorSection extends StatelessWidget {
                 return GestureDetector(
                   onTap: () => onHunSelect!(label),
                   child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 180),
+                    duration: const Duration(milliseconds: 200),
+                    curve: Curves.easeOutCubic,
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 12, vertical: 5),
+                        horizontal: 13, vertical: 7),
                     decoration: BoxDecoration(
                       color: on ? LhTokens.accentSoft : LhTokens.bgApp,
-                      borderRadius: BorderRadius.circular(14),
+                      borderRadius: BorderRadius.circular(16),
                       border: Border.all(
                           color: on ? LhTokens.accent : LhTokens.border,
                           width: 0.5),
@@ -2597,17 +2773,17 @@ class _SectorSection extends StatelessWidget {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Container(
-                          width: 6,
-                          height: 6,
+                          width: 7,
+                          height: 7,
                           decoration:
                               BoxDecoration(color: dot, shape: BoxShape.circle),
                         ),
-                        const SizedBox(width: 5),
+                        const SizedBox(width: 6),
                         Text(label,
                             style: LhTokens.sansText(
-                              size: 12,
+                              size: 13,
                               color: on ? LhTokens.accentDeep : LhTokens.text2,
-                              weight: FontWeight.w500,
+                              weight: on ? FontWeight.w600 : FontWeight.w500,
                               letterSpacing: -0.1,
                             )),
                       ],
@@ -2945,7 +3121,7 @@ class _ListSectionState extends State<_ListSection> {
       decoration: BoxDecoration(
         color: LhTokens.bgApp,
         border: Border.all(color: LhTokens.border, width: 0.5),
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(16),
       ),
       clipBehavior: Clip.hardEdge,
       child: Column(
@@ -2967,9 +3143,9 @@ class _ListSectionState extends State<_ListSection> {
 
   Widget _listHeader(int count, {required bool metricActive}) {
     final sortLabel = _labels[_sortField] ?? _sortField;
-    final fg = metricActive ? LhTokens.accent : LhTokens.text3;
+    final fg = metricActive ? LhTokens.accent : LhTokens.text2;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 10),
       decoration: const BoxDecoration(
         color: LhTokens.bgSoft,
         border: Border(
@@ -2980,27 +3156,62 @@ class _ListSectionState extends State<_ListSection> {
         children: [
           Text(_titleFor(widget.tab),
               style: LhTokens.sansText(
-                size: 12,
-                weight: FontWeight.w500,
+                size: 13,
+                weight: FontWeight.w600,
                 letterSpacing: -0.1,
               )),
-          const SizedBox(width: 5),
+          const SizedBox(width: 6),
           Text('$count 项',
               style: LhTokens.monoText(
-                size: 10,
+                size: 10.5,
                 color: LhTokens.text3,
                 letterSpacing: 0.2,
-                weight: FontWeight.w400,
+                weight: FontWeight.w500,
               )),
           const Spacer(),
-          Text(
-            '$sortLabel${_sortDesc ? ' ↓' : ' ↑'}',
-            style: LhTokens.monoText(
-              size: 10,
-              color: LhTokens.text3,
-              letterSpacing: 0.2,
+          // 排序 chip：点击当前字段切换升降序，长按打开选择器
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () {
+              setState(() => _sortDesc = !_sortDesc);
+            },
+            onLongPress: _openMetricsPicker,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: LhTokens.bgApp,
+                border: Border.all(
+                    color: LhTokens.borderSoft, width: 0.5),
+                borderRadius: BorderRadius.circular(7),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(sortLabel,
+                      style: LhTokens.monoText(
+                        size: 10.5,
+                        color: LhTokens.accent,
+                        letterSpacing: 0.2,
+                        weight: FontWeight.w600,
+                      )),
+                  const SizedBox(width: 4),
+                  Text(_sortDesc ? '↓' : '↑',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: LhTokens.accent,
+                        fontWeight: FontWeight.w700,
+                        height: 1.0,
+                      )),
+                ],
+              ),
             ),
           ),
+          const SizedBox(width: 10),
+          // 指标选择器入口：竖细分隔
+          Container(
+              width: 0.5,
+              height: 14,
+              color: LhTokens.borderSoft),
           const SizedBox(width: 10),
           GestureDetector(
             behavior: HitTestBehavior.opaque,
@@ -3008,19 +3219,20 @@ class _ListSectionState extends State<_ListSection> {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(Icons.bar_chart_rounded, size: 13, color: fg),
+                Icon(Icons.tune_rounded, size: 13, color: fg),
                 const SizedBox(width: 4),
                 Text('指标',
                     style: LhTokens.monoText(
-                      size: 10,
+                      size: 10.5,
                       color: fg,
-                      weight: metricActive ? FontWeight.w600 : FontWeight.w400,
+                      weight: metricActive ? FontWeight.w600 : FontWeight.w500,
                     )),
                 Text(' · ${_selectedMetrics.length}',
                     style: LhTokens.monoText(
-                      size: 10,
+                      size: 10.5,
                       color: fg,
                       letterSpacing: 0.2,
+                      weight: FontWeight.w500,
                     )),
               ],
             ),
@@ -3085,12 +3297,17 @@ class _ListRow extends StatelessWidget {
     final primaryIsNeg = primaryVal < 0;
     final delta = row.deltaPct ??
         (row.deltas?['profit'] as num?)?.toDouble();
-    final deltaText = delta == null ? '环比 —' : '环比 ${Fmt.delta(delta)}';
+    // 环比表达：更符号化「↑ 5.1%」对齐 HTML .gp
+    final deltaArrow = delta == null
+        ? '·'
+        : (delta > 0 ? '↑' : (delta < 0 ? '↓' : '·'));
+    final deltaNum =
+        delta == null ? '—' : '${delta.abs().toStringAsFixed(1)}%';
     final deltaColor = delta == null
         ? LhTokens.text3
         : (delta > 0
-            ? LhTokens.green
-            : (delta < 0 ? LhTokens.coral : LhTokens.text3));
+            ? LhTokens.coral
+            : (delta < 0 ? LhTokens.green : LhTokens.text3));
 
     return Material(
       color: Colors.transparent,
@@ -3099,7 +3316,7 @@ class _ListRow extends StatelessWidget {
         splashColor: LhTokens.bgCard,
         highlightColor: LhTokens.bgSoft,
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+          padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 13),
           decoration: BoxDecoration(
             border: isLast
                 ? null
@@ -3109,13 +3326,21 @@ class _ListRow extends StatelessWidget {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
+              // 板块小圆点：轻微光晕圈让 8px 圆点在名字左侧更"扎实"
               Container(
-                width: 8,
-                height: 8,
-                margin: const EdgeInsets.only(right: 10, top: 2),
+                margin: const EdgeInsets.only(right: 11, top: 2),
+                width: 9,
+                height: 9,
                 decoration: BoxDecoration(
-                  color: _dotColor(row),
                   shape: BoxShape.circle,
+                  color: _dotColor(row),
+                  boxShadow: [
+                    BoxShadow(
+                      color: _dotColor(row).withOpacity(0.24),
+                      blurRadius: 4,
+                      spreadRadius: 0.5,
+                    ),
+                  ],
                 ),
               ),
               Expanded(
@@ -3130,30 +3355,31 @@ class _ListRow extends StatelessWidget {
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: LhTokens.sansText(
-                                size: 13,
-                                weight: FontWeight.w500,
-                                letterSpacing: -0.1,
+                                size: 14,
+                                weight: FontWeight.w600,
+                                letterSpacing: -0.15,
                                 height: 1.25,
                               )),
                         ),
-                        const SizedBox(width: 5),
+                        const SizedBox(width: 6),
                         Container(
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 5, vertical: 1),
+                              horizontal: 6, vertical: 2),
                           decoration: BoxDecoration(
                             color: tag.bg,
-                            borderRadius: BorderRadius.circular(3),
+                            borderRadius: BorderRadius.circular(4),
                           ),
                           child: Text(row.group ?? tag.label,
                               style: LhTokens.monoText(
-                                size: 8.5,
+                                size: 9.5,
                                 color: tag.fg,
                                 letterSpacing: 0.4,
+                                weight: FontWeight.w600,
                               )),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 2),
+                    const SizedBox(height: 3),
                     Text(
                         metricRowMetaLine(
                           row,
@@ -3163,17 +3389,18 @@ class _ListRow extends StatelessWidget {
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                         style: LhTokens.monoText(
-                          size: 9.5,
-                          color: LhTokens.text3,
+                          size: 10.5,
+                          color: LhTokens.text2,
                           letterSpacing: 0.2,
+                          weight: FontWeight.w500,
                         )),
                   ],
                 ),
               ),
               const SizedBox(width: 10),
               SizedBox(
-                width: 48,
-                height: 22,
+                width: 52,
+                height: 24,
                 child: CustomPaint(
                   painter: SparklinePainter(
                     points: trendPoints,
@@ -3183,7 +3410,7 @@ class _ListRow extends StatelessWidget {
                   ),
                 ),
               ),
-              const SizedBox(width: 10),
+              const SizedBox(width: 11),
               Column(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 mainAxisSize: MainAxisSize.min,
@@ -3195,38 +3422,50 @@ class _ListRow extends StatelessWidget {
                       if (primaryIsNeg)
                         Text('−',
                             style: LhTokens.monoText(
-                              size: 13,
+                              size: 14,
                               color: LhTokens.coral,
                               weight: FontWeight.w500,
                             )),
                       Text(primaryFmt.value,
                           style: LhTokens.monoText(
-                            size: 13,
+                            size: 14,
                             color: primaryIsNeg
                                 ? LhTokens.coral
                                 : LhTokens.text,
-                            weight: FontWeight.w500,
+                            weight: FontWeight.w600,
                             letterSpacing: -0.1,
                           )),
                       const SizedBox(width: 2),
                       Text(primaryFmt.unit,
                           style: LhTokens.monoText(
-                            size: 8.5,
+                            size: 9.5,
                             color: LhTokens.text3,
                             letterSpacing: 0.4,
-                            weight: FontWeight.w400,
+                            weight: FontWeight.w500,
                           )),
                     ],
                   ),
-                  const SizedBox(height: 1),
-                  Text(
-                    deltaText,
-                    style: LhTokens.monoText(
-                      size: 10,
-                      color: deltaColor,
-                      letterSpacing: 0.2,
-                      weight: FontWeight.w500,
-                    ),
+                  const SizedBox(height: 2),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Text(deltaArrow,
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: deltaColor,
+                            fontWeight: FontWeight.w700,
+                            height: 1.0,
+                          )),
+                      const SizedBox(width: 3),
+                      Text(deltaNum,
+                          style: LhTokens.monoText(
+                            size: 10.5,
+                            color: deltaColor,
+                            letterSpacing: 0.1,
+                            weight: FontWeight.w600,
+                          )),
+                    ],
                   ),
                 ],
               ),
@@ -3333,11 +3572,22 @@ class SparklinePainter extends CustomPainter {
       ..style = PaintingStyle.stroke;
     canvas.drawPath(path, linePaint);
 
-    // 末点小圆
+    // 末点：外淡晕 + 内实圆（更精致的锚点）
     canvas.drawCircle(
       normed.last,
-      1.6,
+      3.0,
+      Paint()..color = color.withOpacity(0.18),
+    );
+    canvas.drawCircle(
+      normed.last,
+      1.7,
       Paint()..color = color,
+    );
+    // 内白心：微小高光，避免圆点看起来"死"
+    canvas.drawCircle(
+      normed.last,
+      0.6,
+      Paint()..color = Colors.white.withOpacity(0.65),
     );
   }
 
@@ -3471,6 +3721,226 @@ class _ListSkeleton extends StatelessWidget {
       );
 }
 
+class _ScrollLoadHint extends StatelessWidget {
+  const _ScrollLoadHint({required this.shown, required this.total});
+  final int shown;
+  final int total;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 14),
+      decoration: BoxDecoration(
+        color: LhTokens.bgSoft,
+        border: Border.all(color: LhTokens.borderSoft, width: 0.5),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          // 左侧微点动效果（静态三点，避免动画开销）
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _dot(0.35),
+              const SizedBox(width: 3),
+              _dot(0.55),
+              const SizedBox(width: 3),
+              _dot(0.85),
+            ],
+          ),
+          const SizedBox(width: 10),
+          Text('已展示 ',
+              style: LhTokens.monoText(
+                size: 10,
+                color: LhTokens.text3,
+                letterSpacing: 0.2,
+              )),
+          Text('$shown',
+              style: LhTokens.monoText(
+                size: 11,
+                color: LhTokens.text,
+                weight: FontWeight.w600,
+                letterSpacing: 0.2,
+              )),
+          Text(' / $total 条 · 继续滑动加载',
+              style: LhTokens.monoText(
+                size: 10,
+                color: LhTokens.text3,
+                letterSpacing: 0.2,
+              )),
+        ],
+      ),
+    );
+  }
+
+  Widget _dot(double opacity) => Container(
+        width: 3,
+        height: 3,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: LhTokens.accent.withOpacity(opacity),
+        ),
+      );
+}
+
+// =============================================================
+// 分页子列表 · 可选分野（按 group 筛选）+ 下滑加载
+// =============================================================
+class _PagedSubList extends StatefulWidget {
+  const _PagedSubList({
+    super.key,
+    required this.rows,
+    required this.buildList,
+    this.enableFieldFilter = false,
+    this.fieldLabel = '分野',
+    this.onBindLoadMore,
+    this.pageSize = 20,
+  });
+
+  final List<MetricRow> rows;
+  final Widget Function(List<MetricRow> shown) buildList;
+  final bool enableFieldFilter;
+  final String fieldLabel;
+  final ValueChanged<VoidCallback>? onBindLoadMore;
+  final int pageSize;
+
+  @override
+  State<_PagedSubList> createState() => _PagedSubListState();
+}
+
+class _PagedSubListState extends State<_PagedSubList> {
+  String _field = '全部';
+  int _limit = 20;
+  bool _loadingMore = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _limit = widget.pageSize;
+    widget.onBindLoadMore?.call(loadMore);
+  }
+
+  @override
+  void didUpdateWidget(covariant _PagedSubList oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    widget.onBindLoadMore?.call(loadMore);
+    if (oldWidget.rows.length != widget.rows.length) {
+      _limit = widget.pageSize;
+      _field = '全部';
+    }
+  }
+
+  List<String> get _fields {
+    final seen = <String>{};
+    final out = <String>['全部'];
+    for (final r in widget.rows) {
+      final g = (r.group ?? '').trim();
+      if (g.isEmpty || seen.contains(g)) continue;
+      seen.add(g);
+      out.add(g);
+    }
+    return out;
+  }
+
+  List<MetricRow> get _filtered {
+    if (_field == '全部') return widget.rows;
+    return widget.rows.where((r) => (r.group ?? '') == _field).toList();
+  }
+
+  void loadMore() {
+    final total = _filtered.length;
+    if (_limit >= total || _loadingMore) return;
+    _loadingMore = true;
+    setState(() {
+      _limit = (_limit + widget.pageSize).clamp(0, total);
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadingMore = false;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final fields = _fields;
+    final filtered = _filtered;
+    final shown = filtered.take(_limit).toList();
+    final hasMore = _limit < filtered.length;
+    final showFilter = widget.enableFieldFilter && fields.length > 1;
+
+    if (filtered.isEmpty) {
+      return Container(
+        padding: const EdgeInsets.symmetric(vertical: 36),
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: LhTokens.bgSoft,
+          border: Border.all(color: LhTokens.borderSoft, width: 0.5),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Text('该分野暂无数据',
+            style: LhTokens.sansText(size: 12, color: LhTokens.text3)),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (showFilter) ...[
+          SizedBox(
+            height: 32,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              physics: const BouncingScrollPhysics(),
+              itemCount: fields.length,
+              separatorBuilder: (_, __) => const SizedBox(width: 6),
+              itemBuilder: (_, i) {
+                final g = fields[i];
+                final on = g == _field;
+                return GestureDetector(
+                  onTap: () {
+                    setState(() {
+                      _field = g;
+                      _limit = widget.pageSize;
+                    });
+                  },
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 160),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 11, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: on ? LhTokens.accentSoft : LhTokens.bgSoft,
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(
+                        color: on ? LhTokens.accent : LhTokens.borderSoft,
+                        width: 0.5,
+                      ),
+                    ),
+                    child: Text(
+                      i == 0 ? '${widget.fieldLabel} · $g' : g,
+                      style: LhTokens.sansText(
+                        size: 12,
+                        color: on ? LhTokens.accentDeep : LhTokens.text2,
+                        weight: on ? FontWeight.w600 : FontWeight.w400,
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+          const SizedBox(height: 10),
+        ],
+        widget.buildList(shown),
+        if (hasMore) ...[
+          const SizedBox(height: 10),
+          _ScrollLoadHint(shown: shown.length, total: filtered.length),
+        ],
+      ],
+    );
+  }
+}
+
 class _FootMeta extends StatelessWidget {
   const _FootMeta({required this.lastSyncedAt});
   final String? lastSyncedAt;
@@ -3571,6 +4041,9 @@ class _DetailSheetState extends State<_DetailSheet> {
   // ------------------ L4 ------------------
   String? _codeDrillKey; // SKU name（不是 code）
   List<Map<String, dynamic>>? _codeRows;
+
+  // 子列表下滑加载回调（由 _PagedSubList 注册）
+  VoidCallback? _activeLoadMore;
 
   // ------------------ 派生 ------------------
   _DrillLevel get _level {
@@ -4174,39 +4647,56 @@ class _DetailSheetState extends State<_DetailSheet> {
     }
   }
 
+
+  bool _onDetailScroll(ScrollNotification n) {
+    if (n.metrics.axis != Axis.vertical) return false;
+    if (n is ScrollUpdateNotification || n is OverscrollNotification) {
+      if (n.metrics.pixels >= n.metrics.maxScrollExtent - 160) {
+        _activeLoadMore?.call();
+      }
+    }
+    return false;
+  }
+
   // =============================================================
   // L2 视图
   // =============================================================
   Widget _buildL2() {
     final d = _detail;
     final metrics = metricsFromDetailNode(d);
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(14, 12, 14, 20),
-      children: [
-        HeroStatCard(
-          metrics: metrics,
-          loading: false,
-          tab: widget.tab,
-        ),
-        const SizedBox(height: 10),
-        KpiGrid(metrics: metrics, tab: widget.tab),
-        const SizedBox(height: 16),
-        if (_l2SubTabsFor(widget.tab).isNotEmpty) ...[
-          _subTabPills(
-            tabs: _l2SubTabsFor(widget.tab),
-            current: _l2SubTab,
-            onChange: (t) => setState(() => _l2SubTab = t),
+    return NotificationListener<ScrollNotification>(
+      onNotification: _onDetailScroll,
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(14, 12, 14, 20),
+        children: [
+          HeroStatCard(
+            metrics: metrics,
+            loading: false,
+            tab: widget.tab,
           ),
           const SizedBox(height: 10),
-          _subList(
-            node: d,
-            subTab: _l2SubTab,
-            fromLevel: _DrillLevel.l2,
-          ),
+          KpiGrid(metrics: metrics, tab: widget.tab),
+          const SizedBox(height: 16),
+          if (_l2SubTabsFor(widget.tab).isNotEmpty) ...[
+            _subTabPills(
+              tabs: _l2SubTabsFor(widget.tab),
+              current: _l2SubTab,
+              onChange: (t) {
+                _activeLoadMore = null;
+                setState(() => _l2SubTab = t);
+              },
+            ),
+            const SizedBox(height: 10),
+            _subList(
+              node: d,
+              subTab: _l2SubTab,
+              fromLevel: _DrillLevel.l2,
+            ),
+          ],
+          const SizedBox(height: 20),
+          _drillHint(),
         ],
-        const SizedBox(height: 20),
-        _drillHint(),
-      ],
+      ),
     );
   }
 
@@ -4216,7 +4706,9 @@ class _DetailSheetState extends State<_DetailSheet> {
   Widget _buildL3() {
     final n = _drillNode!;
     final metrics = metricsFromDetailNode(n);
-    return ListView(
+    return NotificationListener<ScrollNotification>(
+      onNotification: _onDetailScroll,
+      child: ListView(
       padding: const EdgeInsets.fromLTRB(14, 12, 14, 20),
       children: [
         HeroStatCard(
@@ -4231,7 +4723,10 @@ class _DetailSheetState extends State<_DetailSheet> {
           _subTabPills(
             tabs: _l3SubTabsFor(_drillDim!),
             current: _l3SubTab,
-            onChange: (t) => setState(() => _l3SubTab = t),
+            onChange: (t) {
+              _activeLoadMore = null;
+              setState(() => _l3SubTab = t);
+            },
           ),
           const SizedBox(height: 10),
           _subList(
@@ -4243,6 +4738,7 @@ class _DetailSheetState extends State<_DetailSheet> {
         const SizedBox(height: 20),
         _drillHint(atL3: true),
       ],
+    ),
     );
   }
 
@@ -4258,7 +4754,9 @@ class _DetailSheetState extends State<_DetailSheet> {
     final profitTotal = rows.fold<double>(
         0, (s, r) => s + ((r['profit'] as num?)?.toDouble() ?? 0));
 
-    return ListView(
+    return NotificationListener<ScrollNotification>(
+      onNotification: _onDetailScroll,
+      child: ListView(
       padding: const EdgeInsets.fromLTRB(14, 12, 14, 20),
       children: [
         _l4Hero(_codeDrillKey!, rows.length, total, profitTotal),
@@ -4279,6 +4777,7 @@ class _DetailSheetState extends State<_DetailSheet> {
                   size: 10, color: LhTokens.text3, letterSpacing: 0.6)),
         ),
       ],
+    ),
     );
   }
 
@@ -4548,7 +5047,7 @@ class _DetailSheetState extends State<_DetailSheet> {
     );
   }
 
-  /// 通用子列表 · L2/L3 共用
+  /// 通用子列表 · L2/L3 共用（下滑分页；SKU/供应商产品码带分野）
   Widget _subList({
     required Map<String, dynamic> node,
     required String subTab,
@@ -4563,7 +5062,15 @@ class _DetailSheetState extends State<_DetailSheet> {
       final rows =
           raw.cast<Map<String, dynamic>>().map(MetricRow.new).toList();
       rows.sort((a, b) => b.sales.compareTo(a.sales));
-      return _rankList(rows, tappable: false, onTap: (_) {});
+      return _PagedSubList(
+        key: ValueKey('supplierCode-${rows.length}'),
+        rows: rows,
+        enableFieldFilter: true,
+        fieldLabel: '分野',
+        onBindLoadMore: (fn) => _activeLoadMore = fn,
+        buildList: (shown) =>
+            _rankList(shown, tappable: false, onTap: (_) {}),
+      );
     }
 
     // 通用维度
@@ -4578,10 +5085,17 @@ class _DetailSheetState extends State<_DetailSheet> {
     // 判断可钻性
     final canDrill = _canRowDrill(subTab, fromLevel);
 
-    return _rankList(
-      rows,
-      tappable: canDrill,
-      onTap: (r) => _handleSubRowTap(subTab, r, fromLevel, node),
+    return _PagedSubList(
+      key: ValueKey('$subTab-${rows.length}'),
+      rows: rows,
+      enableFieldFilter: subTab == 'productName',
+      fieldLabel: '分野',
+      onBindLoadMore: (fn) => _activeLoadMore = fn,
+      buildList: (shown) => _rankList(
+        shown,
+        tappable: canDrill,
+        onTap: (r) => _handleSubRowTap(subTab, r, fromLevel, node),
+      ),
     );
   }
 
@@ -4855,122 +5369,14 @@ class _DetailSheetState extends State<_DetailSheet> {
   Widget _codeList(List<Map<String, dynamic>> rawRows) {
     final rows = rawRows.map(MetricRow.new).toList();
     rows.sort((a, b) => b.sales.compareTo(a.sales));
-    final maxV = rows.first.sales.toDouble().abs();
-    return Container(
-      decoration: BoxDecoration(
-        color: LhTokens.bgApp,
-        border: Border.all(color: LhTokens.border, width: 0.5),
-        borderRadius: BorderRadius.circular(14),
-      ),
-      clipBehavior: Clip.hardEdge,
-      child: Column(
-        children: List.generate(rows.length, (i) {
-          final r = rows[i];
-          final salesFmt = Fmt.yiWan(r.sales);
-          final profit = r.profit.toDouble();
-          final pct = maxV == 0
-              ? 0.0
-              : (r.sales.toDouble() / maxV).clamp(0.0, 1.0).toDouble();
-          final isLast = i == rows.length - 1;
-          return Container(
-            padding: const EdgeInsets.fromLTRB(12, 11, 12, 11),
-            decoration: BoxDecoration(
-              border: isLast
-                  ? null
-                  : const Border(
-                      bottom: BorderSide(
-                          color: LhTokens.borderSoft, width: 0.5)),
-            ),
-            child: Row(
-              children: [
-                // 序号
-                SizedBox(
-                  width: 22,
-                  child: Text((i + 1).toString().padLeft(2, '0'),
-                      textAlign: TextAlign.center,
-                      style: LhTokens.monoText(
-                        size: 11,
-                        color:
-                            i < 3 ? LhTokens.amber : LhTokens.text4,
-                        letterSpacing: -0.3,
-                        weight: FontWeight.w500,
-                      )),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // code 用 mono
-                      Text(r.name,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: LhTokens.monoText(
-                            size: 12,
-                            color: LhTokens.text,
-                            letterSpacing: 0.2,
-                            weight: FontWeight.w500,
-                          )),
-                      const SizedBox(height: 4),
-                      // 迷你进度条
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(1),
-                        child: LinearProgressIndicator(
-                          value: pct,
-                          minHeight: 2,
-                          backgroundColor: LhTokens.bgCard,
-                          valueColor:
-                              const AlwaysStoppedAnimation(LhTokens.amber),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.baseline,
-                      textBaseline: TextBaseline.alphabetic,
-                      children: [
-                        Text(salesFmt.value,
-                            style: LhTokens.monoText(
-                              size: 12,
-                              weight: FontWeight.w500,
-                              letterSpacing: -0.1,
-                            )),
-                        const SizedBox(width: 1),
-                        Text(salesFmt.unit,
-                            style: LhTokens.monoText(
-                              size: 8.5,
-                              color: LhTokens.text3,
-                              weight: FontWeight.w400,
-                            )),
-                      ],
-                    ),
-                    const SizedBox(height: 1),
-                    Text(
-                      profit == 0
-                          ? '±0.0'
-                          : '${profit > 0 ? '+' : '−'}${Fmt.yiWan(profit.abs()).value}',
-                      style: LhTokens.monoText(
-                        size: 9.5,
-                        color: profit == 0
-                            ? LhTokens.text3
-                            : (profit > 0
-                                ? LhTokens.green
-                                : LhTokens.coral),
-                        letterSpacing: 0.2,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          );
-        }),
-      ),
+    return _PagedSubList(
+      key: ValueKey('l4-codes-${rows.length}'),
+      rows: rows,
+      enableFieldFilter: true,
+      fieldLabel: '分野',
+      onBindLoadMore: (fn) => _activeLoadMore = fn,
+      buildList: (shown) =>
+          _rankList(shown, tappable: false, onTap: (_) {}),
     );
   }
 }
@@ -5015,11 +5421,11 @@ class _HunShareBar extends StatelessWidget {
     final tf = Fmt.yiWan(total);
 
     return Container(
-      padding: const EdgeInsets.fromLTRB(12, 10, 12, 11),
+      padding: const EdgeInsets.fromLTRB(13, 12, 13, 13),
       decoration: BoxDecoration(
         color: LhTokens.bgApp,
         border: Border.all(color: LhTokens.border, width: 0.5),
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(14),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -5031,45 +5437,47 @@ class _HunShareBar extends StatelessWidget {
             children: [
               Text('U / N / H 份额',
                   style: LhTokens.sansText(
-                    size: 12,
-                    weight: FontWeight.w500,
+                    size: 13,
+                    weight: FontWeight.w600,
                     letterSpacing: -0.1,
                   )),
-              const SizedBox(width: 6),
+              const SizedBox(width: 7),
               Text('HUN SHARE',
                   style: LhTokens.monoText(
-                    size: 9,
+                    size: 10,
                     color: LhTokens.text3,
-                    letterSpacing: 0.6,
+                    letterSpacing: 0.7,
+                    weight: FontWeight.w500,
                   )),
               const Spacer(),
               Text('共 ',
                   style: LhTokens.monoText(
-                    size: 9.5,
+                    size: 10.5,
                     color: LhTokens.text3,
                     letterSpacing: 0.2,
                   )),
               Text(tf.value,
                   style: LhTokens.monoText(
-                    size: 11,
+                    size: 12.5,
                     color: LhTokens.text,
-                    weight: FontWeight.w500,
+                    weight: FontWeight.w600,
+                    letterSpacing: -0.1,
                   )),
-              const SizedBox(width: 1),
+              const SizedBox(width: 2),
               Text(tf.unit,
                   style: LhTokens.monoText(
-                    size: 8.5,
+                    size: 9.5,
                     color: LhTokens.text3,
-                    weight: FontWeight.w400,
+                    weight: FontWeight.w500,
                   )),
             ],
           ),
-          const SizedBox(height: 9),
+          const SizedBox(height: 11),
           // 三段横条
           ClipRRect(
-            borderRadius: BorderRadius.circular(3),
+            borderRadius: BorderRadius.circular(4),
             child: SizedBox(
-              height: 6,
+              height: 7,
               child: Row(
                 children: [
                   if (pU > 0)
@@ -5095,20 +5503,20 @@ class _HunShareBar extends StatelessWidget {
               ),
             ),
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 12),
           // 三段图例
           Row(
             children: [
               Expanded(child: _legend(LhTokens.accent, 'U 端', u, pU)),
               Container(
                   width: 0.5,
-                  height: 26,
+                  height: 30,
                   color: LhTokens.borderSoft,
                   margin: const EdgeInsets.symmetric(horizontal: 4)),
               Expanded(child: _legend(LhTokens.coral, 'N 端', n, pN)),
               Container(
                   width: 0.5,
-                  height: 26,
+                  height: 30,
                   color: LhTokens.borderSoft,
                   margin: const EdgeInsets.symmetric(horizontal: 4)),
               Expanded(child: _legend(LhTokens.amber, '混合 H', h, pH)),
@@ -5128,22 +5536,22 @@ class _HunShareBar extends StatelessWidget {
         Row(
           children: [
             Container(
-              width: 6,
-              height: 6,
+              width: 7,
+              height: 7,
               decoration:
                   BoxDecoration(color: color, shape: BoxShape.circle),
             ),
-            const SizedBox(width: 4),
+            const SizedBox(width: 5),
             Text(label,
                 style: LhTokens.sansText(
-                  size: 10.5,
+                  size: 11.5,
                   color: LhTokens.text2,
-                  weight: FontWeight.w500,
+                  weight: FontWeight.w600,
                   letterSpacing: -0.05,
                 )),
           ],
         ),
-        const SizedBox(height: 3),
+        const SizedBox(height: 4),
         Row(
           crossAxisAlignment: CrossAxisAlignment.baseline,
           textBaseline: TextBaseline.alphabetic,
@@ -5153,25 +5561,26 @@ class _HunShareBar extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: LhTokens.monoText(
-                    size: 11.5,
+                    size: 13,
                     color: LhTokens.text,
-                    weight: FontWeight.w500,
+                    weight: FontWeight.w600,
                     letterSpacing: -0.1,
                   )),
             ),
-            const SizedBox(width: 1),
+            const SizedBox(width: 2),
             Text(f.unit,
-                style: LhTokens.monoText(
-                  size: 8,
-                  color: LhTokens.text3,
-                  weight: FontWeight.w400,
-                )),
-            const SizedBox(width: 4),
-            Text('${(pct * 100).toStringAsFixed(0)}%',
                 style: LhTokens.monoText(
                   size: 9,
                   color: LhTokens.text3,
+                  weight: FontWeight.w500,
+                )),
+            const SizedBox(width: 5),
+            Text('${(pct * 100).toStringAsFixed(0)}%',
+                style: LhTokens.monoText(
+                  size: 10,
+                  color: LhTokens.text3,
                   letterSpacing: 0.2,
+                  weight: FontWeight.w500,
                 )),
           ],
         ),

@@ -107,6 +107,7 @@ pub fn run() {
             commands::save_settings,
             commands::update_runtime_settings,
             commands::get_agent_status,
+            commands::get_grok_installation,
             commands::connect_default_agent,
             commands::clear_workspace,
             commands::read_dropped_files,

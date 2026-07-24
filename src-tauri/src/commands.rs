@@ -40,6 +40,14 @@ pub fn get_agent_status(state: State<'_, Arc<AppState>>) -> AgentStatus {
     state.snapshot_status()
 }
 
+#[tauri::command]
+pub fn get_grok_installation(
+    state: State<'_, Arc<AppState>>,
+) -> crate::models::GrokInstallationStatus {
+    let configured = state.settings.lock().grok_command.clone();
+    crate::models::grok_installation_status(&configured)
+}
+
 fn mime_type_for(path: &std::path::Path) -> &'static str {
     match path
         .extension()

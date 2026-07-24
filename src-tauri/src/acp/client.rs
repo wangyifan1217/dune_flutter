@@ -250,7 +250,10 @@ impl AgentHandle {
         }
         args.extend(settings.grok_args.iter().cloned());
 
-        let mut command = Command::new(&settings.grok_command);
+        // macOS 用户刚按引导安装 Grok 后，设置中可能仍保留旧的 `grok` 值。
+        // 每次启动 Agent 时重新解析，可直接使用 ~/.grok/bin/grok。
+        let grok_command = crate::models::resolve_grok_command(&settings.grok_command);
+        let mut command = Command::new(&grok_command);
         command
             .args(&args)
             .stdin(Stdio::piped())

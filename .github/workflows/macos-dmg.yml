@@ -32,6 +32,20 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # Windows 安装包内置 grok.exe；macOS 则由首次启动引导用户安装官方 Grok CLI。
+      # 不能将 Windows PE 二进制打进 DMG，否则既无效也会让 macOS CI 缺少资源而失败。
+      - name: Remove Windows-only Grok resource
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          path = Path("src-tauri/tauri.conf.json")
+          config = json.loads(path.read_text())
+          config.get("bundle", {}).pop("resources", None)
+          path.write_text(json.dumps(config, ensure_ascii=False, indent=2) + "\n")
+          PY
+
       - name: Setup Node
         uses: actions/setup-node@v4
         with:

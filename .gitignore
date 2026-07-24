@@ -22,3 +22,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Bundled locally for Windows installers; distributed outside Git.
+src-tauri/binaries/grok.exe

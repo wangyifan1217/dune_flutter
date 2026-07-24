@@ -82,7 +82,32 @@ impl Default for AppSettings {
     }
 }
 
-fn default_grok_command() -> String {
+fn bundled_grok_command() -> Option<String> {
+    // 安装包内置的 Grok Agent：新机器无需另行安装。
+    // NSIS 资源会解压至 exe 同级目录；macOS .app 使用 Resources 目录。
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(exe_dir) = exe.parent() {
+            let binary_name = if cfg!(target_os = "windows") {
+                "grok.exe"
+            } else {
+                "grok"
+            };
+            let bundled_candidates = [
+                exe_dir.join("resources").join(binary_name),
+                exe_dir.join(binary_name),
+                exe_dir.join("..").join("resources").join(binary_name),
+            ];
+            for candidate in bundled_candidates {
+                if candidate.exists() {
+                    return Some(candidate.to_string_lossy().into_owned());
+                }
+            }
+        }
+    }
+    None
+}
+
+fn home_grok_command() -> Option<String> {
     if let Ok(home) = std::env::var("USERPROFILE").or_else(|_| std::env::var("HOME")) {
         let candidate = std::path::PathBuf::from(home)
             .join(".grok")
@@ -93,13 +118,77 @@ fn default_grok_command() -> String {
                 "grok"
             });
         if candidate.exists() {
-            return candidate.to_string_lossy().into_owned();
+            return Some(candidate.to_string_lossy().into_owned());
         }
     }
-    if cfg!(target_os = "windows") {
-        "grok.exe".into()
+    None
+}
+
+fn path_grok_command() -> Option<String> {
+    let binary_name = if cfg!(target_os = "windows") {
+        "grok.exe"
     } else {
-        "grok".into()
+        "grok"
+    };
+    std::env::var_os("PATH").and_then(|paths| {
+        std::env::split_paths(&paths)
+            .map(|dir| dir.join(binary_name))
+            .find(|candidate| candidate.is_file())
+            .map(|candidate| candidate.to_string_lossy().into_owned())
+    })
+}
+
+pub fn resolve_grok_command(configured: &str) -> String {
+    let configured = configured.trim();
+    if !configured.is_empty() && std::path::Path::new(configured).is_file() {
+        return configured.to_string();
+    }
+    bundled_grok_command()
+        .or_else(home_grok_command)
+        .or_else(path_grok_command)
+        .unwrap_or_else(|| {
+            if configured.is_empty() {
+                if cfg!(target_os = "windows") {
+                    "grok.exe".into()
+                } else {
+                    "grok".into()
+                }
+            } else {
+                configured.to_string()
+            }
+        })
+}
+
+fn default_grok_command() -> String {
+    let fallback = if cfg!(target_os = "windows") {
+        "grok.exe"
+    } else {
+        "grok"
+    };
+    resolve_grok_command(fallback)
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GrokInstallationStatus {
+    pub platform: String,
+    pub installed: bool,
+    pub command: Option<String>,
+}
+
+pub fn grok_installation_status(configured: &str) -> GrokInstallationStatus {
+    let command = resolve_grok_command(configured);
+    let installed = std::path::Path::new(&command).is_file();
+    GrokInstallationStatus {
+        platform: if cfg!(target_os = "macos") {
+            "macos".into()
+        } else if cfg!(target_os = "windows") {
+            "windows".into()
+        } else {
+            std::env::consts::OS.into()
+        },
+        installed,
+        command: installed.then_some(command),
     }
 }
 

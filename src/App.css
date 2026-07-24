@@ -1786,3 +1786,78 @@ button, input, textarea {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* —— macOS Grok first-run setup —— */
+.grok-setup-backdrop {
+  z-index: 100;
+  background: rgba(20, 24, 31, 0.48);
+  backdrop-filter: blur(7px);
+}
+
+.grok-setup {
+  width: min(520px, calc(100vw - 32px));
+  padding: 32px;
+  border: 1px solid rgba(255, 255, 255, 0.72);
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.22);
+}
+
+.grok-setup-mark {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border-radius: 12px;
+  background: #111;
+  color: #fff;
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.grok-setup h1 {
+  margin: 20px 0 8px;
+  font-size: 23px;
+  letter-spacing: -0.025em;
+}
+
+.grok-setup p {
+  margin: 0 0 20px;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.65;
+}
+
+.grok-setup-command {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 10px 12px 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: 11px;
+  background: #f7f7f8;
+}
+
+.grok-setup-command code {
+  min-width: 0;
+  flex: 1;
+  overflow: auto;
+  color: #27272a;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.grok-setup-command .text-btn {
+  flex: none;
+}
+
+.grok-setup-actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 24px;
+}
+
+.grok-setup-actions .primary-btn {
+  white-space: nowrap;
+}

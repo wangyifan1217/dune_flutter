@@ -5,6 +5,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Composer } from "./components/Composer";
 import { FilePreview } from "./components/FilePreview";
+import { GrokSetupModal } from "./components/GrokSetupModal";
 import { McpSettingsModal } from "./components/McpSettingsModal";
 import { SkillsModal } from "./components/SkillsModal";
 import {
@@ -36,6 +37,12 @@ interface NativeDroppedFile {
   size: number;
   encoding: "base64" | "utf8";
   data: string;
+}
+
+interface GrokInstallationStatus {
+  platform: string;
+  installed: boolean;
+  command: string | null;
 }
 
 function isSupportedTextFile(file: File) {
@@ -132,6 +139,8 @@ function App() {
     null,
   );
   const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
+  const [grokSetupOpen, setGrokSetupOpen] = useState(false);
+  const [checkingGrok, setCheckingGrok] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const restoredWorkspace = useRef(false);
 
@@ -147,6 +156,27 @@ function App() {
       setGitChanges([]);
     }
   }, [status.workspace]);
+
+  const checkGrokInstallation = useCallback(async () => {
+    setCheckingGrok(true);
+    try {
+      const result = await invoke<GrokInstallationStatus>("get_grok_installation");
+      setGrokSetupOpen(result.platform === "macos" && !result.installed);
+    } catch {
+      // 检测失败不阻断界面；实际启动 Agent 时仍会显示具体错误。
+      setGrokSetupOpen(false);
+    } finally {
+      setCheckingGrok(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!authSession) {
+      setGrokSetupOpen(false);
+      return;
+    }
+    void checkGrokInstallation();
+  }, [authSession, checkGrokInstallation]);
 
   useEffect(() => {
     if (!sessionsReady) return;
@@ -511,6 +541,12 @@ function App() {
         open={skillsOpen}
         workspace={status.workspace}
         onClose={() => setSkillsOpen(false)}
+      />
+
+      <GrokSetupModal
+        open={grokSetupOpen}
+        checking={checkingGrok}
+        onRecheck={checkGrokInstallation}
       />
     </div>
   );

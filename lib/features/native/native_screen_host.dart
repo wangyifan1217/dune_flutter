@@ -2181,14 +2181,10 @@ class _NativeScreenHostState extends State<NativeScreenHost>
               enabled: isLighthouse,
               child: NativeLighthousePage(
                 key: const ValueKey<String>('lighthouse-keep-alive'),
-                api: LighthouseApi(
-                  // LighthouseApi 内部拼 /api/v1/lighthouse；session.apiBase 已含 /api/v1
-                  baseUrl: widget.session.apiBase.replaceAll(
-                    RegExp(r'/api/v1/?$'),
-                    '',
-                  ),
-                  token: widget.session.token,
-                ),
+                session: widget.session,
+                navigation: widget.navigation,
+                commUnread: _commUnread,
+                workbenchBadge: _workbenchBadge,
               ),
             ),
           ),

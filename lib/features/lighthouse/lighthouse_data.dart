@@ -69,14 +69,19 @@ class LighthouseDataBundle {
   }
 
   LighthouseDataBundle withSummary(Map<String, dynamic> summary) {
-    final nextMetrics = Map<String, dynamic>.from(metrics);
     final rawMetrics = summary['metrics'];
+    final Map<String, dynamic> incoming;
     if (rawMetrics is Map) {
-      nextMetrics
-        ..clear()
-        ..addAll(Map<String, dynamic>.from(rawMetrics));
+      incoming = Map<String, dynamic>.from(rawMetrics);
+    } else if (summary.containsKey('profit') ||
+        summary.containsKey('sales') ||
+        summary.containsKey('profitDeltaPct')) {
+      // 兼容误把 metrics 本体当成 data 的回包
+      incoming = Map<String, dynamic>.from(summary);
+    } else {
+      return this;
     }
-    return copyWith(metrics: nextMetrics);
+    return copyWith(metrics: incoming);
   }
 
   LighthouseDataBundle withDimension(

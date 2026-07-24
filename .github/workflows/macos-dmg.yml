@@ -142,29 +142,67 @@ jobs:
           fi
           echo "Signing with: $MACOS_SIGNING_IDENTITY"
           ENTITLEMENTS=macos/Runner/Release.entitlements
+          SIGN_ID="$MACOS_SIGNING_IDENTITY"
 
-          # 先签嵌套二进制，再签 .app（避免 --deep）
-          find "$APP_PATH/Contents/Frameworks" -type f \( -name "*.dylib" -o -name "*.so" -o -perm /111 \) 2>/dev/null | while read -r bin; do
-            codesign --force --timestamp --options runtime --sign "$MACOS_SIGNING_IDENTITY" "$bin" || true
-          done
-          find "$APP_PATH/Contents/Frameworks" -type d -name "*.framework" 2>/dev/null | while read -r fw; do
-            codesign --force --timestamp --options runtime --sign "$MACOS_SIGNING_IDENTITY" "$fw" || true
-          done
-          find "$APP_PATH/Contents/Helpers" -type f -perm /111 2>/dev/null | while read -r bin; do
-            codesign --force --timestamp --options runtime --sign "$MACOS_SIGNING_IDENTITY" "$bin" || true
-          done
-          find "$APP_PATH/Contents/MacOS" -type f -perm /111 2>/dev/null | while read -r bin; do
-            codesign --force --timestamp --options runtime --sign "$MACOS_SIGNING_IDENTITY" "$bin" || true
-          done
+          sign_item() {
+            local target="$1"
+            echo "codesign: $target"
+            codesign --force --timestamp --options runtime --sign "$SIGN_ID" "$target"
+          }
+
+          # Sparkle 嵌套组件必须由内向外用 Developer ID 重签，否则公证 Invalid
+          SPARKLE_FW="$APP_PATH/Contents/Frameworks/Sparkle.framework"
+          if [ -d "$SPARKLE_FW" ]; then
+            SPARKLE_VER="$SPARKLE_FW/Versions/Current"
+            [ -d "$SPARKLE_VER" ] || SPARKLE_VER="$SPARKLE_FW/Versions/B"
+            for xpc in "$SPARKLE_VER"/XPCServices/*.xpc; do
+              [ -d "$xpc" ] && sign_item "$xpc"
+            done
+            [ -d "$SPARKLE_VER/Updater.app" ] && sign_item "$SPARKLE_VER/Updater.app"
+            [ -f "$SPARKLE_VER/Autoupdate" ] && sign_item "$SPARKLE_VER/Autoupdate"
+            sign_item "$SPARKLE_FW"
+          fi
+
+          # 其余 dylib / framework / helper：由内向外
+          while IFS= read -r -d '' bin; do
+            case "$bin" in
+              */Sparkle.framework/*) continue ;;
+            esac
+            sign_item "$bin"
+          done < <(find "$APP_PATH/Contents/Frameworks" -type f \( -name "*.dylib" -o -name "*.so" \) -print0 2>/dev/null)
+
+          while IFS= read -r -d '' fw; do
+            case "$fw" in
+              */Sparkle.framework) continue ;;
+              */Sparkle.framework/*) continue ;;
+            esac
+            sign_item "$fw"
+          done < <(find "$APP_PATH/Contents/Frameworks" -type d -name "*.framework" -print0 2>/dev/null)
+
+          while IFS= read -r -d '' bin; do
+            sign_item "$bin"
+          done < <(find "$APP_PATH/Contents/Helpers" -type f -perm /111 -print0 2>/dev/null)
+
+          while IFS= read -r -d '' bin; do
+            sign_item "$bin"
+          done < <(find "$APP_PATH/Contents/MacOS" -type f -perm /111 -print0 2>/dev/null)
 
           codesign --force --timestamp --options runtime \
             --entitlements "$ENTITLEMENTS" \
-            --sign "$MACOS_SIGNING_IDENTITY" \
+            --sign "$SIGN_ID" \
             "$APP_PATH"
 
           codesign --verify --deep --strict --verbose=2 "$APP_PATH"
+          # 抽查 Sparkle 嵌套签名，确认已是 Developer ID
+          if [ -d "$SPARKLE_FW" ] && [ -f "$SPARKLE_VER/Autoupdate" ]; then
+            echo "::group::Sparkle Autoupdate signature"
+            codesign -dv --verbose=2 "$SPARKLE_VER/Autoupdate"
+            echo "::endgroup::"
+            codesign -dv --verbose=2 "$SPARKLE_VER/Autoupdate" 2>&1 | grep -q "Developer ID Application" \
+              || { echo "::error::Sparkle Autoupdate 未签上 Developer ID"; exit 1; }
+          fi
           echo "APP_PATH=$APP_PATH" >> "$GITHUB_ENV"
-          echo "SIGN_IDENTITY=$MACOS_SIGNING_IDENTITY" >> "$GITHUB_ENV"
+          echo "SIGN_IDENTITY=$SIGN_ID" >> "$GITHUB_ENV"
 
       - name: Create DMG
         run: |

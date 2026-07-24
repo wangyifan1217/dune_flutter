@@ -145,9 +145,13 @@ class _NativeProposalListPageState extends State<_NativeProposalListPage> {
   late final XflowService _service;
   final TextEditingController _search = TextEditingController();
   bool _loading = true;
+  /// 静默刷新中（切筛选/推送等）：保留当前列表，仅局部更新数据。
+  bool _refreshing = false;
   String? _error;
   late String _statusFilter = widget.initialStatusFilter ?? 'ALL';
   List<XflowProposalItem> _all = const <XflowProposalItem>[];
+  /// 快速切换筛选时丢弃过期响应，避免旧请求覆盖新数据。
+  int _loadSeq = 0;
 
   @override
   void initState() {
@@ -170,12 +174,26 @@ class _NativeProposalListPageState extends State<_NativeProposalListPage> {
     unawaited(_load(silent: true));
   }
 
+  /// 状态芯片切换：先切本地筛选，再静默拉接口局部刷新。
+  void _selectStatusFilter(String key) {
+    if (_statusFilter == key) {
+      unawaited(_load(silent: true));
+      return;
+    }
+    setState(() => _statusFilter = key);
+    unawaited(_load(silent: true));
+  }
+
   Future<void> _load({bool silent = false}) async {
+    final seq = ++_loadSeq;
     if (!silent) {
       setState(() {
         _loading = true;
+        _refreshing = false;
         _error = null;
       });
+    } else if (!_loading && mounted) {
+      setState(() => _refreshing = true);
     }
     try {
       final rows = switch (widget.type) {
@@ -183,17 +201,22 @@ class _NativeProposalListPageState extends State<_NativeProposalListPage> {
         _ListType.b14 => await _service.fetchB14Initiated(),
         _ListType.p1 => await _service.fetchP1CcProposals(),
       };
-      if (!mounted) return;
+      if (!mounted || seq != _loadSeq) return;
       setState(() {
         _all = rows;
         _loading = false;
+        _refreshing = false;
       });
     } catch (e) {
-      if (!mounted) return;
-      if (silent) return;
+      if (!mounted || seq != _loadSeq) return;
+      if (silent) {
+        setState(() => _refreshing = false);
+        return;
+      }
       setState(() {
         _error = friendlyErrorText(e);
         _loading = false;
+        _refreshing = false;
       });
     }
   }
@@ -365,14 +388,14 @@ class _NativeProposalListPageState extends State<_NativeProposalListPage> {
                                       label: '全部 ${counts['ALL'] ?? 0}',
                                       active: _statusFilter == 'ALL',
                                       showDot: true,
-                                      onTap: () => setState(() => _statusFilter = 'ALL'),
+                                      onTap: () => _selectStatusFilter('ALL'),
                                     ),
                                     const SizedBox(width: 6),
                                     for (final key in _chipKeys) ...[
                                       XflowStatusChip(
                                         label: '${_statusLabel(key)} ${counts[key] ?? 0}',
                                         active: _statusFilter == key,
-                                        onTap: () => setState(() => _statusFilter = key),
+                                        onTap: () => _selectStatusFilter(key),
                                       ),
                                       const SizedBox(width: 6),
                                     ],
@@ -386,6 +409,16 @@ class _NativeProposalListPageState extends State<_NativeProposalListPage> {
                                 accent: widget.type == _ListType.p1 ? '抄送' : '审批',
                                 title: '按发起时间倒序',
                               ),
+                              if (_refreshing) ...[
+                                const SizedBox(height: 10),
+                                const Center(
+                                  child: SizedBox(
+                                    width: 22,
+                                    height: 22,
+                                    child: CircularProgressIndicator(strokeWidth: 2),
+                                  ),
+                                ),
+                              ],
                               const SizedBox(height: 8),
                               if (visible.isEmpty)
                                 Container(

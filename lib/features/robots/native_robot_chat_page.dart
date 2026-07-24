@@ -126,17 +126,20 @@ class _NativeRobotChatPageState extends State<NativeRobotChatPage> {
     setState(() {
       _loading = true;
       _error = null;
+      _awayFromLatest = false;
     });
     try {
       if (widget.autoMarkRead && _convId > 0) {
         await _service.markConversationRead(_convId);
         widget.onConversationRead?.call(_convId);
       }
-      await _reloadMessages();
+      await _reloadMessages(stickToLatest: false);
     } catch (e) {
       if (mounted) setState(() => _error = friendlyErrorText(e));
     } finally {
       if (mounted) setState(() => _loading = false);
+      // ListView 在 loading 结束后才挂载；进会话强制贴底并多次补滚。
+      _scrollToLatestOnEnter();
     }
   }
 
@@ -170,7 +173,10 @@ class _NativeRobotChatPageState extends State<NativeRobotChatPage> {
     } catch (_) {}
   }
 
-  Future<void> _reloadMessages({bool silent = false}) async {
+  Future<void> _reloadMessages({
+    bool silent = false,
+    bool stickToLatest = true,
+  }) async {
     if (_convId <= 0) return;
     try {
       final page = await _service.fetchMessages(_convId, size: 80);
@@ -223,8 +229,9 @@ class _NativeRobotChatPageState extends State<NativeRobotChatPage> {
       if (freshReply && (wasWaiting || widget.autoMarkRead)) {
         unawaited(_markReadIfViewing());
       }
+      if (!stickToLatest) return;
       if (!_awayFromLatest) {
-        WidgetsBinding.instance.addPostFrameCallback((_) => _jumpBottom());
+        _ensureScrolledToBottom();
       } else {
         WidgetsBinding.instance.addPostFrameCallback(
           (_) => _onScrollPosition(),
@@ -269,6 +276,29 @@ class _NativeRobotChatPageState extends State<NativeRobotChatPage> {
     }
     if (_awayFromLatest && mounted) {
       setState(() => _awayFromLatest = false);
+    }
+  }
+
+  /// 进会话贴底：ListView 挂载后执行，并多次补滚以覆盖 Markdown 异步撑高。
+  void _scrollToLatestOnEnter() {
+    _awayFromLatest = false;
+    _ensureScrolledToBottom();
+  }
+
+  void _ensureScrolledToBottom() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _awayFromLatest) return;
+      _jumpBottom();
+    });
+    // Markdown / 图片异步撑高后 maxScrollExtent 会变大，单次 jump 常停在中间。
+    for (final ms in const [60, 120, 240, 480, 800, 1200]) {
+      Future<void>.delayed(Duration(milliseconds: ms), () {
+        if (!mounted || _awayFromLatest || !_scroll.hasClients) return;
+        final max = _scroll.position.maxScrollExtent;
+        if ((_scroll.offset - max).abs() > 2) {
+          _scroll.jumpTo(max);
+        }
+      });
     }
   }
 

@@ -1457,10 +1457,29 @@ class XflowService {
               ?.toString();
       final templateKey = (detail.raw['templateKey'] ?? item.templateKey)
           ?.toString();
+      // 与 B1 一致：销售提案列表标题依赖 createdByName 拼「人名 - 销售提案」。
+      var initiator = detail.ownerName.trim();
+      if (initiator.isEmpty) {
+        initiator = (detail.raw['createdByName'] ??
+                detail.raw['createdBy'] ??
+                detail.raw['initiatorName'] ??
+                detail.raw['initiator'] ??
+                item.createdByName)
+            .toString()
+            .trim();
+      }
+      if (initiator.isEmpty && trail != null) {
+        initiator = (trail.raw['initiatorName'] ?? '').toString().trim();
+        if (initiator.isEmpty && trail.initiatorId > 0) {
+          final names = await fetchUserDisplayNames([trail.initiatorId]);
+          initiator = names[trail.initiatorId]?.trim() ?? '';
+        }
+      }
       return item.copyWith(
         title: detail.title,
         code: detail.code,
         status: status,
+        createdByName: initiator.isNotEmpty ? initiator : item.createdByName,
         canRefedit: st == 'rejected',
         tag1: (detail.raw['tag1'] ?? item.tag1)?.toString(),
         txType: (detail.raw['txType'] ?? item.txType)?.toString(),

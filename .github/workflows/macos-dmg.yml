@@ -208,22 +208,51 @@ jobs:
               || printf '%s\n' "$APPSTORE_API_PRIVATE_KEY" > "$KEY_PATH"
           fi
 
+          dump_notary_log() {
+            local sid="$1"
+            [ -n "$sid" ] || return 0
+            echo "::group::Apple notarization log ($sid)"
+            xcrun notarytool log "$sid" \
+              --key "$KEY_PATH" \
+              --key-id "$APPSTORE_KEY_ID" \
+              --issuer "$APPSTORE_ISSUER_ID" || true
+            echo "::endgroup::"
+          }
+
+          ACCEPTED=0
           for attempt in 1 2 3; do
-            if xcrun notarytool submit "$DMG_PATH" \
+            set +e
+            SUBMIT_LOG=$(xcrun notarytool submit "$DMG_PATH" \
               --key "$KEY_PATH" \
               --key-id "$APPSTORE_KEY_ID" \
               --issuer "$APPSTORE_ISSUER_ID" \
               --wait \
-              --timeout 30m; then
+              --timeout 30m 2>&1)
+            RC=$?
+            set -e
+            echo "$SUBMIT_LOG"
+
+            SUBMISSION_ID=$(echo "$SUBMIT_LOG" | sed -n 's/^[[:space:]]*id:[[:space:]]*//p' | head -1 | tr -d '[:space:]')
+
+            if [ "$RC" -eq 0 ] && ! echo "$SUBMIT_LOG" | grep -q "status: Invalid"; then
+              ACCEPTED=1
               break
             fi
+
+            dump_notary_log "$SUBMISSION_ID"
+
             if [ "$attempt" = 3 ]; then
-              echo "::error::公证失败"
+              echo "::error::公证失败（见上方 Apple notarization log）"
               exit 1
             fi
             echo "notarytool attempt $attempt failed; retrying..."
             sleep 20
           done
+
+          if [ "$ACCEPTED" != 1 ]; then
+            echo "::error::公证未通过"
+            exit 1
+          fi
 
           xcrun stapler staple "$DMG_PATH"
           xcrun stapler validate "$DMG_PATH"

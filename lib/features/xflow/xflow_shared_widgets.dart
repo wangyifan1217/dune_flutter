@@ -864,10 +864,7 @@ class XflowProposalListCard extends StatelessWidget {
   /// 「我发起的」列表：名称、提案种类、提案编码、提案类型、时间。
   Widget _buildCompactInitiatedCard(BuildContext context) {
     final code = item.code.trim().isEmpty ? '#${item.id}' : item.code.trim();
-    final kindLabel = proposalKindLabel(
-      templateKey: item.templateKey,
-      businessType: item.businessType,
-    );
+    final kindLabel = _compactProposalKindLabel(item);
     final typeLabel = _compactProposalTypeLabel(item, kindLabel);
     final title = _compactApprovalTitle(item, kindLabel);
     final timeText = item.createdAt != null
@@ -947,10 +944,7 @@ class XflowProposalListCard extends StatelessWidget {
   /// 「我审批的 / 抄送」紧凑列表：含彩色提案状态。
   Widget _buildCompactApprovalCard(BuildContext context) {
     final code = item.code.trim().isEmpty ? '#${item.id}' : item.code.trim();
-    final kindLabel = proposalKindLabel(
-      templateKey: item.templateKey,
-      businessType: item.businessType,
-    );
+    final kindLabel = _compactProposalKindLabel(item);
     final typeLabel = _compactProposalTypeLabel(item, kindLabel);
     final title = _compactApprovalTitle(item, kindLabel);
     final timeText = item.createdAt != null
@@ -1937,9 +1931,22 @@ String _compactApprovalTitle(XflowProposalItem item, String kindLabel) {
 }
 
 String _compactProposalTypeLabel(XflowProposalItem item, String kindLabel) {
-  final proposalType = excelProposalTypeLabel(item.proposalType);
+  final proposalType = excelProposalTypeLabel(item.proposalType ?? item.txType);
   if (proposalType != '—') return proposalType;
   return item.businessType.toUpperCase() == 'PROPOSAL' ? '—' : kindLabel;
+}
+
+String _compactProposalKindLabel(XflowProposalItem item) {
+  final documentKind = item.documentKind?.trim() ?? '';
+  if (documentKind.isNotEmpty) return documentKind;
+
+  final proposalType = item.proposalType?.trim() ?? item.txType?.trim() ?? '';
+  if (proposalType.isNotEmpty) return proposalType;
+
+  return proposalKindLabel(
+    templateKey: item.templateKey,
+    businessType: item.businessType,
+  );
 }
 
 String _proposalTypeLabel(XflowProposalItem item) {

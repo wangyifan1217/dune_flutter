@@ -1653,6 +1653,12 @@ class XflowService {
         (json['createdAt'] ?? json['updatedAt'] ?? '').toString(),
       ),
       templateKey: (json['templateKey'] ?? '').toString(),
+      documentKind: (json['documentKind'] ?? '').toString().trim().isEmpty
+          ? null
+          : json['documentKind'].toString(),
+      txType: (json['txType'] ?? '').toString().trim().isEmpty
+          ? null
+          : json['txType'].toString(),
       proposalType:
           (json['proposalType'] ?? json['txType'] ?? '')
               .toString()
@@ -1689,6 +1695,15 @@ class XflowService {
           .toString(),
       createdAt: DateTime.tryParse((json['createdAt'] ?? '').toString()),
       templateKey: (json['templateKey'] ?? '').toString(),
+      documentKind: (json['documentKind'] ?? '').toString().trim().isEmpty
+          ? null
+          : json['documentKind'].toString(),
+      txType: (json['txType'] ?? '').toString().trim().isEmpty
+          ? null
+          : json['txType'].toString(),
+      proposalType: (json['proposalType'] ?? '').toString().trim().isEmpty
+          ? null
+          : json['proposalType'].toString(),
     );
   }
 

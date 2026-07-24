@@ -160,6 +160,7 @@ class XflowProposalItem {
     this.tag1,
     this.txType,
     this.proposalType,
+    this.documentKind,
     this.templateKey,
     this.scaleWan,
     this.currentStep = 0,
@@ -178,6 +179,7 @@ class XflowProposalItem {
   final String? tag1;
   final String? txType;
   final String? proposalType;
+  final String? documentKind;
   final String? templateKey;
   final String? scaleWan;
   final int currentStep;
@@ -196,6 +198,7 @@ class XflowProposalItem {
     String? tag1,
     String? txType,
     String? proposalType,
+    String? documentKind,
     String? templateKey,
     String? scaleWan,
     int? currentStep,
@@ -214,6 +217,7 @@ class XflowProposalItem {
       tag1: tag1 ?? this.tag1,
       txType: txType ?? this.txType,
       proposalType: proposalType ?? this.proposalType,
+      documentKind: documentKind ?? this.documentKind,
       templateKey: templateKey ?? this.templateKey,
       scaleWan: scaleWan ?? this.scaleWan,
       currentStep: currentStep ?? this.currentStep,

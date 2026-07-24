@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../core/layout/chat_layout.dart';
 import '../../core/theme/dunes_theme.dart';
@@ -8,6 +9,7 @@ import '../../core/util/friendly_error.dart';
 import '../auth/auth_session.dart';
 import '../chat/chat_widgets.dart';
 import '../conversation/conversation_models.dart';
+import '../conversation/conversation_picker_sheet.dart';
 import '../conversation/conversation_realtime_hub.dart';
 import '../conversation/conversation_realtime_service.dart';
 import '../conversation/conversation_service.dart';
@@ -39,6 +41,7 @@ class NativeRobotChatPage extends StatefulWidget {
   final bool autoMarkRead;
   final VoidCallback? onBack;
   final ValueChanged<int>? onConversationRead;
+
   /// 跳转 NOVA / 千机对应机器人咨询明细列表。
   final VoidCallback? onOpenConsultList;
 
@@ -71,7 +74,8 @@ class _NativeRobotChatPageState extends State<NativeRobotChatPage> {
     return (widget.conversationHint.businessType ?? '').trim();
   }
 
-  RobotAnalyzingCoordinator get _analyzing => RobotAnalyzingCoordinator.instance;
+  RobotAnalyzingCoordinator get _analyzing =>
+      RobotAnalyzingCoordinator.instance;
 
   @override
   void initState() {
@@ -196,8 +200,8 @@ class _NativeRobotChatPageState extends State<NativeRobotChatPage> {
       final nextWaiting = freshReply
           ? false
           : (detected ||
-              pendingLocal.isNotEmpty ||
-              _analyzing.isAnalyzing(_convId));
+                pendingLocal.isNotEmpty ||
+                _analyzing.isAnalyzing(_convId));
 
       if (silent &&
           _sameMessageFingerprint(page) &&
@@ -222,7 +226,9 @@ class _NativeRobotChatPageState extends State<NativeRobotChatPage> {
       if (!_awayFromLatest) {
         WidgetsBinding.instance.addPostFrameCallback((_) => _jumpBottom());
       } else {
-        WidgetsBinding.instance.addPostFrameCallback((_) => _onScrollPosition());
+        WidgetsBinding.instance.addPostFrameCallback(
+          (_) => _onScrollPosition(),
+        );
       }
     } catch (e) {
       if (!silent && mounted) {
@@ -276,6 +282,118 @@ class _NativeRobotChatPageState extends State<NativeRobotChatPage> {
     }
   }
 
+  void _dismissKeyboard() {
+    if (_focus.hasFocus) _focus.unfocus();
+  }
+
+  Future<void> _showRobotReplyActions(
+    NativeChatMessage message, {
+    Offset? anchor,
+  }) async {
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (_) => SafeArea(
+        child: Container(
+          margin: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+          decoration: BoxDecoration(
+            color: DunesColors.bgApp,
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.shortcut_rounded),
+                title: const Text('转发'),
+                onTap: () => Navigator.pop(context, 'forward'),
+              ),
+              ListTile(
+                leading: const Icon(Icons.copy_rounded),
+                title: const Text('复制'),
+                onTap: () => Navigator.pop(context, 'copy'),
+              ),
+              const Divider(height: 1),
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('取消'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (!mounted || action == null) return;
+    if (action == 'copy') {
+      await _copyRobotReply(message);
+      return;
+    }
+    if (action == 'forward') {
+      await _forwardRobotReply(message);
+    }
+  }
+
+  Future<void> _copyRobotReply(NativeChatMessage message) async {
+    final markdown = message.bodyText.trim();
+    if (markdown.isEmpty) {
+      showDunesToast(context, '暂无可复制内容');
+      return;
+    }
+    try {
+      await Clipboard.setData(ClipboardData(text: markdown));
+      if (mounted) showDunesToast(context, '已复制');
+    } catch (_) {
+      if (mounted) {
+        showDunesToast(context, '复制失败，请重试', kind: DunesToastKind.error);
+      }
+    }
+  }
+
+  Future<void> _forwardRobotReply(NativeChatMessage message) async {
+    final markdown = message.bodyText.trim();
+    if (markdown.isEmpty) {
+      showDunesToast(context, '暂无可转发内容');
+      return;
+    }
+    final conversationId = await showConversationPickerSheet(
+      context: context,
+      service: _service,
+      title: '转发至',
+      highlightConversationId: _convId,
+    );
+    if (conversationId == null || conversationId <= 0 || !mounted) return;
+
+    try {
+      await _service.sendText(
+        conversationId,
+        markdown,
+        payload: <String, dynamic>{
+          'robotMarkdown': true,
+          'robotKey': _robotKey,
+          'robotName': (_role ?? RobotCatalog.roleById(_robotKey)).name,
+          'forwardedFromRobot': true,
+        },
+      );
+      if (mounted) showDunesToast(context, '已转发');
+    } catch (e) {
+      if (mounted) {
+        showDunesToast(
+          context,
+          friendlyErrorText(e),
+          kind: DunesToastKind.error,
+        );
+      }
+    }
+  }
+
+  /// 与私聊 IM 对齐：输入框被点中后，键盘弹起前后均定位到最新消息。
+  Future<void> _scrollToLatestForInput() async {
+    _jumpBottom(animate: true);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _jumpBottom());
+    await Future<void>.delayed(const Duration(milliseconds: 280));
+    if (mounted && _focus.hasFocus) _jumpBottom();
+  }
+
   Future<void> _confirmClearHistory() async {
     if (_clearing || _convId <= 0) return;
     final role = _role ?? RobotCatalog.roleById(_robotKey);
@@ -283,9 +401,7 @@ class _NativeRobotChatPageState extends State<NativeRobotChatPage> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('清空会话？'),
-        content: Text(
-          '将清空与「${role.name}」的 IM 聊天记录，仅对你不可见，不可恢复。',
-        ),
+        content: Text('将清空与「${role.name}」的 IM 聊天记录，仅对你不可见，不可恢复。'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
@@ -386,7 +502,8 @@ class _NativeRobotChatPageState extends State<NativeRobotChatPage> {
       }
     } catch (e) {
       final msg = '$e';
-      final needConsultFallback = msg.contains('请通过机器人') ||
+      final needConsultFallback =
+          msg.contains('请通过机器人') ||
           msg.contains('HTTP 400') ||
           msg.contains('HTTP 501') ||
           msg.contains('HTTP 404');
@@ -457,56 +574,64 @@ class _NativeRobotChatPageState extends State<NativeRobotChatPage> {
       backgroundColor: DunesColors.bgApp,
       body: SafeArea(
         bottom: false,
-        child: Column(
-          children: [
-            ChatConvHeader(
-              title: title,
-              subtitle: subtitle,
-              onBack: widget.onBack ?? () => Navigator.maybePop(context),
-              showBackButton: widget.showBackButton,
-              leadingAvatar: RobotFaceAvatar(
-                role: role,
-                size: 32,
-                animate: _waitingReply,
-                busy: _waitingReply,
-              ),
-              actions: [
-                IconButton(
-                  tooltip: '清空会话',
-                  onPressed: (_clearing || _loading) ? null : _confirmClearHistory,
-                  icon: _clearing
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.delete_outline_rounded, size: 20),
-                  color: DunesColors.text2,
+        child: GestureDetector(
+          behavior: HitTestBehavior.translucent,
+          onTap: _dismissKeyboard,
+          child: Column(
+            children: [
+              ChatConvHeader(
+                title: title,
+                subtitle: subtitle,
+                onBack: widget.onBack ?? () => Navigator.maybePop(context),
+                showBackButton: widget.showBackButton,
+                leadingAvatar: RobotFaceAvatar(
+                  role: role,
+                  size: 45,
+                  animate: _waitingReply,
+                  busy: _waitingReply,
                 ),
-                if (widget.onOpenConsultList != null)
+                actions: [
                   IconButton(
-                    tooltip: '咨询明细',
-                    onPressed: widget.onOpenConsultList,
-                    icon: const Icon(Icons.receipt_long_rounded, size: 20),
+                    tooltip: '清空会话',
+                    onPressed: (_clearing || _loading)
+                        ? null
+                        : _confirmClearHistory,
+                    icon: _clearing
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.delete_outline_rounded, size: 20),
                     color: DunesColors.text2,
                   ),
-              ],
-            ),
-            Expanded(child: _buildBody(role)),
-            ChatInputBar(
-              controller: _input,
-              focusNode: _focus,
-              voiceMode: false,
-              voiceEnabled: false,
-              sending: _sending,
-              enabled: !_loading,
-              hintText: '继续追问…',
-              onToggleVoice: () {},
-              onSend: _send,
-              onPlus: null,
-              onEmoji: null,
-            ),
-          ],
+                  if (widget.onOpenConsultList != null)
+                    IconButton(
+                      tooltip: '咨询明细',
+                      onPressed: widget.onOpenConsultList,
+                      icon: const Icon(Icons.receipt_long_rounded, size: 20),
+                      color: DunesColors.text2,
+                    ),
+                ],
+              ),
+              Expanded(child: _buildBody(role)),
+              ChatInputBar(
+                controller: _input,
+                focusNode: _focus,
+                voiceMode: false,
+                voiceEnabled: false,
+                sending: _sending,
+                enabled: !_loading,
+                hintText: '继续追问…',
+                onToggleVoice: () {},
+                onSend: _send,
+                onPlus: null,
+                onEmoji: null,
+                showMobilePlusButton: false,
+                onInputFocused: () => unawaited(_scrollToLatestForInput()),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -560,7 +685,12 @@ class _NativeRobotChatPageState extends State<NativeRobotChatPage> {
           },
           child: ListView.builder(
             controller: _scroll,
-            padding: EdgeInsets.fromLTRB(wide ? 16 : 12, 12, wide ? 16 : 12, 12),
+            padding: EdgeInsets.fromLTRB(
+              wide ? 16 : 12,
+              12,
+              wide ? 16 : 12,
+              12,
+            ),
             addAutomaticKeepAlives: false,
             addRepaintBoundaries: true,
             itemCount: itemCount,
@@ -583,7 +713,7 @@ class _NativeRobotChatPageState extends State<NativeRobotChatPage> {
                     timeLabel: '',
                     avatar: RobotFaceAvatar(
                       role: role,
-                      size: 32,
+                      size: 45,
                       animate: true,
                       busy: true,
                     ),
@@ -617,8 +747,11 @@ class _NativeRobotChatPageState extends State<NativeRobotChatPage> {
               final m = _messages[index];
               final mine = _isMine(m);
               final isRobot = m.kind.toUpperCase() == 'ROBOT_REPLY' || !mine;
-              final timeLabel =
-                  InboxFormat.formatTime(m.createdAt, withClock: true);
+              final isRobotReply = m.kind.toUpperCase() == 'ROBOT_REPLY';
+              final timeLabel = InboxFormat.formatTime(
+                m.createdAt,
+                withClock: true,
+              );
               return KeyedSubtree(
                 key: ValueKey('msg-${m.id}-${m.kind}'),
                 child: ChatMessageRow(
@@ -628,27 +761,54 @@ class _NativeRobotChatPageState extends State<NativeRobotChatPage> {
                   readLabel: null,
                   timeLabel: timeLabel,
                   showTimeForMine: mine,
+                  onLongPressStart: isRobotReply
+                      ? (details) => unawaited(
+                          _showRobotReplyActions(
+                            m,
+                            anchor: details.globalPosition,
+                          ),
+                        )
+                      : null,
+                  onSecondaryTapDown: isRobotReply
+                      ? (details) => unawaited(
+                          _showRobotReplyActions(
+                            m,
+                            anchor: details.globalPosition,
+                          ),
+                        )
+                      : null,
                   avatar: isRobot && !mine
-                      ? RobotFaceAvatar(role: role, size: 32, animate: false)
+                      ? RobotFaceAvatar(role: role, size: 45, animate: false)
                       : null,
                   content: mine
                       ? ChatTextBubble(text: m.bodyText, mine: true)
-                      : _RobotReplyBubble(
-                          wide: wide,
-                          child: m.bodyText.trim().isEmpty
-                              ? Text(
-                                  '[空回复]',
-                                  style: DunesTypography.sans(
-                                    fontSize: 13,
-                                    color: DunesColors.text3,
-                                  ),
-                                )
-                              : RepaintBoundary(
-                                  child: RobotMarkdown(
-                                    markdown: m.bodyText,
-                                    selectable: false,
-                                  ),
-                                ),
+                      : Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _RobotReplyBubble(
+                              wide: wide,
+                              child: m.bodyText.trim().isEmpty
+                                  ? Text(
+                                      '[空回复]',
+                                      style: DunesTypography.sans(
+                                        fontSize: 13,
+                                        color: DunesColors.text3,
+                                      ),
+                                    )
+                                  : RepaintBoundary(
+                                      child: RobotMarkdown(
+                                        markdown: m.bodyText,
+                                        selectable: false,
+                                      ),
+                                    ),
+                            ),
+                            if (isRobotReply)
+                              _RobotReplyQuickActions(
+                                onCopy: () => unawaited(_copyRobotReply(m)),
+                                onForward: () =>
+                                    unawaited(_forwardRobotReply(m)),
+                              ),
+                          ],
                         ),
                 ),
               );
@@ -740,6 +900,44 @@ class _RobotReplyBubble extends StatelessWidget {
         ),
       ),
       child: child,
+    );
+  }
+}
+
+class _RobotReplyQuickActions extends StatelessWidget {
+  const _RobotReplyQuickActions({
+    required this.onCopy,
+    required this.onForward,
+  });
+
+  final VoidCallback onCopy;
+  final VoidCallback onForward;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 2, left: 2),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          IconButton(
+            tooltip: '复制',
+            onPressed: onCopy,
+            visualDensity: VisualDensity.compact,
+            iconSize: 17,
+            color: DunesColors.text3,
+            icon: const Icon(Icons.copy_outlined),
+          ),
+          IconButton(
+            tooltip: '转发',
+            onPressed: onForward,
+            visualDensity: VisualDensity.compact,
+            iconSize: 17,
+            color: DunesColors.text3,
+            icon: const Icon(Icons.shortcut_rounded),
+          ),
+        ],
+      ),
     );
   }
 }

@@ -73,3 +73,6 @@ ios_distribution.key
 ios_distribution.csr
 macos_developer_id.key
 macos_developer_id.p12
+# Sparkle EdDSA 私钥（公钥可提交；私钥仅本机 / GitHub Secret）
+.sparkle/eddsa_priv.key
+.sparkle/*.pem

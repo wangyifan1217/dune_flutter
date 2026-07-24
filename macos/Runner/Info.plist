@@ -28,5 +28,26 @@
 	<string>MainMenu</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
+	<!-- Sparkle：清单地址 + EdDSA 公钥（私钥仅存 GitHub Secret SPARKLE_PRIVATE_KEY） -->
+	<key>SUFeedURL</key>
+	<string>http://dtmgr.he-yue.com.cn:9583/dtpc/mac/appcast.xml</string>
+	<key>SUPublicEDKey</key>
+	<string>mzl9ssd+y3rVbNm3Ii4ffzmvNZiBfEqMnN3md2kEo/U=</string>
+	<key>SUEnableAutomaticChecks</key>
+	<false/>
+	<!-- 过渡：更新服务器暂仅 HTTP；切 HTTPS 后可删除本段 ATS 例外 -->
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSExceptionDomains</key>
+		<dict>
+			<key>dtmgr.he-yue.com.cn</key>
+			<dict>
+				<key>NSExceptionAllowsInsecureHTTPLoads</key>
+				<true/>
+				<key>NSIncludesSubdomains</key>
+				<true/>
+			</dict>
+		</dict>
+	</dict>
 </dict>
 </plist>

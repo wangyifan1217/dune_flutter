@@ -1,14 +1,18 @@
 import 'package:flutter/material.dart';
 
 import '../../core/theme/dunes_theme.dart';
+import '../../core/util/friendly_error.dart';
 import '../auth/auth_session.dart';
+import '../conversation/conversation_picker_sheet.dart';
+import '../conversation/conversation_service.dart';
+import '../shell/dunes_toast.dart';
 import 'robot_character.dart';
 import 'robot_consult_store.dart';
 import 'robot_markdown.dart';
 import 'robot_models.dart';
 import 'robot_widgets.dart';
 
-/// 咨询详情 → GET /lighthouse/bot/consults/{jobId}
+/// 咨询详情 → GET /robot/consults/{jobId}
 /// 轮询用 markRead=0；首次进入详情默认标已读（文档 §5.4 / §6）。
 class NativeRobotConsultDetailPage extends StatefulWidget {
   const NativeRobotConsultDetailPage({
@@ -34,6 +38,7 @@ class _NativeRobotConsultDetailPageState
   String? _error;
   /// null：按终态自动折叠；非 null：用户手动展开/收起。
   bool? _nodesExpandedOverride;
+  bool _forwarding = false;
 
   @override
   void initState() {
@@ -51,6 +56,46 @@ class _NativeRobotConsultDetailPageState
 
   void _onStore() {
     if (mounted) setState(() {});
+  }
+
+  Future<void> _forwardResult(RobotConsultRecord record) async {
+    final session = widget.session;
+    final markdown = record.resultSummary.trim();
+    if (session == null || markdown.isEmpty || _forwarding) return;
+    final service = ConversationService(session: session);
+    final conversationId = await showConversationPickerSheet(
+      context: context,
+      service: service,
+      title: '转发至',
+    );
+    if (conversationId == null || conversationId <= 0 || !mounted) return;
+
+    setState(() => _forwarding = true);
+    try {
+      await service.sendText(
+        conversationId,
+        markdown,
+        payload: <String, dynamic>{
+          'robotMarkdown': true,
+          'robotKey': record.robotKey,
+          'robotName': RobotCatalog.roleById(record.robotKey).name,
+          'forwardedFromRobot': true,
+          'consultId': record.id,
+          'question': record.question,
+        },
+      );
+      if (mounted) showDunesToast(context, '已转发');
+    } catch (e) {
+      if (mounted) {
+        showDunesToast(
+          context,
+          friendlyErrorText(e),
+          kind: DunesToastKind.error,
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _forwarding = false);
+    }
   }
 
   Future<void> _bootstrap() async {
@@ -149,6 +194,21 @@ class _NativeRobotConsultDetailPageState
                       ],
                     ),
                   ),
+                  if (record.resultSummary.trim().isNotEmpty)
+                    IconButton(
+                      tooltip: '转发咨询结果',
+                      onPressed: _forwarding
+                          ? null
+                          : () => _forwardResult(record),
+                      icon: _forwarding
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.shortcut_rounded, size: 20),
+                      color: RobotTheme.text2,
+                    ),
                   RobotFaceAvatar(
                     role: RobotCatalog.lighthouse,
                     size: 32,

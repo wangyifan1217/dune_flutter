@@ -8,7 +8,7 @@ import 'robot_consult_models.dart';
 
 export 'robot_consult_models.dart';
 
-/// 咨询记录：全部走 `/lighthouse/bot/consults*`，详情轮询真实节点态。
+/// 咨询记录：全部走 `/robot/consults*`，详情轮询真实节点态。
 class RobotConsultStore extends ChangeNotifier {
   RobotConsultStore._();
   static final RobotConsultStore instance = RobotConsultStore._();

@@ -8,17 +8,24 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/platform/desktop_features.dart';
 import 'app_update_service.dart';
+import 'macos_sparkle_updater.dart';
 
 typedef UpdateDownloadProgress = void Function(double progress);
 
 class ApplyUpdateOutcome {
-  const ApplyUpdateOutcome({this.macInstallerPath});
+  const ApplyUpdateOutcome({
+    this.macInstallerPath,
+    this.usedSparkle = false,
+  });
 
-  /// Mac：已落到「下载」目录的 DMG 路径，供 UI 展示「在 Finder 中显示」。
+  /// 兼容旧字段：DMG 兜底路径（Sparkle 成功时为空）。
   final String? macInstallerPath;
+
+  /// macOS 已交给 Sparkle 处理（原生 UI 接管下载/替换）。
+  final bool usedSparkle;
 }
 
-/// 桌面端应用内下载安装包并拉起安装程序；移动端仍走浏览器 / 应用商店页。
+/// 桌面端应用内更新；移动端仍走浏览器 / 应用商店页。
 class AppUpdateInstaller {
   const AppUpdateInstaller._();
 
@@ -32,10 +39,33 @@ class AppUpdateInstaller {
     VoidCallback? onLaunching,
   }) async {
     final url = result.downloadUrl.trim();
-    if (url.isEmpty) {
+    if (url.isEmpty && !(Platform.isMacOS && MacosSparkleUpdater.instance.isSupported)) {
       throw StateError('下载地址为空');
     }
     if (!supportsInAppInstall) {
+      if (url.isEmpty) throw StateError('下载地址为空');
+      await _openExternal(url);
+      return const ApplyUpdateOutcome();
+    }
+
+    // macOS：优先 Sparkle（Appcast 验签 + 自动替换）；失败再回退浏览器下载。
+    if (Platform.isMacOS) {
+      onLaunching?.call();
+      try {
+        final ok = await MacosSparkleUpdater.instance.probeSupported();
+        if (ok) {
+          await MacosSparkleUpdater.instance.checkForUpdates();
+          return const ApplyUpdateOutcome(usedSparkle: true);
+        }
+      } catch (e) {
+        // Sparkle 不可用时若有 downloadUrl，仍允许浏览器兜底。
+        if (url.isEmpty) rethrow;
+        await _openExternal(url);
+        return const ApplyUpdateOutcome();
+      }
+      if (url.isEmpty) {
+        throw StateError('Sparkle 不可用且下载地址为空');
+      }
       await _openExternal(url);
       return const ApplyUpdateOutcome();
     }
@@ -44,15 +74,6 @@ class AppUpdateInstaller {
     onLaunching?.call();
     // 让 UI 先切到「正在打开…」，避免一直停在下载 100%。
     await Future<void>.delayed(const Duration(milliseconds: 80));
-
-    if (Platform.isMacOS) {
-      final staged = await _stageMacInstaller(file);
-      // 绝不能 await launchUrl / Process.run：Gatekeeper 会堵住平台通道，
-      // Dart timeout 也救不了，界面会一直卡在 100%。
-      _spawnDetached('xattr', ['-dr', 'com.apple.quarantine', staged.path]);
-      _spawnDetached('open', [staged.path]);
-      return ApplyUpdateOutcome(macInstallerPath: staged.path);
-    }
 
     await launchInstaller(file);
     return const ApplyUpdateOutcome();
@@ -129,7 +150,7 @@ class AppUpdateInstaller {
     await _openExternal(path);
   }
 
-  /// 把 DMG 放到「下载」目录，方便用户在 Finder 里手动双击（open 失败时仍有退路）。
+  /// 把 DMG 放到「下载」目录（仅兜底路径使用）。
   Future<File> _stageMacInstaller(File downloaded) async {
     if (!await downloaded.exists() || await downloaded.length() <= 0) {
       throw StateError('安装包无效');

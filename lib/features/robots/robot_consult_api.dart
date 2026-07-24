@@ -5,7 +5,7 @@ import 'package:http/http.dart' as http;
 import '../auth/auth_session.dart';
 import 'robot_consult_models.dart';
 
-/// 灯塔机器人咨询 API：`/api/v1/lighthouse/bot/consults*`
+/// 通用机器人咨询 API：`/api/v1/robot/consults*`
 class RobotConsultApi {
   RobotConsultApi({required this.session, http.Client? client})
       : _client = client ?? http.Client();
@@ -43,7 +43,7 @@ class RobotConsultApi {
       if (context != null && context.isNotEmpty) 'context': context,
     };
     final resp = await _client.post(
-      _uri('/lighthouse/bot/consults'),
+      _uri('/robot/consults'),
       headers: _headers,
       body: jsonEncode(body),
     );
@@ -58,7 +58,7 @@ class RobotConsultApi {
     int offset = 0,
   }) async {
     final resp = await _client.get(
-      _uri('/lighthouse/bot/consults', {
+      _uri('/robot/consults', {
         if (robotKey != null && robotKey.isNotEmpty) 'robotKey': robotKey,
         if (status != null && status.isNotEmpty) 'status': status,
         if (unreadOnly) 'unread': '1',
@@ -95,7 +95,7 @@ class RobotConsultApi {
   }) async {
     final resp = await _client.get(
       _uri(
-        '/lighthouse/bot/consults/${Uri.encodeComponent(jobId)}',
+        '/robot/consults/${Uri.encodeComponent(jobId)}',
         markRead ? null : {'markRead': '0'},
       ),
       headers: _headers,
@@ -105,7 +105,7 @@ class RobotConsultApi {
 
   Future<int> unreadCount() async {
     final resp = await _client.get(
-      _uri('/lighthouse/bot/consults/unread-count'),
+      _uri('/robot/consults/unread-count'),
       headers: _headers,
     );
     final decoded = _decode(resp);
@@ -118,7 +118,7 @@ class RobotConsultApi {
 
   Future<RobotConsultRecord> markRead(String jobId) async {
     final resp = await _client.post(
-      _uri('/lighthouse/bot/consults/${Uri.encodeComponent(jobId)}/read'),
+      _uri('/robot/consults/${Uri.encodeComponent(jobId)}/read'),
       headers: _headers,
       body: '{}',
     );
@@ -127,7 +127,7 @@ class RobotConsultApi {
 
   Future<int> markAllRead() async {
     final resp = await _client.post(
-      _uri('/lighthouse/bot/consults/read-all'),
+      _uri('/robot/consults/read-all'),
       headers: _headers,
       body: '{}',
     );
@@ -140,7 +140,7 @@ class RobotConsultApi {
 
   Future<void> delete(String jobId) async {
     final resp = await _client.delete(
-      _uri('/lighthouse/bot/consults/${Uri.encodeComponent(jobId)}'),
+      _uri('/robot/consults/${Uri.encodeComponent(jobId)}'),
       headers: _headers,
     );
     final decoded = _decode(resp);

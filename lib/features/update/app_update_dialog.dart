@@ -30,10 +30,8 @@ class _AppUpdateDialog extends StatefulWidget {
 class _AppUpdateDialogState extends State<_AppUpdateDialog> {
   bool _busy = false;
   bool _opening = false;
-  bool _macOpened = false;
   double _progress = 0;
   String? _error;
-  String? _macInstallerPath;
 
   bool get _inApp => AppUpdateInstaller.instance.supportsInAppInstall;
   bool get _isMac => defaultTargetPlatform == TargetPlatform.macOS;
@@ -45,8 +43,6 @@ class _AppUpdateDialogState extends State<_AppUpdateDialog> {
       _opening = false;
       _error = null;
       _progress = 0;
-      _macOpened = false;
-      _macInstallerPath = null;
     });
     try {
       final outcome = await AppUpdateInstaller.instance.applyUpdate(
@@ -63,15 +59,11 @@ class _AppUpdateDialogState extends State<_AppUpdateDialog> {
           });
         },
       );
-      // Windows 安装器拉起后进程会 exit；能走到这里的是 Mac / 移动端。
+      // Windows 安装器拉起后进程会 exit。
+      // macOS Sparkle 会弹出原生更新 UI 并在安装后重启，此处关闭 Flutter 弹窗即可。
       if (!mounted) return;
-      if (_inApp && _isMac) {
-        setState(() {
-          _busy = false;
-          _opening = false;
-          _macOpened = true;
-          _macInstallerPath = outcome.macInstallerPath;
-        });
+      if (outcome.usedSparkle) {
+        Navigator.of(context).pop();
         return;
       }
       Navigator.of(context).pop();
@@ -81,7 +73,9 @@ class _AppUpdateDialogState extends State<_AppUpdateDialog> {
         _busy = false;
         _opening = false;
         _error = _inApp
-            ? '应用内更新失败，可重试或改用浏览器下载。'
+            ? (_isMac
+                ? '应用内更新失败，可重试或改用浏览器下载安装包。'
+                : '应用内更新失败，可重试或改用浏览器下载。')
             : '更新失败，请稍后重试';
       });
     }
@@ -101,19 +95,10 @@ class _AppUpdateDialogState extends State<_AppUpdateDialog> {
     }
   }
 
-  Future<void> _revealMacInstaller() async {
-    final path = _macInstallerPath?.trim() ?? '';
-    if (path.isEmpty) return;
-    await AppUpdateInstaller.instance.revealInFinder(path);
-  }
-
-  Future<void> _reopenMacInstaller() async {
-    final path = _macInstallerPath?.trim() ?? '';
-    if (path.isEmpty) return;
-    await AppUpdateInstaller.instance.openMacInstaller(path);
-  }
-
   String get _progressLabel {
+    if (_isMac) {
+      return _opening ? '正在打开更新程序…' : '正在准备更新…';
+    }
     if (_opening) return '下载完成，正在打开安装包…';
     if (_progress < 0) return '正在下载…';
     final pct = (_progress * 100).clamp(0, 100).toStringAsFixed(0);
@@ -126,7 +111,6 @@ class _AppUpdateDialogState extends State<_AppUpdateDialog> {
     final versionLabel = widget.result.latestVersionName.isNotEmpty
         ? widget.result.latestVersionName
         : '最新版本';
-    final macPath = _macInstallerPath?.trim() ?? '';
 
     return AlertDialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -172,11 +156,11 @@ class _AppUpdateDialogState extends State<_AppUpdateDialog> {
                   ),
                 ),
               ],
-              if (_inApp && !_macOpened) ...[
+              if (_inApp) ...[
                 const SizedBox(height: 10),
                 Text(
                   _isMac
-                      ? '将下载安装包到「下载」文件夹并尝试自动打开；若未弹出请手动双击 DMG。'
+                      ? '将自动下载并安装更新，完成后应用会重启。'
                       : '将在应用内下载安装包并启动安装，无需打开浏览器。',
                   style: DunesTypography.sans(
                     fontSize: 12,
@@ -188,7 +172,7 @@ class _AppUpdateDialogState extends State<_AppUpdateDialog> {
               if (_busy && _inApp) ...[
                 const SizedBox(height: 16),
                 LinearProgressIndicator(
-                  value: _opening || _progress < 0
+                  value: _isMac || _opening || _progress < 0
                       ? null
                       : _progress.clamp(0.0, 1.0),
                   minHeight: 6,
@@ -202,29 +186,6 @@ class _AppUpdateDialogState extends State<_AppUpdateDialog> {
                     color: DunesColors.text3,
                   ),
                 ),
-              ],
-              if (_macOpened) ...[
-                const SizedBox(height: 12),
-                Text(
-                  '安装包已下载。请将「沙丘」拖到「应用程序」，然后退出并重新打开本软件。'
-                  '若窗口未自动弹出，请到「下载」文件夹双击 DMG。',
-                  style: DunesTypography.sans(
-                    fontSize: 13,
-                    color: DunesColors.text2,
-                    height: 1.45,
-                  ),
-                ),
-                if (macPath.isNotEmpty) ...[
-                  const SizedBox(height: 8),
-                  Text(
-                    macPath,
-                    style: DunesTypography.mono(
-                      fontSize: 11,
-                      color: DunesColors.text3,
-                      height: 1.35,
-                    ),
-                  ),
-                ],
               ],
               if (_error != null) ...[
                 const SizedBox(height: 12),
@@ -241,18 +202,17 @@ class _AppUpdateDialogState extends State<_AppUpdateDialog> {
         ),
       ),
       actions: [
-        if (!_macOpened)
-          TextButton(
-            onPressed: _busy ? null : () => Navigator.of(context).pop(),
-            child: Text(
-              '稍后',
-              style: DunesTypography.sans(
-                fontSize: 15,
-                color: DunesColors.text3,
-              ),
+        TextButton(
+          onPressed: _busy ? null : () => Navigator.of(context).pop(),
+          child: Text(
+            '稍后',
+            style: DunesTypography.sans(
+              fontSize: 15,
+              color: DunesColors.text3,
             ),
           ),
-        if (_inApp && _error != null && !_macOpened)
+        ),
+        if (_inApp && _error != null && widget.result.downloadUrl.trim().isNotEmpty)
           TextButton(
             onPressed: _busy ? null : _openInBrowser,
             child: Text(
@@ -263,42 +223,16 @@ class _AppUpdateDialogState extends State<_AppUpdateDialog> {
               ),
             ),
           ),
-        if (_macOpened && macPath.isNotEmpty) ...[
-          TextButton(
-            onPressed: _revealMacInstaller,
-            child: Text(
-              '在 Finder 中显示',
-              style: DunesTypography.sans(
-                fontSize: 15,
-                color: DunesColors.text2,
-              ),
-            ),
-          ),
-          TextButton(
-            onPressed: _reopenMacInstaller,
-            child: Text(
-              '打开安装包',
-              style: DunesTypography.sans(
-                fontSize: 15,
-                color: DunesColors.text2,
-              ),
-            ),
-          ),
-        ],
         FilledButton(
-          onPressed: _macOpened
-              ? () => Navigator.of(context).pop()
-              : (_busy ? null : _onUpdate),
+          onPressed: _busy ? null : _onUpdate,
           style: FilledButton.styleFrom(
             backgroundColor: const Color(0xFF1A6FDB),
             foregroundColor: Colors.white,
           ),
           child: Text(
-            _macOpened
-                ? '知道了'
-                : (_busy
-                    ? (_opening ? '打开中…' : '更新中…')
-                    : (_error != null ? '重试' : '立即更新')),
+            _busy
+                ? (_opening ? '打开中…' : '更新中…')
+                : (_error != null ? '重试' : '立即更新'),
           ),
         ),
       ],

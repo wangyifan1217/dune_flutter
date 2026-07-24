@@ -899,7 +899,7 @@ class _Avatar extends StatelessWidget {
   final ConversationService? avatarService;
   final List<ConversationAvatarMember> groupAvatarMembers;
 
-  static const _inboxAvatarSize = 52.0;
+  static const _inboxAvatarSize = 45.0;
   static const _inboxAvatarRadius = _inboxAvatarSize * 0.18;
 
   @override

@@ -1,14 +1,16 @@
-# macOS DMG：云端签名 + 公证，仅手动触发，不影响 iOS APP 流水线。
+# macOS DMG + Sparkle 更新包：云端签名 + 公证，仅手动触发。
 #
-# 可复用（与 iOS TestFlight 相同）：
+# Secrets（已有）：
+#   MACOS_CERTIFICATE_BASE64 / MACOS_CERTIFICATE_PASSWORD / MACOS_SIGNING_IDENTITY
 #   APPSTORE_ISSUER_ID / APPSTORE_KEY_ID / APPSTORE_API_PRIVATE_KEY
 #
-# 不能复用（必须新建 Developer ID Application 证书）：
-#   MACOS_CERTIFICATE_BASE64 / MACOS_CERTIFICATE_PASSWORD / MACOS_SIGNING_IDENTITY
+# 新增 Secrets：
+#   SPARKLE_PRIVATE_KEY  — EdDSA 私钥单行 base64（见 .sparkle/README.md）
 #
-# Apple Developer → Certificates → Developer ID Application → 导出 .p12
-#   base64 -i DeveloperID.p12 | pbcopy  → 填入 MACOS_CERTIFICATE_BASE64
-#   MACOS_SIGNING_IDENTITY 示例：Developer ID Application: Your Company (TEAMID)
+# 产物（Artifact DunesMacOSRelease）：
+#   DunesSetup-macOS-{version}.dmg   — 首次安装
+#   DunesSetup-macOS-{version}.zip   — Sparkle 应用内更新
+#   appcast.xml                      — 手动上传到服务器覆盖
 name: macOS DMG (Developer ID)
 
 on:
@@ -20,6 +22,8 @@ jobs:
     env:
       APP_NAME: dunes_app
       RELEASE_DIR: build/macos/Build/Products/Release
+      UPDATE_BASE_URL: http://dtmgr.he-yue.com.cn:9583/dtpc/mac
+      SPARKLE_VERSION: 2.7.1
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -61,7 +65,7 @@ jobs:
             echo 'CODE_SIGNING_ALLOWED=NO'
           } >> macos/Runner/Configs/Release.xcconfig
 
-      # 仓库内 Release.entitlements 已按 Developer ID / DMG 关闭沙箱；
+      # 仓库内 Release.entitlements 已按 Developer ID / Sparkle 关闭沙箱；
       # 此处再写一遍，防止本地误改导致 CI 产物无法应用内更新。
       - name: Ensure non-sandbox entitlements for Developer ID
         run: |
@@ -83,6 +87,8 @@ jobs:
           	<key>com.apple.security.network.server</key>
           	<true/>
           	<key>com.apple.security.files.user-selected.read-write</key>
+          	<true/>
+          	<key>com.apple.security.files.downloads.read-write</key>
           	<true/>
           </dict>
           </plist>
@@ -162,7 +168,10 @@ jobs:
 
       - name: Create DMG
         run: |
-          VERSION=$(grep '^version:' pubspec.yaml | head -1 | sed 's/version: //;s/+.*//')
+          VERSION_LINE=$(grep '^version:' pubspec.yaml | head -1 | sed 's/version: //')
+          VERSION="${VERSION_LINE%%+*}"
+          BUILD="${VERSION_LINE##*+}"
+          if [ "$BUILD" = "$VERSION_LINE" ]; then BUILD=1; fi
           DMG_NAME="DunesSetup-macOS-${VERSION}.dmg"
           DMG_PATH="$RUNNER_TEMP/$DMG_NAME"
           STAGE="$RUNNER_TEMP/dmg-stage"
@@ -172,8 +181,12 @@ jobs:
           ln -s /Applications "$STAGE/Applications"
           hdiutil create -volname "沙丘" -srcfolder "$STAGE" -ov -format UDZO "$DMG_PATH"
           codesign --force --timestamp --sign "$SIGN_IDENTITY" "$DMG_PATH" || true
-          echo "DMG_PATH=$DMG_PATH" >> "$GITHUB_ENV"
-          echo "DMG_NAME=$DMG_NAME" >> "$GITHUB_ENV"
+          {
+            echo "VERSION=$VERSION"
+            echo "BUILD=$BUILD"
+            echo "DMG_PATH=$DMG_PATH"
+            echo "DMG_NAME=$DMG_NAME"
+          } >> "$GITHUB_ENV"
           ls -lh "$DMG_PATH"
 
       - name: Notarize DMG (reuse App Store Connect API key)
@@ -214,10 +227,121 @@ jobs:
 
           xcrun stapler staple "$DMG_PATH"
           xcrun stapler validate "$DMG_PATH"
+          # Sparkle ZIP 内的 .app 也尽量 staple（公证票据覆盖 DMG 内 app）
+          xcrun stapler staple "$APP_PATH" || true
           spctl --assess --type open --context context:primary-signature -v "$DMG_PATH" || true
 
-      - name: Upload DMG artifact
+      - name: Create Sparkle ZIP + appcast.xml
+        env:
+          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+        run: |
+          if [ -z "$SPARKLE_PRIVATE_KEY" ]; then
+            echo "::error::缺少 secret SPARKLE_PRIVATE_KEY（见 .sparkle/README.md）"
+            exit 1
+          fi
+
+          ZIP_NAME="DunesSetup-macOS-${VERSION}.zip"
+          ZIP_PATH="$RUNNER_TEMP/$ZIP_NAME"
+          OUT_DIR="$RUNNER_TEMP/macos-release"
+          mkdir -p "$OUT_DIR"
+          rm -f "$ZIP_PATH"
+          # Sparkle 需要保留 .app 包结构
+          ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" "$ZIP_PATH"
+          ls -lh "$ZIP_PATH"
+
+          # 下载 Sparkle 官方 sign_update
+          SPARKLE_TGZ="$RUNNER_TEMP/Sparkle-${SPARKLE_VERSION}.tar.xz"
+          curl -fsSL -o "$SPARKLE_TGZ" \
+            "https://github.com/sparkle-project/Sparkle/releases/download/${SPARKLE_VERSION}/Sparkle-${SPARKLE_VERSION}.tar.xz"
+          mkdir -p "$RUNNER_TEMP/sparkle-tools"
+          tar -xJf "$SPARKLE_TGZ" -C "$RUNNER_TEMP/sparkle-tools"
+          SIGN_UPDATE=$(find "$RUNNER_TEMP/sparkle-tools" -type f -name sign_update | head -1)
+          if [ -z "$SIGN_UPDATE" ] || [ ! -x "$SIGN_UPDATE" ]; then
+            echo "::error::未找到 Sparkle sign_update"
+            find "$RUNNER_TEMP/sparkle-tools" -maxdepth 3 -type f | head -50
+            exit 1
+          fi
+
+          PRIV_KEY="$RUNNER_TEMP/sparkle_eddsa_priv.key"
+          printf '%s' "$SPARKLE_PRIVATE_KEY" | tr -d '\r\n' > "$PRIV_KEY"
+          # 兼容不同 Sparkle 版本的私钥参数
+          set +e
+          SIGN_OUT=$("$SIGN_UPDATE" "$ZIP_PATH" --ed-key-file "$PRIV_KEY" 2>&1)
+          SIGN_RC=$?
+          if [ $SIGN_RC -ne 0 ]; then
+            SIGN_OUT=$("$SIGN_UPDATE" -f "$PRIV_KEY" "$ZIP_PATH" 2>&1)
+            SIGN_RC=$?
+          fi
+          if [ $SIGN_RC -ne 0 ]; then
+            SIGN_OUT=$("$SIGN_UPDATE" "$ZIP_PATH" -f "$PRIV_KEY" 2>&1)
+            SIGN_RC=$?
+          fi
+          set -e
+          if [ $SIGN_RC -ne 0 ]; then
+            echo "::error::sign_update 失败: $SIGN_OUT"
+            exit 1
+          fi
+          echo "sign_update: $SIGN_OUT"
+          ED_SIG=$(echo "$SIGN_OUT" | sed -n 's/.*sparkle:edSignature="\([^"]*\)".*/\1/p')
+          LENGTH=$(echo "$SIGN_OUT" | sed -n 's/.*length="\([0-9]*\)".*/\1/p')
+          if [ -z "$ED_SIG" ]; then
+            # 部分版本只输出 signature 一行
+            ED_SIG=$(echo "$SIGN_OUT" | tr ' ' '\n' | grep -E '^[A-Za-z0-9+/=]{40,}$' | head -1)
+          fi
+          if [ -z "$LENGTH" ]; then
+            LENGTH=$(wc -c < "$ZIP_PATH" | tr -d ' ')
+          fi
+          if [ -z "$ED_SIG" ]; then
+            echo "::error::解析 Sparkle 签名失败: $SIGN_OUT"
+            exit 1
+          fi
+
+          PUB_DATE=$(date -u "+%a, %d %b %Y %H:%M:%S +0000")
+          ZIP_URL="${UPDATE_BASE_URL}/${ZIP_NAME}"
+          APPCAST_PATH="$OUT_DIR/appcast.xml"
+          cat > "$APPCAST_PATH" <<EOF
+          <?xml version="1.0" encoding="utf-8"?>
+          <rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" xmlns:dc="http://purl.org/dc/elements/1.1/">
+            <channel>
+              <title>沙丘 macOS</title>
+              <link>${UPDATE_BASE_URL}/appcast.xml</link>
+              <description>沙丘 macOS 更新</description>
+              <language>zh-CN</language>
+              <item>
+                <title>Version ${VERSION}</title>
+                <sparkle:version>${BUILD}</sparkle:version>
+                <sparkle:shortVersionString>${VERSION}</sparkle:shortVersionString>
+                <pubDate>${PUB_DATE}</pubDate>
+                <enclosure
+                  url="${ZIP_URL}"
+                  length="${LENGTH}"
+                  type="application/octet-stream"
+                  sparkle:edSignature="${ED_SIG}" />
+              </item>
+            </channel>
+          </rss>
+          EOF
+          sed -i '' 's/^[[:space:]]*//' "$APPCAST_PATH"
+
+          cp "$DMG_PATH" "$OUT_DIR/"
+          cp "$ZIP_PATH" "$OUT_DIR/"
+          {
+            echo "发布说明"
+            echo "1. 上传 ${ZIP_NAME} 到 ${UPDATE_BASE_URL}/"
+            echo "2. 上传 ${DMG_NAME}（首次安装）到同一目录（可选）"
+            echo "3. 用本目录 appcast.xml 覆盖服务器 appcast.xml"
+            echo "4. 后台 API 仍配置更新公告；downloadUrl 可指向 DMG 作浏览器兜底"
+            echo "ZIP=${ZIP_NAME}"
+            echo "edSignature=${ED_SIG}"
+            echo "length=${LENGTH}"
+          } > "$OUT_DIR/UPLOAD.txt"
+
+          echo "OUT_DIR=$OUT_DIR" >> "$GITHUB_ENV"
+          cat "$APPCAST_PATH"
+          cat "$OUT_DIR/UPLOAD.txt"
+
+      - name: Upload macOS release artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: DunesMacOSDmg
-          path: ${{ env.DMG_PATH }}
+          name: DunesMacOSRelease
+          path: ${{ env.OUT_DIR }}

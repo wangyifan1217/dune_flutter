@@ -6,7 +6,7 @@ import 'robot_character.dart';
 import 'robot_consult_store.dart';
 import 'robot_models.dart';
 
-/// 新建咨询 → POST /lighthouse/bot/consults
+/// 新建咨询 → POST /robot/consults
 class NativeRobotConsultCreatePage extends StatefulWidget {
   const NativeRobotConsultCreatePage({
     super.key,

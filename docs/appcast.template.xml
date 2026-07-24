@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" xmlns:dc="http://purl.org/dc/elements/1.1/">
+  <channel>
+    <title>沙丘 macOS</title>
+    <link>http://dtmgr.he-yue.com.cn:9583/dtpc/mac/appcast.xml</link>
+    <description>沙丘 macOS 更新（由 GitHub Action 生成后覆盖本文件）</description>
+    <language>zh-CN</language>
+    <!--
+      示例条目。正式发布请使用 Action 产物 appcast.xml 整文件覆盖服务器。
+      sparkle:version = pubspec buildNumber（+ 后数字）
+      enclosure.url = 实际上传的 ZIP 地址
+    -->
+    <!--
+    <item>
+      <title>Version 1.0.9</title>
+      <sparkle:version>1</sparkle:version>
+      <sparkle:shortVersionString>1.0.9</sparkle:shortVersionString>
+      <pubDate>Fri, 24 Jul 2026 00:00:00 +0000</pubDate>
+      <enclosure
+        url="http://dtmgr.he-yue.com.cn:9583/dtpc/mac/DunesSetup-macOS-1.0.9.zip"
+        length="0"
+        type="application/octet-stream"
+        sparkle:edSignature="REPLACE_ME" />
+    </item>
+    -->
+  </channel>
+</rss>

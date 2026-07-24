@@ -350,6 +350,7 @@ class ChatInputBar extends StatelessWidget {
     this.hintText,
     this.focusNode,
     this.onInputFocused,
+    this.showMobilePlusButton = true,
     this.backgroundColor,
     this.onAttemptPasteImage,
   });
@@ -379,6 +380,9 @@ class ChatInputBar extends StatelessWidget {
   final String? hintText;
   final FocusNode? focusNode;
   final VoidCallback? onInputFocused;
+
+  /// 个别纯文本会话（如机器人追问）不需要移动端「+」工具入口。
+  final bool showMobilePlusButton;
   final Color? backgroundColor;
 
   /// 返回 true 表示已处理图片粘贴；false 则回退插入剪贴板文本。
@@ -491,7 +495,7 @@ class ChatInputBar extends StatelessWidget {
                         : onAttemptPasteImage,
                   ),
           ),
-          if (!effectiveVoiceMode) ...[
+          if (!effectiveVoiceMode && (wide || showMobilePlusButton)) ...[
             if (showEmojiControl) ...[
               SizedBox(width: wide ? 8 : 6),
               if (emojiPicker != null)
@@ -910,7 +914,7 @@ class ChatMessageRow extends StatelessWidget {
               : MainAxisAlignment.start,
           children: [
             if (!mine) ...[
-              avatar ?? const SizedBox(width: 32),
+              avatar ?? const SizedBox(width: 45),
               const SizedBox(width: 8),
             ],
             Flexible(
@@ -1008,7 +1012,7 @@ class ChatMessageRow extends StatelessWidget {
             ),
             if (mine) ...[
               const SizedBox(width: 8),
-              trailingAvatar ?? avatar ?? const SizedBox(width: 32),
+              trailingAvatar ?? avatar ?? const SizedBox(width: 45),
             ],
           ],
         ),
@@ -1150,10 +1154,13 @@ class ChatTextBubble extends StatelessWidget {
                   buttonItems: <ContextMenuButtonItem>[
                     ContextMenuButtonItem(
                       label: '复制',
-                      onPressed: () {
-                        editableTextState.copySelection(
-                          SelectionChangedCause.toolbar,
-                        );
+                      onPressed: () async {
+                        // Windows 右键弹出菜单时框架可能会清掉当前选区。
+                        // 这时仍应复制整条消息，不能静默写入空字符串。
+                        final value = selected.isNotEmpty ? selected : text.trim();
+                        if (value.isNotEmpty) {
+                          await Clipboard.setData(ClipboardData(text: value));
+                        }
                         editableTextState.hideToolbar();
                       },
                     ),

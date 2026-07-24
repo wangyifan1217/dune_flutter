@@ -31,6 +31,8 @@ target 'Runner' do
   use_modular_headers!
 
   flutter_install_all_macos_pods File.dirname(File.realpath(__FILE__))
+  # 应用内自动替换更新（Developer ID 外部分发，非 Mac App Store）
+  pod 'Sparkle', '~> 2.7'
   target 'RunnerTests' do
     inherit! :search_paths
   end

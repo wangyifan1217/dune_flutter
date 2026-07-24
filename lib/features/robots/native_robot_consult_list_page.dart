@@ -10,7 +10,7 @@ import 'robot_markdown.dart';
 import 'robot_models.dart';
 import 'robot_service.dart';
 
-/// 咨询列表 → GET /lighthouse/bot/consults
+/// 咨询列表 → GET /robot/consults
 class NativeRobotConsultListPage extends StatefulWidget {
   const NativeRobotConsultListPage({
     super.key,

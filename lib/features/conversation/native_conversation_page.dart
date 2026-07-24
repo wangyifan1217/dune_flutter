@@ -772,7 +772,7 @@ class _NativeConversationPageState extends State<NativeConversationPage>
               role: RobotCatalog.roleById(
                 robotKey.isEmpty ? 'r_lighthouse' : robotKey,
               ),
-              size: 52,
+              size: 45,
               animate: true,
               busy: analyzingRobot,
             )

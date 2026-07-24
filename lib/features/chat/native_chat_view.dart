@@ -36,6 +36,7 @@ import '../kb/kb_chat_share.dart';
 import '../kb/native_kb_service.dart';
 import '../meeting/meeting_minutes_chat_share.dart';
 import '../meeting/native_meeting_detail_page.dart';
+import '../robots/robot_markdown.dart';
 import '../shell/dunes_toast.dart';
 import '../xflow/approval_chat_share.dart';
 import '../xflow/approval_picker_sheet.dart';
@@ -212,20 +213,25 @@ class NativeChatView extends StatefulWidget {
   final NativeChatMessage? focusMessageHint;
   final VoidCallback onBack;
   final VoidCallback? onOpenProfile;
+
   /// 点击消息头像进入用户详情（群聊/私聊）。
   final void Function(int userId, String displayName)? onOpenUser;
   final VoidCallback? onOpenGroupInfo;
   final ValueChanged<int>? onOpenSearch;
   final ValueChanged<int>? onOpenMedia;
   final VoidCallback? onOpenCall;
+
   /// 对本会话发起智能总结（回调参数为当前 conversationId）。
   final ValueChanged<int>? onOpenAiSummary;
+
   /// 打开转发的审批卡片详情（与「我审批的」同一套 B10 / XFS）。
   final ValueChanged<ApprovalChatShare>? onOpenApprovalShare;
   final ValueChanged<int>? onConversationRead;
+
   /// 「回到最新」时清掉上层 focus，避免后续静默刷新又跳回定位消息。
   final VoidCallback? onClearFocusMessage;
   final bool autoMarkRead;
+
   /// 双栏布局下列表已可见时隐藏返回按钮。
   final bool showBackButton;
 
@@ -251,15 +257,19 @@ class _NativeChatViewState extends State<NativeChatView>
   bool _loading = true;
   bool _bootstrapped = false;
   bool _locating = false;
+
   /// 文本发送中（不阻塞媒体上传）。
   bool _sending = false;
+
   /// 媒体/文件上传中（不阻塞文本继续发送）。
   bool _uploading = false;
+
   /// PC 拖入文件/图片时的悬停高亮。
   bool _fileDropHovering = false;
   String? _uploadLabel;
   double _uploadProgress = 0;
   bool _recording = false;
+
   /// 当前正在下载的附件 cacheKey；非空时仅该文件气泡转圈。
   String? _downloadingFileKey;
   double _downloadProgress = 0;
@@ -281,8 +291,10 @@ class _NativeChatViewState extends State<NativeChatView>
   bool _loadingNewer = false;
   bool _locatedMode = false;
   bool _forceLatestMode = false;
+
   /// 用户已点「回到最新」后忽略的 focusMessageId，防止父级未清掉时再次定位。
   int _suppressedFocusMessageId = 0;
+
   /// 递增后作废仍在排队的定位滚动，避免「回到最新」被旧 ensureVisible 拉回去。
   int _messageScrollGen = 0;
 
@@ -293,6 +305,7 @@ class _NativeChatViewState extends State<NativeChatView>
   int _pendingNewMessageCount = 0;
   int _lastMarkedReadNewestId = 0;
   bool _wasNearBottom = true;
+
   /// 用户已上滑离开最新消息端，显示「回到最新」入口。
   bool _awayFromLatest = false;
   bool _userInteractedWithScroll = false;
@@ -311,6 +324,7 @@ class _NativeChatViewState extends State<NativeChatView>
   String? _selfAvatarPreset;
   String? _selfAvatarObjectKey;
   String? _selfAvatarUrl;
+
   /// 上传中气泡预览（微信式圆形进度）。
   Uint8List? _pendingUploadBytes;
   String _pendingUploadKind = '';
@@ -561,10 +575,12 @@ class _NativeChatViewState extends State<NativeChatView>
         return;
       }
       if (!_shouldAutoloadOlder(_scrollController.position)) return;
-      unawaited(_loadOlder().whenComplete(() {
-        if (!mounted) return;
-        _scheduleAutoloadOlderToFill();
-      }));
+      unawaited(
+        _loadOlder().whenComplete(() {
+          if (!mounted) return;
+          _scheduleAutoloadOlderToFill();
+        }),
+      );
     });
   }
 
@@ -577,7 +593,9 @@ class _NativeChatViewState extends State<NativeChatView>
     if (event.scrollDelta.dy >= 0) return;
     final pos = _scrollController.position;
     if (pos.maxScrollExtent <= 24 ||
-        pos.pixels >= pos.maxScrollExtent - math.max(160.0, pos.viewportDimension * 0.4)) {
+        pos.pixels >=
+            pos.maxScrollExtent -
+                math.max(160.0, pos.viewportDimension * 0.4)) {
       unawaited(_loadOlder());
     }
   }
@@ -1485,8 +1503,7 @@ class _NativeChatViewState extends State<NativeChatView>
           _loadingOlder = false;
         });
         unawaited(_refreshDownloadedFileFlags());
-        _olderLoadCooldownUntilMs =
-            DateTime.now().millisecondsSinceEpoch + 600;
+        _olderLoadCooldownUntilMs = DateTime.now().millisecondsSinceEpoch + 600;
         _releaseOlderScrollRestoreGate();
         _scrollBottom(force: true, gentle: false);
         _scheduleAutoloadOlderToFill();
@@ -1982,9 +1999,7 @@ class _NativeChatViewState extends State<NativeChatView>
   }) async {
     final conv = _conversation;
     if (conv == null || _mediaBusy) return;
-    var name =
-        fileName ??
-        'paste-${DateTime.now().millisecondsSinceEpoch}.png';
+    var name = fileName ?? 'paste-${DateTime.now().millisecondsSinceEpoch}.png';
     var mimeType = lookupMimeType(name) ?? 'image/png';
     if (openEditor &&
         !chatImageShouldSkipEditor(fileName: name, mimeType: mimeType)) {
@@ -1997,12 +2012,7 @@ class _NativeChatViewState extends State<NativeChatView>
     }
     if (!_checkSizeLimit(bytes.length, _maxImageBytes, name)) return;
     await _guardSend(() async {
-      _beginUpload(
-        '上传图片',
-        previewBytes: bytes,
-        kind: 'IMAGE',
-        fileName: name,
-      );
+      _beginUpload('上传图片', previewBytes: bytes, kind: 'IMAGE', fileName: name);
       await _service.sendImage(
         conversationId: conv.id,
         bytes: bytes,
@@ -2184,11 +2194,7 @@ class _NativeChatViewState extends State<NativeChatView>
         ? file.name
         : 'video-${DateTime.now().millisecondsSinceEpoch}.mp4';
     await _guardSend(() async {
-      _beginUpload(
-        '上传视频',
-        kind: 'VIDEO',
-        fileName: fileName,
-      );
+      _beginUpload('上传视频', kind: 'VIDEO', fileName: fileName);
       ChatVideoPrepared prepared;
       try {
         if (file.path.isNotEmpty && !kIsWeb) {
@@ -2225,8 +2231,7 @@ class _NativeChatViewState extends State<NativeChatView>
         thumbnailBytes: prepared.thumbnailBytes,
         width: prepared.width,
         height: prepared.height,
-        onProgress: (p) =>
-            _setUploadProgress(0.35 + p * 0.65, label: '上传视频'),
+        onProgress: (p) => _setUploadProgress(0.35 + p * 0.65, label: '上传视频'),
       );
     });
   }
@@ -2257,11 +2262,7 @@ class _NativeChatViewState extends State<NativeChatView>
     if (!_checkSizeLimit(bytes.length, _maxFileBytes, fileName)) return;
     final mimeType = lookupMimeType(fileName) ?? 'application/octet-stream';
     await _guardSend(() async {
-      _beginUpload(
-        '上传文件',
-        kind: 'FILE',
-        fileName: fileName,
-      );
+      _beginUpload('上传文件', kind: 'FILE', fileName: fileName);
       await _service.sendFile(
         conversationId: conv.id,
         bytes: bytes,
@@ -2352,8 +2353,9 @@ class _NativeChatViewState extends State<NativeChatView>
     } finally {
       for (final bookmark in accessed) {
         try {
-          await DesktopDrop.instance
-              .stopAccessingSecurityScopedResource(bookmark: bookmark);
+          await DesktopDrop.instance.stopAccessingSecurityScopedResource(
+            bookmark: bookmark,
+          );
         } catch (_) {}
       }
     }
@@ -2494,7 +2496,9 @@ class _NativeChatViewState extends State<NativeChatView>
     if (key == null) return null;
     final fileKey = _fileCacheKey(payload);
     if (fileKey.isEmpty) {
-      return key == '__download__' ? (_downloadProgress <= 0 ? 0.01 : _downloadProgress) : null;
+      return key == '__download__'
+          ? (_downloadProgress <= 0 ? 0.01 : _downloadProgress)
+          : null;
     }
     if (fileKey != key) return null;
     return _downloadProgress <= 0 ? 0.01 : _downloadProgress;
@@ -2775,7 +2779,8 @@ class _NativeChatViewState extends State<NativeChatView>
     final isImage = kind == 'IMAGE';
     final isAudio = kind == 'AUDIO';
     final desktop = isDesktopCommOnly;
-    final fileDownloaded = isFile && _isFileDownloaded(m.payload, _mediaDownloadFileName(m));
+    final fileDownloaded =
+        isFile && _isFileDownloaded(m.payload, _mediaDownloadFileName(m));
     final actions = <_MessageQuickAction>[
       if (desktop && isFile) ...[
         const _MessageQuickAction(
@@ -2860,8 +2865,7 @@ class _NativeChatViewState extends State<NativeChatView>
         _forwardMessage(m);
         break;
       case 'copy':
-        await Clipboard.setData(ClipboardData(text: copyText));
-        if (mounted) _showToast('已复制');
+        await _copyMessageText(copyText);
         break;
       case 'download':
         await _downloadFile(m.payload, _mediaDownloadFileName(m));
@@ -3161,10 +3165,10 @@ class _NativeChatViewState extends State<NativeChatView>
             onCamera: locked || _mediaBusy
                 ? () {}
                 : () => _sendImageFrom(ImageSource.camera, '拍照'),
-            onCameraLongPress: locked || _mediaBusy ? null : _recordAndSendVideo,
-            onAlbum: locked || _mediaBusy
-                ? () {}
-                : _sendMultiImagesFromGallery,
+            onCameraLongPress: locked || _mediaBusy
+                ? null
+                : _recordAndSendVideo,
+            onAlbum: locked || _mediaBusy ? () {} : _sendMultiImagesFromGallery,
             onScreenshot: !isDesktopCommOnly || locked || _mediaBusy
                 ? null
                 : _desktopScreenshotAndSend,
@@ -3184,7 +3188,8 @@ class _NativeChatViewState extends State<NativeChatView>
           valueListenable: MeetingLiveController.instance.active,
           builder: (context, meetingLive, _) {
             // 录音能力仅移动端可用；Chrome/桌面仍显示语音按钮，点击时提示。
-            final voiceSupported = !kIsWeb &&
+            final voiceSupported =
+                !kIsWeb &&
                 defaultTargetPlatform != TargetPlatform.windows &&
                 defaultTargetPlatform != TargetPlatform.macOS;
             final voiceBlocked = !voiceSupported || locked || meetingLive;
@@ -3258,10 +3263,10 @@ class _NativeChatViewState extends State<NativeChatView>
             onCamera: locked || _mediaBusy
                 ? () {}
                 : () => _sendImageFrom(ImageSource.camera, '拍照'),
-            onCameraLongPress: locked || _mediaBusy ? null : _recordAndSendVideo,
-            onAlbum: locked || _mediaBusy
-                ? () {}
-                : _sendMultiImagesFromGallery,
+            onCameraLongPress: locked || _mediaBusy
+                ? null
+                : _recordAndSendVideo,
+            onAlbum: locked || _mediaBusy ? () {} : _sendMultiImagesFromGallery,
             onFile: locked || _mediaBusy ? () {} : _sendFile,
             onApproval: locked || _mediaBusy
                 ? () {}
@@ -3272,9 +3277,7 @@ class _NativeChatViewState extends State<NativeChatView>
             showVideo: false,
           ),
         if (_emojiOpen && !locked)
-          ChatEmojiGifPanel(
-            controller: _inputController,
-          ),
+          ChatEmojiGifPanel(controller: _inputController),
       ],
     );
   }
@@ -3294,6 +3297,25 @@ class _NativeChatViewState extends State<NativeChatView>
       if (transcript != null && transcript.isNotEmpty) return transcript;
     }
     return ChatMessageQuote.previewForMessage(message);
+  }
+
+  Future<void> _copyMessageText(String text) async {
+    final value = text.trim();
+    if (value.isEmpty) {
+      _showToast('暂无可复制内容');
+      return;
+    }
+    try {
+      await Clipboard.setData(ClipboardData(text: value));
+      if (mounted) _showToast('已复制');
+    } catch (_) {
+      if (mounted) _showToast('复制失败，请重试', error: true);
+    }
+  }
+
+  bool _isRobotMarkdownPayload(Map<String, dynamic>? payload) {
+    final value = payload?['robotMarkdown'];
+    return value == true || value.toString().toLowerCase() == 'true';
   }
 
   void _quoteFromSelectedText(NativeChatMessage message, String selectedText) {
@@ -3430,6 +3452,9 @@ class _NativeChatViewState extends State<NativeChatView>
           final kind = m.kind.toUpperCase();
           Map<String, dynamic>? payload;
           if (m.payload != null && kind != 'TEXT') {
+            payload = Map<String, dynamic>.from(m.payload!);
+          } else if (_isRobotMarkdownPayload(m.payload)) {
+            // 保留机器人 Markdown 标识，二次转发后仍按富文本消息渲染。
             payload = Map<String, dynamic>.from(m.payload!);
           } else if (m.payload?['forward'] is Map) {
             payload = <String, dynamic>{
@@ -3944,10 +3969,7 @@ class _NativeChatViewState extends State<NativeChatView>
     return future;
   }
 
-  String _voiceAsrKey({
-    required int messageId,
-    Map<String, dynamic>? payload,
-  }) {
+  String _voiceAsrKey({required int messageId, Map<String, dynamic>? payload}) {
     final objectKey = ConversationService.mediaObjectKey(payload).trim();
     if (objectKey.isNotEmpty) return 'ok:$objectKey';
     if (messageId > 0) return 'msg:$messageId';
@@ -4082,8 +4104,8 @@ class _NativeChatViewState extends State<NativeChatView>
       final fileName = downloaded.fileName.trim().isNotEmpty
           ? downloaded.fileName.trim()
           : (share.fileName.trim().isNotEmpty
-              ? share.fileName.trim()
-              : share.title);
+                ? share.fileName.trim()
+                : share.title);
       final cacheKey = 'kb-forward-$docId';
       final localPath = await file_dl.saveBytesAsCachedFile(
         downloaded.bytes,
@@ -4109,10 +4131,7 @@ class _NativeChatViewState extends State<NativeChatView>
       );
     } catch (e) {
       if (!mounted) return;
-      _showToast(
-        friendlyErrorText(e, fallback: '打开失败，请重新转发该文档'),
-        error: true,
-      );
+      _showToast(friendlyErrorText(e, fallback: '打开失败，请重新转发该文档'), error: true);
     }
   }
 
@@ -4223,7 +4242,8 @@ class _NativeChatViewState extends State<NativeChatView>
       }
     }
     if (!mounted) return;
-    final changed = next.length != _downloadedFileKeys.length ||
+    final changed =
+        next.length != _downloadedFileKeys.length ||
         !next.containsAll(_downloadedFileKeys);
     if (!changed) return;
     setState(() {
@@ -4586,12 +4606,12 @@ class _NativeChatViewState extends State<NativeChatView>
       return ImUserAvatar(
         initial: initial,
         seed: widget.session.userId,
-        size: 32,
+        size: 45,
         avatarPreset: m.senderAvatarPreset ?? _selfAvatarPreset,
         avatarObjectKey: m.senderAvatarObjectKey ?? _selfAvatarObjectKey,
         avatarUrl: _selfAvatarUrl,
         avatarService: _service,
-        borderRadius: 32 * 0.18,
+        borderRadius: 45 * 0.18,
       );
     }
     final name = m.senderName.isNotEmpty
@@ -4612,12 +4632,12 @@ class _NativeChatViewState extends State<NativeChatView>
     return ImUserAvatar(
       initial: name.isNotEmpty ? name.substring(0, 1) : '?',
       seed: seed,
-      size: 32,
+      size: 45,
       showOnline: false,
       avatarPreset: preset,
       avatarObjectKey: objectKey,
       avatarService: _service,
-      borderRadius: 32 * 0.18,
+      borderRadius: 45 * 0.18,
     );
   }
 
@@ -4638,9 +4658,7 @@ class _NativeChatViewState extends State<NativeChatView>
         ? (widget.session.displayName?.trim().isNotEmpty == true
               ? widget.session.displayName!.trim()
               : '我')
-        : (m.senderName.isNotEmpty
-              ? m.senderName
-              : (conv?.displayTitle ?? ''));
+        : (m.senderName.isNotEmpty ? m.senderName : (conv?.displayTitle ?? ''));
     return GestureDetector(
       onTap: () => onOpen(userId, name),
       behavior: HitTestBehavior.opaque,
@@ -4671,11 +4689,8 @@ class _NativeChatViewState extends State<NativeChatView>
         title: meetingShare.title,
         onTap: () => unawaited(_openMeetingMinutesShare(meetingShare)),
         onSecondaryTapDown: isDesktopCommOnly && !_messageMultiSelectMode
-            ? (details) => _onMessageActions(
-                  m,
-                  mine,
-                  anchor: details.globalPosition,
-                )
+            ? (details) =>
+                  _onMessageActions(m, mine, anchor: details.globalPosition)
             : null,
       );
     }
@@ -4689,11 +4704,8 @@ class _NativeChatViewState extends State<NativeChatView>
             : '审批单据',
         onTap: () => _openApprovalShare(approvalShare),
         onSecondaryTapDown: isDesktopCommOnly && !_messageMultiSelectMode
-            ? (details) => _onMessageActions(
-                  m,
-                  mine,
-                  anchor: details.globalPosition,
-                )
+            ? (details) =>
+                  _onMessageActions(m, mine, anchor: details.globalPosition)
             : null,
       );
     }
@@ -4706,11 +4718,8 @@ class _NativeChatViewState extends State<NativeChatView>
         sizeLabel: kbDoc.sizeLabel,
         onTap: () => unawaited(_openKbDocShare(kbDoc)),
         onSecondaryTapDown: isDesktopCommOnly && !_messageMultiSelectMode
-            ? (details) => _onMessageActions(
-                  m,
-                  mine,
-                  anchor: details.globalPosition,
-                )
+            ? (details) =>
+                  _onMessageActions(m, mine, anchor: details.globalPosition)
             : null,
       );
     }
@@ -4740,11 +4749,7 @@ class _NativeChatViewState extends State<NativeChatView>
           mine: mine,
           downloadProgress: _downloadProgressFor(m.payload),
           onTap: () => unawaited(
-            showChatVideoPlayer(
-              context,
-              service: _service,
-              payload: m.payload,
-            ),
+            showChatVideoPlayer(context, service: _service, payload: m.payload),
           ),
         ),
       );
@@ -4769,11 +4774,8 @@ class _NativeChatViewState extends State<NativeChatView>
                 : _fileSizeHint(m.payload) ?? '',
             onTap: () => unawaited(_openKbFileAttachment(m.payload, fileName)),
             onSecondaryTapDown: isDesktopCommOnly && !_messageMultiSelectMode
-                ? (details) => _onMessageActions(
-                      m,
-                      mine,
-                      anchor: details.globalPosition,
-                    )
+                ? (details) =>
+                      _onMessageActions(m, mine, anchor: details.globalPosition)
                 : null,
           ),
         );
@@ -4790,11 +4792,8 @@ class _NativeChatViewState extends State<NativeChatView>
           downloadProgress: _downloadProgressFor(m.payload),
           onTap: () => _openFileAttachment(m.payload, fileName),
           onSecondaryTapDown: isDesktopCommOnly && !_messageMultiSelectMode
-              ? (details) => _onMessageActions(
-                    m,
-                    mine,
-                    anchor: details.globalPosition,
-                  )
+              ? (details) =>
+                    _onMessageActions(m, mine, anchor: details.globalPosition)
               : null,
         ),
       );
@@ -4812,6 +4811,30 @@ class _NativeChatViewState extends State<NativeChatView>
           asrKey: _voiceAsrKey(messageId: m.id, payload: m.payload),
           resolveUrl: () => _resolveMediaUrl(source),
           onPlayError: (message) => _showToast(message, error: true),
+        ),
+      );
+    }
+    if (_isRobotMarkdownPayload(m.payload)) {
+      final wide = isWideChatLayout(context);
+      final screenW = MediaQuery.sizeOf(context).width;
+      final maxW = wide
+          ? (screenW * 0.55).clamp(420.0, 640.0)
+          : (screenW - 72).clamp(260.0, 420.0);
+      return Container(
+        constraints: BoxConstraints(maxWidth: maxW),
+        padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 9),
+        decoration: BoxDecoration(
+          color: mine ? DunesColors.accentSoft : DunesColors.bgApp,
+          border: Border.all(color: DunesColors.borderSoft),
+          borderRadius: BorderRadius.only(
+            topLeft: Radius.circular(mine ? 12 : 4),
+            topRight: Radius.circular(mine ? 4 : 12),
+            bottomLeft: const Radius.circular(12),
+            bottomRight: const Radius.circular(12),
+          ),
+        ),
+        child: RepaintBoundary(
+          child: RobotMarkdown(markdown: m.bodyText, selectable: false),
         ),
       );
     }
@@ -4895,11 +4918,7 @@ class _NativeChatViewState extends State<NativeChatView>
         payload: e.payload,
         mine: mine,
         onTap: () => unawaited(
-          showChatVideoPlayer(
-            context,
-            service: _service,
-            payload: e.payload,
-          ),
+          showChatVideoPlayer(context, service: _service, payload: e.payload),
         ),
       );
     }
@@ -4930,6 +4949,11 @@ class _NativeChatViewState extends State<NativeChatView>
         asrKey: asrKey,
         resolveUrl: () => _resolveMediaUrl(source),
         onPlayError: (message) => _showToast(message, error: true),
+      );
+    }
+    if (_isRobotMarkdownPayload(e.payload)) {
+      return RepaintBoundary(
+        child: RobotMarkdown(markdown: e.text, selectable: false),
       );
     }
     return Text(
@@ -5454,580 +5478,618 @@ class _NativeChatViewState extends State<NativeChatView>
                                     : '?',
                                 seed: conv.peerUserId ?? conv.id,
                                 showOnline: false,
-                              avatarPreset: conv.peerAvatarPreset,
-                              avatarObjectKey: conv.peerAvatarObjectKey,
-                              avatarService: _service,
-                              borderRadius: 32 * 0.18,
+                                avatarPreset: conv.peerAvatarPreset,
+                                avatarObjectKey: conv.peerAvatarObjectKey,
+                                avatarService: _service,
+                                size: 45,
+                                borderRadius: 45 * 0.18,
+                              )
+                            : null,
+                        actions: [
+                          if (widget.onOpenAiSummary != null)
+                            IconButton(
+                              tooltip: '智能分析',
+                              onPressed: () => widget.onOpenAiSummary!(conv.id),
+                              icon: const Icon(
+                                Icons.auto_awesome_rounded,
+                                size: 20,
+                                color: Color(0xFF7B5CD8),
+                              ),
+                            ),
+                          if (widget.onOpenSearch != null)
+                            IconButton(
+                              tooltip: '聊天记录',
+                              onPressed: () => widget.onOpenSearch!(conv.id),
+                              icon: const Icon(Icons.history, size: 20),
+                            ),
+                          if (!_isPrivate && widget.onOpenMedia != null)
+                            IconButton(
+                              tooltip: '媒体',
+                              onPressed: () => widget.onOpenMedia!(conv.id),
+                              icon: const Icon(
+                                Icons.perm_media_outlined,
+                                size: 20,
+                              ),
+                            ),
+                          if (!_isPrivate && widget.onOpenGroupInfo != null)
+                            IconButton(
+                              tooltip: '群信息',
+                              onPressed: widget.onOpenGroupInfo,
+                              icon: const Icon(Icons.more_vert, size: 20),
+                            ),
+                        ],
+                      ),
+                    Expanded(
+                      child: Stack(
+                        children: [
+                          if (!_bootstrapped && _loading)
+                            const Center(
+                              child: CircularProgressIndicator(strokeWidth: 2),
                             )
-                          : null,
-                      actions: [
-                        if (widget.onOpenAiSummary != null)
-                          IconButton(
-                            tooltip: '智能分析',
-                            onPressed: () =>
-                                widget.onOpenAiSummary!(conv.id),
-                            icon: const Icon(
-                              Icons.auto_awesome_rounded,
-                              size: 20,
-                              color: Color(0xFF7B5CD8),
-                            ),
-                          ),
-                        if (widget.onOpenSearch != null)
-                          IconButton(
-                            tooltip: '聊天记录',
-                            onPressed: () => widget.onOpenSearch!(conv.id),
-                            icon: const Icon(Icons.history, size: 20),
-                          ),
-                        if (!_isPrivate && widget.onOpenMedia != null)
-                          IconButton(
-                            tooltip: '媒体',
-                            onPressed: () => widget.onOpenMedia!(conv.id),
-                            icon: const Icon(
-                              Icons.perm_media_outlined,
-                              size: 20,
-                            ),
-                          ),
-                        if (!_isPrivate && widget.onOpenGroupInfo != null)
-                          IconButton(
-                            tooltip: '群信息',
-                            onPressed: widget.onOpenGroupInfo,
-                            icon: const Icon(Icons.more_vert, size: 20),
-                          ),
-                      ],
-                    ),
-                  Expanded(
-                    child: Stack(
-                      children: [
-                        if (!_bootstrapped && _loading)
-                          const Center(
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        else
-                          NotificationListener<ScrollNotification>(
-                            onNotification: _onMessageListScroll,
-                            child: LayoutBuilder(
-                              builder: (context, constraints) {
-                                final wide = isWideChatLayout(context);
-                                // PC 桌面禁用 shrinkWrap：否则短会话 maxScrollExtent≈0，
-                                // 鼠标滚轮无法驱动 ScrollPosition，「上滑加载」失效。
-                                final useShrinkWrap = wide && !isDesktopCommOnly;
-                                final list = Listener(
-                                  onPointerSignal: _onMessageListPointerSignal,
-                                  child: ListView.builder(
-                                  controller: _scrollController,
-                                  reverse: true,
-                                  // 宽屏 Web 短会话贴顶；桌面端铺满视口以保证滚轮加载历史。
-                                  shrinkWrap: useShrinkWrap,
-                                  physics: _chatListScrollPhysics(scrollMetrics),
-                                  cacheExtent: listCacheExtent,
-                                  addAutomaticKeepAlives: false,
-                                  addRepaintBoundaries: true,
-                                  findChildIndexCallback:
-                                      _findMessageListChildIndex,
-                                  keyboardDismissBehavior:
-                                      ScrollViewKeyboardDismissBehavior.onDrag,
-                                  padding: const EdgeInsets.fromLTRB(
-                                    12,
-                                    12,
-                                    12,
-                                    10,
-                                  ),
-                                  itemCount:
-                                      listEntries.length +
-                                      _listFooterCount +
-                                      _listHeaderCount,
-                                  itemBuilder: (_, index) {
-                                    final hasNewerFooter =
-                                        _locatedMode && _hasNewer;
-                                    if (hasNewerFooter && index == 0) {
-                                      return Padding(
-                                        padding: const EdgeInsets.symmetric(
-                                          vertical: 10,
-                                        ),
-                                        child: Center(
-                                          child: _loadingNewer
-                                              ? const SizedBox(
-                                                  width: 18,
-                                                  height: 18,
-                                                  child:
-                                                      CircularProgressIndicator(
-                                                        strokeWidth: 2,
-                                                      ),
-                                                )
-                                              : TextButton(
-                                                  onPressed: _loadNewer,
-                                                  child: const Text(
-                                                    '加载更新消息',
-                                                  ),
-                                                ),
-                                        ),
-                                      );
-                                    }
-                                    final headerIndex =
-                                        listEntries.length + _listFooterCount;
-                                    if (_listHeaderCount > 0 &&
-                                        index >= headerIndex) {
-                                      // 历史顶入口进入可视区时再兜底拉一次。
-                                      WidgetsBinding.instance
-                                          .addPostFrameCallback((_) {
-                                        if (!mounted ||
-                                            !_scrollController.hasClients) {
-                                          return;
-                                        }
-                                        if (_shouldAutoloadOlder(
-                                          _scrollController.position,
-                                        )) {
-                                          unawaited(_loadOlder());
-                                        }
-                                      });
-                                      return Padding(
-                                        padding: const EdgeInsets.symmetric(
-                                          vertical: 10,
-                                        ),
-                                        child: Center(
-                                          child: _loadingOlder
-                                              ? const SizedBox(
-                                                  width: 18,
-                                                  height: 18,
-                                                  child:
-                                                      CircularProgressIndicator(
-                                                        strokeWidth: 2,
-                                                      ),
-                                                )
-                                              : TextButton(
-                                                  onPressed: _loadOlder,
-                                                  child: const Text(
-                                                    '加载更早消息',
-                                                  ),
-                                                ),
-                                        ),
-                                      );
-                                    }
-                                    final entry = _entryForListIndex(
-                                      index,
-                                      listEntries,
-                                    );
-                                    if (entry == null) {
-                                      return const SizedBox.shrink();
-                                    }
-                                if (entry.dividerLabel != null) {
-                                  return ChatDateDivider(
-                                    key: ValueKey<String>(
-                                      'day-${entry.dividerLabel}',
-                                    ),
-                                    label: entry.dividerLabel!,
-                                  );
-                                }
-                                final m = entry.message!;
-                                final mine =
-                                    m.senderUserId == widget.session.userId;
-                                final highlighted = _highlightMessageId == m.id;
-                                final timeLabel = InboxFormat.msgTimeLabel(
-                                  m.createdAt,
-                                );
-                                final rowAvatar = _tappableAvatarForMessage(
-                                  m,
-                                  mine: mine,
-                                );
-                                Widget row;
-                                if (_isSystemKind(m.kind)) {
-                                  row = _buildMessageWidget(m, mine);
-                                } else {
-                                  final peerRead = mine && _isPrivate
-                                      ? _messagePeerRead(m)
-                                      : false;
-                                  final textMessage =
-                                      m.kind.toUpperCase() == 'TEXT';
-                                  final hasQuote =
-                                      textMessage &&
-                                      !ChatMessageQuote.fromPayload(
-                                        m.payload,
-                                      ).isEmpty;
-                                  final isForwardBundle =
-                                      _forwardBundleFromPayload(m.payload) !=
-                                      null;
-                                  final desktop = isDesktopCommOnly;
-                                  // 移动端：媒体/合并转发/带引用文本可长按；
-                                  // PC（Win/macOS）：任意消息右键或长按均可操作。
-                                  final canShowActions =
-                                      !_messageMultiSelectMode &&
-                                      !_isSystemKind(m.kind);
-                                  final enableLongPress =
-                                      canShowActions &&
-                                      (desktop ||
-                                          isForwardBundle ||
-                                          !textMessage ||
-                                          hasQuote);
-                                  final enableSecondaryTap =
-                                      canShowActions &&
-                                      desktop &&
-                                      // 文本气泡走选区右键菜单，避免与 SelectableText 双菜单冲突。
-                                      !textMessage;
-                                  void openActions(Offset anchor) {
-                                    unawaited(
-                                      _onMessageActions(
-                                        m,
-                                        mine,
-                                        anchor: anchor,
+                          else
+                            NotificationListener<ScrollNotification>(
+                              onNotification: _onMessageListScroll,
+                              child: LayoutBuilder(
+                                builder: (context, constraints) {
+                                  final wide = isWideChatLayout(context);
+                                  // PC 桌面禁用 shrinkWrap：否则短会话 maxScrollExtent≈0，
+                                  // 鼠标滚轮无法驱动 ScrollPosition，「上滑加载」失效。
+                                  final useShrinkWrap =
+                                      wide && !isDesktopCommOnly;
+                                  final list = Listener(
+                                    onPointerSignal:
+                                        _onMessageListPointerSignal,
+                                    child: ListView.builder(
+                                      controller: _scrollController,
+                                      reverse: true,
+                                      // 宽屏 Web 短会话贴顶；桌面端铺满视口以保证滚轮加载历史。
+                                      shrinkWrap: useShrinkWrap,
+                                      physics: _chatListScrollPhysics(
+                                        scrollMetrics,
                                       ),
-                                    );
-                                  }
-
-                                  row = ChatMessageRow(
-                                    message: m,
-                                    mine: mine,
-                                    showSenderMeta: entry.showSenderMeta,
-                                    showTimeForMine: mine,
-                                    timeLabel: timeLabel,
-                                    readLabel: mine && _isPrivate
-                                        ? (peerRead ? '已读' : '未读')
-                                        : null,
-                                    onLongPress: null,
-                                    onLongPressStart: enableLongPress
-                                        ? (details) => openActions(
-                                            details.globalPosition,
-                                          )
-                                        : null,
-                                    onSecondaryTapDown: enableSecondaryTap
-                                        ? (details) => openActions(
-                                            details.globalPosition,
-                                          )
-                                        : null,
-                                    onReadTap: mine && !_isPrivate
-                                        ? () => _showReadReceipts(m)
-                                        : null,
-                                    readTapLabel: _groupReadLabelForMessage(
-                                      m,
-                                      mine: mine,
-                                    ),
-                                    avatar: !mine ? rowAvatar : null,
-                                    trailingAvatar: mine ? rowAvatar : null,
-                                    content: _buildMessageWidget(m, mine),
-                                  );
-                                }
-                                var rowWidget = highlighted
-                                    ? AnimatedContainer(
-                                        key: _messageRowKey(m.id),
-                                        duration: const Duration(
-                                          milliseconds: 200,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: DunesColors.accentSoft
-                                              .withValues(alpha: 0.45),
-                                          borderRadius: BorderRadius.circular(
-                                            8,
-                                          ),
-                                        ),
-                                        padding: const EdgeInsets.symmetric(
-                                          vertical: 2,
-                                        ),
-                                        child: row,
-                                      )
-                                    : KeyedSubtree(
-                                        key: _messageRowKey(m.id),
-                                        child: row,
-                                      );
-                                if (_messageMultiSelectMode &&
-                                    _canSelectMessageForMulti(m)) {
-                                  final selected = _multiSelectedMessageIds
-                                      .contains(m.id);
-                                  rowWidget = Row(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Padding(
-                                        padding: const EdgeInsets.only(
-                                          left: 2,
-                                          right: 6,
-                                          top: 8,
-                                        ),
-                                        child: GestureDetector(
-                                          behavior: HitTestBehavior.opaque,
-                                          onTap: () =>
-                                              _toggleMessageMultiSelected(m.id),
-                                          child: Icon(
-                                            selected
-                                                ? Icons.check_circle
-                                                : Icons.radio_button_unchecked,
-                                            size: 22,
-                                            color: selected
-                                                ? DunesColors.accent
-                                                : DunesColors.text3,
-                                          ),
-                                        ),
+                                      cacheExtent: listCacheExtent,
+                                      addAutomaticKeepAlives: false,
+                                      addRepaintBoundaries: true,
+                                      findChildIndexCallback:
+                                          _findMessageListChildIndex,
+                                      keyboardDismissBehavior:
+                                          ScrollViewKeyboardDismissBehavior
+                                              .onDrag,
+                                      padding: const EdgeInsets.fromLTRB(
+                                        12,
+                                        12,
+                                        12,
+                                        10,
                                       ),
-                                      Expanded(
-                                        child: GestureDetector(
-                                          behavior: HitTestBehavior.opaque,
-                                          onTap: () =>
-                                              _toggleMessageMultiSelected(m.id),
-                                          child: rowWidget,
-                                        ),
-                                      ),
-                                    ],
-                                  );
-                                }
-                                return rowWidget;
-                              },
-                            ),
-                                );
-                                // 桌面端列表已铺满视口，无需 shrinkWrap+Align。
-                                if (!wide || isDesktopCommOnly) return list;
-                                return Align(
-                                  alignment: Alignment.topCenter,
-                                  child: ConstrainedBox(
-                                    constraints: BoxConstraints(
-                                      maxHeight: constraints.maxHeight,
-                                    ),
-                                    child: list,
-                                  ),
-                                );
-                              },
-                            ),
-                          ),
-                        if (_loadingOlder)
-                          const Positioned(
-                            top: 8,
-                            left: 0,
-                            right: 0,
-                            child: Center(
-                              child: Material(
-                                color: Colors.transparent,
-                                child: SizedBox(
-                                  width: 18,
-                                  height: 18,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        if (_locating)
-                          Positioned(
-                            top: 8,
-                            left: 0,
-                            right: 0,
-                            child: Center(
-                              child: Material(
-                                elevation: 1,
-                                borderRadius: BorderRadius.circular(16),
-                                color: DunesColors.bgApp,
-                                child: Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 12,
-                                    vertical: 6,
-                                  ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      const SizedBox(
-                                        width: 12,
-                                        height: 12,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 1.5,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      Text(
-                                        '定位中…',
-                                        style: DunesTypography.sans(
-                                          fontSize: 11,
-                                          color: DunesColors.text3,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        if ((_awayFromLatest || _pendingNewMessageCount > 0) &&
-                            !_locatedMode)
-                          Positioned(
-                            left: 0,
-                            right: 0,
-                            bottom: 12,
-                            child: Center(
-                              child: Material(
-                                color: Colors.transparent,
-                                elevation: 0,
-                                borderRadius: BorderRadius.circular(999),
-                                child: InkWell(
-                                  onTap: _jumpToPendingMessages,
-                                  borderRadius: BorderRadius.circular(999),
-                                  child: Ink(
-                                    decoration: BoxDecoration(
-                                      borderRadius: BorderRadius.circular(999),
-                                      color: _pendingNewMessageCount > 0
-                                          ? const Color(0xFF7E64BD)
-                                          : Colors.white,
-                                      border: _pendingNewMessageCount > 0
-                                          ? null
-                                          : Border.all(
-                                              color: DunesColors.borderSoft,
+                                      itemCount:
+                                          listEntries.length +
+                                          _listFooterCount +
+                                          _listHeaderCount,
+                                      itemBuilder: (_, index) {
+                                        final hasNewerFooter =
+                                            _locatedMode && _hasNewer;
+                                        if (hasNewerFooter && index == 0) {
+                                          return Padding(
+                                            padding: const EdgeInsets.symmetric(
+                                              vertical: 10,
                                             ),
-                                      boxShadow: _pendingNewMessageCount > 0
-                                          ? null
-                                          : const [
-                                              BoxShadow(
-                                                color: Color(0x1A000000),
-                                                blurRadius: 8,
-                                                offset: Offset(0, 2),
+                                            child: Center(
+                                              child: _loadingNewer
+                                                  ? const SizedBox(
+                                                      width: 18,
+                                                      height: 18,
+                                                      child:
+                                                          CircularProgressIndicator(
+                                                            strokeWidth: 2,
+                                                          ),
+                                                    )
+                                                  : TextButton(
+                                                      onPressed: _loadNewer,
+                                                      child: const Text(
+                                                        '加载更新消息',
+                                                      ),
+                                                    ),
+                                            ),
+                                          );
+                                        }
+                                        final headerIndex =
+                                            listEntries.length +
+                                            _listFooterCount;
+                                        if (_listHeaderCount > 0 &&
+                                            index >= headerIndex) {
+                                          // 历史顶入口进入可视区时再兜底拉一次。
+                                          WidgetsBinding.instance
+                                              .addPostFrameCallback((_) {
+                                                if (!mounted ||
+                                                    !_scrollController
+                                                        .hasClients) {
+                                                  return;
+                                                }
+                                                if (_shouldAutoloadOlder(
+                                                  _scrollController.position,
+                                                )) {
+                                                  unawaited(_loadOlder());
+                                                }
+                                              });
+                                          return Padding(
+                                            padding: const EdgeInsets.symmetric(
+                                              vertical: 10,
+                                            ),
+                                            child: Center(
+                                              child: _loadingOlder
+                                                  ? const SizedBox(
+                                                      width: 18,
+                                                      height: 18,
+                                                      child:
+                                                          CircularProgressIndicator(
+                                                            strokeWidth: 2,
+                                                          ),
+                                                    )
+                                                  : TextButton(
+                                                      onPressed: _loadOlder,
+                                                      child: const Text(
+                                                        '加载更早消息',
+                                                      ),
+                                                    ),
+                                            ),
+                                          );
+                                        }
+                                        final entry = _entryForListIndex(
+                                          index,
+                                          listEntries,
+                                        );
+                                        if (entry == null) {
+                                          return const SizedBox.shrink();
+                                        }
+                                        if (entry.dividerLabel != null) {
+                                          return ChatDateDivider(
+                                            key: ValueKey<String>(
+                                              'day-${entry.dividerLabel}',
+                                            ),
+                                            label: entry.dividerLabel!,
+                                          );
+                                        }
+                                        final m = entry.message!;
+                                        final mine =
+                                            m.senderUserId ==
+                                            widget.session.userId;
+                                        final highlighted =
+                                            _highlightMessageId == m.id;
+                                        final timeLabel =
+                                            InboxFormat.msgTimeLabel(
+                                              m.createdAt,
+                                            );
+                                        final rowAvatar =
+                                            _tappableAvatarForMessage(
+                                              m,
+                                              mine: mine,
+                                            );
+                                        Widget row;
+                                        if (_isSystemKind(m.kind)) {
+                                          row = _buildMessageWidget(m, mine);
+                                        } else {
+                                          final peerRead = mine && _isPrivate
+                                              ? _messagePeerRead(m)
+                                              : false;
+                                          final textMessage =
+                                              m.kind.toUpperCase() == 'TEXT';
+                                          final hasQuote =
+                                              textMessage &&
+                                              !ChatMessageQuote.fromPayload(
+                                                m.payload,
+                                              ).isEmpty;
+                                          final isForwardBundle =
+                                              _forwardBundleFromPayload(
+                                                m.payload,
+                                              ) !=
+                                              null;
+                                          final isRobotMarkdown =
+                                              _isRobotMarkdownPayload(
+                                                m.payload,
+                                              );
+                                          final desktop = isDesktopCommOnly;
+                                          // 移动端：媒体/合并转发/带引用文本可长按；
+                                          // PC（Win/macOS）：任意消息右键或长按均可操作。
+                                          final canShowActions =
+                                              !_messageMultiSelectMode &&
+                                              !_isSystemKind(m.kind);
+                                          final enableLongPress =
+                                              canShowActions &&
+                                              (desktop ||
+                                                  isForwardBundle ||
+                                                  isRobotMarkdown ||
+                                                  !textMessage ||
+                                                  hasQuote);
+                                          final enableSecondaryTap =
+                                              canShowActions &&
+                                              desktop &&
+                                              // 文本气泡走选区右键菜单，避免与 SelectableText 双菜单冲突。
+                                              (!textMessage || isRobotMarkdown);
+                                          void openActions(Offset anchor) {
+                                            unawaited(
+                                              _onMessageActions(
+                                                m,
+                                                mine,
+                                                anchor: anchor,
+                                              ),
+                                            );
+                                          }
+
+                                          row = ChatMessageRow(
+                                            message: m,
+                                            mine: mine,
+                                            showSenderMeta:
+                                                entry.showSenderMeta,
+                                            showTimeForMine: mine,
+                                            timeLabel: timeLabel,
+                                            readLabel: mine && _isPrivate
+                                                ? (peerRead ? '已读' : '未读')
+                                                : null,
+                                            onLongPress: null,
+                                            onLongPressStart: enableLongPress
+                                                ? (details) => openActions(
+                                                    details.globalPosition,
+                                                  )
+                                                : null,
+                                            onSecondaryTapDown:
+                                                enableSecondaryTap
+                                                ? (details) => openActions(
+                                                    details.globalPosition,
+                                                  )
+                                                : null,
+                                            onReadTap: mine && !_isPrivate
+                                                ? () => _showReadReceipts(m)
+                                                : null,
+                                            readTapLabel:
+                                                _groupReadLabelForMessage(
+                                                  m,
+                                                  mine: mine,
+                                                ),
+                                            avatar: !mine ? rowAvatar : null,
+                                            trailingAvatar: mine
+                                                ? rowAvatar
+                                                : null,
+                                            content: _buildMessageWidget(
+                                              m,
+                                              mine,
+                                            ),
+                                          );
+                                        }
+                                        var rowWidget = highlighted
+                                            ? AnimatedContainer(
+                                                key: _messageRowKey(m.id),
+                                                duration: const Duration(
+                                                  milliseconds: 200,
+                                                ),
+                                                decoration: BoxDecoration(
+                                                  color: DunesColors.accentSoft
+                                                      .withValues(alpha: 0.45),
+                                                  borderRadius:
+                                                      BorderRadius.circular(8),
+                                                ),
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                      vertical: 2,
+                                                    ),
+                                                child: row,
+                                              )
+                                            : KeyedSubtree(
+                                                key: _messageRowKey(m.id),
+                                                child: row,
+                                              );
+                                        if (_messageMultiSelectMode &&
+                                            _canSelectMessageForMulti(m)) {
+                                          final selected =
+                                              _multiSelectedMessageIds.contains(
+                                                m.id,
+                                              );
+                                          rowWidget = Row(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              Padding(
+                                                padding: const EdgeInsets.only(
+                                                  left: 2,
+                                                  right: 6,
+                                                  top: 8,
+                                                ),
+                                                child: GestureDetector(
+                                                  behavior:
+                                                      HitTestBehavior.opaque,
+                                                  onTap: () =>
+                                                      _toggleMessageMultiSelected(
+                                                        m.id,
+                                                      ),
+                                                  child: Icon(
+                                                    selected
+                                                        ? Icons.check_circle
+                                                        : Icons
+                                                              .radio_button_unchecked,
+                                                    size: 22,
+                                                    color: selected
+                                                        ? DunesColors.accent
+                                                        : DunesColors.text3,
+                                                  ),
+                                                ),
+                                              ),
+                                              Expanded(
+                                                child: GestureDetector(
+                                                  behavior:
+                                                      HitTestBehavior.opaque,
+                                                  onTap: () =>
+                                                      _toggleMessageMultiSelected(
+                                                        m.id,
+                                                      ),
+                                                  child: rowWidget,
+                                                ),
                                               ),
                                             ],
+                                          );
+                                        }
+                                        return rowWidget;
+                                      },
                                     ),
+                                  );
+                                  // 桌面端列表已铺满视口，无需 shrinkWrap+Align。
+                                  if (!wide || isDesktopCommOnly) return list;
+                                  return Align(
+                                    alignment: Alignment.topCenter,
+                                    child: ConstrainedBox(
+                                      constraints: BoxConstraints(
+                                        maxHeight: constraints.maxHeight,
+                                      ),
+                                      child: list,
+                                    ),
+                                  );
+                                },
+                              ),
+                            ),
+                          if (_loadingOlder)
+                            const Positioned(
+                              top: 8,
+                              left: 0,
+                              right: 0,
+                              child: Center(
+                                child: Material(
+                                  color: Colors.transparent,
+                                  child: SizedBox(
+                                    width: 18,
+                                    height: 18,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          if (_locating)
+                            Positioned(
+                              top: 8,
+                              left: 0,
+                              right: 0,
+                              child: Center(
+                                child: Material(
+                                  elevation: 1,
+                                  borderRadius: BorderRadius.circular(16),
+                                  color: DunesColors.bgApp,
+                                  child: Padding(
                                     padding: const EdgeInsets.symmetric(
-                                      horizontal: 14,
-                                      vertical: 8,
+                                      horizontal: 12,
+                                      vertical: 6,
                                     ),
                                     child: Row(
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
-                                        Icon(
-                                          Icons.keyboard_arrow_down_rounded,
-                                          size: 16,
-                                          color: _pendingNewMessageCount > 0
-                                              ? Colors.white
-                                              : DunesColors.accentDeep,
+                                        const SizedBox(
+                                          width: 12,
+                                          height: 12,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 1.5,
+                                          ),
                                         ),
-                                        const SizedBox(width: 4),
+                                        const SizedBox(width: 8),
                                         Text(
-                                          _pendingNewMessageCount > 0
-                                              ? '${_pendingNewMessageCount > 99 ? '99+' : _pendingNewMessageCount} 条新消息'
-                                              : '回到最新',
+                                          '定位中…',
                                           style: DunesTypography.sans(
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.w600,
+                                            fontSize: 11,
+                                            color: DunesColors.text3,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          if ((_awayFromLatest ||
+                                  _pendingNewMessageCount > 0) &&
+                              !_locatedMode)
+                            Positioned(
+                              left: 0,
+                              right: 0,
+                              bottom: 12,
+                              child: Center(
+                                child: Material(
+                                  color: Colors.transparent,
+                                  elevation: 0,
+                                  borderRadius: BorderRadius.circular(999),
+                                  child: InkWell(
+                                    onTap: _jumpToPendingMessages,
+                                    borderRadius: BorderRadius.circular(999),
+                                    child: Ink(
+                                      decoration: BoxDecoration(
+                                        borderRadius: BorderRadius.circular(
+                                          999,
+                                        ),
+                                        color: _pendingNewMessageCount > 0
+                                            ? const Color(0xFF7E64BD)
+                                            : Colors.white,
+                                        border: _pendingNewMessageCount > 0
+                                            ? null
+                                            : Border.all(
+                                                color: DunesColors.borderSoft,
+                                              ),
+                                        boxShadow: _pendingNewMessageCount > 0
+                                            ? null
+                                            : const [
+                                                BoxShadow(
+                                                  color: Color(0x1A000000),
+                                                  blurRadius: 8,
+                                                  offset: Offset(0, 2),
+                                                ),
+                                              ],
+                                      ),
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 14,
+                                        vertical: 8,
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(
+                                            Icons.keyboard_arrow_down_rounded,
+                                            size: 16,
                                             color: _pendingNewMessageCount > 0
                                                 ? Colors.white
                                                 : DunesColors.accentDeep,
                                           ),
-                                        ),
-                                      ],
+                                          const SizedBox(width: 4),
+                                          Text(
+                                            _pendingNewMessageCount > 0
+                                                ? '${_pendingNewMessageCount > 99 ? '99+' : _pendingNewMessageCount} 条新消息'
+                                                : '回到最新',
+                                            style: DunesTypography.sans(
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.w600,
+                                              color: _pendingNewMessageCount > 0
+                                                  ? Colors.white
+                                                  : DunesColors.accentDeep,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
                                     ),
                                   ),
                                 ),
                               ),
                             ),
-                          ),
-                        if (_locatedMode)
-                          Positioned(
-                            left: 0,
-                            right: 0,
-                            bottom: 8,
-                            child: Center(
-                              child: Material(
-                                elevation: 0,
-                                borderRadius: BorderRadius.circular(20),
-                                color: Colors.white,
-                                child: InkWell(
-                                  onTap: _jumpToLatest,
+                          if (_locatedMode)
+                            Positioned(
+                              left: 0,
+                              right: 0,
+                              bottom: 8,
+                              child: Center(
+                                child: Material(
+                                  elevation: 0,
                                   borderRadius: BorderRadius.circular(20),
-                                  child: Padding(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 14,
-                                      vertical: 8,
-                                    ),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        const Icon(
-                                          Icons.arrow_downward,
-                                          size: 14,
-                                          color: DunesColors.accentDeep,
-                                        ),
-                                        const SizedBox(width: 6),
-                                        Text(
-                                          '回到最新消息',
-                                          style: DunesTypography.sans(
-                                            fontSize: 12,
+                                  color: Colors.white,
+                                  child: InkWell(
+                                    onTap: _jumpToLatest,
+                                    borderRadius: BorderRadius.circular(20),
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 14,
+                                        vertical: 8,
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          const Icon(
+                                            Icons.arrow_downward,
+                                            size: 14,
                                             color: DunesColors.accentDeep,
                                           ),
-                                        ),
-                                      ],
+                                          const SizedBox(width: 6),
+                                          Text(
+                                            '回到最新消息',
+                                            style: DunesTypography.sans(
+                                              fontSize: 12,
+                                              color: DunesColors.accentDeep,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
                                     ),
                                   ),
                                 ),
                               ),
                             ),
+                        ],
+                      ),
+                    ),
+                    if (selecting)
+                      _buildMultiSelectBottomBar()
+                    else
+                      SafeArea(
+                        top: false,
+                        child: _buildComposerDock(
+                          locked: locked,
+                          inputHint: inputHint,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              if (_recording)
+                VoiceRecordingOverlay(
+                  durationMs: _recordDurationMs,
+                  willCancel: _recordWillCancel,
+                  focalPoint: _recordFocalPoint,
+                ),
+              if (_fileDropHovering)
+                Positioned.fill(
+                  child: IgnorePointer(
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: DunesColors.accent.withValues(alpha: 0.1),
+                        border: Border.all(
+                          color: DunesColors.accent.withValues(alpha: 0.55),
+                          width: 2,
+                        ),
+                      ),
+                      child: Center(
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 20,
+                            vertical: 14,
                           ),
-                      ],
-                    ),
-                  ),
-                  if (selecting)
-                    _buildMultiSelectBottomBar()
-                  else
-                    SafeArea(
-                      top: false,
-                      child: _buildComposerDock(
-                        locked: locked,
-                        inputHint: inputHint,
-                      ),
-                    ),
-                ],
-              ),
-            ),
-            if (_recording)
-              VoiceRecordingOverlay(
-                durationMs: _recordDurationMs,
-                willCancel: _recordWillCancel,
-                focalPoint: _recordFocalPoint,
-              ),
-            if (_fileDropHovering)
-              Positioned.fill(
-                child: IgnorePointer(
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      color: DunesColors.accent.withValues(alpha: 0.1),
-                      border: Border.all(
-                        color: DunesColors.accent.withValues(alpha: 0.55),
-                        width: 2,
-                      ),
-                    ),
-                    child: Center(
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 20,
-                          vertical: 14,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(14),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.08),
-                              blurRadius: 16,
-                              offset: const Offset(0, 4),
-                            ),
-                          ],
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              Icons.file_upload_outlined,
-                              size: 22,
-                              color: DunesColors.accentDeep,
-                            ),
-                            const SizedBox(width: 10),
-                            Text(
-                              '松开以发送文件 / 图片',
-                              style: DunesTypography.sans(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w600,
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(14),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.08),
+                                blurRadius: 16,
+                                offset: const Offset(0, 4),
+                              ),
+                            ],
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.file_upload_outlined,
+                                size: 22,
                                 color: DunesColors.accentDeep,
                               ),
-                            ),
-                          ],
+                              const SizedBox(width: 10),
+                              Text(
+                                '松开以发送文件 / 图片',
+                                style: DunesTypography.sans(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                  color: DunesColors.accentDeep,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                     ),
                   ),
                 ),
-              ),
-          ],
-        ),
+            ],
+          ),
         ),
       ),
     );

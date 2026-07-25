@@ -1,13 +1,17 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../core/http/session_http.dart';
 import '../../core/layout/chat_layout.dart';
 import '../../core/theme/dunes_theme.dart';
 import '../../core/util/friendly_error.dart';
+import '../../core/widgets/cached_network_image.dart';
 import '../auth/auth_session.dart';
 import '../chat/chat_widgets.dart';
+import '../chat/user_avatar_widget.dart';
 import '../conversation/conversation_models.dart';
 import '../conversation/conversation_picker_sheet.dart';
 import '../conversation/conversation_realtime_hub.dart';
@@ -66,6 +70,9 @@ class _NativeRobotChatPageState extends State<NativeRobotChatPage> {
   int _tempIdSeq = -1;
   Timer? _rtReloadDebounce;
   StreamSubscription<ConversationRealtimeEvent>? _rtSub;
+  String? _selfAvatarPreset;
+  String? _selfAvatarObjectKey;
+  String? _selfAvatarUrl;
 
   int get _convId => widget.conversationHint.id;
   String get _robotKey {
@@ -85,6 +92,9 @@ class _NativeRobotChatPageState extends State<NativeRobotChatPage> {
     // 离开再进：先用跨页状态恢复「正在分析」，避免等消息加载前空白。
     _waitingReply = _analyzing.isAnalyzing(_convId);
     _scroll.addListener(_onScrollPosition);
+    userAvatarRefresh.addListener(_onSelfAvatarUpdated);
+    _applySelfAvatar(userAvatarRefresh.snapshotFor(widget.session.userId));
+    unawaited(_loadSelfAvatar());
     _loadRole();
     _bootstrap();
     _rtSub = ConversationRealtimeHub.instance
@@ -95,6 +105,7 @@ class _NativeRobotChatPageState extends State<NativeRobotChatPage> {
 
   @override
   void dispose() {
+    userAvatarRefresh.removeListener(_onSelfAvatarUpdated);
     _rtSub?.cancel();
     _rtReloadDebounce?.cancel();
     _scroll.removeListener(_onScrollPosition);
@@ -103,6 +114,62 @@ class _NativeRobotChatPageState extends State<NativeRobotChatPage> {
     _scroll.dispose();
     _focus.dispose();
     super.dispose();
+  }
+
+  void _onSelfAvatarUpdated() {
+    _applySelfAvatar(userAvatarRefresh.snapshotFor(widget.session.userId));
+  }
+
+  void _applySelfAvatar(UserAvatarSnapshot? snap) {
+    if (snap == null || !mounted) return;
+    setState(() {
+      _selfAvatarPreset = snap.avatarPreset.isEmpty ? null : snap.avatarPreset;
+      _selfAvatarObjectKey =
+          snap.avatarObjectKey.isEmpty ? null : snap.avatarObjectKey;
+      _selfAvatarUrl = snap.avatarUrl.isEmpty ? null : snap.avatarUrl;
+    });
+  }
+
+  Future<void> _loadSelfAvatar() async {
+    try {
+      final resp = await dunesHttpGet(widget.session, '/users/me');
+      if (!mounted || resp.statusCode < 200 || resp.statusCode >= 300) return;
+      final decoded = jsonDecode(resp.body);
+      final data = decoded is Map
+          ? (decoded['data'] is Map
+                ? Map<String, dynamic>.from(decoded['data'] as Map)
+                : Map<String, dynamic>.from(decoded))
+          : const <String, dynamic>{};
+      final preset = (data['avatarPreset'] ?? '').toString().trim();
+      final objectKey = (data['avatarObjectKey'] ?? '').toString().trim();
+      var avatarUrl = (data['avatarUrl'] ?? '').toString().trim();
+      if (avatarUrl.isEmpty && objectKey.isNotEmpty) {
+        avatarUrl = _service.mediaProxyUrl(objectKey, bucket: 'user-avatars');
+      }
+      final snapshot = UserAvatarSnapshot(
+        userId: widget.session.userId,
+        avatarPreset: preset,
+        avatarObjectKey: objectKey,
+        avatarUrl: avatarUrl,
+      );
+      userAvatarRefresh.remember(snapshot);
+      _applySelfAvatar(snapshot);
+    } catch (_) {}
+  }
+
+  Widget _selfAvatar() {
+    final name = widget.session.displayName?.trim() ?? '';
+    final initial = name.isNotEmpty ? name.substring(0, 1) : '我';
+    return ImUserAvatar(
+      initial: initial,
+      seed: widget.session.userId,
+      size: 45,
+      avatarPreset: _selfAvatarPreset,
+      avatarObjectKey: _selfAvatarObjectKey,
+      avatarUrl: _selfAvatarUrl,
+      avatarService: _service,
+      borderRadius: 45 * 0.18,
+    );
   }
 
   Future<void> _loadRole() async {
@@ -810,6 +877,7 @@ class _NativeRobotChatPageState extends State<NativeRobotChatPage> {
                   avatar: isRobot && !mine
                       ? RobotFaceAvatar(role: role, size: 45, animate: false)
                       : null,
+                  trailingAvatar: mine ? _selfAvatar() : null,
                   content: mine
                       ? ChatTextBubble(text: m.bodyText, mine: true)
                       : Column(

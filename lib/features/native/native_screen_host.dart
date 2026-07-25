@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/http/session_http.dart';
 import '../../core/layout/chat_layout.dart';
@@ -13,6 +12,8 @@ import '../../core/theme/app_text_scale.dart';
 import '../../core/theme/dunes_theme.dart';
 import '../../core/widgets/cached_network_image.dart';
 import '../approval/native_approval_page.dart';
+import '../approval_assistant/native_approval_assistant_page.dart';
+import '../approval_assistant/native_approval_assistant_pending_page.dart';
 import '../auth/auth_session.dart';
 import '../auth/qr_login_scan_page.dart';
 import '../chat/native_broadcast_page.dart';
@@ -127,6 +128,9 @@ class _NativeScreenHostState extends State<NativeScreenHost>
   NativeConversation? _selectedPrivate;
   NativeConversation? _selectedGroup;
   NativeConversation? _selectedRobot;
+  NativeConversation? _selectedApprovalAssistant;
+  ApprovalAssistantPickMode _approvalAssistantPickMode =
+      ApprovalAssistantPickMode.browse;
   NativeConversation? _selectedBroadcast;
   NativeContact? _selectedContact;
   /// PC 双栏：从会话打开名片时嵌在右侧栏，返回目标为 C2/C5；通讯录等入口为 null（整页）。
@@ -838,7 +842,10 @@ class _NativeScreenHostState extends State<NativeScreenHost>
   /// 宽屏双栏：在 C2/C5/CR 之间切换时替换栈顶，避免历史栈堆积。
   void _goChatScreen(String screenId) {
     final current = widget.navigation.currentScreen;
-    if (current == 'C2' || current == 'C5' || current == 'CR') {
+    if (current == 'C2' ||
+        current == 'C5' ||
+        current == 'CR' ||
+        current == 'AA1') {
       widget.navigation.replaceTop(screenId);
     } else {
       widget.navigation.go(screenId);
@@ -851,6 +858,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       _selectedPrivatePeerUserId = conv.peerUserId;
       _selectedGroup = null;
       _selectedRobot = null;
+      _selectedApprovalAssistant = null;
       _focusMessageId = null;
       _focusMessageHint = null;
     });
@@ -867,6 +875,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       _selectedPrivate = null;
       _selectedPrivatePeerUserId = null;
       _selectedGroup = null;
+      _selectedApprovalAssistant = null;
       _focusMessageId = null;
       _focusMessageHint = null;
     });
@@ -897,6 +906,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       _selectedPrivate = null;
       _selectedPrivatePeerUserId = null;
       _selectedRobot = null;
+      _selectedApprovalAssistant = null;
       _focusMessageId = null;
       _focusMessageHint = null;
     });
@@ -957,6 +967,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         _selectedPrivatePeerUserId = null;
         _selectedGroup = null;
         _selectedRobot = null;
+        _selectedApprovalAssistant = null;
       }
     });
     _markUserLeftChat();
@@ -996,6 +1007,9 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     if (chatScreen == 'C5') return _selectedPrivate?.id;
     if (chatScreen == 'C2') return _selectedGroup?.id;
     if (chatScreen == 'CR') return _selectedRobot?.id;
+    if (chatScreen == 'AA1' || chatScreen == 'AA2') {
+      return _selectedApprovalAssistant?.id;
+    }
     return null;
   }
 
@@ -1005,6 +1019,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     // 历史 / 媒体 / 会话内名片 / 智能总结：嵌在右侧会话栏，不撑满整页。
     if (screen == 'C12' || screen == 'C13') return screen;
     if (screen == 'AS1' || screen == 'AS2' || screen == 'AS3') return screen;
+    if (screen == 'AA1' || screen == 'AA2') return screen;
     if (screen == 'C9' && _profileEmbedsInDualPane) return 'C9';
     if (screen == 'C2' || screen == 'C5' || screen == 'CR') return screen;
     if (_selectedPrivate != null || _selectedPrivatePeerUserId != null) {
@@ -1012,6 +1027,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     }
     if (_selectedGroup != null) return 'C2';
     if (_selectedRobot != null) return 'CR';
+    if (_selectedApprovalAssistant != null) return 'AA1';
     return 'C1';
   }
 
@@ -1023,6 +1039,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     final screen = widget.navigation.currentScreen;
     if (screen == 'C12' || screen == 'C13') return screen;
     if (screen == 'AS1' || screen == 'AS2' || screen == 'AS3') return screen;
+    if (screen == 'AA2') return screen;
     if (screen == 'C9' && _profileEmbedsInDualPane) return 'C9';
     return null;
   }
@@ -1037,7 +1054,9 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         screen == 'C13' ||
         screen == 'AS1' ||
         screen == 'AS2' ||
-        screen == 'AS3';
+        screen == 'AS3' ||
+        screen == 'AA1' ||
+        screen == 'AA2';
   }
 
   Widget _buildDualPaneContactProfilePage() {
@@ -1159,11 +1178,104 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         widget.navigation.go('C3');
       },
       onOpenAiSummary: () => widget.navigation.go('AS1'),
+      onOpenApprovalAssistant: _openApprovalAssistant,
+    );
+  }
+
+  Future<void> _openApprovalAssistant() async {
+    setState(() {
+      _selectedPrivate = null;
+      _selectedPrivatePeerUserId = null;
+      _selectedGroup = null;
+      _selectedRobot = null;
+      _focusMessageId = null;
+      _focusMessageHint = null;
+    });
+    try {
+      final conv = await ConversationService(session: widget.session)
+          .ensureApprovalAssistantSession();
+      if (!mounted) return;
+      setState(() => _selectedApprovalAssistant = conv);
+      if (conv.id > 0) {
+        _conversationReadSignal.notifyRead(conv.id);
+      }
+    } catch (_) {
+      // 仍打开页面；页内会再 ensure/报错。
+    }
+    _markUserEnteredChat();
+    _goChatScreen('AA1');
+  }
+
+  void _openApprovalAssistantPending(ApprovalAssistantPickMode mode) {
+    setState(() => _approvalAssistantPickMode = mode);
+    widget.navigation.go('AA2');
+  }
+
+  Widget _buildApprovalAssistantPage({bool showBackButton = true}) {
+    final hint = _selectedApprovalAssistant ??
+        const NativeConversation(
+          id: 0,
+          kind: 'APPROVAL_ASSISTANT',
+          title: '审批助手',
+          unreadCount: 0,
+          preview: '',
+          updatedAt: null,
+        );
+    return NativeApprovalAssistantPage(
+      key: ValueKey<int>(hint.id),
+      session: widget.session,
+      conversationHint: hint,
+      showBackButton: showBackButton,
+      autoMarkRead: _userActivelyInChat,
+      onBack: () => _leaveChatToInbox(clearSelection: true),
+      onConversationRead: _handleConversationRead,
+      onOpenPendingList: _openApprovalAssistantPending,
+      onOpenApproval: (share) => _openApprovalFromChat(share, from: 'AA1'),
+    );
+  }
+
+  Widget _buildApprovalAssistantPendingPage() {
+    return NativeApprovalAssistantPendingPage(
+      session: widget.session,
+      mode: _approvalAssistantPickMode,
+      onBack: () {
+        if (widget.navigation.history.contains('AA1')) {
+          widget.navigation.popTo('AA1');
+        } else {
+          widget.navigation.back();
+        }
+      },
+      onOpenDetail: (businessType, businessId) {
+        // 复用现有审批详情入口（与聊天审批卡片一致）。
+        // 返回 Future，AA2 在详情关闭后可刷新列表（如撤回后不再残留）。
+        return _openApprovalFromChat(
+          ApprovalChatShare(
+            businessType: businessType,
+            businessId: businessId,
+            title: '',
+          ),
+          from: 'AA2',
+        );
+      },
+      onActionDone: () {
+        if (widget.navigation.history.contains('AA1')) {
+          widget.navigation.popTo('AA1');
+        } else {
+          widget.navigation.go('AA1');
+        }
+      },
     );
   }
 
   /// 当前选中的底层会话（不随名片/搜索/媒体切换而卸载）。
   Widget _buildDualPaneBaseChatPage() {
+    final dual = _dualPaneChatScreen;
+    if (widget.navigation.currentScreen == 'AA1' ||
+        widget.navigation.currentScreen == 'AA2' ||
+        dual == 'AA1' ||
+        dual == 'AA2') {
+      return _buildApprovalAssistantPage(showBackButton: false);
+    }
     if (_selectedRobot != null) {
       final robotId = _selectedRobot!.id;
       return NativeRobotChatPage(
@@ -1271,6 +1383,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       'AS1' => _buildAiSummaryHubPage(),
       'AS2' => _buildAiSummaryCreatePage(),
       'AS3' => _buildAiSummaryDetailPage(),
+      'AA2' => _buildApprovalAssistantPendingPage(),
       _ => null,
     };
 
@@ -1581,6 +1694,10 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         );
       case 'C1':
         return _buildConversationListPage();
+      case 'AA1':
+        return _buildApprovalAssistantPage();
+      case 'AA2':
+        return _buildApprovalAssistantPendingPage();
       case 'AS1':
         return _buildAiSummaryHubPage();
       case 'AS2':
@@ -2220,6 +2337,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       'AS1',
       'AS2',
       'AS3',
+      'AA1',
+      'AA2',
     }.contains(screen);
   }
 
@@ -2526,34 +2645,36 @@ class _NativeScreenHostState extends State<NativeScreenHost>
 
   /// IM 审批卡片：不拦权限；若当前用户有 OPEN todo，详情页会自动进入可审批态。
   /// 用覆盖层打开（PC 对话框 / APP 推页），避免切屏导致会话被重建刷新。
-  void _openApprovalFromChat(ApprovalChatShare share, {required String from}) {
-    unawaited(
-      showApprovalDetailOverlay(
-        context: context,
-        session: widget.session,
-        share: share,
-        onApprovalCompleted: () => _scheduleWorkbenchBadgeRefresh(),
-        onEditSubmission: (item) {
-          final templateKey = (item.templateKey ?? '').trim().isNotEmpty
-              ? item.templateKey!.trim()
-              : _xflowTemplateKey;
-          _openProposalEntry(
-            templateKey: templateKey,
-            backScreen: from,
-            editProposalId: item.id,
-            editBusinessType: item.businessType,
-          );
-        },
-        onReeditProposal: (proposalId) {
-          _openProposalEntry(
-            templateKey: XflowService.boundTemplateKeyForMenu(
-              '/business/proposals/new',
-            ),
-            backScreen: from,
-            editProposalId: proposalId,
-          );
-        },
-      ),
+  /// 返回的 Future 在详情关闭后完成，便于调用方刷新列表。
+  Future<void> _openApprovalFromChat(
+    ApprovalChatShare share, {
+    required String from,
+  }) {
+    return showApprovalDetailOverlay(
+      context: context,
+      session: widget.session,
+      share: share,
+      onApprovalCompleted: () => _scheduleWorkbenchBadgeRefresh(),
+      onEditSubmission: (item) {
+        final templateKey = (item.templateKey ?? '').trim().isNotEmpty
+            ? item.templateKey!.trim()
+            : _xflowTemplateKey;
+        _openProposalEntry(
+          templateKey: templateKey,
+          backScreen: from,
+          editProposalId: item.id,
+          editBusinessType: item.businessType,
+        );
+      },
+      onReeditProposal: (proposalId) {
+        _openProposalEntry(
+          templateKey: XflowService.boundTemplateKeyForMenu(
+            '/business/proposals/new',
+          ),
+          backScreen: from,
+          editProposalId: proposalId,
+        );
+      },
     );
   }
 
@@ -2698,6 +2819,7 @@ class _NativeB2PageState extends State<_NativeB2Page> {
   int _meetingCount = 0;
   bool _loading = true;
   String? _loadError;
+  int _statsLoadGeneration = 0;
   bool _avatarSheetOpen = false;
   bool _qrLoginOpening = false;
   int _avatarRefreshVersion = 0;
@@ -2853,36 +2975,86 @@ class _NativeB2PageState extends State<_NativeB2Page> {
     }
   }
 
-  Future<NativeKbSummary?> _fetchKbSummary() async {
+  bool _isCurrentStatsLoad(int generation) =>
+      mounted && generation == _statsLoadGeneration;
+
+  Future<void> _loadMyWorkbenchStats({
+    required bool silent,
+    required int generation,
+    required List<XflowProposalItem>? Function() initiatedRows,
+  }) async {
     try {
-      return await NativeKbService(session: widget.session).fetchSummary();
-    } catch (_) {
-      return null;
+      final resp = await dunesHttpGet(widget.session, '/workbench/my-stats');
+      if (!_isCurrentStatsLoad(generation)) return;
+      if (resp.statusCode < 200 || resp.statusCode >= 300) {
+        throw Exception('HTTP ${resp.statusCode}');
+      }
+      final body = jsonDecode(resp.body);
+      final raw = body is Map<String, dynamic>
+          ? (body['data'] is Map<String, dynamic>
+                ? body['data'] as Map<String, dynamic>
+                : body)
+          : const <String, dynamic>{};
+      var stats = _NativeMyStats.fromJson(raw);
+      final rows = initiatedRows();
+      if (rows != null) {
+        stats = stats.alignedWithInitiatedList(rows);
+      }
+      if (!_isCurrentStatsLoad(generation)) return;
+      setState(() {
+        _stats = stats;
+        _loadError = null;
+      });
+      widget.workbenchBadge.update(stats.pendingForMe);
+    } catch (error) {
+      if (!_isCurrentStatsLoad(generation) || silent) return;
+      setState(() => _loadError = error.toString());
     }
   }
 
-  Future<void> _loadStats({bool silent = false}) async {
-    if (!silent) {
-      setState(() {
-        _loading = true;
-        _loadError = null;
-      });
+  Future<void> _loadKbSummaryStats({required int generation}) async {
+    try {
+      final summary =
+          await NativeKbService(session: widget.session).fetchSummary();
+      if (!_isCurrentStatsLoad(generation)) return;
+      setState(() => _kbSummary = summary);
+    } catch (_) {
+      // 单项失败不拖垮其它事项数字。
     }
-    // 头像/资料与工作台统计解耦，避免被其它接口拖慢首帧。
-    unawaited(_loadAndApplyProfile());
+  }
+
+  Future<void> _loadMeetingCountStats({required int generation}) async {
+    try {
+      final count =
+          await NativeMeetingService(session: widget.session).fetchMyCount();
+      if (!_isCurrentStatsLoad(generation)) return;
+      setState(() => _meetingCount = count);
+    } catch (_) {
+      // 单项失败不拖垮其它事项数字。
+    }
+  }
+
+  Future<void> _alignInitiatedStats({
+    required int generation,
+    required void Function(List<XflowProposalItem> rows) onRows,
+  }) async {
+    try {
+      final rows =
+          await XflowService(session: widget.session).fetchB14Initiated();
+      if (!_isCurrentStatsLoad(generation)) return;
+      onRows(rows);
+      final current = _stats;
+      if (current == null) return;
+      setState(() => _stats = current.alignedWithInitiatedList(rows));
+    } catch (_) {
+      // 校正失败时保留 my-stats 原始数字。
+    }
+  }
+
+  Future<void> _loadQuickLaunchConfig({required int generation}) async {
     try {
       final xflow = XflowService(session: widget.session);
-      List<XflowProposalItem>? initiatedRows;
-      final results = await Future.wait<Object?>(<Future<Object?>>[
-        dunesHttpGet(widget.session, '/workbench/my-stats'),
-        _fetchKbSummary(),
-        xflow
-            .fetchB14Initiated()
-            .then<List<XflowProposalItem>?>((v) => v)
-            .catchError((_) => null),
-        NativeMeetingService(
-          session: widget.session,
-        ).fetchMyCount().catchError((_) => 0),
+      final results = await Future.wait<Object>(<Future<Object>>[
         xflow
             .fetchTemplatesByCategory('biz')
             .catchError((_) => const <XflowTemplateCard>[]),
@@ -2893,39 +3065,19 @@ class _NativeB2PageState extends State<_NativeB2Page> {
           (_) => const <String, dynamic>{},
         ),
       ]);
-      final resp = results[0] as http.Response;
-      final kbSummary = results[1] as NativeKbSummary?;
-      initiatedRows = results[2] as List<XflowProposalItem>?;
-      final meetingCount = results[3] as int;
-      final bizTemplates = results[4] as List<XflowTemplateCard>;
-      final admTemplates = results[5] as List<XflowTemplateCard>;
-      final wbConfig = results[6] as Map<String, dynamic>;
+      if (!_isCurrentStatsLoad(generation)) return;
+      final bizTemplates = results[0] as List<XflowTemplateCard>;
+      final admTemplates = results[1] as List<XflowTemplateCard>;
+      final wbConfig = results[2] as Map<String, dynamic>;
       final bindings = wbConfig['templateBindings'];
-      String defaultTemplate = _defaultSalesTemplateKey;
+      var defaultTemplate = _defaultSalesTemplateKey;
       if (bindings is Map) {
         final hit = (bindings['/business/proposals/new'] ?? '')
             .toString()
             .trim();
         if (hit.isNotEmpty) defaultTemplate = hit;
       }
-      if (resp.statusCode < 200 || resp.statusCode >= 300) {
-        throw Exception('HTTP ${resp.statusCode}');
-      }
-      final body = jsonDecode(resp.body);
-      final raw = body is Map<String, dynamic>
-          ? (body['data'] is Map<String, dynamic>
-                ? body['data'] as Map<String, dynamic>
-                : body)
-          : const <String, dynamic>{};
-      if (!mounted) return;
-      var stats = _NativeMyStats.fromJson(raw);
-      if (initiatedRows != null) {
-        stats = stats.alignedWithInitiatedList(initiatedRows);
-      }
       setState(() {
-        _stats = stats;
-        _kbSummary = kbSummary;
-        _meetingCount = meetingCount;
         _defaultSalesTemplateKey = defaultTemplate;
         _quickLaunchItems = buildQuickLaunchItems(
           bizTemplates: bizTemplates,
@@ -2933,17 +3085,60 @@ class _NativeB2PageState extends State<_NativeB2Page> {
           maxItems: 4,
           defaultSalesTemplateKey: defaultTemplate,
         );
-        _loading = false;
       });
-      widget.workbenchBadge.update(_stats?.pendingForMe ?? 0);
-    } catch (error) {
-      if (!mounted) return;
-      if (silent) return;
+    } catch (_) {
+      // 快捷发起失败不影响事项统计。
+    }
+  }
+
+  Future<void> _loadStats({bool silent = false}) async {
+    final generation = ++_statsLoadGeneration;
+    if (!silent) {
       setState(() {
-        _loading = false;
-        _loadError = error.toString();
+        _loading = true;
+        _loadError = null;
       });
     }
+    // 头像/资料与工作台统计解耦，避免被其它接口拖慢首帧。
+    unawaited(_loadAndApplyProfile());
+
+    List<XflowProposalItem>? initiatedRows;
+    var remaining = 5;
+
+    void markDone() {
+      remaining--;
+      if (remaining <= 0 && _isCurrentStatsLoad(generation)) {
+        setState(() => _loading = false);
+      }
+    }
+
+    Future<void> track(Future<void> Function() task) async {
+      try {
+        await task();
+      } finally {
+        markDone();
+      }
+    }
+
+    // 各数据源独立落数：谁先到谁先刷 UI，互不阻塞。
+    await Future.wait<void>(<Future<void>>[
+      track(
+        () => _loadMyWorkbenchStats(
+          silent: silent,
+          generation: generation,
+          initiatedRows: () => initiatedRows,
+        ),
+      ),
+      track(() => _loadKbSummaryStats(generation: generation)),
+      track(() => _loadMeetingCountStats(generation: generation)),
+      track(
+        () => _alignInitiatedStats(
+          generation: generation,
+          onRows: (rows) => initiatedRows = rows,
+        ),
+      ),
+      track(() => _loadQuickLaunchConfig(generation: generation)),
+    ]);
   }
 
   Future<void> _loadAndApplyProfile() async {

@@ -9,6 +9,7 @@ import '../auth/auth_session.dart';
 import '../nova/nova_history_utils.dart';
 import '../../core/widgets/cached_network_image.dart';
 import '../chat/chat_media_cache.dart';
+import '../xflow/approval_chat_share.dart';
 import 'conversation_models.dart';
 
 /// 上传分块大小：把文件切成小块逐块写入，配合 socket 背压才能得到真实的
@@ -405,6 +406,181 @@ class ConversationService {
         await _delayForRetry(attempt);
       }
     }
+  }
+
+  /// 确保审批助手只读会话存在。
+  Future<NativeConversation> ensureApprovalAssistantSession() async {
+    final resp = await _client.post(
+      _uri('/approvals/assistant/sessions/ensure'),
+      headers: _headers,
+      body: '{}',
+    );
+    if (resp.statusCode < 200 || resp.statusCode >= 300) {
+      throw Exception('打开审批助手失败: HTTP ${resp.statusCode}');
+    }
+    final body = _decode(resp.body);
+    if (body['success'] == false) {
+      throw Exception((body['message'] ?? '打开审批助手失败').toString());
+    }
+    final data = body['data'];
+    final map = data is Map<String, dynamic>
+        ? data
+        : data is Map
+        ? Map<String, dynamic>.from(data)
+        : <String, dynamic>{};
+    final convId = (map['conversationId'] as num?)?.toInt() ?? 0;
+    if (convId <= 0) throw Exception('empty conversationId');
+    return NativeConversation(
+      id: convId,
+      kind: 'APPROVAL_ASSISTANT',
+      title: (map['title'] ?? '审批助手').toString(),
+      unreadCount: 0,
+      preview: '',
+      updatedAt: DateTime.now(),
+    );
+  }
+
+  Future<Map<String, dynamic>> approvalAssistantExplain({
+    required String businessType,
+    required int businessId,
+  }) async {
+    final resp = await _client.post(
+      _uri('/approvals/assistant/explain'),
+      headers: _headers,
+      body: jsonEncode({
+        'businessType': businessType.trim().toUpperCase(),
+        'businessId': businessId,
+      }),
+    );
+    return _requireSuccessMap(resp, '解释失败');
+  }
+
+  Future<Map<String, dynamic>> approvalAssistantUrgeDraft({
+    required String businessType,
+    required int businessId,
+  }) async {
+    final resp = await _client.post(
+      _uri('/approvals/assistant/urge-draft'),
+      headers: _headers,
+      body: jsonEncode({
+        'businessType': businessType.trim().toUpperCase(),
+        'businessId': businessId,
+      }),
+    );
+    return _requireSuccessMap(resp, '催办话术生成失败');
+  }
+
+  /// 将审批名片 + 催办话术统一发给所选人/会话。
+  Future<Map<String, dynamic>> approvalAssistantUrgeSend({
+    required String businessType,
+    required int businessId,
+    required String draft,
+    List<int> recipientUserIds = const [],
+    List<int> conversationIds = const [],
+    bool includeApprovalCard = true,
+    int? sourceMessageId,
+    ApprovalChatShare? card,
+  }) async {
+    final resp = await _client.post(
+      _uri('/approvals/assistant/urge-send'),
+      headers: _headers,
+      body: jsonEncode({
+        'businessType': businessType.trim().toUpperCase(),
+        'businessId': businessId,
+        'draft': draft,
+        'recipientUserIds': recipientUserIds,
+        'conversationIds': conversationIds,
+        'includeApprovalCard': includeApprovalCard,
+        if (sourceMessageId != null && sourceMessageId > 0)
+          'sourceMessageId': sourceMessageId,
+      }),
+    );
+    // 远程未部署时回退到客户端逐会话发送。
+    if (resp.statusCode == 404 || resp.statusCode == 501) {
+      return _urgeSendClientFallback(
+        businessType: businessType,
+        businessId: businessId,
+        draft: draft,
+        recipientUserIds: recipientUserIds,
+        conversationIds: conversationIds,
+        includeApprovalCard: includeApprovalCard,
+        card: card,
+      );
+    }
+    return _requireSuccessMap(resp, '催办发送失败');
+  }
+
+  Future<Map<String, dynamic>> _urgeSendClientFallback({
+    required String businessType,
+    required int businessId,
+    required String draft,
+    required List<int> recipientUserIds,
+    required List<int> conversationIds,
+    required bool includeApprovalCard,
+    ApprovalChatShare? card,
+  }) async {
+    final convIds = <int>{...conversationIds};
+    for (final uid in recipientUserIds) {
+      final id = await ensurePrivateConversationForPeer(uid);
+      if (id != null && id > 0) convIds.add(id);
+    }
+    if (convIds.isEmpty) {
+      throw Exception('请至少选择一位接收人或一个会话');
+    }
+    final share = card ??
+        ApprovalChatShare(
+          businessType: businessType.trim().isEmpty
+              ? 'PROPOSAL'
+              : businessType.trim(),
+          businessId: businessId,
+          title: '审批单 #$businessId',
+          status: 'PENDING',
+        );
+    var sent = 0;
+    var failed = 0;
+    for (final cid in convIds) {
+      try {
+        if (includeApprovalCard) {
+          await sendText(
+            cid,
+            share.bodyText,
+            payload: share.toMessagePayload(),
+          );
+        }
+        await sendText(
+          cid,
+          draft,
+          payload: <String, dynamic>{
+            'type': 'approvalUrgeSent',
+            'businessType': share.businessType,
+            'businessId': share.businessId,
+            'draft': draft,
+          },
+        );
+        sent++;
+      } catch (_) {
+        failed++;
+      }
+    }
+    return <String, dynamic>{
+      'sentCount': sent,
+      'failedCount': failed,
+      'via': 'clientFallback',
+    };
+  }
+
+  Map<String, dynamic> _requireSuccessMap(http.Response resp, String fallback) {
+    if (resp.statusCode < 200 || resp.statusCode >= 300) {
+      throw Exception('$fallback: HTTP ${resp.statusCode}');
+    }
+    final body = _decode(resp.body);
+    if (body['success'] == false) {
+      throw Exception((body['message'] ?? fallback).toString());
+    }
+    final data = body['data'];
+    if (data is Map<String, dynamic>) return data;
+    if (data is Map) return Map<String, dynamic>.from(data);
+    return <String, dynamic>{};
   }
 
   /// 确保一人一机 ROBOT 会话存在。

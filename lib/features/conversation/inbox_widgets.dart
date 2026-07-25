@@ -515,6 +515,7 @@ class ChatInboxSectionHeader extends StatelessWidget {
 enum ChatInboxRowKind {
   aiAssistant,
   aiSummary,
+  approvalAssistant,
   systemNotification,
   broadcast,
   workgroupApproval,
@@ -582,6 +583,7 @@ class ChatInboxRow extends StatelessWidget {
         kind == ChatInboxRowKind.private ||
             kind == ChatInboxRowKind.aiAssistant ||
             kind == ChatInboxRowKind.aiSummary ||
+            kind == ChatInboxRowKind.approvalAssistant ||
             kind == ChatInboxRowKind.robot
         ? const Color(0xFF7B5CD8)
         : DunesColors.coral;
@@ -912,6 +914,20 @@ class _Avatar extends StatelessWidget {
     switch (kind) {
       case ChatInboxRowKind.aiAssistant:
         return const NovaIconImage(size: _inboxAvatarSize, borderRadius: 12);
+      case ChatInboxRowKind.approvalAssistant:
+        decoration = BoxDecoration(
+          borderRadius: borderRadius,
+          gradient: const LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [DunesColors.brandPurple, DunesColors.brandPurpleDeep],
+          ),
+        );
+        child = const Icon(
+          Icons.fact_check_outlined,
+          color: Colors.white,
+          size: 20,
+        );
       case ChatInboxRowKind.robot:
         decoration = BoxDecoration(
           borderRadius: borderRadius,

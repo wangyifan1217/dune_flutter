@@ -47,6 +47,7 @@ class NativeConversationPage extends StatefulWidget {
     required this.onOpenNewChat,
     required this.onOpenAiSummary,
     this.onOpenRobot,
+    this.onOpenApprovalAssistant,
     this.selectedConversationId,
     this.conversationReadSignal,
   });
@@ -63,6 +64,7 @@ class NativeConversationPage extends StatefulWidget {
   final VoidCallback onOpenNewChat;
   final VoidCallback onOpenAiSummary;
   final ValueChanged<NativeConversation>? onOpenRobot;
+  final VoidCallback? onOpenApprovalAssistant;
 
   /// 双栏布局中当前选中的会话，用于列表高亮。
   final int? selectedConversationId;
@@ -294,6 +296,9 @@ class _NativeConversationPageState extends State<NativeConversationPage>
     return screen == 'AS1' || screen == 'AS2' || screen == 'AS3';
   }
 
+  bool get _isViewingApprovalAssistant =>
+      widget.navigation.currentScreen == 'AA1';
+
   void _onAiSummaryRealtime(ConversationRealtimeEvent event) {
     final update = AiSummaryRealtimeUpdate.fromPayload(event.raw);
     if (!mounted) return;
@@ -471,9 +476,24 @@ class _NativeConversationPageState extends State<NativeConversationPage>
         if (!widget.session.isExternalUser) _safeFetchAiSummaryPreview(),
         if (!widget.session.isExternalUser) _aiSummaryService.fetchUnreadCount(),
       ]);
-      final rows = (results[0] as List<NativeConversation>)
+      var rows = (results[0] as List<NativeConversation>)
           .where((c) => c.isVisible && !isConversationHidden(hidden, c.id))
-          .toList(growable: false);
+          .toList(growable: true);
+      // 内部用户确保审批助手会话存在，并入列表按 updatedAt 排序（不硬置顶）。
+      if (!widget.session.isExternalUser &&
+          widget.onOpenApprovalAssistant != null &&
+          !rows.any((c) => c.isApprovalAssistant)) {
+        try {
+          final ensured = await _service.ensureApprovalAssistantSession();
+          if (ensured.id > 0 &&
+              !rows.any((c) => c.id == ensured.id)) {
+            rows = <NativeConversation>[...rows, ensured];
+          }
+        } catch (_) {
+          // 后端未就绪时不影响其它会话列表。
+        }
+      }
+      rows = List<NativeConversation>.unmodifiable(rows);
       final dissolved = (results[0] as List<NativeConversation>)
           .where((c) => c.dissolved && c.id > 0)
           .map((c) => c.id)
@@ -684,6 +704,9 @@ class _NativeConversationPageState extends State<NativeConversationPage>
     } else if (c.isRobot) {
       rowKind = ChatInboxRowKind.robot;
       onTap = () => widget.onOpenRobot?.call(c);
+    } else if (c.isApprovalAssistant) {
+      rowKind = ChatInboxRowKind.approvalAssistant;
+      onTap = () => widget.onOpenApprovalAssistant?.call();
     } else if (c.isWorkgroupApproval) {
       rowKind = ChatInboxRowKind.workgroupApproval;
       onTap = () => widget.onOpenGroup(c);
@@ -710,7 +733,8 @@ class _NativeConversationPageState extends State<NativeConversationPage>
         !(rowKind == ChatInboxRowKind.private ||
             rowKind == ChatInboxRowKind.group ||
             rowKind == ChatInboxRowKind.workgroupApproval ||
-            rowKind == ChatInboxRowKind.robot);
+            rowKind == ChatInboxRowKind.robot ||
+            rowKind == ChatInboxRowKind.approvalAssistant);
 
     final robotKey = c.robotKey ?? '';
     final analyzingRobot =
@@ -718,7 +742,9 @@ class _NativeConversationPageState extends State<NativeConversationPage>
     final selected = widget.selectedConversationId == c.id;
     final row = ChatInboxRow(
       kind: rowKind,
-      title: c.isAiAssistant ? _yunshuName : title,
+      title: c.isAiAssistant
+          ? _yunshuName
+          : (c.isApprovalAssistant ? '审批助手' : title),
       subtitle: null,
       preview: analyzingRobot
           ? '正在分析…'
@@ -733,10 +759,13 @@ class _NativeConversationPageState extends State<NativeConversationPage>
                 )
               : (c.isRobot
                   ? robotPlainPreview(c.preview, maxChars: 48)
-                  : c.preview)),
+                  : (c.preview.isEmpty && c.isApprovalAssistant
+                      ? '待办简报 · 解释 · 催办'
+                      : c.preview))),
       timeLabel: InboxFormat.formatTime(c.updatedAt, withClock: c.isPrivate),
       memberCount: c.isPrivate ||
               c.isRobot ||
+              c.isApprovalAssistant ||
               kind == 'AI_ASSISTANT' ||
               kind == 'BROADCAST'
           ? null
@@ -749,6 +778,8 @@ class _NativeConversationPageState extends State<NativeConversationPage>
               : c.unreadCount),
       muted: c.muted,
       showAiMark: c.isAiAssistant,
+      selected: selected ||
+          (c.isApprovalAssistant && _isViewingApprovalAssistant),
       previewGenerating:
           (c.isAiAssistant && gen.generating) || analyzingRobot,
       showOnlineDot: c.isPrivate && _isPeerOnline(c),
@@ -779,7 +810,6 @@ class _NativeConversationPageState extends State<NativeConversationPage>
           : null,
       sysTag: c.businessType,
       showDivider: true,
-      selected: selected,
       onTap: onTap,
     );
 
@@ -803,7 +833,15 @@ class _NativeConversationPageState extends State<NativeConversationPage>
     // 私聊与普通群聊共用一个按置顶、最近消息排序的会话流，和常见聊天
     // 应用一致；审批工作群仍保留在独立的系统分区中。
     final chats = _sorted(
-      _items.where((c) => c.isGroup || c.isPrivate || c.isRobot).toList(),
+      _items
+          .where(
+            (c) =>
+                c.isGroup ||
+                c.isPrivate ||
+                c.isRobot ||
+                c.isApprovalAssistant,
+          )
+          .toList(),
     );
 
     List<Widget> convRows(Iterable<NativeConversation> rows) =>
@@ -873,8 +911,8 @@ class _NativeConversationPageState extends State<NativeConversationPage>
     return sections;
   }
 
-  /// 智能总结与私聊/群聊同一排序：置顶优先，再按最近时间。
-  /// 仅在已有分析结果时显示（默认不占位）。
+  /// 智能总结与私聊/群/机器人/审批助手同一排序：置顶优先，再按最近时间。
+  /// 仅在已有分析结果时显示智能总结（默认不占位）。
   List<Widget> _buildChatRowsMergedWithAiSummary(
     List<NativeConversation> chats,
   ) {

@@ -91,6 +91,14 @@ class _DunesMainTabBarState extends State<DunesMainTabBar> {
 
   bool get _isVertical => widget.axis == Axis.vertical;
 
+  Widget get _myTab => _tab(
+    icon: Icons.person_outline_rounded,
+    label: '我的',
+    screen: 'B2',
+    showRedDot: widget.chatOnlyMode ? false : _showMyDot,
+  );
+
+  /// 主区域 Tab。PC 竖栏把「我的」放到底部「设置」上方，不掺在中间。
   List<Widget> get _tabs => [
     _tab(
       icon: Icons.forum_outlined,
@@ -106,12 +114,7 @@ class _DunesMainTabBarState extends State<DunesMainTabBar> {
       ),
     if (!_hideWorkbenchTabs)
       _tab(icon: Icons.explore_outlined, label: '灯塔', screen: 'LH'),
-    _tab(
-      icon: Icons.person_outline_rounded,
-      label: '我的',
-      screen: 'B2',
-      showRedDot: widget.chatOnlyMode ? false : _showMyDot,
-    ),
+    if (!_isVertical) _myTab,
     if (_isVertical && !_hideWorkbenchTabs)
       _tab(
         icon: Icons.apps_rounded,
@@ -167,14 +170,15 @@ class _DunesMainTabBarState extends State<DunesMainTabBar> {
               const SizedBox(height: 12),
               ..._tabs,
               const Spacer(),
+              _myTab,
               if (settingsTap != null) ...[
                 _tab(
                   icon: Icons.settings_outlined,
                   label: '设置',
                   onTap: settingsTap,
                 ),
-                const SizedBox(height: 10),
               ],
+              const SizedBox(height: 10),
             ],
           ),
         ),

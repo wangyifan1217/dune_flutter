@@ -399,10 +399,41 @@ String? firstMissingRequiredSupplementalField(
 }
 
 /// 模板/业务线名称，如「销售提案」。
+///
+/// 同时兼容 `templateKey`（kebab）与 `businessType`（SCREAMING_SNAKE）。
 String proposalKindLabel({String? templateKey, String? businessType}) {
+  final keys = <String>[
+    (templateKey ?? '').trim(),
+    (businessType ?? '').trim().toLowerCase().replaceAll('_', '-'),
+  ];
+  for (final key in keys) {
+    if (key.isEmpty) continue;
+    final mapped = _proposalKindLabelByKey(key);
+    if (mapped != null) return mapped;
+  }
+
+  final bt = (businessType ?? '').trim().toUpperCase();
+  if (bt == 'CONTRACT_SEAL') return '合同用印';
+  if (bt == 'PROPOSAL') return '销售提案';
+
   final key = (templateKey ?? '').trim();
+  if (key.isNotEmpty) {
+    return key
+        .split('-')
+        .where((part) => part.isNotEmpty)
+        .map((part) => part[0].toUpperCase() + part.substring(1))
+        .join(' ')
+        .replaceAll(RegExp(r'Proposal', caseSensitive: false), '提案');
+  }
+  // 非销售业务线不要默认成「销售提案」，否则列表种类会误导。
+  if (bt.isNotEmpty) return '审批';
+  return '销售提案';
+}
+
+String? _proposalKindLabelByKey(String key) {
   switch (key) {
     case 'sales-proposal':
+    case 'proposal':
       return '销售提案';
     case 'purchase-proposal':
     case 'procurement-proposal':
@@ -411,24 +442,10 @@ String proposalKindLabel({String? templateKey, String? businessType}) {
       return '项目提案';
     case 'finance-business-procurement':
       return '业务采购申请单';
+    case 'contract-seal':
+      return '合同用印';
     default:
-      final bt = (businessType ?? '').toUpperCase();
-      if (bt == 'CONTRACT_SEAL') {
-        return '合同用印';
-      }
-      if (key.isNotEmpty) {
-        return key
-            .split('-')
-            .where((part) => part.isNotEmpty)
-            .map((part) => part[0].toUpperCase() + part.substring(1))
-            .join(' ')
-            .replaceAll(RegExp(r'Proposal', caseSensitive: false), '提案');
-      }
-      // 非销售业务线不要默认成「销售提案」，否则列表种类会误导。
-      if (bt.isNotEmpty && bt != 'PROPOSAL') {
-        return '审批';
-      }
-      return '销售提案';
+      return null;
   }
 }
 

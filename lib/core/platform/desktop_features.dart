@@ -30,6 +30,8 @@ bool isDesktopAllowedCommScreen(String screenId) {
     'AS1',
     'AS2',
     'AS3',
+    'AA1',
+    'AA2',
     // 我的及审批 / 知识库
     'B2',
     'B1',

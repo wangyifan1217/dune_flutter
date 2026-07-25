@@ -22,6 +22,8 @@ const Set<String> kNativePilotScreens = <String>{
   'AS1',
   'AS2',
   'AS3',
+  'AA1',
+  'AA2',
   'K1',
   'K2',
   'K3',

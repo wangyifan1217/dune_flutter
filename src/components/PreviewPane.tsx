@@ -118,6 +118,14 @@ export function PreviewPane({
           </button>
           <button
             type="button"
+            className="settings-ghost-btn"
+            onClick={onClear}
+            title="关闭预览 (Esc)"
+          >
+            关闭预览
+          </button>
+          <button
+            type="button"
             className="icon-x"
             aria-label="关闭预览"
             onClick={onClear}
@@ -175,6 +183,15 @@ function PreviewContent({
     return (
       <div className="md preview-md">
         <ReactMarkdown remarkPlugins={[remarkGfm]}>{payload.text}</ReactMarkdown>
+      </div>
+    );
+  }
+
+  if (payload.kind === "docx" && payload.text != null) {
+    return (
+      <div className="preview-docx">
+        <p className="preview-docx-note">正文预览（排版以 Word / WPS 打开为准）</p>
+        <div className="preview-docx-body">{payload.text}</div>
       </div>
     );
   }
@@ -251,7 +268,7 @@ function PreviewContent({
   return <div className="preview-status">{payload.message || "无可预览内容"}</div>;
 }
 
-/** 沙箱 iframe 渲染 HTML/Canvas；仅允许脚本，隔离源站。 */
+/** 沙箱 iframe 渲染 HTML/Canvas；仅允许脚本，隔离源站，禁止顶层导航。 */
 function HtmlPreviewFrame({ html, title }: { html: string; title: string }) {
   const srcDoc = useMemo(() => ensureHtmlDocument(html), [html]);
 
@@ -266,10 +283,18 @@ function HtmlPreviewFrame({ html, title }: { html: string; title: string }) {
   );
 }
 
+const PREVIEW_GUARD_HEAD = `<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data: blob: https: http:; style-src 'unsafe-inline'; script-src 'unsafe-inline' 'unsafe-eval'; font-src data: https: http:; connect-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none';"><base href="about:blank"><style>html,body{margin:0;width:100%;height:100%;}</style><script>(function(){try{document.addEventListener("click",function(e){var t=e.target;if(!t||!t.closest)return;var a=t.closest("a[href]");if(!a)return;var href=a.getAttribute("href")||"";if(/^https?:/i.test(href)||href.startsWith("//")){e.preventDefault();e.stopPropagation();}},true);}catch(_){}})();</script>`;
+
 function ensureHtmlDocument(raw: string): string {
   const trimmed = raw.trim();
   if (/<html[\s>]/i.test(trimmed) || /<!doctype/i.test(trimmed)) {
-    return trimmed;
+    if (/<head[\s>]/i.test(trimmed)) {
+      return trimmed.replace(/<head([^>]*)>/i, `<head$1>${PREVIEW_GUARD_HEAD}`);
+    }
+    return trimmed.replace(
+      /<html([^>]*)>/i,
+      `<html$1><head>${PREVIEW_GUARD_HEAD}</head>`,
+    );
   }
-  return `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>html,body{margin:0;width:100%;height:100%;background:#0b0d12;}</style></head><body>${trimmed}</body></html>`;
+  return `<!DOCTYPE html><html><head>${PREVIEW_GUARD_HEAD}<style>html,body{background:#0b0d12;}</style></head><body>${trimmed}</body></html>`;
 }

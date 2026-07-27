@@ -13,6 +13,8 @@ import type { SkillInfo } from "./SkillsModal";
 
 interface ComposerProps {
   busy: boolean;
+  /** 当前会话进度文案，运行中显示在输入框上方 */
+  progress?: string;
   modelId: string;
   models: ModelEntry[];
   askApproval: boolean;
@@ -66,6 +68,7 @@ const MODE_OPTIONS: Array<{ id: ChatMode; label: string; tip: string }> = [
 
 export function Composer({
   busy,
+  progress,
   modelId,
   models,
   askApproval,
@@ -168,11 +171,12 @@ export function Composer({
       setContextFiles([]);
       return;
     }
+    const pending = attachments;
     setValue("");
     setMention(null);
     setContextFiles([]);
     requestAnimationFrame(() => textareaRef.current?.focus());
-    await onSend(text, attachments);
+    await onSend(text, pending);
   }
 
   function addContextFile(path: string) {
@@ -316,8 +320,12 @@ export function Composer({
           <span>等待你的批准 — 请先处理上方的权限请求</span>
         </div>
       ) : busy ? (
-        <div className="composer-queue quiet" role="status">
-          <span>Agent 运行中 — 可继续输入，Enter 将排队发送</span>
+        <div className="composer-queue composer-busy" role="status">
+          <i className="live" />
+          <span>
+            <strong>{progress?.trim() || "Agent 运行中"}</strong>
+            <em>可继续输入，Enter 将排队发送</em>
+          </span>
         </div>
       ) : null}
       <div

@@ -16,7 +16,7 @@ use tokio::sync::{mpsc, oneshot, Mutex as AsyncMutex};
 use tracing::{debug, error, warn};
 
 use crate::models::{AppSettings, PromptAttachment, SessionUpdateEvent};
-use crate::workspace::{absolutize, read_text_file, write_text_file};
+use crate::workspace::{absolutize, read_text_file, write_text_file_with_diff};
 
 static REQUEST_ID: AtomicU64 = AtomicU64::new(1);
 
@@ -463,30 +463,55 @@ impl AgentHandle {
                             }
                         }
                         "fs/read_text_file" | "fs/write_text_file" => {
-                            if let (Some(id), Some(params)) =
-                                (value.get("id").and_then(Value::as_u64), value.get("params"))
-                            {
-                                let response = handle_fs_request(method, params, &app_reader);
-                                let payload = if response.error.is_some() {
-                                    json!({
-                                        "jsonrpc": "2.0",
-                                        "id": id,
-                                        "error": response.error
-                                    })
-                                } else {
-                                    json!({
-                                        "jsonrpc": "2.0",
-                                        "id": id,
-                                        "result": response.result
-                                    })
-                                };
-                                if let Err(err) = outbound_reader.send(payload) {
-                                    error!("Failed to respond to fs request: {err}");
+                            let rpc_id = value.get("id").cloned();
+                            let params = value.get("params");
+                            if let (Some(rpc_id), Some(params)) = (rpc_id, params) {
+                                // id 可能是 number 或 string；只认 u64 会导致不回包，Agent 整轮卡住
+                                if rpc_id_key(&rpc_id).is_some() {
+                                    let response = handle_fs_request(
+                                        method,
+                                        params,
+                                        &app_reader,
+                                        &thread_id,
+                                    );
+                                    let payload = if response.error.is_some() {
+                                        json!({
+                                            "jsonrpc": "2.0",
+                                            "id": rpc_id,
+                                            "error": response.error
+                                        })
+                                    } else {
+                                        json!({
+                                            "jsonrpc": "2.0",
+                                            "id": rpc_id,
+                                            "result": response.result
+                                        })
+                                    };
+                                    if let Err(err) = outbound_reader.send(payload) {
+                                        error!("Failed to respond to fs request: {err}");
+                                    }
                                 }
                             }
                         }
                         other => {
-                            debug!("Unhandled agent method: {other}");
+                            // 带 id 的未知请求必须回错误，否则 Agent 会一直等导致 UI 卡住
+                            if let Some(rpc_id) = value.get("id").cloned() {
+                                if rpc_id_key(&rpc_id).is_some() {
+                                    let payload = json!({
+                                        "jsonrpc": "2.0",
+                                        "id": rpc_id,
+                                        "error": {
+                                            "code": -32601,
+                                            "message": format!("Method not supported by Nova Desktop: {other}")
+                                        }
+                                    });
+                                    if let Err(err) = outbound_reader.send(payload) {
+                                        error!("Failed to respond to unsupported method: {err}");
+                                    }
+                                }
+                            } else {
+                                debug!("Unhandled agent notification: {other}");
+                            }
                         }
                     }
                 }
@@ -764,39 +789,64 @@ struct FsResponse {
     error: Option<Value>,
 }
 
-fn handle_fs_request(method: &str, params: &Value, app: &AppHandle) -> FsResponse {
+fn handle_fs_request(
+    method: &str,
+    params: &Value,
+    app: &AppHandle,
+    thread_id: &str,
+) -> FsResponse {
     let path = params
         .get("path")
         .and_then(Value::as_str)
         .unwrap_or_default();
 
     match method {
-        "fs/read_text_file" => match read_text_file(path) {
-            Ok(content) => FsResponse {
-                result: Some(json!({ "content": content })),
-                error: None,
-            },
-            Err(err) => FsResponse {
-                result: None,
-                error: Some(json!({
-                    "code": -32000,
-                    "message": err.to_string()
-                })),
-            },
-        },
+        "fs/read_text_file" => {
+            let line = params.get("line").and_then(Value::as_u64);
+            let limit = params.get("limit").and_then(Value::as_u64);
+            match read_text_file(path) {
+                Ok(content) => {
+                    let content = apply_line_limit(&content, line, limit);
+                    FsResponse {
+                        result: Some(json!({ "content": content })),
+                        error: None,
+                    }
+                }
+                Err(err) => FsResponse {
+                    result: None,
+                    error: Some(json!({
+                        "code": -32000,
+                        "message": err.to_string()
+                    })),
+                },
+            }
+        }
         "fs/write_text_file" => {
             let content = params
                 .get("content")
                 .and_then(Value::as_str)
                 .unwrap_or_default();
-            match write_text_file(path, content) {
-                Ok(()) => {
+            match write_text_file_with_diff(path, content) {
+                Ok(info) => {
                     let _ = app.emit(
                         "agent://workspace-changed",
                         json!({ "path": path }),
                     );
+                    let _ = app.emit(
+                        "agent://file-edited",
+                        json!({
+                            "threadId": thread_id,
+                            "path": path,
+                            "created": info.created,
+                            "diff": info.diff,
+                        }),
+                    );
                     FsResponse {
-                        result: Some(Value::Null),
+                        result: Some(json!({
+                            "path": path,
+                            "created": info.created,
+                            "diff": info.diff,
+                        })),
                         error: None,
                     }
                 }
@@ -816,5 +866,20 @@ fn handle_fs_request(method: &str, params: &Value, app: &AppHandle) -> FsRespons
                 "message": format!("Unsupported method: {method}")
             })),
         },
+    }
+}
+
+fn apply_line_limit(content: &str, line: Option<u64>, limit: Option<u64>) -> String {
+    let Some(start) = line.filter(|&n| n >= 1) else {
+        return match limit {
+            Some(n) if n > 0 => content.lines().take(n as usize).collect::<Vec<_>>().join("\n"),
+            _ => content.to_string(),
+        };
+    };
+    let skip = (start as usize).saturating_sub(1);
+    let lines = content.lines().skip(skip);
+    match limit {
+        Some(n) if n > 0 => lines.take(n as usize).collect::<Vec<_>>().join("\n"),
+        _ => lines.collect::<Vec<_>>().join("\n"),
     }
 }

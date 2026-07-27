@@ -4,7 +4,7 @@ import type { ChatMessage } from "../types/agent";
 import { CHAT_MODE_PREFIX } from "../types/agent";
 import { IconCopy, IconEdit, IconFile, IconRetry } from "./Icons";
 import { looksLikeOpenableFile, MarkdownBody } from "./MarkdownBody";
-import { ToolCallCard } from "./ToolCallCard";
+import { FileEditCard } from "./FileEditCard";
 
 export function displayUserContent(content: string): string {
   let text = content;
@@ -61,6 +61,13 @@ function extractOpenableUrls(content: string): string[] {
   ].slice(0, 6);
 }
 
+/** 流式输出时补全未闭合的代码围栏，便于边生成边显示代码块 */
+function finalizeStreamingMarkdown(content: string): string {
+  const ticks = content.match(/^```/gm)?.length ?? 0;
+  if (ticks % 2 === 1) return `${content}\n\`\`\``;
+  return content;
+}
+
 function isLikelyFilePath(path: string, urls: string[]): boolean {
   if (!looksLikeOpenableFile(path)) return false;
   if (urls.some((url) => url.includes(path))) return false;
@@ -79,9 +86,9 @@ function extractGeneratedPaths(content: string): string[] {
     ...(masked.match(
       /(?:\.{1,2}[\\/]|[\\/]|(?:[\w.-]+[\\/]))[^\s`*<>|?"']+?\.[A-Za-z0-9]{1,12}/g,
     ) ?? []),
-    // 裸文件名（含中文）：测试.docx、报告.xlsx
+    // 裸文件名（含中文）：测试.docx、报告.xlsx（扩展名须含字母，排除 V1.0）
     ...(masked.match(
-      /(?<![\w./\\-])(?:[`"'【「]?)([^\s`"'「」【】:\\/<>|*?]+\.[A-Za-z0-9]{1,12})(?:[`"'」】]?)/gu,
+      /(?<![\w./\\-])(?:[`"'【「]?)([^\s`"'「」【】:\\/<>|*?]+\.[A-Za-z][A-Za-z0-9]{0,11})(?:[`"'」】]?)/gu,
     ) ?? []),
   ];
   return [
@@ -93,7 +100,9 @@ function extractGeneratedPaths(content: string): string[] {
             .replace(/[，。；：）】]+$/u, "")
             .trim(),
         )
-        .filter((path) => isLikelyFilePath(path, urls)),
+        .filter((path) => isLikelyFilePath(path, urls))
+        // 再挡一层：括号版本号标题
+        .filter((path) => !/[（(]\s*[vV]?\d/.test(path)),
     ),
   ]
     .filter(
@@ -235,22 +244,114 @@ export function Thread({
   }
 
   const lastPlanId = [...messages].reverse().find((m) => m.kind === "plan")?.id;
-  // 已有流式正文时，用消息旁绿点表示生成中，不再在文字下方重复挂「正在生成」条
+  // 同一轮里若已叠了多张规划卡（历史 bug），只显示最后一张
+  const supersededPlanIds = (() => {
+    const hide = new Set<string>();
+    const turnPlans: string[] = [];
+    const flush = () => {
+      if (turnPlans.length > 1) {
+        turnPlans.slice(0, -1).forEach((id) => hide.add(id));
+      }
+      turnPlans.length = 0;
+    };
+    for (const m of messages) {
+      if (m.role === "user") flush();
+      else if (m.kind === "plan") turnPlans.push(m.id);
+    }
+    flush();
+    return hide;
+  })();
+  // 同一轮连续且全文相同的助手正文只留一条（历史流式拆泡残留）
+  const duplicateTextIds = (() => {
+    const hide = new Set<string>();
+    let lastUser = -1;
+    let prevText: { id: string; content: string } | null = null;
+    messages.forEach((m, i) => {
+      if (m.role === "user") {
+        lastUser = i;
+        prevText = null;
+        return;
+      }
+      if (i <= lastUser) return;
+      if (
+        m.role === "assistant" &&
+        m.kind !== "tool" &&
+        m.kind !== "plan" &&
+        m.kind !== "error" &&
+        m.content.trim()
+      ) {
+        const text = m.content.trim();
+        if (prevText && prevText.content === text) {
+          hide.add(m.id);
+        } else {
+          prevText = { id: m.id, content: text };
+        }
+      } else if (m.kind === "tool" || m.kind === "plan") {
+        // 中间插入工具/规划不打断「相同正文」判定：仍与上一段正文比
+      } else {
+        prevText = null;
+      }
+    });
+    return hide;
+  })();
+  // 有实质流式正文时，靠消息气泡反馈；尚无正文时仍显示进度条
   const hasStreamingReply = messages.some(
     (m) =>
       m.role === "assistant" &&
       m.status === "streaming" &&
       m.kind !== "tool" &&
       m.kind !== "plan" &&
-      m.kind !== "error",
+      m.kind !== "error" &&
+      m.content.trim().length > 0,
   );
   const showProgress = busy && !hasStreamingReply;
 
   return (
     <div className="thread">
-      {messages.map((message) => {
+      {messages.map((message, index) => {
+        if (message.kind === "plan-confirm") {
+          const actionable = !messages
+            .slice(index + 1)
+            .some((m) => m.role === "user");
+          return (
+            <div key={message.id} className="msg plan-confirm-card" role="group">
+              <div className="plan-confirm-copy">
+                <strong>规划已完成</strong>
+                <span>是否按此计划开始执行？选择后将切换到执行模式并开始改代码。</span>
+              </div>
+              {actionable && !busy ? (
+                <div className="plan-confirm-actions">
+                  <button
+                    type="button"
+                    className="primary-btn"
+                    onClick={onApprovePlan}
+                  >
+                    按此执行
+                  </button>
+                  <button type="button" className="text-btn" onClick={onRevisePlan}>
+                    修订计划
+                  </button>
+                </div>
+              ) : null}
+            </div>
+          );
+        }
+
+        // 仅展示写文件改码卡；读目录/搜索等工具仍隐藏
         if (message.kind === "tool") {
-          return <ToolCallCard key={message.id} message={message} />;
+          if (message.toolKind === "edit") {
+            return (
+              <FileEditCard
+                key={message.id}
+                message={message}
+                onOpenFile={(path) => void openPath(path, onOpenFile, onOpenError)}
+              />
+            );
+          }
+          return null;
+        }
+        if (duplicateTextIds.has(message.id)) {
+          return null;
         }
 
         if (message.role === "user") {
@@ -330,6 +431,7 @@ export function Thread({
         }
 
         if (message.kind === "plan") {
+          if (supersededPlanIds.has(message.id)) return null;
           const entries =
             message.planEntries?.length
               ? message.planEntries
@@ -369,20 +471,45 @@ export function Thread({
           );
         }
 
+        // 仅当本条仍是会话末尾且正在输出时显示光标；后面若跟了工具调用则不再闪竖线
+        const isLiveStream =
+          busy &&
+          message.status === "streaming" &&
+          index === messages.length - 1;
         return (
           <div key={message.id} className="msg msg-assistant has-actions">
             <div className="msg-label">
               Nova Build
-              {message.status === "streaming" ? <i className="live" /> : null}
+              {isLiveStream ? <i className="live" /> : null}
             </div>
-            <MarkdownBody
-              content={message.content}
-              onOpenFile={(path) => void openPath(path, onOpenFile, onOpenError)}
-            />
+            {isLiveStream ? (
+              message.content.trim() ? (
+                <div className="md md-streaming">
+                  <MarkdownBody
+                    content={finalizeStreamingMarkdown(message.content)}
+                    onOpenFile={(path) => void openPath(path, onOpenFile, onOpenError)}
+                  />
+                  <span className="stream-caret" aria-hidden />
+                </div>
+              ) : (
+                <div className="msg-thinking" role="status">
+                  <span className="msg-thinking-dots" aria-hidden>
+                    <i />
+                    <i />
+                    <i />
+                  </span>
+                  正在思考与执行…
+                </div>
+              )
+            ) : (
+              <MarkdownBody
+                content={message.content}
+                onOpenFile={(path) => void openPath(path, onOpenFile, onOpenError)}
+              />
+            )}
             {(() => {
               const paths = extractGeneratedPaths(message.content);
-              const urls = extractOpenableUrls(message.content);
-              if (paths.length === 0 && urls.length === 0) return null;
+              if (paths.length === 0) return null;
               return (
                 <div className="generated-files">
                   {paths.map((path) => (
@@ -397,25 +524,10 @@ export function Thread({
                       <span>{path.split(/[/\\]/).pop() ?? path}</span>
                     </button>
                   ))}
-                  {urls.map((url) => (
-                    <button
-                      key={url}
-                      type="button"
-                      className="generated-file-chip"
-                      title={`在浏览器打开 ${url}`}
-                      onClick={() => {
-                        void invoke("open_url", { url }).catch((error) => {
-                          onOpenError?.(`无法打开链接：${String(error)}`);
-                        });
-                      }}
-                    >
-                      打开链接
-                    </button>
-                  ))}
                 </div>
               );
             })()}
-            {message.status !== "streaming" ? (
+            {!isLiveStream ? (
               <MessageActions alwaysVisible={message.status === "error"}>
                 <button
                   type="button"

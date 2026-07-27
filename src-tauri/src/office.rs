@@ -476,6 +476,26 @@ pub fn create_blank_pptx(path: &str) -> Result<()> {
     create_pptx(path, &[])
 }
 
+/// 从 docx 抽取正文文本（简易：读 word/document.xml）。
+pub fn extract_docx_text(path: &str) -> Result<String> {
+    let bytes = std::fs::read(path).with_context(|| format!("无法读取：{path}"))?;
+    let mut archive = ZipArchive::new(Cursor::new(bytes)).context("invalid docx")?;
+    let mut file = archive
+        .by_name("word/document.xml")
+        .context("docx 缺少 word/document.xml")?;
+    let mut xml = String::new();
+    file.read_to_string(&mut xml)?;
+    // 段落边界：</w:p> → 换行
+    let with_breaks = xml.replace("</w:p>", "</w:p>\n");
+    let text = strip_xml_to_text(&with_breaks);
+    let lines: Vec<&str> = text
+        .lines()
+        .map(str::trim)
+        .filter(|l| !l.is_empty())
+        .collect();
+    Ok(lines.join("\n\n"))
+}
+
 /// 从 pptx 抽取幻灯片文本（简易）。
 pub fn extract_pptx_text(path: &str) -> Result<String> {
     let bytes = std::fs::read(path).with_context(|| format!("无法读取：{path}"))?;

@@ -5,6 +5,8 @@ use anyhow::{bail, Context, Result};
 use serde_json::{json, Value};
 
 use super::protocol::{require_str, text_result, McpServer};
+use crate::diff_text::unified_line_diff;
+use crate::workspace::strip_verbatim_prefix;
 
 pub struct FilesystemServer {
     root: PathBuf,
@@ -13,15 +15,20 @@ pub struct FilesystemServer {
 impl FilesystemServer {
     pub fn new(root: impl Into<String>) -> Self {
         let root = PathBuf::from(root.into());
-        Self {
-            root: root.canonicalize().unwrap_or(root),
-        }
+        let root = root
+            .canonicalize()
+            .map(strip_verbatim_prefix)
+            .unwrap_or(root);
+        Self { root }
     }
 
     fn join_under_root(&self, rel: &str) -> Result<PathBuf> {
         let raw = Path::new(rel);
         if raw.is_absolute() {
-            let canon = raw.canonicalize().unwrap_or_else(|_| raw.to_path_buf());
+            let canon = raw
+                .canonicalize()
+                .map(strip_verbatim_prefix)
+                .unwrap_or_else(|_| raw.to_path_buf());
             if !canon.starts_with(&self.root) {
                 bail!("path escapes allowed directory: {rel}");
             }
@@ -48,9 +55,10 @@ impl FilesystemServer {
 
     fn resolve_existing(&self, rel: &str) -> Result<PathBuf> {
         let full = self.join_under_root(rel)?;
-        let canon = full
-            .canonicalize()
-            .with_context(|| format!("path not found: {rel}"))?;
+        let canon = strip_verbatim_prefix(
+            full.canonicalize()
+                .with_context(|| format!("path not found: {rel}"))?,
+        );
         if !canon.starts_with(&self.root) {
             bail!("path escapes allowed directory: {rel}");
         }
@@ -115,8 +123,26 @@ impl McpServer for FilesystemServer {
             "read_file" => {
                 let path = require_str(arguments, "path")?;
                 let full = self.resolve_existing(path)?;
-                let content = fs::read_to_string(&full)
+                let bytes = fs::read(&full)
                     .with_context(|| format!("read failed: {}", full.display()))?;
+                if bytes.iter().take(8192).any(|&b| b == 0)
+                    || full
+                        .extension()
+                        .and_then(|e| e.to_str())
+                        .is_some_and(|e| {
+                            matches!(
+                                e.to_ascii_lowercase().as_str(),
+                                "png" | "jpg" | "jpeg" | "gif" | "webp" | "pdf" | "pptx" | "xlsx"
+                                    | "docx" | "zip" | "exe"
+                            )
+                        })
+                {
+                    bail!(
+                        "binary/image file cannot be read as text: {}. Use chat image attachments instead.",
+                        full.display()
+                    );
+                }
+                let content = String::from_utf8_lossy(&bytes).into_owned();
                 Ok(text_result(content))
             }
             "write_file" => {
@@ -126,8 +152,32 @@ impl McpServer for FilesystemServer {
                 if let Some(parent) = full.parent() {
                     fs::create_dir_all(parent)?;
                 }
-                fs::write(&full, content)?;
-                Ok(text_result(format!("wrote {}", full.display())))
+                let created = !full.exists();
+                let old = if created {
+                    String::new()
+                } else {
+                    let raw = fs::read(&full).unwrap_or_default();
+                    let slice = if raw.starts_with(&[0xEF, 0xBB, 0xBF]) {
+                        &raw[3..]
+                    } else {
+                        raw.as_slice()
+                    };
+                    String::from_utf8_lossy(slice).into_owned()
+                };
+                // 与 workspace::write_text_file 一致：UTF-8 BOM
+                let mut bytes = vec![0xEF, 0xBB, 0xBF];
+                bytes.extend_from_slice(content.as_bytes());
+                fs::write(&full, bytes)?;
+                let display = full
+                    .file_name()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or(path);
+                let diff = unified_line_diff(&old, content, display);
+                let kind = if created { "created" } else { "updated" };
+                Ok(text_result(format!(
+                    "wrote {} ({kind})\n\n```diff\n{diff}\n```",
+                    full.display()
+                )))
             }
             "list_directory" => {
                 let path = arguments

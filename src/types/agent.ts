@@ -49,7 +49,7 @@ export interface ChatMessage {
   status: "pending" | "streaming" | "completed" | "error";
   attachments?: ChatAttachment[];
   /** 结构化消息类型；缺省按普通文本 */
-  kind?: "text" | "plan" | "tool" | "error";
+  kind?: "text" | "plan" | "tool" | "error" | "plan-confirm";
   /** plan 类型时的条目列表 */
   planEntries?: string[];
   /** tool 类型：ACP toolCallId，用于 upsert 更新 */
@@ -57,6 +57,11 @@ export interface ChatMessage {
   toolTitle?: string;
   toolStatus?: ToolCallStatus;
   toolOutput?: string;
+  /** 写文件类工具：edit 会在会话内展示改码卡 */
+  toolKind?: "edit" | "other";
+  toolPath?: string;
+  toolDiff?: string;
+  toolCreated?: boolean;
 }
 
 /** 对话交互模式（通过提示词前缀约束 Agent 行为） */
@@ -65,10 +70,106 @@ export type ChatMode = "agent" | "plan" | "ask";
 export const CHAT_MODE_PREFIX: Record<ChatMode, string> = {
   agent: "",
   plan:
-    "【规划模式·只读】你现在只能输出实现计划（步骤、风险、验收标准）。严禁：创建/修改/删除文件、执行 shell 命令、调用会改写磁盘的 MCP（如 excel/word/powerpoint 写入）。等我明确说「按此执行」后再动手。\n\n",
+    "【规划模式·只读】你现在只能输出实现计划（步骤、风险、验收标准）。严禁：创建/修改/删除文件（包括 plan.md）、执行 shell 命令、调用会改写磁盘的 MCP。计划用对话正文清晰列出即可，不要落盘。规划完成后明确询问用户是否执行，并等待用户确认「按此执行」后再动手。\n\n",
   ask:
     "【问答模式·只读】你只能回答问题与做分析。严禁：创建/修改/删除文件、执行 shell 命令、调用会改写磁盘的工具。可用只读检索与说明。\n\n",
 };
+
+/** 去掉模式提示词前缀，得到用户可见正文 */
+export function stripChatModePrefix(content: string): string {
+  let text = content;
+  for (const prefix of Object.values(CHAT_MODE_PREFIX)) {
+    if (prefix && text.startsWith(prefix)) {
+      text = text.slice(prefix.length);
+      break;
+    }
+  }
+  return text;
+}
+
+/** 用户 confirm 开始动手时，应从规划切到执行 */
+export function textRequestsExecute(text: string): boolean {
+  const t = text.trim();
+  if (!t) return false;
+  if (
+    /^(?:按此执行|开始执行|执行吧|可以执行|确认执行|动手(?:吧|做)|开始编码|按计划执行|开干)[.!！。…]*$/u.test(
+      t,
+    )
+  ) {
+    return true;
+  }
+  return /开始执行|按此执行|可以动手|开始改代码|开始编码|退出规划|不要再规划|直接改代码|只改代码/.test(
+    t,
+  );
+}
+
+/** 点「按此执行」或用户确认执行时发给模型的指令（避免空谈退出规划） */
+export const EXECUTE_CONFIRMED_PROMPT =
+  "【已确认执行】请立即按上文规划开始改代码。禁止再讨论如何退出规划模式或只做计划；可以直接创建与修改文件，按步骤推进。";
+
+/** 助手表示已确认、开始编码时，UI 也应切到执行 */
+export function textSuggestsExecuteMode(text: string): boolean {
+  return /退出规划模式|开始编码|开始执行|按此(?:计划)?执行|方案已确认.*(?:编码|执行)|动手改代码/.test(
+    text,
+  );
+}
+
+export function isPlanFilePath(path: string): boolean {
+  const base = path.split(/[/\\]/).pop()?.toLowerCase() ?? "";
+  return (
+    base === "plan.md" ||
+    base === "plan.markdown" ||
+    /^plan[-_.]/i.test(base) ||
+    base.endsWith(".plan.md")
+  );
+}
+
+/** 本轮结束后是否应在会话里插入「是否执行」选择卡 */
+export function shouldOfferPlanConfirm(
+  messages: ChatMessage[],
+  chatMode: ChatMode,
+): boolean {
+  let lastUser = -1;
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    if (messages[i].role === "user") {
+      lastUser = i;
+      break;
+    }
+  }
+  if (lastUser < 0) return false;
+  const turn = messages.slice(lastUser + 1);
+  if (turn.some((m) => m.kind === "plan-confirm")) return false;
+  const hasReply = turn.some(
+    (m) =>
+      m.role === "assistant" &&
+      m.kind !== "error" &&
+      (m.content.trim().length > 0 ||
+        m.kind === "tool" ||
+        m.kind === "plan" ||
+        Boolean(m.planEntries?.length)),
+  );
+  if (!hasReply) return false;
+  if (chatMode === "plan") return true;
+  if (turn.some((m) => m.kind === "plan")) return true;
+  if (
+    turn.some(
+      (m) => m.kind === "tool" && m.toolPath && isPlanFilePath(m.toolPath),
+    )
+  ) {
+    return true;
+  }
+  const lastText = [...turn]
+    .reverse()
+    .find((m) => m.role === "assistant" && m.content.trim());
+  if (
+    lastText &&
+    /规划|实现计划|分步|架构|步骤|验收/.test(lastText.content) &&
+    /先|建议|方案|计划/.test(lastText.content)
+  ) {
+    return true;
+  }
+  return false;
+}
 
 export interface ChatAttachment {
   id: string;

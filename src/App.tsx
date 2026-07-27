@@ -21,6 +21,12 @@ import { useAuth } from "./hooks/useAuth";
 import { useSessions } from "./hooks/useSessions";
 import type { ChatAttachment, ChatMode } from "./types/agent";
 import type { AppSettings } from "./types/agent";
+import {
+  stripChatModePrefix,
+  textRequestsExecute,
+  EXECUTE_CONFIRMED_PROMPT,
+  shouldOfferPlanConfirm,
+} from "./types/agent";
 import type { RightTab } from "./types/codex";
 import { LoginPage } from "./components/LoginPage";
 import "./App.css";
@@ -116,6 +122,7 @@ function App() {
     busyBySession,
     progressBySession,
     lastError,
+    clearError,
     diffs,
     activity,
     openWorkspace,
@@ -130,9 +137,15 @@ function App() {
   } = useAgent({
     activeSessionId: activeId,
     setMessages,
+    onEnterPlanMode: (threadId) => {
+      setChatMode(threadId, "plan");
+    },
+    onEnterAgentMode: (threadId) => {
+      setChatMode(threadId, "agent");
+    },
   });
 
-  const [rightOpen, setRightOpen] = useState(true);
+  const [rightOpen, setRightOpen] = useState(false);
   const [rightTab, setRightTab] = useState<RightTab>("diff");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsTab, setSettingsTab] = useState<SettingsTab>("general");
@@ -180,16 +193,17 @@ function App() {
   const handleSaveSettings = useCallback(
     async (next: AppSettings) => {
       const prev = settings;
+      // 先落盘并刷新 UI（会话框模型选择器立刻变），重连放到后台，避免卡住观感
       await saveSettings(next);
       const mcpChanged =
         JSON.stringify(prev?.mcpServers ?? []) !== JSON.stringify(next.mcpServers ?? []);
       const modelChanged = (prev?.modelId ?? "") !== (next.modelId ?? "");
-      if (mcpChanged || modelChanged) {
-        try {
-          await reconnect();
-        } catch {
+      const modelsListChanged =
+        JSON.stringify(prev?.models ?? []) !== JSON.stringify(next.models ?? []);
+      if (mcpChanged || modelChanged || modelsListChanged) {
+        void reconnect().catch(() => {
           /* 下次发送仍会按 fingerprint 重建 */
-        }
+        });
       }
     },
     [settings, saveSettings, reconnect],
@@ -236,16 +250,9 @@ function App() {
 
   useEffect(() => {
     if (!sessionsReady) return;
-    if (!activeId) createSession(status.workspace);
-  }, [activeId, createSession, sessionsReady, status.workspace]);
-
-  useEffect(() => {
-    if (!activeId || !status.workspace) return;
-    const session = sessions.find((s) => s.id === activeId);
-    if (session && !session.workspace) {
-      bindSessionWorkspace(activeId, status.workspace);
-    }
-  }, [activeId, status.workspace, sessions, bindSessionWorkspace]);
+    // 未主动选项目时，新对话归「本地」，不要挂到工作区文件夹名下
+    if (!activeId) createSession(null);
+  }, [activeId, createSession, sessionsReady]);
 
   const addDroppedPaths = useCallback(async (paths: string[]) => {
     try {
@@ -275,14 +282,9 @@ function App() {
   }, [addDroppedPaths]);
 
   useEffect(() => {
-    if (restoredWorkspace.current) return;
+    // 启动时不自动打开上次项目，避免未选项目时对话被归到项目分组
     restoredWorkspace.current = true;
-    const path = localStorage.getItem("nova-desktop.last-workspace");
-    if (!path) return;
-    void openWorkspace(path).catch(() => {
-      localStorage.removeItem("nova-desktop.last-workspace");
-    });
-  }, [openWorkspace]);
+  }, []);
 
   const scrollToBottom = useCallback((opts?: { smooth?: boolean }) => {
     const el = scrollRef.current;
@@ -363,7 +365,11 @@ function App() {
     setStickToBottom(true);
     setShowJumpBottom(false);
     setEditingMessageId(null);
-    requestAnimationFrame(() => scrollToBottom());
+    // 切换会话后内容可能晚一帧才撑开高度，多滚几次确保停在最新消息
+    const timers = [0, 40, 120].map((ms) =>
+      window.setTimeout(() => scrollToBottom(), ms),
+    );
+    return () => timers.forEach((t) => window.clearTimeout(t));
   }, [activeId, scrollToBottom]);
 
   useEffect(() => {
@@ -415,9 +421,15 @@ function App() {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && previewPath) {
+        e.preventDefault();
+        setPreviewPath(null);
+        setRightTab("files");
+        return;
+      }
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "n") {
         e.preventDefault();
-        createSession(status.workspace);
+        createSession(null);
       }
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "o") {
         e.preventDefault();
@@ -471,7 +483,20 @@ function App() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [createSession, status.workspace]);
+  }, [createSession, status.workspace, previewPath]);
+
+  // 阻止把本地 HTML 拖到窗口时被浏览器整页打开
+  useEffect(() => {
+    const preventBrowserNavigation = (event: DragEvent) => {
+      if (event.dataTransfer?.types.includes("Files")) event.preventDefault();
+    };
+    window.addEventListener("dragover", preventBrowserNavigation);
+    window.addEventListener("drop", preventBrowserNavigation);
+    return () => {
+      window.removeEventListener("dragover", preventBrowserNavigation);
+      window.removeEventListener("drop", preventBrowserNavigation);
+    };
+  }, []);
 
   function openPreview(path: string) {
     setLocalError(null);
@@ -512,10 +537,22 @@ function App() {
 
   async function handleSend(text: string, pendingAttachments: ChatAttachment[]) {
     if (!activeId) return;
+    // 一点发送就清掉输入框附件（图片等），不跟发送结果挂钩
+    setAttachments([]);
     scrollToBottom({ smooth: true });
     setLocalError(null);
     if (!status.connected && !(await connectDefaultAgent(activeId))) return;
-    if (status.workspace) bindSessionWorkspace(activeId, status.workspace);
+
+    // 用户确认执行 → 气泡显示短句，发给模型的是明确开工指令
+    let displayText = text;
+    let agentText: string | undefined;
+    const plain = stripChatModePrefix(text);
+    if (textRequestsExecute(plain)) {
+      setChatMode(activeId, "agent");
+      chatModeRef.current = "agent";
+      displayText = plain.trim() || "按此执行";
+      agentText = EXECUTE_CONFIRMED_PROMPT;
+    }
 
     let history = active?.messages ?? [];
     if (editingMessageId) {
@@ -527,26 +564,45 @@ function App() {
       setEditingMessageId(null);
     }
 
-    const sent = await sendMessage(
+    await sendMessage(
       activeId,
-      text,
+      displayText,
       pendingAttachments,
       history,
+      agentText,
     );
-    if (sent) {
-      setAttachments([]);
-      scrollToBottom();
-    }
+    scrollToBottom();
     await refreshGit();
   }
 
   useEffect(() => {
-    if (prevBusyRef.current && !busy && queuedSend && activeId) {
+    const wasBusy = prevBusyRef.current;
+    prevBusyRef.current = busy;
+
+    if (!wasBusy || busy || !activeId) return;
+
+    if (queuedSend) {
       const next = queuedSend;
       setQueuedSend(null);
       void handleSend(next.text, next.attachments);
+      return;
     }
-    prevBusyRef.current = busy;
+
+    // 规划回合结束后，在会话里插入「是否执行」选择卡
+    const mode = active?.chatMode ?? "agent";
+    setMessages(activeId, (prev) => {
+      if (!shouldOfferPlanConfirm(prev, mode)) return prev;
+      return [
+        ...prev,
+        {
+          id: crypto.randomUUID(),
+          role: "assistant",
+          content: "规划已完成，请选择下一步",
+          status: "completed",
+          kind: "plan-confirm",
+        },
+      ];
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [busy]);
 
@@ -575,7 +631,6 @@ function App() {
     scrollToBottom({ smooth: true });
     void (async () => {
       if (!status.connected && !(await connectDefaultAgent(activeId))) return;
-      if (status.workspace) bindSessionWorkspace(activeId, status.workspace);
       const sent = await sendMessage(
         activeId,
         user.content,
@@ -640,11 +695,15 @@ function App() {
         activeId={activeId}
         busyBySession={busyBySession}
         error={displayError}
+        onDismissError={() => {
+          setLocalError(null);
+          clearError();
+        }}
         authUser={authSession.displayName || authSession.phone || `用户 ${authSession.userId}`}
         settingsOpen={settingsOpen}
         onLogout={() => setLogoutConfirmOpen(true)}
         onNew={() => {
-          createSession(status.workspace);
+          createSession(null);
         }}
         onOpenSettings={() => openSettings("general")}
         onSelectSession={setActiveId}
@@ -670,6 +729,7 @@ function App() {
                     void clearWorkspace()
                       .then(() => {
                         localStorage.removeItem("nova-desktop.last-workspace");
+                        if (activeId) bindSessionWorkspace(activeId, null);
                       })
                       .catch(() => undefined);
                   }}
@@ -697,10 +757,8 @@ function App() {
                   progress={activeId ? progressBySession[activeId] : undefined}
                   onApprovePlan={() => {
                     if (activeId) setChatMode(activeId, "agent");
-                    void handleSend(
-                      "计划已确认，请按上述步骤开始执行，可以修改文件并运行必要命令。",
-                      [],
-                    );
+                    chatModeRef.current = "agent";
+                    void handleSend("按此执行", []);
                   }}
                   onRevisePlan={() => {
                     if (activeId) setChatMode(activeId, "plan");
@@ -738,6 +796,7 @@ function App() {
 
             <Composer
               busy={busy}
+              progress={activeId ? progressBySession[activeId] : undefined}
               modelId={settings?.modelId ?? ""}
               models={settings?.models ?? []}
               askApproval={askApproval}
@@ -813,7 +872,11 @@ function App() {
         onClose={() => setRightOpen(false)}
         onRefreshGit={() => void refreshGit()}
         onOpenFile={openPreview}
-        onClearPreview={() => setPreviewPath(null)}
+        onClearPreview={() => {
+          setPreviewPath(null);
+          setRightTab("files");
+          setRightOpen(true);
+        }}
         onOpenExternal={(path) => void openExternal(path)}
         onPreviewError={(msg) => setLocalError(msg)}
       />

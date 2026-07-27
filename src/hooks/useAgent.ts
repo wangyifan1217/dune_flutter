@@ -10,7 +10,7 @@ import type {
   SessionUpdateEvent,
   ToolCallStatus,
 } from "../types/agent";
-import { normalizeSettings } from "../types/agent";
+import { normalizeSettings, textSuggestsExecuteMode, isPlanFilePath } from "../types/agent";
 import type { ActivityItem, DiffHunk } from "../types/codex";
 import { extractDiffsFromText } from "../lib/diffs";
 
@@ -22,6 +22,10 @@ type StreamPart =
       title: string;
       status: ToolCallStatus;
       output?: string;
+      toolKind?: "edit" | "other";
+      toolPath?: string;
+      toolDiff?: string;
+      toolCreated?: boolean;
     }
   | { kind: "plan"; text: string };
 
@@ -39,6 +43,66 @@ function localizeToolText(input: string): string {
     .replace(/\bgrep\b/gi, "搜索");
 }
 
+function looksLikeEditTool(title: string, kind?: string, path?: string, hasContent?: boolean): boolean {
+  const blob = `${kind ?? ""} ${title}`.toLowerCase();
+  // 明确排除读/列目录类
+  if (
+    /\b(read|list|ls|glob|grep|search|find|stat|dir)\b/.test(blob) ||
+    /读取|列出|浏览|搜索|查看目录|读文件|list_dir|list_directory|read_file|read_text/.test(
+      blob,
+    )
+  ) {
+    return false;
+  }
+  if (
+    /\b(write|edit|create|overwrite|save)\b/.test(blob) ||
+    /写入|编辑|创建|保存|修改文件|写文件/.test(title) ||
+    /write_text_file|write_file|fs\/write/.test(blob)
+  ) {
+    return true;
+  }
+  // 带路径且带写入内容的常见写文件形态（不能仅凭 path，读目录也有 path）
+  if (path && hasContent) return true;
+  return false;
+}
+
+function extractPathFromToolUpdate(update: Record<string, unknown>): string | undefined {
+  const locations = update.locations as Array<{ path?: string }> | undefined;
+  if (locations?.[0]?.path) return locations[0].path;
+  const rawInput = update.rawInput as Record<string, unknown> | undefined;
+  if (typeof rawInput?.path === "string") return rawInput.path;
+  if (typeof update.path === "string") return update.path;
+  return undefined;
+}
+
+function extractDiffFromText(text: string): string | undefined {
+  if (!text.trim()) return undefined;
+  // JSON result from fs/write_text_file
+  try {
+    const parsed = JSON.parse(text) as { diff?: string; path?: string };
+    if (typeof parsed?.diff === "string" && parsed.diff.trim()) return parsed.diff;
+  } catch {
+    /* not json */
+  }
+  const fence = text.match(/```diff\s*([\s\S]*?)```/i);
+  if (fence?.[1]?.trim()) return fence[1].trim();
+  if (/^---\s/m.test(text) && /^\+\+\+\s/m.test(text)) return text.trim();
+  return undefined;
+}
+
+function extractCreatedFlag(text: string | undefined): boolean | undefined {
+  if (!text) return undefined;
+  try {
+    const parsed = JSON.parse(text) as { created?: boolean };
+    if (typeof parsed?.created === "boolean") return parsed.created;
+  } catch {
+    /* ignore */
+  }
+  if (/\(created\)/i.test(text) || /已创建/.test(text)) return true;
+  if (/\(updated\)/i.test(text) || /已更新|已编辑/.test(text)) return false;
+  return undefined;
+}
+
 function mapToolStatus(raw?: string): ToolCallStatus {
   const s = (raw ?? "pending").toLowerCase();
   if (s.includes("fail") || s.includes("error") || s.includes("cancel")) return "failed";
@@ -52,6 +116,12 @@ function extractToolOutput(content: unknown): string {
   if (!content) return "";
   if (typeof content === "string") return content;
   if (!Array.isArray(content)) {
+    // 单对象：优先抽出 diff / text
+    if (typeof content === "object" && content) {
+      const row = content as Record<string, unknown>;
+      if (typeof row.diff === "string") return JSON.stringify(row);
+      if (typeof row.text === "string") return row.text;
+    }
     try {
       return JSON.stringify(content, null, 2);
     } catch {
@@ -64,16 +134,22 @@ function extractToolOutput(content: unknown): string {
       const row = c as Record<string, unknown>;
       if (typeof row.text === "string") return row.text;
       if (row.content && typeof row.content === "object") {
-        const inner = row.content as { text?: string };
+        const inner = row.content as { text?: string; diff?: string };
+        if (typeof inner.diff === "string") {
+          return JSON.stringify({ diff: inner.diff, path: row.path });
+        }
         return inner.text ?? "";
       }
       if (typeof row.type === "string" && row.type === "diff") {
+        if (typeof row.diff === "string") return row.diff as string;
+        // ACP diff content：用 oldText/newText 拼不出完整 unified 时，至少保留 JSON
         try {
           return JSON.stringify(row, null, 2);
         } catch {
           return "";
         }
       }
+      if (typeof row.diff === "string") return row.diff;
       return "";
     })
     .filter(Boolean)
@@ -93,9 +169,10 @@ function parseUpdate(update: Record<string, unknown>): StreamPart | null {
     };
   }
   if (sessionUpdate === "tool_call" || sessionUpdate === "tool_call_update") {
+    const kindStr = typeof update.kind === "string" ? update.kind : undefined;
     const title =
       (typeof update.title === "string" && update.title) ||
-      (typeof update.kind === "string" && update.kind) ||
+      kindStr ||
       "工具调用";
     const toolCallId =
       (typeof update.toolCallId === "string" && update.toolCallId) ||
@@ -106,7 +183,32 @@ function parseUpdate(update: Record<string, unknown>): StreamPart | null {
       sessionUpdate === "tool_call"
         ? mapToolStatus((update.status as string | undefined) ?? "pending")
         : mapToolStatus(update.status as string | undefined);
-    return { kind: "tool", toolCallId, title, status, output: output || undefined };
+    const rawInput = update.rawInput as Record<string, unknown> | undefined;
+    const toolPath = extractPathFromToolUpdate(update);
+    const hasContent =
+      typeof rawInput?.content === "string" ||
+      Boolean(output && extractDiffFromText(output));
+    const toolDiff = output ? extractDiffFromText(output) : undefined;
+    const toolCreated = extractCreatedFlag(output);
+    const toolKind: "edit" | "other" = looksLikeEditTool(
+      title,
+      kindStr,
+      toolPath,
+      hasContent,
+    )
+      ? "edit"
+      : "other";
+    return {
+      kind: "tool",
+      toolCallId,
+      title,
+      status,
+      output: output || undefined,
+      toolKind,
+      toolPath,
+      toolDiff,
+      toolCreated,
+    };
   }
   if (sessionUpdate === "plan") {
     const entries = update.entries as
@@ -126,6 +228,15 @@ function parseUpdate(update: Record<string, unknown>): StreamPart | null {
   return null;
 }
 
+function pathsLikelySame(a?: string, b?: string): boolean {
+  if (!a || !b) return false;
+  if (a === b) return true;
+  const na = a.replace(/\\/g, "/").toLowerCase();
+  const nb = b.replace(/\\/g, "/").toLowerCase();
+  if (na === nb) return true;
+  return na.endsWith("/" + nb) || nb.endsWith("/" + na) || na.endsWith(nb) || nb.endsWith(na);
+}
+
 function upsertToolMessage(
   prev: ChatMessage[],
   part: Extract<StreamPart, { kind: "tool" }>,
@@ -134,6 +245,12 @@ function upsertToolMessage(
     (m) => m.kind === "tool" && m.toolCallId === part.toolCallId,
   );
   const title = localizeToolText(part.title);
+  const mergeFields = {
+    toolKind: part.toolKind ?? (undefined as "edit" | "other" | undefined),
+    toolPath: part.toolPath,
+    toolDiff: part.toolDiff,
+    toolCreated: part.toolCreated,
+  };
   if (idx >= 0) {
     const existing = prev[idx];
     const next: ChatMessage = {
@@ -150,11 +267,79 @@ function upsertToolMessage(
           : part.status === "completed"
             ? "completed"
             : "streaming",
+      toolKind: mergeFields.toolKind ?? existing.toolKind,
+      toolPath: mergeFields.toolPath || existing.toolPath,
+      toolDiff: mergeFields.toolDiff || existing.toolDiff,
+      toolCreated:
+        mergeFields.toolCreated !== undefined
+          ? mergeFields.toolCreated
+          : existing.toolCreated,
     };
+    // 从合并后的 output 再抽一次 diff（完成态常带 JSON）
+    if (!next.toolDiff && next.toolOutput) {
+      next.toolDiff = extractDiffFromText(next.toolOutput);
+    }
+    // 仅真实写文件（有 diff，或标题/kind 判定为写入）才标为 edit；有路径不等于编辑（读目录也会带 path）
+    if (next.toolDiff) {
+      next.toolKind = "edit";
+    } else if (
+      next.toolKind !== "edit" &&
+      looksLikeEditTool(next.toolTitle ?? "", undefined, next.toolPath, false)
+    ) {
+      next.toolKind = "edit";
+    }
+    // 若最终不是 edit，避免残留「已编辑」展示所需字段被误用
+    if (next.toolKind !== "edit") {
+      next.toolDiff = undefined;
+    }
     const copy = [...prev];
     copy[idx] = next;
     return copy;
   }
+
+  const toolDiff = part.toolDiff;
+  const toolPath = part.toolPath;
+  let toolKind = part.toolKind ?? "other";
+  if (toolDiff) toolKind = "edit";
+
+  // 同一轮同一文件多次写入 → 合并到上一张改码卡，避免叠四张
+  if (toolKind === "edit" && toolPath) {
+    let lastUserIdx = -1;
+    for (let i = prev.length - 1; i >= 0; i -= 1) {
+      if (prev[i].role === "user") {
+        lastUserIdx = i;
+        break;
+      }
+    }
+    for (let i = prev.length - 1; i > lastUserIdx; i -= 1) {
+      const m = prev[i];
+      if (m.kind === "tool" && m.toolKind === "edit" && pathsLikelySame(m.toolPath, toolPath)) {
+        const copy = [...prev];
+        copy[i] = {
+          ...m,
+          toolTitle: title || m.toolTitle,
+          toolStatus: part.status,
+          toolOutput: part.output
+            ? [m.toolOutput, part.output].filter(Boolean).join("\n")
+            : m.toolOutput,
+          content: title,
+          status:
+            part.status === "failed"
+              ? "error"
+              : part.status === "completed"
+                ? "completed"
+                : "streaming",
+          toolPath: toolPath || m.toolPath,
+          toolDiff: toolDiff || m.toolDiff,
+          toolCreated:
+            part.toolCreated !== undefined ? part.toolCreated : m.toolCreated,
+          toolCallId: part.toolCallId || m.toolCallId,
+        };
+        return copy;
+      }
+    }
+  }
+
   return [
     ...prev,
     {
@@ -172,6 +357,10 @@ function upsertToolMessage(
       toolTitle: title,
       toolStatus: part.status,
       toolOutput: part.output,
+      toolKind,
+      toolPath,
+      toolDiff,
+      toolCreated: part.toolCreated,
     },
   ];
 }
@@ -194,9 +383,24 @@ interface Options {
     sessionId: string,
     updater: (prev: ChatMessage[]) => ChatMessage[],
   ) => void;
+  /** 检测到规划产物/规划意图时，切到「规划」模式 */
+  onEnterPlanMode?: (threadId: string) => void;
+  /** 检测到确认执行/退出规划时，切到「执行」模式 */
+  onEnterAgentMode?: (threadId: string) => void;
 }
 
-export function useAgent({ activeSessionId, setMessages }: Options) {
+function textSuggestsPlanMode(text: string): boolean {
+  return /进入规划模式|先做规划|先进行规划|切换到规划|规划模式|理清架构后再|先出(?:一份)?计划|只输出计划|等你确认后再(?:动手|执行)|等你确认「?按此执行/.test(
+    text,
+  );
+}
+
+export function useAgent({
+  activeSessionId,
+  setMessages,
+  onEnterPlanMode,
+  onEnterAgentMode,
+}: Options) {
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [status, setStatus] = useState<AgentStatus>({
     connected: false,
@@ -210,8 +414,119 @@ export function useAgent({ activeSessionId, setMessages }: Options) {
   const [diffs, setDiffs] = useState<DiffHunk[]>([]);
   const [activity, setActivity] = useState<ActivityItem[]>([]);
   const streamMsgIds = useRef(new Map<string, string | null>());
+  const streamBuffers = useRef(new Map<string, string>());
+  const streamFlushTimers = useRef(new Map<string, number>());
   const cancelledSessions = useRef(new Set<string>());
+  const enterPlanModeRef = useRef(onEnterPlanMode);
+  enterPlanModeRef.current = onEnterPlanMode;
+  const enterAgentModeRef = useRef(onEnterAgentMode);
+  enterAgentModeRef.current = onEnterAgentMode;
   const busy = controlBusy || Boolean(activeSessionId && busyBySession[activeSessionId]);
+
+  const requestPlanMode = useCallback((threadId: string) => {
+    enterPlanModeRef.current?.(threadId);
+  }, []);
+
+  const requestAgentMode = useCallback((threadId: string) => {
+    enterAgentModeRef.current?.(threadId);
+  }, []);
+
+  const flushStreamBuffer = useCallback(
+    (threadId: string) => {
+      const timer = streamFlushTimers.current.get(threadId);
+      if (timer != null) {
+        window.clearTimeout(timer);
+        streamFlushTimers.current.delete(threadId);
+      }
+      const chunk = streamBuffers.current.get(threadId) ?? "";
+      streamBuffers.current.set(threadId, "");
+      if (!chunk) return;
+      setMessages(threadId, (prev) => {
+        const streamMsgId = streamMsgIds.current.get(threadId);
+
+        // 优先按本轮流式 id 原地追加；若其后已插入工具/规划，则改在末尾新开气泡（总结文字在改码卡下方）
+        let targetIdx =
+          streamMsgId != null
+            ? prev.findIndex((m) => m.id === streamMsgId)
+            : -1;
+
+        if (targetIdx >= 0) {
+          const interrupted = prev
+            .slice(targetIdx + 1)
+            .some((m) => m.kind === "tool" || m.kind === "plan");
+          if (interrupted) {
+            targetIdx = -1;
+          }
+        }
+
+        if (targetIdx < 0) {
+          // 只接「位于末尾之后」的流式正文：从最后往前找，遇到 tool/plan 就停
+          for (let i = prev.length - 1; i >= 0; i -= 1) {
+            const m = prev[i];
+            if (m.role === "user") break;
+            if (m.kind === "tool" || m.kind === "plan" || m.kind === "error") break;
+            if (
+              m.role === "assistant" &&
+              (m.status === "streaming" || m.kind === "text" || !m.kind)
+            ) {
+              targetIdx = i;
+              break;
+            }
+          }
+        }
+
+        if (targetIdx >= 0) {
+          const existing = prev[targetIdx];
+          const nextContent = existing.content + chunk;
+          const copy = [...prev];
+          copy[targetIdx] = {
+            ...existing,
+            content: nextContent,
+            status: "streaming",
+            kind: "text",
+          };
+          streamMsgIds.current.set(threadId, existing.id);
+          if (textSuggestsExecuteMode(nextContent)) {
+            requestAgentMode(threadId);
+          } else if (textSuggestsPlanMode(nextContent)) {
+            requestPlanMode(threadId);
+          }
+          return copy;
+        }
+
+        const id = crypto.randomUUID();
+        streamMsgIds.current.set(threadId, id);
+        if (textSuggestsExecuteMode(chunk)) {
+          requestAgentMode(threadId);
+        } else if (textSuggestsPlanMode(chunk)) {
+          requestPlanMode(threadId);
+        }
+        return [
+          ...prev,
+          {
+            id,
+            role: "assistant",
+            content: chunk,
+            status: "streaming",
+            kind: "text",
+          },
+        ];
+      });
+    },
+    [setMessages, requestPlanMode, requestAgentMode],
+  );
+
+  const scheduleStreamFlush = useCallback(
+    (threadId: string) => {
+      if (streamFlushTimers.current.has(threadId)) return;
+      const timer = window.setTimeout(() => {
+        streamFlushTimers.current.delete(threadId);
+        flushStreamBuffer(threadId);
+      }, 48);
+      streamFlushTimers.current.set(threadId, timer);
+    },
+    [flushStreamBuffer],
+  );
 
   const setSessionBusy = useCallback((sessionId: string, isBusy: boolean) => {
     setBusyBySession((prev) => ({ ...prev, [sessionId]: isBusy }));
@@ -257,6 +572,18 @@ export function useAgent({ activeSessionId, setMessages }: Options) {
     workspaceRef.current = status.workspace ?? null;
   }, [status.workspace]);
 
+  // 工作区在、文件树丢了（重连/热更新/状态回写）时自动补树；清空项目时同步清树
+  useEffect(() => {
+    const ws = status.workspace;
+    if (!ws) {
+      setTree(null);
+      return;
+    }
+    void refreshTree(ws).catch((error) => {
+      setLastError(`读取文件夹失败：${String(error)}`);
+    });
+  }, [status.workspace, refreshTree]);
+
   useEffect(() => {
     let alive = true;
     const cleanups: UnlistenFn[] = [];
@@ -291,6 +618,78 @@ export function useAgent({ activeSessionId, setMessages }: Options) {
       if (!alive) return uWorkspace();
       cleanups.push(uWorkspace);
 
+      const uFileEdited = await listen<{
+        threadId?: string;
+        path?: string;
+        created?: boolean;
+        diff?: string;
+      }>("agent://file-edited", (event) => {
+        if (!alive) return;
+        const { threadId, path, created, diff } = event.payload;
+        if (!threadId || !path || !diff) return;
+        streamMsgIds.current.set(threadId, null);
+        if (isPlanFilePath(path)) {
+          requestPlanMode(threadId);
+        }
+        setMessages(threadId, (prev) => {
+          // 同路径改码卡合并更新（多次写同一文件只留一张，diff 用最新）
+          const idx = [...prev]
+            .map((m, i) => ({ m, i }))
+            .reverse()
+            .find(
+              ({ m }) =>
+                m.kind === "tool" &&
+                m.toolKind === "edit" &&
+                pathsLikelySame(m.toolPath, path),
+            )?.i;
+          if (idx != null) {
+            const copy = [...prev];
+            copy[idx] = {
+              ...copy[idx],
+              toolKind: "edit",
+              toolPath: path,
+              toolDiff: diff,
+              toolCreated: created,
+              toolStatus: "completed",
+              status: "completed",
+              toolTitle: created ? `已创建 ${path}` : `已编辑 ${path}`,
+              content: created ? `已创建 ${path}` : `已编辑 ${path}`,
+            };
+            return copy;
+          }
+          return [
+            ...prev,
+            {
+              id: crypto.randomUUID(),
+              role: "assistant",
+              content: created ? `已创建 ${path}` : `已编辑 ${path}`,
+              status: "completed",
+              kind: "tool",
+              toolCallId: `file-edit:${path}:${Date.now()}`,
+              toolTitle: created ? `已创建 ${path}` : `已编辑 ${path}`,
+              toolStatus: "completed",
+              toolKind: "edit",
+              toolPath: path,
+              toolDiff: diff,
+              toolCreated: created,
+            },
+          ];
+        });
+        setDiffs((prev) =>
+          [
+            {
+              id: crypto.randomUUID(),
+              path,
+              summary: created ? "文件已创建" : "文件已更新",
+              content: diff,
+            },
+            ...prev,
+          ].slice(0, 50),
+        );
+      });
+      if (!alive) return uFileEdited();
+      cleanups.push(uFileEdited);
+
       const u2 = await listen<SessionUpdateEvent>("agent://session-update", (event) => {
         if (!alive) return;
         const threadId = event.payload.threadId;
@@ -298,9 +697,17 @@ export function useAgent({ activeSessionId, setMessages }: Options) {
         const part = parseUpdate(event.payload.update);
         if (!part) return;
         if (part.kind === "tool") {
+          // 工具插入后，后续正文应出现在改码卡下方，不要再合并进工具前的气泡
+          streamMsgIds.current.set(threadId, null);
+          if (part.toolPath && isPlanFilePath(part.toolPath)) {
+            requestPlanMode(threadId);
+          }
           setProgressBySession((prev) => ({
             ...prev,
-            [threadId]: `正在执行工具：${localizeToolText(part.title)}`,
+            [threadId]:
+              part.toolKind === "edit" && part.toolPath
+                ? `正在编辑：${part.toolPath.split(/[/\\]/).pop()}`
+                : `正在执行工具：${localizeToolText(part.title)}`,
           }));
           setMessages(threadId, (prev) => upsertToolMessage(prev, part));
 
@@ -318,62 +725,54 @@ export function useAgent({ activeSessionId, setMessages }: Options) {
         }
 
         if (part.kind === "text") {
-          setProgressBySession((prev) => ({
-            ...prev,
-            [threadId]: "模型正在生成回复",
-          }));
-        }
-
-        if (part.kind === "text") {
-          setMessages(threadId, (prev) => {
-            const last = prev[prev.length - 1];
-            const streamMsgId = streamMsgIds.current.get(threadId);
-            const sameStream =
-              last?.role === "assistant" &&
-              last.status === "streaming" &&
-              last.kind !== "plan" &&
-              last.kind !== "tool" &&
-              (!part.messageId ||
-                !streamMsgId ||
-                part.messageId === streamMsgId);
-            if (part.messageId) streamMsgIds.current.set(threadId, part.messageId);
-            if (sameStream && last) {
-              return [
-                ...prev.slice(0, -1),
-                { ...last, content: last.content + part.text },
-              ];
-            }
-            return [
-              ...prev,
-              {
-                id: part.messageId ?? crypto.randomUUID(),
-                role: "assistant",
-                content: part.text,
-                status: "streaming",
-                kind: "text",
-              },
-            ];
+          // 进度只在首段文字时更新，避免每 token 触发整树重渲染
+          setProgressBySession((prev) => {
+            if (prev[threadId] === "模型正在生成回复") return prev;
+            return { ...prev, [threadId]: "模型正在生成回复" };
           });
+          streamBuffers.current.set(
+            threadId,
+            (streamBuffers.current.get(threadId) ?? "") + part.text,
+          );
+          if (part.messageId) {
+            const existing = streamMsgIds.current.get(threadId);
+            if (!existing) streamMsgIds.current.set(threadId, part.messageId);
+          }
+          scheduleStreamFlush(threadId);
           return;
         }
 
         if (part.kind === "plan") {
+          requestPlanMode(threadId);
           const entries = part.text
             .split("\n")
             .map((line) => line.replace(/^•\s*/, "").trim())
             .filter(Boolean);
           setMessages(threadId, (prev) => {
-            const last = prev[prev.length - 1];
-            if (last?.kind === "plan" && last.status === "streaming") {
-              return [
-                ...prev.slice(0, -1),
-                {
-                  ...last,
-                  content: part.text,
-                  planEntries: entries,
-                  status: "completed",
-                },
-              ];
+            // 同一轮对话只保留一张规划卡，后续更新原地覆盖（避免 in_progress→completed 叠出两份）
+            let lastUserIdx = -1;
+            for (let i = prev.length - 1; i >= 0; i -= 1) {
+              if (prev[i].role === "user") {
+                lastUserIdx = i;
+                break;
+              }
+            }
+            let planIdx = -1;
+            for (let i = prev.length - 1; i > lastUserIdx; i -= 1) {
+              if (prev[i].kind === "plan") {
+                planIdx = i;
+                break;
+              }
+            }
+            if (planIdx >= 0) {
+              const copy = [...prev];
+              copy[planIdx] = {
+                ...copy[planIdx],
+                content: part.text,
+                planEntries: entries,
+                status: "completed",
+              };
+              return copy;
             }
             return [
               ...prev,
@@ -397,6 +796,7 @@ export function useAgent({ activeSessionId, setMessages }: Options) {
               ...prev,
             ].slice(0, 100),
           );
+          return;
         }
       });
       if (!alive) return u2();
@@ -420,7 +820,7 @@ export function useAgent({ activeSessionId, setMessages }: Options) {
       if (refreshTimer) clearTimeout(refreshTimer);
       cleanups.forEach((fn) => fn());
     };
-  }, [refreshSettings, refreshStatus, refreshTree, setMessages]);
+  }, [refreshSettings, refreshStatus, refreshTree, setMessages, scheduleStreamFlush, requestPlanMode]);
 
   const openWorkspace = useCallback(
     async (path: string) => {
@@ -497,6 +897,7 @@ export function useAgent({ activeSessionId, setMessages }: Options) {
     async (threadId: string) => {
       if (!threadId || !busyBySession[threadId]) return;
       cancelledSessions.current.add(threadId);
+      flushStreamBuffer(threadId);
       setProgressBySession((prev) => ({
         ...prev,
         [threadId]: "正在终止当前回答",
@@ -537,7 +938,7 @@ export function useAgent({ activeSessionId, setMessages }: Options) {
         });
       }
     },
-    [busyBySession, setMessages, setSessionBusy],
+    [busyBySession, setMessages, setSessionBusy, flushStreamBuffer],
   );
 
   const saveSettings = useCallback(async (next: AppSettings) => {
@@ -553,10 +954,20 @@ export function useAgent({ activeSessionId, setMessages }: Options) {
       text: string,
       attachments: ChatAttachment[] = [],
       history: ChatMessage[] = [],
+      agentText?: string,
     ) => {
       const trimmed = text.trim();
+      const promptText = (agentText ?? text).trim();
       if (!threadId || (!trimmed && attachments.length === 0)) return false;
       streamMsgIds.current.set(threadId, null);
+      streamBuffers.current.set(threadId, "");
+      const pendingTimer = streamFlushTimers.current.get(threadId);
+      if (pendingTimer != null) {
+        window.clearTimeout(pendingTimer);
+        streamFlushTimers.current.delete(threadId);
+      }
+      const assistantId = crypto.randomUUID();
+      streamMsgIds.current.set(threadId, assistantId);
       setProgressBySession((prev) => ({
         ...prev,
         [threadId]: attachments.some(
@@ -578,6 +989,13 @@ export function useAgent({ activeSessionId, setMessages }: Options) {
           status: "completed",
           attachments,
         },
+        {
+          id: assistantId,
+          role: "assistant",
+          content: "",
+          status: "streaming",
+          kind: "text",
+        },
       ]);
       setSessionBusy(threadId, true);
       setLastError(null);
@@ -598,35 +1016,94 @@ export function useAgent({ activeSessionId, setMessages }: Options) {
         }
         const historyPayload = history
           .filter((m) => m.role === "user" || m.role === "assistant")
-          .filter((m) => m.kind !== "tool" && m.kind !== "error")
+          .filter((m) => m.kind !== "tool" && m.kind !== "error" && m.kind !== "plan-confirm")
           .filter((m) => m.content.trim().length > 0)
           .slice(-16)
           .map((m) => ({ role: m.role, content: m.content }));
         await invoke("send_prompt", {
           threadId,
-          text: trimmed,
+          text: promptText || trimmed,
           attachments,
           history: historyPayload,
         });
+        flushStreamBuffer(threadId);
         if (cancelledSessions.current.has(threadId)) {
           return false;
         }
         setMessages(threadId, (prev) => {
           const withTools = finalizeOpenTools(prev);
-          const last = withTools[withTools.length - 1];
-          if (
-            last?.role === "assistant" &&
-            last.status === "streaming" &&
-            last.kind !== "tool"
-          ) {
-            const completed = { ...last, status: "completed" as const };
-            const found = extractDiffsFromText(completed.content);
+          // 完成本轮所有仍在 streaming 的助手正文（不只最后一条，避免中途拆开的气泡一直挂着）
+          let lastUserIdx = -1;
+          for (let i = withTools.length - 1; i >= 0; i -= 1) {
+            if (withTools[i].role === "user") {
+              lastUserIdx = i;
+              break;
+            }
+          }
+          let changed = false;
+          const next = withTools.map((m, i) => {
+            if (i <= lastUserIdx) return m;
+            if (
+              m.role === "assistant" &&
+              m.status === "streaming" &&
+              m.kind !== "tool" &&
+              m.kind !== "plan" &&
+              m.kind !== "error"
+            ) {
+              changed = true;
+              return { ...m, status: "completed" as const };
+            }
+            return m;
+          });
+          // 去掉本轮空占位
+          const cleaned = next.filter((m, i) => {
+            if (i <= lastUserIdx) return true;
+            if (
+              m.role === "assistant" &&
+              m.kind === "text" &&
+              !m.content.trim()
+            ) {
+              changed = true;
+              return false;
+            }
+            return true;
+          });
+          // 合并本轮连续且全文相同的助手气泡（历史拆开残留）
+          const lastUserInCleaned = cleaned.reduce(
+            (acc, m, i) => (m.role === "user" ? i : acc),
+            -1,
+          );
+          const merged: ChatMessage[] = [];
+          for (let i = 0; i < cleaned.length; i += 1) {
+            const m = cleaned[i];
+            const prevMsg = merged[merged.length - 1];
+            if (
+              i > lastUserInCleaned &&
+              prevMsg &&
+              m.role === "assistant" &&
+              prevMsg.role === "assistant" &&
+              m.kind !== "tool" &&
+              m.kind !== "plan" &&
+              m.kind !== "error" &&
+              prevMsg.kind !== "tool" &&
+              prevMsg.kind !== "plan" &&
+              prevMsg.kind !== "error" &&
+              m.content.trim() &&
+              m.content.trim() === prevMsg.content.trim()
+            ) {
+              changed = true;
+              continue;
+            }
+            merged.push(m);
+          }
+          const last = merged[merged.length - 1];
+          if (last?.role === "assistant" && last.content.trim()) {
+            const found = extractDiffsFromText(last.content);
             if (found.length) {
               setDiffs((d) => [...found, ...d].slice(0, 50));
             }
-            return [...withTools.slice(0, -1), completed];
           }
-          return withTools;
+          return changed ? merged : withTools;
         });
         // 任务结束后再兜底刷新一次，覆盖非 ACP 直写路径
         if (workspaceRef.current) {
@@ -636,18 +1113,33 @@ export function useAgent({ activeSessionId, setMessages }: Options) {
         if (cancelledSessions.current.has(threadId)) {
           return false;
         }
+        flushStreamBuffer(threadId);
         const msg = String(error);
         setLastError(msg);
-        setMessages(threadId, (prev) => [
-          ...finalizeOpenTools(prev),
-          {
-            id: crypto.randomUUID(),
-            role: "system",
-            content: msg,
-            status: "error",
-            kind: "error",
-          },
-        ]);
+        setMessages(threadId, (prev) => {
+          let next = finalizeOpenTools(prev);
+          const last = next[next.length - 1];
+          if (
+            last?.role === "assistant" &&
+            last.status === "streaming" &&
+            last.kind === "text" &&
+            !last.content.trim()
+          ) {
+            next = next.slice(0, -1);
+          } else if (last?.role === "assistant" && last.status === "streaming") {
+            next = [...next.slice(0, -1), { ...last, status: "completed" }];
+          }
+          return [
+            ...next,
+            {
+              id: crypto.randomUUID(),
+              role: "system",
+              content: msg,
+              status: "error",
+              kind: "error",
+            },
+          ];
+        });
         return false;
       } finally {
         const wasCancelled = cancelledSessions.current.delete(threadId);
@@ -662,7 +1154,7 @@ export function useAgent({ activeSessionId, setMessages }: Options) {
       }
       return true;
     },
-    [setMessages, setSessionBusy, refreshTree],
+    [setMessages, setSessionBusy, refreshTree, flushStreamBuffer],
   );
 
   return {
@@ -673,6 +1165,7 @@ export function useAgent({ activeSessionId, setMessages }: Options) {
     busyBySession,
     progressBySession,
     lastError,
+    clearError: () => setLastError(null),
     diffs,
     activity,
     openWorkspace,

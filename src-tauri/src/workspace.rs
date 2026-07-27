@@ -5,6 +5,56 @@ use serde::Serialize;
 
 use crate::models::FileEntry;
 
+/// Windows `canonicalize` 会加上 `\\?\` 前缀；传给 grok / 会话目录时会变成
+/// URL 编码的奇怪路径（如 `%5C%5C%3F%5CD%3A%5C...`），导致资源读写异常。
+pub fn strip_verbatim_prefix(path: PathBuf) -> PathBuf {
+    let s = path.to_string_lossy();
+    #[cfg(windows)]
+    {
+        if let Some(rest) = s.strip_prefix(r"\\?\") {
+            if let Some(unc) = rest.strip_prefix(r"UNC\") {
+                return PathBuf::from(format!(r"\\{unc}"));
+            }
+            return PathBuf::from(rest);
+        }
+    }
+    let _ = &s;
+    path
+}
+
+fn looks_like_binary(path: &str, bytes: &[u8]) -> bool {
+    let ext = Path::new(path)
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("")
+        .to_ascii_lowercase();
+    matches!(
+        ext.as_str(),
+        "png"
+            | "jpg"
+            | "jpeg"
+            | "gif"
+            | "webp"
+            | "bmp"
+            | "ico"
+            | "pdf"
+            | "zip"
+            | "exe"
+            | "dll"
+            | "pptx"
+            | "xlsx"
+            | "docx"
+            | "wasm"
+            | "mp3"
+            | "mp4"
+            | "mov"
+            | "woff"
+            | "woff2"
+            | "ttf"
+            | "otf"
+    ) || bytes.iter().take(8192).any(|&b| b == 0)
+}
+
 pub fn list_directory(path: &str) -> Result<Vec<FileEntry>> {
     let root = PathBuf::from(path);
     if !root.is_dir() {
@@ -20,7 +70,9 @@ pub fn list_directory(path: &str) -> Result<Vec<FileEntry>> {
             let is_dir = metadata.as_ref().map(|m| m.is_dir()).unwrap_or(false);
             FileEntry {
                 name,
-                path: entry.path().to_string_lossy().into_owned(),
+                path: strip_verbatim_prefix(entry.path())
+                    .to_string_lossy()
+                    .into_owned(),
                 is_dir,
             }
         })
@@ -40,13 +92,24 @@ pub fn list_directory(path: &str) -> Result<Vec<FileEntry>> {
 pub fn read_text_file(path: &str) -> Result<String> {
     let bytes =
         std::fs::read(path).with_context(|| format!("Failed to read file: {path}"))?;
+    if looks_like_binary(path, &bytes) {
+        anyhow::bail!(
+            "这是二进制/图片文件，不能按文本读取：{path}。若对话中已附带图片，请直接根据图片内容继续；不要再用 read_text_file 打开图片。"
+        );
+    }
     // 兼容 UTF-8 BOM（Windows 记事本 / Cursor 预览更稳）
     let slice = if bytes.starts_with(&[0xEF, 0xBB, 0xBF]) {
         &bytes[3..]
     } else {
         bytes.as_slice()
     };
-    String::from_utf8(slice.to_vec()).with_context(|| format!("File is not valid UTF-8: {path}"))
+    match String::from_utf8(slice.to_vec()) {
+        Ok(text) => Ok(text),
+        Err(_) => {
+            // 少数 ANSI/GBK 文本：有损转 UTF-8，避免整轮对话卡死
+            Ok(String::from_utf8_lossy(slice).into_owned())
+        }
+    }
 }
 
 pub fn write_text_file(path: &str, content: &str) -> Result<()> {
@@ -60,9 +123,32 @@ pub fn write_text_file(path: &str, content: &str) -> Result<()> {
     std::fs::write(path, bytes).with_context(|| format!("Failed to write file: {path}"))
 }
 
+/// 写前读旧内容，写后返回是否新建 + unified diff（供会话内改码卡展示）。
+pub fn write_text_file_with_diff(
+    path: &str,
+    content: &str,
+) -> Result<crate::diff_text::WriteFileDiff> {
+    let path_obj = Path::new(path);
+    let created = !path_obj.exists();
+    let old = if created {
+        String::new()
+    } else {
+        read_text_file(path).unwrap_or_default()
+    };
+    write_text_file(path, content)?;
+    let display = path_obj
+        .file_name()
+        .and_then(|s| s.to_str())
+        .unwrap_or(path);
+    let diff = crate::diff_text::unified_line_diff(&old, content, display);
+    Ok(crate::diff_text::WriteFileDiff { created, diff })
+}
+
 pub fn absolutize(path: &str) -> Result<String> {
     let canonical = std::fs::canonicalize(path).with_context(|| format!("Invalid path: {path}"))?;
-    Ok(canonical.to_string_lossy().into_owned())
+    Ok(strip_verbatim_prefix(canonical)
+        .to_string_lossy()
+        .into_owned())
 }
 
 #[derive(Debug, Serialize)]
@@ -90,7 +176,9 @@ fn build_node(path: &Path, depth: u32) -> Result<DirectoryTreeNode> {
 
     let mut node = DirectoryTreeNode {
         name,
-        path: path.to_string_lossy().into_owned(),
+        path: strip_verbatim_prefix(path.to_path_buf())
+            .to_string_lossy()
+            .into_owned(),
         is_dir: metadata.is_dir(),
         children: None,
     };

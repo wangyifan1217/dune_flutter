@@ -10,7 +10,7 @@ use tauri_plugin_store::StoreExt;
 
 use crate::models::{AgentStatus, AppSettings, ChatMessage, FileEntry};
 use crate::state::AppState;
-use crate::workspace::{absolutize, build_tree, list_directory, DirectoryTreeNode};
+use crate::workspace::{absolutize, build_tree, list_directory, strip_verbatim_prefix, DirectoryTreeNode};
 
 const SETTINGS_STORE: &str = "settings.json";
 const SETTINGS_KEY: &str = "app";
@@ -68,6 +68,15 @@ pub fn get_grok_installation(
 ) -> crate::models::GrokInstallationStatus {
     let configured = state.settings.lock().grok_command.clone();
     crate::models::grok_installation_status(&configured)
+}
+
+/// 从 new-api 网关拉取 `/v1/models` 列表，供设置页勾选启用。
+#[tauri::command]
+pub fn list_gateway_models(
+    api_base_url: String,
+    api_key: String,
+) -> Result<Vec<crate::model_resolve::GatewayModel>, String> {
+    crate::model_resolve::list_gateway_models(&api_base_url, &api_key)
 }
 
 fn mime_type_for(path: &std::path::Path) -> &'static str {
@@ -180,7 +189,9 @@ fn resolve_user_path(
             .lock()
             .clone()
             .unwrap_or(default_agent_workspace()?);
-        let root = std::fs::canonicalize(&workspace).map_err(|e| e.to_string())?;
+        let root = strip_verbatim_prefix(
+            std::fs::canonicalize(&workspace).map_err(|e| e.to_string())?,
+        );
         Ok((root.join(&requested), Some(root)))
     }
 }
@@ -189,8 +200,11 @@ fn canonicalize_checked(
     candidate: PathBuf,
     workspace_root: Option<PathBuf>,
 ) -> Result<PathBuf, String> {
-    let canonical = std::fs::canonicalize(&candidate)
-        .map_err(|_| format!("找不到文件：{}", candidate.display()))?;
+    let canonical = strip_verbatim_prefix(
+        std::fs::canonicalize(&candidate)
+            .map_err(|_| format!("找不到文件：{}", candidate.display()))?,
+    );
+    let workspace_root = workspace_root.map(strip_verbatim_prefix);
     if workspace_root
         .as_ref()
         .is_some_and(|root| !canonical.starts_with(root))
@@ -398,6 +412,27 @@ pub fn preview_file(
                 message: None,
             })
         }
+        "docx" => {
+            let text = crate::office::extract_docx_text(&path_str).map_err(|e| e.to_string())?;
+            let clipped = truncate_chars(&text, MAX_PREVIEW_TEXT_CHARS);
+            Ok(FilePreviewPayload {
+                kind: "docx".into(),
+                path: path_str,
+                name,
+                text: Some(if clipped.trim().is_empty() {
+                    "（未提取到正文，可用系统打开查看完整排版）".into()
+                } else {
+                    clipped
+                }),
+                mime: None,
+                image_base64: None,
+                slides: None,
+                sheet: None,
+                headers: None,
+                rows: None,
+                message: None,
+            })
+        }
         "html" | "htm" => {
             let text = crate::workspace::read_text_file(&path_str).map_err(|e| e.to_string())?;
             let clipped = truncate_chars(&text, MAX_PREVIEW_TEXT_CHARS);
@@ -485,31 +520,45 @@ fn default_agent_workspace() -> Result<String, String> {
 }
 
 /// 无项目时以用户主目录作为 Agent 的工作目录，仍可进行普通对话。
+/// 若用户已打开项目，则保留该工作区，绝不能在连接后清空。
 #[tauri::command]
 pub async fn connect_default_agent(
     app: AppHandle,
     state: State<'_, Arc<AppState>>,
 ) -> Result<AgentStatus, String> {
-    let workspace = state
-        .workspace
-        .lock()
+    let existing = state.workspace.lock().clone();
+    let cwd = existing
         .clone()
         .unwrap_or(default_agent_workspace()?);
     state
-        .connect(&workspace, app.clone())
+        .connect(&cwd, app.clone())
         .await
         .map_err(|e| e.to_string())?;
-    // Agent 仍需要一个 cwd；这里不把默认目录当作用户已打开的项目。
-    *state.workspace.lock() = None;
-    let status = AgentStatus {
-        connected: true,
-        session_id: None,
-        workspace: None,
-        message: "已连接（未打开项目）".into(),
-    };
-    state.set_status(status.clone());
-    let _ = app.emit("agent://status", &status);
-    Ok(status)
+
+    if let Some(ws) = existing {
+        *state.workspace.lock() = Some(ws.clone());
+        let status = AgentStatus {
+            connected: true,
+            session_id: None,
+            workspace: Some(ws),
+            message: "已连接".into(),
+        };
+        state.set_status(status.clone());
+        let _ = app.emit("agent://status", &status);
+        Ok(status)
+    } else {
+        // Agent 仍需要一个 cwd；默认主目录不显示为「已打开项目」
+        *state.workspace.lock() = None;
+        let status = AgentStatus {
+            connected: true,
+            session_id: None,
+            workspace: None,
+            message: "已连接（未打开项目）".into(),
+        };
+        state.set_status(status.clone());
+        let _ = app.emit("agent://status", &status);
+        Ok(status)
+    }
 }
 
 #[tauri::command]

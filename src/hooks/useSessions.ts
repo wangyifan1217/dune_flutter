@@ -65,13 +65,26 @@ export function useSessions() {
         }
         list = list.map((s) => ({
           ...s,
+          workspace:
+            (!s.messages || s.messages.length === 0) &&
+            (!s.title || s.title === "新对话")
+              ? null
+              : s.workspace,
           title: titleFromMessages(s.messages),
         }));
         setSessions(list);
         setActiveId(data.activeId ?? list[0]?.id ?? null);
       } catch {
         if (cancelled) return;
-        const list = loadLocalFallback();
+        const list = loadLocalFallback().map((s) => ({
+          ...s,
+          workspace:
+            (!s.messages || s.messages.length === 0) &&
+            (!s.title || s.title === "新对话")
+              ? null
+              : s.workspace,
+          title: titleFromMessages(s.messages),
+        }));
         setSessions(list);
         setActiveId(list[0]?.id ?? null);
       } finally {

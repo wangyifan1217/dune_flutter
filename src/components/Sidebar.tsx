@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { ThreadSession } from "../types/codex";
 import { workspaceGroupName } from "../hooks/useSessions";
 import {
@@ -22,6 +22,7 @@ interface SidebarProps {
   onLogout?: () => void;
   onSelectSession: (id: string) => void;
   onRemoveSession: (id: string) => void;
+  onDismissError?: () => void;
 }
 
 function displayGroupName(key: string) {
@@ -40,6 +41,7 @@ export function Sidebar({
   onLogout,
   onSelectSession,
   onRemoveSession,
+  onDismissError,
 }: SidebarProps) {
   const [query, setQuery] = useState("");
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
@@ -56,14 +58,31 @@ export function Sidebar({
       list.push(s);
       map.set(key, list);
     }
-    return Array.from(map.entries()).sort(([a], [b]) => {
-      if (a === "local") return 1;
-      if (b === "local") return -1;
+    // 组内、组间都按最近更新置顶
+    for (const list of map.values()) {
+      list.sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0));
+    }
+    return Array.from(map.entries()).sort(([a, listA], [b, listB]) => {
+      if (a === "local" && b !== "local") return 1;
+      if (b === "local" && a !== "local") return -1;
+      const ta = listA[0]?.updatedAt ?? 0;
+      const tb = listB[0]?.updatedAt ?? 0;
+      if (tb !== ta) return tb - ta;
       return a.localeCompare(b, "zh-CN");
     });
   }, [sessions, query]);
 
   const initials = (authUser || "N").trim().slice(0, 1).toUpperCase();
+
+  useEffect(() => {
+    if (!activeId) return;
+    const safe =
+      typeof CSS !== "undefined" && typeof CSS.escape === "function"
+        ? CSS.escape(activeId)
+        : activeId.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+    const el = document.querySelector(`[data-session-id="${safe}"]`);
+    el?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [activeId, groups]);
 
   return (
     <aside className="sidebar agents-sidebar">
@@ -117,6 +136,7 @@ export function Sidebar({
                         <button
                           key={s.id}
                           type="button"
+                          data-session-id={s.id}
                           className={`thread-item ${s.id === activeId ? "active" : ""}`}
                           onClick={() => onSelectSession(s.id)}
                         >
@@ -142,7 +162,22 @@ export function Sidebar({
         </div>
       </div>
 
-      {error && <div className="error-box">{error}</div>}
+      {error ? (
+        <div className="error-box" role="alert">
+          <span className="error-box-text">{error}</span>
+          {onDismissError ? (
+            <button
+              type="button"
+              className="error-box-close"
+              aria-label="关闭错误提示"
+              title="关闭"
+              onClick={onDismissError}
+            >
+              <IconX size={14} />
+            </button>
+          ) : null}
+        </div>
+      ) : null}
 
       <div className="sidebar-profile">
         <div className="profile-avatar" aria-hidden>

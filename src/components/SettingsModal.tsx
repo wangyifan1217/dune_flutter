@@ -96,8 +96,9 @@ export function SettingsModal({
   const [draft, setDraft] = useState<AppSettings>(settings ?? normalizeSettings({}));
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
-  const [newModelId, setNewModelId] = useState("");
-  const [newModelLabel, setNewModelLabel] = useState("");
+  const [gatewayCatalog, setGatewayCatalog] = useState<ModelEntry[] | null>(null);
+  const [fetchingModels, setFetchingModels] = useState(false);
+  const [fetchModelsHint, setFetchModelsHint] = useState<string | null>(null);
   const [mcpAdding, setMcpAdding] = useState(false);
   const [mcpName, setMcpName] = useState("");
   const [mcpCommand, setMcpCommand] = useState("npx");
@@ -132,8 +133,9 @@ export function SettingsModal({
     setMcpName("");
     setMcpCommand("npx");
     setMcpArgs("");
-    setNewModelId("");
-    setNewModelLabel("");
+    setGatewayCatalog(null);
+    setFetchingModels(false);
+    setFetchModelsHint(null);
     setSaveError(null);
     setPendingRemoveMcpName(null);
     setPendingRemoveModel(null);
@@ -170,6 +172,15 @@ export function SettingsModal({
       cancelled = true;
     };
   }, [open, tab, workspace, skillsRefreshKey]);
+
+  // 进入「模型」页自动拉网关列表，避免一直停在旧的手动启用列表
+  useEffect(() => {
+    if (!open || tab !== "models") return;
+    if (gatewayCatalog || fetchingModels) return;
+    if (!draftRef.current.apiBaseUrl.trim()) return;
+    void fetchGatewayModels();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 仅在切换到模型页时自动拉一次
+  }, [open, tab]);
 
   // Only explicit 关闭 — Escape / backdrop must not dismiss
   useEffect(() => {
@@ -217,29 +228,89 @@ export function SettingsModal({
     }
   }
 
-  function addModel(entry: ModelEntry) {
+  function setModelEnabled(entry: ModelEntry, enabled: boolean) {
     const id = entry.id.trim();
     if (!id) return;
-    if (draftRef.current.models.some((m) => m.id === id)) {
-      setSaveError(`模型 ${id} 已存在`);
+    const current = draftRef.current.models;
+    if (enabled) {
+      if (current.some((m) => m.id === id)) return;
+      const models = [...current, { id, label: entry.label.trim() || id }];
+      const modelId = draftRef.current.modelId || id;
+      void saveDraft({ models, modelId });
       return;
     }
-    const models = [
-      ...draftRef.current.models,
-      { id, label: entry.label.trim() || id },
-    ];
-    const modelId = draftRef.current.modelId || id;
-    void saveDraft({ models, modelId });
-    setNewModelId("");
-    setNewModelLabel("");
-  }
-
-  function removeModel(id: string) {
-    const models = draftRef.current.models.filter((m) => m.id !== id);
+    const models = current.filter((m) => m.id !== id);
     const modelId =
       draftRef.current.modelId === id ? models[0]?.id ?? "" : draftRef.current.modelId;
     void saveDraft({ models, modelId });
     setPendingRemoveModel(null);
+  }
+
+  function removeModel(id: string) {
+    setModelEnabled({ id, label: id }, false);
+  }
+
+  async function fetchGatewayModels() {
+    const apiBaseUrl = draftRef.current.apiBaseUrl.trim();
+    const apiKey = draftRef.current.apiKey.trim();
+    if (!apiBaseUrl) {
+      setSaveError("请先填写 Base URL");
+      return;
+    }
+    if (fetchingModels) return;
+
+    // 先落盘网关配置，再拉取，避免只改了输入框未 blur
+    if (
+      apiBaseUrl !== (settings?.apiBaseUrl ?? "") ||
+      apiKey !== (settings?.apiKey ?? "")
+    ) {
+      try {
+        await saveDraft({ apiBaseUrl, apiKey });
+      } catch {
+        return;
+      }
+    }
+    setFetchingModels(true);
+    setSaveError(null);
+    setFetchModelsHint("正在从网关刷新…");
+    try {
+      const list = await invoke<ModelEntry[]>("list_gateway_models", {
+        apiBaseUrl,
+        apiKey,
+      });
+      // 新数组引用，确保界面有刷新感
+      setGatewayCatalog(list.map((m) => ({ ...m })));
+
+      // 丢掉网关上已不存在的「旧模型」；勾选状态只保留仍在列表里的
+      const catalogById = new Map(list.map((m) => [m.id, m]));
+      const kept = draftRef.current.models
+        .map((m) => catalogById.get(m.id))
+        .filter((m): m is ModelEntry => Boolean(m))
+        .map((m) => ({ id: m.id, label: m.label || m.id }));
+      const modelId =
+        kept.some((m) => m.id === draftRef.current.modelId)
+          ? draftRef.current.modelId
+          : kept[0]?.id ?? "";
+      if (
+        kept.length !== draftRef.current.models.length ||
+        modelId !== draftRef.current.modelId ||
+        kept.some((m, i) => m.id !== draftRef.current.models[i]?.id)
+      ) {
+        await saveDraft({ models: kept, modelId });
+      }
+      const time = new Date().toLocaleTimeString("zh-CN", {
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+      });
+      setFetchModelsHint(`已刷新 · 共 ${list.length} 个模型 · ${time}`);
+    } catch (error) {
+      setGatewayCatalog(null);
+      setFetchModelsHint(null);
+      setSaveError(String(error));
+    } finally {
+      setFetchingModels(false);
+    }
   }
 
   function addPreset(preset: McpPreset) {
@@ -430,7 +501,9 @@ export function SettingsModal({
           {tab === "models" && (
             <div className="settings-pane-inner">
               <h2>模型</h2>
-              <p className="settings-lead">配置 new-api 网关与可选模型列表。</p>
+              <p className="settings-lead">
+                配置 new-api 网关后，从接口获取模型并勾选要用的项；无需手动填写模型 ID。
+              </p>
 
               <div className="settings-section">
                 <div className="settings-section-head">
@@ -478,86 +551,95 @@ export function SettingsModal({
               <div className="settings-section">
                 <div className="settings-section-head">
                   <h3>模型列表</h3>
-                </div>
-                <div className="settings-card-list">
-                  {draft.models.length === 0 && (
-                    <div className="settings-empty">还没有模型，请在下方添加</div>
-                  )}
-                  {draft.models.map((m) => (
-                    <div
-                      key={m.id}
-                      className={`settings-entity-card ${draft.modelId === m.id ? "active" : ""}`}
-                    >
-                      <div className="settings-entity-avatar">
-                        {initialLetter(m.label || m.id)}
-                      </div>
-                      <button
-                        type="button"
-                        className="settings-entity-main"
-                        disabled={saving}
-                        onClick={() => {
-                          if (draftRef.current.modelId === m.id) return;
-                          void saveDraft({ modelId: m.id });
-                        }}
-                      >
-                        <strong>{m.label || m.id}</strong>
-                        <span>
-                          {m.id}
-                          {draft.modelId === m.id ? " · 当前" : ""}
-                        </span>
-                      </button>
-                      <button
-                        type="button"
-                        className="linkish"
-                        disabled={saving}
-                        onClick={() => setPendingRemoveModel(m.id)}
-                      >
-                        删除
-                      </button>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="settings-add-box">
-                  <label className="settings-field">
-                    模型 ID
-                    <input
-                      value={newModelId}
-                      placeholder="例如 gpt-5.6-sol"
-                      onChange={(e) => setNewModelId(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" && newModelId.trim()) {
-                          e.preventDefault();
-                          addModel({ id: newModelId, label: newModelLabel });
-                        }
-                      }}
-                    />
-                  </label>
-                  <label className="settings-field">
-                    显示名（可选）
-                    <input
-                      value={newModelLabel}
-                      placeholder="例如 GPT-5.6"
-                      onChange={(e) => setNewModelLabel(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" && newModelId.trim()) {
-                          e.preventDefault();
-                          addModel({ id: newModelId, label: newModelLabel });
-                        }
-                      }}
-                    />
-                  </label>
                   <button
                     type="button"
-                    className="settings-primary-btn"
-                    disabled={!newModelId.trim() || saving}
-                    onClick={() =>
-                      addModel({ id: newModelId, label: newModelLabel })
-                    }
+                    className="settings-ghost-btn"
+                    disabled={fetchingModels || !draft.apiBaseUrl.trim()}
+                    onClick={() => void fetchGatewayModels()}
                   >
-                    添加模型
+                    {fetchingModels ? "刷新中…" : gatewayCatalog ? "刷新列表" : "获取模型列表"}
                   </button>
                 </div>
+
+                <p className="settings-hint settings-model-live">
+                  会话框当前：
+                  <strong>
+                    {draft.models.find((m) => m.id === draft.modelId)?.label ||
+                      draft.modelId ||
+                      "未选择"}
+                  </strong>
+                  {draft.models.length > 0
+                    ? ` · 已启用 ${draft.models.length} 个`
+                    : " · 尚未启用任何模型"}
+                </p>
+
+                {fetchModelsHint ? (
+                  <p
+                    className={`settings-hint settings-fetch-hint ${fetchingModels ? "pending" : "ok"}`}
+                    role="status"
+                  >
+                    {fetchModelsHint}
+                  </p>
+                ) : null}
+
+                {fetchingModels && !gatewayCatalog ? (
+                  <div className="settings-empty">正在从网关获取模型…</div>
+                ) : gatewayCatalog ? (
+                  <>
+                    <p className="settings-hint">
+                      共 {gatewayCatalog.length} 个可用模型（已去掉网关里不存在的旧项）。勾选后会出现在输入框选择器；点名称设为当前，会话框会立刻更新。
+                    </p>
+                    <div
+                      className={`settings-card-list ${fetchingModels ? "is-refreshing" : ""}`}
+                    >
+                      {gatewayCatalog.map((m) => {
+                        const enabled = draft.models.some((x) => x.id === m.id);
+                        const isCurrent = draft.modelId === m.id;
+                        return (
+                          <div
+                            key={m.id}
+                            className={`settings-entity-card ${isCurrent ? "active" : ""}`}
+                          >
+                            <label className="settings-model-check" title="启用此模型">
+                              <input
+                                type="checkbox"
+                                checked={enabled}
+                                disabled={saving}
+                                onChange={(e) =>
+                                  setModelEnabled(m, e.target.checked)
+                                }
+                              />
+                            </label>
+                            <div className="settings-entity-avatar">
+                              {initialLetter(m.label || m.id)}
+                            </div>
+                            <button
+                              type="button"
+                              className="settings-entity-main"
+                              disabled={saving || !enabled}
+                              onClick={() => {
+                                if (!enabled || draftRef.current.modelId === m.id) return;
+                                void saveDraft({ modelId: m.id });
+                              }}
+                            >
+                              <strong>{m.label || m.id}</strong>
+                              <span>
+                                {m.id}
+                                {isCurrent ? " · 当前" : enabled ? "" : " · 未启用"}
+                              </span>
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </>
+                ) : (
+                  <div className="settings-empty">
+                    {draft.apiBaseUrl.trim()
+                      ? "请点击「获取模型列表」从网关加载，再勾选要用的模型"
+                      : "请先填写 Base URL 与 API Key"}
+                  </div>
+                )}
               </div>
             </div>
           )}

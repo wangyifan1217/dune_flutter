@@ -226,7 +226,18 @@ export function RightPanel({
               />
             )}
 
-            {tab === "files" && <FileTree tree={tree} onOpenFile={onOpenFile} />}
+            {/* 保持挂载，避免切到预览再回来时丢失展开/懒加载状态 */}
+            <div
+              className="right-tab-pane"
+              hidden={tab !== "files"}
+              aria-hidden={tab !== "files"}
+            >
+              <FileTree
+                tree={tree}
+                selectedPath={previewPath}
+                onOpenFile={onOpenFile}
+              />
+            </div>
 
             {tab === "diff" && (
               <div className="diff-list local-changes">

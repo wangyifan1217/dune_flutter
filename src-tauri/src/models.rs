@@ -77,14 +77,35 @@ impl Default for AppSettings {
             api_key: String::new(),
             model_id: String::new(),
             models: Vec::new(),
-            mcp_servers: Vec::new(),
+            mcp_servers: recommended_mcp_servers(),
         }
     }
 }
 
+/// 内置推荐 MCP：Office / 联网 / 文件 / 记忆 / 分步推理（nova-builtin，无需 Node）。
+pub fn recommended_mcp_servers() -> Vec<McpServerConfig> {
+    fn builtin(name: &str, args: &[&str]) -> McpServerConfig {
+        McpServerConfig {
+            name: name.into(),
+            command: "nova-builtin".into(),
+            args: args.iter().map(|s| (*s).to_string()).collect(),
+            env: Vec::new(),
+        }
+    }
+    vec![
+        builtin("sequential-thinking", &["sequential-thinking"]),
+        builtin("filesystem", &["filesystem", "."]),
+        builtin("memory", &["memory"]),
+        builtin("fetch", &["fetch"]),
+        builtin("excel", &["excel"]),
+        builtin("word", &["word"]),
+        builtin("powerpoint", &["powerpoint"]),
+    ]
+}
+
 fn bundled_grok_command() -> Option<String> {
     // 安装包内置的 Grok Agent：新机器无需另行安装。
-    // NSIS 资源会解压至 exe 同级目录；macOS .app 使用 Resources 目录。
+    // NSIS 资源会解压至 exe 同级目录；macOS .app 使用 Contents/Resources。
     if let Ok(exe) = std::env::current_exe() {
         if let Some(exe_dir) = exe.parent() {
             let binary_name = if cfg!(target_os = "windows") {
@@ -94,11 +115,13 @@ fn bundled_grok_command() -> Option<String> {
             };
             let bundled_candidates = [
                 exe_dir.join("resources").join(binary_name),
+                exe_dir.join("Resources").join(binary_name),
                 exe_dir.join(binary_name),
                 exe_dir.join("..").join("resources").join(binary_name),
+                exe_dir.join("..").join("Resources").join(binary_name),
             ];
             for candidate in bundled_candidates {
-                if candidate.exists() {
+                if candidate.is_file() {
                     return Some(candidate.to_string_lossy().into_owned());
                 }
             }

@@ -121,3 +121,56 @@ export function presetAlreadyAdded(
 ): boolean {
   return servers.some((s) => s.name === preset.name);
 }
+
+/** 推荐默认套件：Office + 联网 + 文件 + 推理，一次打满内置能力 */
+export function buildRecommendedMcpServers(
+  workspace: string | null | undefined,
+): McpServerConfig[] {
+  return MCP_PRESETS.map((p) => p.build(workspace));
+}
+
+/** 把尚未启用的推荐项合并进现有列表 */
+export function mergeRecommendedMcpServers(
+  existing: McpServerConfig[],
+  workspace: string | null | undefined,
+): McpServerConfig[] {
+  const next = [...existing];
+  for (const preset of MCP_PRESETS) {
+    if (!presetAlreadyAdded(next, preset)) {
+      next.push(preset.build(workspace));
+    }
+  }
+  return next;
+}
+
+const MCP_LABELS: Record<string, string> = {
+  powerpoint: "PPT",
+  excel: "Excel",
+  word: "Word",
+  fetch: "联网",
+  filesystem: "文件",
+  memory: "MCP记忆",
+  "sequential-thinking": "分步推理",
+};
+
+/** Composer 状态条用的短标签（按优先级） */
+export function mcpStatusLabels(servers: McpServerConfig[]): string[] {
+  const names = new Set(servers.map((s) => s.name));
+  const order = [
+    "powerpoint",
+    "excel",
+    "word",
+    "fetch",
+    "filesystem",
+    "memory",
+    "sequential-thinking",
+  ];
+  const labels: string[] = [];
+  for (const id of order) {
+    if (names.has(id)) labels.push(MCP_LABELS[id] ?? id);
+  }
+  for (const s of servers) {
+    if (!order.includes(s.name)) labels.push(s.name);
+  }
+  return labels.slice(0, 8);
+}

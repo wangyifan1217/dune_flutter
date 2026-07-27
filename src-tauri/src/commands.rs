@@ -1,7 +1,9 @@
-use std::sync::Arc;
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use base64::{engine::general_purpose::STANDARD, Engine};
+use calamine::{open_workbook_auto, Data, Reader};
+use serde::Serialize;
 use tauri::{AppHandle, Emitter, State};
 use tauri_plugin_opener::OpenerExt;
 use tauri_plugin_store::StoreExt;
@@ -12,6 +14,7 @@ use crate::workspace::{absolutize, build_tree, list_directory, DirectoryTreeNode
 
 const SETTINGS_STORE: &str = "settings.json";
 const SETTINGS_KEY: &str = "app";
+const MCP_SEED_KEY: &str = "mcpRecommendedSeeded";
 const MAX_BINARY_ATTACHMENT_BYTES: u64 = 10 * 1024 * 1024;
 const MAX_TEXT_ATTACHMENT_BYTES: u64 = 512 * 1024;
 
@@ -19,9 +22,28 @@ const MAX_TEXT_ATTACHMENT_BYTES: u64 = 512 * 1024;
 pub fn get_settings(app: AppHandle) -> Result<AppSettings, String> {
     let store = app.store(SETTINGS_STORE).map_err(|e| e.to_string())?;
     if let Some(value) = store.get(SETTINGS_KEY) {
-        serde_json::from_value(value).map_err(|e| e.to_string())
+        let mut settings: AppSettings =
+            serde_json::from_value(value).map_err(|e| e.to_string())?;
+        // 仅首次空列表时注入推荐套件；用户清空后不再强行加回
+        if settings.mcp_servers.is_empty() && store.get(MCP_SEED_KEY).is_none() {
+            settings.mcp_servers = crate::models::recommended_mcp_servers();
+            store.set(
+                SETTINGS_KEY,
+                serde_json::to_value(&settings).map_err(|e| e.to_string())?,
+            );
+            store.set(MCP_SEED_KEY, serde_json::Value::Bool(true));
+            store.save().map_err(|e| e.to_string())?;
+        }
+        Ok(settings)
     } else {
-        Ok(AppSettings::default())
+        let settings = AppSettings::default();
+        store.set(
+            SETTINGS_KEY,
+            serde_json::to_value(&settings).map_err(|e| e.to_string())?,
+        );
+        store.set(MCP_SEED_KEY, serde_json::Value::Bool(true));
+        store.save().map_err(|e| e.to_string())?;
+        Ok(settings)
     }
 }
 
@@ -111,26 +133,62 @@ pub fn read_dropped_files(paths: Vec<String>) -> Result<Vec<crate::models::Dropp
         .collect()
 }
 
-/// Opens a file explicitly referenced in an agent response.
-/// Relative paths are resolved within the selected workspace; absolute paths require user confirmation.
-#[tauri::command]
-pub fn open_generated_file(
-    app: AppHandle,
-    state: State<'_, Arc<AppState>>,
-    path: String,
-) -> Result<(), String> {
+const MAX_PREVIEW_TEXT_CHARS: usize = 200_000;
+const MAX_PREVIEW_IMAGE_BYTES: u64 = 8 * 1024 * 1024;
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PreviewSlide {
+    pub title: String,
+    pub body: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FilePreviewPayload {
+    pub kind: String,
+    pub path: String,
+    pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub text: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mime: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub image_base64: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub slides: Option<Vec<PreviewSlide>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sheet: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub headers: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rows: Option<Vec<Vec<String>>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub message: Option<String>,
+}
+
+fn resolve_user_path(
+    state: &AppState,
+    path: &str,
+) -> Result<(PathBuf, Option<PathBuf>), String> {
     let requested = PathBuf::from(path);
-    let (candidate, workspace_root) = if requested.is_absolute() {
-        (requested, None)
+    if requested.is_absolute() {
+        Ok((requested, None))
     } else {
         let workspace = state
             .workspace
             .lock()
             .clone()
-            .ok_or_else(|| "打开相对路径前请先选择项目文件夹".to_string())?;
+            .unwrap_or(default_agent_workspace()?);
         let root = std::fs::canonicalize(&workspace).map_err(|e| e.to_string())?;
-        (root.join(requested), Some(root))
-    };
+        Ok((root.join(&requested), Some(root)))
+    }
+}
+
+fn canonicalize_checked(
+    candidate: PathBuf,
+    workspace_root: Option<PathBuf>,
+) -> Result<PathBuf, String> {
     let canonical = std::fs::canonicalize(&candidate)
         .map_err(|_| format!("找不到文件：{}", candidate.display()))?;
     if workspace_root
@@ -142,9 +200,280 @@ pub fn open_generated_file(
     if !canonical.is_file() {
         return Err("只能打开文件，不能打开文件夹".into());
     }
+    Ok(canonical)
+}
+
+fn cell_to_string(c: &Data) -> String {
+    match c {
+        Data::Empty => String::new(),
+        Data::String(s) => s.replace('\n', " "),
+        Data::Float(f) => f.to_string(),
+        Data::Int(i) => i.to_string(),
+        Data::Bool(b) => b.to_string(),
+        Data::DateTime(dt) => format!("{dt:?}"),
+        Data::DateTimeIso(s) | Data::DurationIso(s) => s.clone(),
+        Data::Error(e) => format!("#ERR:{e:?}"),
+    }
+}
+
+fn parse_pptx_slides(raw: &str) -> Vec<PreviewSlide> {
+    let mut slides = Vec::new();
+    for block in raw.split("--- slide ") {
+        let block = block.trim();
+        if block.is_empty() {
+            continue;
+        }
+        let body = block
+            .lines()
+            .skip(1)
+            .collect::<Vec<_>>()
+            .join("\n")
+            .trim()
+            .to_string();
+        let first_line = body.lines().next().unwrap_or("幻灯片").trim();
+        let title = if first_line.chars().count() > 48 {
+            format!("{}…", first_line.chars().take(48).collect::<String>())
+        } else if first_line.is_empty() {
+            "幻灯片".into()
+        } else {
+            first_line.to_string()
+        };
+        slides.push(PreviewSlide { title, body });
+    }
+    if slides.is_empty() && !raw.trim().is_empty() {
+        slides.push(PreviewSlide {
+            title: "内容".into(),
+            body: raw.trim().to_string(),
+        });
+    }
+    slides
+}
+
+/// Opens a file explicitly referenced in an agent response.
+/// Relative paths resolve against the selected workspace; if none is open, fall back to the
+/// same default cwd used by the agent (user home), so generated files remain openable.
+#[tauri::command]
+pub fn open_generated_file(
+    app: AppHandle,
+    state: State<'_, Arc<AppState>>,
+    path: String,
+) -> Result<(), String> {
+    let (candidate, workspace_root) = resolve_user_path(state.inner(), &path)?;
+    let canonical = canonicalize_checked(candidate, workspace_root)?;
     app.opener()
         .open_path(canonical.to_string_lossy(), None::<String>)
         .map_err(|e| e.to_string())
+}
+
+/// 右侧预览：按扩展名返回可读内容（非完整 Office 编辑器）。
+#[tauri::command]
+pub fn preview_file(
+    state: State<'_, Arc<AppState>>,
+    path: String,
+) -> Result<FilePreviewPayload, String> {
+    let (candidate, workspace_root) = resolve_user_path(state.inner(), &path)?;
+    let canonical = canonicalize_checked(candidate, workspace_root)?;
+    let path_str = canonical.to_string_lossy().into_owned();
+    let name = canonical
+        .file_name()
+        .map(|s| s.to_string_lossy().into_owned())
+        .unwrap_or_else(|| path_str.clone());
+    let ext = canonical
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("")
+        .to_ascii_lowercase();
+
+    match ext.as_str() {
+        "md" | "markdown" => {
+            let text = crate::workspace::read_text_file(&path_str).map_err(|e| e.to_string())?;
+            let clipped = truncate_chars(&text, MAX_PREVIEW_TEXT_CHARS);
+            Ok(FilePreviewPayload {
+                kind: "markdown".into(),
+                path: path_str,
+                name,
+                text: Some(clipped),
+                mime: None,
+                image_base64: None,
+                slides: None,
+                sheet: None,
+                headers: None,
+                rows: None,
+                message: None,
+            })
+        }
+        "png" | "jpg" | "jpeg" | "gif" | "webp" | "svg" | "bmp" => {
+            let meta = std::fs::metadata(&canonical).map_err(|e| e.to_string())?;
+            if meta.len() > MAX_PREVIEW_IMAGE_BYTES {
+                return Ok(FilePreviewPayload {
+                    kind: "unsupported".into(),
+                    path: path_str,
+                    name,
+                    text: None,
+                    mime: None,
+                    image_base64: None,
+                    slides: None,
+                    sheet: None,
+                    headers: None,
+                    rows: None,
+                    message: Some("图片过大，请用系统打开查看".into()),
+                });
+            }
+            let bytes = std::fs::read(&canonical).map_err(|e| e.to_string())?;
+            let mime = match ext.as_str() {
+                "png" => "image/png",
+                "jpg" | "jpeg" => "image/jpeg",
+                "gif" => "image/gif",
+                "webp" => "image/webp",
+                "svg" => "image/svg+xml",
+                "bmp" => "image/bmp",
+                _ => "application/octet-stream",
+            };
+            Ok(FilePreviewPayload {
+                kind: "image".into(),
+                path: path_str,
+                name,
+                text: None,
+                mime: Some(mime.into()),
+                image_base64: Some(STANDARD.encode(bytes)),
+                slides: None,
+                sheet: None,
+                headers: None,
+                rows: None,
+                message: None,
+            })
+        }
+        "pptx" => {
+            let raw = crate::office::extract_pptx_text(&path_str).map_err(|e| e.to_string())?;
+            let slides = parse_pptx_slides(&raw);
+            Ok(FilePreviewPayload {
+                kind: "pptx".into(),
+                path: path_str,
+                name,
+                text: None,
+                mime: None,
+                image_base64: None,
+                slides: Some(slides),
+                sheet: None,
+                headers: None,
+                rows: None,
+                message: None,
+            })
+        }
+        "xlsx" | "xls" => {
+            let mut wb = open_workbook_auto(&path_str).map_err(|e| e.to_string())?;
+            let sheet = wb
+                .sheet_names()
+                .first()
+                .cloned()
+                .ok_or_else(|| "工作簿没有工作表".to_string())?;
+            let range = wb
+                .worksheet_range(&sheet)
+                .map_err(|e| format!("无法读取工作表：{e}"))?;
+            let mut rows: Vec<Vec<String>> = Vec::new();
+            for (r, row) in range.rows().enumerate() {
+                if r >= 80 {
+                    break;
+                }
+                let cells: Vec<String> = row.iter().take(20).map(cell_to_string).collect();
+                rows.push(cells);
+            }
+            let headers = rows.first().cloned().unwrap_or_default();
+            let data_rows = if rows.len() > 1 {
+                rows[1..].to_vec()
+            } else {
+                Vec::new()
+            };
+            Ok(FilePreviewPayload {
+                kind: "xlsx".into(),
+                path: path_str,
+                name,
+                text: None,
+                mime: None,
+                image_base64: None,
+                slides: None,
+                sheet: Some(sheet),
+                headers: Some(headers),
+                rows: Some(data_rows),
+                message: None,
+            })
+        }
+        "html" | "htm" => {
+            let text = crate::workspace::read_text_file(&path_str).map_err(|e| e.to_string())?;
+            let clipped = truncate_chars(&text, MAX_PREVIEW_TEXT_CHARS);
+            Ok(FilePreviewPayload {
+                kind: "html".into(),
+                path: path_str,
+                name,
+                text: Some(clipped),
+                mime: Some("text/html".into()),
+                image_base64: None,
+                slides: None,
+                sheet: None,
+                headers: None,
+                rows: None,
+                message: None,
+            })
+        }
+        "txt" | "json" | "csv" | "ts" | "tsx" | "js" | "jsx" | "css" | "xml"
+        | "yaml" | "yml" | "toml" | "rs" | "py" | "java" | "go" | "c" | "cpp" | "h" | "hpp"
+        | "sql" | "sh" | "log" | "ini" | "cfg" | "env" => {
+            let text = crate::workspace::read_text_file(&path_str).map_err(|e| e.to_string())?;
+            let clipped = truncate_chars(&text, MAX_PREVIEW_TEXT_CHARS);
+            Ok(FilePreviewPayload {
+                kind: "text".into(),
+                path: path_str,
+                name,
+                text: Some(clipped),
+                mime: None,
+                image_base64: None,
+                slides: None,
+                sheet: None,
+                headers: None,
+                rows: None,
+                message: None,
+            })
+        }
+        _ => {
+            // 尝试当文本读；失败则 unsupported
+            match crate::workspace::read_text_file(&path_str) {
+                Ok(text) if text.len() < MAX_PREVIEW_TEXT_CHARS => Ok(FilePreviewPayload {
+                    kind: "text".into(),
+                    path: path_str,
+                    name,
+                    text: Some(text),
+                    mime: None,
+                    image_base64: None,
+                    slides: None,
+                    sheet: None,
+                    headers: None,
+                    rows: None,
+                    message: None,
+                }),
+                _ => Ok(FilePreviewPayload {
+                    kind: "unsupported".into(),
+                    path: path_str,
+                    name,
+                    text: None,
+                    mime: None,
+                    image_base64: None,
+                    slides: None,
+                    sheet: None,
+                    headers: None,
+                    rows: None,
+                    message: Some("此类型暂不支持内嵌预览，可用系统打开".into()),
+                }),
+            }
+        }
+    }
+}
+
+fn truncate_chars(text: &str, max: usize) -> String {
+    if text.chars().count() <= max {
+        return text.to_string();
+    }
+    let clipped: String = text.chars().take(max).collect();
+    format!("{clipped}\n…(内容已截断)")
 }
 
 fn default_agent_workspace() -> Result<String, String> {
@@ -323,9 +652,15 @@ pub async fn send_prompt(
         .map(|p| p.to_string_lossy().into_owned())
         .unwrap_or_else(|_| "nova-desktop".into());
     prompt.push_str(&format!(
-        "你是 Nova Build 的 AI 编程助手。始终以“Nova Build”自我介绍，\
-不要声称自己是 Grok、xAI 或任何其他第三方产品；不要在回答中提及底层模型或服务提供方。\
-请始终使用简体中文回复。\n\n\
+        "你是 Nova Build 桌面端的 AI 编程助手。\n\
+身份与措辞：\n\
+- 产品名称是 Nova Build；不要声称自己是 Grok、xAI、Cursor、Claude 或其他第三方产品。\n\
+- 不要每条回复都自我介绍；直接回答用户问题。\n\
+- 不要在回答中提及底层模型名称或服务提供方。\n\
+- 请始终使用简体中文回复。\n\
+- 先给结论或可用答案，再按需补充简要说明；避免空泛的「我将要…」式套话。\n\
+- 天气、新闻、股价等实时信息：不要凭记忆瞎编。若已启用 fetch MCP，用 fetch_url 拉取可信来源后再回答；\
+若工具不可用或失败，明确说「当前无法联网核实」，并给出用户可自行打开的查询链接。\n\n\
 运行环境说明：\n\
 - 用户使用的是 Nova Build 桌面客户端，不是终端 TUI。\n\
 - 不要让用户输入 /cd 等 TUI 命令；切换项目由用户点击「选择项目」完成。\n\

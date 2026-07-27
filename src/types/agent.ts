@@ -40,13 +40,35 @@ export interface AgentStatus {
   message: string;
 }
 
+export type ToolCallStatus = "pending" | "running" | "completed" | "failed";
+
 export interface ChatMessage {
   id: string;
   role: "user" | "assistant" | "system";
   content: string;
   status: "pending" | "streaming" | "completed" | "error";
   attachments?: ChatAttachment[];
+  /** 结构化消息类型；缺省按普通文本 */
+  kind?: "text" | "plan" | "tool" | "error";
+  /** plan 类型时的条目列表 */
+  planEntries?: string[];
+  /** tool 类型：ACP toolCallId，用于 upsert 更新 */
+  toolCallId?: string;
+  toolTitle?: string;
+  toolStatus?: ToolCallStatus;
+  toolOutput?: string;
 }
+
+/** 对话交互模式（通过提示词前缀约束 Agent 行为） */
+export type ChatMode = "agent" | "plan" | "ask";
+
+export const CHAT_MODE_PREFIX: Record<ChatMode, string> = {
+  agent: "",
+  plan:
+    "【规划模式·只读】你现在只能输出实现计划（步骤、风险、验收标准）。严禁：创建/修改/删除文件、执行 shell 命令、调用会改写磁盘的 MCP（如 excel/word/powerpoint 写入）。等我明确说「按此执行」后再动手。\n\n",
+  ask:
+    "【问答模式·只读】你只能回答问题与做分析。严禁：创建/修改/删除文件、执行 shell 命令、调用会改写磁盘的工具。可用只读检索与说明。\n\n",
+};
 
 export interface ChatAttachment {
   id: string;

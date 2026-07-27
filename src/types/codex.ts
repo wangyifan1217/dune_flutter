@@ -1,7 +1,7 @@
 import type { ChatMessage, DirectoryTreeNode, McpServerConfig } from "../types/agent";
 
-export type RightTab = "files" | "diff" | "terminal" | "activity";
-export type LeftMode = "threads" | "files" | "memory" | "settings";
+export type RightTab = "files" | "diff" | "terminal" | "activity" | "preview";
+export type LeftMode = "threads" | "settings";
 
 export interface ThreadSession {
   id: string;
@@ -9,6 +9,10 @@ export interface ThreadSession {
   createdAt: number;
   updatedAt: number;
   messages: ChatMessage[];
+  /** Workspace path when the session was created / last bound. */
+  workspace?: string | null;
+  /** 当前会话对话模式 */
+  chatMode?: "agent" | "plan" | "ask";
 }
 
 export interface DiffHunk {

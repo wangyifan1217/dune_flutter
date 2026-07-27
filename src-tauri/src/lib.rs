@@ -112,6 +112,7 @@ pub fn run() {
             commands::clear_workspace,
             commands::read_dropped_files,
             commands::open_generated_file,
+            commands::preview_file,
             commands::set_workspace,
             commands::disconnect_agent,
             commands::reconnect_agent,

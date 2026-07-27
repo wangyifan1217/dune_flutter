@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useState } from "react";
 import type { DirectoryTreeNode, FileEntry } from "../types/agent";
+import { IconChevronRight, IconFile, IconFolder } from "./Icons";
 
 interface FileTreeProps {
   tree: DirectoryTreeNode | null;
@@ -39,8 +40,15 @@ function TreeNode({
         }}
         title={node.path}
       >
-        <span className="tree-icon">
-          {node.isDir ? (isExpanded ? "📂" : "📁") : "📄"}
+        {node.isDir ? (
+          <span className={`tree-chev ${isExpanded ? "open" : ""}`} aria-hidden>
+            <IconChevronRight size={12} />
+          </span>
+        ) : (
+          <span className="tree-chev spacer" aria-hidden />
+        )}
+        <span className="tree-icon" aria-hidden>
+          {node.isDir ? <IconFolder size={14} /> : <IconFile size={14} />}
         </span>
         <span className="tree-name">{node.name}</span>
       </button>

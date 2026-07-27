@@ -8,6 +8,8 @@
 # Apple Developer → Certificates → Developer ID Application → 导出 .p12
 #   base64 -i DeveloperID.p12 | pbcopy  → 填入 MACOS_CERTIFICATE_BASE64
 #   MACOS_SIGNING_IDENTITY 示例：Developer ID Application: Your Company (TEAMID)
+#
+# 构建时按架构下载官方 Grok CLI 并打入 .app Resources，用户无需自行安装地基。
 name: macOS DMG (Developer ID)
 
 on:
@@ -22,8 +24,10 @@ jobs:
       matrix:
         include:
           - target: aarch64-apple-darwin
+            cli_platform: macos-aarch64
             artifact: NovaDesktop-macOS-arm64
           - target: x86_64-apple-darwin
+            cli_platform: macos-x86_64
             artifact: NovaDesktop-macOS-x64
     runs-on: macos-latest
     env:
@@ -32,18 +36,66 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Windows 安装包内置 grok.exe；macOS 则由首次启动引导用户安装官方 Grok CLI。
-      # 不能将 Windows PE 二进制打进 DMG，否则既无效也会让 macOS CI 缺少资源而失败。
-      - name: Remove Windows-only Grok resource
+      # Windows 仓库里可能有 grok.exe；macOS 需换成对应架构的官方 grok 二进制。
+      - name: Bundle official Grok CLI for macOS
         run: |
+          set -euo pipefail
+          PRIMARY="https://x.ai/cli"
+          FALLBACK="https://storage.googleapis.com/grok-build-public-artifacts/cli"
+          PLATFORM="${{ matrix.cli_platform }}"
+
+          fetch() {
+            local url="$1"
+            curl -fsSL --retry 3 --retry-delay 2 "$url"
+          }
+
+          echo "Resolving stable Grok CLI version..."
+          version="$(fetch "${PRIMARY}/stable" 2>/dev/null || true)"
+          base="$PRIMARY"
+          if [ -z "$version" ]; then
+            echo "Note: ${PRIMARY} unreachable, falling back to GCS"
+            version="$(fetch "${FALLBACK}/stable")"
+            base="$FALLBACK"
+          fi
+          version="$(printf '%s' "$version" | tr -d '\r' | head -n1 | tr -d '[:space:]')"
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9._]+)?$ ]]; then
+            echo "::error::无法解析 Grok 版本：${version}"
+            exit 1
+          fi
+          echo "Using Grok CLI ${version} (${PLATFORM})"
+
+          mkdir -p src-tauri/binaries
+          rm -f src-tauri/binaries/grok.exe src-tauri/binaries/grok
+          url="${base}/grok-${version}-${PLATFORM}"
+          echo "Downloading ${url}"
+          if ! curl -fsSL --retry 3 --retry-delay 2 -o src-tauri/binaries/grok "$url"; then
+            if [ "$base" != "$FALLBACK" ]; then
+              url="${FALLBACK}/grok-${version}-${PLATFORM}"
+              echo "Retry from GCS: ${url}"
+              curl -fsSL --retry 3 --retry-delay 2 -o src-tauri/binaries/grok "$url"
+            else
+              exit 1
+            fi
+          fi
+          chmod +x src-tauri/binaries/grok
+          # 同文件副本：部分子流程会找 `agent` 同名入口
+          cp -f src-tauri/binaries/grok src-tauri/binaries/agent
+          chmod +x src-tauri/binaries/agent
+          ls -lh src-tauri/binaries/grok src-tauri/binaries/agent
+          file src-tauri/binaries/grok
+
           python3 - <<'PY'
           import json
           from pathlib import Path
 
           path = Path("src-tauri/tauri.conf.json")
           config = json.loads(path.read_text())
-          config.get("bundle", {}).pop("resources", None)
+          config.setdefault("bundle", {})["resources"] = {
+              "binaries/grok": "grok",
+              "binaries/agent": "agent",
+          }
           path.write_text(json.dumps(config, ensure_ascii=False, indent=2) + "\n")
+          print("Updated bundle.resources -> binaries/grok + binaries/agent")
           PY
 
       - name: Setup Node

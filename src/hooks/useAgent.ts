@@ -8,6 +8,7 @@ import type {
   ChatMessage,
   DirectoryTreeNode,
   SessionUpdateEvent,
+  ToolCallStatus,
 } from "../types/agent";
 import { normalizeSettings } from "../types/agent";
 import type { ActivityItem, DiffHunk } from "../types/codex";
@@ -15,7 +16,13 @@ import { extractDiffsFromText } from "../lib/diffs";
 
 type StreamPart =
   | { kind: "text"; text: string; messageId?: string }
-  | { kind: "tool"; title: string; status?: string }
+  | {
+      kind: "tool";
+      toolCallId: string;
+      title: string;
+      status: ToolCallStatus;
+      output?: string;
+    }
   | { kind: "plan"; text: string };
 
 function localizeToolText(input: string): string {
@@ -32,6 +39,47 @@ function localizeToolText(input: string): string {
     .replace(/\bgrep\b/gi, "搜索");
 }
 
+function mapToolStatus(raw?: string): ToolCallStatus {
+  const s = (raw ?? "pending").toLowerCase();
+  if (s.includes("fail") || s.includes("error") || s.includes("cancel")) return "failed";
+  if (s.includes("complete") || s === "done" || s === "success") return "completed";
+  if (s.includes("progress") || s.includes("running") || s === "updated") return "running";
+  if (s.includes("pending")) return "pending";
+  return "running";
+}
+
+function extractToolOutput(content: unknown): string {
+  if (!content) return "";
+  if (typeof content === "string") return content;
+  if (!Array.isArray(content)) {
+    try {
+      return JSON.stringify(content, null, 2);
+    } catch {
+      return String(content);
+    }
+  }
+  return content
+    .map((c) => {
+      if (!c || typeof c !== "object") return "";
+      const row = c as Record<string, unknown>;
+      if (typeof row.text === "string") return row.text;
+      if (row.content && typeof row.content === "object") {
+        const inner = row.content as { text?: string };
+        return inner.text ?? "";
+      }
+      if (typeof row.type === "string" && row.type === "diff") {
+        try {
+          return JSON.stringify(row, null, 2);
+        } catch {
+          return "";
+        }
+      }
+      return "";
+    })
+    .filter(Boolean)
+    .join("\n");
+}
+
 function parseUpdate(update: Record<string, unknown>): StreamPart | null {
   const sessionUpdate = update.sessionUpdate;
   if (sessionUpdate === "agent_message_chunk") {
@@ -44,42 +92,100 @@ function parseUpdate(update: Record<string, unknown>): StreamPart | null {
       messageId: typeof update.messageId === "string" ? update.messageId : undefined,
     };
   }
-  if (sessionUpdate === "tool_call") {
-    return {
-      kind: "tool",
-      title: (update.title as string | undefined) ?? "工具调用",
-      status: "pending",
-    };
-  }
-  if (sessionUpdate === "tool_call_update") {
-    const content = update.content;
-    let extra = "";
-    if (Array.isArray(content)) {
-      extra = content
-        .map((c) => {
-          if (c && typeof c === "object" && "content" in c) {
-            const inner = (c as { content?: { text?: string } }).content;
-            return inner?.text ?? "";
-          }
-          return "";
-        })
-        .join("\n");
-    }
-    return {
-      kind: "tool",
-      title: (update.title as string | undefined) ?? "工具",
-      status: `${(update.status as string | undefined) ?? "updated"}${extra ? `\n${extra}` : ""}`,
-    };
+  if (sessionUpdate === "tool_call" || sessionUpdate === "tool_call_update") {
+    const title =
+      (typeof update.title === "string" && update.title) ||
+      (typeof update.kind === "string" && update.kind) ||
+      "工具调用";
+    const toolCallId =
+      (typeof update.toolCallId === "string" && update.toolCallId) ||
+      (typeof update.tool_call_id === "string" && update.tool_call_id) ||
+      `title:${title}`;
+    const output = extractToolOutput(update.content);
+    const status =
+      sessionUpdate === "tool_call"
+        ? mapToolStatus((update.status as string | undefined) ?? "pending")
+        : mapToolStatus(update.status as string | undefined);
+    return { kind: "tool", toolCallId, title, status, output: output || undefined };
   }
   if (sessionUpdate === "plan") {
-    const entries = update.entries as Array<{ content?: string }> | undefined;
+    const entries = update.entries as
+      | Array<{ content?: string; priority?: string; status?: string }>
+      | undefined;
     if (!entries?.length) return null;
     return {
       kind: "plan",
-      text: entries.map((e) => `• ${e.content ?? ""}`).join("\n"),
+      text: entries
+        .map((e) => {
+          const status = e.status ? `（${e.status}）` : "";
+          return `• ${e.content ?? ""}${status}`;
+        })
+        .join("\n"),
     };
   }
   return null;
+}
+
+function upsertToolMessage(
+  prev: ChatMessage[],
+  part: Extract<StreamPart, { kind: "tool" }>,
+): ChatMessage[] {
+  const idx = prev.findIndex(
+    (m) => m.kind === "tool" && m.toolCallId === part.toolCallId,
+  );
+  const title = localizeToolText(part.title);
+  if (idx >= 0) {
+    const existing = prev[idx];
+    const next: ChatMessage = {
+      ...existing,
+      toolTitle: title || existing.toolTitle,
+      toolStatus: part.status,
+      toolOutput: part.output
+        ? [existing.toolOutput, part.output].filter(Boolean).join("\n")
+        : existing.toolOutput,
+      content: title,
+      status:
+        part.status === "failed"
+          ? "error"
+          : part.status === "completed"
+            ? "completed"
+            : "streaming",
+    };
+    const copy = [...prev];
+    copy[idx] = next;
+    return copy;
+  }
+  return [
+    ...prev,
+    {
+      id: crypto.randomUUID(),
+      role: "assistant",
+      content: title,
+      status:
+        part.status === "failed"
+          ? "error"
+          : part.status === "completed"
+            ? "completed"
+            : "streaming",
+      kind: "tool",
+      toolCallId: part.toolCallId,
+      toolTitle: title,
+      toolStatus: part.status,
+      toolOutput: part.output,
+    },
+  ];
+}
+
+function finalizeOpenTools(prev: ChatMessage[]): ChatMessage[] {
+  return prev.map((m) => {
+    if (m.kind !== "tool") return m;
+    if (m.toolStatus === "completed" || m.toolStatus === "failed") return m;
+    return {
+      ...m,
+      toolStatus: "completed" as const,
+      status: "completed" as const,
+    };
+  });
 }
 
 interface Options {
@@ -196,7 +302,22 @@ export function useAgent({ activeSessionId, setMessages }: Options) {
             ...prev,
             [threadId]: `正在执行工具：${localizeToolText(part.title)}`,
           }));
-        } else if (part.kind === "text") {
+          setMessages(threadId, (prev) => upsertToolMessage(prev, part));
+
+          const text = `${localizeToolText(part.title)}${part.status ? ` · ${part.status}` : ""}`;
+          setActivity((prev) =>
+            [{ id: crypto.randomUUID(), text, at: Date.now() }, ...prev].slice(0, 100),
+          );
+          const found = extractDiffsFromText(
+            [part.title, part.output].filter(Boolean).join("\n"),
+          );
+          if (found.length) {
+            setDiffs((prev) => [...found, ...prev].slice(0, 50));
+          }
+          return;
+        }
+
+        if (part.kind === "text") {
           setProgressBySession((prev) => ({
             ...prev,
             [threadId]: "模型正在生成回复",
@@ -210,6 +331,8 @@ export function useAgent({ activeSessionId, setMessages }: Options) {
             const sameStream =
               last?.role === "assistant" &&
               last.status === "streaming" &&
+              last.kind !== "plan" &&
+              last.kind !== "tool" &&
               (!part.messageId ||
                 !streamMsgId ||
                 part.messageId === streamMsgId);
@@ -227,25 +350,53 @@ export function useAgent({ activeSessionId, setMessages }: Options) {
                 role: "assistant",
                 content: part.text,
                 status: "streaming",
+                kind: "text",
               },
             ];
           });
           return;
         }
 
-        // 工具/计划只进右侧「活动」，不刷聊天区
-        const text =
-          part.kind === "tool"
-            ? `⚙ ${localizeToolText(part.title)}${part.status ? ` · ${localizeToolText(part.status)}` : ""}`
-            : `计划\n${part.text}`;
-
-        setActivity((prev) =>
-          [{ id: crypto.randomUUID(), text, at: Date.now() }, ...prev].slice(0, 100),
-        );
-
-        const found = extractDiffsFromText(text);
-        if (found.length) {
-          setDiffs((prev) => [...found, ...prev].slice(0, 50));
+        if (part.kind === "plan") {
+          const entries = part.text
+            .split("\n")
+            .map((line) => line.replace(/^•\s*/, "").trim())
+            .filter(Boolean);
+          setMessages(threadId, (prev) => {
+            const last = prev[prev.length - 1];
+            if (last?.kind === "plan" && last.status === "streaming") {
+              return [
+                ...prev.slice(0, -1),
+                {
+                  ...last,
+                  content: part.text,
+                  planEntries: entries,
+                  status: "completed",
+                },
+              ];
+            }
+            return [
+              ...prev,
+              {
+                id: crypto.randomUUID(),
+                role: "assistant",
+                content: part.text,
+                status: "completed",
+                kind: "plan",
+                planEntries: entries,
+              },
+            ];
+          });
+          setActivity((prev) =>
+            [
+              {
+                id: crypto.randomUUID(),
+                text: `计划\n${part.text}`,
+                at: Date.now(),
+              },
+              ...prev,
+            ].slice(0, 100),
+          );
         }
       });
       if (!alive) return u2();
@@ -356,20 +507,25 @@ export function useAgent({ activeSessionId, setMessages }: Options) {
         setLastError(`终止失败：${String(error)}`);
       } finally {
         setMessages(threadId, (prev) => {
-          const last = prev[prev.length - 1];
+          const withTools = finalizeOpenTools(prev);
+          const last = withTools[withTools.length - 1];
           if (last?.role === "assistant" && last.status === "streaming") {
             const content = last.content.trim()
               ? `${last.content}\n\n（已终止）`
               : "（已终止）";
-            return [...prev.slice(0, -1), { ...last, content, status: "completed" }];
+            return [
+              ...withTools.slice(0, -1),
+              { ...last, content, status: "completed" },
+            ];
           }
           return [
-            ...prev,
+            ...withTools,
             {
               id: crypto.randomUUID(),
               role: "system",
               content: "已终止当前回答",
               status: "completed",
+              kind: "error",
             },
           ];
         });
@@ -442,6 +598,7 @@ export function useAgent({ activeSessionId, setMessages }: Options) {
         }
         const historyPayload = history
           .filter((m) => m.role === "user" || m.role === "assistant")
+          .filter((m) => m.kind !== "tool" && m.kind !== "error")
           .filter((m) => m.content.trim().length > 0)
           .slice(-16)
           .map((m) => ({ role: m.role, content: m.content }));
@@ -455,16 +612,21 @@ export function useAgent({ activeSessionId, setMessages }: Options) {
           return false;
         }
         setMessages(threadId, (prev) => {
-          const last = prev[prev.length - 1];
-          if (last?.role === "assistant" && last.status === "streaming") {
+          const withTools = finalizeOpenTools(prev);
+          const last = withTools[withTools.length - 1];
+          if (
+            last?.role === "assistant" &&
+            last.status === "streaming" &&
+            last.kind !== "tool"
+          ) {
             const completed = { ...last, status: "completed" as const };
             const found = extractDiffsFromText(completed.content);
             if (found.length) {
               setDiffs((d) => [...found, ...d].slice(0, 50));
             }
-            return [...prev.slice(0, -1), completed];
+            return [...withTools.slice(0, -1), completed];
           }
-          return prev;
+          return withTools;
         });
         // 任务结束后再兜底刷新一次，覆盖非 ACP 直写路径
         if (workspaceRef.current) {
@@ -477,12 +639,13 @@ export function useAgent({ activeSessionId, setMessages }: Options) {
         const msg = String(error);
         setLastError(msg);
         setMessages(threadId, (prev) => [
-          ...prev,
+          ...finalizeOpenTools(prev),
           {
             id: crypto.randomUUID(),
             role: "system",
             content: msg,
             status: "error",
+            kind: "error",
           },
         ]);
         return false;

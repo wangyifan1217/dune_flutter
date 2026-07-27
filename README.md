@@ -72,6 +72,8 @@ Manual workflow: [`.github/workflows/macos-dmg.yml`](.github/workflows/macos-dmg
 
 Actions 页手动运行 **macOS DMG (Developer ID)**，产物为 arm64 / x64 两个 DMG artifact。
 
+流水线会按架构从官方源下载 Grok CLI 并打入 `.app`（与 Windows 内置 `grok.exe` 同思路），用户无需再执行 `curl … | bash`。
+
 ## How it works
 
 1. Open a workspace folder in the app.

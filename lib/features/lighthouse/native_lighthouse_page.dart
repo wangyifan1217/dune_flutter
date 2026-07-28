@@ -117,13 +117,19 @@ class _LhPlum {
   static const Color lavender = Color(0xFFF0ECF6);
   static const Color mist = Color(0xFFF5F2FA);
 
-  // ── v14 · 全页淡紫系统 ──────────────────────────────────────────────
-  //   紫从「hero 卡的底色」上移成「整页的空气」：页面底铺淡紫雾，
-  //   卡片反白浮起来。原来 hero(#F0ECF6) 比页面底和列表白卡都暗，
-  //   等于把最重要的东西涂成了整页最灰的一块。
-  static const Color page = Color(0xFFF6F3FB);     // 页面底
-  static const Color line = Color(0xFFE7E1F4);     // 全页 hairline 统一走紫
+  // ── v14.1 · 淡紫系统：紫做「线」和「字」，只有一处做「面」────────────
+  //   页面底保持中性，列表卡纯白，hairline 与 hero 大数走紫。
+  //   全页唯一一块有色面是 hero 卡 —— 焦点靠「只有它有颜色」确立，
+  //   不靠它比周围重。线和字的紫可以饱和得多而不显腻，因为面积小。
+  //   （v14 曾把页面底整片铺成淡紫，面积一大色偏累积，且与 mist 撞车，
+  //     读起来「到处都是紫」。面上的紫收回到 hero 一处。）
+  static const Color line = Color(0xFFE4DCF4);     // 全页 hairline，明确的紫
   static const Color heroNum = Color(0xFF4A3A7A);  // hero 大数专用深紫
+
+  //   heroFill 明度与旧 lavender(#F0ECF6) 基本持平，但彩度从 10 提到 18。
+  //   旧色读起来是灰不是紫 —— 问题从来不是太深，是太灰。
+  static const Color heroFill = Color(0xFFEFE9FB); // hero 卡面
+  static const Color heroEdge = Color(0xFFDCD2F1); // hero 卡描边
 }
 
 /// 主分段条单元格语气：维度切换 / 板块态左侧锚点 / 右侧板块筛选
@@ -8111,7 +8117,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       child: Theme(
         data: DunesTheme.light(),
         child: Scaffold(
-          backgroundColor: _LhPlum.page,
+          backgroundColor: DunesColors.bgApp,
           // 键盘弹出时不顶起底部 Column —— SKU 搜索时
           // 通讯/千机/灯塔/我的 这条主 tab bar 保持在屏幕底部，
           // 不会被怼到键盘正上方。搜索框本身在页面中上部，
@@ -8451,16 +8457,17 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         Container(
           margin: const EdgeInsets.fromLTRB(22, 0, 22, 0),
           decoration: BoxDecoration(
-            // v14 · 淡紫底 → 纯白 + 顶部 3px 紫条。
-            //   #F0ECF6 和页面底只差几度，读起来不是「焦点卡」是「浅灰肿块」。
-            //   页面底改铺淡紫雾之后，白卡自然浮起来，对比度不靠加饰面得到。
-            //   饱和紫全页只出现在这条 3px accent 上，稀缺才有强度。
-            color: Colors.white,
-            border: Border.all(color: _LhPlum.line, width: 0.5),
+            // v14.1 · 页面底中性、列表卡纯白，hero 是全页唯一有色面。
+            //   焦点由「只有它带颜色」确立，不由「它比周围重」确立 ——
+            //   后者正是旧版 #F0ECF6 失败的地方：比页面底暗，却又不够紫，
+            //   于是读成一块浅灰肿块而不是一张焦点卡。
+            //   同明度、彩度翻倍之后，它才终于读成「紫」。
+            color: _LhPlum.heroFill,
+            border: Border.all(color: _LhPlum.heroEdge, width: 0.5),
             borderRadius: BorderRadius.circular(14),
             boxShadow: [
               BoxShadow(
-                color: _LhPlum.deep.withAlpha(20),
+                color: _LhPlum.deep.withAlpha(24),
                 blurRadius: 18,
                 spreadRadius: -6,
                 offset: const Offset(0, 6),

@@ -77,6 +77,58 @@ fn restore_app_ui(app: &tauri::AppHandle, window: &tauri::WebviewWindow) {
     let _ = window.navigate(home);
 }
 
+fn show_main_window(app: &tauri::AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.show();
+        let _ = window.unminimize();
+        if window.is_fullscreen().unwrap_or(false) {
+            // 退出异常全屏黑屏态后再聚焦
+            let _ = window.set_fullscreen(false);
+        }
+        let _ = window.set_focus();
+    }
+}
+
+/// 关闭按钮：Windows 藏到托盘；macOS 最小化到 Dock。
+/// macOS 全屏时直接 hide/minimize 会黑屏，需先退出全屏再操作。
+fn close_to_background(window: &tauri::WebviewWindow) {
+    #[cfg(target_os = "macos")]
+    {
+        if window.is_fullscreen().unwrap_or(false) {
+            let app = window.app_handle().clone();
+            let label = window.label().to_string();
+            let _ = window.set_fullscreen(false);
+            tauri::async_runtime::spawn(async move {
+                tokio::time::sleep(std::time::Duration::from_millis(700)).await;
+                if let Some(win) = app.get_webview_window(&label) {
+                    let _ = win.minimize();
+                }
+            });
+        } else {
+            let _ = window.minimize();
+        }
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = window.hide();
+    }
+}
+
+fn close_window_to_background(window: &tauri::Window) {
+    if let Some(webview) = window.app_handle().get_webview_window(window.label()) {
+        close_to_background(&webview);
+    } else {
+        #[cfg(target_os = "macos")]
+        {
+            let _ = window.minimize();
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            let _ = window.hide();
+        }
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tracing_subscriber::fmt()
@@ -123,18 +175,12 @@ pub fn run() {
                 .show_menu_on_left_click(false)
                 .on_menu_event(|app, event| match event.id.as_ref() {
                     "show" => {
-                        if let Some(window) = app.get_webview_window("main") {
-                            let _ = window.show();
-                            let _ = window.unminimize();
-                            let _ = window.set_focus();
-                        }
+                        show_main_window(app);
                     }
                     "reload" => {
                         if let Some(window) = app.get_webview_window("main") {
-                            let _ = window.show();
-                            let _ = window.unminimize();
+                            show_main_window(app);
                             restore_app_ui(app, &window);
-                            let _ = window.set_focus();
                         }
                     }
                     "quit" => {
@@ -151,12 +197,12 @@ pub fn run() {
                     {
                         let app = tray.app_handle();
                         if let Some(window) = app.get_webview_window("main") {
-                            if window.is_visible().unwrap_or(false) {
-                                let _ = window.hide();
+                            let visible = window.is_visible().unwrap_or(false);
+                            let minimized = window.is_minimized().unwrap_or(false);
+                            if visible && !minimized {
+                                close_to_background(&window);
                             } else {
-                                let _ = window.show();
-                                let _ = window.unminimize();
-                                let _ = window.set_focus();
+                                show_main_window(app);
                             }
                         }
                     }
@@ -165,12 +211,21 @@ pub fn run() {
 
             Ok(())
         })
-        .on_window_event(|window, event| {
-            if let WindowEvent::CloseRequested { api, .. } = event {
-                // 点关闭 → 隐藏到托盘，不退出
-                let _ = window.hide();
+        .on_window_event(|window, event| match event {
+            WindowEvent::CloseRequested { api, .. } => {
                 api.prevent_close();
+                close_window_to_background(window);
             }
+            // macOS 绿灯进全屏后偶发 WebView 未重绘；退出全屏时再拉一次焦点
+            WindowEvent::Resized(_) => {
+                #[cfg(target_os = "macos")]
+                {
+                    if window.is_fullscreen().unwrap_or(false) {
+                        let _ = window.set_focus();
+                    }
+                }
+            }
+            _ => {}
         })
         .invoke_handler(tauri::generate_handler![
             commands::get_settings,
@@ -226,6 +281,24 @@ pub fn run() {
             commands::terminal_resize,
             commands::terminal_stop,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app_handle, event| {
+            #[cfg(target_os = "macos")]
+            {
+                // 点 Dock 图标恢复窗口（关闭/最小化后不会只剩黑屏）
+                if let tauri::RunEvent::Reopen {
+                    has_visible_windows, ..
+                } = event
+                {
+                    if !has_visible_windows {
+                        show_main_window(app_handle);
+                    }
+                }
+            }
+            #[cfg(not(target_os = "macos"))]
+            {
+                let _ = (app_handle, &event);
+            }
+        });
 }

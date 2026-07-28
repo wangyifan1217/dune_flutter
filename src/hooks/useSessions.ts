@@ -120,18 +120,42 @@ export function useSessions() {
   );
 
   const createSession = useCallback((workspace?: string | null) => {
-    const next: ThreadSession = {
-      id: crypto.randomUUID(),
-      title: "新对话",
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-      messages: [],
-      workspace: workspace ?? null,
-      chatMode: "agent",
-    };
-    setSessions((prev) => [next, ...prev]);
-    setActiveId(next.id);
-    return next.id;
+    // 已有空白会话时复用，避免无限点「新建」堆一堆空对话
+    let reusedId: string | null = null;
+    setSessions((prev) => {
+      const empties = prev.filter(
+        (s) =>
+          (!s.messages || s.messages.length === 0) &&
+          (!s.title || s.title === "新对话"),
+      );
+      if (empties.length > 0) {
+        const keep = empties[0];
+        reusedId = keep.id;
+        const ws =
+          workspace !== undefined ? workspace ?? null : keep.workspace ?? null;
+        const dropIds = new Set(empties.slice(1).map((s) => s.id));
+        return prev
+          .filter((s) => !dropIds.has(s.id))
+          .map((s) =>
+            s.id === keep.id
+              ? { ...s, workspace: ws, updatedAt: Date.now() }
+              : s,
+          );
+      }
+      const next: ThreadSession = {
+        id: crypto.randomUUID(),
+        title: "新对话",
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        messages: [],
+        workspace: workspace ?? null,
+        chatMode: "agent",
+      };
+      reusedId = next.id;
+      return [next, ...prev];
+    });
+    if (reusedId) setActiveId(reusedId);
+    return reusedId ?? "";
   }, []);
 
   const setChatMode = useCallback((sessionId: string, chatMode: "agent" | "plan" | "ask") => {

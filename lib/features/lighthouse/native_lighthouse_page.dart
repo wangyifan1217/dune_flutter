@@ -284,8 +284,9 @@ enum _FlowRole { anchor, intermediate, result }
 //   预收    = 销售规模 − 核销规模
 //   收入    = 核销规模 × 利差率
 //   经营成本 = 业务成本（business_cost）
-//   成本合计 = total_cost（直读，禁止业务/税务拼凑）
-//   毛利    = 收入 − 成本合计（库字段 profit 直读，与上式一致）
+//   成本合计 = total_cost − business_cost − institution_rebate
+//   毛利    = 收入 − 成本合计（不直读库字段 profit）
+//   净利    = 库字段 profit（JSON: netProfit）
 //   效率    = 毛利 ÷ 锚点(优先核销)
 // ═════════════════════════════════════════════════════════════════════════════
 class _LhBiz {
@@ -471,7 +472,8 @@ Map<String, dynamic> _fallbackUiRoot() {
           metric('totalCost', '成本', '成本', 'neg'),
           metric('cost', '业务成本', '业务', 'neg'),
           metric('tax', '税务成本', '税务', 'mute'),
-          metric('profit', '毛利润', '毛利', 'pos', listDefault: false, hero: true),
+          metric('profit', '毛利润', '毛利', 'pos', listDefault: true, hero: true),
+          metric('netProfit', '净利润', '净利', 'pos', listDefault: true),
           metric(
             'rate',
             'ROI',
@@ -491,6 +493,8 @@ Map<String, dynamic> _fallbackUiRoot() {
           'totalCost',
           'cost',
           'tax',
+          'profit',
+          'netProfit',
         ],
         ['profit', 'gmv', 'rate', 'revenue', 'cost', 'tax'],
         // 与后端 ProductLineGroupCaseSQL(sync_source) 对齐
@@ -516,7 +520,8 @@ Map<String, dynamic> _fallbackUiRoot() {
           metric('woa', 'WOA', 'WOA', 'mute'),
           metric('deferred', '抵扣延期分润', '延期', 'mute'),
           metric('discount', '折扣返点', '折扣', 'copper', sortable: false),
-          metric('profit', '毛利润', '毛利', 'pos', listDefault: false, hero: true),
+          metric('profit', '毛利润', '毛利', 'pos', listDefault: true, hero: true),
+          metric('netProfit', '净利润', '净利', 'pos', listDefault: true),
           metric(
             'rate',
             'ROI',
@@ -537,6 +542,8 @@ Map<String, dynamic> _fallbackUiRoot() {
           'saasFee',
           'deferred',
           'discount',
+          'profit',
+          'netProfit',
         ],
         ['sales', 'revenue', 'cost', 'profit', 'rate'],
         filters: [
@@ -555,7 +562,8 @@ Map<String, dynamic> _fallbackUiRoot() {
           metric('saasFee', 'SAAS服务费', 'SAAS', 'mute'),
           metric('woa', 'WOA', 'WOA', 'mute'),
           metric('deferred', '抵扣延期分润', '延期', 'mute'),
-          metric('profit', '毛利润', '毛利', 'pos', listDefault: false, hero: true),
+          metric('profit', '毛利润', '毛利', 'pos', listDefault: true, hero: true),
+          metric('netProfit', '净利润', '净利', 'pos', listDefault: true),
           metric(
             'rate',
             'ROI',
@@ -566,7 +574,7 @@ Map<String, dynamic> _fallbackUiRoot() {
             isRate: true,
           ),
         ],
-        ['sales', 'verifiedSales', 'gmv', 'cost', 'tax', 'spread', 'saasFee', 'deferred'],
+        ['sales', 'verifiedSales', 'gmv', 'cost', 'tax', 'spread', 'saasFee', 'deferred', 'profit', 'netProfit'],
         ['profit', 'revenue', 'cost', 'rate'],
         filters: [
           {'key': 'hun', 'label': 'U/N', 'options': hunOptions},
@@ -3157,6 +3165,7 @@ class _MetaCompareStageState extends State<_MetaCompareStage> {
   // 小地图, 常见指标 key → UPPER 英文.没命中的直接 upper key 用兜底.
   static const Map<String, String> _kMetricEn = {
     'profit': 'PROFIT',
+    'netProfit': 'NET PROFIT',
     'grossProfit': 'GROSS PROFIT',
     'revenue': 'REVENUE',
     'sales': 'SALES',
@@ -4618,6 +4627,8 @@ class _HeroMetricTrendChartState extends State<_HeroMetricTrendChart> {
     '成本合计': 'SUM(total_cost)',
     '毛利': '收入 − 成本合计',
     '毛利（净毛利）': '收入 − 成本合计',
+    '净利': '库字段 profit',
+    '净利润': '库字段 profit',
     'ROI': '毛利 ÷ 核销规模 × 100%',
   };
 
@@ -6287,10 +6298,27 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       final valid = _uiMetricDefs(tab).map((d) => d['key'] as String).toSet();
       final current = _savedMetricPrefs[tab] ?? _metrics[tab] ?? const [];
       final pruned = current.where(valid.contains).toList();
-      _metrics[tab] = pruned.isEmpty
+      final ordered = pruned.isEmpty
           ? List<String>.from(defaults)
           : List<String>.from(pruned);
+      _metrics[tab] = _ensureNetProfitAfterProfit(ordered);
     }
+  }
+
+  /// 净利必须紧跟毛利；旧偏好里常被追加在列尾，这里纠正顺序。
+  List<String> _ensureNetProfitAfterProfit(List<String> keys) {
+    final out = List<String>.from(keys);
+    final netIdx = out.indexOf('netProfit');
+    if (netIdx < 0) return out;
+    out.removeAt(netIdx);
+    var profitIdx = out.indexOf('profit');
+    if (profitIdx < 0) {
+      // 有净利无毛利时补上毛利，再把净利贴在后面
+      out.add('profit');
+      profitIdx = out.length - 1;
+    }
+    out.insert(profitIdx + 1, 'netProfit');
+    return out;
   }
 
   String _metricPrefsKey(String tab) {
@@ -7884,6 +7912,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                       } else {
                         m.add(k);
                       }
+                      _metrics[tab] = _ensureNetProfitAfterProfit(m);
                     });
                     _persistMetricPrefs();
                     refresh();
@@ -8820,6 +8849,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           sumVerifiedSales = 0,
           sumGmv = 0,
           sumCost = 0,
+          sumProjectCost = 0,
           sumTotalCost = 0,
           sumProfit = 0,
           sumRevenue = 0;
@@ -8830,6 +8860,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         sumVerifiedSales += v;
         sumGmv += (r['gmv'] as num?)?.toDouble() ?? 0;
         sumCost += (r['cost'] as num?)?.toDouble() ?? 0;
+        sumProjectCost += (r['projectCost'] as num?)?.toDouble() ?? 0;
         sumTotalCost += (r['totalCost'] as num?)?.toDouble() ?? 0;
         sumProfit += (r['profit'] as num?)?.toDouble() ?? 0;
         sumRevenue += (r['revenue'] as num?)?.toDouble() ?? 0;
@@ -8871,6 +8902,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             : ((metrics['cost'] as num?)?.toDouble() ??
                   (metrics['operatingCost'] as num?)?.toDouble() ??
                   sumCost),
+        'projectCost': filterActive
+            ? sumProjectCost
+            : ((metrics['projectCost'] as num?)?.toDouble() ?? sumProjectCost),
         'totalCost': filterActive
             ? sumTotalCost
             : ((metrics['totalCost'] as num?)?.toDouble() ?? sumTotalCost),
@@ -9256,12 +9290,6 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         label: 'ROI',
         isRate: true,
         cellColor: _LhPlum.primary,
-      ),
-      _HeroMetric(
-        key: 'cost',
-        label: '经营成本',
-        isRate: false,
-        cellColor: LhColors.pos,
       ),
       _HeroMetric(
         key: 'totalCost',
@@ -10814,7 +10842,6 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     final rate = totals['rate'] ?? 0;
     final spreadRate = totals['spreadRate'] ??
         (anchorValue > 0 ? revenue / anchorValue * 100 : 0.0);
-    final cost = totals['cost'] ?? 0;
     final totalCost = totals['totalCost'] ?? 0;
 
     // v14 · 固定 4 列网格。成本面只有 3 个指标，原来让它们撑满全宽，
@@ -10894,7 +10921,6 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             value: sales,
             isRate: false,
           ),
-          _statCell(keyId: 'cost', label: '经营成本', value: cost, isRate: false),
           _statCell(
             keyId: 'totalCost',
             label: '成本合计',
@@ -11141,6 +11167,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       'revenue': ('收入', false),
       'sales': ('销售额', false),
       'cost': ('经营成本', false),
+      'projectCost': ('项目成本', false),
       'totalCost': ('成本合计', false),
       'profit': ('毛利', false),
       'rate': ('ROI', true),
@@ -11749,6 +11776,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     double sumSales = 0,
         sumVerifiedSales = 0,
         sumCost = 0,
+        sumProjectCost = 0,
         sumTotalCost = 0,
         sumProfit = 0,
         sumRevenue = 0;
@@ -11758,6 +11786,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       sumSales += s;
       sumVerifiedSales += v;
       sumCost += (r['cost'] as num?)?.toDouble() ?? 0;
+      sumProjectCost += (r['projectCost'] as num?)?.toDouble() ?? 0;
       sumTotalCost += (r['totalCost'] as num?)?.toDouble() ?? 0;
       sumProfit += (r['profit'] as num?)?.toDouble() ?? 0;
       sumRevenue += (r['revenue'] as num?)?.toDouble() ?? 0;
@@ -11774,6 +11803,17 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     final heroRevenue = filterActive
         ? sumRevenue
         : ((metrics['revenue'] as num?)?.toDouble() ?? sumRevenue);
+    final heroProjectCost = filterActive
+        ? sumProjectCost
+        : ((metrics['projectCost'] as num?)?.toDouble() ?? sumProjectCost);
+    final heroTotalCost = filterActive
+        ? sumTotalCost
+        : ((metrics['totalCost'] as num?)?.toDouble() ?? sumTotalCost);
+    final heroCost = filterActive
+        ? sumCost
+        : ((metrics['cost'] as num?)?.toDouble() ??
+              (metrics['operatingCost'] as num?)?.toDouble() ??
+              sumCost);
     final anchorTotal = _anchor == _LhAnchor.verified && heroVerified > 0
         ? heroVerified
         : heroSales;
@@ -11785,9 +11825,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     final totals = {
       'sales': heroSales,
       'verifiedSales': heroVerified,
-      'cost': sumCost,
-      'totalCost': sumTotalCost,
-      'businessCost': sumCost,
+      'cost': heroCost,
+      'projectCost': heroProjectCost,
+      'totalCost': heroTotalCost,
+      'businessCost': heroCost,
       'profit': heroProfit,
       'revenue': heroRevenue,
       'spreadRate': spreadRate,
@@ -12299,7 +12340,8 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       (key: 'spreadRate', text: '利差率 = 收入（已核销利差） ÷ ${anchor}规模'),
       (key: 'revenue', text: '收入（已核销利差）= ${anchor}规模 × 利差率'),
       (key: 'cost', text: '经营成本 = 业务成本'),
-      (key: 'totalCost', text: '成本合计 = SUM(total_cost)'),
+      (key: 'projectCost', text: '项目成本 = 机构返佣'),
+      (key: 'totalCost', text: '成本合计 = total_cost − 经营成本 − 项目成本'),
       (key: 'profit', text: '毛利润（净毛利）= 收入（已核销利差）− 成本合计'),
       (key: 'rate', text: 'ROI = 毛利 ÷ 核销规模'),
     ];
@@ -12564,6 +12606,8 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         return _readMetricSeries('costSeries');
       case 'totalCost':
         return _readMetricSeries('totalCostSeries');
+      case 'projectCost':
+        return _readMetricSeries('projectCostSeries');
       case 'spreadRate':
         final direct = _readMetricSeries('spreadRateSeries');
         if (direct.isNotEmpty) return direct;
@@ -12607,10 +12651,12 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     const labels = {
       'sales': '销售额',
       'profit': '毛利润',
+      'netProfit': '净利润',
       'gmv': 'GMV',
       'rate': 'ROI',
       'revenue': '收入',
       'cost': '业务成本',
+      'projectCost': '项目成本',
       'totalCost': '成本合计',
       'tax': '税务成本',
     };
@@ -12623,6 +12669,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       case 'sales':
         return LhColors.ink2;
       case 'profit':
+      case 'netProfit':
         return LhColors.neg;
       case 'rate':
         return _LhPlum.primary;
@@ -12631,6 +12678,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       case 'revenue':
         return LhColors.cnpc;
       case 'cost':
+      case 'projectCost':
       case 'totalCost':
       case 'tax':
         return LhColors.pos;
@@ -12753,10 +12801,12 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     const en = {
       'sales': 'GROSS SALES',
       'profit': 'GROSS PROFIT',
+      'netProfit': 'NET PROFIT',
       'gmv': 'TRAFFIC GMV',
       'rate': 'EFFICIENCY ROI',
       'revenue': 'REVENUE',
       'cost': 'BUSINESS COST',
+      'projectCost': 'PROJECT COST',
       'totalCost': 'TOTAL COST',
       'tax': 'TAX COST',
     };
@@ -12768,11 +12818,13 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   List<String> _metricPageRelatedKeys(String key) {
     const rel = {
       'sales': ['profit', 'rate'],
-      'profit': ['rate', 'sales'],
+      'profit': ['netProfit', 'rate'],
+      'netProfit': ['profit', 'sales'],
       'rate': ['profit', 'sales'],
       'gmv': ['sales', 'profit'],
       'revenue': ['sales', 'profit'],
       'cost': ['sales', 'profit'],
+      'projectCost': ['totalCost', 'sales'],
       'totalCost': ['sales', 'profit'],
       'tax': ['revenue', 'sales'],
     };
@@ -17075,7 +17127,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   //        都有独立列。放不下靠横滚，不靠隐藏。
   //     3. 手机适配：首列钉住，指标区横滚，表头/所有行共用一个滚动偏移。
   //        列宽随屏宽三档 (74/80/88)，首列 clamp(screenW*0.40, 112, 156)。
-  //     4. 列序 = 走势 → 占比 → [排序指标] → 毛利 → 效率 → 其余选中指标。
+  //     4. 列序 = 走势 → 占比 → [排序指标] → 毛利 → 净利 → 效率 → 其余选中指标。
   //        走势/占比是形状与权重，紧挨冻结列，二级不用横滑也能看到；
   //        数值块保持连续。
   //
@@ -17100,7 +17152,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     return key == 'rate' || _uiMetricDefMap(tab)[key]?['isRate'] == true;
   }
 
-  /// 列集 = 走势 + 占比 + [排序指标] + 毛利 + 效率 + 其余选中指标
+  /// 列集 = 走势 + 占比 + [排序指标] + 毛利 + 净利 + 效率 + 其余选中指标
   ///
   /// 走势 / 占比紧挨冻结首列：都是「形状/权重」不是绝对值，放在数值块之前
   /// 保证二级/三级不用横滑也能看到占比与绿色进度条（与一级同款）。
@@ -17129,6 +17181,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
 
     add(_sortField);
     add('profit');
+    add('netProfit');
     add('rate');
     for (final k in (_metrics[tab] ?? const <String>[])) {
       add(k);
@@ -17481,6 +17534,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     required bool canDetail,
     required bool isExpanded,
     required VoidCallback onToggle,
+    VoidCallback? onOpenDetail,
   }) {
     final rawName = r['name']?.toString().trim() ?? '';
     final name = rawName.isEmpty ? '未命名' : rawName;
@@ -17490,8 +17544,37 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     final isTop3 = idx < 3;
     final hun = (_tab == 'supply' || _tab == 'channel') ? _hunOf(r) : null;
 
+    // 名称行：点名字/› 进二级；与下方展开箭头彻底拆开，避免误触。
+    final nameRow = Row(
+      children: [
+        Flexible(
+          child: Text(
+            name,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: LhTypography.sans(
+              size: 12.5,
+              weight: FontWeight.w600,
+              color: LhColors.ink,
+              height: 1.15,
+              letterSpacing: -0.1,
+            ),
+          ),
+        ),
+        if (canDetail)
+          Padding(
+            padding: const EdgeInsets.only(left: 1),
+            child: Icon(
+              Icons.chevron_right_rounded,
+              size: 15,
+              color: _LhPlum.primary,
+            ),
+          ),
+      ],
+    );
+
     return Padding(
-      padding: const EdgeInsets.only(left: 12, right: 8),
+      padding: const EdgeInsets.only(left: 12, right: 4),
       child: Row(
         children: [
           SizedBox(
@@ -17518,39 +17601,17 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           Expanded(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // 名称 + 进二级页箭头
-                //   整行 onTap 就是进详情，但没有任何视觉提示用户不会去点。
-                //   › 紧跟名字（而不是放行尾）是因为它的语义锚在「这个主体」上，
-                //   跟行尾那个「展开这一行的数据」是两回事。
-                Row(
-                  children: [
-                    Flexible(
-                      child: Text(
-                        name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: LhTypography.sans(
-                          size: 12.5,
-                          weight: FontWeight.w600,
-                          color: LhColors.ink,
-                          height: 1.15,
-                          letterSpacing: -0.1,
-                        ),
-                      ),
-                    ),
-                    if (canDetail)
-                      Padding(
-                        padding: const EdgeInsets.only(left: 1),
-                        child: Icon(
-                          Icons.chevron_right_rounded,
-                          size: 15,
-                          color: _LhPlum.primary,
-                        ),
-                      ),
-                  ],
-                ),
+                if (onOpenDetail != null)
+                  GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: onOpenDetail,
+                    child: nameRow,
+                  )
+                else
+                  nameRow,
                 const SizedBox(height: 2),
                 Row(
                   children: [
@@ -17588,24 +17649,29 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                         ),
                       ),
                     ),
-                    // ── 展开全指标 + 折线 ─────────────────────────────
-                    //   原来挂在横滚区最右端 —— 窄屏上必须把指标区整个划到底
-                    //   才够得着，等于这个功能在手机上不存在。
-                    //   搬进冻结列后永远在原地；右对齐是为了固定位置形成肌肉
-                    //   记忆（跟着名字长度浮动的话每行位置都不一样）。
-                    //   视觉 18px，热区靠 padding 撑到 22×24，行高 52 装得下。
+                    // 布局只占第二行高度；OverflowBox 把热区撑到 36×36，
+                    // 不参与 Column 测高，避免 bottom overflow。
                     GestureDetector(
                       behavior: HitTestBehavior.opaque,
                       onTap: onToggle,
-                      child: Padding(
-                        // 视觉 13px，热区靠 padding 撑到 21×21
-                        padding: const EdgeInsets.fromLTRB(4, 4, 0, 4),
-                        child: Icon(
-                          isExpanded
-                              ? Icons.keyboard_arrow_up_rounded
-                              : Icons.keyboard_arrow_down_rounded,
-                          size: 13,
-                          color: _LhPlum.primary,
+                      child: SizedBox(
+                        width: 36,
+                        height: 16,
+                        child: OverflowBox(
+                          minWidth: 36,
+                          maxWidth: 36,
+                          minHeight: 36,
+                          maxHeight: 36,
+                          alignment: Alignment.center,
+                          child: Icon(
+                            isExpanded
+                                ? Icons.keyboard_arrow_up_rounded
+                                : Icons.keyboard_arrow_down_rounded,
+                            size: 18,
+                            color: isExpanded
+                                ? _LhPlum.deep
+                                : _LhPlum.primary,
+                          ),
                         ),
                       ),
                     ),
@@ -17740,12 +17806,15 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         shadeFrac: _ledgerShare(r),
         // 行底占比色带：与占比列进度条同色；略提高 alpha，二级白底上仍可读
         shadeColor: groupColor.withAlpha(isExpanded ? 28 : 18),
+        // 进二级只挂在「名称/›」与右侧指标区；展开箭头在冻结列内独立处理，
+        // 避免点小尖头时父级 onTap 一并进详情。
         onTap: rowTap,
         pinned: _buildLedgerPinned(
           r,
           idx,
           canDetail: showChevron,
           isExpanded: isExpanded,
+          onOpenDetail: rowTap,
           onToggle: () => setState(() {
             if (!_expandedTrends.remove(trendKey)) {
               _expandedTrends.add(trendKey);
@@ -22549,7 +22618,7 @@ class _CubeChipButton extends StatelessWidget {
 //   _LedgerCol          列描述
 // ═══════════════════════════════════════════════════════════════════════════
 
-const double _kLedgerRowH = 48; // 折叠态行高
+const double _kLedgerRowH = 52; // 折叠态行高（冻结列两行 + 展开热区）
 const double _kLedgerHeadH = 26; // 表头高
 const double _kLedgerShareColW = 54; // 「占比」：百分比 + 3px 进度条
 const double _kLedgerSparkColW = 42; // 「走势」合成列
@@ -22680,26 +22749,33 @@ class _LedgerLineState extends State<_LedgerLine> {
             ),
           Row(
             children: [
+              // 冻结列不包行级 onTap：展开箭头与名称各自有独立手势。
               SizedBox(width: widget.pinnedWidth, child: widget.pinned),
               Expanded(
-                child: SingleChildScrollView(
-                  controller: _ctrl,
-                  scrollDirection: Axis.horizontal,
-                  physics: const ClampingScrollPhysics(),
-                  child: Row(children: widget.cells),
-                ),
+                child: widget.onTap == null
+                    ? SingleChildScrollView(
+                        controller: _ctrl,
+                        scrollDirection: Axis.horizontal,
+                        physics: const ClampingScrollPhysics(),
+                        child: Row(children: widget.cells),
+                      )
+                    : GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: widget.onTap,
+                        child: SingleChildScrollView(
+                          controller: _ctrl,
+                          scrollDirection: Axis.horizontal,
+                          physics: const ClampingScrollPhysics(),
+                          child: Row(children: widget.cells),
+                        ),
+                      ),
               ),
             ],
           ),
         ],
       ),
     );
-    if (widget.onTap == null) return line;
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: widget.onTap,
-      child: line,
-    );
+    return line;
   }
 }
 

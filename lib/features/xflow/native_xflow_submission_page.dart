@@ -398,7 +398,13 @@ class _NativeXflowSubmissionPageState extends State<NativeXflowSubmissionPage> {
                     )
                   : _error != null
                   ? Center(child: Text(_error!))
-                  : ListView(
+                  : GestureDetector(
+                      behavior: HitTestBehavior.translucent,
+                      onTap: () =>
+                          FocusManager.instance.primaryFocus?.unfocus(),
+                      child: ListView(
+                      keyboardDismissBehavior:
+                          ScrollViewKeyboardDismissBehavior.onDrag,
                       padding: const EdgeInsets.all(14),
                       children: [
                         if (hero != null)
@@ -435,6 +441,7 @@ class _NativeXflowSubmissionPageState extends State<NativeXflowSubmissionPage> {
                           ),
                         ],
                       ],
+                    ),
                     ),
             ),
             if (!_isApprover &&

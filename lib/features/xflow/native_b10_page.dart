@@ -411,28 +411,36 @@ class _NativeB10PageState extends State<NativeB10Page> {
                   ? _buildError()
                   : RefreshIndicator(
                       onRefresh: _load,
-                      child: ListView(
-                        padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
-                        children: [
-                          XflowDetailRenderer(
-                            bundle: _bundle!,
-                            service: _service,
-                            onApprove: _approve,
-                            onReject: _reject,
-                            onDelete: _deleteDraft,
-                            onPush: _push,
-                            onInitiate: _initiate,
-                            onReedit: () => widget.onReedit(_bundle!.detail.id),
-                            onVoid: _voidProposal,
-                            onWithdraw: _withdrawProposal,
-                            onReturn: _return,
-                          ),
-                          XflowCcRulesCard(
-                            rules: _ccRules,
-                            loading: _ccLoading,
-                            error: _ccError,
-                          ),
-                        ],
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.translucent,
+                        onTap: () =>
+                            FocusManager.instance.primaryFocus?.unfocus(),
+                        child: ListView(
+                          keyboardDismissBehavior:
+                              ScrollViewKeyboardDismissBehavior.onDrag,
+                          padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+                          children: [
+                            XflowDetailRenderer(
+                              bundle: _bundle!,
+                              service: _service,
+                              onApprove: _approve,
+                              onReject: _reject,
+                              onDelete: _deleteDraft,
+                              onPush: _push,
+                              onInitiate: _initiate,
+                              onReedit: () =>
+                                  widget.onReedit(_bundle!.detail.id),
+                              onVoid: _voidProposal,
+                              onWithdraw: _withdrawProposal,
+                              onReturn: _return,
+                            ),
+                            XflowCcRulesCard(
+                              rules: _ccRules,
+                              loading: _ccLoading,
+                              error: _ccError,
+                            ),
+                          ],
+                        ),
                       ),
                     ),
             ),

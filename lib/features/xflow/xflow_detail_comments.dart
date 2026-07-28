@@ -39,6 +39,10 @@ class _XfDetCommentsSectionState extends State<XfDetCommentsSection> {
   bool _sending = false;
   String? _error;
 
+  /// 用于识别退格是否落在 @人名 内，整段删除。
+  String _prevInputText = '';
+  bool _applyingMentionDelete = false;
+
   /// @ 列表不包含自己。
   List<ApprovalStakeholderPerson> get _mentionablePeople {
     final selfId = widget.service.session.userId;
@@ -55,6 +59,8 @@ class _XfDetCommentsSectionState extends State<XfDetCommentsSection> {
   void initState() {
     super.initState();
     _people = widget.fallbackPeople;
+    _prevInputText = _input.text;
+    _input.addListener(_onInputValueChanged);
     _load();
   }
 
@@ -69,10 +75,85 @@ class _XfDetCommentsSectionState extends State<XfDetCommentsSection> {
 
   @override
   void dispose() {
+    _input.removeListener(_onInputValueChanged);
     _input.dispose();
     _focus.dispose();
     _avatarService.close();
     super.dispose();
+  }
+
+  void _onInputValueChanged() {
+    if (_applyingMentionDelete) return;
+    final prev = _prevInputText;
+    final next = _input.value;
+    _expandMentionDeleteIfNeeded(prev, next);
+    _prevInputText = _input.text;
+  }
+
+  /// 退格/删除碰到 @人名 时，整段去掉（含紧随的空格）。
+  void _expandMentionDeleteIfNeeded(String prev, TextEditingValue next) {
+    if (next.text.length >= prev.length) return;
+    if (!next.selection.isValid || !next.selection.isCollapsed) return;
+    final composing = next.composing;
+    if (composing.isValid && !composing.isCollapsed) return;
+
+    final cursor = next.selection.baseOffset.clamp(0, next.text.length);
+    final deletedLen = prev.length - next.text.length;
+    if (deletedLen <= 0) return;
+    final delStart = cursor;
+    final delEnd = cursor + deletedLen;
+    if (delStart < 0 || delEnd > prev.length) return;
+
+    final ranges = _mentionRanges(prev);
+    for (final r in ranges) {
+      // 只在删到「@人名」本体时整段删；单独删尾随空格不触发。
+      if (delStart < r.coreEnd && delEnd > r.start) {
+        final newText = prev.substring(0, r.start) + prev.substring(r.end);
+        _applyingMentionDelete = true;
+        _input.value = TextEditingValue(
+          text: newText,
+          selection: TextSelection.collapsed(offset: r.start),
+        );
+        _applyingMentionDelete = false;
+        return;
+      }
+    }
+  }
+
+  List<({int start, int coreEnd, int end})> _mentionRanges(String text) {
+    final names = <String>{
+      for (final p in _people)
+        if (p.displayName.trim().isNotEmpty) p.displayName.trim(),
+    }.toList()
+      ..sort((a, b) => b.length.compareTo(a.length));
+    final ranges = <({int start, int coreEnd, int end})>[];
+    final occupied = <bool>[for (var i = 0; i < text.length; i++) false];
+    for (final name in names) {
+      final token = '@$name';
+      var from = 0;
+      while (from < text.length) {
+        final idx = text.indexOf(token, from);
+        if (idx < 0) break;
+        final coreEnd = idx + token.length;
+        final end =
+            coreEnd < text.length && text[coreEnd] == ' ' ? coreEnd + 1 : coreEnd;
+        var overlap = false;
+        for (var i = idx; i < coreEnd; i++) {
+          if (occupied[i]) {
+            overlap = true;
+            break;
+          }
+        }
+        if (!overlap) {
+          for (var i = idx; i < end && i < occupied.length; i++) {
+            occupied[i] = true;
+          }
+          ranges.add((start: idx, coreEnd: coreEnd, end: end));
+        }
+        from = idx + 1;
+      }
+    }
+    return ranges;
   }
 
   Future<void> _load() async {
@@ -184,8 +265,12 @@ class _XfDetCommentsSectionState extends State<XfDetCommentsSection> {
     final sel = _input.selection;
     final insertAt = sel.isValid ? sel.baseOffset : cur.length;
     final safeAt = insertAt.clamp(0, cur.length);
-    final before = cur.substring(0, safeAt);
+    var before = cur.substring(0, safeAt);
     final after = cur.substring(safeAt);
+    // 输入 @ 弹出选人后，复用已键入的 @，避免出现 @@人名。
+    if (before.endsWith('@')) {
+      before = before.substring(0, before.length - 1);
+    }
     final needSpace =
         before.isNotEmpty && !before.endsWith(' ') && !before.endsWith('\n');
     final chunk = '${needSpace ? ' ' : ''}@$name ';
@@ -225,6 +310,12 @@ class _XfDetCommentsSectionState extends State<XfDetCommentsSection> {
 
   void _cancelReply() {
     setState(() => _replyParent = null);
+    _focus.unfocus();
+  }
+
+  void _dismissKeyboard() {
+    _focus.unfocus();
+    FocusManager.instance.primaryFocus?.unfocus();
   }
 
   Future<void> _send() async {
@@ -247,6 +338,7 @@ class _XfDetCommentsSectionState extends State<XfDetCommentsSection> {
         _replyParent = null;
         _sending = false;
       });
+      _dismissKeyboard();
       showDunesToast(context, '评论已发送，相关人将在审批助手收到通知');
     } catch (e) {
       if (!mounted) return;
@@ -398,6 +490,7 @@ class _XfDetCommentsSectionState extends State<XfDetCommentsSection> {
                       enabledBorder: InputBorder.none,
                       focusedBorder: InputBorder.none,
                     ),
+                    onTapOutside: (_) => _dismissKeyboard(),
                     onChanged: (v) {
                       if (v.endsWith('@')) {
                         _pickMention();

@@ -6,6 +6,7 @@ list(APPEND FLUTTER_PLUGIN_LIST
   desktop_drop
   emoji_picker_flutter
   file_selector_linux
+  hotkey_manager_linux
   pasteboard
   screen_retriever_linux
   tray_manager

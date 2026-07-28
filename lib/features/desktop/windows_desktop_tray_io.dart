@@ -37,6 +37,17 @@ void setWindowsTrayOnInactiveChanged(void Function(bool inactive)? callback) {
   WindowsDesktopTray.instance.onInactiveChanged = callback;
 }
 
+/// 应用更新前解除「关窗进托盘」拦截，使 Sparkle / 安装器能正常终止进程。
+/// [exitProcess] 为 true 时走完整退出（DMG 兜底等需立刻腾出 .app 占用）。
+Future<void> windowsTrayPrepareQuitForAppUpdate({bool exitProcess = false}) =>
+    WindowsDesktopTray.instance.prepareQuitForAppUpdate(
+      exitProcess: exitProcess,
+    );
+
+/// Sparkle 未真正安装（取消/无更新/失败）时恢复托盘防关闭。
+Future<void> windowsTrayRearmPreventCloseAfterUpdateCancelled() =>
+    WindowsDesktopTray.instance.rearmPreventCloseAfterUpdateCancelled();
+
 /// 关闭进托盘；隐藏且有未读/新消息时托盘图标闪烁。
 class WindowsDesktopTray with WindowListener, TrayListener {
   WindowsDesktopTray._();
@@ -165,6 +176,36 @@ class WindowsDesktopTray with WindowListener, TrayListener {
     await windowManager.setPreventClose(true);
     await trayManager.setIcon(_trayIcon);
     _emitInactiveChanged();
+  }
+
+  /// Sparkle「安装并重启」前只需松绑；DMG 兜底则 [exitProcess] 立刻退出。
+  Future<void> prepareQuitForAppUpdate({bool exitProcess = false}) async {
+    if (kIsWeb || !(Platform.isWindows || Platform.isMacOS)) return;
+    _allowQuit = true;
+    try {
+      await windowManager.setPreventClose(false);
+    } catch (_) {}
+    if (!exitProcess) return;
+    // 对齐 Windows 更新退出：不走 onBeforeQuit，保留本地登录态便于重装后恢复会话。
+    await _stopFlash();
+    try {
+      await trayManager.destroy();
+    } catch (_) {}
+    try {
+      await windowManager.destroy();
+    } catch (_) {}
+    exit(0);
+  }
+
+  /// 用户取消更新或 Sparkle 未安装时，恢复关窗进托盘。
+  Future<void> rearmPreventCloseAfterUpdateCancelled() async {
+    if (kIsWeb || !(Platform.isWindows || Platform.isMacOS) || !_ready) {
+      return;
+    }
+    _allowQuit = false;
+    try {
+      await windowManager.setPreventClose(true);
+    } catch (_) {}
   }
 
   Future<void> _quitApp() async {

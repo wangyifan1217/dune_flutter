@@ -26,3 +26,11 @@ void windowsTrayReveal() => impl.windowsTrayReveal();
 /// 托盘「退出」前回调（用于清除登录会话）。
 void setWindowsTrayOnBeforeQuit(Future<void> Function()? callback) =>
     impl.setWindowsTrayOnBeforeQuit(callback);
+
+/// 应用更新前解除关窗进托盘拦截；[exitProcess] 为 true 时立刻退出进程。
+Future<void> windowsTrayPrepareQuitForAppUpdate({bool exitProcess = false}) =>
+    impl.windowsTrayPrepareQuitForAppUpdate(exitProcess: exitProcess);
+
+/// Sparkle 未安装时恢复托盘防关闭。
+Future<void> windowsTrayRearmPreventCloseAfterUpdateCancelled() =>
+    impl.windowsTrayRearmPreventCloseAfterUpdateCancelled();

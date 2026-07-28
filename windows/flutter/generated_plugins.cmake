@@ -7,6 +7,7 @@ list(APPEND FLUTTER_PLUGIN_LIST
   emoji_picker_flutter
   file_selector_windows
   gal
+  hotkey_manager_windows
   just_audio_windows
   just_screenshot
   pasteboard

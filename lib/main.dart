@@ -14,6 +14,7 @@ import 'features/desktop/windows_desktop_tray.dart';
 import 'features/push/push_service.dart';
 import 'features/shell/splash_screen.dart';
 import 'features/xflow/xflow_service.dart';
+import 'package:hotkey_manager/hotkey_manager.dart';
 import 'core/web/text_input_guard_stub.dart'
     if (dart.library.html) 'core/web/text_input_guard_web.dart';
 
@@ -64,6 +65,10 @@ Future<void> main() async {
   await AppTextScaleController.instance.load();
   if (isDesktopCommOnly) {
     await initWindowsDesktopTray();
+    // 全局截图热键依赖 hotkey_manager 初始化。
+    try {
+      await hotKeyManager.unregisterAll();
+    } catch (_) {}
   }
   if (!kIsWeb) {
     SystemChrome.setSystemUIOverlayStyle(

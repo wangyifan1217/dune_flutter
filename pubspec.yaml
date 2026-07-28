@@ -52,6 +52,7 @@ dependencies:
   # 上游 CMake 目标名/include 路径错误，使用本地修补版。
   just_screenshot:
     path: packages/just_screenshot
+  hotkey_manager: ^0.2.3
 dev_dependencies:
   flutter_test:
     sdk: flutter

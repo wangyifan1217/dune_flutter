@@ -42,6 +42,7 @@ import '../xflow/approval_chat_share.dart';
 import '../xflow/approval_picker_sheet.dart';
 import '../xflow/xflow_detail_logic.dart';
 import 'chat_emoji_gif_panel.dart';
+import 'chat_foreground_sync.dart';
 import 'chat_image_batch_preview.dart';
 import 'chat_image_editor.dart';
 import 'chat_image_utils.dart';
@@ -287,6 +288,11 @@ class _NativeChatViewState extends State<NativeChatView>
   final Map<int, GlobalKey> _scrollRestoreKeys = <int, GlobalKey>{};
   ScrollHoldController? _olderScrollHold;
   double _olderScrollHoldPixels = 0;
+
+  /// 最小化期间收到新消息但贴底失败时，恢复前台后再滚一次。
+  bool _pendingStickBottomAfterForeground = false;
+  bool _foregroundSyncRunning = false;
+  DateTime? _lastForegroundSyncAt;
   double _olderScrollHoldMax = 0;
   bool _loadingNewer = false;
   bool _locatedMode = false;
@@ -354,6 +360,7 @@ class _NativeChatViewState extends State<NativeChatView>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    ChatForegroundSync.addListener(_onChatForegroundResumed);
     _service = ConversationService(session: widget.session);
     _realtime = ConversationRealtimeHub.instance.of(widget.session);
     _scrollController.addListener(_onScroll);
@@ -370,6 +377,14 @@ class _NativeChatViewState extends State<NativeChatView>
     MeetingLiveController.instance.active.addListener(
       _onMeetingLiveActiveChanged,
     );
+    if (isDesktopCommOnly) {
+      // 热键全局只注册一次；切会话只更新回调，避免 native unregister abort。
+      unawaited(registerDesktopScreenshotHotkey(_onWindowsHotkeyPressed));
+    }
+  }
+
+  void _onWindowsHotkeyPressed() {
+    unawaited(_desktopScreenshotAndSend());
   }
 
   void _onMeetingLiveActiveChanged() {
@@ -483,8 +498,9 @@ class _NativeChatViewState extends State<NativeChatView>
     }
     if (!oldWidget.autoMarkRead && widget.autoMarkRead) {
       _userInteractedWithScroll = false;
+      // 恢复前台重新允许已读前，先补拉最新消息，避免缺消息却先标已读。
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        unawaited(_markReadIfNeeded());
+        unawaited(_syncLatestOnForeground());
       });
     }
   }
@@ -509,8 +525,67 @@ class _NativeChatViewState extends State<NativeChatView>
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      unawaited(_syncLatestOnForeground());
+    }
+  }
+
+  void _onChatForegroundResumed() {
+    unawaited(_syncLatestOnForeground());
+  }
+
+  /// 从最小化/失焦恢复后：重连 realtime、REST 补最新消息，并强制贴底。
+  Future<void> _syncLatestOnForeground() async {
+    if (!mounted || !_bootstrapped || _loading || _sending || _uploading) {
+      return;
+    }
+    final now = DateTime.now();
+    if (_lastForegroundSyncAt != null &&
+        now.difference(_lastForegroundSyncAt!) <
+            const Duration(milliseconds: 800)) {
+      return;
+    }
+    if (_foregroundSyncRunning) return;
+    _lastForegroundSyncAt = now;
+    _foregroundSyncRunning = true;
+    final shouldStick =
+        _pendingStickBottomAfterForeground ||
+        _shouldStickToLatestOnLoad ||
+        _isNearBottom;
+    try {
+      await _realtime.connect();
+      if (!mounted) return;
+      if (shouldStick) {
+        _forceLatestMode = true;
+        _enterStickBottomPending = true;
+      }
+      await _load(silent: true);
+      if (!mounted) return;
+      if (shouldStick && !_shouldAnchorMessagesAtTop) {
+        _pendingStickBottomAfterForeground = false;
+        _scrollBottom(force: true, gentle: false);
+      } else if (_pendingStickBottomAfterForeground) {
+        _pendingStickBottomAfterForeground = false;
+        _scrollBottom(force: true, gentle: false);
+      }
+      if (widget.autoMarkRead) {
+        unawaited(_markReadIfNeeded());
+      }
+    } catch (_) {
+      // 补同步失败不打断会话；下次前台/实时事件仍可重试。
+    } finally {
+      _foregroundSyncRunning = false;
+    }
+  }
+
+  @override
   void dispose() {
+    if (isDesktopCommOnly) {
+      clearDesktopScreenshotHotkey(_onWindowsHotkeyPressed);
+    }
     WidgetsBinding.instance.removeObserver(this);
+    ChatForegroundSync.removeListener(_onChatForegroundResumed);
     userAvatarRefresh.removeListener(_onSelfAvatarUpdated);
     MeetingLiveController.instance.active.removeListener(
       _onMeetingLiveActiveChanged,
@@ -741,7 +816,12 @@ class _NativeChatViewState extends State<NativeChatView>
       }
     });
     if (stickBottom) {
-      _scrollToPreferredAnchor(gentle: true);
+      // 最小化/失焦时 gentle 贴底常空跑；记下来等恢复前台再强制滚到底。
+      if (windowsTrayIsWindowInactive()) {
+        _pendingStickBottomAfterForeground = true;
+      } else {
+        _scrollToPreferredAnchor(gentle: true);
+      }
     }
     unawaited(_markReadIfNeeded());
     if (_isPrivate && msg.senderUserId != widget.session.userId) {
@@ -2058,6 +2138,25 @@ class _NativeChatViewState extends State<NativeChatView>
       sourceLabel: '截图',
       openEditor: true,
     );
+  }
+
+  /// Ctrl+Alt+A：窗口聚焦时全局可触发（不依赖当前 Focus 落在哪个输入框）。
+  bool _onDesktopScreenshotHotkey(KeyEvent event) {
+    if (event is! KeyDownEvent) return false;
+    if (event.logicalKey != LogicalKeyboardKey.keyA) return false;
+    final pressed = HardwareKeyboard.instance.logicalKeysPressed;
+    final ctrl =
+        pressed.contains(LogicalKeyboardKey.controlLeft) ||
+        pressed.contains(LogicalKeyboardKey.controlRight);
+    final alt =
+        pressed.contains(LogicalKeyboardKey.altLeft) ||
+        pressed.contains(LogicalKeyboardKey.altRight);
+    if (!ctrl || !alt) return false;
+    if (_mediaBusy || _conversation == null || _conversation!.dissolved) {
+      return true;
+    }
+    unawaited(_desktopScreenshotAndSend());
+    return true;
   }
 
   Future<void> _sendMultiImagesFromGallery() async {
@@ -5429,7 +5528,7 @@ class _NativeChatViewState extends State<NativeChatView>
         ? (title.isNotEmpty ? '给$title发消息…' : '输入消息…')
         : '输入消息 · @人时唤出选择器';
 
-    return Scaffold(
+    final scaffold = Scaffold(
       resizeToAvoidBottomInset: true,
       backgroundColor: DunesColors.bgApp,
       body: SafeArea(
@@ -6092,6 +6191,22 @@ class _NativeChatViewState extends State<NativeChatView>
           ),
         ),
       ),
+    );
+
+    if (!isDesktopCommOnly) return scaffold;
+    // 快捷键由 HardwareKeyboard 处理；这里保留 Shortcuts 作兜底。
+    return CallbackShortcuts(
+      bindings: <ShortcutActivator, VoidCallback>{
+        const SingleActivator(
+          LogicalKeyboardKey.keyA,
+          control: true,
+          alt: true,
+        ): () {
+          if (locked || _mediaBusy) return;
+          unawaited(_desktopScreenshotAndSend());
+        },
+      },
+      child: scaffold,
     );
   }
 }

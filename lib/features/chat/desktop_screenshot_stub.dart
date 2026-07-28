@@ -1,5 +1,9 @@
 import 'dart:typed_data';
 
-Future<Uint8List?> captureDesktopRegionScreenshotImpl() async {
-  throw UnsupportedError('当前平台不支持截图');
-}
+import 'package:flutter/foundation.dart';
+
+Future<Uint8List?> captureDesktopRegionScreenshotImpl() async => null;
+
+Future<void> registerDesktopScreenshotHotkeyImpl(VoidCallback onPressed) async {}
+
+void clearDesktopScreenshotHotkeyImpl(VoidCallback onPressed) {}

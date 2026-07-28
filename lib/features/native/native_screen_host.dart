@@ -18,6 +18,7 @@ import '../auth/auth_session.dart';
 import '../auth/qr_login_scan_page.dart';
 import '../chat/native_broadcast_page.dart';
 import '../desktop/native_desktop_settings_page.dart';
+import '../chat/chat_foreground_sync.dart';
 import '../chat/native_chat_search_page.dart';
 import '../chat/native_group_chat_page.dart';
 import '../chat/native_group_info_page.dart';
@@ -321,6 +322,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       _scheduleCommBadgeRefresh();
       return;
     }
+    // 先通知聊天页补拉最新消息，再恢复已读上报，避免缺消息却先标已读。
+    ChatForegroundSync.notifyResumed();
     // 恢复前台且仍停在会话页时，重新允许已读上报。
     final screen = widget.navigation.currentScreen;
     final onChat =
@@ -354,6 +357,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       }
       _syncActiveViewReport();
     } else if (state == AppLifecycleState.resumed) {
+      // 与托盘 inactive→active 对齐：恢复时补拉当前会话最新消息。
+      ChatForegroundSync.notifyResumed();
       final screen = widget.navigation.currentScreen;
       final onChat =
           screen == 'C5' ||
@@ -476,7 +481,14 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     if (event.type == 'conversation_updated') {
       final totalUnread = (event.raw['totalUnread'] as num?)?.toInt();
       if (totalUnread != null) {
-        _applyRealtimeUnreadTotal(totalUnread);
+        // 正在看某会话时，totalUnread 可能仍含本会话未读；走 REST 汇总
+        //（treatAsRead）避免 Tab 小红点误亮。
+        final viewingId = _activeViewingConversationId() ?? 0;
+        if (viewingId > 0) {
+          _scheduleCommBadgeRefresh();
+        } else {
+          _applyRealtimeUnreadTotal(totalUnread);
+        }
         return;
       }
     }
@@ -1283,8 +1295,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         session: widget.session,
         conversationHint: _selectedRobot!,
         showBackButton: false,
-        autoMarkRead: _userActivelyInChat &&
-            (_peekViewingConversationId() ?? 0) == robotId,
+        autoMarkRead: _userActivelyInChat,
         onBack: () => _leaveChatToInbox(clearSelection: true),
         onConversationRead: _handleConversationRead,
         onOpenConsultList: _openRobotConsultListFromChat,
@@ -1730,8 +1741,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           session: widget.session,
           conversationHint: _selectedRobot!,
           showBackButton: true,
-          autoMarkRead: _userActivelyInChat &&
-              (_peekViewingConversationId() ?? 0) == _selectedRobot!.id,
+          autoMarkRead: _userActivelyInChat,
           onBack: () => _leaveChatToInbox(clearSelection: false),
           onConversationRead: _handleConversationRead,
           onOpenConsultList: _openRobotConsultListFromChat,

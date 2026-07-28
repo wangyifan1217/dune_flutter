@@ -158,6 +158,7 @@ class ChatQuickActions extends StatelessWidget {
           _QaCell(
             icon: Icons.crop_free_rounded,
             label: '截图',
+            hint: '系统截图 Ctrl+Alt+A',
             onTap: onScreenshot!,
           ),
         _QaCell(icon: Icons.attach_file, label: '文件', onTap: onFile),
@@ -199,24 +200,30 @@ class ChatQuickActions extends StatelessWidget {
           children: cells
               .map(
                 (c) => Expanded(
-                  child: InkWell(
-                    borderRadius: BorderRadius.circular(10),
-                    onTap: c.onTap,
-                    child: SizedBox(
-                      height: 46,
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(c.icon, size: 18, color: DunesColors.text2),
-                          const SizedBox(height: 3),
-                          Text(
-                            c.label,
-                            style: DunesTypography.sans(
-                              fontSize: 9.5,
-                              color: DunesColors.text3,
+                  child: Tooltip(
+                    message: (c.hint ?? '').isNotEmpty
+                        ? '${c.label}（${c.hint}）'
+                        : c.label,
+                    waitDuration: const Duration(milliseconds: 400),
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(10),
+                      onTap: c.onTap,
+                      child: SizedBox(
+                        height: 46,
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(c.icon, size: 18, color: DunesColors.text2),
+                            const SizedBox(height: 3),
+                            Text(
+                              c.label,
+                              style: DunesTypography.sans(
+                                fontSize: 9.5,
+                                color: DunesColors.text3,
+                              ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     ),
                   ),

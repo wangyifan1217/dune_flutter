@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/theme/dunes_theme.dart';
+import '../desktop/windows_desktop_tray.dart';
 import 'app_update_installer.dart';
 import 'app_update_service.dart';
 
@@ -45,7 +46,7 @@ class _AppUpdateDialogState extends State<_AppUpdateDialog> {
       _progress = 0;
     });
     try {
-      final outcome = await AppUpdateInstaller.instance.applyUpdate(
+      await AppUpdateInstaller.instance.applyUpdate(
         widget.result,
         onProgress: (p) {
           if (!mounted) return;
@@ -60,14 +61,15 @@ class _AppUpdateDialogState extends State<_AppUpdateDialog> {
         },
       );
       // Windows 安装器拉起后进程会 exit。
-      // macOS Sparkle 会弹出原生更新 UI 并在安装后重启，此处关闭 Flutter 弹窗即可。
+      // macOS Sparkle 会弹出原生更新 UI 并在安装后重启；兜底打开 DMG 后也会 exit。
       if (!mounted) return;
-      if (outcome.usedSparkle) {
-        Navigator.of(context).pop();
-        return;
-      }
       Navigator.of(context).pop();
     } catch (e) {
+      if (!mounted) return;
+      if (_isMac) {
+        // Sparkle 拉起失败时恢复托盘防关闭，避免关窗直接退出。
+        await windowsTrayRearmPreventCloseAfterUpdateCancelled();
+      }
       if (!mounted) return;
       setState(() {
         _busy = false;
@@ -86,6 +88,12 @@ class _AppUpdateDialogState extends State<_AppUpdateDialog> {
     if (url.isEmpty) return;
     try {
       await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+      if (_isMac) {
+        // 浏览器下载 DMG 后自动退出，避免安装时占用应用。
+        await Future<void>.delayed(const Duration(milliseconds: 600));
+        await windowsTrayPrepareQuitForAppUpdate(exitProcess: true);
+        return;
+      }
       if (mounted) Navigator.of(context).pop();
     } catch (_) {
       if (!mounted) return;
@@ -160,7 +168,7 @@ class _AppUpdateDialogState extends State<_AppUpdateDialog> {
                 const SizedBox(height: 10),
                 Text(
                   _isMac
-                      ? '将自动下载并安装更新，完成后应用会重启。'
+                      ? '确认安装后应用会自动退出并重启；若使用安装包，打开后也会自动退出以便完成安装。'
                       : '将在应用内下载安装包并启动安装，无需打开浏览器。',
                   style: DunesTypography.sans(
                     fontSize: 12,

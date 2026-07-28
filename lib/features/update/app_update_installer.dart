@@ -7,6 +7,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/platform/desktop_features.dart';
+import '../desktop/windows_desktop_tray.dart';
 import 'app_update_service.dart';
 import 'macos_sparkle_updater.dart';
 
@@ -60,13 +61,13 @@ class AppUpdateInstaller {
       } catch (e) {
         // Sparkle 不可用时若有 downloadUrl，仍允许浏览器兜底。
         if (url.isEmpty) rethrow;
-        await _openExternal(url);
+        await _openExternalAndQuitMac(url);
         return const ApplyUpdateOutcome();
       }
       if (url.isEmpty) {
         throw StateError('Sparkle 不可用且下载地址为空');
       }
-      await _openExternal(url);
+      await _openExternalAndQuitMac(url);
       return const ApplyUpdateOutcome();
     }
 
@@ -145,9 +146,19 @@ class AppUpdateInstaller {
       final staged = await _stageMacInstaller(file);
       _spawnDetached('xattr', ['-dr', 'com.apple.quarantine', staged.path]);
       _spawnDetached('open', [staged.path]);
+      // 对齐 Windows：打开安装包后退出，避免拖装时占用 .app。
+      await Future<void>.delayed(const Duration(milliseconds: 600));
+      await windowsTrayPrepareQuitForAppUpdate(exitProcess: true);
       return;
     }
     await _openExternal(path);
+  }
+
+  /// 浏览器打开 DMG 后退出进程，便于用户安装替换。
+  Future<void> _openExternalAndQuitMac(String urlOrPath) async {
+    await _openExternal(urlOrPath);
+    await Future<void>.delayed(const Duration(milliseconds: 600));
+    await windowsTrayPrepareQuitForAppUpdate(exitProcess: true);
   }
 
   /// 把 DMG 放到「下载」目录（仅兜底路径使用）。

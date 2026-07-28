@@ -61,4 +61,21 @@ final class SparkleUpdaterBridge: NSObject, SPUUpdaterDelegate {
     }
     channel = methodChannel
   }
+
+  /// 即将写入新版本前再通知 Flutter 松绑（与 Dart 侧预松绑双保险）。
+  func updater(_ updater: SPUUpdater, willInstallUpdate item: SUAppcastItem) {
+    channel?.invokeMethod("prepareForQuit", arguments: nil)
+  }
+
+  func updaterWillRelaunchApplication(_ updater: SPUUpdater) {
+    channel?.invokeMethod("prepareForQuit", arguments: nil)
+  }
+
+  func updaterDidNotFindUpdate(_ updater: SPUUpdater) {
+    channel?.invokeMethod("rearmPreventClose", arguments: nil)
+  }
+
+  func updater(_ updater: SPUUpdater, didAbortWithError error: Error) {
+    channel?.invokeMethod("rearmPreventClose", arguments: nil)
+  }
 }

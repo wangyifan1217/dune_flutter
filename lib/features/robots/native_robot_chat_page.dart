@@ -116,6 +116,14 @@ class _NativeRobotChatPageState extends State<NativeRobotChatPage> {
     super.dispose();
   }
 
+  @override
+  void didUpdateWidget(NativeRobotChatPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!oldWidget.autoMarkRead && widget.autoMarkRead) {
+      unawaited(_markReadIfViewing());
+    }
+  }
+
   void _onSelfAvatarUpdated() {
     _applySelfAvatar(userAvatarRefresh.snapshotFor(widget.session.userId));
   }
@@ -236,6 +244,7 @@ class _NativeRobotChatPageState extends State<NativeRobotChatPage> {
     if (!widget.autoMarkRead || _convId <= 0) return;
     try {
       await _service.markConversationRead(_convId);
+      if (!mounted) return;
       widget.onConversationRead?.call(_convId);
     } catch (_) {}
   }
@@ -248,6 +257,7 @@ class _NativeRobotChatPageState extends State<NativeRobotChatPage> {
     try {
       final page = await _service.fetchMessages(_convId, size: 80);
       if (!mounted) return;
+      final prevLastId = _messages.isEmpty ? 0 : _messages.last.id;
       final pendingLocal = _messages
           .where((m) => m.id < 0)
           .where(
@@ -293,7 +303,12 @@ class _NativeRobotChatPageState extends State<NativeRobotChatPage> {
         nextWaiting,
         question: pendingLocal.isNotEmpty ? pendingLocal.last.bodyText : null,
       );
-      if (freshReply && (wasWaiting || widget.autoMarkRead)) {
+      final nextLastId = _messages.isEmpty ? 0 : _messages.last.id;
+      // 正在查看时收到新回复必须再清一次未读（对齐审批助手），
+      // 否则切到别的会话后 tab/列表仍会挂小红点。
+      if (silent && nextLastId > prevLastId) {
+        unawaited(_markReadIfViewing());
+      } else if (freshReply && (wasWaiting || widget.autoMarkRead)) {
         unawaited(_markReadIfViewing());
       }
       if (!stickToLatest) return;
@@ -319,8 +334,9 @@ class _NativeRobotChatPageState extends State<NativeRobotChatPage> {
         (msg['kind'] ?? '').toString().toUpperCase() == 'ROBOT_REPLY') {
       _analyzing.clear(_convId);
       if (mounted) setState(() => _waitingReply = false);
-      unawaited(_markReadIfViewing());
     }
+    // 实时推送到达时先清未读，避免列表/角标短暂残留（对齐审批助手）。
+    unawaited(_markReadIfViewing());
     _rtReloadDebounce?.cancel();
     _rtReloadDebounce = Timer(const Duration(milliseconds: 280), () {
       unawaited(_reloadMessages(silent: true));

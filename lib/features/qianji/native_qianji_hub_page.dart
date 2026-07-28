@@ -18,12 +18,15 @@ class NativeQianjiHubPage extends StatefulWidget {
     required this.onOpenCursorAccount,
     this.onOpenMeetingSupervise,
     this.onOpenRobotHome,
+    this.onOpenRobot,
     this.session,
   });
 
   final VoidCallback onOpenCursorAccount;
   final VoidCallback? onOpenMeetingSupervise;
   final VoidCallback? onOpenRobotHome;
+  /// 点击单个机器人名片：由 Host 按 canChat 决定进聊天或提示。
+  final ValueChanged<RobotRole>? onOpenRobot;
   final AuthSession? session;
 
   @override
@@ -102,6 +105,7 @@ class _NativeQianjiHubPageState extends State<NativeQianjiHubPage> {
                     _RobotHubPreview(
                       robots: _robots,
                       loading: _loadingRobots,
+                      onOpenRobot: widget.onOpenRobot,
                       onOpenConsultList: widget.onOpenRobotHome,
                     ),
                     const SizedBox(height: 16),
@@ -189,11 +193,13 @@ class _RobotHubPreview extends StatelessWidget {
   const _RobotHubPreview({
     required this.robots,
     this.loading = false,
+    this.onOpenRobot,
     this.onOpenConsultList,
   });
 
   final List<RobotRole> robots;
   final bool loading;
+  final ValueChanged<RobotRole>? onOpenRobot;
   final VoidCallback? onOpenConsultList;
 
   @override
@@ -245,7 +251,13 @@ class _RobotHubPreview extends StatelessWidget {
               for (final robot in robots)
                 _RobotMiniCard(
                   role: robot,
-                  onTap: onOpenConsultList,
+                  onTap: () {
+                    if (onOpenRobot != null) {
+                      onOpenRobot!(robot);
+                      return;
+                    }
+                    onOpenConsultList?.call();
+                  },
                 ),
             ],
           ),
@@ -305,7 +317,33 @@ class _RobotMiniCard extends StatelessWidget {
                                 status == RobotConsultStatus.queued,
                           ),
                         ),
-                        if (status != null)
+                        if (!role.canChat)
+                          Positioned(
+                            right: -6,
+                            top: -6,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 5,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFFFF4E5),
+                                borderRadius: BorderRadius.circular(999),
+                                border: Border.all(
+                                  color: const Color(0xFFE8C48A),
+                                ),
+                              ),
+                              child: const Text(
+                                '仅推送',
+                                style: TextStyle(
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.w700,
+                                  color: Color(0xFFB07A2B),
+                                ),
+                              ),
+                            ),
+                          )
+                        else if (status != null)
                           Positioned(
                             right: -4,
                             top: -4,
@@ -326,7 +364,18 @@ class _RobotMiniCard extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 2),
-                    if (status != null)
+                    if (!role.canChat)
+                      const Text(
+                        '仅推送通知',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 11,
+                          height: 1.25,
+                          color: DunesColors.text3,
+                        ),
+                      )
+                    else if (status != null)
                       Text(
                         active > 1
                             ? '${status.label} · $active'

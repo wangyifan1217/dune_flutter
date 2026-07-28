@@ -479,3 +479,40 @@ Map<String, dynamic> parseLayout(dynamic rawLayout) {
   }
   return const <String, dynamic>{};
 }
+
+class ApprovalCommentItem {
+  const ApprovalCommentItem({
+    required this.id,
+    required this.authorUserId,
+    required this.authorName,
+    required this.bodyText,
+    this.mentionUserIds = const [],
+    this.parentId,
+    this.authorAvatarPreset = '',
+    this.authorAvatarObjectKey = '',
+    this.createdAt,
+  });
+
+  final int id;
+  final int authorUserId;
+  final String authorName;
+  final String bodyText;
+  final List<int> mentionUserIds;
+  final int? parentId;
+  final String authorAvatarPreset;
+  final String authorAvatarObjectKey;
+  final DateTime? createdAt;
+}
+
+class ApprovalStakeholderPerson {
+  const ApprovalStakeholderPerson({
+    required this.id,
+    required this.displayName,
+    this.role = '',
+  });
+
+  final int id;
+  final String displayName;
+  final String role;
+}
+

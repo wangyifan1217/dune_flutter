@@ -25,6 +25,7 @@ import '../../core/widgets/cached_network_image.dart';
 import '../auth/auth_session.dart';
 import '../contacts/contact_service.dart';
 import '../meeting/meeting_live_controller.dart';
+import '../conversation/chat_message_cache.dart';
 import '../conversation/conversation_models.dart';
 import '../conversation/conversation_realtime_dedup.dart';
 import '../conversation/conversation_realtime_hub.dart';
@@ -371,8 +372,15 @@ class _NativeChatViewState extends State<NativeChatView>
     _inputFocusNode.addListener(_onInputFocusChanged);
     if (widget.conversationHint != null) {
       _conversation = widget.conversationHint;
+      final cached =
+          ChatMessageCache.instance.peek(widget.conversationHint!.id);
+      if (cached != null && cached.isNotEmpty) {
+        _messages = cached;
+        _loading = false;
+        _bootstrapped = true;
+      }
     }
-    _load();
+    _load(silent: _bootstrapped);
     _bootRealtime();
     unawaited(VoiceAsrStore.instance.ensureLoaded());
     unawaited(_loadSelfAvatar());
@@ -491,7 +499,7 @@ class _NativeChatViewState extends State<NativeChatView>
         (newConvId > 0 && newConvId != oldConvId) ||
         (newConvId <= 0 && newPeer > 0 && newPeer != oldPeer);
     if (conversationSwitched) {
-      // 同一 State 复用时立即作废旧加载，并清空消息区，避免串会话或空白+旧错误。
+      // 同一 State 复用时立即作废旧加载；有缓存则先展示，避免整页转圈。
       _loadGeneration++;
       _enterStickBottomPending = true;
       _userInteractedWithScroll = false;
@@ -499,12 +507,17 @@ class _NativeChatViewState extends State<NativeChatView>
       _forceLatestMode = true;
       _suppressedFocusMessageId = 0;
       _pendingStickBottomAfterForeground = false;
+      final cachedId = newConvId > 0
+          ? newConvId
+          : (widget.conversationHint?.id ?? 0);
+      final cached = ChatMessageCache.instance.peek(cachedId);
+      final hasCache = cached != null && cached.isNotEmpty;
       setState(() {
         _conversation = widget.conversationHint;
-        _messages = const <NativeChatMessage>[];
+        _messages = hasCache ? cached : const <NativeChatMessage>[];
         _groupMembers = const <Map<String, dynamic>>[];
-        _bootstrapped = false;
-        _loading = true;
+        _bootstrapped = hasCache;
+        _loading = !hasCache;
         _locating = false;
         _error = null;
         _hasMore = false;
@@ -513,7 +526,7 @@ class _NativeChatViewState extends State<NativeChatView>
         _clearPendingNewMessages();
         _lastMarkedReadNewestId = 0;
       });
-      unawaited(_load());
+      unawaited(_load(silent: hasCache));
       return;
     }
     if (newFocus > 0 && newFocus != oldFocus) {
@@ -1442,6 +1455,9 @@ class _NativeChatViewState extends State<NativeChatView>
             page.peerLastReadMessageId ?? _peerLastReadMessageId;
         if (!silent) _error = null;
       });
+      if (!preservePaginatedHistory || conversationChanged) {
+        ChatMessageCache.instance.put(conv.id, nextMessages);
+      }
       unawaited(_refreshDownloadedFileFlags());
       final stickLatest = focusId <= 0 && _shouldStickToLatestOnLoad;
       _forceLatestMode = false;
@@ -4975,25 +4991,37 @@ class _NativeChatViewState extends State<NativeChatView>
     if (_isRobotMarkdownPayload(m.payload)) {
       final wide = isWideChatLayout(context);
       final screenW = MediaQuery.sizeOf(context).width;
-      final maxW = wide
+      final preferredMax = wide
           ? (screenW * 0.55).clamp(420.0, 640.0)
           : (screenW - 72).clamp(260.0, 420.0);
-      return Container(
-        constraints: BoxConstraints(maxWidth: maxW),
-        padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 9),
-        decoration: BoxDecoration(
-          color: mine ? DunesColors.accentSoft : DunesColors.bgApp,
-          border: Border.all(color: DunesColors.borderSoft),
-          borderRadius: BorderRadius.only(
-            topLeft: Radius.circular(mine ? 12 : 4),
-            topRight: Radius.circular(mine ? 4 : 12),
-            bottomLeft: const Radius.circular(12),
-            bottomRight: const Radius.circular(12),
-          ),
-        ),
-        child: RepaintBoundary(
-          child: RobotMarkdown(markdown: m.bodyText, selectable: false),
-        ),
+      return LayoutBuilder(
+        builder: (context, constraints) {
+          final available = constraints.maxWidth;
+          final maxW = available.isFinite && available > 0
+              ? (available < preferredMax ? available : preferredMax)
+              : preferredMax;
+          return Align(
+            alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
+            child: Container(
+              width: maxW,
+              clipBehavior: Clip.hardEdge,
+              padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 9),
+              decoration: BoxDecoration(
+                color: mine ? DunesColors.accentSoft : DunesColors.bgApp,
+                border: Border.all(color: DunesColors.borderSoft),
+                borderRadius: BorderRadius.only(
+                  topLeft: Radius.circular(mine ? 12 : 4),
+                  topRight: Radius.circular(mine ? 4 : 12),
+                  bottomLeft: const Radius.circular(12),
+                  bottomRight: const Radius.circular(12),
+                ),
+              ),
+              child: RepaintBoundary(
+                child: RobotMarkdown(markdown: m.bodyText, selectable: false),
+              ),
+            ),
+          );
+        },
       );
     }
     return ChatTextBubble(
@@ -5644,6 +5672,7 @@ class _NativeChatViewState extends State<NativeChatView>
                               )
                             : null,
                         actions: [
+                          // 智能总结：私聊 / 群聊头部均保留
                           if (widget.onOpenAiSummary != null)
                             IconButton(
                               tooltip: '智能分析',
@@ -5654,21 +5683,14 @@ class _NativeChatViewState extends State<NativeChatView>
                                 color: Color(0xFF7B5CD8),
                               ),
                             ),
-                          if (widget.onOpenSearch != null)
+                          // 私聊：三点进资料（历史/免打扰/置顶在资料页）
+                          if (_isPrivate && widget.onOpenProfile != null)
                             IconButton(
-                              tooltip: '聊天记录',
-                              onPressed: () => widget.onOpenSearch!(conv.id),
-                              icon: const Icon(Icons.history, size: 20),
+                              tooltip: '更多',
+                              onPressed: widget.onOpenProfile,
+                              icon: const Icon(Icons.more_vert, size: 20),
                             ),
-                          if (!_isPrivate && widget.onOpenMedia != null)
-                            IconButton(
-                              tooltip: '媒体',
-                              onPressed: () => widget.onOpenMedia!(conv.id),
-                              icon: const Icon(
-                                Icons.perm_media_outlined,
-                                size: 20,
-                              ),
-                            ),
+                          // 群聊：三点进群信息（历史/媒体在群资料页内，不占头部）
                           if (!_isPrivate && widget.onOpenGroupInfo != null)
                             IconButton(
                               tooltip: '群信息',

@@ -15,6 +15,7 @@ import '../ai_summary/ai_summary_service.dart';
 import '../auth/auth_session.dart';
 import '../workbench/workbench_badge_notifier.dart';
 import 'comm_unread_notifier.dart';
+import 'conversation_inbox_cache.dart';
 import 'conversation_inbox_merge.dart';
 import 'conversation_inbox_realtime.dart';
 import 'conversation_mention_utils.dart';
@@ -28,9 +29,9 @@ import 'inbox_hidden_storage.dart';
 import 'inbox_widgets.dart';
 import 'notification_service.dart';
 import '../robots/robot_analyzing_coordinator.dart';
+import '../robots/robot_catalog_cache.dart';
 import '../robots/robot_character.dart';
 import '../robots/robot_markdown.dart';
-import '../robots/robot_models.dart';
 
 class NativeConversationPage extends StatefulWidget {
   const NativeConversationPage({
@@ -50,6 +51,7 @@ class NativeConversationPage extends StatefulWidget {
     this.onOpenApprovalAssistant,
     this.selectedConversationId,
     this.conversationReadSignal,
+    this.memberSettingsSignal,
   });
 
   final AuthSession session;
@@ -64,13 +66,16 @@ class NativeConversationPage extends StatefulWidget {
   final VoidCallback onOpenNewChat;
   final VoidCallback onOpenAiSummary;
   final ValueChanged<NativeConversation>? onOpenRobot;
-  final VoidCallback? onOpenApprovalAssistant;
+  final ValueChanged<NativeConversation>? onOpenApprovalAssistant;
 
   /// 双栏布局中当前选中的会话，用于列表高亮。
   final int? selectedConversationId;
 
   /// Host 在 mark-read 成功后通知列表清零对应未读角标。
   final ConversationReadSignal? conversationReadSignal;
+
+  /// Host 在资料页切换置顶/免打扰后，立刻同步列表排序与角标。
+  final ConversationMemberSettingsSignal? memberSettingsSignal;
 
   @override
   State<NativeConversationPage> createState() => _NativeConversationPageState();
@@ -85,6 +90,30 @@ class ConversationReadSignal extends ChangeNotifier {
   void notifyRead(int conversationId) {
     if (conversationId <= 0) return;
     _conversationId = conversationId;
+    notifyListeners();
+  }
+}
+
+/// Host → 会话列表：同步成员级置顶 / 免打扰。
+class ConversationMemberSettingsSignal extends ChangeNotifier {
+  int _conversationId = 0;
+  bool? _muted;
+  bool? _pinned;
+
+  int get conversationId => _conversationId;
+  bool? get muted => _muted;
+  bool? get pinned => _pinned;
+
+  void notifySettings({
+    required int conversationId,
+    bool? muted,
+    bool? pinned,
+  }) {
+    if (conversationId <= 0) return;
+    if (muted == null && pinned == null) return;
+    _conversationId = conversationId;
+    _muted = muted;
+    _pinned = pinned;
     notifyListeners();
   }
 }
@@ -149,11 +178,31 @@ class _NativeConversationPageState extends State<NativeConversationPage>
     WidgetsBinding.instance.addObserver(this);
     userAvatarRefresh.addListener(_onSelfAvatarUpdated);
     widget.conversationReadSignal?.addListener(_onConversationReadSignal);
-    _load();
+    widget.memberSettingsSignal?.addListener(_onMemberSettingsSignal);
+    final cached = ConversationInboxCache.instance.peek(widget.session.userId);
+    if (cached != null) {
+      _items = cached.conversations;
+      _notif = cached.notif;
+      _novaStorage = cached.novaStorage;
+      _aiSummaryPreview = cached.aiSummaryPreview;
+      _aiSummaryUnread = cached.aiSummaryUnread;
+      _loading = false;
+      unawaited(_load(silent: true));
+    } else {
+      unawaited(_load());
+    }
     _bootRealtime();
+    unawaited(_preloadRobotCatalog());
     NovaBackgroundCoordinator.instance.addListener(_onNovaBackgroundUpdate);
     RobotAnalyzingCoordinator.instance.bindSession(widget.session);
     RobotAnalyzingCoordinator.instance.addListener(_onRobotAnalyzingUpdate);
+  }
+
+  Future<void> _preloadRobotCatalog() async {
+    try {
+      await RobotCatalogCache.instance.refresh(widget.session);
+      if (mounted) setState(() {});
+    } catch (_) {}
   }
 
   @override
@@ -165,6 +214,10 @@ class _NativeConversationPageState extends State<NativeConversationPage>
       );
       widget.conversationReadSignal?.addListener(_onConversationReadSignal);
     }
+    if (oldWidget.memberSettingsSignal != widget.memberSettingsSignal) {
+      oldWidget.memberSettingsSignal?.removeListener(_onMemberSettingsSignal);
+      widget.memberSettingsSignal?.addListener(_onMemberSettingsSignal);
+    }
     final selected = widget.selectedConversationId ?? 0;
     final prev = oldWidget.selectedConversationId ?? 0;
     if (selected > 0 && selected != prev) {
@@ -175,6 +228,35 @@ class _NativeConversationPageState extends State<NativeConversationPage>
   void _onConversationReadSignal() {
     final id = widget.conversationReadSignal?.conversationId ?? 0;
     if (id > 0) _clearUnreadLocally(id);
+  }
+
+  void _onMemberSettingsSignal() {
+    final signal = widget.memberSettingsSignal;
+    if (signal == null || !mounted) return;
+    final id = signal.conversationId;
+    if (id <= 0) return;
+    final idx = _items.indexWhere((c) => c.id == id);
+    if (idx < 0) return;
+    final old = _items[idx];
+    final nextMuted = signal.muted ?? old.muted;
+    final nextPinned = signal.pinned ?? old.pinned;
+    if (nextMuted == old.muted && nextPinned == old.pinned) return;
+    setState(() {
+      final copy = _items.toList(growable: true);
+      copy[idx] = ConversationInboxRealtime.copyConversation(
+        old,
+        muted: nextMuted,
+        pinned: nextPinned,
+      );
+      copy.sort((a, b) {
+        final ap = a.pinned ? 1 : 0;
+        final bp = b.pinned ? 1 : 0;
+        if (ap != bp) return bp.compareTo(ap);
+        return b.sortTimestamp.compareTo(a.sortTimestamp);
+      });
+      _items = copy;
+    });
+    _updateCommBadge(_items, _notif.unreadCount);
   }
 
   void _clearUnreadLocally(int conversationId) {
@@ -251,6 +333,7 @@ class _NativeConversationPageState extends State<NativeConversationPage>
     WidgetsBinding.instance.removeObserver(this);
     userAvatarRefresh.removeListener(_onSelfAvatarUpdated);
     widget.conversationReadSignal?.removeListener(_onConversationReadSignal);
+    widget.memberSettingsSignal?.removeListener(_onMemberSettingsSignal);
     NovaBackgroundCoordinator.instance.removeListener(_onNovaBackgroundUpdate);
     RobotAnalyzingCoordinator.instance.removeListener(_onRobotAnalyzingUpdate);
     _rtRefreshDebounce?.cancel();
@@ -445,6 +528,14 @@ class _NativeConversationPageState extends State<NativeConversationPage>
     setState(() {
       _items = _items.where((c) => c.id != conv.id).toList(growable: false);
     });
+    ConversationInboxCache.instance.put(
+      userId: widget.session.userId,
+      conversations: _items,
+      notif: _notif,
+      novaStorage: _novaStorage,
+      aiSummaryPreview: _aiSummaryPreview,
+      aiSummaryUnread: _aiSummaryUnread,
+    );
     _updateCommBadge(_items, _notif.unreadCount);
   }
 
@@ -461,11 +552,14 @@ class _NativeConversationPageState extends State<NativeConversationPage>
     bool silent = false,
     bool skipAvatarMerge = false,
   }) async {
-    if (!silent) {
+    // 已有列表时不再整页转圈（下拉刷新用 RefreshIndicator，切 Tab 用静默刷新）。
+    if (!silent && _items.isEmpty) {
       setState(() {
         _loading = true;
         _error = null;
       });
+    } else if (!silent) {
+      setState(() => _error = null);
     }
     try {
       final hidden = await InboxHiddenStorage.load();
@@ -535,6 +629,14 @@ class _NativeConversationPageState extends State<NativeConversationPage>
         _loading = false;
         if (!silent) _error = null;
       });
+      ConversationInboxCache.instance.put(
+        userId: widget.session.userId,
+        conversations: merged,
+        notif: notif,
+        novaStorage: novaStorage,
+        aiSummaryPreview: _aiSummaryPreview,
+        aiSummaryUnread: _aiSummaryUnread,
+      );
       _syncNovaInboxPoll(merged, novaStorage);
       _updateCommBadge(merged, notif.unreadCount);
       if (mounted) {
@@ -706,7 +808,7 @@ class _NativeConversationPageState extends State<NativeConversationPage>
       onTap = () => widget.onOpenRobot?.call(c);
     } else if (c.isApprovalAssistant) {
       rowKind = ChatInboxRowKind.approvalAssistant;
-      onTap = () => widget.onOpenApprovalAssistant?.call();
+      onTap = () => widget.onOpenApprovalAssistant?.call(c);
     } else if (c.isWorkgroupApproval) {
       rowKind = ChatInboxRowKind.workgroupApproval;
       onTap = () => widget.onOpenGroup(c);
@@ -775,8 +877,9 @@ class _NativeConversationPageState extends State<NativeConversationPage>
           : (c.isAiAssistant &&
                   NovaBackgroundCoordinator.instance.hasUnreadReplyFor(c.id)
               ? (c.unreadCount > 0 ? c.unreadCount : 1)
-              : c.unreadCount),
+              : widget.commUnread.effectiveUnreadCount(c)),
       muted: c.muted,
+      pinned: c.pinned,
       showAiMark: c.isAiAssistant,
       selected: selected ||
           (c.isApprovalAssistant && _isViewingApprovalAssistant),
@@ -800,7 +903,7 @@ class _NativeConversationPageState extends State<NativeConversationPage>
           : c.avatarMembers,
       robotAvatar: c.isRobot
           ? RobotFaceAvatar(
-              role: RobotCatalog.roleById(
+              role: RobotCatalogCache.instance.resolve(
                 robotKey.isEmpty ? 'r_lighthouse' : robotKey,
               ),
               size: 45,
@@ -1004,10 +1107,10 @@ class _NativeConversationPageState extends State<NativeConversationPage>
   }
 
   Widget _buildBody() {
-    if (_loading) {
+    if (_loading && _items.isEmpty) {
       return const Center(child: CircularProgressIndicator(strokeWidth: 2));
     }
-    if (_error != null) {
+    if (_error != null && _items.isEmpty) {
       return _ErrorPanel(error: _error!, onRetry: _load);
     }
 
@@ -1027,11 +1130,12 @@ class _NativeConversationPageState extends State<NativeConversationPage>
     children.add(const SizedBox(height: 6));
 
     return RefreshIndicator(
-      onRefresh: _load,
+      onRefresh: () => _load(silent: true),
       child: ListView(
         keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
         physics: const AlwaysScrollableScrollPhysics(),
-        clipBehavior: Clip.none,
+        // 必须裁剪：头像 OverflowBox / 未读角标会画出行外，否则上滑会盖住「消息」标题与搜索栏。
+        clipBehavior: Clip.hardEdge,
         padding: EdgeInsets.zero,
         children: children,
       ),

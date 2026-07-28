@@ -16,6 +16,8 @@ class RobotRole {
     required this.accent,
     this.glasses = false,
     this.primaryScenarioId,
+    /// 缺省 true：允许用户发起/继续会话；false=仅推送。
+    this.canChat = true,
   });
 
   final String id;
@@ -28,6 +30,7 @@ class RobotRole {
   final bool glasses;
   /// 首页「运行」默认绑定的 N8N 场景。
   final String? primaryScenarioId;
+  final bool canChat;
 
   factory RobotRole.fromApi(Map<String, dynamic> json) {
     return RobotRole(
@@ -43,6 +46,8 @@ class RobotRole {
         final v = '${json['primaryScenarioKey'] ?? ''}'.trim();
         return v.isEmpty ? null : v;
       }(),
+      // 缺省 true，兼容旧缓存 / 旧包。
+      canChat: json['canChat'] != false,
     );
   }
 }

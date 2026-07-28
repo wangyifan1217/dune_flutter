@@ -7,6 +7,7 @@ import '../chat/chat_widgets.dart';
 import '../chat/group_info_widgets.dart';
 import '../chat/user_avatar_widget.dart';
 import '../conversation/conversation_service.dart';
+import '../shell/dunes_toast.dart';
 import 'contact_models.dart';
 import 'contact_service.dart';
 
@@ -17,12 +18,21 @@ class NativeContactProfilePage extends StatefulWidget {
     required this.contactHint,
     required this.onBack,
     required this.onOpenPrivateChat,
+    this.conversationId,
+    this.onOpenSearch,
+    this.onChatSettingsChanged,
   });
 
   final AuthSession session;
   final NativeContact? contactHint;
   final VoidCallback onBack;
   final ValueChanged<int> onOpenPrivateChat;
+
+  /// 从私聊打开时传入，用于展示免打扰 / 置顶 / 查找聊天内容。
+  final int? conversationId;
+  final ValueChanged<int>? onOpenSearch;
+  final void Function({required int conversationId, bool? muted, bool? pinned})?
+      onChatSettingsChanged;
 
   @override
   State<NativeContactProfilePage> createState() =>
@@ -31,17 +41,35 @@ class NativeContactProfilePage extends StatefulWidget {
 
 class _NativeContactProfilePageState extends State<NativeContactProfilePage> {
   late final ContactService _service;
-  late final ConversationService _avatarService;
+  late final ConversationService _conversationService;
   NativeContact? _contact;
   bool _loading = true;
   String? _error;
+
+  bool _muted = false;
+  bool _pinned = false;
+  bool _settingsLoaded = false;
+
+  bool get _showChatSettings {
+    final id = widget.conversationId;
+    return id != null && id > 0;
+  }
 
   @override
   void initState() {
     super.initState();
     _service = ContactService(session: widget.session);
-    _avatarService = ConversationService(session: widget.session);
+    _conversationService = ConversationService(session: widget.session);
     _load();
+  }
+
+  @override
+  void didUpdateWidget(covariant NativeContactProfilePage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.conversationId != widget.conversationId ||
+        oldWidget.contactHint?.userId != widget.contactHint?.userId) {
+      _load();
+    }
   }
 
   Future<void> _load() async {
@@ -50,6 +78,7 @@ class _NativeContactProfilePageState extends State<NativeContactProfilePage> {
       setState(() {
         _loading = false;
         _error = '联系人不存在';
+        _settingsLoaded = false;
       });
       return;
     }
@@ -59,6 +88,11 @@ class _NativeContactProfilePageState extends State<NativeContactProfilePage> {
     });
     try {
       final fresh = await _service.fetchContact(hint.userId);
+      if (_showChatSettings) {
+        await _loadChatSettings();
+      } else if (mounted) {
+        setState(() => _settingsLoaded = false);
+      }
       if (!mounted) return;
       setState(() {
         _contact = fresh ?? hint;
@@ -72,6 +106,71 @@ class _NativeContactProfilePageState extends State<NativeContactProfilePage> {
         _loading = false;
       });
     }
+  }
+
+  Future<void> _loadChatSettings() async {
+    final id = widget.conversationId;
+    if (id == null || id <= 0) return;
+    try {
+      final conv = await _conversationService.fetchConversation(id);
+      if (!mounted) return;
+      setState(() {
+        _muted = conv?.muted ?? false;
+        _pinned = conv?.pinned ?? false;
+        _settingsLoaded = true;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _settingsLoaded = true);
+    }
+  }
+
+  Future<void> _toggleMuted() async {
+    final id = widget.conversationId;
+    if (id == null || id <= 0) return;
+    final next = !_muted;
+    setState(() => _muted = next);
+    try {
+      await _conversationService.patchMySettings(id, muted: next);
+      widget.onChatSettingsChanged?.call(
+        conversationId: id,
+        muted: next,
+        pinned: _pinned,
+      );
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _muted = !next);
+      _toast(context, '设置失败');
+    }
+  }
+
+  Future<void> _togglePinned() async {
+    final id = widget.conversationId;
+    if (id == null || id <= 0) return;
+    final next = !_pinned;
+    setState(() => _pinned = next);
+    try {
+      await _conversationService.patchMySettings(id, pinned: next);
+      widget.onChatSettingsChanged?.call(
+        conversationId: id,
+        muted: _muted,
+        pinned: next,
+      );
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _pinned = !next);
+      _toast(context, '设置失败');
+    }
+  }
+
+  void _toast(BuildContext context, String message) {
+    showDunesToast(
+      context,
+      message,
+      kind: dunesToastLooksLikeError(message)
+          ? DunesToastKind.error
+          : DunesToastKind.normal,
+    );
   }
 
   @override
@@ -132,6 +231,7 @@ class _NativeContactProfilePageState extends State<NativeContactProfilePage> {
     final department = (c.department ?? '').trim();
     final phone = (c.phone ?? '').trim();
     final isSelf = c.userId == widget.session.userId;
+    final convId = widget.conversationId;
 
     return ListView(
       padding: const EdgeInsets.only(bottom: 32),
@@ -143,7 +243,7 @@ class _NativeContactProfilePageState extends State<NativeContactProfilePage> {
           seed: c.userId,
           avatarPreset: c.avatarPreset,
           avatarObjectKey: c.avatarObjectKey,
-          avatarService: _avatarService,
+          avatarService: _conversationService,
         ),
         const SizedBox(height: 10),
         GroupInfoRow(
@@ -179,6 +279,30 @@ class _NativeContactProfilePageState extends State<NativeContactProfilePage> {
             ),
           ),
         ),
+        if (_showChatSettings && _settingsLoaded) ...[
+          const SizedBox(height: 10),
+          GroupInfoRow(
+            icon: Icons.notifications_off_outlined,
+            title: '消息免打扰',
+            trailing: GroupInfoToggle(value: _muted),
+            onTap: _toggleMuted,
+          ),
+          GroupInfoRow(
+            icon: Icons.push_pin_outlined,
+            title: '置顶聊天',
+            trailing: GroupInfoToggle(value: _pinned),
+            onTap: _togglePinned,
+          ),
+          const SizedBox(height: 10),
+          GroupInfoRow(
+            icon: Icons.search,
+            title: '查找聊天内容',
+            trailing: const GroupInfoChevron(),
+            onTap: widget.onOpenSearch == null || convId == null
+                ? null
+                : () => widget.onOpenSearch!(convId),
+          ),
+        ],
         if (!isSelf)
           _ProfileMessageAction(
             onTap: () => widget.onOpenPrivateChat(c.userId),

@@ -41,7 +41,7 @@ abstract final class ConversationInboxRealtime {
       final userId = (event.raw['userId'] as num?)?.toInt() ?? 0;
       if (userId != selfUserId) return items;
       final copy = items.toList(growable: true);
-      copy[index] = _copyConversation(copy[index], unreadCount: 0);
+      copy[index] = copyConversation(copy[index], unreadCount: 0);
       return copy;
     }
 
@@ -75,7 +75,7 @@ abstract final class ConversationInboxRealtime {
     final nextUnread = activeOnChatScreen
         ? 0
         : (bumpUnread ? old.unreadCount + 1 : old.unreadCount);
-    copy[index] = _copyConversation(
+    copy[index] = copyConversation(
       old,
       preview: preview?.text,
       updatedAt: at ?? old.updatedAt,
@@ -205,12 +205,14 @@ abstract final class ConversationInboxRealtime {
     return title.isEmpty ? null : title;
   }
 
-  static NativeConversation _copyConversation(
+  static NativeConversation copyConversation(
     NativeConversation c, {
     String? preview,
     DateTime? updatedAt,
     int? unreadCount,
     String? title,
+    bool? muted,
+    bool? pinned,
   }) {
     return NativeConversation(
       id: c.id,
@@ -222,8 +224,8 @@ abstract final class ConversationInboxRealtime {
       peerUserId: c.peerUserId,
       peerDisplayName: c.peerDisplayName,
       memberCount: c.memberCount,
-      muted: c.muted,
-      pinned: c.pinned,
+      muted: muted ?? c.muted,
+      pinned: pinned ?? c.pinned,
       businessType: c.businessType,
       peerDepartment: c.peerDepartment,
       peerRoleLabel: c.peerRoleLabel,

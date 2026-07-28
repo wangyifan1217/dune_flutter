@@ -664,6 +664,105 @@ class XflowService {
     }
   }
 
+  Future<List<ApprovalCommentItem>> fetchApprovalComments({
+    required String businessType,
+    required int businessId,
+  }) async {
+    final bt = Uri.encodeComponent(businessType.trim().toUpperCase());
+    final rows = await _requestList('/approvals/$bt/$businessId/comments');
+    final out = <ApprovalCommentItem>[];
+    for (final row in rows) {
+      if (row is! Map) continue;
+      final map = Map<String, dynamic>.from(row);
+      final mentions = <int>[];
+      final rawMentions = map['mentionUserIds'];
+      if (rawMentions is List) {
+        for (final m in rawMentions) {
+          final id = _int(m);
+          if (id > 0) mentions.add(id);
+        }
+      }
+      out.add(
+        ApprovalCommentItem(
+          id: _int(map['id']),
+          authorUserId: _int(map['authorUserId']),
+          authorName: (map['authorName'] ?? '').toString(),
+          bodyText: (map['bodyText'] ?? '').toString(),
+          mentionUserIds: mentions,
+          parentId: _intNullable(map['parentId']),
+          authorAvatarPreset: (map['authorAvatarPreset'] ?? '').toString(),
+          authorAvatarObjectKey: (map['authorAvatarObjectKey'] ?? '').toString(),
+          createdAt: _parseApiDateTime(map['createdAt']),
+        ),
+      );
+    }
+    return out;
+  }
+
+  Future<List<ApprovalStakeholderPerson>> fetchApprovalStakeholders({
+    required String businessType,
+    required int businessId,
+  }) async {
+    final bt = Uri.encodeComponent(businessType.trim().toUpperCase());
+    final raw = await _request('/approvals/$bt/$businessId/stakeholders');
+    final people = raw['people'];
+    final out = <ApprovalStakeholderPerson>[];
+    if (people is List) {
+      for (final row in people) {
+        if (row is! Map) continue;
+        final map = Map<String, dynamic>.from(row);
+        final id = _int(map['id'] ?? map['userId']);
+        if (id <= 0) continue;
+        out.add(
+          ApprovalStakeholderPerson(
+            id: id,
+            displayName: (map['displayName'] ?? '用户$id').toString(),
+            role: (map['role'] ?? '').toString(),
+          ),
+        );
+      }
+    }
+    return out;
+  }
+
+  Future<ApprovalCommentItem> postApprovalComment({
+    required String businessType,
+    required int businessId,
+    required String text,
+    List<int> mentionUserIds = const [],
+    int? parentId,
+  }) async {
+    final bt = Uri.encodeComponent(businessType.trim().toUpperCase());
+    final raw = await _request(
+      '/approvals/$bt/$businessId/comments',
+      method: 'POST',
+      body: <String, dynamic>{
+        'text': text,
+        'mentionUserIds': mentionUserIds,
+        if (parentId != null && parentId > 0) 'parentId': parentId,
+      },
+    );
+    final mentions = <int>[];
+    final rawMentions = raw['mentionUserIds'];
+    if (rawMentions is List) {
+      for (final m in rawMentions) {
+        final id = _int(m);
+        if (id > 0) mentions.add(id);
+      }
+    }
+    return ApprovalCommentItem(
+      id: _int(raw['id']),
+      authorUserId: _int(raw['authorUserId']),
+      authorName: (raw['authorName'] ?? '').toString(),
+      bodyText: (raw['bodyText'] ?? text).toString(),
+      mentionUserIds: mentions,
+      parentId: _intNullable(raw['parentId']) ?? parentId,
+      authorAvatarPreset: (raw['authorAvatarPreset'] ?? '').toString(),
+      authorAvatarObjectKey: (raw['authorAvatarObjectKey'] ?? '').toString(),
+      createdAt: _parseApiDateTime(raw['createdAt']),
+    );
+  }
+
   Future<XflowTodoHint?> findMyOpenTodo({
     required String businessType,
     required int businessId,
@@ -1873,4 +1972,22 @@ class XflowService {
   int _int(dynamic value) => _businessId(value);
 
   int? _intNullable(dynamic value) => _businessIdNullable(value);
+
+  /// 解析接口时间并转为本地时区（兼容 `+00` / 无时区按 UTC）。
+  DateTime? _parseApiDateTime(dynamic value) {
+    if (value == null) return null;
+    var s = value.toString().trim();
+    if (s.isEmpty) return null;
+    if (RegExp(r'\+00:?00?$').hasMatch(s)) {
+      s = s.replaceFirst(RegExp(r'\+00:?00?$'), 'Z');
+    }
+    // 无时区的 ISO 本地墙钟通常是 UTC 落库值，按 UTC 解析。
+    if (RegExp(r'^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}').hasMatch(s) &&
+        !RegExp(r'(Z|[+-]\d{2}:?\d{2})$').hasMatch(s)) {
+      s = '${s.replaceFirst(' ', 'T')}Z';
+    }
+    final parsed = DateTime.tryParse(s);
+    if (parsed == null) return null;
+    return parsed.isUtc ? parsed.toLocal() : parsed;
+  }
 }

@@ -70,8 +70,9 @@ MarkdownStyleSheet _robotMdStyle({required bool compact}) {
       color: RobotTheme.purpleDeep,
       decoration: TextDecoration.underline,
     ),
-    // Intrinsic + 包内横向滚动：宽表不再被气泡压扁。
-    tableColumnWidth: const IntrinsicColumnWidth(),
+    // IntrinsicColumnWidth 会对每个单元格二次布局，宽表进会话首帧极卡。
+    // Flex 在气泡宽度内均分列宽，足够阅读且显著更快。
+    tableColumnWidth: const FlexColumnWidth(),
     tableHead: TextStyle(
       fontSize: tableSize,
       fontWeight: FontWeight.w700,
@@ -114,17 +115,89 @@ class RobotMarkdown extends StatelessWidget {
     final data = markdown.trim();
     if (data.isEmpty) return const SizedBox.shrink();
 
-    return MarkdownBody(
-      data: data,
-      selectable: selectable && !compact,
-      softLineBreak: true,
-      styleSheet: _robotMdStyle(compact: compact),
-      onTapLink: (text, href, title) {
-        if (href == null || href.trim().isEmpty) return;
-        final uri = Uri.tryParse(href.trim());
-        if (uri == null) return;
-        launchUrl(uri, mode: LaunchMode.externalApplication);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final screenW = MediaQuery.sizeOf(context).width;
+        // 无界约束时（偶发首帧）回落到屏宽，避免宽表按「无限宽」量测把整页撑大。
+        final maxW = constraints.maxWidth.isFinite && constraints.maxWidth > 0
+            ? constraints.maxWidth
+            : (screenW - 72).clamp(200.0, screenW);
+        return MediaQuery.withClampedTextScaling(
+          maxScaleFactor: 1.25,
+          child: SizedBox(
+            width: maxW,
+            child: MarkdownBody(
+              data: data,
+              selectable: selectable && !compact,
+              softLineBreak: true,
+              // 在已钉死的宽度内拉伸，避免 Intrinsic 宽表把父级撑破。
+              fitContent: false,
+              styleSheet: _robotMdStyle(compact: compact),
+              sizedImageBuilder: (config) => _RobotMdImage(
+                uri: config.uri,
+                alt: config.alt,
+                width: config.width,
+                height: config.height,
+                maxWidth: maxW,
+              ),
+              onTapLink: (text, href, title) {
+                if (href == null || href.trim().isEmpty) return;
+                final uri = Uri.tryParse(href.trim());
+                if (uri == null) return;
+                launchUrl(uri, mode: LaunchMode.externalApplication);
+              },
+            ),
+          ),
+        );
       },
+    );
+  }
+}
+
+class _RobotMdImage extends StatelessWidget {
+  const _RobotMdImage({
+    required this.uri,
+    required this.maxWidth,
+    this.alt,
+    this.width,
+    this.height,
+  });
+
+  final Uri uri;
+  final String? alt;
+  final double? width;
+  final double? height;
+  final double maxWidth;
+
+  @override
+  Widget build(BuildContext context) {
+    final targetW = () {
+      final w = width;
+      if (w != null && w.isFinite && w > 0) {
+        return w > maxWidth ? maxWidth : w;
+      }
+      return maxWidth;
+    }();
+    final provider = switch (uri.scheme) {
+      'http' || 'https' => NetworkImage(uri.toString()),
+      'data' => null,
+      _ => NetworkImage(uri.toString()),
+    };
+    if (provider == null) {
+      return Text(
+        alt?.trim().isNotEmpty == true ? alt!.trim() : '[图片]',
+        style: const TextStyle(fontSize: 12, color: RobotTheme.text3),
+      );
+    }
+    return Image(
+      image: provider,
+      width: targetW,
+      height: height,
+      fit: BoxFit.contain,
+      errorBuilder: (_, _, _) => Text(
+        alt?.trim().isNotEmpty == true ? alt!.trim() : '[图片加载失败]',
+        style: const TextStyle(fontSize: 12, color: RobotTheme.text3),
+      ),
     );
   }
 }

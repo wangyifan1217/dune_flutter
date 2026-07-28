@@ -615,7 +615,8 @@ class XfDetPushContext extends StatelessWidget {
   }
 }
 
-class XfDetTabsWrap extends StatefulWidget {
+/// 详情填报区（历史名 TabsWrap；现已改为完整纵向展示，不再使用 Tab）。
+class XfDetTabsWrap extends StatelessWidget {
   const XfDetTabsWrap({
     super.key,
     required this.bundle,
@@ -628,76 +629,37 @@ class XfDetTabsWrap extends StatefulWidget {
   final bool showTrack;
 
   @override
-  State<XfDetTabsWrap> createState() => _XfDetTabsWrapState();
-}
-
-class _XfDetTabsWrapState extends State<XfDetTabsWrap> {
-  String _tab = 'content';
-
-  @override
   Widget build(BuildContext context) {
-    final cfg = widget.bundle.detailConfig;
+    final cfg = bundle.detailConfig;
     var sections = buildSectionsByDetailConfig(
-      widget.bundle.fields,
-      widget.bundle.detail.formValues,
+      bundle.fields,
+      bundle.detail.formValues,
       cfg,
-      widget.bundle.detail,
+      bundle.detail,
     );
     if (sections.isEmpty) {
       sections = buildFieldSections(
-        widget.bundle.fields,
-        widget.bundle.detail.formValues,
-        widget.bundle.detail,
+        bundle.fields,
+        bundle.detail.formValues,
+        bundle.detail,
       );
     }
 
-    return XfDetCard(
-      marginBottom: 10,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              _tabBtn('content', '填报内容'),
-              if (widget.showTrack) ...[
-                const SizedBox(width: 4),
-                _tabBtn('track', '流程追踪'),
-              ],
-            ],
-          ),
-          const SizedBox(height: 10),
-          if (_tab == 'content')
-            XfDetFormSections(sections: sections, service: widget.service)
-          else
-            XfDetTrackTimeline(bundle: widget.bundle),
-        ],
-      ),
-    );
-  }
-
-  Widget _tabBtn(String id, String label) {
-    final on = _tab == id;
-    return Expanded(
-      child: Material(
-        color: on ? DunesColors.accent : DunesColors.bgSoft,
-        borderRadius: BorderRadius.circular(8),
-        child: InkWell(
-          onTap: () => setState(() => _tab = id),
-          borderRadius: BorderRadius.circular(8),
-          child: Container(
-            alignment: Alignment.center,
-            padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 6),
-            child: Text(
-              label,
-              style: DunesTypography.sans(
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-                color: on ? Colors.white : DunesColors.text2,
-              ),
-            ),
-          ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        XfDetCard(
+          title: '填报内容',
+          marginBottom: 10,
+          child: XfDetFormSections(sections: sections, service: service),
         ),
-      ),
+        if (showTrack)
+          XfDetCard(
+            title: '审批进度',
+            marginBottom: 10,
+            child: XfDetTrackTimeline(bundle: bundle),
+          ),
+      ],
     );
   }
 }

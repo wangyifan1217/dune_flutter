@@ -48,7 +48,8 @@ Future<void> windowsTrayPrepareQuitForAppUpdate({bool exitProcess = false}) =>
 Future<void> windowsTrayRearmPreventCloseAfterUpdateCancelled() =>
     WindowsDesktopTray.instance.rearmPreventCloseAfterUpdateCancelled();
 
-/// 关闭进托盘；隐藏且有未读/新消息时托盘图标闪烁。
+/// 关闭进托盘；最小化/收起到托盘且有未读时托盘图标闪烁。
+/// 注意：仅「失焦」不闪烁——Windows 上切窗/弹层会频繁 blur，闪烁会像图标自己狂抖。
 class WindowsDesktopTray with WindowListener, TrayListener {
   WindowsDesktopTray._();
   static final WindowsDesktopTray instance = WindowsDesktopTray._();
@@ -64,6 +65,7 @@ class WindowsDesktopTray with WindowListener, TrayListener {
   int _unread = 0;
   bool? _lastInactiveNotified;
   Timer? _flashTimer;
+  Future<void> _iconChain = Future<void>.value();
   String _trayIcon = _trayIconWin;
   String _trayIconBlank = _trayIconWinBlank;
   Future<void> Function()? onBeforeQuit;
@@ -71,6 +73,9 @@ class WindowsDesktopTray with WindowListener, TrayListener {
 
   /// 最小化、失焦和关闭到托盘时，当前会话不应被视为“正在查看”。
   bool get isWindowInactive => _hidden || _minimized || !_focused;
+
+  /// 仅窗口不可见时闪烁托盘（隐藏到托盘或最小化），避免失焦误闪。
+  bool get _shouldFlashTray => _hidden || _minimized;
 
   void _emitInactiveChanged() {
     final inactive = isWindowInactive;
@@ -87,10 +92,10 @@ class WindowsDesktopTray with WindowListener, TrayListener {
     await windowManager.ensureInitialized();
     windowManager.addListener(this);
 
-    // 默认宽窗，保证进入双栏聊天布局（≥900）；可再拖拽缩放。
+    // 默认普通窗口（非最大化），可拖拽缩放；最小宽度保证双栏布局。
     const windowOptions = WindowOptions(
-      size: Size(1180, 760),
-      minimumSize: Size(960, 640),
+      size: Size(1080, 720),
+      minimumSize: Size(900, 600),
       center: true,
       skipTaskbar: false,
       title: '沙丘',
@@ -100,6 +105,16 @@ class WindowsDesktopTray with WindowListener, TrayListener {
     windowManager.waitUntilReadyToShow(windowOptions, () async {
       await windowManager.setPreventClose(true);
       await windowManager.setTitle('沙丘');
+      try {
+        if (await windowManager.isFullScreen()) {
+          await windowManager.setFullScreen(false);
+        }
+        if (await windowManager.isMaximized()) {
+          await windowManager.unmaximize();
+        }
+        await windowManager.setSize(const Size(1080, 720));
+        await windowManager.center();
+      } catch (_) {}
       await windowManager.show();
       await windowManager.focus();
     });
@@ -141,7 +156,8 @@ class WindowsDesktopTray with WindowListener, TrayListener {
   }
 
   void notifyIncomingMessage() {
-    if (!_ready || !isWindowInactive) return;
+    // 仅窗口不可见时标记提醒；前台失焦不闪，避免托盘狂抖。
+    if (!_ready || !_shouldFlashTray) return;
     _pendingAlert = true;
     unawaited(_syncFlash());
   }
@@ -174,7 +190,7 @@ class WindowsDesktopTray with WindowListener, TrayListener {
       await windowManager.setAlwaysOnTop(false);
     }
     await windowManager.setPreventClose(true);
-    await trayManager.setIcon(_trayIcon);
+    await _setTrayIcon(_trayIcon);
     _emitInactiveChanged();
   }
 
@@ -225,10 +241,21 @@ class WindowsDesktopTray with WindowListener, TrayListener {
     exit(0);
   }
 
+  Future<void> _setTrayIcon(String path) {
+    // 串行化 setIcon，避免闪烁/停止交错导致托盘图标抽搐。
+    _iconChain = _iconChain
+        .catchError((_) {})
+        .then((_) async {
+          try {
+            await trayManager.setIcon(path);
+          } catch (_) {}
+        });
+    return _iconChain;
+  }
+
   Future<void> _syncFlash() async {
     final hasAttention = _unread > 0 || _pendingAlert;
-    // 最小化或失焦时同样闪烁托盘图标；关闭到托盘时沿用原有行为。
-    final shouldFlashTray = isWindowInactive && hasAttention;
+    final shouldFlashTray = _shouldFlashTray && hasAttention;
     if (shouldFlashTray) {
       await _startFlash();
     } else {
@@ -245,7 +272,8 @@ class WindowsDesktopTray with WindowListener, TrayListener {
     _flashing = true;
     _flashVisible = true;
     _flashTimer?.cancel();
-    _flashTimer = Timer.periodic(const Duration(milliseconds: 450), (_) {
+    // 略放慢节奏，减少「狂抖」观感；仅 invisible 态才需要切换。
+    _flashTimer = Timer.periodic(const Duration(milliseconds: 700), (_) {
       unawaited(_toggleFlashIcon());
     });
   }
@@ -255,17 +283,13 @@ class WindowsDesktopTray with WindowListener, TrayListener {
     _flashTimer = null;
     _flashing = false;
     _flashVisible = true;
-    try {
-      await trayManager.setIcon(_trayIcon);
-    } catch (_) {}
+    await _setTrayIcon(_trayIcon);
   }
 
   Future<void> _toggleFlashIcon() async {
     if (!_flashing) return;
     _flashVisible = !_flashVisible;
-    try {
-      await trayManager.setIcon(_flashVisible ? _trayIcon : _trayIconBlank);
-    } catch (_) {}
+    await _setTrayIcon(_flashVisible ? _trayIcon : _trayIconBlank);
   }
 
   @override
@@ -290,7 +314,7 @@ class WindowsDesktopTray with WindowListener, TrayListener {
     _minimized = false;
     _focused = true;
     _pendingAlert = false;
-    unawaited(_stopFlash());
+    unawaited(_syncFlash());
     _emitInactiveChanged();
   }
 
@@ -298,12 +322,15 @@ class WindowsDesktopTray with WindowListener, TrayListener {
   void onWindowMinimize() {
     _minimized = true;
     _emitInactiveChanged();
+    // 最小化后若有未读，开始托盘闪烁提醒。
+    unawaited(_syncFlash());
   }
 
   @override
   void onWindowBlur() {
     _focused = false;
     _emitInactiveChanged();
+    // 失焦不触发闪烁；若此前因最小化在闪，保持由 _shouldFlashTray 决定。
   }
 
   @override
@@ -312,8 +339,8 @@ class WindowsDesktopTray with WindowListener, TrayListener {
     _minimized = false;
     if (!_hidden) {
       _pendingAlert = false;
-      unawaited(_stopFlash());
     }
+    unawaited(_syncFlash());
     _emitInactiveChanged();
   }
 

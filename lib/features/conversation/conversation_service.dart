@@ -600,10 +600,16 @@ class ConversationService {
       headers: _headers,
       body: '{}',
     );
-    if (resp.statusCode < 200 || resp.statusCode >= 300) {
-      throw Exception('打开机器人会话失败: HTTP ${resp.statusCode}');
-    }
     final body = _decode(resp.body);
+    if (resp.statusCode < 200 || resp.statusCode >= 300) {
+      final msg = (body['message'] ?? '').toString().trim();
+      if (resp.statusCode == 403 && msg.contains('不支持会话')) {
+        throw Exception('该机器人仅推送，不支持回复');
+      }
+      throw Exception(
+        msg.isEmpty ? '打开机器人会话失败: HTTP ${resp.statusCode}' : msg,
+      );
+    }
     if (body['success'] == false) {
       throw Exception((body['message'] ?? '打开机器人会话失败').toString());
     }
@@ -672,10 +678,14 @@ class ConversationService {
         'via': 'conversations',
       };
     }
-    if (resp.statusCode < 200 || resp.statusCode >= 300) {
-      throw Exception('发送失败: HTTP ${resp.statusCode}');
-    }
     final body = _decode(resp.body);
+    if (resp.statusCode < 200 || resp.statusCode >= 300) {
+      final msg = (body['message'] ?? '').toString().trim();
+      if (resp.statusCode == 403 && msg.contains('不支持会话')) {
+        throw Exception('该机器人仅推送，不支持回复');
+      }
+      throw Exception(msg.isEmpty ? '发送失败: HTTP ${resp.statusCode}' : msg);
+    }
     if (body['success'] == false) {
       throw Exception((body['message'] ?? '发送失败').toString());
     }

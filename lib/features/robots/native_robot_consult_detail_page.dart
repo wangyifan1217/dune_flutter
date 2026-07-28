@@ -36,7 +36,7 @@ class _NativeRobotConsultDetailPageState
   final _store = RobotConsultStore.instance;
   bool _loading = true;
   String? _error;
-  /// null：按终态自动折叠；非 null：用户手动展开/收起。
+  /// null：默认展开；非 null：用户手动展开/收起。
   bool? _nodesExpandedOverride;
   bool _forwarding = false;
 
@@ -152,9 +152,8 @@ class _NativeRobotConsultDetailPageState
         record.nodes.where((n) => n.status == RobotNodeStatus.success).length;
     final progress =
         record.nodes.isEmpty ? 0.0 : done / record.nodes.length;
-    // 进行中默认展开；全部完成/失败后默认收起，用户可再打开。
-    final nodesExpanded =
-        _nodesExpandedOverride ?? !record.isTerminal;
+    // 默认展开节点明细（含已完成）；用户可手动收起。
+    final nodesExpanded = _nodesExpandedOverride ?? true;
 
     return ColoredBox(
       color: RobotTheme.pageBg,
@@ -272,73 +271,98 @@ class _NativeRobotConsultDetailPageState
                   ),
                   if (record.nodes.isNotEmpty) ...[
                     const SizedBox(height: 12),
-                    Material(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(14),
-                      child: InkWell(
+                    Container(
+                      width: double.infinity,
+                      decoration: BoxDecoration(
+                        color: Colors.white,
                         borderRadius: BorderRadius.circular(14),
-                        onTap: () {
-                          setState(() {
-                            _nodesExpandedOverride = !nodesExpanded;
-                          });
-                        },
-                        child: Ink(
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(14),
-                            border: Border.all(color: RobotTheme.cardBorder),
-                          ),
-                          child: Padding(
-                            padding: const EdgeInsets.fromLTRB(14, 12, 10, 12),
-                            child: Row(
-                              children: [
-                                Icon(
-                                  Icons.account_tree_outlined,
-                                  size: 18,
-                                  color: record.isTerminal
-                                      ? const Color(0xFF2E7544)
-                                      : RobotTheme.purple,
+                        border: Border.all(color: RobotTheme.cardBorder),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Material(
+                            color: Colors.transparent,
+                            child: InkWell(
+                              borderRadius: nodesExpanded
+                                  ? const BorderRadius.vertical(
+                                      top: Radius.circular(14),
+                                    )
+                                  : BorderRadius.circular(14),
+                              onTap: () {
+                                setState(() {
+                                  _nodesExpandedOverride = !nodesExpanded;
+                                });
+                              },
+                              child: Padding(
+                                padding: const EdgeInsets.fromLTRB(
+                                  14,
+                                  12,
+                                  10,
+                                  12,
                                 ),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: Text(
-                                    record.isTerminal
-                                        ? '执行节点 $done/${record.nodes.length} · 已完成'
-                                        : '执行节点 $done/${record.nodes.length}',
-                                    style: DunesTypography.sans(
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w700,
-                                      color: RobotTheme.text,
+                                child: Row(
+                                  children: [
+                                    Icon(
+                                      Icons.account_tree_outlined,
+                                      size: 18,
+                                      color: record.isTerminal
+                                          ? const Color(0xFF2E7544)
+                                          : RobotTheme.purple,
                                     ),
-                                  ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        record.isTerminal
+                                            ? '执行节点 $done/${record.nodes.length} · 已完成'
+                                            : '执行节点 $done/${record.nodes.length}',
+                                        style: DunesTypography.sans(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w700,
+                                          color: RobotTheme.text,
+                                        ),
+                                      ),
+                                    ),
+                                    Text(
+                                      nodesExpanded ? '收起' : '展开',
+                                      style: DunesTypography.sans(
+                                        fontSize: 12,
+                                        color: RobotTheme.text3,
+                                      ),
+                                    ),
+                                    Icon(
+                                      nodesExpanded
+                                          ? Icons.expand_less_rounded
+                                          : Icons.expand_more_rounded,
+                                      color: RobotTheme.text3,
+                                    ),
+                                  ],
                                 ),
-                                Text(
-                                  nodesExpanded ? '收起' : '展开',
-                                  style: DunesTypography.sans(
-                                    fontSize: 12,
-                                    color: RobotTheme.text3,
-                                  ),
-                                ),
-                                Icon(
-                                  nodesExpanded
-                                      ? Icons.expand_less_rounded
-                                      : Icons.expand_more_rounded,
-                                  color: RobotTheme.text3,
-                                ),
-                              ],
+                              ),
                             ),
                           ),
-                        ),
+                          if (nodesExpanded) ...[
+                            const Divider(
+                              height: 1,
+                              color: Color(0xFFE8EAED),
+                            ),
+                            Padding(
+                              padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
+                              child: Column(
+                                children: [
+                                  for (var i = 0; i < record.nodes.length; i++)
+                                    _NodeTile(
+                                      index: i,
+                                      node: record.nodes[i],
+                                      isLast: i == record.nodes.length - 1,
+                                    ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
                     ),
-                    if (nodesExpanded) ...[
-                      const SizedBox(height: 10),
-                      for (var i = 0; i < record.nodes.length; i++)
-                        _NodeTile(
-                          index: i,
-                          node: record.nodes[i],
-                          isLast: i == record.nodes.length - 1,
-                        ),
-                    ],
                   ],
                 ],
               ),
@@ -363,9 +387,12 @@ class _NodeTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = robotStatusColor(node.status);
-    return IntrinsicHeight(
+    // 不用 IntrinsicHeight：节点 reply 含 Markdown/表格时，在 PC 宽屏
+    // ListView 里量高会失败，展开后只剩标题、明细空白。
+    return Padding(
+      padding: EdgeInsets.only(bottom: isLast ? 0 : 12),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SizedBox(
             width: 28,
@@ -373,14 +400,13 @@ class _NodeTile extends StatelessWidget {
               children: [
                 Icon(robotStatusIcon(node.status), size: 22, color: color),
                 if (!isLast)
-                  Expanded(
-                    child: Container(
-                      width: 2,
-                      margin: const EdgeInsets.symmetric(vertical: 4),
-                      color: node.status == RobotNodeStatus.success
-                          ? const Color(0xFF2E7544).withValues(alpha: 0.35)
-                          : const Color(0xFFE0E2E6),
-                    ),
+                  Container(
+                    width: 2,
+                    height: 28,
+                    margin: const EdgeInsets.only(top: 4),
+                    color: node.status == RobotNodeStatus.success
+                        ? const Color(0xFF2E7544).withValues(alpha: 0.35)
+                        : const Color(0xFFE0E2E6),
                   ),
               ],
             ),
@@ -388,15 +414,14 @@ class _NodeTile extends StatelessWidget {
           const SizedBox(width: 8),
           Expanded(
             child: Container(
-              margin: EdgeInsets.only(bottom: isLast ? 0 : 12),
               padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
               decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(14),
+                color: const Color(0xFFF7F8FA),
+                borderRadius: BorderRadius.circular(12),
                 border: Border.all(
                   color: node.status == RobotNodeStatus.running
                       ? RobotTheme.purple.withValues(alpha: 0.45)
-                      : RobotTheme.cardBorder,
+                      : const Color(0xFFE8EAED),
                 ),
               ),
               child: Column(
@@ -404,15 +429,16 @@ class _NodeTile extends StatelessWidget {
                 children: [
                   Row(
                     children: [
-                      Text(
-                        '${index + 1}. ${node.name}',
-                        style: DunesTypography.sans(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w700,
-                          color: RobotTheme.text,
+                      Expanded(
+                        child: Text(
+                          '${index + 1}. ${node.name}',
+                          style: DunesTypography.sans(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                            color: RobotTheme.text,
+                          ),
                         ),
                       ),
-                      const Spacer(),
                       Container(
                         padding: const EdgeInsets.symmetric(
                           horizontal: 7,
@@ -448,12 +474,13 @@ class _NodeTile extends StatelessWidget {
                       width: double.infinity,
                       padding: const EdgeInsets.all(10),
                       decoration: BoxDecoration(
-                        color: const Color(0xFFF7F8FA),
+                        color: Colors.white,
                         borderRadius: BorderRadius.circular(10),
                       ),
                       child: RobotMarkdown(
                         markdown: node.reply,
                         compact: true,
+                        selectable: false,
                       ),
                     ),
                   ] else if (node.status == RobotNodeStatus.running) ...[

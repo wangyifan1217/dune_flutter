@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 import '../auth/auth_session.dart';
+import 'robot_catalog_cache.dart';
 import 'robot_models.dart';
 
 /// APP 拉取机器人目录（flow-go GET /api/v1/robots）。
@@ -31,11 +32,15 @@ class RobotService {
     final data = decoded is Map ? decoded['data'] : decoded;
     final list = data is List
         ? data
-        : (data is Map && data['items'] is List ? data['items'] as List : const []);
-    return list
+        : (data is Map && data['items'] is List
+              ? data['items'] as List
+              : const []);
+    final roles = list
         .whereType<Map>()
         .map((e) => RobotRole.fromApi(Map<String, dynamic>.from(e)))
         .where((r) => r.id.isNotEmpty && r.name.isNotEmpty)
         .toList();
+    RobotCatalogCache.instance.rememberAll(roles);
+    return roles;
   }
 }

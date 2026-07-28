@@ -51,6 +51,10 @@ class _NativeRobotConsultListPageState extends State<NativeRobotConsultListPage>
     super.didUpdateWidget(oldWidget);
     if (oldWidget.session?.token != widget.session?.token) {
       _store.bindSession(widget.session);
+    }
+    if (oldWidget.session?.token != widget.session?.token ||
+        oldWidget.robotKey != widget.robotKey) {
+      _loadRobot();
       _store.refreshList(robotKey: widget.robotKey);
     }
   }

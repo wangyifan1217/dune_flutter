@@ -536,6 +536,7 @@ class ChatInboxRow extends StatelessWidget {
     this.memberCount,
     this.unreadCount = 0,
     this.muted = false,
+    this.pinned = false,
     this.showAiMark = false,
     this.showOnlineDot = false,
     this.avatarInitial,
@@ -561,6 +562,7 @@ class ChatInboxRow extends StatelessWidget {
   final int? memberCount;
   final int unreadCount;
   final bool muted;
+  final bool pinned;
   final bool showAiMark;
   final bool showOnlineDot;
   final String? avatarInitial;
@@ -576,6 +578,12 @@ class ChatInboxRow extends StatelessWidget {
   final bool selected;
   final Widget? robotAvatar;
 
+  Color get _rowBg {
+    if (selected) return DunesColors.accentSoft;
+    if (pinned) return DunesColors.bgSoft;
+    return DunesColors.bgApp;
+  }
+
   @override
   Widget build(BuildContext context) {
     final unreadText = unreadCount > 99 ? '99+' : '$unreadCount';
@@ -590,7 +598,7 @@ class ChatInboxRow extends StatelessWidget {
     return Column(
       children: [
         Material(
-          color: selected ? DunesColors.accentSoft : DunesColors.bgApp,
+          color: _rowBg,
           child: InkWell(
             onTap: onTap,
             child: Padding(
@@ -746,12 +754,15 @@ class ChatInboxRow extends StatelessWidget {
           ),
         ),
         if (showDivider)
-          const Padding(
-            padding: EdgeInsets.only(left: 80, right: 16),
-            child: Divider(
-              height: 1,
-              thickness: 1,
-              color: DunesColors.borderSoft,
+          ColoredBox(
+            color: _rowBg,
+            child: const Padding(
+              padding: EdgeInsets.only(left: 80, right: 16),
+              child: Divider(
+                height: 1,
+                thickness: 1,
+                color: DunesColors.borderSoft,
+              ),
             ),
           ),
       ],

@@ -90,9 +90,26 @@ class _NativeApprovalAssistantPageState
       _awayFromLatest = false;
     });
     try {
-      if (widget.autoMarkRead && _convId > 0) {
-        await _service.markConversationRead(_convId);
-        widget.onConversationRead?.call(_convId);
+      var convId = _convId;
+      if (convId <= 0) {
+        final ensured = await _service.ensureApprovalAssistantSession();
+        convId = ensured.id;
+        if (convId <= 0) {
+          throw Exception('审批助手会话无效');
+        }
+        // conversationHint 是 final，用本地覆盖后续拉取。
+        if (!mounted) return;
+        // 通过重新加载消息使用新 id：暂存到 messages 拉取参数。
+        await _reloadMessagesFor(convId);
+        if (widget.autoMarkRead) {
+          await _service.markConversationRead(convId);
+          widget.onConversationRead?.call(convId);
+        }
+        return;
+      }
+      if (widget.autoMarkRead) {
+        await _service.markConversationRead(convId);
+        widget.onConversationRead?.call(convId);
       }
       await _reloadMessages();
     } catch (e) {
@@ -103,17 +120,8 @@ class _NativeApprovalAssistantPageState
     }
   }
 
-  Future<void> _markReadIfViewing() async {
-    if (!widget.autoMarkRead || _convId <= 0) return;
-    try {
-      await _service.markConversationRead(_convId);
-      if (!mounted) return;
-      widget.onConversationRead?.call(_convId);
-    } catch (_) {}
-  }
-
-  Future<void> _reloadMessages({bool silent = false}) async {
-    final list = await _service.fetchMessages(_convId);
+  Future<void> _reloadMessagesFor(int convId, {bool silent = false}) async {
+    final list = await _service.fetchMessages(convId);
     if (!mounted) return;
     final prevLastId = _messages.isEmpty ? 0 : _messages.last.id;
     final stick = !_awayFromLatest;
@@ -124,14 +132,31 @@ class _NativeApprovalAssistantPageState
       if (!silent) _error = null;
     });
     final nextLastId = _messages.isEmpty ? 0 : _messages.last.id;
-    // 正在查看时收到新消息（解释/催办异步完成）必须再清一次未读，
-    // 否则切到别的会话后 tab/列表仍会挂小红点。
     if (silent && nextLastId > prevLastId) {
       unawaited(_markReadIfViewing());
     }
     if (stick) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _jumpBottom());
     }
+  }
+
+  Future<void> _reloadMessages({bool silent = false}) async {
+    if (_convId <= 0) {
+      if (!silent) {
+        throw Exception('审批助手会话无效');
+      }
+      return;
+    }
+    await _reloadMessagesFor(_convId, silent: silent);
+  }
+
+  Future<void> _markReadIfViewing() async {
+    if (!widget.autoMarkRead || _convId <= 0) return;
+    try {
+      await _service.markConversationRead(_convId);
+      if (!mounted) return;
+      widget.onConversationRead?.call(_convId);
+    } catch (_) {}
   }
 
   void _onRealtime(ConversationRealtimeEvent event) {
@@ -402,6 +427,79 @@ class _NativeApprovalAssistantPageState
         fallback: m.bodyText,
         onOpenAll: () =>
             widget.onOpenPendingList?.call(ApprovalAssistantPickMode.browse),
+      );
+    }
+    if (type == 'approvalComment') {
+      final share = ApprovalChatShare.fromPayload(payload);
+      final author = (payload['authorDisplayName'] ?? '').toString().trim();
+      final body = (payload['bodyText'] ?? m.bodyText).toString().trim();
+      final mentioned = payload['mentionedMe'] == true;
+      final repliedToMe = payload['repliedToMe'] == true;
+      final parentId = (payload['parentId'] as num?)?.toInt() ?? 0;
+      final parentAuthor =
+          (payload['parentAuthorDisplayName'] ?? '').toString().trim();
+      final parentBody = (payload['parentBodyText'] ?? '').toString().trim();
+      final isReply = parentId > 0 && parentAuthor.isNotEmpty;
+      final who = author.isEmpty ? '有人' : author;
+      String? tip;
+      if (isReply) {
+        tip = repliedToMe
+            ? '$who 回复了你的评论'
+            : '$who 回复了 $parentAuthor 的评论';
+      } else if (mentioned) {
+        tip = '有人在审批评论中 @ 了你';
+      }
+      final bubbleText = isReply
+          ? body
+          : (author.isEmpty ? body : '$author：\n$body');
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (tip != null)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Text(
+                tip,
+                style: DunesTypography.sans(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: isReply
+                      ? DunesColors.brandPurpleDeep
+                      : const Color(0xFFB07A2B),
+                ),
+              ),
+            ),
+          if (isReply && parentBody.isNotEmpty) ...[
+            Container(
+              constraints: const BoxConstraints(maxWidth: 280),
+              margin: const EdgeInsets.only(bottom: 6),
+              padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+              decoration: BoxDecoration(
+                color: DunesColors.bgSoft,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: DunesColors.borderSoft),
+              ),
+              child: Text(
+                '$parentAuthor：$parentBody',
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+                style: DunesTypography.sans(
+                  fontSize: 12,
+                  height: 1.4,
+                  color: DunesColors.text3,
+                ),
+              ),
+            ),
+          ],
+          ChatTextBubble(
+            text: bubbleText,
+            mine: false,
+          ),
+          if (share != null) ...[
+            const SizedBox(height: 8),
+            _approvalCardWidget(share),
+          ],
+        ],
       );
     }
     final share = ApprovalChatShare.fromPayload(payload);

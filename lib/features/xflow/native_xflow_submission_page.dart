@@ -9,6 +9,7 @@ import '../auth/auth_session.dart';
 import '../shell/dunes_toast.dart';
 import 'approval_chat_forward.dart';
 import 'approval_chat_share.dart';
+import 'xflow_detail_comments.dart';
 import 'xflow_detail_logic.dart';
 import 'xflow_detail_widgets.dart';
 import 'xflow_models.dart';
@@ -26,6 +27,7 @@ class NativeXflowSubmissionPage extends StatefulWidget {
     required this.businessId,
     required this.backScreen,
     required this.onEdit,
+    this.todoHint,
     this.onApprovalCompleted,
   });
 
@@ -35,6 +37,7 @@ class NativeXflowSubmissionPage extends StatefulWidget {
   final int businessId;
   final String backScreen;
   final VoidCallback onEdit;
+  final XflowTodoHint? todoHint;
   final VoidCallback? onApprovalCompleted;
 
   @override
@@ -87,11 +90,12 @@ class _NativeXflowSubmissionPageState extends State<NativeXflowSubmissionPage> {
         createdById: detail.createdById,
       );
       if (!mounted) return;
+      final myTodo = results[2] as XflowTodoHint?;
       setState(() {
         _detail = detail;
         _template = results[0] as XflowTemplateDetail;
         _trail = trail;
-        _myTodo = results[2] as XflowTodoHint?;
+        _myTodo = myTodo;
         _assigneeNames = assigneeNames;
         _loading = false;
       });
@@ -183,6 +187,10 @@ class _NativeXflowSubmissionPageState extends State<NativeXflowSubmissionPage> {
   Future<void> _approve(String comment) async {
     final todo = _myTodo;
     if (todo == null) return;
+    if (todo.id <= 0) {
+      showDunesToast(context, '预览模式：不会真正提交审批');
+      return;
+    }
     await _service.completeTodo(
       todoId: todo.id,
       approve: true,
@@ -197,6 +205,10 @@ class _NativeXflowSubmissionPageState extends State<NativeXflowSubmissionPage> {
   Future<void> _reject(String comment) async {
     final todo = _myTodo;
     if (todo == null) return;
+    if (todo.id <= 0) {
+      showDunesToast(context, '预览模式：不会真正提交审批');
+      return;
+    }
     await _service.completeTodo(
       todoId: todo.id,
       approve: false,
@@ -252,6 +264,7 @@ class _NativeXflowSubmissionPageState extends State<NativeXflowSubmissionPage> {
         'createdById': detail.createdById,
         'createdBy': submitter,
         'createdByName': submitter,
+        'businessType': detail.businessType,
       },
     );
     return XflowDetailBundle(
@@ -264,6 +277,29 @@ class _NativeXflowSubmissionPageState extends State<NativeXflowSubmissionPage> {
       assigneeNames: _assigneeNames,
       layout: template.layout,
     );
+  }
+
+  List<ApprovalStakeholderPerson> _fallbackStakeholders(XflowDetailBundle bundle) {
+    final out = <ApprovalStakeholderPerson>[];
+    final seen = <int>{};
+    void add(int id, String name) {
+      if (id <= 0 || seen.contains(id)) return;
+      seen.add(id);
+      out.add(
+        ApprovalStakeholderPerson(
+          id: id,
+          displayName: name.trim().isEmpty ? '用户$id' : name.trim(),
+        ),
+      );
+    }
+    for (final e in bundle.assigneeNames.entries) {
+      add(e.key, e.value);
+    }
+    final createdBy = bundle.detail.createdById;
+    if (createdBy > 0) {
+      add(createdBy, bundle.detail.ownerName);
+    }
+    return out;
   }
 
   String get _resolvedStatus {
@@ -377,6 +413,13 @@ class _NativeXflowSubmissionPageState extends State<NativeXflowSubmissionPage> {
                             ),
                             service: _service,
                           ),
+                        ),
+                        const SizedBox(height: 12),
+                        XfDetCommentsSection(
+                          service: _service,
+                          businessType: widget.businessType,
+                          businessId: widget.businessId,
+                          fallbackPeople: _fallbackStakeholders(bundle),
                         ),
                         const SizedBox(height: 12),
                         XflowFormCard(

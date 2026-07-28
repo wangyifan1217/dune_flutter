@@ -37,9 +37,9 @@ class CommUnreadNotifier extends ChangeNotifier {
 
   int effectiveUnreadCount(NativeConversation conversation) {
     final unread = conversation.unreadCount;
-    if (!_isMutedGroup(conversation)) return unread;
-    final mentionUnread = mutedMentionUnreadFor(conversation.id);
-    return unread > mentionUnread ? unread : mentionUnread;
+    if (!isMutedConversation(conversation)) return unread;
+    // 免打扰：Tab 角标只计 @ 我；私聊通常无 @，角标为 0。
+    return mutedMentionUnreadFor(conversation.id);
   }
 
   int sumConversationUnread({
@@ -57,10 +57,15 @@ class CommUnreadNotifier extends ChangeNotifier {
     return total;
   }
 
-  static bool isMutedGroup(NativeConversation conversation) {
-    return conversation.muted &&
-        (conversation.isGroup || conversation.isWorkgroupApproval);
+  /// 免打扰会话：群 / 审批工作群 / 私聊（与资料页开关一致）。
+  static bool isMutedConversation(NativeConversation conversation) {
+    if (!conversation.muted) return false;
+    return conversation.isGroup ||
+        conversation.isWorkgroupApproval ||
+        conversation.isPrivate;
   }
 
-  bool _isMutedGroup(NativeConversation conversation) => isMutedGroup(conversation);
+  /// 兼容旧调用名；语义同 [isMutedConversation]。
+  static bool isMutedGroup(NativeConversation conversation) =>
+      isMutedConversation(conversation);
 }

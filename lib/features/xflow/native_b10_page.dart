@@ -398,7 +398,8 @@ class _NativeB10PageState extends State<NativeB10Page> {
               crumb: '提案详情 · 返回列表',
               title: detail?.code ?? 'PROP-${widget.proposalId}',
               onBack: () => widget.navigation.popTo(widget.backScreen),
-              onForward: detail == null ? null : () => unawaited(_forwardApproval()),
+              onForward:
+                  detail == null ? null : () => unawaited(_forwardApproval()),
               forwarding: _forwarding,
             ),
             Expanded(

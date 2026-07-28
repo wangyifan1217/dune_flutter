@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'xflow_detail_comments.dart';
 import 'xflow_detail_logic.dart';
 import 'xflow_detail_widgets.dart';
 import 'xflow_models.dart';
@@ -65,7 +66,62 @@ class XflowDetailRenderer extends StatelessWidget {
             fields: bundle.fields,
             detailRaw: bundle.detail.raw,
           ),
-        XfDetTabsWrap(bundle: bundle, service: service, showTrack: showTrack),
+        // 填报/补充与审批进度均完整展示，不再用 Tab 切换。
+        Builder(
+          builder: (context) {
+            var sections = buildSectionsByDetailConfig(
+              bundle.fields,
+              bundle.detail.formValues,
+              cfg,
+              bundle.detail,
+            );
+            if (sections.isEmpty) {
+              sections = buildFieldSections(
+                bundle.fields,
+                bundle.detail.formValues,
+                bundle.detail,
+              );
+            }
+            if (sections.isEmpty) return const SizedBox.shrink();
+            return XfDetCard(
+              title: showRecognition ? '提交补充' : '填报内容',
+              marginBottom: 10,
+              child: XfDetFormSections(sections: sections, service: service),
+            );
+          },
+        ),
+        XfDetCommentsSection(
+          service: service,
+          businessType: (bundle.detail.raw['businessType'] ?? 'PROPOSAL')
+              .toString()
+              .trim()
+              .isEmpty
+              ? 'PROPOSAL'
+              : (bundle.detail.raw['businessType'] ?? 'PROPOSAL').toString(),
+          businessId: bundle.detail.id,
+          fallbackPeople: [
+            for (final e in bundle.assigneeNames.entries)
+              ApprovalStakeholderPerson(id: e.key, displayName: e.value),
+            if (bundle.detail.createdById > 0)
+              ApprovalStakeholderPerson(
+                id: bundle.detail.createdById,
+                displayName: bundle.detail.ownerName,
+              ),
+            for (final cc in bundle.ccList)
+              if (((cc['userId'] ?? cc['id']) as num?)?.toInt() != null)
+                ApprovalStakeholderPerson(
+                  id: ((cc['userId'] ?? cc['id']) as num).toInt(),
+                  displayName:
+                      (cc['displayName'] ?? cc['name'] ?? '').toString(),
+                ),
+          ],
+        ),
+        if (showTrack)
+          XfDetCard(
+            title: '审批进度',
+            marginBottom: 10,
+            child: XfDetTrackTimeline(bundle: bundle),
+          ),
         if (showCc) XfDetCcCard(ccList: bundle.ccList),
         if (bundle.myTodo != null)
           XfDetApproveCard(onApprove: onApprove, onReject: onReject),

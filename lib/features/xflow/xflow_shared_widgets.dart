@@ -1260,16 +1260,16 @@ class XflowFormCard extends StatelessWidget {
                     vertical: 3,
                   ),
                   decoration: BoxDecoration(
-                    color: XfProposalUi.coralSoft,
+                    color: DunesColors.brandPurpleSoft,
                     borderRadius: BorderRadius.circular(5),
-                    border: Border.all(color: const Color(0xFFFFD6C8)),
+                    border: Border.all(color: DunesColors.brandPurpleLine),
                   ),
                   child: Text(
                     tag!,
                     style: DunesTypography.mono(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
-                      color: XfProposalUi.coral,
+                      color: DunesColors.brandPurple,
                     ),
                   ),
                 ),

@@ -958,34 +958,14 @@
     extras = extras || {};
     var sections = buildSectionsByDetailConfig(extras.fields, d.formValues || {}, cfg, d);
     if (!sections.length) sections = buildFieldSections(extras.fields, d.formValues || {}, d);
-    var tabs = [{ key: 'content', label: '填报内容' }];
-    if (cfg.showApprovalFlow !== false) tabs.push({ key: 'track', label: '流程追踪' });
-    var nav = tabs
-      .map(function (t, i) {
-        return (
-          '<button type="button" class="xf-det-tab' +
-          (i === 0 ? ' on' : '') +
-          '" data-tab="' +
-          esc(t.key) +
-          '">' +
-          esc(t.label) +
-          '</button>'
-        );
-      })
-      .join('');
-    return (
-      '<div class="xf-det-card xf-det-tabs-wrap">' +
-      '<div class="xf-det-tabs">' +
-      nav +
-      '</div>' +
-      '<div class="xf-det-tab-body">' +
-      '<div class="xf-det-tab-pane" data-tab="content">' +
+    var html =
+      '<div class="xf-det-card"><div class="xf-det-card-h"><i class="ti ti-forms"></i>填报内容</div>' +
       renderFormSections(sections) +
-      '</div>' +
-      '<div class="xf-det-tab-pane hidden" data-tab="track">' +
-      renderTrackTimeline(extras.trail, stages, extras.assigneeNames, d) +
-      '</div></div></div>'
-    );
+      '</div>';
+    if (cfg.showApprovalFlow !== false) {
+      html += renderTrackTimeline(extras.trail, stages, extras.assigneeNames, d);
+    }
+    return html;
   }
 
   function renderPushContext(d) {

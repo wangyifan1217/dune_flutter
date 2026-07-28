@@ -61,6 +61,14 @@ class ConversationService {
   final AuthSession _session;
   final http.Client _client;
   static const int _maxSendAttempts = 3;
+  bool _closed = false;
+
+  /// 释放底层 HTTP 连接；切会话销毁页面时调用，避免旧请求占满连接池。
+  void close() {
+    if (_closed) return;
+    _closed = true;
+    _client.close();
+  }
 
   Uri _uri(String path) => Uri.parse('${_session.apiBase}$path');
 

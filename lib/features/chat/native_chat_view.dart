@@ -304,6 +304,9 @@ class _NativeChatViewState extends State<NativeChatView>
   /// 递增后作废仍在排队的定位滚动，避免「回到最新」被旧 ensureVisible 拉回去。
   int _messageScrollGen = 0;
 
+  /// 递增后忽略过期的 `_load` 结果，避免快速切会话时旧请求回写空白/错误态。
+  int _loadGeneration = 0;
+
   /// 进入会话后需持续尝试滚到底，直到成功或用户手动滚动（解决 ListView/图片懒加载竞态）。
   bool _enterStickBottomPending = true;
   int _scrollBottomGen = 0;
@@ -480,20 +483,43 @@ class _NativeChatViewState extends State<NativeChatView>
     super.didUpdateWidget(oldWidget);
     final newFocus = widget.focusMessageId ?? 0;
     final oldFocus = oldWidget.focusMessageId ?? 0;
-    if (newFocus > 0 && newFocus != oldFocus) {
-      _forceLatestMode = false;
-      _suppressedFocusMessageId = 0;
-      _enterStickBottomPending = false;
-      unawaited(_load(silent: _bootstrapped));
-    }
     final oldConvId = oldWidget.conversationHint?.id ?? 0;
     final newConvId = widget.conversationHint?.id ?? 0;
-    if (newConvId > 0 && newConvId != oldConvId) {
+    final oldPeer = oldWidget.peerUserIdHint ?? 0;
+    final newPeer = widget.peerUserIdHint ?? 0;
+    final conversationSwitched =
+        (newConvId > 0 && newConvId != oldConvId) ||
+        (newConvId <= 0 && newPeer > 0 && newPeer != oldPeer);
+    if (conversationSwitched) {
+      // 同一 State 复用时立即作废旧加载，并清空消息区，避免串会话或空白+旧错误。
+      _loadGeneration++;
       _enterStickBottomPending = true;
       _userInteractedWithScroll = false;
       _locatedMode = false;
       _forceLatestMode = true;
       _suppressedFocusMessageId = 0;
+      _pendingStickBottomAfterForeground = false;
+      setState(() {
+        _conversation = widget.conversationHint;
+        _messages = const <NativeChatMessage>[];
+        _groupMembers = const <Map<String, dynamic>>[];
+        _bootstrapped = false;
+        _loading = true;
+        _locating = false;
+        _error = null;
+        _hasMore = false;
+        _hasNewer = false;
+        _awayFromLatest = false;
+        _clearPendingNewMessages();
+        _lastMarkedReadNewestId = 0;
+      });
+      unawaited(_load());
+      return;
+    }
+    if (newFocus > 0 && newFocus != oldFocus) {
+      _forceLatestMode = false;
+      _suppressedFocusMessageId = 0;
+      _enterStickBottomPending = false;
       unawaited(_load(silent: _bootstrapped));
     }
     if (!oldWidget.autoMarkRead && widget.autoMarkRead) {
@@ -581,6 +607,7 @@ class _NativeChatViewState extends State<NativeChatView>
 
   @override
   void dispose() {
+    _loadGeneration++;
     if (isDesktopCommOnly) {
       clearDesktopScreenshotHotkey(_onWindowsHotkeyPressed);
     }
@@ -606,6 +633,8 @@ class _NativeChatViewState extends State<NativeChatView>
     _olderScrollHold?.cancel();
     _inputController.dispose();
     _scrollController.dispose();
+    // 关闭本页 HTTP client，打断未完成请求并释放连接，减轻频繁切会话时的连接压力。
+    _service.close();
     super.dispose();
   }
 
@@ -1297,6 +1326,8 @@ class _NativeChatViewState extends State<NativeChatView>
   }
 
   Future<void> _load({bool silent = false}) async {
+    final gen = ++_loadGeneration;
+    bool stale() => !mounted || gen != _loadGeneration;
     final focusId = _effectiveFocusMessageId;
     final locating = focusId > 0;
     final forceLatest = _forceLatestMode;
@@ -1311,8 +1342,8 @@ class _NativeChatViewState extends State<NativeChatView>
     }
     try {
       final conv = await _resolveConversation();
+      if (stale()) return;
       if (conv == null) {
-        if (!mounted) return;
         setState(() {
           _loading = false;
           _locating = false;
@@ -1333,12 +1364,15 @@ class _NativeChatViewState extends State<NativeChatView>
           size: _scrollMetricsForScreen().initialPageSize,
         );
       }
+      if (stale()) return;
       if (!_isPrivate) {
         try {
           _groupMembers = await _service.fetchConversationMembers(conv.id);
         } catch (_) {
+          if (stale()) return;
           try {
             final info = await _service.fetchGroupInfo(conv.id);
+            if (stale()) return;
             _groupMembers = info.members
                 .map(
                   (m) => <String, dynamic>{
@@ -1355,6 +1389,7 @@ class _NativeChatViewState extends State<NativeChatView>
                 .toList(growable: false);
           } catch (_) {}
         }
+        if (stale()) return;
         unawaited(_refreshGroupReadMap(conv.id));
       }
       unawaited(_realtime.ensureConversationSubscription(conv.id));
@@ -1366,13 +1401,13 @@ class _NativeChatViewState extends State<NativeChatView>
         final peerId = conv.peerUserId ?? 0;
         final online =
             peerId > 0 && _realtime.currentOnlineUsers.contains(peerId);
-        if (mounted && _peerOnline != online) {
+        if (!stale() && _peerOnline != online) {
           setState(() => _peerOnline = online);
         }
       }
+      if (stale()) return;
       final msgs = _enrichMessages(page.items, conv)
         ..sort((a, b) => a.id.compareTo(b.id));
-      if (!mounted) return;
       final conversationChanged = _conversation?.id != conv.id;
       // 「回到最新」必须整页替换，不能与定位窗口合并，否则仍停在历史位置。
       final preservePaginatedHistory =
@@ -1423,14 +1458,24 @@ class _NativeChatViewState extends State<NativeChatView>
       }
       if (focusId <= 0 && widget.autoMarkRead) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (stale()) return;
           unawaited(_markReadIfNeeded());
         });
       }
     } catch (e) {
       _forceLatestMode = false;
-      if (!mounted) return;
+      if (stale()) return;
+      final text = friendlyErrorText(e);
+      // 静默刷新 / 已有消息时失败不冲掉当前会话，避免快速切会话后出现空白页。
+      if (silent || (_bootstrapped && _messages.isNotEmpty)) {
+        setState(() {
+          _loading = false;
+          _locating = false;
+        });
+        return;
+      }
       setState(() {
-        _error = friendlyErrorText(e);
+        _error = text;
         _loading = false;
         _locating = false;
       });
@@ -1761,7 +1806,9 @@ class _NativeChatViewState extends State<NativeChatView>
 
   Future<NativeConversation?> _resolveConversation() async {
     NativeConversation? conv;
-    if (widget.conversationHint != null && widget.conversationHint!.id > 0) {
+    final hasHint =
+        widget.conversationHint != null && widget.conversationHint!.id > 0;
+    if (hasHint) {
       conv = widget.conversationHint;
     } else if (_isPrivate) {
       final peerId = widget.peerUserIdHint ?? 0;
@@ -1789,12 +1836,24 @@ class _NativeChatViewState extends State<NativeChatView>
       }
     }
     if (conv == null) return null;
-    if (conv.id > 0) {
-      final fresh = await _service.fetchConversation(conv.id);
-      if (fresh != null) conv = fresh;
+    var resolved = conv;
+    if (resolved.id > 0) {
+      try {
+        final fresh = await _service.fetchConversation(resolved.id);
+        if (fresh != null) resolved = fresh;
+      } catch (_) {
+        // 列表 hint 可用时，刷新会话详情失败不阻断进会话（频繁切会话时很常见）。
+        if (!hasHint || widget.conversationHint!.id != resolved.id) rethrow;
+      }
     }
-    if (_isPrivate) return _enrichPrivateConversation(conv);
-    return conv;
+    if (_isPrivate) {
+      try {
+        return await _enrichPrivateConversation(resolved);
+      } catch (_) {
+        return resolved;
+      }
+    }
+    return resolved;
   }
 
   Future<NativeConversation> _enrichPrivateConversation(
@@ -5624,6 +5683,31 @@ class _NativeChatViewState extends State<NativeChatView>
                           if (!_bootstrapped && _loading)
                             const Center(
                               child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          else if (_error != null && !_bootstrapped)
+                            Center(
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 24,
+                                ),
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(
+                                      _error!,
+                                      textAlign: TextAlign.center,
+                                      style: const TextStyle(
+                                        color: DunesColors.text3,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 12),
+                                    OutlinedButton(
+                                      onPressed: _load,
+                                      child: const Text('重试'),
+                                    ),
+                                  ],
+                                ),
+                              ),
                             )
                           else
                             NotificationListener<ScrollNotification>(

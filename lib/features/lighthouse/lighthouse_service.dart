@@ -237,6 +237,79 @@ class LighthouseService {
     return map;
   }
 
+  /// 一级页 AI 解读 / 要点（事实层 + 规则/LLM）。
+  Future<Map<String, dynamic>> fetchAiSummary({
+    required String tab,
+    String? period,
+    String? date,
+    String? fuel,
+    int? offset,
+    DateTime? startDate,
+    DateTime? endDate,
+    String? group,
+    String? anchor,
+    String? hun,
+    String? anomaly,
+  }) async {
+    final body = <String, dynamic>{
+      'tab': tab,
+      if (period != null && period.isNotEmpty) 'period': period,
+      if (date != null && date.isNotEmpty) 'date': date,
+      if (fuel != null && fuel.isNotEmpty && fuel != '全部') 'fuel': fuel,
+      if (offset != null && offset != 0) 'offset': offset,
+      if (startDate != null) 'start_date': _fmtDate(startDate),
+      if (endDate != null) 'end_date': _fmtDate(endDate),
+      if (group != null && group.isNotEmpty && group != '全部') 'group': group,
+      if (anchor != null && anchor.isNotEmpty) 'anchor': anchor,
+      if (hun != null && hun.isNotEmpty && hun != '全部') 'hun': hun,
+      if (anomaly != null && anomaly.isNotEmpty && anomaly != '全部')
+        'anomaly': anomaly,
+    };
+    final resp = await _client.post(
+      _uri('/lighthouse/ai-summary'),
+      headers: _headers,
+      body: jsonEncode(body),
+    );
+    if (resp.statusCode == 403) {
+      throw Exception('暂无权限');
+    }
+    if (resp.statusCode < 200 || resp.statusCode >= 300) {
+      throw Exception('灯塔解读加载失败: HTTP ${resp.statusCode}');
+    }
+    final decoded = jsonDecode(resp.body);
+    if (decoded is! Map) {
+      throw Exception('灯塔解读格式错误');
+    }
+    final map = Map<String, dynamic>.from(decoded);
+    if (map['success'] == false) {
+      throw Exception((map['message'] ?? '灯塔解读加载失败').toString());
+    }
+    final data = map['data'];
+    if (data is Map) return Map<String, dynamic>.from(data);
+    return map;
+  }
+
+  Future<void> submitAiSummaryFeedback({
+    required String summaryId,
+    required int itemIndex,
+    required int vote,
+    String? factsHash,
+  }) async {
+    final resp = await _client.post(
+      _uri('/lighthouse/ai-summary/feedback'),
+      headers: _headers,
+      body: jsonEncode({
+        'summary_id': summaryId,
+        'item_index': itemIndex,
+        'vote': vote,
+        if (factsHash != null && factsHash.isNotEmpty) 'facts_hash': factsHash,
+      }),
+    );
+    if (resp.statusCode < 200 || resp.statusCode >= 300) {
+      throw Exception('反馈提交失败: HTTP ${resp.statusCode}');
+    }
+  }
+
   Future<Map<String, dynamic>> _getData(
     String path,
     Map<String, String> query,

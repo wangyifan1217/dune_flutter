@@ -1075,6 +1075,9 @@ class _StatusBadge extends StatelessWidget {
     } else if (st == 'VOIDED') {
       bg = DunesColors.bgSoft;
       fg = DunesColors.text3;
+    } else if (st == 'WITHDRAWN' || st == 'CANCELLED') {
+      bg = DunesColors.bgSoft;
+      fg = DunesColors.text3;
     } else if (st == 'SUPERSEDED') {
       bg = DunesColors.bgSoft;
       fg = DunesColors.text2;
@@ -1916,27 +1919,10 @@ _ProgressFoot _progressFoot(XflowProposalItem item) {
 }
 
 String _compactApprovalTitle(XflowProposalItem item, String kindLabel) {
-  final businessType = item.businessType.trim();
   final rawTitle = item.title.trim();
-  final isProposal = item.businessType.toUpperCase() == 'PROPOSAL';
-  final isGenericSubmissionTitle =
-      rawTitle.isEmpty ||
-      rawTitle == businessType ||
-      rawTitle.toUpperCase() == businessType.toUpperCase() ||
-      rawTitle.startsWith('$businessType #') ||
-      // 销售提案详情常只返回「销售提案」，需用种类标签统一展示。
-      (isProposal && (rawTitle == '销售提案' || rawTitle == '提案详情'));
-  final templateName =
-      isProposal || isGenericSubmissionTitle ? kindLabel : rawTitle;
-  final base = templateName.trim().isEmpty
-      ? (isProposal ? '销售提案' : rawTitle)
-      : templateName.trim();
-  final submitter = item.createdByName.trim();
-  if (submitter.isEmpty) return base;
-  if (base.startsWith('$submitter -') || base.startsWith('$submitter-')) {
-    return base;
-  }
-  return '$submitter - $base';
+  // “我审批的”标题以服务端业务标题为准，不再在客户端拼接提交人或种类。
+  if (rawTitle.isNotEmpty) return rawTitle;
+  return kindLabel.trim().isEmpty ? '审批单' : kindLabel.trim();
 }
 
 String _compactProposalTypeLabel(XflowProposalItem item, String kindLabel) {
@@ -1983,6 +1969,8 @@ String _statusText(String status) {
   if (raw == 'DRAFT') return '草稿';
   if (raw == 'PENDING_INITIATE') return '待发起';
   if (raw == 'VOIDED') return '已作废';
+  if (raw == 'WITHDRAWN') return '已撤回';
+  if (raw == 'CANCELLED') return '已取消';
   if (raw == 'SUPERSEDED') return '已替代';
   return raw.isEmpty ? '未知状态' : raw;
 }

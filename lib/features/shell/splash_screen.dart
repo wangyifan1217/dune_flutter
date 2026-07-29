@@ -54,8 +54,12 @@ class _AppBootGateState extends State<AppBootGate> {
   Widget build(BuildContext context) {
     return Stack(
       children: [
-        // 正式应用始终在底层挂载并完成会话校验；启屏覆盖其上，ready 后淡出。
-        LoginFlow(onHydrated: _onHydrated),
+        // 保持会话校验运行，但在启屏完全消失前不显示登录页，避免两枚
+        // 尺寸、位置不同的 Logo 在淡出期间叠加，造成视觉跳动。
+        Offstage(
+          offstage: !_splashGone,
+          child: LoginFlow(onHydrated: _onHydrated),
+        ),
         if (!_splashGone)
           IgnorePointer(
             ignoring: _ready,
@@ -123,7 +127,7 @@ class _PostLoginSplashOverlayState extends State<PostLoginSplashOverlay> {
   }
 }
 
-/// 启屏页：居中 logo 呼吸动画 + 底部版本号。
+/// 启屏页：静态居中 Logo + 底部版本号。
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key, this.version = ''});
 
@@ -133,33 +137,7 @@ class SplashScreen extends StatefulWidget {
   State<SplashScreen> createState() => _SplashScreenState();
 }
 
-class _SplashScreenState extends State<SplashScreen>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _controller;
-  late final Animation<double> _scale;
-  late final Animation<double> _glow;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1500),
-    )..repeat(reverse: true);
-    _scale = Tween<double>(begin: 0.92, end: 1.06).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
-    );
-    _glow = Tween<double>(begin: 0.16, end: 0.42).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
-    );
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
+class _SplashScreenState extends State<SplashScreen> {
   @override
   Widget build(BuildContext context) {
     final bottomInset = MediaQuery.viewPaddingOf(context).bottom;
@@ -168,31 +146,22 @@ class _SplashScreenState extends State<SplashScreen>
       body: Stack(
         children: [
           Center(
-            child: AnimatedBuilder(
-              animation: _controller,
-              builder: (context, child) {
-                return Transform.scale(
-                  scale: _scale.value,
-                  child: Container(
-                    width: 108,
-                    height: 108,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: Colors.white,
-                      boxShadow: [
-                        BoxShadow(
-                          color: DunesColors.accent.withValues(alpha: _glow.value),
-                          blurRadius: 38,
-                          spreadRadius: 4,
-                          offset: const Offset(0, 6),
-                        ),
-                      ],
-                    ),
-                    clipBehavior: Clip.antiAlias,
-                    child: child,
+            child: Container(
+              width: 108,
+              height: 108,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.white,
+                boxShadow: [
+                  BoxShadow(
+                    color: DunesColors.accent.withValues(alpha: 0.24),
+                    blurRadius: 38,
+                    spreadRadius: 4,
+                    offset: const Offset(0, 6),
                   ),
-                );
-              },
+                ],
+              ),
+              clipBehavior: Clip.antiAlias,
               child: Image.asset(
                 'assets/images/app_logo.png',
                 fit: BoxFit.cover,

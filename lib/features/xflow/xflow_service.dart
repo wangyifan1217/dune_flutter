@@ -266,7 +266,8 @@ class XflowService {
           templateKey: (row['templateKey'] ?? '').toString().trim().isEmpty
               ? null
               : row['templateKey'].toString(),
-          status: (row['status'] ?? 'PENDING').toString(),
+          // 审批卡片展示整单状态；个人 todo 的 DONE 仅说明当前用户已处理。
+          status: _resolveInboxListStatus(row),
           createdByName: (row['createdByName'] ?? row['subtitle'] ?? '')
               .toString(),
           createdAt: DateTime.tryParse(
@@ -278,13 +279,36 @@ class XflowService {
             kind: (row['kind'] ?? 'APPROVAL').toString(),
             businessType: businessType,
             businessId: businessId > 0 ? businessId : todoId,
-            status: (row['status'] ?? '').toString(),
+            status: (row['todoStatus'] ?? row['status'] ?? '').toString(),
           ),
         ),
       );
     }
     final deduped = _dedupeB1Todos(out);
     return Future.wait(deduped.map(_enrichB1Item));
+  }
+
+  String _resolveInboxListStatus(Map<String, dynamic> row) {
+    final todoStatus = (row['todoStatus'] ?? '').toString().toUpperCase();
+    if (todoStatus == 'OPEN') return 'PENDING';
+
+    final approvalStatus =
+        (row['approvalStatus'] ?? '').toString().toUpperCase();
+    if (approvalStatus == 'APPROVED' ||
+        approvalStatus == 'REJECTED' ||
+        approvalStatus == 'WITHDRAWN' ||
+        approvalStatus == 'VOIDED' ||
+        approvalStatus == 'CANCELLED') {
+      return approvalStatus;
+    }
+    if (approvalStatus == 'PENDING' ||
+        approvalStatus == 'OPEN' ||
+        approvalStatus == 'IN_PROGRESS') {
+      return 'PENDING';
+    }
+
+    final status = (row['status'] ?? '').toString().toUpperCase();
+    return status.isEmpty || status == 'DONE' ? 'PENDING' : status;
   }
 
   /// 已办与待办可能属于同一业务，必须按 todoId 去重，不能只按业务 ID 去重。
@@ -1530,10 +1554,9 @@ class XflowService {
   }
 
   XflowProposalItem _fallbackB1ItemStatus(XflowProposalItem item) {
-    final st = item.todoHint?.status.toUpperCase() == 'OPEN'
-        ? 'PENDING'
-        : 'APPROVED';
-    return item.copyWith(status: st);
+    // 详情或审批流请求失败时，保留 inbox 的整单状态，不能把个人已办
+    // 记录默认显示为“已通过”。
+    return item.copyWith(status: item.status.isEmpty ? 'PENDING' : item.status);
   }
 
   Future<XflowProposalItem> _enrichB14Item(XflowProposalItem item) async {
@@ -1622,23 +1645,13 @@ class XflowService {
     String detailStatus = '',
   }) {
     if (item.todoHint?.status.toUpperCase() == 'OPEN') return 'PENDING';
-    final sourceStepId = item.todoHint?.sourceStepId;
-    if (sourceStepId != null && trail != null) {
-      for (final step in trail.steps) {
-        final stepId = _int(step.raw['id']);
-        if (stepId != sourceStepId) continue;
-        final decision = step.decision.toUpperCase();
-        if (decision == 'APPROVED' || decision == 'REJECTED') {
-          return decision;
-        }
-        break;
-      }
-    }
+    // “我审批的”展示业务审批流的整体状态，不能用当前用户节点的处理结果
+    // 覆盖尚未结束或最终被其他节点驳回的流程。
     final fromTrail = _terminalStatusFromTrail(trail);
     if (fromTrail != null) return fromTrail;
     final st = detailStatus.toUpperCase();
     if (st.isNotEmpty) return st;
-    return 'APPROVED';
+    return 'PENDING';
   }
 
   /// 审批轨迹终态优先于卡住的 submission/PENDING。

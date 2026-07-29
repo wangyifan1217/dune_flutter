@@ -535,12 +535,16 @@ class _NativeProposalListPageState extends State<_NativeProposalListPage> {
 String _normalizeStatus(String raw) {
   final status = raw.toUpperCase();
   if (status == 'OPEN' || status == 'PENDING') return 'PENDING';
-  if (status == 'APPROVED' || status == 'DONE') return 'APPROVED';
+  if (status == 'APPROVED') return 'APPROVED';
+  // DONE 代表当前用户的待办已处理，不代表整单审批已通过。
+  if (status == 'DONE') return 'PENDING';
   if (status == 'LIVE') return 'LIVE';
   if (status == 'REJECTED') return 'REJECTED';
   if (status == 'DRAFT') return 'DRAFT';
   if (status == 'PENDING_INITIATE') return 'PENDING_INITIATE';
-  if (status == 'VOIDED') return 'VOIDED';
+  if (status == 'VOIDED' || status == 'WITHDRAWN' || status == 'CANCELLED') {
+    return status;
+  }
   if (status == 'SUPERSEDED') return 'SUPERSEDED';
   return 'OTHER';
 }

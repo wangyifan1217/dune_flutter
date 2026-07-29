@@ -57,9 +57,9 @@ class ApprovalChatShare {
           ? 'PROPOSAL'
           : item.businessType.trim(),
       businessId: item.id,
-      title: item.title.trim().isEmpty
+      title: _normalizeApprovalTitle(item.title.trim().isEmpty
           ? (item.businessType.toUpperCase() == 'PROPOSAL' ? '销售提案' : '审批单')
-          : item.title.trim(),
+          : item.title.trim()),
       status: item.status,
       templateKey: item.templateKey ?? '',
       code: item.code,
@@ -81,10 +81,25 @@ class ApprovalChatShare {
     return ApprovalChatShare(
       businessType: businessType,
       businessId: businessId,
-      title: title.isEmpty ? '审批单 #$businessId' : title,
+      title: _normalizeApprovalTitle(
+        title.isEmpty ? '审批单 #$businessId' : title,
+      ),
       status: (map['status'] ?? '').toString(),
       templateKey: (map['templateKey'] ?? '').toString(),
       code: (map['code'] ?? '').toString(),
     );
   }
+}
+
+/// 兼容历史消息中后端重复加上的同一发起人前缀：
+/// `陆青 - 陆青 - 广西卡品提案` → `陆青 - 广西卡品提案`。
+String _normalizeApprovalTitle(String value) {
+  final parts = value
+      .split(' - ')
+      .map((part) => part.trim())
+      .toList(growable: false);
+  if (parts.length >= 3 && parts[0].isNotEmpty && parts[0] == parts[1]) {
+    return parts.skip(1).join(' - ');
+  }
+  return value.trim();
 }

@@ -191,7 +191,7 @@ class _ParsedProposal {
       ].where((name) => name != owner1).toList(growable: false),
     );
     final body = <String, dynamic>{
-      'title': _proposalTitle(fileName: fileName, proposalCode: proposalId),
+      'title': _proposalTitle(fileName: fileName),
       'proposalCode': proposalId,
       'launchChannel': channel,
       'launchDate': launchDate ?? '',
@@ -468,12 +468,13 @@ String _solutionText(List<_ProposalSection> sections) {
       .join('\n');
 }
 
-String _proposalTitle({
-  required String fileName,
-  required String proposalCode,
-}) {
-  if (proposalCode.isNotEmpty) return proposalCode;
-  return fileName.replaceFirst(RegExp(r'\.xlsx$', caseSensitive: false), '');
+String _proposalTitle({required String fileName}) {
+  // 销售提案标题默认采用上传文件名（去扩展名），编号仍单独写入
+  // proposalCode，用户可在动态 title 字段中自行修改。
+  return fileName.replaceFirst(
+    RegExp(r'\.(xlsx|xls|xlsm|csv)$', caseSensitive: false),
+    '',
+  );
 }
 
 String _firstNonEmpty(List<String> values) {

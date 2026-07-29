@@ -70,9 +70,9 @@ MarkdownStyleSheet _robotMdStyle({required bool compact}) {
       color: RobotTheme.purpleDeep,
       decoration: TextDecoration.underline,
     ),
-    // IntrinsicColumnWidth 会对每个单元格二次布局，宽表进会话首帧极卡。
-    // Flex 在气泡宽度内均分列宽，足够阅读且显著更快。
-    tableColumnWidth: const FlexColumnWidth(),
+    // 按内容确定列宽；flutter_markdown 会为超出气泡宽度的表格提供横向滚动，
+    // 避免移动端多列表格被 Flex 压缩后出现中文逐字换行。
+    tableColumnWidth: const IntrinsicColumnWidth(),
     tableHead: TextStyle(
       fontSize: tableSize,
       fontWeight: FontWeight.w700,

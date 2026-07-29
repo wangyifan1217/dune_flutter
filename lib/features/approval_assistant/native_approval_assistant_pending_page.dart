@@ -124,7 +124,9 @@ class _NativeApprovalAssistantPendingPageState
         _xflow.fetchB14Initiated(),
       ]);
       final mine = results[0]
-          .where((e) => e.isPending)
+          // “待我审批”必须是当前用户尚未处理的 OPEN todo；整单仍在
+          // PENDING 只代表流程未结束，不能说明仍等待当前用户审批。
+          .where(_isMyOpenApproval)
           .toList(growable: false);
       final initiated = results[1]
           .where((e) {
@@ -148,6 +150,10 @@ class _NativeApprovalAssistantPendingPageState
         _loading = false;
       });
     }
+  }
+
+  bool _isMyOpenApproval(XflowProposalItem item) {
+    return item.todoHint?.status.trim().toUpperCase() == 'OPEN';
   }
 
   Future<void> _openItem(XflowProposalItem item) async {
@@ -586,7 +592,7 @@ String _typeLabel(XflowProposalItem item, String kind) {
 
 String _displayTitle(XflowProposalItem item) {
   final kind = _kindLabel(item);
-  final raw = item.title.trim();
+  final raw = _normalizeApprovalAssistantTitle(item.title);
   final bt = item.businessType.trim();
   final generic = raw.isEmpty ||
       raw == bt ||
@@ -600,6 +606,17 @@ String _displayTitle(XflowProposalItem item) {
     return base;
   }
   return '$submitter - $base';
+}
+
+String _normalizeApprovalAssistantTitle(String value) {
+  final parts = value
+      .split(' - ')
+      .map((part) => part.trim())
+      .toList(growable: false);
+  if (parts.length >= 3 && parts[0].isNotEmpty && parts[0] == parts[1]) {
+    return parts.skip(1).join(' - ');
+  }
+  return value.trim();
 }
 
 String _statusLabel(String status) {

@@ -30,6 +30,7 @@ class TaskItem {
     this.ownerAvatarUrl = '',
     this.creatorName = '',
     this.approverName = '',
+    this.parentTitle = '',
     this.overdue = false,
     this.coOwnerUserIds = const [],
   });
@@ -64,6 +65,7 @@ class TaskItem {
   final String ownerAvatarUrl;
   final String creatorName;
   final String approverName;
+  final String parentTitle;
   final bool overdue;
   final List<int> coOwnerUserIds;
 
@@ -108,6 +110,7 @@ class TaskItem {
       ownerAvatarUrl: '${json['ownerAvatarUrl'] ?? ''}',
       creatorName: '${json['creatorName'] ?? ''}',
       approverName: '${json['approverName'] ?? ''}',
+      parentTitle: '${json['parentTitle'] ?? ''}',
       overdue: json['overdue'] == true,
       coOwnerUserIds: (json['coOwnerUserIds'] as List?)
               ?.map((e) => (e as num).toInt())

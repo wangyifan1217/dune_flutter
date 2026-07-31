@@ -593,6 +593,7 @@ class ChatInboxRow extends StatelessWidget {
             kind == ChatInboxRowKind.aiAssistant ||
             kind == ChatInboxRowKind.aiSummary ||
             kind == ChatInboxRowKind.approvalAssistant ||
+            kind == ChatInboxRowKind.taskAssistant ||
             kind == ChatInboxRowKind.robot
         ? const Color(0xFF7B5CD8)
         : DunesColors.coral;

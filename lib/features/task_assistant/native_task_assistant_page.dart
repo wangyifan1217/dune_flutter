@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../core/theme/dunes_theme.dart';
@@ -34,12 +36,15 @@ class NativeTaskAssistantPage extends StatefulWidget {
 }
 
 class _NativeTaskAssistantPageState extends State<NativeTaskAssistantPage> {
-  late final ConversationService _service = ConversationService(session: widget.session);
+  late final ConversationService _service =
+      ConversationService(session: widget.session);
   late final TaskApi _taskApi = TaskApi(widget.session);
   final List<NativeChatMessage> _messages = [];
+  final Map<int, String> _parentTitleById = {};
   List<TaskItem> _tasks = const [];
   bool _loading = true;
   bool _showTasks = false;
+  TaskItem? _actionTask;
   String? _error;
 
   int get _convId => widget.conversationHint.id;
@@ -78,17 +83,65 @@ class _NativeTaskAssistantPageState extends State<NativeTaskAssistantPage> {
   Future<void> _openActiveTasks() async {
     setState(() {
       _showTasks = true;
+      _actionTask = null;
       _loading = true;
       _error = null;
     });
     try {
-      final tasks = await _taskApi.listTasks(scope: 'mine');
+      final tasks = await _loadOwnedActiveSubtasks();
       if (mounted) setState(() => _tasks = tasks);
     } catch (e) {
       if (mounted) setState(() => _error = '$e');
     } finally {
       if (mounted) setState(() => _loading = false);
     }
+  }
+
+  /// 优先走 `owned_subtasks`；旧后端会把它当 mine 返回主任务，再回退按详情拆子任务。
+  Future<List<TaskItem>> _loadOwnedActiveSubtasks() async {
+    final page = await _taskApi.listTasksPage(
+      scope: 'owned_subtasks',
+      page: 0,
+      size: 100,
+    );
+    final items = page.items;
+    final looksLikeLegacyMains =
+        items.isNotEmpty && items.every((t) => t.isMain);
+    if (items.isEmpty || looksLikeLegacyMains) {
+      return _loadOwnedActiveSubtasksViaDetails(
+        seedMains: looksLikeLegacyMains ? items : null,
+      );
+    }
+    return items
+        .where((t) =>
+            !t.isMain &&
+            t.ownerUserId == widget.session.userId &&
+            (t.status == 'active' || t.status == 'in_progress'))
+        .toList(growable: false);
+  }
+
+  Future<List<TaskItem>> _loadOwnedActiveSubtasksViaDetails({
+    List<TaskItem>? seedMains,
+  }) async {
+    final mains = seedMains ??
+        await _taskApi.listTasks(scope: 'mine', size: 100, maxPages: 3);
+    final out = <TaskItem>[];
+    final parentTitles = <int, String>{};
+    for (final m in mains) {
+      parentTitles[m.id] = m.title;
+      if (m.subtaskCount <= 0) continue;
+      final detail = await _taskApi.getDetail(m.id);
+      for (final s in detail.subtasks) {
+        if (s.ownerUserId == widget.session.userId &&
+            (s.status == 'active' || s.status == 'in_progress')) {
+          out.add(s);
+        }
+      }
+    }
+    _parentTitleById
+      ..clear()
+      ..addAll(parentTitles);
+    return out;
   }
 
   List<TaskItem> get _activeSubtasks => _tasks
@@ -99,15 +152,43 @@ class _NativeTaskAssistantPageState extends State<NativeTaskAssistantPage> {
       .toList(growable: false);
 
   String _parentTitle(TaskItem task) {
-    if (task.parentId == null) return '';
+    final fromApi = task.parentTitle.trim();
+    if (fromApi.isNotEmpty) return fromApi;
+    final pid = task.parentId;
+    if (pid == null) return '';
+    final cached = _parentTitleById[pid];
+    if (cached != null && cached.trim().isNotEmpty) return cached;
     for (final item in _tasks) {
-      if (item.id == task.parentId) return item.title;
+      if (item.id == pid) return item.title;
     }
-    return '主任务 #${task.parentId}';
+    return '主任务 #$pid';
+  }
+
+  void _openProgress(TaskItem task) {
+    setState(() => _actionTask = task);
+  }
+
+  void _closeProgress({required bool refresh}) {
+    setState(() => _actionTask = null);
+    if (refresh) unawaited(_openActiveTasks());
   }
 
   @override
   Widget build(BuildContext context) {
+    final action = _actionTask;
+    if (action != null) {
+      // 嵌在任务助手右侧栏内，避免 Navigator.push 全屏/双栏撑破布局。
+      return NativeTaskActionView(
+        session: widget.session,
+        task: action,
+        mode: TaskActionMode.progress,
+        accentColor: const Color(0xFF2F8F7E),
+        backgroundColor: DunesColors.bgApp,
+        onBack: () => _closeProgress(refresh: false),
+        onDone: () => _closeProgress(refresh: true),
+      );
+    }
+
     return Scaffold(
       backgroundColor: DunesColors.bgApp,
       body: SafeArea(
@@ -121,9 +202,11 @@ class _NativeTaskAssistantPageState extends State<NativeTaskAssistantPage> {
                   ? () => setState(() {
                         _showTasks = false;
                         _error = null;
+                        _loading = false;
                       })
                   : (widget.onBack ?? () => Navigator.maybePop(context)),
-              showBackButton: widget.showBackButton,
+              // 双栏主会话可隐藏返回；进入「进行中的任务」子页时必须能返回消息流。
+              showBackButton: _showTasks || widget.showBackButton,
               leadingAvatar: const TaskAssistantAvatar(size: 45),
             ),
             Expanded(child: _showTasks ? _buildTasks() : _buildMessages()),
@@ -155,14 +238,23 @@ class _NativeTaskAssistantPageState extends State<NativeTaskAssistantPage> {
   Widget _buildMessages() {
     if (_loading) return const Center(child: CircularProgressIndicator());
     if (_error != null) {
-      return Center(child: TextButton(onPressed: _loadMessages, child: Text('重试：$_error')));
+      return Center(
+        child: TextButton(
+          onPressed: _loadMessages,
+          child: Text('重试：$_error'),
+        ),
+      );
     }
     if (_messages.isEmpty) {
       return const Center(
-        child: Text('子任务分配后会在这里提醒你', style: TextStyle(color: DunesColors.text3)),
+        child: Text(
+          '子任务分配后会在这里提醒你',
+          style: TextStyle(color: DunesColors.text3),
+        ),
       );
     }
     return ListView.builder(
+      physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.all(12),
       itemCount: _messages.length,
       itemBuilder: (context, index) {
@@ -196,38 +288,34 @@ class _NativeTaskAssistantPageState extends State<NativeTaskAssistantPage> {
   Widget _buildTasks() {
     if (_loading) return const Center(child: CircularProgressIndicator());
     if (_error != null) {
-      return Center(child: TextButton(onPressed: _openActiveTasks, child: Text('重试：$_error')));
+      return Center(
+        child: TextButton(
+          onPressed: _openActiveTasks,
+          child: Text('重试：$_error'),
+        ),
+      );
     }
     final tasks = _activeSubtasks;
     if (tasks.isEmpty) {
       return const Center(
-        child: Text('暂无你负责的进行中子任务', style: TextStyle(color: DunesColors.text3)),
+        child: Text(
+          '暂无你负责的进行中子任务',
+          style: TextStyle(color: DunesColors.text3),
+        ),
       );
     }
     return ListView.separated(
+      physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
       itemCount: tasks.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 10),
+      separatorBuilder: (_, _) => const SizedBox(height: 10),
       itemBuilder: (context, index) {
         final task = tasks[index];
         return _ActiveSubtaskCard(
           task: task,
           parentTitle: _parentTitle(task),
           canUpdate: task.ownerUserId == widget.session.userId,
-          onUpdate: () async {
-            await Navigator.of(context).push<void>(
-              MaterialPageRoute(
-                builder: (_) => NativeTaskActionView(
-                  session: widget.session,
-                  task: task,
-                  mode: TaskActionMode.progress,
-                  onBack: () => Navigator.pop(context),
-                  onDone: () => Navigator.pop(context),
-                ),
-              ),
-            );
-            if (mounted) _openActiveTasks();
-          },
+          onUpdate: () => _openProgress(task),
         );
       },
     );
@@ -251,7 +339,11 @@ class TaskAssistantAvatar extends StatelessWidget {
           colors: [Color(0xFF2F8F7E), Color(0xFF5EAEDE)],
         ),
       ),
-      child: Icon(Icons.assignment_turned_in_outlined, color: Colors.white, size: size * .42),
+      child: Icon(
+        Icons.assignment_turned_in_outlined,
+        color: Colors.white,
+        size: size * .42,
+      ),
     );
   }
 }
@@ -289,34 +381,94 @@ class _ActiveSubtaskCard extends StatelessWidget {
   final bool canUpdate;
   final VoidCallback onUpdate;
 
+  String? get _dateRange {
+    String fmt(DateTime d) {
+      final local = d.toLocal();
+      return '${local.month}/${local.day}';
+    }
+
+    if (task.startAt == null && task.dueAt == null) return null;
+    if (task.startAt != null && task.dueAt != null) {
+      return '${fmt(task.startAt!)} - ${fmt(task.dueAt!)}';
+    }
+    if (task.startAt != null) return '起 ${fmt(task.startAt!)}';
+    return '止 ${fmt(task.dueAt!)}';
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFE8EAED)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(task.title, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
-          if (parentTitle.isNotEmpty) ...[
-            const SizedBox(height: 4),
-            Text('主任务：$parentTitle', style: const TextStyle(fontSize: 12, color: DunesColors.text3)),
-          ],
-          const SizedBox(height: 10),
-          TaskProgressBar(progressPct: task.progressPct, overdue: task.overdue),
-          Align(
-            alignment: Alignment.centerRight,
-            child: TextButton.icon(
-              onPressed: canUpdate ? onUpdate : null,
-              icon: const Icon(Icons.tune, size: 17),
-              label: const Text('更新进度'),
+    final meta = <String>[
+      '优先级 ${taskPriorityLabel(task.priority)}',
+      taskStatusLabel(task.status),
+      ?_dateRange,
+      if (task.ownerName.isNotEmpty) '负责人 ${task.ownerName}',
+      if (task.overdue) '已逾期',
+    ];
+    final desc = task.description.trim();
+
+    return Material(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: const Color(0xFFE8EAED)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              task.title.trim().isEmpty ? '未命名子任务' : task.title.trim(),
+              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
             ),
-          ),
-        ],
+            if (parentTitle.isNotEmpty) ...[
+              const SizedBox(height: 4),
+              Text(
+                '主任务：$parentTitle',
+                style: const TextStyle(fontSize: 12, color: DunesColors.text3),
+              ),
+            ],
+            const SizedBox(height: 8),
+            Text(
+              meta.join(' · '),
+              style: const TextStyle(
+                fontSize: 12,
+                color: DunesColors.text2,
+                height: 1.35,
+              ),
+            ),
+            if (desc.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Text(
+                desc,
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: DunesColors.text3,
+                  height: 1.4,
+                ),
+              ),
+            ],
+            const SizedBox(height: 10),
+            TaskProgressBar(
+              progressPct: task.progressPct,
+              overdue: task.overdue,
+            ),
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton.icon(
+                onPressed: canUpdate ? onUpdate : null,
+                style: TextButton.styleFrom(
+                  foregroundColor: const Color(0xFF2F8F7E),
+                ),
+                icon: const Icon(Icons.tune, size: 17),
+                label: const Text('更新进度'),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

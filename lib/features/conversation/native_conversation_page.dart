@@ -674,8 +674,20 @@ class _NativeConversationPageState extends State<NativeConversationPage>
           if (ensured.id > 0 && !rows.any((c) => c.id == ensured.id)) {
             rows = <NativeConversation>[...rows, ensured];
           }
-        } catch (_) {
-          // 后端未就绪时不影响其它会话列表。
+        } catch (e) {
+          // 后端未就绪时仍展示入口，点击时再尝试同步。
+          debugPrint('[task-assistant] ensure failed: $e');
+          rows = <NativeConversation>[
+            ...rows,
+            NativeConversation(
+              id: 0,
+              kind: 'TASK_ASSISTANT',
+              title: '任务助手',
+              unreadCount: 0,
+              preview: '子任务分配 · 进度跟进',
+              updatedAt: DateTime.now(),
+            ),
+          ];
         }
       }
       rows = List<NativeConversation>.unmodifiable(rows);
@@ -1045,6 +1057,7 @@ class _NativeConversationPageState extends State<NativeConversationPage>
     );
     // 私聊与普通群聊共用一个按置顶、最近消息排序的会话流，和常见聊天
     // 应用一致；审批工作群仍保留在独立的系统分区中。
+    // 审批助手 / 任务助手与机器人同属「聊天」区，内部用户全员可见。
     final chats = _sorted(
       _items
           .where(
@@ -1052,7 +1065,8 @@ class _NativeConversationPageState extends State<NativeConversationPage>
                 c.isGroup ||
                 c.isPrivate ||
                 c.isRobot ||
-                c.isApprovalAssistant,
+                c.isApprovalAssistant ||
+                c.isTaskAssistant,
           )
           .toList(),
     );
@@ -1124,7 +1138,7 @@ class _NativeConversationPageState extends State<NativeConversationPage>
     return sections;
   }
 
-  /// 智能总结与私聊/群/机器人/审批助手同一排序：置顶优先，再按最近时间。
+  /// 智能总结与私聊/群/机器人/审批助手/任务助手同一排序：置顶优先，再按最近时间。
   /// 仅在已有分析结果时显示智能总结（默认不占位）。
   List<Widget> _buildChatRowsMergedWithAiSummary(
     List<NativeConversation> chats,

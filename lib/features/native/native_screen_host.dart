@@ -878,13 +878,14 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     }
   }
 
-  /// 宽屏双栏：在 C2/C5/CR 之间切换时替换栈顶，避免历史栈堆积。
+  /// 宽屏双栏：在 C2/C5/CR/AA1/TA1 之间切换时替换栈顶，避免历史栈堆积。
   void _goChatScreen(String screenId) {
     final current = widget.navigation.currentScreen;
     if (current == 'C2' ||
         current == 'C5' ||
         current == 'CR' ||
-        current == 'AA1') {
+        current == 'AA1' ||
+        current == 'TA1') {
       widget.navigation.replaceTop(screenId);
     } else {
       widget.navigation.go(screenId);
@@ -899,6 +900,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       _selectedGroup = null;
       _selectedRobot = null;
       _selectedApprovalAssistant = null;
+      _selectedTaskAssistant = null;
       _focusMessageId = null;
       _focusMessageHint = null;
     });
@@ -917,6 +919,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       _selectedPrivatePeerUserId = null;
       _selectedGroup = null;
       _selectedApprovalAssistant = null;
+      _selectedTaskAssistant = null;
       _focusMessageId = null;
       _focusMessageHint = null;
     });
@@ -973,6 +976,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       _selectedPrivatePeerUserId = null;
       _selectedRobot = null;
       _selectedApprovalAssistant = null;
+      _selectedTaskAssistant = null;
       _focusMessageId = null;
       _focusMessageHint = null;
     });
@@ -1035,6 +1039,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         _selectedGroup = null;
         _selectedRobot = null;
         _selectedApprovalAssistant = null;
+        _selectedTaskAssistant = null;
       }
     });
     _markUserLeftChat();
@@ -1080,6 +1085,9 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     if (chatScreen == 'AA1' || chatScreen == 'AA2') {
       return _selectedApprovalAssistant?.id;
     }
+    if (chatScreen == 'TA1') {
+      return _selectedTaskAssistant?.id;
+    }
     return null;
   }
 
@@ -1090,6 +1098,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     if (screen == 'C12' || screen == 'C13') return screen;
     if (screen == 'AS1' || screen == 'AS2' || screen == 'AS3') return screen;
     if (screen == 'AA1' || screen == 'AA2') return screen;
+    if (screen == 'TA1') return screen;
     if (screen == 'C6') return 'C6';
     if (screen == 'C9' && _profileEmbedsInDualPane) return 'C9';
     if (screen == 'C2' || screen == 'C5' || screen == 'CR') return screen;
@@ -1099,6 +1108,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     if (_selectedGroup != null) return 'C2';
     if (_selectedRobot != null) return 'CR';
     if (_selectedApprovalAssistant != null) return 'AA1';
+    if (_selectedTaskAssistant != null) return 'TA1';
     return 'C1';
   }
 
@@ -1131,7 +1141,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         screen == 'AS2' ||
         screen == 'AS3' ||
         screen == 'AA1' ||
-        screen == 'AA2';
+        screen == 'AA2' ||
+        screen == 'TA1';
   }
 
   void _onPrivateChatSettingsChanged({
@@ -1344,6 +1355,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       _selectedPrivatePeerUserId = null;
       _selectedGroup = null;
       _selectedRobot = null;
+      _selectedTaskAssistant = null;
       _focusMessageId = null;
       _focusMessageHint = null;
       if (hint != null && hint.id > 0) {
@@ -1514,6 +1526,9 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         dual == 'AA2') {
       return 'aa';
     }
+    if (screen == 'TA1' || dual == 'TA1') {
+      return 'ta';
+    }
     if (_selectedRobot != null) {
       return 'robot:${_selectedRobot!.id}';
     }
@@ -1539,6 +1554,9 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         dual == 'AA1' ||
         dual == 'AA2') {
       return _DualChatSlot.approval(_selectedApprovalAssistant);
+    }
+    if (screen == 'TA1' || dual == 'TA1') {
+      return _DualChatSlot.task(_selectedTaskAssistant);
     }
     if (_selectedRobot != null) {
       return _DualChatSlot.robot(_selectedRobot!);
@@ -1598,6 +1616,25 @@ class _NativeScreenHostState extends State<NativeScreenHost>
             onOpenPendingList: _openApprovalAssistantPending,
             onOpenApproval: (share) =>
                 _openApprovalFromChat(share, from: 'AA1'),
+          ),
+        );
+      case _DualChatKind.task:
+        return KeyedSubtree(
+          key: key,
+          child: NativeTaskAssistantPage(
+            session: widget.session,
+            conversationHint: slot.conversation ??
+                const NativeConversation(
+                  id: 0,
+                  kind: 'TASK_ASSISTANT',
+                  title: '任务助手',
+                  unreadCount: 0,
+                  preview: '',
+                  updatedAt: null,
+                ),
+            showBackButton: false,
+            onBack: () => _leaveChatToInbox(clearSelection: true),
+            onConversationRead: _handleConversationRead,
           ),
         );
       case _DualChatKind.robot:
@@ -5177,7 +5214,7 @@ class _InfoTile extends StatelessWidget {
   }
 }
 
-enum _DualChatKind { robot, private, group, approval }
+enum _DualChatKind { robot, private, group, approval, task }
 
 class _DualChatSlot {
   const _DualChatSlot._({
@@ -5214,6 +5251,13 @@ class _DualChatSlot {
   factory _DualChatSlot.approval(NativeConversation? conversation) {
     return _DualChatSlot._(
       kind: _DualChatKind.approval,
+      conversation: conversation,
+    );
+  }
+
+  factory _DualChatSlot.task(NativeConversation? conversation) {
+    return _DualChatSlot._(
+      kind: _DualChatKind.task,
       conversation: conversation,
     );
   }

@@ -40,11 +40,13 @@ class TaskAttachmentField extends StatefulWidget {
     required this.session,
     required this.files,
     required this.onChanged,
+    this.accentColor = _themePurple,
   });
 
   final AuthSession session;
   final List<TaskAttachment> files;
   final ValueChanged<List<TaskAttachment>> onChanged;
+  final Color accentColor;
 
   @override
   State<TaskAttachmentField> createState() => _TaskAttachmentFieldState();
@@ -160,9 +162,10 @@ class _TaskAttachmentFieldState extends State<TaskAttachmentField> {
 
   @override
   Widget build(BuildContext context) {
+    final accent = widget.accentColor;
     final zone = Material(
       color: _dragging
-          ? _themePurple.withValues(alpha: 0.08)
+          ? accent.withValues(alpha: 0.08)
           : const Color(0xFFF5F6F8),
       borderRadius: BorderRadius.circular(10),
       child: InkWell(
@@ -175,7 +178,7 @@ class _TaskAttachmentFieldState extends State<TaskAttachmentField> {
             borderRadius: BorderRadius.circular(10),
             border: Border.all(
               color: _dragging
-                  ? _themePurple.withValues(alpha: 0.45)
+                  ? accent.withValues(alpha: 0.45)
                   : const Color(0xFFE8EAED),
               style: BorderStyle.solid,
             ),
@@ -184,7 +187,7 @@ class _TaskAttachmentFieldState extends State<TaskAttachmentField> {
             children: [
               Icon(
                 Icons.cloud_upload_outlined,
-                color: _dragging ? _themePurple : DunesColors.text3,
+                color: _dragging ? accent : DunesColors.text3,
               ),
               const SizedBox(height: 6),
               Text(
@@ -194,7 +197,7 @@ class _TaskAttachmentFieldState extends State<TaskAttachmentField> {
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 13,
-                  color: _dragging ? _themePurple : DunesColors.text2,
+                  color: _dragging ? accent : DunesColors.text2,
                 ),
               ),
               const SizedBox(height: 4),
@@ -244,7 +247,7 @@ class _TaskAttachmentFieldState extends State<TaskAttachmentField> {
                 ),
                 child: Row(
                   children: [
-                    const Icon(Icons.insert_drive_file_outlined, size: 18, color: _themePurple),
+                    Icon(Icons.insert_drive_file_outlined, size: 18, color: accent),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(

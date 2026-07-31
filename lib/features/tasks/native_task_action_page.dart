@@ -8,10 +8,13 @@ import 'task_attachment_field.dart';
 import 'task_models.dart';
 
 const _themePurple = Color(0xFF7B5CD8);
+const _workbenchBg = Color(0xFFF5F6F8);
 
 enum TaskActionMode { progress, evaluate }
 
 /// 三级页：进度调整 / 任务评价（均可上传附件）。
+///
+/// 默认沿用工作台紫色；任务助手等通讯场景可传入 [accentColor]/[backgroundColor]。
 class NativeTaskActionView extends StatefulWidget {
   const NativeTaskActionView({
     super.key,
@@ -20,6 +23,8 @@ class NativeTaskActionView extends StatefulWidget {
     required this.mode,
     required this.onBack,
     required this.onDone,
+    this.accentColor = _themePurple,
+    this.backgroundColor = _workbenchBg,
   });
 
   final AuthSession session;
@@ -27,6 +32,8 @@ class NativeTaskActionView extends StatefulWidget {
   final TaskActionMode mode;
   final VoidCallback onBack;
   final VoidCallback onDone;
+  final Color accentColor;
+  final Color backgroundColor;
 
   @override
   State<NativeTaskActionView> createState() => _NativeTaskActionViewState();
@@ -43,6 +50,7 @@ class _NativeTaskActionViewState extends State<NativeTaskActionView> {
   bool _saving = false;
 
   bool get _isProgress => widget.mode == TaskActionMode.progress;
+  Color get _accent => widget.accentColor;
 
   @override
   void initState() {
@@ -75,7 +83,7 @@ class _NativeTaskActionViewState extends State<NativeTaskActionView> {
             child: const Text('取消'),
           ),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: _themePurple),
+            style: FilledButton.styleFrom(backgroundColor: _accent),
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text('确认'),
           ),
@@ -113,8 +121,9 @@ class _NativeTaskActionViewState extends State<NativeTaskActionView> {
 
   @override
   Widget build(BuildContext context) {
-    return ColoredBox(
-      color: const Color(0xFFF5F6F8),
+    // Material 供 InkWell 使用；保持内嵌三级页，避免独立路由全屏/撑破双栏。
+    return Material(
+      color: widget.backgroundColor,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -132,7 +141,7 @@ class _NativeTaskActionViewState extends State<NativeTaskActionView> {
                       children: [
                         Icon(Icons.arrow_back_ios_new, size: 14, color: DunesColors.text2),
                         SizedBox(width: 2),
-                        Text('详情', style: TextStyle(fontSize: 13, color: DunesColors.text2)),
+                        Text('返回', style: TextStyle(fontSize: 13, color: DunesColors.text2)),
                       ],
                     ),
                   ),
@@ -141,16 +150,16 @@ class _NativeTaskActionViewState extends State<NativeTaskActionView> {
                 Expanded(
                   child: Text(
                     _isProgress ? '调整进度' : '任务评价',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.w700,
-                      color: _themePurple,
+                      color: _accent,
                     ),
                   ),
                 ),
                 FilledButton(
                   style: FilledButton.styleFrom(
-                    backgroundColor: _themePurple,
+                    backgroundColor: _accent,
                     padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                   ),
@@ -193,20 +202,29 @@ class _NativeTaskActionViewState extends State<NativeTaskActionView> {
                         Text(
                           '${_pct.round()}%',
                           textAlign: TextAlign.center,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 32,
                             fontWeight: FontWeight.w700,
-                            color: _themePurple,
+                            color: _accent,
                           ),
                         ),
-                        Slider(
-                          value: _pct,
-                          min: 0,
-                          max: 100,
-                          divisions: 20,
-                          activeColor: _themePurple,
-                          label: '${_pct.round()}%',
-                          onChanged: (v) => setState(() => _pct = v),
+                        SliderTheme(
+                          data: SliderTheme.of(context).copyWith(
+                            activeTrackColor: _accent,
+                            inactiveTrackColor: _accent.withValues(alpha: 0.18),
+                            thumbColor: _accent,
+                            overlayColor: _accent.withValues(alpha: 0.12),
+                            activeTickMarkColor: Colors.white70,
+                            inactiveTickMarkColor: _accent.withValues(alpha: 0.35),
+                          ),
+                          child: Slider(
+                            value: _pct,
+                            min: 0,
+                            max: 100,
+                            divisions: 20,
+                            label: '${_pct.round()}%',
+                            onChanged: (v) => setState(() => _pct = v),
+                          ),
                         ),
                         const SizedBox(height: 8),
                         TextField(
@@ -264,6 +282,7 @@ class _NativeTaskActionViewState extends State<NativeTaskActionView> {
                       TaskAttachmentField(
                         session: widget.session,
                         files: _attachments,
+                        accentColor: _accent,
                         onChanged: (list) => setState(() => _attachments = list),
                       ),
                     ],

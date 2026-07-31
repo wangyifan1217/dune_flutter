@@ -450,11 +450,17 @@ class ConversationService {
 
   /// 确保任务助手只读会话存在。
   Future<NativeConversation> ensureTaskAssistantSession() async {
-    final resp = await _client.post(
-      _uri('/tasks/assistant/sessions/ensure'),
-      headers: _headers,
-      body: '{}',
-    );
+    Future<http.Response> post(String path) => _client.post(
+          _uri(path),
+          headers: _headers,
+          body: '{}',
+        );
+    // 线上已代理 `/tasks/assistant` → im-go；`/conversations/task-assistant/ensure`
+    // 需新版 im-go，旧版会 400（被当成会话 id），故仅作次选。
+    var resp = await post('/tasks/assistant/sessions/ensure');
+    if (resp.statusCode < 200 || resp.statusCode >= 300) {
+      resp = await post('/conversations/task-assistant/ensure');
+    }
     if (resp.statusCode < 200 || resp.statusCode >= 300) {
       throw Exception('打开任务助手失败: HTTP ${resp.statusCode}');
     }

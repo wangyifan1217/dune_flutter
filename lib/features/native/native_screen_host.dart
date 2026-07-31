@@ -1449,6 +1449,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       key: ValueKey<int>(hint.id),
       session: widget.session,
       conversationHint: hint,
+      navigation: widget.navigation,
       showBackButton: showBackButton,
       onBack: () => _leaveChatToInbox(clearSelection: true),
       onConversationRead: _handleConversationRead,
@@ -1632,6 +1633,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
                   preview: '',
                   updatedAt: null,
                 ),
+            navigation: widget.navigation,
             showBackButton: false,
             onBack: () => _leaveChatToInbox(clearSelection: true),
             onConversationRead: _handleConversationRead,
@@ -1993,7 +1995,10 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           },
         );
       case 'QJA':
-        return NativeQianjiAdminShell(session: widget.session);
+        return NativeQianjiAdminShell(
+          session: widget.session,
+          navigation: widget.navigation,
+        );
       case 'QJD':
         final entity = _selectedQianjiEntity ?? QianjiStaticCatalog.entities.first;
         return NativeQianjiDetailPage(
@@ -2649,6 +2654,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
                   navigation: widget.navigation,
                   commUnread: _commUnread,
                   workbenchBadge: _workbenchBadge,
+                  active: false,
                 ),
               ),
             ),
@@ -2733,6 +2739,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
                 navigation: widget.navigation,
                 commUnread: _commUnread,
                 workbenchBadge: _workbenchBadge,
+                active: isLighthouse,
               ),
             ),
           ),

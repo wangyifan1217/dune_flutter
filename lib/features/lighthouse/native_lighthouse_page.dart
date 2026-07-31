@@ -6059,12 +6059,15 @@ class NativeLighthousePage extends StatefulWidget {
     required this.navigation,
     required this.commUnread,
     required this.workbenchBadge,
+    this.active = true,
   });
 
   final AuthSession session;
   final DunesNavigationController navigation;
   final CommUnreadNotifier commUnread;
   final WorkbenchBadgeNotifier workbenchBadge;
+  /// keep-alive 离屏时为 false，避免占用全局返回拦截把其它 Tab 拉回灯塔。
+  final bool active;
 
   @override
   State<NativeLighthousePage> createState() => _NativeLighthousePageState();
@@ -6831,8 +6834,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   @override
   void initState() {
     super.initState();
-    widget.navigation.canBackInterceptor = _hasInternalBackStack;
-    widget.navigation.backInterceptor = _handleInternalBack;
+    if (widget.active) _installBackInterceptor();
     _restoreMetricPrefs();
     if (widget.session.effectiveLighthouseAccess) {
       _load();
@@ -6842,9 +6844,34 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   }
 
   @override
+  void didUpdateWidget(covariant NativeLighthousePage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.active != oldWidget.active) {
+      if (widget.active) {
+        _installBackInterceptor();
+      } else {
+        _clearBackInterceptor();
+      }
+    }
+  }
+
+  void _installBackInterceptor() {
+    widget.navigation.canBackInterceptor = _hasInternalBackStack;
+    widget.navigation.backInterceptor = _handleInternalBack;
+  }
+
+  void _clearBackInterceptor() {
+    if (widget.navigation.canBackInterceptor == _hasInternalBackStack) {
+      widget.navigation.canBackInterceptor = null;
+    }
+    if (widget.navigation.backInterceptor == _handleInternalBack) {
+      widget.navigation.backInterceptor = null;
+    }
+  }
+
+  @override
   void dispose() {
-    widget.navigation.canBackInterceptor = null;
-    widget.navigation.backInterceptor = null;
+    _clearBackInterceptor();
     _ddEntry?.remove();
     _detailSkuSearchCtrl.dispose();
     _mainListScrollCtrl.dispose();

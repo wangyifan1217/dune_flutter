@@ -122,7 +122,12 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
 
   void _publishChrome() {
     if (_page == _TaskPage.detail || _page == _TaskPage.action) {
-      widget.onChromeChanged?.call(const TaskShellChrome(hideShellHeader: true));
+      widget.onChromeChanged?.call(
+        TaskShellChrome(
+          hideShellHeader: true,
+          onBack: _page == _TaskPage.action ? _backFromAction : _backFromDetail,
+        ),
+      );
       return;
     }
     widget.onChromeChanged?.call(

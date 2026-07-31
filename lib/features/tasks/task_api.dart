@@ -361,6 +361,19 @@ class TaskApi {
         .toList(growable: false);
   }
 
+  /// 是否可进「任务汇总」：完全以后端鉴权为准，前端不写死角色。
+  Future<bool> canAccessHrbpOverview() async {
+    try {
+      final resp = await http.get(_uri('hrbp/overview'), headers: _headers);
+      if (resp.statusCode == 401 || resp.statusCode == 403) return false;
+      final body = jsonDecode(utf8.decode(resp.bodyBytes));
+      if (body is Map && body['success'] == false) return false;
+      return resp.statusCode >= 200 && resp.statusCode < 300;
+    } catch (_) {
+      return false;
+    }
+  }
+
   Future<TaskListPage> hrbpDepartmentPage(
     int deptId, {
     DateTime? dateFrom,

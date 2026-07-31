@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../core/navigation/navigation_controller.dart';
 import '../../core/theme/dunes_theme.dart';
 import '../auth/auth_session.dart';
 import '../chat/chat_widgets.dart';
@@ -19,6 +20,7 @@ class NativeTaskAssistantPage extends StatefulWidget {
     super.key,
     required this.session,
     required this.conversationHint,
+    this.navigation,
     this.showBackButton = true,
     this.onBack,
     this.onConversationRead,
@@ -26,6 +28,7 @@ class NativeTaskAssistantPage extends StatefulWidget {
 
   final AuthSession session;
   final NativeConversation conversationHint;
+  final DunesNavigationController? navigation;
   final bool showBackButton;
   final VoidCallback? onBack;
   final ValueChanged<int>? onConversationRead;
@@ -52,7 +55,61 @@ class _NativeTaskAssistantPageState extends State<NativeTaskAssistantPage> {
   @override
   void initState() {
     super.initState();
+    _syncBackInterceptor();
     _loadMessages();
+  }
+
+  @override
+  void dispose() {
+    _clearBackInterceptor();
+    super.dispose();
+  }
+
+  bool get _hasInternalBack => _actionTask != null || _showTasks;
+
+  void _installBackInterceptor() {
+    final nav = widget.navigation;
+    if (nav == null) return;
+    nav.canBackInterceptor = _canHandleInternalBack;
+    nav.backInterceptor = _handleInternalBack;
+  }
+
+  void _clearBackInterceptor() {
+    final nav = widget.navigation;
+    if (nav == null) return;
+    if (nav.canBackInterceptor == _canHandleInternalBack) {
+      nav.canBackInterceptor = null;
+    }
+    if (nav.backInterceptor == _handleInternalBack) {
+      nav.backInterceptor = null;
+    }
+  }
+
+  void _syncBackInterceptor() {
+    if (_hasInternalBack) {
+      _installBackInterceptor();
+    } else {
+      _clearBackInterceptor();
+    }
+  }
+
+  bool _canHandleInternalBack() => _hasInternalBack;
+
+  bool _handleInternalBack() {
+    if (_actionTask != null) {
+      _closeProgress(refresh: false);
+      return true;
+    }
+    if (_showTasks) {
+      setState(() {
+        _showTasks = false;
+        _error = null;
+        _loading = false;
+      });
+      _syncBackInterceptor();
+      return true;
+    }
+    return false;
   }
 
   Future<void> _loadMessages() async {
@@ -87,6 +144,7 @@ class _NativeTaskAssistantPageState extends State<NativeTaskAssistantPage> {
       _loading = true;
       _error = null;
     });
+    _syncBackInterceptor();
     try {
       final tasks = await _loadOwnedActiveSubtasks();
       if (mounted) setState(() => _tasks = tasks);
@@ -166,11 +224,22 @@ class _NativeTaskAssistantPageState extends State<NativeTaskAssistantPage> {
 
   void _openProgress(TaskItem task) {
     setState(() => _actionTask = task);
+    _syncBackInterceptor();
   }
 
   void _closeProgress({required bool refresh}) {
     setState(() => _actionTask = null);
+    _syncBackInterceptor();
     if (refresh) unawaited(_openActiveTasks());
+  }
+
+  void _backFromTasks() {
+    setState(() {
+      _showTasks = false;
+      _error = null;
+      _loading = false;
+    });
+    _syncBackInterceptor();
   }
 
   @override
@@ -178,14 +247,21 @@ class _NativeTaskAssistantPageState extends State<NativeTaskAssistantPage> {
     final action = _actionTask;
     if (action != null) {
       // 嵌在任务助手右侧栏内，避免 Navigator.push 全屏/双栏撑破布局。
-      return NativeTaskActionView(
-        session: widget.session,
-        task: action,
-        mode: TaskActionMode.progress,
-        accentColor: const Color(0xFF2F8F7E),
+      // APP 需 SafeArea，否则状态栏会压住「返回 / 调整进度」顶栏。
+      return Scaffold(
         backgroundColor: DunesColors.bgApp,
-        onBack: () => _closeProgress(refresh: false),
-        onDone: () => _closeProgress(refresh: true),
+        body: SafeArea(
+          bottom: false,
+          child: NativeTaskActionView(
+            session: widget.session,
+            task: action,
+            mode: TaskActionMode.progress,
+            accentColor: const Color(0xFF2F8F7E),
+            backgroundColor: DunesColors.bgApp,
+            onBack: () => _closeProgress(refresh: false),
+            onDone: () => _closeProgress(refresh: true),
+          ),
+        ),
       );
     }
 
@@ -199,11 +275,7 @@ class _NativeTaskAssistantPageState extends State<NativeTaskAssistantPage> {
               title: _showTasks ? '进行中的任务' : '任务助手',
               subtitle: _loading ? '加载中…' : '',
               onBack: _showTasks
-                  ? () => setState(() {
-                        _showTasks = false;
-                        _error = null;
-                        _loading = false;
-                      })
+                  ? _backFromTasks
                   : (widget.onBack ?? () => Navigator.maybePop(context)),
               // 双栏主会话可隐藏返回；进入「进行中的任务」子页时必须能返回消息流。
               showBackButton: _showTasks || widget.showBackButton,

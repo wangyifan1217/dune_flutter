@@ -17,6 +17,7 @@ class AuthSession {
     this.qianjiAccess = false,
     this.qianjiAdminAccess = false,
     this.robotAccess = false,
+    this.hrbpAccess = false,
   });
 
   final String phone;
@@ -31,6 +32,8 @@ class AuthSession {
   final bool qianjiAccess;
   final bool qianjiAdminAccess;
   final bool robotAccess;
+  /// 后端下发的「任务汇总」能力开关；未下发时工作台会走接口探测。
+  final bool hrbpAccess;
 
   bool get isExternalUser => userType.toUpperCase() == 'EXTERNAL';
 
@@ -94,6 +97,7 @@ class AuthSession {
     bool? qianjiAccess,
     bool? qianjiAdminAccess,
     bool? robotAccess,
+    bool? hrbpAccess,
   }) {
     return AuthSession(
       phone: phone ?? this.phone,
@@ -109,6 +113,7 @@ class AuthSession {
       qianjiAccess: qianjiAccess ?? this.qianjiAccess,
       qianjiAdminAccess: qianjiAdminAccess ?? this.qianjiAdminAccess,
       robotAccess: robotAccess ?? this.robotAccess,
+      hrbpAccess: hrbpAccess ?? this.hrbpAccess,
     );
   }
 
@@ -143,6 +148,7 @@ class AuthSession {
       qianjiAccess: data['qianjiAccess'] == true,
       qianjiAdminAccess: data['qianjiAdminAccess'] == true,
       robotAccess: data['robotAccess'] == true,
+      hrbpAccess: data['hrbpAccess'] == true,
     );
   }
 
@@ -171,6 +177,7 @@ class AuthSession {
       qianjiAccess: claims['qianjiAccess'] == true,
       qianjiAdminAccess: claims['qianjiAdminAccess'] == true,
       robotAccess: claims['robotAccess'] == true,
+      hrbpAccess: claims['hrbpAccess'] == true,
     );
   }
 
@@ -206,6 +213,7 @@ class AuthSession {
       'qianjiAccess': qianjiAccess,
       'qianjiAdminAccess': qianjiAdminAccess,
       'robotAccess': robotAccess,
+      'hrbpAccess': hrbpAccess,
     };
   }
 
@@ -227,6 +235,7 @@ class AuthSession {
       qianjiAccess: json['qianjiAccess'] == true,
       qianjiAdminAccess: json['qianjiAdminAccess'] == true,
       robotAccess: json['robotAccess'] == true,
+      hrbpAccess: json['hrbpAccess'] == true,
     );
   }
 

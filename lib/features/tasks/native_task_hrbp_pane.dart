@@ -96,7 +96,12 @@ class _NativeTaskHrbpPaneState extends State<NativeTaskHrbpPane> {
 
   void _publishChrome() {
     if (_page == _HrbpPage.detail || _page == _HrbpPage.action) {
-      widget.onChromeChanged?.call(const TaskShellChrome(hideShellHeader: true));
+      widget.onChromeChanged?.call(
+        TaskShellChrome(
+          hideShellHeader: true,
+          onBack: _page == _HrbpPage.action ? _backFromAction : _backFromDetail,
+        ),
+      );
       return;
     }
     widget.onChromeChanged?.call(const TaskShellChrome());

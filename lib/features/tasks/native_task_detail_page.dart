@@ -79,10 +79,7 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
     }
   }
 
-  bool get _isHrbp =>
-      widget.session.roles.any((r) => r.toUpperCase() == 'HRBP');
-
-  /// 负责人 / 创建人 / 协同 / 审核人；否则（含 HRBP 看他人任务）仅可浏览。
+  /// 负责人 / 创建人 / 协同 / 审核人；否则仅可浏览。
   bool get _isStakeholder {
     final t = _detail?.task;
     if (t == null) return false;
@@ -402,7 +399,7 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
                                 ),
                             ],
                           ),
-                          if (_viewOnly && _isHrbp) ...[
+                          if (_viewOnly) ...[
                             const SizedBox(height: 8),
                             Container(
                               width: double.infinity,

@@ -2,11 +2,13 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../core/navigation/navigation_controller.dart';
 import '../../core/theme/dunes_theme.dart';
 import '../auth/auth_session.dart';
 import '../auth/auth_session_coordinator.dart';
 import '../tasks/native_task_home_pane.dart';
 import '../tasks/native_task_hrbp_pane.dart';
+import '../tasks/task_api.dart';
 import 'qianji_admin_api.dart';
 import 'qianji_req_pool_pane.dart';
 
@@ -15,9 +17,14 @@ const _hrbpAccent = Color(0xFF3D7A8C);
 
 /// 工作台：小名片概览 → 点进功能页（可左右滑回）。
 class NativeQianjiAdminShell extends StatefulWidget {
-  const NativeQianjiAdminShell({super.key, required this.session});
+  const NativeQianjiAdminShell({
+    super.key,
+    required this.session,
+    required this.navigation,
+  });
 
   final AuthSession session;
+  final DunesNavigationController navigation;
 
   @override
   State<NativeQianjiAdminShell> createState() => _NativeQianjiAdminShellState();
@@ -33,6 +40,8 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
   bool _hideShellHeader = false;
   Widget? _shellTrailing;
   VoidCallback? _onShellBackOverride;
+  /// null=探测中；以后端 hrbp/overview 鉴权为准，不写死角色。
+  bool? _canSeeTaskSummary;
 
   static const _titles = {
     _WorkbenchView.tasks: '任务',
@@ -45,15 +54,16 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
 
   bool get _isQianjiAdmin => _session.effectiveQianjiAdminAccess;
 
-  bool get _isHrbp =>
-      _session.roles.any((r) => r.toUpperCase() == 'HRBP');
-
   @override
   void initState() {
     super.initState();
     _pageController = PageController();
     _session = AuthSessionCoordinator.instance.resolve(widget.session);
     unawaited(_refreshSessionOnEnter());
+    unawaited(_resolveTaskSummaryAccess());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _syncBackInterceptor();
+    });
   }
 
   @override
@@ -63,6 +73,7 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
     if (incoming.token != _session.token ||
         incoming.roles.join('|') != _session.roles.join('|')) {
       _session = incoming;
+      unawaited(_resolveTaskSummaryAccess());
     }
   }
 
@@ -72,15 +83,70 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
     setState(() {
       _session = refreshed ?? AuthSessionCoordinator.instance.resolve(_session);
     });
+    unawaited(_resolveTaskSummaryAccess());
+  }
+
+  Future<void> _resolveTaskSummaryAccess() async {
+    // 优先读会话里后端下发的开关（若有）；否则用接口鉴权探测。
+    if (_session.hrbpAccess) {
+      if (mounted) setState(() => _canSeeTaskSummary = true);
+      return;
+    }
+    final ok = await TaskApi(_session).canAccessHrbpOverview();
+    if (!mounted) return;
+    setState(() => _canSeeTaskSummary = ok);
   }
 
   @override
   void dispose() {
+    _clearBackInterceptor();
     _pageController.dispose();
     super.dispose();
   }
 
   bool get _isOverview => _pageIndex == 0;
+
+  /// 详情/调整进度等内页：禁用 PageView 横滑，避免一滑就跳出任务栈。
+  bool get _lockPageSwipe => _onShellBackOverride != null || _hideShellHeader;
+
+  void _installBackInterceptor() {
+    widget.navigation.canBackInterceptor = _canHandleInternalBack;
+    widget.navigation.backInterceptor = _handleInternalBack;
+  }
+
+  void _clearBackInterceptor() {
+    if (widget.navigation.canBackInterceptor == _canHandleInternalBack) {
+      widget.navigation.canBackInterceptor = null;
+    }
+    if (widget.navigation.backInterceptor == _handleInternalBack) {
+      widget.navigation.backInterceptor = null;
+    }
+  }
+
+  bool _canHandleInternalBack() {
+    return _onShellBackOverride != null || !_isOverview;
+  }
+
+  bool _handleInternalBack() {
+    final nested = _onShellBackOverride;
+    if (nested != null) {
+      nested();
+      return true;
+    }
+    if (!_isOverview) {
+      _goPage(0);
+      return true;
+    }
+    return false;
+  }
+
+  void _syncBackInterceptor() {
+    if (_canHandleInternalBack()) {
+      _installBackInterceptor();
+    } else {
+      _clearBackInterceptor();
+    }
+  }
 
   void _open(_WorkbenchView view, {bool requireQianjiAdmin = false}) {
     if (view == _WorkbenchView.overview) {
@@ -104,6 +170,7 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
         _onShellBackOverride = null;
       }
     });
+    _syncBackInterceptor();
     if (!_pageController.hasClients) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (_pageController.hasClients) {
@@ -181,7 +248,13 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
             Expanded(
               child: PageView(
                 controller: _pageController,
-                onPageChanged: (i) => setState(() => _pageIndex = i),
+                physics: _lockPageSwipe
+                    ? const NeverScrollableScrollPhysics()
+                    : const PageScrollPhysics(),
+                onPageChanged: (i) {
+                  setState(() => _pageIndex = i);
+                  _syncBackInterceptor();
+                },
                 children: [
                   _buildOverviewPage(),
                   _buildContentPage(),
@@ -201,6 +274,7 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
       _shellTrailing = chrome.trailing;
       _onShellBackOverride = chrome.onBack;
     });
+    _syncBackInterceptor();
   }
 
   Widget _buildContentPage() {
@@ -239,7 +313,7 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
         enabled: true,
         onTap: () => _open(_WorkbenchView.tasks),
       ),
-      if (_isHrbp)
+      if (_canSeeTaskSummary == true)
         _WorkbenchTile(
           title: '任务汇总',
           subtitle: '部门进度',

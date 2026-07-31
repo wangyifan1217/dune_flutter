@@ -110,18 +110,18 @@ class _NativeQianjiHubPageState extends State<NativeQianjiHubPage> {
                     ),
                     const SizedBox(height: 16),
                   ],
-                  _QianjiHubSection(
+                  _NovaHubSection(
                     title: '管理',
                     accent: _themePurple,
                     children: [
-                      _QianjiHubTile(
+                      _NovaHubTile(
                         title: 'Cursor账号监管',
                         subtitle: '账号与用量',
                         icon: Icons.manage_accounts_outlined,
                         color: _themePurple,
                         onTap: widget.onOpenCursorAccount,
                       ),
-                      _QianjiHubTile(
+                      _NovaHubTile(
                         title: '会议纪要监管',
                         subtitle: '本人及下级',
                         icon: Icons.fact_check_outlined,
@@ -456,8 +456,8 @@ class _StatusDot extends StatelessWidget {
   }
 }
 
-class _QianjiHubTile {
-  const _QianjiHubTile({
+class _NovaHubTile {
+  const _NovaHubTile({
     required this.title,
     required this.subtitle,
     required this.icon,
@@ -472,8 +472,8 @@ class _QianjiHubTile {
   final VoidCallback? onTap;
 }
 
-class _QianjiHubSection extends StatelessWidget {
-  const _QianjiHubSection({
+class _NovaHubSection extends StatelessWidget {
+  const _NovaHubSection({
     required this.title,
     required this.accent,
     required this.children,
@@ -481,7 +481,7 @@ class _QianjiHubSection extends StatelessWidget {
 
   final String title;
   final Color accent;
-  final List<_QianjiHubTile> children;
+  final List<_NovaHubTile> children;
 
   @override
   Widget build(BuildContext context) {
@@ -521,7 +521,7 @@ class _QianjiHubSection extends StatelessWidget {
             spacing: 12,
             runSpacing: 12,
             children: [
-              for (final tile in children) _QianjiHubCard(tile: tile),
+              for (final tile in children) _NovaHubCard(tile: tile),
             ],
           ),
         ],
@@ -530,10 +530,10 @@ class _QianjiHubSection extends StatelessWidget {
   }
 }
 
-class _QianjiHubCard extends StatelessWidget {
-  const _QianjiHubCard({required this.tile});
+class _NovaHubCard extends StatelessWidget {
+  const _NovaHubCard({required this.tile});
 
-  final _QianjiHubTile tile;
+  final _NovaHubTile tile;
 
   @override
   Widget build(BuildContext context) {

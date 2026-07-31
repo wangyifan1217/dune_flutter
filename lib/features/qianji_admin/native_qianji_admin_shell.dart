@@ -1,13 +1,19 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../core/theme/dunes_theme.dart';
 import '../auth/auth_session.dart';
+import '../auth/auth_session_coordinator.dart';
+import '../tasks/native_task_home_pane.dart';
+import '../tasks/native_task_hrbp_pane.dart';
 import 'qianji_admin_api.dart';
 import 'qianji_req_pool_pane.dart';
 
 const _themePurple = Color(0xFF7B5CD8);
+const _hrbpAccent = Color(0xFF3D7A8C);
 
-/// PC「工作台」：名片进入后只展示对应功能；概览 ↔ 功能页可左右滑动。
+/// 工作台：小名片概览 → 点进功能页（可左右滑回）。
 class NativeQianjiAdminShell extends StatefulWidget {
   const NativeQianjiAdminShell({super.key, required this.session});
 
@@ -17,24 +23,55 @@ class NativeQianjiAdminShell extends StatefulWidget {
   State<NativeQianjiAdminShell> createState() => _NativeQianjiAdminShellState();
 }
 
-enum _WorkbenchView { overview, products, display, cases, pool }
+enum _WorkbenchView { overview, tasks, hrbp, products, display, cases, pool }
 
 class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
   late final PageController _pageController;
+  late AuthSession _session;
   int _pageIndex = 0;
-  _WorkbenchView _contentView = _WorkbenchView.products;
+  _WorkbenchView _contentView = _WorkbenchView.tasks;
+  bool _hideShellHeader = false;
+  Widget? _shellTrailing;
+  VoidCallback? _onShellBackOverride;
 
   static const _titles = {
+    _WorkbenchView.tasks: '任务',
+    _WorkbenchView.hrbp: '任务汇总',
     _WorkbenchView.products: '产品/能力',
     _WorkbenchView.display: '展示设置',
     _WorkbenchView.cases: '案例库',
     _WorkbenchView.pool: '需求任务池',
   };
 
+  bool get _isQianjiAdmin => _session.effectiveQianjiAdminAccess;
+
+  bool get _isHrbp =>
+      _session.roles.any((r) => r.toUpperCase() == 'HRBP');
+
   @override
   void initState() {
     super.initState();
     _pageController = PageController();
+    _session = AuthSessionCoordinator.instance.resolve(widget.session);
+    unawaited(_refreshSessionOnEnter());
+  }
+
+  @override
+  void didUpdateWidget(covariant NativeQianjiAdminShell oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final incoming = AuthSessionCoordinator.instance.resolve(widget.session);
+    if (incoming.token != _session.token ||
+        incoming.roles.join('|') != _session.roles.join('|')) {
+      _session = incoming;
+    }
+  }
+
+  Future<void> _refreshSessionOnEnter() async {
+    final refreshed = await AuthSessionCoordinator.instance.refreshToken();
+    if (!mounted) return;
+    setState(() {
+      _session = refreshed ?? AuthSessionCoordinator.instance.resolve(_session);
+    });
   }
 
   @override
@@ -45,12 +82,12 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
 
   bool get _isOverview => _pageIndex == 0;
 
-  void _open(_WorkbenchView view) {
+  void _open(_WorkbenchView view, {bool requireQianjiAdmin = false}) {
     if (view == _WorkbenchView.overview) {
       _goPage(0);
       return;
     }
-    if (!widget.session.effectiveQianjiAdminAccess) {
+    if (requireQianjiAdmin && !_isQianjiAdmin) {
       _showNoAccess('千机管理');
       return;
     }
@@ -59,7 +96,14 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
   }
 
   void _goPage(int index) {
-    setState(() => _pageIndex = index);
+    setState(() {
+      _pageIndex = index;
+      if (index == 0) {
+        _hideShellHeader = false;
+        _shellTrailing = null;
+        _onShellBackOverride = null;
+      }
+    });
     if (!_pageController.hasClients) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (_pageController.hasClients) {
@@ -90,118 +134,96 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
 
   @override
   Widget build(BuildContext context) {
-    if (!widget.session.effectiveQianjiAdminAccess) {
-      return ColoredBox(
-        color: const Color(0xFFF5F6F8),
-        child: Center(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 32),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Container(
-                  width: 56,
-                  height: 56,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF0EEF7),
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: const Color(0xFFE8EAED)),
-                  ),
-                  child: const Icon(
-                    Icons.lock_outline_rounded,
-                    size: 28,
-                    color: DunesColors.text3,
-                  ),
-                ),
-                const SizedBox(height: 18),
-                const Text(
-                  '暂无权限',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    color: DunesColors.text,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                const Text(
-                  '当前账号未开通「千机配置」权限，如需使用工作台请联系管理员。',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: DunesColors.text3,
-                    height: 1.5,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      );
-    }
-
     return ColoredBox(
       color: const Color(0xFFF5F6F8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
-            child: Row(
-              children: [
-                if (!_isOverview) ...[
-                  InkWell(
-                    borderRadius: BorderRadius.circular(8),
-                    onTap: () => _goPage(0),
-                    child: const Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 6, vertical: 6),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.arrow_back_ios_new, size: 14, color: DunesColors.text2),
-                          SizedBox(width: 2),
-                          Text('工作台', style: TextStyle(fontSize: 13, color: DunesColors.text2)),
-                        ],
+      child: SafeArea(
+        bottom: false,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (!_hideShellHeader)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 14, 12, 8),
+                child: Row(
+                  children: [
+                    if (!_isOverview) ...[
+                      InkWell(
+                        borderRadius: BorderRadius.circular(8),
+                        onTap: _onShellBackOverride ?? () => _goPage(0),
+                        child: const Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.arrow_back_ios_new, size: 14, color: DunesColors.text2),
+                              SizedBox(width: 2),
+                              Text('工作台', style: TextStyle(fontSize: 13, color: DunesColors.text2)),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                    ],
+                    Expanded(
+                      child: Text(
+                        _isOverview ? '工作台' : (_titles[_contentView] ?? ''),
+                        style: TextStyle(
+                          fontSize: _isOverview ? 24 : 18,
+                          fontWeight: FontWeight.w700,
+                          color: _isOverview ? DunesColors.text : _themePurple,
+                        ),
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                ],
-                Text(
-                  _isOverview ? '工作台' : (_titles[_contentView] ?? ''),
-                  style: TextStyle(
-                    fontSize: _isOverview ? 24 : 18,
-                    fontWeight: FontWeight.w700,
-                    color: _isOverview ? DunesColors.text : _themePurple,
-                  ),
+                    if (_shellTrailing != null) _shellTrailing!,
+                  ],
                 ),
-              ],
+              ),
+            Expanded(
+              child: PageView(
+                controller: _pageController,
+                onPageChanged: (i) => setState(() => _pageIndex = i),
+                children: [
+                  _buildOverviewPage(),
+                  _buildContentPage(),
+                ],
+              ),
             ),
-          ),
-          Expanded(
-            child: PageView(
-              controller: _pageController,
-              onPageChanged: (i) => setState(() => _pageIndex = i),
-              children: [
-                _buildOverviewPage(),
-                _buildContentPage(),
-              ],
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
 
+  void _onTaskChrome(TaskShellChrome chrome) {
+    if (!mounted) return;
+    setState(() {
+      _hideShellHeader = chrome.hideShellHeader;
+      _shellTrailing = chrome.trailing;
+      _onShellBackOverride = chrome.onBack;
+    });
+  }
+
   Widget _buildContentPage() {
     switch (_contentView) {
+      case _WorkbenchView.tasks:
+        return NativeTaskHomePane(
+          session: _session,
+          embedded: true,
+          onChromeChanged: _onTaskChrome,
+        );
+      case _WorkbenchView.hrbp:
+        return NativeTaskHrbpPane(
+          session: _session,
+          onChromeChanged: _onTaskChrome,
+        );
       case _WorkbenchView.products:
-        return _ProductsAdminPane(session: widget.session);
+        return _ProductsAdminPane(session: _session);
       case _WorkbenchView.display:
-        return _DisplaySettingsPane(session: widget.session);
+        return _DisplaySettingsPane(session: _session);
       case _WorkbenchView.cases:
         return const _PlaceholderPane(title: '案例库');
       case _WorkbenchView.pool:
-        return QianjiReqPoolPane(session: widget.session);
+        return QianjiReqPoolPane(session: _session);
       case _WorkbenchView.overview:
         return _buildOverviewPage();
     }
@@ -210,44 +232,29 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
   Widget _buildOverviewPage() {
     final tiles = <_WorkbenchTile>[
       _WorkbenchTile(
-        title: '产品/能力',
-        subtitle: '目录维护',
-        icon: Icons.inventory_2_outlined,
+        title: '任务',
+        subtitle: '主任务 · 子任务',
+        icon: Icons.task_alt_outlined,
         color: _themePurple,
         enabled: true,
-        onTap: () => _open(_WorkbenchView.products),
+        onTap: () => _open(_WorkbenchView.tasks),
       ),
-      _WorkbenchTile(
-        title: '需求池',
-        subtitle: '任务录入',
-        icon: Icons.playlist_add_check_outlined,
-        color: const Color(0xFFE8A838),
-        enabled: true,
-        onTap: () => _open(_WorkbenchView.pool),
-      ),
-      _WorkbenchTile(
-        title: '展示设置',
-        subtitle: '可见性',
-        icon: Icons.visibility_outlined,
-        color: const Color(0xFF5B8DEF),
-        enabled: true,
-        onTap: () => _open(_WorkbenchView.display),
-      ),
-      _WorkbenchTile(
-        title: '案例库',
-        subtitle: '敬请期待',
-        icon: Icons.collections_bookmark_outlined,
-        color: const Color(0xFF3CBFA9),
-        enabled: true,
-        onTap: () => _open(_WorkbenchView.cases),
-      ),
+      if (_isHrbp)
+        _WorkbenchTile(
+          title: '任务汇总',
+          subtitle: '部门进度',
+          icon: Icons.insights_outlined,
+          color: _hrbpAccent,
+          enabled: true,
+          onTap: () => _open(_WorkbenchView.hrbp),
+        ),
     ];
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(24, 8, 24, 40),
       children: [
         _WorkbenchSection(
-          title: '千机',
+          title: '协作',
           accent: _themePurple,
           children: tiles,
         ),
@@ -392,14 +399,19 @@ class _WorkbenchCard extends StatelessWidget {
     return Opacity(
       opacity: opacity,
       child: Material(
-        color: const Color(0xFFF8F7FB),
+        color: Colors.white,
         borderRadius: BorderRadius.circular(10),
         child: InkWell(
           borderRadius: BorderRadius.circular(10),
           onTap: tile.enabled ? tile.onTap : null,
           child: SizedBox(
             width: 132,
-            child: Padding(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: const Color(0xFFE8EAED)),
+              ),
+              child: Padding(
               padding: const EdgeInsets.fromLTRB(12, 12, 12, 10),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -409,7 +421,7 @@ class _WorkbenchCard extends StatelessWidget {
                     width: 34,
                     height: 34,
                     decoration: BoxDecoration(
-                      color: tile.color.withValues(alpha: 0.14),
+                      color: tile.color.withValues(alpha: 0.10),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Icon(tile.icon, color: tile.color, size: 18),
@@ -438,6 +450,7 @@ class _WorkbenchCard extends StatelessWidget {
                     ),
                   ),
                 ],
+              ),
               ),
             ),
           ),

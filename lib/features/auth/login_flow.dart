@@ -362,7 +362,8 @@ class _PhoneStepState extends State<_PhoneStep> {
     return AuthScaffold(
       child: Column(        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const AuthAppLogo(size: 88),          const SizedBox(height: 20),
+          const AuthAppLogo(size: 88),
+          const SizedBox(height: 20),
           Text(
             '沙丘',
             textAlign: TextAlign.center,

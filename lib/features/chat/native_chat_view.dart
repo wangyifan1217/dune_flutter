@@ -4321,6 +4321,7 @@ class _NativeChatViewState extends State<NativeChatView>
         service: _service,
         payload: payload,
         fileName: fileName,
+        saveToKbSession: widget.session,
       );
       return;
     }
@@ -4332,6 +4333,7 @@ class _NativeChatViewState extends State<NativeChatView>
       fileName: fileName,
       conversationId: _chatConversationId,
       initialLocalPath: initialLocalPath,
+      saveToKbSession: widget.session,
       onDownloaded: () {
         final key = _downloadedKey(payload, fileName);
         if (key.isEmpty || !mounted) return;

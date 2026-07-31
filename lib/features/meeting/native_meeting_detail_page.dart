@@ -274,6 +274,19 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
   bool get _kbUploaded => _kbUploadedDoc != null;
 
   bool _isKbUploadStale(NativeMeetingDetail detail) {
+    // 会话转发打开时，服务端 kbUpload 属于会议归属方，不能用来判断「我的知识库」。
+    if (widget.summaryOnly) {
+      if (!_kbUploaded) return false;
+      final meetingAt = DateTime.tryParse(detail.updatedAt.trim());
+      if (meetingAt == null ||
+          _kbSyncedMeetingUpdatedAt == null ||
+          _kbSyncedMeetingUpdatedAt!.isEmpty) {
+        return false;
+      }
+      final syncedAt = DateTime.tryParse(_kbSyncedMeetingUpdatedAt!);
+      if (syncedAt != null) return meetingAt.isAfter(syncedAt);
+      return detail.updatedAt != _kbSyncedMeetingUpdatedAt;
+    }
     if (detail.kbUpload?.stale == true) return true;
     if (!_kbUploaded && !detail.kbUploaded) return _kbMarkedStale;
 
@@ -313,6 +326,7 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
       ).showSnackBar(const SnackBar(content: Text('纪要尚未生成，暂无法上传知识库')));
       return;
     }
+    final toOwnKb = widget.summaryOnly;
     if (_kbUploaded || _isKbUploadStale(detail)) {
       final title = detail.title.trim().isNotEmpty
           ? detail.title.trim()
@@ -324,8 +338,8 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
           title: Text(stale ? '更新知识库文档' : '重新上传到知识库'),
           content: Text(
             stale
-                ? '「$title」的纪要已重新生成，知识库中的版本可能仍是旧内容。重新上传将删除旧文档并替换为最新摘要与待办（不含原始逐句转写）。\n\n是否继续？'
-                : '「$title」已上传过知识库。重新上传将删除旧版本并替换为仅含摘要与待办的新文档（不含原始逐句转写）。\n\n是否继续？',
+                ? '「$title」的纪要已重新生成，你知识库中的版本可能仍是旧内容。重新上传将删除旧文档并替换为最新摘要与待办（不含原始逐句转写）。\n\n是否继续？'
+                : '「$title」已在你的知识库中。重新上传将删除旧版本并替换为仅含摘要与待办的新文档（不含原始逐句转写）。\n\n是否继续？',
             style: DunesTypography.sans(fontSize: 14, height: 1.55),
           ),
           actions: [
@@ -351,9 +365,11 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('上传到知识库'),
+        title: Text(toOwnKb ? '存入我的知识库' : '上传到知识库'),
         content: Text(
-          '将把「$title」的会议摘要与待办上传至知识库（不含原始逐句转写），上传后可在知识库中检索引用。\n\n是否继续？',
+          toOwnKb
+              ? '将把「$title」的会议摘要与待办存入你的知识库（不含原始逐句转写），上传后可检索引用。\n\n是否继续？'
+              : '将把「$title」的会议摘要与待办上传至知识库（不含原始逐句转写），上传后可在知识库中检索引用。\n\n是否继续？',
           style: DunesTypography.sans(fontSize: 14, height: 1.55),
         ),
         actions: [
@@ -363,7 +379,7 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
           ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('确认上传'),
+            child: Text(toOwnKb ? '确认存入' : '确认上传'),
           ),
         ],
       ),
@@ -402,7 +418,7 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
           setState(() => _kbUploadedDoc = existing);
           ScaffoldMessenger.of(
             context,
-          ).showSnackBar(const SnackBar(content: Text('该会议纪要已上传至知识库')));
+          ).showSnackBar(const SnackBar(content: Text('该会议纪要已在你的知识库中')));
         }
         return;
       }
@@ -414,13 +430,46 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
                 content: Text(
-                  '删除旧 Nova 文档失败：${friendlyErrorText(e)}，将继续尝试服务端上传',
+                  '删除旧 Nova 文档失败：${friendlyErrorText(e)}，将继续尝试上传',
                 ),
               ),
             );
           }
         }
         if (mounted) setState(() => _kbUploadedDoc = null);
+      }
+
+      // 会话转发的摘要页：直接把 Markdown 上传到当前用户知识库（不依赖会议归属方的 upload-to-kb）。
+      if (widget.summaryOnly) {
+        final md = MeetingMinutesExport.buildKbUploadMarkdown(detail);
+        final bytes = Uint8List.fromList(utf8.encode(md));
+        await _kbService.uploadDocument(
+          bytes: bytes,
+          fileName: MeetingMinutesExport.kbUploadFileName(detail),
+          title: MeetingMinutesExport.kbUploadTitle(detail),
+        );
+        NativeKbDocument? uploaded = await _findKbDoc(detail);
+        uploaded ??= await _waitKbDocument(detail);
+        if (!mounted) return;
+        if (uploaded == null) {
+          throw Exception('上传已完成，但知识库列表尚未同步，请稍后刷新知识库页查看');
+        }
+        setState(() {
+          _kbUploadedDoc = uploaded;
+          _kbMarkedStale = false;
+          _kbSyncedMeetingUpdatedAt = detail.updatedAt;
+        });
+        KbDocumentCoordinator.instance.notifyChanged();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              shouldReplace
+                  ? '已更新到你的知识库（不含逐句转写），正在后台解析入库'
+                  : '已存入你的知识库，正在后台解析入库',
+            ),
+          ),
+        );
+        return;
       }
 
       await _service.uploadToKb(widget.meetingId);
@@ -613,41 +662,48 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
     );
   }
 
-  Widget? _buildSummarySectionTrailing(NativeMeetingDetail d) {
+  Widget? _buildSummaryKbUploadButton(NativeMeetingDetail d) {
     if (!MeetingMinutesExport.canExport(d)) return null;
     final uploaded = _kbUploaded;
     final stale = _isKbUploadStale(d);
+    final toOwnKb = widget.summaryOnly;
+    return IconButton(
+      tooltip: stale
+          ? '更新知识库（纪要已变更）'
+          : uploaded
+          ? '重新上传到知识库'
+          : (toOwnKb ? '存入我的知识库' : '上传到知识库'),
+      onPressed: _uploadingSummaryToKb ? null : _confirmUploadSummaryToKb,
+      icon: _uploadingSummaryToKb
+          ? const SizedBox(
+              width: 18,
+              height: 18,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          : Icon(
+              stale
+                  ? Icons.cloud_sync_outlined
+                  : uploaded
+                  ? Icons.cloud_done_outlined
+                  : Icons.cloud_upload_outlined,
+              size: 20,
+              color: stale
+                  ? DunesColors.brandPurpleDeep
+                  : uploaded
+                  ? DunesColors.readReceipt
+                  : null,
+            ),
+    );
+  }
+
+  Widget? _buildSummarySectionTrailing(NativeMeetingDetail d) {
+    final uploadBtn = _buildSummaryKbUploadButton(d);
     final exportMenu = _buildSummaryExportMenu(d);
+    if (uploadBtn == null && exportMenu == null) return null;
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        IconButton(
-          tooltip: stale
-              ? '更新知识库（纪要已变更）'
-              : uploaded
-              ? '重新上传到知识库'
-              : '上传到知识库',
-          onPressed: _uploadingSummaryToKb ? null : _confirmUploadSummaryToKb,
-          icon: _uploadingSummaryToKb
-              ? const SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : Icon(
-                  stale
-                      ? Icons.cloud_sync_outlined
-                      : uploaded
-                      ? Icons.cloud_done_outlined
-                      : Icons.cloud_upload_outlined,
-                  size: 20,
-                  color: stale
-                      ? DunesColors.brandPurpleDeep
-                      : uploaded
-                      ? DunesColors.readReceipt
-                      : null,
-                ),
-        ),
+        if (uploadBtn != null) uploadBtn,
         if (exportMenu != null) exportMenu,
       ],
     );
@@ -1041,7 +1097,27 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
               icon: const Icon(Icons.delete_outline_rounded),
               tooltip: '删除',
             ),
-          if (summaryOnly && d != null && MeetingMinutesExport.canExport(d))
+          if (summaryOnly && d != null && MeetingMinutesExport.canExport(d)) ...[
+            IconButton(
+              tooltip: _kbUploaded
+                  ? (_isKbUploadStale(d) ? '更新我的知识库' : '重新存入知识库')
+                  : '存入我的知识库',
+              onPressed:
+                  _uploadingSummaryToKb ? null : _confirmUploadSummaryToKb,
+              icon: _uploadingSummaryToKb
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : Icon(
+                      _isKbUploadStale(d)
+                          ? Icons.cloud_sync_outlined
+                          : _kbUploaded
+                          ? Icons.cloud_done_outlined
+                          : Icons.cloud_upload_outlined,
+                    ),
+            ),
             PopupMenuButton<MeetingExportFormat>(
               tooltip: '下载',
               icon: const Icon(Icons.download_outlined),
@@ -1054,6 +1130,7 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
                   ),
               ],
             ),
+          ],
           IconButton(onPressed: _load, icon: const Icon(Icons.refresh_rounded)),
         ],
       ),
@@ -1096,14 +1173,14 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
                 icon: Icons.auto_awesome_outlined,
                 trailing: summaryOnly || readOnly
                     ? (summaryOnly
+                        // AppBar 已提供「存入我的知识库」与下载，避免重复入口。
                         ? null
                         : _buildSummaryExportMenu(d))
                     : _buildSummarySectionTrailing(d),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    if (!summaryOnly &&
-                        (_kbUploaded || _isKbUploadStale(d)))
+                    if (_kbUploaded || _isKbUploadStale(d))
                       Padding(
                         padding: const EdgeInsets.only(bottom: 8),
                         child: Row(

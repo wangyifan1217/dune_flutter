@@ -5,7 +5,7 @@ import '../../core/theme/dunes_theme.dart';
 import '../conversation/comm_unread_notifier.dart';
 import '../workbench/workbench_badge_notifier.dart';
 
-/// 底部主 Tab：通讯 · NOVA · 灯塔 · 我的；PC 竖栏末尾另有「工作台」。
+/// 底部主 Tab：通讯 · NOVA · 灯塔 · 工作台 · 我的；PC 竖栏同步含「工作台」，「我的」沉底。
 /// 此为 Tab 内容区高度；iOS Home Indicator 的安全区由组件自身额外处理。
 const double kDunesMainTabBarHeight = 64;
 
@@ -98,7 +98,9 @@ class _DunesMainTabBarState extends State<DunesMainTabBar> {
     showRedDot: widget.chatOnlyMode ? false : _showMyDot,
   );
 
-  /// 主区域 Tab。PC 竖栏把「我的」放到底部「设置」上方，不掺在中间。
+  /// 主区域 Tab。
+  /// APP 底栏：通讯 · NOVA · 灯塔 · 工作台 · 我的
+  /// PC 竖栏：通讯 / NOVA / 灯塔 / 工作台；「我的」单独沉底。
   List<Widget> get _tabs => [
     _tab(
       icon: Icons.forum_outlined,
@@ -114,13 +116,13 @@ class _DunesMainTabBarState extends State<DunesMainTabBar> {
       ),
     if (!_hideWorkbenchTabs)
       _tab(icon: Icons.explore_outlined, label: '灯塔', screen: 'LH'),
-    if (!_isVertical) _myTab,
-    if (_isVertical && !_hideWorkbenchTabs)
+    if (!_hideWorkbenchTabs)
       _tab(
         icon: Icons.apps_rounded,
         label: '工作台',
         screen: 'QJA',
       ),
+    if (!_isVertical) _myTab,
   ];
 
   @override

@@ -90,7 +90,8 @@ class AuthSessionCoordinator extends ChangeNotifier {
           : body['token'] as String?;
       if (token == null || token.isEmpty) return null;
 
-      final next = session.copyWith(token: token);
+      // 重新解析 JWT，把最新 roles 等写回会话（否则只换 token、角色仍旧）。
+      final next = session.withRefreshedToken(token);
       updateSession(next);
       return next;
     } catch (_) {

@@ -54,6 +54,7 @@ class NativeConversation {
   bool get isGroup => kind == 'WORKGROUP' || kind == 'GROUP';
   bool get isRobot => kind == 'ROBOT';
   bool get isApprovalAssistant => kind == 'APPROVAL_ASSISTANT';
+  bool get isTaskAssistant => kind == 'TASK_ASSISTANT';
 
   /// kind=ROBOT 时 businessType 存 robotKey。
   String? get robotKey {

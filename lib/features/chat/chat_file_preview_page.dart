@@ -1,11 +1,15 @@
 import 'dart:async';
 
+import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/platform/desktop_features.dart';
 import '../../core/theme/dunes_theme.dart';
 import '../../core/util/friendly_error.dart';
+import '../auth/auth_session.dart';
 import '../conversation/conversation_service.dart';
+import '../kb/kb_document_coordinator.dart';
+import '../kb/native_kb_service.dart';
 import 'file_download.dart' as file_dl;
 
 const _wechatGreen = Color(0xFF07C160);
@@ -18,6 +22,7 @@ Future<void> showChatFilePreview({
   int? conversationId,
   String? initialLocalPath,
   VoidCallback? onDownloaded,
+  AuthSession? saveToKbSession,
 }) {
   final page = ChatFilePreviewPage(
     service: service,
@@ -26,6 +31,7 @@ Future<void> showChatFilePreview({
     conversationId: conversationId,
     initialLocalPath: initialLocalPath,
     onDownloaded: onDownloaded,
+    saveToKbSession: saveToKbSession,
   );
   if (isDesktopCommOnly) {
     return showDialog<void>(
@@ -70,6 +76,7 @@ class ChatFilePreviewPage extends StatefulWidget {
     this.conversationId,
     this.initialLocalPath,
     this.onDownloaded,
+    this.saveToKbSession,
   });
 
   final ConversationService service;
@@ -78,6 +85,8 @@ class ChatFilePreviewPage extends StatefulWidget {
   final int? conversationId;
   final String? initialLocalPath;
   final VoidCallback? onDownloaded;
+  /// 非空时提供「存入我的知识库」（用于 IM 转发的知识库文档）。
+  final AuthSession? saveToKbSession;
 
   @override
   State<ChatFilePreviewPage> createState() => _ChatFilePreviewPageState();
@@ -85,6 +94,7 @@ class ChatFilePreviewPage extends StatefulWidget {
 
 class _ChatFilePreviewPageState extends State<ChatFilePreviewPage> {
   bool _busy = false;
+  bool _savingToKb = false;
   double _progress = 0;
   String? _localPath;
   String? _status;
@@ -222,9 +232,74 @@ class _ChatFilePreviewPageState extends State<ChatFilePreviewPage> {
     }
   }
 
+  Future<void> _saveToKb() async {
+    final session = widget.saveToKbSession;
+    if (session == null || _savingToKb || _busy) return;
+    final title = widget.fileName.trim().isNotEmpty
+        ? widget.fileName.trim()
+        : '文档';
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('存入我的知识库'),
+        content: Text(
+          '将把「$title」存入你的知识库，上传后可检索引用。\n\n是否继续？',
+          style: DunesTypography.sans(fontSize: 14, height: 1.55),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('确认存入'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _savingToKb = true);
+    try {
+      List<int> bytes;
+      if (ConversationService.hasAuthMedia(widget.payload)) {
+        bytes = await widget.service.loadChatMediaBytes(widget.payload);
+      } else {
+        final path = await _ensureDownloaded();
+        if (path == null || path.isEmpty) {
+          throw Exception('无法读取文件内容');
+        }
+        bytes = await XFile(path).readAsBytes();
+      }
+      if (bytes.isEmpty) throw Exception('文件内容为空');
+      final kb = NativeKbService(session: session);
+      await kb.uploadDocument(
+        bytes: bytes,
+        fileName: widget.fileName,
+        title: title,
+      );
+      KbDocumentCoordinator.instance.notifyChanged();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('已存入你的知识库，正在后台解析入库')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(friendlyErrorText(e, fallback: '存入知识库失败，请稍后重试')),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _savingToKb = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final downloaded = _localPath != null && _localPath!.isNotEmpty;
+    final canSaveToKb = widget.saveToKbSession != null;
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
@@ -236,22 +311,44 @@ class _ChatFilePreviewPageState extends State<ChatFilePreviewPage> {
           icon: const Icon(Icons.chevron_left_rounded, color: Color(0xFF191919)),
         ),
         actions: [
+          if (canSaveToKb)
+            IconButton(
+              tooltip: '存入我的知识库',
+              onPressed: (_busy || _savingToKb) ? null : _saveToKb,
+              icon: _savingToKb
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(
+                      Icons.cloud_upload_outlined,
+                      color: Color(0xFF191919),
+                    ),
+            ),
           PopupMenuButton<String>(
             tooltip: '更多',
             icon: const Icon(Icons.more_horiz_rounded, color: Color(0xFF191919)),
             onSelected: (value) {
               if (value == 'download') unawaited(_downloadOnly());
+              if (value == 'saveToKb') unawaited(_saveToKb());
             },
             itemBuilder: (ctx) => [
               PopupMenuItem(
                 value: 'download',
-                enabled: !_busy && (_canRedownload || !downloaded),
+                enabled: !_busy && !_savingToKb && (_canRedownload || !downloaded),
                 child: Text(
                   downloaded
                       ? (_canRedownload ? '重新下载' : '已下载')
                       : '下载',
                 ),
               ),
+              if (canSaveToKb)
+                PopupMenuItem(
+                  value: 'saveToKb',
+                  enabled: !_busy && !_savingToKb,
+                  child: const Text('存入我的知识库'),
+                ),
             ],
           ),
         ],

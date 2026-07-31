@@ -231,7 +231,7 @@ class _NativeQianjiMeetingSupervisePageState
                   ),
                   SizedBox(width: 2),
                   Text(
-                    '千机',
+                    'NOVA',
                     style: TextStyle(fontSize: 13, color: DunesColors.text2),
                   ),
                 ],

@@ -15,6 +15,7 @@ import '../../core/widgets/cached_network_image.dart';
 import '../approval/native_approval_page.dart';
 import '../approval_assistant/native_approval_assistant_page.dart';
 import '../approval_assistant/native_approval_assistant_pending_page.dart';
+import '../task_assistant/native_task_assistant_page.dart';
 import '../auth/auth_session.dart';
 import '../auth/qr_login_scan_page.dart';
 import '../chat/native_broadcast_page.dart';
@@ -133,6 +134,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
   NativeConversation? _selectedGroup;
   NativeConversation? _selectedRobot;
   NativeConversation? _selectedApprovalAssistant;
+  NativeConversation? _selectedTaskAssistant;
   ApprovalAssistantPickMode _approvalAssistantPickMode =
       ApprovalAssistantPickMode.browse;
   /// 作废过期的「打开审批助手」异步结果，避免从灯塔等会话被事后抢跳到 AA1。
@@ -202,6 +204,10 @@ class _NativeScreenHostState extends State<NativeScreenHost>
   /// Keep lighthouse subtree alive across 通讯/我的 tab switches so L2/filters
   /// are not wiped by AnimatedSwitcher dispose. Created on first LH visit.
   bool _lighthouseMounted = false;
+
+  /// Keep 手机端会话列表 alive：进 C2/C5 等会话页再返回时不 dispose，保留滚动位置。
+  bool _inboxMounted = false;
+  final GlobalKey _inboxPageKey = GlobalKey(debugLabel: 'inbox-page-keep-alive');
 
   /// Keep PC 通讯双栏 alive across 灯塔/我的/NOVA tab switches，避免列表整页转圈。
   bool _commDualMounted = false;
@@ -1288,9 +1294,15 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     );
   }
 
-  Widget _buildConversationListPage({int? selectedConversationId}) {
+  Widget _buildConversationListPage({
+    int? selectedConversationId,
+    bool listVisible = true,
+    bool useKeepAliveKey = false,
+  }) {
     return NativeConversationPage(
-      key: const ValueKey<String>('native-conversation-inbox'),
+      key: useKeepAliveKey
+          ? _inboxPageKey
+          : const ValueKey<String>('native-conversation-inbox'),
       session: widget.session,
       navigation: widget.navigation,
       commUnread: _commUnread,
@@ -1298,6 +1310,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       selectedConversationId: selectedConversationId,
       conversationReadSignal: _conversationReadSignal,
       memberSettingsSignal: _conversationMemberSettingsSignal,
+      listVisible: listVisible,
       onOpenPrivate: _openPrivateConversation,
       onOpenGroup: _openGroupConversation,
       onOpenRobot: _openRobotConversation,
@@ -1320,6 +1333,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       },
       onOpenAiSummary: () => widget.navigation.go('AS1'),
       onOpenApprovalAssistant: _openApprovalAssistant,
+      onOpenTaskAssistant: _openTaskAssistant,
     );
   }
 
@@ -1376,6 +1390,57 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         kind: DunesToastKind.error,
       );
     }
+  }
+
+  Future<void> _openTaskAssistant([NativeConversation? hint]) async {
+    setState(() {
+      _selectedPrivate = null;
+      _selectedPrivatePeerUserId = null;
+      _selectedGroup = null;
+      _selectedRobot = null;
+      _selectedApprovalAssistant = null;
+      if (hint != null && hint.id > 0) _selectedTaskAssistant = hint;
+    });
+    if ((_selectedTaskAssistant?.id ?? 0) > 0) {
+      _markUserEnteredChat();
+      _goChatScreen('TA1');
+      _conversationReadSignal.notifyRead(_selectedTaskAssistant!.id);
+    }
+    try {
+      final conv = await ConversationService(session: widget.session)
+          .ensureTaskAssistantSession();
+      if (!mounted) return;
+      setState(() => _selectedTaskAssistant = conv);
+      _conversationReadSignal.notifyRead(conv.id);
+      if (widget.navigation.currentScreen != 'TA1') {
+        _markUserEnteredChat();
+        _goChatScreen('TA1');
+      }
+    } catch (_) {
+      if (mounted && (_selectedTaskAssistant?.id ?? 0) <= 0) {
+        showDunesToast(context, '任务助手会话同步失败', kind: DunesToastKind.error);
+      }
+    }
+  }
+
+  Widget _buildTaskAssistantPage({bool showBackButton = true}) {
+    final hint = _selectedTaskAssistant ??
+        const NativeConversation(
+          id: 0,
+          kind: 'TASK_ASSISTANT',
+          title: '任务助手',
+          unreadCount: 0,
+          preview: '',
+          updatedAt: null,
+        );
+    return NativeTaskAssistantPage(
+      key: ValueKey<int>(hint.id),
+      session: widget.session,
+      conversationHint: hint,
+      showBackButton: showBackButton,
+      onBack: () => _leaveChatToInbox(clearSelection: true),
+      onConversationRead: _handleConversationRead,
+    );
   }
 
   void _openApprovalAssistantPending(ApprovalAssistantPickMode mode) {
@@ -1977,6 +2042,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         return _buildApprovalAssistantPage();
       case 'AA2':
         return _buildApprovalAssistantPendingPage();
+      case 'TA1':
+        return _buildTaskAssistantPage();
       case 'AS1':
         return _buildAiSummaryHubPage();
       case 'AS2':
@@ -2557,13 +2624,17 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         (_isMyRoute(screen) && _isMyRoute(previousScreen)) ||
         (_isQianjiRoute(screen) && _isQianjiRoute(previousScreen));
     final isLighthouse = screen == 'LH';
+    final isInbox = screen == 'C1';
     if (isLighthouse) {
       _lighthouseMounted = true;
     }
-    // 双栏由 keep-alive 承载；此处占位避免 AnimatedSwitcher 再造一份。
+    if (isInbox) {
+      _inboxMounted = true;
+    }
+    // 双栏 / 灯塔 / 会话列表由 keep-alive 承载；此处占位避免 AnimatedSwitcher 再造一份。
     final currentScreen = dualNow
         ? const SizedBox.shrink()
-        : isLighthouse
+        : (isLighthouse || isInbox)
         ? const SizedBox.shrink()
         : _buildCurrentScreen(context);
     final child = KeyedSubtree(
@@ -2628,6 +2699,25 @@ class _NativeScreenHostState extends State<NativeScreenHost>
               ),
             ),
           ),
+        // 手机单栏会话列表：进出会话不销毁，返回时保持下滑位置。
+        // 注意：不能用 Offstage——offstage 会以 0 尺寸布局，ListView 偏移会被钳成 0。
+        // 用 Opacity + IgnorePointer 隐藏，仍按全尺寸布局，滚动位置才能保住。
+        if (_inboxMounted && !dualNow)
+          Positioned.fill(
+            child: TickerMode(
+              enabled: isInbox,
+              child: IgnorePointer(
+                ignoring: !isInbox,
+                child: Opacity(
+                  opacity: isInbox ? 1 : 0,
+                  child: _buildConversationListPage(
+                    listVisible: isInbox,
+                    useKeepAliveKey: true,
+                  ),
+                ),
+              ),
+            ),
+          ),
         if (!isLighthouse && !dualNow) animatedContent,
       ],
     );
@@ -2656,6 +2746,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       'C12',
       'C13',
       'CR',
+      'TA1',
       'Z2',
       'AS1',
       'AS2',
@@ -2762,6 +2853,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     return screen == 'C1' ||
         screen == 'B2' ||
         screen == 'QJ' ||
+        screen == 'QJA' ||
         screen == 'LH' ||
         screen == 'LM';
   }
@@ -3832,57 +3924,6 @@ class _NativeB2PageState extends State<_NativeB2Page> {
                           desc: '$_meetingCount 场 · 录音转写 · 纪要生成',
                           badge: _meetingCount,
                           onTap: () => widget.navigation.go('MM-L'),
-                        ),
-                      ]),
-                      const SizedBox(height: 10),
-                      _buildSectionLabel('千机'),
-                      const SizedBox(height: 8),
-                      _buildMenuList(<Widget>[
-                        _buildMenuItem(
-                          icon: Icons.inbox_outlined,
-                          title: '需求任务池',
-                          desc: '待处理 · 已处理 · 接收人队列',
-                          comingSoon: true,
-                          onTap: () => _showSoonToast('需求任务池'),
-                        ),
-                        _buildMenuItem(
-                          icon: Icons.person_add_alt_1_outlined,
-                          title: '人员需求录入',
-                          desc: '提交平台 / 产品 / 能力需求',
-                          comingSoon: true,
-                          onTap: () => _showSoonToast('人员需求录入'),
-                        ),
-                        _buildMenuItem(
-                          icon: Icons.collections_bookmark_outlined,
-                          title: '案例库',
-                          desc: '行业案例 · 产品 / 能力关联',
-                          comingSoon: true,
-                          onTap: () => _showSoonToast('案例库'),
-                        ),
-                        _buildMenuItem(
-                          icon: Icons.folder_special_outlined,
-                          title: '我的项目',
-                          desc: '敬请期待',
-                          comingSoon: true,
-                        ),
-                        _buildMenuItem(
-                          icon: Icons.leaderboard_outlined,
-                          title: '团队考核',
-                          desc: '敬请期待',
-                          comingSoon: true,
-                        ),
-                        _buildMenuItem(
-                          icon: Icons.assessment_outlined,
-                          title: '我的绩效',
-                          desc: '敬请期待',
-                          comingSoon: true,
-                        ),
-                        _buildMenuItem(
-                          icon: Icons.visibility_outlined,
-                          title: '展示设置',
-                          desc: '对内全量 · 对外展厅',
-                          comingSoon: true,
-                          onTap: () => _showSoonToast('展示设置'),
                         ),
                       ]),
                       if (_showDeferredTools) ...[

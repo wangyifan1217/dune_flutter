@@ -49,9 +49,11 @@ class NativeConversationPage extends StatefulWidget {
     required this.onOpenAiSummary,
     this.onOpenRobot,
     this.onOpenApprovalAssistant,
+    this.onOpenTaskAssistant,
     this.selectedConversationId,
     this.conversationReadSignal,
     this.memberSettingsSignal,
+    this.listVisible = true,
   });
 
   final AuthSession session;
@@ -67,6 +69,7 @@ class NativeConversationPage extends StatefulWidget {
   final VoidCallback onOpenAiSummary;
   final ValueChanged<NativeConversation>? onOpenRobot;
   final ValueChanged<NativeConversation>? onOpenApprovalAssistant;
+  final ValueChanged<NativeConversation>? onOpenTaskAssistant;
 
   /// 双栏布局中当前选中的会话，用于列表高亮。
   final int? selectedConversationId;
@@ -76,6 +79,9 @@ class NativeConversationPage extends StatefulWidget {
 
   /// Host 在资料页切换置顶/免打扰后，立刻同步列表排序与角标。
   final ConversationMemberSettingsSignal? memberSettingsSignal;
+
+  /// 手机端 keep-alive 时：进会话隐藏列表为 false，返回后为 true，用于恢复滚动。
+  final bool listVisible;
 
   @override
   State<NativeConversationPage> createState() => _NativeConversationPageState();
@@ -148,12 +154,14 @@ class _NativeConversationPageState extends State<NativeConversationPage>
   late final ConversationRealtimeService _realtime;
   final ConversationRealtimeDedup _realtimeDedup = ConversationRealtimeDedup();
   final TextEditingController _searchController = TextEditingController();
+  final ScrollController _listScrollController = ScrollController();
 
   StreamSubscription<ConversationRealtimeEvent>? _rtSub;
   StreamSubscription<Set<int>>? _onlineSub;
   Timer? _rtRefreshDebounce;
   Timer? _searchDebounce;
   Timer? _novaInboxPollTimer;
+  Timer? _scrollRestoreRetry;
 
   bool _loading = true;
   String? _error;
@@ -176,6 +184,7 @@ class _NativeConversationPageState extends State<NativeConversationPage>
     _aiSummaryService = AiSummaryService(session: widget.session);
     _realtime = ConversationRealtimeHub.instance.of(widget.session);
     WidgetsBinding.instance.addObserver(this);
+    _listScrollController.addListener(_onListScroll);
     userAvatarRefresh.addListener(_onSelfAvatarUpdated);
     widget.conversationReadSignal?.addListener(_onConversationReadSignal);
     widget.memberSettingsSignal?.addListener(_onMemberSettingsSignal);
@@ -196,6 +205,60 @@ class _NativeConversationPageState extends State<NativeConversationPage>
     NovaBackgroundCoordinator.instance.addListener(_onNovaBackgroundUpdate);
     RobotAnalyzingCoordinator.instance.bindSession(widget.session);
     RobotAnalyzingCoordinator.instance.addListener(_onRobotAnalyzingUpdate);
+    if (widget.listVisible) {
+      _scheduleScrollRestore();
+    }
+  }
+
+  void _persistScrollNow() {
+    if (!_listScrollController.hasClients) return;
+    ConversationInboxCache.instance.saveScrollOffset(
+      userId: widget.session.userId,
+      offset: _listScrollController.offset,
+    );
+  }
+
+  void _onListScroll() {
+    // 隐藏期间不写入，避免异常布局把 0 偏移覆盖掉真实位置。
+    if (!widget.listVisible) return;
+    _persistScrollNow();
+  }
+
+  void _scheduleScrollRestore() {
+    _scrollRestoreRetry?.cancel();
+    void attempt() {
+      if (!mounted || !widget.listVisible) return;
+      _applySavedScroll();
+    }
+
+    WidgetsBinding.instance.addPostFrameCallback((_) => attempt());
+    // 覆盖「返回后静默刷新 / 布局完成」竞态，连续多帧回写偏移。
+    _scrollRestoreRetry = Timer.periodic(const Duration(milliseconds: 48), (t) {
+      if (!mounted || !widget.listVisible || t.tick > 12) {
+        t.cancel();
+        return;
+      }
+      attempt();
+    });
+  }
+
+  void _applySavedScroll() {
+    if (!mounted || !widget.listVisible) return;
+    final target = ConversationInboxCache.instance.peekScrollOffset(
+      widget.session.userId,
+    );
+    if (target <= 0 || !_listScrollController.hasClients) return;
+    final max = _listScrollController.position.maxScrollExtent;
+    final next = target.clamp(0.0, max);
+    if ((_listScrollController.offset - next).abs() < 0.5) return;
+    _listScrollController.jumpTo(next);
+  }
+
+  VoidCallback _openWithScrollPersist(VoidCallback open) {
+    return () {
+      _persistScrollNow();
+      open();
+    };
   }
 
   Future<void> _preloadRobotCatalog() async {
@@ -222,6 +285,13 @@ class _NativeConversationPageState extends State<NativeConversationPage>
     final prev = oldWidget.selectedConversationId ?? 0;
     if (selected > 0 && selected != prev) {
       _clearUnreadLocally(selected);
+    }
+    // 从会话页返回：列表重新可见时强制恢复滚动（并扛住随后的静默刷新）。
+    if (!oldWidget.listVisible && widget.listVisible) {
+      _scheduleScrollRestore();
+    } else if (oldWidget.listVisible && !widget.listVisible) {
+      _persistScrollNow();
+      _scrollRestoreRetry?.cancel();
     }
   }
 
@@ -330,17 +400,26 @@ class _NativeConversationPageState extends State<NativeConversationPage>
 
   @override
   void dispose() {
+    if (_listScrollController.hasClients) {
+      ConversationInboxCache.instance.saveScrollOffset(
+        userId: widget.session.userId,
+        offset: _listScrollController.offset,
+      );
+    }
     WidgetsBinding.instance.removeObserver(this);
     userAvatarRefresh.removeListener(_onSelfAvatarUpdated);
     widget.conversationReadSignal?.removeListener(_onConversationReadSignal);
     widget.memberSettingsSignal?.removeListener(_onMemberSettingsSignal);
     NovaBackgroundCoordinator.instance.removeListener(_onNovaBackgroundUpdate);
     RobotAnalyzingCoordinator.instance.removeListener(_onRobotAnalyzingUpdate);
+    _scrollRestoreRetry?.cancel();
     _rtRefreshDebounce?.cancel();
     _searchDebounce?.cancel();
     _novaInboxPollTimer?.cancel();
     _rtSub?.cancel();
     _onlineSub?.cancel();
+    _listScrollController.removeListener(_onListScroll);
+    _listScrollController.dispose();
     _searchController.dispose();
     super.dispose();
   }
@@ -587,6 +666,18 @@ class _NativeConversationPageState extends State<NativeConversationPage>
           // 后端未就绪时不影响其它会话列表。
         }
       }
+      if (!widget.session.isExternalUser &&
+          widget.onOpenTaskAssistant != null &&
+          !rows.any((c) => c.isTaskAssistant)) {
+        try {
+          final ensured = await _service.ensureTaskAssistantSession();
+          if (ensured.id > 0 && !rows.any((c) => c.id == ensured.id)) {
+            rows = <NativeConversation>[...rows, ensured];
+          }
+        } catch (_) {
+          // 后端未就绪时不影响其它会话列表。
+        }
+      }
       rows = List<NativeConversation>.unmodifiable(rows);
       final dissolved = (results[0] as List<NativeConversation>)
           .where((c) => c.dissolved && c.id > 0)
@@ -639,6 +730,12 @@ class _NativeConversationPageState extends State<NativeConversationPage>
       );
       _syncNovaInboxPoll(merged, novaStorage);
       _updateCommBadge(merged, notif.unreadCount);
+      // 静默刷新后 ListView 可能重建，把保存的偏移再写回去。
+      if (widget.listVisible) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _applySavedScroll();
+        });
+      }
       if (mounted) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (!mounted) return;
@@ -802,28 +899,35 @@ class _NativeConversationPageState extends State<NativeConversationPage>
     VoidCallback onTap;
     if (c.isPrivate) {
       rowKind = ChatInboxRowKind.private;
-      onTap = () => widget.onOpenPrivate(c);
+      onTap = _openWithScrollPersist(() => widget.onOpenPrivate(c));
     } else if (c.isRobot) {
       rowKind = ChatInboxRowKind.robot;
-      onTap = () => widget.onOpenRobot?.call(c);
+      onTap = _openWithScrollPersist(() => widget.onOpenRobot?.call(c));
     } else if (c.isApprovalAssistant) {
       rowKind = ChatInboxRowKind.approvalAssistant;
-      onTap = () => widget.onOpenApprovalAssistant?.call(c);
+      onTap = _openWithScrollPersist(
+        () => widget.onOpenApprovalAssistant?.call(c),
+      );
+    } else if (c.isTaskAssistant) {
+      rowKind = ChatInboxRowKind.taskAssistant;
+      onTap = _openWithScrollPersist(
+        () => widget.onOpenTaskAssistant?.call(c),
+      );
     } else if (c.isWorkgroupApproval) {
       rowKind = ChatInboxRowKind.workgroupApproval;
-      onTap = () => widget.onOpenGroup(c);
+      onTap = _openWithScrollPersist(() => widget.onOpenGroup(c));
     } else if (c.isGroup) {
       rowKind = ChatInboxRowKind.group;
-      onTap = () => widget.onOpenGroup(c);
+      onTap = _openWithScrollPersist(() => widget.onOpenGroup(c));
     } else if (c.isBroadcast) {
       rowKind = ChatInboxRowKind.broadcast;
-      onTap = widget.onOpenNotifications;
+      onTap = _openWithScrollPersist(widget.onOpenNotifications);
     } else if (c.isAiAssistant) {
       rowKind = ChatInboxRowKind.aiAssistant;
-      onTap = () => _openNovaConversation(c);
+      onTap = _openWithScrollPersist(() => _openNovaConversation(c));
     } else {
       rowKind = ChatInboxRowKind.group;
-      onTap = () => widget.onOpenGroup(c);
+      onTap = _openWithScrollPersist(() => widget.onOpenGroup(c));
     }
 
     final gen = c.isAiAssistant
@@ -836,7 +940,8 @@ class _NativeConversationPageState extends State<NativeConversationPage>
             rowKind == ChatInboxRowKind.group ||
             rowKind == ChatInboxRowKind.workgroupApproval ||
             rowKind == ChatInboxRowKind.robot ||
-            rowKind == ChatInboxRowKind.approvalAssistant);
+            rowKind == ChatInboxRowKind.approvalAssistant ||
+            rowKind == ChatInboxRowKind.taskAssistant);
 
     final robotKey = c.robotKey ?? '';
     final analyzingRobot =
@@ -846,11 +951,13 @@ class _NativeConversationPageState extends State<NativeConversationPage>
       kind: rowKind,
       title: c.isAiAssistant
           ? _yunshuName
-          : (c.isApprovalAssistant ? '审批助手' : title),
+          : (c.isApprovalAssistant
+              ? '审批助手'
+              : (c.isTaskAssistant ? '任务助手' : title)),
       subtitle: null,
       preview: analyzingRobot
           ? '正在分析…'
-          : (c.isAiAssistant
+          : c.isAiAssistant
               ? resolveNovaInboxPreview(
                   storage: _novaStorage,
                   convId: c.id,
@@ -859,15 +966,18 @@ class _NativeConversationPageState extends State<NativeConversationPage>
                   generatingStatus: gen.status,
                   allowLocalCache: true,
                 )
-              : (c.isRobot
+              : c.isRobot
                   ? robotPlainPreview(c.preview, maxChars: 48)
-                  : (c.preview.isEmpty && c.isApprovalAssistant
+                  : c.preview.isEmpty && c.isApprovalAssistant
                       ? '待办简报 · 解释 · 催办'
-                      : c.preview))),
+                      : c.preview.isEmpty && c.isTaskAssistant
+                          ? '子任务分配 · 进度跟进'
+                          : c.preview,
       timeLabel: InboxFormat.formatTime(c.updatedAt, withClock: c.isPrivate),
       memberCount: c.isPrivate ||
               c.isRobot ||
               c.isApprovalAssistant ||
+              c.isTaskAssistant ||
               kind == 'AI_ASSISTANT' ||
               kind == 'BROADCAST'
           ? null
@@ -1132,6 +1242,8 @@ class _NativeConversationPageState extends State<NativeConversationPage>
     return RefreshIndicator(
       onRefresh: () => _load(silent: true),
       child: ListView(
+        // 不用 PageStorageKey：曾被 Offstage 钳成 0 的偏移会写回并盖掉恢复。
+        controller: _listScrollController,
         keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
         physics: const AlwaysScrollableScrollPhysics(),
         // 必须裁剪：头像 OverflowBox / 未读角标会画出行外，否则上滑会盖住「消息」标题与搜索栏。

@@ -112,6 +112,25 @@ class AuthSession {
     );
   }
 
+  /// refresh 后用新 JWT 刷新角色等声明字段；保留本地 nova / 访问开关。
+  AuthSession withRefreshedToken(String newToken) {
+    if (newToken.isEmpty) return this;
+    final fromJwt = AuthSession.fromJwt(
+      phone: phone,
+      userId: userId,
+      token: newToken,
+      apiBase: apiBase,
+    );
+    return copyWith(
+      token: newToken,
+      userId: fromJwt.userId > 0 ? fromJwt.userId : userId,
+      roles: fromJwt.roles,
+      displayName: fromJwt.displayName ?? displayName,
+      departmentId: fromJwt.departmentId ?? departmentId,
+      userType: fromJwt.userType,
+    );
+  }
+
   static AuthSession enrichFromUsersMe(
     AuthSession session,
     Map<String, dynamic> data,

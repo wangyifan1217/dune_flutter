@@ -1861,7 +1861,7 @@ class ChatKbDocCard extends StatelessWidget {
                 ),
                 const Spacer(),
                 Text(
-                  '下载 / 打开',
+                  '打开 · 可存知识库',
                   style: DunesTypography.sans(
                     fontSize: 10,
                     color: DunesColors.text3,
@@ -1973,7 +1973,7 @@ class ChatMeetingMinutesCard extends StatelessWidget {
                 ),
                 const Spacer(),
                 Text(
-                  '查看摘要',
+                  '查看 · 可存知识库',
                   style: DunesTypography.sans(
                     fontSize: 10,
                     color: DunesColors.text3,

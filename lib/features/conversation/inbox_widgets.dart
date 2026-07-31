@@ -516,6 +516,7 @@ enum ChatInboxRowKind {
   aiAssistant,
   aiSummary,
   approvalAssistant,
+  taskAssistant,
   systemNotification,
   broadcast,
   workgroupApproval,
@@ -936,6 +937,20 @@ class _Avatar extends StatelessWidget {
         );
         child = const Icon(
           Icons.fact_check_outlined,
+          color: Colors.white,
+          size: 20,
+        );
+      case ChatInboxRowKind.taskAssistant:
+        decoration = BoxDecoration(
+          borderRadius: borderRadius,
+          gradient: const LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [Color(0xFF2F8F7E), Color(0xFF5EAEDE)],
+          ),
+        );
+        child = const Icon(
+          Icons.assignment_turned_in_outlined,
           color: Colors.white,
           size: 20,
         );

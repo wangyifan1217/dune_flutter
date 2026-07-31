@@ -13,12 +13,13 @@ bool dunesToastLooksLikeError(String message) {
   return RegExp(r'失败|无法|错误|无效|不能|为空|缺少|未就绪|不支持|未允许').hasMatch(message);
 }
 
-/// 对齐 WebView `.dunes-app-toast`：底部居中、圆角深色浮层。
+/// 对齐 WebView `.dunes-app-toast`：默认底部居中；可传 [alignment] 改到屏幕中央。
 void showDunesToast(
   BuildContext context,
   String message, {
   DunesToastKind kind = DunesToastKind.normal,
   Duration duration = const Duration(milliseconds: 2800),
+  Alignment alignment = Alignment.bottomCenter,
 }) {
   final overlay = Overlay.maybeOf(context, rootOverlay: true);
   if (overlay == null) return;
@@ -31,6 +32,7 @@ void showDunesToast(
     builder: (ctx) => _DunesToastOverlay(
       message: message,
       kind: kind,
+      alignment: alignment,
     ),
   );
 
@@ -47,6 +49,25 @@ void showDunesToast(
 
 void showDunesSoonToast(BuildContext context, [String message = '敬请期待']) {
   showDunesToast(context, message);
+}
+
+/// 屏幕正中央提示（任务等模块操作反馈）。
+void showDunesCenterToast(
+  BuildContext context,
+  String message, {
+  DunesToastKind? kind,
+  Duration duration = const Duration(milliseconds: 2800),
+}) {
+  showDunesToast(
+    context,
+    message,
+    kind: kind ??
+        (dunesToastLooksLikeError(message)
+            ? DunesToastKind.error
+            : DunesToastKind.normal),
+    duration: duration,
+    alignment: Alignment.center,
+  );
 }
 
 /// 显示一条「常驻可点击」通知条：
@@ -103,10 +124,12 @@ class _DunesToastOverlay extends StatefulWidget {
   const _DunesToastOverlay({
     required this.message,
     required this.kind,
+    this.alignment = Alignment.bottomCenter,
   });
 
   final String message;
   final DunesToastKind kind;
+  final Alignment alignment;
 
   @override
   State<_DunesToastOverlay> createState() => _DunesToastOverlayState();
@@ -125,7 +148,9 @@ class _DunesToastOverlayState extends State<_DunesToastOverlay>
   );
 
   late final Animation<Offset> _slide = Tween<Offset>(
-    begin: const Offset(0, 0.12),
+    begin: widget.alignment == Alignment.center
+        ? const Offset(0, 0.04)
+        : const Offset(0, 0.12),
     end: Offset.zero,
   ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOut));
 
@@ -138,12 +163,15 @@ class _DunesToastOverlayState extends State<_DunesToastOverlay>
   @override
   Widget build(BuildContext context) {
     final bottomInset = MediaQuery.paddingOf(context).bottom;
+    final centered = widget.alignment == Alignment.center;
     return Positioned.fill(
       child: IgnorePointer(
         child: Align(
-          alignment: Alignment.bottomCenter,
+          alignment: widget.alignment,
           child: Padding(
-            padding: EdgeInsets.fromLTRB(24, 0, 24, 88 + bottomInset),
+            padding: centered
+                ? const EdgeInsets.symmetric(horizontal: 32)
+                : EdgeInsets.fromLTRB(24, 0, 24, 88 + bottomInset),
             child: FadeTransition(
               opacity: _fade,
               child: SlideTransition(

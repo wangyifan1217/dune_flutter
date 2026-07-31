@@ -575,9 +575,47 @@ class NativeKbService {
     required String docId,
     NativeKbDocument? hint,
   }) async {
+    String pickName(NativeKbDocument? doc) {
+      final fromDoc = (doc?.fileName.trim().isNotEmpty == true)
+          ? doc!.fileName.trim()
+          : (doc?.title.trim() ?? '');
+      if (fromDoc.isNotEmpty) return fromDoc;
+      return 'document';
+    }
+
+    Object? lastError;
+
+    // 快路径：列表项已带 objectKey / url 时，先直接下，少一次详情往返。
+    if (hint != null) {
+      final fastName = pickName(hint);
+      for (final key in _kbStorageKeyCandidates(hint)) {
+        try {
+          final bytes = await _downloadBytesViaStorageProxy(key);
+          if (bytes.isNotEmpty) {
+            return (bytes: bytes, fileName: fastName);
+          }
+        } catch (e) {
+          lastError = e;
+        }
+      }
+      final directUrl = hint.fileUrl.trim();
+      if (isDirectHttpUrl(directUrl) && isUrlLikelyDeviceReachable(directUrl)) {
+        try {
+          final bytes = await _downloadBytesFromUrl(directUrl);
+          if (bytes.isNotEmpty) {
+            return (bytes: bytes, fileName: fastName);
+          }
+        } catch (e) {
+          lastError = e;
+        }
+      }
+    }
+
     final dunesId = await resolveDunesDocumentIdAsync(doc: hint, docId: docId);
     if (dunesId.isEmpty) {
-      throw Exception('该文档尚未关联本地知识库，请返回刷新后重试');
+      throw lastError is Exception
+          ? lastError
+          : Exception('该文档尚未关联本地知识库，请返回刷新后重试');
     }
     NativeKbDocument? doc = hint;
     try {
@@ -585,16 +623,9 @@ class NativeKbService {
     } catch (_) {
       doc ??= hint;
     }
-    final fileName = () {
-      final fromDoc = (doc?.fileName.trim().isNotEmpty == true)
-          ? doc!.fileName.trim()
-          : (doc?.title.trim() ?? '');
-      if (fromDoc.isNotEmpty) return fromDoc;
-      return 'document';
-    }();
+    final fileName = pickName(doc);
 
-    Object? lastError;
-    // 1) 优先走鉴权 storage proxy（与预览一致，不依赖预签名）。
+    // 1) 鉴权 storage proxy（与预览一致，不依赖预签名）。
     final keys = <String>[
       if (doc != null) ..._kbStorageKeyCandidates(doc),
     ];

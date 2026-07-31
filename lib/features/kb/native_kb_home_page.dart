@@ -5,9 +5,13 @@ import 'package:flutter/material.dart';
 import 'package:mime/mime.dart';
 
 import '../../core/navigation/navigation_controller.dart';
+import '../../core/platform/desktop_features.dart';
 import '../../core/theme/dunes_theme.dart';
 import '../../core/util/friendly_error.dart';
 import '../auth/auth_session.dart';
+import '../chat/chat_file_preview_page.dart';
+import '../chat/chat_pdf_preview.dart';
+import '../chat/file_download.dart' as file_dl;
 import '../conversation/conversation_picker_sheet.dart';
 import '../conversation/conversation_service.dart';
 import '../shell/dunes_toast.dart';
@@ -115,7 +119,7 @@ class _NativeKbHomePageState extends State<NativeKbHomePage> {
           ),
         );
       }
-      await _load();
+      await _load(silent: true);
       if (!mounted) return;
       if (!_syncStatus.contains('未完成') && !_syncStatus.contains('失败')) {
         setState(() => _syncStatus = '同步完成，已更新知识库状态');
@@ -150,13 +154,37 @@ class _NativeKbHomePageState extends State<NativeKbHomePage> {
       _toast('仅支持 PDF / Word / Excel / Markdown', error: true);
       return;
     }
+    if (!mounted) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('上传到知识库'),
+        content: Text(
+          '将把「${file.name}」上传到你的知识库，上传后可检索引用。\n\n是否继续？',
+          style: DunesTypography.sans(fontSize: 14, height: 1.55),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('确认上传'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
     setState(() => _uploading = true);
     try {
       await _service.uploadDocument(
         bytes: await file.readAsBytes(),
         fileName: file.name,
       );
-      await _load();
+      KbDocumentCoordinator.instance.notifyChanged();
+      await _load(silent: true);
       if (!mounted) return;
       _toast('上传成功，正在解析入库');
     } catch (e) {
@@ -195,13 +223,163 @@ class _NativeKbHomePageState extends State<NativeKbHomePage> {
       ),
     );
     if (ok != true) return;
+    final previous = _summary;
+    // 先局部移除，避免整页 loading 闪烁。
+    if (previous != null) {
+      final nextDocs =
+          previous.documents.where((d) => d.id != doc.id).toList(growable: false);
+      setState(() {
+        _summary = NativeKbSummary(
+          documentCount: nextDocs.length,
+          categoryCount: previous.categoryCount,
+          unreadCount: previous.unreadCount,
+          ready: previous.ready,
+          documents: nextDocs,
+          folderId: previous.folderId,
+          message: previous.message,
+        );
+      });
+      _syncParsePoll(nextDocs);
+    }
     try {
       await _service.deleteDocument(doc.id);
       KbDocumentCoordinator.instance.notifyChanged();
-      await _load();
+      await _load(silent: true);
     } catch (e) {
       if (!mounted) return;
+      if (previous != null) {
+        setState(() => _summary = previous);
+        _syncParsePoll(previous.documents);
+      }
       _toast('删除失败：${friendlyErrorText(e)}', error: true);
+    }
+  }
+
+  bool _isMarkdownDoc(NativeKbDocument doc, String fileName) {
+    final ext = doc.fileExtension.trim().toLowerCase();
+    if (ext == 'md' || ext == 'markdown') return true;
+    final name = fileName.trim().toLowerCase();
+    return name.endsWith('.md') || name.endsWith('.markdown');
+  }
+
+  static const int _inAppPdfMaxBytes = 8 * 1024 * 1024;
+
+  Future<T?> _withOpenProgress<T>(Future<T> Function() action) async {
+    if (!mounted) return null;
+    unawaited(
+      showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => const Center(
+          child: Card(
+            child: Padding(
+              padding: EdgeInsets.all(20),
+              child: SizedBox(
+                width: 28,
+                height: 28,
+                child: CircularProgressIndicator(strokeWidth: 2.5),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    try {
+      return await action();
+    } finally {
+      if (mounted) {
+        final nav = Navigator.of(context, rootNavigator: true);
+        if (nav.canPop()) nav.pop();
+      }
+    }
+  }
+
+  Future<void> _openDoc(NativeKbDocument doc) async {
+    final share = KbChatDocShare.fromDocument(doc);
+    final openId = share.openDocId;
+    if (openId.isEmpty) {
+      _toast('文档无效，无法打开', error: true);
+      return;
+    }
+    final displayName = doc.fileName.trim().isNotEmpty
+        ? doc.fileName.trim()
+        : (doc.title.trim().isNotEmpty ? doc.title.trim() : '文档');
+
+    // Markdown 仍走知识库内预览页（可读性更好）。
+    if (_isMarkdownDoc(doc, displayName)) {
+      widget.onOpenDoc(doc);
+      return;
+    }
+
+    try {
+      final downloaded = await _withOpenProgress(
+        () => _service.downloadDocumentBytes(docId: openId, hint: doc),
+      );
+      if (downloaded == null || !mounted) return;
+      final fileName = downloaded.fileName.trim().isNotEmpty
+          ? downloaded.fileName.trim()
+          : displayName;
+      final localPath = await file_dl.saveBytesAsCachedFile(
+        downloaded.bytes,
+        'kb-home-$openId',
+        fileName,
+      );
+      if (!mounted) return;
+      if (localPath == null || localPath.isEmpty) {
+        _toast('保存文件失败', error: true);
+        return;
+      }
+
+      final isPdf = chatPayloadIsPdf(null, fileName);
+      // 桌面端或较大 PDF：pdfx 内存渲染易灰屏，改用系统阅读器。
+      final useSystemPdf = isPdf &&
+          (isDesktopCommOnly || downloaded.bytes.length > _inAppPdfMaxBytes);
+      if (useSystemPdf) {
+        await file_dl.openLocalFile(localPath);
+        if (!mounted) return;
+        _toast(
+          downloaded.bytes.length > _inAppPdfMaxBytes
+              ? '文件较大，已用系统应用打开'
+              : '已用系统应用打开',
+        );
+        return;
+      }
+
+      if (isPdf) {
+        try {
+          await showChatPdfPreview(
+            context: context,
+            service: _chatService,
+            payload: <String, dynamic>{
+              'fileName': fileName,
+              'mimeType': 'application/pdf',
+              'size': downloaded.bytes.length,
+            },
+            fileName: fileName,
+            initialBytes: downloaded.bytes,
+          );
+          return;
+        } catch (_) {
+          await file_dl.openLocalFile(localPath);
+          if (mounted) _toast('应用内预览失败，已用系统应用打开');
+          return;
+        }
+      }
+
+      await showChatFilePreview(
+        context: context,
+        service: _chatService,
+        payload: <String, dynamic>{
+          'fileName': fileName,
+          'mimeType': lookupMimeType(fileName) ?? 'application/octet-stream',
+          'size': downloaded.bytes.length,
+        },
+        fileName: fileName,
+        initialLocalPath: localPath,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      _toast(friendlyErrorText(e, fallback: '打开失败，请稍后重试'), error: true);
     }
   }
 
@@ -269,7 +447,7 @@ class _NativeKbHomePageState extends State<NativeKbHomePage> {
             : _error != null
             ? _buildError()
             : RefreshIndicator(
-                onRefresh: _load,
+                onRefresh: () => _load(silent: true),
                 child: ListView(
                   padding: EdgeInsets.zero,
                   children: [
@@ -617,7 +795,7 @@ class _NativeKbHomePageState extends State<NativeKbHomePage> {
             borderRadius: BorderRadius.circular(10),
             child: InkWell(
               borderRadius: BorderRadius.circular(10),
-              onTap: () => widget.onOpenDoc(doc),
+              onTap: () => unawaited(_openDoc(doc)),
               child: Container(
                 key: ValueKey(doc.id),
                 margin: const EdgeInsets.only(bottom: 8),

@@ -1917,46 +1917,58 @@ class _NovaExpandedActions extends StatelessWidget {
       (icon: Icons.attach_file_rounded, label: '文件', onTap: onAttach),
     ].where((action) => action.onTap != null).toList(growable: false);
 
+    // APP 端一行三个小名片；多出的自动换行。
+    const columns = 3;
+    const gap = 6.0;
+    const tileHeight = 58.0;
+    final rows = (actions.length / columns).ceil().clamp(1, 8);
+    final gridHeight = rows * tileHeight + (rows - 1) * gap;
+
     return Padding(
       padding: const EdgeInsets.only(top: 10),
-      child: Row(
-        children: [
-          for (final action in actions)
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 3),
-                child: Material(
-                  color: const Color(0xFFF7F7F7),
-                  borderRadius: BorderRadius.circular(12),
-                  child: InkWell(
-                    borderRadius: BorderRadius.circular(12),
-                    onTap: action.onTap,
-                    child: SizedBox(
-                      height: 66,
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            action.icon,
-                            size: 20,
-                            color: const Color(0xFF3B3B3B),
-                          ),
-                          const SizedBox(height: 5),
-                          Text(
-                            action.label,
-                            style: DunesTypography.sans(
-                              fontSize: 10.5,
-                              color: const Color(0xFF444444),
-                            ),
-                          ),
-                        ],
+      child: SizedBox(
+        height: gridHeight,
+        child: GridView.builder(
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: actions.length,
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: columns,
+            mainAxisSpacing: gap,
+            crossAxisSpacing: gap,
+            mainAxisExtent: tileHeight,
+          ),
+          itemBuilder: (context, index) {
+            final action = actions[index];
+            return Material(
+              color: const Color(0xFFF7F7F7),
+              borderRadius: BorderRadius.circular(10),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(10),
+                onTap: action.onTap,
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      action.icon,
+                      size: 18,
+                      color: const Color(0xFF3B3B3B),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      action.label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: DunesTypography.sans(
+                        fontSize: 10,
+                        color: const Color(0xFF444444),
                       ),
                     ),
-                  ),
+                  ],
                 ),
               ),
-            ),
-        ],
+            );
+          },
+        ),
       ),
     );
   }

@@ -946,19 +946,19 @@ class _BriefCard extends StatelessWidget {
     ].join(' · ');
 
     return Container(
-      constraints: const BoxConstraints(maxWidth: 340),
-      padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
+      constraints: const BoxConstraints(maxWidth: 260),
+      padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(8),
         border: Border.all(
           color: DunesColors.brandPurpleLine.withValues(alpha: 0.75),
         ),
         boxShadow: const [
           BoxShadow(
             color: Color(0x0F3A2A6A),
-            blurRadius: 10,
-            offset: Offset(0, 3),
+            blurRadius: 5,
+            offset: Offset(0, 1),
           ),
         ],
       ),
@@ -968,49 +968,47 @@ class _BriefCard extends StatelessWidget {
           Text(
             '今日审批简报',
             style: DunesTypography.sans(
-              fontSize: 15,
+              fontSize: 12,
               fontWeight: FontWeight.w700,
               color: DunesColors.brandPurpleDeep,
-              letterSpacing: 0.2,
+              letterSpacing: 0.1,
             ),
           ),
           if (pending <= 0 && initiated <= 0) ...[
-            const SizedBox(height: 10),
+            const SizedBox(height: 4),
             Text(
               fallback.isEmpty ? '暂无待审' : fallback,
               style: DunesTypography.sans(
-                fontSize: 13,
+                fontSize: 11,
                 color: DunesColors.text3,
               ),
             ),
           ] else ...[
-            const SizedBox(height: 12),
-            // 一大一小：待我审批为主视觉，我发起为次要块。
+            const SizedBox(height: 4),
+            // 待我审批为主视觉，我发起为次要块（等高不再强制撑开）。
             if (showPending && showInitiated)
-              IntrinsicHeight(
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Expanded(
-                      flex: 7,
-                      child: _BriefMetric(
-                        label: '待我审批',
-                        value: pending,
-                        hint: overdue,
-                        large: true,
-                      ),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    flex: 7,
+                    child: _BriefMetric(
+                      label: '待我审批',
+                      value: pending,
+                      hint: overdue,
+                      large: true,
                     ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      flex: 4,
-                      child: _BriefMetric(
-                        label: '我发起进行中',
-                        value: initiated,
-                        compact: true,
-                      ),
+                  ),
+                  const SizedBox(width: 4),
+                  Expanded(
+                    flex: 4,
+                    child: _BriefMetric(
+                      label: '我发起进行中',
+                      value: initiated,
+                      compact: true,
                     ),
-                  ],
-                ),
+                  ),
+                ],
               )
             else if (showPending)
               _BriefMetric(
@@ -1026,15 +1024,15 @@ class _BriefCard extends StatelessWidget {
                 large: true,
               ),
             if (pendingTypes.isNotEmpty) ...[
-              const SizedBox(height: 14),
+              const SizedBox(height: 5),
               _BriefTypeBlock(title: '待我审批', rows: pendingTypes),
             ],
             if (initiatedTypes.isNotEmpty) ...[
-              const SizedBox(height: 12),
+              const SizedBox(height: 4),
               _BriefTypeBlock(title: '我发起进行中', rows: initiatedTypes),
             ],
           ],
-          const SizedBox(height: 12),
+          const SizedBox(height: 4),
           SizedBox(
             width: double.infinity,
             child: TextButton(
@@ -1042,15 +1040,18 @@ class _BriefCard extends StatelessWidget {
               style: TextButton.styleFrom(
                 foregroundColor: DunesColors.brandPurpleDeep,
                 backgroundColor: DunesColors.brandPurpleSoft,
-                padding: const EdgeInsets.symmetric(vertical: 9),
+                padding: const EdgeInsets.symmetric(vertical: 3),
+                minimumSize: const Size(0, 24),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                visualDensity: VisualDensity.compact,
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: BorderRadius.circular(6),
                 ),
               ),
               child: Text(
                 '查看列表',
                 style: DunesTypography.sans(
-                  fontSize: 13,
+                  fontSize: 11,
                   fontWeight: FontWeight.w600,
                   color: DunesColors.brandPurpleDeep,
                 ),
@@ -1093,10 +1094,10 @@ class _BriefMetric extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final valueSize = large ? 34.0 : (compact ? 22.0 : 26.0);
+    final valueSize = large ? 14.0 : (compact ? 12.0 : 13.0);
     final pad = compact
-        ? const EdgeInsets.fromLTRB(10, 10, 10, 10)
-        : const EdgeInsets.fromLTRB(14, 12, 14, 12);
+        ? const EdgeInsets.fromLTRB(5, 4, 5, 4)
+        : const EdgeInsets.fromLTRB(6, 4, 6, 4);
     return Container(
       width: double.infinity,
       padding: pad,
@@ -1104,7 +1105,7 @@ class _BriefMetric extends StatelessWidget {
         color: large
             ? DunesColors.brandPurpleSoft
             : const Color(0xFFF7F5FB),
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(6),
         border: large
             ? null
             : Border.all(
@@ -1113,19 +1114,19 @@ class _BriefMetric extends StatelessWidget {
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.center,
+        mainAxisSize: MainAxisSize.min,
         children: [
           Text(
             label,
             maxLines: compact ? 2 : 1,
             overflow: TextOverflow.ellipsis,
             style: DunesTypography.sans(
-              fontSize: compact ? 11 : 12,
-              height: 1.2,
+              fontSize: compact ? 9 : 10,
+              height: 1.1,
               color: DunesColors.text3,
             ),
           ),
-          SizedBox(height: compact ? 6 : 4),
+          SizedBox(height: compact ? 2 : 1),
           Text(
             '$value',
             style: DunesTypography.sans(
@@ -1136,19 +1137,18 @@ class _BriefMetric extends StatelessWidget {
             ),
           ),
           if (hint.isNotEmpty) ...[
-            const SizedBox(height: 6),
+            const SizedBox(height: 1),
             Text(
               hint,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: DunesTypography.sans(
-                fontSize: 11,
+                fontSize: 9,
                 fontWeight: FontWeight.w600,
                 color: const Color(0xFFB45309),
               ),
             ),
-          ] else if (compact)
-            const SizedBox(height: 2),
+          ],
         ],
       ),
     );
@@ -1169,12 +1169,12 @@ class _BriefTypeBlock extends StatelessWidget {
         Text(
           title,
           style: DunesTypography.sans(
-            fontSize: 12,
+            fontSize: 10,
             fontWeight: FontWeight.w600,
             color: DunesColors.text3,
           ),
         ),
-        const SizedBox(height: 6),
+        const SizedBox(height: 2),
         for (var i = 0; i < rows.length; i++) ...[
           if (i > 0)
             Divider(
@@ -1183,7 +1183,7 @@ class _BriefTypeBlock extends StatelessWidget {
               color: DunesColors.brandPurpleLine.withValues(alpha: 0.35),
             ),
           Padding(
-            padding: const EdgeInsets.symmetric(vertical: 7),
+            padding: const EdgeInsets.symmetric(vertical: 2),
             child: Row(
               children: [
                 Expanded(
@@ -1192,16 +1192,16 @@ class _BriefTypeBlock extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: DunesTypography.sans(
-                      fontSize: 13,
+                      fontSize: 11,
                       color: DunesColors.text,
                     ),
                   ),
                 ),
-                const SizedBox(width: 10),
+                const SizedBox(width: 6),
                 Text(
                   '${rows[i].$2}',
                   style: DunesTypography.sans(
-                    fontSize: 13,
+                    fontSize: 11,
                     fontWeight: FontWeight.w700,
                     color: DunesColors.brandPurpleDeep,
                   ),

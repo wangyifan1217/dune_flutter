@@ -4,7 +4,7 @@ import '../../core/navigation/navigation_controller.dart';
 import '../../core/theme/dunes_theme.dart';
 import '../../core/util/friendly_error.dart';
 import '../auth/auth_session.dart';
-import '../nova/nova_markdown.dart';
+import '../meeting/meeting_minutes_markdown.dart';
 import 'native_kb_models.dart';
 import 'native_kb_service.dart';
 
@@ -178,15 +178,17 @@ class _NativeKbDocPageState extends State<NativeKbDocPage> {
 
   Widget _buildBody() {
     final doc = _doc!;
-    if (_markdown != null) {
-      return ListView(
-        padding: const EdgeInsets.all(14),
-        children: [
-          NovaMarkdownBody(
-            text: _markdown!.trim().isEmpty ? '（空文档）' : _markdown!,
-            documentPreview: true,
-          ),
-        ],
+    final md = _markdown?.trim() ?? '';
+    if (md.isNotEmpty) {
+      // 渲染 Markdown（勿用 NovaMarkdownBody.documentPreview，那会退化成纯文本）。
+      return ColoredBox(
+        color: Colors.white,
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(16, 14, 16, 28),
+          children: [
+            MeetingMinutesMarkdown(markdown: md),
+          ],
+        ),
       );
     }
     return Center(

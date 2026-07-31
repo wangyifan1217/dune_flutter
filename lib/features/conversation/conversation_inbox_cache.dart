@@ -27,6 +27,9 @@ class ConversationInboxCache {
   int? _userId;
   ConversationInboxSnapshot? _snapshot;
 
+  /// 会话列表滚动偏移（进会话再返回时恢复用）。
+  double _scrollOffset = 0;
+
   ConversationInboxSnapshot? peek(int userId) {
     if (userId <= 0) return null;
     if (_userId != userId) return null;
@@ -41,6 +44,18 @@ class ConversationInboxCache {
     );
   }
 
+  double peekScrollOffset(int userId) {
+    if (userId <= 0 || _userId != userId) return 0;
+    return _scrollOffset;
+  }
+
+  void saveScrollOffset({required int userId, required double offset}) {
+    if (userId <= 0) return;
+    if (_userId != null && _userId != userId) return;
+    _userId ??= userId;
+    _scrollOffset = offset < 0 ? 0 : offset;
+  }
+
   void put({
     required int userId,
     required List<NativeConversation> conversations,
@@ -50,6 +65,9 @@ class ConversationInboxCache {
     int aiSummaryUnread = 0,
   }) {
     if (userId <= 0) return;
+    if (_userId != null && _userId != userId) {
+      _scrollOffset = 0;
+    }
     _userId = userId;
     _snapshot = ConversationInboxSnapshot(
       conversations: List<NativeConversation>.unmodifiable(conversations),
@@ -63,5 +81,6 @@ class ConversationInboxCache {
   void clear() {
     _userId = null;
     _snapshot = null;
+    _scrollOffset = 0;
   }
 }

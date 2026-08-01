@@ -14,6 +14,7 @@ import 'features/desktop/windows_desktop_tray.dart';
 import 'features/push/push_service.dart';
 import 'features/shell/splash_screen.dart';
 import 'features/xflow/xflow_service.dart';
+import 'features/drive/native_drive_share_page.dart';
 import 'package:hotkey_manager/hotkey_manager.dart';
 import 'core/web/text_input_guard_stub.dart'
     if (dart.library.html) 'core/web/text_input_guard_web.dart';
@@ -33,10 +34,7 @@ class DunesApp extends StatelessWidget {
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,
       ],
-      supportedLocales: const [
-        Locale('zh', 'CN'),
-        Locale('en', 'US'),
-      ],
+      supportedLocales: const [Locale('zh', 'CN'), Locale('en', 'US')],
       builder: (context, child) {
         return ListenableBuilder(
           listenable: AppTextScaleController.instance,
@@ -46,17 +44,28 @@ class DunesApp extends StatelessWidget {
             return MediaQuery(
               data: media.copyWith(textScaler: TextScaler.linear(scale)),
               child: MobileViewportShell(
-                child: AppWatermark(
-                  child: child ?? const SizedBox.shrink(),
-                ),
+                child: AppWatermark(child: child ?? const SizedBox.shrink()),
               ),
             );
           },
         );
       },
-      home: const AppBootGate(),
+      home: _initialHome(),
     );
   }
+}
+
+Widget _initialHome() {
+  if (kIsWeb) {
+    final segments = Uri.base.pathSegments;
+    if (segments.length >= 3 &&
+        segments[0] == 'share' &&
+        segments[1] == 'drive') {
+      final token = segments[2].trim();
+      if (token.isNotEmpty) return NativeDriveSharePage(token: token);
+    }
+  }
+  return const AppBootGate();
 }
 
 Future<void> main() async {

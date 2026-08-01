@@ -10,6 +10,13 @@ import '../robots/robot_models.dart';
 import '../robots/robot_service.dart';
 
 const _themePurple = Color(0xFF7B5CD8);
+const _hubCardColumns = 3;
+const _hubCardGap = 12.0;
+
+double _hubCardWidth(double availableWidth) {
+  return (availableWidth - (_hubCardColumns - 1) * _hubCardGap) /
+      _hubCardColumns;
+}
 
 /// NOVA Hub：机器人（接口目录）+ 管理入口。
 class NativeQianjiHubPage extends StatefulWidget {
@@ -244,22 +251,28 @@ class _RobotHubPreview extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 14),
-          Wrap(
-            spacing: 12,
-            runSpacing: 12,
-            children: [
-              for (final robot in robots)
-                _RobotMiniCard(
-                  role: robot,
-                  onTap: () {
-                    if (onOpenRobot != null) {
-                      onOpenRobot!(robot);
-                      return;
-                    }
-                    onOpenConsultList?.call();
-                  },
-                ),
-            ],
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final cardWidth = _hubCardWidth(constraints.maxWidth);
+              return Wrap(
+                spacing: _hubCardGap,
+                runSpacing: _hubCardGap,
+                children: [
+                  for (final robot in robots)
+                    _RobotMiniCard(
+                      role: robot,
+                      width: cardWidth,
+                      onTap: () {
+                        if (onOpenRobot != null) {
+                          onOpenRobot!(robot);
+                          return;
+                        }
+                        onOpenConsultList?.call();
+                      },
+                    ),
+                ],
+              );
+            },
           ),
         ],
       ),
@@ -270,10 +283,12 @@ class _RobotHubPreview extends StatelessWidget {
 class _RobotMiniCard extends StatelessWidget {
   const _RobotMiniCard({
     required this.role,
+    required this.width,
     this.onTap,
   });
 
   final RobotRole role;
+  final double width;
   final VoidCallback? onTap;
 
   @override
@@ -291,7 +306,7 @@ class _RobotMiniCard extends StatelessWidget {
             borderRadius: BorderRadius.circular(10),
             onTap: onTap,
             child: SizedBox(
-              width: 132,
+              width: width,
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(12, 12, 12, 10),
                 child: Column(
@@ -517,12 +532,18 @@ class _NovaHubSection extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 14),
-          Wrap(
-            spacing: 12,
-            runSpacing: 12,
-            children: [
-              for (final tile in children) _NovaHubCard(tile: tile),
-            ],
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final cardWidth = _hubCardWidth(constraints.maxWidth);
+              return Wrap(
+                spacing: _hubCardGap,
+                runSpacing: _hubCardGap,
+                children: [
+                  for (final tile in children)
+                    _NovaHubCard(tile: tile, width: cardWidth),
+                ],
+              );
+            },
           ),
         ],
       ),
@@ -531,9 +552,10 @@ class _NovaHubSection extends StatelessWidget {
 }
 
 class _NovaHubCard extends StatelessWidget {
-  const _NovaHubCard({required this.tile});
+  const _NovaHubCard({required this.tile, required this.width});
 
   final _NovaHubTile tile;
+  final double width;
 
   @override
   Widget build(BuildContext context) {
@@ -544,7 +566,7 @@ class _NovaHubCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(10),
         onTap: tile.onTap,
         child: SizedBox(
-          width: 132,
+          width: width,
           child: Padding(
             padding: const EdgeInsets.fromLTRB(12, 12, 12, 10),
             child: Column(

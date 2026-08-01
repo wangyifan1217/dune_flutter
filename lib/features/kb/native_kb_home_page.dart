@@ -14,11 +14,16 @@ import '../chat/chat_pdf_preview.dart';
 import '../chat/file_download.dart' as file_dl;
 import '../conversation/conversation_picker_sheet.dart';
 import '../conversation/conversation_service.dart';
+import '../drive/chat_save_to_drive.dart';
+import '../drive/native_drive_service.dart';
 import '../shell/dunes_toast.dart';
 import 'kb_chat_share.dart';
 import 'kb_document_coordinator.dart';
 import 'native_kb_models.dart';
 import 'native_kb_service.dart';
+
+const _driveBlue = Color(0xFF3B82F6);
+const _driveBlueSoft = Color(0xFFEFF6FF);
 
 class NativeKbHomePage extends StatefulWidget {
   const NativeKbHomePage({
@@ -48,6 +53,8 @@ class _NativeKbHomePageState extends State<NativeKbHomePage> {
   bool _syncing = false;
   bool _uploading = false;
   String? _forwardingDocId;
+  String? _savingDriveDocId;
+  final Set<String> _driveSavedDocKeys = <String>{};
   String? _error;
   String _syncStatus = '打开页面自动读本地库 · 后台同步 RAGFlow · 可手动刷新';
   Timer? _parsePollTimer;
@@ -81,6 +88,7 @@ class _NativeKbHomePageState extends State<NativeKbHomePage> {
         if (!silent) _loading = false;
       });
       _syncParsePoll(summary.documents);
+      unawaited(_refreshDriveSavedStatus(summary.documents));
     } catch (e) {
       if (!mounted) return;
       if (!silent) {
@@ -89,6 +97,36 @@ class _NativeKbHomePageState extends State<NativeKbHomePage> {
           _loading = false;
         });
       }
+    }
+  }
+
+  String _driveSourceKeyForDoc(NativeKbDocument doc) {
+    final share = KbChatDocShare.fromDocument(doc);
+    final id = share.openDocId.trim().isNotEmpty
+        ? share.openDocId.trim()
+        : doc.id.trim();
+    return id.isEmpty ? '' : 'kb-doc-$id';
+  }
+
+  Future<void> _refreshDriveSavedStatus(List<NativeKbDocument> docs) async {
+    final keys = docs
+        .map(_driveSourceKeyForDoc)
+        .where((k) => k.isNotEmpty)
+        .toList(growable: false);
+    if (keys.isEmpty) return;
+    final drive = NativeDriveService(session: widget.session);
+    try {
+      final saved = await drive.fetchChatSavedKeys(keys);
+      if (!mounted) return;
+      setState(() {
+        _driveSavedDocKeys
+          ..clear()
+          ..addAll(saved);
+      });
+    } catch (_) {
+      // 标记查询失败不影响列表。
+    } finally {
+      drive.close();
     }
   }
 
@@ -354,9 +392,12 @@ class _NativeKbHomePageState extends State<NativeKbHomePage> {
               'fileName': fileName,
               'mimeType': 'application/pdf',
               'size': downloaded.bytes.length,
+              'objectKey': 'kb-home-$openId',
             },
             fileName: fileName,
             initialBytes: downloaded.bytes,
+            saveToKbSession: widget.session,
+            saveToDriveSession: widget.session,
           );
           return;
         } catch (_) {
@@ -373,9 +414,12 @@ class _NativeKbHomePageState extends State<NativeKbHomePage> {
           'fileName': fileName,
           'mimeType': lookupMimeType(fileName) ?? 'application/octet-stream',
           'size': downloaded.bytes.length,
+          'objectKey': 'kb-home-$openId',
         },
         fileName: fileName,
         initialLocalPath: localPath,
+        saveToKbSession: widget.session,
+        saveToDriveSession: widget.session,
       );
     } catch (e) {
       if (!mounted) return;
@@ -384,7 +428,7 @@ class _NativeKbHomePageState extends State<NativeKbHomePage> {
   }
 
   Future<void> _forwardDoc(NativeKbDocument doc) async {
-    if (_forwardingDocId != null) return;
+    if (_forwardingDocId != null || _savingDriveDocId != null) return;
     final share = KbChatDocShare.fromDocument(doc);
     if (share.openDocId.isEmpty) {
       _toast('文档无效，暂无法转发', error: true);
@@ -423,6 +467,46 @@ class _NativeKbHomePageState extends State<NativeKbHomePage> {
       _toast(friendlyErrorText(e, fallback: '转发失败，请稍后重试'), error: true);
     } finally {
       if (mounted) setState(() => _forwardingDocId = null);
+    }
+  }
+
+  Future<void> _saveDocToDrive(NativeKbDocument doc) async {
+    if (_savingDriveDocId != null || _forwardingDocId != null) return;
+    final share = KbChatDocShare.fromDocument(doc);
+    if (share.openDocId.isEmpty) {
+      _toast('文档无效，暂无法存入微盘', error: true);
+      return;
+    }
+    setState(() => _savingDriveDocId = doc.id);
+    try {
+      final downloaded = await _service.downloadDocumentBytes(
+        docId: share.openDocId,
+        hint: doc,
+      );
+      if (!mounted) return;
+      final fileName = downloaded.fileName.trim().isNotEmpty
+          ? downloaded.fileName.trim()
+          : (doc.fileName.trim().isNotEmpty ? doc.fileName.trim() : share.title);
+      final mimeType = lookupMimeType(fileName) ??
+          lookupMimeType('file.${doc.fileExtension}') ??
+          'application/octet-stream';
+      final sourceKey = _driveSourceKeyForDoc(doc);
+      final ok = await saveBytesToDrive(
+        context: context,
+        session: widget.session,
+        bytes: downloaded.bytes,
+        fileName: fileName,
+        mimeType: mimeType,
+        sourceKey: sourceKey,
+      );
+      if (ok && sourceKey.isNotEmpty && mounted) {
+        setState(() => _driveSavedDocKeys.add(sourceKey));
+      }
+    } catch (e) {
+      if (!mounted) return;
+      _toast(friendlyErrorText(e, fallback: '存入微盘失败，请稍后重试'), error: true);
+    } finally {
+      if (mounted) setState(() => _savingDriveDocId = null);
     }
   }
 
@@ -869,11 +953,53 @@ class _NativeKbHomePageState extends State<NativeKbHomePage> {
                         ],
                       ),
                     ),
+                    Builder(
+                      builder: (context) {
+                        final driveKey = _driveSourceKeyForDoc(doc);
+                        final driveSaved = driveKey.isNotEmpty &&
+                            _driveSavedDocKeys.contains(driveKey);
+                        return Tooltip(
+                          message: driveSaved ? '再次存入微盘' : '存入微盘',
+                          child: Material(
+                            color: _driveBlueSoft,
+                            borderRadius: BorderRadius.circular(8),
+                            child: InkWell(
+                              onTap: _savingDriveDocId == doc.id ||
+                                      _forwardingDocId != null
+                                  ? null
+                                  : () => unawaited(_saveDocToDrive(doc)),
+                              borderRadius: BorderRadius.circular(8),
+                              child: SizedBox(
+                                width: 30,
+                                height: 30,
+                                child: _savingDriveDocId == doc.id
+                                    ? const Padding(
+                                        padding: EdgeInsets.all(7),
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                          color: _driveBlue,
+                                        ),
+                                      )
+                                    : Icon(
+                                        driveSaved
+                                            ? Icons.folder_copy_outlined
+                                            : Icons.folder_shared_outlined,
+                                        size: 15,
+                                        color: _driveBlue,
+                                      ),
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                    const SizedBox(width: 6),
                     Material(
                       color: DunesColors.brandPurpleSoft,
                       borderRadius: BorderRadius.circular(8),
                       child: InkWell(
-                        onTap: _forwardingDocId == doc.id
+                        onTap: _forwardingDocId == doc.id ||
+                                _savingDriveDocId != null
                             ? null
                             : () => unawaited(_forwardDoc(doc)),
                         borderRadius: BorderRadius.circular(8),

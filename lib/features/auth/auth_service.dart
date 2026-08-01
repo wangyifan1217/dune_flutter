@@ -94,11 +94,19 @@ class AuthService {
     );
   }
 
-  Future<RegistrationPhoneCheck> checkRegistrationPhone(String phone) async {
+  Future<RegistrationPhoneCheck> checkRegistrationPhone(
+    String phone, {
+    String inviteCode = '',
+  }) async {
     if (!RegExp(r'^\d{11}$').hasMatch(phone)) {
       throw AuthException('请输入 11 位手机号');
     }
-    final uri = Uri.parse('$apiBase/auth/register/check?phone=${Uri.encodeQueryComponent(phone)}');
+    final params = <String, String>{'phone': phone};
+    final invite = inviteCode.trim();
+    if (invite.isNotEmpty) params['inviteCode'] = invite;
+    final uri = Uri.parse('$apiBase/auth/register/check').replace(
+      queryParameters: params,
+    );
     final resp = await _client.get(uri);
     if (resp.statusCode < 200 || resp.statusCode >= 300) {
       throw AuthException(
@@ -109,15 +117,63 @@ class AuthService {
     return RegistrationPhoneCheck.fromJson(data);
   }
 
-  Future<void> requestRegistrationSmsCode({required String phone}) async {
+  Future<RegistrationInviteCheck> checkRegistrationInvite(String code) async {
+    final raw = code.trim();
+    if (raw.isEmpty) {
+      throw AuthException('请输入或扫描邀请码');
+    }
+    final uri = Uri.parse('$apiBase/auth/register/invite').replace(
+      queryParameters: <String, String>{'code': raw},
+    );
+    final resp = await _client.get(uri);
+    if (resp.statusCode < 200 || resp.statusCode >= 300) {
+      throw AuthException(
+        _registrationApiMessage(resp.body, fallback: '邀请码无效或已失效'),
+      );
+    }
+    return RegistrationInviteCheck.fromJson(_unwrapData(resp.body));
+  }
+
+  Future<RegistrationInvite> fetchMyInvite({required String token}) async {
+    final uri = Uri.parse('$apiBase/me/invite');
+    final resp = await _client.get(
+      uri,
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+      },
+    );
+    if (resp.statusCode == 403) {
+      throw AuthException(
+        _registrationApiMessage(resp.body, fallback: '仅组织员工可邀请外部用户'),
+      );
+    }
+    if (resp.statusCode < 200 || resp.statusCode >= 300) {
+      throw AuthException(
+        _registrationApiMessage(resp.body, fallback: '获取邀请码失败'),
+      );
+    }
+    return RegistrationInvite.fromJson(_unwrapData(resp.body));
+  }
+
+  Future<void> requestRegistrationSmsCode({
+    required String phone,
+    required String inviteCode,
+  }) async {
     if (!RegExp(r'^\d{11}$').hasMatch(phone)) {
       throw AuthException('请输入 11 位手机号');
+    }
+    if (inviteCode.trim().isEmpty) {
+      throw AuthException('缺少有效邀请码');
     }
     final uri = Uri.parse('$apiBase/auth/register/sms/request');
     final resp = await _client.post(
       uri,
       headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({'phone': phone}),
+      body: jsonEncode({
+        'phone': phone,
+        'inviteCode': inviteCode.trim(),
+      }),
     );
     if (resp.statusCode < 200 || resp.statusCode >= 300) {
       throw AuthException(
@@ -130,9 +186,12 @@ class AuthService {
     required String phone,
     required String code,
     required String displayName,
+    required String inviteCode,
     String organizationName = '',
-    String referrerName = '',
   }) async {
+    if (inviteCode.trim().isEmpty) {
+      throw AuthException('缺少有效邀请码');
+    }
     final uri = Uri.parse('$apiBase/auth/register/submit');
     final resp = await _client.post(
       uri,
@@ -142,7 +201,7 @@ class AuthService {
         'code': code,
         'displayName': displayName,
         'organizationName': organizationName,
-        'referrerName': referrerName,
+        'inviteCode': inviteCode.trim(),
       }),
     );
     if (resp.statusCode < 200 || resp.statusCode >= 300) {
@@ -284,6 +343,66 @@ class RegistrationPhoneCheck {
       allowed: json['allowed'] == true,
       reason: json['reason'] as String?,
       applicationStatus: json['applicationStatus'] as String?,
+    );
+  }
+}
+
+class RegistrationInviteCheck {
+  const RegistrationInviteCheck({
+    required this.valid,
+    required this.code,
+    required this.inviterUserId,
+    required this.inviterName,
+    this.reason,
+  });
+
+  final bool valid;
+  final String code;
+  final int inviterUserId;
+  final String inviterName;
+  final String? reason;
+
+  factory RegistrationInviteCheck.fromJson(Map<String, dynamic> json) {
+    return RegistrationInviteCheck(
+      valid: json['valid'] == true,
+      code: (json['code'] as String?)?.trim() ?? '',
+      inviterUserId: (json['inviterUserId'] as num?)?.toInt() ?? 0,
+      inviterName: (json['inviterName'] as String?)?.trim() ?? '',
+      reason: json['reason'] as String?,
+    );
+  }
+}
+
+class RegistrationInvite {
+  const RegistrationInvite({
+    required this.id,
+    required this.code,
+    required this.inviterUserId,
+    required this.inviterName,
+    required this.enabled,
+    required this.qrPayload,
+    this.inviteCount = 0,
+  });
+
+  final int id;
+  final String code;
+  final int inviterUserId;
+  final String inviterName;
+  final bool enabled;
+  final String qrPayload;
+  final int inviteCount;
+
+  factory RegistrationInvite.fromJson(Map<String, dynamic> json) {
+    final code = (json['code'] as String?)?.trim() ?? '';
+    final qr = (json['qrPayload'] as String?)?.trim() ?? '';
+    return RegistrationInvite(
+      id: (json['id'] as num?)?.toInt() ?? 0,
+      code: code,
+      inviterUserId: (json['inviterUserId'] as num?)?.toInt() ?? 0,
+      inviterName: (json['inviterName'] as String?)?.trim() ?? '',
+      enabled: json['enabled'] != false,
+      qrPayload: qr.isNotEmpty ? qr : 'dunes://invite?code=$code',
+      inviteCount: (json['inviteCount'] as num?)?.toInt() ?? 0,
     );
   }
 }

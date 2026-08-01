@@ -50,7 +50,7 @@ String cameraPermissionHint(PermissionStatus status) {
   if (status.isPermanentlyDenied || status.isRestricted) {
     return '相机权限未开启，请在系统设置中允许「沙丘X」使用相机';
   }
-  return '请先允许相机权限，以便扫码登录或在聊天、NOVA 中拍摄照片';
+  return '请先允许相机权限，以便扫描内部员工邀请码完成注册，或在聊天、NOVA 中拍摄照片';
 }
 
 String photosPermissionHint(PermissionStatus status) {

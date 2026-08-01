@@ -101,6 +101,9 @@ String friendlyErrorText(Object? error, {String fallback = '操作失败，请�
       low.contains('no human approval steps')) {
     return '审批流程未配置完整，请联系管理员';
   }
+  if (low.contains('move is limited to the same space')) {
+    return '移动仅限同一空间，跨空间请使用复制';
+  }
   // 其它纯英文技术错误统一兜底，不直接暴露给用户。
   return fallback;
 }

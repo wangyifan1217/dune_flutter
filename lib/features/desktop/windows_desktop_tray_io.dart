@@ -66,6 +66,10 @@ class WindowsDesktopTray with WindowListener, TrayListener {
   bool? _lastInactiveNotified;
   Timer? _flashTimer;
   Future<void> _iconChain = Future<void>.value();
+  bool _iconBusy = false;
+  String? _lastIconPath;
+  String? _desiredIconPath;
+  bool _syncFlashQueued = false;
   String _trayIcon = _trayIconWin;
   String _trayIconBlank = _trayIconWinBlank;
   Future<void> Function()? onBeforeQuit;
@@ -150,16 +154,30 @@ class WindowsDesktopTray with WindowListener, TrayListener {
 
   void updateUnread(int total) {
     if (!_ready) return;
-    _unread = total < 0 ? 0 : total;
+    final next = total < 0 ? 0 : total;
+    final changed = next != _unread;
+    _unread = next;
     if (_unread == 0) _pendingAlert = false;
-    unawaited(_syncFlash());
+    // 未读未变且已在正确闪烁/静止态时跳过，避免弱网角标轮询把 setIcon 打爆。
+    if (!changed) return;
+    _queueSyncFlash();
   }
 
   void notifyIncomingMessage() {
     // 仅窗口不可见时标记提醒；前台失焦不闪，避免托盘狂抖。
     if (!_ready || !_shouldFlashTray) return;
+    if (_pendingAlert && _flashing) return;
     _pendingAlert = true;
-    unawaited(_syncFlash());
+    _queueSyncFlash();
+  }
+
+  void _queueSyncFlash() {
+    if (_syncFlashQueued) return;
+    _syncFlashQueued = true;
+    scheduleMicrotask(() {
+      _syncFlashQueued = false;
+      unawaited(_syncFlash());
+    });
   }
 
   Future<void> reveal() => _showFromTray();
@@ -172,7 +190,7 @@ class WindowsDesktopTray with WindowListener, TrayListener {
     // Windows：从任务栏隐藏；macOS：从 Dock 隐藏，仅留状态栏图标
     await windowManager.setSkipTaskbar(true);
     _emitInactiveChanged();
-    await _syncFlash();
+    _queueSyncFlash();
   }
 
   Future<void> _showFromTray() async {
@@ -242,13 +260,36 @@ class WindowsDesktopTray with WindowListener, TrayListener {
   }
 
   Future<void> _setTrayIcon(String path) {
-    // 串行化 setIcon，避免闪烁/停止交错导致托盘图标抽搐。
+    // 合并为目标路径：弱网/高负载时 setIcon 变慢，禁止无限排队导致「补帧狂抖」。
+    _desiredIconPath = path;
+    if (_iconBusy) return _iconChain;
+    if (_lastIconPath == path) return _iconChain;
+
+    _iconBusy = true;
+    final target = path;
     _iconChain = _iconChain
         .catchError((_) {})
         .then((_) async {
-          try {
-            await trayManager.setIcon(path);
-          } catch (_) {}
+          var next = _desiredIconPath ?? target;
+          while (true) {
+            if (_lastIconPath == next) break;
+            try {
+              await trayManager.setIcon(next);
+              _lastIconPath = next;
+            } catch (_) {
+              break;
+            }
+            final latest = _desiredIconPath ?? next;
+            if (latest == next) break;
+            next = latest;
+          }
+        })
+        .whenComplete(() {
+          _iconBusy = false;
+          final latest = _desiredIconPath;
+          if (latest != null && latest != _lastIconPath) {
+            unawaited(_setTrayIcon(latest));
+          }
         });
     return _iconChain;
   }
@@ -272,8 +313,9 @@ class WindowsDesktopTray with WindowListener, TrayListener {
     _flashing = true;
     _flashVisible = true;
     _flashTimer?.cancel();
-    // 略放慢节奏，减少「狂抖」观感；仅 invisible 态才需要切换。
-    _flashTimer = Timer.periodic(const Duration(milliseconds: 700), (_) {
+    // 放慢节奏；上一帧 setIcon 未完成则跳过，避免队列堆积后狂抖。
+    _flashTimer = Timer.periodic(const Duration(milliseconds: 1000), (_) {
+      if (_iconBusy) return;
       unawaited(_toggleFlashIcon());
     });
   }
@@ -287,7 +329,7 @@ class WindowsDesktopTray with WindowListener, TrayListener {
   }
 
   Future<void> _toggleFlashIcon() async {
-    if (!_flashing) return;
+    if (!_flashing || _iconBusy) return;
     _flashVisible = !_flashVisible;
     await _setTrayIcon(_flashVisible ? _trayIcon : _trayIconBlank);
   }
@@ -314,7 +356,7 @@ class WindowsDesktopTray with WindowListener, TrayListener {
     _minimized = false;
     _focused = true;
     _pendingAlert = false;
-    unawaited(_syncFlash());
+    _queueSyncFlash();
     _emitInactiveChanged();
   }
 
@@ -323,7 +365,7 @@ class WindowsDesktopTray with WindowListener, TrayListener {
     _minimized = true;
     _emitInactiveChanged();
     // 最小化后若有未读，开始托盘闪烁提醒。
-    unawaited(_syncFlash());
+    _queueSyncFlash();
   }
 
   @override
@@ -340,7 +382,7 @@ class WindowsDesktopTray with WindowListener, TrayListener {
     if (!_hidden) {
       _pendingAlert = false;
     }
-    unawaited(_syncFlash());
+    _queueSyncFlash();
     _emitInactiveChanged();
   }
 

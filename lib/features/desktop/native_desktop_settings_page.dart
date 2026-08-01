@@ -11,9 +11,26 @@ import '../shell/dunes_toast.dart';
 
 /// PC 端企微/微信风格设置页，侧栏「设置」入口。
 class NativeDesktopSettingsPage extends StatefulWidget {
-  const NativeDesktopSettingsPage({super.key, required this.onBack});
+  const NativeDesktopSettingsPage({
+    super.key,
+    required this.onBack,
+    this.onOpenTextScale,
+    this.onCheckForUpdates,
+    this.onScanWorkstation,
+    this.onOpenWechatBot,
+    this.onClearCache,
+    this.onStartProposal,
+    this.onLogout,
+  });
 
   final VoidCallback onBack;
+  final VoidCallback? onOpenTextScale;
+  final VoidCallback? onCheckForUpdates;
+  final VoidCallback? onScanWorkstation;
+  final VoidCallback? onOpenWechatBot;
+  final VoidCallback? onClearCache;
+  final VoidCallback? onStartProposal;
+  final VoidCallback? onLogout;
 
   @override
   State<NativeDesktopSettingsPage> createState() =>
@@ -116,6 +133,13 @@ class _NativeDesktopSettingsPageState extends State<NativeDesktopSettingsPage> {
         body: ListView(
           children: [
             const GroupInfoSectionLabel('通用'),
+            if (widget.onOpenTextScale != null)
+              _buildActionRow(
+                icon: Icons.format_size_rounded,
+                title: '字体大小',
+                subtitle: '调整后作用于整个 App',
+                onTap: widget.onOpenTextScale!,
+              ),
             GroupInfoRow(
               icon: Icons.folder_outlined,
               title: '文件保存位置',
@@ -148,6 +172,52 @@ class _NativeDesktopSettingsPageState extends State<NativeDesktopSettingsPage> {
                 trailing: const GroupInfoChevron(),
                 onTap: _busy ? null : _resetSaveDir,
               ),
+            if (widget.onCheckForUpdates != null ||
+                widget.onScanWorkstation != null ||
+                widget.onOpenWechatBot != null ||
+                widget.onClearCache != null ||
+                widget.onStartProposal != null) ...[
+              const GroupInfoSectionLabel('应用与工具'),
+              if (widget.onCheckForUpdates != null)
+                _buildActionRow(
+                  icon: Icons.system_update_alt_rounded,
+                  title: '检查更新',
+                  onTap: widget.onCheckForUpdates!,
+                ),
+              if (widget.onScanWorkstation != null)
+                _buildActionRow(
+                  icon: Icons.qr_code_scanner_rounded,
+                  title: '扫码登录工作台',
+                  onTap: widget.onScanWorkstation!,
+                ),
+              if (widget.onOpenWechatBot != null)
+                _buildActionRow(
+                  icon: Icons.chat_rounded,
+                  title: '微信 Bot',
+                  onTap: widget.onOpenWechatBot!,
+                ),
+              if (widget.onClearCache != null)
+                _buildActionRow(
+                  icon: Icons.cleaning_services_outlined,
+                  title: '清除本地缓存',
+                  onTap: widget.onClearCache!,
+                ),
+              if (widget.onStartProposal != null)
+                _buildActionRow(
+                  icon: Icons.add_circle_outline_rounded,
+                  title: '发起提案',
+                  onTap: widget.onStartProposal!,
+                ),
+            ],
+            if (widget.onLogout != null) ...[
+              const GroupInfoSectionLabel('账号'),
+              _buildActionRow(
+                icon: Icons.logout_rounded,
+                title: '退出登录',
+                onTap: widget.onLogout!,
+                accentIcon: true,
+              ),
+            ],
             const GroupInfoSectionLabel(''),
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
@@ -163,6 +233,23 @@ class _NativeDesktopSettingsPageState extends State<NativeDesktopSettingsPage> {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildActionRow({
+    required IconData icon,
+    required String title,
+    required VoidCallback onTap,
+    String? subtitle,
+    bool accentIcon = false,
+  }) {
+    return GroupInfoRow(
+      icon: icon,
+      title: title,
+      subtitle: subtitle,
+      accentIcon: accentIcon,
+      trailing: const GroupInfoChevron(),
+      onTap: onTap,
     );
   }
 }

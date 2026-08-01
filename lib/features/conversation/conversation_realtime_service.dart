@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:centrifuge/centrifuge.dart' as centrifuge;
 import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
 
 import '../../core/http/session_http.dart';
 import '../auth/auth_session_coordinator.dart';
@@ -44,6 +45,7 @@ class ConversationRealtimeService {
   Set<int> _onlineUsers = <int>{};
   Timer? _presenceTimer;
   Timer? _reconnectTimer;
+  int _reconnectAttempt = 0;
   int _presenceConvId = 0;
   int _presencePeerUserId = 0;
 
@@ -68,6 +70,7 @@ class ConversationRealtimeService {
   Future<void> connect() async {
     if (_closed) return;
     if (isConnected) {
+      _reconnectAttempt = 0;
       await refreshOnlinePresence();
       return;
     }
@@ -79,10 +82,14 @@ class ConversationRealtimeService {
     _reconnectTimer?.cancel();
     _connecting = true;
     _connectCompleter = Completer<void>();
+    var shouldReconnect = false;
     try {
       final payload = await _fetchConnectionToken();
       final token = (payload['token'] ?? '').toString();
-      if (token.isEmpty) return;
+      if (token.isEmpty) {
+        shouldReconnect = true;
+        return;
+      }
       final channels = (payload['channels'] as List<dynamic>? ?? const <dynamic>[])
           .map((e) => e.toString())
           .where((e) => e.isNotEmpty)
@@ -118,6 +125,7 @@ class ConversationRealtimeService {
         _dispatchPublication(event.data, event.channel);
       });
       ws.connected.listen((_) {
+        _reconnectAttempt = 0;
         _subscribeClientChannels();
         unawaited(refreshOnlinePresence());
         _presenceTimer?.cancel();
@@ -127,14 +135,27 @@ class ConversationRealtimeService {
       });
       ws.disconnected.listen((_) => _scheduleReconnect());
       ws.error.listen((_) => _scheduleReconnect());
-      await ws.connect();
+      await ws.connect().timeout(const Duration(seconds: 10));
       _subscribeClientChannels();
       await refreshOnlinePresence();
+      if (isConnected) {
+        _reconnectAttempt = 0;
+      } else {
+        shouldReconnect = true;
+      }
+    } catch (e) {
+      shouldReconnect = true;
+      if (kDebugMode) {
+        debugPrint('[ConversationRealtime] connect failed: $e');
+      }
     } finally {
       _connecting = false;
       final waiter = _connectCompleter;
       _connectCompleter = null;
       if (waiter != null && !waiter.isCompleted) waiter.complete();
+      if (shouldReconnect && !_closed && !isConnected) {
+        _scheduleReconnect();
+      }
     }
   }
 
@@ -228,8 +249,13 @@ class ConversationRealtimeService {
 
   void _scheduleReconnect() {
     if (_closed || _connecting || isConnected) return;
-    _reconnectTimer?.cancel();
-    _reconnectTimer = Timer(const Duration(seconds: 3), () {
+    if (_reconnectTimer != null) return;
+    // 指数退避：弱网下避免每 3 秒打一次无超时 HTTP。
+    final attempt = _reconnectAttempt;
+    if (_reconnectAttempt < 8) _reconnectAttempt += 1;
+    final seconds = (3 * (1 << (attempt.clamp(0, 5)))).clamp(3, 60);
+    _reconnectTimer = Timer(Duration(seconds: seconds), () {
+      _reconnectTimer = null;
       if (_closed) return;
       unawaited(connect());
     });
@@ -375,26 +401,37 @@ class ConversationRealtimeService {
 
   Future<Map<String, dynamic>> _fetchConnectionToken() async {
     final session = AuthSessionCoordinator.instance.resolve(_session);
-    final resp = await dunesHttpGet(session, '/realtime/connection-token');
-    if (resp.statusCode == 401) {
-      throw Exception('realtime token 获取失败: HTTP 401');
+    final client = http.Client();
+    try {
+      final resp = await dunesHttpGet(
+        session,
+        '/realtime/connection-token',
+        client: client,
+      ).timeout(const Duration(seconds: 8));
+      if (resp.statusCode == 401) {
+        throw Exception('realtime token 获取失败: HTTP 401');
+      }
+      if (resp.statusCode < 200 || resp.statusCode >= 300) {
+        throw Exception('realtime token 获取失败: HTTP ${resp.statusCode}');
+      }
+      final decoded = jsonDecode(resp.body);
+      if (decoded is! Map<String, dynamic>) {
+        throw Exception('realtime token 返回格式错误');
+      }
+      final success = decoded['success'];
+      if (success is bool && !success) {
+        throw Exception(
+          (decoded['message'] ?? 'realtime token 获取失败').toString(),
+        );
+      }
+      final data = decoded['data'];
+      if (data is! Map<String, dynamic>) {
+        throw Exception('realtime token data 为空');
+      }
+      return data;
+    } finally {
+      client.close();
     }
-    if (resp.statusCode < 200 || resp.statusCode >= 300) {
-      throw Exception('realtime token 获取失败: HTTP ${resp.statusCode}');
-    }
-    final decoded = jsonDecode(resp.body);
-    if (decoded is! Map<String, dynamic>) {
-      throw Exception('realtime token 返回格式错误');
-    }
-    final success = decoded['success'];
-    if (success is bool && !success) {
-      throw Exception((decoded['message'] ?? 'realtime token 获取失败').toString());
-    }
-    final data = decoded['data'];
-    if (data is! Map<String, dynamic>) {
-      throw Exception('realtime token data 为空');
-    }
-    return data;
   }
 
   String _resolveWsUrl(String serverUrl) {

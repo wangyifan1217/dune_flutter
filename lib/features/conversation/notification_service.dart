@@ -47,6 +47,13 @@ class NotificationService {
 
   final AuthSession _session;
   final http.Client _client;
+  bool _closed = false;
+
+  void close() {
+    if (_closed) return;
+    _closed = true;
+    _client.close();
+  }
 
   Future<NativeNotificationSummary> fetchSummary() async {
     final items = await fetchAll();

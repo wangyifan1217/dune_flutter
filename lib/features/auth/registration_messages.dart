@@ -27,4 +27,8 @@ const _registrationMessageMap = <String, String>{
   'sms send failed': '验证码发送失败，请稍后重试',
   'user not found': '用户不存在',
   'missing bearer token': '注册服务暂不可用，请稍后重试或联系管理员',
+  '邀请码无效或已失效': '邀请码无效或已失效',
+  '邀请码已被禁用': '邀请码已被禁用',
+  '仅组织员工可生成邀请码': '仅组织员工可邀请外部用户',
+  '外部用户不能生成邀请码': '外部用户不能邀请他人注册',
 };

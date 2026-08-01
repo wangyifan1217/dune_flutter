@@ -173,8 +173,7 @@ class _InboxHeaderActionsState extends State<_InboxHeaderActions> {
                 onAiSummary: widget.onOpenAiSummary == null
                     ? null
                     : () => _runAndClose(widget.onOpenAiSummary!),
-                onMessageCenter: () =>
-                    _runAndClose(widget.onOpenMessageCenter),
+                onMessageCenter: () => _runAndClose(widget.onOpenMessageCenter),
                 onContacts: () => _runAndClose(widget.onOpenContacts),
                 onNewChat: widget.onNewChat == null
                     ? null
@@ -517,6 +516,7 @@ enum ChatInboxRowKind {
   aiSummary,
   approvalAssistant,
   taskAssistant,
+  reconciliationAssistant,
   systemNotification,
   broadcast,
   workgroupApproval,
@@ -594,6 +594,7 @@ class ChatInboxRow extends StatelessWidget {
             kind == ChatInboxRowKind.aiSummary ||
             kind == ChatInboxRowKind.approvalAssistant ||
             kind == ChatInboxRowKind.taskAssistant ||
+            kind == ChatInboxRowKind.reconciliationAssistant ||
             kind == ChatInboxRowKind.robot
         ? const Color(0xFF7B5CD8)
         : DunesColors.coral;
@@ -619,7 +620,8 @@ class ChatInboxRow extends StatelessWidget {
                             alignment: Alignment.center,
                             maxWidth: 56,
                             maxHeight: 56,
-                            child: robotAvatar ??
+                            child:
+                                robotAvatar ??
                                 _Avatar(
                                   kind: kind,
                                   initial: avatarInitial,
@@ -952,6 +954,20 @@ class _Avatar extends StatelessWidget {
         );
         child = const Icon(
           Icons.assignment_turned_in_outlined,
+          color: Colors.white,
+          size: 20,
+        );
+      case ChatInboxRowKind.reconciliationAssistant:
+        decoration = BoxDecoration(
+          borderRadius: borderRadius,
+          gradient: const LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [Color(0xFF5B6FC4), Color(0xFF7652B8)],
+          ),
+        );
+        child = const Icon(
+          Icons.sync_alt_rounded,
           color: Colors.white,
           size: 20,
         );

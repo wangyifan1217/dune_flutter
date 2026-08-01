@@ -84,3 +84,20 @@ Future<void> deleteCachedChatFile(
     conversationId: conversationId,
   );
 }
+
+/// 微盘文件落盘：`{根目录}/企业微盘/{fileName}`（无 hash 子目录）。
+Future<String?> saveBytesAsDriveFile(
+  Uint8List bytes,
+  String fileName, {
+  String? cacheKey,
+}) async {
+  return saveBytesAsDriveFileImpl(bytes, fileName, cacheKey: cacheKey);
+}
+
+/// 查找已下载的微盘文件（先查「企业微盘」，再兼容旧 hash 目录）。
+Future<String?> findCachedDriveFile(
+  String fileName, {
+  String? cacheKey,
+}) async {
+  return findCachedDriveFileImpl(fileName, cacheKey: cacheKey);
+}

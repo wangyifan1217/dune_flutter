@@ -25,8 +25,6 @@ import 'auth_profile.dart';
 import 'auth_session.dart';
 import 'auth_session_coordinator.dart';
 import 'desktop_login_page.dart';
-import 'registration_flow.dart';
-
 const _authBlue = authBlue;
 const _authBg = authBg;
 class LoginFlow extends StatefulWidget {
@@ -426,9 +424,11 @@ class _PhoneStepState extends State<_PhoneStep> {
             height: 50,
             child: FilledButton(
               onPressed: _next,
-              style: authPrimaryButtonStyle,              child: const Text('获取验证码'),
+              style: authPrimaryButtonStyle,
+              child: const Text('获取验证码'),
             ),
           ),
+          // 「扫码邀请注册」入口暂隐藏，需要时再打开。
         ],
       ),
     );

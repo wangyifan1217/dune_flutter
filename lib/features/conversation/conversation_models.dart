@@ -55,6 +55,14 @@ class NativeConversation {
   bool get isRobot => kind == 'ROBOT';
   bool get isApprovalAssistant => kind == 'APPROVAL_ASSISTANT';
   bool get isTaskAssistant => kind == 'TASK_ASSISTANT';
+  bool get isReconciliationAssistant {
+    final normalized = kind.trim().toUpperCase();
+    return normalized == 'RECONCILIATION_ASSISTANT' ||
+        normalized == 'RECONCILIATION' ||
+        normalized == 'RECON_ASSISTANT' ||
+        normalized == 'RECONCILIATION_BOT' ||
+        normalized == 'RECON_BOT';
+  }
 
   /// kind=ROBOT 时 businessType 存 robotKey。
   String? get robotKey {
@@ -149,7 +157,8 @@ class NativeChatMessage {
       payload: payload,
       peerRead: peerRead,
       senderAvatarPreset: senderAvatarPreset ?? this.senderAvatarPreset,
-      senderAvatarObjectKey: senderAvatarObjectKey ?? this.senderAvatarObjectKey,
+      senderAvatarObjectKey:
+          senderAvatarObjectKey ?? this.senderAvatarObjectKey,
     );
   }
 }

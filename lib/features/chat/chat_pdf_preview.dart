@@ -1,16 +1,18 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
-import 'package:pdfx/pdfx.dart';
 
 import '../../core/platform/desktop_features.dart';
 import '../../core/theme/dunes_theme.dart';
 import '../../core/util/friendly_error.dart';
 import '../auth/auth_session.dart';
 import '../conversation/conversation_service.dart';
+import '../drive/chat_save_to_drive.dart';
 import '../kb/kb_document_coordinator.dart';
 import '../kb/native_kb_service.dart';
+import 'dunes_pdf_view.dart';
 import 'file_download.dart' as file_dl;
 
 Future<void> showChatPdfPreview({
@@ -19,6 +21,7 @@ Future<void> showChatPdfPreview({
   required Map<String, dynamic>? payload,
   required String fileName,
   AuthSession? saveToKbSession,
+  AuthSession? saveToDriveSession,
   Uint8List? initialBytes,
 }) {
   final page = ChatPdfPreviewPage(
@@ -26,6 +29,7 @@ Future<void> showChatPdfPreview({
     payload: payload,
     fileName: fileName,
     saveToKbSession: saveToKbSession,
+    saveToDriveSession: saveToDriveSession ?? saveToKbSession,
     initialBytes: initialBytes,
   );
   // PDF 渲染层不能包 SelectionArea，否则 Windows 上常出现整页灰屏。
@@ -75,14 +79,17 @@ class ChatPdfPreviewPage extends StatefulWidget {
     required this.payload,
     required this.fileName,
     this.saveToKbSession,
+    this.saveToDriveSession,
     this.initialBytes,
   });
 
   final ConversationService service;
   final Map<String, dynamic>? payload;
   final String fileName;
-  /// 非空时提供「存入我的知识库」（用于 IM 转发的知识库文档）。
+  /// 非空时提供「存入我的知识库」（IM 普通附件 / 知识库转发文档）。
   final AuthSession? saveToKbSession;
+  /// 非空时提供「存入微盘」。
+  final AuthSession? saveToDriveSession;
   /// 知识库等场景可直接传入已下载字节，跳过会话附件拉取。
   final Uint8List? initialBytes;
 
@@ -91,27 +98,45 @@ class ChatPdfPreviewPage extends StatefulWidget {
 }
 
 class _ChatPdfPreviewPageState extends State<ChatPdfPreviewPage> {
-  PdfControllerPinch? _controller;
+  Uint8List? _bytes;
   bool _loading = true;
   bool _downloading = false;
   bool _savingToKb = false;
+  bool _savingToDrive = false;
+  bool _driveSaved = false;
   String? _error;
 
   @override
   void initState() {
     super.initState();
     _loadPdf();
+    unawaited(_refreshDriveSaved());
   }
 
-  @override
-  void dispose() {
-    _controller?.dispose();
-    super.dispose();
+  String get _driveSourceKey {
+    final objectKey = (widget.payload?['objectKey'] ?? '').toString().trim();
+    if (objectKey.isNotEmpty) return objectKey;
+    return ConversationService.mediaDirectUrl(widget.payload);
+  }
+
+  Future<void> _refreshDriveSaved() async {
+    final session = widget.saveToDriveSession;
+    final key = _driveSourceKey;
+    if (session == null || key.isEmpty || _driveSaved) return;
+    final saved = await isChatFileSavedToDrive(
+      session: session,
+      sourceKey: key,
+    );
+    if (saved && mounted) setState(() => _driveSaved = true);
   }
 
   Future<Uint8List> _loadPdfBytes() async {
+    final cached = _bytes;
+    if (cached != null && cached.isNotEmpty) return cached;
     final initial = widget.initialBytes;
-    if (initial != null && initial.isNotEmpty) return initial;
+    if (initial != null && initial.isNotEmpty) {
+      return Uint8List.fromList(initial);
+    }
     if (ConversationService.hasAuthMedia(widget.payload)) {
       return widget.service.loadChatMediaBytes(widget.payload);
     }
@@ -137,22 +162,16 @@ class _ChatPdfPreviewPageState extends State<ChatPdfPreviewPage> {
     try {
       final raw = await _loadPdfBytes();
       if (!mounted) return;
-      // 拷贝一份，避免外部 buffer 被回收后 pdfx 渲染灰屏。
+      // 拷贝一份，避免外部 buffer 被回收后渲染灰屏。
       final bytes = Uint8List.fromList(raw);
       if (bytes.length < 5 ||
           String.fromCharCodes(bytes.take(5)) != '%PDF-') {
         throw Exception('文件不是有效的 PDF');
       }
-      final document = await PdfDocument.openData(bytes);
-      if (!mounted) {
-        await document.close();
-        return;
-      }
-      _controller?.dispose();
-      _controller = PdfControllerPinch(
-        document: Future<PdfDocument>.value(document),
-      );
-      setState(() => _loading = false);
+      setState(() {
+        _bytes = bytes;
+        _loading = false;
+      });
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -162,8 +181,49 @@ class _ChatPdfPreviewPageState extends State<ChatPdfPreviewPage> {
     }
   }
 
+  Future<void> _saveToDrive() async {
+    final session = widget.saveToDriveSession;
+    if (session == null || _savingToDrive || _downloading || _savingToKb) {
+      return;
+    }
+    final pick = await pickDriveSaveLocation(
+      context: context,
+      session: session,
+      fileName: widget.fileName,
+    );
+    if (pick == null || !mounted) return;
+
+    setState(() => _savingToDrive = true);
+    try {
+      final bytes = await _loadPdfBytes();
+      if (bytes.isEmpty) throw Exception('文件内容为空');
+      if (!mounted) return;
+      final mimeType =
+          (widget.payload?['mimeType'] ?? '').toString().trim();
+      final ok = await uploadBytesToDriveLocation(
+        context: context,
+        session: session,
+        location: pick,
+        bytes: bytes,
+        fileName: widget.fileName,
+        mimeType: mimeType.isEmpty ? 'application/pdf' : mimeType,
+        sourceKey: _driveSourceKey,
+      );
+      if (ok && mounted) setState(() => _driveSaved = true);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(friendlyErrorText(e, fallback: '存入微盘失败，请稍后重试')),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _savingToDrive = false);
+    }
+  }
+
   Future<void> _downloadPdf() async {
-    if (_downloading || _savingToKb) return;
+    if (_downloading || _savingToKb || _savingToDrive) return;
     setState(() => _downloading = true);
     try {
       final bytes = await _loadPdfBytes();
@@ -186,7 +246,9 @@ class _ChatPdfPreviewPageState extends State<ChatPdfPreviewPage> {
 
   Future<void> _saveToKb() async {
     final session = widget.saveToKbSession;
-    if (session == null || _savingToKb || _downloading) return;
+    if (session == null || _savingToKb || _downloading || _savingToDrive) {
+      return;
+    }
     final title = widget.fileName.trim().isNotEmpty
         ? widget.fileName.trim()
         : '文档';
@@ -242,6 +304,8 @@ class _ChatPdfPreviewPageState extends State<ChatPdfPreviewPage> {
   @override
   Widget build(BuildContext context) {
     final canSaveToKb = widget.saveToKbSession != null;
+    final canSaveToDrive = widget.saveToDriveSession != null;
+    final actionBusy = _downloading || _savingToKb || _savingToDrive;
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
@@ -253,9 +317,25 @@ class _ChatPdfPreviewPageState extends State<ChatPdfPreviewPage> {
           style: const TextStyle(fontSize: 16),
         ),
         actions: [
+          if (canSaveToDrive)
+            IconButton(
+              onPressed: actionBusy ? null : _saveToDrive,
+              icon: _savingToDrive
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : Icon(
+                      _driveSaved
+                          ? Icons.folder_copy_outlined
+                          : Icons.folder_shared_outlined,
+                    ),
+              tooltip: _driveSaved ? '再次存入微盘' : '存入微盘',
+            ),
           if (canSaveToKb)
             IconButton(
-              onPressed: (_downloading || _savingToKb) ? null : _saveToKb,
+              onPressed: actionBusy ? null : _saveToKb,
               icon: _savingToKb
                   ? const SizedBox(
                       width: 20,
@@ -266,7 +346,7 @@ class _ChatPdfPreviewPageState extends State<ChatPdfPreviewPage> {
               tooltip: '存入我的知识库',
             ),
           IconButton(
-            onPressed: (_downloading || _savingToKb) ? null : _downloadPdf,
+            onPressed: actionBusy ? null : _downloadPdf,
             icon: _downloading
                 ? const SizedBox(
                     width: 20,
@@ -311,14 +391,10 @@ class _ChatPdfPreviewPageState extends State<ChatPdfPreviewPage> {
         ),
       );
     }
-    final controller = _controller;
-    if (controller == null) {
+    final bytes = _bytes;
+    if (bytes == null || bytes.isEmpty) {
       return const SizedBox.shrink();
     }
-    return PdfViewPinch(
-      controller: controller,
-      padding: 10,
-      scrollDirection: Axis.vertical,
-    );
+    return DunesPdfView(bytes: bytes, padding: 10);
   }
 }

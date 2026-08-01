@@ -50,6 +50,7 @@ class NativeConversationPage extends StatefulWidget {
     this.onOpenRobot,
     this.onOpenApprovalAssistant,
     this.onOpenTaskAssistant,
+    this.onOpenReconciliationAssistant,
     this.selectedConversationId,
     this.conversationReadSignal,
     this.memberSettingsSignal,
@@ -70,6 +71,7 @@ class NativeConversationPage extends StatefulWidget {
   final ValueChanged<NativeConversation>? onOpenRobot;
   final ValueChanged<NativeConversation>? onOpenApprovalAssistant;
   final ValueChanged<NativeConversation>? onOpenTaskAssistant;
+  final VoidCallback? onOpenReconciliationAssistant;
 
   /// 双栏布局中当前选中的会话，用于列表高亮。
   final int? selectedConversationId;
@@ -464,8 +466,7 @@ class _NativeConversationPageState extends State<NativeConversationPage>
   void _onAiSummaryRealtime(ConversationRealtimeEvent event) {
     final update = AiSummaryRealtimeUpdate.fromPayload(event.raw);
     if (!mounted) return;
-    final terminal =
-        update.status == 'SUCCESS' || update.status == 'FAILED';
+    final terminal = update.status == 'SUCCESS' || update.status == 'FAILED';
     // 仅终态更新通讯列表预览；未读由服务端 read_at 统计。
     if (terminal) {
       setState(() {
@@ -483,12 +484,12 @@ class _NativeConversationPageState extends State<NativeConversationPage>
             from: prev?.from,
             to: prev?.to,
             status: update.status,
-            summaryPreview: update.preview ??
-                update.body ??
-                prev?.summaryPreview,
+            summaryPreview:
+                update.preview ?? update.body ?? prev?.summaryPreview,
             createdAt: DateTime.now(),
             finishedAt: DateTime.now(),
-            initiator: prev?.initiator ??
+            initiator:
+                prev?.initiator ??
                 const AiSummaryInitiator(userId: 0, displayName: ''),
           );
         }
@@ -647,7 +648,8 @@ class _NativeConversationPageState extends State<NativeConversationPage>
         _notificationService.fetchSummary(),
         NovaWebStorage.load(widget.session.userId),
         if (!widget.session.isExternalUser) _safeFetchAiSummaryPreview(),
-        if (!widget.session.isExternalUser) _aiSummaryService.fetchUnreadCount(),
+        if (!widget.session.isExternalUser)
+          _aiSummaryService.fetchUnreadCount(),
       ]);
       var rows = (results[0] as List<NativeConversation>)
           .where((c) => c.isVisible && !isConversationHidden(hidden, c.id))
@@ -658,8 +660,7 @@ class _NativeConversationPageState extends State<NativeConversationPage>
           !rows.any((c) => c.isApprovalAssistant)) {
         try {
           final ensured = await _service.ensureApprovalAssistantSession();
-          if (ensured.id > 0 &&
-              !rows.any((c) => c.id == ensured.id)) {
+          if (ensured.id > 0 && !rows.any((c) => c.id == ensured.id)) {
             rows = <NativeConversation>[...rows, ensured];
           }
         } catch (_) {
@@ -700,14 +701,12 @@ class _NativeConversationPageState extends State<NativeConversationPage>
       }
       final notif = results[1] as NativeNotificationSummary;
       final novaStorage = results[2] as Map<String, String>;
-      final aiPreview =
-          !widget.session.isExternalUser && results.length > 3
-              ? results[3] as AiSummaryItem?
-              : null;
-      final aiUnread =
-          !widget.session.isExternalUser && results.length > 4
-              ? (results[4] as int? ?? 0)
-              : 0;
+      final aiPreview = !widget.session.isExternalUser && results.length > 3
+          ? results[3] as AiSummaryItem?
+          : null;
+      final aiUnread = !widget.session.isExternalUser && results.length > 4
+          ? (results[4] as int? ?? 0)
+          : 0;
       final refreshedHidden = await InboxHiddenStorage.load();
       if (!mounted) return;
       final selfAvatar = userAvatarRefresh.snapshotFor(widget.session.userId);
@@ -922,8 +921,11 @@ class _NativeConversationPageState extends State<NativeConversationPage>
       );
     } else if (c.isTaskAssistant) {
       rowKind = ChatInboxRowKind.taskAssistant;
+      onTap = _openWithScrollPersist(() => widget.onOpenTaskAssistant?.call(c));
+    } else if (c.isReconciliationAssistant) {
+      rowKind = ChatInboxRowKind.reconciliationAssistant;
       onTap = _openWithScrollPersist(
-        () => widget.onOpenTaskAssistant?.call(c),
+        () => widget.onOpenReconciliationAssistant?.call(),
       );
     } else if (c.isWorkgroupApproval) {
       rowKind = ChatInboxRowKind.workgroupApproval;
@@ -953,7 +955,8 @@ class _NativeConversationPageState extends State<NativeConversationPage>
             rowKind == ChatInboxRowKind.workgroupApproval ||
             rowKind == ChatInboxRowKind.robot ||
             rowKind == ChatInboxRowKind.approvalAssistant ||
-            rowKind == ChatInboxRowKind.taskAssistant);
+            rowKind == ChatInboxRowKind.taskAssistant ||
+            rowKind == ChatInboxRowKind.reconciliationAssistant);
 
     final robotKey = c.robotKey ?? '';
     final analyzingRobot =
@@ -961,35 +964,41 @@ class _NativeConversationPageState extends State<NativeConversationPage>
     final selected = widget.selectedConversationId == c.id;
     final row = ChatInboxRow(
       kind: rowKind,
-      title: c.isAiAssistant
+      title: c.isReconciliationAssistant
+          ? '对账助手'
+          : c.isAiAssistant
           ? _yunshuName
           : (c.isApprovalAssistant
-              ? '审批助手'
-              : (c.isTaskAssistant ? '任务助手' : title)),
+                ? '审批助手'
+                : (c.isTaskAssistant ? '任务助手' : title)),
       subtitle: null,
       preview: analyzingRobot
           ? '正在分析…'
           : c.isAiAssistant
-              ? resolveNovaInboxPreview(
-                  storage: _novaStorage,
-                  convId: c.id,
-                  serverPreview: c.preview,
-                  generating: gen.generating,
-                  generatingStatus: gen.status,
-                  allowLocalCache: true,
-                )
-              : c.isRobot
-                  ? robotPlainPreview(c.preview, maxChars: 48)
-                  : c.preview.isEmpty && c.isApprovalAssistant
-                      ? '待办简报 · 解释 · 催办'
-                      : c.preview.isEmpty && c.isTaskAssistant
-                          ? '子任务分配 · 进度跟进'
-                          : c.preview,
+          ? resolveNovaInboxPreview(
+              storage: _novaStorage,
+              convId: c.id,
+              serverPreview: c.preview,
+              generating: gen.generating,
+              generatingStatus: gen.status,
+              allowLocalCache: true,
+            )
+          : c.isReconciliationAssistant
+          ? (c.preview.isEmpty ? '每日对账 · 待你确认' : c.preview)
+          : c.isRobot
+          ? robotPlainPreview(c.preview, maxChars: 48)
+          : c.preview.isEmpty && c.isApprovalAssistant
+          ? '待办简报 · 解释 · 催办'
+          : c.preview.isEmpty && c.isTaskAssistant
+          ? '子任务分配 · 进度跟进'
+          : c.preview,
       timeLabel: InboxFormat.formatTime(c.updatedAt, withClock: c.isPrivate),
-      memberCount: c.isPrivate ||
+      memberCount:
+          c.isPrivate ||
               c.isRobot ||
               c.isApprovalAssistant ||
               c.isTaskAssistant ||
+              c.isReconciliationAssistant ||
               kind == 'AI_ASSISTANT' ||
               kind == 'BROADCAST'
           ? null
@@ -997,16 +1006,15 @@ class _NativeConversationPageState extends State<NativeConversationPage>
       unreadCount: selected
           ? 0
           : (c.isAiAssistant &&
-                  NovaBackgroundCoordinator.instance.hasUnreadReplyFor(c.id)
-              ? (c.unreadCount > 0 ? c.unreadCount : 1)
-              : widget.commUnread.effectiveUnreadCount(c)),
+                    NovaBackgroundCoordinator.instance.hasUnreadReplyFor(c.id)
+                ? (c.unreadCount > 0 ? c.unreadCount : 1)
+                : widget.commUnread.effectiveUnreadCount(c)),
       muted: c.muted,
       pinned: c.pinned,
       showAiMark: c.isAiAssistant,
-      selected: selected ||
-          (c.isApprovalAssistant && _isViewingApprovalAssistant),
-      previewGenerating:
-          (c.isAiAssistant && gen.generating) || analyzingRobot,
+      selected:
+          selected || (c.isApprovalAssistant && _isViewingApprovalAssistant),
+      previewGenerating: (c.isAiAssistant && gen.generating) || analyzingRobot,
       showOnlineDot: c.isPrivate && _isPeerOnline(c),
       avatarInitial: c.isPrivate
           ? (_privateTitle(c).isNotEmpty
@@ -1066,7 +1074,8 @@ class _NativeConversationPageState extends State<NativeConversationPage>
                 c.isPrivate ||
                 c.isRobot ||
                 c.isApprovalAssistant ||
-                c.isTaskAssistant,
+                c.isTaskAssistant ||
+                c.isReconciliationAssistant,
           )
           .toList(),
     );
@@ -1098,9 +1107,7 @@ class _NativeConversationPageState extends State<NativeConversationPage>
     final chatRows = _buildChatRowsMergedWithAiSummary(chats);
     final aiTs = _aiSummaryPreview?.sortTime?.millisecondsSinceEpoch ?? 0;
     final chatTs = chats.isNotEmpty
-        ? (chats.first.sortTimestamp > aiTs
-              ? chats.first.sortTimestamp
-              : aiTs)
+        ? (chats.first.sortTimestamp > aiTs ? chats.first.sortTimestamp : aiTs)
         : aiTs;
 
     final sections = <_InboxSection>[
@@ -1154,6 +1161,15 @@ class _NativeConversationPageState extends State<NativeConversationPage>
       final ts = _aiSummaryPreview?.sortTime?.millisecondsSinceEpoch ?? 0;
       entries.add((ts: ts, pinned: false, row: aiRow));
     }
+    final reconciliationRow = _buildReconciliationAssistantInboxRow();
+    if (reconciliationRow != null &&
+        !chats.any((c) => c.isReconciliationAssistant)) {
+      entries.add((
+        ts: DateTime.now().millisecondsSinceEpoch,
+        pinned: false,
+        row: reconciliationRow,
+      ));
+    }
     entries.sort((a, b) {
       final ap = a.pinned ? 1 : 0;
       final bp = b.pinned ? 1 : 0;
@@ -1161,6 +1177,24 @@ class _NativeConversationPageState extends State<NativeConversationPage>
       return b.ts.compareTo(a.ts);
     });
     return entries.map((e) => e.row).toList(growable: false);
+  }
+
+  Widget? _buildReconciliationAssistantInboxRow() {
+    final onOpen = widget.onOpenReconciliationAssistant;
+    if (onOpen == null) return null;
+    const preview = '每日对账 · 待你确认';
+    if (!_matchesSearch('对账助手', preview)) return null;
+    return KeyedSubtree(
+      key: const ValueKey<String>('reconciliation-assistant-inbox'),
+      child: ChatInboxRow(
+        kind: ChatInboxRowKind.reconciliationAssistant,
+        title: '对账助手',
+        preview: preview,
+        timeLabel: '今天',
+        selected: false,
+        onTap: _openWithScrollPersist(onOpen),
+      ),
+    );
   }
 
   Widget? _buildAiSummaryInboxRow() {

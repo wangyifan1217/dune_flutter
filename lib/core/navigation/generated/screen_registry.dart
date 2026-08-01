@@ -95,9 +95,11 @@ const kDunesScreens = <DunesScreenInfo>[
   DunesScreenInfo(id: 'MM-L', name: '会议历史', region: DunesRegion.lh),
   DunesScreenInfo(id: 'MM0', name: '会议上传', region: DunesRegion.lh),
   DunesScreenInfo(id: 'MM', name: '会议纪要 · AI', region: DunesRegion.lh),
+  DunesScreenInfo(id: 'FD1', name: '企业微盘', region: DunesRegion.lh),
 ];
 
 const kDunesScreenIds = <String>[
+  'FD1',
   'LH',
   'Z1',
   'Z2',

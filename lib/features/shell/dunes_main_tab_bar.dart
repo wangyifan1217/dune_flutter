@@ -5,7 +5,7 @@ import '../../core/theme/dunes_theme.dart';
 import '../conversation/comm_unread_notifier.dart';
 import '../workbench/workbench_badge_notifier.dart';
 
-/// 底部主 Tab：通讯 · NOVA · 灯塔 · 工作台 · 我的；PC 竖栏同步含「工作台」，「我的」沉底。
+/// 底部主 Tab：通讯 · NOVA · 灯塔 · 我的；PC 竖栏另外保留「工作台」。
 /// 此为 Tab 内容区高度；iOS Home Indicator 的安全区由组件自身额外处理。
 const double kDunesMainTabBarHeight = 64;
 
@@ -99,7 +99,7 @@ class _DunesMainTabBarState extends State<DunesMainTabBar> {
   );
 
   /// 主区域 Tab。
-  /// APP 底栏：通讯 · NOVA · 灯塔 · 工作台 · 我的
+  /// APP 底栏：通讯 · NOVA · 灯塔 · 我的
   /// PC 竖栏：通讯 / NOVA / 灯塔 / 工作台；「我的」单独沉底。
   List<Widget> get _tabs => [
     _tab(
@@ -109,19 +109,11 @@ class _DunesMainTabBarState extends State<DunesMainTabBar> {
       showRedDot: _showCommDot,
     ),
     if (!_hideWorkbenchTabs)
-      _tab(
-        icon: Icons.grid_view_rounded,
-        label: 'NOVA',
-        screen: 'QJ',
-      ),
+      _tab(icon: Icons.grid_view_rounded, label: 'NOVA', screen: 'QJ'),
     if (!_hideWorkbenchTabs)
       _tab(icon: Icons.explore_outlined, label: '灯塔', screen: 'LH'),
-    if (!_hideWorkbenchTabs)
-      _tab(
-        icon: Icons.apps_rounded,
-        label: '工作台',
-        screen: 'QJA',
-      ),
+    if (!_hideWorkbenchTabs && _isVertical)
+      _tab(icon: Icons.apps_rounded, label: '工作台', screen: 'QJA'),
     if (!_isVertical) _myTab,
   ];
 
@@ -176,6 +168,7 @@ class _DunesMainTabBarState extends State<DunesMainTabBar> {
               if (settingsTap != null) ...[
                 _tab(
                   icon: Icons.settings_outlined,
+                  screen: '__desktop_settings__',
                   label: '设置',
                   onTap: settingsTap,
                 ),

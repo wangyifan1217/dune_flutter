@@ -32,7 +32,8 @@ bool isDesktopAllowedCommScreen(String screenId) {
     'AS3',
     'AA1',
     'AA2',
-    // 我的及审批 / 知识库
+    'RA1',
+    // 我的及审批 / 知识库 / 企业微盘
     'B2',
     'B1',
     'B3',
@@ -46,6 +47,7 @@ bool isDesktopAllowedCommScreen(String screenId) {
     'K1',
     'K2',
     'K3',
+    'FD1',
     'WX',
     // 会议纪要（桌面端只读列表/详情，不含新建 MM0）
     'MM-L',

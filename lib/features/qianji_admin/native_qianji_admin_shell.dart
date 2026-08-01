@@ -6,6 +6,7 @@ import '../../core/navigation/navigation_controller.dart';
 import '../../core/theme/dunes_theme.dart';
 import '../auth/auth_session.dart';
 import '../auth/auth_session_coordinator.dart';
+import '../drive/native_drive_page.dart';
 import '../tasks/native_task_home_pane.dart';
 import '../tasks/native_task_hrbp_pane.dart';
 import '../tasks/task_api.dart';
@@ -21,16 +22,27 @@ class NativeQianjiAdminShell extends StatefulWidget {
     super.key,
     required this.session,
     required this.navigation,
+    this.onExit,
   });
 
   final AuthSession session;
   final DunesNavigationController navigation;
+  final VoidCallback? onExit;
 
   @override
   State<NativeQianjiAdminShell> createState() => _NativeQianjiAdminShellState();
 }
 
-enum _WorkbenchView { overview, tasks, hrbp, products, display, cases, pool }
+enum _WorkbenchView {
+  overview,
+  tasks,
+  hrbp,
+  products,
+  display,
+  cases,
+  pool,
+  drive,
+}
 
 class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
   late final PageController _pageController;
@@ -40,6 +52,7 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
   bool _hideShellHeader = false;
   Widget? _shellTrailing;
   VoidCallback? _onShellBackOverride;
+
   /// null=探测中；以后端 hrbp/overview 鉴权为准，不写死角色。
   bool? _canSeeTaskSummary;
 
@@ -50,6 +63,7 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
     _WorkbenchView.display: '展示设置',
     _WorkbenchView.cases: '案例库',
     _WorkbenchView.pool: '需求任务池',
+    _WorkbenchView.drive: '企业微盘',
   };
 
   bool get _isQianjiAdmin => _session.effectiveQianjiAdminAccess;
@@ -193,7 +207,10 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
         title: const Text('暂无权限'),
         content: Text('当前账号未开通「$name」权限，如需使用请联系管理员。'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('知道了')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('知道了'),
+          ),
         ],
       ),
     );
@@ -213,18 +230,45 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
                 padding: const EdgeInsets.fromLTRB(16, 14, 12, 8),
                 child: Row(
                   children: [
+                    if (_isOverview && widget.onExit != null) ...[
+                      IconButton(
+                        tooltip: '返回我的',
+                        onPressed: widget.onExit,
+                        icon: const Icon(Icons.arrow_back_ios_new, size: 16),
+                        color: DunesColors.text2,
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(
+                          minWidth: 32,
+                          minHeight: 32,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                    ],
                     if (!_isOverview) ...[
                       InkWell(
                         borderRadius: BorderRadius.circular(8),
                         onTap: _onShellBackOverride ?? () => _goPage(0),
                         child: const Padding(
-                          padding: EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+                          padding: EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 6,
+                          ),
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Icon(Icons.arrow_back_ios_new, size: 14, color: DunesColors.text2),
+                              Icon(
+                                Icons.arrow_back_ios_new,
+                                size: 14,
+                                color: DunesColors.text2,
+                              ),
                               SizedBox(width: 2),
-                              Text('工作台', style: TextStyle(fontSize: 13, color: DunesColors.text2)),
+                              Text(
+                                '工作台',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: DunesColors.text2,
+                                ),
+                              ),
                             ],
                           ),
                         ),
@@ -252,13 +296,17 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
                     ? const NeverScrollableScrollPhysics()
                     : const PageScrollPhysics(),
                 onPageChanged: (i) {
-                  setState(() => _pageIndex = i);
+                  setState(() {
+                    _pageIndex = i;
+                    if (i == 0) {
+                      _hideShellHeader = false;
+                      _shellTrailing = null;
+                      _onShellBackOverride = null;
+                    }
+                  });
                   _syncBackInterceptor();
                 },
-                children: [
-                  _buildOverviewPage(),
-                  _buildContentPage(),
-                ],
+                children: [_buildOverviewPage(), _buildContentPage()],
               ),
             ),
           ],
@@ -298,6 +346,12 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
         return const _PlaceholderPane(title: '案例库');
       case _WorkbenchView.pool:
         return QianjiReqPoolPane(session: _session);
+      case _WorkbenchView.drive:
+        return NativeDrivePage(
+          session: _session,
+          embedded: true,
+          onChromeChanged: _onTaskChrome,
+        );
       case _WorkbenchView.overview:
         return _buildOverviewPage();
     }
@@ -322,16 +376,21 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
           enabled: true,
           onTap: () => _open(_WorkbenchView.hrbp),
         ),
+      if (!_session.isExternalUser)
+        _WorkbenchTile(
+          title: '企业微盘',
+          subtitle: '文件 · 共享空间',
+          icon: Icons.cloud_outlined,
+          color: _themePurple,
+          enabled: true,
+          onTap: () => _open(_WorkbenchView.drive),
+        ),
     ];
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(24, 8, 24, 40),
       children: [
-        _WorkbenchSection(
-          title: '协作',
-          accent: _themePurple,
-          children: tiles,
-        ),
+        _WorkbenchSection(title: '协作', accent: _themePurple, children: tiles),
       ],
     );
   }
@@ -363,7 +422,11 @@ class _PlaceholderPane extends StatelessWidget {
                 color: _themePurple.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(16),
               ),
-              child: const Icon(Icons.construction_outlined, color: _themePurple, size: 28),
+              child: const Icon(
+                Icons.construction_outlined,
+                color: _themePurple,
+                size: 28,
+              ),
             ),
             const SizedBox(height: 16),
             Text(
@@ -431,12 +494,29 @@ class _WorkbenchSection extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 14),
-          Wrap(
-            spacing: 12,
-            runSpacing: 12,
-            children: [
-              for (final tile in children) _WorkbenchCard(tile: tile),
-            ],
+          // APP/窄屏：一行始终露出 3 张；超出可横向滑动。
+          LayoutBuilder(
+            builder: (context, c) {
+              const gap = 10.0;
+              const perRow = 3;
+              final cardWidth = ((c.maxWidth - gap * (perRow - 1)) / perRow)
+                  .clamp(72.0, 220.0);
+              const cardHeight = 108.0;
+              return SizedBox(
+                height: cardHeight,
+                child: ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  physics: const BouncingScrollPhysics(),
+                  itemCount: children.length,
+                  separatorBuilder: (_, _) => const SizedBox(width: gap),
+                  itemBuilder: (context, i) => SizedBox(
+                    width: cardWidth,
+                    height: cardHeight,
+                    child: _WorkbenchCard(tile: children[i]),
+                  ),
+                ),
+              );
+            },
           ),
         ],
       ),
@@ -478,36 +558,33 @@ class _WorkbenchCard extends StatelessWidget {
         child: InkWell(
           borderRadius: BorderRadius.circular(10),
           onTap: tile.enabled ? tile.onTap : null,
-          child: SizedBox(
-            width: 132,
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: const Color(0xFFE8EAED)),
-              ),
-              child: Padding(
-              padding: const EdgeInsets.fromLTRB(12, 12, 12, 10),
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: const Color(0xFFE8EAED)),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(10, 10, 10, 8),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
                 children: [
                   Container(
-                    width: 34,
-                    height: 34,
+                    width: 32,
+                    height: 32,
                     decoration: BoxDecoration(
                       color: tile.color.withValues(alpha: 0.10),
                       borderRadius: BorderRadius.circular(8),
                     ),
-                    child: Icon(tile.icon, color: tile.color, size: 18),
+                    child: Icon(tile.icon, color: tile.color, size: 17),
                   ),
-                  const SizedBox(height: 12),
+                  const Spacer(),
                   Text(
                     tile.title,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
                       fontSize: 13,
-                      height: 1.25,
+                      height: 1.2,
                       fontWeight: FontWeight.w600,
                       color: DunesColors.text,
                     ),
@@ -519,12 +596,11 @@ class _WorkbenchCard extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
                       fontSize: 11,
-                      height: 1.25,
+                      height: 1.2,
                       color: DunesColors.text3,
                     ),
                   ),
                 ],
-              ),
               ),
             ),
           ),
@@ -577,10 +653,12 @@ class _ProductsAdminPaneState extends State<_ProductsAdminPane> {
     }).toList();
   }
 
-  int get _productCount =>
-      _allItems.where((p) => p.kind == 'product' || p.kind == 'platform').length;
+  int get _productCount => _allItems
+      .where((p) => p.kind == 'product' || p.kind == 'platform')
+      .length;
 
-  int get _capabilityCount => _allItems.where((p) => p.kind == 'capability').length;
+  int get _capabilityCount =>
+      _allItems.where((p) => p.kind == 'capability').length;
 
   int get _activeCount => _allItems.where((p) => p.status == 'active').length;
 
@@ -622,7 +700,9 @@ class _ProductsAdminPaneState extends State<_ProductsAdminPane> {
       await _load();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('保存失败: $e')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('保存失败: $e')));
     }
   }
 
@@ -633,8 +713,14 @@ class _ProductsAdminPaneState extends State<_ProductsAdminPane> {
         title: const Text('删除产品'),
         content: Text('确认删除「${p.name}」？'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('取消')),
-          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('删除')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('删除'),
+          ),
         ],
       ),
     );
@@ -644,7 +730,9 @@ class _ProductsAdminPaneState extends State<_ProductsAdminPane> {
       await _load();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('删除失败: $e')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('删除失败: $e')));
     }
   }
 
@@ -662,7 +750,11 @@ class _ProductsAdminPaneState extends State<_ProductsAdminPane> {
               children: [
                 const Text(
                   '管理科技产品与核心能力，支持标签分类与状态追踪',
-                  style: TextStyle(fontSize: 13, color: DunesColors.text3, height: 1.3),
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: DunesColors.text3,
+                    height: 1.3,
+                  ),
                 ),
                 const SizedBox(height: 12),
                 _ProductSummaryRow(
@@ -686,16 +778,26 @@ class _ProductsAdminPaneState extends State<_ProductsAdminPane> {
                           controller: _search,
                           decoration: InputDecoration(
                             hintText: '搜索名称 / 编码 / 负责人',
-                            hintStyle: const TextStyle(color: DunesColors.text3, fontSize: 13),
+                            hintStyle: const TextStyle(
+                              color: DunesColors.text3,
+                              fontSize: 13,
+                            ),
                             isDense: true,
                             filled: true,
                             fillColor: const Color(0xFFF5F6F8),
-                            prefixIcon: const Icon(Icons.search, size: 20, color: DunesColors.text3),
+                            prefixIcon: const Icon(
+                              Icons.search,
+                              size: 20,
+                              color: DunesColors.text3,
+                            ),
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(10),
                               borderSide: BorderSide.none,
                             ),
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 10,
+                            ),
                           ),
                           onChanged: (_) => setState(() {}),
                           onSubmitted: (_) => setState(() {}),
@@ -741,7 +843,10 @@ class _ProductsAdminPaneState extends State<_ProductsAdminPane> {
                       IconButton(
                         tooltip: '刷新',
                         onPressed: _load,
-                        icon: const Icon(Icons.refresh_rounded, color: DunesColors.text2),
+                        icon: const Icon(
+                          Icons.refresh_rounded,
+                          color: DunesColors.text2,
+                        ),
                       ),
                       const SizedBox(width: 4),
                       FilledButton.icon(
@@ -750,8 +855,13 @@ class _ProductsAdminPaneState extends State<_ProductsAdminPane> {
                         label: const Text('新建'),
                         style: FilledButton.styleFrom(
                           backgroundColor: _themePurple,
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 12,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
                         ),
                       ),
                     ],
@@ -768,7 +878,9 @@ class _ProductsAdminPaneState extends State<_ProductsAdminPane> {
 
   Widget _buildBody() {
     if (_loading) {
-      return const Center(child: CircularProgressIndicator(color: _themePurple));
+      return const Center(
+        child: CircularProgressIndicator(color: _themePurple),
+      );
     }
     if (_error != null) {
       return Center(
@@ -810,18 +922,30 @@ class _ProductsAdminPaneState extends State<_ProductsAdminPane> {
                   ),
                   borderRadius: BorderRadius.circular(18),
                 ),
-                child: const Icon(Icons.inventory_2_outlined, color: _themePurple, size: 30),
+                child: const Icon(
+                  Icons.inventory_2_outlined,
+                  color: _themePurple,
+                  size: 30,
+                ),
               ),
               const SizedBox(height: 18),
               const Text(
                 '还没有产品 / 能力',
-                style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: DunesColors.text),
+                style: TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w700,
+                  color: DunesColors.text,
+                ),
               ),
               const SizedBox(height: 8),
               const Text(
                 '创建第一条目录，开始维护千机展厅内容',
                 textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 13, color: DunesColors.text3, height: 1.4),
+                style: TextStyle(
+                  fontSize: 13,
+                  color: DunesColors.text3,
+                  height: 1.4,
+                ),
               ),
               const SizedBox(height: 20),
               FilledButton.icon(
@@ -830,8 +954,13 @@ class _ProductsAdminPaneState extends State<_ProductsAdminPane> {
                 label: const Text('新建第一条'),
                 style: FilledButton.styleFrom(
                   backgroundColor: _themePurple,
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 12,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
                 ),
               ),
             ],
@@ -849,31 +978,23 @@ class _ProductsAdminPaneState extends State<_ProductsAdminPane> {
       );
     }
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final width = constraints.maxWidth;
-        final crossAxisCount = width >= 1200
-            ? 3
-            : width >= 800
-                ? 2
-                : 1;
-        return GridView.builder(
-          padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
-          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: crossAxisCount,
-            mainAxisSpacing: 12,
-            crossAxisSpacing: 12,
-            mainAxisExtent: 148,
-          ),
-          itemCount: items.length,
-          itemBuilder: (context, i) {
-            final p = items[i];
-            return _ProductCard(
-              product: p,
-              onEdit: () => _openEditor(p),
-              onDelete: () => _delete(p),
-            );
-          },
+    return GridView.builder(
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+      physics: const BouncingScrollPhysics(),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        // APP/PC 统一一行三个，纵向滑动浏览。
+        crossAxisCount: 3,
+        mainAxisSpacing: 12,
+        crossAxisSpacing: 10,
+        mainAxisExtent: 148,
+      ),
+      itemCount: items.length,
+      itemBuilder: (context, i) {
+        final p = items[i];
+        return _ProductCard(
+          product: p,
+          onEdit: () => _openEditor(p),
+          onDelete: () => _delete(p),
         );
       },
     );
@@ -1033,14 +1154,14 @@ class _SummaryCard extends StatelessWidget {
 }
 
 MenuStyle get _workbenchMenuStyle => MenuStyle(
-      backgroundColor: const WidgetStatePropertyAll(Colors.white),
-      elevation: const WidgetStatePropertyAll(8),
-      shadowColor: WidgetStatePropertyAll(Colors.black.withValues(alpha: 0.12)),
-      shape: WidgetStatePropertyAll(
-        RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      ),
-      padding: const WidgetStatePropertyAll(EdgeInsets.symmetric(vertical: 6)),
-    );
+  backgroundColor: const WidgetStatePropertyAll(Colors.white),
+  elevation: const WidgetStatePropertyAll(8),
+  shadowColor: WidgetStatePropertyAll(Colors.black.withValues(alpha: 0.12)),
+  shape: WidgetStatePropertyAll(
+    RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+  ),
+  padding: const WidgetStatePropertyAll(EdgeInsets.symmetric(vertical: 6)),
+);
 
 List<Widget> _workbenchMenuItems<T>({
   required T value,
@@ -1101,7 +1222,9 @@ class _FilterChipDropdown<T> extends StatelessWidget {
       builder: (context, controller, child) {
         final open = controller.isOpen;
         return Material(
-          color: open ? _themePurple.withValues(alpha: 0.08) : const Color(0xFFF5F6F8),
+          color: open
+              ? _themePurple.withValues(alpha: 0.08)
+              : const Color(0xFFF5F6F8),
           borderRadius: BorderRadius.circular(10),
           child: InkWell(
             borderRadius: BorderRadius.circular(10),
@@ -1117,7 +1240,9 @@ class _FilterChipDropdown<T> extends StatelessWidget {
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(10),
                 border: Border.all(
-                  color: open ? _themePurple.withValues(alpha: 0.35) : Colors.transparent,
+                  color: open
+                      ? _themePurple.withValues(alpha: 0.35)
+                      : Colors.transparent,
                 ),
               ),
               child: Row(
@@ -1133,7 +1258,9 @@ class _FilterChipDropdown<T> extends StatelessWidget {
                   ),
                   const SizedBox(width: 4),
                   Icon(
-                    open ? Icons.keyboard_arrow_up_rounded : Icons.keyboard_arrow_down_rounded,
+                    open
+                        ? Icons.keyboard_arrow_up_rounded
+                        : Icons.keyboard_arrow_down_rounded,
                     size: 18,
                     color: open ? _themePurple : DunesColors.text3,
                   ),
@@ -1339,7 +1466,11 @@ class _ProductCard extends StatelessWidget {
                       color: kindColor.withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    child: Icon(Icons.inventory_2_outlined, size: 18, color: kindColor),
+                    child: Icon(
+                      Icons.inventory_2_outlined,
+                      size: 18,
+                      color: kindColor,
+                    ),
                   ),
                   const SizedBox(width: 10),
                   Expanded(
@@ -1358,13 +1489,21 @@ class _ProductCard extends StatelessWidget {
                     tooltip: '编辑',
                     visualDensity: VisualDensity.compact,
                     onPressed: onEdit,
-                    icon: const Icon(Icons.edit_outlined, size: 18, color: DunesColors.text2),
+                    icon: const Icon(
+                      Icons.edit_outlined,
+                      size: 18,
+                      color: DunesColors.text2,
+                    ),
                   ),
                   IconButton(
                     tooltip: '删除',
                     visualDensity: VisualDensity.compact,
                     onPressed: onDelete,
-                    icon: const Icon(Icons.delete_outline, size: 18, color: DunesColors.text3),
+                    icon: const Icon(
+                      Icons.delete_outline,
+                      size: 18,
+                      color: DunesColors.text3,
+                    ),
                   ),
                 ],
               ),
@@ -1380,9 +1519,15 @@ class _ProductCard extends StatelessWidget {
                 children: [
                   _MetaChip(text: _kindText(product.kind), color: kindColor),
                   _MetaChip(text: '标签${product.tag}', color: _themePurple),
-                  _MetaChip(text: _statusText(product.status), color: statusColor),
+                  _MetaChip(
+                    text: _statusText(product.status),
+                    color: statusColor,
+                  ),
                   if (product.ownerName.isNotEmpty)
-                    _MetaChip(text: product.ownerName, color: DunesColors.text2),
+                    _MetaChip(
+                      text: product.ownerName,
+                      color: DunesColors.text2,
+                    ),
                 ],
               ),
             ],
@@ -1431,7 +1576,11 @@ class _MetaChip extends StatelessWidget {
       ),
       child: Text(
         text,
-        style: TextStyle(fontSize: 11, color: color, fontWeight: FontWeight.w600),
+        style: TextStyle(
+          fontSize: 11,
+          color: color,
+          fontWeight: FontWeight.w600,
+        ),
       ),
     );
   }
@@ -1542,11 +1691,7 @@ class _ProductEditorDialogState extends State<_ProductEditorDialog> {
                     child: _WorkbenchFormDropdown<int>(
                       label: '标签',
                       value: _tag,
-                      items: const [
-                        (1, '标签一'),
-                        (2, '标签二'),
-                        (3, '标签三'),
-                      ],
+                      items: const [(1, '标签一'), (2, '标签二'), (3, '标签三')],
                       onChanged: (v) => setState(() => _tag = v),
                     ),
                   ),
@@ -1591,7 +1736,9 @@ class _ProductEditorDialogState extends State<_ProductEditorDialog> {
           style: FilledButton.styleFrom(
             backgroundColor: _themePurple,
             padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
           ),
           onPressed: () {
             final name = _name.text.trim();
@@ -1635,7 +1782,11 @@ class _ProductEditorDialogState extends State<_ProductEditorDialog> {
           TextField(
             controller: c,
             maxLines: maxLines,
-            style: const TextStyle(fontSize: 14, color: DunesColors.text, height: 1.3),
+            style: const TextStyle(
+              fontSize: 14,
+              color: DunesColors.text,
+              height: 1.3,
+            ),
             decoration: InputDecoration(
               hintText: hint,
               hintStyle: TextStyle(
@@ -1646,7 +1797,10 @@ class _ProductEditorDialogState extends State<_ProductEditorDialog> {
               fillColor: hasError
                   ? const Color(0xFFFFF1F2)
                   : const Color(0xFFF5F6F8),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 14,
+                vertical: 12,
+              ),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(10),
                 borderSide: BorderSide.none,
@@ -1738,20 +1892,28 @@ class _DisplaySettingsPaneState extends State<_DisplaySettingsPane> {
         fieldVisibility: Map<String, dynamic>.from(_visibility),
       );
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('展示设置已保存')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('展示设置已保存')));
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('保存失败: $e')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('保存失败: $e')));
     }
   }
 
   @override
   Widget build(BuildContext context) {
     if (_loading) {
-      return const Center(child: CircularProgressIndicator(color: _themePurple));
+      return const Center(
+        child: CircularProgressIndicator(color: _themePurple),
+      );
     }
     if (_error != null) {
-      return Center(child: Text(_error!, style: const TextStyle(color: Colors.red)));
+      return Center(
+        child: Text(_error!, style: const TextStyle(color: Colors.red)),
+      );
     }
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 4, 20, 40),
@@ -1826,7 +1988,10 @@ class _DisplaySettingsPaneState extends State<_DisplaySettingsPane> {
               for (final e in _visibility.entries)
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
-                  title: Text(_fieldLabel(e.key), style: const TextStyle(fontSize: 14)),
+                  title: Text(
+                    _fieldLabel(e.key),
+                    style: const TextStyle(fontSize: 14),
+                  ),
                   value: e.value,
                   activeThumbColor: _themePurple,
                   onChanged: (v) => setState(() => _visibility[e.key] = v),
@@ -1841,7 +2006,9 @@ class _DisplaySettingsPaneState extends State<_DisplaySettingsPane> {
             style: FilledButton.styleFrom(
               backgroundColor: _themePurple,
               padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 14),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
             ),
             onPressed: _save,
             child: const Text('保存设置'),
@@ -1887,7 +2054,9 @@ class _ModeCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: selected ? _themePurple.withValues(alpha: 0.08) : const Color(0xFFF5F6F8),
+      color: selected
+          ? _themePurple.withValues(alpha: 0.08)
+          : const Color(0xFFF5F6F8),
       borderRadius: BorderRadius.circular(12),
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
@@ -1919,7 +2088,10 @@ class _ModeCard extends StatelessWidget {
                     const SizedBox(height: 2),
                     Text(
                       subtitle,
-                      style: const TextStyle(fontSize: 12, color: DunesColors.text3),
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: DunesColors.text3,
+                      ),
                     ),
                   ],
                 ),

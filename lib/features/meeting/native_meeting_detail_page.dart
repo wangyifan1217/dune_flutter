@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as math;
 
@@ -13,6 +13,7 @@ import '../auth/auth_session.dart';
 import '../chat/file_download.dart' as file_dl;
 import '../conversation/conversation_picker_sheet.dart';
 import '../conversation/conversation_service.dart';
+import '../drive/chat_save_to_drive.dart';
 import '../kb/kb_document_coordinator.dart';
 import '../kb/native_kb_models.dart';
 import '../kb/native_kb_service.dart';
@@ -117,6 +118,8 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
   bool _startingTranscription = false;
   bool _downloadingAudio = false;
   bool _forwarding = false;
+  bool _savingToDrive = false;
+  bool _driveSaved = false;
   bool _uploadingSummaryToKb = false;
   bool _kbMarkedStale = false;
   String? _kbSyncedMeetingUpdatedAt;
@@ -180,6 +183,7 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
     setState(() {
       _detail = null;
       _kbUploadedDoc = null;
+      _driveSaved = false;
       _loading = true;
       _error = null;
       _transcriptExpanded = false;
@@ -219,6 +223,7 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
         }
       });
       unawaited(_refreshKbUploadStatus(detail));
+      unawaited(_refreshDriveSavedStatus(detail.meetingId));
     } catch (e) {
       if (!mounted) return;
       if (!silent) {
@@ -563,7 +568,9 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
 
   Future<void> _forwardMeetingMinutes() async {
     final detail = _detail;
-    if (detail == null || _forwarding || _downloadingAudio) return;
+    if (detail == null || _forwarding || _downloadingAudio || _savingToDrive) {
+      return;
+    }
     if (!MeetingMinutesExport.canExport(detail)) {
       ScaffoldMessenger.of(
         context,
@@ -614,6 +621,74 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
       if (mounted) {
         setState(() {
           _forwarding = false;
+          _downloadProgress = 0;
+          _downloadLabel = null;
+        });
+      }
+    }
+  }
+
+  Future<void> _refreshDriveSavedStatus(int meetingId) async {
+    if (meetingId <= 0) return;
+    final saved = await isChatFileSavedToDrive(
+      session: widget.session,
+      sourceKey: 'meeting-$meetingId',
+    );
+    if (!mounted) return;
+    if (_driveSaved != saved) {
+      setState(() => _driveSaved = saved);
+    }
+  }
+
+  Future<void> _saveMeetingToDrive() async {
+    final detail = _detail;
+    if (detail == null ||
+        _savingToDrive ||
+        _forwarding ||
+        _downloadingAudio ||
+        _uploadingSummaryToKb) {
+      return;
+    }
+    if (!MeetingMinutesExport.canExport(detail)) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('纪要尚未生成，暂无法存入微盘')));
+      return;
+    }
+
+    setState(() {
+      _savingToDrive = true;
+      _downloadProgress = 0;
+      _downloadLabel = '生成 PDF';
+    });
+    try {
+      final bytes = await _service.exportPdfBytes(detail.meetingId);
+      if (!mounted) return;
+      final fileName = MeetingMinutesExport.pdfFileName(detail);
+      setState(() => _downloadLabel = '存入微盘');
+      final sourceKey = 'meeting-${detail.meetingId}';
+      final ok = await saveBytesToDrive(
+        context: context,
+        session: widget.session,
+        bytes: bytes,
+        fileName: fileName,
+        mimeType: 'application/pdf',
+        sourceKey: sourceKey,
+      );
+      if (ok && mounted) {
+        setState(() => _driveSaved = true);
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(friendlyErrorText(e, fallback: '存入微盘失败，请稍后重试')),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _savingToDrive = false;
           _downloadProgress = 0;
           _downloadLabel = null;
         });
@@ -1079,9 +1154,28 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
         leading: BackButton(onPressed: widget.onBack),
         title: Text(summaryOnly ? '会议摘要' : '会议纪要'),
         actions: [
-          if (!summaryOnly && d != null && MeetingMinutesExport.canExport(d))
+          if (!summaryOnly && d != null && MeetingMinutesExport.canExport(d)) ...[
             IconButton(
-              onPressed: _forwarding ? null : _forwardMeetingMinutes,
+              onPressed: (_forwarding || _savingToDrive)
+                  ? null
+                  : _saveMeetingToDrive,
+              icon: _savingToDrive
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : Icon(
+                      _driveSaved
+                          ? Icons.folder_copy_outlined
+                          : Icons.folder_shared_outlined,
+                    ),
+              tooltip: _driveSaved ? '再次存入微盘' : '存入微盘',
+            ),
+            IconButton(
+              onPressed: (_forwarding || _savingToDrive)
+                  ? null
+                  : _forwardMeetingMinutes,
               icon: _forwarding
                   ? const SizedBox(
                       width: 20,
@@ -1091,6 +1185,7 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
                   : const Icon(Icons.forward_outlined),
               tooltip: '转发',
             ),
+          ],
           if (!summaryOnly && !readOnly)
             IconButton(
               onPressed: _delete,
@@ -1099,11 +1194,29 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
             ),
           if (summaryOnly && d != null && MeetingMinutesExport.canExport(d)) ...[
             IconButton(
+              onPressed: (_savingToDrive || _uploadingSummaryToKb)
+                  ? null
+                  : _saveMeetingToDrive,
+              icon: _savingToDrive
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : Icon(
+                      _driveSaved
+                          ? Icons.folder_copy_outlined
+                          : Icons.folder_shared_outlined,
+                    ),
+              tooltip: _driveSaved ? '再次存入微盘' : '存入微盘',
+            ),
+            IconButton(
               tooltip: _kbUploaded
                   ? (_isKbUploadStale(d) ? '更新我的知识库' : '重新存入知识库')
                   : '存入我的知识库',
-              onPressed:
-                  _uploadingSummaryToKb ? null : _confirmUploadSummaryToKb,
+              onPressed: (_uploadingSummaryToKb || _savingToDrive)
+                  ? null
+                  : _confirmUploadSummaryToKb,
               icon: _uploadingSummaryToKb
                   ? const SizedBox(
                       width: 20,
@@ -1137,7 +1250,8 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
       body: Stack(
         children: [
           _buildBody(d),
-          if (_downloadingAudio || _forwarding) _buildDownloadOverlay(),
+          if (_downloadingAudio || _forwarding || _savingToDrive)
+            _buildDownloadOverlay(),
         ],
       ),
     );

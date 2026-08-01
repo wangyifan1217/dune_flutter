@@ -86,6 +86,21 @@ Future<void> deleteCachedChatFileImpl(
   int? conversationId,
 }) async {}
 
+Future<String?> saveBytesAsDriveFileImpl(
+  Uint8List bytes,
+  String fileName, {
+  String? cacheKey,
+}) async {
+  return saveBytesAsFileImpl(bytes, fileName);
+}
+
+Future<String?> findCachedDriveFileImpl(
+  String fileName, {
+  String? cacheKey,
+}) async {
+  return null;
+}
+
 Future<List<int>> _blobToBytes(html.Blob blob) async {
   final reader = html.FileReader();
   reader.readAsArrayBuffer(blob);

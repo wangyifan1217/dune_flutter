@@ -33,7 +33,9 @@ import '../conversation/conversation_realtime_service.dart';
 import '../conversation/conversation_service.dart';
 import '../conversation/inbox_format.dart';
 import '../desktop/windows_desktop_tray.dart';
+import '../drive/chat_save_to_drive.dart';
 import '../kb/kb_chat_share.dart';
+import '../kb/kb_document_coordinator.dart';
 import '../kb/native_kb_service.dart';
 import '../meeting/meeting_minutes_chat_share.dart';
 import '../meeting/native_meeting_detail_page.dart';
@@ -48,6 +50,7 @@ import 'chat_image_batch_preview.dart';
 import 'chat_image_editor.dart';
 import 'chat_image_utils.dart';
 import 'chat_file_preview_page.dart';
+import 'chat_file_upload_coordinator.dart';
 import 'chat_pdf_preview.dart';
 import 'chat_media_widgets.dart';
 import 'chat_quote.dart';
@@ -265,6 +268,7 @@ class _NativeChatViewState extends State<NativeChatView>
 
   /// 媒体/文件上传中（不阻塞文本继续发送）。
   bool _uploading = false;
+  bool _showingBackgroundFileUpload = false;
 
   /// PC 拖入文件/图片时的悬停高亮。
   bool _fileDropHovering = false;
@@ -278,6 +282,9 @@ class _NativeChatViewState extends State<NativeChatView>
 
   /// 本地已缓存的文件 cacheKey（或 fileName 兜底），用于气泡勾选。
   final Set<String> _downloadedFileKeys = <String>{};
+
+  /// 已存入微盘的 IM 附件 sourceKey（objectKey / url）。
+  final Set<String> _driveSavedFileKeys = <String>{};
   bool _recordWillCancel = false;
   Offset? _recordFocalPoint;
   bool _loadingOlder = false;
@@ -366,20 +373,23 @@ class _NativeChatViewState extends State<NativeChatView>
     WidgetsBinding.instance.addObserver(this);
     ChatForegroundSync.addListener(_onChatForegroundResumed);
     _service = ConversationService(session: widget.session);
+    ChatFileUploadCoordinator.instance.addListener(_onFileUploadUpdate);
     _realtime = ConversationRealtimeHub.instance.of(widget.session);
     _scrollController.addListener(_onScroll);
     _inputController.addListener(_onComposeInputChanged);
     _inputFocusNode.addListener(_onInputFocusChanged);
     if (widget.conversationHint != null) {
       _conversation = widget.conversationHint;
-      final cached =
-          ChatMessageCache.instance.peek(widget.conversationHint!.id);
+      final cached = ChatMessageCache.instance.peek(
+        widget.conversationHint!.id,
+      );
       if (cached != null && cached.isNotEmpty) {
         _messages = cached;
         _loading = false;
         _bootstrapped = true;
       }
     }
+    _syncBackgroundFileUpload();
     _load(silent: _bootstrapped);
     _bootRealtime();
     unawaited(VoiceAsrStore.instance.ensureLoaded());
@@ -396,6 +406,42 @@ class _NativeChatViewState extends State<NativeChatView>
 
   void _onWindowsHotkeyPressed() {
     unawaited(_desktopScreenshotAndSend());
+  }
+
+  void _onFileUploadUpdate() {
+    _syncBackgroundFileUpload();
+  }
+
+  void _syncBackgroundFileUpload() {
+    if (!mounted) return;
+    final conversationId =
+        _conversation?.id ?? widget.conversationHint?.id ?? 0;
+    final job = ChatFileUploadCoordinator.instance.jobForConversation(
+      conversationId,
+    );
+    if (job != null) {
+      setState(() {
+        _showingBackgroundFileUpload = true;
+        _uploading = true;
+        _uploadLabel = '上传文件';
+        _uploadProgress = job.progress;
+        _pendingUploadBytes = null;
+        _pendingUploadKind = 'FILE';
+        _pendingUploadName = job.fileName;
+      });
+      return;
+    }
+    if (!_showingBackgroundFileUpload) return;
+    setState(() {
+      _showingBackgroundFileUpload = false;
+      _uploading = false;
+      _uploadLabel = null;
+      _uploadProgress = 0;
+      _pendingUploadBytes = null;
+      _pendingUploadKind = '';
+      _pendingUploadName = '';
+    });
+    unawaited(_load(silent: true));
   }
 
   void _onMeetingLiveActiveChanged() {
@@ -574,7 +620,8 @@ class _NativeChatViewState extends State<NativeChatView>
     unawaited(_syncLatestOnForeground());
   }
 
-  /// 从最小化/失焦恢复后：重连 realtime、REST 补最新消息，并强制贴底。
+  /// 从最小化/失焦恢复后：重连 realtime、REST 补最新消息。
+  /// 用户正在上滑看历史时只补数据，不强制跳到最新。
   Future<void> _syncLatestOnForeground() async {
     if (!mounted || !_bootstrapped || _loading || _sending || _uploading) {
       return;
@@ -588,10 +635,14 @@ class _NativeChatViewState extends State<NativeChatView>
     if (_foregroundSyncRunning) return;
     _lastForegroundSyncAt = now;
     _foregroundSyncRunning = true;
-    final shouldStick =
-        _pendingStickBottomAfterForeground ||
-        _shouldStickToLatestOnLoad ||
-        _isNearBottom;
+    // 在异步空窗前先记下是否在看历史；!hasClients 时勿默认当成贴底。
+    final browsingHistory = _userInteractedWithScroll &&
+        (!_scrollController.hasClients ||
+            _scrollController.position.pixels > 72);
+    final nearBottom = _scrollController.hasClients &&
+        _scrollController.position.pixels <= 72;
+    final shouldStick = !browsingHistory &&
+        (_pendingStickBottomAfterForeground || nearBottom);
     try {
       await _realtime.connect();
       if (!mounted) return;
@@ -604,11 +655,11 @@ class _NativeChatViewState extends State<NativeChatView>
       if (shouldStick && !_shouldAnchorMessagesAtTop) {
         _pendingStickBottomAfterForeground = false;
         _scrollBottom(force: true, gentle: false);
-      } else if (_pendingStickBottomAfterForeground) {
+      } else {
+        // 看历史时清掉误挂起的贴底标记，避免后续仍被拉到底。
         _pendingStickBottomAfterForeground = false;
-        _scrollBottom(force: true, gentle: false);
       }
-      if (widget.autoMarkRead) {
+      if (widget.autoMarkRead && shouldStick) {
         unawaited(_markReadIfNeeded());
       }
     } catch (_) {
@@ -626,6 +677,7 @@ class _NativeChatViewState extends State<NativeChatView>
     }
     WidgetsBinding.instance.removeObserver(this);
     ChatForegroundSync.removeListener(_onChatForegroundResumed);
+    ChatFileUploadCoordinator.instance.removeListener(_onFileUploadUpdate);
     userAvatarRefresh.removeListener(_onSelfAvatarUpdated);
     MeetingLiveController.instance.active.removeListener(
       _onMeetingLiveActiveChanged,
@@ -2437,12 +2489,12 @@ class _NativeChatViewState extends State<NativeChatView>
     final mimeType = lookupMimeType(fileName) ?? 'application/octet-stream';
     await _guardSend(() async {
       _beginUpload('上传文件', kind: 'FILE', fileName: fileName);
-      await _service.sendFile(
+      await ChatFileUploadCoordinator.instance.sendFile(
+        session: widget.session,
         conversationId: conv.id,
         bytes: bytes,
         fileName: fileName,
         mimeType: mimeType,
-        onProgress: (p) => _setUploadProgress(p),
       );
     });
   }
@@ -2462,6 +2514,7 @@ class _NativeChatViewState extends State<NativeChatView>
   Future<void> _onDesktopFilesDropped(DropDoneDetails detail) async {
     final conv = _conversation;
     if (!_supportsDesktopFileDrop ||
+        !TickerMode.valuesOf(context).enabled ||
         conv == null ||
         conv.dissolved ||
         _messageMultiSelectMode) {
@@ -2953,8 +3006,15 @@ class _NativeChatViewState extends State<NativeChatView>
     final isImage = kind == 'IMAGE';
     final isAudio = kind == 'AUDIO';
     final desktop = isDesktopCommOnly;
+    final attachmentName = _mediaDownloadFileName(m);
     final fileDownloaded =
-        isFile && _isFileDownloaded(m.payload, _mediaDownloadFileName(m));
+        isFile && _isFileDownloaded(m.payload, attachmentName);
+    final canSaveFileToKb =
+        isFile && chatFileSupportsKbUpload(attachmentName, m.payload);
+    if (isFile) {
+      await _ensureDriveSavedKnown(m.payload);
+    }
+    final driveSaved = isFile && _isDriveSaved(m.payload);
     final actions = <_MessageQuickAction>[
       if (desktop && isFile) ...[
         const _MessageQuickAction(
@@ -2990,6 +3050,20 @@ class _NativeChatViewState extends State<NativeChatView>
         label: '转发',
         icon: Icons.shortcut_rounded,
       ),
+      if (canSaveFileToKb)
+        const _MessageQuickAction(
+          id: 'save_to_kb',
+          label: '存入知识库',
+          icon: Icons.cloud_upload_outlined,
+        ),
+      if (isFile)
+        _MessageQuickAction(
+          id: 'save_to_drive',
+          label: driveSaved ? '再次存入微盘' : '存入微盘',
+          icon: driveSaved
+              ? Icons.folder_copy_outlined
+              : Icons.folder_shared_outlined,
+        ),
       if (copyText.isNotEmpty)
         const _MessageQuickAction(
           id: 'copy',
@@ -3024,10 +3098,10 @@ class _NativeChatViewState extends State<NativeChatView>
     final action = await _showMessageActionsMenu(actions, anchor: anchor);
     switch (action) {
       case 'open_file':
-        await _openFileAttachment(m.payload, _mediaDownloadFileName(m));
+        await _openFileAttachment(m.payload, attachmentName);
         break;
       case 'reveal_file':
-        await _revealFileOnDesktop(m.payload, _mediaDownloadFileName(m));
+        await _revealFileOnDesktop(m.payload, attachmentName);
         break;
       case 'transcribe':
         await _transcribeVoiceMessage(m);
@@ -3038,14 +3112,20 @@ class _NativeChatViewState extends State<NativeChatView>
       case 'forward':
         _forwardMessage(m);
         break;
+      case 'save_to_kb':
+        await _saveChatAttachmentToKb(m.payload, attachmentName);
+        break;
+      case 'save_to_drive':
+        await _saveChatAttachmentToDrive(m.payload, attachmentName);
+        break;
       case 'copy':
         await _copyMessageText(copyText);
         break;
       case 'download':
-        await _downloadFile(m.payload, _mediaDownloadFileName(m));
+        await _downloadFile(m.payload, attachmentName);
         break;
       case 'redownload':
-        await _redownloadFile(m.payload, _mediaDownloadFileName(m));
+        await _redownloadFile(m.payload, attachmentName);
         break;
       case 'multi_msg':
         _enterMessageMultiSelect(initialMessageId: m.id);
@@ -4322,6 +4402,7 @@ class _NativeChatViewState extends State<NativeChatView>
         payload: payload,
         fileName: fileName,
         saveToKbSession: widget.session,
+        saveToDriveSession: widget.session,
       );
       return;
     }
@@ -4334,6 +4415,7 @@ class _NativeChatViewState extends State<NativeChatView>
       conversationId: _chatConversationId,
       initialLocalPath: initialLocalPath,
       saveToKbSession: widget.session,
+      saveToDriveSession: widget.session,
       onDownloaded: () {
         final key = _downloadedKey(payload, fileName);
         if (key.isEmpty || !mounted) return;
@@ -4346,16 +4428,22 @@ class _NativeChatViewState extends State<NativeChatView>
     Map<String, dynamic>? payload,
     String fileName,
   ) async {
+    final kbSession = chatFileSupportsKbUpload(fileName, payload)
+        ? widget.session
+        : null;
     if (chatPayloadIsPdf(payload, fileName)) {
       await showChatPdfPreview(
         context: context,
         service: _service,
         payload: payload,
         fileName: fileName,
+        saveToKbSession: kbSession,
+        saveToDriveSession: widget.session,
       );
       return;
     }
     // PC：下载后直接用系统默认应用打开（已缓存则跳过下载）。
+    // 存入知识库 / 微盘走消息菜单。
     if (isDesktopCommOnly) {
       await _openOrDownloadFileOnDesktop(payload, fileName);
       return;
@@ -4368,12 +4456,172 @@ class _NativeChatViewState extends State<NativeChatView>
       payload: payload,
       fileName: fileName,
       conversationId: _chatConversationId,
+      saveToKbSession: kbSession,
+      saveToDriveSession: widget.session,
       onDownloaded: () {
         final key = _downloadedKey(payload, fileName);
         if (key.isEmpty || !mounted) return;
         setState(() => _downloadedFileKeys.add(key));
       },
     );
+  }
+
+  /// 将会话附件存入微盘（可选空间与文件夹）。
+  Future<void> _saveChatAttachmentToDrive(
+    Map<String, dynamic>? payload,
+    String fileName,
+  ) async {
+    if (_downloadingMedia) {
+      _showToast('正在处理，请稍候…');
+      return;
+    }
+    final pick = await pickDriveSaveLocation(
+      context: context,
+      session: widget.session,
+      fileName: fileName,
+    );
+    if (pick == null || !mounted) return;
+
+    final cacheKey = _fileCacheKey(payload);
+    _beginDownload(cacheKey);
+    try {
+      List<int> bytes;
+      if (ConversationService.hasAuthMedia(payload)) {
+        bytes = await _service.loadChatMediaBytes(
+          payload,
+          onProgress: _setDownloadProgress,
+        );
+      } else {
+        final path = await _saveAttachmentToDisk(
+          payload,
+          fileName,
+          cacheKey: cacheKey,
+        );
+        if (path == null || path.isEmpty) {
+          throw Exception('无法读取文件内容');
+        }
+        bytes = await XFile(path).readAsBytes();
+        _markFileDownloaded(payload, fileName);
+      }
+      if (bytes.isEmpty) throw Exception('文件内容为空');
+      if (!mounted) return;
+      final mimeType = (payload?['mimeType'] ?? '').toString().trim();
+      final sourceKey = cacheKey;
+      final ok = await uploadBytesToDriveLocation(
+        context: context,
+        session: widget.session,
+        location: pick,
+        bytes: bytes,
+        fileName: fileName,
+        mimeType: mimeType.isEmpty ? null : mimeType,
+        sourceKey: sourceKey,
+      );
+      if (ok && sourceKey.isNotEmpty && mounted) {
+        setState(() => _driveSavedFileKeys.add(sourceKey));
+      }
+    } catch (e) {
+      if (!mounted) return;
+      _showToast(
+        friendlyErrorText(e, fallback: '存入微盘失败，请稍后重试'),
+        error: true,
+      );
+    } finally {
+      _endDownload();
+    }
+  }
+
+  bool _isDriveSaved(Map<String, dynamic>? payload) {
+    final key = _fileCacheKey(payload);
+    return key.isNotEmpty && _driveSavedFileKeys.contains(key);
+  }
+
+  Future<void> _ensureDriveSavedKnown(Map<String, dynamic>? payload) async {
+    final key = _fileCacheKey(payload);
+    if (key.isEmpty || _driveSavedFileKeys.contains(key)) return;
+    final saved = await isChatFileSavedToDrive(
+      session: widget.session,
+      sourceKey: key,
+    );
+    if (!saved || !mounted) return;
+    setState(() => _driveSavedFileKeys.add(key));
+  }
+
+  /// 将会话附件存入当前用户知识库（PDF / Word / Excel / Markdown）。
+  Future<void> _saveChatAttachmentToKb(
+    Map<String, dynamic>? payload,
+    String fileName,
+  ) async {
+    if (!chatFileSupportsKbUpload(fileName, payload)) {
+      _showToast('仅支持 PDF / Word / Excel / Markdown', error: true);
+      return;
+    }
+    if (_downloadingMedia) {
+      _showToast('正在处理，请稍候…');
+      return;
+    }
+    final title = fileName.trim().isNotEmpty ? fileName.trim() : '文档';
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('存入我的知识库'),
+        content: Text(
+          '将把「$title」存入你的知识库，上传后可检索引用。\n\n是否继续？',
+          style: DunesTypography.sans(fontSize: 14, height: 1.55),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('确认存入'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    final cacheKey = _fileCacheKey(payload);
+    _beginDownload(cacheKey);
+    try {
+      List<int> bytes;
+      if (ConversationService.hasAuthMedia(payload)) {
+        bytes = await _service.loadChatMediaBytes(
+          payload,
+          onProgress: _setDownloadProgress,
+        );
+      } else {
+        final path = await _saveAttachmentToDisk(
+          payload,
+          fileName,
+          cacheKey: cacheKey,
+        );
+        if (path == null || path.isEmpty) {
+          throw Exception('无法读取文件内容');
+        }
+        bytes = await XFile(path).readAsBytes();
+        _markFileDownloaded(payload, fileName);
+      }
+      if (bytes.isEmpty) throw Exception('文件内容为空');
+      final kb = NativeKbService(session: widget.session);
+      await kb.uploadDocument(
+        bytes: bytes,
+        fileName: fileName,
+        title: title,
+      );
+      KbDocumentCoordinator.instance.notifyChanged();
+      if (!mounted) return;
+      _showToast('已存入你的知识库，正在后台解析入库');
+    } catch (e) {
+      if (!mounted) return;
+      _showToast(
+        friendlyErrorText(e, fallback: '存入知识库失败，请稍后重试'),
+        error: true,
+      );
+    } finally {
+      _endDownload();
+    }
   }
 
   String _fileCacheKey(Map<String, dynamic>? payload) {
@@ -5623,7 +5871,12 @@ class _NativeChatViewState extends State<NativeChatView>
       body: SafeArea(
         bottom: false,
         child: DropTarget(
-          enable: _supportsDesktopFileDrop && !locked && !selecting,
+          // keep-alive 的 Offstage 会话仍会挂载 DropTarget；用 TickerMode
+          // 保证切到工作台/微盘时不会把拖入文件误发到 IM。
+          enable: _supportsDesktopFileDrop &&
+              !locked &&
+              !selecting &&
+              TickerMode.valuesOf(context).enabled,
           onDragEntered: (_) {
             if (!_fileDropHovering) setState(() => _fileDropHovering = true);
           },
@@ -5631,6 +5884,7 @@ class _NativeChatViewState extends State<NativeChatView>
             if (_fileDropHovering) setState(() => _fileDropHovering = false);
           },
           onDragDone: (detail) {
+            if (!TickerMode.valuesOf(context).enabled) return;
             if (_fileDropHovering) setState(() => _fileDropHovering = false);
             unawaited(_onDesktopFilesDropped(detail));
           },

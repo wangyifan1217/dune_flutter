@@ -48,3 +48,18 @@ Future<void> deleteCachedChatFileImpl(
   String fileName, {
   int? conversationId,
 }) async {}
+
+Future<String?> saveBytesAsDriveFileImpl(
+  Uint8List bytes,
+  String fileName, {
+  String? cacheKey,
+}) async {
+  throw UnsupportedError('当前平台不支持下载');
+}
+
+Future<String?> findCachedDriveFileImpl(
+  String fileName, {
+  String? cacheKey,
+}) async {
+  return null;
+}

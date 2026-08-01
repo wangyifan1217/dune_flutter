@@ -15,6 +15,7 @@ class NativeB3Page extends StatefulWidget {
     required this.session,
     required this.navigation,
     required this.onOpenForm,
+    this.onBack,
     this.onCategoryChanged,
     this.initialCategory = 'biz',
   });
@@ -22,6 +23,7 @@ class NativeB3Page extends StatefulWidget {
   final AuthSession session;
   final DunesNavigationController navigation;
   final void Function(String templateKey) onOpenForm;
+  final VoidCallback? onBack;
   final void Function(String category)? onCategoryChanged;
   final String initialCategory;
 
@@ -120,7 +122,7 @@ class _NativeB3PageState extends State<NativeB3Page> {
             XflowDsBar(
               crumb: '我的 · 更多审批',
               title: '发起新审批',
-              onBack: () => widget.navigation.go('B2'),
+              onBack: widget.onBack ?? () => widget.navigation.go('B2'),
             ),
             Expanded(
               child: _loading
@@ -221,7 +223,7 @@ class _NativeB3PageState extends State<NativeB3Page> {
         child: InkWell(
           borderRadius: BorderRadius.circular(7),
           onTap: onTap,
-            child: Padding(
+          child: Padding(
             padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,

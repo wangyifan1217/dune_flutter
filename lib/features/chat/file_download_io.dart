@@ -120,6 +120,17 @@ String _conversationFolderPath(Directory dir, int conversationId) {
   return '${dir.path}${Platform.pathSeparator}${_safeFolderName('$conversationId')}';
 }
 
+/// 微盘本地下载目录：`{根目录}/企业微盘/{fileName}`（无 hash 子目录）。
+const _driveLocalFolderName = '企业微盘';
+
+String _driveFolderPath(Directory dir) {
+  return '${dir.path}${Platform.pathSeparator}$_driveLocalFolderName';
+}
+
+String _driveCachedFilePath(Directory dir, String fileName) {
+  return '${_driveFolderPath(dir)}${Platform.pathSeparator}${_safeFileName(fileName)}';
+}
+
 String _legacyCachedFilePath(Directory dir, String cacheKey, String fileName) {
   final folder =
       '${dir.path}${Platform.pathSeparator}${_legacyCacheFolderName(cacheKey)}';
@@ -337,4 +348,38 @@ Future<void> revealLocalFileImpl(String path) async {
 Future<String> resolveImSaveDirPathImpl() async {
   final dir = await _resolveSaveDir();
   return dir.path;
+}
+
+Future<String?> saveBytesAsDriveFileImpl(
+  Uint8List bytes,
+  String fileName, {
+  String? cacheKey,
+}) async {
+  final dir = await _resolveSaveDir();
+  final path = _driveCachedFilePath(dir, fileName);
+  await Directory(File(path).parent.path).create(recursive: true);
+  await File(path).writeAsBytes(bytes, flush: true);
+  return path;
+}
+
+Future<String?> findCachedDriveFileImpl(
+  String fileName, {
+  String? cacheKey,
+}) async {
+  final dirs = await _cacheSearchDirs();
+  for (final dir in dirs) {
+    final path = _driveCachedFilePath(dir, fileName);
+    final file = File(path);
+    if (await file.exists() && await file.length() > 0) return path;
+  }
+  // 兼容旧版 hash 子目录。
+  final key = (cacheKey ?? '').trim();
+  if (key.isNotEmpty) {
+    for (final dir in dirs) {
+      final legacy = _legacyCachedFilePath(dir, key, fileName);
+      final file = File(legacy);
+      if (await file.exists() && await file.length() > 0) return legacy;
+    }
+  }
+  return null;
 }

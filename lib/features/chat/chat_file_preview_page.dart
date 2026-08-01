@@ -8,11 +8,35 @@ import '../../core/theme/dunes_theme.dart';
 import '../../core/util/friendly_error.dart';
 import '../auth/auth_session.dart';
 import '../conversation/conversation_service.dart';
+import '../drive/chat_save_to_drive.dart';
 import '../kb/kb_document_coordinator.dart';
 import '../kb/native_kb_service.dart';
 import 'file_download.dart' as file_dl;
 
 const _wechatGreen = Color(0xFF07C160);
+
+/// 与知识库上传页一致：PDF / Word / Excel / Markdown。
+bool chatFileSupportsKbUpload(
+  String fileName, [
+  Map<String, dynamic>? payload,
+]) {
+  final name = fileName.trim().toLowerCase();
+  final ext = name.contains('.') ? name.split('.').last.trim() : '';
+  const allowed = <String>{'pdf', 'doc', 'docx', 'xlsx', 'xls', 'md'};
+  if (allowed.contains(ext)) return true;
+  final mime = (payload?['mimeType'] ?? '').toString().trim().toLowerCase();
+  switch (mime) {
+    case 'application/pdf':
+    case 'application/msword':
+    case 'application/vnd.openxmlformats-officedocument.wordprocessingml.document':
+    case 'application/vnd.ms-excel':
+    case 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet':
+    case 'text/markdown':
+      return true;
+    default:
+      return false;
+  }
+}
 
 Future<void> showChatFilePreview({
   required BuildContext context,
@@ -23,6 +47,7 @@ Future<void> showChatFilePreview({
   String? initialLocalPath,
   VoidCallback? onDownloaded,
   AuthSession? saveToKbSession,
+  AuthSession? saveToDriveSession,
 }) {
   final page = ChatFilePreviewPage(
     service: service,
@@ -32,6 +57,7 @@ Future<void> showChatFilePreview({
     initialLocalPath: initialLocalPath,
     onDownloaded: onDownloaded,
     saveToKbSession: saveToKbSession,
+    saveToDriveSession: saveToDriveSession ?? saveToKbSession,
   );
   if (isDesktopCommOnly) {
     return showDialog<void>(
@@ -77,6 +103,7 @@ class ChatFilePreviewPage extends StatefulWidget {
     this.initialLocalPath,
     this.onDownloaded,
     this.saveToKbSession,
+    this.saveToDriveSession,
   });
 
   final ConversationService service;
@@ -85,8 +112,10 @@ class ChatFilePreviewPage extends StatefulWidget {
   final int? conversationId;
   final String? initialLocalPath;
   final VoidCallback? onDownloaded;
-  /// 非空时提供「存入我的知识库」（用于 IM 转发的知识库文档）。
+  /// 非空时提供「存入我的知识库」（IM 普通附件 / 知识库转发文档）。
   final AuthSession? saveToKbSession;
+  /// 非空时提供「存入微盘」。
+  final AuthSession? saveToDriveSession;
 
   @override
   State<ChatFilePreviewPage> createState() => _ChatFilePreviewPageState();
@@ -95,6 +124,8 @@ class ChatFilePreviewPage extends StatefulWidget {
 class _ChatFilePreviewPageState extends State<ChatFilePreviewPage> {
   bool _busy = false;
   bool _savingToKb = false;
+  bool _savingToDrive = false;
+  bool _driveSaved = false;
   double _progress = 0;
   String? _localPath;
   String? _status;
@@ -115,6 +146,7 @@ class _ChatFilePreviewPageState extends State<ChatFilePreviewPage> {
   @override
   void initState() {
     super.initState();
+    unawaited(_refreshDriveSaved());
     final initial = widget.initialLocalPath?.trim() ?? '';
     if (initial.isNotEmpty) {
       _localPath = initial;
@@ -232,9 +264,81 @@ class _ChatFilePreviewPageState extends State<ChatFilePreviewPage> {
     }
   }
 
+  String get _driveSourceKey {
+    final objectKey = (widget.payload?['objectKey'] ?? '').toString().trim();
+    if (objectKey.isNotEmpty) return objectKey;
+    return ConversationService.mediaDirectUrl(widget.payload);
+  }
+
+  Future<void> _refreshDriveSaved() async {
+    final session = widget.saveToDriveSession;
+    final key = _driveSourceKey;
+    if (session == null || key.isEmpty || _driveSaved) return;
+    final saved = await isChatFileSavedToDrive(
+      session: session,
+      sourceKey: key,
+    );
+    if (saved && mounted) setState(() => _driveSaved = true);
+  }
+
+  Future<void> _saveToDrive() async {
+    final session = widget.saveToDriveSession;
+    if (session == null || _savingToDrive || _busy || _savingToKb) return;
+
+    final pick = await pickDriveSaveLocation(
+      context: context,
+      session: session,
+      fileName: widget.fileName,
+    );
+    if (pick == null || !mounted) return;
+
+    setState(() => _savingToDrive = true);
+    try {
+      List<int> bytes;
+      if (ConversationService.hasAuthMedia(widget.payload)) {
+        bytes = await widget.service.loadChatMediaBytes(widget.payload);
+      } else {
+        final path = await _ensureDownloaded();
+        if (path == null || path.isEmpty) {
+          throw Exception('无法读取文件内容');
+        }
+        bytes = await XFile(path).readAsBytes();
+      }
+      if (bytes.isEmpty) throw Exception('文件内容为空');
+      if (!mounted) return;
+      final mimeType =
+          (widget.payload?['mimeType'] ?? '').toString().trim();
+      final ok = await uploadBytesToDriveLocation(
+        context: context,
+        session: session,
+        location: pick,
+        bytes: bytes,
+        fileName: widget.fileName,
+        mimeType: mimeType.isEmpty ? null : mimeType,
+        sourceKey: _driveSourceKey,
+      );
+      if (ok && mounted) setState(() => _driveSaved = true);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(friendlyErrorText(e, fallback: '存入微盘失败，请稍后重试')),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _savingToDrive = false);
+    }
+  }
+
   Future<void> _saveToKb() async {
     final session = widget.saveToKbSession;
-    if (session == null || _savingToKb || _busy) return;
+    if (session == null ||
+        _savingToKb ||
+        _busy ||
+        _savingToDrive ||
+        !chatFileSupportsKbUpload(widget.fileName, widget.payload)) {
+      return;
+    }
     final title = widget.fileName.trim().isNotEmpty
         ? widget.fileName.trim()
         : '文档';
@@ -299,7 +403,10 @@ class _ChatFilePreviewPageState extends State<ChatFilePreviewPage> {
   @override
   Widget build(BuildContext context) {
     final downloaded = _localPath != null && _localPath!.isNotEmpty;
-    final canSaveToKb = widget.saveToKbSession != null;
+    final canSaveToKb = widget.saveToKbSession != null &&
+        chatFileSupportsKbUpload(widget.fileName, widget.payload);
+    final canSaveToDrive = widget.saveToDriveSession != null;
+    final actionBusy = _busy || _savingToKb || _savingToDrive;
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
@@ -314,7 +421,7 @@ class _ChatFilePreviewPageState extends State<ChatFilePreviewPage> {
           if (canSaveToKb)
             IconButton(
               tooltip: '存入我的知识库',
-              onPressed: (_busy || _savingToKb) ? null : _saveToKb,
+              onPressed: actionBusy ? null : _saveToKb,
               icon: _savingToKb
                   ? const SizedBox(
                       width: 20,
@@ -332,21 +439,28 @@ class _ChatFilePreviewPageState extends State<ChatFilePreviewPage> {
             onSelected: (value) {
               if (value == 'download') unawaited(_downloadOnly());
               if (value == 'saveToKb') unawaited(_saveToKb());
+              if (value == 'saveToDrive') unawaited(_saveToDrive());
             },
             itemBuilder: (ctx) => [
               PopupMenuItem(
                 value: 'download',
-                enabled: !_busy && !_savingToKb && (_canRedownload || !downloaded),
+                enabled: !actionBusy && (_canRedownload || !downloaded),
                 child: Text(
                   downloaded
                       ? (_canRedownload ? '重新下载' : '已下载')
                       : '下载',
                 ),
               ),
+              if (canSaveToDrive)
+                PopupMenuItem(
+                  value: 'saveToDrive',
+                  enabled: !actionBusy,
+                  child: Text(_driveSaved ? '再次存入微盘' : '存入微盘'),
+                ),
               if (canSaveToKb)
                 PopupMenuItem(
                   value: 'saveToKb',
-                  enabled: !_busy && !_savingToKb,
+                  enabled: !actionBusy,
                   child: const Text('存入我的知识库'),
                 ),
             ],

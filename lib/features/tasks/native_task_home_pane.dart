@@ -790,37 +790,28 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
     }
 
     return [
-      SliverLayoutBuilder(
-        builder: (context, constraints) {
-          final width = constraints.crossAxisExtent;
-          final crossAxisCount = width >= 1200
-              ? 3
-              : width >= 800
-                  ? 2
-                  : 1;
-          return SliverPadding(
-            padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
-            sliver: SliverGrid(
-              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: crossAxisCount,
-                mainAxisSpacing: 12,
-                crossAxisSpacing: 12,
-                mainAxisExtent: 148,
-              ),
-              delegate: SliverChildBuilderDelegate(
-                (context, i) {
-                  final t = items[i];
-                  return TaskNameCard(
-                    session: widget.session,
-                    task: t,
-                    onTap: () => _openDetail(t.id),
-                  );
-                },
-                childCount: items.length,
-              ),
-            ),
-          );
-        },
+      SliverPadding(
+        padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+        sliver: SliverGrid(
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            // APP/PC 统一一行三个，纵向滑动浏览。
+            crossAxisCount: 3,
+            mainAxisSpacing: 12,
+            crossAxisSpacing: 10,
+            mainAxisExtent: 148,
+          ),
+          delegate: SliverChildBuilderDelegate(
+            (context, i) {
+              final t = items[i];
+              return TaskNameCard(
+                session: widget.session,
+                task: t,
+                onTap: () => _openDetail(t.id),
+              );
+            },
+            childCount: items.length,
+          ),
+        ),
       ),
     ];
   }

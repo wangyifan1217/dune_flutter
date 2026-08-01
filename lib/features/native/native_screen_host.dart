@@ -3,6 +3,7 @@ import 'dart:collection';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/http/session_http.dart';
 import '../../core/layout/chat_layout.dart';
@@ -16,7 +17,9 @@ import '../approval/native_approval_page.dart';
 import '../approval_assistant/native_approval_assistant_page.dart';
 import '../approval_assistant/native_approval_assistant_pending_page.dart';
 import '../task_assistant/native_task_assistant_page.dart';
+import '../reconciliation/native_reconciliation_assistant_page.dart';
 import '../auth/auth_session.dart';
+import '../auth/invite_qr_page.dart';
 import '../auth/qr_login_scan_page.dart';
 import '../chat/native_broadcast_page.dart';
 import '../desktop/native_desktop_settings_page.dart';
@@ -88,9 +91,7 @@ import '../update/app_update_dialog.dart';
 import '../update/app_update_service.dart';
 import '../workbench/native_avatar_sheet.dart';
 import '../workbench/native_my_workbench_pages.dart';
-import '../workbench/native_team_board_page.dart';
 import '../workbench/workbench_badge_notifier.dart';
-import '../lighthouse/contract_sealing_page.dart';
 import '../lighthouse/native_lighthouse_page.dart';
 import '../lighthouse/platform_tree.dart';
 import '../meeting/meeting_live_controller.dart';
@@ -105,6 +106,7 @@ import '../ai_summary/ai_summary_service.dart';
 import '../ai_summary/native_ai_summary_create_page.dart';
 import '../ai_summary/native_ai_summary_detail_page.dart';
 import '../ai_summary/native_ai_summary_hub_page.dart';
+import '../drive/native_drive_page.dart';
 
 class NativeScreenHost extends StatefulWidget {
   const NativeScreenHost({
@@ -137,8 +139,10 @@ class _NativeScreenHostState extends State<NativeScreenHost>
   NativeConversation? _selectedTaskAssistant;
   ApprovalAssistantPickMode _approvalAssistantPickMode =
       ApprovalAssistantPickMode.browse;
+
   /// 作废过期的「打开审批助手」异步结果，避免从灯塔等会话被事后抢跳到 AA1。
   int _approvalAssistantOpenGen = 0;
+
   /// 双栏右侧会话保活：机器人↔私聊/群切换时不销毁 State，避免整页转圈。
   static const int _maxDualChatKeepAlive = 8;
   final LinkedHashMap<String, _DualChatSlot> _dualChatSlots =
@@ -146,6 +150,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
   final Map<String, GlobalKey> _dualChatKeys = <String, GlobalKey>{};
   NativeConversation? _selectedBroadcast;
   NativeContact? _selectedContact;
+
   /// PC 双栏：从会话打开名片时嵌在右侧栏，返回目标为 C2/C5；通讯录等入口为 null（整页）。
   String? _profileReturnScreen;
   bool _contactsGroupPickMode = false;
@@ -181,11 +186,14 @@ class _NativeScreenHostState extends State<NativeScreenHost>
   int _meetingId = 0;
   int _cursorBindingId = 0;
   String _selectedRobotConsultId = '';
+
   /// 从通讯机器人会话进入 QJR 时带上 robotKey。
   String _qjrRobotKey = 'r_lighthouse';
+
   /// true：从 IM 机器人会话进咨询明细；false：从 NOVA 板块进入。
   bool _qjrOpenedFromChat = false;
   String _lastMyScreen = 'B2';
+
   /// NOVA 板块离开时记住的子页（返回时恢复，对标 `_lastMyScreen`）。
   String _lastQianjiScreen = 'QJ';
   QianjiEntity? _selectedQianjiEntity;
@@ -197,6 +205,12 @@ class _NativeScreenHostState extends State<NativeScreenHost>
   Timer? _commBadgeRefreshDebounce;
   Timer? _commBadgeRecorrectTimer;
   Timer? _workbenchBadgeRefreshDebounce;
+  bool _commBadgeRefreshInFlight = false;
+  bool _commBadgeRefreshQueued = false;
+  DateTime? _commBadgeRefreshBackoffUntil;
+  bool _workbenchBadgeRefreshInFlight = false;
+  bool _workbenchBadgeRefreshQueued = false;
+  DateTime? _workbenchBadgeRefreshBackoffUntil;
   final Map<int, bool> _mutedConvIds = <int, bool>{};
   String? _lastScreen;
   int _lastHistoryDepth = 0;
@@ -207,7 +221,9 @@ class _NativeScreenHostState extends State<NativeScreenHost>
 
   /// Keep 手机端会话列表 alive：进 C2/C5 等会话页再返回时不 dispose，保留滚动位置。
   bool _inboxMounted = false;
-  final GlobalKey _inboxPageKey = GlobalKey(debugLabel: 'inbox-page-keep-alive');
+  final GlobalKey _inboxPageKey = GlobalKey(
+    debugLabel: 'inbox-page-keep-alive',
+  );
 
   /// Keep PC 通讯双栏 alive across 灯塔/我的/NOVA tab switches，避免列表整页转圈。
   bool _commDualMounted = false;
@@ -235,6 +251,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
 
   /// PC 侧栏「设置」页（保留侧栏，内容区切换）。
   bool _desktopSettingsOpen = false;
+  bool _desktopSettingsChildReturnPending = false;
+  bool _desktopQrLoginOpening = false;
 
   void _markUserEnteredChat() {
     _userActivelyInChat = true;
@@ -271,8 +289,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
   }
 
   void _syncActiveViewReport() {
-    final shouldReport =
-        _userActivelyInChat && !windowsTrayIsWindowInactive();
+    final shouldReport = _userActivelyInChat && !windowsTrayIsWindowInactive();
     final nextId = shouldReport ? (_peekViewingConversationId() ?? 0) : 0;
     final prevId = _reportedActiveViewConvId;
     if (nextId == prevId) {
@@ -298,9 +315,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     _activeViewHeartbeat?.cancel();
     _activeViewHeartbeat = Timer.periodic(const Duration(seconds: 25), (_) {
       final id = _reportedActiveViewConvId;
-      if (id <= 0 ||
-          !_userActivelyInChat ||
-          windowsTrayIsWindowInactive()) {
+      if (id <= 0 || !_userActivelyInChat || windowsTrayIsWindowInactive()) {
         _syncActiveViewReport();
         return;
       }
@@ -464,18 +479,20 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       final map = data is Map ? data : event.raw;
       final status = (map['status'] ?? '').toString().toUpperCase();
       if (status == 'SUCCESS' || status == 'FAILED') {
-        final onSummary = const <String>{'AS1', 'AS2', 'AS3'}
-            .contains(widget.navigation.currentScreen);
+        final onSummary = const <String>{
+          'AS1',
+          'AS2',
+          'AS3',
+        }.contains(widget.navigation.currentScreen);
         if (onSummary) {
           final screen = widget.navigation.currentScreen;
           if (screen == 'AS3') {
             final summaryId = (map['id'] as num?)?.toInt() ?? 0;
-            if (summaryId > 0 &&
-                summaryId == (_selectedAiSummaryId ?? 0)) {
+            if (summaryId > 0 && summaryId == (_selectedAiSummaryId ?? 0)) {
               unawaited(
-                AiSummaryService(session: widget.session)
-                    .markRead(summaryId)
-                    .whenComplete(_scheduleCommBadgeRefresh),
+                AiSummaryService(
+                  session: widget.session,
+                ).markRead(summaryId).whenComplete(_scheduleCommBadgeRefresh),
               );
               return;
             }
@@ -580,6 +597,16 @@ class _NativeScreenHostState extends State<NativeScreenHost>
   }
 
   void _scheduleCommBadgeRefresh() {
+    final backoffUntil = _commBadgeRefreshBackoffUntil;
+    if (backoffUntil != null && DateTime.now().isBefore(backoffUntil)) {
+      final delay = backoffUntil.difference(DateTime.now());
+      _commBadgeRefreshDebounce?.cancel();
+      _commBadgeRefreshDebounce = Timer(delay, () {
+        if (!mounted) return;
+        unawaited(_refreshCommUnreadBadge());
+      });
+      return;
+    }
     _commBadgeRefreshDebounce?.cancel();
     _commBadgeRefreshDebounce = Timer(const Duration(milliseconds: 400), () {
       if (!mounted) return;
@@ -635,6 +662,16 @@ class _NativeScreenHostState extends State<NativeScreenHost>
   }
 
   void _scheduleWorkbenchBadgeRefresh({bool rejected = false}) {
+    final backoffUntil = _workbenchBadgeRefreshBackoffUntil;
+    if (backoffUntil != null && DateTime.now().isBefore(backoffUntil)) {
+      final delay = backoffUntil.difference(DateTime.now());
+      _workbenchBadgeRefreshDebounce?.cancel();
+      _workbenchBadgeRefreshDebounce = Timer(delay, () {
+        if (!mounted) return;
+        unawaited(_refreshWorkbenchBadge(notifyRejected: rejected));
+      });
+      return;
+    }
     _workbenchBadgeRefreshDebounce?.cancel();
     _workbenchBadgeRefreshDebounce = Timer(
       const Duration(milliseconds: 350),
@@ -646,8 +683,23 @@ class _NativeScreenHostState extends State<NativeScreenHost>
   }
 
   Future<void> _refreshWorkbenchBadge({bool notifyRejected = false}) async {
+    if (_workbenchBadgeRefreshInFlight) {
+      _workbenchBadgeRefreshQueued = true;
+      return;
+    }
+    final backoffUntil = _workbenchBadgeRefreshBackoffUntil;
+    if (backoffUntil != null && DateTime.now().isBefore(backoffUntil)) {
+      return;
+    }
+    _workbenchBadgeRefreshInFlight = true;
+    final httpClient = http.Client();
     try {
-      final resp = await dunesHttpGet(widget.session, '/workbench/my-stats');
+      final resp = await dunesHttpGet(
+        widget.session,
+        '/workbench/my-stats',
+        client: httpClient,
+      ).timeout(const Duration(seconds: 8));
+      _workbenchBadgeRefreshBackoffUntil = null;
       if (resp.statusCode < 200 || resp.statusCode >= 300) return;
       final body = jsonDecode(resp.body);
       final raw = body is Map<String, dynamic>
@@ -706,7 +758,21 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         windowsTrayNotifyIncomingMessage();
       }
     } catch (_) {
-      // Workbench badge is best-effort.
+      // 弱网超时后退避，避免堆积无超时 HTTP 拖死 UI。
+      _workbenchBadgeRefreshBackoffUntil =
+          DateTime.now().add(const Duration(seconds: 15));
+    } finally {
+      try {
+        httpClient.close();
+      } catch (_) {}
+      _workbenchBadgeRefreshInFlight = false;
+      if (_workbenchBadgeRefreshQueued && mounted) {
+        _workbenchBadgeRefreshQueued = false;
+        final until = _workbenchBadgeRefreshBackoffUntil;
+        if (until == null || !DateTime.now().isBefore(until)) {
+          unawaited(_refreshWorkbenchBadge(notifyRejected: notifyRejected));
+        }
+      }
     }
   }
 
@@ -791,10 +857,30 @@ class _NativeScreenHostState extends State<NativeScreenHost>
   }
 
   Future<void> _refreshCommUnreadBadge() async {
+    if (_commBadgeRefreshInFlight) {
+      _commBadgeRefreshQueued = true;
+      return;
+    }
+    final backoffUntil = _commBadgeRefreshBackoffUntil;
+    if (backoffUntil != null && DateTime.now().isBefore(backoffUntil)) {
+      return;
+    }
+    _commBadgeRefreshInFlight = true;
+    // 共用 Client：超时后 close 可中止挂起连接，避免弱网堆积拖死 UI。
+    final httpClient = http.Client();
+    final convService = ConversationService(
+      session: widget.session,
+      client: httpClient,
+    );
+    final notifService = NotificationService(
+      session: widget.session,
+      client: httpClient,
+    );
+    final aiSummaryService = AiSummaryService(
+      session: widget.session,
+      client: httpClient,
+    );
     try {
-      final convService = ConversationService(session: widget.session);
-      final notifService = NotificationService(session: widget.session);
-      final aiSummaryService = AiSummaryService(session: widget.session);
       final futures = <Future<Object?>>[
         convService.fetchConversations(),
         notifService.fetchSummary(),
@@ -804,18 +890,25 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       if (!widget.session.isExternalUser) {
         futures.add(aiSummaryService.fetchUnreadCount());
       }
-      final results = await Future.wait<Object?>(futures);
+      final results = await Future.wait<Object?>(futures)
+          .timeout(const Duration(seconds: 10));
+      _commBadgeRefreshBackoffUntil = null;
       final allRows = results[0] as List<NativeConversation>;
       final notif = results[1] as NativeNotificationSummary;
       final hidden = results[2] as Map<String, InboxHiddenEntry>;
       final apiTotal = results[3] as int?;
-      final aiSummaryUnread = !widget.session.isExternalUser && results.length > 4
+      final aiSummaryUnread =
+          !widget.session.isExternalUser && results.length > 4
           ? (results[4] as int? ?? 0)
           : 0;
-      final onSummaryScreen = const <String>{'AS1', 'AS2', 'AS3'}
-          .contains(widget.navigation.currentScreen);
-      final effectiveAiUnread =
-          onSummaryScreen || widget.session.isExternalUser ? 0 : aiSummaryUnread;
+      final onSummaryScreen = const <String>{
+        'AS1',
+        'AS2',
+        'AS3',
+      }.contains(widget.navigation.currentScreen);
+      final effectiveAiUnread = onSummaryScreen || widget.session.isExternalUser
+          ? 0
+          : aiSummaryUnread;
       final rows = allRows
           .where((c) => c.isVisible && !isConversationHidden(hidden, c.id))
           .toList(growable: false);
@@ -874,18 +967,35 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         syncPushBadgeCount(serverTotal);
       }
     } catch (e, st) {
+      // 弱网下无超时会堆积连接拖死 UI；失败后短暂退避。
+      _commBadgeRefreshBackoffUntil =
+          DateTime.now().add(const Duration(seconds: 12));
       print('[Badge] refresh failed: $e\n$st');
+    } finally {
+      try {
+        httpClient.close();
+      } catch (_) {}
+      _commBadgeRefreshInFlight = false;
+      if (_commBadgeRefreshQueued && mounted) {
+        _commBadgeRefreshQueued = false;
+        // 退避窗口内不要立刻连环重试。
+        final until = _commBadgeRefreshBackoffUntil;
+        if (until == null || !DateTime.now().isBefore(until)) {
+          unawaited(_refreshCommUnreadBadge());
+        }
+      }
     }
   }
 
-  /// 宽屏双栏：在 C2/C5/CR/AA1/TA1 之间切换时替换栈顶，避免历史栈堆积。
+  /// 宽屏双栏：在会话/助手之间切换时替换栈顶，避免历史栈堆积。
   void _goChatScreen(String screenId) {
     final current = widget.navigation.currentScreen;
     if (current == 'C2' ||
         current == 'C5' ||
         current == 'CR' ||
         current == 'AA1' ||
-        current == 'TA1') {
+        current == 'TA1' ||
+        current == 'RA1') {
       widget.navigation.replaceTop(screenId);
     } else {
       widget.navigation.go(screenId);
@@ -955,10 +1065,11 @@ class _NativeScreenHostState extends State<NativeScreenHost>
   }
 
   void _openRobotConsultListFromChat() {
-    final key = (_selectedRobot?.robotKey ??
-            _selectedRobot?.businessType ??
-            'r_lighthouse')
-        .trim();
+    final key =
+        (_selectedRobot?.robotKey ??
+                _selectedRobot?.businessType ??
+                'r_lighthouse')
+            .trim();
     setState(() {
       _qjrRobotKey = key.isEmpty ? 'r_lighthouse' : key;
       _qjrOpenedFromChat = true;
@@ -1099,6 +1210,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     if (screen == 'AS1' || screen == 'AS2' || screen == 'AS3') return screen;
     if (screen == 'AA1' || screen == 'AA2') return screen;
     if (screen == 'TA1') return screen;
+    if (screen == 'RA1') return screen;
     if (screen == 'C6') return 'C6';
     if (screen == 'C9' && _profileEmbedsInDualPane) return 'C9';
     if (screen == 'C2' || screen == 'C5' || screen == 'CR') return screen;
@@ -1142,6 +1254,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         screen == 'AS3' ||
         screen == 'AA1' ||
         screen == 'AA2' ||
+        screen == 'RA1' ||
         screen == 'TA1';
   }
 
@@ -1199,8 +1312,9 @@ class _NativeScreenHostState extends State<NativeScreenHost>
   }
 
   Widget _buildDualPaneContactProfilePage() {
-    final profileConvId =
-        _profileReturnScreen == 'C5' ? _selectedPrivate?.id : null;
+    final profileConvId = _profileReturnScreen == 'C5'
+        ? _selectedPrivate?.id
+        : null;
     return NativeContactProfilePage(
       key: ValueKey<int>(_selectedContact?.userId ?? 0),
       session: widget.session,
@@ -1214,8 +1328,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           : (convId) {
               setState(() {
                 _searchConversationId = convId;
-                _searchTitle =
-                    '${_selectedPrivate?.displayTitle ?? '私聊'} · 搜索';
+                _searchTitle = '${_selectedPrivate?.displayTitle ?? '私聊'} · 搜索';
                 _searchReturnScreen = 'C5';
                 _focusMessageId = null;
                 _focusMessageHint = null;
@@ -1345,7 +1458,26 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       onOpenAiSummary: () => widget.navigation.go('AS1'),
       onOpenApprovalAssistant: _openApprovalAssistant,
       onOpenTaskAssistant: _openTaskAssistant,
+      onOpenReconciliationAssistant: !widget.session.isExternalUser
+          ? _openReconciliationAssistant
+          : null,
     );
+  }
+
+  void _openReconciliationAssistant() {
+    // 对账助手是独立的会话卡片，不应沿用上一个私聊/群聊的右侧状态。
+    setState(() {
+      _selectedPrivate = null;
+      _selectedPrivatePeerUserId = null;
+      _selectedGroup = null;
+      _selectedRobot = null;
+      _selectedApprovalAssistant = null;
+      _selectedTaskAssistant = null;
+      _focusMessageId = null;
+      _focusMessageHint = null;
+    });
+    _markUserEnteredChat();
+    _goChatScreen('RA1');
   }
 
   Future<void> _openApprovalAssistant([NativeConversation? hint]) async {
@@ -1371,15 +1503,17 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       }
     }
     try {
-      final conv = await ConversationService(session: widget.session)
-          .ensureApprovalAssistantSession();
+      final conv = await ConversationService(
+        session: widget.session,
+      ).ensureApprovalAssistantSession();
       if (!mounted || openGen != _approvalAssistantOpenGen) return;
       setState(() => _selectedApprovalAssistant = conv);
       if (conv.id > 0) {
         _conversationReadSignal.notifyRead(conv.id);
       }
       // 先前没有可用 hint（或仍停在 AA1）时再导航。
-      final onAa = widget.navigation.currentScreen == 'AA1' ||
+      final onAa =
+          widget.navigation.currentScreen == 'AA1' ||
           widget.navigation.currentScreen == 'AA2';
       if (!onAa) {
         _markUserEnteredChat();
@@ -1396,11 +1530,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         return;
       }
       // 已有列表会话仍可看历史；ensure 失败只提示一次。
-      showDunesToast(
-        context,
-        '审批助手会话同步失败，先展示本地会话',
-        kind: DunesToastKind.error,
-      );
+      showDunesToast(context, '审批助手会话同步失败，先展示本地会话', kind: DunesToastKind.error);
     }
   }
 
@@ -1419,8 +1549,9 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       _conversationReadSignal.notifyRead(_selectedTaskAssistant!.id);
     }
     try {
-      final conv = await ConversationService(session: widget.session)
-          .ensureTaskAssistantSession();
+      final conv = await ConversationService(
+        session: widget.session,
+      ).ensureTaskAssistantSession();
       if (!mounted) return;
       setState(() => _selectedTaskAssistant = conv);
       _conversationReadSignal.notifyRead(conv.id);
@@ -1436,7 +1567,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
   }
 
   Widget _buildTaskAssistantPage({bool showBackButton = true}) {
-    final hint = _selectedTaskAssistant ??
+    final hint =
+        _selectedTaskAssistant ??
         const NativeConversation(
           id: 0,
           kind: 'TASK_ASSISTANT',
@@ -1462,7 +1594,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
   }
 
   Widget _buildApprovalAssistantPage({bool showBackButton = true}) {
-    final hint = _selectedApprovalAssistant ??
+    final hint =
+        _selectedApprovalAssistant ??
         const NativeConversation(
           id: 0,
           kind: 'APPROVAL_ASSISTANT',
@@ -1521,14 +1654,14 @@ class _NativeScreenHostState extends State<NativeScreenHost>
   String? _activeDualChatSlotId() {
     final screen = widget.navigation.currentScreen;
     final dual = _dualPaneChatScreen;
-    if (screen == 'AA1' ||
-        screen == 'AA2' ||
-        dual == 'AA1' ||
-        dual == 'AA2') {
+    if (screen == 'AA1' || screen == 'AA2' || dual == 'AA1' || dual == 'AA2') {
       return 'aa';
     }
     if (screen == 'TA1' || dual == 'TA1') {
       return 'ta';
+    }
+    if (screen == 'RA1' || dual == 'RA1') {
+      return 'reconciliation';
     }
     if (_selectedRobot != null) {
       return 'robot:${_selectedRobot!.id}';
@@ -1536,9 +1669,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     if (_selectedPrivate != null || _selectedPrivatePeerUserId != null) {
       final cid = _selectedPrivate?.id ?? 0;
       if (cid > 0) return 'private:$cid';
-      final peer = _selectedPrivatePeerUserId ??
-          _selectedPrivate?.peerUserId ??
-          0;
+      final peer =
+          _selectedPrivatePeerUserId ?? _selectedPrivate?.peerUserId ?? 0;
       return peer > 0 ? 'private-peer:$peer' : null;
     }
     if (_selectedGroup != null) {
@@ -1550,14 +1682,14 @@ class _NativeScreenHostState extends State<NativeScreenHost>
   _DualChatSlot? _captureActiveDualChatSlot() {
     final screen = widget.navigation.currentScreen;
     final dual = _dualPaneChatScreen;
-    if (screen == 'AA1' ||
-        screen == 'AA2' ||
-        dual == 'AA1' ||
-        dual == 'AA2') {
+    if (screen == 'AA1' || screen == 'AA2' || dual == 'AA1' || dual == 'AA2') {
       return _DualChatSlot.approval(_selectedApprovalAssistant);
     }
     if (screen == 'TA1' || dual == 'TA1') {
       return _DualChatSlot.task(_selectedTaskAssistant);
+    }
+    if (screen == 'RA1' || dual == 'RA1') {
+      return const _DualChatSlot.reconciliation();
     }
     if (_selectedRobot != null) {
       return _DualChatSlot.robot(_selectedRobot!);
@@ -1601,7 +1733,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           key: key,
           child: NativeApprovalAssistantPage(
             session: widget.session,
-            conversationHint: slot.conversation ??
+            conversationHint:
+                slot.conversation ??
                 const NativeConversation(
                   id: 0,
                   kind: 'APPROVAL_ASSISTANT',
@@ -1624,7 +1757,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           key: key,
           child: NativeTaskAssistantPage(
             session: widget.session,
-            conversationHint: slot.conversation ??
+            conversationHint:
+                slot.conversation ??
                 const NativeConversation(
                   id: 0,
                   kind: 'TASK_ASSISTANT',
@@ -1637,6 +1771,14 @@ class _NativeScreenHostState extends State<NativeScreenHost>
             showBackButton: false,
             onBack: () => _leaveChatToInbox(clearSelection: true),
             onConversationRead: _handleConversationRead,
+          ),
+        );
+      case _DualChatKind.reconciliation:
+        return KeyedSubtree(
+          key: key,
+          child: NativeReconciliationAssistantPage(
+            desktopMode: true,
+            onBack: () => _leaveChatToInbox(clearSelection: true),
           ),
         );
       case _DualChatKind.robot:
@@ -1662,8 +1804,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           showBackButton: false,
           onBack: () => _leaveChatToInbox(clearSelection: true),
           onOpenProfile: () {
-            final peerId =
-                slot.conversation?.peerUserId ?? slot.peerUserId;
+            final peerId = slot.conversation?.peerUserId ?? slot.peerUserId;
             if (peerId == null || peerId <= 0) return;
             _openContactProfile(
               peerId,
@@ -1676,8 +1817,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           onOpenSearch: (convId) {
             setState(() {
               _searchConversationId = convId;
-              _searchTitle =
-                  '${slot.conversation?.displayTitle ?? '私聊'} · 搜索';
+              _searchTitle = '${slot.conversation?.displayTitle ?? '私聊'} · 搜索';
               _searchReturnScreen = 'C5';
               _focusMessageId = null;
               _focusMessageHint = null;
@@ -1998,9 +2138,13 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         return NativeQianjiAdminShell(
           session: widget.session,
           navigation: widget.navigation,
+          onExit: isDesktopCommOnly
+              ? null
+              : () => widget.navigation.popTo('B2'),
         );
       case 'QJD':
-        final entity = _selectedQianjiEntity ?? QianjiStaticCatalog.entities.first;
+        final entity =
+            _selectedQianjiEntity ?? QianjiStaticCatalog.entities.first;
         return NativeQianjiDetailPage(
           entity: entity,
           onBack: widget.navigation.back,
@@ -2013,8 +2157,10 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           },
         );
       case 'QJI':
-        final entity = _selectedQianjiEntity ?? QianjiStaticCatalog.entities.first;
-        final iteration = _selectedQianjiIteration ??
+        final entity =
+            _selectedQianjiEntity ?? QianjiStaticCatalog.entities.first;
+        final iteration =
+            _selectedQianjiIteration ??
             QianjiStaticCatalog.detailFor(entity).iterations.first;
         return NativeQianjiIterationPage(
           entity: entity,
@@ -2040,7 +2186,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           },
         );
       case 'QJMT':
-        final project = _selectedQianjiProject ?? QianjiProjectCatalog.joined.last;
+        final project =
+            _selectedQianjiProject ?? QianjiProjectCatalog.joined.last;
         return NativeQianjiProjectTasksPage(
           project: project,
           onBack: widget.navigation.back,
@@ -2053,8 +2200,10 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           },
         );
       case 'QJTD':
-        final project = _selectedQianjiProject ?? QianjiProjectCatalog.joined.last;
-        final task = _selectedQianjiTask ??
+        final project =
+            _selectedQianjiProject ?? QianjiProjectCatalog.joined.last;
+        final task =
+            _selectedQianjiTask ??
             QianjiProjectCatalog.detailFor(project).myTasks.first;
         return NativeQianjiTaskDetailPage(
           project: project,
@@ -2076,6 +2225,9 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           onOpenB14: _goB14,
           onOpenB3: _goB3,
           onOpenXflowForm: _openXflowFormFromB2,
+          onOpenWorkbench: !isDesktopCommOnly && !widget.session.isExternalUser
+              ? () => widget.navigation.go('QJA')
+              : null,
           onLogout: widget.onLogout,
         );
       case 'C1':
@@ -2086,6 +2238,28 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         return _buildApprovalAssistantPendingPage();
       case 'TA1':
         return _buildTaskAssistantPage();
+      case 'RA1':
+        return NativeReconciliationAssistantPage(
+          desktopMode: isDesktopCommOnly,
+          onBack: () {
+            if (widget.navigation.history.contains('C1')) {
+              widget.navigation.popTo('C1');
+            } else {
+              widget.navigation.back();
+            }
+          },
+        );
+      case 'FD1':
+        return NativeDrivePage(
+          session: widget.session,
+          onBack: () {
+            if (widget.navigation.history.contains('QJA')) {
+              widget.navigation.popTo('QJA');
+            } else {
+              widget.navigation.popTo('B2');
+            }
+          },
+        );
       case 'AS1':
         return _buildAiSummaryHubPage();
       case 'AS2':
@@ -2173,9 +2347,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         );
       case 'C3':
         return NativeContactsPage(
-          key: ValueKey<String>(
-            'contacts-group-pick-$_contactsGroupPickMode',
-          ),
+          key: ValueKey<String>('contacts-group-pick-$_contactsGroupPickMode'),
           session: widget.session,
           initialGroupPickMode: _contactsGroupPickMode,
           onBack: () {
@@ -2196,8 +2368,9 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           },
         );
       case 'C9':
-        final profileConvId =
-            _profileReturnScreen == 'C5' ? _selectedPrivate?.id : null;
+        final profileConvId = _profileReturnScreen == 'C5'
+            ? _selectedPrivate?.id
+            : null;
         return NativeContactProfilePage(
           session: widget.session,
           contactHint: _selectedContact,
@@ -2252,6 +2425,9 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         return NativeB3Page(
           session: widget.session,
           navigation: widget.navigation,
+          onBack: _desktopSettingsChildReturnPending
+              ? _returnToDesktopSettings
+              : null,
           initialCategory: _b3InitialCategory,
           onCategoryChanged: (category) {
             _b3InitialCategory = category;
@@ -2401,7 +2577,9 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       case 'WX':
         return NativeWechatBotPage(
           session: widget.session,
-          onBack: widget.navigation.back,
+          onBack: _desktopSettingsChildReturnPending
+              ? _returnToDesktopSettings
+              : widget.navigation.back,
         );
       case 'MM-L':
         return NativeMeetingListPage(
@@ -2498,7 +2676,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           },
           onOpenGroupInfo: () => widget.navigation.go('C6'),
           onOpenUser: _openContactProfile,
-          onOpenAiSummary: (convId) => _openAiSummaryCreate(conversationId: convId),
+          onOpenAiSummary: (convId) =>
+              _openAiSummaryCreate(conversationId: convId),
           onOpenApprovalShare: (share) =>
               _openApprovalFromChat(share, from: 'C2'),
           onConversationRead: _handleConversationRead,
@@ -2535,7 +2714,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
             });
             widget.navigation.go('C12');
           },
-          onOpenAiSummary: (convId) => _openAiSummaryCreate(conversationId: convId),
+          onOpenAiSummary: (convId) =>
+              _openAiSummaryCreate(conversationId: convId),
           onOpenApprovalShare: (share) =>
               _openApprovalFromChat(share, from: 'C5'),
           onConversationRead: _handleConversationRead,
@@ -2588,8 +2768,38 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         NativeDesktopSettingsPage(
           onBack: () {
             if (!mounted) return;
-            setState(() => _desktopSettingsOpen = false);
+            setState(() {
+              _desktopSettingsOpen = false;
+              _desktopSettingsChildReturnPending = false;
+            });
           },
+          onOpenTextScale: () => unawaited(_openDesktopTextScalePicker()),
+          onCheckForUpdates: isWindowsDesktopCommOnly
+              ? () => unawaited(_checkDesktopAppUpdate())
+              : null,
+          onScanWorkstation:
+              !isWindowsDesktopCommOnly && !widget.session.isExternalUser
+              ? () {
+                  _leaveDesktopSettingsForChild();
+                  unawaited(_openDesktopQrLoginScanner(returnToSettings: true));
+                }
+              : null,
+          onOpenWechatBot: !widget.session.isExternalUser
+              ? () {
+                  _leaveDesktopSettingsForChild();
+                  widget.navigation.go('WX');
+                }
+              : null,
+          onClearCache: () => unawaited(_clearDesktopLocalCache()),
+          onStartProposal: !widget.session.isExternalUser
+              ? () {
+                  _leaveDesktopSettingsForChild();
+                  _goB3();
+                }
+              : null,
+          onLogout: widget.onLogout == null
+              ? null
+              : () => unawaited(_confirmDesktopLogout()),
         ),
         screen: screen,
       );
@@ -2618,9 +2828,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     final wide = isWideChatLayout(context);
     final dualNow = wide && _isDualPaneChatRoute(screen);
     final dualPrev =
-        previousScreen != null &&
-        wide &&
-        _isDualPaneChatRoute(previousScreen);
+        previousScreen != null && wide && _isDualPaneChatRoute(previousScreen);
 
     // 路由变化时重算 active-view（CR→QJR / 切会话等），避免仍登记旧会话导致推送被吞。
     if (previousScreen != null && previousScreen != screen) {
@@ -2726,8 +2934,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     final body = Stack(
       fit: StackFit.expand,
       children: [
-        if (_commDualMounted)
-          _buildCommDualKeepAlive(active: dualNow),
+        if (_commDualMounted) _buildCommDualKeepAlive(active: dualNow),
         if (_lighthouseMounted)
           Offstage(
             offstage: !isLighthouse,
@@ -2797,6 +3004,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       'AS3',
       'AA1',
       'AA2',
+      'RA1',
     }.contains(screen);
   }
 
@@ -2854,7 +3062,9 @@ class _NativeScreenHostState extends State<NativeScreenHost>
   Widget _wrapWithMainNavigation(Widget content, {required String screen}) {
     final tabBar = DunesMainTabBar(
       navigation: widget.navigation,
-      activeScreen: _mainTabScreenFor(screen),
+      activeScreen: _desktopSettingsOpen
+          ? '__desktop_settings__'
+          : _mainTabScreenFor(screen),
       axis: isDesktopCommOnly ? Axis.vertical : Axis.horizontal,
       commUnread: _commUnread,
       workbenchBadge: _workbenchBadge,
@@ -2897,12 +3107,14 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     return screen == 'C1' ||
         screen == 'B2' ||
         screen == 'QJ' ||
-        screen == 'QJA' ||
         screen == 'LH' ||
         screen == 'LM';
   }
 
   String _mainTabScreenFor(String screen) {
+    if (!isDesktopCommOnly && screen == 'QJA') return 'B2';
+    // 企业微盘从工作台进入：PC 归工作台 Tab，APP 归「我的」。
+    if (screen == 'FD1') return isDesktopCommOnly ? 'QJA' : 'B2';
     if (_isMyRoute(screen)) return 'B2';
     if (screen == 'QJ' ||
         screen == 'QJC' ||
@@ -2928,8 +3140,11 @@ class _NativeScreenHostState extends State<NativeScreenHost>
 
   /// 主 Tab 在板块之间切换时，保留「我的 / NOVA」最后打开的子页面。
   void _switchMainTab(String screen) {
-    if (_desktopSettingsOpen) {
-      setState(() => _desktopSettingsOpen = false);
+    if (_desktopSettingsOpen || _desktopSettingsChildReturnPending) {
+      setState(() {
+        _desktopSettingsOpen = false;
+        _desktopSettingsChildReturnPending = false;
+      });
     }
     final current = widget.navigation.currentScreen;
     final currentTab = _mainTabScreenFor(current);
@@ -3137,7 +3352,179 @@ class _NativeScreenHostState extends State<NativeScreenHost>
 
   void _openDesktopSettings() {
     if (!isDesktopCommOnly || !mounted) return;
-    setState(() => _desktopSettingsOpen = true);
+    setState(() {
+      _desktopSettingsOpen = true;
+      _desktopSettingsChildReturnPending = false;
+    });
+  }
+
+  void _leaveDesktopSettingsForChild() {
+    if (!mounted) return;
+    setState(() {
+      _desktopSettingsOpen = false;
+      _desktopSettingsChildReturnPending = true;
+    });
+  }
+
+  void _returnToDesktopSettings() {
+    if (!mounted) return;
+    if (widget.navigation.canGoBack) {
+      widget.navigation.back();
+    }
+    setState(() {
+      _desktopSettingsOpen = true;
+      _desktopSettingsChildReturnPending = false;
+    });
+  }
+
+  Future<void> _openDesktopQrLoginScanner({
+    bool returnToSettings = false,
+  }) async {
+    if (_desktopQrLoginOpening) return;
+    setState(() => _desktopQrLoginOpening = true);
+    try {
+      await Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => QrLoginScanPage(session: widget.session),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _desktopQrLoginOpening = false);
+    }
+    if (returnToSettings && mounted) {
+      setState(() {
+        _desktopSettingsOpen = true;
+        _desktopSettingsChildReturnPending = false;
+      });
+    }
+  }
+
+  Future<void> _checkDesktopAppUpdate() async {
+    showDunesToast(context, '正在检查更新…');
+    final result = await AppUpdateService.instance.checkUpdate();
+    if (!mounted) return;
+    if (result == null) {
+      showDunesToast(context, '暂无法检查更新，请稍后重试');
+      return;
+    }
+    if (!result.updateAvailable) {
+      showDunesToast(context, '当前已是最新版本');
+      return;
+    }
+    await showAppUpdateDialog(context, result);
+  }
+
+  Future<void> _clearDesktopLocalCache() async {
+    var cleared = false;
+    try {
+      await InboxHiddenStorage.save(const <String, InboxHiddenEntry>{});
+      await NovaWebStorage.clear(widget.session.userId);
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('xflow_draft_sales-proposal');
+      cleared = true;
+    } catch (_) {}
+    if (!mounted) return;
+    showDunesToast(context, cleared ? '本地缓存已清除' : '清除本地缓存失败，请稍后重试');
+  }
+
+  Future<void> _openDesktopTextScalePicker() async {
+    final controller = AppTextScaleController.instance;
+    final picked = await showModalBottomSheet<int>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return SafeArea(
+          top: false,
+          child: Container(
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+            ),
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Center(
+                  child: Container(
+                    width: 36,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: DunesColors.borderSoft,
+                      borderRadius: BorderRadius.circular(99),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Text(
+                  '字体大小',
+                  style: DunesTypography.sans(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: DunesColors.text,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  '调整后将作用于整个 App',
+                  style: DunesTypography.sans(
+                    fontSize: 13,
+                    color: DunesColors.text3,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                for (var i = 0; i < AppTextScaleController.presets.length; i++)
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(
+                      AppTextScaleController.labels[i],
+                      style: DunesTypography.sans(
+                        fontSize: 15 * AppTextScaleController.presets[i],
+                        fontWeight: FontWeight.w600,
+                        color: DunesColors.text,
+                      ),
+                    ),
+                    trailing: i == controller.presetIndex
+                        ? const Icon(
+                            Icons.check_rounded,
+                            color: Color(0xFF7E64BD),
+                          )
+                        : null,
+                    onTap: () => Navigator.pop(ctx, i),
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+    if (picked == null) return;
+    await controller.setPresetIndex(picked);
+    if (!mounted) return;
+    showDunesToast(context, '已切换为「${AppTextScaleController.labels[picked]}」字号');
+  }
+
+  Future<void> _confirmDesktopLogout() async {
+    final confirmed =
+        await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('确认退出登录？'),
+            content: const Text('退出后需要重新登录才能继续使用。'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(false),
+                child: const Text('取消'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(ctx).pop(true),
+                child: const Text('退出登录'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+    if (confirmed && mounted) widget.onLogout?.call();
   }
 }
 
@@ -3248,6 +3635,7 @@ class _NativeB2Page extends StatefulWidget {
     required this.onOpenB14,
     required this.onOpenB3,
     required this.onOpenXflowForm,
+    this.onOpenWorkbench,
     this.onLogout,
   });
 
@@ -3259,6 +3647,7 @@ class _NativeB2Page extends StatefulWidget {
   final void Function({String? filter}) onOpenB14;
   final void Function({String category}) onOpenB3;
   final void Function(String templateKey) onOpenXflowForm;
+  final VoidCallback? onOpenWorkbench;
   final VoidCallback? onLogout;
 
   @override
@@ -3347,7 +3736,8 @@ class _NativeB2PageState extends State<_NativeB2Page> {
     var url = snap.avatarUrl.trim();
     final objectKey = snap.avatarObjectKey.trim();
     if (url.isEmpty && objectKey.isNotEmpty) {
-      url = dunesAvatarResolvedUrlCache[objectKey] ?? _avatarProxyUrl(objectKey);
+      url =
+          dunesAvatarResolvedUrlCache[objectKey] ?? _avatarProxyUrl(objectKey);
     }
     return _NativeB2Profile(
       displayName: (widget.session.displayName ?? '').trim(),
@@ -3471,8 +3861,9 @@ class _NativeB2PageState extends State<_NativeB2Page> {
 
   Future<void> _loadKbSummaryStats({required int generation}) async {
     try {
-      final summary =
-          await NativeKbService(session: widget.session).fetchSummary();
+      final summary = await NativeKbService(
+        session: widget.session,
+      ).fetchSummary();
       if (!_isCurrentStatsLoad(generation)) return;
       setState(() => _kbSummary = summary);
     } catch (_) {
@@ -3482,8 +3873,9 @@ class _NativeB2PageState extends State<_NativeB2Page> {
 
   Future<void> _loadMeetingCountStats({required int generation}) async {
     try {
-      final count =
-          await NativeMeetingService(session: widget.session).fetchMyCount();
+      final count = await NativeMeetingService(
+        session: widget.session,
+      ).fetchMyCount();
       if (!_isCurrentStatsLoad(generation)) return;
       setState(() => _meetingCount = count);
     } catch (_) {
@@ -3496,8 +3888,9 @@ class _NativeB2PageState extends State<_NativeB2Page> {
     required void Function(List<XflowProposalItem> rows) onRows,
   }) async {
     try {
-      final rows =
-          await XflowService(session: widget.session).fetchB14Initiated();
+      final rows = await XflowService(
+        session: widget.session,
+      ).fetchB14Initiated();
       if (!_isCurrentStatsLoad(generation)) return;
       onRows(rows);
       final current = _stats;
@@ -3645,7 +4038,7 @@ class _NativeB2PageState extends State<_NativeB2Page> {
     }
   }
 
-  Future<void> _checkDesktopAppUpdate() async {
+  Future<void> _checkDesktopAppUpdateFromMobileMenu() async {
     showDunesToast(context, '正在检查更新…');
     final result = await AppUpdateService.instance.checkUpdate();
     if (!mounted) return;
@@ -3658,6 +4051,21 @@ class _NativeB2PageState extends State<_NativeB2Page> {
       return;
     }
     await showAppUpdateDialog(context, result);
+  }
+
+  Future<bool> _clearLocalCache() async {
+    try {
+      await InboxHiddenStorage.save(const <String, InboxHiddenEntry>{});
+      await NovaWebStorage.clear(widget.session.userId);
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('xflow_draft_sales-proposal');
+      if (!mounted) return true;
+      await _refreshCommBadge();
+      await _loadStats(silent: true);
+      return true;
+    } catch (_) {
+      return false;
+    }
   }
 
   Future<_NativeB2Profile> _loadProfile() async {
@@ -3826,21 +4234,6 @@ class _NativeB2PageState extends State<_NativeB2Page> {
     );
   }
 
-  Future<bool> _clearLocalCache() async {
-    try {
-      await InboxHiddenStorage.save(const <String, InboxHiddenEntry>{});
-      await NovaWebStorage.clear(widget.session.userId);
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.remove('xflow_draft_sales-proposal');
-      if (!mounted) return true;
-      await _refreshCommBadge();
-      await _loadStats(silent: true);
-      return true;
-    } catch (_) {
-      return false;
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final stats = _stats ?? const _NativeMyStats.empty();
@@ -3919,6 +4312,13 @@ class _NativeB2PageState extends State<_NativeB2Page> {
                       _buildSectionLabel('我的事项'),
                       const SizedBox(height: 8),
                       _buildMenuList(<Widget>[
+                        if (widget.onOpenWorkbench != null)
+                          _buildMenuItem(
+                            icon: Icons.apps_rounded,
+                            title: '工作台',
+                            desc: '任务与协作',
+                            onTap: widget.onOpenWorkbench,
+                          ),
                         _buildMenuItem(
                           icon: Icons.description_outlined,
                           title: '我发起的审批',
@@ -4106,52 +4506,6 @@ class _NativeB2PageState extends State<_NativeB2Page> {
     return '$url${sep}dunes_avatar_v=$_avatarRefreshVersion';
   }
 
-  Widget _buildB2TopBar() {
-    return Container(
-      height: 56,
-      padding: const EdgeInsets.symmetric(horizontal: 12),
-      decoration: const BoxDecoration(
-        color: DunesColors.bgApp,
-        border: Border(bottom: BorderSide(color: DunesColors.borderSoft)),
-      ),
-      child: Row(
-        children: [
-          RichText(
-            text: const TextSpan(
-              children: [
-                TextSpan(
-                  text: '沙丘',
-                  style: TextStyle(
-                    color: Color(0xFF7C5CE6),
-                    fontSize: 19,
-                    fontWeight: FontWeight.w500,
-                    letterSpacing: -0.2,
-                  ),
-                ),
-                TextSpan(
-                  text: ' DUNES',
-                  style: TextStyle(color: DunesColors.text3, fontSize: 11),
-                ),
-                TextSpan(
-                  text: '  ·  我的',
-                  style: TextStyle(color: DunesColors.text2, fontSize: 11),
-                ),
-              ],
-            ),
-          ),
-          const Spacer(),
-          IconButton(
-            tooltip: '字体大小',
-            onPressed: _openTextScalePicker,
-            icon: const Icon(Icons.format_size_rounded, size: 22),
-            color: DunesColors.text2,
-          ),
-          _buildB2OverflowMenu(),
-        ],
-      ),
-    );
-  }
-
   Future<void> _openTextScalePicker() async {
     final controller = AppTextScaleController.instance;
     final picked = await showModalBottomSheet<int>(
@@ -4229,6 +4583,63 @@ class _NativeB2PageState extends State<_NativeB2Page> {
     showDunesToast(context, '已切换为「${AppTextScaleController.labels[picked]}」字号');
   }
 
+  Widget _buildB2TopBar() {
+    return Container(
+      height: 56,
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      decoration: const BoxDecoration(
+        color: DunesColors.bgApp,
+        border: Border(bottom: BorderSide(color: DunesColors.borderSoft)),
+      ),
+      child: Row(
+        children: [
+          RichText(
+            text: const TextSpan(
+              children: [
+                TextSpan(
+                  text: '沙丘',
+                  style: TextStyle(
+                    color: Color(0xFF7C5CE6),
+                    fontSize: 19,
+                    fontWeight: FontWeight.w500,
+                    letterSpacing: -0.2,
+                  ),
+                ),
+                TextSpan(
+                  text: ' DUNES',
+                  style: TextStyle(color: DunesColors.text3, fontSize: 11),
+                ),
+                TextSpan(
+                  text: '  ·  我的',
+                  style: TextStyle(color: DunesColors.text2, fontSize: 11),
+                ),
+              ],
+            ),
+          ),
+          const Spacer(),
+          if (!isDesktopCommOnly)
+            IconButton(
+              tooltip: '字体大小',
+              onPressed: _openTextScalePicker,
+              icon: const Icon(Icons.format_size_rounded, size: 22),
+              color: DunesColors.text2,
+            ),
+          // PC 外部用户无可用项；APP 仍保留清缓存/退出等。
+          if (!(isDesktopCommOnly && widget.session.isExternalUser))
+            _buildB2OverflowMenu(),
+        ],
+      ),
+    );
+  }
+
+  void _openInviteQrPage() {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => InviteQrPage(session: widget.session),
+      ),
+    );
+  }
+
   Widget _buildB2OverflowMenu() {
     return PopupMenuButton<_B2MenuAction>(
       tooltip: '更多功能',
@@ -4244,68 +4655,95 @@ class _NativeB2PageState extends State<_NativeB2Page> {
           case _B2MenuAction.wechatBot:
             widget.navigation.go('WX');
           case _B2MenuAction.checkUpdate:
-            unawaited(_checkDesktopAppUpdate());
+            unawaited(_checkDesktopAppUpdateFromMobileMenu());
           case _B2MenuAction.clearCache:
             _clearLocalCache();
           case _B2MenuAction.startProposal:
             widget.onOpenB3();
+          case _B2MenuAction.inviteUser:
+            _openInviteQrPage();
           case _B2MenuAction.logout:
             unawaited(_confirmLogout());
         }
       },
-      itemBuilder: (context) => [
-        if (isWindowsDesktopCommOnly)
+      itemBuilder: (context) {
+        // PC：右上角保留微信 Bot / 发起提案 / 邀请用户；其余能力在「设置」。
+        if (isDesktopCommOnly) {
+          return [
+            if (!widget.session.isExternalUser)
+              const PopupMenuItem(
+                value: _B2MenuAction.wechatBot,
+                child: _B2MenuEntry(icon: Icons.chat_rounded, label: '微信 Bot'),
+              ),
+            if (!widget.session.isExternalUser)
+              const PopupMenuItem(
+                value: _B2MenuAction.startProposal,
+                child: _B2MenuEntry(
+                  icon: Icons.add_circle_outline_rounded,
+                  label: '发起提案',
+                ),
+              ),
+            if (!widget.session.isExternalUser)
+              const PopupMenuItem(
+                value: _B2MenuAction.inviteUser,
+                child: _B2MenuEntry(
+                  icon: Icons.person_add_alt_1_outlined,
+                  label: '邀请用户',
+                ),
+              ),
+          ];
+        }
+        return [
+          if (!widget.session.isExternalUser)
+            PopupMenuItem(
+              value: _B2MenuAction.scanWorkstation,
+              enabled: !_qrLoginOpening,
+              child: const _B2MenuEntry(
+                icon: Icons.qr_code_scanner_rounded,
+                label: '扫码登录工作台',
+              ),
+            ),
+          if (!widget.session.isExternalUser)
+            const PopupMenuItem(
+              value: _B2MenuAction.wechatBot,
+              child: _B2MenuEntry(icon: Icons.chat_rounded, label: '微信 Bot'),
+            ),
           const PopupMenuItem(
-            value: _B2MenuAction.checkUpdate,
+            value: _B2MenuAction.clearCache,
             child: _B2MenuEntry(
-              icon: Icons.system_update_alt_rounded,
-              label: '检查更新',
-            ),
-          )
-        else if (!widget.session.isExternalUser)
-          PopupMenuItem(
-            value: _B2MenuAction.scanWorkstation,
-            enabled: !_qrLoginOpening,
-            child: const _B2MenuEntry(
-              icon: Icons.qr_code_scanner_rounded,
-              label: '扫码登录工作台',
+              icon: Icons.cleaning_services_outlined,
+              label: '清除本地缓存',
             ),
           ),
-        if (!widget.session.isExternalUser)
-          const PopupMenuItem(
-            value: _B2MenuAction.wechatBot,
-            child: _B2MenuEntry(
-              icon: Icons.chat_rounded,
-              label: '微信 Bot',
+          if (!widget.session.isExternalUser)
+            const PopupMenuItem(
+              value: _B2MenuAction.startProposal,
+              child: _B2MenuEntry(
+                icon: Icons.add_circle_outline_rounded,
+                label: '发起提案',
+              ),
             ),
-          ),
-        const PopupMenuItem(
-          value: _B2MenuAction.clearCache,
-          child: _B2MenuEntry(
-            icon: Icons.cleaning_services_outlined,
-            label: '清除本地缓存',
-          ),
-        ),
-        if (!widget.session.isExternalUser)
-          const PopupMenuItem(
-            value: _B2MenuAction.startProposal,
-            child: _B2MenuEntry(
-              icon: Icons.add_circle_outline_rounded,
-              label: '发起提案',
+          if (!widget.session.isExternalUser)
+            const PopupMenuItem(
+              value: _B2MenuAction.inviteUser,
+              child: _B2MenuEntry(
+                icon: Icons.person_add_alt_1_outlined,
+                label: '邀请用户',
+              ),
             ),
-          ),
-        if (widget.onLogout != null) ...[
-          const PopupMenuDivider(),
-          const PopupMenuItem(
-            value: _B2MenuAction.logout,
-            child: _B2MenuEntry(
-              icon: Icons.logout_rounded,
-              label: '退出登录',
-              color: DunesColors.coral,
+          if (widget.onLogout != null) ...[
+            const PopupMenuDivider(),
+            const PopupMenuItem(
+              value: _B2MenuAction.logout,
+              child: _B2MenuEntry(
+                icon: Icons.logout_rounded,
+                label: '退出登录',
+                color: DunesColors.coral,
+              ),
             ),
-          ),
-        ],
-      ],
+          ],
+        ];
+      },
       child: Container(
         width: 42,
         height: 42,
@@ -4772,7 +5210,10 @@ class _NativeB2PageState extends State<_NativeB2Page> {
                 alignment: Alignment.centerRight,
                 padding: const EdgeInsets.only(right: 44),
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 3,
+                  ),
                   decoration: BoxDecoration(
                     color: const Color(0xE61F2421),
                     borderRadius: BorderRadius.circular(99),
@@ -4801,6 +5242,7 @@ enum _B2MenuAction {
   checkUpdate,
   clearCache,
   startProposal,
+  inviteUser,
   logout,
 }
 
@@ -5221,7 +5663,7 @@ class _InfoTile extends StatelessWidget {
   }
 }
 
-enum _DualChatKind { robot, private, group, approval, task }
+enum _DualChatKind { robot, private, group, approval, task, reconciliation }
 
 class _DualChatSlot {
   const _DualChatSlot._({
@@ -5268,6 +5710,11 @@ class _DualChatSlot {
       conversation: conversation,
     );
   }
+
+  const _DualChatSlot.reconciliation()
+    : kind = _DualChatKind.reconciliation,
+      conversation = null,
+      peerUserId = null;
 
   final _DualChatKind kind;
   final NativeConversation? conversation;

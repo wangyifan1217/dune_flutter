@@ -12,11 +12,15 @@ class RegistrationFlowPage extends StatefulWidget {
     super.key,
     required this.auth,
     required this.onSignedIn,
+    required this.inviteCode,
+    required this.inviterName,
     this.initialStep = 0,
   });
 
   final AuthService auth;
   final ValueChanged<AuthSession> onSignedIn;
+  final String inviteCode;
+  final String inviterName;
   final int initialStep;
 
   @override
@@ -27,7 +31,6 @@ class _RegistrationFlowPageState extends State<RegistrationFlowPage> {
   final _phone = TextEditingController();
   final _displayName = TextEditingController();
   final _organization = TextEditingController();
-  final _referrer = TextEditingController();
   bool _loading = false;
   String? _error;
   late int _step;
@@ -43,7 +46,6 @@ class _RegistrationFlowPageState extends State<RegistrationFlowPage> {
     _phone.dispose();
     _displayName.dispose();
     _organization.dispose();
-    _referrer.dispose();
     super.dispose();
   }
 
@@ -63,11 +65,17 @@ class _RegistrationFlowPageState extends State<RegistrationFlowPage> {
       _error = null;
     });
     try {
-      final check = await widget.auth.checkRegistrationPhone(phone);
+      final check = await widget.auth.checkRegistrationPhone(
+        phone,
+        inviteCode: widget.inviteCode,
+      );
       if (!check.allowed) {
         throw AuthException(check.localizedReason ?? '该手机号不可注册');
       }
-      await widget.auth.requestRegistrationSmsCode(phone: phone);
+      await widget.auth.requestRegistrationSmsCode(
+        phone: phone,
+        inviteCode: widget.inviteCode,
+      );
       if (!mounted) return;
       await Navigator.of(context).push<void>(
         MaterialPageRoute<void>(
@@ -76,7 +84,7 @@ class _RegistrationFlowPageState extends State<RegistrationFlowPage> {
             phone: phone,
             displayName: name,
             organizationName: _organization.text.trim(),
-            referrerName: _referrer.text.trim(),
+            inviteCode: widget.inviteCode,
             onSignedIn: widget.onSignedIn,
             onPending: () {
               if (mounted) setState(() => _step = 2);
@@ -101,7 +109,9 @@ class _RegistrationFlowPageState extends State<RegistrationFlowPage> {
     try {
       final result = await widget.auth.registrationStatus(_phone.text.trim());
       if (!mounted) return;
-      if (result.status == 'APPROVED' && result.token != null && result.token!.isNotEmpty) {
+      if (result.status == 'APPROVED' &&
+          result.token != null &&
+          result.token!.isNotEmpty) {
         await _finishWithToken(_phone.text.trim(), result.token!);
         return;
       }
@@ -167,15 +177,31 @@ class _RegistrationFlowPageState extends State<RegistrationFlowPage> {
               child: AuthBackButton(onPressed: () => Navigator.of(context).pop()),
             ),
             const SizedBox(height: 12),
-            Text('等待审核', style: DunesTypography.sans(fontSize: 22, fontWeight: FontWeight.w600)),
+            Text(
+              '等待审核',
+              style: DunesTypography.sans(
+                fontSize: 22,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
             const SizedBox(height: 12),
             Text(
               '您的注册申请已提交，管理员审核通过后将自动进入 App。',
-              style: DunesTypography.sans(fontSize: 14, color: DunesColors.text3, height: 1.5),
+              style: DunesTypography.sans(
+                fontSize: 14,
+                color: DunesColors.text3,
+                height: 1.5,
+              ),
             ),
             if (_error != null) ...[
               const SizedBox(height: 12),
-              Text(_error!, style: DunesTypography.sans(fontSize: 13, color: DunesColors.coral)),
+              Text(
+                _error!,
+                style: DunesTypography.sans(
+                  fontSize: 13,
+                  color: DunesColors.coral,
+                ),
+              ),
             ],
             const SizedBox(height: 24),
             SizedBox(
@@ -191,6 +217,10 @@ class _RegistrationFlowPageState extends State<RegistrationFlowPage> {
       );
     }
 
+    final inviter = widget.inviterName.trim().isEmpty
+        ? '内部员工'
+        : widget.inviterName.trim();
+
     return AuthScaffold(
       showLogo: false,
       child: Column(
@@ -203,9 +233,21 @@ class _RegistrationFlowPageState extends State<RegistrationFlowPage> {
           const SizedBox(height: 12),
           const AuthAppLogo(size: 64),
           const SizedBox(height: 24),
-          Text('注册账号', style: DunesTypography.sans(fontSize: 22, fontWeight: FontWeight.w600)),
+          Text(
+            '注册账号',
+            style: DunesTypography.sans(
+              fontSize: 22,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
           const SizedBox(height: 8),
-          Text('填写资料并获取验证码', style: DunesTypography.sans(fontSize: 14, color: DunesColors.text3)),
+          Text(
+            '由 $inviter 邀请注册外部用户账号',
+            style: DunesTypography.sans(
+              fontSize: 14,
+              color: DunesColors.text3,
+            ),
+          ),
           const SizedBox(height: 24),
           _textField(
             controller: _phone,
@@ -222,7 +264,28 @@ class _RegistrationFlowPageState extends State<RegistrationFlowPage> {
           const SizedBox(height: 12),
           _textField(controller: _organization, hint: '组织机构（选填）'),
           const SizedBox(height: 12),
-          _textField(controller: _referrer, hint: '介绍人（选填）'),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF5F5F7),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.person_outline, size: 20, color: DunesColors.text3),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    '邀请人：$inviter',
+                    style: DunesTypography.sans(
+                      fontSize: 15,
+                      color: DunesColors.text2,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
           const SizedBox(height: 24),
           SizedBox(
             height: 50,
@@ -245,7 +308,7 @@ class RegistrationCodeStepPage extends StatefulWidget {
     required this.phone,
     required this.displayName,
     required this.organizationName,
-    required this.referrerName,
+    required this.inviteCode,
     required this.onSignedIn,
     required this.onPending,
   });
@@ -254,12 +317,13 @@ class RegistrationCodeStepPage extends StatefulWidget {
   final String phone;
   final String displayName;
   final String organizationName;
-  final String referrerName;
+  final String inviteCode;
   final ValueChanged<AuthSession> onSignedIn;
   final VoidCallback onPending;
 
   @override
-  State<RegistrationCodeStepPage> createState() => _RegistrationCodeStepPageState();
+  State<RegistrationCodeStepPage> createState() =>
+      _RegistrationCodeStepPageState();
 }
 
 class _RegistrationCodeStepPageState extends State<RegistrationCodeStepPage> {
@@ -315,10 +379,12 @@ class _RegistrationCodeStepPageState extends State<RegistrationCodeStepPage> {
         code: _code,
         displayName: widget.displayName,
         organizationName: widget.organizationName,
-        referrerName: widget.referrerName,
+        inviteCode: widget.inviteCode,
       );
       if (!mounted) return;
-      if (result.status == 'APPROVED' && result.token != null && result.token!.isNotEmpty) {
+      if (result.status == 'APPROVED' &&
+          result.token != null &&
+          result.token!.isNotEmpty) {
         await _finishWithToken(result.token!);
         return;
       }

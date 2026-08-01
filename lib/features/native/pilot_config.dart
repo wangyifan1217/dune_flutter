@@ -1,6 +1,7 @@
 const Set<String> kNativePilotScreens = <String>{
   'B1',
   'B2',
+  'FD1',
   'B3',
   'B10',
   'B13',

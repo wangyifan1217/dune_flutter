@@ -87,6 +87,7 @@ flutter:
     - assets/images/tray_icon_blank.ico
     - assets/images/tray_icon.png
     - assets/images/tray_icon_blank.png
+    - assets/brands/
     - assets/prototype/
     - assets/prototype/dunes_app_ui.js
     - assets/prototype/workbench_live.js

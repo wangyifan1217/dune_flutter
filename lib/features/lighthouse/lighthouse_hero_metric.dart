@@ -9,7 +9,56 @@ bool lighthouseHeroMetricIsRate(String key) =>
 const int lighthouseCompactHeroKpiFlex = 3;
 const int lighthouseCompactHeroTrendFlex = 7;
 const double lighthouseCompactHeroSparkHeight = 92;
-const double lighthouseCompactHeroMetricGap = 8;
+const double lighthouseCompactHeroMetricGap = 6;
+const bool lighthouseHeroUsesCategoryTint = false;
+const bool lighthouseHeroUsesAccentRail = false;
+const bool lighthouseHeroShowsEnglishKicker = false;
+const bool lighthouseHeroUsesCardShadow = true;
+const bool lighthouseHeroMetricUsesSansLabel = true;
+const double lighthouseHeroCardRadius = 10;
+const double lighthouseHeroCardGap = 8;
+const double lighthouseHeroCardPadding = 8;
+const bool lighthouseHeroChartUsesCardSurface = true;
+const double lighthouseHeroChartCardPadding = 6;
+const bool lighthouseHeroSparkShowsAxes = false;
+const bool lighthouseHeroSparkShowsGrid = false;
+const bool lighthouseHeroSparkShowsAverage = false;
+const bool lighthouseHeroSparkShowsEveryPeriodLabel = true;
+const bool lighthouseHeroSparkShowsEveryValue = true;
+
+String lighthouseHeroCompactPeriodLabel(String label) {
+  final normalized = label.trim();
+  final month = RegExp(r'^\d{4}[.-](\d{2})$').firstMatch(normalized);
+  if (month != null) return '${month.group(1)}月';
+  return normalized;
+}
+
+const double lighthouseHeroSectionIconSize = 18;
+const lighthouseHeroSectionIconKeys = <String, String>{
+  'scale': 'monitoring',
+  'cost': 'receipt',
+  'cash': 'wallet',
+  'profit': 'trendingUp',
+};
+const lighthouseHeroSectionAccentValues = <String, int>{
+  'scale': 0xFF7565C7,
+  'cost': 0xFFB47A32,
+  'cash': 0xFF3F7D70,
+  'profit': 0xFF5C6FB5,
+};
+const bool lighthouseHeroShowsSectionAccentDash = false;
+const bool lighthouseHeroMastheadLabelAboveNumber = true;
+const double lighthouseHeroMastheadLabelFontSize = 11;
+const double lighthouseHeroMastheadLabelIconSize = 18;
+const double lighthouseHeroMastheadLabelRadius = 8;
+const double lighthouseHeroGroupTitleFontSize = 10;
+const double lighthouseHeroMastheadFontSize = 29;
+const double lighthouseHeroMetricValueFontSize = 13;
+const double lighthouseHeroMetricLabelFontSize = 9;
+const double lighthouseHeroMetricDeltaFontSize = 8;
+const int lighthouseHeroScaleColumnFlex = 9;
+const int lighthouseHeroCostColumnFlex = 14;
+const int lighthouseHeroResultColumnFlex = 16;
 
 /// Three Y-axis ticks used by the compact Hero chart.
 List<double> lighthouseHeroAxisTicks(List<double> values) {
@@ -56,28 +105,126 @@ String lighthouseLedgerCellHighlightKey(
 ) => '${lighthouseLedgerHighlightKey(tab, row)}\u001f${metricKey.trim()}';
 
 class LighthouseHeroVerticalSection {
-  const LighthouseHeroVerticalSection(this.title, this.metricKeys);
+  const LighthouseHeroVerticalSection(this.key, this.title, this.metricKeys);
 
+  final String key;
   final String title;
   final List<String> metricKeys;
 }
 
 const lighthouseHeroVerticalSections = <LighthouseHeroVerticalSection>[
-  LighthouseHeroVerticalSection('规模', ['sales', 'verifiedSales', 'gmv']),
-  LighthouseHeroVerticalSection('利润', [
-    'profit',
-    'netProfit',
-    'revenue',
-    'spread',
+  LighthouseHeroVerticalSection('scale', '规模', [
+    'sales',
+    'verifiedSales',
+    'gmv',
+  ]),
+  LighthouseHeroVerticalSection('cost', '成本', [
     'totalCost',
     'projectCost',
     'cost',
     'directCost',
+  ]),
+  LighthouseHeroVerticalSection('cash', '经营性现金流', ['prepaid']),
+  LighthouseHeroVerticalSection('profit', '利润', [
+    'profit',
+    'netProfit',
+    'revenue',
+    'spread',
     'grossMargin',
     'rate',
   ]),
-  LighthouseHeroVerticalSection('经营性现金流', ['prepaid']),
 ];
+
+const lighthouseHeroColumnSectionKeys = <List<String>>[
+  ['scale'],
+  ['cost'],
+  ['cash', 'profit'],
+];
+
+const int lighthouseLedgerSummaryColumns = 2;
+const double lighthouseLedgerNameFontSize = 11.5;
+const double lighthouseLedgerPinnedWidthRatio = 0.35;
+const double lighthouseLedgerPinnedMaxWidth = 164;
+const lighthouseLedgerNavigationLevels = <String>[
+  'primaryTab',
+  'filterChip',
+  'subSegment',
+];
+const double lighthouseLedgerPrimaryTabHeight = 44;
+const double lighthouseLedgerFilterRowHeight = 42;
+const double lighthouseLedgerFilterChipRadius = 8;
+const bool lighthouseLedgerCentersPrimaryDimensions = false;
+const bool lighthouseLedgerPrimaryDimensionsFillAvailableWidth = true;
+const bool lighthouseLedgerSeparatesAnalysisTab = true;
+const bool lighthouseLedgerUsesLavenderPanelFrame = true;
+const double lighthouseLedgerPanelBorderWidth = 0.8;
+const double lighthouseLedgerPanelRadius = 12;
+const double lighthouseLedgerPanelShadowBlur = 12;
+const bool lighthousePeriodUsesFloatingSegment = true;
+const double lighthousePeriodTrackHeight = 44;
+const double lighthousePeriodTrackRadius = 12;
+const double lighthousePeriodSelectedRadius = 8;
+const double lighthousePeriodStatusDotSize = 4;
+const int lighthousePeriodAnimationMs = 180;
+const double lighthouseAppBarTitleFontSize = 18;
+const double lighthouseAppBarEnglishFontSize = 8.5;
+const double lighthouseAppBarToolbarHeight = 34;
+const double lighthouseAppBarToolbarRadius = 11;
+const bool lighthouseHeroShowsLiveMetadata = false;
+const double lighthouseHeroSummaryTitleFontSize = 13.5;
+const double lighthouseHeroSummaryIconSize = 20;
+const double lighthouseHeroSummaryIconRadius = 6;
+
+String lighthouseHeroSummaryIconKey(String title) {
+  final normalized = title.trim();
+  if (normalized.contains('汇总')) {
+    if (normalized.contains('产品')) return 'product';
+    if (normalized.contains('供给') || normalized.contains('供应')) {
+      return 'supply';
+    }
+    if (normalized.contains('渠道')) return 'channel';
+  }
+  if (normalized.contains('分析')) return 'analysis';
+  return 'overview';
+}
+
+const double lighthouseCategoryLogoSize = 14;
+
+String? lighthouseCategoryBrandAsset(String label) {
+  final normalized = label.trim();
+  if (normalized.contains('中石油') || normalized.contains('中国石油')) {
+    return 'assets/brands/petrochina.svg';
+  }
+  if (normalized.contains('中石化') || normalized.contains('中国石化')) {
+    return 'assets/brands/sinopec.svg';
+  }
+  if (normalized.contains('平安')) return 'assets/brands/ping_an.svg';
+  if (normalized.contains('移动')) return 'assets/brands/china_mobile.svg';
+  if (normalized.contains('电信')) return 'assets/brands/china_telecom.svg';
+  if (normalized.contains('联通')) return 'assets/brands/china_unicom.svg';
+  if (normalized.contains('银联')) return 'assets/brands/unionpay.svg';
+  return null;
+}
+
+const lighthouseLedgerSummaryMetricKeys = <String>[
+  'sales',
+  'verifiedSales',
+  'profit',
+  'costTotal',
+];
+const lighthouseLedgerSummaryMetricRows = <List<String>>[
+  ['sales', 'verifiedSales'],
+  ['profit', 'costTotal'],
+];
+
+String lighthouseLedgerHighlightModeLabel({
+  required bool rowMode,
+  required bool cellMode,
+}) {
+  if (rowMode) return '行标记';
+  if (cellMode) return '格标记';
+  return '标记';
+}
 
 /// Resolve a totals value with key aliases used across L1/L2 payloads.
 double? lighthouseHeroMetricValue(Map<String, double> totals, String key) {

@@ -52,36 +52,188 @@ void main() {
     });
   });
 
-  test('hero financial board uses three vertical columns', () {
+  test('hero financial board balances four sections across three columns', () {
     expect(
       lighthouseHeroVerticalSections.map((section) => section.title).toList(),
-      ['规模', '利润', '经营性现金流'],
+      ['规模', '成本', '经营性现金流', '利润'],
     );
+    expect(lighthouseHeroColumnSectionKeys, [
+      ['scale'],
+      ['cost'],
+      ['cash', 'profit'],
+    ]);
     expect(lighthouseHeroVerticalSections[0].metricKeys, [
       'sales',
       'verifiedSales',
       'gmv',
     ]);
     expect(lighthouseHeroVerticalSections[1].metricKeys, [
-      'profit',
-      'netProfit',
-      'revenue',
-      'spread',
       'totalCost',
       'projectCost',
       'cost',
       'directCost',
+    ]);
+    expect(lighthouseHeroVerticalSections[2].metricKeys, ['prepaid']);
+    expect(lighthouseHeroVerticalSections[3].metricKeys, [
+      'profit',
+      'netProfit',
+      'revenue',
+      'spread',
       'grossMargin',
       'rate',
     ]);
-    expect(lighthouseHeroVerticalSections[2].metricKeys, ['prepaid']);
+  });
+
+  test('ledger rows show four focused metrics in a neutral 2x2 grid', () {
+    expect(lighthouseLedgerSummaryColumns, 2);
+    expect(lighthouseLedgerNameFontSize, 11.5);
+    expect(lighthouseLedgerPinnedWidthRatio, 0.35);
+    expect(lighthouseLedgerPinnedMaxWidth, 164);
+    expect(lighthouseLedgerSummaryMetricKeys, [
+      'sales',
+      'verifiedSales',
+      'profit',
+      'costTotal',
+    ]);
+    expect(lighthouseLedgerSummaryMetricRows, [
+      ['sales', 'verifiedSales'],
+      ['profit', 'costTotal'],
+    ]);
+  });
+
+  test('ledger navigation uses three distinct professional control levels', () {
+    expect(lighthouseLedgerNavigationLevels, [
+      'primaryTab',
+      'filterChip',
+      'subSegment',
+    ]);
+    expect(lighthouseLedgerPrimaryTabHeight, 44);
+    expect(lighthouseLedgerFilterRowHeight, 42);
+    expect(lighthouseLedgerFilterChipRadius, 8);
+    expect(lighthouseLedgerCentersPrimaryDimensions, isFalse);
+    expect(lighthouseLedgerPrimaryDimensionsFillAvailableWidth, isTrue);
+    expect(lighthouseLedgerSeparatesAnalysisTab, isTrue);
+    expect(lighthouseLedgerUsesLavenderPanelFrame, isTrue);
+    expect(lighthouseLedgerPanelBorderWidth, 0.8);
+    expect(lighthouseLedgerPanelRadius, 12);
+    expect(lighthouseLedgerPanelShadowBlur, 12);
+  });
+
+  test('period selector uses a floating rounded segmented control', () {
+    expect(lighthousePeriodUsesFloatingSegment, isTrue);
+    expect(lighthousePeriodTrackHeight, 44);
+    expect(lighthousePeriodTrackRadius, 12);
+    expect(lighthousePeriodSelectedRadius, 8);
+    expect(lighthousePeriodStatusDotSize, 4);
+    expect(lighthousePeriodAnimationMs, 180);
+  });
+
+  test('lighthouse header uses refined chrome without LIVE metadata', () {
+    expect(lighthouseAppBarTitleFontSize, 18);
+    expect(lighthouseAppBarEnglishFontSize, 8.5);
+    expect(lighthouseAppBarToolbarHeight, 34);
+    expect(lighthouseAppBarToolbarRadius, 11);
+    expect(lighthouseHeroShowsLiveMetadata, isFalse);
+    expect(lighthouseHeroSummaryTitleFontSize, 13.5);
+    expect(lighthouseHeroSummaryIconSize, 20);
+    expect(lighthouseHeroSummaryIconRadius, 6);
+    expect(lighthouseHeroSummaryIconKey('产品汇总'), 'product');
+    expect(lighthouseHeroSummaryIconKey('供给方汇总'), 'supply');
+    expect(lighthouseHeroSummaryIconKey('渠道汇总'), 'channel');
+    expect(lighthouseHeroSummaryIconKey('分析总览'), 'analysis');
+    expect(lighthouseHeroSummaryIconKey('某产品详情'), 'overview');
+  });
+
+  test('category chips resolve official brand logos with generic fallback', () {
+    expect(lighthouseCategoryBrandAsset('中石油'), 'assets/brands/petrochina.svg');
+    expect(lighthouseCategoryBrandAsset('中石化'), 'assets/brands/sinopec.svg');
+    expect(lighthouseCategoryBrandAsset('平安'), 'assets/brands/ping_an.svg');
+    expect(
+      lighthouseCategoryBrandAsset('中国移动'),
+      'assets/brands/china_mobile.svg',
+    );
+    expect(
+      lighthouseCategoryBrandAsset('中国电信'),
+      'assets/brands/china_telecom.svg',
+    );
+    expect(
+      lighthouseCategoryBrandAsset('中国联通'),
+      'assets/brands/china_unicom.svg',
+    );
+    expect(lighthouseCategoryBrandAsset('银联'), 'assets/brands/unionpay.svg');
+    expect(lighthouseCategoryBrandAsset('民营'), isNull);
+    expect(lighthouseCategoryLogoSize, 14);
   });
 
   test('compact hero keeps KPI and trend side by side', () {
     expect(lighthouseCompactHeroKpiFlex, 3);
     expect(lighthouseCompactHeroTrendFlex, 7);
     expect(lighthouseCompactHeroSparkHeight, 92);
-    expect(lighthouseCompactHeroMetricGap, 8);
+    expect(lighthouseCompactHeroMetricGap, 6);
+    expect(lighthouseHeroUsesCategoryTint, isFalse);
+    expect(lighthouseHeroUsesAccentRail, isFalse);
+    expect(lighthouseHeroShowsEnglishKicker, isFalse);
+    expect(lighthouseHeroUsesCardShadow, isTrue);
+    expect(lighthouseHeroMetricUsesSansLabel, isTrue);
+    expect(lighthouseHeroCardRadius, 10);
+    expect(lighthouseHeroCardGap, 8);
+    expect(lighthouseHeroCardPadding, 8);
+    expect(lighthouseHeroChartUsesCardSurface, isTrue);
+    expect(lighthouseHeroChartCardPadding, 6);
+    expect(lighthouseHeroSparkShowsAxes, isFalse);
+    expect(lighthouseHeroSparkShowsGrid, isFalse);
+    expect(lighthouseHeroSparkShowsAverage, isFalse);
+    expect(lighthouseHeroSparkShowsEveryPeriodLabel, isTrue);
+    expect(lighthouseHeroSparkShowsEveryValue, isTrue);
+    expect(lighthouseHeroCompactPeriodLabel('2026.08'), '08月');
+    expect(lighthouseHeroCompactPeriodLabel('2026-02'), '02月');
+    expect(lighthouseHeroCompactPeriodLabel('08.01'), '08.01');
+    expect(lighthouseHeroSectionIconSize, 18);
+    expect(lighthouseHeroSectionIconKeys, {
+      'scale': 'monitoring',
+      'cost': 'receipt',
+      'cash': 'wallet',
+      'profit': 'trendingUp',
+    });
+    expect(lighthouseHeroSectionAccentValues.keys, {
+      'scale',
+      'cost',
+      'cash',
+      'profit',
+    });
+    expect(lighthouseHeroShowsSectionAccentDash, isFalse);
+    expect(lighthouseHeroMastheadLabelAboveNumber, isTrue);
+    expect(lighthouseHeroMastheadLabelFontSize, 11);
+    expect(lighthouseHeroMastheadLabelIconSize, 18);
+    expect(lighthouseHeroMastheadLabelRadius, 8);
+    expect(lighthouseHeroGroupTitleFontSize, 10);
+    expect(lighthouseHeroMastheadFontSize, 29);
+    expect(lighthouseHeroMetricValueFontSize, 13);
+    expect(lighthouseHeroMetricLabelFontSize, 9);
+    expect(lighthouseHeroMetricDeltaFontSize, 8);
+    expect(
+      [
+        lighthouseHeroScaleColumnFlex,
+        lighthouseHeroCostColumnFlex,
+        lighthouseHeroResultColumnFlex,
+      ],
+      [9, 14, 16],
+    );
+  });
+
+  test('ledger highlight tool has one compact label for each mode', () {
+    expect(
+      lighthouseLedgerHighlightModeLabel(rowMode: false, cellMode: false),
+      '标记',
+    );
+    expect(
+      lighthouseLedgerHighlightModeLabel(rowMode: true, cellMode: false),
+      '行标记',
+    );
+    expect(
+      lighthouseLedgerHighlightModeLabel(rowMode: false, cellMode: true),
+      '格标记',
+    );
   });
 
   group('lighthouseHeroAxisTicks', () {

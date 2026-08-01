@@ -923,10 +923,8 @@ class _NativeConversationPageState extends State<NativeConversationPage>
       rowKind = ChatInboxRowKind.taskAssistant;
       onTap = _openWithScrollPersist(() => widget.onOpenTaskAssistant?.call(c));
     } else if (c.isReconciliationAssistant) {
-      rowKind = ChatInboxRowKind.reconciliationAssistant;
-      onTap = _openWithScrollPersist(
-        () => widget.onOpenReconciliationAssistant?.call(),
-      );
+      // 对账助手入口已屏蔽，后端若仍返回对应会话也不展示。
+      return null;
     } else if (c.isWorkgroupApproval) {
       rowKind = ChatInboxRowKind.workgroupApproval;
       onTap = _openWithScrollPersist(() => widget.onOpenGroup(c));
@@ -1180,21 +1178,8 @@ class _NativeConversationPageState extends State<NativeConversationPage>
   }
 
   Widget? _buildReconciliationAssistantInboxRow() {
-    final onOpen = widget.onOpenReconciliationAssistant;
-    if (onOpen == null) return null;
-    const preview = '每日对账 · 待你确认';
-    if (!_matchesSearch('对账助手', preview)) return null;
-    return KeyedSubtree(
-      key: const ValueKey<String>('reconciliation-assistant-inbox'),
-      child: ChatInboxRow(
-        kind: ChatInboxRowKind.reconciliationAssistant,
-        title: '对账助手',
-        preview: preview,
-        timeLabel: '今天',
-        selected: false,
-        onTap: _openWithScrollPersist(onOpen),
-      ),
-    );
+    // 对账助手暂为静态预览，入口先屏蔽；恢复时按 onOpenReconciliationAssistant 硬插会话行即可。
+    return null;
   }
 
   Widget? _buildAiSummaryInboxRow() {

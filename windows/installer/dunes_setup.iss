@@ -1,5 +1,5 @@
 #define MyAppName "沙丘"
-#define MyAppVersion "1.1.3"
+#define MyAppVersion "1.1.5"
 #define MyAppPublisher "Dunes"
 #define MyAppExeName "dunes_app.exe"
 
@@ -12,7 +12,7 @@ DefaultDirName={autopf}\Dunes
 DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=yes
 OutputDir=..\..\build\installer
-OutputBaseFilename=DunesSetup-1.1.3-101
+OutputBaseFilename=DunesSetup-1.1.5-103
 Compression=lzma
 SolidCompression=yes
 WizardStyle=modern

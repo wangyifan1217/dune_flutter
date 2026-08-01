@@ -1458,12 +1458,14 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       onOpenAiSummary: () => widget.navigation.go('AS1'),
       onOpenApprovalAssistant: _openApprovalAssistant,
       onOpenTaskAssistant: _openTaskAssistant,
-      onOpenReconciliationAssistant: !widget.session.isExternalUser
-          ? _openReconciliationAssistant
-          : null,
+      // 对账助手暂为静态预览，先屏蔽入口；恢复时改回：
+      // !widget.session.isExternalUser ? _openReconciliationAssistant : null
+      onOpenReconciliationAssistant: null,
     );
   }
 
+  // 入口已临时屏蔽；恢复 onOpenReconciliationAssistant 时继续用。
+  // ignore: unused_element
   void _openReconciliationAssistant() {
     // 对账助手是独立的会话卡片，不应沿用上一个私聊/群聊的右侧状态。
     setState(() {

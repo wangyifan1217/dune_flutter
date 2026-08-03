@@ -56,9 +56,9 @@ const double lighthouseHeroMastheadFontSize = 29;
 const double lighthouseHeroMetricValueFontSize = 13;
 const double lighthouseHeroMetricLabelFontSize = 9;
 const double lighthouseHeroMetricDeltaFontSize = 8;
-const int lighthouseHeroScaleColumnFlex = 9;
+const int lighthouseHeroScaleColumnFlex = 10;
 const int lighthouseHeroCostColumnFlex = 14;
-const int lighthouseHeroResultColumnFlex = 16;
+const int lighthouseHeroResultColumnFlex = 15;
 
 /// Three Y-axis ticks used by the compact Hero chart.
 List<double> lighthouseHeroAxisTicks(List<double> values) {
@@ -137,8 +137,8 @@ const lighthouseHeroVerticalSections = <LighthouseHeroVerticalSection>[
 
 const lighthouseHeroColumnSectionKeys = <List<String>>[
   ['scale'],
-  ['cost'],
-  ['cash', 'profit'],
+  ['cost', 'cash'],
+  ['profit'],
 ];
 
 const int lighthouseLedgerSummaryColumns = 2;
@@ -209,6 +209,7 @@ String? lighthouseCategoryBrandAsset(String label) {
 const lighthouseLedgerSummaryMetricKeys = <String>[
   'sales',
   'verifiedSales',
+  'prepaid',
   'profit',
   'costTotal',
 ];
@@ -216,6 +217,15 @@ const lighthouseLedgerSummaryMetricRows = <List<String>>[
   ['sales', 'verifiedSales'],
   ['profit', 'costTotal'],
 ];
+const lighthouseProductLedgerSummaryMetricRows = <List<String>>[
+  ['sales', 'prepaid'],
+  ['verifiedSales', 'profit'],
+];
+
+List<List<String>> lighthouseLedgerSummaryMetricRowsForTab(String tab) =>
+    tab == 'product'
+    ? lighthouseProductLedgerSummaryMetricRows
+    : lighthouseLedgerSummaryMetricRows;
 
 String lighthouseLedgerHighlightModeLabel({
   required bool rowMode,

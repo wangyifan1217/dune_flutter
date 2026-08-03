@@ -95,6 +95,7 @@ class LighthouseService {
     DateTime? endDate,
     String? tab,
     String? group,
+    String? province,
   }) {
     final g = (group ?? '').trim();
     final t = (tab ?? '').trim();
@@ -109,6 +110,8 @@ class LighthouseService {
         'tab': t,
         'group': g,
       },
+      if (province != null && province.trim().isNotEmpty && province != '全部')
+        'province': province.trim(),
     }, '灯塔摘要加载失败');
   }
 

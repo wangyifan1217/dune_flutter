@@ -5952,6 +5952,7 @@ class NativeLighthousePage extends StatefulWidget {
   final DunesNavigationController navigation;
   final CommUnreadNotifier commUnread;
   final WorkbenchBadgeNotifier workbenchBadge;
+
   /// keep-alive 离屏时为 false，避免占用全局返回拦截把其它 Tab 拉回灯塔。
   final bool active;
 
@@ -6122,6 +6123,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   final List<String> _metricPageStack = [];
   String? _detailKey; // non-null when detail view is open
   String? _detailType;
+  String _provinceFilter = '全部';
   String _detailSubTab = '';
   String _detailSkuQuery = '';
   // Level-3 drill: sub-row tapped in L2 sub-tab list
@@ -6177,6 +6179,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
 
   /// Metrics/sort context tab — detail page uses detail type (same as outer tab).
   String get _metricsTab => _detailType ?? _tab;
+
+  bool get _hasProvinceFilter => _tab == 'channel' && _provinceFilter != '全部';
+
+  String get _activeListTab => _hasProvinceFilter ? 'province' : _tab;
 
   bool get _isPageBusy => _loading || _cubeLoading;
 
@@ -6484,6 +6490,14 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       return const ['全部'];
     }
     return _pinPreferredCategory(tab, raw);
+  }
+
+  List<String> _provinceOptions() {
+    if (_tab != 'channel' || _groupFilter == '全部') return const ['全部'];
+    return lighthouseProvinceOptionsForGroup(
+      _bundle?.rowsOf('province') ?? const [],
+      _groupFilter,
+    );
   }
 
   void _syncMetricsFromUI() {
@@ -6929,6 +6943,8 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         return 'supply_drill';
       case 'channel':
         return 'channel_drill';
+      case 'province':
+        return 'province_drill';
       case 'project':
         return 'project_drill';
       case 'productName':
@@ -6992,6 +7008,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       'product_drill',
       'supply_drill',
       'channel_drill',
+      'province_drill',
       'project_drill',
       'sku_drill',
       'sign_entity_drill',
@@ -7099,6 +7116,8 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         return '供给';
       case 'channel':
         return '渠道';
+      case 'province':
+        return '省份';
       case 'project':
         return '项目';
       case 'productName':
@@ -7235,13 +7254,19 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     //   收到后拿它们做 SQL where 覆盖 period+offset 的桶推导.
     final requestedStart = _customStart;
     final requestedEnd = _customEnd;
+    final requestedTab = _tab;
+    final requestedGroup = _groupFilter;
+    final requestedProvince = _provinceFilter;
     final cacheKey =
         '$requestedPeriod|$requestedOffset|${requestedStart?.toIso8601String() ?? ""}|${requestedEnd?.toIso8601String() ?? ""}';
     bool stillCurrent() =>
         requestedPeriod == _period &&
         requestedOffset == _periodOffset &&
         requestedStart == _customStart &&
-        requestedEnd == _customEnd;
+        requestedEnd == _customEnd &&
+        requestedTab == _tab &&
+        requestedGroup == _groupFilter &&
+        requestedProvince == _provinceFilter;
     final service = LighthouseService(session: widget.session);
     try {
       final summary = await service.fetchSummary(
@@ -7249,8 +7274,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         offset: requestedOffset,
         startDate: requestedStart,
         endDate: requestedEnd,
-        tab: _tab == 'analysis' ? 'product' : _tab,
-        group: _groupFilter,
+        tab: requestedTab == 'analysis' ? 'product' : requestedTab,
+        group: requestedGroup,
+        province: requestedProvince,
       );
       if (mounted && stillCurrent()) {
         setState(() {
@@ -7276,8 +7302,13 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         });
       }
       await _loadTab(
-        requestedPeriod == _period && _tab != 'analysis' ? _tab : 'product',
+        requestedPeriod == _period && requestedTab != 'analysis'
+            ? requestedTab
+            : 'product',
       );
+      if (requestedPeriod == _period && requestedTab == 'channel') {
+        await _loadTab('province');
+      }
     } catch (e) {
       try {
         final bundle = await service.fetchOverview(
@@ -7307,6 +7338,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             _syncMetricsFromUI();
             _ensureDefaultGroupFilter();
           });
+          if (requestedTab == 'channel') unawaited(_loadTab('province'));
         }
       } catch (_) {
         if (mounted && stillCurrent()) {
@@ -7328,6 +7360,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     final requestedEnd = _customEnd;
     final requestedTab = _tab;
     final requestedGroup = _groupFilter;
+    final requestedProvince = _provinceFilter;
     try {
       final summary = await LighthouseService(session: widget.session)
           .fetchSummary(
@@ -7337,6 +7370,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             endDate: requestedEnd,
             tab: requestedTab,
             group: requestedGroup,
+            province: requestedProvince,
           );
       if (!mounted) return;
       if (requestedPeriod != _period ||
@@ -7344,7 +7378,8 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           requestedStart != _customStart ||
           requestedEnd != _customEnd ||
           requestedTab != _tab ||
-          requestedGroup != _groupFilter) {
+          requestedGroup != _groupFilter ||
+          requestedProvince != _provinceFilter) {
         return;
       }
       setState(() {
@@ -7367,11 +7402,27 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     }
     setState(() {
       _groupFilter = next;
+      _provinceFilter = '全部';
       _listLimit = _listPageSize;
       _rowsCacheKey = '';
       _rowsCache = null;
     });
     if (closeDropdown) _closeDropdown();
+    if (_tab == 'channel' && next != '全部') unawaited(_loadTab('province'));
+    unawaited(_reloadHeroSummary());
+  }
+
+  void _setProvinceFilter(String province) {
+    final next = province.trim().isEmpty ? '全部' : province;
+    if (next == _provinceFilter) return;
+    setState(() {
+      _provinceFilter = next;
+      _listLimit = _listPageSize;
+      _rowsCacheKey = '';
+      _rowsCache = null;
+      _invalidateAiSummary();
+    });
+    if (next != '全部') unawaited(_loadTrend('province'));
     unawaited(_reloadHeroSummary());
   }
 
@@ -7890,9 +7941,16 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
 
   List<Map<String, dynamic>> _rowsBeforeAnomalyFilter() {
     if (_bundle == null) return const [];
-    var rows = _bundle!.rowsOf(_tab);
+    var rows = _provinceFilter != '全部' && _tab == 'channel'
+        ? _bundle!.rowsOf('province')
+        : _bundle!.rowsOf(_tab);
     if (_groupFilter != '全部') {
       rows = rows.where((r) => r['group']?.toString() == _groupFilter).toList();
+    }
+    if (_provinceFilter != '全部' && _tab == 'channel') {
+      rows = rows
+          .where((r) => r['name']?.toString() == _provinceFilter)
+          .toList();
     }
     if (_hunFilter != '全部' && (_tab == 'supply' || _tab == 'channel')) {
       final match = _hunMatchFor(_hunFilter);
@@ -7908,7 +7966,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   List<Map<String, dynamic>> get _currentRows {
     if (_bundle == null) return const [];
     final key =
-        '$_period|$_tab|$_groupFilter|$_hunFilter|$_anomalyFilter|$_sortField|$_sortDesc';
+        '$_period|$_tab|$_groupFilter|$_provinceFilter|$_hunFilter|$_anomalyFilter|$_sortField|$_sortDesc';
     final cached = _rowsCache;
     if (cached != null && key == _rowsCacheKey) return cached;
     _listLimit = _listPageSize; // 筛选/排序/周期变化时重置分页
@@ -8028,6 +8086,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
 
   bool get _listFilterActive =>
       _mainFilterActive ||
+      _hasProvinceFilter ||
       ((_tab == 'supply' || _tab == 'channel') && _hunFilter != '全部') ||
       _anomalyFilter != '全部';
 
@@ -8036,6 +8095,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   /// - HUN / 异常：后端 summary 不含这两层，只能前端聚
   bool get _heroFilterActive =>
       _mainFilterActive ||
+      _hasProvinceFilter ||
       ((_tab == 'supply' || _tab == 'channel') && _hunFilter != '全部') ||
       _anomalyFilter != '全部';
 
@@ -8050,9 +8110,14 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   /// 若此时硬拦，环比和走势会整页空白。
   bool get _heroSummaryMatchesGroup {
     final fg = (_bundle?.metrics['filterGroup']?.toString() ?? '').trim();
-    if (_groupFilter == '全部') return fg.isEmpty;
-    if (fg.isEmpty) return false;
-    return fg == _groupFilter;
+    final fp = (_bundle?.metrics['filterProvince']?.toString() ?? '').trim();
+    final groupMatches = _groupFilter == '全部'
+        ? fg.isEmpty
+        : fg.isNotEmpty && fg == _groupFilter;
+    final provinceMatches = _provinceFilter == '全部'
+        ? fp.isEmpty
+        : fp.isNotEmpty && fp == _provinceFilter;
+    return groupMatches && provinceMatches;
   }
 
   /// Hero 上方 pills：展示当前 L1 分类 + HUN / 异常。
@@ -8064,6 +8129,13 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         label: '分类',
         value: _groupFilter,
         onClear: () => _setGroupFilter('全部'),
+      ));
+    }
+    if (_hasProvinceFilter) {
+      list.add((
+        label: '省份',
+        value: _provinceFilter,
+        onClear: () => _setProvinceFilter('全部'),
       ));
     }
     if ((_tab == 'supply' || _tab == 'channel') && _hunFilter != '全部') {
@@ -9217,6 +9289,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       range,
       _anchor.name,
       _groupFilter,
+      _provinceFilter,
       _hunFilter,
       _anomalyFilter,
     ].join('|');
@@ -12409,6 +12482,8 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   Widget _buildHeroStatRail(
     Map<String, double> totals, {
     bool whiteBackground = false,
+    Map<String, dynamic>? entityRow,
+    bool interactive = true,
   }) {
     final sales = totals['sales'] ?? 0;
     final verified = totals['verifiedSales'] ?? 0;
@@ -12432,7 +12507,14 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       double value, {
       bool isRate = false,
     }) {
-      return _statCell(keyId: key, label: label, value: value, isRate: isRate);
+      return _statCell(
+        keyId: key,
+        label: label,
+        value: value,
+        isRate: isRate,
+        entityRow: entityRow,
+        interactive: interactive,
+      );
     }
 
     Widget metricGrid(
@@ -12634,100 +12716,92 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               const SizedBox(width: lighthouseHeroCardGap),
               Expanded(
                 flex: lighthouseHeroCostColumnFlex,
-                child: strip(
-                  sectionKey: 'cost',
-                  title: '成本',
-                  child: metricGrid([
-                    (
-                      key: 'totalCost',
-                      label: '成本合计',
-                      value: totalCost,
-                      isRate: false,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    strip(
+                      sectionKey: 'cost',
+                      title: '成本',
+                      child: metricGrid([
+                        (
+                          key: 'totalCost',
+                          label: '成本合计',
+                          value: totalCost,
+                          isRate: false,
+                        ),
+                        (
+                          key: 'projectCost',
+                          label: '项目成本',
+                          value: projectCost,
+                          isRate: false,
+                        ),
+                        (
+                          key: 'cost',
+                          label: '业务成本',
+                          value: businessCost,
+                          isRate: false,
+                        ),
+                        (
+                          key: 'directCost',
+                          label: '直接成本',
+                          value: directCost,
+                          isRate: false,
+                        ),
+                      ], columns: 2),
                     ),
-                    (
-                      key: 'projectCost',
-                      label: '项目成本',
-                      value: projectCost,
-                      isRate: false,
-                    ),
-                    (
-                      key: 'cost',
-                      label: '业务成本',
-                      value: businessCost,
-                      isRate: false,
-                    ),
-                    (
-                      key: 'directCost',
-                      label: '直接成本',
-                      value: directCost,
-                      isRate: false,
-                    ),
-                  ], columns: 2),
+                    const SizedBox(height: lighthouseHeroCardGap),
+                    compactCashStrip(),
+                  ],
                 ),
               ),
               const SizedBox(width: lighthouseHeroCardGap),
               Expanded(
                 flex: lighthouseHeroResultColumnFlex,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    compactCashStrip(),
-                    const SizedBox(height: lighthouseHeroCardGap),
-                    strip(
-                      sectionKey: 'profit',
-                      title: '利润',
-                      child: metricGrid([
-                        (
-                          key: 'profit',
-                          label: '毛利润',
-                          value: profit,
-                          isRate: false,
-                        ),
-                        (
-                          key: 'netProfit',
-                          label: '净利润',
-                          value: netProfit,
-                          isRate: false,
-                        ),
-                        (
-                          key: 'revenue',
-                          label: '收入',
-                          value: revenue,
-                          isRate: false,
-                        ),
-                        (
-                          key: 'spread',
-                          label: '利差',
-                          value: spread,
-                          isRate: false,
-                        ),
-                        (
-                          key: 'grossMargin',
-                          label: '毛利率',
-                          value: grossMargin,
-                          isRate: true,
-                        ),
-                        (key: 'rate', label: 'ROI', value: rate, isRate: true),
-                      ], columns: 2),
+                child: strip(
+                  sectionKey: 'profit',
+                  title: '利润',
+                  child: metricGrid([
+                    (key: 'profit', label: '毛利润', value: profit, isRate: false),
+                    (
+                      key: 'netProfit',
+                      label: '净利润',
+                      value: netProfit,
+                      isRate: false,
                     ),
-                  ],
+                    (
+                      key: 'revenue',
+                      label: '收入',
+                      value: revenue,
+                      isRate: false,
+                    ),
+                    (key: 'spread', label: '利差', value: spread, isRate: false),
+                    (
+                      key: 'grossMargin',
+                      label: '毛利率',
+                      value: grossMargin,
+                      isRate: true,
+                    ),
+                    (key: 'rate', label: 'ROI', value: rate, isRate: true),
+                  ], columns: 2),
                 ),
               ),
             ],
           ),
         ),
         // 内嵌走势展开区 —— 点任一格展开，两段共享
-        AnimatedSize(
-          duration: const Duration(milliseconds: 220),
-          curve: Curves.easeOutCubic,
-          alignment: Alignment.topCenter,
-          child: _expandedTrendKey == null
-              ? const SizedBox.shrink()
-              : Padding(
-                  padding: const EdgeInsets.only(top: 14),
-                  child: _buildInlineTrendPanel(_expandedTrendKey!, totals),
-                ),
-        ),
+        if (interactive)
+          AnimatedSize(
+            duration: const Duration(milliseconds: 220),
+            curve: Curves.easeOutCubic,
+            alignment: Alignment.topCenter,
+            child: _expandedTrendKey == null
+                ? const SizedBox.shrink()
+                : Padding(
+                    padding: const EdgeInsets.only(top: 14),
+                    child: _buildInlineTrendPanel(_expandedTrendKey!, totals),
+                  ),
+          ),
       ],
     );
   }
@@ -12741,9 +12815,13 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     required String label,
     required double value,
     required bool isRate,
+    Map<String, dynamic>? entityRow,
+    bool interactive = true,
   }) {
-    final isActive = _expandedTrendKey == keyId;
-    final delta = _deltaForMetric(keyId);
+    final isActive = interactive && _expandedTrendKey == keyId;
+    final delta = entityRow == null
+        ? _deltaForMetric(keyId)
+        : _deltaFromEntityRow(entityRow, keyId);
     final numberColor = LhColors.ink;
     final labelColor = isActive ? LhColors.ink2 : LhColors.mute;
     final unitColor = LhColors.mute;
@@ -12753,9 +12831,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onTap: () => setState(() {
-        _expandedTrendKey = isActive ? null : keyId;
-      }),
+      onTap: interactive
+          ? () => setState(() {
+              _expandedTrendKey = isActive ? null : keyId;
+            })
+          : null,
       child: Padding(
         padding: const EdgeInsets.only(right: 2),
         child: Column(
@@ -16088,6 +16168,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     // 放在它后面，默认选中状态仍由 _defaultGroupFilter 决定。
     final groups = _categoryOptions(_tab).toList();
     final showGroups = _tabBarShowsGroups && _tab != 'analysis';
+    final provinceOpts = _provinceOptions();
+    final showProvinces =
+        showGroups && _tab == 'channel' && _groupFilter != '全部';
     final showHun = showGroups && (_tab == 'supply' || _tab == 'channel');
 
     // ── ROW 1 · 维度锚点 (biggest) ─────────────────────────────────────
@@ -16121,6 +16204,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             setState(() {
               _tab = key;
               _groupFilter = '全部';
+              _provinceFilter = '全部';
               _tabBarShowsGroups = false;
               _hunFilter = '全部';
               _listLimit = _listPageSize;
@@ -16139,6 +16223,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               if (_tabBarShowsGroups) {
                 _tabBarShowsGroups = false;
                 _groupFilter = '全部';
+                _provinceFilter = '全部';
                 _hunFilter = '全部';
               } else {
                 _tabBarShowsGroups = true;
@@ -16151,12 +16236,16 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             if (prevGroup != _groupFilter) {
               unawaited(_reloadHeroSummary());
             }
+            if (_tab == 'channel' && _tabBarShowsGroups) {
+              unawaited(_loadTab('province'));
+            }
             return;
           }
           setState(() {
             _tab = key;
             _tabBarShowsGroups = true; // 切维仍默认展开分类
             _groupFilter = _defaultGroupFilter(key);
+            _provinceFilter = '全部';
             _ensureDefaultGroupFilter();
             if (key != 'supply' && key != 'channel') _hunFilter = '全部';
             _listLimit = _listPageSize;
@@ -16167,6 +16256,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           });
           unawaited(_reloadHeroSummary());
           _loadTab(key);
+          if (key == 'channel') _loadTab('province');
         },
       );
     }).toList();
@@ -16294,6 +16384,31 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                       ),
                       size: _SegmentSize.medium,
                       onTap: () => _setGroupFilter(g),
+                    ),
+                  )
+                  .toList(),
+            ),
+          if (showProvinces)
+            filterRow(
+              kicker: '省份',
+              divider: true,
+              cells: provinceOpts
+                  .map(
+                    (province) => _segmentCell(
+                      label: province,
+                      isOn: _provinceFilter == province,
+                      tone: _SegmentTone.subgroup,
+                      leading: Icon(
+                        province == '全部'
+                            ? Icons.public_rounded
+                            : Icons.location_on_outlined,
+                        size: 12,
+                        color: _provinceFilter == province
+                            ? _LhPlum.primary
+                            : LhColors.mute2,
+                      ),
+                      size: _SegmentSize.medium,
+                      onTap: () => _setProvinceFilter(province),
                     ),
                   )
                   .toList(),
@@ -16697,6 +16812,13 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                     isOn: isOn,
                     tone: _SegmentTone.dim,
                     size: _SegmentSize.medium,
+                    leading: t.icon == null
+                        ? null
+                        : Icon(
+                            t.icon,
+                            size: 13,
+                            color: isOn ? t.color : LhColors.mute2,
+                          ),
                     onTap: () => setState(() {
                       _detailSubTab = t.key;
                       _detailPage = 1;
@@ -17347,10 +17469,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         ),
       );
     }
-    if (_loadingTabs.contains(_tab) && _currentRows.isEmpty) {
+    if (_loadingTabs.contains(_activeListTab) && _currentRows.isEmpty) {
       return const SizedBox(height: 240);
     }
-    final tabError = _tabErrors[_tab];
+    final tabError = _tabErrors[_activeListTab];
     if (tabError != null && _currentRows.isEmpty) {
       return Padding(
         padding: EdgeInsets.symmetric(
@@ -17375,7 +17497,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             ),
             const SizedBox(height: 16),
             GestureDetector(
-              onTap: () => _loadTab(_tab, force: true),
+              onTap: () => _loadTab(_activeListTab, force: true),
               child: Container(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 14,
@@ -17418,7 +17540,15 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
 
     final listBody = Column(
       children: [
-        _buildLedger(visible, shareRows: rows),
+        _buildLedger(
+          visible,
+          shareRows: rows,
+          metricsTab: _hasProvinceFilter ? 'channel' : null,
+          trendKeyPrefix: _hasProvinceFilter ? 'province' : null,
+          rootLabel: _hasProvinceFilter ? '省份' : null,
+          showRowChevron: !_hasProvinceFilter,
+          allowDefaultDetailOpen: !_hasProvinceFilter,
+        ),
         if (hasMore)
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 14),
@@ -20341,11 +20471,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     return out;
   }
 
-  /// 列表收起态只展示销售、核销、毛利、成本四个重点指标。
-  /// 完整分类与子指标统一放在行展开区。
-  List<_LedgerCol> _ledgerSummaryCols(double w) {
+  /// 产品收起态按「规模 → 结果」排版：左列销售/核销，右列现金流/毛利。
+  /// 供给与渠道保持销售/核销/毛利/成本四项；完整指标统一放在展开区。
+  List<_LedgerCol> _ledgerSummaryCols(double w, String tab) {
     final colW = _ledgerColW(w);
-    return lighthouseLedgerSummaryMetricRows
+    return lighthouseLedgerSummaryMetricRowsForTab(tab)
         .expand((row) => row)
         .map(
           (key) => _LedgerCol(key, _ledgerSummaryMetricLabel(key), false, colW),
@@ -20359,7 +20489,8 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       (_kLedgerGridCellHBase * _ledgerScale).roundToDouble();
   double get _ledgerGridRowGap =>
       (_kLedgerGridRowGapBase * _ledgerScale).roundToDouble();
-  double get _ledgerSummaryCellH => (27 * _ledgerScale).roundToDouble();
+  double _ledgerSummaryCellH(String tab) =>
+      ((tab == 'product' ? 31 : 27) * _ledgerScale).roundToDouble();
   double get _ledgerDeltaW =>
       (_kLedgerDeltaWBase * _ledgerScale).roundToDouble();
 
@@ -20379,12 +20510,12 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     return math.max(grid, pinnedMin);
   }
 
-  double _ledgerSummaryRowH(int n) {
+  double _ledgerSummaryRowH(int n, {required double cellHeight}) {
     final rows = _ledgerGridRowCount(
       n,
       columns: lighthouseLedgerSummaryColumns,
     );
-    final grid = rows * _ledgerSummaryCellH + _ledgerGridPadV * 2;
+    final grid = rows * cellHeight + _ledgerGridPadV * 2;
     final pinnedMin = (_kLedgerPinnedMinH * _ledgerScale).roundToDouble();
     return math.max(grid, pinnedMin);
   }
@@ -20440,6 +20571,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   String _ledgerSummaryMetricLabel(String key) => switch (key) {
     'sales' => '销售额',
     'verifiedSales' => '核销额',
+    'prepaid' => '经营性现金流',
     'costTotal' => '成本合计',
     'profit' => '毛利润',
     _ => _metricShort(key),
@@ -20452,10 +20584,25 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     return 'profit';
   }
 
-  Border _ledgerSummaryBorder(String key) {
-    final isLeft = key == 'sales' || key == 'profit';
-    final isTop = key == 'sales' || key == 'verifiedSales';
+  Border _ledgerSummaryBorder(String key, {required String tab}) {
+    final productLayout = tab == 'product';
+    final isLeft = productLayout
+        ? key == 'sales' || key == 'verifiedSales'
+        : key == 'sales' || key == 'profit';
+    final isTop = productLayout
+        ? key == 'sales' || key == 'prepaid'
+        : key == 'sales' || key == 'verifiedSales';
+    final outcomeAccent = productLayout
+        ? switch (key) {
+            'prepaid' => Color(lighthouseHeroSectionAccentValues['cash']!),
+            'profit' => Color(lighthouseHeroSectionAccentValues['profit']!),
+            _ => null,
+          }
+        : null;
     return Border(
+      left: outcomeAccent == null
+          ? BorderSide.none
+          : BorderSide(color: outcomeAccent.withAlpha(115), width: 1.5),
       right: isLeft
           ? BorderSide(color: LhColors.line2, width: 0.5)
           : BorderSide.none,
@@ -20620,6 +20767,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     required bool isSorted,
     required String tab,
     bool showCategory = false,
+    Color? emphasisAccent,
   }) {
     final vOrNull = _rowMetricValueOrNull(r, c.key);
     final missing = vOrNull == null;
@@ -20669,7 +20817,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                           ? LhColors.mute2
                           : (negative
                                 ? LhColors.pos
-                                : (isSorted ? LhColors.ink : LhColors.ink2)),
+                                : (emphasisAccent ??
+                                      (isSorted
+                                          ? LhColors.ink
+                                          : LhColors.ink2))),
                       weight: isSorted && !missing
                           ? FontWeight.w700
                           : FontWeight.w600,
@@ -20727,9 +20878,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             : (_metaHighlightKey == c.key
                   ? _LhPlum.primary.withAlpha(22)
                   : (showCategory
-                        ? Colors.transparent
+                        ? (emphasisAccent?.withAlpha(15) ?? Colors.transparent)
                         : _ledgerGroupTint(c.key))),
-        border: showCategory ? _ledgerSummaryBorder(c.key) : null,
+        border: showCategory ? _ledgerSummaryBorder(c.key, tab: tab) : null,
       ),
       padding: showCategory
           ? EdgeInsets.fromLTRB(_fs(6), _fs(3), _fs(6), _fs(2))
@@ -20741,6 +20892,24 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               children: [
                 Row(
                   children: [
+                    if (emphasisAccent != null) ...[
+                      Container(
+                        width: _fs(13),
+                        height: _fs(13),
+                        decoration: BoxDecoration(
+                          color: emphasisAccent.withAlpha(24),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Icon(
+                          c.key == 'prepaid'
+                              ? Icons.account_balance_wallet_outlined
+                              : Icons.trending_up_rounded,
+                          size: _fs(8.5),
+                          color: emphasisAccent,
+                        ),
+                      ),
+                      SizedBox(width: _fs(3)),
+                    ],
                     Expanded(
                       child: Text(
                         c.label,
@@ -20748,7 +20917,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                         overflow: TextOverflow.ellipsis,
                         style: LhTypography.mono(
                           size: _fs(8.5),
-                          color: isSorted ? LhColors.ink2 : LhColors.mute2,
+                          color:
+                              emphasisAccent ??
+                              (isSorted ? LhColors.ink2 : LhColors.mute2),
                           weight: isSorted ? FontWeight.w700 : FontWeight.w500,
                           letterSpacing: 0.2,
                           height: 1.0,
@@ -21018,9 +21189,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         final w = cons.maxWidth;
         _ledgerScale = _lhLedgerScale(w);
         final pinnedW = _ledgerPinnedW(w);
-        final cols = _ledgerSummaryCols(w);
+        final cols = _ledgerSummaryCols(w, tab);
+        final summaryCellH = _ledgerSummaryCellH(tab);
         // 四分类摘要固定 2×2；完整子指标进入行展开区，避免列表纵向拥挤。
-        final rowH = _ledgerSummaryRowH(cols.length);
+        final rowH = _ledgerSummaryRowH(cols.length, cellHeight: summaryCellH);
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -21033,6 +21205,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 cols,
                 pinnedW,
                 rowH,
+                summaryCellH: summaryCellH,
                 metricsTab: tab,
                 trendKeyPrefix: trendKeyPrefix,
                 onRowTap: onRowTap,
@@ -21052,6 +21225,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     List<_LedgerCol> cols,
     double pinnedW,
     double rowH, {
+    required double summaryCellH,
     String? metricsTab,
     String? trendKeyPrefix,
     void Function(Map<String, dynamic> row)? onRowTap,
@@ -21151,9 +21325,20 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               isSorted: _ledgerSummaryKeyForMetric(_sortField) == c.key,
               tab: tab,
               showCategory: true,
+              emphasisAccent: tab == 'product'
+                  ? switch (c.key) {
+                      'prepaid' => Color(
+                        lighthouseHeroSectionAccentValues['cash']!,
+                      ),
+                      'profit' => Color(
+                        lighthouseHeroSectionAccentValues['profit']!,
+                      ),
+                      _ => null,
+                    }
+                  : null,
             ),
             columns: lighthouseLedgerSummaryColumns,
-            cellHeight: _ledgerSummaryCellH,
+            cellHeight: summaryCellH,
             rowGap: 0,
           ),
         ),
@@ -21472,13 +21657,8 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   // ═══════════════════════════════════════════════════════════════════════════
   // 展开态 (账本版) —— 全宽面板，不受横滚影响
   //
-  //   展开态承担一个职责：**给一份按业务口径分好组的全指标快照**。
-  //   账本行里的每一列在这里都有一份，不存在"只有一边才有"的指标；
-  //   区别是这里按 规模 / 成本 / 经营性现金流 / 利润 分成四段，
-  //   收起态只保留每段一个摘要，展开态展示全部子指标。
-  //
-  //   布局：≤390 两列 / >390 三列。每格 = 指标全称 + 数值 + 环比，点击进列聚焦对比。
-  //   数值走 _tabular 等宽，所以网格内部也是列对齐的，跟上方账本行同一套语言。
+  //   展开态承担两个职责：保留当前行走势，并按主 Hero 的四分类版式展示
+  //   规模 / 成本 / 经营性现金流 / 利润。L1/L2/L3 共用这一入口。
   // ═══════════════════════════════════════════════════════════════════════════
   Widget _buildInlineExpanded(Map<String, dynamic> r) {
     final trendChart = _trendChartFor(r, showHeader: false);
@@ -21487,9 +21667,6 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         (_resolvedRowTrend(r) ?? (r['trend'] as Map?))?['rangeLabel']
             ?.toString() ??
         '';
-    final screenW = MediaQuery.sizeOf(context).width;
-    final metricWidth = _ledgerColW(screenW);
-
     final trendMeta = [
       headerTitle,
       if (headerRange.isNotEmpty) headerRange,
@@ -21535,135 +21712,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       );
     }
 
-    // ── v19 · 全指标拆成四个板块 ─────────────────────────────────────────
-    //   一堆指标平铺成 13 格，读的人得自己在脑子里分类。按「规模 / 成本 /
-    //   经营性现金流 / 利润」分开之后，每一段回答一个独立的问题：
-    //     规模 —— 盘子做了多大（三个不同口径：撮合 / 收款 / 核销）
-    //     利润 —— 利差减掉成本，最后落下多少（链路自闭合，能算出结果）
-    //     现金流 —— 收进来的钱有多少还没兑现（预收 ≠ 利润）
-    //
-    List<Widget> cellsFor(List<String> keys) => keys
-        .where((key) => key != 'prepaid')
-        .map(
-          (key) => _ledgerExpandedCell(
-            r,
-            _LedgerCol(
-              key,
-              _metricShort(key),
-              lighthouseHeroMetricIsRate(key),
-              metricWidth,
-            ),
-          ),
-        )
-        .toList(growable: false);
-
-    // 与顶部 Hero/L2/L3 固定使用同一分桶，不受账本列显隐和拖拽顺序影响。
-    final scaleCells = cellsFor(lighthouseHeroVerticalSections[0].metricKeys);
-    final costCells = cellsFor(lighthouseHeroVerticalSections[1].metricKeys);
-    final profitCells = cellsFor(lighthouseHeroVerticalSections[3].metricKeys);
-
-    // 经营性现金流 —— 后端目前没有收付流水，唯一能自洽派生的就是这一项：
-    //   销售额(收进来的) − 核销额(已经兑掉的) = 还沉在池子里的预收。
-    //   环比不给：两个百分比相减推不出差额的环比，硬算就是假数。
-    final salesV = _rowMetricValueOrNull(r, 'sales');
-    final verifiedV = _rowMetricValueOrNull(r, 'verifiedSales');
-    final cashCells = <Widget>[];
-    if (salesV != null && verifiedV != null) {
-      final net = (salesV - verifiedV).clamp(0.0, double.infinity);
-      cashCells.add(
-        _expandedCellShell(
-          label: '预收净增',
-          value: _fmtMoney(net),
-          unit: _unitMoney(net),
-          delta: '销售额 − 核销额',
-          deltaColor: LhColors.mute2,
-          valueColor: net < 0 ? LhColors.pos : LhColors.ink,
-        ),
-      );
-    }
-
-    Widget compactGrid(List<Widget> cells, int columns) {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          for (int i = 0; i < cells.length; i += columns)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  for (int j = i; j < i + columns; j++)
-                    Expanded(
-                      child: j < cells.length
-                          ? cells[j]
-                          : const SizedBox.shrink(),
-                    ),
-                ],
-              ),
-            ),
-        ],
-      );
-    }
-
-    Widget verticalStrip({
-      required String title,
-      required String kicker,
-      required Color accent,
-      required Widget child,
-    }) {
-      return Container(
-        padding: const EdgeInsets.fromLTRB(10, 11, 7, 6),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          border: Border(
-            top: BorderSide(color: accent.withAlpha(110), width: 1.2),
-            left: BorderSide(color: accent.withAlpha(42), width: 0.6),
-            right: BorderSide(color: accent.withAlpha(24), width: 0.4),
-          ),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              children: [
-                Container(width: 3, height: 18, color: accent),
-                const SizedBox(width: 7),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: LhTypography.sans(
-                          size: 11.5,
-                          color: LhColors.ink,
-                          weight: FontWeight.w700,
-                        ),
-                      ),
-                      Text(
-                        kicker,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: LhTypography.mono(
-                          size: 7,
-                          color: accent.withAlpha(180),
-                          weight: FontWeight.w700,
-                          letterSpacing: 0.7,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 15),
-            child,
-          ],
-        ),
-      );
-    }
+    // 列表行展开与 L1/L2/L3 主 Hero 使用完全相同的四分类版式；
+    // 数值与环比来自当前实体行，折线仍由上方 trendChart 独立承载。
+    final expandedTotals = _heroTotalsFromRow(r);
 
     return AnimatedSize(
       duration: const Duration(milliseconds: 220),
@@ -21710,61 +21761,13 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                       ),
                     ),
 
-                  // ── § 四分类 2×2 —— 与收起态摘要完全同构 ─────────────
+                  // ── § 四分类 —— 与主 Hero 完全同构 ───────────────────
                   const SizedBox(height: 18),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      IntrinsicHeight(
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            Expanded(
-                              child: verticalStrip(
-                                title: '规模',
-                                kicker: 'SCALE',
-                                accent: _LhPlum.primary,
-                                child: compactGrid(scaleCells, 2),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: verticalStrip(
-                                title: '成本',
-                                kicker: 'COST',
-                                accent: _LhPnl.costEdge,
-                                child: compactGrid(costCells, 2),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      IntrinsicHeight(
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            Expanded(
-                              child: verticalStrip(
-                                title: '经营性现金流',
-                                kicker: 'CASH',
-                                accent: LhColors.pos,
-                                child: compactGrid(cashCells, 1),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: verticalStrip(
-                                title: '利润',
-                                kicker: 'PROFIT',
-                                accent: _LhPlum.primary,
-                                child: compactGrid(profitCells, 2),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
+                  _buildHeroStatRail(
+                    expandedTotals,
+                    whiteBackground: true,
+                    entityRow: r,
+                    interactive: false,
                   ),
                 ],
               ),
@@ -21775,113 +21778,6 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           ],
         ),
       ),
-    );
-  }
-
-  /// 展开态网格格子的统一骨架 —— 标签 9 / 数字 13.5 / 单位 8.5 / 环比 8.5。
-  ///
-  /// v14.3：字号从 v14.2 的 11/16/10 收回一档。展开体一屏要放 7~10 格，
-  ///   格子本身是「快照」不是「主角」——它上方的账本行才是。16pt 数字
-  ///   在一片三列网格里同时出现十几个，重量和 hero 大数打架，整块读起来
-  ///   发胀。降到 13.5 后网格自己变轻，层级重新回到 hero → 账本行 → 快照。
-  ///   注意：这里不再跟 hero 共用同一档字号，是刻意的 —— 两处网格的
-  ///   职责不同，对齐的是「等宽 + 三段结构」，不是绝对字号。
-  Widget _expandedCellShell({
-    required String label,
-    required String value,
-    required String unit,
-    required String delta,
-    required Color deltaColor,
-    Color? labelColor,
-    Color? valueColor,
-    bool bold = false,
-    VoidCallback? onTap,
-  }) {
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.only(right: 10),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: LhTypography.mono(
-                size: 9,
-                color: labelColor ?? LhColors.mute,
-                weight: FontWeight.w600,
-                letterSpacing: 0.3,
-                height: 1.0,
-              ),
-            ),
-            const SizedBox(height: 4),
-            RichText(
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              text: TextSpan(
-                children: [
-                  TextSpan(
-                    text: value,
-                    style: _tabular(
-                      LhTypography.number(
-                        size: 13.5,
-                        color: valueColor ?? LhColors.ink,
-                      ),
-                    ),
-                  ),
-                  TextSpan(
-                    text: unit,
-                    style: LhTypography.sans(
-                      size: 8.5,
-                      color: LhColors.mute,
-                      weight: FontWeight.w500,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 3),
-            Text(
-              delta,
-              style: _tabular(
-                LhTypography.mono(
-                  size: 8.5,
-                  color: deltaColor,
-                  weight: FontWeight.w600,
-                  height: 1.0,
-                  letterSpacing: 0.2,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  /// 展开态网格的一格 —— 指标全称 + 数值 + 环比，点击进跨行列聚焦
-  Widget _ledgerExpandedCell(Map<String, dynamic> r, _LedgerCol c) {
-    final v = _rowMetricValue(r, c.key);
-    final d = _ledgerDelta(r, c.key);
-    final hasDelta = d != null && d.abs() >= 0.05;
-    final dColor = !hasDelta
-        ? LhColors.mute2
-        : (d > 0 ? LhColors.neg : LhColors.pos);
-    final isSorted = c.key == _sortField;
-
-    return _expandedCellShell(
-      label: _metricLabel(c.key, tab: _tab),
-      value: c.isRate ? v.toStringAsFixed(1) : _fmtMoney(v),
-      unit: c.isRate ? '%' : _unitMoney(v),
-      delta: hasDelta ? _ledgerFmtDelta(d, isRate: c.isRate) : '—',
-      deltaColor: dColor,
-      labelColor: isSorted ? _LhPlum.primary : LhColors.mute,
-      valueColor: v < 0 ? LhColors.pos : LhColors.ink,
-      onTap: () => _openMetaCompare(c.key),
     );
   }
 
@@ -21952,6 +21848,12 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       _SubTabInfo(key: 'signEntity', label: '公司主体', color: _LhPlum.deep),
     ],
     'channel': [
+      _SubTabInfo(
+        key: 'province',
+        label: '省份',
+        color: LhColors.private,
+        icon: Icons.map_outlined,
+      ),
       _SubTabInfo(key: 'product', label: '产品', color: LhColors.product),
       _SubTabInfo(key: 'supply', label: '供给', color: LhColors.sinopec),
       _SubTabInfo(key: 'project', label: '项目', color: _LhPlum.primary),
@@ -21971,6 +21873,14 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   //     · productName drilled → 供给·渠道·项目·产品码·公司主体
   //     · signEntity  drilled → 产品·供给·渠道·项目·SKU·产品码
   static const _kDrillSubTabs = {
+    'province': [
+      _SubTabInfo(key: 'product', label: '产品', color: LhColors.product),
+      _SubTabInfo(key: 'supply', label: '供给', color: LhColors.sinopec),
+      _SubTabInfo(key: 'project', label: '项目', color: _LhPlum.primary),
+      _SubTabInfo(key: 'productName', label: 'SKU', color: LhColors.product),
+      _SubTabInfo(key: 'supplierCode', label: '产品码', color: LhColors.copper),
+      _SubTabInfo(key: 'signEntity', label: '公司主体', color: _LhPlum.deep),
+    ],
     'product': [
       _SubTabInfo(key: 'supply', label: '供给', color: LhColors.sinopec),
       _SubTabInfo(key: 'channel', label: '渠道', color: LhColors.carrier),
@@ -24339,10 +24249,12 @@ class _SubTabInfo {
     required this.key,
     required this.label,
     required this.color,
+    this.icon,
   });
   final String key;
   final String label;
   final Color color;
+  final IconData? icon;
 }
 
 // ── Brand mark / loader（抽象同心圆 mark；加载时旋转）────────

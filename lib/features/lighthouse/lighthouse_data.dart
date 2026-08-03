@@ -1,3 +1,21 @@
+List<String> lighthouseProvinceOptionsForGroup(
+  Iterable<Map<String, dynamic>> rows,
+  String channelGroup,
+) {
+  if (channelGroup.trim().isEmpty || channelGroup == '全部') {
+    return const ['全部'];
+  }
+  final seen = <String>{};
+  final result = <String>['全部'];
+  for (final row in rows) {
+    if (row['group']?.toString() != channelGroup) continue;
+    final name = row['name']?.toString().trim() ?? '';
+    if (name.isEmpty || !seen.add(name)) continue;
+    result.add(name);
+  }
+  return result;
+}
+
 class LighthouseDataBundle {
   LighthouseDataBundle({
     required this.data,
@@ -19,6 +37,7 @@ class LighthouseDataBundle {
         'product': <Map<String, dynamic>>[],
         'supply': <Map<String, dynamic>>[],
         'channel': <Map<String, dynamic>>[],
+        'province': <Map<String, dynamic>>[],
       },
       productDetail: <String, dynamic>{},
       supplyDetail: <String, dynamic>{},

@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:dunes_app/features/lighthouse/lighthouse_data.dart';
 import 'package:dunes_app/features/lighthouse/lighthouse_hero_metric.dart';
 
 void main() {
@@ -59,8 +60,8 @@ void main() {
     );
     expect(lighthouseHeroColumnSectionKeys, [
       ['scale'],
-      ['cost'],
-      ['cash', 'profit'],
+      ['cost', 'cash'],
+      ['profit'],
     ]);
     expect(lighthouseHeroVerticalSections[0].metricKeys, [
       'sales',
@@ -92,12 +93,24 @@ void main() {
     expect(lighthouseLedgerSummaryMetricKeys, [
       'sales',
       'verifiedSales',
+      'prepaid',
       'profit',
       'costTotal',
     ]);
     expect(lighthouseLedgerSummaryMetricRows, [
       ['sales', 'verifiedSales'],
       ['profit', 'costTotal'],
+    ]);
+    expect(lighthouseLedgerSummaryMetricRowsForTab('supply'), [
+      ['sales', 'verifiedSales'],
+      ['profit', 'costTotal'],
+    ]);
+  });
+
+  test('product rows place scale left and emphasized outcomes right', () {
+    expect(lighthouseLedgerSummaryMetricRowsForTab('product'), [
+      ['sales', 'prepaid'],
+      ['verifiedSales', 'profit'],
     ]);
   });
 
@@ -165,6 +178,18 @@ void main() {
     expect(lighthouseCategoryLogoSize, 14);
   });
 
+  test('channel category exposes only its own province options', () {
+    final rows = <Map<String, dynamic>>[
+      {'name': '广东', 'group': '平安'},
+      {'name': '江苏', 'group': '平安'},
+      {'name': '广东', 'group': '多渠道'},
+      {'name': '浙江', 'group': '多渠道'},
+    ];
+
+    expect(lighthouseProvinceOptionsForGroup(rows, '平安'), ['全部', '广东', '江苏']);
+    expect(lighthouseProvinceOptionsForGroup(rows, '多渠道'), ['全部', '广东', '浙江']);
+  });
+
   test('compact hero keeps KPI and trend side by side', () {
     expect(lighthouseCompactHeroKpiFlex, 3);
     expect(lighthouseCompactHeroTrendFlex, 7);
@@ -217,7 +242,7 @@ void main() {
         lighthouseHeroCostColumnFlex,
         lighthouseHeroResultColumnFlex,
       ],
-      [9, 14, 16],
+      [10, 14, 15],
     );
   });
 

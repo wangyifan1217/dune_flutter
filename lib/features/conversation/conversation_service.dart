@@ -264,10 +264,13 @@ class ConversationService {
         .whereType<Map<String, dynamic>>()
         .map(_mapMessage)
         .toList(growable: false);
+    // after 分页：旧后端可能不带 hasNewer，满页时按「还有更新」兼容。
+    final hasNewer = _readBoolField(data, 'hasNewer') ||
+        (after != null && after > 0 && items.length >= size);
     return NativeMessagePage(
       items: items,
       hasMore: _readBoolField(data, 'hasMore'),
-      hasNewer: _readBoolField(data, 'hasNewer'),
+      hasNewer: hasNewer,
       peerLastReadMessageId: _readIntField(data, 'peerLastReadMessageId'),
     );
   }
@@ -1372,6 +1375,122 @@ class ConversationService {
     if (body['success'] == false) {
       throw Exception((body['message'] ?? '设置失败').toString());
     }
+  }
+
+  /// 收藏消息（快照；原消息撤回后仍可在收藏夹查看）。
+  Future<NativeMessageFavorite> favoriteMessage(
+    int conversationId,
+    int messageId,
+  ) async {
+    final resp = await _client.post(
+      _uri('/conversations/$conversationId/messages/$messageId/favorite'),
+      headers: _headers,
+      body: '{}',
+    );
+    final body = _decode(resp.body);
+    if (resp.statusCode < 200 || resp.statusCode >= 300) {
+      final msg = (body['message'] ?? '').toString().trim();
+      throw Exception(msg.isNotEmpty ? msg : '收藏失败: HTTP ${resp.statusCode}');
+    }
+    if (body['success'] == false) {
+      throw Exception((body['message'] ?? '收藏失败').toString());
+    }
+    final data = body['data'];
+    if (data is! Map<String, dynamic>) {
+      throw Exception('收藏失败：响应异常');
+    }
+    return _mapMessageFavorite(data);
+  }
+
+  Future<void> unfavoriteMessage(int conversationId, int messageId) async {
+    final resp = await _client.delete(
+      _uri('/conversations/$conversationId/messages/$messageId/favorite'),
+      headers: _headers,
+    );
+    if (resp.statusCode < 200 || resp.statusCode >= 300) {
+      throw Exception('取消收藏失败: HTTP ${resp.statusCode}');
+    }
+    final body = _decode(resp.body);
+    if (body['success'] == false) {
+      throw Exception((body['message'] ?? '取消收藏失败').toString());
+    }
+  }
+
+  Future<void> deleteFavorite(int favoriteId) async {
+    final resp = await _client.delete(
+      _uri('/favorites/messages/$favoriteId'),
+      headers: _headers,
+    );
+    if (resp.statusCode < 200 || resp.statusCode >= 300) {
+      throw Exception('取消收藏失败: HTTP ${resp.statusCode}');
+    }
+    final body = _decode(resp.body);
+    if (body['success'] == false) {
+      throw Exception((body['message'] ?? '取消收藏失败').toString());
+    }
+  }
+
+  Future<NativeMessageFavoritePage> fetchFavorites({
+    int? beforeId,
+    int size = 30,
+    String? query,
+  }) async {
+    final qp = <String, String>{'size': '$size'};
+    if (beforeId != null && beforeId > 0) qp['beforeId'] = '$beforeId';
+    final q = (query ?? '').trim();
+    if (q.isNotEmpty) qp['q'] = q;
+    final resp = await _client.get(
+      _uri('/favorites/messages').replace(queryParameters: qp),
+      headers: _headers,
+    );
+    if (resp.statusCode < 200 || resp.statusCode >= 300) {
+      throw Exception('收藏列表加载失败: HTTP ${resp.statusCode}');
+    }
+    final body = _decode(resp.body);
+    if (body['success'] == false) {
+      throw Exception((body['message'] ?? '收藏列表加载失败').toString());
+    }
+    final data = body['data'];
+    final items = _rowsFromData(data)
+        .whereType<Map<String, dynamic>>()
+        .map(_mapMessageFavorite)
+        .toList(growable: false);
+    final hasMore = data is Map<String, dynamic>
+        ? _readBoolField(data, 'hasMore')
+        : false;
+    return NativeMessageFavoritePage(items: items, hasMore: hasMore);
+  }
+
+  NativeMessageFavorite _mapMessageFavorite(Map<String, dynamic> raw) {
+    final sender = raw['sender'];
+    final senderMap = sender is Map<String, dynamic>
+        ? sender
+        : sender is Map
+            ? Map<String, dynamic>.from(sender)
+            : const <String, dynamic>{};
+    final payloadRaw = raw['payload'];
+    final payload = payloadRaw is Map<String, dynamic>
+        ? payloadRaw
+        : payloadRaw is Map
+            ? Map<String, dynamic>.from(payloadRaw)
+            : null;
+    final preview = (raw['previewText'] ?? raw['bodyText'] ?? '').toString().trim();
+    return NativeMessageFavorite(
+      id: (raw['id'] as num?)?.toInt() ?? 0,
+      conversationId: (raw['conversationId'] as num?)?.toInt() ?? 0,
+      messageId: (raw['messageId'] as num?)?.toInt() ?? 0,
+      conversationKind: (raw['conversationKind'] ?? '').toString(),
+      conversationTitle: (raw['conversationTitle'] ?? '').toString(),
+      kind: (raw['kind'] ?? raw['messageKind'] ?? 'TEXT').toString().trim(),
+      bodyText: (raw['bodyText'] ?? '').toString(),
+      previewText: preview.isEmpty ? '[消息]' : preview,
+      senderName: (senderMap['displayName'] ?? '').toString().trim(),
+      senderUserId: (senderMap['userId'] as num?)?.toInt(),
+      payload: payload,
+      favoritedAt: DateTime.tryParse((raw['favoritedAt'] ?? '').toString()),
+      messageCreatedAt:
+          DateTime.tryParse((raw['messageCreatedAt'] ?? '').toString()),
+    );
   }
 
   Future<void> patchConversationTitle(int conversationId, String title) async {

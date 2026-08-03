@@ -1037,6 +1037,7 @@ class ChatTextBubble extends StatelessWidget {
     this.onQuoteTap,
     this.onSelectionQuote,
     this.onSelectionForward,
+    this.onSelectionFavorite,
     this.onSelectionMulti,
     this.onSelectionRecall,
     this.enableSelection = true,
@@ -1048,6 +1049,7 @@ class ChatTextBubble extends StatelessWidget {
   final VoidCallback? onQuoteTap;
   final ValueChanged<String>? onSelectionQuote;
   final ValueChanged<String>? onSelectionForward;
+  final VoidCallback? onSelectionFavorite;
   final ValueChanged<String>? onSelectionMulti;
   final VoidCallback? onSelectionRecall;
   final bool enableSelection;
@@ -1185,6 +1187,14 @@ class ChatTextBubble extends StatelessWidget {
                         editableTextState.hideToolbar();
                       },
                     ),
+                    if (onSelectionFavorite != null)
+                      ContextMenuButtonItem(
+                        label: '收藏',
+                        onPressed: () {
+                          onSelectionFavorite!();
+                          editableTextState.hideToolbar();
+                        },
+                      ),
                     ContextMenuButtonItem(
                       label: '多选',
                       onPressed: () {

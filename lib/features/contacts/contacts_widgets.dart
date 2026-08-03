@@ -376,7 +376,16 @@ class _DeptBlockTileState extends State<DeptBlockTile> {
   @override
   void initState() {
     super.initState();
-    _expanded = widget.department.expanded;
+    // 默认展开；用户可手动折叠。
+    _expanded = true;
+  }
+
+  @override
+  void didUpdateWidget(covariant DeptBlockTile oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.department.id != widget.department.id) {
+      _expanded = true;
+    }
   }
 
   @override

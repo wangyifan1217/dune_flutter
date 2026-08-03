@@ -6,6 +6,7 @@ import '../../core/theme/dunes_theme.dart';
 import '../../core/util/friendly_error.dart';
 import '../auth/auth_session.dart';
 import '../shell/dunes_toast.dart';
+import '../chat/user_avatar_widget.dart';
 import '../conversation/conversation_models.dart';
 import '../conversation/conversation_realtime_hub.dart';
 import '../conversation/conversation_realtime_service.dart';
@@ -23,6 +24,9 @@ class NativeContactsPage extends StatefulWidget {
     required this.onStartPrivateChat,
     this.onOpenGroupChat,
     this.initialGroupPickMode = false,
+    this.initialSelectedUserIds = const <int>{},
+    this.lockedSelectedUserIds = const <int>{},
+    this.initialSelectedNames = const <int, String>{},
   });
 
   final AuthSession session;
@@ -31,6 +35,15 @@ class NativeContactsPage extends StatefulWidget {
   final ValueChanged<int> onStartPrivateChat;
   final ValueChanged<NativeConversation>? onOpenGroupChat;
   final bool initialGroupPickMode;
+
+  /// 进入建群多选时预勾选的成员（如私聊详情「+」带入的当前联系人）。
+  final Set<int> initialSelectedUserIds;
+
+  /// 不可取消勾选的成员（通常与 [initialSelectedUserIds] 中的发起人一致）。
+  final Set<int> lockedSelectedUserIds;
+
+  /// 预选成员展示名兜底（通讯录尚未加载完时用）。
+  final Map<int, String> initialSelectedNames;
 
   @override
   State<NativeContactsPage> createState() => _NativeContactsPageState();
@@ -61,6 +74,9 @@ class _NativeContactsPageState extends State<NativeContactsPage> {
   void initState() {
     super.initState();
     _groupPickMode = widget.initialGroupPickMode;
+    if (_groupPickMode) {
+      _selectedUserIds = _normalizedInitialSelected();
+    }
     _service = ContactService(session: widget.session);
     _convService = ConversationService(session: widget.session);
     _realtime = ConversationRealtimeHub.instance.of(widget.session);
@@ -76,10 +92,33 @@ class _NativeContactsPageState extends State<NativeContactsPage> {
         !_groupPickMode) {
       setState(() {
         _groupPickMode = true;
-        _selectedUserIds = <int>{};
+        _selectedUserIds = _normalizedInitialSelected();
+      });
+    } else if (widget.initialGroupPickMode &&
+        (oldWidget.initialSelectedUserIds != widget.initialSelectedUserIds ||
+            oldWidget.lockedSelectedUserIds != widget.lockedSelectedUserIds)) {
+      setState(() {
+        _selectedUserIds = {
+          ..._selectedUserIds,
+          ..._normalizedInitialSelected(),
+        };
       });
     }
   }
+
+  Set<int> _normalizedInitialSelected() {
+    return widget.initialSelectedUserIds
+        .where((id) => id > 0 && id != widget.session.userId)
+        .toSet();
+  }
+
+  Set<int> get _lockedSelectedIds {
+    return widget.lockedSelectedUserIds
+        .where((id) => id > 0 && id != widget.session.userId)
+        .toSet();
+  }
+
+  bool _isLockedSelected(int userId) => _lockedSelectedIds.contains(userId);
 
   @override
   void dispose() {
@@ -168,15 +207,28 @@ class _NativeContactsPageState extends State<NativeContactsPage> {
         contact.userId == widget.session.userId) {
       return;
     }
-    setState(() {
-      final next = Set<int>.from(_selectedUserIds);
-      if (next.contains(contact.userId)) {
-        next.remove(contact.userId);
-      } else {
-        next.add(contact.userId);
+    if (_selectedUserIds.contains(contact.userId)) {
+      if (_isLockedSelected(contact.userId)) {
+        showDunesToast(context, '当前会话联系人不可移除');
+        return;
       }
-      _selectedUserIds = next;
+      setState(() {
+        _selectedUserIds = Set<int>.from(_selectedUserIds)
+          ..remove(contact.userId);
+      });
+      return;
+    }
+    setState(() {
+      _selectedUserIds = {..._selectedUserIds, contact.userId};
     });
+  }
+
+  void _removeSelected(int userId) {
+    if (_isLockedSelected(userId)) {
+      showDunesToast(context, '当前会话联系人不可移除', kind: DunesToastKind.normal);
+      return;
+    }
+    setState(() => _selectedUserIds.remove(userId));
   }
 
   List<NativeContact> _allSelectableContacts() {
@@ -229,7 +281,10 @@ class _NativeContactsPageState extends State<NativeContactsPage> {
       if (hit != null) break;
       walk(dep);
     }
-    return hit;
+    if (hit != null) return hit;
+    final fallbackName = (widget.initialSelectedNames[userId] ?? '').trim();
+    if (fallbackName.isEmpty) return null;
+    return NativeContact(userId: userId, displayName: fallbackName);
   }
 
   void _selectAllMembers() {
@@ -242,7 +297,36 @@ class _NativeContactsPageState extends State<NativeContactsPage> {
   }
 
   void _clearSelected() {
-    setState(() => _selectedUserIds = <int>{});
+    setState(() => _selectedUserIds = Set<int>.from(_lockedSelectedIds));
+  }
+
+  Future<void> _showSelectedMembersSheet() async {
+    if (_selectedUserIds.isEmpty) {
+      showDunesToast(context, '请先选择群成员');
+      return;
+    }
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (sheetContext) {
+        return _SelectedMembersSheet(
+          selectedUserIds: _selectedUserIds,
+          resolveContact: _contactById,
+          avatarService: _convService,
+          onRemove: (userId) {
+            _removeSelected(userId);
+            if (_selectedUserIds.isEmpty && sheetContext.mounted) {
+              Navigator.pop(sheetContext);
+            }
+          },
+          onDone: () => Navigator.pop(sheetContext),
+        );
+      },
+    );
   }
 
   Future<void> _startPrivateChat(NativeContact contact) async {
@@ -283,6 +367,32 @@ class _NativeContactsPageState extends State<NativeContactsPage> {
       showDunesToast(context, '群聊至少选择两位同事', kind: DunesToastKind.error);
       return;
     }
+    final previewNames = ids
+        .take(3)
+        .map((id) => _contactById(id)?.displayName ?? '成员')
+        .join('、');
+    final more = ids.length > 3 ? ' 等' : '';
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('确认创建群聊'),
+        content: Text('将与 $previewNames$more共 ${ids.length} 人创建群聊，是否继续？'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: const Color(0xFF7B5CD8),
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('创建'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
     setState(() => _creating = true);
     try {
       final title = ids
@@ -397,10 +507,11 @@ class _NativeContactsPageState extends State<NativeContactsPage> {
                 _SelectedMembersBar(
                   selectedUserIds: _selectedUserIds.toList()..sort(),
                   resolveContact: _contactById,
-                  onRemove: (userId) =>
-                      setState(() => _selectedUserIds.remove(userId)),
+                  avatarService: _convService,
+                  onRemove: _removeSelected,
                 ),
                 _BulkSelectBar(
+                  onShowList: _showSelectedMembersSheet,
                   onSelectAll: _selectAllMembers,
                   onClearAll: _clearSelected,
                 ),
@@ -586,98 +697,375 @@ class _NativeContactsPageState extends State<NativeContactsPage> {
   }
 }
 
+class _SelectedMembersSheet extends StatefulWidget {
+  const _SelectedMembersSheet({
+    required this.selectedUserIds,
+    required this.resolveContact,
+    required this.avatarService,
+    required this.onRemove,
+    required this.onDone,
+  });
+
+  final Set<int> selectedUserIds;
+  final NativeContact? Function(int userId) resolveContact;
+  final ConversationService avatarService;
+  final ValueChanged<int> onRemove;
+  final VoidCallback onDone;
+
+  @override
+  State<_SelectedMembersSheet> createState() => _SelectedMembersSheetState();
+}
+
+class _SelectedMembersSheetState extends State<_SelectedMembersSheet> {
+  final TextEditingController _searchController = TextEditingController();
+  String _keyword = '';
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  List<int> _filteredIds() {
+    final ids = widget.selectedUserIds.toList()..sort();
+    final q = _keyword.trim().toLowerCase();
+    if (q.isEmpty) return ids;
+    return ids.where((id) {
+      final name = (widget.resolveContact(id)?.displayName ?? '$id')
+          .trim()
+          .toLowerCase();
+      return name.contains(q);
+    }).toList(growable: false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ids = _filteredIds();
+    final total = widget.selectedUserIds.length;
+    final maxH = MediaQuery.sizeOf(context).height * 0.72;
+    return SafeArea(
+      child: Padding(
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.viewInsetsOf(context).bottom,
+        ),
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxHeight: maxH),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(height: 10),
+              Container(
+                width: 36,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFD5D7DE),
+                  borderRadius: BorderRadius.circular(999),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 14, 8, 8),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        _keyword.trim().isEmpty
+                            ? '已选成员（$total）'
+                            : '已选成员（${ids.length}/$total）',
+                        style: DunesTypography.sans(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          color: DunesColors.text,
+                        ),
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: widget.onDone,
+                      child: Text(
+                        '完成',
+                        style: DunesTypography.sans(
+                          fontSize: 14,
+                          color: const Color(0xFF7B5CD8),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+                child: TextField(
+                  controller: _searchController,
+                  onChanged: (v) => setState(() => _keyword = v),
+                  style: DunesTypography.sans(fontSize: 14),
+                  textInputAction: TextInputAction.search,
+                  decoration: InputDecoration(
+                    isDense: true,
+                    hintText: '搜索已选成员姓名',
+                    hintStyle: DunesTypography.sans(
+                      fontSize: 14,
+                      color: DunesColors.text3,
+                    ),
+                    prefixIcon: const Icon(
+                      Icons.search,
+                      size: 20,
+                      color: Color(0xFF9CA3AF),
+                    ),
+                    suffixIcon: _keyword.trim().isEmpty
+                        ? null
+                        : IconButton(
+                            onPressed: () {
+                              _searchController.clear();
+                              setState(() => _keyword = '');
+                            },
+                            icon: const Icon(Icons.close, size: 18),
+                          ),
+                    filled: true,
+                    fillColor: const Color(0xFFF5F6F8),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: BorderSide.none,
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 10,
+                    ),
+                  ),
+                ),
+              ),
+              const Divider(height: 1, color: Color(0xFFE8E9ED)),
+              Flexible(
+                child: ids.isEmpty
+                    ? Padding(
+                        padding: const EdgeInsets.all(28),
+                        child: Text(
+                          _keyword.trim().isEmpty ? '暂无已选成员' : '未找到匹配成员',
+                          style: DunesTypography.sans(
+                            fontSize: 14,
+                            color: DunesColors.text3,
+                          ),
+                        ),
+                      )
+                    : ListView.separated(
+                        shrinkWrap: true,
+                        padding: const EdgeInsets.fromLTRB(16, 4, 12, 16),
+                        itemCount: ids.length,
+                        separatorBuilder: (_, __) => const Divider(
+                          height: 1,
+                          color: Color(0xFFF0F1F5),
+                        ),
+                        itemBuilder: (context, index) {
+                          final id = ids[index];
+                          final contact = widget.resolveContact(id);
+                          final name = contact?.displayName ?? '$id';
+                          final subtitle = [
+                            if ((contact?.title ?? '').trim().isNotEmpty)
+                              contact!.title!.trim(),
+                            if ((contact?.department ?? '').trim().isNotEmpty)
+                              contact!.department!.trim(),
+                          ].join(' · ');
+                          final initial = name.trim().isEmpty
+                              ? '?'
+                              : String.fromCharCode(name.runes.first);
+                          return InkWell(
+                            onTap: () {
+                              widget.onRemove(id);
+                              setState(() {});
+                            },
+                            child: Padding(
+                              padding:
+                                  const EdgeInsets.symmetric(vertical: 10),
+                              child: Row(
+                                children: [
+                                  ImUserAvatar(
+                                    initial: initial,
+                                    seed: id,
+                                    size: 40,
+                                    avatarPreset: contact?.avatarPreset,
+                                    avatarObjectKey:
+                                        contact?.avatarObjectKey,
+                                    avatarService: widget.avatarService,
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          name,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: DunesTypography.sans(
+                                            fontSize: 15,
+                                            color: DunesColors.text,
+                                          ),
+                                        ),
+                                        if (subtitle.isNotEmpty) ...[
+                                          const SizedBox(height: 2),
+                                          Text(
+                                            subtitle,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: DunesTypography.sans(
+                                              fontSize: 12,
+                                              color: DunesColors.text3,
+                                            ),
+                                          ),
+                                        ],
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Container(
+                                    width: 22,
+                                    height: 22,
+                                    decoration: const BoxDecoration(
+                                      color: Color(0xFF9CA3AF),
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: const Icon(
+                                      Icons.close,
+                                      size: 14,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _SelectedMembersBar extends StatelessWidget {
   const _SelectedMembersBar({
     required this.selectedUserIds,
     required this.resolveContact,
+    required this.avatarService,
     required this.onRemove,
   });
 
   final List<int> selectedUserIds;
   final NativeContact? Function(int userId) resolveContact;
+  final ConversationService avatarService;
   final ValueChanged<int> onRemove;
+
+  String _initial(String? name) {
+    final t = (name ?? '').trim();
+    if (t.isEmpty) return '?';
+    return String.fromCharCode(t.runes.first);
+  }
 
   @override
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
       decoration: const BoxDecoration(
-        color: Color(0xFFF5F6F8),
+        color: Colors.white,
         border: Border(bottom: BorderSide(color: Color(0xFFE8E9ED))),
       ),
-      child: Wrap(
-        spacing: 6,
-        runSpacing: 6,
-        crossAxisAlignment: WrapCrossAlignment.center,
-        children: [
-          Text(
-            '已选 ${selectedUserIds.length}：',
-            style: DunesTypography.sans(
-              fontSize: 12,
-              color: DunesColors.text3,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          if (selectedUserIds.isEmpty)
-            Text(
+      child: selectedUserIds.isEmpty
+          ? Text(
               '请选择群成员',
               style: DunesTypography.sans(
-                fontSize: 12,
+                fontSize: 13,
                 color: DunesColors.text3,
               ),
             )
-          else
-            ...selectedUserIds.map((id) {
-              final name = resolveContact(id)?.displayName ?? '成员$id';
-              return InkWell(
-                onTap: () => onRemove(id),
-                borderRadius: BorderRadius.circular(6),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: DunesColors.accent,
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        name,
-                        style: DunesTypography.sans(
-                          fontSize: 11,
-                          color: Colors.white,
-                          fontWeight: FontWeight.w600,
+          : SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  for (final id in selectedUserIds)
+                    Padding(
+                      padding: const EdgeInsets.only(right: 10),
+                      child: GestureDetector(
+                        onTap: () => onRemove(id),
+                        child: Column(
+                          children: [
+                            Stack(
+                              clipBehavior: Clip.none,
+                              children: [
+                                ImUserAvatar(
+                                  initial: _initial(
+                                    resolveContact(id)?.displayName,
+                                  ),
+                                  seed: id,
+                                  size: 40,
+                                  avatarPreset:
+                                      resolveContact(id)?.avatarPreset,
+                                  avatarObjectKey:
+                                      resolveContact(id)?.avatarObjectKey,
+                                  avatarService: avatarService,
+                                ),
+                                Positioned(
+                                  right: -2,
+                                  top: -2,
+                                  child: Container(
+                                    width: 16,
+                                    height: 16,
+                                    decoration: const BoxDecoration(
+                                      color: Color(0xFF9CA3AF),
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: const Icon(
+                                      Icons.close,
+                                      size: 11,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 4),
+                            SizedBox(
+                              width: 48,
+                              child: Text(
+                                resolveContact(id)?.displayName ?? '$id',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                textAlign: TextAlign.center,
+                                style: DunesTypography.sans(
+                                  fontSize: 11,
+                                  color: DunesColors.text3,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                      const SizedBox(width: 4),
-                      const Icon(
-                        Icons.close_rounded,
-                        size: 12,
-                        color: Colors.white70,
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            }),
-        ],
-      ),
+                    ),
+                ],
+              ),
+            ),
     );
   }
 }
 
 class _BulkSelectBar extends StatelessWidget {
   const _BulkSelectBar({
+    required this.onShowList,
     required this.onSelectAll,
     required this.onClearAll,
   });
 
+  final VoidCallback onShowList;
   final VoidCallback onSelectAll;
   final VoidCallback onClearAll;
+
+  ButtonStyle get _outlineStyle => OutlinedButton.styleFrom(
+    side: const BorderSide(color: Color(0xFFE0E1E6)),
+    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -689,13 +1077,7 @@ class _BulkSelectBar extends StatelessWidget {
           children: [
             OutlinedButton(
               onPressed: onSelectAll,
-              style: OutlinedButton.styleFrom(
-                side: const BorderSide(color: Color(0xFFE0E1E6)),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              ),
+              style: _outlineStyle,
               child: Text(
                 '全选',
                 style: DunesTypography.sans(
@@ -707,15 +1089,21 @@ class _BulkSelectBar extends StatelessWidget {
             const SizedBox(width: 8),
             OutlinedButton(
               onPressed: onClearAll,
-              style: OutlinedButton.styleFrom(
-                side: const BorderSide(color: Color(0xFFE0E1E6)),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              ),
+              style: _outlineStyle,
               child: Text(
                 '清空已选',
+                style: DunesTypography.sans(
+                  fontSize: 12,
+                  color: DunesColors.text2,
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            OutlinedButton(
+              onPressed: onShowList,
+              style: _outlineStyle,
+              child: Text(
+                '列表显示',
                 style: DunesTypography.sans(
                   fontSize: 12,
                   color: DunesColors.text2,

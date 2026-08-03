@@ -31,6 +31,19 @@ class _DesktopLoginPageState extends State<DesktopLoginPage> {
   String _mode = 'qr';
 
   @override
+  void initState() {
+    super.initState();
+    // 预缓存桌面登录 Logo，避免首帧资源未就绪落到错误占位。
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      unawaited(precacheImage(
+        const AssetImage('assets/images/app_logo.png'),
+        context,
+      ));
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
     return AuthScaffold(
       child: Column(

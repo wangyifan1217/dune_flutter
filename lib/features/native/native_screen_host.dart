@@ -25,6 +25,7 @@ import '../chat/native_broadcast_page.dart';
 import '../desktop/native_desktop_settings_page.dart';
 import '../chat/chat_foreground_sync.dart';
 import '../chat/native_chat_search_page.dart';
+import '../chat/native_favorites_page.dart';
 import '../chat/native_group_chat_page.dart';
 import '../chat/native_group_info_page.dart';
 import '../chat/native_group_media_page.dart';
@@ -33,8 +34,10 @@ import '../chat/native_private_chat_page.dart';
 import '../contacts/contact_models.dart';
 import '../contacts/native_contact_profile_page.dart';
 import '../contacts/native_contacts_page.dart';
+import '../ctrip/native_ctrip_h5_page.dart';
 import '../conversation/chat_dual_pane_shell.dart';
 import '../conversation/comm_unread_notifier.dart';
+import '../conversation/conversation_inbox_realtime.dart';
 import '../conversation/conversation_models.dart';
 import '../conversation/conversation_mention_utils.dart';
 import '../conversation/conversation_realtime_dedup.dart';
@@ -154,6 +157,9 @@ class _NativeScreenHostState extends State<NativeScreenHost>
   /// PC 双栏：从会话打开名片时嵌在右侧栏，返回目标为 C2/C5；通讯录等入口为 null（整页）。
   String? _profileReturnScreen;
   bool _contactsGroupPickMode = false;
+  Set<int> _contactsInitialSelectedUserIds = <int>{};
+  Set<int> _contactsLockedSelectedUserIds = <int>{};
+  Map<int, String> _contactsInitialSelectedNames = <int, String>{};
   int? _selectedPrivatePeerUserId;
   int? _selectedAiSummaryId;
   List<int> _aiSummaryPrefillConversationIds = const <int>[];
@@ -248,6 +254,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
   /// 资料页切换置顶 / 免打扰后立刻同步会话列表。
   final ConversationMemberSettingsSignal _conversationMemberSettingsSignal =
       ConversationMemberSettingsSignal();
+  final ConversationRemovedSignal _conversationRemovedSignal =
+      ConversationRemovedSignal();
 
   /// PC 侧栏「设置」页（保留侧栏，内容区切换）。
   bool _desktopSettingsOpen = false;
@@ -1114,21 +1122,31 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     if (userId <= 0) return;
     final current = widget.navigation.currentScreen;
     // 仅从会话（含双栏内搜索/媒体/群资料）打开时嵌在右侧会话栏；其它入口整页展示。
+    // PC 宽屏：只要右侧已有私聊/群聊上下文且不是通讯录入口，名片只占会话框，不撑满整页。
     String? returnScreen;
-    if (current == 'C2' || current == 'C5' || current == 'C6') {
+    final hasPrivate =
+        _selectedPrivate != null || _selectedPrivatePeerUserId != null;
+    final hasGroup = _selectedGroup != null;
+    final fromContacts = current == 'C3';
+
+    if (current == 'C5') {
+      returnScreen = 'C5';
+    } else if (current == 'C2' || current == 'C6') {
       returnScreen = current;
     } else if (current == 'C12' || current == 'C13') {
-      if (_selectedGroup != null) {
+      if (hasGroup) {
         returnScreen = 'C2';
-      } else if (_selectedPrivate != null ||
-          _selectedPrivatePeerUserId != null) {
+      } else if (hasPrivate) {
         returnScreen = 'C5';
-      } else {
-        returnScreen = null;
       }
-    } else {
-      returnScreen = null;
+    } else if (isDesktopCommOnly && !fromContacts) {
+      if (hasPrivate) {
+        returnScreen = 'C5';
+      } else if (hasGroup) {
+        returnScreen = 'C2';
+      }
     }
+
     setState(() {
       _selectedContact = NativeContact(
         userId: userId,
@@ -1271,12 +1289,38 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         _mutedConvIds.remove(conversationId);
       }
     }
+    // 同步当前选中会话的本地副本，避免侧栏/标题仍显示旧状态。
+    NativeConversation patch(NativeConversation c) {
+      return ConversationInboxRealtime.copyConversation(
+        c,
+        muted: muted,
+        pinned: pinned,
+      );
+    }
+
+    if (_selectedGroup?.id == conversationId) {
+      _selectedGroup = patch(_selectedGroup!);
+    }
+    if (_selectedPrivate?.id == conversationId) {
+      _selectedPrivate = patch(_selectedPrivate!);
+    }
     _conversationMemberSettingsSignal.notifySettings(
       conversationId: conversationId,
       muted: muted,
       pinned: pinned,
     );
     _scheduleCommBadgeRefresh();
+  }
+
+  void _handleExitedGroup(int conversationId) {
+    if (conversationId > 0) {
+      _conversationRemovedSignal.notifyRemoved(conversationId);
+      final slotId = 'group:$conversationId';
+      _dualChatSlots.remove(slotId);
+      _dualChatKeys.remove(slotId);
+      _mutedConvIds.remove(conversationId);
+    }
+    _leaveChatToInbox(clearSelection: true);
   }
 
   Widget _buildDualPaneGroupInfoPage() {
@@ -1307,7 +1351,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         _openContactProfile(userId, displayName);
       },
       onOpenApproval: () => _goB14(),
-      onExitedGroup: () => widget.navigation.popTo('C1'),
+      onExitedGroup: _handleExitedGroup,
+      onChatSettingsChanged: _onPrivateChatSettingsChanged,
     );
   }
 
@@ -1323,6 +1368,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       onOpenPrivateChat: _openPrivateByPeerId,
       conversationId: profileConvId,
       onChatSettingsChanged: _onPrivateChatSettingsChanged,
+      onCreateGroupWithContact: _startGroupFromContact,
       onOpenSearch: profileConvId == null
           ? null
           : (convId) {
@@ -1336,6 +1382,31 @@ class _NativeScreenHostState extends State<NativeScreenHost>
               widget.navigation.go('C12');
             },
     );
+  }
+
+  void _clearContactsGroupPickState() {
+    _contactsGroupPickMode = false;
+    _contactsInitialSelectedUserIds = <int>{};
+    _contactsLockedSelectedUserIds = <int>{};
+    _contactsInitialSelectedNames = <int, String>{};
+  }
+
+  /// 私聊详情头像旁「+」：进入通讯录建群，并预选当前联系人。
+  void _startGroupFromContact(NativeContact contact) {
+    final userId = contact.userId;
+    if (userId <= 0 || userId == widget.session.userId) return;
+    final name = contact.displayLabel.trim().isEmpty
+        ? contact.displayName.trim()
+        : contact.displayLabel.trim();
+    setState(() {
+      _contactsGroupPickMode = true;
+      _contactsInitialSelectedUserIds = <int>{userId};
+      _contactsLockedSelectedUserIds = <int>{userId};
+      _contactsInitialSelectedNames = name.isEmpty
+          ? <int, String>{}
+          : <int, String>{userId: name};
+    });
+    widget.navigation.go('C3');
   }
 
   Widget _buildDualPaneSearchPage() {
@@ -1434,12 +1505,13 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       selectedConversationId: selectedConversationId,
       conversationReadSignal: _conversationReadSignal,
       memberSettingsSignal: _conversationMemberSettingsSignal,
+      conversationRemovedSignal: _conversationRemovedSignal,
       listVisible: listVisible,
       onOpenPrivate: _openPrivateConversation,
       onOpenGroup: _openGroupConversation,
       onOpenRobot: _openRobotConversation,
       onOpenContacts: () {
-        setState(() => _contactsGroupPickMode = false);
+        setState(_clearContactsGroupPickState);
         widget.navigation.go('C3');
       },
       onOpenNova: () {
@@ -1452,10 +1524,14 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       },
       onOpenNotifications: () => widget.navigation.go('Z2'),
       onOpenNewChat: () {
-        setState(() => _contactsGroupPickMode = true);
+        setState(() {
+          _clearContactsGroupPickState();
+          _contactsGroupPickMode = true;
+        });
         widget.navigation.go('C3');
       },
       onOpenAiSummary: () => widget.navigation.go('AS1'),
+      onOpenFavorites: () => widget.navigation.go('CF'),
       onOpenApprovalAssistant: _openApprovalAssistant,
       onOpenTaskAssistant: _openTaskAssistant,
       // 对账助手暂为静态预览，先屏蔽入口；恢复时改回：
@@ -2144,6 +2220,20 @@ class _NativeScreenHostState extends State<NativeScreenHost>
               ? null
               : () => widget.navigation.popTo('B2'),
         );
+      case 'CT1':
+        return NativeCtripH5Page(
+          session: widget.session,
+          embedded: false,
+          onBack: () {
+            if (widget.navigation.history.contains('QJA')) {
+              widget.navigation.popTo('QJA');
+            } else if (widget.navigation.canGoBack) {
+              widget.navigation.back();
+            } else {
+              widget.navigation.popTo(isDesktopCommOnly ? 'QJA' : 'B2');
+            }
+          },
+        );
       case 'QJD':
         final entity =
             _selectedQianjiEntity ?? QianjiStaticCatalog.entities.first;
@@ -2275,6 +2365,11 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           onNotificationsRead: _handleNotificationsRead,
           onBroadcastRead: _handleConversationRead,
         );
+      case 'CF':
+        return NativeFavoritesPage(
+          session: widget.session,
+          onBack: widget.navigation.back,
+        );
       case 'C10':
         return NativeBroadcastPage(
           session: widget.session,
@@ -2345,19 +2440,27 @@ class _NativeScreenHostState extends State<NativeScreenHost>
             _openContactProfile(userId, displayName);
           },
           onOpenApproval: () => _goB14(),
-          onExitedGroup: () => widget.navigation.popTo('C1'),
+          onExitedGroup: _handleExitedGroup,
+          onChatSettingsChanged: _onPrivateChatSettingsChanged,
         );
       case 'C3':
+        final pickKey = _contactsInitialSelectedUserIds.toList()..sort();
         return NativeContactsPage(
-          key: ValueKey<String>('contacts-group-pick-$_contactsGroupPickMode'),
+          key: ValueKey<String>(
+            'contacts-group-pick-$_contactsGroupPickMode-${pickKey.join(',')}',
+          ),
           session: widget.session,
           initialGroupPickMode: _contactsGroupPickMode,
+          initialSelectedUserIds: _contactsInitialSelectedUserIds,
+          lockedSelectedUserIds: _contactsLockedSelectedUserIds,
+          initialSelectedNames: _contactsInitialSelectedNames,
           onBack: () {
-            setState(() => _contactsGroupPickMode = false);
+            setState(_clearContactsGroupPickState);
             widget.navigation.back();
           },
           onOpenContact: (contact) {
             setState(() {
+              _clearContactsGroupPickState();
               _selectedContact = contact;
               _profileReturnScreen = null;
             });
@@ -2365,7 +2468,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           },
           onStartPrivateChat: _openPrivateByPeerId,
           onOpenGroupChat: (conv) {
-            setState(() => _contactsGroupPickMode = false);
+            setState(_clearContactsGroupPickState);
             _openGroupConversation(conv);
           },
         );
@@ -2380,6 +2483,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           onOpenPrivateChat: _openPrivateByPeerId,
           conversationId: profileConvId,
           onChatSettingsChanged: _onPrivateChatSettingsChanged,
+          onCreateGroupWithContact: _startGroupFromContact,
           onOpenSearch: profileConvId == null
               ? null
               : (convId) {
@@ -2999,6 +3103,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       'C12',
       'C13',
       'CR',
+      'CF',
       'TA1',
       'Z2',
       'AS1',
@@ -3114,7 +3219,9 @@ class _NativeScreenHostState extends State<NativeScreenHost>
   }
 
   String _mainTabScreenFor(String screen) {
-    if (!isDesktopCommOnly && screen == 'QJA') return 'B2';
+    if (!isDesktopCommOnly && (screen == 'QJA' || screen == 'CT1')) {
+      return 'B2';
+    }
     // 企业微盘从工作台进入：PC 归工作台 Tab，APP 归「我的」。
     if (screen == 'FD1') return isDesktopCommOnly ? 'QJA' : 'B2';
     if (_isMyRoute(screen)) return 'B2';
@@ -3135,7 +3242,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         screen == 'QJTD') {
       return 'QJ';
     }
-    if (screen == 'QJA') return 'QJA';
+    if (screen == 'QJA' || screen == 'CT1') return 'QJA';
     if (screen == 'LH' || screen == 'LM') return 'LH';
     return 'C1';
   }

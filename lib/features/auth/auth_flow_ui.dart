@@ -48,6 +48,8 @@ class AuthScaffold extends StatelessWidget {
 class AuthAppLogo extends StatelessWidget {
   const AuthAppLogo({super.key, required this.size});
 
+  static const _assetPath = 'assets/images/app_logo.png';
+
   final double size;
 
   @override
@@ -58,7 +60,8 @@ class AuthAppLogo extends StatelessWidget {
         height: size,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          color: authSurface,
+          // Logo 本体是黑底白字，圆形容器同步黑底，避免透出白底。
+          color: Colors.black,
           boxShadow: [
             BoxShadow(
               color: authBlue.withValues(alpha: 0.18),
@@ -69,17 +72,56 @@ class AuthAppLogo extends StatelessWidget {
         ),
         clipBehavior: Clip.antiAlias,
         child: Image.asset(
-          'assets/images/app_logo.png',
+          _assetPath,
           fit: BoxFit.cover,
-          errorBuilder: (context, error, stackTrace) => Container(
-            color: const Color(0xFFE8F0FE),
-            alignment: Alignment.center,
-            child: Icon(
-              Icons.terrain_rounded,
-              size: size * 0.44,
-              color: authBlue,
-            ),
-          ),
+          filterQuality: FilterQuality.medium,
+          gaplessPlayback: true,
+          errorBuilder: (context, error, stackTrace) {
+            // 资源偶发失败时用同风格文字 Logo，避免落到地形占位图标。
+            return ColoredBox(
+              color: Colors.black,
+              child: Center(
+                child: Text.rich(
+                  TextSpan(
+                    children: [
+                      TextSpan(
+                        text: 'DU',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: size * 0.22,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.5,
+                          height: 1,
+                        ),
+                      ),
+                      WidgetSpan(
+                        alignment: PlaceholderAlignment.top,
+                        child: Padding(
+                          padding: EdgeInsets.only(left: size * 0.01),
+                          child: Icon(
+                            Icons.auto_awesome,
+                            size: size * 0.1,
+                            color: const Color(0xFF7DFFB3),
+                          ),
+                        ),
+                      ),
+                      TextSpan(
+                        text: 'NE',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: size * 0.22,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.5,
+                          height: 1,
+                        ),
+                      ),
+                    ],
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            );
+          },
         ),
       ),
     );

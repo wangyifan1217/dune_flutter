@@ -2,8 +2,6 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
-import '../../core/layout/chat_layout.dart';
-import '../../core/platform/desktop_features.dart';
 import '../../core/theme/dunes_theme.dart';
 import '../ai_summary/ai_summary_sparkle_icon.dart';
 import '../chat/group_composite_avatar.dart';
@@ -21,6 +19,7 @@ class ChatInboxHeader extends StatelessWidget {
     required this.onOpenNova,
     required this.onOpenMessageCenter,
     this.onOpenAiSummary,
+    this.onOpenFavorites,
     this.messageCenterUnread = 0,
     this.novaThinking = false,
     this.novaUnread = false,
@@ -31,6 +30,7 @@ class ChatInboxHeader extends StatelessWidget {
   final VoidCallback onOpenNova;
   final VoidCallback onOpenMessageCenter;
   final VoidCallback? onOpenAiSummary;
+  final VoidCallback? onOpenFavorites;
   final int messageCenterUnread;
   final bool novaThinking;
   final bool novaUnread;
@@ -77,6 +77,7 @@ class ChatInboxHeader extends StatelessWidget {
                 onNewChat: onNewChat,
                 onOpenMessageCenter: onOpenMessageCenter,
                 onOpenAiSummary: onOpenAiSummary,
+                onOpenFavorites: onOpenFavorites,
                 messageCenterUnread: messageCenterUnread,
               ),
             ),
@@ -94,6 +95,7 @@ class _InboxHeaderActions extends StatefulWidget {
     required this.onOpenMessageCenter,
     this.onNewChat,
     this.onOpenAiSummary,
+    this.onOpenFavorites,
     this.messageCenterUnread = 0,
   });
 
@@ -101,6 +103,7 @@ class _InboxHeaderActions extends StatefulWidget {
   final VoidCallback? onNewChat;
   final VoidCallback onOpenMessageCenter;
   final VoidCallback? onOpenAiSummary;
+  final VoidCallback? onOpenFavorites;
   final int messageCenterUnread;
 
   @override
@@ -112,9 +115,8 @@ class _InboxHeaderActionsState extends State<_InboxHeaderActions> {
   OverlayEntry? _overlay;
   bool _expanded = false;
 
-  bool get _useCluster {
-    return isDesktopCommOnly || isWideChatLayout(context);
-  }
+  /// APP / PC 统一用「···」下拉，避免手机右上角图标挤在一起。
+  bool get _useCluster => true;
 
   int get _badgeTotal => widget.messageCenterUnread;
 
@@ -170,6 +172,7 @@ class _InboxHeaderActionsState extends State<_InboxHeaderActions> {
                 messageCenterUnread: widget.messageCenterUnread,
                 showAiSummary: widget.onOpenAiSummary != null,
                 showNewChat: widget.onNewChat != null,
+                showFavorites: widget.onOpenFavorites != null,
                 onAiSummary: widget.onOpenAiSummary == null
                     ? null
                     : () => _runAndClose(widget.onOpenAiSummary!),
@@ -178,6 +181,9 @@ class _InboxHeaderActionsState extends State<_InboxHeaderActions> {
                 onNewChat: widget.onNewChat == null
                     ? null
                     : () => _runAndClose(widget.onNewChat!),
+                onFavorites: widget.onOpenFavorites == null
+                    ? null
+                    : () => _runAndClose(widget.onOpenFavorites!),
               ),
             ),
           ],
@@ -227,19 +233,23 @@ class _InboxActionsDropdown extends StatelessWidget {
     required this.messageCenterUnread,
     required this.showAiSummary,
     required this.showNewChat,
+    required this.showFavorites,
     required this.onMessageCenter,
     required this.onContacts,
     this.onAiSummary,
     this.onNewChat,
+    this.onFavorites,
   });
 
   final int messageCenterUnread;
   final bool showAiSummary;
   final bool showNewChat;
+  final bool showFavorites;
   final VoidCallback? onAiSummary;
   final VoidCallback onMessageCenter;
   final VoidCallback onContacts;
   final VoidCallback? onNewChat;
+  final VoidCallback? onFavorites;
 
   @override
   Widget build(BuildContext context) {
@@ -263,6 +273,25 @@ class _InboxActionsDropdown extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              if (showNewChat && onNewChat != null)
+                _DropdownItem(
+                  leading: const Icon(
+                    Icons.group_add_outlined,
+                    size: 20,
+                    color: Color(0xFF4B5563),
+                  ),
+                  label: '发起群聊',
+                  onTap: onNewChat!,
+                ),
+              _DropdownItem(
+                leading: const Icon(
+                  Icons.people_outline_rounded,
+                  size: 20,
+                  color: Color(0xFF4B5563),
+                ),
+                label: '通讯录',
+                onTap: onContacts,
+              ),
               if (showAiSummary && onAiSummary != null)
                 _DropdownItem(
                   leading: const SizedBox(
@@ -289,24 +318,15 @@ class _InboxActionsDropdown extends StatelessWidget {
                 badge: messageCenterUnread,
                 onTap: onMessageCenter,
               ),
-              _DropdownItem(
-                leading: const Icon(
-                  Icons.people_outline_rounded,
-                  size: 20,
-                  color: Color(0xFF4B5563),
-                ),
-                label: '通讯录',
-                onTap: onContacts,
-              ),
-              if (showNewChat && onNewChat != null)
+              if (showFavorites && onFavorites != null)
                 _DropdownItem(
                   leading: const Icon(
-                    Icons.edit_outlined,
+                    Icons.bookmark_border_rounded,
                     size: 20,
                     color: Color(0xFF4B5563),
                   ),
-                  label: '发起聊天',
-                  onTap: onNewChat!,
+                  label: '我的收藏',
+                  onTap: onFavorites!,
                 ),
             ],
           ),
@@ -916,7 +936,7 @@ class _Avatar extends StatelessWidget {
   final ConversationService? avatarService;
   final List<ConversationAvatarMember> groupAvatarMembers;
 
-  static const _inboxAvatarSize = 45.0;
+  static const _inboxAvatarSize = kImListAvatarSize;
   static const _inboxAvatarRadius = _inboxAvatarSize * 0.18;
 
   @override

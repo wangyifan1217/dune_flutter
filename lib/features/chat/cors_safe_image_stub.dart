@@ -5,6 +5,7 @@ Widget buildCorsSafeImageImpl({
   required double width,
   required double height,
   required BoxFit fit,
+  bool hitTestOverlay = false,
 }) {
   return Image.network(
     url,

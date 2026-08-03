@@ -102,7 +102,8 @@ class _LoginFlowState extends State<LoginFlow> {
     );
     setState(() {
       _session = session;
-      _showPostLoginSplash = true;
+      // 已屏蔽登录后启屏，登录成功后直接进 IM。
+      _showPostLoginSplash = false;
     });
     _persistSession(session);
   }

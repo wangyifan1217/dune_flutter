@@ -8,11 +8,14 @@ Widget buildCorsSafeImage({
   required double width,
   required double height,
   required BoxFit fit,
+  /// Web 的 HtmlElementView 会吃掉点击；气泡等需要外层 GestureDetector 时打开。
+  bool hitTestOverlay = false,
 }) {
   return buildCorsSafeImageImpl(
     url: url,
     width: width,
     height: height,
     fit: fit,
+    hitTestOverlay: hitTestOverlay,
   );
 }

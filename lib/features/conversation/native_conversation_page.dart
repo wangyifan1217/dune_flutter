@@ -47,6 +47,7 @@ class NativeConversationPage extends StatefulWidget {
     required this.onOpenNotifications,
     required this.onOpenNewChat,
     required this.onOpenAiSummary,
+    this.onOpenFavorites,
     this.onOpenRobot,
     this.onOpenApprovalAssistant,
     this.onOpenTaskAssistant,
@@ -54,6 +55,7 @@ class NativeConversationPage extends StatefulWidget {
     this.selectedConversationId,
     this.conversationReadSignal,
     this.memberSettingsSignal,
+    this.conversationRemovedSignal,
     this.listVisible = true,
   });
 
@@ -68,6 +70,7 @@ class NativeConversationPage extends StatefulWidget {
   final VoidCallback onOpenNotifications;
   final VoidCallback onOpenNewChat;
   final VoidCallback onOpenAiSummary;
+  final VoidCallback? onOpenFavorites;
   final ValueChanged<NativeConversation>? onOpenRobot;
   final ValueChanged<NativeConversation>? onOpenApprovalAssistant;
   final ValueChanged<NativeConversation>? onOpenTaskAssistant;
@@ -81,6 +84,9 @@ class NativeConversationPage extends StatefulWidget {
 
   /// Host 在资料页切换置顶/免打扰后，立刻同步列表排序与角标。
   final ConversationMemberSettingsSignal? memberSettingsSignal;
+
+  /// Host 在退出群聊等场景后，立刻从列表移除对应会话。
+  final ConversationRemovedSignal? conversationRemovedSignal;
 
   /// 手机端 keep-alive 时：进会话隐藏列表为 false，返回后为 true，用于恢复滚动。
   final bool listVisible;
@@ -122,6 +128,19 @@ class ConversationMemberSettingsSignal extends ChangeNotifier {
     _conversationId = conversationId;
     _muted = muted;
     _pinned = pinned;
+    notifyListeners();
+  }
+}
+
+/// Host → 会话列表：退出群聊等后立刻移除会话行。
+class ConversationRemovedSignal extends ChangeNotifier {
+  int _conversationId = 0;
+
+  int get conversationId => _conversationId;
+
+  void notifyRemoved(int conversationId) {
+    if (conversationId <= 0) return;
+    _conversationId = conversationId;
     notifyListeners();
   }
 }
@@ -190,6 +209,7 @@ class _NativeConversationPageState extends State<NativeConversationPage>
     userAvatarRefresh.addListener(_onSelfAvatarUpdated);
     widget.conversationReadSignal?.addListener(_onConversationReadSignal);
     widget.memberSettingsSignal?.addListener(_onMemberSettingsSignal);
+    widget.conversationRemovedSignal?.addListener(_onConversationRemovedSignal);
     final cached = ConversationInboxCache.instance.peek(widget.session.userId);
     if (cached != null) {
       _items = cached.conversations;
@@ -283,6 +303,15 @@ class _NativeConversationPageState extends State<NativeConversationPage>
       oldWidget.memberSettingsSignal?.removeListener(_onMemberSettingsSignal);
       widget.memberSettingsSignal?.addListener(_onMemberSettingsSignal);
     }
+    if (oldWidget.conversationRemovedSignal !=
+        widget.conversationRemovedSignal) {
+      oldWidget.conversationRemovedSignal?.removeListener(
+        _onConversationRemovedSignal,
+      );
+      widget.conversationRemovedSignal?.addListener(
+        _onConversationRemovedSignal,
+      );
+    }
     final selected = widget.selectedConversationId ?? 0;
     final prev = oldWidget.selectedConversationId ?? 0;
     if (selected > 0 && selected != prev) {
@@ -328,6 +357,35 @@ class _NativeConversationPageState extends State<NativeConversationPage>
       });
       _items = copy;
     });
+    _updateCommBadge(_items, _notif.unreadCount);
+  }
+
+  void _onConversationRemovedSignal() {
+    final id = widget.conversationRemovedSignal?.conversationId ?? 0;
+    if (id <= 0 || !mounted) return;
+    unawaited(_removeConversationLocally(id));
+  }
+
+  Future<void> _removeConversationLocally(int conversationId) async {
+    if (conversationId <= 0 || !mounted) return;
+    _hiddenConversations = await InboxHiddenStorage.load();
+    if (!mounted) return;
+    final next = _items
+        .where((c) => c.id != conversationId)
+        .toList(growable: false);
+    if (next.length == _items.length) {
+      // 列表暂无该项时仍刷新隐藏集，避免后续静默拉取又露出来。
+      return;
+    }
+    setState(() => _items = next);
+    ConversationInboxCache.instance.put(
+      userId: widget.session.userId,
+      conversations: _items,
+      notif: _notif,
+      novaStorage: _novaStorage,
+      aiSummaryPreview: _aiSummaryPreview,
+      aiSummaryUnread: _aiSummaryUnread,
+    );
     _updateCommBadge(_items, _notif.unreadCount);
   }
 
@@ -412,6 +470,9 @@ class _NativeConversationPageState extends State<NativeConversationPage>
     userAvatarRefresh.removeListener(_onSelfAvatarUpdated);
     widget.conversationReadSignal?.removeListener(_onConversationReadSignal);
     widget.memberSettingsSignal?.removeListener(_onMemberSettingsSignal);
+    widget.conversationRemovedSignal?.removeListener(
+      _onConversationRemovedSignal,
+    );
     NovaBackgroundCoordinator.instance.removeListener(_onNovaBackgroundUpdate);
     RobotAnalyzingCoordinator.instance.removeListener(_onRobotAnalyzingUpdate);
     _scrollRestoreRetry?.cancel();
@@ -1226,8 +1287,10 @@ class _NativeConversationPageState extends State<NativeConversationPage>
             children: [
               ChatInboxHeader(
                 onOpenContacts: widget.onOpenContacts,
+                onNewChat: widget.onOpenNewChat,
                 onOpenNova: _openNovaConversation,
                 onOpenMessageCenter: widget.onOpenNotifications,
+                onOpenFavorites: widget.onOpenFavorites,
                 onOpenAiSummary: widget.session.isExternalUser
                     ? null
                     : () => unawaited(_openAiSummaryHub()),

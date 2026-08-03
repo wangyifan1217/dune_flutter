@@ -7,6 +7,7 @@ import '../../core/theme/dunes_theme.dart';
 import '../auth/auth_session.dart';
 import '../auth/auth_session_coordinator.dart';
 import '../drive/native_drive_page.dart';
+import '../shell/dunes_toast.dart';
 import '../tasks/native_task_home_pane.dart';
 import '../tasks/native_task_hrbp_pane.dart';
 import '../tasks/task_api.dart';
@@ -358,7 +359,7 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
   }
 
   Widget _buildOverviewPage() {
-    final tiles = <_WorkbenchTile>[
+    final collaborationTiles = <_WorkbenchTile>[
       _WorkbenchTile(
         title: '任务',
         subtitle: '主任务 · 子任务',
@@ -387,10 +388,35 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
         ),
     ];
 
+    final toolTiles = <_WorkbenchTile>[
+      if (!_session.isExternalUser)
+        _WorkbenchTile(
+          title: '携程商旅',
+          subtitle: '机票 · 酒店 · 用车',
+          icon: Icons.flight_takeoff_outlined,
+          color: const Color(0xFF1668E8),
+          enabled: true,
+          onTap: () => showDunesSoonToast(context, '对接中'),
+        ),
+    ];
+
     return ListView(
       padding: const EdgeInsets.fromLTRB(24, 8, 24, 40),
       children: [
-        _WorkbenchSection(title: '协作', accent: _themePurple, children: tiles),
+        if (collaborationTiles.isNotEmpty)
+          _WorkbenchSection(
+            title: '协作',
+            accent: _themePurple,
+            children: collaborationTiles,
+          ),
+        if (toolTiles.isNotEmpty) ...[
+          const SizedBox(height: 14),
+          _WorkbenchSection(
+            title: '工具',
+            accent: const Color(0xFF1668E8),
+            children: toolTiles,
+          ),
+        ],
       ],
     );
   }

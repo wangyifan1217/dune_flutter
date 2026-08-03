@@ -45,19 +45,26 @@ abstract final class ConversationInboxRealtime {
       return copy;
     }
 
+    final conv = items[index];
+    // 编辑/删除历史消息不应改写列表预览与排序时间（否则会显示成「不是最后一条」）。
+    if (event.type == 'message_updated' &&
+        !_isEditingCurrentLatestMessage(event, conv)) {
+      return items;
+    }
+
     final preview = _previewForEvent(
       event,
-      conv: items[index],
+      conv: conv,
       selfUserId: selfUserId,
       selfDisplayName: selfDisplayName,
     );
-    final at = _timestampForEvent(event);
+    // message_updated：只改预览文案，不改 sortTimestamp。
+    final at = event.type == 'message_updated' ? null : _timestampForEvent(event);
     if (preview == null && at == null && event.type != 'conversation_updated') {
       return items;
     }
 
     final fromPeer = _isFromPeer(event, selfUserId);
-    final conv = items[index];
     final mentionHit = ConversationMentionUtils.eventMentionsMe(
       event: event,
       selfUserId: selfUserId,
@@ -183,6 +190,21 @@ abstract final class ConversationInboxRealtime {
     return parseNovaDateTime(
       event.raw['updatedAt'] ?? event.raw['lastMessageAt'] ?? event.raw['previewAt'],
     );
+  }
+
+  /// 工作台编辑消息时：仅当被编辑的是当前列表对应的最新消息才刷新预览。
+  static bool _isEditingCurrentLatestMessage(
+    ConversationRealtimeEventLike event,
+    NativeConversation conv,
+  ) {
+    final msg = event.message;
+    if (msg == null) return false;
+    final msgAt = parseNovaDateTime(msg['createdAt']);
+    final current = conv.updatedAt;
+    if (msgAt == null) return false;
+    if (current == null) return true;
+    // 允许相等（编辑当前最后一条）；更早的消息直接忽略。
+    return !msgAt.isBefore(current);
   }
 
   static bool _isFromPeer(ConversationRealtimeEventLike event, int selfUserId) {

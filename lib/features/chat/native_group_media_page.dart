@@ -609,6 +609,7 @@ class _ImageMediaRow extends StatelessWidget {
             width: 36,
             height: 36,
             fit: BoxFit.cover,
+            hitTestOverlay: true,
           ),
         );
       } else if (ConversationService.hasAuthMedia(payload)) {

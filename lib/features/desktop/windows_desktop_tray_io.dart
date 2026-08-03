@@ -6,6 +6,8 @@ import 'package:flutter/foundation.dart';
 import 'package:tray_manager/tray_manager.dart';
 import 'package:window_manager/window_manager.dart';
 
+import '../../core/layout/chat_layout.dart';
+
 const _trayIconWin = 'assets/images/tray_icon.ico';
 const _trayIconWinBlank = 'assets/images/tray_icon_blank.ico';
 const _trayIconMac = 'assets/images/tray_icon.png';
@@ -96,10 +98,10 @@ class WindowsDesktopTray with WindowListener, TrayListener {
     await windowManager.ensureInitialized();
     windowManager.addListener(this);
 
-    // 默认普通窗口（非最大化），可拖拽缩放；最小宽度保证双栏布局。
+    // 默认普通窗口（非最大化），可拖拽缩放；最小尺寸高于双栏断点，避免缩成 APP 布局。
     const windowOptions = WindowOptions(
-      size: Size(1080, 720),
-      minimumSize: Size(900, 600),
+      size: kDesktopWindowDefaultSize,
+      minimumSize: kDesktopWindowMinSize,
       center: true,
       skipTaskbar: false,
       title: '沙丘',
@@ -110,13 +112,15 @@ class WindowsDesktopTray with WindowListener, TrayListener {
       await windowManager.setPreventClose(true);
       await windowManager.setTitle('沙丘');
       try {
+        // WindowOptions 的 minimumSize 在部分系统上不可靠，显式再设一次。
+        await windowManager.setMinimumSize(kDesktopWindowMinSize);
         if (await windowManager.isFullScreen()) {
           await windowManager.setFullScreen(false);
         }
         if (await windowManager.isMaximized()) {
           await windowManager.unmaximize();
         }
-        await windowManager.setSize(const Size(1080, 720));
+        await windowManager.setSize(kDesktopWindowDefaultSize);
         await windowManager.center();
       } catch (_) {}
       await windowManager.show();

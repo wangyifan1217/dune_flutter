@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'dart:io' show Platform;
+import 'dart:io' show File, Platform;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
@@ -29,10 +29,12 @@ Future<void> ensurePushInitializedImpl() async {
     defaultPresentBanner: true,
     defaultPresentList: true,
   );
-  const windows = WindowsInitializationSettings(
+  final windows = WindowsInitializationSettings(
     appName: '沙丘',
     appUserModelId: 'com.nova.dunes.desktop',
     guid: 'a8e2c1d4-7b5f-4e9a-9c3d-1f2a6b8e0d71',
+    // Debug / EXE 安装包都需要绝对路径，否则 Toast 左侧无应用图标。
+    iconPath: _resolveWindowsNotificationIconPath(),
   );
 
   await _plugin.initialize(
@@ -120,8 +122,16 @@ Future<void> _showToast({
           threadIdentifier:
               conversationId > 0 ? 'conv_$conversationId' : 'dunes_desktop',
         ),
-        windows: const WindowsNotificationDetails(
+        windows: WindowsNotificationDetails(
           duration: WindowsNotificationDuration.short,
+          images: <WindowsImage>[
+            WindowsImage(
+              WindowsImage.getAssetUri('assets/images/app_logo.png'),
+              altText: '沙丘',
+              placement: WindowsImagePlacement.appLogoOverride,
+              crop: WindowsImageCrop.circle,
+            ),
+          ],
         ),
       ),
       payload: conversationId > 0 ? 'conv:$conversationId' : 'conv:0',
@@ -129,6 +139,37 @@ Future<void> _showToast({
   } catch (e, st) {
     debugPrint('[DesktopPush] show failed: $e\n$st');
   }
+}
+
+/// 解析 Windows Toast 初始化图标（优先 .ico）。
+String? _resolveWindowsNotificationIconPath() {
+  try {
+    final exeDir = File(Platform.resolvedExecutable).parent;
+    final candidates = <File>[
+      File('assets/images/tray_icon.ico'),
+      File('data/flutter_assets/assets/images/tray_icon.ico'),
+      File.fromUri(
+        Uri.file(
+          '${exeDir.path}\\data\\flutter_assets\\assets\\images\\tray_icon.ico',
+          windows: true,
+        ),
+      ),
+      File('assets/images/app_logo.png'),
+      File('data/flutter_assets/assets/images/app_logo.png'),
+      File.fromUri(
+        Uri.file(
+          '${exeDir.path}\\data\\flutter_assets\\assets\\images\\app_logo.png',
+          windows: true,
+        ),
+      ),
+    ];
+    for (final file in candidates) {
+      if (file.existsSync()) return file.absolute.path;
+    }
+  } catch (e) {
+    debugPrint('[DesktopPush] resolve icon failed: $e');
+  }
+  return null;
 }
 
 /// 系统通知只保留一行摘要，避免 Windows/macOS 因换行或长文本撑高横幅。

@@ -21,6 +21,7 @@ class NativeContactProfilePage extends StatefulWidget {
     this.conversationId,
     this.onOpenSearch,
     this.onChatSettingsChanged,
+    this.onCreateGroupWithContact,
   });
 
   final AuthSession session;
@@ -33,6 +34,9 @@ class NativeContactProfilePage extends StatefulWidget {
   final ValueChanged<int>? onOpenSearch;
   final void Function({required int conversationId, bool? muted, bool? pinned})?
       onChatSettingsChanged;
+
+  /// 企微式：头像旁「+」→ 通讯录选人，与当前联系人组成群聊。
+  final ValueChanged<NativeContact>? onCreateGroupWithContact;
 
   @override
   State<NativeContactProfilePage> createState() =>
@@ -244,6 +248,9 @@ class _NativeContactProfilePageState extends State<NativeContactProfilePage> {
           avatarPreset: c.avatarPreset,
           avatarObjectKey: c.avatarObjectKey,
           avatarService: _conversationService,
+          onAddToGroup: isSelf || widget.onCreateGroupWithContact == null
+              ? null
+              : () => widget.onCreateGroupWithContact!(c),
         ),
         const SizedBox(height: 10),
         GroupInfoRow(
@@ -312,7 +319,7 @@ class _NativeContactProfilePageState extends State<NativeContactProfilePage> {
   }
 }
 
-/// 企微式联系人头部：白底、左头像右信息，无渐变。
+/// 企微式联系人头部：白底、左头像（可带头像旁 +）右信息。
 class _ProfileHero extends StatelessWidget {
   const _ProfileHero({
     required this.name,
@@ -322,6 +329,7 @@ class _ProfileHero extends StatelessWidget {
     this.avatarPreset,
     this.avatarObjectKey,
     this.avatarService,
+    this.onAddToGroup,
   });
 
   final String name;
@@ -331,6 +339,9 @@ class _ProfileHero extends StatelessWidget {
   final String? avatarPreset;
   final String? avatarObjectKey;
   final ConversationService? avatarService;
+  final VoidCallback? onAddToGroup;
+
+  static const double _avatarSize = kImListAvatarSize;
 
   @override
   Widget build(BuildContext context) {
@@ -339,6 +350,7 @@ class _ProfileHero extends StatelessWidget {
       if (department.isNotEmpty) department,
       if (roleTag.isNotEmpty) roleTag,
     ];
+    final avatarRadius = _avatarSize * 0.18;
 
     return Container(
       width: double.infinity,
@@ -350,12 +362,16 @@ class _ProfileHero extends StatelessWidget {
           ImUserAvatar(
             initial: initial,
             seed: seed,
-            size: 64,
+            size: _avatarSize,
             avatarPreset: avatarPreset,
             avatarObjectKey: avatarObjectKey,
             avatarService: avatarService,
-            borderRadius: 8,
+            borderRadius: avatarRadius,
           ),
+          if (onAddToGroup != null) ...[
+            const SizedBox(width: 12),
+            _ProfileAddCell(size: _avatarSize, onTap: onAddToGroup!),
+          ],
           const SizedBox(width: 16),
           Expanded(
             child: Column(
@@ -387,6 +403,43 @@ class _ProfileHero extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// 企微式「头像旁 +」：选通讯录与当前人组成群。
+class _ProfileAddCell extends StatelessWidget {
+  const _ProfileAddCell({required this.size, required this.onTap});
+
+  final double size;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final radius = size * 0.18;
+    return Tooltip(
+      message: '添加成员发起群聊',
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(radius),
+          child: Ink(
+            width: size,
+            height: size,
+            decoration: BoxDecoration(
+              color: const Color(0xFFF7F7F7),
+              borderRadius: BorderRadius.circular(radius),
+              border: Border.all(color: const Color(0xFFE5E5E5)),
+            ),
+            child: Icon(
+              Icons.add,
+              size: size * 0.48,
+              color: const Color(0xFF888888),
+            ),
+          ),
+        ),
       ),
     );
   }

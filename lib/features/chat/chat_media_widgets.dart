@@ -24,12 +24,15 @@ class ChatAuthImageBubble extends StatefulWidget {
     required this.payload,
     required this.mine,
     this.conversationId,
+    this.onTap,
   });
 
   final ConversationService service;
   final Map<String, dynamic>? payload;
   final bool mine;
   final int? conversationId;
+  /// 为空时默认打开图片预览。
+  final VoidCallback? onTap;
 
   @override
   State<ChatAuthImageBubble> createState() => _ChatAuthImageBubbleState();
@@ -110,6 +113,11 @@ class _ChatAuthImageBubbleState extends State<ChatAuthImageBubble> {
 
   Future<void> _openPreview() async {
     if (!mounted) return;
+    final custom = widget.onTap;
+    if (custom != null) {
+      custom();
+      return;
+    }
     final fileName =
         ConversationService.mediaFileName(widget.payload, fallback: 'image.jpg');
     await showChatImagePreview(
@@ -416,6 +424,8 @@ class _ChatInlineImageState extends State<_ChatInlineImage> {
           width: display.width,
           height: display.height,
           fit: BoxFit.contain,
+          // 会话气泡需要点击预览；HtmlElementView 会吃掉点击。
+          hitTestOverlay: true,
         );
       } else {
         image = Image.network(

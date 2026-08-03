@@ -35,6 +35,7 @@ class NativeGroupInfoPage extends StatefulWidget {
     this.onOpenMember,
     this.onOpenApproval,
     this.onExitedGroup,
+    this.onChatSettingsChanged,
   });
 
   final AuthSession session;
@@ -44,7 +45,9 @@ class NativeGroupInfoPage extends StatefulWidget {
   final ValueChanged<int>? onOpenMedia;
   final void Function(int userId, String displayName)? onOpenMember;
   final VoidCallback? onOpenApproval;
-  final VoidCallback? onExitedGroup;
+  final ValueChanged<int>? onExitedGroup;
+  final void Function({required int conversationId, bool? muted, bool? pinned})?
+      onChatSettingsChanged;
 
   @override
   State<NativeGroupInfoPage> createState() => _NativeGroupInfoPageState();
@@ -110,15 +113,16 @@ class _NativeGroupInfoPageState extends State<NativeGroupInfoPage> {
   Future<void> _toggleMuted() async {
     final info = _detail;
     if (info == null) return;
+    final nextMuted = !info.muted;
     try {
-      await _service.patchMySettings(info.id, muted: !info.muted);
+      await _service.patchMySettings(info.id, muted: nextMuted);
       if (!mounted) return;
       setState(() => _info = NativeGroupInfo(
             id: info.id,
             kind: info.kind,
             title: info.title,
             members: info.members,
-            muted: !info.muted,
+            muted: nextMuted,
             pinned: info.pinned,
             isOwner: info.isOwner,
             canLeave: info.canLeave,
@@ -127,6 +131,11 @@ class _NativeGroupInfoPageState extends State<NativeGroupInfoPage> {
             businessType: info.businessType,
             businessId: info.businessId,
           ));
+      widget.onChatSettingsChanged?.call(
+        conversationId: info.id,
+        muted: nextMuted,
+        pinned: info.pinned,
+      );
     } catch (e) {
       if (!mounted) return;
       _toast(context, '设置失败');
@@ -136,8 +145,9 @@ class _NativeGroupInfoPageState extends State<NativeGroupInfoPage> {
   Future<void> _togglePinned() async {
     final info = _detail;
     if (info == null) return;
+    final nextPinned = !info.pinned;
     try {
-      await _service.patchMySettings(info.id, pinned: !info.pinned);
+      await _service.patchMySettings(info.id, pinned: nextPinned);
       if (!mounted) return;
       setState(() => _info = NativeGroupInfo(
             id: info.id,
@@ -145,7 +155,7 @@ class _NativeGroupInfoPageState extends State<NativeGroupInfoPage> {
             title: info.title,
             members: info.members,
             muted: info.muted,
-            pinned: !info.pinned,
+            pinned: nextPinned,
             isOwner: info.isOwner,
             canLeave: info.canLeave,
             dissolved: info.dissolved,
@@ -153,6 +163,11 @@ class _NativeGroupInfoPageState extends State<NativeGroupInfoPage> {
             businessType: info.businessType,
             businessId: info.businessId,
           ));
+      widget.onChatSettingsChanged?.call(
+        conversationId: info.id,
+        muted: info.muted,
+        pinned: nextPinned,
+      );
     } catch (e) {
       if (!mounted) return;
       _toast(context, '设置失败');
@@ -264,7 +279,7 @@ class _NativeGroupInfoPageState extends State<NativeGroupInfoPage> {
       await InboxHiddenStorage.hide(info.id, permanent: permanent);
       if (!mounted) return;
       _toast(context, dissolved ? '该群已解散，已为你退出' : '已退出群聊');
-      widget.onExitedGroup?.call();
+      widget.onExitedGroup?.call(info.id);
     } catch (e) {
       if (!mounted) return;
       _toast(context, friendlyErrorText(e));
@@ -653,7 +668,7 @@ class _MemberPickerSheetState extends State<_MemberPickerSheet> {
       name: dep.name,
       subtitle: dep.subtitle,
       userCount: count,
-      expanded: false,
+      expanded: true,
       users: users,
       children: children,
     );

@@ -85,7 +85,7 @@ class ContactMemberPickerPanelState extends State<ContactMemberPickerPanel> {
       name: dep.name,
       subtitle: dep.subtitle,
       userCount: count,
-      expanded: false,
+      expanded: true,
       users: users,
       children: children,
     );

@@ -111,7 +111,8 @@ class ContactService {
       // 不展示部门编码（如 D_xxxxx）
       subtitle: null,
       userCount: (raw['userCount'] as num?)?.toInt() ?? _contactList(raw['users']).length,
-      expanded: raw['expanded'] != false,
+      // 通讯录默认全部展开（忽略后端 expanded）。
+      expanded: true,
       users: _contactList(raw['users']),
       children: childrenRaw is List
           ? childrenRaw.whereType<Map<String, dynamic>>().map(_mapDepartment).toList(growable: false)

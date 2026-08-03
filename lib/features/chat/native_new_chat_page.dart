@@ -212,6 +212,33 @@ class _NativeNewChatPageState extends State<NativeNewChatPage> {
       showDunesSoonToast(context, '请至少选择一位同事');
       return;
     }
+    final creatingGroup = _mode != _NewChatMode.private && ids.length >= 2;
+    if (creatingGroup) {
+      final previewNames = ids
+          .take(3)
+          .map((id) => _contactById(id)?.displayName ?? '成员')
+          .join('、');
+      final more = ids.length > 3 ? ' 等' : '';
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('确认创建群聊'),
+          content: Text('将与 $previewNames$more共 ${ids.length} 人创建群聊，是否继续？'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('取消'),
+            ),
+            FilledButton(
+              style: FilledButton.styleFrom(backgroundColor: const Color(0xFF7B5CD8)),
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('创建'),
+            ),
+          ],
+        ),
+      );
+      if (ok != true || !mounted) return;
+    }
     setState(() => _creating = true);
     try {
       if (_mode == _NewChatMode.private || ids.length == 1) {

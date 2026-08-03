@@ -682,6 +682,7 @@ class _MediaThumb extends StatelessWidget {
           fit: BoxFit.cover,
           width: 200,
           height: 200,
+          hitTestOverlay: true,
         );
       } else if (ConversationService.hasAuthMedia(payload)) {
         child = FutureBuilder<Uint8List>(

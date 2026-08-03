@@ -10,8 +10,10 @@ Widget buildCorsSafeImageImpl({
   required double width,
   required double height,
   required BoxFit fit,
+  bool hitTestOverlay = false,
 }) {
-  final viewType = 'dunes-cors-img-${url.hashCode}-${fit.name}-${width.toInt()}-${height.toInt()}';
+  final viewType =
+      'dunes-cors-img-${url.hashCode}-${fit.name}-${width.toInt()}-${height.toInt()}';
   if (!_registeredViewTypes.contains(viewType)) {
     _registeredViewTypes.add(viewType);
     ui_web.platformViewRegistry.registerViewFactory(viewType, (int _) {
@@ -31,10 +33,24 @@ Widget buildCorsSafeImageImpl({
       return root;
     });
   }
-  return SizedBox(
+  final view = SizedBox(
     width: width,
     height: height,
     child: HtmlElementView(viewType: viewType),
+  );
+  if (!hitTestOverlay) return view;
+  // HtmlElementView 在 Flutter Web 上仍会占据命中测试，挡掉外层 onTap。
+  // 盖一层透明 Flutter 组件，让气泡 GestureDetector 能收到点击。
+  return SizedBox(
+    width: width,
+    height: height,
+    child: Stack(
+      fit: StackFit.expand,
+      children: [
+        view,
+        const ColoredBox(color: Color(0x00000000)),
+      ],
+    ),
   );
 }
 

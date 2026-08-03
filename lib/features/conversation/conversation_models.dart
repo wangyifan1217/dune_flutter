@@ -184,6 +184,62 @@ class NativeSearchMessagePage {
   final bool hasMore;
 }
 
+/// IM 消息收藏（企微式：内容 + 来源人/群 + 收藏日期）。
+class NativeMessageFavorite {
+  const NativeMessageFavorite({
+    required this.id,
+    required this.conversationId,
+    required this.messageId,
+    required this.conversationKind,
+    required this.conversationTitle,
+    required this.kind,
+    required this.bodyText,
+    required this.previewText,
+    required this.senderName,
+    this.senderUserId,
+    this.payload,
+    this.favoritedAt,
+    this.messageCreatedAt,
+  });
+
+  final int id;
+  final int conversationId;
+  final int messageId;
+  final String conversationKind;
+  final String conversationTitle;
+  final String kind;
+  final String bodyText;
+  final String previewText;
+  final String senderName;
+  final int? senderUserId;
+  final Map<String, dynamic>? payload;
+  final DateTime? favoritedAt;
+  final DateTime? messageCreatedAt;
+
+  bool get isPrivate => conversationKind.toUpperCase() == 'PRIVATE';
+  bool get isGroup {
+    final k = conversationKind.toUpperCase();
+    return k == 'WORKGROUP' || k == 'GROUP' || k == 'WORKGROUP_APPROVAL';
+  }
+
+  /// 列表副标题：来自某某 / 某某群。
+  String get sourceLabel {
+    final title = conversationTitle.trim();
+    if (title.isEmpty) return isGroup ? '来自群聊' : '来自会话';
+    return '来自$title';
+  }
+}
+
+class NativeMessageFavoritePage {
+  const NativeMessageFavoritePage({
+    required this.items,
+    this.hasMore = false,
+  });
+
+  final List<NativeMessageFavorite> items;
+  final bool hasMore;
+}
+
 class NativeGroupMember {
   const NativeGroupMember({
     required this.userId,

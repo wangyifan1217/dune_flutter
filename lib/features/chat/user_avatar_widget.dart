@@ -7,6 +7,9 @@ import '../conversation/conversation_service.dart';
 import '../conversation/inbox_format.dart';
 import '../workbench/native_avatar_presets.dart';
 
+/// IM 会话列表头像边长；详细资料等入口需与此对齐。
+const double kImListAvatarSize = 45;
+
 /// 与 WebView `renderListAvatar` 对齐：预设 / 自定义头像 / 首字 fallback。
 class ImUserAvatar extends StatelessWidget {
   const ImUserAvatar({

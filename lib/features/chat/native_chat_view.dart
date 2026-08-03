@@ -26,6 +26,7 @@ import '../auth/auth_session.dart';
 import '../contacts/contact_service.dart';
 import '../meeting/meeting_live_controller.dart';
 import '../conversation/chat_message_cache.dart';
+import '../conversation/conversation_inbox_realtime.dart';
 import '../conversation/conversation_models.dart';
 import '../conversation/conversation_realtime_dedup.dart';
 import '../conversation/conversation_realtime_hub.dart';
@@ -292,6 +293,7 @@ class _NativeChatViewState extends State<NativeChatView>
   /// prepend 历史消息后正在恢复滚动位置，避免仍停在 maxScrollExtent 连续拉完全部历史。
   bool _olderScrollRestorePending = false;
   int _olderLoadCooldownUntilMs = 0;
+  int _newerLoadCooldownUntilMs = 0;
   int? _scrollRestoreAnchorId;
   final Map<int, GlobalKey> _scrollRestoreKeys = <int, GlobalKey>{};
   ScrollHoldController? _olderScrollHold;
@@ -327,6 +329,11 @@ class _NativeChatViewState extends State<NativeChatView>
   bool _awayFromLatest = false;
   bool _userInteractedWithScroll = false;
   bool _userScrollActive = false;
+
+  /// 进入会话时捕获的未读（微信式右上角「N 条未读」）。
+  int _sessionUnreadCount = 0;
+  int _firstUnreadMessageId = 0;
+  bool _unreadJumpDismissed = false;
   bool _hasMore = false;
   bool _hasNewer = false;
   int? _highlightMessageId;
@@ -380,6 +387,7 @@ class _NativeChatViewState extends State<NativeChatView>
     _inputFocusNode.addListener(_onInputFocusChanged);
     if (widget.conversationHint != null) {
       _conversation = widget.conversationHint;
+      _sessionUnreadCount = widget.conversationHint!.unreadCount;
       final cached = ChatMessageCache.instance.peek(
         widget.conversationHint!.id,
       );
@@ -387,6 +395,9 @@ class _NativeChatViewState extends State<NativeChatView>
         _messages = cached;
         _loading = false;
         _bootstrapped = true;
+        if (_sessionUnreadCount > 0) {
+          _captureSessionUnread(widget.conversationHint!, cached);
+        }
       }
     }
     _syncBackgroundFileUpload();
@@ -558,6 +569,7 @@ class _NativeChatViewState extends State<NativeChatView>
           : (widget.conversationHint?.id ?? 0);
       final cached = ChatMessageCache.instance.peek(cachedId);
       final hasCache = cached != null && cached.isNotEmpty;
+      final hintUnread = widget.conversationHint?.unreadCount ?? 0;
       setState(() {
         _conversation = widget.conversationHint;
         _messages = hasCache ? cached : const <NativeChatMessage>[];
@@ -571,7 +583,14 @@ class _NativeChatViewState extends State<NativeChatView>
         _awayFromLatest = false;
         _clearPendingNewMessages();
         _lastMarkedReadNewestId = 0;
+        // 进会话立刻用列表未读数种子，避免后续 silent/缓存加载漏捕获。
+        _sessionUnreadCount = hintUnread;
+        _firstUnreadMessageId = 0;
+        _unreadJumpDismissed = false;
       });
+      if (hasCache && hintUnread > 0 && cached != null) {
+        _captureSessionUnread(widget.conversationHint!, cached);
+      }
       unawaited(_load(silent: hasCache));
       return;
     }
@@ -582,11 +601,11 @@ class _NativeChatViewState extends State<NativeChatView>
       unawaited(_load(silent: _bootstrapped));
     }
     if (!oldWidget.autoMarkRead && widget.autoMarkRead) {
-      _userInteractedWithScroll = false;
-      // 恢复前台重新允许已读前，先补拉最新消息，避免缺消息却先标已读。
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        unawaited(_syncLatestOnForeground());
-      });
+      // 恢复已读权限时不要清滚动交互态，否则最小化再回来会误跳到底。
+      // 前台补拉由 ChatForegroundSync / lifecycle 统一触发，这里不再二次调用。
+      if (widget.autoMarkRead && _isNearBottom && !_isScrolledAwayFromLatest) {
+        unawaited(_markReadIfNeeded());
+      }
     }
   }
 
@@ -635,10 +654,11 @@ class _NativeChatViewState extends State<NativeChatView>
     if (_foregroundSyncRunning) return;
     _lastForegroundSyncAt = now;
     _foregroundSyncRunning = true;
-    // 在异步空窗前先记下是否在看历史；!hasClients 时勿默认当成贴底。
-    final browsingHistory = _userInteractedWithScroll &&
-        (!_scrollController.hasClients ||
-            _scrollController.position.pixels > 72);
+    // 优先用像素位置判断是否在看历史（覆盖滚轮未置交互标志的情况）。
+    final browsingHistory = _isScrolledAwayFromLatest ||
+        (_userInteractedWithScroll &&
+            (!_scrollController.hasClients ||
+                _scrollController.position.pixels > 72));
     final nearBottom = _scrollController.hasClients &&
         _scrollController.position.pixels <= 72;
     final shouldStick = !browsingHistory &&
@@ -704,25 +724,37 @@ class _NativeChatViewState extends State<NativeChatView>
   }
 
   void _onScroll() {
-    if (!_scrollController.hasClients ||
-        _loadingOlder ||
-        _olderScrollRestorePending) {
-      return;
-    }
+    if (!_scrollController.hasClients) return;
     final pos = _scrollController.position;
+    // 用户已上滑离开最新端时，清掉进会话贴底标记，避免后续补历史被拽回底部。
+    if (pos.pixels > 72) {
+      _enterStickBottomPending = false;
+    }
     // reverse 列表：scroll≈0 为最新消息（靠近输入框），maxScrollExtent 为历史方向。
     // PC 宽屏 shrinkWrap 时，消息未撑满视口会出现 maxScrollExtent≈0，
     // 此时仍应自动拉更早消息，不能只依赖「滑到顶」。
-    if (_shouldAutoloadOlder(pos)) {
+    // 注意：加载历史时不要 return，否则定位模式下无法继续触发「加载更新」。
+    if (!_loadingOlder &&
+        !_olderScrollRestorePending &&
+        _shouldAutoloadOlder(pos)) {
       unawaited(_loadOlder());
     }
-    if (_locatedMode && _hasNewer && !_loadingNewer && pos.pixels <= 72) {
+    if (_shouldAutoloadNewer(pos)) {
       unawaited(_loadNewer());
     }
     // 手指拖动或惯性滑动期间不刷新 UI，避免滚动中 setState 导致卡顿。
     if (!_userScrollActive) {
       _updateStickBottomState();
     }
+  }
+
+  /// 定位模式下滑向更新端时自动续拉（需用户已滚动，避免定位落地后连拉到最新）。
+  bool _shouldAutoloadNewer(ScrollPosition pos) {
+    if (!_locatedMode || !_hasNewer || _loadingNewer) return false;
+    if (!_userInteractedWithScroll) return false;
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    if (nowMs < _newerLoadCooldownUntilMs) return false;
+    return pos.pixels <= 72;
   }
 
   /// 是否应自动加载更早消息（含：已顶到历史端 / 列表尚未撑满视口）。
@@ -753,19 +785,24 @@ class _NativeChatViewState extends State<NativeChatView>
     });
   }
 
-  /// 鼠标滚轮 / 触控板上滑：朝历史方向滚动时尝试加载更早消息。
+  /// 鼠标滚轮 / 触控板：上滑加载历史，下滑（定位模式）加载更新消息。
   void _onMessageListPointerSignal(PointerSignalEvent event) {
     if (event is! PointerScrollEvent) return;
-    if (!_hasMore || _loadingOlder || _olderScrollRestorePending) return;
     if (!_scrollController.hasClients) return;
-    // reverse 列表：滚轮向上（dy<0）把内容往「历史端」推。
-    if (event.scrollDelta.dy >= 0) return;
     final pos = _scrollController.position;
-    if (pos.maxScrollExtent <= 24 ||
-        pos.pixels >=
-            pos.maxScrollExtent -
-                math.max(160.0, pos.viewportDimension * 0.4)) {
-      unawaited(_loadOlder());
+    // reverse 列表：dy<0 朝历史；dy>0 朝更新。
+    if (event.scrollDelta.dy < 0) {
+      if (!_hasMore || _loadingOlder || _olderScrollRestorePending) return;
+      if (pos.maxScrollExtent <= 24 ||
+          pos.pixels >=
+              pos.maxScrollExtent -
+                  math.max(160.0, pos.viewportDimension * 0.4)) {
+        unawaited(_loadOlder());
+      }
+      return;
+    }
+    if (event.scrollDelta.dy > 0 && _shouldAutoloadNewer(pos)) {
+      unawaited(_loadNewer());
     }
   }
 
@@ -916,8 +953,9 @@ class _NativeChatViewState extends State<NativeChatView>
       } else {
         _scrollToPreferredAnchor(gentle: true);
       }
+      // 只有正在看本会话且贴在最新端时才标已读；看历史/后台 keep-alive 不标。
+      unawaited(_markReadIfNeeded());
     }
-    unawaited(_markReadIfNeeded());
     if (_isPrivate && msg.senderUserId != widget.session.userId) {
       unawaited(_refreshPeerReadFromServer());
     }
@@ -1059,28 +1097,48 @@ class _NativeChatViewState extends State<NativeChatView>
     widget.onConversationRead?.call(conv.id);
   }
 
+  /// 仅当前真正正在看该会话（autoMarkRead=true）时才允许标已读。
+  /// 不能用 `_userInteractedWithScroll` 放行：双栏 keep-alive 的后台会话
+  /// 若曾滚过，会在用户已回列表时仍把新消息标成已读。
   bool get _canMarkReadNow =>
-      !windowsTrayIsWindowInactive() &&
-      (widget.autoMarkRead || _userInteractedWithScroll);
+      !windowsTrayIsWindowInactive() && widget.autoMarkRead;
 
   bool get _mediaBusy => _uploading;
 
   bool get _supportsDesktopFileDrop => !kIsWeb && isDesktopCommOnly;
 
   bool _onMessageListScroll(ScrollNotification notification) {
+    // 手指拖动 / 惯性：记为用户交互，并取消进会话贴底。
     if (notification is UserScrollNotification ||
         (notification is ScrollUpdateNotification &&
             notification.dragDetails != null)) {
       _userInteractedWithScroll = true;
       _enterStickBottomPending = false;
     }
-    // 鼠标滚轮 / 触控板：用通知兜底触发历史加载（不依赖 dragDetails）。
+    // PC 滚轮常无 dragDetails；仅桌面用 scrollDelta 兜底，避免 APP 把程序化滚动误判成用户上滑。
+    if (isDesktopCommOnly &&
+        notification is ScrollUpdateNotification &&
+        notification.dragDetails == null &&
+        (notification.scrollDelta ?? 0).abs() > 0.5) {
+      _userInteractedWithScroll = true;
+      _enterStickBottomPending = false;
+    }
+    // 鼠标滚轮 / 触控板：用通知兜底触发历史/更新消息加载（不依赖 dragDetails）。
     if (notification is ScrollUpdateNotification ||
         notification is OverscrollNotification) {
-      if (_scrollController.hasClients &&
-          _shouldAutoloadOlder(_scrollController.position)) {
-        unawaited(_loadOlder());
+      if (_scrollController.hasClients) {
+        final pos = _scrollController.position;
+        if (_shouldAutoloadOlder(pos)) {
+          unawaited(_loadOlder());
+        }
+        if (_shouldAutoloadNewer(pos)) {
+          unawaited(_loadNewer());
+        }
       }
+    }
+    if (notification is ScrollUpdateNotification ||
+        notification is ScrollEndNotification) {
+      _maybeDismissUnreadJumpBadge();
     }
     if (notification is ScrollStartNotification) {
       if (notification.dragDetails != null) {
@@ -1215,9 +1273,12 @@ class _NativeChatViewState extends State<NativeChatView>
   bool get _shouldStickToLatestOnLoad {
     if (_locatedMode) return false;
     if (_effectiveFocusMessageId > 0) return false;
-    return _enterStickBottomPending ||
-        !_userInteractedWithScroll ||
-        _isNearBottom;
+    // 用户已上滑看历史时，静默补拉不要强行贴底。
+    if (_isScrolledAwayFromLatest ||
+        (_userInteractedWithScroll && !_isNearBottom)) {
+      return false;
+    }
+    return _enterStickBottomPending || _isNearBottom;
   }
 
   void _scrollToLatestOnEnter() {
@@ -1511,6 +1572,23 @@ class _NativeChatViewState extends State<NativeChatView>
         ChatMessageCache.instance.put(conv.id, nextMessages);
       }
       unawaited(_refreshDownloadedFileFlags());
+      // 有缓存的 silent 首进也要捕获；已捕获过则用 hint/会话未读数取大值补齐。
+      final hintUnread = widget.conversationHint?.unreadCount ?? 0;
+      final shouldCaptureUnread = !silent ||
+          conversationChanged ||
+          (_sessionUnreadCount <= 0 &&
+              !_unreadJumpDismissed &&
+              (conv.unreadCount > 0 || hintUnread > 0)) ||
+          (_sessionUnreadCount > 0 && _firstUnreadMessageId <= 0);
+      if (shouldCaptureUnread) {
+        final unreadSource = hintUnread > conv.unreadCount
+            ? ConversationInboxRealtime.copyConversation(
+                conv,
+                unreadCount: hintUnread,
+              )
+            : conv;
+        _captureSessionUnread(unreadSource, nextMessages);
+      }
       final stickLatest = focusId <= 0 && _shouldStickToLatestOnLoad;
       _forceLatestMode = false;
       if (focusId > 0) {
@@ -1567,6 +1645,26 @@ class _NativeChatViewState extends State<NativeChatView>
         ((pos.pixels + pos.viewportDimension * 0.1) / pos.maxScrollExtent)
             .clamp(0.0, 1.0);
     final listIndex = (topRatio * (total - 1)).round().clamp(0, total - 1);
+    return _entryForListIndex(listIndex, entries)?.message?.id;
+  }
+
+  /// reverse 列表视口下沿附近的消息（更靠近更新端）。
+  int? _bottomVisibleMessageId() {
+    final entries = _buildListEntries();
+    final total = entries.length + _listFooterCount + _listHeaderCount;
+    if (total <= 0 || !_scrollController.hasClients) return null;
+    final pos = _scrollController.position;
+    if (pos.maxScrollExtent <= 0) {
+      for (final e in entries) {
+        final id = e.message?.id;
+        if (id != null && id > 0) return id;
+      }
+      return null;
+    }
+    final bottomRatio =
+        ((pos.pixels + pos.viewportDimension * 0.85) / pos.maxScrollExtent)
+            .clamp(0.0, 1.0);
+    final listIndex = (bottomRatio * (total - 1)).round().clamp(0, total - 1);
     return _entryForListIndex(listIndex, entries)?.message?.id;
   }
 
@@ -1685,7 +1783,9 @@ class _NativeChatViewState extends State<NativeChatView>
       final merged = _enrichMessages(_mergeMessages(page.items, _messages));
       if (!mounted) return;
       // 贴底看最新时补历史：只钉在最新端，不要 ensureVisible 把视口往上拽。
-      final stickBottom = _enterStickBottomPending || _isNearBottom;
+      // 用户已上滑看历史时，绝不能走贴底分支（否则 APP 上滑加载会被拽回最新）。
+      final stickBottom = !_isScrolledAwayFromLatest &&
+          (_enterStickBottomPending || _isNearBottom);
       if (stickBottom) {
         _olderScrollHold?.cancel();
         _olderScrollHold = null;
@@ -1735,8 +1835,9 @@ class _NativeChatViewState extends State<NativeChatView>
 
   Future<void> _loadNewer() async {
     final conv = _conversation;
-    if (conv == null || _loadingNewer || _messages.isEmpty || !_hasNewer)
+    if (conv == null || _loadingNewer || _messages.isEmpty || !_hasNewer) {
       return;
+    }
     final newestId = _messages.last.id;
     if (newestId <= 0) return;
     final batchSize = _scrollController.hasClients
@@ -1744,6 +1845,11 @@ class _NativeChatViewState extends State<NativeChatView>
             _scrollController.position.viewportDimension,
           ).batchPageSize
         : _scrollMetricsForScreen().batchPageSize;
+    // 锚定当前可见消息，避免 reverse 列表追加更新后视口被拽到最新。
+    final anchorId = _bottomVisibleMessageId() ?? newestId;
+    final oldPixels = _scrollController.hasClients
+        ? _scrollController.position.pixels
+        : 0.0;
     setState(() => _loadingNewer = true);
     try {
       final page = await _service.fetchMessagePage(
@@ -1751,17 +1857,29 @@ class _NativeChatViewState extends State<NativeChatView>
         size: batchSize,
         after: newestId,
       );
-      if (!mounted || page.items.isEmpty) {
-        if (mounted) setState(() => _hasNewer = false);
+      if (!mounted) return;
+      if (page.items.isEmpty) {
+        setState(() => _hasNewer = false);
         return;
       }
       final merged = _enrichMessages(_mergeMessages(_messages, page.items));
       if (!mounted) return;
+      // 兼容旧后端：未返回 hasNewer 时，本页满页则继续认为还有更新。
+      final nextHasNewer = page.hasNewer || page.items.length >= batchSize;
       setState(() {
         _messages = merged;
-        _hasNewer = page.hasNewer;
+        _hasNewer = nextHasNewer;
       });
       unawaited(_refreshDownloadedFileFlags());
+      _newerLoadCooldownUntilMs = DateTime.now().millisecondsSinceEpoch + 600;
+      if (_locatedMode) {
+        // 定位浏览：只续一页，保持阅读位置，绝不连拉/贴底到全局最新。
+        _restoreViewportAfterNewerLoad(
+          anchorMessageId: anchorId,
+          fallbackPixels: oldPixels,
+        );
+        return;
+      }
       if (_isNearBottom) {
         setState(_clearPendingNewMessages);
         _scrollBottom(gentle: true, force: true);
@@ -1773,6 +1891,24 @@ class _NativeChatViewState extends State<NativeChatView>
     } finally {
       if (mounted) setState(() => _loadingNewer = false);
     }
+  }
+
+  /// reverse 列表追加更新消息后，尽量钉回加载前看到的那条，防止跳到最底部。
+  void _restoreViewportAfterNewerLoad({
+    required int anchorMessageId,
+    required double fallbackPixels,
+  }) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_scrollController.hasClients) return;
+      final entries = _buildListEntries();
+      final listIndex = _listIndexForMessageId(anchorMessageId, entries);
+      if (listIndex != null) {
+        _scrollToListIndex(listIndex, entries);
+        return;
+      }
+      final max = _scrollController.position.maxScrollExtent;
+      _scrollController.jumpTo(fallbackPixels.clamp(0.0, max));
+    });
   }
 
   List<NativeChatMessage> _mergeMessages(
@@ -1809,11 +1945,15 @@ class _NativeChatViewState extends State<NativeChatView>
     _scrollToLatestOnEnter();
   }
 
-  void _preScrollTowardMessage(int messageId) {
+  void _preScrollTowardMessage(
+    int messageId, {
+    bool allowNearLatestShortcut = true,
+  }) {
     if (!_scrollController.hasClients) return;
     final msgIndex = _messages.indexWhere((m) => m.id == messageId);
     if (msgIndex < 0) return;
-    if (msgIndex >= _messages.length - 2) {
+    // 未读跳转时禁止「靠近最新就贴底」，否则永远停在最新消息。
+    if (allowNearLatestShortcut && msgIndex >= _messages.length - 2) {
       _scrollBottom(force: true);
       return;
     }
@@ -1824,20 +1964,200 @@ class _NativeChatViewState extends State<NativeChatView>
     }
   }
 
-  void _highlightAndScroll(int messageId) {
+  void _highlightAndScroll(
+    int messageId, {
+    Duration duration = const Duration(milliseconds: 280),
+  }) {
     final gen = ++_messageScrollGen;
     setState(() => _highlightMessageId = messageId);
     _highlightTimer?.cancel();
     _highlightTimer = Timer(const Duration(seconds: 2), () {
       if (mounted) setState(() => _highlightMessageId = null);
     });
-    _ensureMessageVisible(messageId, gen: gen);
+    _ensureMessageVisible(messageId, gen: gen, duration: duration);
+  }
+
+  void _captureSessionUnread(
+    NativeConversation conv,
+    List<NativeChatMessage> messages,
+  ) {
+    if (_unreadJumpDismissed && _conversation?.id == conv.id) return;
+    final hintUnread = widget.conversationHint?.id == conv.id
+        ? (widget.conversationHint?.unreadCount ?? 0)
+        : 0;
+    final unread = math.max(conv.unreadCount, hintUnread);
+    if (unread <= 0 || messages.isEmpty) {
+      // 勿把已展示的会话内未读角标清掉（进会话后服务端/列表可能已把 unreadCount 置 0）。
+      if (_sessionUnreadCount > 0 && _firstUnreadMessageId > 0) return;
+      if (mounted) {
+        setState(() {
+          _sessionUnreadCount = 0;
+          _firstUnreadMessageId = 0;
+        });
+      } else {
+        _sessionUnreadCount = 0;
+        _firstUnreadMessageId = 0;
+      }
+      return;
+    }
+    final sorted = List<NativeChatMessage>.from(messages)
+      ..sort((a, b) => a.id.compareTo(b.id));
+    final others = sorted
+        .where((m) => m.senderUserId != widget.session.userId && m.id > 0)
+        .toList(growable: false);
+    final pool = others.isNotEmpty ? others : sorted;
+    // 未读窗口可能超出当前页：先落到当前页最旧一条，点击时再向上补拉。
+    final start = (pool.length - unread).clamp(0, pool.length - 1);
+    final firstId = pool[start].id;
+    if (!mounted) {
+      _sessionUnreadCount = unread;
+      _firstUnreadMessageId = firstId;
+      return;
+    }
+    setState(() {
+      _sessionUnreadCount = unread;
+      _firstUnreadMessageId = firstId;
+      _unreadJumpDismissed = false;
+    });
+  }
+
+  bool get _showUnreadJumpBadge =>
+      !_unreadJumpDismissed &&
+      !_locatedMode &&
+      _sessionUnreadCount > 0 &&
+      _firstUnreadMessageId > 0;
+
+  Future<void> _jumpToFirstUnread() async {
+    var targetId = _firstUnreadMessageId;
+    if (targetId <= 0) return;
+    final conv = _conversation;
+    if (conv == null) return;
+    _userInteractedWithScroll = true;
+    _enterStickBottomPending = false;
+
+    // 独立拉取历史，避免走 _loadOlder 的「贴底补页」分支（会把视口拽回最新）。
+    var working = List<NativeChatMessage>.from(_messages)
+      ..sort((a, b) => a.id.compareTo(b.id));
+    var hasMore = _hasMore;
+    for (var i = 0; i < 24 && mounted && hasMore; i++) {
+      final othersCount = working
+          .where((m) => m.senderUserId != widget.session.userId && m.id > 0)
+          .length;
+      if (othersCount >= _sessionUnreadCount &&
+          working.any((m) => m.id == targetId)) {
+        break;
+      }
+      final oldestId = working.isEmpty ? 0 : working.first.id;
+      if (oldestId <= 0) break;
+      final page = await _service.fetchMessagePage(
+        conv.id,
+        size: 40,
+        before: oldestId,
+      );
+      if (!mounted) return;
+      if (page.items.isEmpty) {
+        hasMore = false;
+        break;
+      }
+      working = _enrichMessages(_mergeMessages(page.items, working))
+        ..sort((a, b) => a.id.compareTo(b.id));
+      hasMore = page.hasMore;
+      final others = working
+          .where((m) => m.senderUserId != widget.session.userId && m.id > 0)
+          .toList(growable: false);
+      final pool = others.isNotEmpty ? others : working;
+      if (pool.isEmpty) break;
+      final start =
+          (pool.length - _sessionUnreadCount).clamp(0, pool.length - 1);
+      targetId = pool[start].id;
+    }
+
+    if (!mounted || targetId <= 0) return;
+    final gen = ++_messageScrollGen;
+    setState(() {
+      _messages = working;
+      _hasMore = hasMore;
+      _firstUnreadMessageId = targetId;
+      _unreadJumpDismissed = true;
+      _awayFromLatest = true;
+      // 挂 GlobalKey，供 ensureVisible 精确滚到目标气泡。
+      _scrollRestoreAnchorId = targetId;
+      _highlightMessageId = targetId;
+    });
+    ChatMessageCache.instance.put(conv.id, working);
+    _highlightTimer?.cancel();
+    _highlightTimer = Timer(const Duration(seconds: 2), () {
+      if (mounted) setState(() => _highlightMessageId = null);
+    });
+    // 等一帧让列表挂上 GlobalKey，再定位。
+    await Future<void>.delayed(const Duration(milliseconds: 16));
+    if (!mounted || gen != _messageScrollGen) return;
+    await _ensureUnreadMessageVisible(targetId, gen: gen);
+  }
+
+  Future<void> _ensureUnreadMessageVisible(
+    int messageId, {
+    required int gen,
+    int attempt = 0,
+  }) async {
+    if (!mounted || gen != _messageScrollGen) return;
+    // 先粗定位，让目标行进入构建范围，再 ensureVisible 精确定位。
+    if (attempt == 0 || attempt == 3 || attempt == 7) {
+      _preScrollTowardMessage(messageId, allowNearLatestShortcut: false);
+      await Future<void>.delayed(const Duration(milliseconds: 32));
+      if (!mounted || gen != _messageScrollGen) return;
+    }
+    final ctx = _scrollRestoreKeys[messageId]?.currentContext;
+    if (ctx != null) {
+      await Scrollable.ensureVisible(
+        ctx,
+        alignment: 0.18,
+        duration: const Duration(milliseconds: 420),
+        curve: Curves.easeOutCubic,
+      );
+      if (mounted && _scrollRestoreAnchorId == messageId) {
+        setState(() => _scrollRestoreAnchorId = null);
+      }
+      return;
+    }
+    if (attempt < 24) {
+      await Future<void>.delayed(const Duration(milliseconds: 40));
+      await _ensureUnreadMessageVisible(
+        messageId,
+        gen: gen,
+        attempt: attempt + 1,
+      );
+      return;
+    }
+    if (mounted && _scrollRestoreAnchorId == messageId) {
+      setState(() => _scrollRestoreAnchorId = null);
+    }
+  }
+
+  void _maybeDismissUnreadJumpBadge() {
+    if (!_showUnreadJumpBadge || !_scrollController.hasClients) return;
+    // 停在最新消息端时绝不能收起（首条未读也在近期时原先会被误判关掉）。
+    if (!_isScrolledAwayFromLatest) return;
+    final entries = _buildListEntries();
+    final listIndex = _listIndexForMessageId(_firstUnreadMessageId, entries);
+    if (listIndex == null) return;
+    final total = entries.length + _listFooterCount + _listHeaderCount;
+    if (total <= 1) return;
+    final max = _scrollController.position.maxScrollExtent;
+    if (max <= 0) return;
+    final ratio = listIndex / (total - 1);
+    final target = max * ratio;
+    // 只有用户已经上滑离开底部，并且滚到首条未读附近，才收起角标。
+    if ((_scrollController.position.pixels - target).abs() < 120) {
+      setState(() => _unreadJumpDismissed = true);
+    }
   }
 
   void _ensureMessageVisible(
     int messageId, {
     int attempt = 0,
     required int gen,
+    Duration duration = const Duration(milliseconds: 280),
   }) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || gen != _messageScrollGen) return;
@@ -1855,7 +2175,7 @@ class _NativeChatViewState extends State<NativeChatView>
           if ((_scrollController.position.pixels - target).abs() > 8) {
             _scrollController.animateTo(
               target,
-              duration: const Duration(milliseconds: 280),
+              duration: duration,
               curve: Curves.easeOutCubic,
             );
           }
@@ -1863,7 +2183,12 @@ class _NativeChatViewState extends State<NativeChatView>
         return;
       }
       if (attempt < 8) {
-        _ensureMessageVisible(messageId, attempt: attempt + 1, gen: gen);
+        _ensureMessageVisible(
+          messageId,
+          attempt: attempt + 1,
+          gen: gen,
+          duration: duration,
+        );
         return;
       }
       if (_messages.any((m) => m.id == messageId)) {
@@ -3050,6 +3375,12 @@ class _NativeChatViewState extends State<NativeChatView>
         label: '转发',
         icon: Icons.shortcut_rounded,
       ),
+      if (m.id > 0)
+        const _MessageQuickAction(
+          id: 'favorite',
+          label: '收藏',
+          icon: Icons.bookmark_border_rounded,
+        ),
       if (canSaveFileToKb)
         const _MessageQuickAction(
           id: 'save_to_kb',
@@ -3111,6 +3442,9 @@ class _NativeChatViewState extends State<NativeChatView>
         break;
       case 'forward':
         _forwardMessage(m);
+        break;
+      case 'favorite':
+        await _favoriteMessage(m);
         break;
       case 'save_to_kb':
         await _saveChatAttachmentToKb(m.payload, attachmentName);
@@ -3589,6 +3923,26 @@ class _NativeChatViewState extends State<NativeChatView>
   bool _canSelectMessageForMulti(NativeChatMessage message) {
     if (message.id <= 0) return false;
     return !_isSystemKind(message.kind);
+  }
+
+  Future<void> _favoriteMessage(NativeChatMessage message) async {
+    final convId = _conversation?.id ?? widget.conversationHint?.id ?? 0;
+    if (convId <= 0 || message.id <= 0) {
+      _showToast('收藏失败：会话无效', error: true);
+      return;
+    }
+    if (_isSystemKind(message.kind)) {
+      _showToast('该消息无法收藏', error: true);
+      return;
+    }
+    try {
+      await _service.favoriteMessage(convId, message.id);
+      if (!mounted) return;
+      _showToast('已收藏');
+    } catch (e) {
+      if (!mounted) return;
+      _showToast('收藏失败：${friendlyErrorText(e)}', error: true);
+    }
   }
 
   void _forwardMessage(NativeChatMessage message) {
@@ -5281,6 +5635,9 @@ class _NativeChatViewState extends State<NativeChatView>
       onQuoteTap: onQuoteTap,
       onSelectionQuote: (text) => _quoteFromSelectedText(m, text),
       onSelectionForward: (text) => _forwardFromSelectedText(m, text),
+      onSelectionFavorite: m.id > 0
+          ? () => unawaited(_favoriteMessage(m))
+          : null,
       onSelectionMulti: (text) => _multiFromSelectedText(m, text),
       onSelectionRecall: mine && m.id > 0
           ? () => unawaited(_tryRecallMessage(m))
@@ -6355,6 +6712,56 @@ class _NativeChatViewState extends State<NativeChatView>
                                             fontSize: 11,
                                             color: DunesColors.text3,
                                           ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          if (_showUnreadJumpBadge)
+                            Positioned(
+                              right: 12,
+                              top: 12,
+                              child: Material(
+                                color: Colors.transparent,
+                                elevation: 0,
+                                borderRadius: BorderRadius.circular(999),
+                                child: InkWell(
+                                  onTap: () => unawaited(_jumpToFirstUnread()),
+                                  borderRadius: BorderRadius.circular(999),
+                                  child: Ink(
+                                    decoration: BoxDecoration(
+                                      borderRadius: BorderRadius.circular(999),
+                                      color: const Color(0xFF07C160),
+                                      boxShadow: const [
+                                        BoxShadow(
+                                          color: Color(0x33000000),
+                                          blurRadius: 10,
+                                          offset: Offset(0, 3),
+                                        ),
+                                      ],
+                                    ),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 8,
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Text(
+                                          '${_sessionUnreadCount > 99 ? '99+' : _sessionUnreadCount} 条未读',
+                                          style: DunesTypography.sans(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w600,
+                                            color: Colors.white,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 2),
+                                        const Icon(
+                                          Icons.keyboard_arrow_up_rounded,
+                                          size: 16,
+                                          color: Colors.white,
                                         ),
                                       ],
                                     ),

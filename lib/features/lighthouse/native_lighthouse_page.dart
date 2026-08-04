@@ -6123,7 +6123,6 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   final List<String> _metricPageStack = [];
   String? _detailKey; // non-null when detail view is open
   String? _detailType;
-  String _provinceFilter = '全部';
   String _detailSubTab = '';
   String _detailSkuQuery = '';
   // Level-3 drill: sub-row tapped in L2 sub-tab list
@@ -6180,9 +6179,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   /// Metrics/sort context tab — detail page uses detail type (same as outer tab).
   String get _metricsTab => _detailType ?? _tab;
 
-  bool get _hasProvinceFilter => _tab == 'channel' && _provinceFilter != '全部';
-
-  String get _activeListTab => _hasProvinceFilter ? 'province' : _tab;
+  String get _activeListTab => _tab;
 
   bool get _isPageBusy => _loading || _cubeLoading;
 
@@ -6490,14 +6487,6 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       return const ['全部'];
     }
     return _pinPreferredCategory(tab, raw);
-  }
-
-  List<String> _provinceOptions() {
-    if (_tab != 'channel' || _groupFilter == '全部') return const ['全部'];
-    return lighthouseProvinceOptionsForGroup(
-      _bundle?.rowsOf('province') ?? const [],
-      _groupFilter,
-    );
   }
 
   void _syncMetricsFromUI() {
@@ -7256,7 +7245,6 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     final requestedEnd = _customEnd;
     final requestedTab = _tab;
     final requestedGroup = _groupFilter;
-    final requestedProvince = _provinceFilter;
     final cacheKey =
         '$requestedPeriod|$requestedOffset|${requestedStart?.toIso8601String() ?? ""}|${requestedEnd?.toIso8601String() ?? ""}';
     bool stillCurrent() =>
@@ -7265,8 +7253,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         requestedStart == _customStart &&
         requestedEnd == _customEnd &&
         requestedTab == _tab &&
-        requestedGroup == _groupFilter &&
-        requestedProvince == _provinceFilter;
+        requestedGroup == _groupFilter;
     final service = LighthouseService(session: widget.session);
     try {
       final summary = await service.fetchSummary(
@@ -7276,7 +7263,6 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         endDate: requestedEnd,
         tab: requestedTab == 'analysis' ? 'product' : requestedTab,
         group: requestedGroup,
-        province: requestedProvince,
       );
       if (mounted && stillCurrent()) {
         setState(() {
@@ -7306,9 +7292,6 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             ? requestedTab
             : 'product',
       );
-      if (requestedPeriod == _period && requestedTab == 'channel') {
-        await _loadTab('province');
-      }
     } catch (e) {
       try {
         final bundle = await service.fetchOverview(
@@ -7338,7 +7321,6 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             _syncMetricsFromUI();
             _ensureDefaultGroupFilter();
           });
-          if (requestedTab == 'channel') unawaited(_loadTab('province'));
         }
       } catch (_) {
         if (mounted && stillCurrent()) {
@@ -7360,7 +7342,6 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     final requestedEnd = _customEnd;
     final requestedTab = _tab;
     final requestedGroup = _groupFilter;
-    final requestedProvince = _provinceFilter;
     try {
       final summary = await LighthouseService(session: widget.session)
           .fetchSummary(
@@ -7370,7 +7351,6 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             endDate: requestedEnd,
             tab: requestedTab,
             group: requestedGroup,
-            province: requestedProvince,
           );
       if (!mounted) return;
       if (requestedPeriod != _period ||
@@ -7378,8 +7358,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           requestedStart != _customStart ||
           requestedEnd != _customEnd ||
           requestedTab != _tab ||
-          requestedGroup != _groupFilter ||
-          requestedProvince != _provinceFilter) {
+          requestedGroup != _groupFilter) {
         return;
       }
       setState(() {
@@ -7402,27 +7381,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     }
     setState(() {
       _groupFilter = next;
-      _provinceFilter = '全部';
       _listLimit = _listPageSize;
       _rowsCacheKey = '';
       _rowsCache = null;
     });
     if (closeDropdown) _closeDropdown();
-    if (_tab == 'channel' && next != '全部') unawaited(_loadTab('province'));
-    unawaited(_reloadHeroSummary());
-  }
-
-  void _setProvinceFilter(String province) {
-    final next = province.trim().isEmpty ? '全部' : province;
-    if (next == _provinceFilter) return;
-    setState(() {
-      _provinceFilter = next;
-      _listLimit = _listPageSize;
-      _rowsCacheKey = '';
-      _rowsCache = null;
-      _invalidateAiSummary();
-    });
-    if (next != '全部') unawaited(_loadTrend('province'));
     unawaited(_reloadHeroSummary());
   }
 
@@ -7941,16 +7904,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
 
   List<Map<String, dynamic>> _rowsBeforeAnomalyFilter() {
     if (_bundle == null) return const [];
-    var rows = _provinceFilter != '全部' && _tab == 'channel'
-        ? _bundle!.rowsOf('province')
-        : _bundle!.rowsOf(_tab);
+    var rows = _bundle!.rowsOf(_tab);
     if (_groupFilter != '全部') {
       rows = rows.where((r) => r['group']?.toString() == _groupFilter).toList();
-    }
-    if (_provinceFilter != '全部' && _tab == 'channel') {
-      rows = rows
-          .where((r) => r['name']?.toString() == _provinceFilter)
-          .toList();
     }
     if (_hunFilter != '全部' && (_tab == 'supply' || _tab == 'channel')) {
       final match = _hunMatchFor(_hunFilter);
@@ -7966,7 +7922,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   List<Map<String, dynamic>> get _currentRows {
     if (_bundle == null) return const [];
     final key =
-        '$_period|$_tab|$_groupFilter|$_provinceFilter|$_hunFilter|$_anomalyFilter|$_sortField|$_sortDesc';
+        '$_period|$_tab|$_groupFilter|$_hunFilter|$_anomalyFilter|$_sortField|$_sortDesc';
     final cached = _rowsCache;
     if (cached != null && key == _rowsCacheKey) return cached;
     _listLimit = _listPageSize; // 筛选/排序/周期变化时重置分页
@@ -8086,7 +8042,6 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
 
   bool get _listFilterActive =>
       _mainFilterActive ||
-      _hasProvinceFilter ||
       ((_tab == 'supply' || _tab == 'channel') && _hunFilter != '全部') ||
       _anomalyFilter != '全部';
 
@@ -8095,7 +8050,6 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   /// - HUN / 异常：后端 summary 不含这两层，只能前端聚
   bool get _heroFilterActive =>
       _mainFilterActive ||
-      _hasProvinceFilter ||
       ((_tab == 'supply' || _tab == 'channel') && _hunFilter != '全部') ||
       _anomalyFilter != '全部';
 
@@ -8110,14 +8064,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   /// 若此时硬拦，环比和走势会整页空白。
   bool get _heroSummaryMatchesGroup {
     final fg = (_bundle?.metrics['filterGroup']?.toString() ?? '').trim();
-    final fp = (_bundle?.metrics['filterProvince']?.toString() ?? '').trim();
-    final groupMatches = _groupFilter == '全部'
+    return _groupFilter == '全部'
         ? fg.isEmpty
         : fg.isNotEmpty && fg == _groupFilter;
-    final provinceMatches = _provinceFilter == '全部'
-        ? fp.isEmpty
-        : fp.isNotEmpty && fp == _provinceFilter;
-    return groupMatches && provinceMatches;
   }
 
   /// Hero 上方 pills：展示当前 L1 分类 + HUN / 异常。
@@ -8129,13 +8078,6 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         label: '分类',
         value: _groupFilter,
         onClear: () => _setGroupFilter('全部'),
-      ));
-    }
-    if (_hasProvinceFilter) {
-      list.add((
-        label: '省份',
-        value: _provinceFilter,
-        onClear: () => _setProvinceFilter('全部'),
       ));
     }
     if ((_tab == 'supply' || _tab == 'channel') && _hunFilter != '全部') {
@@ -9289,7 +9231,6 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       range,
       _anchor.name,
       _groupFilter,
-      _provinceFilter,
       _hunFilter,
       _anomalyFilter,
     ].join('|');
@@ -10196,11 +10137,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         ? verified
         : sales;
     final spreadRate = anchor > 0 ? revenue / anchor * 100 : 0.0;
-    final prepaid = (sales - verified).clamp(0.0, double.infinity);
+    final prepaid = (e['prepaid'] as num?)?.toDouble() ?? 0.0;
     return {
       'sales': sales,
       'verifiedSales': verified,
-      'prepaid': prepaid.toDouble(),
+      'prepaid': prepaid,
       'gmv': gmv,
       'cost': cost,
       'projectCost': projectCost,
@@ -10389,6 +10330,8 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         return _trendNums(t['sales']);
       case 'verifiedSales':
         return _trendNums(t['verifiedSales']);
+      case 'prepaid':
+        return _trendNums(t['prepaid']);
       case 'projectCost':
         return _trendNums(t['projectCost']);
       case 'cost':
@@ -10541,12 +10484,14 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           sumNetProfit = 0,
           sumRevenue = 0,
           sumHandlingFee = 0,
-          sumPlatformFee = 0;
+          sumPlatformFee = 0,
+          sumPrepaid = 0;
       for (final r in rows) {
         final s = (r['sales'] as num?)?.toDouble() ?? 0;
         final v = _verifiedSalesOf(r);
         sumSales += s;
         sumVerifiedSales += v;
+        sumPrepaid += (r['prepaid'] as num?)?.toDouble() ?? 0;
         sumGmv += (r['gmv'] as num?)?.toDouble() ?? 0;
         sumCost += (r['cost'] as num?)?.toDouble() ?? 0;
         sumProjectCost += (r['projectCost'] as num?)?.toDouble() ?? 0;
@@ -10621,11 +10566,13 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       final spreadRate = anchorTotal > 0
           ? heroRevenue / anchorTotal * 100
           : 0.0;
-      final sumPrepaid = (heroSales - heroVerified).clamp(0.0, double.infinity);
+      final heroPrepaid = useRowAmounts
+          ? sumPrepaid
+          : ((metrics['prepaid'] as num?)?.toDouble() ?? sumPrepaid);
       totals = {
         'sales': heroSales,
         'verifiedSales': heroVerified,
-        'prepaid': sumPrepaid.toDouble(),
+        'prepaid': heroPrepaid,
         'gmv': heroGmv,
         'cost': heroCost,
         'projectCost': heroProjectCost,
@@ -12488,8 +12435,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     final sales = totals['sales'] ?? 0;
     final verified = totals['verifiedSales'] ?? 0;
     final gmv = totals['gmv'] ?? 0;
-    final prepaid =
-        totals['prepaid'] ?? (sales - verified).clamp(0, double.infinity);
+    final prepaid = totals['prepaid'] ?? 0;
     final revenue = totals['revenue'] ?? 0;
     final spread = totals['spread'] ?? 0;
     final profit = totals['profit'] ?? 0;
@@ -15107,10 +15053,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       case 'verifiedSales':
         return _verifiedSalesOf(r);
       case 'prepaid':
-        final sales = (r['sales'] as num?)?.toDouble();
-        final verified = _verifiedSalesOf(r);
-        if (sales == null) return null;
-        return (sales - verified).clamp(0.0, double.infinity).toDouble();
+        final prepaid = (r['prepaid'] as num?)?.toDouble();
+        if (prepaid != null) return prepaid;
+        return null;
       default:
         // discount 等字段是 Map，不能按 num 强转
         final raw = r[key];
@@ -16168,9 +16113,6 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     // 放在它后面，默认选中状态仍由 _defaultGroupFilter 决定。
     final groups = _categoryOptions(_tab).toList();
     final showGroups = _tabBarShowsGroups && _tab != 'analysis';
-    final provinceOpts = _provinceOptions();
-    final showProvinces =
-        showGroups && _tab == 'channel' && _groupFilter != '全部';
     final showHun = showGroups && (_tab == 'supply' || _tab == 'channel');
 
     // ── ROW 1 · 维度锚点 (biggest) ─────────────────────────────────────
@@ -16204,7 +16146,6 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             setState(() {
               _tab = key;
               _groupFilter = '全部';
-              _provinceFilter = '全部';
               _tabBarShowsGroups = false;
               _hunFilter = '全部';
               _listLimit = _listPageSize;
@@ -16223,7 +16164,6 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               if (_tabBarShowsGroups) {
                 _tabBarShowsGroups = false;
                 _groupFilter = '全部';
-                _provinceFilter = '全部';
                 _hunFilter = '全部';
               } else {
                 _tabBarShowsGroups = true;
@@ -16236,16 +16176,12 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             if (prevGroup != _groupFilter) {
               unawaited(_reloadHeroSummary());
             }
-            if (_tab == 'channel' && _tabBarShowsGroups) {
-              unawaited(_loadTab('province'));
-            }
             return;
           }
           setState(() {
             _tab = key;
             _tabBarShowsGroups = true; // 切维仍默认展开分类
             _groupFilter = _defaultGroupFilter(key);
-            _provinceFilter = '全部';
             _ensureDefaultGroupFilter();
             if (key != 'supply' && key != 'channel') _hunFilter = '全部';
             _listLimit = _listPageSize;
@@ -16256,7 +16192,6 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           });
           unawaited(_reloadHeroSummary());
           _loadTab(key);
-          if (key == 'channel') _loadTab('province');
         },
       );
     }).toList();
@@ -16384,31 +16319,6 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                       ),
                       size: _SegmentSize.medium,
                       onTap: () => _setGroupFilter(g),
-                    ),
-                  )
-                  .toList(),
-            ),
-          if (showProvinces)
-            filterRow(
-              kicker: '省份',
-              divider: true,
-              cells: provinceOpts
-                  .map(
-                    (province) => _segmentCell(
-                      label: province,
-                      isOn: _provinceFilter == province,
-                      tone: _SegmentTone.subgroup,
-                      leading: Icon(
-                        province == '全部'
-                            ? Icons.public_rounded
-                            : Icons.location_on_outlined,
-                        size: 12,
-                        color: _provinceFilter == province
-                            ? _LhPlum.primary
-                            : LhColors.mute2,
-                      ),
-                      size: _SegmentSize.medium,
-                      onTap: () => _setProvinceFilter(province),
                     ),
                   )
                   .toList(),
@@ -17540,15 +17450,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
 
     final listBody = Column(
       children: [
-        _buildLedger(
-          visible,
-          shareRows: rows,
-          metricsTab: _hasProvinceFilter ? 'channel' : null,
-          trendKeyPrefix: _hasProvinceFilter ? 'province' : null,
-          rootLabel: _hasProvinceFilter ? '省份' : null,
-          showRowChevron: !_hasProvinceFilter,
-          allowDefaultDetailOpen: !_hasProvinceFilter,
-        ),
+        _buildLedger(visible, shareRows: rows),
         if (hasMore)
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 14),
@@ -21046,8 +20948,8 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 else
                   nameRow,
                 SizedBox(height: _fs(3)),
-                // 分类 + 展开箭头：箭头热区靠 OverflowBox 撑到 36×36，
-                // 但布局上只占一行高，不参与 Column 测高。
+                // 分类 + 展开箭头：箭头下移，与标题行的详情箭头拉开层级；
+                // 36×36 热区不变，行高略增，避免压住下方占比。
                 Row(
                   children: [
                     if (hun != null && hun.hasAny) ...[
@@ -21089,19 +20991,27 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                       onTap: onToggle,
                       child: SizedBox(
                         width: 26,
-                        height: 14,
+                        height: lighthouseLedgerExpandArrowLayoutHeight,
                         child: OverflowBox(
                           minWidth: 36,
                           maxWidth: 36,
                           minHeight: 36,
                           maxHeight: 36,
                           alignment: Alignment.center,
-                          child: Icon(
-                            isExpanded
-                                ? Icons.keyboard_arrow_up_rounded
-                                : Icons.keyboard_arrow_down_rounded,
-                            size: 19,
-                            color: isExpanded ? _LhPlum.deep : _LhPlum.primary,
+                          child: Transform.translate(
+                            offset: const Offset(
+                              0,
+                              lighthouseLedgerExpandArrowVerticalOffset,
+                            ),
+                            child: Icon(
+                              isExpanded
+                                  ? Icons.keyboard_arrow_up_rounded
+                                  : Icons.keyboard_arrow_down_rounded,
+                              size: 19,
+                              color: isExpanded
+                                  ? _LhPlum.deep
+                                  : _LhPlum.primary,
+                            ),
                           ),
                         ),
                       ),
@@ -21848,12 +21758,6 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       _SubTabInfo(key: 'signEntity', label: '公司主体', color: _LhPlum.deep),
     ],
     'channel': [
-      _SubTabInfo(
-        key: 'province',
-        label: '省份',
-        color: LhColors.private,
-        icon: Icons.map_outlined,
-      ),
       _SubTabInfo(key: 'product', label: '产品', color: LhColors.product),
       _SubTabInfo(key: 'supply', label: '供给', color: LhColors.sinopec),
       _SubTabInfo(key: 'project', label: '项目', color: _LhPlum.primary),
@@ -21873,14 +21777,6 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   //     · productName drilled → 供给·渠道·项目·产品码·公司主体
   //     · signEntity  drilled → 产品·供给·渠道·项目·SKU·产品码
   static const _kDrillSubTabs = {
-    'province': [
-      _SubTabInfo(key: 'product', label: '产品', color: LhColors.product),
-      _SubTabInfo(key: 'supply', label: '供给', color: LhColors.sinopec),
-      _SubTabInfo(key: 'project', label: '项目', color: _LhPlum.primary),
-      _SubTabInfo(key: 'productName', label: 'SKU', color: LhColors.product),
-      _SubTabInfo(key: 'supplierCode', label: '产品码', color: LhColors.copper),
-      _SubTabInfo(key: 'signEntity', label: '公司主体', color: _LhPlum.deep),
-    ],
     'product': [
       _SubTabInfo(key: 'supply', label: '供给', color: LhColors.sinopec),
       _SubTabInfo(key: 'channel', label: '渠道', color: LhColors.carrier),

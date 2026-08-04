@@ -1,5 +1,4 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:dunes_app/features/lighthouse/lighthouse_data.dart';
 import 'package:dunes_app/features/lighthouse/lighthouse_hero_metric.dart';
 
 void main() {
@@ -90,6 +89,8 @@ void main() {
     expect(lighthouseLedgerNameFontSize, 11.5);
     expect(lighthouseLedgerPinnedWidthRatio, 0.35);
     expect(lighthouseLedgerPinnedMaxWidth, 164);
+    expect(lighthouseLedgerExpandArrowVerticalOffset, 5);
+    expect(lighthouseLedgerExpandArrowLayoutHeight, 18);
     expect(lighthouseLedgerSummaryMetricKeys, [
       'sales',
       'verifiedSales',
@@ -112,6 +113,14 @@ void main() {
       ['sales', 'prepaid'],
       ['verifiedSales', 'profit'],
     ]);
+  });
+
+  test('channel detail removes the redundant province column', () {
+    expect(lighthouseChannelDetailIncludesProvince, isFalse);
+  });
+
+  test('channel root removes the province category row', () {
+    expect(lighthouseChannelRootIncludesProvinceFilter, isFalse);
   });
 
   test('ledger navigation uses three distinct professional control levels', () {
@@ -176,18 +185,6 @@ void main() {
     expect(lighthouseCategoryBrandAsset('银联'), 'assets/brands/unionpay.svg');
     expect(lighthouseCategoryBrandAsset('民营'), isNull);
     expect(lighthouseCategoryLogoSize, 14);
-  });
-
-  test('channel category exposes only its own province options', () {
-    final rows = <Map<String, dynamic>>[
-      {'name': '广东', 'group': '平安'},
-      {'name': '江苏', 'group': '平安'},
-      {'name': '广东', 'group': '多渠道'},
-      {'name': '浙江', 'group': '多渠道'},
-    ];
-
-    expect(lighthouseProvinceOptionsForGroup(rows, '平安'), ['全部', '广东', '江苏']);
-    expect(lighthouseProvinceOptionsForGroup(rows, '多渠道'), ['全部', '广东', '浙江']);
   });
 
   test('compact hero keeps KPI and trend side by side', () {

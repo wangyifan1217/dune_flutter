@@ -1,21 +1,3 @@
-List<String> lighthouseProvinceOptionsForGroup(
-  Iterable<Map<String, dynamic>> rows,
-  String channelGroup,
-) {
-  if (channelGroup.trim().isEmpty || channelGroup == '全部') {
-    return const ['全部'];
-  }
-  final seen = <String>{};
-  final result = <String>['全部'];
-  for (final row in rows) {
-    if (row['group']?.toString() != channelGroup) continue;
-    final name = row['name']?.toString().trim() ?? '';
-    if (name.isEmpty || !seen.add(name)) continue;
-    result.add(name);
-  }
-  return result;
-}
-
 class LighthouseDataBundle {
   LighthouseDataBundle({
     required this.data,
@@ -115,12 +97,8 @@ class LighthouseDataBundle {
   /// Merge dimension 接口下发的 tab UI（含完整 categories）到 metrics.ui。
   LighthouseDataBundle withTabUi(String tab, Map<String, dynamic> tabUi) {
     final nextMetrics = Map<String, dynamic>.from(metrics);
-    final ui = Map<String, dynamic>.from(
-      nextMetrics['ui'] as Map? ?? const {},
-    );
-    final tabs = Map<String, dynamic>.from(
-      ui['tabs'] as Map? ?? const {},
-    );
+    final ui = Map<String, dynamic>.from(nextMetrics['ui'] as Map? ?? const {});
+    final tabs = Map<String, dynamic>.from(ui['tabs'] as Map? ?? const {});
     tabs[tab] = Map<String, dynamic>.from(tabUi);
     ui['tabs'] = tabs;
     nextMetrics['ui'] = ui;

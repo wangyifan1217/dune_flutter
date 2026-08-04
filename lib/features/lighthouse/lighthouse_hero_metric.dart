@@ -59,6 +59,10 @@ const double lighthouseHeroMetricDeltaFontSize = 8;
 const int lighthouseHeroScaleColumnFlex = 10;
 const int lighthouseHeroCostColumnFlex = 14;
 const int lighthouseHeroResultColumnFlex = 15;
+const double lighthouseLedgerExpandArrowVerticalOffset = 5;
+const double lighthouseLedgerExpandArrowLayoutHeight = 18;
+const bool lighthouseChannelDetailIncludesProvince = false;
+const bool lighthouseChannelRootIncludesProvinceFilter = false;
 
 /// Three Y-axis ticks used by the compact Hero chart.
 List<double> lighthouseHeroAxisTicks(List<double> values) {

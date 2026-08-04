@@ -2051,16 +2051,8 @@ class _NativeChatViewState extends State<NativeChatView>
   }
 
   bool get _showUnreadJumpBadge {
-    if (_unreadJumpDismissed ||
-        _locatedMode ||
-        _sessionUnreadCount <= 0 ||
-        _firstUnreadMessageId <= 0) {
-      return false;
-    }
-    // 历史尚未覆盖完整未读窗口时，始终显示跳转入口。
-    if (_firstUnreadTruncated) return true;
-    // 首条未读已在当前视口内（短会话一屏看完也算）→ 不必再显示跳转入口。
-    return !_unreadMessageVisible;
+    // 临时屏蔽会话页右上角「N 条未读」浮动入口。
+    return false;
   }
 
   /// 只在首条未读确实离开消息列表视口时显示跳转提示。

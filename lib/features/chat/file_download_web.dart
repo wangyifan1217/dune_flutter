@@ -1,6 +1,8 @@
 import 'dart:html' as html;
 import 'dart:typed_data';
 
+import '../conversation/conversation_service.dart';
+
 Future<String?> saveBytesAsFileImpl(Uint8List bytes, String fileName) async {
   final blob = html.Blob(<Uint8List>[bytes]);
   final url = html.Url.createObjectUrlFromBlob(blob);
@@ -37,7 +39,9 @@ Future<String?> openUrlAsFileImpl(
   void Function(double progress)? onProgress,
   String? cacheKey,
   int? conversationId,
+  ChatUploadCancelToken? cancelToken,
 }) async {
+  cancelToken?.throwIfCancelled(download: true);
   onProgress?.call(0);
   try {
     final response = await html.HttpRequest.request(
@@ -45,6 +49,7 @@ Future<String?> openUrlAsFileImpl(
       method: 'GET',
       responseType: 'blob',
     );
+    cancelToken?.throwIfCancelled(download: true);
     final blob = response.response as html.Blob?;
     if (blob != null) {
       onProgress?.call(1);
@@ -53,10 +58,16 @@ Future<String?> openUrlAsFileImpl(
         fileName,
       );
     }
+  } on ChatDownloadCancelledException {
+    rethrow;
   } catch (_) {
+    if (cancelToken?.isCancelled == true) {
+      throw const ChatDownloadCancelledException();
+    }
     /* fall through to anchor download */
   }
 
+  cancelToken?.throwIfCancelled(download: true);
   final anchor = html.AnchorElement(href: url)
     ..download = fileName.isEmpty ? 'download' : fileName
     ..rel = 'noopener'

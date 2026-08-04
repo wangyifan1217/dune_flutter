@@ -20,6 +20,7 @@ class ChatAuthVideoBubble extends StatefulWidget {
     required this.mine,
     required this.onTap,
     this.downloadProgress,
+    this.onCancelDownload,
   });
 
   final ConversationService service;
@@ -27,6 +28,7 @@ class ChatAuthVideoBubble extends StatefulWidget {
   final bool mine;
   final VoidCallback onTap;
   final double? downloadProgress;
+  final VoidCallback? onCancelDownload;
 
   @override
   State<ChatAuthVideoBubble> createState() => _ChatAuthVideoBubbleState();
@@ -102,6 +104,7 @@ class _ChatAuthVideoBubbleState extends State<ChatAuthVideoBubble> {
       width: width,
       height: height,
       downloadProgress: widget.downloadProgress,
+      onCancelDownload: widget.onCancelDownload,
       onTap: widget.onTap,
     );
   }
@@ -120,6 +123,8 @@ class ChatVideoBubble extends StatelessWidget {
     this.downloadProgress,
     this.width,
     this.height,
+    this.onCancelUpload,
+    this.onCancelDownload,
   });
 
   final bool mine;
@@ -131,6 +136,8 @@ class ChatVideoBubble extends StatelessWidget {
   final double? downloadProgress;
   final int? width;
   final int? height;
+  final VoidCallback? onCancelUpload;
+  final VoidCallback? onCancelDownload;
 
   @override
   Widget build(BuildContext context) {
@@ -195,6 +202,28 @@ class ChatVideoBubble extends StatelessWidget {
                       strokeWidth: 3,
                       color: Colors.white,
                       backgroundColor: Colors.white24,
+                    ),
+                  ),
+                ),
+              if ((upload != null && onCancelUpload != null) ||
+                  (download != null && onCancelDownload != null))
+                Positioned(
+                  top: 6,
+                  right: 6,
+                  child: Material(
+                    color: Colors.black.withValues(alpha: 0.45),
+                    shape: const CircleBorder(),
+                    child: InkWell(
+                      customBorder: const CircleBorder(),
+                      onTap: upload != null ? onCancelUpload : onCancelDownload,
+                      child: const Padding(
+                        padding: EdgeInsets.all(4),
+                        child: Icon(
+                          Icons.close_rounded,
+                          size: 16,
+                          color: Colors.white,
+                        ),
+                      ),
                     ),
                   ),
                 ),

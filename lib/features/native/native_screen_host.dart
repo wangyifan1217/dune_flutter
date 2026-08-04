@@ -35,6 +35,7 @@ import '../contacts/contact_models.dart';
 import '../contacts/native_contact_profile_page.dart';
 import '../contacts/native_contacts_page.dart';
 import '../ctrip/native_ctrip_h5_page_v2.dart';
+import '../ctrip/native_ctrip_pc_page.dart';
 import '../conversation/chat_dual_pane_shell.dart';
 import '../conversation/comm_unread_notifier.dart';
 import '../conversation/conversation_inbox_realtime.dart';
@@ -293,6 +294,14 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       final id = _selectedBroadcast?.id ?? 0;
       return id > 0 ? id : null;
     }
+    if (screen == 'AA1') {
+      final id = _selectedApprovalAssistant?.id ?? 0;
+      return id > 0 ? id : null;
+    }
+    if (screen == 'TA1') {
+      final id = _selectedTaskAssistant?.id ?? 0;
+      return id > 0 ? id : null;
+    }
     return null;
   }
 
@@ -374,14 +383,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     // 先通知聊天页补拉最新消息，再恢复已读上报，避免缺消息却先标已读。
     ChatForegroundSync.notifyResumed();
     // 恢复前台且仍停在会话页时，重新允许已读上报。
-    final screen = widget.navigation.currentScreen;
-    final onChat =
-        screen == 'C5' ||
-        screen == 'C2' ||
-        screen == 'CR' ||
-        screen == 'C10' ||
-        (_dualPaneSelectedConversationId ?? 0) > 0;
-    if (onChat && !_userActivelyInChat) {
+    if (_isOnActiveChatScreen() && !_userActivelyInChat) {
       setState(() => _userActivelyInChat = true);
     }
     _syncActiveViewReport();
@@ -408,14 +410,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     } else if (state == AppLifecycleState.resumed) {
       // 与托盘 inactive→active 对齐：恢复时补拉当前会话最新消息。
       ChatForegroundSync.notifyResumed();
-      final screen = widget.navigation.currentScreen;
-      final onChat =
-          screen == 'C5' ||
-          screen == 'C2' ||
-          screen == 'CR' ||
-          screen == 'C10' ||
-          (_dualPaneSelectedConversationId ?? 0) > 0;
-      if (onChat && !_userActivelyInChat) {
+      if (_isOnActiveChatScreen() && !_userActivelyInChat) {
         setState(() => _userActivelyInChat = true);
       }
       _syncActiveViewReport();
@@ -802,6 +797,20 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     return senderId > 0 && senderId != widget.session.userId;
   }
 
+  /// 当前是否停在可自动 mark-read 的会话页（含审批助手 / 任务助手）。
+  bool _isOnActiveChatScreen([String? screen]) {
+    final s = screen ?? widget.navigation.currentScreen;
+    if (s == 'C5' ||
+        s == 'C2' ||
+        s == 'CR' ||
+        s == 'C10' ||
+        s == 'AA1' ||
+        s == 'TA1') {
+      return true;
+    }
+    return (_dualPaneSelectedConversationId ?? 0) > 0;
+  }
+
   bool _isViewingConversation(int convId) {
     if (convId <= 0) return false;
     // 桌面窗口最小化、失焦或隐藏到托盘后，不能继续视为用户正在看此会话。
@@ -814,6 +823,10 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     if (screen == 'C2' && _selectedGroup?.id == convId) return true;
     if (screen == 'CR' && _selectedRobot?.id == convId) return true;
     if (screen == 'C10' && _selectedBroadcast?.id == convId) return true;
+    if (screen == 'AA1' && _selectedApprovalAssistant?.id == convId) {
+      return true;
+    }
+    if (screen == 'TA1' && _selectedTaskAssistant?.id == convId) return true;
     return false;
   }
 
@@ -838,6 +851,14 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     }
     if (screen == 'C10') {
       final id = _selectedBroadcast?.id ?? 0;
+      return id > 0 ? id : null;
+    }
+    if (screen == 'AA1') {
+      final id = _selectedApprovalAssistant?.id ?? 0;
+      return id > 0 ? id : null;
+    }
+    if (screen == 'TA1') {
+      final id = _selectedTaskAssistant?.id ?? 0;
       return id > 0 ? id : null;
     }
     return null;
@@ -2231,24 +2252,35 @@ class _NativeScreenHostState extends State<NativeScreenHost>
               : () => widget.navigation.popTo('B2'),
         );
       case 'CT1':
-        // 每次进入使用独立 key，强制重建 WebView，避免复用一次性 Token/旧 Cookie。
+        // 每次进入使用独立 key，强制重建，避免复用一次性 Ticket。
+        // 桌面端走 PC 单点（系统浏览器）；手机 APP 继续走 H5 WebView。
+        final ctripKey = ValueKey<String>(
+          'ctrip-${widget.navigation.history.length}-'
+          '${widget.navigation.history.where((e) => e == 'CT1').length}',
+        );
+        void ctripBack() {
+          if (widget.navigation.history.contains('QJA')) {
+            widget.navigation.popTo('QJA');
+          } else if (widget.navigation.canGoBack) {
+            widget.navigation.back();
+          } else {
+            widget.navigation.popTo(isDesktopCommOnly ? 'QJA' : 'B2');
+          }
+        }
+        if (isDesktopCommOnly) {
+          return NativeCtripPCPage(
+            key: ctripKey,
+            session: widget.session,
+            navigation: widget.navigation,
+            onBack: ctripBack,
+          );
+        }
         return NativeCtripH5Page(
-          key: ValueKey<String>(
-            'ctrip-${widget.navigation.history.length}-'
-            '${widget.navigation.history.where((e) => e == 'CT1').length}',
-          ),
+          key: ctripKey,
           session: widget.session,
           navigation: widget.navigation,
           embedded: false,
-          onBack: () {
-            if (widget.navigation.history.contains('QJA')) {
-              widget.navigation.popTo('QJA');
-            } else if (widget.navigation.canGoBack) {
-              widget.navigation.back();
-            } else {
-              widget.navigation.popTo(isDesktopCommOnly ? 'QJA' : 'B2');
-            }
-          },
+          onBack: ctripBack,
         );
       case 'QJD':
         final entity =

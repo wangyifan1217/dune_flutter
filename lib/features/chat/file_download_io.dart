@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import 'package:open_filex/open_filex.dart';
 import 'package:path_provider/path_provider.dart';
 
+import '../conversation/conversation_service.dart';
 import 'im_file_save_dir.dart';
 
 Future<Directory> _defaultDesktopSaveDir() async {
@@ -219,13 +220,17 @@ Future<String> openUrlAsFileImpl(
   void Function(double progress)? onProgress,
   String? cacheKey,
   int? conversationId,
+  ChatUploadCancelToken? cancelToken,
 }) async {
   final uri = Uri.tryParse(url);
   if (uri == null) throw Exception('下载链接无效');
+  cancelToken?.throwIfCancelled(download: true);
   final client = http.Client();
+  cancelToken?.bindClient(client);
   try {
     final req = http.Request('GET', uri);
     final resp = await client.send(req);
+    cancelToken?.throwIfCancelled(download: true);
     if (resp.statusCode < 200 || resp.statusCode >= 300) {
       throw Exception('下载失败（HTTP ${resp.statusCode}）');
     }
@@ -233,12 +238,14 @@ Future<String> openUrlAsFileImpl(
     var received = 0;
     final chunks = <int>[];
     await for (final chunk in resp.stream) {
+      cancelToken?.throwIfCancelled(download: true);
       chunks.addAll(chunk);
       if (total > 0) {
         received += chunk.length;
         onProgress?.call((received / total).clamp(0.0, 1.0));
       }
     }
+    cancelToken?.throwIfCancelled(download: true);
     if (total <= 0) onProgress?.call(1.0);
     final bytes = Uint8List.fromList(chunks);
     final key = (cacheKey ?? '').trim();
@@ -251,6 +258,13 @@ Future<String> openUrlAsFileImpl(
       );
     }
     return saveBytesAsFileImpl(bytes, fileName);
+  } on ChatDownloadCancelledException {
+    rethrow;
+  } catch (e) {
+    if (cancelToken?.isCancelled == true) {
+      throw const ChatDownloadCancelledException();
+    }
+    rethrow;
   } finally {
     client.close();
   }

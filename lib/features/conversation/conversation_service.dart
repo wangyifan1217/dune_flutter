@@ -17,6 +17,57 @@ import 'conversation_models.dart';
 /// 上传进度（直接用 fromBytes 会一次性吐出全部字节导致进度瞬间到 100%）。
 const int _uploadChunkSize = 64 * 1024;
 
+/// 用户主动取消聊天附件上传。
+class ChatUploadCancelledException implements Exception {
+  const ChatUploadCancelledException();
+
+  @override
+  String toString() => '上传已取消';
+}
+
+/// 用户主动取消聊天附件下载。
+class ChatDownloadCancelledException implements Exception {
+  const ChatDownloadCancelledException();
+
+  @override
+  String toString() => '下载已取消';
+}
+
+/// 聊天附件传输取消令牌：关闭专用 HTTP 客户端以中断上传/下载。
+class ChatUploadCancelToken {
+  bool _cancelled = false;
+  http.Client? _client;
+
+  bool get isCancelled => _cancelled;
+
+  void bindClient(http.Client client) {
+    _client = client;
+    if (_cancelled) {
+      try {
+        client.close();
+      } catch (_) {}
+    }
+  }
+
+  void cancel() {
+    if (_cancelled) return;
+    _cancelled = true;
+    final client = _client;
+    _client = null;
+    if (client != null) {
+      try {
+        client.close();
+      } catch (_) {}
+    }
+  }
+
+  void throwIfCancelled({bool download = false}) {
+    if (!_cancelled) return;
+    if (download) throw const ChatDownloadCancelledException();
+    throw const ChatUploadCancelledException();
+  }
+}
+
 /// 构造一个按块上报进度的 multipart 文件部件。
 http.MultipartFile _progressMultipartFile(
   String field,
@@ -24,15 +75,18 @@ http.MultipartFile _progressMultipartFile(
   String filename,
   void Function(int sent, int total)? onProgress, {
   String? mimeType,
+  ChatUploadCancelToken? cancelToken,
 }) {
   final total = bytes.length;
   Stream<List<int>> chunked() async* {
     var offset = 0;
     if (total == 0) {
+      cancelToken?.throwIfCancelled();
       onProgress?.call(0, 0);
       return;
     }
     while (offset < total) {
+      cancelToken?.throwIfCancelled();
       final end = (offset + _uploadChunkSize < total)
           ? offset + _uploadChunkSize
           : total;
@@ -822,7 +876,9 @@ class ConversationService {
         Function()?
     preparePreview,
     void Function(double progress)? onProgress,
+    ChatUploadCancelToken? cancelToken,
   }) async {
+    cancelToken?.throwIfCancelled();
     final previewFuture = preparePreview?.call();
     final uploaded = await uploadAttachment(
       conversationId: conversationId,
@@ -833,7 +889,9 @@ class ConversationService {
         if (onProgress == null) return;
         onProgress(previewFuture == null ? p : p * 0.88);
       },
+      cancelToken: cancelToken,
     );
+    cancelToken?.throwIfCancelled();
     final url = uploaded.bestUrl;
     final objectKey = uploaded.objectKey.trim();
 
@@ -843,16 +901,20 @@ class ConversationService {
     if (previewFuture != null) {
       try {
         final preview = await previewFuture;
+        cancelToken?.throwIfCancelled();
         if (preview != null && preview.bytes.isNotEmpty) {
           final previewUploaded = await uploadAttachment(
             conversationId: conversationId,
             bytes: preview.bytes,
             fileName: preview.fileName,
             mimeType: preview.mimeType,
+            cancelToken: cancelToken,
           );
           previewUrl = previewUploaded.bestUrl;
           previewObjectKey = previewUploaded.objectKey.trim();
         }
+      } on ChatUploadCancelledException {
+        rethrow;
       } catch (_) {
         previewUrl = url;
         previewObjectKey = objectKey;
@@ -860,20 +922,25 @@ class ConversationService {
       onProgress?.call(0.96);
     } else if (previewBytes != null && previewBytes.isNotEmpty) {
       try {
+        cancelToken?.throwIfCancelled();
         final preview = await uploadAttachment(
           conversationId: conversationId,
           bytes: previewBytes,
           fileName: previewFileName ?? fileName,
           mimeType: previewMimeType ?? 'image/jpeg',
+          cancelToken: cancelToken,
         );
         previewUrl = preview.bestUrl;
         previewObjectKey = preview.objectKey.trim();
+      } on ChatUploadCancelledException {
+        rethrow;
       } catch (_) {
         previewUrl = url;
         previewObjectKey = objectKey;
       }
     }
 
+    cancelToken?.throwIfCancelled();
     onProgress?.call(1.0);
     await _sendAttachment(
       conversationId: conversationId,
@@ -897,14 +964,18 @@ class ConversationService {
     required String mimeType,
     Map<String, dynamic>? extraPayload,
     void Function(double progress)? onProgress,
+    ChatUploadCancelToken? cancelToken,
   }) async {
+    cancelToken?.throwIfCancelled();
     final uploaded = await uploadAttachment(
       conversationId: conversationId,
       bytes: bytes,
       fileName: fileName,
       mimeType: mimeType,
       onProgress: onProgress,
+      cancelToken: cancelToken,
     );
+    cancelToken?.throwIfCancelled();
     final url = uploaded.bestUrl;
     final objectKey = uploaded.objectKey.trim();
     final payload = <String, dynamic>{
@@ -934,7 +1005,9 @@ class ConversationService {
     int? width,
     int? height,
     void Function(double progress)? onProgress,
+    ChatUploadCancelToken? cancelToken,
   }) async {
+    cancelToken?.throwIfCancelled();
     onProgress?.call(0.02);
     final uploaded = await uploadAttachment(
       conversationId: conversationId,
@@ -942,7 +1015,9 @@ class ConversationService {
       fileName: fileName,
       mimeType: mimeType,
       onProgress: (p) => onProgress?.call(0.05 + p * 0.8),
+      cancelToken: cancelToken,
     );
+    cancelToken?.throwIfCancelled();
     final url = uploaded.bestUrl;
     final objectKey = uploaded.objectKey.trim();
     String? previewUrl;
@@ -957,11 +1032,15 @@ class ConversationService {
           bytes: thumbnailBytes,
           fileName: thumbName,
           mimeType: 'image/jpeg',
+          cancelToken: cancelToken,
         );
         previewUrl = thumb.bestUrl;
         previewObjectKey = thumb.objectKey.trim();
+      } on ChatUploadCancelledException {
+        rethrow;
       } catch (_) {}
     }
+    cancelToken?.throwIfCancelled();
     onProgress?.call(0.97);
     await _sendAttachment(
       conversationId: conversationId,
@@ -1019,56 +1098,81 @@ class ConversationService {
     required String fileName,
     required String mimeType,
     void Function(double progress)? onProgress,
+    ChatUploadCancelToken? cancelToken,
   }) async {
-    for (var attempt = 1; attempt <= _maxSendAttempts; attempt++) {
-      try {
-        final req = http.MultipartRequest('POST', _uri('/storage/upload'));
-        req.headers['Authorization'] = 'Bearer ${_session.token}';
-        req.fields['bucket'] = 'im-attachments';
-        req.fields['conversationId'] = '$conversationId';
-        req.files.add(
-          _progressMultipartFile(
-            'file',
-            bytes,
-            fileName,
-            onProgress == null
-                ? null
-                : (sent, total) {
-                    if (total > 0) onProgress((sent / total).clamp(0.0, 1.0));
-                  },
-            mimeType: mimeType,
-          ),
-        );
-        final streamed = await _client.send(req);
-        final bodyText = await streamed.stream.bytesToString();
-        if (streamed.statusCode < 200 || streamed.statusCode >= 300) {
-          if (_isRetryableStatus(streamed.statusCode) &&
-              attempt < _maxSendAttempts) {
-            await _delayForRetry(attempt);
-            continue;
+    // 可取消上传使用独立 Client，避免 close 影响会话页其它请求。
+    final ownsClient = cancelToken != null;
+    final client = ownsClient ? http.Client() : _client;
+    if (ownsClient) cancelToken.bindClient(client);
+    try {
+      for (var attempt = 1; attempt <= _maxSendAttempts; attempt++) {
+        cancelToken?.throwIfCancelled();
+        try {
+          final req = http.MultipartRequest('POST', _uri('/storage/upload'));
+          req.headers['Authorization'] = 'Bearer ${_session.token}';
+          req.fields['bucket'] = 'im-attachments';
+          req.fields['conversationId'] = '$conversationId';
+          req.files.add(
+            _progressMultipartFile(
+              'file',
+              bytes,
+              fileName,
+              onProgress == null
+                  ? null
+                  : (sent, total) {
+                      if (total > 0) {
+                        onProgress((sent / total).clamp(0.0, 1.0));
+                      }
+                    },
+              mimeType: mimeType,
+              cancelToken: cancelToken,
+            ),
+          );
+          final streamed = await client.send(req);
+          cancelToken?.throwIfCancelled();
+          final bodyText = await streamed.stream.bytesToString();
+          cancelToken?.throwIfCancelled();
+          if (streamed.statusCode < 200 || streamed.statusCode >= 300) {
+            if (_isRetryableStatus(streamed.statusCode) &&
+                attempt < _maxSendAttempts) {
+              await _delayForRetry(attempt);
+              continue;
+            }
+            throw Exception('上传失败: HTTP ${streamed.statusCode}');
           }
-          throw Exception('上传失败: HTTP ${streamed.statusCode}');
+          final body = _decode(bodyText);
+          if (body['success'] == false) {
+            throw Exception((body['message'] ?? '上传失败').toString());
+          }
+          final data = body['data'];
+          if (data is! Map<String, dynamic>) {
+            throw Exception('上传失败: 返回数据异常');
+          }
+          final url = (data['url'] ?? '').toString();
+          final objectKey = (data['objectKey'] ?? url).toString();
+          if (url.isEmpty && objectKey.isEmpty) {
+            throw Exception('上传失败: 未返回文件地址');
+          }
+          return UploadedAttachment(url: url, objectKey: objectKey);
+        } on ChatUploadCancelledException {
+          rethrow;
+        } catch (e) {
+          if (cancelToken?.isCancelled == true) {
+            throw const ChatUploadCancelledException();
+          }
+          if (attempt >= _maxSendAttempts) rethrow;
+          await _delayForRetry(attempt);
+          cancelToken?.throwIfCancelled();
         }
-        final body = _decode(bodyText);
-        if (body['success'] == false) {
-          throw Exception((body['message'] ?? '上传失败').toString());
-        }
-        final data = body['data'];
-        if (data is! Map<String, dynamic>) {
-          throw Exception('上传失败: 返回数据异常');
-        }
-        final url = (data['url'] ?? '').toString();
-        final objectKey = (data['objectKey'] ?? url).toString();
-        if (url.isEmpty && objectKey.isEmpty) {
-          throw Exception('上传失败: 未返回文件地址');
-        }
-        return UploadedAttachment(url: url, objectKey: objectKey);
-      } catch (e) {
-        if (attempt >= _maxSendAttempts) rethrow;
-        await _delayForRetry(attempt);
+      }
+      throw Exception('上传失败: 重试次数已达上限');
+    } finally {
+      if (ownsClient) {
+        try {
+          client.close();
+        } catch (_) {}
       }
     }
-    throw Exception('上传失败: 重试次数已达上限');
   }
 
   Future<void> _sendAttachment({
@@ -1919,7 +2023,7 @@ class ConversationService {
           avatarUrl: _avatarField(map['avatarUrl']),
         ),
       );
-      if (out.length >= 6) break;
+      if (out.length >= 9) break;
     }
     return out;
   }
@@ -2317,8 +2421,10 @@ class ConversationService {
     String bucket = 'im-attachments',
     String? fileName,
     void Function(double progress)? onProgress,
+    ChatUploadCancelToken? cancelToken,
   }) async {
     if (objectKey.isEmpty) throw Exception('附件地址为空');
+    cancelToken?.throwIfCancelled(download: true);
     final uri = _isPublicMediaUrl(objectKey)
         ? Uri.parse(objectKey)
         : downloadUri(
@@ -2326,28 +2432,49 @@ class ConversationService {
             bucket: bucket,
             fileName: fileName,
           );
-    final req = http.Request('GET', uri);
-    if (!_isPublicMediaUrl(objectKey)) {
-      req.headers.addAll(_headers);
-    }
-    final streamed = await _client.send(req);
-    if (streamed.statusCode < 200 || streamed.statusCode >= 300) {
-      throw Exception('下载失败: HTTP ${streamed.statusCode}');
-    }
-    final total = streamed.contentLength ?? 0;
-    var received = 0;
-    final chunks = <int>[];
-    await for (final chunk in streamed.stream) {
-      chunks.addAll(chunk);
-      if (total > 0) {
-        received += chunk.length;
-        onProgress?.call((received / total).clamp(0.0, 1.0));
+    final ownsClient = cancelToken != null;
+    final client = ownsClient ? http.Client() : _client;
+    if (ownsClient) cancelToken.bindClient(client);
+    try {
+      final req = http.Request('GET', uri);
+      if (!_isPublicMediaUrl(objectKey)) {
+        req.headers.addAll(_headers);
+      }
+      final streamed = await client.send(req);
+      cancelToken?.throwIfCancelled(download: true);
+      if (streamed.statusCode < 200 || streamed.statusCode >= 300) {
+        throw Exception('下载失败: HTTP ${streamed.statusCode}');
+      }
+      final total = streamed.contentLength ?? 0;
+      var received = 0;
+      final chunks = <int>[];
+      await for (final chunk in streamed.stream) {
+        cancelToken?.throwIfCancelled(download: true);
+        chunks.addAll(chunk);
+        if (total > 0) {
+          received += chunk.length;
+          onProgress?.call((received / total).clamp(0.0, 1.0));
+        }
+      }
+      cancelToken?.throwIfCancelled(download: true);
+      if (total <= 0) {
+        onProgress?.call(1.0);
+      }
+      return Uint8List.fromList(chunks);
+    } on ChatDownloadCancelledException {
+      rethrow;
+    } catch (e) {
+      if (cancelToken?.isCancelled == true) {
+        throw const ChatDownloadCancelledException();
+      }
+      rethrow;
+    } finally {
+      if (ownsClient) {
+        try {
+          client.close();
+        } catch (_) {}
       }
     }
-    if (total <= 0) {
-      onProgress?.call(1.0);
-    }
-    return Uint8List.fromList(chunks);
   }
 
   /// IM 语音转文字：上传音频到后端，由服务端代理 SiliconFlow。
@@ -2552,6 +2679,7 @@ class ConversationService {
   Future<Uint8List> loadChatMediaBytes(
     Map<String, dynamic>? payload, {
     void Function(double progress)? onProgress,
+    ChatUploadCancelToken? cancelToken,
   }) async {
     final objectKey = ConversationService.mediaAuthObjectKey(payload);
     if (objectKey.isNotEmpty) {
@@ -2559,6 +2687,7 @@ class ConversationService {
         objectKey: objectKey,
         fileName: mediaFileName(payload),
         onProgress: onProgress,
+        cancelToken: cancelToken,
       );
     }
     final url = mediaDirectUrl(payload);
@@ -2571,11 +2700,16 @@ class ConversationService {
   Future<Uint8List> loadCachedChatMediaBytes(
     Map<String, dynamic>? payload, {
     void Function(double progress)? onProgress,
+    ChatUploadCancelToken? cancelToken,
   }) {
     final objectKey = ConversationService.mediaAuthObjectKey(payload);
     return cachedChatMediaBytes(
       objectKey,
-      () => loadChatMediaBytes(payload, onProgress: onProgress),
+      () => loadChatMediaBytes(
+        payload,
+        onProgress: onProgress,
+        cancelToken: cancelToken,
+      ),
     );
   }
 

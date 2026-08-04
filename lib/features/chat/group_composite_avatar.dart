@@ -4,7 +4,8 @@ import '../conversation/conversation_models.dart';
 import '../conversation/conversation_service.dart';
 import 'user_avatar_widget.dart';
 
-/// 微信风格群聊头像：最多展示 6 位成员头像拼贴（含当前用户）。
+/// 微信风格群聊头像：最多展示 9 位成员头像拼贴（九宫格，含当前用户）。
+/// 外框尺寸由 [size] 决定，格子随人数均分，整体大小不变。
 class GroupCompositeAvatar extends StatelessWidget {
   const GroupCompositeAvatar({
     super.key,
@@ -17,7 +18,7 @@ class GroupCompositeAvatar extends StatelessWidget {
   final double size;
   final ConversationService? avatarService;
 
-  static const _maxMembers = 6;
+  static const _maxMembers = 9;
   static const _gap = 1.0;
   static const _bgColor = Color(0xFFE3E3E3);
   static const _cellRadius = 1.0;
@@ -174,7 +175,9 @@ class GroupCompositeAvatar extends StatelessWidget {
   _GridLayout _layoutFor(int count) {
     if (count <= 2) return _GridLayout(rows: 1, cols: count);
     if (count <= 4) return const _GridLayout(rows: 2, cols: 2);
-    return const _GridLayout(rows: 2, cols: 3);
+    if (count <= 6) return const _GridLayout(rows: 2, cols: 3);
+    // 7–9：九宫格（3×3），外框 size 不变，格子均分缩小。
+    return const _GridLayout(rows: 3, cols: 3);
   }
 }
 

@@ -1,5 +1,7 @@
 import 'dart:typed_data';
 
+import '../conversation/conversation_service.dart';
+
 Future<String?> saveBytesAsFileImpl(Uint8List bytes, String fileName) async {
   throw UnsupportedError('当前平台不支持下载');
 }
@@ -27,6 +29,7 @@ Future<String?> openUrlAsFileImpl(
   void Function(double progress)? onProgress,
   String? cacheKey,
   int? conversationId,
+  ChatUploadCancelToken? cancelToken,
 }) async {
   throw UnsupportedError('当前平台不支持下载');
 }

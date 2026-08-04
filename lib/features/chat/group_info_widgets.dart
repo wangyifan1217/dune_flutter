@@ -223,7 +223,7 @@ class GroupInfoChevron extends StatelessWidget {
   }
 }
 
-/// 企微式成员网格；PC 宽屏固定单元格，避免拉伸。
+/// 企微式成员网格：按可用宽度自适应列数，单元格均分铺满，避免右侧留白。
 class GroupInfoMemberGrid extends StatelessWidget {
   const GroupInfoMemberGrid({
     super.key,
@@ -237,8 +237,11 @@ class GroupInfoMemberGrid extends StatelessWidget {
     this.onRemove,
   });
 
-  static const double cellWidth = 64;
-  static const double cellGap = 12;
+  /// 期望单元格宽度；实际列数按容器宽度推算，再均分铺满。
+  static const double preferredCellWidth = 64;
+  static const double cellGap = 8;
+  static const int minColumns = 4;
+  static const int maxColumns = 6;
 
   final List<NativeGroupMember> members;
   final int selfUserId;
@@ -251,50 +254,82 @@ class GroupInfoMemberGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cells = <Widget>[
-      for (final m in members)
-        SizedBox(
-          width: cellWidth,
-          child: _MemberCell(
-            label: m.displayName,
-            seed: m.userId,
-            avatarPreset: m.avatarPreset,
-            avatarObjectKey: m.avatarObjectKey,
-            avatarService: avatarService,
-            isOwner: m.isOwner,
-            isSelf: m.userId == selfUserId,
-            onTap: onMemberTap == null ? null : () => onMemberTap!(m),
-          ),
-        ),
-      if (showAdd)
-        SizedBox(
-          width: cellWidth,
-          child: _ActionMemberCell(
-            icon: Icons.add,
-            label: '添加',
-            onTap: onAdd,
-          ),
-        ),
-      if (showRemove)
-        SizedBox(
-          width: cellWidth,
-          child: _ActionMemberCell(
-            icon: Icons.remove,
-            label: '移除',
-            onTap: onRemove,
-          ),
-        ),
-    ];
-
     return Container(
       width: double.infinity,
       color: _bgCard,
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
-      child: Wrap(
-        spacing: cellGap,
-        runSpacing: 14,
-        crossAxisAlignment: WrapCrossAlignment.start,
-        children: cells,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final maxW = constraints.maxWidth;
+          var cols = (maxW / preferredCellWidth).floor();
+          cols = cols.clamp(minColumns, maxColumns);
+          final totalItems =
+              members.length + (showAdd ? 1 : 0) + (showRemove ? 1 : 0);
+          // 人数很少时按实际人数分列，同样铺满一行。
+          if (totalItems > 0 && totalItems < cols) {
+            cols = totalItems;
+          }
+          final avatarSize =
+              ((maxW / cols) * 0.58).clamp(40.0, 52.0);
+
+          final cells = <Widget>[
+            for (final m in members)
+              _MemberCell(
+                label: m.displayName,
+                seed: m.userId,
+                avatarSize: avatarSize,
+                avatarPreset: m.avatarPreset,
+                avatarObjectKey: m.avatarObjectKey,
+                avatarService: avatarService,
+                isOwner: m.isOwner,
+                isSelf: m.userId == selfUserId,
+                onTap: onMemberTap == null ? null : () => onMemberTap!(m),
+              ),
+            if (showAdd)
+              _ActionMemberCell(
+                icon: Icons.add,
+                label: '添加',
+                avatarSize: avatarSize,
+                onTap: onAdd,
+              ),
+            if (showRemove)
+              _ActionMemberCell(
+                icon: Icons.remove,
+                label: '移除',
+                avatarSize: avatarSize,
+                onTap: onRemove,
+              ),
+          ];
+
+          final rows = <Widget>[];
+          for (var i = 0; i < cells.length; i += cols) {
+            final rowChildren = <Widget>[];
+            for (var j = 0; j < cols; j++) {
+              if (j > 0) rowChildren.add(const SizedBox(width: cellGap));
+              final idx = i + j;
+              rowChildren.add(
+                Expanded(
+                  child: idx < cells.length
+                      ? cells[idx]
+                      : const SizedBox.shrink(),
+                ),
+              );
+            }
+            rows.add(
+              Padding(
+                padding: EdgeInsets.only(
+                  bottom: i + cols < cells.length ? 14 : 0,
+                ),
+                child: Row(children: rowChildren),
+              ),
+            );
+          }
+
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: rows,
+          );
+        },
       ),
     );
   }
@@ -305,6 +340,7 @@ class _MemberCell extends StatelessWidget {
     required this.label,
     required this.seed,
     required this.avatarService,
+    required this.avatarSize,
     this.avatarPreset,
     this.avatarObjectKey,
     this.isOwner = false,
@@ -315,6 +351,7 @@ class _MemberCell extends StatelessWidget {
   final String label;
   final int seed;
   final ConversationService avatarService;
+  final double avatarSize;
   final String? avatarPreset;
   final String? avatarObjectKey;
   final bool isOwner;
@@ -333,24 +370,21 @@ class _MemberCell extends StatelessWidget {
           ImUserAvatar(
             initial: initial,
             seed: seed,
-            size: 48,
+            size: avatarSize,
             avatarPreset: avatarPreset,
             avatarObjectKey: avatarObjectKey,
             avatarService: avatarService,
             borderRadius: 6,
           ),
           const SizedBox(height: 6),
-          SizedBox(
-            width: 56,
-            child: Text(
-              label,
-              textAlign: TextAlign.center,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: DunesTypography.sans(
-                fontSize: 12,
-                color: _textPrimary,
-              ),
+          Text(
+            label,
+            textAlign: TextAlign.center,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: DunesTypography.sans(
+              fontSize: 12,
+              color: _textPrimary,
             ),
           ),
           if (isOwner || isSelf)
@@ -371,11 +405,13 @@ class _ActionMemberCell extends StatelessWidget {
   const _ActionMemberCell({
     required this.icon,
     required this.label,
+    required this.avatarSize,
     this.onTap,
   });
 
   final IconData icon;
   final String label;
+  final double avatarSize;
   final VoidCallback? onTap;
 
   @override
@@ -387,14 +423,14 @@ class _ActionMemberCell extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Container(
-            width: 48,
-            height: 48,
+            width: avatarSize,
+            height: avatarSize,
             decoration: BoxDecoration(
               color: const Color(0xFFF7F7F7),
               borderRadius: BorderRadius.circular(6),
               border: Border.all(color: const Color(0xFFE5E5E5)),
             ),
-            child: Icon(icon, size: 22, color: _textSecondary),
+            child: Icon(icon, size: avatarSize * 0.46, color: _textSecondary),
           ),
           const SizedBox(height: 6),
           Text(

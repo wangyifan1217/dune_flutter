@@ -1664,6 +1664,8 @@ class ChatFileAttach extends StatelessWidget {
     this.downloaded = false,
     this.uploadProgress,
     this.downloadProgress,
+    this.onCancelUpload,
+    this.onCancelDownload,
   });
 
   final String fileName;
@@ -1680,6 +1682,12 @@ class ChatFileAttach extends StatelessWidget {
 
   /// 0~1；非空时在图标上展示圆形下载进度（与上传互斥优先上传）。
   final double? downloadProgress;
+
+  /// 上传中点击取消。
+  final VoidCallback? onCancelUpload;
+
+  /// 下载中点击取消。
+  final VoidCallback? onCancelDownload;
 
   @override
   Widget build(BuildContext context) {
@@ -1774,7 +1782,35 @@ class ChatFileAttach extends StatelessWidget {
                 ],
               ),
             ),
-            if (downloaded && !busy) ...[
+            if (uploading && onCancelUpload != null) ...[
+              const SizedBox(width: 4),
+              IconButton(
+                tooltip: '取消上传',
+                onPressed: onCancelUpload,
+                visualDensity: VisualDensity.compact,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                icon: const Icon(
+                  Icons.close_rounded,
+                  size: 18,
+                  color: DunesColors.text3,
+                ),
+              ),
+            ] else if (downloading && onCancelDownload != null) ...[
+              const SizedBox(width: 4),
+              IconButton(
+                tooltip: '取消下载',
+                onPressed: onCancelDownload,
+                visualDensity: VisualDensity.compact,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                icon: const Icon(
+                  Icons.close_rounded,
+                  size: 18,
+                  color: DunesColors.text3,
+                ),
+              ),
+            ] else if (downloaded && !busy) ...[
               const SizedBox(width: 8),
               const Icon(
                 Icons.check_circle,

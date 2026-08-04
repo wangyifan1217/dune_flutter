@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 
+import '../conversation/conversation_service.dart';
 import 'file_download_stub.dart'
     if (dart.library.html) 'file_download_web.dart'
     if (dart.library.io) 'file_download_io.dart';
@@ -46,6 +47,7 @@ Future<String?> openUrlAsFile(
   void Function(double progress)? onProgress,
   String? cacheKey,
   int? conversationId,
+  ChatUploadCancelToken? cancelToken,
 }) async {
   final path = await openUrlAsFileImpl(
     url,
@@ -53,6 +55,7 @@ Future<String?> openUrlAsFile(
     onProgress: onProgress,
     cacheKey: cacheKey,
     conversationId: conversationId,
+    cancelToken: cancelToken,
   );
   return path;
 }

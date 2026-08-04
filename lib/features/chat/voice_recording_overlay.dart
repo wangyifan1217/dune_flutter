@@ -196,27 +196,43 @@ class _RecordingCenterPanel extends StatelessWidget {
               color: const Color(0xD926262A),
               borderRadius: BorderRadius.circular(20),
             ),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
+            child: Stack(
+              alignment: Alignment.center,
               children: [
-                SizedBox(
-                  width: 64,
-                  height: 40,
-                  child: _WaveBars(
-                    controller: controller,
-                    barCount: 7,
-                    maxHeight: 38,
-                    barWidth: 3.5,
-                    color: Colors.white,
+                Positioned.fill(
+                  child: IgnorePointer(
+                    child: _BreathingHalo(controller: controller),
                   ),
                 ),
-                const SizedBox(height: 12),
-                Text(
-                  _formatClock(durationMs),
-                  style: DunesTypography.mono(
-                    fontSize: 17,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.white,
+                // Stack 内 Column 对齐基准不同，波形容易被顶到边缘；
+                // 给 Column 固定尺寸，和加光环之前保持一致。
+                SizedBox(
+                  width: 148,
+                  height: 148,
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      SizedBox(
+                        width: 64,
+                        height: 40,
+                        child: _WaveBars(
+                          controller: controller,
+                          barCount: 7,
+                          maxHeight: 38,
+                          barWidth: 3.5,
+                          color: Colors.white,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        _formatClock(durationMs),
+                        style: DunesTypography.mono(
+                          fontSize: 17,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ],
@@ -232,6 +248,35 @@ class _RecordingCenterPanel extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// 面板内侧轻微呼吸的光环。
+class _BreathingHalo extends StatelessWidget {
+  const _BreathingHalo({required this.controller});
+
+  final Animation<double> controller;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: controller,
+      builder: (context, _) {
+        final t = 0.5 + 0.5 * math.sin(controller.value * math.pi * 2);
+        return Padding(
+          padding: const EdgeInsets.all(8),
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(15),
+              border: Border.all(
+                color: Colors.white.withValues(alpha: 0.16 + 0.14 * t),
+                width: 1.2,
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }

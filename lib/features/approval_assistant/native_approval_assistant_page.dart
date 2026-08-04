@@ -12,6 +12,7 @@ import '../conversation/conversation_realtime_hub.dart';
 import '../conversation/conversation_realtime_service.dart';
 import '../conversation/conversation_service.dart';
 import '../conversation/inbox_format.dart';
+import '../desktop/windows_desktop_tray.dart';
 import '../shell/dunes_toast.dart';
 import '../xflow/approval_chat_share.dart';
 import '../xflow/proposal_upload_config.dart';
@@ -83,6 +84,16 @@ class _NativeApprovalAssistantPageState
     super.dispose();
   }
 
+  @override
+  void didUpdateWidget(NativeApprovalAssistantPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // PC 最小化/失焦期间 autoMarkRead=false，新消息会进屏但不上报已读；
+    // 恢复前台后必须补一次，否则托盘会继续按服务端未读闪烁。
+    if (!oldWidget.autoMarkRead && widget.autoMarkRead) {
+      unawaited(_markReadIfViewing());
+    }
+  }
+
   Future<void> _bootstrap() async {
     setState(() {
       _loading = true;
@@ -152,6 +163,8 @@ class _NativeApprovalAssistantPageState
 
   Future<void> _markReadIfViewing() async {
     if (!widget.autoMarkRead || _convId <= 0) return;
+    // PC 最小化/失焦/托盘时禁止已读上报，保持未读并驱动托盘闪烁。
+    if (windowsTrayIsWindowInactive()) return;
     try {
       await _service.markConversationRead(_convId);
       if (!mounted) return;

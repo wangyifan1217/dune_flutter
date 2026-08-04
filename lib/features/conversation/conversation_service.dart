@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
 
@@ -2377,25 +2378,161 @@ class ConversationService {
     );
     final streamed = await _client.send(req).timeout(const Duration(minutes: 2));
     final bodyText = await streamed.stream.bytesToString();
-    if (streamed.statusCode < 200 || streamed.statusCode >= 300) {
-      var msg = '转写失败（${streamed.statusCode}）';
-      try {
-        final decoded = _decode(bodyText);
-        final m = (decoded['message'] ?? '').toString().trim();
-        if (m.isNotEmpty) msg = m;
-      } catch (_) {}
-      throw Exception(msg);
+    if (kDebugMode) {
+      debugPrint(
+        '[voice-asr] status=${streamed.statusCode} bytes=${bytes.length} '
+        'name=$name mime=$mime body=${bodyText.length > 500 ? '${bodyText.substring(0, 500)}…' : bodyText}',
+      );
     }
-    final body = _decode(bodyText);
+    if (streamed.statusCode < 200 || streamed.statusCode >= 300) {
+      throw Exception(
+        voiceAsrErrorMessage(
+          statusCode: streamed.statusCode,
+          bodyText: bodyText,
+        ),
+      );
+    }
+    Map<String, dynamic> body;
+    try {
+      body = _decode(bodyText);
+    } catch (_) {
+      throw Exception('转写响应解析失败，请稍后重试');
+    }
     if (body['success'] == false) {
-      throw Exception((body['message'] ?? '转写失败').toString());
+      throw Exception(
+        voiceAsrErrorMessage(
+          statusCode: streamed.statusCode,
+          bodyText: bodyText,
+          fallback: (body['message'] ?? '转写失败').toString(),
+        ),
+      );
     }
     final data = body['data'];
     if (data is Map) {
       final text = (data['text'] ?? '').toString().trim();
       if (text.isNotEmpty) return text;
     }
-    throw Exception('转写结果无效');
+    final topText = (body['text'] ?? '').toString().trim();
+    if (topText.isNotEmpty) return topText;
+    throw Exception('转写结果为空，请重新录音后再试');
+  }
+
+  /// 把后端 / SiliconFlow 英文错误转成可读中文。
+  static String voiceAsrErrorMessage({
+    required int statusCode,
+    required String bodyText,
+    String? fallback,
+  }) {
+    var raw = (fallback ?? '').trim();
+    try {
+      final decoded = jsonDecode(bodyText);
+      if (decoded is Map) {
+        final map = Map<String, dynamic>.from(decoded);
+        for (final key in const ['message', 'error', 'msg', 'detail']) {
+          final value = map[key];
+          if (value is String && value.trim().isNotEmpty) {
+            raw = value.trim();
+            break;
+          }
+          if (value is Map) {
+            final nested = (value['message'] ?? value['msg'] ?? value['type'])
+                ?.toString()
+                .trim();
+            if (nested != null && nested.isNotEmpty) {
+              raw = nested;
+              break;
+            }
+          }
+        }
+      }
+    } catch (_) {
+      final trimmed = bodyText.trim();
+      if (trimmed.isNotEmpty && trimmed.length < 160) raw = trimmed;
+    }
+
+    final low = raw.toLowerCase();
+    // IM 走腾讯云实时 ASR；Nova 走 glm-asr。两类额度/欠费文案都覆盖。
+    if (low.contains('asr_not_configured') ||
+        low.contains('model_not_found') ||
+        low.contains('glm-asr') ||
+        low.contains('not allow') ||
+        low.contains('not permitted') ||
+        low.contains('credentials are not configured') ||
+        raw.contains('未配置')) {
+      return '语音转写服务未配置或未开通，请联系管理员';
+    }
+    if (low.contains('insufficient') ||
+        low.contains('quota') ||
+        low.contains('balance') ||
+        low.contains('billing') ||
+        low.contains('arrear') ||
+        low.contains('accountarrears') ||
+        low.contains('debt') ||
+        raw.contains('充值') ||
+        raw.contains('欠费') ||
+        raw.contains('余额') ||
+        raw.contains('额度') ||
+        raw.contains('账户') && raw.contains('不足')) {
+      return '语音识别额度不足或账号欠费，请联系管理员充值（腾讯云 ASR）';
+    }
+    if (low.contains('unauthorized') ||
+        low.contains('authfailure') ||
+        low.contains('signature') ||
+        low.contains('secretid')) {
+      return '语音识别鉴权失败，请检查腾讯云 ASR 密钥配置';
+    }
+    if (low.contains('unsupported') ||
+        low.contains('invalid file') ||
+        low.contains('invalid audio') ||
+        low.contains('format') ||
+        low.contains('decode')) {
+      return '语音格式暂不支持识别，请重新录制后再试';
+    }
+    if (low.contains('too large') ||
+        low.contains('payload') ||
+        statusCode == 413) {
+      return '语音文件过大，请缩短录音后再试';
+    }
+    if (low.contains('too short') || low.contains('empty audio')) {
+      return '录音太短或无有效语音，请重新录制';
+    }
+    if (low.contains('timeout') || low.contains('timed out')) {
+      return '转写超时，请稍后重试';
+    }
+    if (low.contains('upstream') || low.contains('temporarily')) {
+      return '语音识别服务暂时不可用，请稍后重试';
+    }
+    if (low.contains('websocket connect') ||
+        low.contains('handshake') ||
+        low.contains('dial tcp') ||
+        low.contains('connection refused')) {
+      return '连接腾讯云 ASR 失败，请检查服务端网络或密钥';
+    }
+    if (low.contains('empty transcription') ||
+        low.contains('returned empty')) {
+      return '未识别到有效语音内容，请靠近麦克风重新录制';
+    }
+    if (low.contains('tencent cloud asr error') ||
+        low.contains('asr error')) {
+      return '腾讯云 ASR 返回错误：$raw';
+    }
+    if (statusCode == 401 || statusCode == 403) {
+      return '语音识别鉴权失败，请重新登录后再试';
+    }
+    if (statusCode == 404) {
+      return '转写接口不存在（404），请确认服务端已部署';
+    }
+    // 后端对腾讯云失败统一回 502，但 body.message 才是根因，优先展示。
+    if (RegExp(r'[\u4e00-\u9fa5]').hasMatch(raw)) return raw;
+    if (raw.isNotEmpty) {
+      return statusCode >= 500
+          ? '转写失败（$statusCode）：$raw'
+          : '转写失败：$raw';
+    }
+    if (statusCode >= 500) {
+      return '转写服务异常（$statusCode），请稍后重试或查看服务端 voice-transcribe 日志';
+    }
+    return '转写失败（$statusCode）';
   }
 
   static String _guessAudioMime(String fileName) {

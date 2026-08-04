@@ -60,6 +60,7 @@ import 'chat_video_widgets.dart';
 import 'chat_voice_player.dart';
 import 'voice_asr_store.dart';
 import 'voice_recording_overlay.dart';
+import 'voice_transcript_panel.dart';
 import 'chat_widgets.dart';
 import 'desktop_screenshot.dart';
 import 'file_download.dart' as file_dl;
@@ -3046,6 +3047,7 @@ class _NativeChatViewState extends State<NativeChatView>
             await _showVoiceTranscriptComposer(
               text,
               originalBytes: bytes,
+              originalFilePath: recorded.path,
               fileName: fileName,
               mimeType: mimeType,
               durationSec: durationSec,
@@ -3053,8 +3055,15 @@ class _NativeChatViewState extends State<NativeChatView>
           }
         } catch (e) {
           if (mounted) {
+            // ASR 错误已在 ConversationService 里转成中文，避免再被友好文案盖掉。
+            final detail = friendlyErrorText(
+              e,
+              fallback: e.toString().replaceFirst(RegExp(r'^Exception:\s*'), ''),
+            );
             _showToast(
-              '转写失败：${friendlyErrorText(e, fallback: '请稍后重试')}',
+              detail.startsWith('转写') || detail.startsWith('语音')
+                  ? detail
+                  : '转写失败：$detail',
               error: true,
             );
           }
@@ -4727,8 +4736,14 @@ class _NativeChatViewState extends State<NativeChatView>
       );
     } catch (e) {
       if (mounted) {
+        final detail = friendlyErrorText(
+          e,
+          fallback: e.toString().replaceFirst(RegExp(r'^Exception:\s*'), ''),
+        );
         _showToast(
-          '转写失败：${friendlyErrorText(e, fallback: '请稍后重试')}',
+          detail.startsWith('转写') || detail.startsWith('语音')
+              ? detail
+              : '转写失败：$detail',
           error: true,
         );
       }
@@ -4738,145 +4753,36 @@ class _NativeChatViewState extends State<NativeChatView>
   Future<void> _showVoiceTranscriptComposer(
     String transcript, {
     Uint8List? originalBytes,
+    String? originalFilePath,
     Future<Uint8List> Function()? loadOriginal,
     required String fileName,
     required String mimeType,
     required int durationSec,
   }) async {
     if (!mounted || transcript.trim().isEmpty) return;
-    final controller = TextEditingController(text: transcript.trim());
-    try {
-      final result = await showModalBottomSheet<_VoiceTranscriptResult>(
-        context: context,
-        isScrollControlled: true,
-        backgroundColor: Colors.transparent,
-        builder: (sheetContext) {
-          final bottom = MediaQuery.viewInsetsOf(sheetContext).bottom;
-          return Padding(
-            padding: EdgeInsets.only(bottom: bottom),
-            child: Material(
-              color: DunesColors.bgApp,
-              borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(20),
-              ),
-              child: SafeArea(
-                top: false,
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(18, 14, 18, 16),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Center(
-                        child: Container(
-                          width: 36,
-                          height: 4,
-                          decoration: BoxDecoration(
-                            color: DunesColors.borderSoft,
-                            borderRadius: BorderRadius.circular(99),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        '语音转文字',
-                        style: DunesTypography.sans(
-                          fontSize: 17,
-                          fontWeight: FontWeight.w700,
-                          color: DunesColors.text,
-                        ),
-                      ),
-                      const SizedBox(height: 5),
-                      Text(
-                        '可编辑识别内容，也可以发送原语音',
-                        style: DunesTypography.sans(
-                          fontSize: 12,
-                          color: DunesColors.text3,
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      TextField(
-                        controller: controller,
-                        autofocus: true,
-                        minLines: 2,
-                        maxLines: 5,
-                        textInputAction: TextInputAction.newline,
-                        decoration: InputDecoration(
-                          hintText: '识别结果',
-                          filled: true,
-                          fillColor: Colors.white,
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: const BorderSide(
-                              color: DunesColors.borderSoft,
-                            ),
-                          ),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: const BorderSide(
-                              color: DunesColors.borderSoft,
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 14),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: OutlinedButton(
-                              onPressed: () => Navigator.of(sheetContext).pop(),
-                              child: const Text('取消'),
-                            ),
-                          ),
-                          if (originalBytes != null || loadOriginal != null) ...[
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: OutlinedButton.icon(
-                                onPressed: () => Navigator.of(sheetContext).pop(
-                                  const _VoiceTranscriptResult.original(),
-                                ),
-                                icon: const Icon(Icons.mic_none_rounded),
-                                label: const Text('发原语音'),
-                              ),
-                            ),
-                          ],
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: FilledButton(
-                              onPressed: () {
-                                final value = controller.text.trim();
-                                if (value.isEmpty) return;
-                                Navigator.of(sheetContext).pop(
-                                  _VoiceTranscriptResult.text(value),
-                                );
-                              },
-                              child: const Text('发送文字'),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          );
-        },
+    final result = await showVoiceTranscriptPanel(
+      context: context,
+      transcript: transcript,
+      durationSec: durationSec,
+      originalFilePath: originalFilePath,
+      originalBytes: originalFilePath == null ? originalBytes : null,
+      loadOriginalBytes:
+          originalFilePath == null && originalBytes == null
+              ? loadOriginal
+              : null,
+      fileName: fileName,
+    );
+    if (!mounted || result == null) return;
+    if (result.action == VoiceTranscriptAction.text) {
+      await _sendVoiceTranscriptText(result.text);
+    } else {
+      await _sendOriginalVoice(
+        originalBytes: originalBytes,
+        loadOriginal: loadOriginal,
+        fileName: fileName,
+        mimeType: mimeType,
+        durationSec: durationSec,
       );
-      if (!mounted || result == null) return;
-      if (result.kind == _VoiceTranscriptResultKind.text) {
-        await _sendVoiceTranscriptText(result.text);
-      } else if (originalBytes != null || loadOriginal != null) {
-        await _sendOriginalVoice(
-          originalBytes: originalBytes,
-          loadOriginal: loadOriginal,
-          fileName: fileName,
-          mimeType: mimeType,
-          durationSec: durationSec,
-        );
-      }
-    } finally {
-      controller.dispose();
     }
   }
 
@@ -7320,21 +7226,6 @@ class _NativeChatViewState extends State<NativeChatView>
       child: scaffold,
     );
   }
-}
-
-enum _VoiceTranscriptResultKind { text, original }
-
-class _VoiceTranscriptResult {
-  const _VoiceTranscriptResult._(this.kind, this.text);
-
-  const _VoiceTranscriptResult.text(String value)
-      : this._(_VoiceTranscriptResultKind.text, value);
-
-  const _VoiceTranscriptResult.original()
-      : this._(_VoiceTranscriptResultKind.original, '');
-
-  final _VoiceTranscriptResultKind kind;
-  final String text;
 }
 
 class _GroupReadPerson {

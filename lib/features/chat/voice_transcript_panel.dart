@@ -8,8 +8,6 @@ import 'chat_voice_player.dart';
 import 'chat_voice_temp_stub.dart'
     if (dart.library.io) 'chat_voice_temp_io.dart' as voice_temp;
 
-const _kWeChatGreen = Color(0xFF07C160);
-
 enum VoiceTranscriptAction { text, original }
 
 class VoiceTranscriptResult {
@@ -25,11 +23,10 @@ class VoiceTranscriptResult {
   final String text;
 }
 
-/// 微信式「语音转文字」全屏面板（图三）。
+/// 微信式「语音转文字」半屏浮层。
 ///
-/// 顶部：取消 ｜ 语音转文字 ｜ 发送原语音；
-/// 内容：悬浮卡片，播放条（播放/波形/时长）与识别文本分层展示，
-/// 点击文本直接编辑；底部：提示语 + 全宽绿色「发送」按钮。
+/// 不再铺满整屏：上方露出聊天内容并压暗，内容在下侧深色面板中，
+/// 底部为「取消 ｜ 发送原语音 ｜ 发送」三个操作胶囊。
 Future<VoiceTranscriptResult?> showVoiceTranscriptPanel({
   required BuildContext context,
   required String transcript,
@@ -44,7 +41,7 @@ Future<VoiceTranscriptResult?> showVoiceTranscriptPanel({
     barrierDismissible: false,
     barrierLabel: '语音转文字',
     barrierColor: Colors.transparent,
-    transitionDuration: const Duration(milliseconds: 260),
+    transitionDuration: const Duration(milliseconds: 240),
     pageBuilder: (routeContext, animation, secondaryAnimation) {
       return VoiceTranscriptPanel(
         transcript: transcript,
@@ -63,7 +60,7 @@ Future<VoiceTranscriptResult?> showVoiceTranscriptPanel({
       );
       return SlideTransition(
         position: Tween<Offset>(
-          begin: const Offset(0, 0.06),
+          begin: const Offset(0, 0.12),
           end: Offset.zero,
         ).animate(curved),
         child: FadeTransition(opacity: curved, child: child),
@@ -181,71 +178,64 @@ class _VoiceTranscriptPanelState extends State<VoiceTranscriptPanel>
   Widget build(BuildContext context) {
     final viewInsets = MediaQuery.viewInsetsOf(context);
     final viewPadding = MediaQuery.viewPaddingOf(context);
+    final screen = MediaQuery.sizeOf(context);
+    final maxSheetHeight = screen.height * 0.62;
     return Material(
-      color: const Color(0xFFF5F6F7),
-      child: SafeArea(
-        child: Column(
-          children: [
-            _buildHeader(),
-            Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(20, 22, 20, 20),
-                child: Align(
-                  alignment: Alignment.topCenter,
-                  child: ConstrainedBox(
-                    constraints: BoxConstraints(
-                      maxWidth: math.min(
-                        MediaQuery.sizeOf(context).width * 0.9,
-                        560,
-                      ),
+      type: MaterialType.transparency,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          // 露出上层聊天并压暗。
+          const ColoredBox(color: Color(0xA3000000)),
+          Align(
+            alignment: Alignment.bottomCenter,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                maxWidth: math.min(screen.width, 560),
+                maxHeight: maxSheetHeight,
+              ),
+              child: Container(
+                decoration: const BoxDecoration(
+                  color: Color(0xFF19191B),
+                  borderRadius: BorderRadius.vertical(
+                    top: Radius.circular(18),
+                  ),
+                ),
+                child: SafeArea(
+                  top: false,
+                  child: Padding(
+                    padding: EdgeInsets.only(
+                      bottom: viewInsets.bottom > 0
+                          ? viewInsets.bottom
+                          : viewPadding.bottom,
                     ),
-                    child: _buildTranscriptCard(),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const SizedBox(height: 6),
+                        // 顶部指示条。
+                        Container(
+                          width: 36,
+                          height: 4,
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.22),
+                            borderRadius: BorderRadius.circular(2),
+                          ),
+                        ),
+                        Flexible(
+                          child: SingleChildScrollView(
+                            padding: const EdgeInsets.fromLTRB(16, 14, 16, 6),
+                            child: _buildTranscriptCard(),
+                          ),
+                        ),
+                        _buildActionBar(),
+                      ],
+                    ),
                   ),
                 ),
               ),
             ),
-            _buildBottomBar(viewInsets.bottom + viewPadding.bottom),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildHeader() {
-    return Container(
-      height: 54,
-      decoration: const BoxDecoration(
-        border: Border(bottom: BorderSide(color: Color(0xFFEBECEE))),
-      ),
-      child: Stack(
-        children: [
-          Align(
-            alignment: Alignment.centerLeft,
-            child: _HeaderTextButton(
-              label: '取消',
-              onTap: () => Navigator.of(context).pop(),
-            ),
           ),
-          Center(
-            child: Text(
-              '语音转文字',
-              style: DunesTypography.sans(
-                fontSize: 17,
-                fontWeight: FontWeight.w600,
-                color: DunesColors.text,
-              ),
-            ),
-          ),
-          if (_canSendOriginal)
-            Align(
-              alignment: Alignment.centerRight,
-              child: _HeaderTextButton(
-                label: '发送原语音',
-                onTap: () => Navigator.of(
-                  context,
-                ).pop(const VoiceTranscriptResult.original()),
-              ),
-            ),
         ],
       ),
     );
@@ -253,39 +243,38 @@ class _VoiceTranscriptPanelState extends State<VoiceTranscriptPanel>
 
   Widget _buildTranscriptCard() {
     return Container(
+      width: double.infinity,
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFEEEFF1)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 16,
-            offset: const Offset(0, 4),
-          ),
-        ],
+        color: const Color(0xFF242426),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFF2E2E31)),
       ),
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.fromLTRB(14, 13, 14, 14),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
           _buildPlaybackRow(),
           const Padding(
-            padding: EdgeInsets.symmetric(vertical: 12),
-            child: Divider(height: 1, color: Color(0xFFF0F1F2)),
+            padding: EdgeInsets.symmetric(vertical: 11),
+            child: Divider(height: 1, color: Color(0xFF303034)),
           ),
           TextField(
             controller: _controller,
             minLines: 1,
-            maxLines: null,
+            maxLines: 8,
             style: DunesTypography.sans(
-              fontSize: 16.5,
+              fontSize: 16,
               height: 1.5,
-              color: DunesColors.text,
+              color: Colors.white,
             ),
-            cursorColor: _kWeChatGreen,
-            decoration: const InputDecoration.collapsed(hintText: '识别结果'),
+            cursorColor: const Color(0xFF07C160),
+            decoration: InputDecoration.collapsed(
+              hintText: '识别结果',
+              hintStyle: TextStyle(
+                color: Colors.white.withValues(alpha: 0.4),
+              ),
+            ),
           ),
         ],
       ),
@@ -303,7 +292,7 @@ class _VoiceTranscriptPanelState extends State<VoiceTranscriptPanel>
             const SizedBox(width: 12),
             Expanded(
               child: SizedBox(
-                height: 22,
+                height: 20,
                 child: _VoicePrintBars(
                   controller: _waveController,
                   playing: playing,
@@ -315,7 +304,7 @@ class _VoiceTranscriptPanelState extends State<VoiceTranscriptPanel>
               "${widget.durationSec}''",
               style: DunesTypography.mono(
                 fontSize: 12.5,
-                color: DunesColors.text3,
+                color: Colors.white.withValues(alpha: 0.55),
               ),
             ),
           ],
@@ -327,16 +316,16 @@ class _VoiceTranscriptPanelState extends State<VoiceTranscriptPanel>
   Widget _buildPlayButton(bool playing) {
     if (!_canSendOriginal) {
       return Container(
-        width: 34,
-        height: 34,
-        decoration: const BoxDecoration(
+        width: 30,
+        height: 30,
+        decoration: BoxDecoration(
           shape: BoxShape.circle,
-          color: Color(0xFFD6D8DB),
+          color: Colors.white.withValues(alpha: 0.22),
         ),
-        child: const Icon(
+        child: Icon(
           Icons.play_arrow_rounded,
-          size: 20,
-          color: Colors.white,
+          size: 18,
+          color: Colors.white.withValues(alpha: 0.7),
         ),
       );
     }
@@ -345,109 +334,129 @@ class _VoiceTranscriptPanelState extends State<VoiceTranscriptPanel>
       behavior: HitTestBehavior.opaque,
       child: _preparingPlay
           ? const SizedBox(
-              width: 34,
-              height: 34,
+              width: 30,
+              height: 30,
               child: Padding(
-                padding: EdgeInsets.all(7),
+                padding: EdgeInsets.all(6),
                 child: CircularProgressIndicator(
-                  strokeWidth: 2.2,
-                  color: _kWeChatGreen,
+                  strokeWidth: 2,
+                  color: Color(0xFF07C160),
                 ),
               ),
             )
           : Container(
-              width: 34,
-              height: 34,
+              width: 30,
+              height: 30,
               decoration: const BoxDecoration(
                 shape: BoxShape.circle,
-                color: _kWeChatGreen,
+                color: Color(0xFF07C160),
               ),
               child: Icon(
                 playing ? Icons.pause_rounded : Icons.play_arrow_rounded,
-                size: 20,
+                size: 18,
                 color: Colors.white,
               ),
             ),
     );
   }
 
-  Widget _buildBottomBar(double bottomPadding) {
+  Widget _buildActionBar() {
     return Container(
       width: double.infinity,
-      padding: EdgeInsets.fromLTRB(16, 10, 16, 12 + bottomPadding),
+      padding: const EdgeInsets.fromLTRB(14, 8, 14, 14),
       decoration: const BoxDecoration(
-        color: Colors.white,
-        border: Border(top: BorderSide(color: Color(0xFFEBECEE))),
+        border: Border(top: BorderSide(color: Color(0xFF2A2A2D))),
       ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
+      child: Row(
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(
-                Icons.edit_outlined,
-                size: 13,
-                color: DunesColors.text3,
-              ),
-              const SizedBox(width: 5),
-              Text(
-                '点击文字可以重新编辑或修改，点击发送',
-                style: DunesTypography.sans(
-                  fontSize: 12,
-                  color: DunesColors.text3,
-                ),
-              ),
-            ],
+          _ActionCapsule(
+            label: '取消',
+            onTap: () => Navigator.of(context).pop(),
           ),
-          const SizedBox(height: 10),
-          SizedBox(
-            width: double.infinity,
-            height: 46,
-            child: FilledButton(
-              onPressed: _canSubmit ? _submitText : null,
-              style: FilledButton.styleFrom(
-                backgroundColor: _kWeChatGreen,
-                disabledBackgroundColor: _kWeChatGreen.withValues(alpha: 0.35),
-                foregroundColor: Colors.white,
-                disabledForegroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(23),
-                ),
-              ),
-              child: Text(
-                '发送',
-                style: DunesTypography.sans(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
+          const SizedBox(width: 10),
+          _ActionCapsule(
+            label: '发送原语音',
+            enabled: _canSendOriginal,
+            onTap: () => Navigator.of(
+              context,
+            ).pop(const VoiceTranscriptResult.original()),
           ),
+          const Spacer(),
+          _SendCapsule(enabled: _canSubmit, onTap: _submitText),
         ],
       ),
     );
   }
 }
 
-class _HeaderTextButton extends StatelessWidget {
-  const _HeaderTextButton({required this.label, required this.onTap});
+class _ActionCapsule extends StatelessWidget {
+  const _ActionCapsule({
+    required this.label,
+    required this.onTap,
+    this.enabled = true,
+  });
 
   final String label;
+  final VoidCallback onTap;
+  final bool enabled;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: enabled ? onTap : null,
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        height: 38,
+        padding: const EdgeInsets.symmetric(horizontal: 18),
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: enabled
+              ? const Color(0xFF2E2E31)
+              : const Color(0xFF2E2E31).withValues(alpha: 0.5),
+          borderRadius: BorderRadius.circular(19),
+        ),
+        child: Text(
+          label,
+          style: DunesTypography.sans(
+            fontSize: 14.5,
+            fontWeight: FontWeight.w500,
+            color: enabled
+                ? Colors.white
+                : Colors.white.withValues(alpha: 0.4),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SendCapsule extends StatelessWidget {
+  const _SendCapsule({required this.enabled, required this.onTap});
+
+  final bool enabled;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: onTap,
+      onTap: enabled ? onTap : null,
       behavior: HitTestBehavior.opaque,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      child: Container(
+        height: 38,
+        padding: const EdgeInsets.symmetric(horizontal: 26),
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: enabled
+              ? const Color(0xFF07C160)
+              : const Color(0xFF07C160).withValues(alpha: 0.35),
+          borderRadius: BorderRadius.circular(19),
+        ),
         child: Text(
-          label,
+          '发送',
           style: DunesTypography.sans(
-            fontSize: 15.5,
-            color: DunesColors.text2,
+            fontSize: 14.5,
+            fontWeight: FontWeight.w600,
+            color: Colors.white,
           ),
         ),
       ),
@@ -463,6 +472,7 @@ class _VoicePrintBars extends StatelessWidget {
   final bool playing;
 
   static const _barCount = 24;
+  static const _green = Color(0xFF07C160);
 
   @override
   Widget build(BuildContext context) {
@@ -474,16 +484,16 @@ class _VoicePrintBars extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.center,
           children: List.generate(_barCount, (index) {
             final seed = (math.sin(index * 1.73) + math.sin(index * 0.61)).abs();
-            final base = 4 + (seed % 1) * 14;
+            final base = 3 + (seed % 1) * 12;
             final sway = playing
                 ? math.sin(controller.value * math.pi * 2 + index * 0.62).abs() *
-                      8
+                      7
                 : 0.0;
             return Container(
               width: 2.5,
               height: base + sway,
               decoration: BoxDecoration(
-                color: _kWeChatGreen.withValues(alpha: playing ? 0.9 : 0.38),
+                color: _green.withValues(alpha: playing ? 0.95 : 0.42),
                 borderRadius: BorderRadius.circular(2),
               ),
             );

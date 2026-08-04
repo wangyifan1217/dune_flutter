@@ -14,6 +14,9 @@ enum VoiceHoldAction { none, send, transcribe, cancel }
 /// 底部操作面板高度（贴屏幕底部，与手势判定共用同一份几何）。
 const kVoiceRecordingOverlayHeight = 300.0;
 
+/// IM 语音消息最长时长（到点自动发送）。
+const kVoiceRecordMaxDurationMs = 60 * 1000;
+
 /// 圆圈行中心距面板顶部的距离（与面板内部布局保持一致）。
 const _kCircleRowCenterY = 93.0;
 
@@ -177,6 +180,11 @@ class _RecordingCenterPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final remainSec =
+        ((kVoiceRecordMaxDurationMs - durationMs) / 1000).ceil();
+    final tip = remainSec <= 10 && remainSec > 0
+        ? '还可以说 $remainSec 秒'
+        : '松手发送，上滑选择';
     return Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -216,7 +224,7 @@ class _RecordingCenterPanel extends StatelessWidget {
           ),
           const SizedBox(height: 20),
           Text(
-            '松手发送，上滑取消',
+            tip,
             style: DunesTypography.sans(
               fontSize: 13,
               color: Colors.white.withValues(alpha: 0.6),
@@ -246,11 +254,15 @@ class _VoiceActionPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final bottomInset = MediaQuery.viewPaddingOf(context).bottom;
-    final hint = switch (action) {
-      VoiceHoldAction.cancel => '松手取消',
-      VoiceHoldAction.transcribe => '松手转文字',
-      _ => '松手发送',
-    };
+    final remainSec =
+        ((kVoiceRecordMaxDurationMs - durationMs) / 1000).ceil();
+    final hint = remainSec <= 10 && remainSec > 0
+        ? '还可以说 $remainSec 秒'
+        : switch (action) {
+            VoiceHoldAction.cancel => '松手取消',
+            VoiceHoldAction.transcribe => '松手转文字',
+            _ => '松手发送',
+          };
     return Align(
       alignment: Alignment.bottomCenter,
       child: Container(

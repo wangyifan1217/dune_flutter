@@ -34,7 +34,7 @@ import '../chat/native_private_chat_page.dart';
 import '../contacts/contact_models.dart';
 import '../contacts/native_contact_profile_page.dart';
 import '../contacts/native_contacts_page.dart';
-import '../ctrip/native_ctrip_h5_page.dart';
+import '../ctrip/native_ctrip_h5_page_v2.dart';
 import '../conversation/chat_dual_pane_shell.dart';
 import '../conversation/comm_unread_notifier.dart';
 import '../conversation/conversation_inbox_realtime.dart';
@@ -767,8 +767,9 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       }
     } catch (_) {
       // 弱网超时后退避，避免堆积无超时 HTTP 拖死 UI。
-      _workbenchBadgeRefreshBackoffUntil =
-          DateTime.now().add(const Duration(seconds: 15));
+      _workbenchBadgeRefreshBackoffUntil = DateTime.now().add(
+        const Duration(seconds: 15),
+      );
     } finally {
       try {
         httpClient.close();
@@ -898,8 +899,9 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       if (!widget.session.isExternalUser) {
         futures.add(aiSummaryService.fetchUnreadCount());
       }
-      final results = await Future.wait<Object?>(futures)
-          .timeout(const Duration(seconds: 10));
+      final results = await Future.wait<Object?>(
+        futures,
+      ).timeout(const Duration(seconds: 10));
       _commBadgeRefreshBackoffUntil = null;
       final allRows = results[0] as List<NativeConversation>;
       final notif = results[1] as NativeNotificationSummary;
@@ -976,8 +978,9 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       }
     } catch (e, st) {
       // 弱网下无超时会堆积连接拖死 UI；失败后短暂退避。
-      _commBadgeRefreshBackoffUntil =
-          DateTime.now().add(const Duration(seconds: 12));
+      _commBadgeRefreshBackoffUntil = DateTime.now().add(
+        const Duration(seconds: 12),
+      );
       print('[Badge] refresh failed: $e\n$st');
     } finally {
       try {
@@ -2228,8 +2231,14 @@ class _NativeScreenHostState extends State<NativeScreenHost>
               : () => widget.navigation.popTo('B2'),
         );
       case 'CT1':
+        // 每次进入使用独立 key，强制重建 WebView，避免复用一次性 Token/旧 Cookie。
         return NativeCtripH5Page(
+          key: ValueKey<String>(
+            'ctrip-${widget.navigation.history.length}-'
+            '${widget.navigation.history.where((e) => e == 'CT1').length}',
+          ),
           session: widget.session,
+          navigation: widget.navigation,
           embedded: false,
           onBack: () {
             if (widget.navigation.history.contains('QJA')) {

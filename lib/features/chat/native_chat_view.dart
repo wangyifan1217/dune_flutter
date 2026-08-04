@@ -2997,6 +2997,13 @@ class _NativeChatViewState extends State<NativeChatView>
       _recordTicker = Timer.periodic(const Duration(milliseconds: 120), (_) {
         if (!mounted || !_recording) return;
         setState(() => _recordDurationMs += 120);
+        // 最长 60 秒，到点强制发送语音（忽略当前取消/转文字手势）。
+        if (_recordDurationMs >= kVoiceRecordMaxDurationMs) {
+          _recordTicker?.cancel();
+          _recordHoldAction = VoiceHoldAction.none;
+          _showToast('已达最长 60 秒，自动发送');
+          unawaited(_finishHoldRecord());
+        }
       });
     } catch (e) {
       if (e is NativeAudioRecorderBusyException) {

@@ -48,10 +48,27 @@ Future<bool> ensureMicrophonePermission() async {
 
 Future<bool> ensureLocationPermission() async {
   if (kIsWeb) return true;
-  final status = await Permission.locationWhenInUse.status;
-  if (status.isGranted) return true;
-  final result = await Permission.locationWhenInUse.request();
-  return result.isGranted;
+  final whenInUse = await Permission.locationWhenInUse.status;
+  if (whenInUse.isGranted) return true;
+
+  var result = await Permission.locationWhenInUse.request();
+  if (result.isGranted) return true;
+
+  // 部分 Android 机型（含小米）仅申请 locationWhenInUse 不够，再补一次 location。
+  if (!kIsWeb && Platform.isAndroid) {
+    final location = await Permission.location.status;
+    if (location.isGranted) return true;
+    result = await Permission.location.request();
+    if (result.isGranted) return true;
+  }
+  return false;
+}
+
+String locationPermissionHint(PermissionStatus status) {
+  if (status.isPermanentlyDenied || status.isRestricted) {
+    return '定位权限未开启，请在系统设置中允许「沙丘X」使用位置信息';
+  }
+  return '请先允许定位权限，以便携程商旅打车与附近服务正常使用';
 }
 
 String cameraPermissionHint(PermissionStatus status) {

@@ -6,7 +6,9 @@ list(APPEND FLUTTER_PLUGIN_LIST
   desktop_drop
   emoji_picker_flutter
   file_selector_windows
+  flutter_inappwebview_windows
   gal
+  geolocator_windows
   hotkey_manager_windows
   just_audio_windows
   just_screenshot

@@ -1337,6 +1337,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           _searchConversationId = convId;
           _searchTitle = '${group.title} · 搜索';
           _searchReturnScreen = 'C6';
+          _focusMessageId = null;
+          _focusMessageHint = null;
         });
         widget.navigation.go('C12');
       },
@@ -1420,10 +1422,15 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           _focusMessageId = message.id;
           _focusMessageHint = message;
         });
-        if (_searchReturnScreen == 'C5' || _searchReturnScreen == 'C2') {
+        // 群聊信息页的历史入口先经过 C6，但定位结果必须回到 C2 会话内，
+        // 让 NativeChatView 用 focusMessageId 拉取并滚到原消息。
+        final returnScreen = _searchReturnScreen == 'C6'
+            ? 'C2'
+            : _searchReturnScreen;
+        if (returnScreen == 'C5' || returnScreen == 'C2') {
           _markUserEnteredChat();
         }
-        widget.navigation.popTo(_searchReturnScreen);
+        widget.navigation.popTo(returnScreen);
       },
     );
   }
@@ -2426,6 +2433,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
               _searchConversationId = convId;
               _searchTitle = '${_selectedGroup?.title ?? '群聊'} · 搜索';
               _searchReturnScreen = 'C6';
+              _focusMessageId = null;
+              _focusMessageHint = null;
             });
             widget.navigation.go('C12');
           },
@@ -2838,11 +2847,15 @@ class _NativeScreenHostState extends State<NativeScreenHost>
               _focusMessageId = message.id;
               _focusMessageHint = message;
             });
-            if (_searchReturnScreen == 'C5' || _searchReturnScreen == 'C2') {
+            // 从群聊信息 C6 定位时切回 C2，而不是停留在群信息页。
+            final returnScreen = _searchReturnScreen == 'C6'
+                ? 'C2'
+                : _searchReturnScreen;
+            if (returnScreen == 'C5' || returnScreen == 'C2') {
               _markUserEnteredChat();
             }
             // 从历史定位回会话时弹出 C12，避免返回键回到「查找聊天内容」。
-            widget.navigation.popTo(_searchReturnScreen);
+            widget.navigation.popTo(returnScreen);
           },
         );
       case 'C13':

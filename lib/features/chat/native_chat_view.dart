@@ -9,7 +9,7 @@ import 'package:file_selector/file_selector.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart' show ScrollDirection;
+import 'package:flutter/rendering.dart' show RenderBox, ScrollDirection;
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:mime/mime.dart';
@@ -286,8 +286,12 @@ class _NativeChatViewState extends State<NativeChatView>
 
   /// 已存入微盘的 IM 附件 sourceKey（objectKey / url）。
   final Set<String> _driveSavedFileKeys = <String>{};
-  bool _recordWillCancel = false;
+  VoiceHoldAction _recordHoldAction = VoiceHoldAction.none;
   Offset? _recordFocalPoint;
+
+  bool get _recordWillCancel => _recordHoldAction == VoiceHoldAction.cancel;
+  bool get _recordWillTranscribe =>
+      _recordHoldAction == VoiceHoldAction.transcribe;
   bool _loadingOlder = false;
 
   /// prepend 历史消息后正在恢复滚动位置，避免仍停在 maxScrollExtent 连续拉完全部历史。
@@ -334,6 +338,8 @@ class _NativeChatViewState extends State<NativeChatView>
   int _sessionUnreadCount = 0;
   int _firstUnreadMessageId = 0;
   bool _unreadJumpDismissed = false;
+  bool _unreadMessageVisible = false;
+  bool _unreadVisibilityCheckPending = false;
   bool _hasMore = false;
   bool _hasNewer = false;
   int? _highlightMessageId;
@@ -726,6 +732,7 @@ class _NativeChatViewState extends State<NativeChatView>
   void _onScroll() {
     if (!_scrollController.hasClients) return;
     final pos = _scrollController.position;
+    _scheduleUnreadVisibilityCheck();
     // 用户已上滑离开最新端时，清掉进会话贴底标记，避免后续补历史被拽回底部。
     if (pos.pixels > 72) {
       _enterStickBottomPending = false;
@@ -1993,10 +2000,12 @@ class _NativeChatViewState extends State<NativeChatView>
         setState(() {
           _sessionUnreadCount = 0;
           _firstUnreadMessageId = 0;
+          _unreadMessageVisible = false;
         });
       } else {
         _sessionUnreadCount = 0;
         _firstUnreadMessageId = 0;
+        _unreadMessageVisible = false;
       }
       return;
     }
@@ -2018,14 +2027,57 @@ class _NativeChatViewState extends State<NativeChatView>
       _sessionUnreadCount = unread;
       _firstUnreadMessageId = firstId;
       _unreadJumpDismissed = false;
+      _unreadMessageVisible = false;
     });
+    _scheduleUnreadVisibilityCheck();
   }
 
-  bool get _showUnreadJumpBadge =>
-      !_unreadJumpDismissed &&
-      !_locatedMode &&
-      _sessionUnreadCount > 0 &&
-      _firstUnreadMessageId > 0;
+  bool get _showUnreadJumpBadge {
+    final available =
+        !_unreadJumpDismissed &&
+        !_locatedMode &&
+        _sessionUnreadCount > 0 &&
+        _firstUnreadMessageId > 0;
+    if (!available || isDesktopCommOnly) return available;
+    return !_unreadMessageVisible;
+  }
+
+  /// 只在首条未读确实离开消息列表视口时显示跳转提示。
+  ///
+  /// 不能仅用 scroll offset 推算：消息高度、日期分隔线、图片加载都会改变
+  /// 实际位置。使用消息行和 ListView 视口的 global rect 求交集，分页补历史也
+  /// 不会改变这个判断。
+  bool _isMessageVisibleInViewport(int messageId) {
+    if (messageId <= 0) return false;
+    final itemContext = _scrollRestoreKeys[messageId]?.currentContext;
+    if (itemContext == null) return false;
+    final itemRender = itemContext.findRenderObject();
+    if (itemRender is! RenderBox || !itemRender.hasSize) return false;
+    final scrollable = Scrollable.maybeOf(itemContext);
+    final viewportRender = scrollable?.context.findRenderObject();
+    if (viewportRender is! RenderBox || !viewportRender.hasSize) return false;
+    final itemRect = itemRender.localToGlobal(Offset.zero) & itemRender.size;
+    final viewportRect =
+        viewportRender.localToGlobal(Offset.zero) & viewportRender.size;
+    if (!itemRect.overlaps(viewportRect)) return false;
+    final top = math.max(itemRect.top, viewportRect.top);
+    final bottom = math.min(itemRect.bottom, viewportRect.bottom);
+    final visibleHeight = bottom - top;
+    final requiredHeight = math.min(40.0, itemRect.height * 0.45);
+    return visibleHeight >= requiredHeight;
+  }
+
+  void _scheduleUnreadVisibilityCheck() {
+    if (_unreadVisibilityCheckPending || _firstUnreadMessageId <= 0) return;
+    _unreadVisibilityCheckPending = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _unreadVisibilityCheckPending = false;
+      if (!mounted || _firstUnreadMessageId <= 0) return;
+      final visible = _isMessageVisibleInViewport(_firstUnreadMessageId);
+      if (visible == _unreadMessageVisible) return;
+      setState(() => _unreadMessageVisible = visible);
+    });
+  }
 
   Future<void> _jumpToFirstUnread() async {
     var targetId = _firstUnreadMessageId;
@@ -2039,7 +2091,9 @@ class _NativeChatViewState extends State<NativeChatView>
     var working = List<NativeChatMessage>.from(_messages)
       ..sort((a, b) => a.id.compareTo(b.id));
     var hasMore = _hasMore;
-    for (var i = 0; i < 24 && mounted && hasMore; i++) {
+    // 按未读数量持续补拉历史，不能只依赖首屏分页；256 页约覆盖 1 万条消息，
+    // 同时保留上限避免服务端游标异常时无限请求。
+    for (var i = 0; i < 256 && mounted && hasMore; i++) {
       final othersCount = working
           .where((m) => m.senderUserId != widget.session.userId && m.id > 0)
           .length;
@@ -2935,7 +2989,7 @@ class _NativeChatViewState extends State<NativeChatView>
       _recordTicker?.cancel();
       setState(() {
         _recording = true;
-        _recordWillCancel = false;
+        _recordHoldAction = VoiceHoldAction.none;
         _recordFocalPoint = focalPoint;
         _recordDurationMs = 0;
       });
@@ -2958,9 +3012,11 @@ class _NativeChatViewState extends State<NativeChatView>
       await _cancelHoldRecordInternal(showHint: true);
       return;
     }
+    final transcribe = !isDesktopCommOnly && _recordWillTranscribe;
     _recordTicker?.cancel();
     setState(() {
       _recording = false;
+      _recordHoldAction = VoiceHoldAction.none;
       _recordFocalPoint = null;
     });
     try {
@@ -2978,13 +3034,40 @@ class _NativeChatViewState extends State<NativeChatView>
           ? 'voice-${DateTime.now().millisecondsSinceEpoch}.m4a'
           : Uri.file(recorded.path).pathSegments.last;
       final mimeType = lookupMimeType(fileName) ?? 'audio/mp4';
+      final durationSec = (recorded.durationMs / 1000).ceil();
+      if (transcribe) {
+        try {
+          // 录音草稿只在当前编辑面板使用，不写入消息转写缓存。
+          final text = await _service.transcribeVoice(
+            bytes: bytes,
+            fileName: fileName,
+          );
+          if (mounted) {
+            await _showVoiceTranscriptComposer(
+              text,
+              originalBytes: bytes,
+              fileName: fileName,
+              mimeType: mimeType,
+              durationSec: durationSec,
+            );
+          }
+        } catch (e) {
+          if (mounted) {
+            _showToast(
+              '转写失败：${friendlyErrorText(e, fallback: '请稍后重试')}',
+              error: true,
+            );
+          }
+        }
+        return;
+      }
       await _guardSend(() async {
         await _service.sendAudio(
           conversationId: conv.id,
           bytes: bytes,
           fileName: fileName,
           mimeType: mimeType,
-          durationSec: (recorded.durationMs / 1000).ceil(),
+          durationSec: durationSec,
         );
       });
     } catch (e) {
@@ -2997,7 +3080,7 @@ class _NativeChatViewState extends State<NativeChatView>
     _recordTicker?.cancel();
     setState(() {
       _recording = false;
-      _recordWillCancel = false;
+      _recordHoldAction = VoiceHoldAction.none;
       _recordFocalPoint = null;
       _recordDurationMs = 0;
     });
@@ -3009,11 +3092,13 @@ class _NativeChatViewState extends State<NativeChatView>
 
   void _onRecordMove(LongPressMoveUpdateDetails details) {
     if (!_recording) return;
-    final overlayTop =
-        MediaQuery.sizeOf(context).height - kVoiceRecordingOverlayHeight;
-    final shouldCancel = details.globalPosition.dy < overlayTop;
+    final action = resolveVoiceHoldAction(
+      details.globalPosition,
+      MediaQuery.sizeOf(context),
+      transcribeEnabled: !isDesktopCommOnly,
+    );
     setState(() {
-      _recordWillCancel = shouldCancel;
+      _recordHoldAction = action;
       _recordFocalPoint = details.globalPosition;
     });
   }
@@ -3834,6 +3919,7 @@ class _NativeChatViewState extends State<NativeChatView>
                     },
               recording: _recording,
               recordWillCancel: _recordWillCancel,
+              recordWillTranscribe: _recordWillTranscribe,
               recordDurationMs: _recordDurationMs,
               onVoiceHoldStart: voiceBlocked
                   ? null
@@ -4586,6 +4672,19 @@ class _NativeChatViewState extends State<NativeChatView>
     return '';
   }
 
+  Future<Uint8List> _loadVoiceBytes(NativeChatMessage m) async {
+    if (ConversationService.hasAuthMedia(m.payload)) {
+      return _service.loadCachedChatMediaBytes(m.payload);
+    }
+    final url = ConversationService.mediaDirectUrl(m.payload).trim();
+    if (url.isEmpty) throw Exception('语音地址为空');
+    final resp = await http.get(Uri.parse(url));
+    if (resp.statusCode < 200 || resp.statusCode >= 300) {
+      throw Exception('下载语音失败 HTTP ${resp.statusCode}');
+    }
+    return resp.bodyBytes;
+  }
+
   Future<void> _transcribeVoiceMessage(NativeChatMessage m) async {
     if (m.kind.toUpperCase() != 'AUDIO') return;
     final key = _voiceAsrKey(messageId: m.id, payload: m.payload);
@@ -4594,37 +4693,38 @@ class _NativeChatViewState extends State<NativeChatView>
       return;
     }
     final existing = VoiceAsrStore.instance.textFor(key);
-    if (existing != null) {
-      _showToast('已转写');
-      return;
-    }
     if (VoiceAsrStore.instance.isLoading(key)) {
       _showToast('正在转写…');
       return;
     }
     try {
-      await VoiceAsrStore.instance.transcribe(
-        key: key,
-        request: () async {
-          late final Uint8List bytes;
-          if (ConversationService.hasAuthMedia(m.payload)) {
-            bytes = await _service.loadCachedChatMediaBytes(m.payload);
-          } else {
-            final url = ConversationService.mediaDirectUrl(m.payload).trim();
-            if (url.isEmpty) throw Exception('语音地址为空');
-            final resp = await http.get(Uri.parse(url));
-            if (resp.statusCode < 200 || resp.statusCode >= 300) {
-              throw Exception('下载语音失败 HTTP ${resp.statusCode}');
-            }
-            bytes = resp.bodyBytes;
-          }
-          return _service.transcribeVoice(
-            bytes: bytes,
-            fileName: _mediaDownloadFileName(m),
+      final text = existing ??
+          await VoiceAsrStore.instance.transcribe(
+            key: key,
+            request: () async {
+              final bytes = await _loadVoiceBytes(m);
+              return _service.transcribeVoice(
+                bytes: bytes,
+                fileName: _mediaDownloadFileName(m),
+              );
+            },
           );
-        },
+      if (!mounted) return;
+      if (isDesktopCommOnly) {
+        _showToast(existing == null ? '转写完成' : '已转写');
+        return;
+      }
+      final fileName = _mediaDownloadFileName(m);
+      final payloadMime = (m.payload?['mimeType'] ?? '').toString().trim();
+      await _showVoiceTranscriptComposer(
+        text,
+        fileName: fileName,
+        mimeType: payloadMime.isEmpty
+            ? (lookupMimeType(fileName) ?? 'audio/mp4')
+            : payloadMime,
+        durationSec: (m.payload?['durationSec'] as num?)?.toInt() ?? 0,
+        loadOriginal: () => _loadVoiceBytes(m),
       );
-      if (mounted) _showToast('转写完成');
     } catch (e) {
       if (mounted) {
         _showToast(
@@ -4633,6 +4733,179 @@ class _NativeChatViewState extends State<NativeChatView>
         );
       }
     }
+  }
+
+  Future<void> _showVoiceTranscriptComposer(
+    String transcript, {
+    Uint8List? originalBytes,
+    Future<Uint8List> Function()? loadOriginal,
+    required String fileName,
+    required String mimeType,
+    required int durationSec,
+  }) async {
+    if (!mounted || transcript.trim().isEmpty) return;
+    final controller = TextEditingController(text: transcript.trim());
+    try {
+      final result = await showModalBottomSheet<_VoiceTranscriptResult>(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: Colors.transparent,
+        builder: (sheetContext) {
+          final bottom = MediaQuery.viewInsetsOf(sheetContext).bottom;
+          return Padding(
+            padding: EdgeInsets.only(bottom: bottom),
+            child: Material(
+              color: DunesColors.bgApp,
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(20),
+              ),
+              child: SafeArea(
+                top: false,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(18, 14, 18, 16),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Center(
+                        child: Container(
+                          width: 36,
+                          height: 4,
+                          decoration: BoxDecoration(
+                            color: DunesColors.borderSoft,
+                            borderRadius: BorderRadius.circular(99),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        '语音转文字',
+                        style: DunesTypography.sans(
+                          fontSize: 17,
+                          fontWeight: FontWeight.w700,
+                          color: DunesColors.text,
+                        ),
+                      ),
+                      const SizedBox(height: 5),
+                      Text(
+                        '可编辑识别内容，也可以发送原语音',
+                        style: DunesTypography.sans(
+                          fontSize: 12,
+                          color: DunesColors.text3,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: controller,
+                        autofocus: true,
+                        minLines: 2,
+                        maxLines: 5,
+                        textInputAction: TextInputAction.newline,
+                        decoration: InputDecoration(
+                          hintText: '识别结果',
+                          filled: true,
+                          fillColor: Colors.white,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(
+                              color: DunesColors.borderSoft,
+                            ),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(
+                              color: DunesColors.borderSoft,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton(
+                              onPressed: () => Navigator.of(sheetContext).pop(),
+                              child: const Text('取消'),
+                            ),
+                          ),
+                          if (originalBytes != null || loadOriginal != null) ...[
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: OutlinedButton.icon(
+                                onPressed: () => Navigator.of(sheetContext).pop(
+                                  const _VoiceTranscriptResult.original(),
+                                ),
+                                icon: const Icon(Icons.mic_none_rounded),
+                                label: const Text('发原语音'),
+                              ),
+                            ),
+                          ],
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: FilledButton(
+                              onPressed: () {
+                                final value = controller.text.trim();
+                                if (value.isEmpty) return;
+                                Navigator.of(sheetContext).pop(
+                                  _VoiceTranscriptResult.text(value),
+                                );
+                              },
+                              child: const Text('发送文字'),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          );
+        },
+      );
+      if (!mounted || result == null) return;
+      if (result.kind == _VoiceTranscriptResultKind.text) {
+        await _sendVoiceTranscriptText(result.text);
+      } else if (originalBytes != null || loadOriginal != null) {
+        await _sendOriginalVoice(
+          originalBytes: originalBytes,
+          loadOriginal: loadOriginal,
+          fileName: fileName,
+          mimeType: mimeType,
+          durationSec: durationSec,
+        );
+      }
+    } finally {
+      controller.dispose();
+    }
+  }
+
+  Future<void> _sendVoiceTranscriptText(String text) async {
+    final conv = _conversation;
+    final value = text.trim();
+    if (conv == null || value.isEmpty || conv.dissolved) return;
+    await _guardSend(() => _service.sendText(conv.id, value));
+  }
+
+  Future<void> _sendOriginalVoice({
+    Uint8List? originalBytes,
+    Future<Uint8List> Function()? loadOriginal,
+    required String fileName,
+    required String mimeType,
+    required int durationSec,
+  }) async {
+    final conv = _conversation;
+    if (conv == null || conv.dissolved) return;
+    await _guardSend(() async {
+      final bytes = originalBytes ?? await loadOriginal!();
+      await _service.sendAudio(
+        conversationId: conv.id,
+        bytes: bytes,
+        fileName: fileName,
+        mimeType: mimeType,
+        durationSec: durationSec,
+      );
+    });
   }
 
   String _mediaSource(Map<String, dynamic>? payload) {
@@ -5422,7 +5695,7 @@ class _NativeChatViewState extends State<NativeChatView>
   Widget _tappableAvatarForMessage(NativeChatMessage m, {required bool mine}) {
     final avatar = _avatarForMessage(m, mine: mine);
     final onOpen = widget.onOpenUser;
-    if (onOpen == null) return avatar;
+    if (onOpen == null && (mine || _messageMultiSelectMode)) return avatar;
 
     final conv = _conversation;
     final userId = mine
@@ -5438,10 +5711,50 @@ class _NativeChatViewState extends State<NativeChatView>
               : '我')
         : (m.senderName.isNotEmpty ? m.senderName : (conv?.displayTitle ?? ''));
     return GestureDetector(
-      onTap: () => onOpen(userId, name),
+      onTap: onOpen == null ? null : () => onOpen(userId, name),
+      // 只响应对方头像：私聊插入姓名，群聊插入 @姓名；保留点击头像打开资料。
+      onLongPress:
+          mine ||
+              isDesktopCommOnly ||
+              _messageMultiSelectMode ||
+              name.trim().isEmpty
+          ? null
+          : () => unawaited(_insertAvatarTarget(name, userId: userId)),
       behavior: HitTestBehavior.opaque,
       child: avatar,
     );
+  }
+
+  Future<void> _insertAvatarTarget(String rawName, {int userId = 0}) async {
+    if (_messageMultiSelectMode || _conversation?.dissolved == true) return;
+    var name = rawName.trim();
+    if (!_isPrivate && userId > 0) {
+      for (final member in _groupMembers) {
+        final memberId = (member['userId'] as num?)?.toInt() ?? 0;
+        if (memberId != userId) continue;
+        final canonical =
+            (member['displayName'] ?? member['name'] ?? '').toString().trim();
+        if (canonical.isNotEmpty) name = canonical;
+        break;
+      }
+    }
+    if (name.isEmpty) return;
+    final current = _inputController.text.trimRight();
+    final prefix = current.isEmpty ? '' : '$current ';
+    final value = '$prefix${_isPrivate ? name : '@$name'} ';
+    _insertingAtMentions = !_isPrivate;
+    _inputController.value = TextEditingValue(
+      text: value,
+      selection: TextSelection.collapsed(offset: value.length),
+    );
+    _insertingAtMentions = false;
+    _closeEmojiPicker();
+    if (!_voiceMode) {
+      _inputFocusNode.requestFocus();
+    } else if (mounted) {
+      setState(() => _voiceMode = false);
+      _inputFocusNode.requestFocus();
+    }
   }
 
   bool _isSystemKind(String kind) {
@@ -5643,6 +5956,7 @@ class _NativeChatViewState extends State<NativeChatView>
           ? () => unawaited(_tryRecallMessage(m))
           : null,
       enableSelection: !_messageMultiSelectMode,
+      selectAllOnLongPress: !isDesktopCommOnly,
     );
   }
 
@@ -6211,6 +6525,7 @@ class _NativeChatViewState extends State<NativeChatView>
         ? '群聊'
         : memberLabel;
     final listEntries = _buildListEntries();
+    _scheduleUnreadVisibilityCheck();
     final selecting = _messageMultiSelectMode;
     final scrollMetrics = _ChatScrollMetrics.fromScreenHeight(
       MediaQuery.sizeOf(context).height,
@@ -6726,42 +7041,68 @@ class _NativeChatViewState extends State<NativeChatView>
                               child: Material(
                                 color: Colors.transparent,
                                 elevation: 0,
-                                borderRadius: BorderRadius.circular(999),
+                                borderRadius: BorderRadius.circular(
+                                  isDesktopCommOnly ? 999 : 14,
+                                ),
                                 child: InkWell(
                                   onTap: () => unawaited(_jumpToFirstUnread()),
-                                  borderRadius: BorderRadius.circular(999),
+                                  borderRadius: BorderRadius.circular(
+                                    isDesktopCommOnly ? 999 : 14,
+                                  ),
                                   child: Ink(
                                     decoration: BoxDecoration(
-                                      borderRadius: BorderRadius.circular(999),
-                                      color: const Color(0xFF07C160),
-                                      boxShadow: const [
+                                      borderRadius: BorderRadius.circular(
+                                        isDesktopCommOnly ? 999 : 14,
+                                      ),
+                                      color: isDesktopCommOnly
+                                          ? const Color(0xFF07C160)
+                                          : Colors.white.withValues(alpha: 0.96),
+                                      border: isDesktopCommOnly
+                                          ? null
+                                          : Border.all(
+                                              color: DunesColors.accent
+                                                  .withValues(alpha: 0.32),
+                                            ),
+                                      boxShadow: [
                                         BoxShadow(
-                                          color: Color(0x33000000),
-                                          blurRadius: 10,
-                                          offset: Offset(0, 3),
+                                          color: const Color(0x33000000),
+                                          blurRadius: isDesktopCommOnly ? 10 : 8,
+                                          offset: Offset(0, isDesktopCommOnly ? 3 : 2),
                                         ),
                                       ],
                                     ),
                                     padding: const EdgeInsets.symmetric(
-                                      horizontal: 12,
-                                      vertical: 8,
+                                      horizontal: 11,
+                                      vertical: 7,
                                     ),
                                     child: Row(
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
+                                        if (!isDesktopCommOnly) ...[
+                                          const Icon(
+                                            Icons.mark_chat_unread_outlined,
+                                            size: 15,
+                                            color: DunesColors.accentDeep,
+                                          ),
+                                          const SizedBox(width: 5),
+                                        ],
                                         Text(
                                           '${_sessionUnreadCount > 99 ? '99+' : _sessionUnreadCount} 条未读',
                                           style: DunesTypography.sans(
                                             fontSize: 12,
                                             fontWeight: FontWeight.w600,
-                                            color: Colors.white,
+                                            color: isDesktopCommOnly
+                                                ? Colors.white
+                                                : DunesColors.accentDeep,
                                           ),
                                         ),
                                         const SizedBox(width: 2),
-                                        const Icon(
+                                        Icon(
                                           Icons.keyboard_arrow_up_rounded,
                                           size: 16,
-                                          color: Colors.white,
+                                          color: isDesktopCommOnly
+                                              ? Colors.white
+                                              : DunesColors.accentDeep,
                                         ),
                                       ],
                                     ),
@@ -6901,7 +7242,8 @@ class _NativeChatViewState extends State<NativeChatView>
               if (_recording)
                 VoiceRecordingOverlay(
                   durationMs: _recordDurationMs,
-                  willCancel: _recordWillCancel,
+                  action: _recordHoldAction,
+                  transcribeEnabled: !isDesktopCommOnly,
                   focalPoint: _recordFocalPoint,
                 ),
               if (_fileDropHovering)
@@ -6978,6 +7320,21 @@ class _NativeChatViewState extends State<NativeChatView>
       child: scaffold,
     );
   }
+}
+
+enum _VoiceTranscriptResultKind { text, original }
+
+class _VoiceTranscriptResult {
+  const _VoiceTranscriptResult._(this.kind, this.text);
+
+  const _VoiceTranscriptResult.text(String value)
+      : this._(_VoiceTranscriptResultKind.text, value);
+
+  const _VoiceTranscriptResult.original()
+      : this._(_VoiceTranscriptResultKind.original, '');
+
+  final _VoiceTranscriptResultKind kind;
+  final String text;
 }
 
 class _GroupReadPerson {

@@ -46,6 +46,14 @@ Future<bool> ensureMicrophonePermission() async {
   return result.isGranted;
 }
 
+Future<bool> ensureLocationPermission() async {
+  if (kIsWeb) return true;
+  final status = await Permission.locationWhenInUse.status;
+  if (status.isGranted) return true;
+  final result = await Permission.locationWhenInUse.request();
+  return result.isGranted;
+}
+
 String cameraPermissionHint(PermissionStatus status) {
   if (status.isPermanentlyDenied || status.isRestricted) {
     return '相机权限未开启，请在系统设置中允许「沙丘X」使用相机';

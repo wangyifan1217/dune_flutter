@@ -63,6 +63,8 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage>
   bool _submitting = false;
   bool _submitSucceeded = false;
   int? _draftProposalId;
+  /// 自动保存草稿对应的业务类型（非销售模板也可能拿到服务端草稿 id）。
+  String? _draftBusinessType;
   Timer? _autosaveTimer;
   int _autosaveSeq = 0;
   String _autosaveHint = '填写中将自动保存草稿';
@@ -101,6 +103,19 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage>
 
   bool get _isNonProposalTemplate =>
       _templateBusinessType.toUpperCase() != 'PROPOSAL';
+
+  /// 本地草稿桶的业务类型：新建非销售表单用模板类型，其余跟编辑上下文。
+  String get _localDraftBusinessType => _isNonProposalTemplate
+      ? _templateBusinessType
+      : (widget.editBusinessType.trim().isEmpty
+            ? 'PROPOSAL'
+            : widget.editBusinessType);
+
+  String get _trackedDraftBusinessType {
+    final tracked = (_draftBusinessType ?? '').trim();
+    if (tracked.isNotEmpty) return tracked;
+    return _localDraftBusinessType;
+  }
 
   String get _editingStatus => _isDynamicSubmission
       ? (_editingSubmission?.status.toLowerCase() ?? '')
@@ -173,9 +188,7 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage>
       unawaited(
         _service.saveLocalDraft(
           Map<String, dynamic>.from(_values),
-          businessType: _isNonProposalTemplate
-              ? _templateBusinessType
-              : widget.editBusinessType,
+          businessType: _localDraftBusinessType,
           businessId: _activeDraftId,
         ),
       );
@@ -217,9 +230,7 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage>
       if (forceLocalFirst) {
         await _service.saveLocalDraft(
           Map<String, dynamic>.from(_values),
-          businessType: _isNonProposalTemplate
-              ? _templateBusinessType
-              : widget.editBusinessType,
+          businessType: _localDraftBusinessType,
           businessId: _activeDraftId,
         );
       }
@@ -229,14 +240,8 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage>
           businessId: widget.editProposalId!,
           formValues: Map<String, dynamic>.from(_values),
         );
-      } else if (_isNonProposalTemplate) {
-        // 非销售模板不要写进 proposal 草稿表，否则提交后会残留假草稿。
-        await _service.saveLocalDraft(
-          Map<String, dynamic>.from(_values),
-          businessType: _templateBusinessType,
-          businessId: _activeDraftId,
-        );
       } else {
+        // 销售 / 非销售统一走模板草稿 API；后端按 businessType 分流落库。
         final res = await _service.submitDraft(
           formValues: Map<String, dynamic>.from(_values),
           proposalId: _activeDraftId,
@@ -244,6 +249,10 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage>
         );
         final pid = _int(res['proposalId'] ?? res['businessId'] ?? res['id']);
         if (pid > 0) _draftProposalId = pid;
+        final bt = (res['businessType'] ?? _templateBusinessType)
+            .toString()
+            .trim();
+        if (bt.isNotEmpty) _draftBusinessType = bt;
       }
       if (!mounted || seq != _autosaveSeq) return;
       setState(() => _autosaveHint = '已自动保存');
@@ -251,9 +260,7 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage>
     } catch (_) {
       await _service.saveLocalDraft(
         Map<String, dynamic>.from(_values),
-        businessType: _isNonProposalTemplate
-            ? _templateBusinessType
-            : widget.editBusinessType,
+        businessType: _localDraftBusinessType,
         businessId: _activeDraftId,
       );
       if (!mounted || seq != _autosaveSeq) return;
@@ -278,8 +285,10 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage>
       final template = await _service.fetchTemplateDetail(
         templateKey: widget.templateKey,
       );
+      // 先挂上模板，便于 _localDraftBusinessType 取到真实业务类型。
+      _template = template;
       final local = await _service.loadLocalDraft(
-        businessType: widget.editBusinessType,
+        businessType: _localDraftBusinessType,
         businessId: widget.editProposalId,
       );
       _values
@@ -293,10 +302,12 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage>
         );
         _editingSubmission = submission;
         _values.addAll(submission.formData);
+        _draftBusinessType = widget.editBusinessType;
       } else if (_isEditing) {
         detail = await _service.fetchProposalDetail(widget.editProposalId!);
         _mergeProposalToForm(detail);
         _draftProposalId = widget.editProposalId;
+        _draftBusinessType = 'PROPOSAL';
       }
       Map<String, dynamic> detailCfg = const {};
       try {
@@ -402,22 +413,28 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage>
         await _clearDraftsAfterSubmit(
           businessType: 'PROPOSAL',
           businessId: widget.editProposalId,
+          reusedDraft: true,
         );
         showDunesToast(context, '已提交审批');
         widget.onSubmitted(widget.editProposalId!, 'PROPOSAL');
         return;
       } else {
+        // 提交时带上自动保存草稿 id，让后端复用 DRAFT 记录（与 admin-web 对齐）。
+        final formValues = Map<String, dynamic>.from(_values);
+        final draftId = _activeDraftId;
+        if (draftId != null && draftId > 0) {
+          formValues['proposalId'] = draftId;
+          formValues['businessId'] = draftId;
+        }
         res = await _service.submitProposal(
-          formValues: _values,
+          formValues: formValues,
           templateKey: widget.templateKey,
-          clearDraftBusinessId: _activeDraftId,
-          clearDraftBusinessType: _isNonProposalTemplate
-              ? _templateBusinessType
-              : widget.editBusinessType,
+          clearDraftBusinessId: draftId,
+          clearDraftBusinessType: _trackedDraftBusinessType,
         );
       }
       final pid = _int(res['businessId'] ?? res['proposalId'] ?? res['id']);
-      final bt = (res['businessType'] ?? _templateBusinessType)
+      final bt = (res['businessType'] ?? _trackedDraftBusinessType)
           .toString()
           .trim();
       final businessType = bt.isEmpty ? 'PROPOSAL' : bt;
@@ -426,6 +443,7 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage>
       await _clearDraftsAfterSubmit(
         businessType: businessType,
         businessId: pid > 0 ? pid : _activeDraftId,
+        reusedDraft: pid > 0 && pid == (_activeDraftId ?? 0),
       );
       showDunesToast(context, '已提交审批');
       if (pid > 0) widget.onSubmitted(pid, businessType);
@@ -441,23 +459,35 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage>
     }
   }
 
-  /// 提交成功后清理：本地草稿 + 自动保存误写入的 proposal 草稿。
+  /// 提交成功后清理本地草稿；若服务端未复用自动保存草稿，再删掉残留 DRAFT。
   Future<void> _clearDraftsAfterSubmit({
     required String businessType,
     int? businessId,
+    bool reusedDraft = false,
   }) async {
     final draftId = _draftProposalId;
+    final draftBt = _trackedDraftBusinessType;
     if (draftId != null && draftId > 0) {
-      try {
-        await _service.deleteProposal(draftId);
-      } catch (_) {}
+      if (!reusedDraft) {
+        try {
+          await _service.deleteDraft(
+            businessType: draftBt,
+            businessId: draftId,
+          );
+        } catch (_) {}
+      }
       _draftProposalId = null;
-    } else if (_isEditing &&
+      _draftBusinessType = null;
+    } else if (!reusedDraft &&
+        _isEditing &&
         !_isDynamicSubmission &&
         (_editingStatus == 'draft') &&
         widget.editProposalId != null) {
       try {
-        await _service.deleteProposal(widget.editProposalId!);
+        await _service.deleteDraft(
+          businessType: widget.editBusinessType,
+          businessId: widget.editProposalId!,
+        );
       } catch (_) {}
     }
     await _service.clearLocalDraft(
@@ -562,7 +592,7 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage>
 
   Future<void> _loadDraft() async {
     final draft = await _service.loadLocalDraft(
-      businessType: widget.editBusinessType,
+      businessType: _localDraftBusinessType,
       businessId: _activeDraftId,
     );
     if (!XflowService.hasMeaningfulDraftValues(draft)) {
@@ -586,13 +616,19 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage>
   Future<void> _clearForm() async {
     setState(_values.clear);
     final oldId = _activeDraftId;
+    final oldBt = _trackedDraftBusinessType;
     _draftProposalId = null;
+    _draftBusinessType = null;
     await _service.clearLocalDraft(
-      businessType: widget.editBusinessType,
+      businessType: oldBt,
       businessId: oldId,
     );
     await _service.clearLocalDraft(
-      businessType: widget.editBusinessType,
+      businessType: oldBt,
+      businessId: null,
+    );
+    await _service.clearLocalDraft(
+      businessType: _localDraftBusinessType,
       businessId: null,
     );
     if (!mounted) return;
@@ -613,6 +649,8 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage>
         return;
       }
       _draftProposalId = pid;
+      final bt = (res['businessType'] ?? _templateBusinessType).toString().trim();
+      if (bt.isNotEmpty) _draftBusinessType = bt;
       if (!mounted) return;
       await _showPushDialog(pid);
     } catch (e) {

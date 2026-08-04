@@ -940,8 +940,9 @@ class XflowService {
     String templateKey = salesTemplateKey,
   }) async {
     final body = <String, dynamic>{...formValues};
-    if (proposalId != null) {
+    if (proposalId != null && proposalId > 0) {
       body['proposalId'] = proposalId;
+      body['businessId'] = proposalId;
     }
     final raw = await _request(
       '/xflow/templates/${Uri.encodeComponent(templateKey)}/draft',
@@ -949,9 +950,16 @@ class XflowService {
       body: body,
     );
     final pid = _int(raw['proposalId'] ?? raw['businessId'] ?? raw['id']);
-    await saveLocalDraft(formValues, businessId: pid > 0 ? pid : proposalId);
+    final bt = (raw['businessType'] ?? 'PROPOSAL').toString().trim();
+    final businessType = bt.isEmpty ? 'PROPOSAL' : bt;
+    await saveLocalDraft(
+      formValues,
+      businessType: businessType,
+      businessId: pid > 0 ? pid : proposalId,
+    );
+    // 新建草稿拿到 id 后，清掉同业务类型的 new 桶，避免下次新建误恢复。
     if (pid > 0 && (proposalId == null || proposalId <= 0)) {
-      await clearLocalDraft(businessId: null);
+      await clearLocalDraft(businessType: businessType, businessId: null);
     }
     return raw;
   }

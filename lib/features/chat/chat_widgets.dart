@@ -352,6 +352,7 @@ class ChatInputBar extends StatelessWidget {
     this.onVoiceHoldCancel,
     this.recording = false,
     this.recordWillCancel = false,
+    this.recordWillTranscribe = false,
     this.recordDurationMs = 0,
     this.enabled = true,
     this.hintText,
@@ -382,6 +383,7 @@ class ChatInputBar extends StatelessWidget {
   final VoidCallback? onVoiceHoldCancel;
   final bool recording;
   final bool recordWillCancel;
+  final bool recordWillTranscribe;
   final int recordDurationMs;
   final bool enabled;
   final String? hintText;
@@ -465,7 +467,9 @@ class ChatInputBar extends StatelessWidget {
                         color: recording
                             ? (recordWillCancel
                                   ? DunesColors.coral
-                                  : const Color(0xFF8B72B7))
+                                  : (recordWillTranscribe
+                                        ? const Color(0xFF3C8B86)
+                                        : const Color(0xFF8B72B7)))
                             : Colors.white,
                         borderRadius: BorderRadius.circular(wide ? 7 : 8),
                         border: recording || !wide
@@ -476,6 +480,8 @@ class ChatInputBar extends StatelessWidget {
                         recording
                             ? (recordWillCancel
                                   ? '松开取消'
+                                  : recordWillTranscribe
+                                  ? '松开转文字 ${(recordDurationMs / 1000).toStringAsFixed(1)}s'
                                   : '松开发送 ${(recordDurationMs / 1000).toStringAsFixed(1)}s')
                             : '按住 说话',
                         style: DunesTypography.sans(
@@ -1041,6 +1047,7 @@ class ChatTextBubble extends StatelessWidget {
     this.onSelectionMulti,
     this.onSelectionRecall,
     this.enableSelection = true,
+    this.selectAllOnLongPress = false,
   });
 
   final String text;
@@ -1053,6 +1060,7 @@ class ChatTextBubble extends StatelessWidget {
   final ValueChanged<String>? onSelectionMulti;
   final VoidCallback? onSelectionRecall;
   final bool enableSelection;
+  final bool selectAllOnLongPress;
 
   String _selectedText(TextEditingValue value) {
     final selection = value.selection;
@@ -1155,6 +1163,16 @@ class ChatTextBubble extends StatelessWidget {
             SelectableText.rich(
               _buildMentionTextSpan(),
               contextMenuBuilder: (context, editableTextState) {
+                // APP 端长按消息时直接选中整条文本，和微信的消息操作习惯一致。
+                // 选区仍由 SelectableText 管理，复制/引用等操作继续复用当前工具栏。
+                final selection = editableTextState.textEditingValue.selection;
+                final needsSelectAll =
+                    !selection.isValid ||
+                    selection.start != 0 ||
+                    selection.end != text.length;
+                if (selectAllOnLongPress && needsSelectAll && text.isNotEmpty) {
+                  editableTextState.selectAll(SelectionChangedCause.longPress);
+                }
                 final selected = _selectedText(
                   editableTextState.textEditingValue,
                 );

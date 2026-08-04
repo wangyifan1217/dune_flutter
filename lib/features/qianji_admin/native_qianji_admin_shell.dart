@@ -396,7 +396,7 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
           icon: Icons.flight_takeoff_outlined,
           color: const Color(0xFF1668E8),
           enabled: true,
-          onTap: () => showDunesSoonToast(context, '对接中'),
+          onTap: () => widget.navigation.go('CT1'),
         ),
     ];
 

@@ -87,7 +87,7 @@ class _NativeNovaPageState extends State<NativeNovaPage>
   bool _voiceMode = false;
   bool _quickActionsOpen = false;
   bool _recording = false;
-  bool _recordWillCancel = false;
+  VoiceHoldAction _recordAction = VoiceHoldAction.none;
   Offset? _recordFocalPoint;
   int _recordDurationMs = 0;
   int? _highlightMessageId;
@@ -2594,7 +2594,7 @@ class _NativeNovaPageState extends State<NativeNovaPage>
       _recordTicker?.cancel();
       setState(() {
         _recording = true;
-        _recordWillCancel = false;
+        _recordAction = VoiceHoldAction.none;
         _recordFocalPoint = focalPoint;
         _recordDurationMs = 0;
       });
@@ -2620,13 +2620,14 @@ class _NativeNovaPageState extends State<NativeNovaPage>
 
   Future<void> _finishHoldRecord() async {
     if (!_recording) return;
-    if (_recordWillCancel) {
+    if (_recordAction == VoiceHoldAction.cancel) {
       await _cancelHoldRecord(showHint: true);
       return;
     }
     _recordTicker?.cancel();
     setState(() {
       _recording = false;
+      _recordAction = VoiceHoldAction.none;
       _recordFocalPoint = null;
     });
     try {
@@ -2690,7 +2691,7 @@ class _NativeNovaPageState extends State<NativeNovaPage>
     _recordTicker?.cancel();
     setState(() {
       _recording = false;
-      _recordWillCancel = false;
+      _recordAction = VoiceHoldAction.none;
       _recordFocalPoint = null;
       _recordDurationMs = 0;
     });
@@ -2703,11 +2704,14 @@ class _NativeNovaPageState extends State<NativeNovaPage>
 
   void _onRecordMove(LongPressMoveUpdateDetails details) {
     if (!_recording) return;
-    final overlayTop =
-        MediaQuery.sizeOf(context).height - kVoiceRecordingOverlayHeight;
-    final shouldCancel = details.globalPosition.dy < overlayTop;
+    // Nova 不支持转文字，操作面板只有「发送 / 取消」两个圆圈。
+    final action = resolveVoiceHoldAction(
+      details.globalPosition,
+      MediaQuery.sizeOf(context),
+      transcribeEnabled: false,
+    );
     setState(() {
-      _recordWillCancel = shouldCancel;
+      _recordAction = action;
       _recordFocalPoint = details.globalPosition;
     });
   }
@@ -3486,7 +3490,8 @@ class _NativeNovaPageState extends State<NativeNovaPage>
                               ? _pickFile
                               : null,
                           recording: _recording,
-                          recordWillCancel: _recordWillCancel,
+                          recordWillCancel:
+                              _recordAction == VoiceHoldAction.cancel,
                           recordDurationMs: _recordDurationMs,
                           onVoiceHoldStart: voiceBlocked
                               ? null
@@ -3504,7 +3509,8 @@ class _NativeNovaPageState extends State<NativeNovaPage>
                 if (_recording)
                   VoiceRecordingOverlay(
                     durationMs: _recordDurationMs,
-                    willCancel: _recordWillCancel,
+                    action: _recordAction,
+                    transcribeEnabled: false,
                     focalPoint: _recordFocalPoint,
                   ),
               ],

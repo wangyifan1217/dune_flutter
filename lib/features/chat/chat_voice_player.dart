@@ -27,19 +27,46 @@ class ChatVoicePlayer extends ChangeNotifier {
     notifyListeners();
     try {
       await _player.setUrl(trimmed);
-      await _player.play();
-      await _stateSub?.cancel();
-      _stateSub = _player.processingStateStream.listen((state) {
-        if (state == ProcessingState.completed) {
-          playingKey = null;
-          notifyListeners();
-        }
-      });
+      await _playCurrent();
     } catch (e) {
       playingKey = null;
       notifyListeners();
       rethrow;
     }
+  }
+
+  /// 播放本地语音文件（如录音草稿回放）。
+  Future<void> toggleFile(String key, String path) async {
+    final trimmed = path.trim();
+    if (trimmed.isEmpty) {
+      throw Exception('语音文件为空');
+    }
+    if (playingKey == key) {
+      await stop();
+      return;
+    }
+    await stop();
+    playingKey = key;
+    notifyListeners();
+    try {
+      await _player.setFilePath(trimmed);
+      await _playCurrent();
+    } catch (e) {
+      playingKey = null;
+      notifyListeners();
+      rethrow;
+    }
+  }
+
+  Future<void> _playCurrent() async {
+    await _player.play();
+    await _stateSub?.cancel();
+    _stateSub = _player.processingStateStream.listen((state) {
+      if (state == ProcessingState.completed) {
+        playingKey = null;
+        notifyListeners();
+      }
+    });
   }
 
   Future<void> stop() async {

@@ -11,6 +11,7 @@ import '../conversation/conversation_models.dart';
 import '../conversation/conversation_service.dart';
 import '../conversation/inbox_format.dart';
 import '../shell/dunes_toast.dart';
+import 'chat_file_type_icon.dart';
 import 'chat_history_filter.dart';
 import 'chat_media_widgets.dart';
 import 'chat_video_widgets.dart';
@@ -434,14 +435,10 @@ class _NativeChatHistoryFilterPageState
           fallback: m.bodyText.isEmpty ? '文件' : m.bodyText,
         );
         return _FilterListTile(
-          leading: Container(
-            width: 42,
-            height: 42,
-            decoration: BoxDecoration(
-              color: DunesColors.blueSoft,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: const Icon(Icons.insert_drive_file_outlined, color: DunesColors.blue),
+          leading: ChatFileTypeIcon(
+            fileName: name,
+            kindHint: m.kind,
+            size: 42,
           ),
           title: name,
           subtitle: '${m.senderName} · ${InboxFormat.formatTime(m.createdAt, withClock: true)}',

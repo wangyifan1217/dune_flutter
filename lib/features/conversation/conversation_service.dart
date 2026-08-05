@@ -162,9 +162,7 @@ class ConversationService {
   Future<int?> fetchTotalUnread() async {
     final uri = _uri('/comm/unread-total');
     final resp = await _client.get(uri, headers: _headers);
-    print(
-      '[BadgeAPI] GET $uri status=${resp.statusCode} body=${resp.body}',
-    );
+    print('[BadgeAPI] GET $uri status=${resp.statusCode} body=${resp.body}');
     if (resp.statusCode == 404) return null;
     if (resp.statusCode < 200 || resp.statusCode >= 300) {
       throw Exception('未读总数加载失败: HTTP ${resp.statusCode} ${resp.body}');
@@ -320,7 +318,8 @@ class ConversationService {
         .map(_mapMessage)
         .toList(growable: false);
     // after 分页：旧后端可能不带 hasNewer，满页时按「还有更新」兼容。
-    final hasNewer = _readBoolField(data, 'hasNewer') ||
+    final hasNewer =
+        _readBoolField(data, 'hasNewer') ||
         (after != null && after > 0 && items.length >= size);
     return NativeMessagePage(
       items: items,
@@ -508,11 +507,8 @@ class ConversationService {
 
   /// 确保任务助手只读会话存在。
   Future<NativeConversation> ensureTaskAssistantSession() async {
-    Future<http.Response> post(String path) => _client.post(
-          _uri(path),
-          headers: _headers,
-          body: '{}',
-        );
+    Future<http.Response> post(String path) =>
+        _client.post(_uri(path), headers: _headers, body: '{}');
     // 线上已代理 `/tasks/assistant` → im-go；`/conversations/task-assistant/ensure`
     // 需新版 im-go，旧版会 400（被当成会话 id），故仅作次选。
     var resp = await post('/tasks/assistant/sessions/ensure');
@@ -530,14 +526,46 @@ class ConversationService {
     final map = data is Map<String, dynamic>
         ? data
         : data is Map
-            ? Map<String, dynamic>.from(data)
-            : <String, dynamic>{};
+        ? Map<String, dynamic>.from(data)
+        : <String, dynamic>{};
     final convId = (map['conversationId'] as num?)?.toInt() ?? 0;
     if (convId <= 0) throw Exception('empty conversationId');
     return NativeConversation(
       id: convId,
       kind: 'TASK_ASSISTANT',
       title: (map['title'] ?? '任务助手').toString(),
+      unreadCount: 0,
+      preview: '',
+      updatedAt: DateTime.now(),
+    );
+  }
+
+  /// 确保“企业微盘”只读会话存在。
+  Future<NativeConversation> ensureDriveAssistantSession() async {
+    final resp = await _client.post(
+      _uri('/conversations/drive-assistant/ensure'),
+      headers: _headers,
+      body: '{}',
+    );
+    if (resp.statusCode < 200 || resp.statusCode >= 300) {
+      throw Exception('打开企业微盘会话失败: HTTP ${resp.statusCode}');
+    }
+    final body = _decode(resp.body);
+    if (body['success'] == false) {
+      throw Exception((body['message'] ?? '打开企业微盘会话失败').toString());
+    }
+    final data = body['data'];
+    final map = data is Map<String, dynamic>
+        ? data
+        : data is Map
+        ? Map<String, dynamic>.from(data)
+        : <String, dynamic>{};
+    final convId = (map['conversationId'] as num?)?.toInt() ?? 0;
+    if (convId <= 0) throw Exception('empty conversationId');
+    return NativeConversation(
+      id: convId,
+      kind: 'DRIVE_ASSISTANT',
+      title: (map['title'] ?? '企业微盘').toString(),
       unreadCount: 0,
       preview: '',
       updatedAt: DateTime.now(),
@@ -631,7 +659,8 @@ class ConversationService {
     if (convIds.isEmpty) {
       throw Exception('请至少选择一位接收人或一个会话');
     }
-    final share = card ??
+    final share =
+        card ??
         ApprovalChatShare(
           businessType: businessType.trim().isEmpty
               ? 'PROPOSAL'
@@ -702,9 +731,7 @@ class ConversationService {
       if (resp.statusCode == 403 && msg.contains('不支持会话')) {
         throw Exception('该机器人仅推送，不支持回复');
       }
-      throw Exception(
-        msg.isEmpty ? '打开机器人会话失败: HTTP ${resp.statusCode}' : msg,
-      );
+      throw Exception(msg.isEmpty ? '打开机器人会话失败: HTTP ${resp.statusCode}' : msg);
     }
     if (body['success'] == false) {
       throw Exception((body['message'] ?? '打开机器人会话失败').toString());
@@ -799,7 +826,9 @@ class ConversationService {
   }) async {
     final msgKind = kind.trim().isEmpty ? 'TEXT' : kind.trim().toUpperCase();
     final msgText = bodyText.trim();
-    final msgPayload = payload == null ? null : Map<String, dynamic>.from(payload);
+    final msgPayload = payload == null
+        ? null
+        : Map<String, dynamic>.from(payload);
     if (msgKind == 'TEXT') {
       await sendText(conversationId, msgText, payload: msgPayload);
       return;
@@ -867,13 +896,7 @@ class ConversationService {
     Uint8List? previewBytes,
     String? previewFileName,
     String? previewMimeType,
-    Future<
-            ({
-              Uint8List bytes,
-              String fileName,
-              String mimeType,
-            })?>?
-        Function()?
+    Future<({Uint8List bytes, String fileName, String mimeType})?>? Function()?
     preparePreview,
     void Function(double progress)? onProgress,
     ChatUploadCancelToken? cancelToken,
@@ -1295,11 +1318,7 @@ class ConversationService {
     String? to,
   }) async {
     final q = Uri.encodeQueryComponent(query.trim());
-    final parts = <String>[
-      'q=$q',
-      'size=$size',
-      'page=$page',
-    ];
+    final parts = <String>['q=$q', 'size=$size', 'page=$page'];
     if (before != null && before > 0) parts.add('before=$before');
     if (from != null && from.isNotEmpty) {
       parts.add('from=${Uri.encodeQueryComponent(from)}');
@@ -1482,6 +1501,118 @@ class ConversationService {
     }
   }
 
+  /// 会话内置顶消息列表（最新在前，最多 5 条）。
+  Future<List<NativePinnedMessage>> fetchPinnedMessages(
+    int conversationId,
+  ) async {
+    if (conversationId <= 0) return const <NativePinnedMessage>[];
+    final resp = await _client.get(
+      _uri('/conversations/$conversationId/pinned-messages'),
+      headers: _headers,
+    );
+    final body = _decode(resp.body);
+    if (resp.statusCode < 200 || resp.statusCode >= 300) {
+      final msg = (body['message'] ?? '').toString().trim();
+      throw Exception(msg.isNotEmpty ? msg : '获取置顶失败: HTTP ${resp.statusCode}');
+    }
+    if (body['success'] == false) {
+      throw Exception((body['message'] ?? '获取置顶失败').toString());
+    }
+    final data = body['data'];
+    final rawItems = data is Map ? data['items'] : null;
+    if (rawItems is! List) return const <NativePinnedMessage>[];
+    return rawItems
+        .whereType<Map>()
+        .map((e) => _mapPinnedMessage(Map<String, dynamic>.from(e)))
+        .toList(growable: false);
+  }
+
+  /// 置顶会话消息（全员可见；超过 5 条会挤掉最早一条）。
+  Future<List<NativePinnedMessage>> pinMessage(
+    int conversationId,
+    int messageId,
+  ) async {
+    final resp = await _client.post(
+      _uri('/conversations/$conversationId/messages/$messageId/pin'),
+      headers: _headers,
+      body: '{}',
+    );
+    final body = _decode(resp.body);
+    if (resp.statusCode < 200 || resp.statusCode >= 300) {
+      final msg = (body['message'] ?? '').toString().trim();
+      throw Exception(msg.isNotEmpty ? msg : '置顶失败: HTTP ${resp.statusCode}');
+    }
+    if (body['success'] == false) {
+      throw Exception((body['message'] ?? '置顶失败').toString());
+    }
+    return _pinnedItemsFromData(body['data']);
+  }
+
+  Future<List<NativePinnedMessage>> unpinMessage(
+    int conversationId,
+    int messageId,
+  ) async {
+    final resp = await _client.delete(
+      _uri('/conversations/$conversationId/messages/$messageId/pin'),
+      headers: _headers,
+    );
+    final body = _decode(resp.body);
+    if (resp.statusCode < 200 || resp.statusCode >= 300) {
+      final msg = (body['message'] ?? '').toString().trim();
+      throw Exception(msg.isNotEmpty ? msg : '取消置顶失败: HTTP ${resp.statusCode}');
+    }
+    if (body['success'] == false) {
+      throw Exception((body['message'] ?? '取消置顶失败').toString());
+    }
+    return _pinnedItemsFromData(body['data']);
+  }
+
+  List<NativePinnedMessage> _pinnedItemsFromData(dynamic data) {
+    final rawItems = data is Map ? data['items'] : null;
+    if (rawItems is! List) return const <NativePinnedMessage>[];
+    return rawItems
+        .whereType<Map>()
+        .map((e) => _mapPinnedMessage(Map<String, dynamic>.from(e)))
+        .toList(growable: false);
+  }
+
+  NativePinnedMessage _mapPinnedMessage(Map<String, dynamic> raw) {
+    final sender = raw['sender'];
+    final senderMap = sender is Map<String, dynamic>
+        ? sender
+        : sender is Map
+        ? Map<String, dynamic>.from(sender)
+        : const <String, dynamic>{};
+    final payloadRaw = raw['payload'];
+    final payload = payloadRaw is Map<String, dynamic>
+        ? payloadRaw
+        : payloadRaw is Map
+        ? Map<String, dynamic>.from(payloadRaw)
+        : null;
+    final kind = (raw['kind'] ?? 'TEXT').toString();
+    final bodyText = (raw['bodyText'] ?? '').toString();
+    final preview = (raw['previewText'] ?? '').toString().trim();
+    return NativePinnedMessage(
+      id: (raw['id'] as num?)?.toInt() ?? 0,
+      conversationId: (raw['conversationId'] as num?)?.toInt() ?? 0,
+      messageId: (raw['messageId'] as num?)?.toInt() ?? 0,
+      kind: kind,
+      bodyText: bodyText,
+      previewText: preview.isNotEmpty
+          ? preview
+          : _compactPreview(kind, bodyText),
+      senderName: (senderMap['displayName'] ?? '').toString().trim(),
+      senderUserId: (senderMap['userId'] as num?)?.toInt(),
+      pinnedByUserId: (raw['pinnedByUserId'] as num?)?.toInt(),
+      pinnedByDisplayName: (raw['pinnedByDisplayName'] ?? '').toString().trim(),
+      payload: payload,
+      pinnedAt: DateTime.tryParse((raw['pinnedAt'] ?? '').toString()),
+      messageCreatedAt: DateTime.tryParse(
+        (raw['messageCreatedAt'] ?? '').toString(),
+      ),
+    );
+  }
+
   /// 收藏消息（快照；原消息撤回后仍可在收藏夹查看）。
   Future<NativeMessageFavorite> favoriteMessage(
     int conversationId,
@@ -1571,15 +1702,17 @@ class ConversationService {
     final senderMap = sender is Map<String, dynamic>
         ? sender
         : sender is Map
-            ? Map<String, dynamic>.from(sender)
-            : const <String, dynamic>{};
+        ? Map<String, dynamic>.from(sender)
+        : const <String, dynamic>{};
     final payloadRaw = raw['payload'];
     final payload = payloadRaw is Map<String, dynamic>
         ? payloadRaw
         : payloadRaw is Map
-            ? Map<String, dynamic>.from(payloadRaw)
-            : null;
-    final preview = (raw['previewText'] ?? raw['bodyText'] ?? '').toString().trim();
+        ? Map<String, dynamic>.from(payloadRaw)
+        : null;
+    final preview = (raw['previewText'] ?? raw['bodyText'] ?? '')
+        .toString()
+        .trim();
     return NativeMessageFavorite(
       id: (raw['id'] as num?)?.toInt() ?? 0,
       conversationId: (raw['conversationId'] as num?)?.toInt() ?? 0,
@@ -1593,8 +1726,9 @@ class ConversationService {
       senderUserId: (senderMap['userId'] as num?)?.toInt(),
       payload: payload,
       favoritedAt: DateTime.tryParse((raw['favoritedAt'] ?? '').toString()),
-      messageCreatedAt:
-          DateTime.tryParse((raw['messageCreatedAt'] ?? '').toString()),
+      messageCreatedAt: DateTime.tryParse(
+        (raw['messageCreatedAt'] ?? '').toString(),
+      ),
     );
   }
 
@@ -1845,6 +1979,9 @@ class ConversationService {
 
   NativeChatMessage mapMessage(Map<String, dynamic> raw) => _mapMessage(raw);
 
+  NativePinnedMessage mapPinnedMessage(Map<String, dynamic> raw) =>
+      _mapPinnedMessage(raw);
+
   NativeConversation _mapConversation(Map<String, dynamic> raw) {
     final peer = raw['peer'];
     var peerMap = peer is Map<String, dynamic>
@@ -2061,8 +2198,7 @@ class ConversationService {
           }
           if (m.senderUserId > 0) {
             final member = avatarByUserId[m.senderUserId];
-            if (member != null &&
-                _hasAvatar(member.preset, member.objectKey)) {
+            if (member != null && _hasAvatar(member.preset, member.objectKey)) {
               return m.copyWith(
                 senderAvatarPreset: member.preset,
                 senderAvatarObjectKey: member.objectKey,
@@ -2241,8 +2377,10 @@ class ConversationService {
   String _compactPreview(String kind, String text) {
     final trimmed = text.trim();
     if (kind == 'IMAGE' ||
-        RegExp(r'^\[(相册|拍照|图片|GIF)\]', caseSensitive: false)
-            .hasMatch(trimmed)) {
+        RegExp(
+          r'^\[(相册|拍照|图片|GIF)\]',
+          caseSensitive: false,
+        ).hasMatch(trimmed)) {
       return '发送了一张图片';
     }
     if (kind == 'AUDIO' || RegExp(r'^\[语音\]').hasMatch(trimmed)) {
@@ -2323,8 +2461,9 @@ class ConversationService {
     ]) {
       final resolved = resolvePublicAttachmentUrl(
         url: (candidate['url'] ?? candidate['previewUrl'] ?? '').toString(),
-        objectKey: (candidate['objectKey'] ?? candidate['previewObjectKey'] ?? '')
-            .toString(),
+        objectKey:
+            (candidate['objectKey'] ?? candidate['previewObjectKey'] ?? '')
+                .toString(),
       );
       if (resolved.isNotEmpty) return resolved;
     }
@@ -2386,10 +2525,7 @@ class ConversationService {
     throw lastError ?? Exception('媒体地址解析失败');
   }
 
-  String mediaProxyUrl(
-    String source, {
-    String bucket = 'im-attachments',
-  }) {
+  String mediaProxyUrl(String source, {String bucket = 'im-attachments'}) {
     final raw = source.trim();
     if (raw.isEmpty) return raw;
     return _uri(
@@ -2503,7 +2639,9 @@ class ConversationService {
         ),
       ),
     );
-    final streamed = await _client.send(req).timeout(const Duration(minutes: 2));
+    final streamed = await _client
+        .send(req)
+        .timeout(const Duration(minutes: 2));
     final bodyText = await streamed.stream.bytesToString();
     if (kDebugMode) {
       debugPrint(
@@ -2635,12 +2773,10 @@ class ConversationService {
         low.contains('connection refused')) {
       return '连接腾讯云 ASR 失败，请检查服务端网络或密钥';
     }
-    if (low.contains('empty transcription') ||
-        low.contains('returned empty')) {
+    if (low.contains('empty transcription') || low.contains('returned empty')) {
       return '未识别到有效语音内容，请靠近麦克风重新录制';
     }
-    if (low.contains('tencent cloud asr error') ||
-        low.contains('asr error')) {
+    if (low.contains('tencent cloud asr error') || low.contains('asr error')) {
       return '腾讯云 ASR 返回错误：$raw';
     }
     if (statusCode == 401 || statusCode == 403) {
@@ -2652,9 +2788,7 @@ class ConversationService {
     // 后端对腾讯云失败统一回 502，但 body.message 才是根因，优先展示。
     if (RegExp(r'[\u4e00-\u9fa5]').hasMatch(raw)) return raw;
     if (raw.isNotEmpty) {
-      return statusCode >= 500
-          ? '转写失败（$statusCode）：$raw'
-          : '转写失败：$raw';
+      return statusCode >= 500 ? '转写失败（$statusCode）：$raw' : '转写失败：$raw';
     }
     if (statusCode >= 500) {
       return '转写服务异常（$statusCode），请稍后重试或查看服务端 voice-transcribe 日志';
@@ -2723,7 +2857,8 @@ class ConversationService {
       previewPayload,
       if (originalPayload != previewPayload) originalPayload,
     ]) {
-      if (payload == null || !ConversationService.hasAuthMedia(payload)) continue;
+      if (payload == null || !ConversationService.hasAuthMedia(payload))
+        continue;
       try {
         return await loadChatMediaBytes(payload);
       } catch (e) {
@@ -2746,7 +2881,8 @@ class ConversationService {
       previewPayload,
       if (originalPayload != previewPayload) originalPayload,
     ]) {
-      if (payload == null || !ConversationService.hasAuthMedia(payload)) continue;
+      if (payload == null || !ConversationService.hasAuthMedia(payload))
+        continue;
       try {
         return await loadCachedChatMediaBytes(payload);
       } catch (e) {
@@ -2769,7 +2905,8 @@ class ConversationService {
       previewPayload,
       if (originalPayload != previewPayload) originalPayload,
     ]) {
-      if (payload == null || !ConversationService.hasAuthMedia(payload)) continue;
+      if (payload == null || !ConversationService.hasAuthMedia(payload))
+        continue;
       final objectKey = ConversationService.mediaAuthObjectKey(payload);
       if (objectKey.isEmpty) continue;
       try {

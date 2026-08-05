@@ -8,6 +8,7 @@ import '../../core/platform/desktop_features.dart';
 import '../../core/theme/dunes_theme.dart';
 import '../../core/util/friendly_error.dart';
 import '../auth/auth_session.dart';
+import '../chat/chat_file_type_icon.dart';
 import '../chat/file_download.dart' as file_dl;
 import '../shell/dunes_toast.dart';
 import 'drive_subpages.dart';
@@ -426,21 +427,7 @@ class _DriveFilePreviewPageState extends State<_DriveFilePreviewPage> {
           child: Column(
             children: [
               const Spacer(flex: 2),
-              Container(
-                width: 72,
-                height: 88,
-                decoration: BoxDecoration(
-                  color: const Color(0xFFEFF6FF),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: const Color(0xFFBFDBFE)),
-                ),
-                alignment: Alignment.center,
-                child: const Icon(
-                  Icons.insert_drive_file_outlined,
-                  size: 36,
-                  color: _driveBlue,
-                ),
-              ),
+              ChatFileTypeIcon(fileName: widget.fileName, size: 64),
               const SizedBox(height: 22),
               Text(
                 widget.fileName,

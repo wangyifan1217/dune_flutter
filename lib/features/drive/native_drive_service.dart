@@ -104,6 +104,19 @@ class NativeDriveService {
     await _patch('/drive/spaces/$spaceId', {'name': name});
   }
 
+  Future<void> updateSpaceNotifications({
+    required int spaceId,
+    required bool notifyOnUpload,
+    required bool notifyOnUpdate,
+    required bool notifyOnDelete,
+  }) async {
+    await _patch('/drive/spaces/$spaceId', {
+      'notifyOnUpload': notifyOnUpload,
+      'notifyOnUpdate': notifyOnUpdate,
+      'notifyOnDelete': notifyOnDelete,
+    });
+  }
+
   Future<void> deleteSpace(int spaceId) => _delete('/drive/spaces/$spaceId');
 
   Future<DriveItem> createFolder({
@@ -130,6 +143,17 @@ class NativeDriveService {
       _post('/drive/trash/$id/restore', const {});
 
   Future<void> purgeTrash(int id) => _delete('/drive/trash/$id');
+
+  Future<DriveItemLocation> fetchItemLocation(int itemId) async {
+    final data = await _get('/drive/items/$itemId/location');
+    final map = data is Map
+        ? Map<String, dynamic>.from(data)
+        : const <String, dynamic>{};
+    if ('${map['status'] ?? ''}'.toLowerCase() == 'deleted') {
+      throw Exception('该文件已删除');
+    }
+    return DriveItemLocation.fromJson(map);
+  }
 
   Future<void> move({required int id, required int spaceId, int? parentId}) =>
       _post('/drive/items/$id/move', {
@@ -203,28 +227,27 @@ class NativeDriveService {
       _delete('/drive/share-links/$linkId');
 
   /// 标记当前用户已将此微盘文件存入自己的知识库。
-  Future<void> markKbSaved(int itemId, {int version = 0}) =>
-      _post('/drive/items/$itemId/kb-save', {
-        if (version > 0) 'version': version,
-      });
+  Future<void> markKbSaved(int itemId, {int version = 0}) => _post(
+    '/drive/items/$itemId/kb-save',
+    {if (version > 0) 'version': version},
+  );
 
   /// 标记当前用户已将此微盘文件下载到本地。
-  Future<void> markDownloaded(int itemId, {int version = 0}) =>
-      _post('/drive/items/$itemId/downloaded', {
-        if (version > 0) 'version': version,
-      });
+  Future<void> markDownloaded(int itemId, {int version = 0}) => _post(
+    '/drive/items/$itemId/downloaded',
+    {if (version > 0) 'version': version},
+  );
 
   /// 标记 IM 附件已存入微盘（按人、按 sourceKey）。
   Future<void> markChatSaved({
     required String sourceKey,
     int driveItemId = 0,
     String fileName = '',
-  }) =>
-      _post('/drive/chat-saves', {
-        'sourceKey': sourceKey,
-        if (driveItemId > 0) 'driveItemId': driveItemId,
-        if (fileName.trim().isNotEmpty) 'fileName': fileName.trim(),
-      });
+  }) => _post('/drive/chat-saves', {
+    'sourceKey': sourceKey,
+    if (driveItemId > 0) 'driveItemId': driveItemId,
+    if (fileName.trim().isNotEmpty) 'fileName': fileName.trim(),
+  });
 
   /// 查询哪些 IM 附件 sourceKey 已存入微盘。
   Future<Set<String>> fetchChatSavedKeys(Iterable<String> keys) async {

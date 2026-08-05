@@ -11,6 +11,9 @@ class DriveSpace {
     this.ownerDisplayName = '',
     this.ownerAvatarPreset = '',
     this.ownerAvatarObjectKey = '',
+    this.notifyOnUpload = false,
+    this.notifyOnUpdate = false,
+    this.notifyOnDelete = false,
   });
 
   final int id;
@@ -24,6 +27,9 @@ class DriveSpace {
   final String ownerDisplayName;
   final String ownerAvatarPreset;
   final String ownerAvatarObjectKey;
+  final bool notifyOnUpload;
+  final bool notifyOnUpdate;
+  final bool notifyOnDelete;
 
   factory DriveSpace.fromJson(Map<String, dynamic> json) => DriveSpace(
     id: _int(json['id']),
@@ -37,7 +43,63 @@ class DriveSpace {
     ownerDisplayName: '${json['ownerDisplayName'] ?? ''}'.trim(),
     ownerAvatarPreset: '${json['ownerAvatarPreset'] ?? ''}'.trim(),
     ownerAvatarObjectKey: '${json['ownerAvatarObjectKey'] ?? ''}'.trim(),
+    notifyOnUpload: json['notifyOnUpload'] == true,
+    notifyOnUpdate: json['notifyOnUpdate'] == true,
+    notifyOnDelete: json['notifyOnDelete'] == true,
   );
+}
+
+class DriveItemLocation {
+  const DriveItemLocation({
+    required this.spaceId,
+    required this.folders,
+    required this.item,
+  });
+
+  final int spaceId;
+  final List<DriveItem> folders;
+  final DriveItem item;
+
+  factory DriveItemLocation.fromJson(Map<String, dynamic> json) {
+    final itemRaw = json['item'];
+    final rawFolders =
+        json['breadcrumb'] ??
+        json['breadcrumbs'] ??
+        json['folders'] ??
+        json['ancestors'];
+    final rawPath = rawFolders is List
+        ? rawFolders.whereType<Map>().toList(growable: false)
+        : const <Map>[];
+    final fallbackItem = rawPath.isNotEmpty
+        ? Map<String, dynamic>.from(rawPath.last)
+        : <String, dynamic>{
+            ...json,
+            'id': json['itemId'] ?? json['id'],
+          };
+    fallbackItem.putIfAbsent('spaceId', () => json['spaceId']);
+    final item = itemRaw is Map
+        ? DriveItem.fromJson(Map<String, dynamic>.from(itemRaw))
+        : DriveItem.fromJson(fallbackItem);
+    final folderRows = itemRaw is Map || rawPath.isEmpty
+        ? rawPath
+        : rawPath.take(rawPath.length - 1);
+    final folders = rawPath.isNotEmpty
+        ? folderRows
+              .map((row) {
+                final map = Map<String, dynamic>.from(row);
+                map.putIfAbsent('type', () => 'FOLDER');
+                map.putIfAbsent('spaceId', () => json['spaceId']);
+                return DriveItem.fromJson(map);
+              })
+              .where((entry) => entry.isFolder)
+              .toList(growable: false)
+        : const <DriveItem>[];
+    return DriveItemLocation(
+      spaceId: _int(json['spaceId'] ?? item.spaceId),
+      folders: folders,
+      item: item,
+    );
+  }
 }
 
 class DriveItem {
@@ -72,9 +134,11 @@ class DriveItem {
   final bool canEdit;
   final bool canManage;
   final DateTime? deletedAt;
+
   /// 当前用户是否已将该文件存入自己的知识库。
   final bool kbSaved;
   final int kbSavedVersion;
+
   /// 当前用户是否已将该文件下载到本地。
   final bool downloaded;
   final int downloadedVersion;

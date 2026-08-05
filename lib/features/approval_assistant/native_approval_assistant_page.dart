@@ -61,7 +61,14 @@ class _NativeApprovalAssistantPageState
   StreamSubscription<ConversationRealtimeEvent>? _rtSub;
   Timer? _rtReloadDebounce;
 
-  int get _convId => widget.conversationHint.id;
+  /// ensure 后得到的真实会话 id（hint.id 可能为 0）。
+  int? _resolvedConvId;
+
+  int get _convId {
+    final hintId = widget.conversationHint.id;
+    if (hintId > 0) return hintId;
+    return _resolvedConvId ?? 0;
+  }
 
   @override
   void initState() {
@@ -69,10 +76,9 @@ class _NativeApprovalAssistantPageState
     _service = ConversationService(session: widget.session);
     _scroll.addListener(_onScrollPosition);
     _bootstrap();
-    _rtSub = ConversationRealtimeHub.instance
-        .of(widget.session)
-        .events
-        .listen(_onRealtime);
+    final realtime = ConversationRealtimeHub.instance.of(widget.session);
+    unawaited(realtime.connect());
+    _rtSub = realtime.events.listen(_onRealtime);
   }
 
   @override
@@ -108,21 +114,19 @@ class _NativeApprovalAssistantPageState
         if (convId <= 0) {
           throw Exception('审批助手会话无效');
         }
-        // conversationHint 是 final，用本地覆盖后续拉取。
         if (!mounted) return;
-        // 通过重新加载消息使用新 id：暂存到 messages 拉取参数。
-        await _reloadMessagesFor(convId);
-        if (widget.autoMarkRead) {
-          await _service.markConversationRead(convId);
-          widget.onConversationRead?.call(convId);
-        }
-        return;
+        _resolvedConvId = convId;
       }
+      unawaited(
+        ConversationRealtimeHub.instance
+            .of(widget.session)
+            .ensureConversationSubscription(convId),
+      );
       if (widget.autoMarkRead) {
         await _service.markConversationRead(convId);
         widget.onConversationRead?.call(convId);
       }
-      await _reloadMessages();
+      await _reloadMessagesFor(convId);
     } catch (e) {
       if (mounted) setState(() => _error = friendlyErrorText(e));
     } finally {
@@ -132,22 +136,28 @@ class _NativeApprovalAssistantPageState
   }
 
   Future<void> _reloadMessagesFor(int convId, {bool silent = false}) async {
-    final list = await _service.fetchMessages(convId);
-    if (!mounted) return;
-    final prevLastId = _messages.isEmpty ? 0 : _messages.last.id;
-    final stick = !_awayFromLatest;
-    setState(() {
-      _messages
-        ..clear()
-        ..addAll(list);
-      if (!silent) _error = null;
-    });
-    final nextLastId = _messages.isEmpty ? 0 : _messages.last.id;
-    if (silent && nextLastId > prevLastId) {
-      unawaited(_markReadIfViewing());
-    }
-    if (stick) {
-      WidgetsBinding.instance.addPostFrameCallback((_) => _jumpBottom());
+    try {
+      final list = await _service.fetchMessages(convId);
+      if (!mounted) return;
+      final prevLastId = _messages.isEmpty ? 0 : _messages.last.id;
+      final stick = !_awayFromLatest;
+      setState(() {
+        _messages
+          ..clear()
+          ..addAll(list);
+        if (!silent) _error = null;
+      });
+      final nextLastId = _messages.isEmpty ? 0 : _messages.last.id;
+      if (silent && nextLastId > prevLastId) {
+        unawaited(_markReadIfViewing());
+      }
+      if (stick) {
+        WidgetsBinding.instance.addPostFrameCallback((_) => _jumpBottom());
+      }
+    } catch (e) {
+      if (!silent && mounted) {
+        setState(() => _error = friendlyErrorText(e));
+      }
     }
   }
 
@@ -173,9 +183,15 @@ class _NativeApprovalAssistantPageState
   }
 
   void _onRealtime(ConversationRealtimeEvent event) {
-    if (event.conversationId != _convId) return;
+    final convId = _convId;
+    if (convId <= 0 || event.conversationId != convId) return;
     if (event.type != 'message' && event.type != 'conversation_updated') {
       return;
+    }
+    // 催办/解释完成后服务端会原地更新同一条 pending 消息（updated:true）。
+    // 先按 id upsert，避免只靠 silent reload 时界面仍停在「正在生成…」。
+    if (event.type == 'message') {
+      _upsertRealtimeMessage(event);
     }
     // 实时推送到达时先清未读，避免列表/角标短暂残留。
     unawaited(_markReadIfViewing());
@@ -184,6 +200,31 @@ class _NativeApprovalAssistantPageState
       if (!mounted) return;
       unawaited(_reloadMessages(silent: true));
     });
+  }
+
+  void _upsertRealtimeMessage(ConversationRealtimeEvent event) {
+    final raw = event.raw['message'];
+    if (raw is! Map) return;
+    try {
+      final msg = _service.mapMessage(Map<String, dynamic>.from(raw));
+      if (msg.id <= 0 || !mounted) return;
+      setState(() {
+        final idx = _messages.indexWhere((m) => m.id == msg.id);
+        if (idx >= 0) {
+          _messages[idx] = msg;
+        } else {
+          _messages.add(msg);
+          _messages.sort((a, b) => a.id.compareTo(b.id));
+        }
+      });
+      if (!_awayFromLatest) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _jumpBottom();
+        });
+      }
+    } catch (_) {
+      // 解析失败时仍走下方 silent reload 兜底。
+    }
   }
 
   void _onScrollPosition() {

@@ -111,6 +111,7 @@ import '../ai_summary/native_ai_summary_create_page.dart';
 import '../ai_summary/native_ai_summary_detail_page.dart';
 import '../ai_summary/native_ai_summary_hub_page.dart';
 import '../drive/native_drive_page.dart';
+import '../drive/native_drive_assistant_page.dart';
 
 class NativeScreenHost extends StatefulWidget {
   const NativeScreenHost({
@@ -141,6 +142,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
   NativeConversation? _selectedRobot;
   NativeConversation? _selectedApprovalAssistant;
   NativeConversation? _selectedTaskAssistant;
+  NativeConversation? _selectedDriveAssistant;
+  int? _driveTargetItemId;
   ApprovalAssistantPickMode _approvalAssistantPickMode =
       ApprovalAssistantPickMode.browse;
 
@@ -219,6 +222,9 @@ class _NativeScreenHostState extends State<NativeScreenHost>
   bool _workbenchBadgeRefreshQueued = false;
   DateTime? _workbenchBadgeRefreshBackoffUntil;
   final Map<int, bool> _mutedConvIds = <int, bool>{};
+  // 用于桌面实时弹框：群聊标题应使用会话名称，而不是消息发送人。
+  final Map<int, NativeConversation> _commBadgeConversations =
+      <int, NativeConversation>{};
   String? _lastScreen;
   int _lastHistoryDepth = 0;
 
@@ -238,7 +244,10 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     debugLabel: 'comm-dual-keep-alive',
   );
 
-  /// 仅在一次 markConversationRead 成功后允许把桌面角标同步为 0。
+  /// 允许在已读回执或重新拿到服务端快照后把桌面角标同步为 0。
+  ///
+  /// APP 可能在后台时收不到 PC 端发出的实时已读事件；下次恢复/启动
+  /// 时必须允许“服务端总未读为 0”清掉遗留的系统角标。
   bool _pendingBadgeZeroSync = false;
 
   /// 用户本次前台会话内主动点进聊天；切后台后清零，避免 resume 误触已读。
@@ -302,6 +311,10 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       final id = _selectedTaskAssistant?.id ?? 0;
       return id > 0 ? id : null;
     }
+    if (screen == 'DA1') {
+      final id = _selectedDriveAssistant?.id ?? 0;
+      return id > 0 ? id : null;
+    }
     return null;
   }
 
@@ -346,7 +359,9 @@ class _NativeScreenHostState extends State<NativeScreenHost>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _pendingBadgeZeroSync = false;
+    // 首次从服务端拿到完整未读快照时，服务端结果可以校正上一次设备
+    // 留下的系统角标（例如 PC 已读、APP 当时处于后台的情况）。
+    _pendingBadgeZeroSync = true;
     unawaited(ConversationRealtimeHub.instance.of(widget.session).connect());
     NovaBackgroundCoordinator.instance.addListener(_onNovaCoordinatorUpdate);
     MeetingUploadCoordinator.instance.attach(widget.session);
@@ -381,6 +396,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       return;
     }
     // 先通知聊天页补拉最新消息，再恢复已读上报，避免缺消息却先标已读。
+    // 窗口恢复时重新以服务端快照校正角标，覆盖 PC/APP 跨端已读。
+    _pendingBadgeZeroSync = true;
     ChatForegroundSync.notifyResumed();
     // 恢复前台且仍停在会话页时，重新允许已读上报。
     if (_isOnActiveChatScreen() && !_userActivelyInChat) {
@@ -391,6 +408,9 @@ class _NativeScreenHostState extends State<NativeScreenHost>
   }
 
   void _requestCommBadgeRefreshFromServer() {
+    // 推送展示/恢复回调意味着设备刚有机会与服务端同步；允许本次
+    // 成功返回 0 时清除可能由其他设备留下的旧角标。
+    _pendingBadgeZeroSync = true;
     _scheduleCommBadgeRefresh();
   }
 
@@ -409,7 +429,9 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       _syncActiveViewReport();
     } else if (state == AppLifecycleState.resumed) {
       // 与托盘 inactive→active 对齐：恢复时补拉当前会话最新消息。
+      _pendingBadgeZeroSync = true;
       ChatForegroundSync.notifyResumed();
+      _scheduleCommBadgeRefresh();
       if (_isOnActiveChatScreen() && !_userActivelyInChat) {
         setState(() => _userActivelyInChat = true);
       }
@@ -586,13 +608,42 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         final rawBody =
             (msg['bodyText'] ?? msg['content'] ?? msg['text'] ?? body)
                 .toString();
-        body = compactMessagePushPreview(kind: kind, body: rawBody);
+        final preview = compactMessagePushPreview(kind: kind, body: rawBody);
         final sender = msg['sender'];
+        var senderName = '';
         if (sender is Map) {
-          final name = (sender['displayName'] ?? sender['name'] ?? '')
+          senderName = (sender['displayName'] ?? sender['name'] ?? '')
               .toString()
               .trim();
-          if (name.isNotEmpty) title = name;
+        }
+
+        final cachedConversation = _commBadgeConversations[convId];
+        final rawTitle =
+            (event.raw['conversationTitle'] ??
+                    event.raw['conversationName'] ??
+                    msg['conversationTitle'] ??
+                    msg['conversationName'] ??
+                    '')
+                .toString()
+                .trim();
+        final conversationTitle = rawTitle.isNotEmpty
+            ? rawTitle
+            : (cachedConversation?.title ?? '').trim();
+        final isPrivate =
+            cachedConversation?.isPrivate == true ||
+            (msg['conversationKind'] ?? event.raw['conversationKind'] ?? '')
+                    .toString()
+                    .trim()
+                    .toUpperCase() ==
+                'PRIVATE';
+        if (!isPrivate && conversationTitle.isNotEmpty) {
+          // 群聊/工作群/广播：标题显示会话名称，发送人放到正文前缀。
+          title = conversationTitle;
+          body = senderName.isEmpty ? preview : '$senderName：$preview';
+        } else {
+          // 私聊保持微信式提示：标题显示对方姓名。
+          title = senderName.isEmpty ? '沙丘' : senderName;
+          body = preview;
         }
       }
     }
@@ -805,7 +856,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         s == 'CR' ||
         s == 'C10' ||
         s == 'AA1' ||
-        s == 'TA1') {
+        s == 'TA1' ||
+        s == 'DA1') {
       return true;
     }
     return (_dualPaneSelectedConversationId ?? 0) > 0;
@@ -827,6 +879,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       return true;
     }
     if (screen == 'TA1' && _selectedTaskAssistant?.id == convId) return true;
+    if (screen == 'DA1' && _selectedDriveAssistant?.id == convId) return true;
     return false;
   }
 
@@ -859,6 +912,10 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     }
     if (screen == 'TA1') {
       final id = _selectedTaskAssistant?.id ?? 0;
+      return id > 0 ? id : null;
+    }
+    if (screen == 'DA1') {
+      final id = _selectedDriveAssistant?.id ?? 0;
       return id > 0 ? id : null;
     }
     return null;
@@ -925,6 +982,11 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       ).timeout(const Duration(seconds: 10));
       _commBadgeRefreshBackoffUntil = null;
       final allRows = results[0] as List<NativeConversation>;
+      _commBadgeConversations
+        ..clear()
+        ..addEntries(
+          allRows.where((c) => c.id > 0).map((c) => MapEntry(c.id, c)),
+        );
       final notif = results[1] as NativeNotificationSummary;
       final hidden = results[2] as Map<String, InboxHiddenEntry>;
       final apiTotal = results[3] as int?;
@@ -989,11 +1051,11 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         windowsTrayUpdateUnread(serverTotal);
         if (serverTotal == 0) {
           if (!_pendingBadgeZeroSync) {
-            print('[Badge] skip sync 0 (no read ack)');
+            print('[Badge] skip sync 0 (no fresh snapshot/read ack)');
             return;
           }
           _pendingBadgeZeroSync = false;
-          print('[Badge] sync 0 after read ack');
+          print('[Badge] sync 0 after fresh snapshot/read ack');
         }
         syncPushBadgeCount(serverTotal);
       }
@@ -1027,6 +1089,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         current == 'CR' ||
         current == 'AA1' ||
         current == 'TA1' ||
+        current == 'DA1' ||
         current == 'RA1') {
       widget.navigation.replaceTop(screenId);
     } else {
@@ -1043,6 +1106,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       _selectedRobot = null;
       _selectedApprovalAssistant = null;
       _selectedTaskAssistant = null;
+      _selectedDriveAssistant = null;
       _focusMessageId = null;
       _focusMessageHint = null;
     });
@@ -1062,6 +1126,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       _selectedGroup = null;
       _selectedApprovalAssistant = null;
       _selectedTaskAssistant = null;
+      _selectedDriveAssistant = null;
       _focusMessageId = null;
       _focusMessageHint = null;
     });
@@ -1120,6 +1185,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       _selectedRobot = null;
       _selectedApprovalAssistant = null;
       _selectedTaskAssistant = null;
+      _selectedDriveAssistant = null;
       _focusMessageId = null;
       _focusMessageHint = null;
     });
@@ -1193,6 +1259,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         _selectedRobot = null;
         _selectedApprovalAssistant = null;
         _selectedTaskAssistant = null;
+        _selectedDriveAssistant = null;
       }
     });
     _markUserLeftChat();
@@ -1241,6 +1308,9 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     if (chatScreen == 'TA1') {
       return _selectedTaskAssistant?.id;
     }
+    if (chatScreen == 'DA1') {
+      return _selectedDriveAssistant?.id;
+    }
     return null;
   }
 
@@ -1252,6 +1322,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     if (screen == 'AS1' || screen == 'AS2' || screen == 'AS3') return screen;
     if (screen == 'AA1' || screen == 'AA2') return screen;
     if (screen == 'TA1') return screen;
+    if (screen == 'DA1') return screen;
     if (screen == 'RA1') return screen;
     if (screen == 'C6') return 'C6';
     if (screen == 'C9' && _profileEmbedsInDualPane) return 'C9';
@@ -1263,6 +1334,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     if (_selectedRobot != null) return 'CR';
     if (_selectedApprovalAssistant != null) return 'AA1';
     if (_selectedTaskAssistant != null) return 'TA1';
+    if (_selectedDriveAssistant != null) return 'DA1';
     return 'C1';
   }
 
@@ -1297,7 +1369,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         screen == 'AA1' ||
         screen == 'AA2' ||
         screen == 'RA1' ||
-        screen == 'TA1';
+        screen == 'TA1' ||
+        screen == 'DA1';
   }
 
   void _onPrivateChatSettingsChanged({
@@ -1565,6 +1638,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       onOpenFavorites: () => widget.navigation.go('CF'),
       onOpenApprovalAssistant: _openApprovalAssistant,
       onOpenTaskAssistant: _openTaskAssistant,
+      onOpenDriveAssistant: _openDriveAssistant,
       // 对账助手暂为静态预览，先屏蔽入口；恢复时改回：
       // !widget.session.isExternalUser ? _openReconciliationAssistant : null
       onOpenReconciliationAssistant: null,
@@ -1582,6 +1656,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       _selectedRobot = null;
       _selectedApprovalAssistant = null;
       _selectedTaskAssistant = null;
+      _selectedDriveAssistant = null;
       _focusMessageId = null;
       _focusMessageHint = null;
     });
@@ -1597,6 +1672,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       _selectedGroup = null;
       _selectedRobot = null;
       _selectedTaskAssistant = null;
+      _selectedDriveAssistant = null;
       _focusMessageId = null;
       _focusMessageHint = null;
       if (hint != null && hint.id > 0) {
@@ -1650,6 +1726,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       _selectedGroup = null;
       _selectedRobot = null;
       _selectedApprovalAssistant = null;
+      _selectedDriveAssistant = null;
       if (hint != null && hint.id > 0) _selectedTaskAssistant = hint;
     });
     if ((_selectedTaskAssistant?.id ?? 0) > 0) {
@@ -1694,6 +1771,68 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       showBackButton: showBackButton,
       onBack: () => _leaveChatToInbox(clearSelection: true),
       onConversationRead: _handleConversationRead,
+    );
+  }
+
+  Future<void> _openDriveAssistant([NativeConversation? hint]) async {
+    setState(() {
+      _selectedPrivate = null;
+      _selectedPrivatePeerUserId = null;
+      _selectedGroup = null;
+      _selectedRobot = null;
+      _selectedApprovalAssistant = null;
+      _selectedTaskAssistant = null;
+      if (hint != null && hint.id > 0) _selectedDriveAssistant = hint;
+    });
+    if ((_selectedDriveAssistant?.id ?? 0) > 0) {
+      _markUserEnteredChat();
+      _goChatScreen('DA1');
+      _conversationReadSignal.notifyRead(_selectedDriveAssistant!.id);
+    }
+    try {
+      final conv = await ConversationService(
+        session: widget.session,
+      ).ensureDriveAssistantSession();
+      if (!mounted) return;
+      setState(() => _selectedDriveAssistant = conv);
+      _conversationReadSignal.notifyRead(conv.id);
+      if (widget.navigation.currentScreen != 'DA1') {
+        _markUserEnteredChat();
+        _goChatScreen('DA1');
+      }
+    } catch (_) {
+      if (mounted && (_selectedDriveAssistant?.id ?? 0) <= 0) {
+        showDunesToast(context, '企业微盘会话同步失败', kind: DunesToastKind.error);
+      }
+    }
+  }
+
+  void _openDriveItemFromChat(int itemId) {
+    if (itemId <= 0) return;
+    setState(() => _driveTargetItemId = itemId);
+    _markUserLeftChat();
+    widget.navigation.go('FD1');
+  }
+
+  Widget _buildDriveAssistantPage({bool showBackButton = true}) {
+    final hint =
+        _selectedDriveAssistant ??
+        const NativeConversation(
+          id: 0,
+          kind: 'DRIVE_ASSISTANT',
+          title: '企业微盘',
+          unreadCount: 0,
+          preview: '',
+          updatedAt: null,
+        );
+    return NativeDriveAssistantPage(
+      key: ValueKey<int>(hint.id),
+      session: widget.session,
+      conversationHint: hint,
+      showBackButton: showBackButton,
+      onBack: () => _leaveChatToInbox(clearSelection: true),
+      onConversationRead: _handleConversationRead,
+      onOpenItem: _openDriveItemFromChat,
     );
   }
 
@@ -1769,6 +1908,9 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     if (screen == 'TA1' || dual == 'TA1') {
       return 'ta';
     }
+    if (screen == 'DA1' || dual == 'DA1') {
+      return 'da';
+    }
     if (screen == 'RA1' || dual == 'RA1') {
       return 'reconciliation';
     }
@@ -1796,6 +1938,9 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     }
     if (screen == 'TA1' || dual == 'TA1') {
       return _DualChatSlot.task(_selectedTaskAssistant);
+    }
+    if (screen == 'DA1' || dual == 'DA1') {
+      return _DualChatSlot.drive(_selectedDriveAssistant);
     }
     if (screen == 'RA1' || dual == 'RA1') {
       return const _DualChatSlot.reconciliation();
@@ -1880,6 +2025,27 @@ class _NativeScreenHostState extends State<NativeScreenHost>
             showBackButton: false,
             onBack: () => _leaveChatToInbox(clearSelection: true),
             onConversationRead: _handleConversationRead,
+          ),
+        );
+      case _DualChatKind.drive:
+        return KeyedSubtree(
+          key: key,
+          child: NativeDriveAssistantPage(
+            session: widget.session,
+            conversationHint:
+                slot.conversation ??
+                const NativeConversation(
+                  id: 0,
+                  kind: 'DRIVE_ASSISTANT',
+                  title: '企业微盘',
+                  unreadCount: 0,
+                  preview: '',
+                  updatedAt: null,
+                ),
+            showBackButton: false,
+            onBack: () => _leaveChatToInbox(clearSelection: true),
+            onConversationRead: _handleConversationRead,
+            onOpenItem: _openDriveItemFromChat,
           ),
         );
       case _DualChatKind.reconciliation:
@@ -2378,6 +2544,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         return _buildApprovalAssistantPendingPage();
       case 'TA1':
         return _buildTaskAssistantPage();
+      case 'DA1':
+        return _buildDriveAssistantPage();
       case 'RA1':
         return NativeReconciliationAssistantPage(
           desktopMode: isDesktopCommOnly,
@@ -2391,9 +2559,15 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         );
       case 'FD1':
         return NativeDrivePage(
+          key: ValueKey<int?>(_driveTargetItemId),
           session: widget.session,
+          initialItemId: _driveTargetItemId,
           onBack: () {
-            if (widget.navigation.history.contains('QJA')) {
+            setState(() => _driveTargetItemId = null);
+            if (widget.navigation.history.contains('DA1')) {
+              _markUserEnteredChat();
+              widget.navigation.popTo('DA1');
+            } else if (widget.navigation.history.contains('QJA')) {
               widget.navigation.popTo('QJA');
             } else {
               widget.navigation.popTo('B2');
@@ -3159,6 +3333,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       'CR',
       'CF',
       'TA1',
+      'DA1',
       'Z2',
       'AS1',
       'AS2',
@@ -5826,7 +6001,15 @@ class _InfoTile extends StatelessWidget {
   }
 }
 
-enum _DualChatKind { robot, private, group, approval, task, reconciliation }
+enum _DualChatKind {
+  robot,
+  private,
+  group,
+  approval,
+  task,
+  drive,
+  reconciliation,
+}
 
 class _DualChatSlot {
   const _DualChatSlot._({
@@ -5870,6 +6053,13 @@ class _DualChatSlot {
   factory _DualChatSlot.task(NativeConversation? conversation) {
     return _DualChatSlot._(
       kind: _DualChatKind.task,
+      conversation: conversation,
+    );
+  }
+
+  factory _DualChatSlot.drive(NativeConversation? conversation) {
+    return _DualChatSlot._(
+      kind: _DualChatKind.drive,
       conversation: conversation,
     );
   }

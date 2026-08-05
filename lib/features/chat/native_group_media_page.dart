@@ -11,6 +11,7 @@ import '../auth/auth_session.dart';
 import '../conversation/conversation_models.dart';
 import '../conversation/conversation_service.dart';
 import '../shell/dunes_toast.dart';
+import 'chat_file_type_icon.dart';
 import 'chat_media_widgets.dart';
 import 'chat_video_widgets.dart';
 import 'cors_safe_image.dart';
@@ -718,28 +719,22 @@ class _FileMediaRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final icon = message.kind == 'AUDIO' ? Icons.audiotrack_outlined : _fileIconForName(message.bodyText);
-    final color = message.kind == 'AUDIO' ? DunesColors.accent : _fileIconColor(message.bodyText);
     return _FilledMediaSlot(
       leading: SizedBox(
-        width: 36,
-        height: 36,
+        width: 40,
+        height: 40,
         child: Stack(
           alignment: Alignment.center,
           children: [
-            Container(
-              width: 36,
-              height: 36,
-              decoration: BoxDecoration(
-                color: DunesColors.bgSoft,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Icon(icon, color: color, size: 20),
+            ChatFileTypeIcon(
+              fileName: message.bodyText,
+              kindHint: message.kind,
+              size: 40,
             ),
             if (downloading)
               Container(
-                width: 36,
-                height: 36,
+                width: 40,
+                height: 40,
                 decoration: BoxDecoration(
                   color: Colors.black.withValues(alpha: 0.28),
                   borderRadius: BorderRadius.circular(8),
@@ -819,22 +814,4 @@ String _timeLabel(DateTime? at) {
     return '昨 ${pad(local.hour)}:${pad(local.minute)}';
   }
   return '${local.month}-${pad(local.day)}';
-}
-
-IconData _fileIconForName(String name) {
-  final lower = name.toLowerCase();
-  if (lower.contains('.xls')) return Icons.table_chart_outlined;
-  if (lower.contains('.doc')) return Icons.description_outlined;
-  if (lower.contains('.pdf')) return Icons.picture_as_pdf_outlined;
-  if (lower.contains('.zip') || lower.contains('.rar')) return Icons.folder_zip_outlined;
-  return Icons.insert_drive_file_outlined;
-}
-
-Color _fileIconColor(String name) {
-  final lower = name.toLowerCase();
-  if (lower.contains('.xls')) return const Color(0xFF1D9E75);
-  if (lower.contains('.doc')) return const Color(0xFF185FA5);
-  if (lower.contains('.pdf')) return DunesColors.coral;
-  if (lower.contains('.zip') || lower.contains('.rar')) return DunesColors.amber;
-  return DunesColors.text2;
 }

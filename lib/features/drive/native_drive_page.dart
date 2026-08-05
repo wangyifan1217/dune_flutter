@@ -10,6 +10,7 @@ import '../../core/platform/desktop_features.dart';
 import '../../core/theme/dunes_theme.dart';
 import '../../core/util/friendly_error.dart';
 import '../auth/auth_session.dart';
+import '../chat/chat_file_type_icon.dart';
 import '../chat/user_avatar_widget.dart';
 import '../conversation/conversation_service.dart';
 import '../shell/dunes_toast.dart';
@@ -33,12 +34,14 @@ class NativeDrivePage extends StatefulWidget {
     this.onBack,
     this.embedded = false,
     this.onChromeChanged,
+    this.initialItemId,
   });
 
   final AuthSession session;
   final VoidCallback? onBack;
   final bool embedded;
   final ValueChanged<TaskShellChrome>? onChromeChanged;
+  final int? initialItemId;
 
   @override
   State<NativeDrivePage> createState() => _NativeDrivePageState();
@@ -62,17 +65,17 @@ class _NativeDrivePageState extends State<NativeDrivePage> {
   bool _dragging = false;
   String? _error;
   final Set<String> _toastedErrorJobIds = <String>{};
+  int? _pendingInitialItemId;
+  bool _openingInitialItem = false;
 
   /// false=空间首页；true=已进入某个空间浏览文件。
   bool _inSpace = false;
 
   int? get _parentId => _folders.isEmpty ? null : _folders.last.id;
 
-  bool get _isPersonalSpace =>
-      (_space?.kind ?? '').toLowerCase() == 'personal';
+  bool get _isPersonalSpace => (_space?.kind ?? '').toLowerCase() == 'personal';
 
-  bool get _canManageMembers =>
-      _space?.canManage == true && !_isPersonalSpace;
+  bool get _canManageMembers => _space?.canManage == true && !_isPersonalSpace;
 
   bool get _supportsDesktopDrop {
     if (kIsWeb) return true;
@@ -83,10 +86,23 @@ class _NativeDrivePageState extends State<NativeDrivePage> {
   @override
   void initState() {
     super.initState();
+    _pendingInitialItemId = widget.initialItemId;
     _search.addListener(_onSearchChanged);
     DriveUploadCoordinator.instance.addListener(_onUploadChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) => _publishChrome());
     _load();
+  }
+
+  @override
+  void didUpdateWidget(covariant NativeDrivePage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.initialItemId != oldWidget.initialItemId &&
+        (widget.initialItemId ?? 0) > 0) {
+      _pendingInitialItemId = widget.initialItemId;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) unawaited(_openPendingItem());
+      });
+    }
   }
 
   @override
@@ -112,9 +128,7 @@ class _NativeDrivePageState extends State<NativeDrivePage> {
     );
     var needRefresh = false;
     for (final job in jobs) {
-      if (job.done &&
-          job.error == null &&
-          !_refreshedJobIds.contains(job.id)) {
+      if (job.done && job.error == null && !_refreshedJobIds.contains(job.id)) {
         _refreshedJobIds.add(job.id);
         needRefresh = true;
       }
@@ -168,6 +182,13 @@ class _NativeDrivePageState extends State<NativeDrivePage> {
             tooltip: '成员',
             onPressed: _showMembers,
             icon: const Icon(Icons.group_outlined, size: 22),
+            color: DunesColors.text2,
+          ),
+        if (_canManageMembers)
+          IconButton(
+            tooltip: '通知设置',
+            onPressed: _showNotificationSettings,
+            icon: const Icon(Icons.settings_outlined, size: 21),
             color: DunesColors.text2,
           ),
         if (canEdit)
@@ -236,6 +257,11 @@ class _NativeDrivePageState extends State<NativeDrivePage> {
           _loading = false;
         });
         _publishChrome();
+        if ((_pendingInitialItemId ?? 0) > 0) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) unawaited(_openPendingItem());
+          });
+        }
         return;
       }
 
@@ -261,6 +287,11 @@ class _NativeDrivePageState extends State<NativeDrivePage> {
         _loading = false;
       });
       _publishChrome();
+      if ((_pendingInitialItemId ?? 0) > 0) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) unawaited(_openPendingItem());
+        });
+      }
     } catch (error) {
       if (!mounted) return;
       setState(() {
@@ -280,6 +311,51 @@ class _NativeDrivePageState extends State<NativeDrivePage> {
     });
     _publishChrome();
     await _load();
+  }
+
+  Future<void> _openPendingItem() async {
+    final itemId = _pendingInitialItemId ?? 0;
+    if (itemId <= 0 || _openingInitialItem) return;
+    _openingInitialItem = true;
+    try {
+      final location = await _service.fetchItemLocation(itemId);
+      DriveSpace? targetSpace;
+      for (final space in _spaces) {
+        if (space.id == location.spaceId) {
+          targetSpace = space;
+          break;
+        }
+      }
+      if (targetSpace == null) {
+        final latestSpaces = await _service.fetchSpaces();
+        for (final space in latestSpaces) {
+          if (space.id == location.spaceId) {
+            targetSpace = space;
+            break;
+          }
+        }
+      }
+      if (targetSpace == null) throw Exception('你已无法访问该共享空间');
+      _pendingInitialItemId = null;
+      if (!mounted) return;
+      setState(() {
+        _space = targetSpace;
+        _folders
+          ..clear()
+          ..addAll(location.folders);
+        _inSpace = true;
+        _search.clear();
+      });
+      _publishChrome();
+      await _load();
+      if (!mounted) return;
+      await _openFile(location.item);
+    } catch (e) {
+      _pendingInitialItemId = null;
+      _showError(friendlyErrorText(e, fallback: '无法定位该文件'));
+    } finally {
+      _openingInitialItem = false;
+    }
   }
 
   Future<void> _leaveSpace() async {
@@ -422,6 +498,31 @@ class _NativeDrivePageState extends State<NativeDrivePage> {
     if (_inSpace) await _load();
   }
 
+  Future<void> _showNotificationSettings() async {
+    final space = _space;
+    if (space == null || !space.canManage || _isPersonalSpace) return;
+    final changed = await pushDrivePage<bool>(
+      context,
+      DriveSpaceNotificationSettingsPage(service: _service, space: space),
+    );
+    if (changed == true && mounted) {
+      final spaces = await _service.fetchSpaces();
+      DriveSpace? refreshed;
+      for (final entry in spaces) {
+        if (entry.id == space.id) {
+          refreshed = entry;
+          break;
+        }
+      }
+      if (!mounted) return;
+      setState(() {
+        _spaces = spaces;
+        if (refreshed != null) _space = refreshed;
+      });
+      _publishChrome();
+    }
+  }
+
   Future<void> _showTrash() async {
     await pushDrivePage<void>(context, DriveTrashPage(service: _service));
     if (_inSpace) await _load();
@@ -534,9 +635,7 @@ class _NativeDrivePageState extends State<NativeDrivePage> {
                       ),
                       subtitle: item.downloadedCurrent
                           ? const Text('已标记为下载到本地')
-                          : (item.downloaded
-                              ? const Text('本地有旧版本')
-                              : null),
+                          : (item.downloaded ? const Text('本地有旧版本') : null),
                       onTap: () => Navigator.pop(context, 'download'),
                     ),
                 ],
@@ -691,7 +790,10 @@ class _NativeDrivePageState extends State<NativeDrivePage> {
           mainAxisSize: MainAxisSize.min,
           children: [
             ListTile(
-              leading: const Icon(Icons.delete_outline, color: Colors.redAccent),
+              leading: const Icon(
+                Icons.delete_outline,
+                color: Colors.redAccent,
+              ),
               title: const Text('删除共享空间'),
               onTap: () => Navigator.pop(ctx, 'delete'),
             ),
@@ -838,9 +940,7 @@ class _NativeDrivePageState extends State<NativeDrivePage> {
       ),
     );
 
-    if (_inSpace &&
-        _space?.canEdit == true &&
-        _supportsDesktopDrop) {
+    if (_inSpace && _space?.canEdit == true && _supportsDesktopDrop) {
       scrollBody = DropTarget(
         onDragEntered: (_) => setState(() => _dragging = true),
         onDragExited: (_) => setState(() => _dragging = false),
@@ -1026,12 +1126,10 @@ class _NativeDrivePageState extends State<NativeDrivePage> {
     final personal = _visibleSpaces
         .where((s) => s.kind.toLowerCase() == 'personal')
         .toList();
-    final shared = _visibleSpaces
-        .where((s) {
-          final k = s.kind.toLowerCase();
-          return k != 'personal' && k != 'default';
-        })
-        .toList();
+    final shared = _visibleSpaces.where((s) {
+      final k = s.kind.toLowerCase();
+      return k != 'personal' && k != 'default';
+    }).toList();
 
     if (_spaces.isEmpty && q.isEmpty) {
       return [
@@ -1127,12 +1225,12 @@ class _NativeDrivePageState extends State<NativeDrivePage> {
                               : (space.canEdit ? '可编辑' : '仅查看')),
                     icon: Icons.inventory_2_outlined,
                     onTap: () => unawaited(_selectSpace(space)),
-                    onLongPress: space.canManage &&
-                            space.kind.toLowerCase() == 'shared'
+                    onLongPress:
+                        space.canManage && space.kind.toLowerCase() == 'shared'
                         ? () => unawaited(_deleteSharedSpace(space))
                         : null,
-                    onMore: space.canManage &&
-                            space.kind.toLowerCase() == 'shared'
+                    onMore:
+                        space.canManage && space.kind.toLowerCase() == 'shared'
                         ? () => unawaited(_confirmDeleteSpaceMenu(space))
                         : null,
                     ownerName: space.ownerDisplayName.isEmpty
@@ -1146,8 +1244,7 @@ class _NativeDrivePageState extends State<NativeDrivePage> {
                             avatarPreset: space.ownerAvatarPreset.isEmpty
                                 ? null
                                 : space.ownerAvatarPreset,
-                            avatarObjectKey:
-                                space.ownerAvatarObjectKey.isEmpty
+                            avatarObjectKey: space.ownerAvatarObjectKey.isEmpty
                                 ? null
                                 : space.ownerAvatarObjectKey,
                             avatarService: _avatarService,
@@ -1217,15 +1314,15 @@ class _NativeDrivePageState extends State<NativeDrivePage> {
               subtitle: item.isFolder
                   ? '文件夹'
                   : '${_formatBytes(item.sizeBytes)} · v${item.version}$statusLabel',
-              icon: item.isFolder
-                  ? Icons.folder_rounded
-                  : _fileIcon(item.mimeType, item.name),
-              iconColor: item.isFolder
-                  ? _driveBlue
-                  : (item.name.toLowerCase().endsWith('.pdf') ||
-                            item.mimeType == 'application/pdf'
-                        ? DunesColors.coral
-                        : DunesColors.text2),
+              typeIcon: item.isFolder
+                  ? null
+                  : ChatFileTypeIcon(
+                      fileName: item.name,
+                      kindHint: _driveKindHint(item.mimeType),
+                      size: 36,
+                    ),
+              icon: item.isFolder ? Icons.folder_rounded : null,
+              iconColor: item.isFolder ? _driveBlue : DunesColors.text2,
               kbSaved: item.kbSavedCurrent,
               downloaded: item.downloadedCurrent,
               // PC：文件双击打开（对齐 IM）；APP：单击打开。文件夹始终单击进入。
@@ -1246,12 +1343,11 @@ class _NativeDrivePageState extends State<NativeDrivePage> {
     ];
   }
 
-  IconData _fileIcon(String mime, [String name = '']) {
-    if (mime.startsWith('image/')) return Icons.image_outlined;
-    if (mime == 'application/pdf' || name.toLowerCase().endsWith('.pdf')) {
-      return Icons.picture_as_pdf_outlined;
-    }
-    return Icons.insert_drive_file_outlined;
+  String _driveKindHint(String mime) {
+    if (mime.startsWith('image/')) return 'IMAGE';
+    if (mime.startsWith('video/')) return 'VIDEO';
+    if (mime.startsWith('audio/')) return 'AUDIO';
+    return '';
   }
 }
 
@@ -1505,7 +1601,8 @@ class _DriveFileRow extends StatelessWidget {
   const _DriveFileRow({
     required this.title,
     required this.subtitle,
-    required this.icon,
+    this.icon,
+    this.typeIcon,
     this.onTap,
     this.onDoubleTap,
     this.onMore,
@@ -1516,7 +1613,10 @@ class _DriveFileRow extends StatelessWidget {
 
   final String title;
   final String subtitle;
-  final IconData icon;
+  final IconData? icon;
+
+  /// 非文件夹时的彩色类型图标；优先于 [icon]。
+  final Widget? typeIcon;
   final Color iconColor;
   final VoidCallback? onTap;
   final VoidCallback? onDoubleTap;
@@ -1536,9 +1636,9 @@ class _DriveFileRow extends StatelessWidget {
           child: Row(
             children: [
               SizedBox(
-                width: 28,
-                height: 28,
-                child: Icon(icon, color: iconColor, size: 28),
+                width: 36,
+                height: 36,
+                child: typeIcon ?? Icon(icon, color: iconColor, size: 28),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -1613,4 +1713,3 @@ class _DriveFileRow extends StatelessWidget {
     );
   }
 }
-

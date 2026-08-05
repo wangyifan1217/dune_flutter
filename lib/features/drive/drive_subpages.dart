@@ -8,6 +8,7 @@ import '../../core/platform/desktop_features.dart';
 import '../../core/theme/dunes_theme.dart';
 import '../../core/util/friendly_error.dart';
 import '../auth/auth_session.dart';
+import '../chat/chat_file_type_icon.dart';
 import '../chat/user_avatar_widget.dart';
 import '../contacts/contact_member_picker_page.dart';
 import '../contacts/contact_models.dart';
@@ -72,10 +73,7 @@ class DriveCreateSpaceResult {
 
 /// 创建共享空间：名称 + 成员同一页完成（对齐企微列表风）。
 class DriveCreateSpacePanel extends StatefulWidget {
-  const DriveCreateSpacePanel({
-    super.key,
-    required this.session,
-  });
+  const DriveCreateSpacePanel({super.key, required this.session});
 
   final AuthSession session;
 
@@ -85,8 +83,9 @@ class DriveCreateSpacePanel extends StatefulWidget {
 
 class _DriveCreateSpacePanelState extends State<DriveCreateSpacePanel> {
   late final ContactService _contacts = ContactService(session: widget.session);
-  late final ConversationService _avatarService =
-      ConversationService(session: widget.session);
+  late final ConversationService _avatarService = ConversationService(
+    session: widget.session,
+  );
   final _name = TextEditingController();
   final _description = TextEditingController();
   final _memberIds = <int>{};
@@ -204,7 +203,11 @@ class _DriveCreateSpacePanelState extends State<DriveCreateSpacePanel> {
                 visualDensity: VisualDensity.compact,
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                icon: const Icon(Icons.close, size: 18, color: DunesColors.text3),
+                icon: const Icon(
+                  Icons.close,
+                  size: 18,
+                  color: DunesColors.text3,
+                ),
                 onPressed: onRemove,
               ),
             ],
@@ -216,10 +219,9 @@ class _DriveCreateSpacePanelState extends State<DriveCreateSpacePanel> {
 
   @override
   Widget build(BuildContext context) {
-    final ownerName =
-        (widget.session.displayName ?? '').trim().isEmpty
-            ? '我'
-            : widget.session.displayName!.trim();
+    final ownerName = (widget.session.displayName ?? '').trim().isEmpty
+        ? '我'
+        : widget.session.displayName!.trim();
     final canSubmit = _name.text.trim().isNotEmpty;
 
     if (_picking) {
@@ -267,124 +269,124 @@ class _DriveCreateSpacePanelState extends State<DriveCreateSpacePanel> {
             ),
             Expanded(
               child: ListView(
-              padding: const EdgeInsets.only(bottom: 24),
-              children: [
-                _sectionLabel('空间名称'),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    padding: const EdgeInsets.symmetric(horizontal: 14),
-                    child: TextField(
-                      controller: _name,
-                      autofocus: true,
-                      decoration: const InputDecoration(
-                        hintText: '请输入空间名称',
-                        border: InputBorder.none,
-                        hintStyle: TextStyle(color: DunesColors.text3),
+                padding: const EdgeInsets.only(bottom: 24),
+                children: [
+                  _sectionLabel('空间名称'),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      padding: const EdgeInsets.symmetric(horizontal: 14),
+                      child: TextField(
+                        controller: _name,
+                        autofocus: true,
+                        decoration: const InputDecoration(
+                          hintText: '请输入空间名称',
+                          border: InputBorder.none,
+                          hintStyle: TextStyle(color: DunesColors.text3),
+                        ),
                       ),
                     ),
                   ),
-                ),
-                _sectionLabel('空间简介'),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    padding: const EdgeInsets.symmetric(horizontal: 14),
-                    child: TextField(
-                      controller: _description,
-                      maxLength: 512,
-                      maxLines: 3,
-                      minLines: 2,
-                      decoration: const InputDecoration(
-                        hintText: '选填，将展示在空间列表',
-                        border: InputBorder.none,
-                        counterText: '',
-                        hintStyle: TextStyle(color: DunesColors.text3),
+                  _sectionLabel('空间简介'),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      padding: const EdgeInsets.symmetric(horizontal: 14),
+                      child: TextField(
+                        controller: _description,
+                        maxLength: 512,
+                        maxLines: 3,
+                        minLines: 2,
+                        decoration: const InputDecoration(
+                          hintText: '选填，将展示在空间列表',
+                          border: InputBorder.none,
+                          counterText: '',
+                          hintStyle: TextStyle(color: DunesColors.text3),
+                        ),
                       ),
                     ),
                   ),
-                ),
-                _sectionLabel('成员及权限'),
-                const Padding(
-                  padding: EdgeInsets.fromLTRB(20, 0, 20, 8),
-                  child: Text(
-                    '共享空间可添加同事；「我的空间」仅自己可见、不可加人',
-                    style: TextStyle(fontSize: 12, color: DunesColors.text3),
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(10),
+                  _sectionLabel('成员及权限'),
+                  const Padding(
+                    padding: EdgeInsets.fromLTRB(20, 0, 20, 8),
+                    child: Text(
+                      '共享空间可添加同事；「我的空间」仅自己可见、不可加人',
+                      style: TextStyle(fontSize: 12, color: DunesColors.text3),
                     ),
-                    child: Column(
-                      children: [
-                        InkWell(
-                          onTap: () => setState(() => _picking = true),
-                          borderRadius: const BorderRadius.vertical(
-                            top: Radius.circular(10),
-                          ),
-                          child: const SizedBox(
-                            height: 56,
-                            child: Padding(
-                              padding: EdgeInsets.symmetric(horizontal: 14),
-                              child: Row(
-                                children: [
-                                  _AddMemberIcon(),
-                                  SizedBox(width: 12),
-                                  Text(
-                                    '添加成员',
-                                    style: TextStyle(
-                                      fontSize: 16,
-                                      color: DunesColors.text,
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Column(
+                        children: [
+                          InkWell(
+                            onTap: () => setState(() => _picking = true),
+                            borderRadius: const BorderRadius.vertical(
+                              top: Radius.circular(10),
+                            ),
+                            child: const SizedBox(
+                              height: 56,
+                              child: Padding(
+                                padding: EdgeInsets.symmetric(horizontal: 14),
+                                child: Row(
+                                  children: [
+                                    _AddMemberIcon(),
+                                    SizedBox(width: 12),
+                                    Text(
+                                      '添加成员',
+                                      style: TextStyle(
+                                        fontSize: 16,
+                                        color: DunesColors.text,
+                                      ),
                                     ),
-                                  ),
-                                ],
+                                  ],
+                                ),
                               ),
                             ),
                           ),
-                        ),
-                        const Divider(height: 1, indent: 62),
-                        _memberRow(
-                          userId: widget.session.userId,
-                          name: ownerName,
-                          role: '管理者',
-                          avatarPreset:
-                              _contactById[widget.session.userId]?.avatarPreset,
-                          avatarObjectKey: _contactById[widget.session.userId]
-                              ?.avatarObjectKey,
-                        ),
-                        for (final id in memberIds) ...[
                           const Divider(height: 1, indent: 62),
                           _memberRow(
-                            userId: id,
-                            name: _contactById[id]?.displayName ?? '用户$id',
-                            role: '查看者',
-                            avatarPreset: _contactById[id]?.avatarPreset,
-                            avatarObjectKey:
-                                _contactById[id]?.avatarObjectKey,
-                            onRemove: () =>
-                                setState(() => _memberIds.remove(id)),
+                            userId: widget.session.userId,
+                            name: ownerName,
+                            role: '管理者',
+                            avatarPreset: _contactById[widget.session.userId]
+                                ?.avatarPreset,
+                            avatarObjectKey: _contactById[widget.session.userId]
+                                ?.avatarObjectKey,
                           ),
+                          for (final id in memberIds) ...[
+                            const Divider(height: 1, indent: 62),
+                            _memberRow(
+                              userId: id,
+                              name: _contactById[id]?.displayName ?? '用户$id',
+                              role: '查看者',
+                              avatarPreset: _contactById[id]?.avatarPreset,
+                              avatarObjectKey:
+                                  _contactById[id]?.avatarObjectKey,
+                              onRemove: () =>
+                                  setState(() => _memberIds.remove(id)),
+                            ),
+                          ],
                         ],
-                      ],
+                      ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
         ),
       ),
     );
@@ -492,8 +494,9 @@ class DriveTextFormPage extends StatefulWidget {
 }
 
 class _DriveTextFormPageState extends State<DriveTextFormPage> {
-  late final TextEditingController _controller =
-      TextEditingController(text: widget.initial);
+  late final TextEditingController _controller = TextEditingController(
+    text: widget.initial,
+  );
 
   @override
   void initState() {
@@ -515,8 +518,7 @@ class _DriveTextFormPageState extends State<DriveTextFormPage> {
 
   @override
   Widget build(BuildContext context) {
-    final canSubmit =
-        widget.allowEmpty || _controller.text.trim().isNotEmpty;
+    final canSubmit = widget.allowEmpty || _controller.text.trim().isNotEmpty;
     return Scaffold(
       backgroundColor: _driveSheetBg,
       body: SafeArea(
@@ -710,7 +712,10 @@ class _DriveTrashPageState extends State<DriveTrashPage> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(_error!, style: const TextStyle(color: Colors.redAccent)),
+                  Text(
+                    _error!,
+                    style: const TextStyle(color: Colors.redAccent),
+                  ),
                   TextButton(onPressed: _load, child: const Text('重试')),
                 ],
               ),
@@ -731,13 +736,13 @@ class _DriveTrashPageState extends State<DriveTrashPage> {
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                      Icon(
-                        item.isFolder
-                            ? Icons.folder_outlined
-                            : Icons.insert_drive_file_outlined,
-                        color: _driveBlue,
-                        size: 28,
-                      ),
+                      item.isFolder
+                          ? const Icon(
+                              Icons.folder_rounded,
+                              color: _driveBlue,
+                              size: 28,
+                            )
+                          : ChatFileTypeIcon(fileName: item.name, size: 36),
                       const SizedBox(width: 12),
                       Expanded(
                         child: Column(
@@ -827,8 +832,9 @@ class DriveMembersPage extends StatefulWidget {
 
 class _DriveMembersPageState extends State<DriveMembersPage> {
   late final ContactService _contacts = ContactService(session: widget.session);
-  late final ConversationService _avatarService =
-      ConversationService(session: widget.session);
+  late final ConversationService _avatarService = ConversationService(
+    session: widget.session,
+  );
   final _memberIds = <int>{};
   final _contactById = <int, NativeContact>{};
   bool _loading = true;
@@ -957,91 +963,54 @@ class _DriveMembersPageState extends State<DriveMembersPage> {
             else
               Expanded(
                 child: ListView(
-                padding: const EdgeInsets.only(bottom: 24),
-                children: [
-                  const Padding(
-                    padding: EdgeInsets.fromLTRB(20, 16, 20, 8),
-                    child: Text(
-                      '成员及权限',
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: DunesColors.text3,
-                        fontWeight: FontWeight.w500,
+                  padding: const EdgeInsets.only(bottom: 24),
+                  children: [
+                    const Padding(
+                      padding: EdgeInsets.fromLTRB(20, 16, 20, 8),
+                      child: Text(
+                        '成员及权限',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: DunesColors.text3,
+                          fontWeight: FontWeight.w500,
+                        ),
                       ),
                     ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Column(
-                        children: [
-                          InkWell(
-                            onTap: () => setState(() => _picking = true),
-                            borderRadius: const BorderRadius.vertical(
-                              top: Radius.circular(10),
-                            ),
-                            child: const Padding(
-                              padding: EdgeInsets.symmetric(
-                                horizontal: 14,
-                                vertical: 12,
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Column(
+                          children: [
+                            InkWell(
+                              onTap: () => setState(() => _picking = true),
+                              borderRadius: const BorderRadius.vertical(
+                                top: Radius.circular(10),
                               ),
-                              child: Row(
-                                children: [
-                                  _AddMemberIcon(),
-                                  SizedBox(width: 12),
-                                  Text(
-                                    '添加成员',
-                                    style: TextStyle(
-                                      fontSize: 16,
-                                      color: DunesColors.text,
+                              child: const Padding(
+                                padding: EdgeInsets.symmetric(
+                                  horizontal: 14,
+                                  vertical: 12,
+                                ),
+                                child: Row(
+                                  children: [
+                                    _AddMemberIcon(),
+                                    SizedBox(width: 12),
+                                    Text(
+                                      '添加成员',
+                                      style: TextStyle(
+                                        fontSize: 16,
+                                        color: DunesColors.text,
+                                      ),
                                     ),
-                                  ),
-                                ],
+                                  ],
+                                ),
                               ),
                             ),
-                          ),
-                          const Divider(height: 1, indent: 14),
-                          Padding(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 14,
-                              vertical: 10,
-                            ),
-                            child: Row(
-                              children: [
-                                ImUserAvatar(
-                                  initial: _initial(ownerName),
-                                  seed: widget.session.userId,
-                                  size: 36,
-                                  avatarPreset: _contactById[widget.session.userId]
-                                      ?.avatarPreset,
-                                  avatarObjectKey:
-                                      _contactById[widget.session.userId]
-                                          ?.avatarObjectKey,
-                                  avatarService: _avatarService,
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Text(
-                                    ownerName,
-                                    style: const TextStyle(fontSize: 16),
-                                  ),
-                                ),
-                                const Text(
-                                  '管理者',
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    color: DunesColors.text3,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          for (final id in ids) ...[
-                            const Divider(height: 1, indent: 62),
+                            const Divider(height: 1, indent: 14),
                             Padding(
                               padding: const EdgeInsets.symmetric(
                                 horizontal: 14,
@@ -1050,54 +1019,91 @@ class _DriveMembersPageState extends State<DriveMembersPage> {
                               child: Row(
                                 children: [
                                   ImUserAvatar(
-                                    initial: _initial(
-                                      _contactById[id]?.displayName,
-                                    ),
-                                    seed: id,
+                                    initial: _initial(ownerName),
+                                    seed: widget.session.userId,
                                     size: 36,
                                     avatarPreset:
-                                        _contactById[id]?.avatarPreset,
+                                        _contactById[widget.session.userId]
+                                            ?.avatarPreset,
                                     avatarObjectKey:
-                                        _contactById[id]?.avatarObjectKey,
+                                        _contactById[widget.session.userId]
+                                            ?.avatarObjectKey,
                                     avatarService: _avatarService,
                                   ),
                                   const SizedBox(width: 12),
                                   Expanded(
                                     child: Text(
-                                      _contactById[id]?.displayName ??
-                                          '用户$id',
+                                      ownerName,
                                       style: const TextStyle(fontSize: 16),
                                     ),
                                   ),
                                   const Text(
-                                    '查看者',
+                                    '管理者',
                                     style: TextStyle(
                                       fontSize: 14,
                                       color: DunesColors.text3,
                                     ),
                                   ),
-                                  IconButton(
-                                    visualDensity: VisualDensity.compact,
-                                    icon: const Icon(
-                                      Icons.close,
-                                      size: 18,
-                                      color: DunesColors.text3,
-                                    ),
-                                    onPressed: () => setState(
-                                      () => _memberIds.remove(id),
-                                    ),
-                                  ),
                                 ],
                               ),
                             ),
+                            for (final id in ids) ...[
+                              const Divider(height: 1, indent: 62),
+                              Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 14,
+                                  vertical: 10,
+                                ),
+                                child: Row(
+                                  children: [
+                                    ImUserAvatar(
+                                      initial: _initial(
+                                        _contactById[id]?.displayName,
+                                      ),
+                                      seed: id,
+                                      size: 36,
+                                      avatarPreset:
+                                          _contactById[id]?.avatarPreset,
+                                      avatarObjectKey:
+                                          _contactById[id]?.avatarObjectKey,
+                                      avatarService: _avatarService,
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Text(
+                                        _contactById[id]?.displayName ??
+                                            '用户$id',
+                                        style: const TextStyle(fontSize: 16),
+                                      ),
+                                    ),
+                                    const Text(
+                                      '查看者',
+                                      style: TextStyle(
+                                        fontSize: 14,
+                                        color: DunesColors.text3,
+                                      ),
+                                    ),
+                                    IconButton(
+                                      visualDensity: VisualDensity.compact,
+                                      icon: const Icon(
+                                        Icons.close,
+                                        size: 18,
+                                        color: DunesColors.text3,
+                                      ),
+                                      onPressed: () =>
+                                          setState(() => _memberIds.remove(id)),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
                           ],
-                        ],
+                        ),
                       ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
           ],
         ),
       ),
@@ -1195,8 +1201,7 @@ class _DriveMoveCopyPageState extends State<DriveMoveCopyPage> {
   bool _loading = true;
   String? _error;
 
-  int? get _parentId =>
-      _folderStack.isEmpty ? null : _folderStack.last.id;
+  int? get _parentId => _folderStack.isEmpty ? null : _folderStack.last.id;
 
   bool get _sameSpace => _target.id == widget.sourceSpace.id;
 
@@ -1262,11 +1267,7 @@ class _DriveMoveCopyPageState extends State<DriveMoveCopyPage> {
     if (mode == 'move' && !_sameSpace) return;
     Navigator.pop(
       context,
-      DriveMoveCopyResult(
-        mode: mode,
-        space: _target,
-        parentId: _parentId,
-      ),
+      DriveMoveCopyResult(mode: mode, space: _target, parentId: _parentId),
     );
   }
 
@@ -1279,9 +1280,9 @@ class _DriveMoveCopyPageState extends State<DriveMoveCopyPage> {
   Widget build(BuildContext context) {
     final options = _spaceOptions;
     final selected = options.cast<DriveSpace?>().firstWhere(
-          (s) => s?.id == _target.id,
-          orElse: () => options.isEmpty ? null : options.first,
-        );
+      (s) => s?.id == _target.id,
+      orElse: () => options.isEmpty ? null : options.first,
+    );
 
     return Scaffold(
       backgroundColor: _driveSheetBg,
@@ -1491,7 +1492,11 @@ class _DriveMoveCopyPageState extends State<DriveMoveCopyPage> {
       itemBuilder: (context, i) {
         final folder = _folders[i];
         return ListTile(
-          leading: const Icon(Icons.folder_rounded, color: _driveBlue, size: 28),
+          leading: const Icon(
+            Icons.folder_rounded,
+            color: _driveBlue,
+            size: 28,
+          ),
           title: Text(
             folder.name,
             maxLines: 1,
@@ -1514,10 +1519,7 @@ class _DriveMoveCopyPageState extends State<DriveMoveCopyPage> {
 }
 
 class DriveFolderPickResult {
-  const DriveFolderPickResult({
-    required this.space,
-    this.parentId,
-  });
+  const DriveFolderPickResult({required this.space, this.parentId});
 
   final DriveSpace space;
   final int? parentId;
@@ -1551,8 +1553,7 @@ class _DriveFolderPickerPageState extends State<DriveFolderPickerPage> {
   bool _loading = true;
   String? _error;
 
-  int? get _parentId =>
-      _folderStack.isEmpty ? null : _folderStack.last.id;
+  int? get _parentId => _folderStack.isEmpty ? null : _folderStack.last.id;
 
   List<DriveSpace> get _spaceOptions {
     final writable = widget.spaces.where((s) => s.canEdit).toList();
@@ -1585,8 +1586,7 @@ class _DriveFolderPickerPageState extends State<DriveFolderPickerPage> {
         spaceId: _target.id,
         parentId: _parentId,
       );
-      final folders =
-          items.where((e) => e.isFolder).toList(growable: false);
+      final folders = items.where((e) => e.isFolder).toList(growable: false);
       if (!mounted) return;
       setState(() {
         _folders = folders;
@@ -1630,9 +1630,9 @@ class _DriveFolderPickerPageState extends State<DriveFolderPickerPage> {
   Widget build(BuildContext context) {
     final options = _spaceOptions;
     final selected = options.cast<DriveSpace?>().firstWhere(
-          (s) => s?.id == _target.id,
-          orElse: () => options.isEmpty ? null : options.first,
-        );
+      (s) => s?.id == _target.id,
+      orElse: () => options.isEmpty ? null : options.first,
+    );
     final titleName = widget.fileName.trim().isEmpty
         ? '文件'
         : widget.fileName.trim();
@@ -1752,12 +1752,12 @@ class _DriveFolderPickerPageState extends State<DriveFolderPickerPage> {
                   onPressed: selected == null
                       ? null
                       : () => Navigator.pop(
-                            context,
-                            DriveFolderPickResult(
-                              space: selected,
-                              parentId: _parentId,
-                            ),
+                          context,
+                          DriveFolderPickResult(
+                            space: selected,
+                            parentId: _parentId,
                           ),
+                        ),
                   style: FilledButton.styleFrom(
                     backgroundColor: _driveBlue,
                     foregroundColor: Colors.white,
@@ -1816,7 +1816,11 @@ class _DriveFolderPickerPageState extends State<DriveFolderPickerPage> {
       itemBuilder: (context, i) {
         final folder = _folders[i];
         return ListTile(
-          leading: const Icon(Icons.folder_rounded, color: _driveBlue, size: 28),
+          leading: const Icon(
+            Icons.folder_rounded,
+            color: _driveBlue,
+            size: 28,
+          ),
           title: Text(
             folder.name,
             maxLines: 1,
@@ -1839,10 +1843,7 @@ class _DriveFolderPickerPageState extends State<DriveFolderPickerPage> {
 }
 
 class DriveShareCreateResult {
-  const DriveShareCreateResult({
-    this.password = '',
-    this.expiresDays = 7,
-  });
+  const DriveShareCreateResult({this.password = '', this.expiresDays = 7});
 
   final String password;
   final int expiresDays;
@@ -2171,7 +2172,9 @@ class _DriveShareLinksPageState extends State<DriveShareLinksPage> {
                 return ListTile(
                   leading: Icon(
                     link.revoked ? Icons.link_off : Icons.link,
-                    color: link.revoked ? DunesColors.text3 : DunesColors.accent,
+                    color: link.revoked
+                        ? DunesColors.text3
+                        : DunesColors.accent,
                   ),
                   title: Text(
                     link.revoked
@@ -2214,7 +2217,8 @@ class DrivePreviewPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     Widget body;
-    final isPdf = item.mimeType.toLowerCase() == 'application/pdf' ||
+    final isPdf =
+        item.mimeType.toLowerCase() == 'application/pdf' ||
         item.name.toLowerCase().endsWith('.pdf');
     if (item.mimeType.startsWith('image/')) {
       body = InteractiveViewer(
@@ -2231,9 +2235,8 @@ class DrivePreviewPage extends StatelessWidget {
         ),
       );
     }
-    final canSaveKb = session != null &&
-        service != null &&
-        driveItemSupportsKbUpload(item);
+    final canSaveKb =
+        session != null && service != null && driveItemSupportsKbUpload(item);
     final canDownload = service != null;
     return Scaffold(
       backgroundColor: Colors.white,
@@ -2274,6 +2277,134 @@ class DrivePreviewPage extends StatelessWidget {
         ],
       ),
       body: body,
+    );
+  }
+}
+
+class DriveSpaceNotificationSettingsPage extends StatefulWidget {
+  const DriveSpaceNotificationSettingsPage({
+    super.key,
+    required this.service,
+    required this.space,
+  });
+
+  final NativeDriveService service;
+  final DriveSpace space;
+
+  @override
+  State<DriveSpaceNotificationSettingsPage> createState() =>
+      _DriveSpaceNotificationSettingsPageState();
+}
+
+class _DriveSpaceNotificationSettingsPageState
+    extends State<DriveSpaceNotificationSettingsPage> {
+  late bool _upload;
+  late bool _update;
+  late bool _delete;
+  bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _upload = widget.space.notifyOnUpload;
+    _update = widget.space.notifyOnUpdate;
+    _delete = widget.space.notifyOnDelete;
+  }
+
+  Future<void> _save() async {
+    if (_saving) return;
+    setState(() => _saving = true);
+    try {
+      await widget.service.updateSpaceNotifications(
+        spaceId: widget.space.id,
+        notifyOnUpload: _upload,
+        notifyOnUpdate: _update,
+        notifyOnDelete: _delete,
+      );
+      if (mounted) Navigator.pop(context, true);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(friendlyErrorText(e, fallback: '保存失败'))),
+      );
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.white,
+      appBar: AppBar(
+        backgroundColor: Colors.white,
+        foregroundColor: DunesColors.text,
+        elevation: 0,
+        title: const Text(
+          '通知设置',
+          style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
+        ),
+        actions: [
+          TextButton(
+            onPressed: _saving ? null : _save,
+            child: _saving
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Text('保存'),
+          ),
+        ],
+      ),
+      body: ListView(
+        children: [
+          const Padding(
+            padding: EdgeInsets.fromLTRB(16, 14, 16, 8),
+            child: Text(
+              '文件动态',
+              style: TextStyle(fontSize: 13, color: DunesColors.text3),
+            ),
+          ),
+          SwitchListTile(
+            value: _upload,
+            onChanged: _saving
+                ? null
+                : (value) => setState(() => _upload = value),
+            title: const Text('上传文件'),
+            subtitle: const Text('有新文件上传时通知共享空间成员'),
+          ),
+          const Divider(height: 1, indent: 16),
+          SwitchListTile(
+            value: _update,
+            onChanged: _saving
+                ? null
+                : (value) => setState(() => _update = value),
+            title: const Text('更新文件'),
+            subtitle: const Text('上传新版本或恢复历史版本时通知'),
+          ),
+          const Divider(height: 1, indent: 16),
+          SwitchListTile(
+            value: _delete,
+            onChanged: _saving
+                ? null
+                : (value) => setState(() => _delete = value),
+            title: const Text('删除文件'),
+            subtitle: const Text('文件移入回收站时通知'),
+          ),
+          const Padding(
+            padding: EdgeInsets.fromLTRB(16, 16, 16, 24),
+            child: Text(
+              '通知会发送到成员的“企业微盘”只读会话，不会通知本次操作人。',
+              style: TextStyle(
+                fontSize: 12,
+                color: DunesColors.text3,
+                height: 1.5,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

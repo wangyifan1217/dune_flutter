@@ -8,6 +8,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../core/layout/chat_layout.dart';
 import '../../core/theme/dunes_theme.dart';
 import '../../core/util/friendly_error.dart';
+import 'chat_file_type_icon.dart';
 import 'chat_quote.dart';
 import '../conversation/conversation_models.dart';
 import '../conversation/inbox_format.dart';
@@ -133,8 +134,10 @@ class ChatQuickActions extends StatelessWidget {
   final VoidCallback onAlbum;
   final VoidCallback onFile;
   final VoidCallback onApproval;
+
   /// 长按拍照：录制小视频（微信式）。
   final VoidCallback? onCameraLongPress;
+
   /// PC：微信式区域截图（截完可裁剪编辑后发送）。
   final VoidCallback? onScreenshot;
   final VoidCallback? onAt;
@@ -149,11 +152,7 @@ class ChatQuickActions extends StatelessWidget {
     // PC 宽屏：图片(含视频) + 截图 + 文件；APP：微信式宫格（相册 / 拍照长按拍视频 / 文件）。
     final cells = <_QaCell>[
       if (wide) ...[
-        _QaCell(
-          icon: Icons.photo_outlined,
-          label: '图片',
-          onTap: onAlbum,
-        ),
+        _QaCell(icon: Icons.photo_outlined, label: '图片', onTap: onAlbum),
         if (onScreenshot != null)
           _QaCell(
             icon: Icons.crop_free_rounded,
@@ -1046,6 +1045,7 @@ class ChatTextBubble extends StatelessWidget {
     this.onSelectionFavorite,
     this.onSelectionMulti,
     this.onSelectionRecall,
+    this.onActionsMenu,
     this.enableSelection = true,
     this.selectAllOnLongPress = false,
   });
@@ -1059,6 +1059,10 @@ class ChatTextBubble extends StatelessWidget {
   final VoidCallback? onSelectionFavorite;
   final ValueChanged<String>? onSelectionMulti;
   final VoidCallback? onSelectionRecall;
+
+  /// 与文件消息一致的操作菜单（深色图标宫格）。
+  /// 提供后将不再弹出系统文字选区工具条。
+  final void Function(Offset anchor, String selectedText)? onActionsMenu;
   final bool enableSelection;
   final bool selectAllOnLongPress;
 
@@ -1164,7 +1168,6 @@ class ChatTextBubble extends StatelessWidget {
               _buildMentionTextSpan(),
               contextMenuBuilder: (context, editableTextState) {
                 // APP 端长按消息时直接选中整条文本，和微信的消息操作习惯一致。
-                // 选区仍由 SelectableText 管理，复制/引用等操作继续复用当前工具栏。
                 final selection = editableTextState.textEditingValue.selection;
                 final needsSelectAll =
                     !selection.isValid ||
@@ -1176,6 +1179,17 @@ class ChatTextBubble extends StatelessWidget {
                 final selected = _selectedText(
                   editableTextState.textEditingValue,
                 );
+                // 与文件消息共用深色宫格菜单：拦截系统选区工具条。
+                // selected 为空时由上层按整条消息处理，避免把「未选中」误当成「全选」。
+                if (onActionsMenu != null) {
+                  final anchor =
+                      editableTextState.contextMenuAnchors.primaryAnchor;
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    editableTextState.hideToolbar();
+                    onActionsMenu!(anchor, selected);
+                  });
+                  return const SizedBox.shrink();
+                }
                 return AdaptiveTextSelectionToolbar.buttonItems(
                   anchors: editableTextState.contextMenuAnchors,
                   buttonItems: <ContextMenuButtonItem>[
@@ -1184,7 +1198,9 @@ class ChatTextBubble extends StatelessWidget {
                       onPressed: () async {
                         // Windows 右键弹出菜单时框架可能会清掉当前选区。
                         // 这时仍应复制整条消息，不能静默写入空字符串。
-                        final value = selected.isNotEmpty ? selected : text.trim();
+                        final value = selected.isNotEmpty
+                            ? selected
+                            : text.trim();
                         if (value.isNotEmpty) {
                           await Clipboard.setData(ClipboardData(text: value));
                         }
@@ -1482,6 +1498,187 @@ class ChatSystemPill extends StatelessWidget {
   }
 }
 
+/// 会话置顶条：默认展示最新一条，可向下展开多条；点击定位原消息。
+class ChatPinnedMessagesBar extends StatelessWidget {
+  const ChatPinnedMessagesBar({
+    super.key,
+    required this.items,
+    required this.expanded,
+    required this.onToggleExpand,
+    required this.onTapItem,
+    this.onUnpinItem,
+  });
+
+  final List<NativePinnedMessage> items;
+  final bool expanded;
+  final VoidCallback onToggleExpand;
+  final ValueChanged<NativePinnedMessage> onTapItem;
+  final ValueChanged<NativePinnedMessage>? onUnpinItem;
+
+  @override
+  Widget build(BuildContext context) {
+    if (items.isEmpty) return const SizedBox.shrink();
+    final latest = items.first;
+    final canExpand = items.length > 1;
+    return Material(
+      color: DunesColors.bgApp,
+      child: Container(
+        width: double.infinity,
+        decoration: const BoxDecoration(
+          border: Border(bottom: BorderSide(color: DunesColors.borderSoft)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            InkWell(
+              onTap: expanded && canExpand
+                  ? onToggleExpand
+                  : () => onTapItem(latest),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(14, 8, 8, 8),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.push_pin_rounded,
+                      size: 16,
+                      color: Color(0xFFE6A23C),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: expanded && canExpand
+                          ? Text(
+                              '置顶消息 · ${items.length}',
+                              style: DunesTypography.sans(
+                                fontSize: 13,
+                                color: DunesColors.text2,
+                              ),
+                            )
+                          : _PinnedMessageText(item: latest),
+                    ),
+                    if (canExpand)
+                      IconButton(
+                        tooltip: expanded ? '收起' : '展开全部置顶',
+                        visualDensity: VisualDensity.compact,
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(
+                          minWidth: 32,
+                          minHeight: 32,
+                        ),
+                        onPressed: onToggleExpand,
+                        icon: Icon(
+                          expanded
+                              ? Icons.keyboard_arrow_up_rounded
+                              : Icons.keyboard_arrow_down_rounded,
+                          size: 20,
+                          color: DunesColors.text3,
+                        ),
+                      )
+                    else if (onUnpinItem != null)
+                      IconButton(
+                        tooltip: '取消置顶',
+                        visualDensity: VisualDensity.compact,
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(
+                          minWidth: 32,
+                          minHeight: 32,
+                        ),
+                        onPressed: () => onUnpinItem!(latest),
+                        icon: const Icon(
+                          Icons.close_rounded,
+                          size: 18,
+                          color: DunesColors.text3,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+            if (expanded && canExpand)
+              ...items.indexed.map((entry) {
+                final index = entry.$1;
+                final item = entry.$2;
+                return InkWell(
+                  onTap: () => onTapItem(item),
+                  child: Container(
+                    decoration: index == 0
+                        ? const BoxDecoration(
+                            border: Border(
+                              top: BorderSide(color: DunesColors.borderSoft),
+                            ),
+                          )
+                        : null,
+                    padding: const EdgeInsets.fromLTRB(38, 12, 8, 12),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        Expanded(child: _PinnedMessageText(item: item)),
+                        if (onUnpinItem != null) ...[
+                          const SizedBox(width: 8),
+                          IconButton(
+                            tooltip: '取消置顶',
+                            visualDensity: VisualDensity.compact,
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(
+                              minWidth: 30,
+                              minHeight: 30,
+                            ),
+                            onPressed: () => onUnpinItem!(item),
+                            icon: const Icon(
+                              Icons.close_rounded,
+                              size: 16,
+                              color: DunesColors.text3,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                );
+              }),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PinnedMessageText extends StatelessWidget {
+  const _PinnedMessageText({required this.item});
+
+  final NativePinnedMessage item;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          item.pinnedActionLabel,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: DunesTypography.sans(
+            fontSize: 12,
+            color: DunesColors.text3,
+            height: 1.35,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          item.contentLabel,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: DunesTypography.sans(
+            fontSize: 13,
+            color: DunesColors.text2,
+            height: 1.4,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class ChatVoiceBubble extends StatefulWidget {
   const ChatVoiceBubble({
     super.key,
@@ -1497,6 +1694,7 @@ class ChatVoiceBubble extends StatefulWidget {
   final int durationSec;
   final bool mine;
   final Future<String> Function() resolveUrl;
+
   /// 本地转写缓存 key；有值时在气泡下方展示转写结果。
   final String? asrKey;
   final ValueChanged<String>? onPlayError;
@@ -1542,14 +1740,16 @@ class _ChatVoiceBubbleState extends State<ChatVoiceBubble> {
   Widget build(BuildContext context) {
     final playing = ChatVoicePlayer.instance.playingKey == widget.playKey;
     final asrKey = (widget.asrKey ?? '').trim();
-    final transcript =
-        asrKey.isEmpty ? null : VoiceAsrStore.instance.textFor(asrKey);
+    final transcript = asrKey.isEmpty
+        ? null
+        : VoiceAsrStore.instance.textFor(asrKey);
     final transcribing =
         asrKey.isNotEmpty && VoiceAsrStore.instance.isLoading(asrKey);
 
     return Column(
-      crossAxisAlignment:
-          widget.mine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+      crossAxisAlignment: widget.mine
+          ? CrossAxisAlignment.end
+          : CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
         GestureDetector(
@@ -1559,13 +1759,13 @@ class _ChatVoiceBubbleState extends State<ChatVoiceBubble> {
             cursor: SystemMouseCursors.click,
             child: Container(
               constraints: BoxConstraints(
-                minWidth:
-                    80 + (widget.durationSec * 4).clamp(0, 80).toDouble(),
+                minWidth: 80 + (widget.durationSec * 4).clamp(0, 80).toDouble(),
               ),
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
               decoration: BoxDecoration(
-                color:
-                    widget.mine ? const Color(0xFF7E64BD) : DunesColors.bgApp,
+                color: widget.mine
+                    ? const Color(0xFF7E64BD)
+                    : DunesColors.bgApp,
                 border: widget.mine
                     ? null
                     : Border.all(color: DunesColors.borderSoft),
@@ -1660,7 +1860,7 @@ class ChatFileAttach extends StatelessWidget {
     required this.mine,
     required this.onTap,
     this.onSecondaryTapDown,
-    this.isPdf = false,
+    this.fileSizeBytes,
     this.downloaded = false,
     this.uploadProgress,
     this.downloadProgress,
@@ -1672,7 +1872,9 @@ class ChatFileAttach extends StatelessWidget {
   final bool mine;
   final VoidCallback onTap;
   final GestureTapDownCallback? onSecondaryTapDown;
-  final bool isPdf;
+
+  /// 文件字节数；空闲时在文件名下方展示格式化大小。
+  final int? fileSizeBytes;
 
   /// 本地已缓存时在气泡右侧显示勾。
   final bool downloaded;
@@ -1705,6 +1907,7 @@ class ChatFileAttach extends StatelessWidget {
       final p = download;
       statusLabel = p > 0 ? '下载中 ${(p * 100).round()}%' : '下载中…';
     }
+    final sizeLabel = _formatFileSize(fileSizeBytes);
     return GestureDetector(
       onTap: busy ? null : onTap,
       onSecondaryTapDown: busy ? null : onSecondaryTapDown,
@@ -1718,30 +1921,16 @@ class ChatFileAttach extends StatelessWidget {
         child: Row(
           children: [
             SizedBox(
-              width: 36,
-              height: 36,
+              width: 40,
+              height: 40,
               child: Stack(
                 alignment: Alignment.center,
                 children: [
-                  Container(
-                    width: 36,
-                    height: 36,
-                    decoration: BoxDecoration(
-                      color: DunesColors.bgSoft,
-                      borderRadius: BorderRadius.circular(9),
-                    ),
-                    child: Icon(
-                      isPdf
-                          ? Icons.picture_as_pdf_outlined
-                          : Icons.insert_drive_file_outlined,
-                      size: 16,
-                      color: isPdf ? DunesColors.coral : DunesColors.text2,
-                    ),
-                  ),
+                  ChatFileTypeIcon(fileName: fileName, size: 40),
                   if (busy)
                     SizedBox(
-                      width: 36,
-                      height: 36,
+                      width: 40,
+                      height: 40,
                       child: CircularProgressIndicator(
                         value: busyProgress > 0 && busyProgress < 1
                             ? busyProgress
@@ -1769,10 +1958,10 @@ class ChatFileAttach extends StatelessWidget {
                       fontWeight: FontWeight.w500,
                     ),
                   ),
-                  if (statusLabel != null) ...[
+                  if (statusLabel != null || sizeLabel != null) ...[
                     const SizedBox(height: 2),
                     Text(
-                      statusLabel,
+                      statusLabel ?? sizeLabel!,
                       style: DunesTypography.sans(
                         fontSize: 11,
                         color: DunesColors.text3,
@@ -1825,6 +2014,16 @@ class ChatFileAttach extends StatelessWidget {
   }
 }
 
+String? _formatFileSize(int? bytes) {
+  if (bytes == null || bytes <= 0) return null;
+  if (bytes < 1024) return '$bytes B';
+  if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
+  if (bytes < 1024 * 1024 * 1024) {
+    return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+  }
+  return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(2)} GB';
+}
+
 /// 知识库文档转发卡片（会话内展示）。
 class ChatKbDocCard extends StatelessWidget {
   const ChatKbDocCard({
@@ -1858,7 +2057,9 @@ class ChatKbDocCard extends StatelessWidget {
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: DunesColors.brandPurpleLine.withValues(alpha: 0.45)),
+          border: Border.all(
+            color: DunesColors.brandPurpleLine.withValues(alpha: 0.45),
+          ),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -1970,7 +2171,9 @@ class ChatMeetingMinutesCard extends StatelessWidget {
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: DunesColors.accentLine.withValues(alpha: 0.7)),
+          border: Border.all(
+            color: DunesColors.accentLine.withValues(alpha: 0.7),
+          ),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -2086,7 +2289,9 @@ class ChatApprovalCard extends StatelessWidget {
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: DunesColors.accentLine.withValues(alpha: 0.7)),
+          border: Border.all(
+            color: DunesColors.accentLine.withValues(alpha: 0.7),
+          ),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,

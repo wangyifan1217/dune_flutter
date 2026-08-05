@@ -712,7 +712,7 @@ class _FavoriteCard extends StatelessWidget {
           child: ChatFileAttach(
             fileName: fileName,
             mine: false,
-            isPdf: chatPayloadIsPdf(item.payload, fileName),
+            fileSizeBytes: (item.payload?['size'] as num?)?.toInt(),
             onTap: onOpenFile,
           ),
         );

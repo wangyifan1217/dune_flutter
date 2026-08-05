@@ -51,6 +51,7 @@ class NativeConversationPage extends StatefulWidget {
     this.onOpenRobot,
     this.onOpenApprovalAssistant,
     this.onOpenTaskAssistant,
+    this.onOpenDriveAssistant,
     this.onOpenReconciliationAssistant,
     this.selectedConversationId,
     this.conversationReadSignal,
@@ -74,6 +75,7 @@ class NativeConversationPage extends StatefulWidget {
   final ValueChanged<NativeConversation>? onOpenRobot;
   final ValueChanged<NativeConversation>? onOpenApprovalAssistant;
   final ValueChanged<NativeConversation>? onOpenTaskAssistant;
+  final ValueChanged<NativeConversation>? onOpenDriveAssistant;
   final VoidCallback? onOpenReconciliationAssistant;
 
   /// 双栏布局中当前选中的会话，用于列表高亮。
@@ -752,6 +754,18 @@ class _NativeConversationPageState extends State<NativeConversationPage>
           ];
         }
       }
+      if (!widget.session.isExternalUser &&
+          widget.onOpenDriveAssistant != null &&
+          !rows.any((c) => c.isDriveAssistant)) {
+        try {
+          final ensured = await _service.ensureDriveAssistantSession();
+          if (ensured.id > 0 && !rows.any((c) => c.id == ensured.id)) {
+            rows = <NativeConversation>[...rows, ensured];
+          }
+        } catch (_) {
+          // 后端灰度期间不影响其它会话列表。
+        }
+      }
       rows = List<NativeConversation>.unmodifiable(rows);
       final dissolved = (results[0] as List<NativeConversation>)
           .where((c) => c.dissolved && c.id > 0)
@@ -983,6 +997,11 @@ class _NativeConversationPageState extends State<NativeConversationPage>
     } else if (c.isTaskAssistant) {
       rowKind = ChatInboxRowKind.taskAssistant;
       onTap = _openWithScrollPersist(() => widget.onOpenTaskAssistant?.call(c));
+    } else if (c.isDriveAssistant) {
+      rowKind = ChatInboxRowKind.driveAssistant;
+      onTap = _openWithScrollPersist(
+        () => widget.onOpenDriveAssistant?.call(c),
+      );
     } else if (c.isReconciliationAssistant) {
       // 对账助手入口已屏蔽，后端若仍返回对应会话也不展示。
       return null;
@@ -1029,7 +1048,9 @@ class _NativeConversationPageState extends State<NativeConversationPage>
           ? _yunshuName
           : (c.isApprovalAssistant
                 ? '审批助手'
-                : (c.isTaskAssistant ? '任务助手' : title)),
+                : (c.isTaskAssistant
+                      ? '任务助手'
+                      : (c.isDriveAssistant ? '企业微盘' : title))),
       subtitle: null,
       preview: analyzingRobot
           ? '正在分析…'
@@ -1050,6 +1071,8 @@ class _NativeConversationPageState extends State<NativeConversationPage>
           ? '待办简报 · 解释 · 催办'
           : c.preview.isEmpty && c.isTaskAssistant
           ? '子任务分配 · 进度跟进'
+          : c.preview.isEmpty && c.isDriveAssistant
+          ? '共享空间文件动态'
           : c.preview,
       timeLabel: InboxFormat.formatTime(c.updatedAt, withClock: c.isPrivate),
       memberCount:
@@ -1057,6 +1080,7 @@ class _NativeConversationPageState extends State<NativeConversationPage>
               c.isRobot ||
               c.isApprovalAssistant ||
               c.isTaskAssistant ||
+              c.isDriveAssistant ||
               c.isReconciliationAssistant ||
               kind == 'AI_ASSISTANT' ||
               kind == 'BROADCAST'
@@ -1134,6 +1158,7 @@ class _NativeConversationPageState extends State<NativeConversationPage>
                 c.isRobot ||
                 c.isApprovalAssistant ||
                 c.isTaskAssistant ||
+                c.isDriveAssistant ||
                 c.isReconciliationAssistant,
           )
           .toList(),

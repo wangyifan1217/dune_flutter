@@ -55,6 +55,7 @@ class NativeConversation {
   bool get isRobot => kind == 'ROBOT';
   bool get isApprovalAssistant => kind == 'APPROVAL_ASSISTANT';
   bool get isTaskAssistant => kind == 'TASK_ASSISTANT';
+  bool get isDriveAssistant => kind == 'DRIVE_ASSISTANT';
   bool get isReconciliationAssistant {
     final normalized = kind.trim().toUpperCase();
     return normalized == 'RECONCILIATION_ASSISTANT' ||
@@ -231,13 +232,141 @@ class NativeMessageFavorite {
 }
 
 class NativeMessageFavoritePage {
-  const NativeMessageFavoritePage({
-    required this.items,
-    this.hasMore = false,
-  });
+  const NativeMessageFavoritePage({required this.items, this.hasMore = false});
 
   final List<NativeMessageFavorite> items;
   final bool hasMore;
+}
+
+/// 会话内消息置顶（企微式：全员可见，最多 5 条）。
+class NativePinnedMessage {
+  const NativePinnedMessage({
+    required this.id,
+    required this.conversationId,
+    required this.messageId,
+    required this.kind,
+    required this.bodyText,
+    required this.previewText,
+    required this.senderName,
+    this.senderUserId,
+    this.pinnedByUserId,
+    this.pinnedByDisplayName = '',
+    this.payload,
+    this.pinnedAt,
+    this.messageCreatedAt,
+  });
+
+  final int id;
+  final int conversationId;
+  final int messageId;
+  final String kind;
+  final String bodyText;
+  final String previewText;
+  final String senderName;
+  final int? senderUserId;
+  final int? pinnedByUserId;
+  final String pinnedByDisplayName;
+  final Map<String, dynamic>? payload;
+  final DateTime? pinnedAt;
+  final DateTime? messageCreatedAt;
+
+  String get contentLabel {
+    final text = pinnedContentSummary;
+    final sender = senderName.trim();
+    if (sender.isEmpty) return text;
+    return '$sender：$text';
+  }
+
+  String get pinnedActionLabel {
+    final operator = pinnedByDisplayName.trim();
+    return '${operator.isEmpty ? '有人' : operator}置顶了';
+  }
+
+  /// 置顶条内容摘要：用消息本体，不用推送口吻（「发送了一张图片」等）。
+  String get pinnedContentSummary {
+    final upper = kind.trim().toUpperCase();
+    final body = bodyText.trim();
+    final fileName = _payloadFileName;
+
+    switch (upper) {
+      case 'IMAGE':
+        return '[图片]';
+      case 'VIDEO':
+        return '[视频]';
+      case 'AUDIO':
+      case 'VOICE':
+        return '[语音]';
+      case 'FILE':
+        final name = fileName.isNotEmpty
+            ? fileName
+            : _stripAttachmentPrefix(body);
+        return name.isEmpty ? '[文件]' : '[文件] $name';
+      case 'LINK':
+        return body.isNotEmpty ? body : '[链接]';
+    }
+
+    if (_isPushStylePreview(previewText) || _isPushStylePreview(body)) {
+      if (_looksLikeImageName(body) || _looksLikeImageName(fileName)) {
+        return '[图片]';
+      }
+      if (_looksLikeVideoName(body) || body.startsWith('[视频]')) {
+        return '[视频]';
+      }
+      if (body.startsWith('[语音]')) return '[语音]';
+      if (body.startsWith('[文件]') || fileName.isNotEmpty) {
+        final name = fileName.isNotEmpty
+            ? fileName
+            : _stripAttachmentPrefix(body);
+        return name.isEmpty ? '[文件]' : '[文件] $name';
+      }
+    }
+
+    final preview = previewText.trim();
+    if (preview.isNotEmpty && !_isPushStylePreview(preview)) return preview;
+    if (body.isNotEmpty) return body;
+    return '[消息]';
+  }
+
+  String get _payloadFileName {
+    final raw = payload?['fileName'] ?? payload?['name'];
+    return '${raw ?? ''}'.trim();
+  }
+
+  static bool _isPushStylePreview(String text) {
+    final t = text.trim();
+    return t == '发送了一张图片' ||
+        t == '发送了一个文件' ||
+        t == '发送了一个视频' ||
+        t == '发送了一条语音' ||
+        t == '您有新消息' ||
+        t == '[新消息]';
+  }
+
+  static String _stripAttachmentPrefix(String text) {
+    final t = text.trim();
+    final idx = t.indexOf(']');
+    if (t.startsWith('[') && idx > 0 && idx + 1 < t.length) {
+      return t.substring(idx + 1).trim();
+    }
+    return t;
+  }
+
+  static bool _looksLikeImageName(String text) {
+    return RegExp(
+      r'\.(png|jpe?g|gif|webp|bmp|heic|heif)$',
+      caseSensitive: false,
+    ).hasMatch(text.trim());
+  }
+
+  static bool _looksLikeVideoName(String text) {
+    return RegExp(
+      r'\.(mp4|mov|m4v|webm|mkv|avi)$',
+      caseSensitive: false,
+    ).hasMatch(text.trim());
+  }
+
+  /// 兼容其它使用方的单行摘要。
+  String get barLabel => '$pinnedActionLabel  $contentLabel';
 }
 
 class NativeGroupMember {

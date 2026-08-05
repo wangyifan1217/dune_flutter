@@ -8,6 +8,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/config/dunes_defaults.dart';
 import '../../core/theme/dunes_theme.dart';
+import '../chat/chat_file_type_icon.dart';
 import '../chat/dunes_pdf_view.dart';
 
 class NativeDriveSharePage extends StatefulWidget {
@@ -243,12 +244,12 @@ class _NativeDriveSharePageState extends State<NativeDriveSharePage> {
               ? Map<String, dynamic>.from(displayItems[index] as Map)
               : <String, dynamic>{};
           final folder = '${item['type']}'.toLowerCase() == 'folder';
+          final name = '${item['name'] ?? ''}';
           return ListTile(
-            leading: Icon(
-              folder ? Icons.folder_rounded : Icons.insert_drive_file_outlined,
-              color: folder ? const Color(0xFF7656D6) : DunesColors.text2,
-            ),
-            title: Text('${item['name'] ?? ''}'),
+            leading: folder
+                ? const Icon(Icons.folder_rounded, color: Color(0xFF7656D6))
+                : ChatFileTypeIcon(fileName: name, size: 36),
+            title: Text(name),
             subtitle: Text(
               folder
                   ? '文件夹'

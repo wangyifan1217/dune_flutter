@@ -21986,11 +21986,13 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
 
     // Same metrics source as main list (HTML: state.metrics[type])
 
-    // Sub-tab rows (aggregated by name+group, sorted by profit desc)
+    // Sub-tab rows (aggregated by name, sorted by profit desc)
     //
     // v11 · 分类 tab 已从 UI 移除 (see _kDetailSubTabs)，但客户端聚合路径
     //       保留 —— 后端将来若下发 view_dict[productCategory] 等键，
     //       走同一入口不需要改。当前 UI 里只会用到 supplierCode 分支。
+    // v12 · L2/L3 子列表按 name 合并，不再用 name::group 拆行。
+    //       一级分类筛选只在 L1 有意义；二级再挂「中石化/(未分类)」会把同省拆成双行。
     final subRows = <Map<String, dynamic>>[];
     const aggregatedSubTabs = {
       'supplierCode',
@@ -22006,14 +22008,15 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     } else {
       final rawSubRows = viewDict[_detailSubTab];
       if (rawSubRows is List) {
-        // Aggregate by name::group
+        // Aggregate by name only（兼容旧网关仍下发带 group 的拆行）
         final agg = <String, Map<String, dynamic>>{};
         for (final r in rawSubRows.cast<Map<String, dynamic>>()) {
-          final k = '${r['name']}::${r['group']}';
-          if (!agg.containsKey(k)) {
-            agg[k] = {'name': r['name'], 'group': r['group']};
+          final name = r['name']?.toString() ?? '';
+          if (name.isEmpty) continue;
+          if (!agg.containsKey(name)) {
+            agg[name] = {'name': name, 'group': ''};
           }
-          final a = agg[k]!;
+          final a = agg[name]!;
           for (final field in r.keys) {
             if (field == 'name' || field == 'group') continue;
             final raw = r[field];

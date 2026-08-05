@@ -30,7 +30,7 @@ Future<bool> saveDriveItemToKb({
   if (!driveItemSupportsKbUpload(item)) {
     showDunesCenterToast(
       context,
-      '仅支持 PDF / Word / Excel / Markdown',
+      '仅支持 $kChatKbUploadSupportLabel',
       kind: DunesToastKind.error,
     );
     return false;

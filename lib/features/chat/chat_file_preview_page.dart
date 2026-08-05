@@ -15,23 +15,63 @@ import 'file_download.dart' as file_dl;
 
 const _wechatGreen = Color(0xFF07C160);
 
-/// 与知识库上传页一致：PDF / Word / Excel / Markdown。
+/// IM / 微盘 / 知识库上传共用：可入库扩展名。
+const Set<String> kChatKbUploadExtensions = <String>{
+  // 文档
+  'pdf',
+  'doc',
+  'docx',
+  'xlsx',
+  'xls',
+  'ppt',
+  'pptx',
+  'md',
+  'txt',
+  'html',
+  'htm',
+  // 图片
+  'jpg',
+  'jpeg',
+  'png',
+  'webp',
+  'gif',
+  'bmp',
+  // 语音 / 音频
+  'm4a',
+  'mp3',
+  'wav',
+  'aac',
+  'amr',
+  'ogg',
+  'webm',
+};
+
+/// 面向用户的支持类型文案。
+const String kChatKbUploadSupportLabel =
+    'PDF / Word / Excel / PPT / Markdown / TXT / HTML / 图片 / 语音';
+
+/// 与知识库上传页一致：文档 + 图片 + 语音。
 bool chatFileSupportsKbUpload(
   String fileName, [
   Map<String, dynamic>? payload,
 ]) {
   final name = fileName.trim().toLowerCase();
   final ext = name.contains('.') ? name.split('.').last.trim() : '';
-  const allowed = <String>{'pdf', 'doc', 'docx', 'xlsx', 'xls', 'md'};
-  if (allowed.contains(ext)) return true;
+  if (kChatKbUploadExtensions.contains(ext)) return true;
   final mime = (payload?['mimeType'] ?? '').toString().trim().toLowerCase();
+  if (mime.startsWith('image/') || mime.startsWith('audio/')) return true;
   switch (mime) {
     case 'application/pdf':
     case 'application/msword':
     case 'application/vnd.openxmlformats-officedocument.wordprocessingml.document':
     case 'application/vnd.ms-excel':
     case 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet':
+    case 'application/vnd.ms-powerpoint':
+    case 'application/vnd.openxmlformats-officedocument.presentationml.presentation':
     case 'text/markdown':
+    case 'text/plain':
+    case 'text/html':
+    case 'application/xhtml+xml':
       return true;
     default:
       return false;

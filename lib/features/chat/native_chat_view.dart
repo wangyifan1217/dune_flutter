@@ -3642,7 +3642,8 @@ class _NativeChatViewState extends State<NativeChatView>
     final fileDownloaded =
         isFile && _isFileDownloaded(m.payload, attachmentName);
     final canSaveFileToKb =
-        isFile && chatFileSupportsKbUpload(attachmentName, m.payload);
+        (isFile || isImage || isAudio) &&
+        chatFileSupportsKbUpload(attachmentName, m.payload);
     if (isFile) {
       await _ensureDriveSavedKnown(m.payload);
     }
@@ -5292,13 +5293,13 @@ class _NativeChatViewState extends State<NativeChatView>
     setState(() => _driveSavedFileKeys.add(key));
   }
 
-  /// 将会话附件存入当前用户知识库（PDF / Word / Excel / Markdown）。
+  /// 将会话附件存入当前用户知识库（文档 / 图片 / 语音等）。
   Future<void> _saveChatAttachmentToKb(
     Map<String, dynamic>? payload,
     String fileName,
   ) async {
     if (!chatFileSupportsKbUpload(fileName, payload)) {
-      _showToast('仅支持 PDF / Word / Excel / Markdown', error: true);
+      _showToast('仅支持 $kChatKbUploadSupportLabel', error: true);
       return;
     }
     if (_downloadingMedia) {

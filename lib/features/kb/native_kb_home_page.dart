@@ -178,18 +178,16 @@ class _NativeKbHomePageState extends State<NativeKbHomePage> {
       _toast('Nova 知识库未就绪，请稍后重试', error: true);
       return;
     }
-    const types = <XTypeGroup>[
+    final types = <XTypeGroup>[
       XTypeGroup(
-        label: 'documents',
-        extensions: <String>['pdf', 'doc', 'docx', 'xlsx', 'xls', 'md'],
+        label: 'kb-upload',
+        extensions: kChatKbUploadExtensions.toList(growable: false),
       ),
     ];
     final file = await _openDocumentFileWithFallback(types);
     if (file == null) return;
-    final ext = file.name.split('.').last.toLowerCase().trim();
-    const allowed = <String>{'pdf', 'doc', 'docx', 'xlsx', 'xls', 'md'};
-    if (!allowed.contains(ext)) {
-      _toast('仅支持 PDF / Word / Excel / Markdown', error: true);
+    if (!chatFileSupportsKbUpload(file.name)) {
+      _toast('仅支持 $kChatKbUploadSupportLabel', error: true);
       return;
     }
     if (!mounted) return;
@@ -816,13 +814,13 @@ class _NativeKbHomePageState extends State<NativeKbHomePage> {
                   ),
                   const SizedBox(height: 6),
                   const Text(
-                    '点击选择 PDF / Word / Excel / Markdown',
+                    '点击选择文档 / 图片 / 语音等文件',
                     style: TextStyle(fontSize: 11.5),
                   ),
                   const SizedBox(height: 4),
                   Text(
                     ready
-                        ? '支持 PDF / Word / Excel / Markdown · 上传后自动解析'
+                        ? '支持 $kChatKbUploadSupportLabel · 上传后自动解析'
                         : 'Nova 知识库未就绪，请稍后重试',
                     style: const TextStyle(
                       fontSize: 10,

@@ -553,7 +553,7 @@ Map<String, dynamic> _fallbackUiRoot() {
     metric('netProfit', '净利润', '净利', 'pos'),
     metric('revenue', '收入', '收入', 'cnpc'),
     metric('costTotal', '成本合计', '成本合计', 'neg'),
-    metric('projectCost', '项目成本', '项目', 'neg'),
+    metric('projectCost', '直接成本', '直接', 'neg'),
     metric('cost', '业务成本', '业务', 'neg'),
     metric('spread', '利差', '利差', 'copper'),
     metric('rate', 'ROI', 'ROI', 'copper', isRate: true, hero: true),
@@ -9397,7 +9397,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       case 'cost':
         return '业务成本';
       case 'projectCost':
-        return '项目成本';
+        return '直接成本';
       case 'profit':
         return '毛利';
       case 'netProfit':
@@ -9577,7 +9577,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             ],
             evidence: [
               _LhAiEvidence('业务成本', _fmtAmountWithUnit(businessCost)),
-              _LhAiEvidence('项目成本', _fmtAmountWithUnit(projectCost)),
+              _LhAiEvidence('直接成本', _fmtAmountWithUnit(projectCost)),
             ],
             drill: () => setState(() => _expandedTrendKey = 'totalCost'),
           ),
@@ -12636,7 +12636,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                         ),
                         (
                           key: 'projectCost',
-                          label: '项目成本',
+                          label: '直接成本',
                           value: projectCost,
                           isRate: false,
                         ),
@@ -13363,7 +13363,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       'netProfit': ('净利润', false),
       'totalCost': ('成本合计', false),
       'costTotal': ('成本合计', false),
-      'projectCost': ('项目成本', false),
+      'projectCost': ('直接成本', false),
       'cost': ('业务成本', false),
       'businessCost': ('业务成本', false),
       'grossMargin': ('毛利率', true),
@@ -14467,7 +14467,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       (key: 'revenue', text: '收入（已核销利差）= 核销规模 × 利差率'),
       (key: 'spread', text: '利差 = 库字段 spread_margin'),
       (key: 'cost', text: '经营成本 = 业务成本'),
-      (key: 'projectCost', text: '项目成本 = 库字段 cost_gross_profit'),
+      (key: 'projectCost', text: '直接成本 = 库字段 cost_gross_profit'),
       (key: 'totalCost', text: '成本合计 = 库字段 total_cost'),
       (key: 'profit', text: '毛利润 = 库字段 gross_profit'),
       (key: 'grossMargin', text: '毛利率 = 毛利润 ÷ 核销额'),
@@ -19606,7 +19606,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     'netProfit', // 净利润
     'revenue', // 收入
     'costTotal', // 成本合计
-    'projectCost', // 项目成本
+    'projectCost', // 直接成本
     'cost', // 业务成本
     'spread', // 利差
     'rate', // ROI
@@ -25890,7 +25890,7 @@ const Map<String, String> _kHeroMetricLabel = {
   'profit': '毛利润',
   'netProfit': '净利润',
   'totalCost': '成本合计',
-  'projectCost': '项目成本',
+  'projectCost': '直接成本',
   'cost': '业务成本',
   'grossMargin': '毛利率',
   'rate': 'ROI',

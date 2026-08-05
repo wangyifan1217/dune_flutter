@@ -296,7 +296,7 @@ String lighthouseHeroMetricLabel(String key) {
     'netProfit': '净利润',
     'totalCost': '成本合计',
     'costTotal': '成本合计',
-    'projectCost': '项目成本',
+    'projectCost': '直接成本',
     'cost': '业务成本',
     'businessCost': '业务成本',
     'grossMargin': '毛利率',

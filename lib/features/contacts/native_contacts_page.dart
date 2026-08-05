@@ -335,22 +335,8 @@ class _NativeContactsPageState extends State<NativeContactsPage> {
       showDunesToast(context, '不能与自己发起私聊', kind: DunesToastKind.error);
       return;
     }
-    try {
-      final convId = await _convService.ensurePrivateConversationForPeer(
-        contact.userId,
-      );
-      if (convId == null || convId <= 0) {
-        throw Exception('创建私聊失败');
-      }
-      widget.onStartPrivateChat(contact.userId);
-    } catch (e) {
-      if (!mounted) return;
-      showDunesToast(
-        context,
-        '创建私聊失败：${friendlyErrorText(e)}',
-        kind: DunesToastKind.error,
-      );
-    }
+    // 不预先创建服务端会话：首次发消息再建，避免对方未收到消息就看到空会话。
+    widget.onStartPrivateChat(contact.userId);
   }
 
   Future<void> _createGroupChat() async {

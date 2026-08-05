@@ -243,9 +243,8 @@ class _NativeNewChatPageState extends State<NativeNewChatPage> {
     try {
       if (_mode == _NewChatMode.private || ids.length == 1) {
         final peerId = ids.first;
-        final convId = await _conversationService.ensurePrivateConversationForPeer(peerId);
         if (!mounted) return;
-        if (convId == null || convId <= 0) throw Exception('创建私聊失败');
+        // 不预先创建服务端会话：首次发消息再建。
         widget.onOpenPrivateChat(peerId);
         return;
       }

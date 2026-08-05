@@ -50,7 +50,7 @@ class CommUnreadNotifier extends ChangeNotifier {
   }) {
     var total = notifUnread + aiSummaryUnread;
     for (final conversation in rows) {
-      if (!conversation.isVisible) continue;
+      if (!conversation.isListedInInbox) continue;
       if (treatAsReadIds.contains(conversation.id)) continue;
       total += effectiveUnreadCount(conversation);
     }

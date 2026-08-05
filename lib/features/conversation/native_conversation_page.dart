@@ -715,7 +715,7 @@ class _NativeConversationPageState extends State<NativeConversationPage>
           _aiSummaryService.fetchUnreadCount(),
       ]);
       var rows = (results[0] as List<NativeConversation>)
-          .where((c) => c.isVisible && !isConversationHidden(hidden, c.id))
+          .where((c) => c.isListedInInbox && !isConversationHidden(hidden, c.id))
           .toList(growable: true);
       // 内部用户确保审批助手会话存在，并入列表按 updatedAt 排序（不硬置顶）。
       if (!widget.session.isExternalUser &&

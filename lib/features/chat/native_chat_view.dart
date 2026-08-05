@@ -59,6 +59,7 @@ import 'chat_video_utils.dart';
 import 'chat_video_widgets.dart';
 import 'chat_voice_player.dart';
 import 'voice_asr_store.dart';
+import 'chat_compose_draft_store.dart';
 import 'voice_recording_overlay.dart';
 import 'voice_transcript_panel.dart';
 import 'chat_widgets.dart';
@@ -392,8 +393,65 @@ class _NativeChatViewState extends State<NativeChatView>
   bool _messageActionsMenuOpen = false;
   final Set<int> _multiSelectedMessageIds = <int>{};
   double _lastKeyboardInset = 0;
+  String? _composeDraftKey;
+  bool _restoringComposeDraft = false;
 
   bool get _isPrivate => widget.kind == NativeChatKind.private;
+
+  String? _draftKeyFor({
+    NativeConversation? conversation,
+    int? peerUserId,
+    int? conversationId,
+  }) {
+    final id =
+        conversationId ??
+        conversation?.id ??
+        widget.conversationHint?.id ??
+        0;
+    if (id > 0) return ChatComposeDraftStore.keyFor(conversationId: id);
+    final peer =
+        peerUserId ??
+        conversation?.peerUserId ??
+        widget.peerUserIdHint ??
+        0;
+    if (_isPrivate && peer > 0) {
+      return ChatComposeDraftStore.keyFor(peerUserId: peer);
+    }
+    return null;
+  }
+
+  void _persistComposeDraft({bool flush = false}) {
+    final key = _composeDraftKey ?? _draftKeyFor(conversation: _conversation);
+    if (key == null) return;
+    ChatComposeDraftStore.instance.save(
+      key,
+      _inputController.text,
+      flush: flush,
+    );
+  }
+
+  Future<void> _restoreComposeDraft({NativeConversation? conversation}) async {
+    await ChatComposeDraftStore.instance.ensureLoaded();
+    if (!mounted) return;
+    final key = _draftKeyFor(conversation: conversation ?? _conversation);
+    _composeDraftKey = key;
+    final draft = ChatComposeDraftStore.instance.textFor(key);
+    if (draft == null || draft.isEmpty) return;
+    if (_inputController.text.isNotEmpty) return;
+    _restoringComposeDraft = true;
+    _inputController.value = TextEditingValue(
+      text: draft,
+      selection: TextSelection.collapsed(offset: draft.length),
+    );
+    _lastComposeText = draft;
+    _restoringComposeDraft = false;
+  }
+
+  void _clearComposeDraft() {
+    final key = _composeDraftKey ?? _draftKeyFor(conversation: _conversation);
+    ChatComposeDraftStore.instance.clear(key);
+    _composeDraftKey = key;
+  }
 
   @override
   void initState() {
@@ -425,6 +483,11 @@ class _NativeChatViewState extends State<NativeChatView>
     _load(silent: _bootstrapped);
     _bootRealtime();
     unawaited(VoiceAsrStore.instance.ensureLoaded());
+    unawaited(
+      ChatComposeDraftStore.instance.ensureLoaded().then((_) {
+        if (mounted) unawaited(_restoreComposeDraft());
+      }),
+    );
     unawaited(_loadSelfAvatar());
     userAvatarRefresh.addListener(_onSelfAvatarUpdated);
     MeetingLiveController.instance.active.addListener(
@@ -578,6 +641,7 @@ class _NativeChatViewState extends State<NativeChatView>
         (newConvId <= 0 && newPeer > 0 && newPeer != oldPeer);
     if (conversationSwitched) {
       // 同一 State 复用时立即作废旧加载；有缓存则先展示，避免整页转圈。
+      _persistComposeDraft(flush: true);
       _loadGeneration++;
       _enterStickBottomPending = true;
       _userInteractedWithScroll = false;
@@ -591,6 +655,11 @@ class _NativeChatViewState extends State<NativeChatView>
       final cached = ChatMessageCache.instance.peek(cachedId);
       final hasCache = cached != null && cached.isNotEmpty;
       final hintUnread = widget.conversationHint?.unreadCount ?? 0;
+      _restoringComposeDraft = true;
+      _inputController.clear();
+      _lastComposeText = '';
+      _restoringComposeDraft = false;
+      _quoteDraft = null;
       setState(() {
         _conversation = widget.conversationHint;
         _messages = hasCache ? cached : const <NativeChatMessage>[];
@@ -615,6 +684,7 @@ class _NativeChatViewState extends State<NativeChatView>
       if (hasCache && hintUnread > 0 && cached != null) {
         _captureSessionUnread(widget.conversationHint!, cached);
       }
+      unawaited(_restoreComposeDraft(conversation: widget.conversationHint));
       unawaited(_load(silent: hasCache));
       return;
     }
@@ -733,6 +803,7 @@ class _NativeChatViewState extends State<NativeChatView>
     _highlightTimer?.cancel();
     _inputController.removeListener(_onComposeInputChanged);
     _inputFocusNode.removeListener(_onInputFocusChanged);
+    _persistComposeDraft(flush: true);
     _inputFocusNode.dispose();
     _atFilterNotifier?.dispose();
     if (_recording) {
@@ -1525,6 +1596,34 @@ class _NativeChatViewState extends State<NativeChatView>
         });
         return;
       }
+      // 本地占位私聊（尚未发过消息）：不拉历史、不订阅，展示空会话页。
+      if (conv.id <= 0) {
+        setState(() {
+          _conversation = conv;
+          _messages = const <NativeChatMessage>[];
+          _hasMore = false;
+          _hasNewer = false;
+          _locatedMode = false;
+          _loading = false;
+          _locating = false;
+          _bootstrapped = true;
+          if (!silent) _error = null;
+        });
+        unawaited(_restoreComposeDraft(conversation: conv));
+        if (_isPrivate) {
+          final peerId = conv.peerUserId ?? widget.peerUserIdHint ?? 0;
+          _realtime.setPresenceContext(
+            conversationId: 0,
+            peerUserId: peerId,
+          );
+          final online =
+              peerId > 0 && _realtime.currentOnlineUsers.contains(peerId);
+          if (!stale() && _peerOnline != online) {
+            setState(() => _peerOnline = online);
+          }
+        }
+        return;
+      }
       final NativeMessagePage page;
       if (focusId > 0) {
         page = await _service.fetchMessagesAround(
@@ -1619,10 +1718,13 @@ class _NativeChatViewState extends State<NativeChatView>
         if (!silent) _error = null;
       });
       if (!preservePaginatedHistory || conversationChanged) {
-        ChatMessageCache.instance.put(conv.id, nextMessages);
+        if (conv.id > 0) {
+          ChatMessageCache.instance.put(conv.id, nextMessages);
+        }
       }
       unawaited(_refreshPinnedMessages());
       unawaited(_refreshDownloadedFileFlags());
+      unawaited(_restoreComposeDraft(conversation: conv));
       // 有缓存的 silent 首进也要捕获；已捕获过则用 hint/会话未读数取大值补齐。
       final hintUnread = widget.conversationHint?.unreadCount ?? 0;
       final shouldCaptureUnread = !silent ||
@@ -2409,9 +2511,21 @@ class _NativeChatViewState extends State<NativeChatView>
     } else if (_isPrivate) {
       final peerId = widget.peerUserIdHint ?? 0;
       if (peerId > 0) {
-        final convId = await _service.ensurePrivateConversationForPeer(peerId);
+        // 只查找已有会话；没有消息活动的空私聊不当作有效会话。
+        final convId = await _service.findPrivateConversationForPeer(peerId);
         if (convId != null && convId > 0) {
           conv = await _service.fetchConversation(convId);
+        } else {
+          // 本地占位：首次发消息再建服务端会话，避免对方提前看到空会话。
+          conv = NativeConversation(
+            id: 0,
+            kind: 'PRIVATE',
+            title: '私聊',
+            unreadCount: 0,
+            preview: '',
+            updatedAt: null,
+            peerUserId: peerId,
+          );
         }
       }
     }
@@ -2419,6 +2533,7 @@ class _NativeChatViewState extends State<NativeChatView>
       final all = await _service.fetchConversations();
       for (final c in all) {
         if (_isPrivate && c.isPrivate) {
+          if (!c.hasInboxActivity) continue;
           conv = c;
           break;
         }
@@ -2450,6 +2565,54 @@ class _NativeChatViewState extends State<NativeChatView>
       }
     }
     return resolved;
+  }
+
+  /// 首次发消息时再创建服务端私聊；已有 id 则直接返回。
+  Future<NativeConversation?> _ensureConversationReadyForSend() async {
+    final current = _conversation;
+    if (current != null && current.id > 0) return current;
+    if (!_isPrivate) return current;
+    if (current?.dissolved == true) return null;
+    final peerId =
+        current?.peerUserId ?? widget.peerUserIdHint ?? 0;
+    if (peerId <= 0 || peerId == widget.session.userId) {
+      throw Exception('无法创建私聊：对方无效');
+    }
+    final convId = await _service.ensurePrivateConversationForPeer(peerId);
+    if (convId == null || convId <= 0) {
+      throw Exception('创建私聊失败');
+    }
+    ChatComposeDraftStore.instance.migratePeerToConversation(peerId, convId);
+    var fresh = await _service.fetchConversation(convId);
+    fresh ??= NativeConversation(
+      id: convId,
+      kind: 'PRIVATE',
+      title: current?.title ?? '私聊',
+      unreadCount: 0,
+      preview: current?.preview ?? '',
+      updatedAt: DateTime.now(),
+      peerUserId: peerId,
+      peerDisplayName: current?.peerDisplayName,
+      peerDepartment: current?.peerDepartment,
+      peerRoleLabel: current?.peerRoleLabel,
+      peerAvatarPreset: current?.peerAvatarPreset,
+      peerAvatarObjectKey: current?.peerAvatarObjectKey,
+      peerAvatarUrl: current?.peerAvatarUrl,
+    );
+    final enriched = await _enrichPrivateConversation(fresh);
+    if (!mounted) return enriched;
+    setState(() {
+      _conversation = enriched;
+      _composeDraftKey = _draftKeyFor(conversation: enriched);
+    });
+    unawaited(
+      _realtime.ensureConversationSubscription(enriched.id),
+    );
+    _realtime.setPresenceContext(
+      conversationId: enriched.id,
+      peerUserId: enriched.peerUserId ?? peerId,
+    );
+    return enriched;
   }
 
   Future<NativeConversation> _enrichPrivateConversation(
@@ -2534,9 +2697,8 @@ class _NativeChatViewState extends State<NativeChatView>
   }
 
   Future<void> _send() async {
-    final conv = _conversation;
     final text = _inputController.text.trim();
-    if (conv == null || text.isEmpty || _sending || conv.dissolved) return;
+    if (text.isEmpty || _sending || _conversation?.dissolved == true) return;
     final mentionIds = _parseMentionUserIds(text);
     final payload = <String, dynamic>{};
     if (mentionIds.isNotEmpty) {
@@ -2548,12 +2710,23 @@ class _NativeChatViewState extends State<NativeChatView>
     }
     final payloadOrNull = payload.isEmpty ? null : payload;
     setState(() => _sending = true);
-    // 键盘「发送」会先 unfocus；连发场景下保持输入焦点。
+    // 键盘「发送」会先 unfocus；连发场景下立刻抢回焦点，避免先折叠再展开。
     final keepKeyboard = !isWideChatLayout(context);
     if (keepKeyboard) _inputFocusNode.requestFocus();
     try {
+      var conv = _conversation;
+      if (conv == null || conv.id <= 0) {
+        final ready = await _ensureConversationReadyForSend();
+        if (ready == null || ready.id <= 0) {
+          throw Exception('会话未就绪');
+        }
+        conv = ready;
+        // 首次建会话的 await 后补一次焦点，防止键盘被系统收起。
+        if (keepKeyboard && mounted) _inputFocusNode.requestFocus();
+      }
       await _service.sendText(conv.id, text, payload: payloadOrNull);
       _inputController.clear();
+      _clearComposeDraft();
       setState(() {
         _emojiOpen = false;
         _locatedMode = false;
@@ -2680,7 +2853,7 @@ class _NativeChatViewState extends State<NativeChatView>
         fileName: fileName,
       );
       await _service.sendImage(
-        conversationId: conv.id,
+        conversationId: _requireReadyConversationId(),
         bytes: bytes,
         fileName: fileName,
         mimeType: mimeType,
@@ -2752,7 +2925,7 @@ class _NativeChatViewState extends State<NativeChatView>
     await _guardSend(() async {
       _beginUpload('上传图片', previewBytes: bytes, kind: 'IMAGE', fileName: name);
       await _service.sendImage(
-        conversationId: conv.id,
+        conversationId: _requireReadyConversationId(),
         bytes: bytes,
         fileName: name,
         mimeType: mimeType,
@@ -2911,7 +3084,7 @@ class _NativeChatViewState extends State<NativeChatView>
           fileName: fileName,
         );
         await _service.sendImage(
-          conversationId: conv.id,
+          conversationId: _requireReadyConversationId(),
           bytes: bytes,
           fileName: fileName,
           mimeType: mimeType,
@@ -2994,7 +3167,7 @@ class _NativeChatViewState extends State<NativeChatView>
         videoHeight: prepared.height,
       );
       await _service.sendVideo(
-        conversationId: conv.id,
+        conversationId: _requireReadyConversationId(),
         bytes: prepared.bytes,
         fileName: prepared.fileName,
         mimeType: prepared.mimeType,
@@ -3038,7 +3211,7 @@ class _NativeChatViewState extends State<NativeChatView>
       _beginUpload('上传文件', kind: 'FILE', fileName: fileName);
       await ChatFileUploadCoordinator.instance.sendFile(
         session: widget.session,
-        conversationId: conv.id,
+        conversationId: _requireReadyConversationId(),
         bytes: bytes,
         fileName: fileName,
         mimeType: mimeType,
@@ -3247,7 +3420,7 @@ class _NativeChatViewState extends State<NativeChatView>
       }
       await _guardSend(() async {
         await _service.sendAudio(
-          conversationId: conv.id,
+          conversationId: _requireReadyConversationId(),
           bytes: bytes,
           fileName: fileName,
           mimeType: mimeType,
@@ -3380,10 +3553,17 @@ class _NativeChatViewState extends State<NativeChatView>
   Future<void> _guardSend(
     Future<void> Function() task, {
     ChatUploadCancelToken? cancelToken,
+    bool ensureCurrentConversation = true,
   }) async {
     _activeUploadCancel = cancelToken;
     setState(() => _uploading = true);
     try {
+      if (ensureCurrentConversation && (_conversation?.id ?? 0) <= 0) {
+        final ready = await _ensureConversationReadyForSend();
+        if (ready == null || ready.id <= 0) {
+          throw Exception('会话未就绪');
+        }
+      }
       await task();
       if (!mounted) return;
       // 与普通文本发送一致：退出定位态，回到最新消息端并贴底。
@@ -3424,6 +3604,12 @@ class _NativeChatViewState extends State<NativeChatView>
         });
       }
     }
+  }
+
+  int _requireReadyConversationId() {
+    final id = _conversation?.id ?? 0;
+    if (id <= 0) throw Exception('会话未就绪');
+    return id;
   }
 
   Widget _buildPendingUploadBubble() {
@@ -4756,7 +4942,7 @@ class _NativeChatViewState extends State<NativeChatView>
     final candidates = rows
         .where(
           (c) =>
-              c.isVisible &&
+              c.isListedInInbox &&
               c.id > 0 &&
               allowedKinds.contains(c.kind.toUpperCase()),
         )
@@ -4911,7 +5097,7 @@ class _NativeChatViewState extends State<NativeChatView>
           );
         }
       }
-    });
+    }, ensureCurrentConversation: false);
     if (_messageMultiSelectMode) _exitMessageMultiSelect();
     if (mounted) {
       _showToast('已转发${units.length}条');
@@ -5179,7 +5365,9 @@ class _NativeChatViewState extends State<NativeChatView>
     final conv = _conversation;
     final value = text.trim();
     if (conv == null || value.isEmpty || conv.dissolved) return;
-    await _guardSend(() => _service.sendText(conv.id, value));
+    await _guardSend(
+      () => _service.sendText(_requireReadyConversationId(), value),
+    );
   }
 
   Future<void> _sendOriginalVoice({
@@ -5194,7 +5382,7 @@ class _NativeChatViewState extends State<NativeChatView>
     await _guardSend(() async {
       final bytes = originalBytes ?? await loadOriginal!();
       await _service.sendAudio(
-        conversationId: conv.id,
+        conversationId: _requireReadyConversationId(),
         bytes: bytes,
         fileName: fileName,
         mimeType: mimeType,
@@ -6003,12 +6191,21 @@ class _NativeChatViewState extends State<NativeChatView>
     final memberAvatars = !_isPrivate && m.senderUserId > 0
         ? _memberAvatarMap[m.senderUserId]
         : null;
+    // 群聊的 peerAvatar 只是会话列表里随便取的一名成员，不能回退到消息头像，
+    // 否则未设置头像的成员会错用别人的预设/自定义头像。
+    final usePeerFallback =
+        _isPrivate &&
+        (conv?.peerUserId == null ||
+            conv!.peerUserId! <= 0 ||
+            m.senderUserId == conv.peerUserId);
     final preset =
-        m.senderAvatarPreset ?? memberAvatars?.preset ?? conv?.peerAvatarPreset;
+        m.senderAvatarPreset ??
+        memberAvatars?.preset ??
+        (usePeerFallback ? conv?.peerAvatarPreset : null);
     final objectKey =
         m.senderAvatarObjectKey ??
         memberAvatars?.objectKey ??
-        conv?.peerAvatarObjectKey;
+        (usePeerFallback ? conv?.peerAvatarObjectKey : null);
     return ImUserAvatar(
       initial: name.isNotEmpty ? name.substring(0, 1) : '?',
       seed: seed,
@@ -6864,6 +7061,9 @@ class _NativeChatViewState extends State<NativeChatView>
     final text = _inputController.text;
     final previousText = _lastComposeText;
     _lastComposeText = text;
+    if (!_restoringComposeDraft) {
+      _persistComposeDraft();
+    }
     if (_syncingAtFilter ||
         _insertingAtMentions ||
         _isPrivate ||

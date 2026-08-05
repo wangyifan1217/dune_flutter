@@ -58,7 +58,7 @@ Future<Set<int>?> showConversationMultiPickerSheet({
   final candidates = rows
       .where(
         (c) =>
-            c.isVisible &&
+            c.isListedInInbox &&
             c.id > 0 &&
             allowedKinds.contains(c.kind.toUpperCase()),
       )

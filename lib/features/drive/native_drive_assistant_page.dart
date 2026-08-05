@@ -3,13 +3,16 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../core/theme/dunes_theme.dart';
+import '../../core/util/friendly_error.dart';
 import '../auth/auth_session.dart';
+import '../chat/chat_file_type_icon.dart';
 import '../chat/chat_widgets.dart';
 import '../conversation/conversation_models.dart';
 import '../conversation/conversation_realtime_hub.dart';
 import '../conversation/conversation_realtime_service.dart';
 import '../conversation/conversation_service.dart';
 import '../conversation/inbox_format.dart';
+import '../shell/dunes_toast.dart';
 import 'drive_chat_event.dart';
 
 class NativeDriveAssistantPage extends StatefulWidget {
@@ -41,6 +44,7 @@ class _NativeDriveAssistantPageState extends State<NativeDriveAssistantPage> {
   );
   List<NativeChatMessage> _messages = const [];
   bool _loading = true;
+  bool _clearing = false;
   String? _error;
   int _conversationId = 0;
   StreamSubscription<ConversationRealtimeEvent>? _realtimeSubscription;
@@ -107,6 +111,51 @@ class _NativeDriveAssistantPageState extends State<NativeDriveAssistantPage> {
     });
   }
 
+  Future<void> _confirmClearHistory() async {
+    if (_clearing || _conversationId <= 0) return;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('清空记录？'),
+        content: const Text('将清空企业微盘的通知记录，仅对你不可见，不可恢复。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: TextButton.styleFrom(
+              foregroundColor: const Color(0xFFC44949),
+            ),
+            child: const Text('清空'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    setState(() => _clearing = true);
+    try {
+      await _service.clearConversationHistory(_conversationId);
+      if (!mounted) return;
+      setState(() {
+        _messages = const [];
+        _error = null;
+      });
+      showDunesToast(context, '已清空记录');
+    } catch (e) {
+      if (mounted) {
+        showDunesToast(
+          context,
+          friendlyErrorText(e),
+          kind: DunesToastKind.error,
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _clearing = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -121,6 +170,25 @@ class _NativeDriveAssistantPageState extends State<NativeDriveAssistantPage> {
               onBack: widget.onBack ?? () => Navigator.maybePop(context),
               showBackButton: widget.showBackButton,
               leadingAvatar: const DriveAssistantAvatar(size: 45),
+              actions: [
+                IconButton(
+                  tooltip: '清空记录',
+                  onPressed:
+                      (_clearing ||
+                          _loading ||
+                          _conversationId <= 0 ||
+                          _messages.isEmpty)
+                      ? null
+                      : _confirmClearHistory,
+                  icon: _clearing
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.delete_outline_rounded, size: 22),
+                ),
+              ],
             ),
             Expanded(child: _buildBody()),
           ],
@@ -227,14 +295,9 @@ class _DriveEventCard extends StatelessWidget {
           const SizedBox(height: 10),
           Row(
             children: [
-              Icon(
-                event.deleted
-                    ? Icons.delete_outline
-                    : Icons.insert_drive_file_outlined,
-                size: 22,
-                color: event.deleted
-                    ? DunesColors.text3
-                    : const Color(0xFF3B82F6),
+              Opacity(
+                opacity: event.deleted ? 0.55 : 1,
+                child: ChatFileTypeIcon(fileName: event.fileName, size: 36),
               ),
               const SizedBox(width: 8),
               Expanded(

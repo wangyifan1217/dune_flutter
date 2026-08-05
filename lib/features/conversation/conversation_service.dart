@@ -178,8 +178,24 @@ class ConversationService {
     return (body['totalUnread'] as num?)?.toInt();
   }
 
+  /// 仅查找已有私聊，不创建。用于打开聊天窗口；真正建会话放到首次发消息时。
+  Future<int?> findPrivateConversationForPeer(int peerUserId) async {
+    if (peerUserId <= 0 || peerUserId == _session.userId) return null;
+    final rows = await fetchConversations();
+    for (final c in rows) {
+      if (c.kind != 'PRIVATE') continue;
+      // 无消息的空私聊对双方都不应当作有效会话（避免「点开未发言对方已可见」）。
+      if (!c.hasInboxActivity) continue;
+      if ((c.peerUserId ?? 0) == peerUserId && c.isVisible) return c.id;
+    }
+    return null;
+  }
+
   Future<int?> ensurePrivateConversationForPeer(int peerUserId) async {
     if (peerUserId <= 0 || peerUserId == _session.userId) return null;
+    final existing = await findPrivateConversationForPeer(peerUserId);
+    if (existing != null && existing > 0) return existing;
+    // 兼容：服务端已有空会话时仍复用，避免重复创建。
     final rows = await fetchConversations();
     for (final c in rows) {
       if (c.kind != 'PRIVATE') continue;

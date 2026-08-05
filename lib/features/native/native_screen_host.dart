@@ -1003,7 +1003,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           ? 0
           : aiSummaryUnread;
       final rows = allRows
-          .where((c) => c.isVisible && !isConversationHidden(hidden, c.id))
+          .where((c) => c.isListedInInbox && !isConversationHidden(hidden, c.id))
           .toList(growable: false);
       _mutedConvIds
         ..clear()
@@ -4145,7 +4145,7 @@ class _NativeB2PageState extends State<_NativeB2Page> {
       final notif = results[1] as NativeNotificationSummary;
       final hidden = results[2] as Map<String, InboxHiddenEntry>;
       final rows = allRows
-          .where((c) => c.isVisible && !isConversationHidden(hidden, c.id))
+          .where((c) => c.isListedInInbox && !isConversationHidden(hidden, c.id))
           .toList(growable: false);
       if (mounted) {
         widget.commUnread.update(

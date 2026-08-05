@@ -100,6 +100,14 @@ class NativeConversation {
     return true;
   }
 
+  /// 会话列表是否应展示：私聊无任何消息预览时对双方隐藏（点开未发言不应进列表）。
+  bool get hasInboxActivity {
+    if (!isPrivate) return true;
+    return preview.trim().isNotEmpty;
+  }
+
+  bool get isListedInInbox => isVisible && hasInboxActivity;
+
   int get sortTimestamp => updatedAt?.millisecondsSinceEpoch ?? 0;
 }
 

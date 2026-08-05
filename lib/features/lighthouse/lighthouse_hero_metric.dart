@@ -43,7 +43,7 @@ const lighthouseHeroSectionIconKeys = <String, String>{
 const lighthouseHeroSectionAccentValues = <String, int>{
   'scale': 0xFF7565C7,
   'cost': 0xFFB47A32,
-  'cash': 0xFF3F7D70,
+  'cash': 0xFF7B5CD8,
   'profit': 0xFF5C6FB5,
 };
 const bool lighthouseHeroShowsSectionAccentDash = false;
@@ -59,8 +59,12 @@ const double lighthouseHeroMetricDeltaFontSize = 8;
 const int lighthouseHeroScaleColumnFlex = 10;
 const int lighthouseHeroCostColumnFlex = 14;
 const int lighthouseHeroResultColumnFlex = 15;
-const double lighthouseLedgerExpandArrowVerticalOffset = 5;
-const double lighthouseLedgerExpandArrowLayoutHeight = 18;
+
+/// v18 · 展开箭头下移到冻结列最后一行（毛利率行）。
+/// 它和名称行的穿透箭头 › 之间隔着「分类」「占比/走势」两整行，
+/// 视觉与热区都彻底分离，不再需要靠 Transform 偏移来躲。
+const double lighthouseLedgerExpandArrowVerticalOffset = 3;
+const double lighthouseLedgerExpandArrowLayoutHeight = 14;
 const bool lighthouseChannelDetailIncludesProvince = false;
 const bool lighthouseChannelRootIncludesProvinceFilter = false;
 
@@ -126,9 +130,8 @@ const lighthouseHeroVerticalSections = <LighthouseHeroVerticalSection>[
     'totalCost',
     'projectCost',
     'cost',
-    'directCost',
   ]),
-  LighthouseHeroVerticalSection('cash', '经营性现金流', ['prepaid']),
+  LighthouseHeroVerticalSection('cash', '经营性净现金流', ['prepaid']),
   LighthouseHeroVerticalSection('profit', '利润', [
     'profit',
     'netProfit',
@@ -146,9 +149,31 @@ const lighthouseHeroColumnSectionKeys = <List<String>>[
 ];
 
 const int lighthouseLedgerSummaryColumns = 2;
-const double lighthouseLedgerNameFontSize = 11.5;
+
+/// 名称略大于右侧核心数字，数字不压过业务名称。
+const double lighthouseLedgerNameFontSize = 12.5;
+const double lighthouseLedgerValueFontSize = 11.5;
+const double lighthouseLedgerMetricLabelFontSize = 10;
+const double lighthouseLedgerDeltaFontSize = 9;
+
+/// 收起态核心数字 / 排序列用黑体（700）；展开态普通列略轻（600）。
+/// 返回 FontWeight 的 numeric value，避免本文件依赖 Flutter painting。
+int lighthouseLedgerValueWeightValue({
+  required bool missing,
+  required bool emphasized,
+}) {
+  if (missing) return 500;
+  return emphasized ? 700 : 600;
+}
 const double lighthouseLedgerPinnedWidthRatio = 0.35;
 const double lighthouseLedgerPinnedMaxWidth = 164;
+
+/// 占比继续显示为文字与走势，不再用整行底色重复编码。
+const bool lighthouseLedgerShowsShareWash = false;
+const bool lighthouseLedgerCollapsedShowsShare = false;
+const bool lighthouseLedgerCollapsedShowsSparkline = false;
+const bool lighthouseLedgerCollapsedShowsGroup = false;
+const bool lighthouseLedgerCollapsedShowsGrossMargin = true;
 const lighthouseLedgerNavigationLevels = <String>[
   'primaryTab',
   'filterChip',
@@ -226,6 +251,12 @@ const lighthouseProductLedgerSummaryMetricRows = <List<String>>[
   ['verifiedSales', 'profit'],
 ];
 
+String lighthouseLedgerSummaryMetricTone(String key) => switch (key) {
+  'prepaid' => 'cash',
+  'profit' => 'profit',
+  _ => 'neutral',
+};
+
 List<List<String>> lighthouseLedgerSummaryMetricRowsForTab(String tab) =>
     tab == 'product'
     ? lighthouseProductLedgerSummaryMetricRows
@@ -268,7 +299,6 @@ String lighthouseHeroMetricLabel(String key) {
     'projectCost': '项目成本',
     'cost': '业务成本',
     'businessCost': '业务成本',
-    'directCost': '直接成本',
     'grossMargin': '毛利率',
     'rate': 'ROI',
     'spreadRate': '利差率',
@@ -324,6 +354,37 @@ double lighthouseRestoreScrollOffset(double saved, double maxExtent) {
 double lighthouseValidRateBase(double value, {double minimumBase = 50}) =>
     value >= minimumBase ? value : 0;
 
+/// 比率展示上限：只用于拦住「核销极小 → 毛利率爆炸」的脏数。
+/// 正常经营毛利率（哪怕到一两百 %）不应被挡掉。
+const double lighthouseMaxDisplayRatePct = 1000;
+
+/// 过滤 NaN / Infinity / 异常放大的比率；不合格返回 null。
+double? lighthouseDisplayRatePct(
+  double? pct, {
+  double maxAbs = lighthouseMaxDisplayRatePct,
+}) {
+  if (pct == null) return null;
+  if (pct.isNaN || pct.isInfinite) return null;
+  if (pct.abs() > maxAbs) return null;
+  return pct;
+}
+
+/// 列表/Hero 共用的毛利率展示值：毛利润 ÷ 核销额 × 100%。
+/// 核销过小或结果爆炸时返回 null（UI 显示 —）。
+double? lighthouseGrossMarginDisplayPct({
+  required double profit,
+  required double verifiedSales,
+  double minimumVerified = 50,
+  double maxAbsPct = lighthouseMaxDisplayRatePct,
+}) {
+  final base = lighthouseValidRateBase(
+    verifiedSales,
+    minimumBase: minimumVerified,
+  );
+  if (base <= 0) return null;
+  return lighthouseDisplayRatePct(profit / base * 100, maxAbs: maxAbsPct);
+}
+
 /// 毛利率走势 = 毛利润 ÷ 核销额，单位为百分点。
 List<double> lighthouseGrossMarginSeries({
   required List<double> profit,
@@ -336,27 +397,10 @@ List<double> lighthouseGrossMarginSeries({
   return List<double>.generate(count, (index) {
     final base = verifiedSales[index];
     final validBase = lighthouseValidRateBase(base, minimumBase: minimumBase);
-    return validBase > 0 ? profit[index] / validBase * 100 : 0;
+    if (validBase <= 0) return 0;
+    final pct = profit[index] / validBase * 100;
+    return lighthouseDisplayRatePct(pct) ?? 0;
   }, growable: false);
-}
-
-/// 直接成本走势兜底：成本合计 − 项目成本 − 业务成本。
-/// 有后端 directCost（cost_gross_profit）序列时优先直读，不必走此公式。
-List<double> lighthouseDirectCostSeries({
-  required List<double> totalCost,
-  required List<double> projectCost,
-  required List<double> businessCost,
-}) {
-  final count = [
-    totalCost.length,
-    projectCost.length,
-    businessCost.length,
-  ].reduce((a, b) => a < b ? a : b);
-  return List<double>.generate(
-    count,
-    (index) => totalCost[index] - projectCost[index] - businessCost[index],
-    growable: false,
-  );
 }
 
 bool lighthouseCanFallbackToRootTrend({required bool isDrill}) => !isDrill;
@@ -379,4 +423,17 @@ String lighthouseResolvePreferredGroup({
   final idx = options.indexWhere((g) => g != '全部' && g.contains(want));
   if (idx >= 0) return options[idx];
   return '全部';
+}
+
+/// 校正当前 L1 分类：用户选的「全部」必须保留；仅选项失效时回退。
+/// 切维 / 展开分类条时用，禁止再把「全部」偷偷改成中石油、平安。
+String lighthouseNormalizeGroupFilter({
+  required String current,
+  required List<String> options,
+  String fallback = '全部',
+}) {
+  final cur = current.trim().isEmpty ? '全部' : current.trim();
+  if (cur == '全部') return '全部';
+  if (options.contains(cur)) return cur;
+  return fallback;
 }

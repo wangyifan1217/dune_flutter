@@ -55,7 +55,7 @@ void main() {
   test('hero financial board balances four sections across three columns', () {
     expect(
       lighthouseHeroVerticalSections.map((section) => section.title).toList(),
-      ['规模', '成本', '经营性现金流', '利润'],
+      ['规模', '成本', '经营性净现金流', '利润'],
     );
     expect(lighthouseHeroColumnSectionKeys, [
       ['scale'],
@@ -71,7 +71,6 @@ void main() {
       'totalCost',
       'projectCost',
       'cost',
-      'directCost',
     ]);
     expect(lighthouseHeroVerticalSections[2].metricKeys, ['prepaid']);
     expect(lighthouseHeroVerticalSections[3].metricKeys, [
@@ -86,11 +85,23 @@ void main() {
 
   test('ledger rows show four focused metrics in a neutral 2x2 grid', () {
     expect(lighthouseLedgerSummaryColumns, 2);
-    expect(lighthouseLedgerNameFontSize, 11.5);
+    expect(lighthouseLedgerNameFontSize, 12.5);
+    expect(lighthouseLedgerValueFontSize, 11.5);
+    expect(lighthouseLedgerMetricLabelFontSize, 10);
+    expect(lighthouseLedgerDeltaFontSize, 9);
     expect(lighthouseLedgerPinnedWidthRatio, 0.35);
     expect(lighthouseLedgerPinnedMaxWidth, 164);
-    expect(lighthouseLedgerExpandArrowVerticalOffset, 5);
-    expect(lighthouseLedgerExpandArrowLayoutHeight, 18);
+    expect(lighthouseLedgerShowsShareWash, isFalse);
+    expect(lighthouseLedgerCollapsedShowsShare, isFalse);
+    expect(lighthouseLedgerCollapsedShowsSparkline, isFalse);
+    expect(lighthouseLedgerCollapsedShowsGroup, isFalse);
+    expect(lighthouseLedgerCollapsedShowsGrossMargin, isTrue);
+    expect(lighthouseLedgerSummaryMetricTone('prepaid'), 'cash');
+    expect(lighthouseLedgerSummaryMetricTone('profit'), 'profit');
+    expect(lighthouseLedgerSummaryMetricTone('sales'), 'neutral');
+    // v18: 展开箭头移到冻结列最后一行，不再靠 Transform 偏移躲开穿透箭头。
+    expect(lighthouseLedgerExpandArrowVerticalOffset, 3);
+    expect(lighthouseLedgerExpandArrowLayoutHeight, 14);
     expect(lighthouseLedgerSummaryMetricKeys, [
       'sales',
       'verifiedSales',
@@ -379,6 +390,35 @@ void main() {
       expect(lighthouseValidRateBase(-100), 0);
     });
 
+    test('absurd rate pct from tiny denominator is not displayable', () {
+      // 毛利 41.23 万 / 核销 0.01 万 ≈ 515415%，应显示 —
+      expect(lighthouseDisplayRatePct(515415.2), isNull);
+      expect(lighthouseDisplayRatePct(1000), 1000);
+      expect(lighthouseDisplayRatePct(12.5), 12.5);
+      expect(lighthouseDisplayRatePct(double.infinity), isNull);
+    });
+
+    test('normal product margins remain displayable', () {
+      expect(
+        lighthouseGrossMarginDisplayPct(
+          profit: 1178648.1,
+          verifiedSales: 2134816.5,
+        ),
+        closeTo(55.21, 0.1),
+      );
+      expect(
+        lighthouseGrossMarginDisplayPct(
+          profit: 345451.0,
+          verifiedSales: 19014700,
+        ),
+        closeTo(1.82, 0.1),
+      );
+      expect(
+        lighthouseGrossMarginDisplayPct(profit: 412262, verifiedSales: 80),
+        isNull,
+      );
+    });
+
     test('gross margin uses verified sales, not revenue', () {
       expect(
         lighthouseGrossMarginSeries(
@@ -389,16 +429,16 @@ void main() {
       );
     });
 
-    test('direct cost is total minus project and business cost', () {
+    test('gross margin series zeros out absurd magnified rates', () {
       expect(
-        lighthouseDirectCostSeries(
-          totalCost: [100, 80],
-          projectCost: [20, 10],
-          businessCost: [5, 4],
+        lighthouseGrossMarginSeries(
+          profit: [412300],
+          verifiedSales: [80],
         ),
-        [75, 66],
+        [0],
       );
     });
+
   });
 
   group('lighthouse cross-level trend isolation', () {
@@ -435,6 +475,23 @@ void main() {
           options: const ['全部', '运营商', '出行权益金'],
         ),
         '全部',
+      );
+    });
+  });
+
+  group('lighthouseLedgerValueWeightValue', () {
+    test('summary and sorted numbers are bold', () {
+      expect(
+        lighthouseLedgerValueWeightValue(missing: false, emphasized: true),
+        700,
+      );
+      expect(
+        lighthouseLedgerValueWeightValue(missing: false, emphasized: false),
+        600,
+      );
+      expect(
+        lighthouseLedgerValueWeightValue(missing: true, emphasized: true),
+        500,
       );
     });
   });

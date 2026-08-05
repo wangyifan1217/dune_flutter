@@ -156,6 +156,27 @@ const double lighthouseLedgerValueFontSize = 11.5;
 const double lighthouseLedgerMetricLabelFontSize = 10;
 const double lighthouseLedgerDeltaFontSize = 9;
 
+/// 「越低越好」的指标 —— 成本类。其余（规模 / 利润 / 现金流 / 率）越高越好。
+const Set<String> lighthouseLedgerLowerIsBetterKeys = <String>{
+  'costTotal',
+  'totalCost',
+  'projectCost',
+  'cost',
+  'businessCost',
+};
+
+/// 环比变化是否「向好」。返回 null = 无变化 / 数据缺失，应走中性色。
+///
+/// 颜色表达的是**好坏**而不是**涨跌**：方向已经由 ↑↓ 箭头和正负号表达了两遍，
+/// 再用颜色重复编码一次方向没有信息量。旧口径无条件「涨红跌绿」，
+/// 会把销售额 −50%、毛利润 −86% 渲染成一片绿色 —— 崩盘看起来像向好。
+bool? lighthouseLedgerDeltaIsFavorable(String key, double? delta) {
+  if (delta == null || delta.abs() < 0.05) return null;
+  return lighthouseLedgerLowerIsBetterKeys.contains(key)
+      ? delta < 0
+      : delta > 0;
+}
+
 /// 收起态核心数字 / 排序列用黑体（700）；展开态普通列略轻（600）。
 /// 返回 FontWeight 的 numeric value，避免本文件依赖 Flutter painting。
 int lighthouseLedgerValueWeightValue({
@@ -174,6 +195,19 @@ const bool lighthouseLedgerCollapsedShowsShare = false;
 const bool lighthouseLedgerCollapsedShowsSparkline = false;
 const bool lighthouseLedgerCollapsedShowsGroup = false;
 const bool lighthouseLedgerCollapsedShowsGrossMargin = true;
+
+/// 分组文字关掉之后，冻结列那条 3px 彩条就没有图例可以解码了 ——
+/// 六种颜色对用户等价于噪点。跟着 ShowsGroup 一起关；要恢复请两个一起开。
+const bool lighthouseLedgerCollapsedShowsGroupColorBar =
+    lighthouseLedgerCollapsedShowsGroup;
+
+/// 摘要网格标题 —— 列数是数据驱动的（整列空值会被摘掉），标题跟着变。
+String lighthouseLedgerSummaryTitle(int count) {
+  const cn = ['零', '一', '二', '三', '四', '五', '六', '七', '八'];
+  final n = count >= 0 && count < cn.length ? cn[count] : '$count';
+  return '$n项核心指标';
+}
+
 const lighthouseLedgerNavigationLevels = <String>[
   'primaryTab',
   'filterChip',
@@ -206,18 +240,33 @@ const double lighthouseHeroSummaryIconRadius = 6;
 
 String lighthouseHeroSummaryIconKey(String title) {
   final normalized = title.trim();
-  if (normalized.contains('汇总')) {
-    if (normalized.contains('产品')) return 'product';
-    if (normalized.contains('供给') || normalized.contains('供应')) {
-      return 'supply';
-    }
-    if (normalized.contains('渠道')) return 'channel';
+  // 一级「xx汇总」、二级/三级「产品|供给|渠道 · 实体」都按前缀/关键字识别。
+  if (normalized.startsWith('产品') ||
+      (normalized.contains('汇总') && normalized.contains('产品'))) {
+    return 'product';
+  }
+  if (normalized.startsWith('供给') ||
+      normalized.startsWith('供应') ||
+      (normalized.contains('汇总') &&
+          (normalized.contains('供给') || normalized.contains('供应')))) {
+    return 'supply';
+  }
+  if (normalized.startsWith('渠道') ||
+      (normalized.contains('汇总') && normalized.contains('渠道'))) {
+    return 'channel';
   }
   if (normalized.contains('分析')) return 'analysis';
   return 'overview';
 }
 
 const double lighthouseCategoryLogoSize = 14;
+const double lighthouseHeroCategoryLogoSize = 18;
+
+/// L1 选中具体分类时，主 Hero 标题位与分类字样旁展示该分类 logo。
+bool lighthouseHeroShowsCategoryLogo(String groupFilter) {
+  final normalized = groupFilter.trim();
+  return normalized.isNotEmpty && normalized != '全部';
+}
 
 String? lighthouseCategoryBrandAsset(String label) {
   final normalized = label.trim();
@@ -242,10 +291,18 @@ const lighthouseLedgerSummaryMetricKeys = <String>[
   'profit',
   'costTotal',
 ];
+
+/// 供给 / 渠道收起态四核心。
+///
+/// v19: 毛利润挪到右下角 —— 结果区是右半列，profit 必须落在右列，否则
+/// 「结果块」会盖到成本合计上。右下也是阅读顺序的终点，本来就该放结论。
 const lighthouseLedgerSummaryMetricRows = <List<String>>[
   ['sales', 'verifiedSales'],
-  ['profit', 'costTotal'],
+  ['costTotal', 'profit'],
 ];
+
+/// 产品收起态四核心：与供给/渠道区分，保留经营性净现金流位。
+/// 一 / 二 / 三级同根维必须同一套排列。
 const lighthouseProductLedgerSummaryMetricRows = <List<String>>[
   ['sales', 'prepaid'],
   ['verifiedSales', 'profit'],
@@ -256,6 +313,27 @@ String lighthouseLedgerSummaryMetricTone(String key) => switch (key) {
   'profit' => 'profit',
   _ => 'neutral',
 };
+
+/// 「结果」指标 —— 经营性净现金流 + 毛利润。老板真正要盯的两个。
+bool lighthouseLedgerIsResultMetric(String key) =>
+    lighthouseLedgerSummaryMetricTone(key) != 'neutral';
+
+/// v19 · 结果区分块。
+///
+/// 旧版靠给单个数字换色相来强调（现金流紫 / 毛利润蓝），但这两个色比左边
+/// 规模数字用的近黑更浅、对比度更低 —— 想突出的反而更轻，层级是反的。
+/// 而且 11.5px 下色相只表达「另一类」，不表达「更重要」。
+///
+/// 改成分区：右半列整体铺一层极淡底 + 左缘一条竖轨，把「结果」从「规模」里
+/// 切出来。强调由区块承担，字号一律不动。
+const bool lighthouseLedgerUsesResultBlock = true;
+const int lighthouseLedgerResultBlockAccentValue = 0xFF5C6FB5;
+const int lighthouseLedgerResultBlockTintAlpha = 12;
+const double lighthouseLedgerResultBlockRailWidth = 2;
+
+/// 区块已经在分区了，数字再上色就是重复编码 —— 关掉，数值回到中性墨色。
+/// 想恢复紫/蓝两色数字，把这个改回 true 即可。
+const bool lighthouseLedgerResultBlockKeepsMetricTint = false;
 
 List<List<String>> lighthouseLedgerSummaryMetricRowsForTab(String tab) =>
     tab == 'product'

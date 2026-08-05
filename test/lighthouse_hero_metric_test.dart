@@ -111,15 +111,16 @@ void main() {
     ]);
     expect(lighthouseLedgerSummaryMetricRows, [
       ['sales', 'verifiedSales'],
-      ['profit', 'costTotal'],
+      ['costTotal', 'profit'],
     ]);
     expect(lighthouseLedgerSummaryMetricRowsForTab('supply'), [
       ['sales', 'verifiedSales'],
-      ['profit', 'costTotal'],
+      ['costTotal', 'profit'],
     ]);
-  });
-
-  test('product rows place scale left and emphasized outcomes right', () {
+    expect(lighthouseLedgerSummaryMetricRowsForTab('channel'), [
+      ['sales', 'verifiedSales'],
+      ['costTotal', 'profit'],
+    ]);
     expect(lighthouseLedgerSummaryMetricRowsForTab('product'), [
       ['sales', 'prepaid'],
       ['verifiedSales', 'profit'],
@@ -175,6 +176,9 @@ void main() {
     expect(lighthouseHeroSummaryIconKey('渠道汇总'), 'channel');
     expect(lighthouseHeroSummaryIconKey('分析总览'), 'analysis');
     expect(lighthouseHeroSummaryIconKey('某产品详情'), 'overview');
+    expect(lighthouseHeroSummaryIconKey('产品 · 中石油现金券'), 'product');
+    expect(lighthouseHeroSummaryIconKey('供给 · 广东省'), 'supply');
+    expect(lighthouseHeroSummaryIconKey('渠道 · 产险'), 'channel');
   });
 
   test('category chips resolve official brand logos with generic fallback', () {
@@ -196,6 +200,15 @@ void main() {
     expect(lighthouseCategoryBrandAsset('银联'), 'assets/brands/unionpay.svg');
     expect(lighthouseCategoryBrandAsset('民营'), isNull);
     expect(lighthouseCategoryLogoSize, 14);
+    expect(lighthouseHeroCategoryLogoSize, 18);
+  });
+
+  test('L1 hero shows category logo only when a concrete group is selected', () {
+    expect(lighthouseHeroShowsCategoryLogo('全部'), isFalse);
+    expect(lighthouseHeroShowsCategoryLogo(''), isFalse);
+    expect(lighthouseHeroShowsCategoryLogo('中石油'), isTrue);
+    expect(lighthouseHeroShowsCategoryLogo('能源'), isTrue);
+    expect(lighthouseHeroShowsCategoryLogo('平安'), isTrue);
   });
 
   test('compact hero keeps KPI and trend side by side', () {
@@ -443,6 +456,7 @@ void main() {
 
   group('lighthouse cross-level trend isolation', () {
     test('L3 never falls back to L2 trend', () {
+      // L3 必须用 detail 接口下发的 drill.trend；禁止串父级折线。
       expect(lighthouseCanFallbackToRootTrend(isDrill: false), isTrue);
       expect(lighthouseCanFallbackToRootTrend(isDrill: true), isFalse);
     });
@@ -492,6 +506,106 @@ void main() {
       expect(
         lighthouseLedgerValueWeightValue(missing: true, emphasized: true),
         500,
+      );
+    });
+  });
+
+  group('lighthouseLedgerDeltaIsFavorable', () {
+    test('规模 / 利润 / 现金流：跌为坏，涨为好', () {
+      for (final key in ['sales', 'verifiedSales', 'profit', 'prepaid']) {
+        expect(
+          lighthouseLedgerDeltaIsFavorable(key, -86.0),
+          isFalse,
+          reason: key,
+        );
+        expect(
+          lighthouseLedgerDeltaIsFavorable(key, 19.0),
+          isTrue,
+          reason: key,
+        );
+      }
+    });
+
+    test('成本类：跌为好，涨为坏', () {
+      for (final key in lighthouseLedgerLowerIsBetterKeys) {
+        expect(
+          lighthouseLedgerDeltaIsFavorable(key, -12.0),
+          isTrue,
+          reason: key,
+        );
+        expect(
+          lighthouseLedgerDeltaIsFavorable(key, 12.0),
+          isFalse,
+          reason: key,
+        );
+      }
+    });
+
+    test('毛利率跟随「越高越好」', () {
+      expect(lighthouseLedgerDeltaIsFavorable('grossMargin', 2.0), isTrue);
+      expect(lighthouseLedgerDeltaIsFavorable('grossMargin', -2.0), isFalse);
+    });
+
+    test('空值与阈值内的抖动走中性色', () {
+      expect(lighthouseLedgerDeltaIsFavorable('sales', null), isNull);
+      expect(lighthouseLedgerDeltaIsFavorable('sales', 0.0), isNull);
+      expect(lighthouseLedgerDeltaIsFavorable('sales', 0.04), isNull);
+      expect(lighthouseLedgerDeltaIsFavorable('sales', -0.04), isNull);
+      expect(lighthouseLedgerDeltaIsFavorable('sales', 0.05), isTrue);
+    });
+  });
+
+  group('lighthouseLedgerSummaryTitle', () {
+    test('标题随实际列数变化', () {
+      expect(lighthouseLedgerSummaryTitle(4), '四项核心指标');
+      expect(lighthouseLedgerSummaryTitle(3), '三项核心指标');
+      expect(lighthouseLedgerSummaryTitle(2), '二项核心指标');
+    });
+  });
+
+  group('结果区分块', () {
+    test('现金流与毛利润是结果指标，规模与成本不是', () {
+      expect(lighthouseLedgerIsResultMetric('prepaid'), isTrue);
+      expect(lighthouseLedgerIsResultMetric('profit'), isTrue);
+      expect(lighthouseLedgerIsResultMetric('sales'), isFalse);
+      expect(lighthouseLedgerIsResultMetric('verifiedSales'), isFalse);
+      expect(lighthouseLedgerIsResultMetric('costTotal'), isFalse);
+    });
+
+    test('结果指标一律落在右列，区块才连得成一片', () {
+      for (final tab in ['product', 'supply', 'channel']) {
+        final flat = lighthouseLedgerSummaryMetricRowsForTab(
+          tab,
+        ).expand((r) => r).toList();
+        for (var i = 0; i < flat.length; i++) {
+          if (!lighthouseLedgerIsResultMetric(flat[i])) continue;
+          expect(
+            i % lighthouseLedgerSummaryColumns,
+            lighthouseLedgerSummaryColumns - 1,
+            reason: '$tab / ${flat[i]}',
+          );
+        }
+      }
+    });
+
+    test('强调交给区块，数字不再单独上色', () {
+      expect(lighthouseLedgerUsesResultBlock, isTrue);
+      expect(lighthouseLedgerResultBlockKeepsMetricTint, isFalse);
+      expect(lighthouseLedgerResultBlockRailWidth, 2);
+      expect(lighthouseLedgerResultBlockTintAlpha, 12);
+    });
+
+    test('字号维持原状 —— 层级由分区承担，不放大数字', () {
+      expect(lighthouseLedgerValueFontSize, 11.5);
+      expect(lighthouseLedgerMetricLabelFontSize, 10);
+    });
+  });
+
+  group('分组色条', () {
+    test('分组文字关掉时色条也必须关掉（否则颜色无图例可解码）', () {
+      expect(
+        lighthouseLedgerCollapsedShowsGroupColorBar,
+        lighthouseLedgerCollapsedShowsGroup,
       );
     });
   });

@@ -592,7 +592,8 @@ void main() {
       expect(lighthouseLedgerUsesResultBlock, isTrue);
       expect(lighthouseLedgerResultBlockKeepsMetricTint, isFalse);
       expect(lighthouseLedgerResultBlockRailWidth, 2);
-      expect(lighthouseLedgerResultBlockTintAlpha, 12);
+      expect(lighthouseLedgerResultBlockTintAlpha, 38);
+      expect(lighthouseLedgerResultBlockAccentValue, 0xFF4A83C4);
     });
 
     test('字号维持原状 —— 层级由分区承担，不放大数字', () {

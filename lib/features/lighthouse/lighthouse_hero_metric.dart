@@ -327,8 +327,14 @@ bool lighthouseLedgerIsResultMetric(String key) =>
 /// 改成分区：右半列整体铺一层极淡底 + 左缘一条竖轨，把「结果」从「规模」里
 /// 切出来。强调由区块承担，字号一律不动。
 const bool lighthouseLedgerUsesResultBlock = true;
-const int lighthouseLedgerResultBlockAccentValue = 0xFF5C6FB5;
-const int lighthouseLedgerResultBlockTintAlpha = 12;
+
+/// 竖轨与底色同一支蓝。原来的 0xFF5C6FB5 偏灰靛，铺淡了只剩一层脏灰；
+/// 这支蓝饱和度够，12% 就能读出「淡蓝」而不是「白里带脏」。
+const int lighthouseLedgerResultBlockAccentValue = 0xFF4A83C4;
+
+/// 底色不透明度（0–255）。38 ≈ 15%，压在白底上约 #E4EDF6。
+/// 往下 30 ≈ #EAF0F8（偏淡），往上 46 ≈ #DEE9F4 就开始跟数字抢注意力了。
+const int lighthouseLedgerResultBlockTintAlpha = 38;
 const double lighthouseLedgerResultBlockRailWidth = 2;
 
 /// 区块已经在分区了，数字再上色就是重复编码 —— 关掉，数值回到中性墨色。

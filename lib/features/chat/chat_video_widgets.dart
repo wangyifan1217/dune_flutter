@@ -414,16 +414,19 @@ class _ChatVideoPlayerPageState extends State<_ChatVideoPlayerPage> {
                     )
                   : !_ready || _controller == null
                       ? const CircularProgressIndicator(color: Colors.white)
-                      : AspectRatio(
-                          aspectRatio: _controller!.value.aspectRatio == 0
-                              ? 16 / 9
-                              : _controller!.value.aspectRatio,
-                          child: Stack(
-                            alignment: Alignment.center,
-                            children: [
-                              VideoPlayer(_controller!),
-                              _PlayPauseOverlay(controller: _controller!),
-                            ],
+                      : Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 48, 16, 88),
+                          child: AspectRatio(
+                            aspectRatio: _controller!.value.aspectRatio == 0
+                                ? 16 / 9
+                                : _controller!.value.aspectRatio,
+                            child: Stack(
+                              alignment: Alignment.center,
+                              children: [
+                                VideoPlayer(_controller!),
+                                _PlayPauseOverlay(controller: _controller!),
+                              ],
+                            ),
                           ),
                         ),
             ),
@@ -437,19 +440,170 @@ class _ChatVideoPlayerPageState extends State<_ChatVideoPlayerPage> {
             ),
             if (_ready && _controller != null)
               Positioned(
-                left: 16,
-                right: 16,
-                bottom: 24,
-                child: VideoProgressIndicator(
-                  _controller!,
-                  allowScrubbing: true,
-                  colors: const VideoProgressColors(
-                    playedColor: Color(0xFF7E64BD),
-                    bufferedColor: Colors.white24,
-                    backgroundColor: Colors.white12,
+                left: 12,
+                right: 12,
+                bottom: 12,
+                child: _VideoSeekBar(controller: _controller!),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+String _formatVideoClock(Duration d) {
+  final total = d.inSeconds.clamp(0, 24 * 3600);
+  final h = total ~/ 3600;
+  final m = (total % 3600) ~/ 60;
+  final s = total % 60;
+  final mm = m.toString().padLeft(2, '0');
+  final ss = s.toString().padLeft(2, '0');
+  if (h > 0) return '$h:$mm:$ss';
+  return '$mm:$ss';
+}
+
+/// 可拖拽进度条：播放/暂停 + 当前时间 / 总时长。
+class _VideoSeekBar extends StatefulWidget {
+  const _VideoSeekBar({required this.controller});
+
+  final VideoPlayerController controller;
+
+  @override
+  State<_VideoSeekBar> createState() => _VideoSeekBarState();
+}
+
+class _VideoSeekBarState extends State<_VideoSeekBar> {
+  bool _dragging = false;
+  double _dragValue = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.controller.addListener(_onTick);
+  }
+
+  @override
+  void didUpdateWidget(covariant _VideoSeekBar oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.controller != widget.controller) {
+      oldWidget.controller.removeListener(_onTick);
+      widget.controller.addListener(_onTick);
+    }
+  }
+
+  @override
+  void dispose() {
+    widget.controller.removeListener(_onTick);
+    super.dispose();
+  }
+
+  void _onTick() {
+    if (!_dragging && mounted) setState(() {});
+  }
+
+  Future<void> _seekTo(double seconds) async {
+    final duration = widget.controller.value.duration;
+    if (duration <= Duration.zero) return;
+    final target = Duration(
+      milliseconds: (seconds * 1000).round().clamp(
+        0,
+        duration.inMilliseconds,
+      ),
+    );
+    await widget.controller.seekTo(target);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final value = widget.controller.value;
+    final durationSec = value.duration.inMilliseconds / 1000.0;
+    final positionSec = _dragging
+        ? _dragValue
+        : value.position.inMilliseconds / 1000.0;
+    final max = durationSec > 0 ? durationSec : 1.0;
+    final playing = value.isPlaying;
+    final posLabel = _formatVideoClock(
+      Duration(milliseconds: (positionSec * 1000).round()),
+    );
+    final durLabel = _formatVideoClock(value.duration);
+
+    return Material(
+      color: Colors.black.withValues(alpha: 0.55),
+      borderRadius: BorderRadius.circular(12),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(6, 4, 12, 4),
+        child: Row(
+          children: [
+            IconButton(
+              visualDensity: VisualDensity.compact,
+              onPressed: () {
+                if (playing) {
+                  widget.controller.pause();
+                } else {
+                  widget.controller.play();
+                }
+              },
+              icon: Icon(
+                playing ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                color: Colors.white,
+              ),
+            ),
+            Text(
+              posLabel,
+              style: const TextStyle(
+                color: Colors.white70,
+                fontSize: 12,
+                fontFeatures: [FontFeature.tabularFigures()],
+              ),
+            ),
+            Expanded(
+              child: SliderTheme(
+                data: SliderTheme.of(context).copyWith(
+                  trackHeight: 3,
+                  thumbShape: const RoundSliderThumbShape(
+                    enabledThumbRadius: 7,
                   ),
+                  overlayShape: const RoundSliderOverlayShape(
+                    overlayRadius: 14,
+                  ),
+                  activeTrackColor: const Color(0xFF7E64BD),
+                  inactiveTrackColor: Colors.white24,
+                  thumbColor: Colors.white,
+                  overlayColor: const Color(0x337E64BD),
+                ),
+                child: Slider(
+                  min: 0,
+                  max: max,
+                  value: positionSec.clamp(0, max),
+                  onChanged: durationSec <= 0
+                      ? null
+                      : (v) {
+                          setState(() {
+                            _dragging = true;
+                            _dragValue = v;
+                          });
+                        },
+                  onChangeEnd: durationSec <= 0
+                      ? null
+                      : (v) async {
+                          setState(() {
+                            _dragging = false;
+                            _dragValue = v;
+                          });
+                          await _seekTo(v);
+                        },
                 ),
               ),
+            ),
+            Text(
+              durLabel,
+              style: const TextStyle(
+                color: Colors.white70,
+                fontSize: 12,
+                fontFeatures: [FontFeature.tabularFigures()],
+              ),
+            ),
           ],
         ),
       ),

@@ -53,20 +53,51 @@ class ChatVideoPrepared {
   final int? height;
 }
 
+/// 桌面选视频对话框常用扩展名（不含点）。
+const List<String> kChatVideoPickExtensions = <String>[
+  'mp4',
+  'mov',
+  'm4v',
+  'avi',
+  'mkv',
+  'webm',
+  '3gp',
+  'wmv',
+  'mpeg',
+  'mpg',
+  'flv',
+];
+
 bool isChatVideoFileName(String name) {
-  final lower = name.toLowerCase();
-  return lower.endsWith('.mp4') ||
-      lower.endsWith('.mov') ||
-      lower.endsWith('.m4v') ||
-      lower.endsWith('.avi') ||
-      lower.endsWith('.mkv') ||
-      lower.endsWith('.webm') ||
-      lower.endsWith('.3gp');
+  final lower = name.toLowerCase().replaceAll('\\', '/');
+  final base = lower.contains('/') ? lower.split('/').last : lower;
+  return base.endsWith('.mp4') ||
+      base.endsWith('.mov') ||
+      base.endsWith('.m4v') ||
+      base.endsWith('.avi') ||
+      base.endsWith('.mkv') ||
+      base.endsWith('.webm') ||
+      base.endsWith('.3gp') ||
+      base.endsWith('.wmv') ||
+      base.endsWith('.mpeg') ||
+      base.endsWith('.mpg') ||
+      base.endsWith('.flv');
 }
 
 bool isChatVideoMime(String? mime) {
   final m = (mime ?? '').toLowerCase();
   return m.startsWith('video/');
+}
+
+/// 综合文件名 / 路径 / mime 判断是否为可发送视频。
+bool isChatVideoXFile(XFile file) {
+  final name = file.name.trim().isNotEmpty
+      ? file.name.trim()
+      : file.path.replaceAll('\\', '/').split('/').last;
+  final mime = file.mimeType ?? lookupMimeType(name) ?? lookupMimeType(file.path);
+  return isChatVideoFileName(name) ||
+      isChatVideoFileName(file.path) ||
+      isChatVideoMime(mime);
 }
 
 /// 从本地路径准备可发送视频：移动端压缩，其它平台直接读入并校验大小。

@@ -16,6 +16,7 @@ class XflowApprovalFlowSection extends StatelessWidget {
     this.pendingStatusLabel = '待发起',
     this.showHeader = true,
     this.userNames = const {},
+    this.emptyHint,
   });
 
   final List<Map<String, dynamic>> stages;
@@ -25,6 +26,9 @@ class XflowApprovalFlowSection extends StatelessWidget {
   final String pendingStatusLabel;
   final bool showHeader;
   final Map<int, String> userNames;
+
+  /// 预览失败等场景的空态文案；勿回退模板全量 stages。
+  final String? emptyHint;
 
   @override
   Widget build(BuildContext context) {
@@ -43,10 +47,12 @@ class XflowApprovalFlowSection extends StatelessWidget {
         ],
         XflowApprovalFlowCard(
           children: rows.isEmpty
-              ? const [
+              ? [
                   Text(
-                    '未配置审批阶段，请在模板设计器「审批阶段」中维护',
-                    style: TextStyle(
+                    (emptyHint != null && emptyHint!.trim().isNotEmpty)
+                        ? emptyHint!.trim()
+                        : '未配置审批阶段，请在模板设计器「审批阶段」中维护',
+                    style: const TextStyle(
                       fontSize: 11,
                       color: XfProposalUi.mute,
                       height: 1.5,

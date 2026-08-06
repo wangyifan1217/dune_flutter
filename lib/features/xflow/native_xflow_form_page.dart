@@ -70,6 +70,12 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage>
   String _autosaveHint = '填写中将自动保存草稿';
   bool _autosaving = false;
   Map<int, String> _stageUserNames = const {};
+  /// 仅渲染 preview-approval 返回的 stages；失败不回退模板全量列表。
+  List<Map<String, dynamic>>? _previewStages;
+  Timer? _previewTimer;
+  int _previewSeq = 0;
+  bool _previewFailed = false;
+  bool _previewLoading = false;
 
   void _dismissKeyboard() {
     final focus = FocusManager.instance.primaryFocus;
@@ -183,6 +189,7 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _autosaveTimer?.cancel();
+    _previewTimer?.cancel();
     // iOS/Android 离开页时尽量落本地，避免未防抖完丢失。
     if (_canAutosave && XflowService.hasMeaningfulDraftValues(_values)) {
       unawaited(
@@ -194,6 +201,62 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage>
       );
     }
     super.dispose();
+  }
+
+  List<Map<String, dynamic>> get _displayApprovalStages =>
+      _previewStages ?? const <Map<String, dynamic>>[];
+
+  String? get _approvalEmptyHint {
+    if (_previewLoading && _previewStages == null) {
+      return '正在预览审批流…';
+    }
+    if (_previewFailed && _previewStages == null) {
+      return '暂无法预览审批流';
+    }
+    return null;
+  }
+
+  void _scheduleApprovalPreview() {
+    _previewTimer?.cancel();
+    _previewTimer = Timer(const Duration(milliseconds: 300), () {
+      unawaited(_refreshApprovalPreview());
+    });
+  }
+
+  Future<void> _refreshApprovalPreview() async {
+    final key = widget.templateKey.trim();
+    if (key.isEmpty) return;
+    final seq = ++_previewSeq;
+    if (mounted) {
+      setState(() {
+        _previewLoading = true;
+        if (_previewStages == null) _previewFailed = false;
+      });
+    }
+    try {
+      final stages = await _service.previewApproval(
+        templateKey: key,
+        formData: Map<String, dynamic>.from(_values),
+      );
+      if (!mounted || seq != _previewSeq) return;
+      final names = await _service.fetchUserDisplayNames(
+        collectApproverIdsFromStages(stages),
+      );
+      if (!mounted || seq != _previewSeq) return;
+      setState(() {
+        _previewStages = stages;
+        _previewFailed = false;
+        _previewLoading = false;
+        _stageUserNames = names;
+      });
+    } catch (_) {
+      if (!mounted || seq != _previewSeq) return;
+      setState(() {
+        _previewLoading = false;
+        // 保留上一次成功预览；首次失败则空态提示，绝不回退模板全量 stages。
+        if (_previewStages == null) _previewFailed = true;
+      });
+    }
   }
 
   @override
@@ -317,18 +380,16 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage>
       } catch (_) {}
       // 初次渲染前先重算计算字段（如印花税），避免编辑/草稿预填时显示为空。
       XflowLinkage.recompute(template.fields, template.layout, _values);
-      final stageNames = await _service.fetchUserDisplayNames(
-        collectApproverIdsFromStages(template.stages),
-      );
       if (!mounted) return;
       setState(() {
         _template = template;
         _editingDetail = detail;
         _detailConfig = detailCfg;
-        _stageUserNames = stageNames;
         _loading = false;
         _autosaveHint = _canAutosave ? '填写中将自动保存草稿' : '';
       });
+      // 条件阶段 / 人名补齐走预览接口，不本地拼审批链。
+      unawaited(_refreshApprovalPreview());
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -827,6 +888,7 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage>
                                     _recompute();
                                   });
                                   _scheduleAutosave();
+                                  _scheduleApprovalPreview();
                                 },
                                 onAction: _handleAction,
                               ),
@@ -834,9 +896,10 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage>
                               ),
                             ),
                             XflowApprovalFlowSection(
-                              stages: _template!.stages,
+                              stages: _displayApprovalStages,
                               layout: _template!.layout,
                               userNames: _stageUserNames,
+                              emptyHint: _approvalEmptyHint,
                             ),
                             XflowCcRulesCard(
                               rules: _ccRules,

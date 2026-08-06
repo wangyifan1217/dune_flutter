@@ -15,7 +15,11 @@ class MainFlutterWindow: NSWindow {
     self.title = "沙丘"
 
     RegisterGeneratedPlugins(registry: flutterViewController)
-    SparkleUpdaterBridge.shared.setup(with: flutterViewController.engine.binaryMessenger)
+    let messenger = flutterViewController.engine.binaryMessenger
+    SparkleUpdaterBridge.shared.setup(with: messenger)
+    if let appDelegate = NSApplication.shared.delegate as? AppDelegate {
+      appDelegate.setupDesktopWindowChannel(with: messenger)
+    }
 
     super.awakeFromNib()
   }

@@ -48,6 +48,7 @@ import '../xflow/xflow_detail_logic.dart';
 import 'chat_emoji_gif_panel.dart';
 import 'chat_foreground_sync.dart';
 import 'chat_image_batch_preview.dart';
+import 'chat_image_clipboard.dart';
 import 'chat_image_editor.dart';
 import 'chat_image_utils.dart';
 import 'chat_file_preview_page.dart';
@@ -363,6 +364,10 @@ class _NativeChatViewState extends State<NativeChatView>
   bool _voiceMode = false;
   bool _emojiOpen = false;
   bool _toolsOpen = false;
+  /// PC：输入框可拖拽高度（托起消息列表）。
+  double _pcInputHeight = 108;
+  static const double _pcInputHeightMin = 72;
+  static const double _pcInputHeightMax = 320;
   bool _peerOnline = false;
   int _recordDurationMs = 0;
   String? _error;
@@ -776,6 +781,9 @@ class _NativeChatViewState extends State<NativeChatView>
       if (widget.autoMarkRead && shouldStick) {
         unawaited(_markReadIfNeeded());
       }
+      if (_isPrivate) {
+        unawaited(_refreshPeerReadFromServer());
+      }
     } catch (_) {
       // 补同步失败不打断会话；下次前台/实时事件仍可重试。
     } finally {
@@ -1152,16 +1160,27 @@ class _NativeChatViewState extends State<NativeChatView>
   }
 
   bool _handleReadEvent(ConversationRealtimeEvent event) {
-    final userId = (event.raw['userId'] as num?)?.toInt() ?? 0;
+    final userId = _realtimeInt(event.raw['userId']);
     if (userId <= 0 || userId == widget.session.userId) return true;
-    final lastRead =
-        (event.raw['lastReadMessageId'] as num?)?.toInt() ??
-        (event.raw['readMessageId'] as num?)?.toInt() ??
-        (event.raw['messageId'] as num?)?.toInt() ??
-        0;
-    if (lastRead <= 0) return true;
+    final lastRead = _realtimeInt(
+      event.raw['lastReadMessageId'] ??
+          event.raw['readMessageId'] ??
+          event.raw['messageId'],
+    );
+    if (lastRead <= 0) {
+      // 实时包缺字段时回源校验，避免一直停在「未读」。
+      unawaited(_refreshPeerReadFromServer());
+      return true;
+    }
     _applyPeerLastRead(lastRead);
     return true;
+  }
+
+  /// 实时/JSON 字段兼容 num / 数字字符串。
+  int _realtimeInt(Object? value) {
+    if (value is num) return value.toInt();
+    if (value is String) return int.tryParse(value.trim()) ?? 0;
+    return 0;
   }
 
   /// 仅依据服务端返回的 peerLastReadMessageId 推进「已读」状态。
@@ -1182,6 +1201,8 @@ class _NativeChatViewState extends State<NativeChatView>
               createdAt: m.createdAt,
               payload: m.payload,
               peerRead: m.id <= _peerLastReadMessageId || m.peerRead,
+              senderAvatarPreset: m.senderAvatarPreset,
+              senderAvatarObjectKey: m.senderAvatarObjectKey,
             ),
           )
           .toList(growable: false);
@@ -1197,6 +1218,17 @@ class _NativeChatViewState extends State<NativeChatView>
       if (!mounted || lastRead <= 0) return;
       _applyPeerLastRead(lastRead);
     } catch (_) {}
+  }
+
+  Future<void> _openChatVideo(Map<String, dynamic>? payload) async {
+    // 点开视频即视为已读会话（避免定位进会话 / 未贴底时漏报已读，发送方一直「未读」）。
+    unawaited(_markReadIfNeeded());
+    if (!mounted) return;
+    await showChatVideoPlayer(
+      context,
+      service: _service,
+      payload: payload,
+    );
   }
 
   Future<void> _markReadIfNeeded() async {
@@ -1713,8 +1745,10 @@ class _NativeChatViewState extends State<NativeChatView>
         _loading = false;
         _locating = false;
         _bootstrapped = true;
-        _peerLastReadMessageId =
-            page.peerLastReadMessageId ?? _peerLastReadMessageId;
+        _peerLastReadMessageId = math.max(
+          _peerLastReadMessageId,
+          page.peerLastReadMessageId ?? 0,
+        );
         if (!silent) _error = null;
       });
       if (!preservePaginatedHistory || conversationChanged) {
@@ -1755,7 +1789,7 @@ class _NativeChatViewState extends State<NativeChatView>
       if (focusId <= 0 && page.hasMore) {
         _scheduleAutoloadOlderToFill();
       }
-      if (focusId <= 0 && widget.autoMarkRead) {
+      if (widget.autoMarkRead) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (stale()) return;
           unawaited(_markReadIfNeeded());
@@ -2871,32 +2905,81 @@ class _NativeChatViewState extends State<NativeChatView>
       return false;
     }
     try {
+      // 剪贴板已有普通文本（用户又复制了文字）时，绝不用旧的图片备份抢粘贴。
+      final clipText =
+          (await Clipboard.getData(Clipboard.kTextPlain))?.text?.trim() ?? '';
+      final hasRealText =
+          clipText.isNotEmpty && !_isImageClipboardPlaceholder(clipText);
+      if (hasRealText) {
+        ChatImageClipboard.clear();
+        return false;
+      }
+
       final image = await Pasteboard.image;
-      if (image != null && image.isNotEmpty) {
+      if (image != null &&
+          image.isNotEmpty &&
+          _looksLikeImageBytes(image)) {
         await _sendPastedImageBytes(image);
         return true;
       }
-      if (kIsWeb) return false;
-      final paths = await Pasteboard.files();
-      for (final path in paths) {
-        final lower = path.toLowerCase();
-        if (!(lower.endsWith('.png') ||
-            lower.endsWith('.jpg') ||
-            lower.endsWith('.jpeg') ||
-            lower.endsWith('.webp') ||
-            lower.endsWith('.gif') ||
-            lower.endsWith('.bmp'))) {
-          continue;
+      if (!kIsWeb) {
+        final paths = await Pasteboard.files();
+        for (final path in paths) {
+          final lower = path.toLowerCase();
+          if (!(lower.endsWith('.png') ||
+              lower.endsWith('.jpg') ||
+              lower.endsWith('.jpeg') ||
+              lower.endsWith('.webp') ||
+              lower.endsWith('.gif') ||
+              lower.endsWith('.bmp'))) {
+            continue;
+          }
+          final file = XFile(path);
+          final bytes = await file.readAsBytes();
+          if (bytes.isEmpty) continue;
+          final name = path.replaceAll('\\', '/').split('/').last;
+          await _sendPastedImageBytes(bytes, fileName: name);
+          return true;
         }
-        final file = XFile(path);
-        final bytes = await file.readAsBytes();
-        if (bytes.isEmpty) continue;
-        final name = path.replaceAll('\\', '/').split('/').last;
-        await _sendPastedImageBytes(bytes, fileName: name);
+      }
+      // 系统剪贴板拿不到时，回退到本应用「复制图片」的进程内备份。
+      final mem = ChatImageClipboard.peek();
+      if (mem != null) {
+        await _sendPastedImageBytes(
+          mem.bytes,
+          fileName: mem.fileName,
+          openEditor: false,
+          sourceLabel: '粘贴',
+        );
         return true;
       }
     } catch (e) {
       debugPrint('[Chat] paste image failed: $e');
+    }
+    return false;
+  }
+
+  bool _isImageClipboardPlaceholder(String text) {
+    final t = text.trim();
+    return t == '[图片]' || t == '图片' || t == '发送了一张图片';
+  }
+
+  bool _looksLikeImageBytes(Uint8List bytes) {
+    if (bytes.length < 12) return false;
+    // JPEG
+    if (bytes[0] == 0xFF && bytes[1] == 0xD8) return true;
+    // PNG
+    if (bytes[0] == 0x89 && bytes[1] == 0x50) return true;
+    // GIF
+    if (bytes[0] == 0x47 && bytes[1] == 0x49) return true;
+    // BMP（Windows 剪贴板读回常见）
+    if (bytes[0] == 0x42 && bytes[1] == 0x4D) return true;
+    // WEBP
+    if (bytes[0] == 0x52 &&
+        bytes[1] == 0x49 &&
+        bytes[8] == 0x57 &&
+        bytes[9] == 0x45) {
+      return true;
     }
     return false;
   }
@@ -2991,34 +3074,95 @@ class _NativeChatViewState extends State<NativeChatView>
     return true;
   }
 
+  /// PC：系统文件对话框选图/视频（Windows 上 image_picker 基本选不到视频）。
+  Future<List<XFile>> _pickDesktopAlbumOrVideo({required bool videoOnly}) async {
+    final videos = XTypeGroup(
+      label: 'videos',
+      extensions: kChatVideoPickExtensions,
+    );
+    if (videoOnly) {
+      try {
+        return await openFiles(acceptedTypeGroups: [videos]);
+      } catch (_) {
+        return openFiles();
+      }
+    }
+    const images = XTypeGroup(
+      label: 'images',
+      extensions: <String>[
+        'jpg',
+        'jpeg',
+        'png',
+        'gif',
+        'webp',
+        'bmp',
+        'heic',
+        'heif',
+      ],
+    );
+    try {
+      return await openFiles(acceptedTypeGroups: [images, videos]);
+    } catch (_) {
+      try {
+        return await openFiles(acceptedTypeGroups: [images]);
+      } catch (_) {
+        return openFiles();
+      }
+    }
+  }
+
+  Future<void> _pickAndSendVideo() async {
+    final conv = _conversation;
+    if (conv == null || _mediaBusy) return;
+    List<XFile> picked;
+    if (isDesktopCommOnly) {
+      picked = await _pickDesktopAlbumOrVideo(videoOnly: true);
+    } else {
+      if (!await _ensurePhotosPermission()) return;
+      final one = await _imagePicker.pickVideo(source: ImageSource.gallery);
+      picked = one == null ? const <XFile>[] : <XFile>[one];
+    }
+    if (picked.isEmpty) return;
+    for (final file in picked) {
+      if (!mounted || _conversation == null) return;
+      if (!isChatVideoXFile(file)) {
+        _showToast('请选择视频文件');
+        continue;
+      }
+      await _sendVideoXFile(file, sourceLabel: '视频');
+    }
+  }
+
   Future<void> _sendMultiImagesFromGallery() async {
     final conv = _conversation;
     if (conv == null || _mediaBusy) return;
-    if (!await _ensurePhotosPermission()) return;
 
-    // 相册同时可选图片 + 视频（对齐微信）。
+    // 相册同时可选图片 + 视频（对齐微信）。PC 走文件对话框，避免选不到视频。
     List<XFile> picked;
-    try {
-      picked = await _imagePicker.pickMultipleMedia(
-        imageQuality: kChatImagePickQuality,
-        maxWidth: kChatImagePickMaxEdge,
-        maxHeight: kChatImagePickMaxEdge,
-      );
-    } catch (_) {
-      picked = await _imagePicker.pickMultiImage(
-        maxWidth: kChatImagePickMaxEdge,
-        maxHeight: kChatImagePickMaxEdge,
-        imageQuality: kChatImagePickQuality,
-      );
+    if (isDesktopCommOnly) {
+      picked = await _pickDesktopAlbumOrVideo(videoOnly: false);
+    } else {
+      if (!await _ensurePhotosPermission()) return;
+      try {
+        picked = await _imagePicker.pickMultipleMedia(
+          imageQuality: kChatImagePickQuality,
+          maxWidth: kChatImagePickMaxEdge,
+          maxHeight: kChatImagePickMaxEdge,
+        );
+      } catch (_) {
+        picked = await _imagePicker.pickMultiImage(
+          maxWidth: kChatImagePickMaxEdge,
+          maxHeight: kChatImagePickMaxEdge,
+          imageQuality: kChatImagePickQuality,
+        );
+      }
     }
     if (picked.isEmpty) return;
 
     final imageFiles = <XFile>[];
     final videoFiles = <XFile>[];
     for (final file in picked) {
-      final name = file.name.isNotEmpty ? file.name : file.path;
-      final mime = file.mimeType ?? lookupMimeType(name) ?? '';
-      if (isChatVideoFileName(name) || isChatVideoMime(mime)) {
+      if (isChatVideoXFile(file)) {
         videoFiles.add(file);
       } else {
         imageFiles.add(file);
@@ -3186,10 +3330,16 @@ class _NativeChatViewState extends State<NativeChatView>
     if (conv == null || _mediaBusy) return;
     final file = await openFile();
     if (file == null) return;
-    final fileName = file.name;
-    if (isChatVideoFileName(fileName)) {
+    final fileName = file.name.isNotEmpty
+        ? file.name
+        : file.path.replaceAll('\\', '/').split('/').last;
+    if (isChatVideoXFile(file) || isChatVideoFileName(fileName)) {
       await _sendVideoXFile(
-        XFile(file.path, name: fileName, mimeType: file.mimeType),
+        XFile(
+          file.path,
+          name: fileName,
+          mimeType: file.mimeType ?? lookupMimeType(fileName),
+        ),
         sourceLabel: '文件',
       );
       return;
@@ -3290,7 +3440,7 @@ class _NativeChatViewState extends State<NativeChatView>
             sourceLabel: '拖入',
             openEditor: toSend.length == 1,
           );
-        } else if (isChatVideoFileName(fileName)) {
+        } else if (isChatVideoXFile(file) || isChatVideoFileName(fileName)) {
           await _sendVideoXFile(file, sourceLabel: '拖入');
         } else {
           await _sendFileBytes(bytes, fileName: fileName);
@@ -3934,7 +4084,7 @@ class _NativeChatViewState extends State<NativeChatView>
                 ? Icons.folder_copy_outlined
                 : Icons.folder_shared_outlined,
           ),
-        if (copyText.isNotEmpty)
+        if (isImage || copyText.isNotEmpty)
           const _MessageQuickAction(
             id: 'copy',
             label: '复制',
@@ -4006,7 +4156,11 @@ class _NativeChatViewState extends State<NativeChatView>
           await _saveChatAttachmentToDrive(m.payload, attachmentName);
           break;
         case 'copy':
-          await _copyMessageText(copyText);
+          if (selection.isEmpty && isImage) {
+            await _copyMessageImage(m);
+          } else {
+            await _copyMessageText(copyText);
+          }
           break;
         case 'download':
           await _downloadFile(m.payload, attachmentName);
@@ -4326,9 +4480,9 @@ class _NativeChatViewState extends State<NativeChatView>
                 : () => unawaited(_forwardApprovalToChat()),
             onAt: locked ? null : _pickAtMember,
             onEmoji: locked ? null : _toggleEmojiPicker,
-            onVideo: null,
+            onVideo: locked || _mediaBusy ? () {} : _pickAndSendVideo,
             showAt: !_isPrivate,
-            showVideo: false,
+            showVideo: true,
           ),
         if (_quoteDraft != null && !_quoteDraft!.isEmpty && !locked)
           ChatQuotePreviewBar(quote: _quoteDraft!, onCancel: _clearQuoteDraft),
@@ -4351,6 +4505,17 @@ class _NativeChatViewState extends State<NativeChatView>
                 if (!wide && _toolsOpen) setState(() => _toolsOpen = false);
                 _scrollToLatestAfterKeyboard();
               },
+              inputHeight: wide ? _pcInputHeight : null,
+              onInputHeightDrag: wide
+                  ? (deltaDy) {
+                      setState(() {
+                        _pcInputHeight = (_pcInputHeight - deltaDy).clamp(
+                          _pcInputHeightMin,
+                          _pcInputHeightMax,
+                        );
+                      });
+                    }
+                  : null,
               voiceMode: effectiveVoiceMode,
               voiceEnabled: showVoice,
               sending: _sending,
@@ -4448,6 +4613,35 @@ class _NativeChatViewState extends State<NativeChatView>
     return ChatMessageQuote.previewForMessage(message);
   }
 
+  /// 图片消息复制：优先用会话里已缓存的预览图，立刻可粘贴；系统剪贴板后台刷新。
+  Future<void> _copyMessageImage(NativeChatMessage message) async {
+    try {
+      final payload = message.payload;
+      final preview = ConversationService.previewMediaPayload(payload);
+      Uint8List bytes;
+      try {
+        bytes = await _service.loadCachedChatMediaBytesWithFallback(
+          previewPayload: preview,
+          originalPayload: payload,
+        );
+      } catch (_) {
+        bytes = await _service.loadFullImageBytes(payload);
+      }
+      if (bytes.isEmpty) {
+        if (mounted) _showToast('图片为空', error: true);
+        return;
+      }
+      final name = ConversationService.mediaFileName(
+        payload,
+        fallback: 'image.jpg',
+      );
+      await ChatImageClipboard.write(bytes, fileName: name);
+      if (mounted) _showToast('已复制图片');
+    } catch (_) {
+      if (mounted) _showToast('复制失败，请重试', error: true);
+    }
+  }
+
   Future<void> _copyMessageText(String text) async {
     final value = text.trim();
     if (value.isEmpty) {
@@ -4455,6 +4649,8 @@ class _NativeChatViewState extends State<NativeChatView>
       return;
     }
     try {
+      // 复制文字后清掉图片备份，避免下次粘贴仍发出旧图。
+      ChatImageClipboard.clear();
       await Clipboard.setData(ClipboardData(text: value));
       if (mounted) _showToast('已复制');
     } catch (_) {
@@ -5135,7 +5331,12 @@ class _NativeChatViewState extends State<NativeChatView>
   }
 
   Future<void> _copySelectedMessages() async {
-    final texts = _multiSelectedMessages
+    final selected = _multiSelectedMessages;
+    if (selected.length == 1 && selected.first.kind.toUpperCase() == 'IMAGE') {
+      await _copyMessageImage(selected.first);
+      return;
+    }
+    final texts = selected
         .map(_messageForwardText)
         .where((e) => e.trim().isNotEmpty)
         .toList(growable: false);
@@ -5143,6 +5344,7 @@ class _NativeChatViewState extends State<NativeChatView>
       _showToast('请先选择消息');
       return;
     }
+    ChatImageClipboard.clear();
     await Clipboard.setData(ClipboardData(text: texts.join('\n')));
     if (mounted) _showToast('已复制${texts.length}条消息');
   }
@@ -6366,9 +6568,7 @@ class _NativeChatViewState extends State<NativeChatView>
           mine: mine,
           downloadProgress: _downloadProgressFor(m.payload),
           onCancelDownload: _downloadCancelFor(m.payload),
-          onTap: () => unawaited(
-            showChatVideoPlayer(context, service: _service, payload: m.payload),
-          ),
+          onTap: () => unawaited(_openChatVideo(m.payload)),
         ),
       );
     }
@@ -6554,9 +6754,7 @@ class _NativeChatViewState extends State<NativeChatView>
         service: _service,
         payload: e.payload,
         mine: mine,
-        onTap: () => unawaited(
-          showChatVideoPlayer(context, service: _service, payload: e.payload),
-        ),
+        onTap: () => unawaited(_openChatVideo(e.payload)),
       );
     }
     if (kind == 'FILE') {

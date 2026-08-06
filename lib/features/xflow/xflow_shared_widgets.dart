@@ -1397,6 +1397,7 @@ class XflowCcRulesCard extends StatefulWidget {
     this.loading = false,
     this.error,
     this.hideWhenEmpty = true,
+    this.initiallyExpanded = true,
   });
 
   final List<Map<String, dynamic>> rules;
@@ -1406,12 +1407,15 @@ class XflowCcRulesCard extends StatefulWidget {
   /// WebView：规则加载成功且为空时隐藏整张卡片
   final bool hideWhenEmpty;
 
+  /// 默认展开抄送规则列表。
+  final bool initiallyExpanded;
+
   @override
   State<XflowCcRulesCard> createState() => _XflowCcRulesCardState();
 }
 
 class _XflowCcRulesCardState extends State<XflowCcRulesCard> {
-  bool _open = false;
+  late bool _open = widget.initiallyExpanded;
 
   @override
   Widget build(BuildContext context) {
@@ -1422,7 +1426,8 @@ class _XflowCcRulesCardState extends State<XflowCcRulesCard> {
       return const SizedBox.shrink();
     }
     return Container(
-      margin: const EdgeInsets.only(bottom: 10),
+      // 与上方审批流拉开一点间距，避免贴在一起。
+      margin: const EdgeInsets.only(top: 16, bottom: 10),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: XfProposalUi.card,

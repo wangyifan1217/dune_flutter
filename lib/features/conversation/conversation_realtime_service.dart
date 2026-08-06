@@ -367,13 +367,15 @@ class ConversationRealtimeService {
       return;
     }
     final fromChannel = _convIdFromChannel(channel);
-    final fromPayload = (payload['conversationId'] as num?)?.toInt() ??
-        (payload['message'] is Map<String, dynamic>
-            ? ((payload['message'] as Map<String, dynamic>)['conversationId']
-                    as num?)
-                ?.toInt()
-            : null);
-    final convId = (fromPayload ?? (fromChannel > 0 ? fromChannel : null));
+    final fromPayload = _asInt(payload['conversationId']);
+    final fromMessage = payload['message'] is Map
+        ? _asInt((payload['message'] as Map)['conversationId'])
+        : 0;
+    final int? convId = fromPayload > 0
+        ? fromPayload
+        : (fromMessage > 0
+              ? fromMessage
+              : (fromChannel > 0 ? fromChannel : null));
     final type = (payload['type'] ?? '').toString();
     if (channel == 'online' || _isPresenceLikeType(type)) {
       unawaited(refreshOnlinePresence());
@@ -387,6 +389,12 @@ class ConversationRealtimeService {
         conversationId: convId,
       ),
     );
+  }
+
+  int _asInt(Object? value) {
+    if (value is num) return value.toInt();
+    if (value is String) return int.tryParse(value.trim()) ?? 0;
+    return 0;
   }
 
   bool _isPresenceLikeType(String type) {

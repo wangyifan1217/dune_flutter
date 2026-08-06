@@ -149,10 +149,16 @@ class ChatQuickActions extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final wide = isWideChatLayout(context);
-    // PC 宽屏：图片(含视频) + 截图 + 文件；APP：微信式宫格（相册 / 拍照长按拍视频 / 文件）。
+    // PC 宽屏：图片 + 视频 + 截图 + 文件；APP：微信式宫格（相册 / 拍照长按拍视频 / 文件）。
     final cells = <_QaCell>[
       if (wide) ...[
         _QaCell(icon: Icons.photo_outlined, label: '图片', onTap: onAlbum),
+        if (showVideo && onVideo != null)
+          _QaCell(
+            icon: Icons.videocam_outlined,
+            label: '视频',
+            onTap: onVideo!,
+          ),
         if (onScreenshot != null)
           _QaCell(
             icon: Icons.crop_free_rounded,
@@ -170,6 +176,12 @@ class ChatQuickActions extends StatelessWidget {
           onLongPress: onCameraLongPress,
           hint: onCameraLongPress == null ? null : '长按拍视频',
         ),
+        if (showVideo && onVideo != null)
+          _QaCell(
+            icon: Icons.videocam_outlined,
+            label: '视频',
+            onTap: onVideo!,
+          ),
         _QaCell(icon: Icons.folder_outlined, label: '文件', onTap: onFile),
       ],
       _QaCell(
@@ -179,9 +191,7 @@ class ChatQuickActions extends StatelessWidget {
       ),
       if (showAt && onAt != null)
         _QaCell(icon: Icons.alternate_email, label: '@', onTap: onAt!),
-      if (showVideo && onVideo != null)
-        _QaCell(icon: Icons.videocam_outlined, label: '视频', onTap: onVideo!)
-      else if (wide && onEmoji != null)
+      if (wide && onEmoji != null)
         _QaCell(
           icon: Icons.emoji_emotions_outlined,
           label: '表情',
@@ -360,6 +370,8 @@ class ChatInputBar extends StatelessWidget {
     this.showMobilePlusButton = true,
     this.backgroundColor,
     this.onAttemptPasteImage,
+    this.inputHeight,
+    this.onInputHeightDrag,
   });
 
   final TextEditingController controller;
@@ -396,6 +408,12 @@ class ChatInputBar extends StatelessWidget {
   /// 返回 true 表示已处理图片粘贴；false 则回退插入剪贴板文本。
   final Future<bool> Function()? onAttemptPasteImage;
 
+  /// PC：固定输入框高度；为 null 时按 min/maxLines 自动增高。
+  final double? inputHeight;
+
+  /// PC：拖拽输入框上沿调整高度（deltaDy>0 为向下拖）。
+  final ValueChanged<double>? onInputHeightDrag;
+
   @override
   Widget build(BuildContext context) {
     final showStop = sending && onStop != null;
@@ -406,13 +424,12 @@ class ChatInputBar extends StatelessWidget {
     final minLines = wide ? 3 : 1;
     final maxLines = wide ? 8 : 4;
     final fieldPadV = wide ? 14.0 : 10.0;
-    // PC：紧凑「发送」；APP：避开 iOS home indicator。
-    final sendH = wide ? 44.0 : 40.0;
     final bottomInset = MediaQuery.paddingOf(context).bottom;
+    final canResize = wide && onInputHeightDrag != null && inputHeight != null;
     return Container(
       padding: EdgeInsets.fromLTRB(
         wide ? 12 : 10,
-        wide ? 10 : 8,
+        canResize ? 0 : (wide ? 10 : 8),
         wide ? 12 : 10,
         bottomInset > 0 ? bottomInset + (wide ? 6 : 4) : (wide ? 12.0 : 8.0),
       ),
@@ -426,9 +443,14 @@ class ChatInputBar extends StatelessWidget {
           ),
         ),
       ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.end,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
+          if (canResize)
+            _ComposerResizeHandle(onDrag: onInputHeightDrag!),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
           if (voiceEnabled) ...[
             if (wide)
               _RoundIconBtn(
@@ -491,12 +513,31 @@ class ChatInputBar extends StatelessWidget {
                       ),
                     ),
                   )
+                : wide
+                ? _PcComposerBox(
+                    height: inputHeight ?? 108,
+                    controller: controller,
+                    focusNode: focusNode,
+                    enabled: enabled && !showStop,
+                    fieldPadV: fieldPadV,
+                    hintText: hintText,
+                    onInputFocused: onInputFocused,
+                    onSend: interactionLocked ? null : onSend,
+                    onAttemptPasteImage: interactionLocked
+                        ? null
+                        : onAttemptPasteImage,
+                    showStop: showStop,
+                    sending: sending,
+                    interactionLocked: interactionLocked,
+                    onStop: onStop,
+                  )
                 : _ChatTextField(
                     controller: controller,
                     focusNode: focusNode,
                     enabled: enabled && !showStop,
                     minLines: minLines,
                     maxLines: maxLines,
+                    fixedHeight: inputHeight,
                     wide: wide,
                     fieldPadV: fieldPadV,
                     hintText: hintText,
@@ -507,9 +548,9 @@ class ChatInputBar extends StatelessWidget {
                         : onAttemptPasteImage,
                   ),
           ),
-          if (!effectiveVoiceMode && (wide || showMobilePlusButton)) ...[
+          if (!effectiveVoiceMode && !wide && showMobilePlusButton) ...[
             if (showEmojiControl) ...[
-              SizedBox(width: wide ? 8 : 6),
+              const SizedBox(width: 6),
               if (emojiPicker != null)
                 emojiPicker!
               else if (onEmoji != null)
@@ -518,67 +559,173 @@ class ChatInputBar extends StatelessWidget {
                   onTap: interactionLocked ? null : onEmoji,
                 ),
             ],
-            SizedBox(width: wide ? 8 : 6),
-            // PC：原「发送」按钮；APP：紫色圆形「+」展开工具。
-            if (wide)
-              Material(
-                color: Colors.transparent,
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(6),
-                  onTap: showStop
-                      ? onStop
-                      : (interactionLocked ? null : onSend),
-                  child: Ink(
-                    width: 56,
-                    height: sendH,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(6),
-                      color: showStop
-                          ? const Color(0xFFB65252)
-                          : interactionLocked
-                          ? const Color(0xFFC9BEDD)
-                          : const Color(0xFF8B72B7),
-                    ),
-                    child: Center(
-                      child: showStop
-                          ? const Icon(
-                              Icons.stop_rounded,
-                              size: 18,
-                              color: Colors.white,
-                            )
-                          : sending
-                          ? const SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
+            const SizedBox(width: 6),
+            _WeChatPlusBtn(
+              showStop: showStop,
+              sending: sending,
+              locked: interactionLocked,
+              plusOpen: plusOpen,
+              onTap: showStop
+                  ? onStop
+                  : (interactionLocked ? null : (onPlus ?? onSend)),
+            ),
+          ],
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// PC：输入框外壳，发送按钮落在框内右下角。
+class _PcComposerBox extends StatelessWidget {
+  const _PcComposerBox({
+    required this.height,
+    required this.controller,
+    required this.focusNode,
+    required this.enabled,
+    required this.fieldPadV,
+    required this.hintText,
+    required this.onInputFocused,
+    required this.onSend,
+    required this.onAttemptPasteImage,
+    required this.showStop,
+    required this.sending,
+    required this.interactionLocked,
+    required this.onStop,
+  });
+
+  final double height;
+  final TextEditingController controller;
+  final FocusNode? focusNode;
+  final bool enabled;
+  final double fieldPadV;
+  final String? hintText;
+  final VoidCallback? onInputFocused;
+  final VoidCallback? onSend;
+  final Future<bool> Function()? onAttemptPasteImage;
+  final bool showStop;
+  final bool sending;
+  final bool interactionLocked;
+  final VoidCallback? onStop;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: height,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: const Color(0xFFFFFEFF),
+          borderRadius: BorderRadius.circular(7),
+          border: Border.all(color: const Color(0xFFE3DCEE)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(
+              child: _ChatTextField(
+                controller: controller,
+                focusNode: focusNode,
+                enabled: enabled,
+                minLines: 1,
+                maxLines: null,
+                fillParent: true,
+                showOutline: false,
+                wide: true,
+                fieldPadV: fieldPadV,
+                hintText: hintText,
+                onInputFocused: onInputFocused,
+                onSend: onSend,
+                onAttemptPasteImage: onAttemptPasteImage,
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+              child: Align(
+                alignment: Alignment.centerRight,
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(6),
+                    onTap: showStop
+                        ? onStop
+                        : (interactionLocked ? null : onSend),
+                    child: Ink(
+                      width: 56,
+                      height: 32,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(6),
+                        color: showStop
+                            ? const Color(0xFFB65252)
+                            : interactionLocked
+                            ? const Color(0xFFC9BEDD)
+                            : const Color(0xFF8B72B7),
+                      ),
+                      child: Center(
+                        child: showStop
+                            ? const Icon(
+                                Icons.stop_rounded,
+                                size: 18,
                                 color: Colors.white,
+                              )
+                            : sending
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : const Text(
+                                '发送',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                ),
                               ),
-                            )
-                          : const Text(
-                              '发送',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 14,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
+                      ),
                     ),
                   ),
                 ),
-              )
-            else
-              _WeChatPlusBtn(
-                showStop: showStop,
-                sending: sending,
-                locked: interactionLocked,
-                plusOpen: plusOpen,
-                onTap: showStop
-                    ? onStop
-                    : (interactionLocked ? null : (onPlus ?? onSend)),
               ),
+            ),
           ],
-        ],
+        ),
+      ),
+    );
+  }
+}
+
+/// PC：输入框上沿拖拽条，向上拖升高输入区并托起消息列表。
+class _ComposerResizeHandle extends StatelessWidget {
+  const _ComposerResizeHandle({required this.onDrag});
+
+  final ValueChanged<double> onDrag;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      cursor: SystemMouseCursors.resizeUpDown,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onVerticalDragUpdate: (details) => onDrag(details.delta.dy),
+        child: SizedBox(
+          height: 14,
+          width: double.infinity,
+          child: Center(
+            child: Container(
+              width: 36,
+              height: 3,
+              decoration: BoxDecoration(
+                color: const Color(0xFFC9C2D6),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -700,13 +847,19 @@ class _ChatTextField extends StatefulWidget {
     required this.onInputFocused,
     required this.onSend,
     required this.onAttemptPasteImage,
+    this.fixedHeight,
+    this.fillParent = false,
+    this.showOutline = true,
   });
 
   final TextEditingController controller;
   final FocusNode? focusNode;
   final bool enabled;
   final int minLines;
-  final int maxLines;
+  final int? maxLines;
+  final double? fixedHeight;
+  final bool fillParent;
+  final bool showOutline;
   final bool wide;
   final double fieldPadV;
   final String? hintText;
@@ -738,135 +891,202 @@ class _ChatTextFieldState extends State<_ChatTextField> {
     return widget.wide && !HardwareKeyboard.instance.isShiftPressed;
   }
 
+  /// 输入法组字/选词中：Enter 应交还给 IME，不能直接发送。
+  bool _isImeComposing() {
+    final composing = widget.controller.value.composing;
+    return composing.isValid && !composing.isCollapsed;
+  }
+
+  /// 旧版复制图片会写入「[图片]」占位文案，粘贴时不再插入。
+  bool _isImagePlaceholderText(String text) {
+    final t = text.trim();
+    return t == '[图片]' ||
+        t == '图片' ||
+        t == '发送了一张图片';
+  }
+
+  Future<void> _insertClipboardText() async {
+    final data = await Clipboard.getData(Clipboard.kTextPlain);
+    final text = data?.text;
+    if (text == null || text.isEmpty) return;
+    if (_isImagePlaceholderText(text)) return;
+    if (!mounted) return;
+    final value = widget.controller.value;
+    final selection = value.selection;
+    final start = selection.isValid ? selection.start : value.text.length;
+    final end = selection.isValid ? selection.end : value.text.length;
+    final next = value.text.replaceRange(start, end, text);
+    widget.controller.value = TextEditingValue(
+      text: next,
+      selection: TextSelection.collapsed(offset: start + text.length),
+    );
+  }
+
+  Future<void> _handlePasteAttempt() async {
+    if (_handlingPaste) return;
+    _handlingPaste = true;
+    try {
+      if (widget.onAttemptPasteImage != null) {
+        final handled = await widget.onAttemptPasteImage!();
+        if (handled || !mounted) return;
+      }
+      await _insertClipboardText();
+    } finally {
+      _handlingPaste = false;
+    }
+  }
+
   KeyEventResult _onKeyEvent(FocusNode node, KeyEvent event) {
     if (_isSendKey(event)) {
+      // macOS / 中文等输入法：候选未上屏前按回车只确认选词，不发送。
+      if (_isImeComposing()) {
+        return KeyEventResult.ignored;
+      }
       widget.onSend?.call();
       return KeyEventResult.handled;
     }
     if (!_isPasteKey(event) || widget.onAttemptPasteImage == null) {
       return KeyEventResult.ignored;
     }
-    if (_handlingPaste) return KeyEventResult.ignored;
-    _handlingPaste = true;
-    unawaited(() async {
-      try {
-        final handled = await widget.onAttemptPasteImage!();
-        if (handled || !mounted) return;
-        // 无图片时手动插入文本，因本事件已拦截默认粘贴。
-        final data = await Clipboard.getData(Clipboard.kTextPlain);
-        final text = data?.text;
-        if (text == null || text.isEmpty) return;
-        final value = widget.controller.value;
-        final selection = value.selection;
-        final start = selection.isValid ? selection.start : value.text.length;
-        final end = selection.isValid ? selection.end : value.text.length;
-        final next = value.text.replaceRange(start, end, text);
-        widget.controller.value = TextEditingValue(
-          text: next,
-          selection: TextSelection.collapsed(offset: start + text.length),
-        );
-      } finally {
-        _handlingPaste = false;
-      }
-    }());
+    unawaited(_handlePasteAttempt());
     return KeyEventResult.handled;
+  }
+
+  List<ContextMenuButtonItem> _pasteAwareButtonItems(
+    EditableTextState editableTextState,
+  ) {
+    final items = editableTextState.contextMenuButtonItems;
+    if (widget.onAttemptPasteImage == null) return items;
+    return items
+        .map((item) {
+          if (item.type != ContextMenuButtonType.paste) return item;
+          return ContextMenuButtonItem(
+            label: item.label,
+            type: ContextMenuButtonType.paste,
+            onPressed: () {
+              editableTextState.hideToolbar();
+              unawaited(_handlePasteAttempt());
+            },
+          );
+        })
+        .toList(growable: false);
   }
 
   @override
   Widget build(BuildContext context) {
-    return Focus(
-      onKeyEvent: _onKeyEvent,
-      child: TextField(
-        controller: widget.controller,
-        focusNode: widget.focusNode,
-        enabled: widget.enabled,
-        minLines: widget.minLines,
-        maxLines: widget.maxLines,
-        enableInteractiveSelection: true,
-        // PC：newline + Enter 发送；APP：键盘右下角「发送」，长按可选换行。
-        textInputAction: widget.wide
-            ? TextInputAction.newline
-            : TextInputAction.send,
-        onSubmitted: widget.wide || widget.onSend == null
-            ? null
-            : (_) {
-                widget.onSend!();
-                // TextInputAction.send 会在 onSubmitted 之后主动 unfocus；
-                // 发送后立刻抢回焦点，保持键盘不收起（对齐微信连发）。
-                WidgetsBinding.instance.addPostFrameCallback((_) {
-                  if (!context.mounted) return;
-                  widget.focusNode?.requestFocus();
-                });
-              },
-        onTap: widget.onInputFocused,
-        contextMenuBuilder: (context, editableTextState) {
-          if (widget.wide) {
-            return AdaptiveTextSelectionToolbar.editableText(
-              editableTextState: editableTextState,
-            );
-          }
-          final value = editableTextState.textEditingValue;
-          final selection = value.selection;
-          final canInsertNewline = widget.enabled && selection.isValid;
+    final fixed = widget.fixedHeight;
+    final useFixedHeight = fixed != null && fixed > 0;
+    final expands = useFixedHeight || widget.fillParent;
+    final outline = widget.showOutline;
+    final field = TextField(
+      controller: widget.controller,
+      focusNode: widget.focusNode,
+      enabled: widget.enabled,
+      minLines: expands ? null : widget.minLines,
+      maxLines: expands ? null : widget.maxLines,
+      expands: expands,
+      textAlignVertical: expands
+          ? TextAlignVertical.top
+          : TextAlignVertical.center,
+      enableInteractiveSelection: true,
+      // PC：newline + Enter 发送；APP：键盘右下角「发送」，长按可选换行。
+      textInputAction: widget.wide
+          ? TextInputAction.newline
+          : TextInputAction.send,
+      onSubmitted: widget.wide || widget.onSend == null
+          ? null
+          : (_) {
+              widget.onSend!();
+              // TextInputAction.send 会在 onSubmitted 之后主动 unfocus；
+              // 发送后立刻抢回焦点，保持键盘不收起（对齐微信连发）。
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (!context.mounted) return;
+                widget.focusNode?.requestFocus();
+              });
+            },
+      onTap: widget.onInputFocused,
+      contextMenuBuilder: (context, editableTextState) {
+        final buttonItems = _pasteAwareButtonItems(editableTextState);
+        if (widget.wide) {
           return AdaptiveTextSelectionToolbar.buttonItems(
             anchors: editableTextState.contextMenuAnchors,
-            buttonItems: <ContextMenuButtonItem>[
-              if (canInsertNewline)
-                ContextMenuButtonItem(
-                  label: '换行',
-                  onPressed: () {
-                    final start = selection.start;
-                    final end = selection.end;
-                    final next = value.text.replaceRange(start, end, '\n');
-                    widget.controller.value = TextEditingValue(
-                      text: next,
-                      selection: TextSelection.collapsed(offset: start + 1),
-                    );
-                    editableTextState.hideToolbar();
-                  },
-                ),
-              ...editableTextState.contextMenuButtonItems,
-            ],
+            buttonItems: buttonItems,
           );
-        },
-        style: DunesTypography.sans(
-          fontSize: widget.wide ? 15 : 16,
-          height: widget.wide ? 1.55 : 1.35,
-          color: DunesColors.text,
-        ),
-        decoration: InputDecoration(
-          hintText: widget.hintText ?? '输入消息…',
-          hintStyle: DunesTypography.sans(
-            fontSize: widget.wide ? 15 : 16,
-            color: widget.wide ? DunesColors.text3 : const Color(0xFFB0B0B0),
-          ),
-          filled: true,
-          fillColor: widget.wide ? const Color(0xFFFFFEFF) : Colors.white,
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(widget.wide ? 7 : 8),
-            borderSide: widget.wide
-                ? const BorderSide(color: Color(0xFFE3DCEE))
-                : BorderSide.none,
-          ),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(widget.wide ? 7 : 8),
-            borderSide: widget.wide
-                ? const BorderSide(color: Color(0xFFE3DCEE))
-                : BorderSide.none,
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(widget.wide ? 7 : 8),
-            borderSide: widget.wide
-                ? const BorderSide(color: Color(0xFF9A82C5))
-                : BorderSide.none,
-          ),
-          contentPadding: EdgeInsets.symmetric(
-            horizontal: 12,
-            vertical: widget.fieldPadV,
-          ),
-          isDense: !widget.wide,
-        ),
+        }
+        final value = editableTextState.textEditingValue;
+        final selection = value.selection;
+        final canInsertNewline = widget.enabled && selection.isValid;
+        return AdaptiveTextSelectionToolbar.buttonItems(
+          anchors: editableTextState.contextMenuAnchors,
+          buttonItems: <ContextMenuButtonItem>[
+            if (canInsertNewline)
+              ContextMenuButtonItem(
+                label: '换行',
+                onPressed: () {
+                  final start = selection.start;
+                  final end = selection.end;
+                  final next = value.text.replaceRange(start, end, '\n');
+                  widget.controller.value = TextEditingValue(
+                    text: next,
+                    selection: TextSelection.collapsed(offset: start + 1),
+                  );
+                  editableTextState.hideToolbar();
+                },
+              ),
+            ...buttonItems,
+          ],
+        );
+      },
+      style: DunesTypography.sans(
+        fontSize: widget.wide ? 15 : 16,
+        height: widget.wide ? 1.55 : 1.35,
+        color: DunesColors.text,
       ),
+      decoration: InputDecoration(
+        hintText: widget.hintText ?? '输入消息…',
+        hintStyle: DunesTypography.sans(
+          fontSize: widget.wide ? 15 : 16,
+          color: widget.wide ? DunesColors.text3 : const Color(0xFFB0B0B0),
+        ),
+        filled: outline,
+        fillColor: outline
+            ? (widget.wide ? const Color(0xFFFFFEFF) : Colors.white)
+            : null,
+        border: outline
+            ? OutlineInputBorder(
+                borderRadius: BorderRadius.circular(widget.wide ? 7 : 8),
+                borderSide: widget.wide
+                    ? const BorderSide(color: Color(0xFFE3DCEE))
+                    : BorderSide.none,
+              )
+            : InputBorder.none,
+        enabledBorder: outline
+            ? OutlineInputBorder(
+                borderRadius: BorderRadius.circular(widget.wide ? 7 : 8),
+                borderSide: widget.wide
+                    ? const BorderSide(color: Color(0xFFE3DCEE))
+                    : BorderSide.none,
+              )
+            : InputBorder.none,
+        focusedBorder: outline
+            ? OutlineInputBorder(
+                borderRadius: BorderRadius.circular(widget.wide ? 7 : 8),
+                borderSide: widget.wide
+                    ? const BorderSide(color: Color(0xFF9A82C5))
+                    : BorderSide.none,
+              )
+            : InputBorder.none,
+        contentPadding: EdgeInsets.symmetric(
+          horizontal: 12,
+          vertical: widget.fieldPadV,
+        ),
+        isDense: !widget.wide,
+      ),
+    );
+
+    return Focus(
+      onKeyEvent: _onKeyEvent,
+      child: useFixedHeight ? SizedBox(height: fixed, child: field) : field,
     );
   }
 }

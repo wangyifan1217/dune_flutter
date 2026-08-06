@@ -26,6 +26,7 @@ import 'package:http_parser/http_parser.dart';
 
 import '../../core/config/dunes_defaults.dart';
 import '../auth/auth_session.dart';
+import '../chat/chat_file_type_icon.dart';
 import '../shell/dunes_toast.dart';
 import 'proposal_archive_models.dart';
 import 'proposal_excel_preview_page.dart';
@@ -548,6 +549,11 @@ class _ProposalUploadPageState extends State<ProposalUploadPage>
   String _autosaveHint = '';
   bool _recognitionHydrating = false;
   Map<int, String> _stageUserNames = const {};
+  List<Map<String, dynamic>>? _previewStages;
+  Timer? _previewTimer;
+  int _previewSeq = 0;
+  bool _previewFailed = false;
+  bool _previewLoading = false;
 
   int? get _activeDraftId {
     final draft = _draftProposalId;
@@ -577,6 +583,7 @@ class _ProposalUploadPageState extends State<ProposalUploadPage>
   @override
   void dispose() {
     _autosaveTimer?.cancel();
+    _previewTimer?.cancel();
     if (_canAutosave &&
         XflowService.hasMeaningfulDraftValues(_buildDraftValues())) {
       unawaited(_runAutosave(silent: true, forceLocalFirst: true));
@@ -731,16 +738,9 @@ class _ProposalUploadPageState extends State<ProposalUploadPage>
       }
 
       if (!mounted) return;
-      final stageNames = await _service.fetchUserDisplayNames(
-        collectApproverIdsFromStages(
-          approvalStagesFromDetailConfig(detailConfig),
-        ),
-      );
-      if (!mounted) return;
       setState(() {
         _template = template;
         _detailConfig = detailConfig;
-        _stageUserNames = stageNames;
         _configLoading = false;
         for (final field in supplemental) {
           _supplementalValues.putIfAbsent(field.key, () => '');
@@ -775,11 +775,59 @@ class _ProposalUploadPageState extends State<ProposalUploadPage>
               restored.proposalId.trim().isNotEmpty)) {
         unawaited(_hydrateRecognitionFromArchive());
       }
+      unawaited(_refreshApprovalPreview());
     } catch (e) {
       if (!mounted) return;
       setState(() {
         _configError = e.toString();
         _configLoading = false;
+      });
+    }
+  }
+
+  Map<String, dynamic> _previewFormData() {
+    if (_parsed != null) return _buildDraftValues();
+    return Map<String, dynamic>.from(_supplementalValues);
+  }
+
+  void _scheduleApprovalPreview() {
+    _previewTimer?.cancel();
+    _previewTimer = Timer(const Duration(milliseconds: 300), () {
+      unawaited(_refreshApprovalPreview());
+    });
+  }
+
+  Future<void> _refreshApprovalPreview() async {
+    final key = _templateKey;
+    if (key.isEmpty) return;
+    final seq = ++_previewSeq;
+    if (mounted) {
+      setState(() {
+        _previewLoading = true;
+        if (_previewStages == null) _previewFailed = false;
+      });
+    }
+    try {
+      final stages = await _service.previewApproval(
+        templateKey: key,
+        formData: _previewFormData(),
+      );
+      if (!mounted || seq != _previewSeq) return;
+      final names = await _service.fetchUserDisplayNames(
+        collectApproverIdsFromStages(stages),
+      );
+      if (!mounted || seq != _previewSeq) return;
+      setState(() {
+        _previewStages = stages;
+        _previewFailed = false;
+        _previewLoading = false;
+        _stageUserNames = names;
+      });
+    } catch (_) {
+      if (!mounted || seq != _previewSeq) return;
+      setState(() {
+        _previewLoading = false;
+        if (_previewStages == null) _previewFailed = true;
       });
     }
   }
@@ -829,6 +877,7 @@ class _ProposalUploadPageState extends State<ProposalUploadPage>
                 .map((section) => section.id),
           );
       });
+      unawaited(_refreshApprovalPreview());
     } catch (_) {
       if (mounted) setState(() => _recognitionHydrating = false);
     }
@@ -854,7 +903,17 @@ class _ProposalUploadPageState extends State<ProposalUploadPage>
       summaryFieldsFromDetailConfig(_detailConfig);
 
   List<Map<String, dynamic>> get _approvalStages =>
-      approvalStagesFromDetailConfig(_detailConfig);
+      _previewStages ?? const <Map<String, dynamic>>[];
+
+  String? get _approvalEmptyHint {
+    if (_previewLoading && _previewStages == null) {
+      return '正在预览审批流…';
+    }
+    if (_previewFailed && _previewStages == null) {
+      return '暂无法预览审批流';
+    }
+    return null;
+  }
 
   bool get _canSubmit =>
       _state == _UploadState.parsed && _parsed != null && !_submitting;
@@ -910,6 +969,7 @@ class _ProposalUploadPageState extends State<ProposalUploadPage>
       }
     });
     _scheduleAutosave();
+    _scheduleApprovalPreview();
   }
 
   Future<void> _handleUpload() async {
@@ -961,6 +1021,7 @@ class _ProposalUploadPageState extends State<ProposalUploadPage>
           );
       });
       unawaited(_runAutosave(silent: true));
+      unawaited(_refreshApprovalPreview());
     } catch (err) {
       if (!mounted) return;
       setState(() => _state = _UploadState.empty);
@@ -1605,6 +1666,7 @@ class _ProposalUploadPageState extends State<ProposalUploadPage>
     return XflowApprovalFlowSection(
       stages: _approvalStages,
       userNames: _stageUserNames,
+      emptyHint: _approvalEmptyHint,
     );
   }
 
@@ -1641,19 +1703,7 @@ class _ProposalUploadPageState extends State<ProposalUploadPage>
       ),
       child: Row(
         children: [
-          Container(
-            width: 38,
-            height: 38,
-            decoration: BoxDecoration(
-              color: _PDColors.ink.withAlpha(14),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: const Icon(
-              Icons.description_outlined,
-              size: 20,
-              color: _PDColors.ink,
-            ),
-          ),
+          ChatFileTypeIcon(fileName: p.fileName, size: 38),
           const SizedBox(width: 10),
           Expanded(
             child: Column(

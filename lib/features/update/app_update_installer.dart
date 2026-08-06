@@ -133,6 +133,9 @@ class AppUpdateInstaller {
     }
     final path = file.path;
     if (Platform.isWindows) {
+      // 先解除关窗进托盘，避免安装器/Restart Manager 发 WM_CLOSE 时只藏托盘不退出。
+      // 不走 onBeforeQuit，保留本地登录态便于安装后恢复会话。
+      await windowsTrayPrepareQuitForAppUpdate(exitProcess: false);
       await Process.start(
         path,
         const <String>[],
@@ -140,7 +143,8 @@ class AppUpdateInstaller {
         runInShell: false,
       );
       await Future<void>.delayed(const Duration(milliseconds: 600));
-      exit(0);
+      await windowsTrayPrepareQuitForAppUpdate(exitProcess: true);
+      return;
     }
     if (Platform.isMacOS) {
       final staged = await _stageMacInstaller(file);

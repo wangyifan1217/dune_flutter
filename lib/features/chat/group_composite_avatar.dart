@@ -1,11 +1,13 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../conversation/conversation_models.dart';
 import '../conversation/conversation_service.dart';
 import 'user_avatar_widget.dart';
 
-/// 微信风格群聊头像：最多展示 9 位成员头像拼贴（九宫格，含当前用户）。
-/// 外框尺寸由 [size] 决定，格子随人数均分，整体大小不变。
+/// 微信风格群聊头像：最多展示 9 位成员头像拼贴（含当前用户）。
+/// 外框尺寸由 [size] 固定；格子随人数用正方形自适应，不足一行居中。
 class GroupCompositeAvatar extends StatelessWidget {
   const GroupCompositeAvatar({
     super.key,
@@ -25,7 +27,8 @@ class GroupCompositeAvatar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final shown = members.take(_maxMembers).toList(growable: false);
+    // 按 userId 稳定排序，避免列表刷新时拼贴顺序跳动。
+    final shown = _stableMembers(members);
     if (shown.isEmpty) {
       return _fallbackIcon();
     }
@@ -43,107 +46,61 @@ class GroupCompositeAvatar extends StatelessWidget {
       );
     }
 
-    if (shown.length == 3) {
-      return _frame(child: _threeMemberGrid(shown));
-    }
-
-    final layout = _layoutFor(shown.length);
+    final rows = _rowPattern(shown.length);
+    final maxCols = rows.fold<int>(0, (m, r) => math.max(m, r.length));
+    final rowCount = rows.length;
     final inner = size - _gap * 2;
-    final cellW = (inner - _gap * (layout.cols - 1)) / layout.cols;
-    final cellH = (inner - _gap * (layout.rows - 1)) / layout.rows;
+    final cellByW = (inner - _gap * (maxCols - 1)) / maxCols;
+    final cellByH = (inner - _gap * (rowCount - 1)) / rowCount;
+    final cell = math.min(cellByW, cellByH);
 
-    return _frame(
-      child: Column(
-        children: [
-          for (var row = 0; row < layout.rows; row++)
-            Padding(
-              padding: EdgeInsets.only(bottom: row < layout.rows - 1 ? _gap : 0),
-              child: Row(
-                children: [
-                  for (var col = 0; col < layout.cols; col++)
-                    Padding(
-                      padding: EdgeInsets.only(
-                        right: col < layout.cols - 1 ? _gap : 0,
-                      ),
-                      child: SizedBox(
-                        width: cellW,
-                        height: cellH,
-                        child: _cell(shown, row * layout.cols + col, cellW, cellH),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-
-  Widget _frame({required Widget child}) {
     return ClipRRect(
       borderRadius: BorderRadius.circular(size * 0.18),
       child: Container(
         width: size,
         height: size,
         color: _bgColor,
+        alignment: Alignment.center,
         padding: const EdgeInsets.all(_gap),
-        child: child,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (var r = 0; r < rows.length; r++) ...[
+              if (r > 0) const SizedBox(height: _gap),
+              _buildRow(shown, rows[r], cell),
+            ],
+          ],
+        ),
       ),
     );
   }
 
-  /// 3 人：上排 2 个，下排居中 1 个（避免 2×2 空一格）。
-  Widget _threeMemberGrid(List<ConversationAvatarMember> shown) {
-    final inner = size - _gap * 2;
-    final cellW = (inner - _gap) / 2;
-    final cellH = (inner - _gap) / 2;
-    return Column(
+  Widget _buildRow(
+    List<ConversationAvatarMember> shown,
+    List<int> indexes,
+    double cell,
+  ) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        Row(
-          children: [
-            SizedBox(
-              width: cellW,
-              height: cellH,
-              child: _cell(shown, 0, cellW, cellH),
-            ),
-            SizedBox(width: _gap),
-            SizedBox(
-              width: cellW,
-              height: cellH,
-              child: _cell(shown, 1, cellW, cellH),
-            ),
-          ],
-        ),
-        SizedBox(height: _gap),
-        Row(
-          children: [
-            SizedBox(width: cellW / 2 + _gap / 2),
-            SizedBox(
-              width: cellW,
-              height: cellH,
-              child: _cell(shown, 2, cellW, cellH),
-            ),
-          ],
-        ),
+        for (var i = 0; i < indexes.length; i++) ...[
+          if (i > 0) const SizedBox(width: _gap),
+          SizedBox(
+            width: cell,
+            height: cell,
+            child: _cell(shown[indexes[i]], cell),
+          ),
+        ],
       ],
     );
   }
 
-  Widget _cell(
-    List<ConversationAvatarMember> shown,
-    int index,
-    double cellW,
-    double cellH,
-  ) {
-    if (index >= shown.length) {
-      return const SizedBox.shrink();
-    }
-    final m = shown[index];
-    final avatarSize = cellW < cellH ? cellW : cellH;
+  Widget _cell(ConversationAvatarMember m, double cell) {
     return ImUserAvatar(
       initial: _initial(m),
       seed: m.userId,
-      size: avatarSize,
+      size: cell,
       avatarPreset: m.avatarPreset,
       avatarObjectKey: m.avatarObjectKey,
       avatarUrl: m.avatarUrl,
@@ -172,17 +129,60 @@ class GroupCompositeAvatar extends StatelessWidget {
     return name.substring(0, 1);
   }
 
-  _GridLayout _layoutFor(int count) {
-    if (count <= 2) return _GridLayout(rows: 1, cols: count);
-    if (count <= 4) return const _GridLayout(rows: 2, cols: 2);
-    if (count <= 6) return const _GridLayout(rows: 2, cols: 3);
-    // 7–9：九宫格（3×3），外框 size 不变，格子均分缩小。
-    return const _GridLayout(rows: 3, cols: 3);
+  /// 微信式行布局：人数变化时格子为正方形并居中，外框 [size] 不变。
+  List<List<int>> _rowPattern(int count) {
+    switch (count) {
+      case 2:
+        return const [
+          [0, 1],
+        ];
+      case 3:
+        return const [
+          [0, 1],
+          [2],
+        ];
+      case 4:
+        return const [
+          [0, 1],
+          [2, 3],
+        ];
+      case 5:
+        return const [
+          [0, 1, 2],
+          [3, 4],
+        ];
+      case 6:
+        return const [
+          [0, 1, 2],
+          [3, 4, 5],
+        ];
+      case 7:
+        return const [
+          [0],
+          [1, 2, 3],
+          [4, 5, 6],
+        ];
+      case 8:
+        return const [
+          [0, 1],
+          [2, 3, 4],
+          [5, 6, 7],
+        ];
+      default:
+        return const [
+          [0, 1, 2],
+          [3, 4, 5],
+          [6, 7, 8],
+        ];
+    }
   }
-}
 
-class _GridLayout {
-  const _GridLayout({required this.rows, required this.cols});
-  final int rows;
-  final int cols;
+  List<ConversationAvatarMember> _stableMembers(
+    List<ConversationAvatarMember> source,
+  ) {
+    final list = source.where((m) => m.userId > 0).toList(growable: true);
+    list.sort((a, b) => a.userId.compareTo(b.userId));
+    if (list.length <= _maxMembers) return list;
+    return list.take(_maxMembers).toList(growable: false);
+  }
 }

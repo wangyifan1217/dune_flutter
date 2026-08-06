@@ -169,7 +169,7 @@ class _AppUpdateDialogState extends State<_AppUpdateDialog> {
                 Text(
                   _isMac
                       ? '确认安装后应用会自动退出并重启；若使用安装包，打开后也会自动退出以便完成安装。'
-                      : '将在应用内下载安装包并启动安装，无需打开浏览器。',
+                      : '将在应用内下载安装包并启动安装；启动安装后应用会自动退出，以便完成文件替换。',
                   style: DunesTypography.sans(
                     fontSize: 12,
                     color: DunesColors.text3,

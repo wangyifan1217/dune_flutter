@@ -1,12 +1,36 @@
 import 'dart:async';
+import 'dart:ffi';
 import 'dart:io' show Platform, exit;
-import 'dart:ui' show Size;
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:tray_manager/tray_manager.dart';
 import 'package:window_manager/window_manager.dart';
 
 import '../../core/layout/chat_layout.dart';
+
+/// [ExitProcess] 会执行所有 DLL_PROCESS_DETACH，某个 Flutter 原生插件
+/// 卡在卸载回调时，进程会变成无窗口却无法再启动的“半退出”状态。
+/// [TerminateProcess] 不调用 DLL 卸载回调，用于 Windows 托盘退出的最后一步。
+void _hardTerminateProcess([int code = 0]) {
+  if (Platform.isWindows) {
+    try {
+      final k32 = DynamicLibrary.open('kernel32.dll');
+      final getCurrentProcess = k32.lookupFunction<
+        Pointer<Void> Function(),
+        Pointer<Void> Function()
+      >('GetCurrentProcess');
+      final terminateProcess = k32.lookupFunction<
+        Int32 Function(Pointer<Void>, Uint32),
+        int Function(Pointer<Void>, int)
+      >('TerminateProcess');
+      final terminated = terminateProcess(getCurrentProcess(), code);
+      if (terminated == 0) exit(code);
+      return;
+    } catch (_) {}
+  }
+  exit(code);
+}
 
 const _trayIconWin = 'assets/images/tray_icon.ico';
 const _trayIconWinBlank = 'assets/images/tray_icon_blank.ico';
@@ -61,6 +85,7 @@ class WindowsDesktopTray with WindowListener, TrayListener {
   bool _minimized = false;
   bool _focused = true;
   bool _allowQuit = false;
+  bool _quitting = false;
   bool _flashing = false;
   bool _flashVisible = true;
   bool _pendingAlert = false;
@@ -152,6 +177,15 @@ class WindowsDesktopTray with WindowListener, TrayListener {
     trayManager.addListener(this);
     if (Platform.isMacOS) {
       await windowManager.setPreventClose(true);
+      // Dock 点击 reopen → 原生 AppDelegate 通知，走与托盘相同的恢复路径。
+      const channel = MethodChannel('nova.dunes/desktop_window');
+      channel.setMethodCallHandler((call) async {
+        if (call.method == 'revealFromDock') {
+          await _showFromTray();
+          return null;
+        }
+        throw MissingPluginException(call.method);
+      });
     }
     _ready = true;
   }
@@ -191,8 +225,11 @@ class WindowsDesktopTray with WindowListener, TrayListener {
     // 再次确保关闭被拦截（部分时机下可能被重置）。
     await windowManager.setPreventClose(true);
     await windowManager.hide();
-    // Windows：从任务栏隐藏；macOS：从 Dock 隐藏，仅留状态栏图标
-    await windowManager.setSkipTaskbar(true);
+    // Windows：从任务栏隐藏。macOS 不跳过 Dock：否则会切成 .accessory，
+    // 点击 Dock 无法触发 reopen，只能靠状态栏图标恢复。
+    if (Platform.isWindows) {
+      await windowManager.setSkipTaskbar(true);
+    }
     _emitInactiveChanged();
     _queueSyncFlash();
   }
@@ -216,7 +253,7 @@ class WindowsDesktopTray with WindowListener, TrayListener {
     _emitInactiveChanged();
   }
 
-  /// Sparkle「安装并重启」前只需松绑；DMG 兜底则 [exitProcess] 立刻退出。
+  /// Sparkle「安装并重启」前只需松绑；DMG / Windows 安装器路径则 [exitProcess] 立刻退出。
   Future<void> prepareQuitForAppUpdate({bool exitProcess = false}) async {
     if (kIsWeb || !(Platform.isWindows || Platform.isMacOS)) return;
     _allowQuit = true;
@@ -224,15 +261,12 @@ class WindowsDesktopTray with WindowListener, TrayListener {
       await windowManager.setPreventClose(false);
     } catch (_) {}
     if (!exitProcess) return;
-    // 对齐 Windows 更新退出：不走 onBeforeQuit，保留本地登录态便于重装后恢复会话。
-    await _stopFlash();
-    try {
-      await trayManager.destroy();
-    } catch (_) {}
-    try {
-      await windowManager.destroy();
-    } catch (_) {}
-    exit(0);
+    // 不走 onBeforeQuit，保留本地登录态便于重装后恢复会话。
+    if (Platform.isWindows) {
+      await _forceExitProcess(runBeforeQuit: false);
+      return;
+    }
+    await _gracefulExitProcess(runBeforeQuit: false);
   }
 
   /// 用户取消更新或 Sparkle 未安装时，恢复关窗进托盘。
@@ -247,11 +281,21 @@ class WindowsDesktopTray with WindowListener, TrayListener {
   }
 
   Future<void> _quitApp() async {
+    if (Platform.isWindows) {
+      await _forceExitProcess(runBeforeQuit: true);
+      return;
+    }
+    await _gracefulExitProcess(runBeforeQuit: true);
+  }
+
+  Future<void> _gracefulExitProcess({required bool runBeforeQuit}) async {
     _allowQuit = true;
     await _stopFlash();
-    try {
-      await onBeforeQuit?.call();
-    } catch (_) {}
+    if (runBeforeQuit) {
+      try {
+        await onBeforeQuit?.call();
+      } catch (_) {}
+    }
     try {
       await trayManager.destroy();
     } catch (_) {}
@@ -259,11 +303,54 @@ class WindowsDesktopTray with WindowListener, TrayListener {
       await windowManager.setPreventClose(false);
       await windowManager.destroy();
     } catch (_) {}
-    // QuitOnClose=false 时必须主动结束进程。
     exit(0);
   }
 
+  /// QuitOnClose=false 时必须主动结束进程。
+  /// 托盘删除只等待很短时间，既避免 Explorer 残留幽灵图标，也不让插件拖死退出。
+  Future<void> _forceExitProcess({required bool runBeforeQuit}) async {
+    if (_quitting) return;
+    _quitting = true;
+    _ready = false;
+    _flashTimer?.cancel();
+    _flashTimer = null;
+    _flashing = false;
+    _syncFlashQueued = false;
+    _desiredIconPath = null;
+    _allowQuit = true;
+
+    // 看门狗：即便后续 await 被插件拖死，仍强制杀进程。
+    Timer(const Duration(milliseconds: 800), () => _hardTerminateProcess(0));
+
+    // tray_manager 在 Windows 内部调用 Shell_NotifyIcon(NIM_DELETE)。
+    // TerminateProcess 不会派发 WM_DESTROY，所以必须在强退前显式删除图标。
+    try {
+      await trayManager.destroy().timeout(const Duration(milliseconds: 200));
+    } catch (_) {}
+
+    if (runBeforeQuit) {
+      final beforeQuit = onBeforeQuit;
+      if (beforeQuit != null) {
+        try {
+          // 与超时竞速，避免 realtime dispose / SharedPreferences 拖住退出。
+          await Future.any<void>([
+            beforeQuit().then((_) {}, onError: (_) {}),
+            Future<void>.delayed(const Duration(milliseconds: 400)),
+          ]);
+        } catch (_) {}
+      }
+    }
+
+    // 仅松绑关闭拦截；窗口由 TerminateProcess 随进程回收。
+    try {
+      unawaited(windowManager.setPreventClose(false));
+    } catch (_) {}
+
+    _hardTerminateProcess(0);
+  }
+
   Future<void> _setTrayIcon(String path) {
+    if (_quitting) return Future<void>.value();
     // 合并为目标路径：弱网/高负载时 setIcon 变慢，禁止无限排队导致「补帧狂抖」。
     _desiredIconPath = path;
     if (_iconBusy) return _iconChain;
@@ -274,8 +361,10 @@ class WindowsDesktopTray with WindowListener, TrayListener {
     _iconChain = _iconChain
         .catchError((_) {})
         .then((_) async {
+          if (_quitting) return;
           var next = _desiredIconPath ?? target;
           while (true) {
+            if (_quitting) break;
             if (_lastIconPath == next) break;
             try {
               await trayManager.setIcon(next);
@@ -290,6 +379,7 @@ class WindowsDesktopTray with WindowListener, TrayListener {
         })
         .whenComplete(() {
           _iconBusy = false;
+          if (_quitting) return;
           final latest = _desiredIconPath;
           if (latest != null && latest != _lastIconPath) {
             unawaited(_setTrayIcon(latest));

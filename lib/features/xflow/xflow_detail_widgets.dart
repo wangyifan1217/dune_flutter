@@ -1,16 +1,16 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/platform/desktop_features.dart';
 import '../../core/theme/dunes_theme.dart';
-import '../../core/util/friendly_error.dart';
-import '../chat/file_download.dart' as file_dl;
+import '../chat/chat_file_type_icon.dart';
 import '../shell/dunes_toast.dart';
 import 'xflow_approval_flow_ui.dart';
 import 'xflow_detail_logic.dart';
+import 'xflow_file_open.dart';
 import 'xflow_models.dart';
 import 'xflow_service.dart';
 import 'xflow_shared_widgets.dart';
@@ -1090,15 +1090,50 @@ class _FileItem extends StatefulWidget {
 
 class _FileItemState extends State<_FileItem> {
   bool _busy = false;
+  bool _downloaded = false;
+  bool _statusChecked = false;
 
   Map<String, dynamic> get item => widget.item;
   XflowService get service => widget.service;
 
-  bool get _isImage {
-    final name = (item['fileName'] ?? '').toString().toLowerCase();
-    final mime = (item['mimeType'] ?? '').toString().toLowerCase();
-    return mime.startsWith('image/') ||
-        RegExp(r'\.(jpg|jpeg|png|heic|heif|gif|webp)$').hasMatch(name);
+  String get _fileName => xflowAttachmentFileName(item);
+
+  bool get _isImage => xflowItemIsImage(item, _fileName);
+  bool get _isPdf => xflowItemIsPdf(item, _fileName);
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_refreshDownloaded());
+  }
+
+  @override
+  void didUpdateWidget(covariant _FileItem oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final oldKey = xflowAttachmentCacheKey(oldWidget.item);
+    final nextKey = xflowAttachmentCacheKey(item);
+    if (oldKey != nextKey ||
+        xflowAttachmentFileName(oldWidget.item) != _fileName) {
+      unawaited(_refreshDownloaded());
+    }
+  }
+
+  Future<void> _refreshDownloaded() async {
+    if (kIsWeb) {
+      if (mounted) {
+        setState(() {
+          _downloaded = false;
+          _statusChecked = true;
+        });
+      }
+      return;
+    }
+    final ok = await isXflowAttachmentDownloaded(item);
+    if (!mounted) return;
+    setState(() {
+      _downloaded = ok;
+      _statusChecked = true;
+    });
   }
 
   String _formatSize(dynamic bytes) {
@@ -1108,73 +1143,40 @@ class _FileItemState extends State<_FileItem> {
     return '${(n / (1024 * 1024)).toStringAsFixed(1)} MB';
   }
 
-  Future<void> _open(BuildContext context, {required bool download}) async {
+  Future<void> _open(BuildContext context, {required bool preferPreview}) async {
     if (_busy) return;
-    final url = await service.resolveFileUrl(item);
-    if (url.isEmpty) {
-      if (context.mounted) {
-        showDunesToast(context, '无法获取文件链接', kind: DunesToastKind.error);
-      }
-      return;
+    setState(() => _busy = true);
+    try {
+      await openXflowAttachment(
+        context: context,
+        service: service,
+        item: item,
+        preferPreview: preferPreview,
+      );
+      await _refreshDownloaded();
+    } finally {
+      if (mounted) setState(() => _busy = false);
     }
-    final name = (item['fileName'] ?? item['name'] ?? '未命名文件').toString();
-    final cacheKey = (item['objectKey'] ?? item['url'] ?? url)
-        .toString()
-        .trim();
+  }
 
-    // PC / APP：下载到本地后用系统应用打开（对齐 IM「用其他应用打开」）。
-    // Web 仍走外链。
-    if (!kIsWeb) {
-      setState(() => _busy = true);
-      try {
-        if (cacheKey.isNotEmpty) {
-          final cached = await file_dl.findCachedChatFile(cacheKey, name);
-          if (cached != null && cached.isNotEmpty) {
-            await file_dl.openLocalFile(cached);
-            return;
-          }
-        }
-        if (context.mounted) {
-          showDunesToast(
-            context,
-            isDesktopCommOnly ? '正在打开 $name…' : '正在准备用其他应用打开…',
-          );
-        }
-        final path = await file_dl.openUrlAsFile(
-          url,
-          name,
-          cacheKey: cacheKey.isEmpty ? null : cacheKey,
-        );
-        if (path == null || path.isEmpty) {
-          if (context.mounted) {
-            showDunesToast(
-              context,
-              '文件已保存，但无法自动打开',
-              kind: DunesToastKind.error,
-            );
-          }
-          return;
-        }
-        await file_dl.openLocalFile(path);
-      } catch (e) {
-        if (context.mounted) {
-          showDunesToast(
-            context,
-            '打开失败：${friendlyErrorText(e)}',
-            kind: DunesToastKind.error,
-          );
-        }
-      } finally {
-        if (mounted) setState(() => _busy = false);
+  Future<void> _download(BuildContext context) async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    try {
+      final path = await downloadXflowAttachment(
+        context: context,
+        service: service,
+        item: item,
+        force: _downloaded,
+        reveal: true,
+      );
+      if (path != null && path.isNotEmpty && mounted) {
+        setState(() => _downloaded = true);
+      } else {
+        await _refreshDownloaded();
       }
-      return;
-    }
-
-    final uri = Uri.parse(url);
-    if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
-      if (context.mounted) {
-        showDunesToast(context, '无法打开链接', kind: DunesToastKind.error);
-      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
     }
   }
 
@@ -1183,14 +1185,25 @@ class _FileItemState extends State<_FileItem> {
       return isDesktopCommOnly ? '打开中…' : '准备中…';
     }
     if (isDesktopCommOnly) return '打开';
-    if (kIsWeb) return '下载';
     return '用其他应用打开';
+  }
+
+  String get _downloadActionLabel {
+    if (_busy) return '处理中…';
+    if (kIsWeb) return '下载';
+    return _downloaded ? '重新下载' : '下载';
   }
 
   @override
   Widget build(BuildContext context) {
-    final name = (item['fileName'] ?? item['name'] ?? '未命名文件').toString();
+    final name = _fileName;
     final size = item['size'];
+    final showPreview =
+        !kIsWeb && !isDesktopCommOnly && (_isImage || _isPdf);
+    final metaParts = <String>[
+      if (size != null) _formatSize(size),
+      if (_statusChecked && _downloaded) '已下载',
+    ];
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
@@ -1208,21 +1221,7 @@ class _FileItemState extends State<_FileItem> {
       ),
       child: Row(
         children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: DunesColors.bgSoft,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Icon(
-              _isImage
-                  ? Icons.image_outlined
-                  : Icons.insert_drive_file_outlined,
-              color: DunesColors.accentDeep,
-              size: 20,
-            ),
-          ),
+          ChatFileTypeIcon(fileName: name, size: 40),
           const SizedBox(width: 10),
           Expanded(
             child: Column(
@@ -1237,26 +1236,40 @@ class _FileItemState extends State<_FileItem> {
                     fontWeight: FontWeight.w500,
                   ),
                 ),
-                if (size != null)
+                if (metaParts.isNotEmpty)
                   Text(
-                    _formatSize(size),
+                    metaParts.join(' · '),
                     style: DunesTypography.sans(
                       fontSize: 10,
-                      color: DunesColors.text3,
+                      color: _downloaded
+                          ? const Color(0xFF3B82F6)
+                          : DunesColors.text3,
                     ),
                   ),
               ],
             ),
           ),
-          if (_isImage)
+          if (showPreview)
             TextButton(
-              onPressed: _busy ? null : () => _open(context, download: false),
+              onPressed: _busy
+                  ? null
+                  : () => _open(context, preferPreview: true),
               child: const Text('预览', style: TextStyle(fontSize: 11)),
             ),
+          if (!kIsWeb)
+            TextButton(
+              onPressed: _busy
+                  ? null
+                  : () => _open(context, preferPreview: false),
+              child: Text(
+                _openActionLabel,
+                style: const TextStyle(fontSize: 11),
+              ),
+            ),
           TextButton(
-            onPressed: _busy ? null : () => _open(context, download: true),
+            onPressed: _busy ? null : () => _download(context),
             child: Text(
-              _openActionLabel,
+              _downloadActionLabel,
               style: const TextStyle(fontSize: 11),
             ),
           ),

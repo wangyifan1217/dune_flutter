@@ -53,8 +53,8 @@ class ConversationRealtimeDedup {
     }
     if (type == 'read') {
       final convId = event.conversationId ?? 0;
-      final userId = (data['userId'] as num?)?.toInt() ?? 0;
-      final lastRead = (data['lastReadMessageId'] as num?)?.toInt() ?? 0;
+      final userId = _asInt(data['userId']);
+      final lastRead = _asInt(data['lastReadMessageId']);
       if (convId > 0 && userId > 0) return 'read:$convId:$userId:$lastRead';
     }
     if (type == 'notification') {
@@ -63,5 +63,11 @@ class ConversationRealtimeDedup {
       if (title.isNotEmpty) return 'notification:$title:$body';
     }
     return '';
+  }
+
+  int _asInt(Object? value) {
+    if (value is num) return value.toInt();
+    if (value is String) return int.tryParse(value.trim()) ?? 0;
+    return 0;
   }
 }

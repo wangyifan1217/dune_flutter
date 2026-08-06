@@ -288,6 +288,15 @@ String uploadStageMetaLabel(
 }) {
   final approverType = (stage['approverType'] ?? '').toString();
   final mode = (stage['mode'] ?? 'SINGLE').toString();
+  // preview-approval 已拼好人名时优先用服务端字段，避免只显示「直接主管」角色文案。
+  final approverLabel = (stage['approverLabel'] ?? '').toString().trim();
+  if (approverLabel.isNotEmpty) {
+    return '$mode · $approverLabel';
+  }
+  final previewNames = stageApproverNamesFromPreview(stage);
+  if (previewNames.isNotEmpty) {
+    return '$mode · ${previewNames.join('、')}';
+  }
   final named = stageApproverDisplayNames(stage, userNames);
   String meta;
   if (named.isNotEmpty) {
@@ -301,6 +310,9 @@ String uploadStageMetaLabel(
     meta = '部门主管';
   } else if (approverType == 'DIVISION') {
     meta = '事业部负责人';
+  } else if (approverType == 'FORM_FIELD') {
+    final role = (stage['roleCode'] ?? '').toString().trim();
+    meta = role.isEmpty ? '表单选人' : '表单选人 · $role';
   } else if (approverType == 'USER') {
     meta = '指定人员';
   } else {
@@ -308,6 +320,15 @@ String uploadStageMetaLabel(
     meta = ids.isNotEmpty ? '${ids.length} 人' : '指定审批人';
   }
   return '$mode · $meta';
+}
+
+List<String> stageApproverNamesFromPreview(Map<String, dynamic> stage) {
+  final raw = stage['approverNames'] ?? stage['approver_names'];
+  if (raw is! List) return const [];
+  return raw
+      .map((e) => e.toString().trim())
+      .where((s) => s.isNotEmpty)
+      .toList(growable: false);
 }
 
 List<int> stageApproverIds(Map<String, dynamic> stage) {

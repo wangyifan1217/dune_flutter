@@ -555,6 +555,23 @@ class XflowService {
     return merged;
   }
 
+  /// 按当前登录人 + 表单字段预览审批阶段（条件分支由后端求值，APP 勿本地过滤）。
+  ///
+  /// 成功时只应渲染返回的 [stages]；失败时不要回退模板全量 stages。
+  Future<List<Map<String, dynamic>>> previewApproval({
+    required String templateKey,
+    Map<String, dynamic> formData = const <String, dynamic>{},
+  }) async {
+    final key = templateKey.trim();
+    if (key.isEmpty) return const [];
+    final raw = await _request(
+      '/xflow/templates/${Uri.encodeComponent(key)}/preview-approval',
+      method: 'POST',
+      body: <String, dynamic>{'formData': formData},
+    );
+    return _mapStages(raw['stages']);
+  }
+
   /// 读取 proposal-archive 归档（与上传解析返回结构一致）。
   Future<Map<String, dynamic>> fetchProposalArchive(String archiveId) async {
     final id = archiveId.trim();

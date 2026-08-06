@@ -53,11 +53,19 @@ class _LoginFlowState extends State<LoginFlow> {
     _loadAppVersion();
     _restoreSession();
     if (isDesktopCommOnly) {
+      // 托盘退出会很快硬杀进程：先尽快清本地会话，网络 teardown 不阻塞退出。
       setWindowsTrayOnBeforeQuit(() async {
         final uid = _session?.userId ?? 0;
         AuthSessionCoordinator.instance.clear();
         if (mounted) setState(() => _session = null);
-        await _clearSession(userId: uid);
+        try {
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.remove(_sessionStorageKey);
+        } catch (_) {}
+        unawaited(ConversationRealtimeHub.instance.dispose());
+        unawaited(unbindPushSession());
+        syncPushBadgeCount(0);
+        if (uid > 0) unawaited(NovaWebStorage.clear(uid));
       });
     }
     Future<void>.delayed(const Duration(seconds: 8), () {

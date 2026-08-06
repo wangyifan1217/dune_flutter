@@ -446,11 +446,22 @@ class ConversationService {
   }
 
   int? _readIntField(dynamic data, String key) {
-    if (data is Map) {
-      final v = data[key];
-      if (v is num) return v.toInt();
-    }
+    if (data is! Map) return null;
+    final v = data[key] ?? data[_snakeKey(key)];
+    if (v is num) return v.toInt();
+    if (v is String) return int.tryParse(v.trim());
     return null;
+  }
+
+  String _snakeKey(String camel) {
+    final buf = StringBuffer();
+    for (var i = 0; i < camel.length; i++) {
+      final ch = camel[i];
+      final lower = ch.toLowerCase();
+      if (ch != lower && i > 0) buf.write('_');
+      buf.write(lower);
+    }
+    return buf.toString();
   }
 
   Future<void> sendText(
@@ -2176,9 +2187,10 @@ class ConversationService {
           avatarUrl: _avatarField(map['avatarUrl']),
         ),
       );
-      if (out.length >= 9) break;
     }
-    return out;
+    out.sort((a, b) => a.userId.compareTo(b.userId));
+    if (out.length <= 9) return out;
+    return out.take(9).toList(growable: false);
   }
 
   /// 从群成员列表构建 userId -> 头像字段，供历史消息回填。

@@ -29,13 +29,17 @@ Future<void> ensurePushInitializedImpl() async {
     defaultPresentBanner: true,
     defaultPresentList: true,
   );
+  final iconPath = _resolveWindowsNotificationIconPath();
   final windows = WindowsInitializationSettings(
     appName: '沙丘',
     appUserModelId: 'com.nova.dunes.desktop',
     guid: 'a8e2c1d4-7b5f-4e9a-9c3d-1f2a6b8e0d71',
     // Debug / EXE 安装包都需要绝对路径，否则 Toast 左侧无应用图标。
-    iconPath: _resolveWindowsNotificationIconPath(),
+    iconPath: iconPath,
   );
+  if (iconPath == null) {
+    debugPrint('[DesktopPush] Windows toast iconPath unresolved');
+  }
 
   await _plugin.initialize(
     settings: InitializationSettings(
@@ -124,14 +128,9 @@ Future<void> _showToast({
         ),
         windows: WindowsNotificationDetails(
           duration: WindowsNotificationDuration.short,
-          images: <WindowsImage>[
-            WindowsImage(
-              WindowsImage.getAssetUri('assets/images/app_logo.png'),
-              altText: '沙丘',
-              placement: WindowsImagePlacement.appLogoOverride,
-              crop: WindowsImageCrop.circle,
-            ),
-          ],
+          // 必须用绝对 file URI。getAssetUri 在 Release 下依赖 CWD，
+          // 从开始菜单/快捷方式启动时常解析失败，反而把左侧图标盖成空白。
+          images: _windowsToastLogoImages(),
         ),
       ),
       payload: conversationId > 0 ? 'conv:$conversationId' : 'conv:0',
@@ -141,30 +140,52 @@ Future<void> _showToast({
   }
 }
 
-/// 解析 Windows Toast 初始化图标（优先 .ico）。
+List<WindowsImage> _windowsToastLogoImages() {
+  final path = _resolveWindowsNotificationLogoPath();
+  if (path == null) return const <WindowsImage>[];
+  return <WindowsImage>[
+    WindowsImage(
+      Uri.file(path, windows: true),
+      altText: '沙丘',
+      placement: WindowsImagePlacement.appLogoOverride,
+      crop: WindowsImageCrop.circle,
+    ),
+  ];
+}
+
+/// 解析 Windows Toast 应用图标（注册表 IconUri，优先 .ico）。
 String? _resolveWindowsNotificationIconPath() {
+  return _resolveWindowsAssetPath(const <String>[
+    'assets/images/tray_icon.ico',
+    'assets/images/app_logo.png',
+  ]);
+}
+
+/// 解析 Toast 左侧圆形 logo（优先高清 png）。
+String? _resolveWindowsNotificationLogoPath() {
+  return _resolveWindowsAssetPath(const <String>[
+    'assets/images/app_logo.png',
+    'assets/images/tray_icon.ico',
+  ]);
+}
+
+/// 按「可执行文件旁打包资源 → 工程源码资源」解析绝对路径。
+/// 快捷方式启动时 CWD 往往不是 exe 目录，不能依赖相对路径。
+String? _resolveWindowsAssetPath(List<String> assetNames) {
   try {
-    final exeDir = File(Platform.resolvedExecutable).parent;
-    final candidates = <File>[
-      File('assets/images/tray_icon.ico'),
-      File('data/flutter_assets/assets/images/tray_icon.ico'),
-      File.fromUri(
-        Uri.file(
-          '${exeDir.path}\\data\\flutter_assets\\assets\\images\\tray_icon.ico',
-          windows: true,
-        ),
-      ),
-      File('assets/images/app_logo.png'),
-      File('data/flutter_assets/assets/images/app_logo.png'),
-      File.fromUri(
-        Uri.file(
-          '${exeDir.path}\\data\\flutter_assets\\assets\\images\\app_logo.png',
-          windows: true,
-        ),
-      ),
-    ];
+    final exeDir = File(Platform.resolvedExecutable).parent.path;
+    final candidates = <File>[];
+    for (final name in assetNames) {
+      candidates.addAll(<File>[
+        File('$exeDir\\data\\flutter_assets\\$name'),
+        File('data/flutter_assets/$name'),
+        File(name),
+      ]);
+    }
     for (final file in candidates) {
-      if (file.existsSync()) return file.absolute.path;
+      if (file.existsSync()) {
+        return file.absolute.path.replaceAll('/', '\\');
+      }
     }
   } catch (e) {
     debugPrint('[DesktopPush] resolve icon failed: $e');

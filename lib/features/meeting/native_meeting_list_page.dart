@@ -6,6 +6,7 @@ import '../../core/platform/desktop_features.dart';
 import '../../core/theme/dunes_theme.dart';
 import '../../core/util/friendly_error.dart';
 import '../auth/auth_session.dart';
+import 'meeting_list_cache.dart';
 import 'meeting_upload_coordinator.dart';
 import 'meeting_upload_storage.dart';
 import 'native_meeting_models.dart';
@@ -41,6 +42,9 @@ class _NativeMeetingListPageState extends State<NativeMeetingListPage> {
   int _page = 0;
   static const int _pageSize = 20;
   String? _error;
+  Timer? _scrollRestoreRetry;
+  /// 新建等已 invalidate 时，dispose 勿再 put 旧快照把缓存「复活」。
+  bool _suppressPersistOnDispose = false;
 
   @override
   void initState() {
@@ -49,12 +53,27 @@ class _NativeMeetingListPageState extends State<NativeMeetingListPage> {
     MeetingUploadCoordinator.instance.addListener(_onUploadUpdate);
     unawaited(MeetingUploadCoordinator.instance.resumePending());
     _scrollController.addListener(_onScroll);
-    _load(reset: true);
+    final cached = MeetingListCache.instance.peek(widget.session.userId);
+    if (cached != null) {
+      _rows = cached.rows;
+      _page = cached.page;
+      _hasMore = cached.hasMore;
+      _loading = false;
+      _scheduleScrollRestore();
+    } else {
+      unawaited(_load(reset: true));
+    }
   }
 
   @override
   void dispose() {
+    if (!_suppressPersistOnDispose) {
+      _persistScrollNow();
+      _persistListSnapshot();
+    }
+    _scrollRestoreRetry?.cancel();
     MeetingUploadCoordinator.instance.removeListener(_onUploadUpdate);
+    _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
     super.dispose();
   }
@@ -63,7 +82,69 @@ class _NativeMeetingListPageState extends State<NativeMeetingListPage> {
     if (mounted) setState(() {});
   }
 
+  void _persistScrollNow() {
+    if (!_scrollController.hasClients) return;
+    MeetingListCache.instance.saveScrollOffset(
+      userId: widget.session.userId,
+      offset: _scrollController.offset,
+    );
+  }
+
+  void _persistListSnapshot() {
+    if (_rows.isEmpty) return;
+    MeetingListCache.instance.put(
+      userId: widget.session.userId,
+      rows: _rows,
+      page: _page,
+      hasMore: _hasMore,
+    );
+  }
+
+  void _scheduleScrollRestore() {
+    _scrollRestoreRetry?.cancel();
+    void attempt() {
+      if (!mounted) return;
+      _applySavedScroll();
+    }
+
+    WidgetsBinding.instance.addPostFrameCallback((_) => attempt());
+    // 覆盖「返回后布局完成」竞态，连续多帧回写偏移。
+    _scrollRestoreRetry = Timer.periodic(const Duration(milliseconds: 48), (t) {
+      if (!mounted || t.tick > 12) {
+        t.cancel();
+        return;
+      }
+      attempt();
+    });
+  }
+
+  void _applySavedScroll() {
+    if (!mounted) return;
+    final target = MeetingListCache.instance.peekScrollOffset(
+      widget.session.userId,
+    );
+    if (target <= 0 || !_scrollController.hasClients) return;
+    final max = _scrollController.position.maxScrollExtent;
+    final next = target.clamp(0.0, max);
+    if ((_scrollController.offset - next).abs() < 0.5) return;
+    _scrollController.jumpTo(next);
+  }
+
+  void _openDetail(int meetingId) {
+    _persistScrollNow();
+    _persistListSnapshot();
+    widget.onOpenDetail(meetingId);
+  }
+
+  void _onCreatePressed() {
+    // 新建后列表应重新拉取；suppress 防止 dispose 把旧快照写回。
+    _suppressPersistOnDispose = true;
+    MeetingListCache.instance.invalidate();
+    widget.onCreate?.call();
+  }
+
   void _onScroll() {
+    _persistScrollNow();
     if (!_scrollController.hasClients || _loading || _loadingMore || !_hasMore) {
       return;
     }
@@ -88,6 +169,7 @@ class _NativeMeetingListPageState extends State<NativeMeetingListPage> {
         _page = 0;
         _hasMore = rows.length >= _pageSize;
       });
+      _persistListSnapshot();
     } catch (e) {
       if (!mounted) return;
       setState(() => _error = e.toString());
@@ -113,6 +195,7 @@ class _NativeMeetingListPageState extends State<NativeMeetingListPage> {
         _page = nextPage;
         _hasMore = rows.length >= _pageSize;
       });
+      _persistListSnapshot();
     } catch (_) {
       // Keep silent on auto load more to avoid frequent interruptions.
     } finally {
@@ -141,6 +224,7 @@ class _NativeMeetingListPageState extends State<NativeMeetingListPage> {
       await _service.deleteMeeting(row.meetingId);
       if (!mounted) return;
       setState(() => _rows = _rows.where((e) => e.meetingId != row.meetingId).toList());
+      _persistListSnapshot();
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -201,7 +285,7 @@ class _NativeMeetingListPageState extends State<NativeMeetingListPage> {
         actions: [
           if (canCreate)
             IconButton(
-              onPressed: widget.onCreate,
+              onPressed: _onCreatePressed,
               icon: const Icon(Icons.add_rounded),
               tooltip: '新建会议',
             ),
@@ -209,7 +293,7 @@ class _NativeMeetingListPageState extends State<NativeMeetingListPage> {
       ),
       floatingActionButton: canCreate
           ? FloatingActionButton.large(
-              onPressed: widget.onCreate,
+              onPressed: _onCreatePressed,
               backgroundColor: DunesColors.brandPurple,
               foregroundColor: Colors.white,
               child: const Icon(Icons.mic_rounded),
@@ -266,7 +350,7 @@ class _NativeMeetingListPageState extends State<NativeMeetingListPage> {
                 ? '点击下方麦克风按钮，上传录音并开始 AI 转写'
                 : '暂无会议纪要，请在手机端录制或上传后查看',
             actionLabel: canCreate ? '新建会议' : null,
-            onAction: canCreate ? widget.onCreate : null,
+            onAction: canCreate ? _onCreatePressed : null,
           ),
         ],
       );
@@ -450,7 +534,7 @@ class _NativeMeetingListPageState extends State<NativeMeetingListPage> {
         borderRadius: BorderRadius.circular(14),
         child: InkWell(
           borderRadius: BorderRadius.circular(14),
-          onTap: enabled ? () => widget.onOpenDetail(row.meetingId) : null,
+          onTap: enabled ? () => _openDetail(row.meetingId) : null,
           child: Container(
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(

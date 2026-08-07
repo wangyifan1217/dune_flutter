@@ -105,8 +105,9 @@ class WindowsDesktopTray with WindowListener, TrayListener {
   /// 最小化、失焦和关闭到托盘时，当前会话不应被视为“正在查看”。
   bool get isWindowInactive => _hidden || _minimized || !_focused;
 
-  /// 仅窗口不可见时闪烁托盘（隐藏到托盘或最小化），避免失焦误闪。
-  bool get _shouldFlashTray => _hidden || _minimized;
+  /// 收到新消息时即使主窗口仍打开，也要给托盘一个明确的视觉提示。
+  /// 已有未读数只有在窗口不可见/失焦时继续闪烁，窗口重新聚焦后由新消息事件重新触发。
+  bool get _shouldFlashTray => true;
 
   void _emitInactiveChanged() {
     final inactive = isWindowInactive;
@@ -202,8 +203,8 @@ class WindowsDesktopTray with WindowListener, TrayListener {
   }
 
   void notifyIncomingMessage() {
-    // 仅窗口不可见时标记提醒；前台失焦不闪，避免托盘狂抖。
-    if (!_ready || !_shouldFlashTray) return;
+    // 新消息事件直接标记提醒；窗口重新聚焦时会清掉本次提醒。
+    if (!_ready) return;
     if (_pendingAlert && _flashing) return;
     _pendingAlert = true;
     _queueSyncFlash();
@@ -389,7 +390,8 @@ class WindowsDesktopTray with WindowListener, TrayListener {
   }
 
   Future<void> _syncFlash() async {
-    final hasAttention = _unread > 0 || _pendingAlert;
+    final hasAttention =
+        _pendingAlert || (_unread > 0 && isWindowInactive);
     final shouldFlashTray = _shouldFlashTray && hasAttention;
     if (shouldFlashTray) {
       await _startFlash();
@@ -405,10 +407,12 @@ class WindowsDesktopTray with WindowListener, TrayListener {
   Future<void> _startFlash() async {
     if (_flashing) return;
     _flashing = true;
-    _flashVisible = true;
+    _flashVisible = false;
     _flashTimer?.cancel();
+    // 立即切到透明帧，避免第一次闪烁要等一个完整周期用户才看得到。
+    unawaited(_setTrayIcon(_trayIconBlank));
     // 放慢节奏；上一帧 setIcon 未完成则跳过，避免队列堆积后狂抖。
-    _flashTimer = Timer.periodic(const Duration(milliseconds: 1000), (_) {
+    _flashTimer = Timer.periodic(const Duration(milliseconds: 650), (_) {
       if (_iconBusy) return;
       unawaited(_toggleFlashIcon());
     });
@@ -466,7 +470,9 @@ class WindowsDesktopTray with WindowListener, TrayListener {
   void onWindowBlur() {
     _focused = false;
     _emitInactiveChanged();
-    // 失焦不触发闪烁；若此前因最小化在闪，保持由 _shouldFlashTray 决定。
+    // 失焦本身不新增提醒；后续收到消息时由 notifyIncomingMessage 触发闪烁。
+    // 如果失焦前已经存在未读，也要立即切入托盘提醒状态。
+    _queueSyncFlash();
   }
 
   @override

@@ -3,6 +3,7 @@ import 'dart:io' show Platform;
 import 'android_push_service.dart' as android;
 import 'desktop_push_service.dart' as desktop;
 import 'ios_push_service.dart' as ios;
+import 'push_notification_event.dart';
 
 bool get _isDesktop => Platform.isWindows || Platform.isMacOS;
 
@@ -31,6 +32,21 @@ void setPushBadgeRefreshHandlerImpl(void Function()? handler) {
   } else if (_isDesktop) {
     desktop.setPushBadgeRefreshHandlerImpl(handler);
   }
+}
+
+void setPushNotificationClickHandlerImpl(
+  void Function(PushNotificationClick event)? handler,
+) {
+  if (Platform.isAndroid) {
+    android.setPushNotificationClickHandlerImpl(handler);
+  }
+}
+
+Future<void> clearPushConversationNotificationsImpl(int conversationId) {
+  if (Platform.isAndroid) {
+    return android.clearPushConversationNotificationsImpl(conversationId);
+  }
+  return Future<void>.value();
 }
 
 Future<void> bindPushSessionImpl({

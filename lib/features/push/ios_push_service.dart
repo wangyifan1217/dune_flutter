@@ -136,8 +136,15 @@ Future<void> _initTpns() async {
           syncPushBadgeCountImpl(badge.toInt());
         }
         _badgeRefreshHandler?.call();
+        return;
+      }
+      if (call.method == 'onNotificationClicked') {
+        // 点击事件只保留给上层路由消费，不主动刷新角标，避免误清未读状态。
+        debugPrint('[Push] TPNS notification clicked: ${call.arguments}');
       }
     });
+    // 原生侧会在 Flutter handler 建立后再发送冷启动点击，避免事件丢失。
+    await _tpnsChannel.invokeMethod<void>('consumePendingNotificationClick');
 
     await _tpnsChannel.invokeMethod<void>('init', <String, dynamic>{
       if (TpnsConfig.isConfigured) ...<String, dynamic>{

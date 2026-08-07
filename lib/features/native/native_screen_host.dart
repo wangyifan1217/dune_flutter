@@ -98,6 +98,7 @@ import '../workbench/native_my_workbench_pages.dart';
 import '../workbench/workbench_badge_notifier.dart';
 import '../lighthouse/native_lighthouse_page.dart';
 import '../lighthouse/platform_tree.dart';
+import '../meeting/meeting_list_cache.dart';
 import '../meeting/meeting_live_controller.dart';
 import '../meeting/meeting_upload_coordinator.dart';
 import '../meeting/native_meeting_create_page.dart';
@@ -252,6 +253,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
 
   /// 用户本次前台会话内主动点进聊天；切后台后清零，避免 resume 误触已读。
   bool _userActivelyInChat = false;
+  final Set<int> _tpnsOpeningConversationIds = <int>{};
 
   /// 已上报给服务端的「正在查看」会话，用于抑制该会话 APP TPNS。
   int _reportedActiveViewConvId = 0;
@@ -371,6 +373,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     unawaited(_refreshCommUnreadBadge());
     unawaited(_refreshWorkbenchBadge());
     setPushBadgeRefreshHandler(_requestCommBadgeRefreshFromServer);
+    setPushNotificationClickHandler(_handleTpnsNotificationClick);
     unawaited(
       bindPushSession(
         userId: widget.session.userId,
@@ -414,6 +417,72 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     _scheduleCommBadgeRefresh();
   }
 
+  void _handleTpnsNotificationClick(PushNotificationClick event) {
+    if (!event.isConversation) return;
+    final conversationId = event.conversationId;
+    if (!_tpnsOpeningConversationIds.add(conversationId)) return;
+    unawaited(() async {
+      try {
+        await _openConversationFromTpns(conversationId);
+      } catch (error, stackTrace) {
+        debugPrint('[Push] failed to open conversation $conversationId: $error');
+        debugPrint('$stackTrace');
+      } finally {
+        _tpnsOpeningConversationIds.remove(conversationId);
+      }
+    }());
+  }
+
+  Future<void> _openConversationFromTpns(int conversationId) async {
+    NativeConversation? conversation = _commBadgeConversations[conversationId];
+    if (conversation == null) {
+      final service = ConversationService(session: widget.session);
+      try {
+        conversation = await service.fetchConversation(conversationId);
+      } finally {
+        service.close();
+      }
+    }
+    final resolvedConversation = conversation;
+    if (!mounted || resolvedConversation == null || !resolvedConversation.isVisible) {
+      return;
+    }
+
+    var routed = false;
+    if (resolvedConversation.isPrivate) {
+      _openPrivateConversation(resolvedConversation);
+      routed = true;
+    } else if (resolvedConversation.isGroup ||
+        resolvedConversation.isWorkgroupApproval) {
+      _openGroupConversation(resolvedConversation);
+      routed = true;
+    } else if (resolvedConversation.isRobot) {
+      _openRobotConversation(resolvedConversation);
+      routed = true;
+    } else if (resolvedConversation.isApprovalAssistant) {
+      await _openApprovalAssistant(resolvedConversation);
+      routed = mounted && widget.navigation.currentScreen == 'AA1';
+    } else if (resolvedConversation.isTaskAssistant) {
+      await _openTaskAssistant(resolvedConversation);
+      routed = mounted && widget.navigation.currentScreen == 'TA1';
+    } else if (resolvedConversation.isDriveAssistant) {
+      await _openDriveAssistant(resolvedConversation);
+      routed = mounted && widget.navigation.currentScreen == 'DA1';
+    } else if (resolvedConversation.isAiAssistant) {
+      setState(() {
+        _novaFocusConversationId = resolvedConversation.id;
+        _novaFocusMessageId = null;
+      });
+      _markUserEnteredChat();
+      widget.navigation.go('C4');
+      routed = true;
+    }
+
+    if (!mounted || !routed) return;
+    _handleConversationRead(resolvedConversation.id);
+    await clearPushConversationNotifications(resolvedConversation.id);
+  }
+
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     print('[Badge] lifecycle=$state activelyInChat=$_userActivelyInChat');
@@ -444,6 +513,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     WidgetsBinding.instance.removeObserver(this);
     setWindowsTrayOnInactiveChanged(null);
     setPushBadgeRefreshHandler(null);
+    setPushNotificationClickHandler(null);
     _activeViewHeartbeat?.cancel();
     _activeViewHeartbeat = null;
     if (_reportedActiveViewConvId > 0) {
@@ -2943,6 +3013,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           onBack: widget.navigation.leaveMeetingCreate,
           onCreated: (meetingId, {required isDraft}) {
             if (meetingId <= 0) return;
+            // 新建后列表必须重新拉取，避免缓存漏掉新会议。
+            MeetingListCache.instance.invalidate();
             setState(() => _meetingId = meetingId);
             final nav = widget.navigation;
             if (isDraft) {

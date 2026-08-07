@@ -546,6 +546,8 @@ class _ProposalUploadPageState extends State<ProposalUploadPage>
   Timer? _autosaveTimer;
   int _autosaveSeq = 0;
   bool _autosaving = false;
+  /// 保存进行中又有新编辑时置位，finally 里补一次 schedule，避免 silent drop。
+  bool _needsAutosave = false;
   String _autosaveHint = '';
   bool _recognitionHydrating = false;
   Map<int, String> _stageUserNames = const {};
@@ -586,7 +588,8 @@ class _ProposalUploadPageState extends State<ProposalUploadPage>
     _previewTimer?.cancel();
     if (_canAutosave &&
         XflowService.hasMeaningfulDraftValues(_buildDraftValues())) {
-      unawaited(_runAutosave(silent: true, forceLocalFirst: true));
+      // dispose 中不走带 setState 的 _runAutosave，避免闸门卡死。
+      unawaited(_flushAutosaveLeaving(_buildDraftValues()));
     }
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
@@ -594,8 +597,8 @@ class _ProposalUploadPageState extends State<ProposalUploadPage>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    // inactive 常见于弹层/选文件，勿取消 debounce；仅后台/销毁时刷盘。
     if (state == AppLifecycleState.paused ||
-        state == AppLifecycleState.inactive ||
         state == AppLifecycleState.detached) {
       _autosaveTimer?.cancel();
       unawaited(_runAutosave(silent: true, forceLocalFirst: true));
@@ -608,6 +611,22 @@ class _ProposalUploadPageState extends State<ProposalUploadPage>
     _autosaveTimer = Timer(const Duration(milliseconds: 800), () {
       unawaited(_runAutosave(silent: true));
     });
+  }
+
+  /// 离开页：先本地再服务端，不触碰 UI / `_autosaving` 闸门。
+  Future<void> _flushAutosaveLeaving(Map<String, dynamic> values) async {
+    if (!XflowService.hasMeaningfulDraftValues(values)) return;
+    final payload = Map<String, dynamic>.from(values);
+    try {
+      await _service.saveLocalDraft(payload, businessId: _activeDraftId);
+    } catch (_) {}
+    try {
+      await _service.submitDraft(
+        formValues: payload,
+        proposalId: _activeDraftId,
+        templateKey: _templateKey,
+      );
+    } catch (_) {}
   }
 
   Map<String, dynamic> _buildDraftValues() {
@@ -639,9 +658,13 @@ class _ProposalUploadPageState extends State<ProposalUploadPage>
     if (!_canAutosave) return;
     final values = _buildDraftValues();
     if (!XflowService.hasMeaningfulDraftValues(values)) return;
-    if (_autosaving && !forceLocalFirst) return;
+    if (_autosaving && !forceLocalFirst) {
+      _needsAutosave = true;
+      return;
+    }
     final seq = ++_autosaveSeq;
     _autosaving = true;
+    _needsAutosave = false;
     if (mounted && silent) {
       setState(() => _autosaveHint = '正在自动保存…');
     }
@@ -674,6 +697,10 @@ class _ProposalUploadPageState extends State<ProposalUploadPage>
       }
     } finally {
       _autosaving = false;
+      if (_needsAutosave && mounted) {
+        _needsAutosave = false;
+        _scheduleAutosave();
+      }
     }
   }
 

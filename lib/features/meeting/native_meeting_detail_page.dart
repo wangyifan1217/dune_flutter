@@ -17,6 +17,7 @@ import '../drive/chat_save_to_drive.dart';
 import '../kb/kb_document_coordinator.dart';
 import '../kb/native_kb_models.dart';
 import '../kb/native_kb_service.dart';
+import 'meeting_list_cache.dart';
 import 'meeting_minutes_chat_share.dart';
 import 'meeting_minutes_export.dart';
 import 'meeting_minutes_markdown.dart';
@@ -936,6 +937,7 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
     try {
       await _service.deleteMeeting(widget.meetingId);
       if (!mounted) return;
+      MeetingListCache.instance.removeMeeting(widget.meetingId);
       widget.onBack();
     } catch (e) {
       if (!mounted) return;

@@ -58,11 +58,13 @@ const double kChatImagePickMaxEdge = 2048;
 /// 选图压缩质量（Android/iOS 原生缩放时使用）。
 const int kChatImagePickQuality = 90;
 
-/// 编辑器导出最长边上限。
-const int kChatImageEditorMaxOutputEdge = 1920;
+/// 编辑器导出最长边上限。选图阶段不再主动缩放；常见手机原图（4K/8K）
+/// 可以保留原始像素，超过上限时才做保护性缩放。
+const int kChatImageEditorMaxOutputEdge = 8192;
 
-/// 编辑器导出 JPEG 质量（86 在体积与清晰度间平衡，编码比 100 快）。
-const int kChatImageEditorJpegQuality = 86;
+/// 编辑器导出 JPEG 质量。查看原图时优先保证清晰度，预览图仍由单独的
+/// [buildChatImagePreview] 生成并上传。
+const int kChatImageEditorJpegQuality = 100;
 
 /// 聊天图片压缩产物：用于在会话中展示的缩略/预览图。
 class ChatImagePreview {
@@ -99,6 +101,26 @@ Uint8List? _encodePreview(_PreviewRequest req) {
         )
       : decoded;
   return Uint8List.fromList(img.encodeJpg(resized, quality: req.quality));
+}
+
+/// 非「原图」发送时的默认压缩：最长边 [kChatImagePickMaxEdge]，质量 [kChatImagePickQuality]。
+/// 返回 null 表示无需压缩（已更小或无法解码），调用方应回退源文件。
+Future<Uint8List?> compressChatImageForSend(
+  Uint8List bytes, {
+  String fileName = 'image.jpg',
+  int maxDim = 0,
+  int quality = 0,
+}) async {
+  final dim = maxDim > 0 ? maxDim : kChatImagePickMaxEdge.round();
+  final q = quality > 0 ? quality : kChatImagePickQuality;
+  try {
+    final jpeg = await compute(_encodePreview, _PreviewRequest(bytes, dim, q));
+    if (jpeg == null || jpeg.isEmpty) return null;
+    if (jpeg.length >= bytes.length) return null;
+    return jpeg;
+  } catch (_) {
+    return null;
+  }
 }
 
 /// 生成用于会话内展示的压缩预览图（最长边 [maxDim]px，JPEG [quality]% 质量）。
@@ -157,8 +179,8 @@ Uint8List _prepareForEditor(_EditorPrepareRequest req) {
 /// 进入编辑器前按需缩小超大原图，减轻截屏导出耗时。
 Future<Uint8List> prepareChatImageForEditor(
   Uint8List bytes, {
-  int maxDim = 2048,
-  int quality = kChatImagePickQuality,
+  int maxDim = kChatImageEditorMaxOutputEdge,
+  int quality = kChatImageEditorJpegQuality,
 }) {
   return compute(
     _prepareForEditor,

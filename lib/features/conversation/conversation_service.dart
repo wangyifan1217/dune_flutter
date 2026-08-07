@@ -1003,6 +1003,8 @@ class ConversationService {
         'previewObjectKey': previewObjectKey,
         'fileName': fileName,
         'mimeType': mimeType,
+        // 保留原图字节数，预览页无需再次请求 HEAD 即可展示准确大小。
+        'sizeBytes': bytes.length,
       },
     );
   }
@@ -2960,15 +2962,49 @@ class ConversationService {
   /// 加载完整原图字节（鉴权附件或公网直链均统一返回 bytes），
   /// 供「查看原图 / 保存到相册」使用。
   Future<Uint8List> loadFullImageBytes(Map<String, dynamic>? payload) async {
-    if (hasAuthMedia(payload)) {
-      return loadCachedChatMediaBytes(payload);
+    // 这里不能复用 hasAuthMedia/loadCachedChatMediaBytes：它们为了会话内
+    // 缩略图展示会优先解析 previewObjectKey，点击查看原图时必须只读原图字段。
+    final originalAuthKey = mediaOriginalAuthObjectKey(payload);
+    if (originalAuthKey.isNotEmpty) {
+      return cachedChatMediaBytes(
+        originalAuthKey,
+        () => downloadAttachmentBytes(
+          objectKey: originalAuthKey,
+          fileName: mediaFileName(payload),
+        ),
+      );
     }
-    final url = mediaDirectUrl(payload);
-    if (url.isNotEmpty) {
+    final url = mediaOriginalPublicImageUrl(payload);
+    if (url != null && url.isNotEmpty) {
       return downloadAttachmentBytes(
         objectKey: url,
         fileName: mediaFileName(payload),
       );
+    }
+
+    // 旧消息可能只保存了 previewUrl/previewObjectKey；没有独立原图字段时，
+    // 缩略图就是当时唯一可用的图片，保留兼容读取，但不会覆盖新消息的原图。
+    final originalKey = (payload?['objectKey'] ?? '').toString().trim();
+    final originalUrl = (payload?['url'] ?? '').toString().trim();
+    if (originalKey.isEmpty && originalUrl.isEmpty) {
+      final legacyPreview = previewMediaPayload(payload);
+      final previewAuthKey = mediaAuthObjectKey(legacyPreview);
+      if (previewAuthKey.isNotEmpty) {
+        return cachedChatMediaBytes(
+          previewAuthKey,
+          () => downloadAttachmentBytes(
+            objectKey: previewAuthKey,
+            fileName: mediaFileName(payload),
+          ),
+        );
+      }
+      final previewUrl = mediaPublicImageUrl(legacyPreview);
+      if (previewUrl != null && previewUrl.isNotEmpty) {
+        return downloadAttachmentBytes(
+          objectKey: previewUrl,
+          fileName: mediaFileName(payload),
+        );
+      }
     }
     throw Exception('图片地址为空');
   }
@@ -2995,9 +3031,9 @@ class ConversationService {
     final key = objectKey.trim().isNotEmpty ? objectKey.trim() : direct;
     if (_isPublicMediaUrlStatic(key)) return key;
     if (key.isEmpty) return '';
-    if (bucket == 'im-attachments' ||
-        bucket == 'ftp' ||
-        isPublicStorageKey(key)) {
+    // 仅 im/、proposals/ 等公网相对路径可拼 CDN；flow-go/ 等私有 key
+    // 绝不能伪装成公网地址，否则「查看原图」会打到错误 URL。
+    if (isPublicStorageKey(key)) {
       return '$publicBase/${key.replaceFirst(RegExp(r'^/'), '')}';
     }
     return '';
@@ -3048,8 +3084,54 @@ class ConversationService {
     return direct.isNotEmpty ? direct : null;
   }
 
+  /// 预览页专用：只解析原图字段，不回退到 previewUrl，避免 Web 下载到缩略图。
+  static String? mediaOriginalPublicImageUrl(
+    Map<String, dynamic>? payload, {
+    String publicBase = 'https://image.heunion.com/zdfiles',
+  }) {
+    if (payload == null) return null;
+    final originalUrl = (payload['url'] ?? '').toString().trim();
+    final originalKey = (payload['objectKey'] ?? '').toString().trim();
+    final resolved = resolvePublicStorageUrl(
+      originalUrl,
+      originalKey,
+      publicBase: publicBase,
+    );
+    if (resolved.isNotEmpty) return resolved;
+    // FTP 上传会把公网 HTTPS 写进 objectKey；即使相对路径提取失败也要保留直链。
+    for (final candidate in <String>[originalUrl, originalKey]) {
+      if (!_isPublicMediaUrlStatic(candidate)) continue;
+      final extracted = _extractObjectKeyFromUrl(candidate);
+      if (extracted.isEmpty || isPublicStorageKey(extracted)) {
+        return candidate;
+      }
+    }
+    // 兼容旧消息：只有 preview 字段时，允许使用当时唯一可用的地址。
+    if (originalKey.isEmpty && originalUrl.isEmpty) {
+      final previewUrl = (payload['previewUrl'] ?? '').toString().trim();
+      final previewKey = (payload['previewObjectKey'] ?? '').toString().trim();
+      final previewResolved = resolvePublicStorageUrl(
+        previewUrl,
+        previewKey,
+        publicBase: publicBase,
+      );
+      if (previewResolved.isNotEmpty) return previewResolved;
+      if (previewKey.isEmpty && _isPublicMediaUrlStatic(previewUrl)) {
+        return previewUrl;
+      }
+    }
+    return null;
+  }
+
   static bool hasAuthMedia(Map<String, dynamic>? payload) =>
       mediaAuthObjectKey(previewMediaPayload(payload) ?? payload).isNotEmpty;
+
+  /// 只解析原图字段的鉴权 objectKey；不要回退到 previewObjectKey。
+  static String mediaOriginalAuthObjectKey(Map<String, dynamic>? payload) {
+    final key = mediaOriginalObjectKey(payload);
+    if (key.isEmpty || isPublicStorageKey(key)) return '';
+    return key;
+  }
 
   /// 需要走 /storage/download 鉴权下载的 objectKey（排除公网 CDN 相对路径）。
   static String mediaAuthObjectKey(Map<String, dynamic>? payload) {
@@ -3070,6 +3152,18 @@ class ConversationService {
     if (fromUrl.isNotEmpty) return fromUrl;
     final fromPreview = _extractObjectKeyFromUrl(preview);
     if (fromPreview.isNotEmpty) return fromPreview;
+    return '';
+  }
+
+  /// 原图字段解析：只读取 objectKey/url，不读取预览字段。
+  static String mediaOriginalObjectKey(Map<String, dynamic>? payload) {
+    if (payload == null) return '';
+    final key = (payload['objectKey'] ?? '').toString().trim();
+    if (key.isNotEmpty && !_isPublicMediaUrlStatic(key)) return key;
+    final url = (payload['url'] ?? '').toString().trim();
+    if (url.isNotEmpty && !_isPublicMediaUrlStatic(url)) return url;
+    final fromUrl = _extractObjectKeyFromUrl(url);
+    if (fromUrl.isNotEmpty) return fromUrl;
     return '';
   }
 

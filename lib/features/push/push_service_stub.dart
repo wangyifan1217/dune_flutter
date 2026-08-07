@@ -1,3 +1,5 @@
+import 'push_notification_event.dart';
+
 Future<void> bindPushSessionImpl({
   required int userId,
   required String token,
@@ -19,5 +21,11 @@ void notifyPushRealtimeMessageImpl({
 void registerPushLifecycleObserverImpl() {}
 
 void setPushBadgeRefreshHandlerImpl(void Function()? handler) {}
+
+void setPushNotificationClickHandlerImpl(
+  void Function(PushNotificationClick event)? handler,
+) {}
+
+Future<void> clearPushConversationNotificationsImpl(int conversationId) async {}
 
 Future<void> ensurePushInitializedImpl() async {}

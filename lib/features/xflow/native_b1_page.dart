@@ -7,6 +7,7 @@ import '../../core/util/friendly_error.dart';
 import '../auth/auth_session.dart';
 import '../shell/dunes_toast.dart';
 import '../workbench/workbench_badge_notifier.dart';
+import 'approval_list_cache.dart';
 import 'xflow_models.dart';
 import 'xflow_service.dart';
 import 'xflow_shared_widgets.dart';
@@ -144,6 +145,7 @@ class _NativeProposalListPage extends StatefulWidget {
 class _NativeProposalListPageState extends State<_NativeProposalListPage> {
   late final XflowService _service;
   final TextEditingController _search = TextEditingController();
+  final ScrollController _scrollController = ScrollController();
   bool _loading = true;
   /// 静默刷新中（切筛选/推送等）：保留当前列表，仅局部更新数据。
   bool _refreshing = false;
@@ -152,25 +154,120 @@ class _NativeProposalListPageState extends State<_NativeProposalListPage> {
   List<XflowProposalItem> _all = const <XflowProposalItem>[];
   /// 快速切换筛选时丢弃过期响应，避免旧请求覆盖新数据。
   int _loadSeq = 0;
+  Timer? _scrollRestoreRetry;
+  bool _searchListenerReady = false;
+
+  String get _cacheListType => widget.type.name;
 
   @override
   void initState() {
     super.initState();
     _service = XflowService(session: widget.session);
-    _search.addListener(() => setState(() {}));
+    _scrollController.addListener(_onScroll);
     widget.workbenchRefresh?.addListener(_onWorkbenchDataRefresh);
-    _load();
+    final cached = ApprovalListCache.instance.peek(
+      userId: widget.session.userId,
+      listType: _cacheListType,
+    );
+    if (cached != null) {
+      _all = cached.rows;
+      _statusFilter = cached.statusFilter;
+      _search.text = cached.searchQuery;
+      _loading = false;
+      _searchListenerReady = true;
+      _search.addListener(_onSearchChanged);
+      _scheduleScrollRestore();
+      unawaited(_load(silent: true));
+    } else {
+      _searchListenerReady = true;
+      _search.addListener(_onSearchChanged);
+      unawaited(_load());
+    }
   }
 
   @override
   void dispose() {
+    _persistScrollNow();
+    _persistListSnapshot();
+    _scrollRestoreRetry?.cancel();
     widget.workbenchRefresh?.removeListener(_onWorkbenchDataRefresh);
+    _scrollController.removeListener(_onScroll);
+    _scrollController.dispose();
+    if (_searchListenerReady) {
+      _search.removeListener(_onSearchChanged);
+    }
     _search.dispose();
     super.dispose();
   }
 
+  void _onSearchChanged() {
+    setState(() {});
+    _persistListSnapshot();
+  }
+
+  void _onScroll() {
+    _persistScrollNow();
+  }
+
+  void _persistScrollNow() {
+    if (!_scrollController.hasClients) return;
+    ApprovalListCache.instance.saveScrollOffset(
+      userId: widget.session.userId,
+      listType: _cacheListType,
+      offset: _scrollController.offset,
+    );
+  }
+
+  void _persistListSnapshot() {
+    if (_all.isEmpty) return;
+    ApprovalListCache.instance.put(
+      userId: widget.session.userId,
+      listType: _cacheListType,
+      rows: _all,
+      statusFilter: _statusFilter,
+      searchQuery: _search.text,
+    );
+  }
+
+  void _scheduleScrollRestore() {
+    _scrollRestoreRetry?.cancel();
+    void attempt() {
+      if (!mounted) return;
+      _applySavedScroll();
+    }
+
+    WidgetsBinding.instance.addPostFrameCallback((_) => attempt());
+    _scrollRestoreRetry = Timer.periodic(const Duration(milliseconds: 48), (t) {
+      if (!mounted || t.tick > 12) {
+        t.cancel();
+        return;
+      }
+      attempt();
+    });
+  }
+
+  void _applySavedScroll() {
+    if (!mounted) return;
+    final target = ApprovalListCache.instance.peekScrollOffset(
+      userId: widget.session.userId,
+      listType: _cacheListType,
+    );
+    if (target <= 0 || !_scrollController.hasClients) return;
+    final max = _scrollController.position.maxScrollExtent;
+    final next = target.clamp(0.0, max);
+    if ((_scrollController.offset - next).abs() < 0.5) return;
+    _scrollController.jumpTo(next);
+  }
+
+  void _openProposal(XflowProposalItem item) {
+    _persistScrollNow();
+    _persistListSnapshot();
+    widget.onOpenProposal(item);
+  }
+
   void _onWorkbenchDataRefresh() {
     if (!mounted) return;
+    // 静默拉新并写回缓存；保留滚动，避免在列表页被推送刷回顶部。
     unawaited(_load(silent: true));
   }
 
@@ -181,6 +278,7 @@ class _NativeProposalListPageState extends State<_NativeProposalListPage> {
       return;
     }
     setState(() => _statusFilter = key);
+    _persistListSnapshot();
     unawaited(_load(silent: true));
   }
 
@@ -192,6 +290,11 @@ class _NativeProposalListPageState extends State<_NativeProposalListPage> {
         _refreshing = false;
         _error = null;
       });
+      ApprovalListCache.instance.saveScrollOffset(
+        userId: widget.session.userId,
+        listType: _cacheListType,
+        offset: 0,
+      );
     } else if (!_loading && mounted) {
       setState(() => _refreshing = true);
     }
@@ -207,6 +310,8 @@ class _NativeProposalListPageState extends State<_NativeProposalListPage> {
         _loading = false;
         _refreshing = false;
       });
+      _persistListSnapshot();
+      if (silent) _scheduleScrollRestore();
     } catch (e) {
       if (!mounted || seq != _loadSeq) return;
       if (silent) {
@@ -279,6 +384,10 @@ class _NativeProposalListPageState extends State<_NativeProposalListPage> {
       );
       if (!mounted) return;
       showDunesToast(context, '草稿已删除');
+      ApprovalListCache.instance.invalidate(
+        userId: widget.session.userId,
+        listType: _cacheListType,
+      );
       await _load(silent: true);
     } catch (e) {
       if (!mounted) return;
@@ -305,8 +414,10 @@ class _NativeProposalListPageState extends State<_NativeProposalListPage> {
                   : _error != null
                       ? _buildError()
                       : RefreshIndicator(
-                          onRefresh: _load,
+                          onRefresh: () => _load(),
                           child: ListView(
+                            controller: _scrollController,
+                            physics: const AlwaysScrollableScrollPhysics(),
                             padding: const EdgeInsets.fromLTRB(14, 10, 14, 14),
                             children: [
                               XflowHeroStatCard(
@@ -435,7 +546,7 @@ class _NativeProposalListPageState extends State<_NativeProposalListPage> {
                                       child: XflowProposalListCard(
                                         item: item,
                                         mode: _cardMode,
-                                        onTap: () => widget.onOpenProposal(item),
+                                        onTap: () => _openProposal(item),
                                         onDeleteDraft: widget.type == _ListType.b14 &&
                                                 _normalizeStatus(item.status) == 'DRAFT'
                                             ? () => _deleteDraft(item)

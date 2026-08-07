@@ -11,12 +11,17 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/config/tpns_config.dart';
+import 'push_notification_event.dart';
 
 const _badgePrefsKey = 'dunes_push_badge_count';
 const _tpnsChannel = MethodChannel('dunes/tpns_push');
 
 bool _tpnsReady = false;
 void Function()? _badgeRefreshHandler;
+void Function(PushNotificationClick event)? _notificationClickHandler;
+final List<PushNotificationClick> _pendingNotificationClicks =
+    <PushNotificationClick>[];
+const int _maxPendingNotificationClicks = 16;
 
 int? _userId;
 String _authToken = '';
@@ -34,6 +39,20 @@ void registerPushLifecycleObserverImpl() {
 
 void setPushBadgeRefreshHandlerImpl(void Function()? handler) {
   _badgeRefreshHandler = handler;
+}
+
+void setPushNotificationClickHandlerImpl(
+  void Function(PushNotificationClick event)? handler,
+) {
+  _notificationClickHandler = handler;
+  if (handler == null || _pendingNotificationClicks.isEmpty) return;
+  final pending = List<PushNotificationClick>.from(
+    _pendingNotificationClicks,
+  );
+  _pendingNotificationClicks.clear();
+  for (final event in pending) {
+    scheduleMicrotask(() => handler(event));
+  }
 }
 
 Future<void> bindPushSessionImpl({
@@ -90,6 +109,21 @@ Future<void> unbindPushSessionImpl() async {
   _apiBase = '';
 }
 
+Future<void> clearPushConversationNotificationsImpl(int conversationId) async {
+  if (!Platform.isAndroid || conversationId <= 0) return;
+  try {
+    await _tpnsChannel.invokeMethod<Object?>(
+      'clearConversationNotifications',
+      <String, dynamic>{'conversationId': conversationId},
+    );
+  } catch (e) {
+    debugPrint(
+      '[Push] failed to clear TPNS notifications for conversation '
+      '$conversationId: $e',
+    );
+  }
+}
+
 void syncPushBadgeCountImpl(int count) {
   if (!Platform.isAndroid) return;
   final n = count < 0 ? 0 : count;
@@ -143,8 +177,35 @@ Future<void> _initTpns() async {
       }
       if (call.method == 'onNotificationShown') {
         _badgeRefreshHandler?.call();
+        return;
+      }
+      if (call.method == 'onNotificationClicked') {
+        // 点击事件由原生层暂存并转发，具体会话路由由上层页面自行决定；
+        // 不在这里刷新角标，避免打开通知时误把仍未读的通知清掉。
+        // 双保险：TPNS actionType=2 表示清除通知，不应跳转会话。
+        if (_isTpnsNotificationClear(call.arguments)) {
+          debugPrint('[Push] ignore TPNS notification clear');
+          return;
+        }
+        final event = PushNotificationClick.fromMethodArguments(
+          call.arguments,
+        );
+        if (event == null) return;
+        final handler = _notificationClickHandler;
+        if (handler != null) {
+          handler(event);
+        } else if (_pendingNotificationClicks.length <
+            _maxPendingNotificationClicks) {
+          _pendingNotificationClicks.add(event);
+        }
+        debugPrint(
+          '[Push] TPNS notification clicked event=${event.eventType} '
+          'conversation=${event.conversationId}',
+        );
       }
     });
+    // 原生侧会在 Flutter handler 建立后再发送冷启动点击，避免事件丢失。
+    await _tpnsChannel.invokeMethod<void>('consumePendingNotificationClick');
 
     await _tpnsChannel.invokeMethod<void>('init', <String, dynamic>{
       if (TpnsConfig.isConfigured) ...<String, dynamic>{
@@ -185,6 +246,14 @@ Future<void> _syncRegistrationId() async {
     await Future<void>.delayed(const Duration(seconds: 2));
   }
   debugPrint('[Push] 多次重试仍未获取到 TPNS token');
+}
+
+/// TPNS `actionType=2` 表示用户清除通知，不是点击。
+bool _isTpnsNotificationClear(Object? arguments) {
+  if (arguments is! Map) return false;
+  final raw = arguments['actionType'];
+  if (raw is num) return raw.toInt() == 2;
+  return int.tryParse(raw?.toString().trim() ?? '') == 2;
 }
 
 Future<void> _registerToken(String token) async {

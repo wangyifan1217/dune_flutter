@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/theme/dunes_theme.dart';
 import '../../core/util/friendly_error.dart';
@@ -109,6 +111,64 @@ class _NativeContactProfilePageState extends State<NativeContactProfilePage> {
         _error = friendlyErrorText(e);
         _loading = false;
       });
+    }
+  }
+
+  Future<void> _onPhoneTap(String phone) async {
+    final digits = phone.trim();
+    if (digits.isEmpty || digits == '-') return;
+
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      builder: (_) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+              child: Text(
+                digits,
+                style: DunesTypography.sans(
+                  fontSize: 13,
+                  color: DunesColors.text3,
+                ),
+              ),
+            ),
+            ListTile(
+              leading: const Icon(Icons.phone_outlined),
+              title: const Text('呼叫'),
+              onTap: () => Navigator.of(context).pop('call'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.copy_rounded),
+              title: const Text('复制号码'),
+              onTap: () => Navigator.of(context).pop('copy'),
+            ),
+            ListTile(
+              title: const Text('取消', textAlign: TextAlign.center),
+              onTap: () => Navigator.of(context).pop(),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (!mounted || action == null) return;
+
+    switch (action) {
+      case 'call':
+        final uri = Uri(scheme: 'tel', path: digits);
+        final ok = await launchUrl(uri);
+        if (!mounted) return;
+        if (!ok) {
+          showDunesToast(context, '无法打开拨号', kind: DunesToastKind.error);
+        }
+        break;
+      case 'copy':
+        await Clipboard.setData(ClipboardData(text: digits));
+        if (!mounted) return;
+        showDunesToast(context, '已复制');
+        break;
     }
   }
 
@@ -260,9 +320,12 @@ class _NativeContactProfilePageState extends State<NativeContactProfilePage> {
             phone.isEmpty ? '-' : phone,
             style: DunesTypography.sans(
               fontSize: 15,
-              color: const Color(0xFF888888),
+              color: phone.isEmpty
+                  ? const Color(0xFF888888)
+                  : DunesColors.blue,
             ),
           ),
+          onTap: phone.isEmpty ? null : () => _onPhoneTap(phone),
         ),
         GroupInfoRow(
           icon: Icons.apartment_outlined,

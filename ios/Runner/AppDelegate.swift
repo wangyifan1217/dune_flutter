@@ -5,7 +5,7 @@ import UserNotifications
 
 @main
 @objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate, XGPushDelegate,
-  FlutterStreamHandler
+  FlutterStreamHandler, UNUserNotificationCenterDelegate
 {
   private let voiceChannelName = "dunes/audio_recorder"
   private let voiceStreamChannelName = "dunes/audio_recorder_stream"
@@ -29,6 +29,7 @@ import UserNotifications
   private let recorderEventLock = NSLock()
   private let recorderEventHandler = AudioRecorderEventHandler()
   private var tpnsBridge: TpnsPushBridge?
+  private var pendingTpnsNotificationClick: [AnyHashable: Any]?
   private var audioConverter: AVAudioConverter?
   private let targetFormat = AVAudioFormat(
     commonFormat: .pcmFormatInt16,
@@ -55,6 +56,10 @@ import UserNotifications
       pushDelegate: self
     )
     tpnsBridge?.attach()
+    if let pending = pendingTpnsNotificationClick {
+      tpnsBridge?.handleNotificationClicked(userInfo: pending)
+      pendingTpnsNotificationClick = nil
+    }
 
     let channel = FlutterMethodChannel(
       name: voiceChannelName,
@@ -273,6 +278,21 @@ import UserNotifications
   }
 
   // MARK: - XGPushDelegate
+
+  /// 点击通知可能早于 Flutter 引擎初始化，先暂存 payload，待桥接完成后再转发。
+  func userNotificationCenter(
+    _ center: UNUserNotificationCenter,
+    didReceive response: UNNotificationResponse,
+    withCompletionHandler completionHandler: @escaping () -> Void
+  ) {
+    let userInfo = response.notification.request.content.userInfo
+    if let bridge = tpnsBridge {
+      bridge.handleNotificationClicked(userInfo: userInfo)
+    } else {
+      pendingTpnsNotificationClick = userInfo
+    }
+    completionHandler()
+  }
 
   func xgPushDidRegisteredDeviceToken(
     _ deviceToken: String?,
@@ -1183,6 +1203,9 @@ final class TpnsPushBridge {
   private var accessId: UInt32 = 0
   private var accessKey = ""
   private var isStarted = false
+  private var isAttached = false
+  private var isDartHandlerReady = false
+  private var pendingNotificationClick: [String: Any]?
 
   init(
     application: UIApplication,
@@ -1195,6 +1218,8 @@ final class TpnsPushBridge {
   }
 
   func attach() {
+    isAttached = true
+    isDartHandlerReady = false
     channel?.setMethodCallHandler { [weak self] call, result in
       self?.handle(call, result: result)
     }
@@ -1212,6 +1237,11 @@ final class TpnsPushBridge {
 
   func handleNotificationShown(badgeCount: Int? = nil) {
     channel?.invokeMethod("onNotificationShown", arguments: badgeCount)
+  }
+
+  func handleNotificationClicked(userInfo: [AnyHashable: Any]) {
+    pendingNotificationClick = Self.notificationClickPayload(from: userInfo)
+    flushPendingNotificationClick()
   }
 
   func applyBadgeCount(_ count: Int) {
@@ -1248,6 +1278,9 @@ final class TpnsPushBridge {
       if let raw = userInfo[key] as? String, let badge = parseBadgeJSON(raw) {
         return badge
       }
+      if let raw = userInfo[key] as? [AnyHashable: Any], let badge = parseBadgeDictionary(raw) {
+        return badge
+      }
     }
     return nil
   }
@@ -1275,6 +1308,18 @@ final class TpnsPushBridge {
     return nil
   }
 
+  private static func parseBadgeDictionary(_ raw: [AnyHashable: Any]) -> Int? {
+    for key in ["badgeCount", "badge"] {
+      if let value = raw[key] as? Int, value >= 0 {
+        return value
+      }
+      if let value = raw[key] as? NSNumber, value.intValue >= 0 {
+        return value.intValue
+      }
+    }
+    return nil
+  }
+
   private func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
     switch call.method {
     case "init":
@@ -1291,9 +1336,93 @@ final class TpnsPushBridge {
       requestAuthorization(result: result)
     case "isMiuiDevice":
       result(false)
+    case "consumePendingNotificationClick":
+      isDartHandlerReady = true
+      flushPendingNotificationClick()
+      result(true)
     default:
       result(FlutterMethodNotImplemented)
     }
+  }
+
+  private func flushPendingNotificationClick() {
+    guard isAttached, isDartHandlerReady, let payload = pendingNotificationClick else { return }
+    pendingNotificationClick = nil
+    DispatchQueue.main.async { [weak self] in
+      self?.channel?.invokeMethod("onNotificationClicked", arguments: payload)
+    }
+  }
+
+  private static func notificationClickPayload(from userInfo: [AnyHashable: Any]) -> [String: Any] {
+    var payload: [String: Any] = [:]
+    if let aps = userInfo["aps"] as? [AnyHashable: Any],
+      let alert = aps["alert"] as? [AnyHashable: Any]
+    {
+      if let title = notificationText(alert["title"]) {
+        payload["title"] = title
+      }
+      if let body = notificationText(alert["body"]) {
+        payload["body"] = body
+      }
+    }
+    if let title = notificationText(userInfo["title"]) {
+      payload["title"] = title
+    }
+    if let body = notificationText(userInfo["content"] ?? userInfo["body"]) {
+      payload["body"] = body
+    }
+
+    for key in ["custom_content", "custom"] {
+      guard let raw = userInfo[key] else { continue }
+      if let custom = notificationJSON(raw) {
+        payload["customContent"] = custom
+        for field in ["schemaVersion", "eventType", "conversationId", "messageId", "clickAction"] {
+          if let value = custom[field] {
+            payload[field] = value
+          }
+        }
+        break
+      }
+      if let text = notificationText(raw) {
+        payload["customContent"] = text
+      }
+    }
+    return payload
+  }
+
+  private static func notificationText(_ value: Any?) -> String? {
+    if let string = value as? String {
+      return string.precomposedStringWithCanonicalMapping
+    }
+    if let string = value as? NSString {
+      return string as String
+    }
+    if let data = value as? Data {
+      return String(data: data, encoding: .utf8)
+    }
+    return nil
+  }
+
+  private static func notificationJSON(_ value: Any) -> [String: Any]? {
+    if let object = value as? [String: Any] {
+      return object
+    }
+    if let object = value as? [AnyHashable: Any] {
+      var result: [String: Any] = [:]
+      for (key, value) in object {
+        guard let key = key as? String else { continue }
+        result[key] = value
+      }
+      return result
+    }
+    guard let raw = notificationText(value),
+      let data = raw.data(using: .utf8),
+      let object = try? JSONSerialization.jsonObject(with: data),
+      let result = object as? [String: Any]
+    else {
+      return nil
+    }
+    return result
   }
 
   private func initPush(_ call: FlutterMethodCall, result: @escaping FlutterResult) {

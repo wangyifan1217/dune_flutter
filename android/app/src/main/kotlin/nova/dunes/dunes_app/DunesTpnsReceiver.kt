@@ -55,7 +55,17 @@ class DunesTpnsReceiver : XGPushBaseReceiver() {
         context: Context?,
         message: XGPushClickedResult?,
     ) {
-        Log.i(TAG, "notification clicked title=${message?.title}")
+        // TPNS：actionType=0 点击，actionType=2 清除。
+        // 划掉通知不能当点击，否则会写入 pending_click，下次打开 App 误进会话。
+        val actionType = message?.getActionType() ?: 0L
+        if (actionType == ACTION_TYPE_DELETE) {
+            Log.i(TAG, "notification cleared title=${message?.title}, ignore routing")
+            return
+        }
+        Log.i(TAG, "notification clicked title=${message?.title} actionType=$actionType")
+        // TPNS 通知的点击不会被主动 cancel；同时把 payload 暂存给 Flutter，
+        // 兼容 APP 冷启动时 Flutter 引擎尚未 attach 的情况。
+        TpnsPushBridge.notifyNotificationClicked(context, message)
     }
 
     override fun onNotificationShowedResult(
@@ -71,6 +81,7 @@ class DunesTpnsReceiver : XGPushBaseReceiver() {
             Log.i(TAG, "notification badge from server=$badge")
             BadgeHelper.applyCount(context, badge)
         }
+        TpnsPushBridge.recordNotificationShown(context, message)
         TpnsPushBridge.notifyNotificationShown()
     }
 
@@ -92,5 +103,6 @@ class DunesTpnsReceiver : XGPushBaseReceiver() {
 
     companion object {
         private const val TAG = "DunesTpns"
+        private const val ACTION_TYPE_DELETE = 2L
     }
 }

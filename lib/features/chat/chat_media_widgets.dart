@@ -15,6 +15,17 @@ import 'cors_safe_image.dart';
 import 'file_download.dart' as file_dl;
 import 'gallery_save.dart' as gallery;
 
+bool _chatImageHasSeparateOriginal(Map<String, dynamic>? payload) {
+  if (payload == null) return false;
+  final originalKey = (payload['objectKey'] ?? '').toString().trim();
+  final originalUrl = (payload['url'] ?? '').toString().trim();
+  final previewKey = (payload['previewObjectKey'] ?? '').toString().trim();
+  final previewUrl = (payload['previewUrl'] ?? '').toString().trim();
+  if (originalKey.isEmpty && originalUrl.isEmpty) return false;
+  if (previewKey.isEmpty && previewUrl.isEmpty) return false;
+  return originalKey != previewKey || originalUrl != previewUrl;
+}
+
 /// 与 WebView `hydrateMediaUrls` 对齐：公网图直链、私有附件鉴权拉取，支持点击放大。
 /// 会话内按原图比例完整展示（不裁切），点击可全屏查看/保存。
 class ChatAuthImageBubble extends StatefulWidget {
@@ -513,30 +524,154 @@ class _ImagePreviewDialog extends StatefulWidget {
 class _ImagePreviewDialogState extends State<_ImagePreviewDialog> {
   Future<Uint8List>? _future;
   String? _webPublicUrl;
+  bool _showingOriginal = false;
   bool _saving = false;
   bool _editing = false;
   Uint8List? _editedBytes;
+  Uint8List? _metadataBytes;
+  Future<(int width, int height)?>? _dimensionsFuture;
 
   bool get _desktop => isDesktopCommOnly;
 
   String get _cacheKey {
-    final objectKey = (widget.payload?['objectKey'] ?? '').toString().trim();
+    final cachePayload = _showingOriginal
+        ? widget.payload
+        : ConversationService.previewMediaPayload(widget.payload);
+    final objectKey = (cachePayload?['objectKey'] ?? '').toString().trim();
     if (objectKey.isNotEmpty) return objectKey;
-    return ConversationService.mediaDirectUrl(widget.payload);
+    return ConversationService.mediaDirectUrl(cachePayload);
+  }
+
+  int? get _payloadSizeBytes {
+    final raw =
+        widget.payload?['sizeBytes'] ??
+        widget.payload?['size_bytes'] ??
+        widget.payload?['fileSizeBytes'] ??
+        widget.payload?['fileSize'] ??
+        widget.payload?['file_size'] ??
+        widget.payload?['originalSizeBytes'] ??
+        widget.payload?['original_size_bytes'] ??
+        widget.payload?['size'];
+    if (raw is num && raw >= 0) return raw.toInt();
+    return int.tryParse(raw?.toString() ?? '');
+  }
+
+  void _prepareMetadata(Uint8List bytes) {
+    if (identical(_metadataBytes, bytes)) return;
+    _metadataBytes = bytes;
+    _dimensionsFuture = decodeChatImageDimensions(bytes);
+  }
+
+  static String _formatBytes(int bytes) {
+    if (bytes < 1024) return '$bytes B';
+    if (bytes < 1024 * 1024) {
+      return '${(bytes / 1024).toStringAsFixed(bytes < 10240 ? 1 : 0)} KB';
+    }
+    if (bytes < 1024 * 1024 * 1024) {
+      return '${(bytes / (1024 * 1024)).toStringAsFixed(bytes < 10 * 1024 * 1024 ? 1 : 0)} MB';
+    }
+    return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
+  }
+
+  Widget _metadataPill({
+    required int? sizeBytes,
+    required Future<(int width, int height)?>? dimensions,
+    bool original = true,
+    bool force = false,
+  }) {
+    if (!force && sizeBytes == null && dimensions == null) {
+      return const SizedBox.shrink();
+    }
+    final sizeText = sizeBytes == null ? '' : _formatBytes(sizeBytes);
+    return FutureBuilder<(int width, int height)?>(
+      future: dimensions,
+      builder: (context, snapshot) {
+        final dimension = snapshot.data;
+        final dimensionText = dimension == null
+            ? ''
+            : '${dimension.$1} × ${dimension.$2}';
+        final details = <String>[
+          if (dimensionText.isNotEmpty) dimensionText,
+          if (sizeText.isNotEmpty) sizeText,
+        ].join(' · ');
+        final label = original ? '原图' : '预览图';
+        return DecoratedBox(
+          decoration: BoxDecoration(
+            color: Colors.black.withValues(alpha: 0.55),
+            borderRadius: BorderRadius.circular(14),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            child: Text(
+              details.isEmpty ? label : '$label · $details',
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 11,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+        );
+      },
+    );
   }
 
   @override
   void initState() {
     super.initState();
-    // Web 上的公网图用 <img> 标签展示以规避 CORS；鉴权图与移动端统一拉取字节，
-    // 这样才能「查看原图」并保存到相册。
+    // 首次打开保持原有行为，先展示会话内预览图；查看原图由预览页内按钮触发。
     final publicUrl = ConversationService.mediaPublicImageUrl(widget.payload);
     if (kIsWeb && publicUrl != null) {
       _webPublicUrl = publicUrl;
       _future = null;
     } else {
-      _future = widget.service.loadFullImageBytes(widget.payload);
+      _future = _loadPreviewBytes();
     }
+  }
+
+  Future<Uint8List> _loadPreviewBytes() async {
+    final previewPayload = ConversationService.previewMediaPayload(
+      widget.payload,
+    );
+    final publicUrl = ConversationService.mediaPublicImageUrl(widget.payload);
+    if (publicUrl != null && publicUrl.isNotEmpty) {
+      try {
+        return await widget.service.downloadAttachmentBytes(
+          objectKey: publicUrl,
+          fileName: widget.fileName,
+        );
+      } catch (_) {
+        // 公网地址失效时回退到鉴权预览下载。
+      }
+    }
+    return widget.service.loadCachedChatMediaBytesWithFallback(
+      previewPayload: previewPayload,
+      // 预览页初次打开不能静默回退到原图；原图必须由用户点击按钮后加载。
+      originalPayload: null,
+    );
+  }
+
+  void _viewOriginal() {
+    if (_showingOriginal || !_chatImageHasSeparateOriginal(widget.payload)) {
+      return;
+    }
+    final publicUrl = ConversationService.mediaOriginalPublicImageUrl(
+      widget.payload,
+    );
+    // Web 才用公网直链渲染；桌面/APP 一律拉原图像素字节，避免错误 CDN
+    // 地址抢占 _webPublicUrl 分支后看起来像「点了没效果」。
+    final useWebPublic = kIsWeb && publicUrl != null && publicUrl.isNotEmpty;
+    final fullFuture = useWebPublic
+        ? null
+        : widget.service.loadFullImageBytes(widget.payload);
+    setState(() {
+      _showingOriginal = true;
+      _webPublicUrl = useWebPublic ? publicUrl : null;
+      _future = fullFuture;
+      _editedBytes = null;
+      _metadataBytes = null;
+      _dimensionsFuture = null;
+    });
   }
 
   void _toast(String message) {
@@ -658,12 +793,40 @@ class _ImagePreviewDialogState extends State<_ImagePreviewDialog> {
               ),
             ),
             Positioned(
+              top: 14,
+              left: 14,
+              child: _metadataPill(
+                sizeBytes: _showingOriginal ? _payloadSizeBytes : null,
+                dimensions: null,
+                original: _showingOriginal,
+                force: _showingOriginal,
+              ),
+            ),
+            Positioned(
               left: 4,
               bottom: 4,
-              child: _PreviewActionButton(
-                icon: Icons.download_rounded,
-                label: _saving ? '下载中…' : (_desktop ? '下载' : '保存图片'),
-                onTap: _saving ? null : () => _saveWebUrl(webUrl),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (!_showingOriginal &&
+                      _chatImageHasSeparateOriginal(widget.payload)) ...[
+                    _PreviewActionButton(
+                      icon: Icons.high_quality_rounded,
+                      label: '查看原图',
+                      onTap: _viewOriginal,
+                    ),
+                    const SizedBox(width: 8),
+                  ],
+                  _PreviewActionButton(
+                    icon: Icons.download_rounded,
+                    label: _saving
+                        ? '下载中…'
+                        : (_showingOriginal
+                            ? (_desktop ? '下载原图' : '保存原图')
+                            : (_desktop ? '下载预览' : '保存预览')),
+                    onTap: _saving ? null : () => _saveWebUrl(webUrl),
+                  ),
+                ],
               ),
             ),
           ],
@@ -680,6 +843,7 @@ class _ImagePreviewDialogState extends State<_ImagePreviewDialog> {
           final loading = snap.connectionState != ConnectionState.done;
           final loaded = snap.data;
           final bytes = _editedBytes ?? loaded;
+          final originalBytes = loaded;
           final failed =
               snap.hasError || (!loading && (loaded == null || loaded.isEmpty));
 
@@ -700,6 +864,7 @@ class _ImagePreviewDialogState extends State<_ImagePreviewDialog> {
               ),
             );
           } else {
+            _prepareMetadata(originalBytes ?? bytes);
             content = InteractiveViewer(
               maxScale: 5,
               child: Center(child: Image.memory(bytes, fit: BoxFit.contain)),
@@ -717,6 +882,18 @@ class _ImagePreviewDialogState extends State<_ImagePreviewDialog> {
                   icon: const Icon(Icons.close_rounded, color: Colors.white),
                 ),
               ),
+              if (!loading && !failed && bytes != null)
+                Positioned(
+                  top: 14,
+                  left: 14,
+                  child: _metadataPill(
+                    sizeBytes: _showingOriginal
+                        ? (_payloadSizeBytes ?? originalBytes?.length)
+                        : originalBytes?.length,
+                    dimensions: _dimensionsFuture,
+                    original: _showingOriginal,
+                  ),
+                ),
               if (!loading && !failed && bytes != null)
                 Positioned(
                   left: 12,
@@ -737,6 +914,17 @@ class _ImagePreviewDialogState extends State<_ImagePreviewDialog> {
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
+                            if (!_showingOriginal &&
+                                _chatImageHasSeparateOriginal(
+                                  widget.payload,
+                                )) ...[
+                              _PreviewActionButton(
+                                icon: Icons.high_quality_rounded,
+                                label: '查看原图',
+                                onTap: _viewOriginal,
+                              ),
+                              const SizedBox(width: 8),
+                            ],
                             if (_desktop) ...[
                               _PreviewActionButton(
                                 icon: Icons.crop_rounded,
@@ -751,7 +939,9 @@ class _ImagePreviewDialogState extends State<_ImagePreviewDialog> {
                               icon: Icons.download_rounded,
                               label: _saving
                                   ? (_desktop ? '下载中…' : '保存中…')
-                                  : (_desktop ? '下载' : '保存到相册'),
+                                  : (_showingOriginal
+                                      ? (_desktop ? '下载原图' : '保存原图')
+                                      : (_desktop ? '下载预览' : '保存预览')),
                               onTap: (_saving || _editing)
                                   ? null
                                   : () => _save(bytes),

@@ -69,6 +69,8 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage>
   int _autosaveSeq = 0;
   String _autosaveHint = '填写中将自动保存草稿';
   bool _autosaving = false;
+  /// 保存进行中又有新编辑时置位，finally 里补一次 schedule，避免 silent drop。
+  bool _needsAutosave = false;
   Map<int, String> _stageUserNames = const {};
   /// 仅渲染 preview-approval 返回的 stages；失败不回退模板全量列表。
   List<Map<String, dynamic>>? _previewStages;
@@ -190,17 +192,38 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage>
     WidgetsBinding.instance.removeObserver(this);
     _autosaveTimer?.cancel();
     _previewTimer?.cancel();
-    // iOS/Android 离开页时尽量落本地，避免未防抖完丢失。
+    // 离开页：先本地再服务端；不走带 setState 的 _runAutosave。
     if (_canAutosave && XflowService.hasMeaningfulDraftValues(_values)) {
-      unawaited(
-        _service.saveLocalDraft(
-          Map<String, dynamic>.from(_values),
-          businessType: _localDraftBusinessType,
-          businessId: _activeDraftId,
-        ),
-      );
+      unawaited(_flushAutosaveLeaving(Map<String, dynamic>.from(_values)));
     }
     super.dispose();
+  }
+
+  Future<void> _flushAutosaveLeaving(Map<String, dynamic> values) async {
+    if (!XflowService.hasMeaningfulDraftValues(values)) return;
+    final payload = Map<String, dynamic>.from(values);
+    try {
+      await _service.saveLocalDraft(
+        payload,
+        businessType: _localDraftBusinessType,
+        businessId: _activeDraftId,
+      );
+    } catch (_) {}
+    try {
+      if (_isDynamicSubmission) {
+        await _service.updateSubmissionDraft(
+          businessType: widget.editBusinessType,
+          businessId: widget.editProposalId!,
+          formValues: payload,
+        );
+      } else {
+        await _service.submitDraft(
+          formValues: payload,
+          proposalId: _activeDraftId,
+          templateKey: widget.templateKey,
+        );
+      }
+    } catch (_) {}
   }
 
   List<Map<String, dynamic>> get _displayApprovalStages =>
@@ -261,9 +284,10 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.inactive ||
-        state == AppLifecycleState.paused ||
-        state == AppLifecycleState.hidden) {
+    // inactive 常见于弹层/选人，勿取消 debounce；paused/hidden/detached 才刷盘。
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.hidden ||
+        state == AppLifecycleState.detached) {
       _autosaveTimer?.cancel();
       unawaited(_runAutosave(silent: true, forceLocalFirst: true));
     }
@@ -283,9 +307,13 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage>
   }) async {
     if (!_canAutosave) return;
     if (!XflowService.hasMeaningfulDraftValues(_values)) return;
-    if (_autosaving && !forceLocalFirst) return;
+    if (_autosaving && !forceLocalFirst) {
+      _needsAutosave = true;
+      return;
+    }
     final seq = ++_autosaveSeq;
     _autosaving = true;
+    _needsAutosave = false;
     if (mounted && silent) {
       setState(() => _autosaveHint = '正在自动保存…');
     }
@@ -333,6 +361,10 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage>
       }
     } finally {
       _autosaving = false;
+      if (_needsAutosave && mounted) {
+        _needsAutosave = false;
+        _scheduleAutosave();
+      }
     }
   }
 

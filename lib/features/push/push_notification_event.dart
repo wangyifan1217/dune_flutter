@@ -28,27 +28,47 @@ class PushNotificationClick {
   static PushNotificationClick? fromMethodArguments(Object? arguments) {
     if (arguments is! Map) return null;
     final raw = <Object?, Object?>{}..addAll(arguments);
-    final customContent = raw['customContent']?.toString().trim() ?? '';
     Map<String, dynamic> custom = const <String, dynamic>{};
-    if (customContent.isNotEmpty) {
+    final customRaw = raw['customContent'];
+    var customContent = '';
+    if (customRaw is Map) {
+      // iOS MethodChannel 常把 custom 直接传成 Map。
+      custom = customRaw.map(
+        (key, value) => MapEntry(key.toString(), value),
+      );
       try {
-        final decoded = jsonDecode(customContent);
-        if (decoded is Map) {
-          custom = decoded.map(
-            (key, value) => MapEntry(key.toString(), value),
-          );
-        }
+        customContent = jsonEncode(custom);
       } catch (_) {
-        // A malformed/non-JSON custom payload is not an IM routing event.
+        customContent = customRaw.toString();
+      }
+    } else {
+      customContent = customRaw?.toString().trim() ?? '';
+      if (customContent.isNotEmpty) {
+        try {
+          final decoded = jsonDecode(customContent);
+          if (decoded is Map) {
+            custom = decoded.map(
+              (key, value) => MapEntry(key.toString(), value),
+            );
+          }
+        } catch (_) {
+          // A malformed/non-JSON custom payload is not an IM routing event.
+        }
       }
     }
+    // 兼容 iOS：eventType / conversationId 也会平铺在顶层。
+    final eventType =
+        (custom['eventType'] ?? raw['eventType'])?.toString().trim() ?? '';
+    final conversationId = _toInt(
+      custom['conversationId'] ?? raw['conversationId'],
+    );
     return PushNotificationClick(
-      messageId: _toInt(raw['messageId']),
+      messageId: _toInt(raw['messageId'] ?? custom['messageId']),
       title: raw['title']?.toString() ?? '',
       body: raw['body']?.toString() ?? '',
       customContent: customContent,
-      eventType: custom['eventType']?.toString().trim() ?? '',
-      conversationId: _toInt(custom['conversationId']),
+      eventType: eventType,
+      conversationId: conversationId,
     );
   }
 

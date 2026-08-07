@@ -11,12 +11,17 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/config/tpns_config.dart';
+import 'push_notification_event.dart';
 
 const _badgePrefsKey = 'dunes_push_badge_count';
 const _tpnsChannel = MethodChannel('dunes/tpns_push');
 
 bool _tpnsReady = false;
 void Function()? _badgeRefreshHandler;
+void Function(PushNotificationClick event)? _notificationClickHandler;
+final List<PushNotificationClick> _pendingNotificationClicks =
+    <PushNotificationClick>[];
+const int _maxPendingNotificationClicks = 16;
 
 int? _userId;
 String _authToken = '';
@@ -34,6 +39,20 @@ void registerPushLifecycleObserverImpl() {
 
 void setPushBadgeRefreshHandlerImpl(void Function()? handler) {
   _badgeRefreshHandler = handler;
+}
+
+void setPushNotificationClickHandlerImpl(
+  void Function(PushNotificationClick event)? handler,
+) {
+  _notificationClickHandler = handler;
+  if (handler == null || _pendingNotificationClicks.isEmpty) return;
+  final pending = List<PushNotificationClick>.from(
+    _pendingNotificationClicks,
+  );
+  _pendingNotificationClicks.clear();
+  for (final event in pending) {
+    scheduleMicrotask(() => handler(event));
+  }
 }
 
 Future<void> bindPushSessionImpl({
@@ -139,8 +158,22 @@ Future<void> _initTpns() async {
         return;
       }
       if (call.method == 'onNotificationClicked') {
-        // 点击事件只保留给上层路由消费，不主动刷新角标，避免误清未读状态。
-        debugPrint('[Push] TPNS notification clicked: ${call.arguments}');
+        // 与安卓对齐：点击 IM 通知后由上层打开会话；不在这里清角标。
+        final event = PushNotificationClick.fromMethodArguments(
+          call.arguments,
+        );
+        if (event == null) return;
+        final handler = _notificationClickHandler;
+        if (handler != null) {
+          handler(event);
+        } else if (_pendingNotificationClicks.length <
+            _maxPendingNotificationClicks) {
+          _pendingNotificationClicks.add(event);
+        }
+        debugPrint(
+          '[Push] TPNS notification clicked event=${event.eventType} '
+          'conversation=${event.conversationId}',
+        );
       }
     });
     // 原生侧会在 Flutter handler 建立后再发送冷启动点击，避免事件丢失。

@@ -39,6 +39,8 @@ void setPushNotificationClickHandlerImpl(
 ) {
   if (Platform.isAndroid) {
     android.setPushNotificationClickHandlerImpl(handler);
+  } else if (Platform.isIOS) {
+    ios.setPushNotificationClickHandlerImpl(handler);
   }
 }
 

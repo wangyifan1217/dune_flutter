@@ -5,8 +5,9 @@ import UserNotifications
 
 @main
 @objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate, XGPushDelegate,
-  FlutterStreamHandler, UNUserNotificationCenterDelegate
+  FlutterStreamHandler
 {
+  // FlutterAppDelegate 已实现 UNUserNotificationCenterDelegate，勿再重复声明。
   private let voiceChannelName = "dunes/audio_recorder"
   private let voiceStreamChannelName = "dunes/audio_recorder_stream"
   private let voiceEventsChannelName = "dunes/audio_recorder_events"
@@ -280,7 +281,7 @@ import UserNotifications
   // MARK: - XGPushDelegate
 
   /// 点击通知可能早于 Flutter 引擎初始化，先暂存 payload，待桥接完成后再转发。
-  func userNotificationCenter(
+  override func userNotificationCenter(
     _ center: UNUserNotificationCenter,
     didReceive response: UNNotificationResponse,
     withCompletionHandler completionHandler: @escaping () -> Void

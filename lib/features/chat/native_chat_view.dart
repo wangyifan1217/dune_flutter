@@ -1593,6 +1593,7 @@ class _NativeChatViewState extends State<NativeChatView>
   }
 
   String _privateHeaderSubtitle(NativeConversation conv) {
+    if (conv.isSelfMemo) return '';
     final parts = <String>[];
     final dept = conv.peerDepartment?.trim();
     final role = conv.peerRoleLabel?.trim();
@@ -5438,6 +5439,7 @@ class _NativeChatViewState extends State<NativeChatView>
     if (!mounted) return null;
     final allowedKinds = <String>{
       'PRIVATE',
+      'SELF_MEMO',
       'GROUP',
       'WORKGROUP',
       'WORKGROUP_APPROVAL',
@@ -6049,6 +6051,12 @@ class _NativeChatViewState extends State<NativeChatView>
     final kbSession = chatFileSupportsKbUpload(fileName, payload)
         ? widget.session
         : null;
+    // PC 上 PDF 与 Excel/Word 等文件保持一致：下载后交给系统默认应用打开，
+    // 不再使用应用内 PDF 弹框；移动端仍保留内置预览。
+    if (isDesktopCommOnly) {
+      await _openOrDownloadFileOnDesktop(payload, fileName);
+      return;
+    }
     if (chatPayloadIsPdf(payload, fileName)) {
       await showChatPdfPreview(
         context: context,
@@ -6058,12 +6066,6 @@ class _NativeChatViewState extends State<NativeChatView>
         saveToKbSession: kbSession,
         saveToDriveSession: widget.session,
       );
-      return;
-    }
-    // PC：下载后直接用系统默认应用打开（已缓存则跳过下载）。
-    // 存入知识库 / 微盘走消息菜单。
-    if (isDesktopCommOnly) {
-      await _openOrDownloadFileOnDesktop(payload, fileName);
       return;
     }
     // APP：微信式文件页，用其他应用打开。
@@ -7790,8 +7792,29 @@ class _NativeChatViewState extends State<NativeChatView>
                         onTapTitle: _isPrivate
                             ? widget.onOpenProfile
                             : widget.onOpenGroupInfo,
-                        showOnlineDot: _isPrivate && _peerOnline,
-                        leadingAvatar: _isPrivate
+                        showOnlineDot:
+                            _isPrivate &&
+                            !(_conversation?.isSelfMemo ??
+                                widget.conversationHint?.isSelfMemo ??
+                                false) &&
+                            _peerOnline,
+                        leadingAvatar: conv.isSelfMemo
+                            ? Container(
+                                width: 45,
+                                height: 45,
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF7B5CD8),
+                                  borderRadius: BorderRadius.circular(
+                                    45 * 0.18,
+                                  ),
+                                ),
+                                child: const Icon(
+                                  Icons.folder_copy_outlined,
+                                  color: Colors.white,
+                                  size: 24,
+                                ),
+                              )
+                            : _isPrivate
                             ? ImUserAvatar(
                                 initial: title.isNotEmpty
                                     ? title.substring(0, 1)
@@ -8080,7 +8103,11 @@ class _NativeChatViewState extends State<NativeChatView>
                                                 entry.showSenderMeta,
                                             showTimeForMine: mine,
                                             timeLabel: timeLabel,
-                                            readLabel: mine && _isPrivate
+                                            readLabel:
+                                                mine &&
+                                                    _isPrivate &&
+                                                    _conversation?.isSelfMemo !=
+                                                        true
                                                 ? (peerRead ? '已读' : '未读')
                                                 : null,
                                             onLongPress: null,

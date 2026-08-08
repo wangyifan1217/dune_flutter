@@ -47,12 +47,7 @@ class GroupCompositeAvatar extends StatelessWidget {
     }
 
     final rows = _rowPattern(shown.length);
-    final maxCols = rows.fold<int>(0, (m, r) => math.max(m, r.length));
-    final rowCount = rows.length;
-    final inner = size - _gap * 2;
-    final cellByW = (inner - _gap * (maxCols - 1)) / maxCols;
-    final cellByH = (inner - _gap * (rowCount - 1)) / rowCount;
-    final cell = math.min(cellByW, cellByH);
+    final cell = groupCompositeAvatarCellSize(size, shown.length);
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(size * 0.18),
@@ -119,7 +114,11 @@ class GroupCompositeAvatar extends StatelessWidget {
           colors: [Color(0xFFCABCEB), Color(0xFFA88CD8)],
         ),
       ),
-      child: Icon(Icons.groups_outlined, color: Colors.white, size: size * 0.38),
+      child: Icon(
+        Icons.groups_outlined,
+        color: Colors.white,
+        size: size * 0.38,
+      ),
     );
   }
 
@@ -130,52 +129,7 @@ class GroupCompositeAvatar extends StatelessWidget {
   }
 
   /// 微信式行布局：人数变化时格子为正方形并居中，外框 [size] 不变。
-  List<List<int>> _rowPattern(int count) {
-    switch (count) {
-      case 2:
-        return const [
-          [0, 1],
-        ];
-      case 3:
-        return const [
-          [0, 1],
-          [2],
-        ];
-      case 4:
-        return const [
-          [0, 1],
-          [2, 3],
-        ];
-      case 5:
-        return const [
-          [0, 1, 2],
-          [3, 4],
-        ];
-      case 6:
-        return const [
-          [0, 1, 2],
-          [3, 4, 5],
-        ];
-      case 7:
-        return const [
-          [0],
-          [1, 2, 3],
-          [4, 5, 6],
-        ];
-      case 8:
-        return const [
-          [0, 1],
-          [2, 3, 4],
-          [5, 6, 7],
-        ];
-      default:
-        return const [
-          [0, 1, 2],
-          [3, 4, 5],
-          [6, 7, 8],
-        ];
-    }
-  }
+  List<List<int>> _rowPattern(int count) => _groupAvatarRowPattern(count);
 
   List<ConversationAvatarMember> _stableMembers(
     List<ConversationAvatarMember> source,
@@ -184,5 +138,68 @@ class GroupCompositeAvatar extends StatelessWidget {
     list.sort((a, b) => a.userId.compareTo(b.userId));
     if (list.length <= _maxMembers) return list;
     return list.take(_maxMembers).toList(growable: false);
+  }
+}
+
+/// Returns the side length of each member tile in a composite group avatar.
+///
+/// The inbox prefetcher uses the same calculation so it warms the exact
+/// thumbnail cache entry that the visible 9-grid will request.
+double groupCompositeAvatarCellSize(double size, int memberCount) {
+  final count = memberCount.clamp(2, 9);
+  final rows = _groupAvatarRowPattern(count);
+  final maxCols = rows.fold<int>(0, (m, r) => math.max(m, r.length));
+  final rowCount = rows.length;
+  const gap = 1.0;
+  final inner = size - gap * 2;
+  final cellByW = (inner - gap * (maxCols - 1)) / maxCols;
+  final cellByH = (inner - gap * (rowCount - 1)) / rowCount;
+  return math.min(cellByW, cellByH);
+}
+
+List<List<int>> _groupAvatarRowPattern(int count) {
+  switch (count) {
+    case 2:
+      return const [
+        [0, 1],
+      ];
+    case 3:
+      return const [
+        [0, 1],
+        [2],
+      ];
+    case 4:
+      return const [
+        [0, 1],
+        [2, 3],
+      ];
+    case 5:
+      return const [
+        [0, 1, 2],
+        [3, 4],
+      ];
+    case 6:
+      return const [
+        [0, 1, 2],
+        [3, 4, 5],
+      ];
+    case 7:
+      return const [
+        [0],
+        [1, 2, 3],
+        [4, 5, 6],
+      ];
+    case 8:
+      return const [
+        [0, 1],
+        [2, 3, 4],
+        [5, 6, 7],
+      ];
+    default:
+      return const [
+        [0, 1, 2],
+        [3, 4, 5],
+        [6, 7, 8],
+      ];
   }
 }

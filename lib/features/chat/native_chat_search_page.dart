@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 
@@ -12,7 +13,11 @@ import '../conversation/inbox_format.dart';
 import '../kb/kb_chat_share.dart';
 import '../meeting/meeting_minutes_chat_share.dart';
 import 'chat_history_filter.dart';
+import 'chat_media_widgets.dart';
+import 'chat_file_type_icon.dart';
+import 'chat_video_widgets.dart';
 import 'chat_widgets.dart';
+import 'cors_safe_image.dart';
 import 'user_avatar_widget.dart';
 
 class NativeChatSearchPage extends StatefulWidget {
@@ -95,8 +100,9 @@ class _NativeChatSearchPageState extends State<NativeChatSearchPage> {
       if (isPrivate) {
         final peerId = conv.peerUserId ?? 0;
         if (peerId > 0) {
-          final contact =
-              await ContactService(session: widget.session).fetchContact(peerId);
+          final contact = await ContactService(
+            session: widget.session,
+          ).fetchContact(peerId);
           if (contact != null) {
             _peerAvatarPreset ??= contact.avatarPreset;
             _peerAvatarObjectKey ??= contact.avatarObjectKey;
@@ -104,8 +110,9 @@ class _NativeChatSearchPageState extends State<NativeChatSearchPage> {
         }
       } else {
         try {
-          final members =
-              await _service.fetchConversationMembers(widget.conversationId);
+          final members = await _service.fetchConversationMembers(
+            widget.conversationId,
+          );
           if (mounted) {
             _avatarByUserId = _service.avatarMapFromMembers(members);
           }
@@ -124,8 +131,9 @@ class _NativeChatSearchPageState extends State<NativeChatSearchPage> {
           } catch (_) {}
         }
       }
-      final meResp = await ContactService(session: widget.session)
-          .fetchContact(widget.session.userId);
+      final meResp = await ContactService(
+        session: widget.session,
+      ).fetchContact(widget.session.userId);
       if (meResp != null && mounted) {
         _selfAvatarPreset = meResp.avatarPreset;
         _selfAvatarObjectKey = meResp.avatarObjectKey;
@@ -159,7 +167,10 @@ class _NativeChatSearchPageState extends State<NativeChatSearchPage> {
   }
 
   void _onScroll() {
-    if (!_scrollController.hasClients || _loading || _loadingMore || !_hasMore) {
+    if (!_scrollController.hasClients ||
+        _loading ||
+        _loadingMore ||
+        !_hasMore) {
       return;
     }
     final pos = _scrollController.position;
@@ -300,7 +311,7 @@ class _NativeChatSearchPageState extends State<NativeChatSearchPage> {
   }
 
   Future<({List<NativeChatMessage> items, bool hasMore, int oldestId})>
-      _fetchFilteredPage({
+  _fetchFilteredPage({
     required ChatHistoryFilter? filter,
     required ChatHistoryTimeRange? timeRange,
     required String query,
@@ -351,7 +362,7 @@ class _NativeChatSearchPageState extends State<NativeChatSearchPage> {
         break;
       }
 
-      if (needsLocalTypeFilter && filter != null) {
+      if (needsLocalTypeFilter) {
         collected.addAll(
           pageItems.where((m) => chatHistoryFilterMatches(filter, m)),
         );
@@ -526,15 +537,21 @@ class _NativeChatSearchPageState extends State<NativeChatSearchPage> {
             Padding(
               padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
               child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
                 decoration: BoxDecoration(
                   color: DunesColors.bgSoft,
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Row(
                   children: [
-                    const Icon(Icons.search, size: 16, color: DunesColors.text3),
+                    const Icon(
+                      Icons.search,
+                      size: 16,
+                      color: DunesColors.text3,
+                    ),
                     const SizedBox(width: 8),
                     Expanded(
                       child: TextField(
@@ -613,17 +630,48 @@ class _NativeChatSearchPageState extends State<NativeChatSearchPage> {
       );
     }
     if (entries.isEmpty) {
-      final emptyText = _selectedFilter?.emptyHint ??
+      final emptyText =
+          _selectedFilter?.emptyHint ??
           (_timeRange != null
               ? '该时间段暂无消息'
-              : (_queryController.text.trim().isEmpty
-                  ? '暂无历史消息'
-                  : '暂无搜索结果'));
+              : (_queryController.text.trim().isEmpty ? '暂无历史消息' : '暂无搜索结果'));
       return Center(
         child: Text(
           emptyText,
           style: const TextStyle(fontSize: 12, color: DunesColors.text3),
         ),
+      );
+    }
+    if (_selectedFilter == ChatHistoryFilter.imageVideo) {
+      final media = _items
+          .where((m) {
+            final kind = m.kind.toUpperCase();
+            return kind == 'IMAGE' || kind == 'VIDEO';
+          })
+          .toList(growable: false);
+      return GridView.builder(
+        controller: _scrollController,
+        padding: const EdgeInsets.fromLTRB(12, 4, 12, 16),
+        gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+          maxCrossAxisExtent: 150,
+          mainAxisSpacing: 8,
+          crossAxisSpacing: 8,
+          childAspectRatio: 1,
+        ),
+        itemCount: media.length + (_loadingMore || _hasMore ? 1 : 0),
+        itemBuilder: (_, index) {
+          if (index >= media.length) {
+            return _loadingMore
+                ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
+                : const SizedBox.shrink();
+          }
+          final message = media[index];
+          return _ChatSearchMediaTile(
+            message: message,
+            service: _service,
+            onTap: () => widget.onLocateMessage(message),
+          );
+        },
       );
     }
     return ListView.builder(
@@ -652,22 +700,186 @@ class _NativeChatSearchPageState extends State<NativeChatSearchPage> {
           return ChatDateDivider(label: entry.label!);
         }
         final m = entry.message!;
+        final isFileResult =
+            _selectedFilter == ChatHistoryFilter.files &&
+            m.kind.toUpperCase() == 'FILE';
+        final fileName = isFileResult
+            ? ConversationService.mediaFileName(
+                m.payload,
+                fallback: m.bodyText.isEmpty ? '文件' : m.bodyText,
+              )
+            : '';
         return ChatSearchHitCard(
           senderName: m.senderName,
           body: _hitBody(m),
           timeLabel: InboxFormat.formatTime(m.createdAt, withClock: true),
-          avatar: ImUserAvatar(
-            initial: m.senderName.isNotEmpty ? m.senderName.substring(0, 1) : '?',
-            seed: m.senderUserId,
-            size: 34,
-            avatarPreset: m.senderAvatarPreset,
-            avatarObjectKey: m.senderAvatarObjectKey,
-            avatarService: _service,
-            borderRadius: 34 * 0.18,
-          ),
+          avatar: isFileResult
+              ? SizedBox(
+                  width: 40,
+                  height: 40,
+                  child: Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      ChatFileTypeIcon(fileName: fileName, size: 40),
+                      Positioned(
+                        right: -3,
+                        bottom: -3,
+                        child: ImUserAvatar(
+                          initial: m.senderName.isNotEmpty
+                              ? m.senderName.substring(0, 1)
+                              : '?',
+                          seed: m.senderUserId,
+                          size: 18,
+                          avatarPreset: m.senderAvatarPreset,
+                          avatarObjectKey: m.senderAvatarObjectKey,
+                          avatarService: _service,
+                          borderRadius: 6,
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+              : ImUserAvatar(
+                  initial: m.senderName.isNotEmpty
+                      ? m.senderName.substring(0, 1)
+                      : '?',
+                  seed: m.senderUserId,
+                  size: 34,
+                  avatarPreset: m.senderAvatarPreset,
+                  avatarObjectKey: m.senderAvatarObjectKey,
+                  avatarService: _service,
+                  borderRadius: 34 * 0.18,
+                ),
           onTap: () => widget.onLocateMessage(m),
         );
       },
+    );
+  }
+}
+
+/// 微信式「图片与视频」搜索结果：先预览，再由预览页决定是否定位原消息。
+class _ChatSearchMediaTile extends StatelessWidget {
+  const _ChatSearchMediaTile({
+    required this.message,
+    required this.service,
+    required this.onTap,
+  });
+
+  final NativeChatMessage message;
+  final ConversationService service;
+  final VoidCallback onTap;
+
+  Future<void> _openPreview(BuildContext context) async {
+    final fileName = ConversationService.mediaFileName(
+      message.payload,
+      fallback: message.kind.toUpperCase() == 'VIDEO'
+          ? 'video.mp4'
+          : 'image.jpg',
+    );
+    if (message.kind.toUpperCase() == 'VIDEO') {
+      await showChatVideoPlayer(
+        context,
+        service: service,
+        payload: message.payload,
+        title: fileName,
+        onLocateInChat: onTap,
+      );
+      return;
+    }
+    await showChatImagePreview(
+      context,
+      service: service,
+      payload: message.payload,
+      fileName: fileName,
+      onLocateInChat: onTap,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isVideo = message.kind.toUpperCase() == 'VIDEO';
+    final payload = isVideo
+        ? ConversationService.previewMediaPayload(message.payload)
+        : message.payload;
+    final publicUrl = ConversationService.mediaPublicImageUrl(payload);
+    Widget child = Container(
+      color: isVideo ? const Color(0xFF2A2A2A) : DunesColors.bgSoft,
+      alignment: Alignment.center,
+      child: Icon(
+        isVideo ? Icons.videocam_outlined : Icons.image_outlined,
+        color: isVideo ? Colors.white54 : DunesColors.text3,
+      ),
+    );
+    if (publicUrl != null && publicUrl.isNotEmpty) {
+      child = buildCorsSafeImage(
+        url: publicUrl,
+        fit: BoxFit.cover,
+        width: 200,
+        height: 200,
+        hitTestOverlay: true,
+      );
+    } else if (ConversationService.hasAuthMedia(payload)) {
+      child = FutureBuilder<Uint8List>(
+        future: service.loadCachedChatMediaBytes(payload),
+        builder: (_, snapshot) {
+          if (!snapshot.hasData) {
+            return Container(
+              color: DunesColors.bgSoft,
+              alignment: Alignment.center,
+              child: const SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+            );
+          }
+          return Image.memory(
+            snapshot.data!,
+            fit: BoxFit.cover,
+            gaplessPlayback: true,
+          );
+        },
+      );
+    }
+    return Material(
+      color: Colors.transparent,
+      borderRadius: BorderRadius.circular(8),
+      child: InkWell(
+        onTap: () => _openPreview(context),
+        borderRadius: BorderRadius.circular(8),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(8),
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              child,
+              if (isVideo)
+                const Center(
+                  child: Icon(
+                    Icons.play_circle_fill_rounded,
+                    color: Colors.white,
+                    size: 38,
+                  ),
+                ),
+              Positioned(
+                left: 6,
+                right: 6,
+                bottom: 5,
+                child: Text(
+                  message.senderName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 10,
+                    shadows: [Shadow(blurRadius: 3, color: Colors.black)],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
@@ -802,31 +1014,31 @@ class _ChatHistoryCategoryGrid extends StatelessWidget {
 
   static const _items =
       <({ChatHistoryFilter filter, IconData icon, Color tint, Color soft})>[
-    (
-      filter: ChatHistoryFilter.imageVideo,
-      icon: Icons.photo_library_outlined,
-      tint: DunesColors.blue,
-      soft: DunesColors.blueSoft,
-    ),
-    (
-      filter: ChatHistoryFilter.files,
-      icon: Icons.folder_outlined,
-      tint: DunesColors.amber,
-      soft: DunesColors.amberSoft,
-    ),
-    (
-      filter: ChatHistoryFilter.links,
-      icon: Icons.link_rounded,
-      tint: DunesColors.accentDeep,
-      soft: DunesColors.accentSoft,
-    ),
-    (
-      filter: ChatHistoryFilter.forwards,
-      icon: Icons.reply_all_rounded,
-      tint: DunesColors.green,
-      soft: DunesColors.greenSoft,
-    ),
-  ];
+        (
+          filter: ChatHistoryFilter.imageVideo,
+          icon: Icons.photo_library_outlined,
+          tint: DunesColors.blue,
+          soft: DunesColors.blueSoft,
+        ),
+        (
+          filter: ChatHistoryFilter.files,
+          icon: Icons.folder_outlined,
+          tint: DunesColors.amber,
+          soft: DunesColors.amberSoft,
+        ),
+        (
+          filter: ChatHistoryFilter.links,
+          icon: Icons.link_rounded,
+          tint: DunesColors.accentDeep,
+          soft: DunesColors.accentSoft,
+        ),
+        (
+          filter: ChatHistoryFilter.forwards,
+          icon: Icons.reply_all_rounded,
+          tint: DunesColors.green,
+          soft: DunesColors.greenSoft,
+        ),
+      ];
 
   @override
   Widget build(BuildContext context) {
@@ -1012,7 +1224,7 @@ class _TimeRangeSheetAction {
   });
 
   const _TimeRangeSheetAction.range(ChatHistoryTimeRange range)
-      : this._(range: range);
+    : this._(range: range);
 
   const _TimeRangeSheetAction.clear() : this._(clear: true);
 
@@ -1081,16 +1293,16 @@ class _ChatHistoryTimeRangeSheet extends StatelessWidget {
               subtitle: current?.preset == ChatHistoryTimePreset.custom
                   ? current!.label
                   : null,
-              onTap: () => Navigator.of(context).pop(
-                const _TimeRangeSheetAction.pickCustom(),
-              ),
+              onTap: () => Navigator.of(
+                context,
+              ).pop(const _TimeRangeSheetAction.pickCustom()),
             ),
             if (current != null) ...[
               const SizedBox(height: 4),
               TextButton(
-                onPressed: () => Navigator.of(context).pop(
-                  const _TimeRangeSheetAction.clear(),
-                ),
+                onPressed: () => Navigator.of(
+                  context,
+                ).pop(const _TimeRangeSheetAction.clear()),
                 child: Text(
                   '清除时间筛选',
                   style: DunesTypography.sans(
@@ -1142,8 +1354,9 @@ class _TimeRangeOption extends StatelessWidget {
                         title,
                         style: DunesTypography.sans(
                           fontSize: 14,
-                          fontWeight:
-                              selected ? FontWeight.w600 : FontWeight.w400,
+                          fontWeight: selected
+                              ? FontWeight.w600
+                              : FontWeight.w400,
                           color: DunesColors.text,
                         ),
                       ),

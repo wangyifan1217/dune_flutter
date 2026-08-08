@@ -9,7 +9,8 @@ import '../../core/theme/dunes_theme.dart';
 import '../conversation/conversation_service.dart';
 import 'chat_video_utils.dart';
 import 'chat_video_controller_stub.dart'
-    if (dart.library.io) 'chat_video_controller_io.dart' as video_io;
+    if (dart.library.io) 'chat_video_controller_io.dart'
+    as video_io;
 
 /// 带鉴权封面加载的视频气泡（会话消息用）。
 class ChatAuthVideoBubble extends StatefulWidget {
@@ -78,8 +79,9 @@ class _ChatAuthVideoBubbleState extends State<ChatAuthVideoBubble> {
     if (!ConversationService.hasAuthMedia(previewPayload)) return;
     setState(() => _loadingThumb = true);
     try {
-      final bytes =
-          await widget.service.loadCachedChatMediaBytes(previewPayload);
+      final bytes = await widget.service.loadCachedChatMediaBytes(
+        previewPayload,
+      );
       if (!mounted) return;
       setState(() {
         _thumb = bytes;
@@ -247,8 +249,10 @@ class ChatVideoBubble extends StatelessWidget {
                   right: 8,
                   bottom: 8,
                   child: Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 2,
+                    ),
                     decoration: BoxDecoration(
                       color: Colors.black.withValues(alpha: 0.55),
                       borderRadius: BorderRadius.circular(4),
@@ -295,6 +299,7 @@ Future<void> showChatVideoPlayer(
   required ConversationService service,
   required Map<String, dynamic>? payload,
   String title = '视频',
+  VoidCallback? onLocateInChat,
 }) {
   return showGeneralDialog<void>(
     context: context,
@@ -306,6 +311,7 @@ Future<void> showChatVideoPlayer(
         service: service,
         payload: payload,
         title: title,
+        onLocateInChat: onLocateInChat,
       );
     },
   );
@@ -316,11 +322,13 @@ class _ChatVideoPlayerPage extends StatefulWidget {
     required this.service,
     required this.payload,
     required this.title,
+    this.onLocateInChat,
   });
 
   final ConversationService service;
   final Map<String, dynamic>? payload;
   final String title;
+  final VoidCallback? onLocateInChat;
 
   @override
   State<_ChatVideoPlayerPage> createState() => _ChatVideoPlayerPageState();
@@ -413,29 +421,49 @@ class _ChatVideoPlayerPageState extends State<_ChatVideoPlayerPage> {
                       ),
                     )
                   : !_ready || _controller == null
-                      ? const CircularProgressIndicator(color: Colors.white)
-                      : Padding(
-                          padding: const EdgeInsets.fromLTRB(16, 48, 16, 88),
-                          child: AspectRatio(
-                            aspectRatio: _controller!.value.aspectRatio == 0
-                                ? 16 / 9
-                                : _controller!.value.aspectRatio,
-                            child: Stack(
-                              alignment: Alignment.center,
-                              children: [
-                                VideoPlayer(_controller!),
-                                _PlayPauseOverlay(controller: _controller!),
-                              ],
-                            ),
-                          ),
+                  ? const CircularProgressIndicator(color: Colors.white)
+                  : Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 48, 16, 88),
+                      child: AspectRatio(
+                        aspectRatio: _controller!.value.aspectRatio == 0
+                            ? 16 / 9
+                            : _controller!.value.aspectRatio,
+                        child: Stack(
+                          alignment: Alignment.center,
+                          children: [
+                            VideoPlayer(_controller!),
+                            _PlayPauseOverlay(controller: _controller!),
+                          ],
                         ),
+                      ),
+                    ),
             ),
             Positioned(
               top: 8,
               left: 8,
-              child: IconButton(
-                onPressed: () => Navigator.of(context).pop(),
-                icon: const Icon(Icons.close_rounded, color: Colors.white),
+              child: Row(
+                children: [
+                  IconButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    icon: const Icon(Icons.close_rounded, color: Colors.white),
+                  ),
+                  if (widget.onLocateInChat != null)
+                    TextButton.icon(
+                      onPressed: () {
+                        Navigator.of(context).pop();
+                        widget.onLocateInChat!();
+                      },
+                      icon: const Icon(
+                        Icons.my_location_rounded,
+                        color: Colors.white,
+                        size: 18,
+                      ),
+                      label: const Text('定位聊天'),
+                      style: TextButton.styleFrom(
+                        foregroundColor: Colors.white,
+                      ),
+                    ),
+                ],
               ),
             ),
             if (_ready && _controller != null)
@@ -506,10 +534,7 @@ class _VideoSeekBarState extends State<_VideoSeekBar> {
     final duration = widget.controller.value.duration;
     if (duration <= Duration.zero) return;
     final target = Duration(
-      milliseconds: (seconds * 1000).round().clamp(
-        0,
-        duration.inMilliseconds,
-      ),
+      milliseconds: (seconds * 1000).round().clamp(0, duration.inMilliseconds),
     );
     await widget.controller.seekTo(target);
   }

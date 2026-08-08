@@ -31,6 +31,7 @@ import '../chat/native_group_info_page.dart';
 import '../chat/native_group_media_page.dart';
 import '../chat/native_message_center_page.dart';
 import '../chat/native_private_chat_page.dart';
+import '../chat/native_self_memo_settings_page.dart';
 import '../contacts/contact_models.dart';
 import '../contacts/native_contact_profile_page.dart';
 import '../contacts/native_contacts_page.dart';
@@ -425,7 +426,9 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       try {
         await _openConversationFromTpns(conversationId);
       } catch (error, stackTrace) {
-        debugPrint('[Push] failed to open conversation $conversationId: $error');
+        debugPrint(
+          '[Push] failed to open conversation $conversationId: $error',
+        );
         debugPrint('$stackTrace');
       } finally {
         _tpnsOpeningConversationIds.remove(conversationId);
@@ -444,7 +447,9 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       }
     }
     final resolvedConversation = conversation;
-    if (!mounted || resolvedConversation == null || !resolvedConversation.isVisible) {
+    if (!mounted ||
+        resolvedConversation == null ||
+        !resolvedConversation.isVisible) {
       return;
     }
 
@@ -1073,7 +1078,9 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           ? 0
           : aiSummaryUnread;
       final rows = allRows
-          .where((c) => c.isListedInInbox && !isConversationHidden(hidden, c.id))
+          .where(
+            (c) => c.isListedInInbox && !isConversationHidden(hidden, c.id),
+          )
           .toList(growable: false);
       _mutedConvIds
         ..clear()
@@ -1526,6 +1533,9 @@ class _NativeScreenHostState extends State<NativeScreenHost>
   }
 
   Widget _buildDualPaneContactProfilePage() {
+    if (_selectedPrivate?.isSelfMemo == true) {
+      return _buildSelfMemoSettingsPage();
+    }
     final profileConvId = _profileReturnScreen == 'C5'
         ? _selectedPrivate?.id
         : null;
@@ -1550,6 +1560,29 @@ class _NativeScreenHostState extends State<NativeScreenHost>
               });
               widget.navigation.go('C12');
             },
+    );
+  }
+
+  Widget _buildSelfMemoSettingsPage() {
+    final conversation = _selectedPrivate;
+    if (conversation == null || !conversation.isSelfMemo) {
+      return const SizedBox.shrink();
+    }
+    return NativeSelfMemoSettingsPage(
+      conversation: conversation,
+      session: widget.session,
+      onBack: widget.navigation.back,
+      onSettingsChanged: _onPrivateChatSettingsChanged,
+      onOpenSearch: (convId) {
+        setState(() {
+          _searchConversationId = convId;
+          _searchTitle = '文件传输助手 · 搜索';
+          _searchReturnScreen = 'C9';
+          _focusMessageId = null;
+          _focusMessageHint = null;
+        });
+        widget.navigation.go('C12');
+      },
     );
   }
 
@@ -1593,11 +1626,17 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         // 让 NativeChatView 用 focusMessageId 拉取并滚到原消息。
         final returnScreen = _searchReturnScreen == 'C6'
             ? 'C2'
+            : _searchReturnScreen == 'C9'
+            ? 'C5'
             : _searchReturnScreen;
         if (returnScreen == 'C5' || returnScreen == 'C2') {
           _markUserEnteredChat();
         }
-        widget.navigation.popTo(returnScreen);
+        if (widget.navigation.history.contains(returnScreen)) {
+          widget.navigation.popTo(returnScreen);
+        } else {
+          _goChatScreen(returnScreen);
+        }
       },
     );
   }
@@ -2149,6 +2188,14 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           showBackButton: false,
           onBack: () => _leaveChatToInbox(clearSelection: true),
           onOpenProfile: () {
+            if (slot.conversation?.isSelfMemo == true) {
+              setState(() {
+                _selectedPrivate = slot.conversation;
+                _profileReturnScreen = 'C5';
+              });
+              widget.navigation.go('C9');
+              return;
+            }
             final peerId = slot.conversation?.peerUserId ?? slot.peerUserId;
             if (peerId == null || peerId <= 0) return;
             _openContactProfile(
@@ -2767,6 +2814,9 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           },
         );
       case 'C9':
+        if (_selectedPrivate?.isSelfMemo == true) {
+          return _buildSelfMemoSettingsPage();
+        }
         final profileConvId = _profileReturnScreen == 'C5'
             ? _selectedPrivate?.id
             : null;
@@ -3095,6 +3145,11 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           autoMarkRead: _userActivelyInChat,
           onBack: () => _leaveChatToInbox(clearSelection: false),
           onOpenProfile: () {
+            if (_selectedPrivate?.isSelfMemo == true) {
+              setState(() => _profileReturnScreen = 'C5');
+              widget.navigation.go('C9');
+              return;
+            }
             final peerId =
                 _selectedPrivate?.peerUserId ?? _selectedPrivatePeerUserId;
             if (peerId == null || peerId <= 0) return;
@@ -3137,12 +3192,18 @@ class _NativeScreenHostState extends State<NativeScreenHost>
             // 从群聊信息 C6 定位时切回 C2，而不是停留在群信息页。
             final returnScreen = _searchReturnScreen == 'C6'
                 ? 'C2'
+                : _searchReturnScreen == 'C9'
+                ? 'C5'
                 : _searchReturnScreen;
             if (returnScreen == 'C5' || returnScreen == 'C2') {
               _markUserEnteredChat();
             }
             // 从历史定位回会话时弹出 C12，避免返回键回到「查找聊天内容」。
-            widget.navigation.popTo(returnScreen);
+            if (widget.navigation.history.contains(returnScreen)) {
+              widget.navigation.popTo(returnScreen);
+            } else {
+              _goChatScreen(returnScreen);
+            }
           },
         );
       case 'C13':
@@ -4217,7 +4278,9 @@ class _NativeB2PageState extends State<_NativeB2Page> {
       final notif = results[1] as NativeNotificationSummary;
       final hidden = results[2] as Map<String, InboxHiddenEntry>;
       final rows = allRows
-          .where((c) => c.isListedInInbox && !isConversationHidden(hidden, c.id))
+          .where(
+            (c) => c.isListedInInbox && !isConversationHidden(hidden, c.id),
+          )
           .toList(growable: false);
       if (mounted) {
         widget.commUnread.update(

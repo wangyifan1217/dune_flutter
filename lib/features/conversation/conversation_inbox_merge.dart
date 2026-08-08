@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
 import '../../core/widgets/cached_network_image.dart';
+import '../chat/group_composite_avatar.dart';
 import 'conversation_models.dart';
+import 'conversation_service.dart';
 
 /// 会话头像签名，用于判断静默刷新时是否可保留本地已解析头像。
 String conversationAvatarSignature(NativeConversation c) {
@@ -65,24 +67,26 @@ NativeConversation applySelfAvatarToConversation(
 ) {
   if (c.avatarMembers.isEmpty) return c;
   var changed = false;
-  final members = c.avatarMembers.map((m) {
-    if (m.userId != selfAvatar.userId) return m;
-    if (!_selfAvatarDiffers(m, selfAvatar)) return m;
-    changed = true;
-    return ConversationAvatarMember(
-      userId: m.userId,
-      displayName: m.displayName,
-      avatarPreset: selfAvatar.avatarPreset.isNotEmpty
-          ? selfAvatar.avatarPreset
-          : m.avatarPreset,
-      avatarObjectKey: selfAvatar.avatarObjectKey.isNotEmpty
-          ? selfAvatar.avatarObjectKey
-          : m.avatarObjectKey,
-      avatarUrl: selfAvatar.avatarUrl.isNotEmpty
-          ? selfAvatar.avatarUrl
-          : m.avatarUrl,
-    );
-  }).toList(growable: false);
+  final members = c.avatarMembers
+      .map((m) {
+        if (m.userId != selfAvatar.userId) return m;
+        if (!_selfAvatarDiffers(m, selfAvatar)) return m;
+        changed = true;
+        return ConversationAvatarMember(
+          userId: m.userId,
+          displayName: m.displayName,
+          avatarPreset: selfAvatar.avatarPreset.isNotEmpty
+              ? selfAvatar.avatarPreset
+              : m.avatarPreset,
+          avatarObjectKey: selfAvatar.avatarObjectKey.isNotEmpty
+              ? selfAvatar.avatarObjectKey
+              : m.avatarObjectKey,
+          avatarUrl: selfAvatar.avatarUrl.isNotEmpty
+              ? selfAvatar.avatarUrl
+              : m.avatarUrl,
+        );
+      })
+      .toList(growable: false);
   if (!changed) return c;
   return NativeConversation(
     id: c.id,
@@ -174,27 +178,102 @@ Future<void> prefetchConversationAvatars(
   BuildContext context,
   List<NativeConversation> rows, {
   int limit = 48,
+  ConversationService? avatarService,
 }) async {
   if (!context.mounted) return;
-  var count = 0;
+  final dpr = MediaQuery.devicePixelRatioOf(context);
+  final targets = <({String url, double size})>[];
+  final seen = <String>{};
   for (final c in rows) {
-    if (count >= limit) break;
-    count += await _prefetchHttpAvatar(context, c.peerAvatarUrl);
+    if (targets.length >= limit) break;
+    final peerUrl = _resolvedAvatarUrl(
+      url: c.peerAvatarUrl,
+      objectKey: c.peerAvatarObjectKey,
+      avatarService: avatarService,
+    );
+    _addPrefetchTarget(targets, seen, url: peerUrl, size: 45, limit: limit);
+    final groupCellSize = groupCompositeAvatarCellSize(
+      45,
+      c.avatarMembers.length,
+    );
     for (final m in c.avatarMembers) {
-      if (count >= limit) break;
-      count += await _prefetchHttpAvatar(context, m.avatarUrl);
+      if (targets.length >= limit) break;
+      final memberUrl = _resolvedAvatarUrl(
+        url: m.avatarUrl,
+        objectKey: m.avatarObjectKey,
+        avatarService: avatarService,
+      );
+      _addPrefetchTarget(
+        targets,
+        seen,
+        url: memberUrl,
+        size: groupCellSize,
+        limit: limit,
+      );
     }
+  }
+  // Keep network/decode work bounded without blocking each image on the last.
+  const concurrency = 6;
+  for (var index = 0; index < targets.length; index += concurrency) {
+    if (!context.mounted) return;
+    final batch = targets.skip(index).take(concurrency);
+    await Future.wait(
+      batch.map(
+        (target) => _prefetchHttpAvatar(
+          context,
+          url: target.url,
+          size: target.size,
+          devicePixelRatio: dpr,
+        ),
+      ),
+    );
   }
 }
 
-Future<int> _prefetchHttpAvatar(BuildContext context, String? url) async {
+void _addPrefetchTarget(
+  List<({String url, double size})> targets,
+  Set<String> seen, {
+  required String? url,
+  required double size,
+  required int limit,
+}) {
   final raw = (url ?? '').trim();
-  if (!raw.startsWith('http')) return 0;
-  if (!context.mounted) return 0;
+  if (!raw.startsWith('http') || targets.length >= limit) return;
+  final key = '$raw@$size';
+  if (seen.add(key)) targets.add((url: raw, size: size));
+}
+
+String? _resolvedAvatarUrl({
+  required String? url,
+  required String? objectKey,
+  required ConversationService? avatarService,
+}) {
+  final direct = (url ?? '').trim();
+  if (direct.startsWith('http')) return direct;
+  final source = direct.isNotEmpty ? direct : (objectKey ?? '').trim();
+  if (source.isEmpty) return null;
+  if (source.startsWith('http')) return source;
+  return avatarService?.mediaProxyUrl(source, bucket: 'user-avatars');
+}
+
+Future<void> _prefetchHttpAvatar(
+  BuildContext context, {
+  required String url,
+  required double size,
+  required double devicePixelRatio,
+}) async {
+  if (!context.mounted) return;
   try {
-    await precacheImage(NetworkImage(raw), context);
-    return 1;
+    await precacheImage(
+      dunesNetworkImageProvider(
+        url: url,
+        width: size,
+        height: size,
+        devicePixelRatio: devicePixelRatio,
+      ),
+      context,
+    );
   } catch (_) {
-    return 0;
+    // Prefetch is best-effort; the avatar widget retains its normal fallback.
   }
 }

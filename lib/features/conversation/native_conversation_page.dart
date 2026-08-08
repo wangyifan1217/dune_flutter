@@ -715,7 +715,9 @@ class _NativeConversationPageState extends State<NativeConversationPage>
           _aiSummaryService.fetchUnreadCount(),
       ]);
       var rows = (results[0] as List<NativeConversation>)
-          .where((c) => c.isListedInInbox && !isConversationHidden(hidden, c.id))
+          .where(
+            (c) => c.isListedInInbox && !isConversationHidden(hidden, c.id),
+          )
           .toList(growable: true);
       // 内部用户确保审批助手会话存在，并入列表按 updatedAt 排序（不硬置顶）。
       if (!widget.session.isExternalUser &&
@@ -752,6 +754,18 @@ class _NativeConversationPageState extends State<NativeConversationPage>
               updatedAt: DateTime.now(),
             ),
           ];
+        }
+      }
+      if (!rows.any((c) => c.isSelfMemo)) {
+        try {
+          final ensured = await _service.ensureSelfMemoSession();
+          if (ensured.id > 0 && !rows.any((c) => c.id == ensured.id)) {
+            // 不强制置顶：与普通私聊一致，由用户自行设置置顶状态。
+            rows = <NativeConversation>[...rows, ensured];
+          }
+        } catch (e) {
+          // 失败时不影响既有会话加载，但保留诊断信息以便排查部署问题。
+          debugPrint('[self-memo] ensure failed: $e');
         }
       }
       if (!widget.session.isExternalUser &&
@@ -825,7 +839,13 @@ class _NativeConversationPageState extends State<NativeConversationPage>
       if (mounted) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (!mounted) return;
-          unawaited(prefetchConversationAvatars(context, merged));
+          unawaited(
+            prefetchConversationAvatars(
+              context,
+              merged,
+              avatarService: _service,
+            ),
+          );
         });
       }
     } catch (e) {
@@ -983,7 +1003,11 @@ class _NativeConversationPageState extends State<NativeConversationPage>
 
     ChatInboxRowKind rowKind;
     VoidCallback onTap;
-    if (c.isPrivate) {
+    if (c.isSelfMemo) {
+      // 备忘录复用私聊消息能力，但使用专用图标和入口。
+      rowKind = ChatInboxRowKind.selfMemo;
+      onTap = _openWithScrollPersist(() => widget.onOpenPrivate(c));
+    } else if (c.isPrivate) {
       rowKind = ChatInboxRowKind.private;
       onTap = _openWithScrollPersist(() => widget.onOpenPrivate(c));
     } else if (c.isRobot) {
@@ -1034,7 +1058,8 @@ class _NativeConversationPageState extends State<NativeConversationPage>
             rowKind == ChatInboxRowKind.robot ||
             rowKind == ChatInboxRowKind.approvalAssistant ||
             rowKind == ChatInboxRowKind.taskAssistant ||
-            rowKind == ChatInboxRowKind.reconciliationAssistant);
+            rowKind == ChatInboxRowKind.reconciliationAssistant ||
+            c.isSelfMemo);
 
     final robotKey = c.robotKey ?? '';
     final analyzingRobot =
@@ -1077,6 +1102,7 @@ class _NativeConversationPageState extends State<NativeConversationPage>
       timeLabel: InboxFormat.formatTime(c.updatedAt, withClock: c.isPrivate),
       memberCount:
           c.isPrivate ||
+              c.isSelfMemo ||
               c.isRobot ||
               c.isApprovalAssistant ||
               c.isTaskAssistant ||
@@ -1098,8 +1124,10 @@ class _NativeConversationPageState extends State<NativeConversationPage>
       selected:
           selected || (c.isApprovalAssistant && _isViewingApprovalAssistant),
       previewGenerating: (c.isAiAssistant && gen.generating) || analyzingRobot,
-      showOnlineDot: c.isPrivate && _isPeerOnline(c),
-      avatarInitial: c.isPrivate
+      showOnlineDot: c.isPrivate && !c.isSelfMemo && _isPeerOnline(c),
+      avatarInitial: c.isSelfMemo
+          ? '备'
+          : c.isPrivate
           ? (_privateTitle(c).isNotEmpty
                 ? _privateTitle(c).substring(0, 1)
                 : '?')
@@ -1155,6 +1183,7 @@ class _NativeConversationPageState extends State<NativeConversationPage>
             (c) =>
                 c.isGroup ||
                 c.isPrivate ||
+                c.isSelfMemo ||
                 c.isRobot ||
                 c.isApprovalAssistant ||
                 c.isTaskAssistant ||

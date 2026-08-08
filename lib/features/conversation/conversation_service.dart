@@ -567,6 +567,35 @@ class ConversationService {
     );
   }
 
+  /// 确保每位用户都有唯一的文件传输助手会话。
+  Future<NativeConversation> ensureSelfMemoSession() async {
+    final resp = await _client.post(
+      _uri('/conversations/memo/ensure'),
+      headers: _headers,
+      body: '{}',
+    );
+    if (resp.statusCode < 200 || resp.statusCode >= 300) {
+      throw Exception('打开文件传输助手失败: HTTP ${resp.statusCode}');
+    }
+    final body = _decode(resp.body);
+    final data = body['data'];
+    final map = data is Map<String, dynamic>
+        ? data
+        : data is Map
+        ? Map<String, dynamic>.from(data)
+        : <String, dynamic>{};
+    final id = (map['conversationId'] as num?)?.toInt() ?? 0;
+    if (id <= 0) throw Exception('empty conversationId');
+    return NativeConversation(
+      id: id,
+      kind: 'SELF_MEMO',
+      title: (map['title'] ?? '文件传输助手').toString(),
+      unreadCount: 0,
+      preview: '',
+      updatedAt: DateTime.now(),
+    );
+  }
+
   /// 确保“企业微盘”只读会话存在。
   Future<NativeConversation> ensureDriveAssistantSession() async {
     final resp = await _client.post(

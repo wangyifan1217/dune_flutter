@@ -51,6 +51,7 @@ Future<Set<int>?> showConversationMultiPickerSheet({
 
   const allowedKinds = <String>{
     'PRIVATE',
+    'SELF_MEMO',
     'GROUP',
     'WORKGROUP',
     'WORKGROUP_APPROVAL',
@@ -105,8 +106,9 @@ Future<Set<int>?> showConversationMultiPickerSheet({
                       ),
                       if (multiSelect)
                         TextButton(
-                          onPressed: () =>
-                              Navigator.of(context).pop(Set<int>.from(selected)),
+                          onPressed: () => Navigator.of(
+                            context,
+                          ).pop(Set<int>.from(selected)),
                           style: TextButton.styleFrom(
                             foregroundColor: DunesColors.brandPurple,
                           ),
@@ -204,8 +206,9 @@ Future<Set<int>?> showConversationMultiPickerSheet({
                                     selected.remove(c.id);
                                   } else {
                                     if (selected.length >= maxCount) {
-                                      ScaffoldMessenger.of(context)
-                                          .showSnackBar(
+                                      ScaffoldMessenger.of(
+                                        context,
+                                      ).showSnackBar(
                                         SnackBar(
                                           content: Text('最多选择 $maxCount 个会话'),
                                         ),

@@ -47,7 +47,8 @@ class NativeConversation {
   final bool assistantGenerating;
   final String assistantGeneratingStatus;
 
-  bool get isPrivate => kind == 'PRIVATE';
+  // 文件传输助手是单用户会话，前端交互按私聊呈现，但不包含对端在线状态。
+  bool get isPrivate => kind == 'PRIVATE' || kind == 'SELF_MEMO';
   bool get isAiAssistant => kind == 'AI_ASSISTANT';
   bool get isBroadcast => kind == 'BROADCAST';
   bool get isWorkgroupApproval => kind == 'WORKGROUP_APPROVAL';
@@ -56,6 +57,7 @@ class NativeConversation {
   bool get isApprovalAssistant => kind == 'APPROVAL_ASSISTANT';
   bool get isTaskAssistant => kind == 'TASK_ASSISTANT';
   bool get isDriveAssistant => kind == 'DRIVE_ASSISTANT';
+  bool get isSelfMemo => kind == 'SELF_MEMO';
   bool get isReconciliationAssistant {
     final normalized = kind.trim().toUpperCase();
     return normalized == 'RECONCILIATION_ASSISTANT' ||
@@ -102,6 +104,7 @@ class NativeConversation {
 
   /// 会话列表是否应展示：私聊无任何消息预览时对双方隐藏（点开未发言不应进列表）。
   bool get hasInboxActivity {
+    if (isSelfMemo) return true;
     if (!isPrivate) return true;
     return preview.trim().isNotEmpty;
   }

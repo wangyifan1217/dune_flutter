@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/painting.dart';
 
 /// 按 URL 缓存网络头像，URL 未变时不重复触发加载动画。
 class CachedDunesNetworkImage extends StatelessWidget {
@@ -27,7 +26,8 @@ class CachedDunesNetworkImage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // 仅头像类小图（cover + ≤128）做内存缩略解码；聊天 contain 大图保持原样。
-    final useAvatarMemCache = fit == BoxFit.cover &&
+    final useAvatarMemCache =
+        fit == BoxFit.cover &&
         width > 0 &&
         height > 0 &&
         width <= 128 &&
@@ -35,21 +35,22 @@ class CachedDunesNetworkImage extends StatelessWidget {
     final dpr = useAvatarMemCache
         ? MediaQuery.devicePixelRatioOf(context)
         : null;
-    final image = Image.network(
-      url,
+    final image = Image(
+      image: dunesNetworkImageProvider(
+        url: url,
+        width: width,
+        height: height,
+        devicePixelRatio: dpr,
+        resizeForAvatar: useAvatarMemCache,
+      ),
       key: ValueKey<String>(url),
       width: width,
       height: height,
       fit: fit,
       gaplessPlayback: true,
-      filterQuality:
-          useAvatarMemCache ? FilterQuality.low : FilterQuality.medium,
-      cacheWidth: useAvatarMemCache && dpr != null
-          ? (width * dpr).round()
-          : null,
-      cacheHeight: useAvatarMemCache && dpr != null
-          ? (height * dpr).round()
-          : null,
+      filterQuality: useAvatarMemCache
+          ? FilterQuality.low
+          : FilterQuality.medium,
       frameBuilder: placeholder == null
           ? null
           : (context, child, frame, wasSynchronouslyLoaded) {
@@ -57,11 +58,32 @@ class CachedDunesNetworkImage extends StatelessWidget {
               return placeholder!.call();
             },
       errorBuilder: (_, _, _) =>
-          errorBuilder?.call() ?? placeholder?.call() ?? const SizedBox.shrink(),
+          errorBuilder?.call() ??
+          placeholder?.call() ??
+          const SizedBox.shrink(),
     );
     if (borderRadius == null) return image;
     return ClipRRect(borderRadius: borderRadius!, child: image);
   }
+}
+
+/// Builds the same image-cache key used by [CachedDunesNetworkImage].
+///
+/// List prefetching must use this provider rather than a bare [NetworkImage];
+/// otherwise the prefetch fills a full-resolution cache entry while the avatar
+/// subsequently requests a separately keyed thumbnail.
+ImageProvider<Object> dunesNetworkImageProvider({
+  required String url,
+  required double width,
+  required double height,
+  double? devicePixelRatio,
+  bool resizeForAvatar = true,
+}) {
+  final provider = NetworkImage(url);
+  if (!resizeForAvatar || devicePixelRatio == null) return provider;
+  final cacheWidth = (width * devicePixelRatio).round();
+  final cacheHeight = (height * devicePixelRatio).round();
+  return ResizeImage.resizeIfNeeded(cacheWidth, cacheHeight, provider);
 }
 
 /// objectKey → 解析后的头像 URL 内存缓存。
@@ -206,10 +228,10 @@ class UserAvatarSnapshot {
   final String avatarUrl;
 
   String get sourceSignature => avatarSourceSignature(
-        preset: avatarPreset,
-        objectKey: avatarObjectKey,
-        directUrl: avatarUrl,
-      );
+    preset: avatarPreset,
+    objectKey: avatarObjectKey,
+    directUrl: avatarUrl,
+  );
 }
 
 class UserAvatarRefreshNotifier extends ChangeNotifier {
@@ -230,10 +252,11 @@ class UserAvatarRefreshNotifier extends ChangeNotifier {
 
 final UserAvatarRefreshNotifier userAvatarRefresh = UserAvatarRefreshNotifier();
 
-Future<void> evictAvatarNetworkImage(String? url) async {
+Future<void> evictAvatarNetworkImage(String? url) {
   final raw = (url ?? '').trim();
-  if (raw.isEmpty || !raw.startsWith('http')) return;
-  await imageCache.evict(NetworkImage(raw));
+  if (raw.isEmpty || !raw.startsWith('http')) return Future<void>.value();
+  imageCache.evict(NetworkImage(raw));
+  return Future<void>.value();
 }
 
 /// 头像变更后：失效旧缓存、驱逐 Flutter 图片缓存，并通知通讯列表等刷新。
@@ -249,7 +272,6 @@ Future<void> publishUserAvatarUpdated({
   invalidateAvatarUrlCache(objectKey: oldObjectKey, url: oldAvatarUrl);
   invalidateAvatarUrlCache(objectKey: avatarObjectKey, url: avatarUrl);
   await evictAvatarNetworkImage(oldAvatarUrl);
-  await evictAvatarNetworkImage(avatarUrl);
   final snapshot = UserAvatarSnapshot(
     userId: userId,
     avatarPreset: avatarPreset,

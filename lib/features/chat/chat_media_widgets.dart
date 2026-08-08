@@ -42,6 +42,7 @@ class ChatAuthImageBubble extends StatefulWidget {
   final Map<String, dynamic>? payload;
   final bool mine;
   final int? conversationId;
+
   /// 为空时默认打开图片预览。
   final VoidCallback? onTap;
 
@@ -75,7 +76,9 @@ class _ChatAuthImageBubbleState extends State<ChatAuthImageBubble> {
 
   void _bindMedia() {
     final mime = (widget.payload?['mimeType'] ?? '').toString().toLowerCase();
-    final fileName = ConversationService.mediaFileName(widget.payload).toLowerCase();
+    final fileName = ConversationService.mediaFileName(
+      widget.payload,
+    ).toLowerCase();
     _isGif = mime.contains('gif') || fileName.endsWith('.gif');
     _previewPayload = _isGif
         ? widget.payload
@@ -86,7 +89,8 @@ class _ChatAuthImageBubbleState extends State<ChatAuthImageBubble> {
     _authUrlFuture = null;
     _bytesFuture = null;
 
-    _publicUrl = widget.service.publicImageUrlForPayload(_previewPayload) ??
+    _publicUrl =
+        widget.service.publicImageUrlForPayload(_previewPayload) ??
         widget.service.publicImageUrlForPayload(widget.payload);
 
     if (_publicUrl != null && _publicUrl!.isNotEmpty) {
@@ -129,8 +133,10 @@ class _ChatAuthImageBubbleState extends State<ChatAuthImageBubble> {
       custom();
       return;
     }
-    final fileName =
-        ConversationService.mediaFileName(widget.payload, fallback: 'image.jpg');
+    final fileName = ConversationService.mediaFileName(
+      widget.payload,
+      fallback: 'image.jpg',
+    );
     await showChatImagePreview(
       context,
       service: widget.service,
@@ -175,7 +181,8 @@ class _ChatAuthImageBubbleState extends State<ChatAuthImageBubble> {
               mine: widget.mine,
               onTap: _openPreview,
               error: () => _errorBubble(),
-              placeholder: () => _isGif ? _gifPlaceholder() : _staticPlaceholder(),
+              placeholder: () =>
+                  _isGif ? _gifPlaceholder() : _staticPlaceholder(),
               onUrlError: _onAuthUrlFailed,
             );
           },
@@ -250,7 +257,10 @@ class _ChatAuthImageBubbleState extends State<ChatAuthImageBubble> {
       child: const SizedBox(
         width: 20,
         height: 20,
-        child: CircularProgressIndicator(strokeWidth: 2, color: DunesColors.text3),
+        child: CircularProgressIndicator(
+          strokeWidth: 2,
+          color: DunesColors.text3,
+        ),
       ),
     );
   }
@@ -263,12 +273,19 @@ class _ChatAuthImageBubbleState extends State<ChatAuthImageBubble> {
       child: const SizedBox(
         width: 20,
         height: 20,
-        child: CircularProgressIndicator(strokeWidth: 2, color: DunesColors.text3),
+        child: CircularProgressIndicator(
+          strokeWidth: 2,
+          color: DunesColors.text3,
+        ),
       ),
     );
   }
 
-  Widget _placeholder({required Widget child, double width = 120, double height = 90}) {
+  Widget _placeholder({
+    required Widget child,
+    double width = 120,
+    double height = 90,
+  }) {
     return Container(
       width: width,
       height: height,
@@ -276,7 +293,9 @@ class _ChatAuthImageBubbleState extends State<ChatAuthImageBubble> {
       decoration: BoxDecoration(
         color: widget.mine ? const Color(0x33FFFFFF) : DunesColors.bgSoft,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: widget.mine ? Colors.white24 : DunesColors.borderSoft),
+        border: Border.all(
+          color: widget.mine ? Colors.white24 : DunesColors.borderSoft,
+        ),
       ),
       child: child,
     );
@@ -373,24 +392,27 @@ class _ChatInlineImageState extends State<_ChatInlineImage> {
     final provider = NetworkImage(url);
     final stream = provider.resolve(createLocalImageConfiguration(context));
     late final ImageStreamListener listener;
-    listener = ImageStreamListener((info, _) {
-      if (!mounted) return;
-      final w = info.image.width.toDouble();
-      final h = info.image.height.toDouble();
-      if (w <= 0 || h <= 0) return;
-      setState(() => _decodedSize = Size(w, h));
-      stream.removeListener(listener);
-      if (_netStream == stream) {
-        _netStream = null;
-        _netListener = null;
-      }
-    }, onError: (_, _) {
-      stream.removeListener(listener);
-      if (_netStream == stream) {
-        _netStream = null;
-        _netListener = null;
-      }
-    });
+    listener = ImageStreamListener(
+      (info, _) {
+        if (!mounted) return;
+        final w = info.image.width.toDouble();
+        final h = info.image.height.toDouble();
+        if (w <= 0 || h <= 0) return;
+        setState(() => _decodedSize = Size(w, h));
+        stream.removeListener(listener);
+        if (_netStream == stream) {
+          _netStream = null;
+          _netListener = null;
+        }
+      },
+      onError: (_, _) {
+        stream.removeListener(listener);
+        if (_netStream == stream) {
+          _netStream = null;
+          _netListener = null;
+        }
+      },
+    );
     _netStream = stream;
     _netListener = listener;
     stream.addListener(listener);
@@ -490,6 +512,7 @@ Future<void> showChatImagePreview(
   required Map<String, dynamic>? payload,
   required String fileName,
   int? conversationId,
+  VoidCallback? onLocateInChat,
 }) {
   return showDialog<void>(
     context: context,
@@ -499,6 +522,7 @@ Future<void> showChatImagePreview(
       payload: payload,
       fileName: fileName,
       conversationId: conversationId,
+      onLocateInChat: onLocateInChat,
     ),
   );
 }
@@ -510,12 +534,14 @@ class _ImagePreviewDialog extends StatefulWidget {
     required this.payload,
     required this.fileName,
     this.conversationId,
+    this.onLocateInChat,
   });
 
   final ConversationService service;
   final Map<String, dynamic>? payload;
   final String fileName;
   final int? conversationId;
+  final VoidCallback? onLocateInChat;
 
   @override
   State<_ImagePreviewDialog> createState() => _ImagePreviewDialogState();
@@ -808,6 +834,17 @@ class _ImagePreviewDialogState extends State<_ImagePreviewDialog> {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
+                  if (widget.onLocateInChat != null) ...[
+                    _PreviewActionButton(
+                      icon: Icons.my_location_rounded,
+                      label: '定位聊天',
+                      onTap: () {
+                        Navigator.of(context).pop();
+                        widget.onLocateInChat!();
+                      },
+                    ),
+                    const SizedBox(width: 8),
+                  ],
                   if (!_showingOriginal &&
                       _chatImageHasSeparateOriginal(widget.payload)) ...[
                     _PreviewActionButton(
@@ -822,8 +859,8 @@ class _ImagePreviewDialogState extends State<_ImagePreviewDialog> {
                     label: _saving
                         ? '下载中…'
                         : (_showingOriginal
-                            ? (_desktop ? '下载原图' : '保存原图')
-                            : (_desktop ? '下载预览' : '保存预览')),
+                              ? (_desktop ? '下载原图' : '保存原图')
+                              : (_desktop ? '下载预览' : '保存预览')),
                     onTap: _saving ? null : () => _saveWebUrl(webUrl),
                   ),
                 ],
@@ -914,6 +951,17 @@ class _ImagePreviewDialogState extends State<_ImagePreviewDialog> {
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
+                            if (widget.onLocateInChat != null) ...[
+                              _PreviewActionButton(
+                                icon: Icons.my_location_rounded,
+                                label: '定位聊天',
+                                onTap: () {
+                                  Navigator.of(context).pop();
+                                  widget.onLocateInChat!();
+                                },
+                              ),
+                              const SizedBox(width: 8),
+                            ],
                             if (!_showingOriginal &&
                                 _chatImageHasSeparateOriginal(
                                   widget.payload,
@@ -940,8 +988,8 @@ class _ImagePreviewDialogState extends State<_ImagePreviewDialog> {
                               label: _saving
                                   ? (_desktop ? '下载中…' : '保存中…')
                                   : (_showingOriginal
-                                      ? (_desktop ? '下载原图' : '保存原图')
-                                      : (_desktop ? '下载预览' : '保存预览')),
+                                        ? (_desktop ? '下载原图' : '保存原图')
+                                        : (_desktop ? '下载预览' : '保存预览')),
                               onTap: (_saving || _editing)
                                   ? null
                                   : () => _save(bytes),

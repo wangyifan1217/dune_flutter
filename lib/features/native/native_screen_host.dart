@@ -419,12 +419,20 @@ class _NativeScreenHostState extends State<NativeScreenHost>
   }
 
   void _handleTpnsNotificationClick(PushNotificationClick event) {
-    if (!event.isConversation) return;
+    // Only IM notifications should affect the conversation navigation.  System
+    // notifications and broadcasts may also arrive through this handler, but
+    // they do not have an IM conversation fallback target.
+    if (event.eventType.trim().toLowerCase() != 'im') return;
     final conversationId = event.conversationId;
+    if (conversationId <= 0) {
+      _fallbackToConversationListFromTpns();
+      return;
+    }
     if (!_tpnsOpeningConversationIds.add(conversationId)) return;
     unawaited(() async {
+      var routed = false;
       try {
-        await _openConversationFromTpns(conversationId);
+        routed = await _openConversationFromTpns(conversationId);
       } catch (error, stackTrace) {
         debugPrint(
           '[Push] failed to open conversation $conversationId: $error',
@@ -433,10 +441,25 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       } finally {
         _tpnsOpeningConversationIds.remove(conversationId);
       }
+      if (!routed) {
+        // Keep the existing successful-route behavior unchanged.  When an
+        // explicit IM conversation cannot be resolved, still remove all local
+        // TPNS entries for that conversation before falling back to C1.
+        await clearPushConversationNotifications(conversationId);
+        if (mounted) {
+          _fallbackToConversationListFromTpns();
+        }
+      }
     }());
   }
 
-  Future<void> _openConversationFromTpns(int conversationId) async {
+  void _fallbackToConversationListFromTpns() {
+    if (!mounted) return;
+    _markUserEnteredChat();
+    widget.navigation.go('C1');
+  }
+
+  Future<bool> _openConversationFromTpns(int conversationId) async {
     NativeConversation? conversation = _commBadgeConversations[conversationId];
     if (conversation == null) {
       final service = ConversationService(session: widget.session);
@@ -450,7 +473,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     if (!mounted ||
         resolvedConversation == null ||
         !resolvedConversation.isVisible) {
-      return;
+      return false;
     }
 
     var routed = false;
@@ -483,9 +506,10 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       routed = true;
     }
 
-    if (!mounted || !routed) return;
+    if (!mounted || !routed) return false;
     _handleConversationRead(resolvedConversation.id);
     await clearPushConversationNotifications(resolvedConversation.id);
+    return true;
   }
 
   @override

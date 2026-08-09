@@ -46,9 +46,7 @@ void setPushNotificationClickHandlerImpl(
 ) {
   _notificationClickHandler = handler;
   if (handler == null || _pendingNotificationClicks.isEmpty) return;
-  final pending = List<PushNotificationClick>.from(
-    _pendingNotificationClicks,
-  );
+  final pending = List<PushNotificationClick>.from(_pendingNotificationClicks);
   _pendingNotificationClicks.clear();
   for (final event in pending) {
     scheduleMicrotask(() => handler(event));
@@ -94,6 +92,21 @@ Future<void> unbindPushSessionImpl() async {
   _userId = null;
   _authToken = '';
   _apiBase = '';
+}
+
+Future<void> clearPushConversationNotificationsImpl(int conversationId) async {
+  if (!Platform.isIOS || conversationId <= 0) return;
+  try {
+    await _tpnsChannel.invokeMethod<Object?>(
+      'clearConversationNotifications',
+      <String, dynamic>{'conversationId': conversationId},
+    );
+  } catch (e) {
+    debugPrint(
+      '[Push] failed to clear iOS TPNS notifications for conversation '
+      '$conversationId: $e',
+    );
+  }
 }
 
 void syncPushBadgeCountImpl(int count) {
@@ -159,9 +172,7 @@ Future<void> _initTpns() async {
       }
       if (call.method == 'onNotificationClicked') {
         // 与安卓对齐：点击 IM 通知后由上层打开会话；不在这里清角标。
-        final event = PushNotificationClick.fromMethodArguments(
-          call.arguments,
-        );
+        final event = PushNotificationClick.fromMethodArguments(call.arguments);
         if (event == null) return;
         final handler = _notificationClickHandler;
         if (handler != null) {

@@ -60,7 +60,6 @@ class _NativeGroupInfoPageState extends State<NativeGroupInfoPage> {
   bool _loading = true;
   String? _error;
   NativeGroupInfo? _info;
-  int _mediaCount = 0;
   Map<String, dynamic>? _linkedApproval;
 
   @override
@@ -78,12 +77,7 @@ class _NativeGroupInfoPageState extends State<NativeGroupInfoPage> {
     });
     try {
       final convId = widget.conversationHint.id;
-      final results = await Future.wait<dynamic>([
-        _service.fetchGroupInfo(convId),
-        _service.fetchMediaCount(convId),
-      ]);
-      final info = results[0] as NativeGroupInfo;
-      final mediaCount = results[1] as int;
+      final info = await _service.fetchGroupInfo(convId);
       Map<String, dynamic>? linked;
       if (info.hasLinkedApproval) {
         linked = await _service.fetchApprovalTrail(info.businessType!, info.businessId!);
@@ -91,7 +85,6 @@ class _NativeGroupInfoPageState extends State<NativeGroupInfoPage> {
       if (!mounted) return;
       setState(() {
         _info = info;
-        _mediaCount = mediaCount;
         _linkedApproval = linked;
         _loading = false;
       });
@@ -490,25 +483,6 @@ class _NativeGroupInfoPageState extends State<NativeGroupInfoPage> {
           title: '查找聊天内容',
           trailing: const GroupInfoChevron(),
           onTap: widget.onOpenSearch == null ? null : () => widget.onOpenSearch!(info.id),
-        ),
-        GroupInfoRow(
-          icon: Icons.folder_outlined,
-          title: '文件记录',
-          trailing: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (_mediaCount > 0)
-                Text(
-                  '$_mediaCount',
-                  style: DunesTypography.sans(
-                    fontSize: 15,
-                    color: const Color(0xFF888888),
-                  ),
-                ),
-              const GroupInfoChevron(),
-            ],
-          ),
-          onTap: widget.onOpenMedia == null ? null : () => widget.onOpenMedia!(info.id),
         ),
         if (showOwnerActions)
           GroupInfoDangerRow(label: '解散群聊', onTap: _confirmDissolve),

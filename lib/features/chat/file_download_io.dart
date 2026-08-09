@@ -100,8 +100,7 @@ String _uniqueFilePath(Directory dir, String fileName) {
   final ext = dot > 0 ? safe.substring(dot) : '';
   var i = 1;
   while (true) {
-    final candidate =
-        File('${dir.path}${Platform.pathSeparator}$base($i)$ext');
+    final candidate = File('${dir.path}${Platform.pathSeparator}$base($i)$ext');
     if (!candidate.existsSync()) return candidate.path;
     i += 1;
   }
@@ -214,6 +213,17 @@ Future<String> saveBytesAsFileImpl(Uint8List bytes, String fileName) async {
   return path;
 }
 
+Future<String> saveBytesAsNovaFileImpl(Uint8List bytes, String fileName) async {
+  final root = await _resolveSaveDir();
+  final dir = Platform.isAndroid || Platform.isIOS
+      ? Directory('${root.path}${Platform.pathSeparator}NOVA')
+      : root;
+  await dir.create(recursive: true);
+  final path = _uniqueFilePath(dir, fileName);
+  await File(path).writeAsBytes(bytes, flush: true);
+  return path;
+}
+
 Future<String> openUrlAsFileImpl(
   String url,
   String fileName, {
@@ -293,11 +303,12 @@ Future<void> openLocalFileImpl(String path) async {
   }
   if (Platform.isWindows) {
     // `start` 第一个引号参数是窗口标题，必须留空才能正确打开带空格路径。
-    final result = await Process.run(
-      'cmd',
-      <String>['/c', 'start', '', path],
-      runInShell: false,
-    );
+    final result = await Process.run('cmd', <String>[
+      '/c',
+      'start',
+      '',
+      path,
+    ], runInShell: false);
     if (result.exitCode != 0) {
       await Process.start(
         path,

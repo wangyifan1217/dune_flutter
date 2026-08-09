@@ -63,6 +63,17 @@ class _AppUpdateDialogState extends State<_AppUpdateDialog> {
       // Windows 安装器拉起后进程会 exit。
       // macOS Sparkle 会弹出原生更新 UI 并在安装后重启；兜底打开 DMG 后也会 exit。
       if (!mounted) return;
+      if (widget.result.forceUpdate) {
+        // 手机端会跳到应用商店/下载页，应用本身不会立即退出；返回后保留
+        // 强制更新弹窗，但允许用户再次点击重试。
+        if (!AppUpdateInstaller.instance.supportsInAppInstall) {
+          setState(() {
+            _busy = false;
+            _opening = false;
+          });
+        }
+        return;
+      }
       Navigator.of(context).pop();
     } catch (e) {
       if (!mounted) return;
@@ -75,9 +86,7 @@ class _AppUpdateDialogState extends State<_AppUpdateDialog> {
         _busy = false;
         _opening = false;
         _error = _inApp
-            ? (_isMac
-                ? '应用内更新失败，可重试或改用浏览器下载安装包。'
-                : '应用内更新失败，可重试或改用浏览器下载。')
+            ? (_isMac ? '应用内更新失败，可重试或改用浏览器下载安装包。' : '应用内更新失败，可重试或改用浏览器下载。')
             : '更新失败，请稍后重试';
       });
     }
@@ -94,7 +103,7 @@ class _AppUpdateDialogState extends State<_AppUpdateDialog> {
         await windowsTrayPrepareQuitForAppUpdate(exitProcess: true);
         return;
       }
-      if (mounted) Navigator.of(context).pop();
+      if (mounted && !widget.result.forceUpdate) Navigator.of(context).pop();
     } catch (_) {
       if (!mounted) return;
       setState(() {
@@ -120,130 +129,150 @@ class _AppUpdateDialogState extends State<_AppUpdateDialog> {
         ? widget.result.latestVersionName
         : '最新版本';
 
-    return AlertDialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      title: Text(
-        '发现新版本',
-        style: DunesTypography.sans(
-          fontSize: 18,
-          fontWeight: FontWeight.w600,
-          color: DunesColors.text,
+    final updateTitle = widget.result.forceUpdate ? '需要更新后继续使用' : '发现新版本';
+
+    return PopScope(
+      // 强制更新不能通过系统返回键、手势或点击遮罩关闭。
+      canPop: !widget.result.forceUpdate,
+      child: AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text(
+          updateTitle,
+          style: DunesTypography.sans(
+            fontSize: 18,
+            fontWeight: FontWeight.w600,
+            color: DunesColors.text,
+          ),
         ),
-      ),
-      content: SelectionArea(
-        child: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                versionLabel,
+        content: SelectionArea(
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (widget.result.forceUpdate) ...[
+                  Text(
+                    '当前版本已停止服务，请完成更新后继续使用。',
+                    style: DunesTypography.sans(
+                      fontSize: 13,
+                      color: DunesColors.text2,
+                      height: 1.45,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                ],
+                Text(
+                  versionLabel,
+                  style: DunesTypography.sans(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    color: DunesColors.text,
+                  ),
+                ),
+                if (notes.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  Text(
+                    '更新内容',
+                    style: DunesTypography.sans(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: DunesColors.text2,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    notes,
+                    style: DunesTypography.sans(
+                      fontSize: 14,
+                      color: DunesColors.text2,
+                      height: 1.55,
+                    ),
+                  ),
+                ],
+                if (_inApp) ...[
+                  const SizedBox(height: 10),
+                  Text(
+                    _isMac
+                        ? '确认安装后应用会自动退出并重启；若使用安装包，打开后也会自动退出以便完成安装。'
+                        : '将在应用内下载安装包并启动安装；启动安装后应用会自动退出，以便完成文件替换。',
+                    style: DunesTypography.sans(
+                      fontSize: 12,
+                      color: DunesColors.text3,
+                      height: 1.4,
+                    ),
+                  ),
+                ],
+                if (_busy && _inApp) ...[
+                  const SizedBox(height: 16),
+                  LinearProgressIndicator(
+                    value: _isMac || _opening || _progress < 0
+                        ? null
+                        : _progress.clamp(0.0, 1.0),
+                    minHeight: 6,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    _progressLabel,
+                    style: DunesTypography.sans(
+                      fontSize: 12,
+                      color: DunesColors.text3,
+                    ),
+                  ),
+                ],
+                if (_error != null) ...[
+                  const SizedBox(height: 12),
+                  Text(
+                    _error!,
+                    style: DunesTypography.sans(
+                      fontSize: 13,
+                      color: const Color(0xFFC62828),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          if (!widget.result.forceUpdate)
+            TextButton(
+              onPressed: _busy ? null : () => Navigator.of(context).pop(),
+              child: Text(
+                '稍后',
                 style: DunesTypography.sans(
                   fontSize: 15,
-                  fontWeight: FontWeight.w600,
-                  color: DunesColors.text,
+                  color: DunesColors.text3,
                 ),
               ),
-              if (notes.isNotEmpty) ...[
-                const SizedBox(height: 12),
-                Text(
-                  '更新内容',
-                  style: DunesTypography.sans(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: DunesColors.text2,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  notes,
-                  style: DunesTypography.sans(
-                    fontSize: 14,
-                    color: DunesColors.text2,
-                    height: 1.55,
-                  ),
-                ),
-              ],
-              if (_inApp) ...[
-                const SizedBox(height: 10),
-                Text(
-                  _isMac
-                      ? '确认安装后应用会自动退出并重启；若使用安装包，打开后也会自动退出以便完成安装。'
-                      : '将在应用内下载安装包并启动安装；启动安装后应用会自动退出，以便完成文件替换。',
-                  style: DunesTypography.sans(
-                    fontSize: 12,
-                    color: DunesColors.text3,
-                    height: 1.4,
-                  ),
-                ),
-              ],
-              if (_busy && _inApp) ...[
-                const SizedBox(height: 16),
-                LinearProgressIndicator(
-                  value: _isMac || _opening || _progress < 0
-                      ? null
-                      : _progress.clamp(0.0, 1.0),
-                  minHeight: 6,
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  _progressLabel,
-                  style: DunesTypography.sans(
-                    fontSize: 12,
-                    color: DunesColors.text3,
-                  ),
-                ),
-              ],
-              if (_error != null) ...[
-                const SizedBox(height: 12),
-                Text(
-                  _error!,
-                  style: DunesTypography.sans(
-                    fontSize: 13,
-                    color: const Color(0xFFC62828),
-                  ),
-                ),
-              ],
-            ],
-          ),
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: _busy ? null : () => Navigator.of(context).pop(),
-          child: Text(
-            '稍后',
-            style: DunesTypography.sans(
-              fontSize: 15,
-              color: DunesColors.text3,
             ),
-          ),
-        ),
-        if (_inApp && _error != null && widget.result.downloadUrl.trim().isNotEmpty)
-          TextButton(
-            onPressed: _busy ? null : _openInBrowser,
+          if (_inApp &&
+              _error != null &&
+              widget.result.downloadUrl.trim().isNotEmpty)
+            TextButton(
+              onPressed: _busy ? null : _openInBrowser,
+              child: Text(
+                '浏览器下载',
+                style: DunesTypography.sans(
+                  fontSize: 15,
+                  color: DunesColors.text2,
+                ),
+              ),
+            ),
+          FilledButton(
+            onPressed: _busy ? null : _onUpdate,
+            style: FilledButton.styleFrom(
+              backgroundColor: const Color(0xFF1A6FDB),
+              foregroundColor: Colors.white,
+            ),
             child: Text(
-              '浏览器下载',
-              style: DunesTypography.sans(
-                fontSize: 15,
-                color: DunesColors.text2,
-              ),
+              _busy
+                  ? (_opening ? '打开中…' : '更新中…')
+                  : (_error != null ? '重试' : '立即更新'),
             ),
           ),
-        FilledButton(
-          onPressed: _busy ? null : _onUpdate,
-          style: FilledButton.styleFrom(
-            backgroundColor: const Color(0xFF1A6FDB),
-            foregroundColor: Colors.white,
-          ),
-          child: Text(
-            _busy
-                ? (_opening ? '打开中…' : '更新中…')
-                : (_error != null ? '重试' : '立即更新'),
-          ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }

@@ -25,8 +25,10 @@ import 'auth_profile.dart';
 import 'auth_session.dart';
 import 'auth_session_coordinator.dart';
 import 'desktop_login_page.dart';
+
 const _authBlue = authBlue;
 const _authBg = authBg;
+
 class LoginFlow extends StatefulWidget {
   const LoginFlow({super.key, this.onHydrated});
 
@@ -37,21 +39,33 @@ class LoginFlow extends StatefulWidget {
   State<LoginFlow> createState() => _LoginFlowState();
 }
 
-class _LoginFlowState extends State<LoginFlow> {
+class _LoginFlowState extends State<LoginFlow> with WidgetsBindingObserver {
   static const _sessionStorageKey = 'dunes_auth_session_v1';
+  static const _updateCheckInterval = Duration(hours: 6);
+  static const _updateRetryInterval = Duration(minutes: 10);
   final _auth = AuthService();
   AuthSession? _session;
   bool _hydrating = true;
   bool _notifiedHydrated = false;
   bool _updateChecked = false;
+  bool _updateCheckInFlight = false;
+  bool _appInForeground = true;
+  DateTime? _nextUpdateCheckAt;
+  Timer? _updateCheckTimer;
   bool _showPostLoginSplash = false;
   String _appVersion = '';
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _loadAppVersion();
     _restoreSession();
+    // 用较短的 tick 同时覆盖“失败后重试”和“成功后长间隔检查”。
+    // 真正是否发起请求由 _nextUpdateCheckAt 决定，不会每 10 分钟请求一次。
+    _updateCheckTimer = Timer.periodic(const Duration(minutes: 10), (_) {
+      unawaited(_checkAppUpdateIfDue());
+    });
     if (isDesktopCommOnly) {
       // 托盘退出会很快硬杀进程：先尽快清本地会话，网络 teardown 不阻塞退出。
       setWindowsTrayOnBeforeQuit(() async {
@@ -75,10 +89,28 @@ class _LoginFlowState extends State<LoginFlow> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _updateCheckTimer?.cancel();
+    _updateCheckTimer = null;
     if (isDesktopCommOnly) {
       setWindowsTrayOnBeforeQuit(null);
     }
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    switch (state) {
+      case AppLifecycleState.resumed:
+        _appInForeground = true;
+        // 回到前台时立即尝试一次；方法内部会按下次检查时间限流。
+        unawaited(_checkAppUpdateIfDue());
+      case AppLifecycleState.inactive:
+      case AppLifecycleState.paused:
+      case AppLifecycleState.hidden:
+      case AppLifecycleState.detached:
+        _appInForeground = false;
+    }
   }
 
   Future<void> _loadAppVersion() async {
@@ -91,18 +123,21 @@ class _LoginFlowState extends State<LoginFlow> {
   void _onSignedIn(AuthSession session) {
     session = session.withLocalDevGrants();
     if (session.userId <= 0) {
-      session = AuthSession.fromJwt(
-        phone: session.phone,
-        userId: 0,
-        token: session.token,
-        apiBase: session.apiBase,
-      ).copyWith(
-        displayName: session.displayName,
-        departmentId: session.departmentId,
-        roles: session.roles,
-        novaLocalStorage: session.novaLocalStorage,
-        lighthouseAccess: session.lighthouseAccess,
-      ).withLocalDevGrants();
+      session =
+          AuthSession.fromJwt(
+                phone: session.phone,
+                userId: 0,
+                token: session.token,
+                apiBase: session.apiBase,
+              )
+              .copyWith(
+                displayName: session.displayName,
+                departmentId: session.departmentId,
+                roles: session.roles,
+                novaLocalStorage: session.novaLocalStorage,
+                lighthouseAccess: session.lighthouseAccess,
+              )
+              .withLocalDevGrants();
     }
     AuthSessionCoordinator.instance.bind(
       session,
@@ -149,18 +184,21 @@ class _LoginFlowState extends State<LoginFlow> {
       }
       var session = AuthSession.fromJson(decoded).withLocalDevGrants();
       if (session.userId <= 0 && session.token.isNotEmpty) {
-        session = AuthSession.fromJwt(
-          phone: session.phone,
-          userId: 0,
-          token: session.token,
-          apiBase: session.apiBase,
-        ).copyWith(
-          displayName: session.displayName,
-          departmentId: session.departmentId,
-          roles: session.roles,
-          novaLocalStorage: session.novaLocalStorage,
-          lighthouseAccess: session.lighthouseAccess,
-        ).withLocalDevGrants();
+        session =
+            AuthSession.fromJwt(
+                  phone: session.phone,
+                  userId: 0,
+                  token: session.token,
+                  apiBase: session.apiBase,
+                )
+                .copyWith(
+                  displayName: session.displayName,
+                  departmentId: session.departmentId,
+                  roles: session.roles,
+                  novaLocalStorage: session.novaLocalStorage,
+                  lighthouseAccess: session.lighthouseAccess,
+                )
+                .withLocalDevGrants();
       }
       final normalized = _normalizeApiHost(session);
       if (normalized.apiBase != session.apiBase) {
@@ -180,10 +218,9 @@ class _LoginFlowState extends State<LoginFlow> {
               )
               .timeout(const Duration(seconds: 5));
           if (AuthSessionCoordinator.isRecoverable401(resp)) {
-            final refreshed =
-                await AuthSessionCoordinator.instance
-                    .refreshToken()
-                    .timeout(const Duration(seconds: 5));
+            final refreshed = await AuthSessionCoordinator.instance
+                .refreshToken()
+                .timeout(const Duration(seconds: 5));
             if (refreshed != null) {
               session = refreshed;
               resp = await http
@@ -207,7 +244,10 @@ class _LoginFlowState extends State<LoginFlow> {
                       ? body['data'] as Map<String, dynamic>
                       : body)
                 : const <String, dynamic>{};
-            session = AuthSession.enrichFromUsersMe(session, data).withLocalDevGrants();
+            session = AuthSession.enrichFromUsersMe(
+              session,
+              data,
+            ).withLocalDevGrants();
             AuthSessionCoordinator.instance.updateSession(session);
             await _persistSession(session);
           }
@@ -262,12 +302,37 @@ class _LoginFlowState extends State<LoginFlow> {
     }
   }
 
-  Future<void> _checkAppUpdate() async {
-    if (_updateChecked || !mounted) return;
+  Future<void> _checkAppUpdateIfDue({bool initial = false}) async {
+    if (!mounted || _hydrating || _updateCheckInFlight) return;
+    if (!initial && !_appInForeground) return;
+
+    final now = DateTime.now();
+    if (!initial &&
+        _nextUpdateCheckAt != null &&
+        now.isBefore(_nextUpdateCheckAt!)) {
+      return;
+    }
+
+    _updateCheckInFlight = true;
     _updateChecked = true;
-    final result = await AppUpdateService.instance.checkUpdate();
-    if (!mounted || result == null || !result.updateAvailable) return;
-    await showAppUpdateDialog(context, result);
+    try {
+      final result = await AppUpdateService.instance.checkUpdate();
+      final checkedAt = DateTime.now();
+      _nextUpdateCheckAt = checkedAt.add(
+        result == null ? _updateRetryInterval : _updateCheckInterval,
+      );
+
+      if (!mounted ||
+          !_appInForeground ||
+          result == null ||
+          !result.updateAvailable) {
+        return;
+      }
+
+      await showAppUpdateDialog(context, result);
+    } finally {
+      _updateCheckInFlight = false;
+    }
   }
 
   @override
@@ -279,7 +344,9 @@ class _LoginFlowState extends State<LoginFlow> {
       });
     }
     if (!_hydrating && !_updateChecked) {
-      WidgetsBinding.instance.addPostFrameCallback((_) => _checkAppUpdate());
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => _checkAppUpdateIfDue(initial: true),
+      );
     }
     if (_hydrating) {
       return const Scaffold(
@@ -367,7 +434,8 @@ class _PhoneStepState extends State<_PhoneStep> {
   @override
   Widget build(BuildContext context) {
     return AuthScaffold(
-      child: Column(        crossAxisAlignment: CrossAxisAlignment.stretch,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           const AuthAppLogo(size: 88),
           const SizedBox(height: 20),
@@ -414,9 +482,13 @@ class _PhoneStepState extends State<_PhoneStep> {
               color: DunesColors.text,
               letterSpacing: 1.2,
             ),
-            decoration: authInputDecoration(hintText: '请输入手机号', errorText: _error)
-                .copyWith(
-                  prefixIcon: const AuthPhonePrefix(),                  prefixIconConstraints: const BoxConstraints(
+            decoration:
+                authInputDecoration(
+                  hintText: '请输入手机号',
+                  errorText: _error,
+                ).copyWith(
+                  prefixIcon: const AuthPhonePrefix(),
+                  prefixIconConstraints: const BoxConstraints(
                     minWidth: 0,
                     minHeight: 0,
                   ),
@@ -519,7 +591,9 @@ class _CodeStepState extends State<_CodeStep> {
             dunesToken: session.token,
             phone: session.phone,
           );
-          session = session.copyWith(novaLocalStorage: nova.toLocalStorageEntries());
+          session = session.copyWith(
+            novaLocalStorage: nova.toLocalStorageEntries(),
+          );
         } catch (_) {}
       }
       if (!mounted) return;

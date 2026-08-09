@@ -48,6 +48,9 @@ Future<void> clearPushConversationNotificationsImpl(int conversationId) {
   if (Platform.isAndroid) {
     return android.clearPushConversationNotificationsImpl(conversationId);
   }
+  if (Platform.isIOS) {
+    return ios.clearPushConversationNotificationsImpl(conversationId);
+  }
   return Future<void>.value();
 }
 

@@ -10,6 +10,11 @@ Future<String?> saveBytesAsFile(Uint8List bytes, String fileName) async {
   return path;
 }
 
+/// NOVA 文件：手机保存到 `{根目录}/NOVA`，桌面仍使用用户配置的保存根目录。
+Future<String?> saveBytesAsNovaFile(Uint8List bytes, String fileName) async {
+  return saveBytesAsNovaFileImpl(bytes, fileName);
+}
+
 /// 按会话目录落盘：`沙丘文件/{conversationId}/{fileName}`。
 ///
 /// [cacheKey]（通常为 objectKey）用于兼容旧版哈希子目录，以及下载进度标识。
@@ -98,9 +103,6 @@ Future<String?> saveBytesAsDriveFile(
 }
 
 /// 查找已下载的微盘文件（先查「企业微盘」，再兼容旧 hash 目录）。
-Future<String?> findCachedDriveFile(
-  String fileName, {
-  String? cacheKey,
-}) async {
+Future<String?> findCachedDriveFile(String fileName, {String? cacheKey}) async {
   return findCachedDriveFileImpl(fileName, cacheKey: cacheKey);
 }

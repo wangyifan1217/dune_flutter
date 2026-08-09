@@ -1,16 +1,17 @@
-import 'dart:typed_data';
-
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
 import '../../core/theme/dunes_theme.dart';
 import '../../core/util/friendly_error.dart';
+import '../../core/platform/desktop_features.dart';
 import '../auth/auth_session.dart';
+import '../chat/chat_file_preview_page.dart';
 import '../chat/chat_voice_player.dart';
 import '../chat/cors_safe_image.dart';
 import '../chat/file_download.dart';
 import '../chat/gallery_save.dart' as gallery;
+import '../conversation/conversation_service.dart';
 import 'native_nova_service.dart';
 import 'nova_deliverable.dart';
 import 'nova_file_utils.dart';
@@ -68,7 +69,7 @@ Future<String?> _downloadHttpToFile(
     if (isNovaFilesApiErrorBody(bytes, contentType: contentType)) {
       throw Exception('文件不可访问');
     }
-    return saveBytesAsFile(bytes, fileName);
+    return saveBytesAsNovaFile(bytes, fileName);
   } finally {
     client.close();
   }
@@ -87,7 +88,9 @@ String _resolveNovaAbsoluteUrl(String url, String novaBase) {
 Future<void> _novaDownloadWithProgress(
   BuildContext context, {
   required String fileName,
-  required Future<String?> Function(void Function(double progress) onProgress) download,
+  required Future<String?> Function(void Function(double progress) onProgress)
+  download,
+  AuthSession? openWithSession,
 }) async {
   if (_novaDownloadInFlight) {
     _novaToast(context, '正在下载，请稍候…');
@@ -106,7 +109,23 @@ Future<void> _novaDownloadWithProgress(
     if (!context.mounted) return;
     if (savedPath != null && savedPath.isNotEmpty) {
       final display = _formatNovaSavedPath(savedPath);
-      _novaToast(context, display.isNotEmpty ? '已保存到 $display' : '已保存 $fileName');
+      _novaToast(
+        context,
+        display.isNotEmpty ? '已保存到 $display' : '已保存 $fileName',
+      );
+      if (openWithSession != null) {
+        if (isDesktopCommOnly) {
+          await openLocalFile(savedPath);
+        } else if (context.mounted) {
+          await showChatFilePreview(
+            context: context,
+            service: ConversationService(session: openWithSession),
+            payload: null,
+            fileName: fileName,
+            initialLocalPath: savedPath,
+          );
+        }
+      }
     }
   } finally {
     _novaDownloadInFlight = false;
@@ -120,14 +139,16 @@ class _NovaDownloadProgressDialog extends StatefulWidget {
   });
 
   final String label;
-  final Future<String?> Function(void Function(double progress) onProgress) download;
+  final Future<String?> Function(void Function(double progress) onProgress)
+  download;
 
   @override
   State<_NovaDownloadProgressDialog> createState() =>
       _NovaDownloadProgressDialogState();
 }
 
-class _NovaDownloadProgressDialogState extends State<_NovaDownloadProgressDialog> {
+class _NovaDownloadProgressDialogState
+    extends State<_NovaDownloadProgressDialog> {
   double _progress = 0;
   bool _indeterminate = true;
 
@@ -196,13 +217,16 @@ class _NovaDownloadProgressDialogState extends State<_NovaDownloadProgressDialog
 
 class NovaMediaResolver {
   NovaMediaResolver(this.session, {NativeNovaService? service})
-      : _service = service ?? NativeNovaService(session: session);
+    : _service = service ?? NativeNovaService(session: session);
 
   final AuthSession session;
   final NativeNovaService _service;
   final Map<String, String> _cache = <String, String>{};
 
-  Future<String> resolve(String source, {String bucket = 'im-attachments'}) async {
+  Future<String> resolve(
+    String source, {
+    String bucket = 'im-attachments',
+  }) async {
     final trimmed = source.trim();
     if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
       return trimmed;
@@ -240,8 +264,7 @@ class NovaMediaResolver {
   Future<String> fetchTextViaStorageProxy(
     String objectKey, {
     String bucket = 'im-attachments',
-  }) =>
-      _service.fetchTextViaStorageProxy(objectKey, bucket: bucket);
+  }) => _service.fetchTextViaStorageProxy(objectKey, bucket: bucket);
 
   /// NOVA agent 生成文件（如 PRD.md）兜底读取。
   Future<String> fetchAgentFileText({
@@ -255,6 +278,7 @@ class NovaMediaResolver {
       final s = p.trim();
       if (s.isNotEmpty && !paths.contains(s)) paths.add(s);
     }
+
     addPath(agentPath);
     for (final p in agentPathCandidates) {
       addPath(p);
@@ -268,7 +292,10 @@ class NovaMediaResolver {
     for (final p in paths) {
       final u = '$base/v1/files/download?path=${Uri.encodeComponent(p)}';
       try {
-        final resp = await http.get(Uri.parse(u), headers: novaDownloadHeaders());
+        final resp = await http.get(
+          Uri.parse(u),
+          headers: novaDownloadHeaders(),
+        );
         if (resp.statusCode >= 200 &&
             resp.statusCode < 300 &&
             resp.body.isNotEmpty &&
@@ -296,10 +323,7 @@ class NovaMediaResolver {
   }) async {
     final tried = <String>{};
 
-    Future<Uint8List?> tryGet(
-      String u, {
-      Map<String, String>? headers,
-    }) async {
+    Future<Uint8List?> tryGet(String u, {Map<String, String>? headers}) async {
       final trimmed = u.trim();
       if (trimmed.isEmpty || !tried.add(trimmed)) return null;
       if (!RegExp(r'^https?:', caseSensitive: false).hasMatch(trimmed)) {
@@ -364,7 +388,8 @@ class NovaMediaResolver {
   }) async {
     final candidates = <String>[];
     final direct = url.trim();
-    if (direct.isNotEmpty && RegExp(r'^https?:', caseSensitive: false).hasMatch(direct)) {
+    if (direct.isNotEmpty &&
+        RegExp(r'^https?:', caseSensitive: false).hasMatch(direct)) {
       candidates.add(direct);
     } else if (direct.isNotEmpty) {
       try {
@@ -377,11 +402,13 @@ class NovaMediaResolver {
       final u = '$base/v1/files/download?path=${Uri.encodeComponent(p)}';
       if (!candidates.contains(u)) candidates.add(u);
     }
+
     addAgentPath(agentPath);
     for (final p in agentPathCandidates) {
       addAgentPath(p);
     }
-    if (candidates.every((u) => !novaImageUrlNeedsAuthFetch(u)) && fileName.isNotEmpty) {
+    if (candidates.every((u) => !novaImageUrlNeedsAuthFetch(u)) &&
+        fileName.isNotEmpty) {
       for (final p in guessNovaAgentPaths(fileName)) {
         addAgentPath(p);
       }
@@ -413,6 +440,7 @@ class NovaMediaResolver {
     String agentPath = '',
     List<String> agentPathCandidates = const <String>[],
     String novaDownloadUrl = '',
+    bool openAfterDownload = false,
   }) async {
     final paths = <String>[];
     void addPath(String p) {
@@ -422,7 +450,9 @@ class NovaMediaResolver {
 
     final directNovaUrl = novaDownloadUrl.trim();
     if (directNovaUrl.isNotEmpty) {
-      final uri = Uri.tryParse(_resolveNovaAbsoluteUrl(directNovaUrl, novaBase));
+      final uri = Uri.tryParse(
+        _resolveNovaAbsoluteUrl(directNovaUrl, novaBase),
+      );
       addPath(uri?.queryParameters['path'] ?? '');
     }
 
@@ -439,7 +469,10 @@ class NovaMediaResolver {
     final base = novaBase.replaceAll(RegExp(r'/$'), '');
     final urls = <String>[];
     if (directNovaUrl.isNotEmpty &&
-        RegExp(r'/v1/files/download', caseSensitive: false).hasMatch(directNovaUrl)) {
+        RegExp(
+          r'/v1/files/download',
+          caseSensitive: false,
+        ).hasMatch(directNovaUrl)) {
       urls.add(_resolveNovaAbsoluteUrl(directNovaUrl, base));
     }
     for (final p in paths) {
@@ -450,6 +483,7 @@ class NovaMediaResolver {
     await _novaDownloadWithProgress(
       context,
       fileName: fileName,
+      openWithSession: openAfterDownload ? session : null,
       download: (onProgress) async {
         Object? lastError;
         for (final u in urls) {
@@ -476,13 +510,21 @@ Future<void> openNovaDeliverableDownloadOnly(
   BuildContext context, {
   required NovaMediaResolver resolver,
   required NovaDeliverableItem file,
+  bool openAfterDownload = false,
 }) async {
   final url = file.url.trim();
-  final isPublicHttp = isDirectHttpUrl(url) &&
+  final isPublicHttp =
+      isDirectHttpUrl(url) &&
       !RegExp(r'/v1/files/download', caseSensitive: false).hasMatch(url) &&
       isUrlLikelyDeviceReachable(url);
   if (isPublicHttp) {
-    await _openDownloadUrl(context, url, file.name, resolver: resolver);
+    await _openDownloadUrl(
+      context,
+      url,
+      file.name,
+      resolver: resolver,
+      openAfterDownload: openAfterDownload,
+    );
     return;
   }
 
@@ -499,9 +541,11 @@ Future<void> openNovaDeliverableDownloadOnly(
     fileName: file.name,
     agentPath: paths.isNotEmpty ? paths.first : '',
     agentPathCandidates: paths,
-    novaDownloadUrl: RegExp(r'/v1/files/download', caseSensitive: false).hasMatch(url)
+    novaDownloadUrl:
+        RegExp(r'/v1/files/download', caseSensitive: false).hasMatch(url)
         ? url
         : '',
+    openAfterDownload: openAfterDownload,
   );
 }
 
@@ -537,7 +581,12 @@ Future<void> openNovaDeliverableDownload(
     await openNovaDeliverablePreview(context, resolver: resolver, file: file);
     return;
   }
-  await openNovaDeliverableDownloadOnly(context, resolver: resolver, file: file);
+  await openNovaDeliverableDownloadOnly(
+    context,
+    resolver: resolver,
+    file: file,
+    openAfterDownload: true,
+  );
 }
 
 /// 对齐 WebView `openNovaImagePreview` / `__dunesOpenImageViewer`。
@@ -560,7 +609,7 @@ Future<void> showNovaImagePreview(
         imageUrl: '',
         fileName: name,
         memoryBytes: previewBytes,
-        onDownload: () => saveBytesAsFile(previewBytes, name),
+        onDownload: () => saveBytesAsNovaFile(previewBytes, name),
       ),
     );
     return;
@@ -572,7 +621,10 @@ Future<void> showNovaImagePreview(
     return;
   }
   if (novaImageUrlNeedsAuthFetch(source) || novaImageUrlNeedsAuthFetch(url)) {
-    final bytes = await resolver.loadNovaImageBytes(url: source, fileName: name);
+    final bytes = await resolver.loadNovaImageBytes(
+      url: source,
+      fileName: name,
+    );
     if (!context.mounted) return;
     if (bytes != null && bytes.isNotEmpty) {
       await showDialog<void>(
@@ -582,7 +634,7 @@ Future<void> showNovaImagePreview(
           imageUrl: '',
           fileName: name,
           memoryBytes: bytes,
-          onDownload: () => saveBytesAsFile(bytes, name),
+          onDownload: () => saveBytesAsNovaFile(bytes, name),
         ),
       );
       return;
@@ -598,7 +650,8 @@ Future<void> showNovaImagePreview(
       builder: (ctx) => _NovaImagePreviewDialog(
         imageUrl: source,
         fileName: name,
-        onDownload: () => _openDownloadUrl(ctx, source, name, resolver: resolver),
+        onDownload: () =>
+            _openDownloadUrl(ctx, source, name, resolver: resolver),
       ),
     );
     return;
@@ -612,7 +665,8 @@ Future<void> showNovaImagePreview(
       builder: (ctx) => _NovaImagePreviewDialog(
         imageUrl: resolved,
         fileName: name,
-        onDownload: () => _openDownloadUrl(ctx, resolved, name, resolver: resolver),
+        onDownload: () =>
+            _openDownloadUrl(ctx, resolved, name, resolver: resolver),
       ),
     );
   } catch (e) {
@@ -634,9 +688,10 @@ Future<void> openNovaFileDownload(
     await _novaDownloadWithProgress(
       context,
       fileName: fileName,
+      openWithSession: resolver.session,
       download: (onProgress) async {
         onProgress(0.35);
-        final saved = await saveBytesAsFile(previewBytes, fileName);
+        final saved = await saveBytesAsNovaFile(previewBytes, fileName);
         onProgress(1.0);
         return saved;
       },
@@ -645,13 +700,23 @@ Future<void> openNovaFileDownload(
   }
   final urlTrim = url.trim();
   final keyTrim = objectKey.trim();
-  final isNovaDownload = RegExp(r'/v1/files/download', caseSensitive: false).hasMatch(urlTrim);
-  final isPublicHttp = isDirectHttpUrl(urlTrim) &&
+  final isNovaDownload = RegExp(
+    r'/v1/files/download',
+    caseSensitive: false,
+  ).hasMatch(urlTrim);
+  final isPublicHttp =
+      isDirectHttpUrl(urlTrim) &&
       !isNovaDownload &&
       isUrlLikelyDeviceReachable(urlTrim);
 
   if (isPublicHttp) {
-    await _openDownloadUrl(context, urlTrim, fileName, resolver: resolver);
+    await _openDownloadUrl(
+      context,
+      urlTrim,
+      fileName,
+      resolver: resolver,
+      openAfterDownload: true,
+    );
     return;
   }
 
@@ -669,6 +734,7 @@ Future<void> openNovaFileDownload(
           ? agentPathCandidates
           : guessNovaAgentPaths(fileName),
       novaDownloadUrl: isNovaDownload ? urlTrim : '',
+      openAfterDownload: true,
     );
     return;
   }
@@ -684,11 +750,13 @@ Future<void> openNovaFileDownload(
       objectKey: objectKey,
       bucket: bucket,
     );
+    if (!context.mounted) return;
     await _openDownloadUrl(
       context,
       resolved,
       fileName,
       resolver: resolver,
+      openAfterDownload: true,
     );
   } catch (e) {
     if (context.mounted) {
@@ -702,6 +770,7 @@ Future<void> _openDownloadUrl(
   String url,
   String fileName, {
   NovaMediaResolver? resolver,
+  bool openAfterDownload = false,
 }) async {
   final trimmed = url.trim();
   if (trimmed.isEmpty) {
@@ -711,21 +780,22 @@ Future<void> _openDownloadUrl(
   final absolute = resolver != null
       ? _resolveNovaAbsoluteUrl(trimmed, resolver.novaBase)
       : trimmed;
-  final needsAuth = novaImageUrlNeedsAuthFetch(absolute) ||
+  final needsAuth =
+      novaImageUrlNeedsAuthFetch(absolute) ||
       RegExp(r'/v1/files/download', caseSensitive: false).hasMatch(absolute);
   await _novaDownloadWithProgress(
     context,
     fileName: fileName,
+    openWithSession: openAfterDownload ? resolver?.session : null,
     download: (onProgress) async {
-      if (needsAuth && resolver != null) {
-        return _downloadHttpToFile(
-          absolute,
-          fileName,
-          headers: resolver.novaDownloadHeaders(),
-          onProgress: onProgress,
-        );
-      }
-      return openUrlAsFile(absolute, fileName, onProgress: onProgress);
+      return _downloadHttpToFile(
+        absolute,
+        fileName,
+        headers: needsAuth && resolver != null
+            ? resolver.novaDownloadHeaders()
+            : null,
+        onProgress: onProgress,
+      );
     },
   );
 }
@@ -749,7 +819,12 @@ class _NovaImagePreviewDialog extends StatelessWidget {
     if (memoryBytes != null && memoryBytes!.isNotEmpty) {
       image = Image.memory(memoryBytes!, fit: BoxFit.contain);
     } else if (imageUrl.isNotEmpty && kIsWeb) {
-      image = buildCorsSafeImage(url: imageUrl, width: 800, height: 600, fit: BoxFit.contain);
+      image = buildCorsSafeImage(
+        url: imageUrl,
+        width: 800,
+        height: 600,
+        fit: BoxFit.contain,
+      );
     } else {
       image = Image.network(
         imageUrl,
@@ -759,21 +834,24 @@ class _NovaImagePreviewDialog extends StatelessWidget {
           return const SizedBox(
             width: 48,
             height: 48,
-            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white70),
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              color: Colors.white70,
+            ),
           );
         },
-        errorBuilder: (_, _, _) => const Icon(Icons.broken_image_outlined, color: Colors.white54, size: 48),
+        errorBuilder: (_, _, _) => const Icon(
+          Icons.broken_image_outlined,
+          color: Colors.white54,
+          size: 48,
+        ),
       );
     }
     return SafeArea(
       child: Stack(
         children: [
           Center(
-            child: InteractiveViewer(
-              minScale: 0.5,
-              maxScale: 4,
-              child: image,
-            ),
+            child: InteractiveViewer(minScale: 0.5, maxScale: 4, child: image),
           ),
           Positioned(
             top: 8,
@@ -817,10 +895,11 @@ class _NovaImagePreviewDialog extends StatelessWidget {
         if (context.mounted) _novaToast(context, '已保存到相册');
       } catch (_) {
         try {
-          await saveBytesAsFile(bytes, fileName);
+          await saveBytesAsNovaFile(bytes, fileName);
           if (context.mounted) _novaToast(context, '已保存');
         } catch (e) {
-          if (context.mounted) _novaToast(context, '保存失败：${friendlyErrorText(e)}', error: true);
+          if (context.mounted)
+            _novaToast(context, '保存失败：${friendlyErrorText(e)}', error: true);
         }
       }
       return;
@@ -877,7 +956,8 @@ class _NovaC4ImageCardState extends State<NovaC4ImageCard> {
 
   Future<_NovaResolvedImage> _resolveImage() async {
     final url = widget.url.trim();
-    final needsAuth = url.isEmpty ||
+    final needsAuth =
+        url.isEmpty ||
         novaImageUrlNeedsAuthFetch(url) ||
         widget.agentPath.isNotEmpty ||
         !RegExp(r'^https?:', caseSensitive: false).hasMatch(url);
@@ -892,11 +972,15 @@ class _NovaC4ImageCardState extends State<NovaC4ImageCard> {
         return _NovaResolvedImage.bytes(bytes);
       }
     }
-    if (url.isNotEmpty && RegExp(r'^https?:', caseSensitive: false).hasMatch(url)) {
+    if (url.isNotEmpty &&
+        RegExp(r'^https?:', caseSensitive: false).hasMatch(url)) {
       return _NovaResolvedImage.publicUrl(url);
     }
     try {
-      final resolved = await widget.resolver.resolve(url, bucket: widget.bucket);
+      final resolved = await widget.resolver.resolve(
+        url,
+        bucket: widget.bucket,
+      );
       if (resolved.isNotEmpty) return _NovaResolvedImage.publicUrl(resolved);
     } catch (_) {}
     return const _NovaResolvedImage.failed();
@@ -926,7 +1010,8 @@ class _NovaC4ImageCardState extends State<NovaC4ImageCard> {
           agentPathCandidates: widget.agentPathCandidates,
           fileName: _displayName,
         );
-      } else if (u.isNotEmpty && RegExp(r'^https?:', caseSensitive: false).hasMatch(u)) {
+      } else if (u.isNotEmpty &&
+          RegExp(r'^https?:', caseSensitive: false).hasMatch(u)) {
         try {
           final resp = await http.get(Uri.parse(u));
           if (resp.statusCode == 200 && resp.bodyBytes.isNotEmpty) {
@@ -942,16 +1027,22 @@ class _NovaC4ImageCardState extends State<NovaC4ImageCard> {
       } catch (_) {
         // 桌面/Web 等不支持相册的平台回退为普通文件保存/下载。
         try {
-          await saveBytesAsFile(bytes, _displayName);
+          await saveBytesAsNovaFile(bytes, _displayName);
           if (mounted) _novaToast(context, '已保存');
         } catch (e) {
-          if (mounted) _novaToast(context, '保存失败：${friendlyErrorText(e)}', error: true);
+          if (mounted)
+            _novaToast(context, '保存失败：${friendlyErrorText(e)}', error: true);
         }
       }
       return;
     }
     if (u.isNotEmpty) {
-      await _openDownloadUrl(context, u, _displayName, resolver: widget.resolver);
+      await _openDownloadUrl(
+        context,
+        u,
+        _displayName,
+        resolver: widget.resolver,
+      );
     }
   }
 
@@ -1012,14 +1103,18 @@ class _NovaC4ImageCardState extends State<NovaC4ImageCard> {
                     child: loading
                         ? const SizedBox(
                             height: 120,
-                            child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+                            child: Center(
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
                           )
                         : _imageBody(image),
                   ),
                   Container(
                     padding: const EdgeInsets.fromLTRB(10, 8, 6, 8),
                     decoration: const BoxDecoration(
-                      border: Border(top: BorderSide(color: DunesColors.borderSoft)),
+                      border: Border(
+                        top: BorderSide(color: DunesColors.borderSoft),
+                      ),
                     ),
                     child: Row(
                       children: [
@@ -1038,18 +1133,36 @@ class _NovaC4ImageCardState extends State<NovaC4ImageCard> {
                         IconButton(
                           visualDensity: VisualDensity.compact,
                           padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                          constraints: const BoxConstraints(
+                            minWidth: 28,
+                            minHeight: 28,
+                          ),
                           tooltip: '查看大图',
-                          onPressed: loading || image.failed ? null : () => _preview(image),
-                          icon: const Icon(Icons.zoom_in_rounded, size: 18, color: DunesColors.text2),
+                          onPressed: loading || image.failed
+                              ? null
+                              : () => _preview(image),
+                          icon: const Icon(
+                            Icons.zoom_in_rounded,
+                            size: 18,
+                            color: DunesColors.text2,
+                          ),
                         ),
                         IconButton(
                           visualDensity: VisualDensity.compact,
                           padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                          constraints: const BoxConstraints(
+                            minWidth: 28,
+                            minHeight: 28,
+                          ),
                           tooltip: '下载图片',
-                          onPressed: loading || image.failed ? null : () => _download(image),
-                          icon: const Icon(Icons.download_rounded, size: 18, color: DunesColors.text2),
+                          onPressed: loading || image.failed
+                              ? null
+                              : () => _download(image),
+                          icon: const Icon(
+                            Icons.download_rounded,
+                            size: 18,
+                            color: DunesColors.text2,
+                          ),
                         ),
                       ],
                     ),
@@ -1095,75 +1208,110 @@ class NovaC4DeliverableFileCard extends StatelessWidget {
     return Material(
       color: DunesColors.bgSoft,
       borderRadius: BorderRadius.circular(12),
-      child: Ink(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: DunesColors.borderSoft),
-          boxShadow: const [BoxShadow(color: Color(0x0A0F172A), blurRadius: 4, offset: Offset(0, 1))],
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: () => openNovaDeliverableDownload(
+          context,
+          resolver: resolver,
+          file: file,
         ),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(12, 10, 10, 10),
-          child: Row(
-            children: [
-              Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: DunesColors.borderSoft),
-                ),
-                child: Icon(novaFileIconData(ext), size: 22, color: DunesColors.accentDeep),
+        child: Ink(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: DunesColors.borderSoft),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x0A0F172A),
+                blurRadius: 4,
+                offset: Offset(0, 1),
               ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      file.name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: DunesTypography.sans(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: DunesColors.text,
+            ],
+          ),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(12, 10, 10, 10),
+            child: Row(
+              children: [
+                Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: DunesColors.borderSoft),
+                  ),
+                  child: Icon(
+                    novaFileIconData(ext),
+                    size: 22,
+                    color: DunesColors.accentDeep,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        file.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: DunesTypography.sans(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: DunesColors.text,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      canPreview ? '$sizeHint · 可预览或下载' : '$sizeHint · 可下载',
-                      style: DunesTypography.sans(fontSize: 11, color: DunesColors.text3),
-                    ),
-                  ],
+                      const SizedBox(height: 2),
+                      Text(
+                        canPreview ? '$sizeHint · 可预览或下载' : '$sizeHint · 可下载',
+                        style: DunesTypography.sans(
+                          fontSize: 11,
+                          color: DunesColors.text3,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-              if (canPreview)
+                if (canPreview)
+                  IconButton(
+                    visualDensity: VisualDensity.compact,
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(
+                      minWidth: 34,
+                      minHeight: 34,
+                    ),
+                    tooltip: '预览',
+                    onPressed: () => openNovaDeliverablePreview(
+                      context,
+                      resolver: resolver,
+                      file: file,
+                    ),
+                    icon: const Icon(
+                      Icons.visibility_outlined,
+                      size: 18,
+                      color: DunesColors.accentDeep,
+                    ),
+                  ),
                 IconButton(
                   visualDensity: VisualDensity.compact,
                   padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
-                  tooltip: '预览',
-                  onPressed: () => openNovaDeliverablePreview(
+                  constraints: const BoxConstraints(
+                    minWidth: 34,
+                    minHeight: 34,
+                  ),
+                  tooltip: '下载',
+                  onPressed: () => openNovaDeliverableDownloadOnly(
                     context,
                     resolver: resolver,
                     file: file,
                   ),
-                  icon: const Icon(Icons.visibility_outlined, size: 18, color: DunesColors.accentDeep),
+                  icon: const Icon(
+                    Icons.download_rounded,
+                    size: 18,
+                    color: DunesColors.accentDeep,
+                  ),
                 ),
-              IconButton(
-                visualDensity: VisualDensity.compact,
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
-                tooltip: '下载',
-                onPressed: () => openNovaDeliverableDownloadOnly(
-                  context,
-                  resolver: resolver,
-                  file: file,
-                ),
-                icon: const Icon(Icons.download_rounded, size: 18, color: DunesColors.accentDeep),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -1296,7 +1444,9 @@ class _NovaC4ImageThumbState extends State<NovaC4ImageThumb> {
           return SizedBox(
             width: widget.maxWidth,
             height: 96,
-            child: const Center(child: CircularProgressIndicator(strokeWidth: 2)),
+            child: const Center(
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
           );
         }
         final image = snap.data ?? const _NovaResolvedImage.failed();
@@ -1377,7 +1527,10 @@ class _NovaC4VoiceBubbleState extends State<NovaC4VoiceBubble> {
           children: [
             Text(
               "${widget.durationSec}'",
-              style: DunesTypography.mono(fontSize: 12, color: DunesColors.text2),
+              style: DunesTypography.mono(
+                fontSize: 12,
+                color: DunesColors.text2,
+              ),
             ),
             const SizedBox(width: 8),
             Icon(
@@ -1419,16 +1572,17 @@ class NovaC4FileLink extends StatelessWidget {
     final iconColor = onDarkBubble ? Colors.white70 : DunesColors.accentDeep;
     final textColor = onDarkBubble ? Colors.white : DunesColors.text;
     return InkWell(
-      onTap: onTap ??
+      onTap:
+          onTap ??
           () => openNovaFileDownload(
-                context,
-                resolver: resolver,
-                url: url,
-                objectKey: objectKey,
-                fileName: fileName,
-                bucket: bucket,
-                previewBytes: previewBytes,
-              ),
+            context,
+            resolver: resolver,
+            url: url,
+            objectKey: objectKey,
+            fileName: fileName,
+            bucket: bucket,
+            previewBytes: previewBytes,
+          ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -1437,9 +1591,10 @@ class NovaC4FileLink extends StatelessWidget {
           Flexible(
             child: Text(
               fileName,
-              style: DunesTypography.sans(fontSize: 13, color: textColor).copyWith(
-                decoration: TextDecoration.underline,
-              ),
+              style: DunesTypography.sans(
+                fontSize: 13,
+                color: textColor,
+              ).copyWith(decoration: TextDecoration.underline),
               overflow: TextOverflow.ellipsis,
             ),
           ),

@@ -6,6 +6,13 @@ Future<String?> saveBytesAsFileImpl(Uint8List bytes, String fileName) async {
   throw UnsupportedError('当前平台不支持下载');
 }
 
+Future<String?> saveBytesAsNovaFileImpl(
+  Uint8List bytes,
+  String fileName,
+) async {
+  throw UnsupportedError('当前平台不支持下载');
+}
+
 Future<String?> saveBytesAsCachedFileImpl(
   Uint8List bytes,
   String cacheKey,

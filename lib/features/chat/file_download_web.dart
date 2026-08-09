@@ -16,6 +16,9 @@ Future<String?> saveBytesAsFileImpl(Uint8List bytes, String fileName) async {
   return null;
 }
 
+Future<String?> saveBytesAsNovaFileImpl(Uint8List bytes, String fileName) =>
+    saveBytesAsFileImpl(bytes, fileName);
+
 Future<String?> saveBytesAsCachedFileImpl(
   Uint8List bytes,
   String cacheKey,

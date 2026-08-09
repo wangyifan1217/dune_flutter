@@ -9,6 +9,7 @@ import '../../core/config/dunes_defaults.dart';
 class AppReleaseCheckResult {
   const AppReleaseCheckResult({
     required this.updateAvailable,
+    this.forceUpdate = false,
     this.latestVersionName = '',
     this.latestVersionCode = 0,
     this.releaseNotes = '',
@@ -16,6 +17,7 @@ class AppReleaseCheckResult {
   });
 
   final bool updateAvailable;
+  final bool forceUpdate;
   final String latestVersionName;
   final int latestVersionCode;
   final String releaseNotes;
@@ -49,9 +51,7 @@ class AppUpdateService {
               'versionCode': '$versionCode',
             },
           );
-      final resp = await http
-          .get(uri)
-          .timeout(const Duration(seconds: 8));
+      final resp = await http.get(uri).timeout(const Duration(seconds: 8));
       if (resp.statusCode < 200 || resp.statusCode >= 300) return null;
       final body = jsonDecode(resp.body);
       final data = body is Map<String, dynamic>
@@ -61,6 +61,7 @@ class AppUpdateService {
           : const <String, dynamic>{};
       return AppReleaseCheckResult(
         updateAvailable: data['updateAvailable'] == true,
+        forceUpdate: data['forceUpdate'] == true || data['mandatory'] == true,
         latestVersionName: data['latestVersionName'] as String? ?? '',
         latestVersionCode: (data['latestVersionCode'] as num?)?.toInt() ?? 0,
         releaseNotes: data['releaseNotes'] as String? ?? '',

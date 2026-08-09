@@ -643,35 +643,67 @@ class _NativeChatSearchPageState extends State<NativeChatSearchPage> {
       );
     }
     if (_selectedFilter == ChatHistoryFilter.imageVideo) {
-      final media = _items
-          .where((m) {
-            final kind = m.kind.toUpperCase();
-            return kind == 'IMAGE' || kind == 'VIDEO';
-          })
-          .toList(growable: false);
-      return GridView.builder(
+      final media = _items.where((m) {
+        final kind = m.kind.toUpperCase();
+        return kind == 'IMAGE' || kind == 'VIDEO';
+      }).toList()..sort((a, b) => b.id.compareTo(a.id));
+      final monthGroups = <String, List<NativeChatMessage>>{};
+      for (final message in media) {
+        final date = message.createdAt?.toLocal();
+        final key = date == null ? '时间未知' : '${date.year}年${date.month}月';
+        monthGroups.putIfAbsent(key, () => <NativeChatMessage>[]).add(message);
+      }
+      return CustomScrollView(
         controller: _scrollController,
-        padding: const EdgeInsets.fromLTRB(12, 4, 12, 16),
-        gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-          maxCrossAxisExtent: 150,
-          mainAxisSpacing: 8,
-          crossAxisSpacing: 8,
-          childAspectRatio: 1,
-        ),
-        itemCount: media.length + (_loadingMore || _hasMore ? 1 : 0),
-        itemBuilder: (_, index) {
-          if (index >= media.length) {
-            return _loadingMore
-                ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
-                : const SizedBox.shrink();
-          }
-          final message = media[index];
-          return _ChatSearchMediaTile(
-            message: message,
-            service: _service,
-            onTap: () => widget.onLocateMessage(message),
-          );
-        },
+        slivers: [
+          for (final group in monthGroups.entries) ...[
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
+                child: Text(
+                  group.key,
+                  style: DunesTypography.sans(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: DunesColors.text2,
+                  ),
+                ),
+              ),
+            ),
+            SliverPadding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              sliver: SliverGrid(
+                gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                  maxCrossAxisExtent: 150,
+                  mainAxisSpacing: 8,
+                  crossAxisSpacing: 8,
+                  childAspectRatio: 1,
+                ),
+                delegate: SliverChildBuilderDelegate((_, index) {
+                  final message = group.value[index];
+                  return _ChatSearchMediaTile(
+                    message: message,
+                    service: _service,
+                    onTap: () => widget.onLocateMessage(message),
+                  );
+                }, childCount: group.value.length),
+              ),
+            ),
+          ],
+          if (_loadingMore || _hasMore)
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                child: _loadingMore
+                    ? const Center(
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const SizedBox(height: 20),
+              ),
+            )
+          else
+            const SliverToBoxAdapter(child: SizedBox(height: 16)),
+        ],
       );
     }
     return ListView.builder(

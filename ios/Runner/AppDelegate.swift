@@ -1333,6 +1333,8 @@ final class TpnsPushBridge {
       unbindAccount(call, result: result)
     case "setBadge":
       setBadge(call, result: result)
+    case "clearConversationNotifications":
+      clearConversationNotifications(call, result: result)
     case "requestAuthorization":
       requestAuthorization(result: result)
     case "isMiuiDevice":
@@ -1424,6 +1426,58 @@ final class TpnsPushBridge {
       return nil
     }
     return result
+  }
+
+  private static func int64Value(_ value: Any?) -> Int64? {
+    if let number = value as? NSNumber {
+      return number.int64Value
+    }
+    if let integer = value as? Int {
+      return Int64(integer)
+    }
+    if let text = value as? String {
+      return Int64(text.trimmingCharacters(in: .whitespacesAndNewlines))
+    }
+    return nil
+  }
+
+  private func clearConversationNotifications(
+    _ call: FlutterMethodCall,
+    result: @escaping FlutterResult
+  ) {
+    guard let args = call.arguments as? [String: Any],
+      let conversationId = Self.int64Value(args["conversationId"]),
+      conversationId > 0
+    else {
+      result(0)
+      return
+    }
+
+    let center = UNUserNotificationCenter.current()
+    center.getDeliveredNotifications { notifications in
+      let identifiers = notifications.compactMap { notification -> String? in
+        let payload = Self.notificationClickPayload(
+          from: notification.request.content.userInfo
+        )
+        let eventType = String(describing: payload["eventType"] ?? "")
+          .trimmingCharacters(in: .whitespacesAndNewlines)
+          .lowercased()
+        guard eventType == "im",
+          let notificationConversationId = Self.int64Value(payload["conversationId"]),
+          notificationConversationId == conversationId
+        else {
+          return nil
+        }
+        return notification.request.identifier
+      }
+
+      if !identifiers.isEmpty {
+        center.removeDeliveredNotifications(withIdentifiers: identifiers)
+      }
+      DispatchQueue.main.async {
+        result(identifiers.count)
+      }
+    }
   }
 
   private func initPush(_ call: FlutterMethodCall, result: @escaping FlutterResult) {

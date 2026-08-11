@@ -8,23 +8,25 @@ bool lighthouseHeroMetricIsRate(String key) =>
 /// Shared compact Hero geometry for L1/L2/L3.
 const int lighthouseCompactHeroKpiFlex = 3;
 const int lighthouseCompactHeroTrendFlex = 7;
-const double lighthouseCompactHeroSparkHeight = 92;
+
+/// 给左侧 KPI（标签 + 大数 +「↓xx% vs 昨日」）留足高度，避免环比被裁切。
+const double lighthouseCompactHeroSparkHeight = 100;
 const double lighthouseCompactHeroMetricGap = 6;
 const bool lighthouseHeroUsesCategoryTint = false;
 const bool lighthouseHeroUsesAccentRail = false;
 const bool lighthouseHeroShowsEnglishKicker = false;
-const bool lighthouseHeroUsesCardShadow = true;
+const bool lighthouseHeroUsesCardShadow = false;
 const bool lighthouseHeroMetricUsesSansLabel = true;
-const double lighthouseHeroCardRadius = 10;
+const double lighthouseHeroCardRadius = 12;
 const double lighthouseHeroCardGap = 8;
 const double lighthouseHeroCardPadding = 8;
 const bool lighthouseHeroChartUsesCardSurface = true;
-const double lighthouseHeroChartCardPadding = 6;
+const double lighthouseHeroChartCardPadding = 8;
 const bool lighthouseHeroSparkShowsAxes = false;
 const bool lighthouseHeroSparkShowsGrid = false;
 const bool lighthouseHeroSparkShowsAverage = false;
-const bool lighthouseHeroSparkShowsEveryPeriodLabel = true;
-const bool lighthouseHeroSparkShowsEveryValue = true;
+const bool lighthouseHeroSparkShowsEveryPeriodLabel = false;
+const bool lighthouseHeroSparkShowsEveryValue = false;
 
 String lighthouseHeroCompactPeriodLabel(String label) {
   final normalized = label.trim();
@@ -152,9 +154,28 @@ const int lighthouseLedgerSummaryColumns = 2;
 
 /// 名称略大于右侧核心数字，数字不压过业务名称。
 const double lighthouseLedgerNameFontSize = 12.5;
+
+/// 产品等偏长名称：列表冻结列用更小字号，少截断。
+const double lighthouseLedgerLongNameFontSize = 11.0;
+
+/// 二级「项目」名称更长，再降一档。
+const double lighthouseLedgerProjectNameFontSize = 10.0;
 const double lighthouseLedgerValueFontSize = 11.5;
 const double lighthouseLedgerMetricLabelFontSize = 10;
 const double lighthouseLedgerDeltaFontSize = 9;
+
+/// 供给/渠道用标准名称字号；产品用长名字号；项目更小。
+double lighthouseLedgerNameFontSizeForTab(String tab) {
+  switch (tab) {
+    case 'project':
+      return lighthouseLedgerProjectNameFontSize;
+    case 'product':
+    case 'productName':
+      return lighthouseLedgerLongNameFontSize;
+    default:
+      return lighthouseLedgerNameFontSize;
+  }
+}
 
 /// 「越低越好」的指标 —— 成本类。其余（规模 / 利润 / 现金流 / 率）越高越好。
 const Set<String> lighthouseLedgerLowerIsBetterKeys = <String>{
@@ -177,6 +198,12 @@ bool? lighthouseLedgerDeltaIsFavorable(String key, double? delta) {
       : delta > 0;
 }
 
+/// 环比颜色只表达方向：中国金融色，上涨红、下跌绿。
+bool? lighthouseLedgerDeltaIsUp(double? delta) {
+  if (delta == null || delta.abs() < 0.05) return null;
+  return delta > 0;
+}
+
 /// 收起态核心数字 / 排序列用黑体（700）；展开态普通列略轻（600）。
 /// 返回 FontWeight 的 numeric value，避免本文件依赖 Flutter painting。
 int lighthouseLedgerValueWeightValue({
@@ -186,6 +213,7 @@ int lighthouseLedgerValueWeightValue({
   if (missing) return 500;
   return emphasized ? 700 : 600;
 }
+
 const double lighthouseLedgerPinnedWidthRatio = 0.35;
 const double lighthouseLedgerPinnedMaxWidth = 164;
 
@@ -218,7 +246,7 @@ const double lighthouseLedgerFilterRowHeight = 42;
 const double lighthouseLedgerFilterChipRadius = 8;
 const bool lighthouseLedgerCentersPrimaryDimensions = false;
 const bool lighthouseLedgerPrimaryDimensionsFillAvailableWidth = true;
-const bool lighthouseLedgerSeparatesAnalysisTab = true;
+const bool lighthouseLedgerSeparatesAnalysisTab = false;
 const bool lighthouseLedgerUsesLavenderPanelFrame = true;
 const double lighthouseLedgerPanelBorderWidth = 0.8;
 const double lighthouseLedgerPanelRadius = 12;
@@ -292,21 +320,128 @@ const lighthouseLedgerSummaryMetricKeys = <String>[
   'costTotal',
 ];
 
-/// 供给 / 渠道收起态四核心。
-///
-/// v19: 毛利润挪到右下角 —— 结果区是右半列，profit 必须落在右列，否则
-/// 「结果块」会盖到成本合计上。右下也是阅读顺序的终点，本来就该放结论。
+/// 产品 / 供给 / 渠道统一四核心：左列规模，右列经营结果。
 const lighthouseLedgerSummaryMetricRows = <List<String>>[
-  ['sales', 'verifiedSales'],
-  ['costTotal', 'profit'],
-];
-
-/// 产品收起态四核心：与供给/渠道区分，保留经营性净现金流位。
-/// 一 / 二 / 三级同根维必须同一套排列。
-const lighthouseProductLedgerSummaryMetricRows = <List<String>>[
   ['sales', 'prepaid'],
   ['verifiedSales', 'profit'],
 ];
+
+/// 保留产品专用名称供既有调用使用，三维实际共用同一布局。
+const lighthouseProductLedgerSummaryMetricRows =
+    lighthouseLedgerSummaryMetricRows;
+
+/// 供给卡片追加资金池预览；产品 / 渠道维度不展示。
+/// 数值来自 `/lighthouse/fund-pool`（资管标签二：资产合计 / 资金池余额）。
+bool lighthouseLedgerShowsFundPoolPreview(String tab) => tab.trim() == 'supply';
+
+/// 标签二的一行省份资金数据。金额单位沿用接口的「元」，税率为百分数。
+class LighthouseFundPoolAmounts {
+  const LighthouseFundPoolAmounts({
+    this.endingPrepaymentBalance,
+    this.endingReceivableRebate,
+    this.fundPoolBalance,
+    this.inventoryVoucherBalance,
+    this.contractVoucherBalance,
+    this.systemDifference,
+    this.inTransitFunds,
+    this.regulatoryAccountBalance,
+    this.totalAssets,
+    this.invoiceToIssue,
+    this.invoiceTaxRate,
+  });
+
+  final double? endingPrepaymentBalance;
+  final double? endingReceivableRebate;
+  final double? fundPoolBalance;
+  final double? inventoryVoucherBalance;
+  final double? contractVoucherBalance;
+  final double? systemDifference;
+  final double? inTransitFunds;
+  final double? regulatoryAccountBalance;
+  final double? totalAssets;
+  final double? invoiceToIssue;
+  final double? invoiceTaxRate;
+
+  static LighthouseFundPoolAmounts? fromJson(dynamic raw) {
+    if (raw is! Map) return null;
+    return LighthouseFundPoolAmounts(
+      endingPrepaymentBalance: _asOptionalDouble(
+        raw['endingPrepaymentBalance'],
+      ),
+      endingReceivableRebate: _asOptionalDouble(raw['endingReceivableRebate']),
+      fundPoolBalance: _asOptionalDouble(raw['fundPoolBalance']),
+      inventoryVoucherBalance: _asOptionalDouble(
+        raw['inventoryVoucherBalance'],
+      ),
+      contractVoucherBalance: _asOptionalDouble(raw['contractVoucherBalance']),
+      systemDifference: _asOptionalDouble(raw['systemDifference']),
+      inTransitFunds: _asOptionalDouble(raw['inTransitFunds']),
+      regulatoryAccountBalance: _asOptionalDouble(
+        raw['regulatoryAccountBalance'],
+      ),
+      totalAssets: _asOptionalDouble(raw['totalAssets']),
+      invoiceToIssue: _asOptionalDouble(raw['invoiceToIssue']),
+      invoiceTaxRate: _asOptionalDouble(raw['invoiceTaxRate']),
+    );
+  }
+}
+
+double? _asOptionalDouble(dynamic v) {
+  if (v == null) return null;
+  if (v is num) return v.toDouble();
+  return double.tryParse(v.toString());
+}
+
+/// 将 `/fund-pool` 的 `byProvince` 解析为可匹配 map。
+Map<String, LighthouseFundPoolAmounts> lighthouseParseFundPoolByProvince(
+  dynamic raw,
+) {
+  if (raw is! Map) return const {};
+  final out = <String, LighthouseFundPoolAmounts>{};
+  raw.forEach((key, value) {
+    final name = key?.toString().trim() ?? '';
+    if (name.isEmpty) return;
+    final amounts = LighthouseFundPoolAmounts.fromJson(value);
+    if (amounts != null) out[name] = amounts;
+  });
+  return out;
+}
+
+/// 供给行名 → 标签二省份：精确匹配，再双向包含模糊匹配；合计行不参与模糊。
+LighthouseFundPoolAmounts? lighthouseLookupFundPool(
+  Map<String, LighthouseFundPoolAmounts> byProvince,
+  String rowName,
+) {
+  final name = rowName.trim();
+  if (name.isEmpty || byProvince.isEmpty) return null;
+  final exact = byProvince[name];
+  if (exact != null) return exact;
+  for (final entry in byProvince.entries) {
+    if (entry.key == '__TOTAL__') continue;
+    final key = entry.key.trim();
+    if (key.isEmpty) continue;
+    if (key.contains(name) || name.contains(key)) return entry.value;
+  }
+  return null;
+}
+
+/// 标签二返回元；灯塔统一展示为 `12.3万` / `1.20亿`。
+String lighthouseFormatFundPoolWan(double? amount) {
+  if (amount == null) return '—';
+  final sign = amount < 0 ? '-' : '';
+  final wan = amount.abs() / 10000;
+  if (wan >= 10000) {
+    return '$sign${(wan / 10000).toStringAsFixed(2)}亿';
+  }
+  if (wan >= 1000) return '$sign${wan.toStringAsFixed(0)}万';
+  if (wan >= 1) return '$sign${wan.toStringAsFixed(1)}万';
+  return '$sign${wan.toStringAsFixed(2)}万';
+}
+
+String lighthouseFormatFundPoolRate(double? rate) {
+  if (rate == null) return '—';
+  return '${rate.toStringAsFixed(rate == rate.roundToDouble() ? 0 : 2)}%';
+}
 
 String lighthouseLedgerSummaryMetricTone(String key) => switch (key) {
   'prepaid' => 'cash',
@@ -342,9 +477,7 @@ const double lighthouseLedgerResultBlockRailWidth = 2;
 const bool lighthouseLedgerResultBlockKeepsMetricTint = false;
 
 List<List<String>> lighthouseLedgerSummaryMetricRowsForTab(String tab) =>
-    tab == 'product'
-    ? lighthouseProductLedgerSummaryMetricRows
-    : lighthouseLedgerSummaryMetricRows;
+    lighthouseLedgerSummaryMetricRows;
 
 String lighthouseLedgerHighlightModeLabel({
   required bool rowMode,
@@ -380,7 +513,7 @@ String lighthouseHeroMetricLabel(String key) {
     'netProfit': '净利润',
     'totalCost': '成本合计',
     'costTotal': '成本合计',
-    'projectCost': '直接成本',
+    'projectCost': '项目成本',
     'cost': '业务成本',
     'businessCost': '业务成本',
     'grossMargin': '毛利率',
@@ -520,4 +653,53 @@ String lighthouseNormalizeGroupFilter({
   if (cur == '全部') return '全部';
   if (options.contains(cur)) return cur;
   return fallback;
+}
+
+/// L2 行 → drill map 主键（有 group 时为 `name::group`）。
+String lighthouseDetailRowDrillKey({required String name, String group = ''}) {
+  final g = group.trim();
+  if (g.isEmpty) return name;
+  return '$name::$g';
+}
+
+/// 按 name 合并子行时保留 group；同名多 group 则清空，避免误挂分类。
+String lighthouseMergedSubRowGroup(String? existing, String? incoming) {
+  final e = (existing ?? '').trim();
+  final i = (incoming ?? '').trim();
+  if (e.isEmpty) return i;
+  if (i.isEmpty) return e;
+  if (e == i) return e;
+  return '';
+}
+
+/// 解析 L2→L3 drill 键。
+///
+/// 供给/渠道二级默认子 Tab 是「产品」，后端 `product_drill` / `sku_drill`
+/// 键多为 `name::group`；v12 列表按 name 合并后 group 常被清空，需在
+/// drill map 中唯一命中 `name` 或 `name::*` 时回退，才能进三级页。
+String? lighthouseResolveDrillKey({
+  required Iterable<String> drillKeys,
+  required String name,
+  String group = '',
+}) {
+  final keys = drillKeys is Set<String> ? drillKeys : drillKeys.toSet();
+  if (keys.isEmpty || name.isEmpty) return null;
+
+  final primary = lighthouseDetailRowDrillKey(name: name, group: group);
+  if (keys.contains(primary)) return primary;
+  if (keys.contains(name)) return name;
+
+  final g = group.trim();
+  if (g.isNotEmpty) {
+    final alt = '$name::$g';
+    if (keys.contains(alt)) return alt;
+  }
+
+  final prefix = '$name::';
+  final matches = <String>[
+    for (final k in keys)
+      if (k == name || k.startsWith(prefix)) k,
+  ];
+  if (matches.length == 1) return matches.first;
+  return null;
 }

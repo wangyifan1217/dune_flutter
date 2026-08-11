@@ -86,6 +86,13 @@ void main() {
   test('ledger rows show four focused metrics in a neutral 2x2 grid', () {
     expect(lighthouseLedgerSummaryColumns, 2);
     expect(lighthouseLedgerNameFontSize, 12.5);
+    expect(lighthouseLedgerLongNameFontSize, 11.0);
+    expect(lighthouseLedgerProjectNameFontSize, 10.0);
+    expect(lighthouseLedgerNameFontSizeForTab('supply'), 12.5);
+    expect(lighthouseLedgerNameFontSizeForTab('channel'), 12.5);
+    expect(lighthouseLedgerNameFontSizeForTab('product'), 11.0);
+    expect(lighthouseLedgerNameFontSizeForTab('productName'), 11.0);
+    expect(lighthouseLedgerNameFontSizeForTab('project'), 10.0);
     expect(lighthouseLedgerValueFontSize, 11.5);
     expect(lighthouseLedgerMetricLabelFontSize, 10);
     expect(lighthouseLedgerDeltaFontSize, 9);
@@ -110,16 +117,47 @@ void main() {
       'costTotal',
     ]);
     expect(lighthouseLedgerSummaryMetricRows, [
-      ['sales', 'verifiedSales'],
-      ['costTotal', 'profit'],
+      ['sales', 'prepaid'],
+      ['verifiedSales', 'profit'],
     ]);
+    expect(lighthouseLedgerShowsFundPoolPreview('supply'), isTrue);
+    expect(lighthouseLedgerShowsFundPoolPreview('product'), isFalse);
+    expect(lighthouseLedgerShowsFundPoolPreview('channel'), isFalse);
+
+    final byProvince = lighthouseParseFundPoolByProvince({
+      '广东省': {
+        'endingPrepaymentBalance': 120000,
+        'endingReceivableRebate': 230000,
+        'fundPoolBalance': 567000,
+        'inventoryVoucherBalance': 340000,
+        'contractVoucherBalance': 450000,
+        'systemDifference': -12000,
+        'inTransitFunds': 670000,
+        'regulatoryAccountBalance': 780000,
+        'totalAssets': 1234000,
+        'invoiceToIssue': 890000,
+        'invoiceTaxRate': 13,
+      },
+      '__TOTAL__': {'totalAssets': 999, 'fundPoolBalance': 111},
+    });
+    final guangdong = lighthouseLookupFundPool(byProvince, '广东省');
+    expect(guangdong?.totalAssets, 1234000);
+    expect(guangdong?.endingPrepaymentBalance, 120000);
+    expect(guangdong?.invoiceTaxRate, 13);
+    expect(lighthouseLookupFundPool(byProvince, '广东')?.fundPoolBalance, 567000);
+    expect(lighthouseLookupFundPool(byProvince, '未知省'), isNull);
+    expect(lighthouseFormatFundPoolWan(1234000), '123.4万');
+    expect(lighthouseFormatFundPoolWan(123400000), '1.23亿');
+    expect(lighthouseFormatFundPoolWan(null), '—');
+    expect(lighthouseFormatFundPoolRate(13), '13%');
+    expect(lighthouseFormatFundPoolRate(13.14), '13.14%');
     expect(lighthouseLedgerSummaryMetricRowsForTab('supply'), [
-      ['sales', 'verifiedSales'],
-      ['costTotal', 'profit'],
+      ['sales', 'prepaid'],
+      ['verifiedSales', 'profit'],
     ]);
     expect(lighthouseLedgerSummaryMetricRowsForTab('channel'), [
-      ['sales', 'verifiedSales'],
-      ['costTotal', 'profit'],
+      ['sales', 'prepaid'],
+      ['verifiedSales', 'profit'],
     ]);
     expect(lighthouseLedgerSummaryMetricRowsForTab('product'), [
       ['sales', 'prepaid'],
@@ -146,7 +184,7 @@ void main() {
     expect(lighthouseLedgerFilterChipRadius, 8);
     expect(lighthouseLedgerCentersPrimaryDimensions, isFalse);
     expect(lighthouseLedgerPrimaryDimensionsFillAvailableWidth, isTrue);
-    expect(lighthouseLedgerSeparatesAnalysisTab, isTrue);
+    expect(lighthouseLedgerSeparatesAnalysisTab, isFalse);
     expect(lighthouseLedgerUsesLavenderPanelFrame, isTrue);
     expect(lighthouseLedgerPanelBorderWidth, 0.8);
     expect(lighthouseLedgerPanelRadius, 12);
@@ -203,34 +241,37 @@ void main() {
     expect(lighthouseHeroCategoryLogoSize, 18);
   });
 
-  test('L1 hero shows category logo only when a concrete group is selected', () {
-    expect(lighthouseHeroShowsCategoryLogo('全部'), isFalse);
-    expect(lighthouseHeroShowsCategoryLogo(''), isFalse);
-    expect(lighthouseHeroShowsCategoryLogo('中石油'), isTrue);
-    expect(lighthouseHeroShowsCategoryLogo('能源'), isTrue);
-    expect(lighthouseHeroShowsCategoryLogo('平安'), isTrue);
-  });
+  test(
+    'L1 hero shows category logo only when a concrete group is selected',
+    () {
+      expect(lighthouseHeroShowsCategoryLogo('全部'), isFalse);
+      expect(lighthouseHeroShowsCategoryLogo(''), isFalse);
+      expect(lighthouseHeroShowsCategoryLogo('中石油'), isTrue);
+      expect(lighthouseHeroShowsCategoryLogo('能源'), isTrue);
+      expect(lighthouseHeroShowsCategoryLogo('平安'), isTrue);
+    },
+  );
 
   test('compact hero keeps KPI and trend side by side', () {
     expect(lighthouseCompactHeroKpiFlex, 3);
     expect(lighthouseCompactHeroTrendFlex, 7);
-    expect(lighthouseCompactHeroSparkHeight, 92);
+    expect(lighthouseCompactHeroSparkHeight, 100);
     expect(lighthouseCompactHeroMetricGap, 6);
     expect(lighthouseHeroUsesCategoryTint, isFalse);
     expect(lighthouseHeroUsesAccentRail, isFalse);
     expect(lighthouseHeroShowsEnglishKicker, isFalse);
-    expect(lighthouseHeroUsesCardShadow, isTrue);
+    expect(lighthouseHeroUsesCardShadow, isFalse);
     expect(lighthouseHeroMetricUsesSansLabel, isTrue);
-    expect(lighthouseHeroCardRadius, 10);
+    expect(lighthouseHeroCardRadius, 12);
     expect(lighthouseHeroCardGap, 8);
     expect(lighthouseHeroCardPadding, 8);
     expect(lighthouseHeroChartUsesCardSurface, isTrue);
-    expect(lighthouseHeroChartCardPadding, 6);
+    expect(lighthouseHeroChartCardPadding, 8);
     expect(lighthouseHeroSparkShowsAxes, isFalse);
     expect(lighthouseHeroSparkShowsGrid, isFalse);
     expect(lighthouseHeroSparkShowsAverage, isFalse);
-    expect(lighthouseHeroSparkShowsEveryPeriodLabel, isTrue);
-    expect(lighthouseHeroSparkShowsEveryValue, isTrue);
+    expect(lighthouseHeroSparkShowsEveryPeriodLabel, isFalse);
+    expect(lighthouseHeroSparkShowsEveryValue, isFalse);
     expect(lighthouseHeroCompactPeriodLabel('2026.08'), '08月');
     expect(lighthouseHeroCompactPeriodLabel('2026-02'), '02月');
     expect(lighthouseHeroCompactPeriodLabel('08.01'), '08.01');
@@ -444,14 +485,10 @@ void main() {
 
     test('gross margin series zeros out absurd magnified rates', () {
       expect(
-        lighthouseGrossMarginSeries(
-          profit: [412300],
-          verifiedSales: [80],
-        ),
+        lighthouseGrossMarginSeries(profit: [412300], verifiedSales: [80]),
         [0],
       );
     });
-
   });
 
   group('lighthouse cross-level trend isolation', () {
@@ -555,6 +592,15 @@ void main() {
     });
   });
 
+  group('lighthouseLedgerDeltaIsUp', () {
+    test('上涨为红色方向、下跌为绿色方向，不随指标类型反转', () {
+      expect(lighthouseLedgerDeltaIsUp(12), isTrue);
+      expect(lighthouseLedgerDeltaIsUp(-12), isFalse);
+      expect(lighthouseLedgerDeltaIsUp(null), isNull);
+      expect(lighthouseLedgerDeltaIsUp(0.04), isNull);
+    });
+  });
+
   group('lighthouseLedgerSummaryTitle', () {
     test('标题随实际列数变化', () {
       expect(lighthouseLedgerSummaryTitle(4), '四项核心指标');
@@ -608,6 +654,59 @@ void main() {
         lighthouseLedgerCollapsedShowsGroupColorBar,
         lighthouseLedgerCollapsedShowsGroup,
       );
+    });
+  });
+
+  group('lighthouseResolveDrillKey', () {
+    test('exact name::group hits product_drill style keys', () {
+      expect(
+        lighthouseResolveDrillKey(
+          drillKeys: const {'加油金::中石油', '优惠券::中石化'},
+          name: '加油金',
+          group: '中石油',
+        ),
+        '加油金::中石油',
+      );
+    });
+
+    test('cleared group falls back to unique name:: prefix', () {
+      // 供给/渠道二级 → 产品子列表：合并后 group=''，仍应进 L3
+      expect(
+        lighthouseResolveDrillKey(
+          drillKeys: const {'加油金::中石油', '优惠券::中石化'},
+          name: '加油金',
+          group: '',
+        ),
+        '加油金::中石油',
+      );
+    });
+
+    test('ambiguous same-name groups do not guess', () {
+      expect(
+        lighthouseResolveDrillKey(
+          drillKeys: const {'加油金::中石油', '加油金::中石化'},
+          name: '加油金',
+          group: '',
+        ),
+        isNull,
+      );
+    });
+
+    test('name-only supply/channel drills still resolve', () {
+      expect(
+        lighthouseResolveDrillKey(
+          drillKeys: const {'湖北', '湖南'},
+          name: '湖北',
+          group: '',
+        ),
+        '湖北',
+      );
+    });
+
+    test('merged group keeps unique, clears conflict', () {
+      expect(lighthouseMergedSubRowGroup('', '中石油'), '中石油');
+      expect(lighthouseMergedSubRowGroup('中石油', '中石油'), '中石油');
+      expect(lighthouseMergedSubRowGroup('中石油', '中石化'), '');
     });
   });
 }

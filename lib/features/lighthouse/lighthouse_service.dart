@@ -13,10 +13,17 @@ const _lighthouseApiBaseOverride = String.fromEnvironment(
 class LighthouseService {
   LighthouseService({required AuthSession session, http.Client? client})
     : _session = session,
+      _ownsClient = client == null,
       _client = client ?? http.Client();
 
   final AuthSession _session;
+  final bool _ownsClient;
   final http.Client _client;
+
+  /// 页面级复用一个 Client，让摘要、列表、趋势等请求共享 keep-alive 连接。
+  void dispose() {
+    if (_ownsClient) _client.close();
+  }
 
   /// 局域网访问时跟登录网关一致（`session.apiBase`），避免写死 localhost。
   String get _apiBase {
@@ -189,6 +196,26 @@ class LighthouseService {
       if (offset != null && offset != 0) 'offset': '$offset',
       ..._rangeQuery(startDate, endDate),
     }, '灯塔折扣加载失败');
+  }
+
+  /// 供给资金池（资管标签二：资产合计 / 资金池余额），按省份 map。
+  Future<Map<String, dynamic>> fetchFundPool({
+    String? period,
+    String? date,
+    String? fuel,
+    int? offset,
+    DateTime? startDate,
+    DateTime? endDate,
+    String? asOfDate,
+  }) {
+    return _getData('/lighthouse/fund-pool', {
+      if (period != null && period.isNotEmpty) 'period': period,
+      if (date != null && date.isNotEmpty) 'date': date,
+      if (fuel != null && fuel.isNotEmpty && fuel != '全部') 'fuel': fuel,
+      if (offset != null && offset != 0) 'offset': '$offset',
+      if (asOfDate != null && asOfDate.isNotEmpty) 'asOfDate': asOfDate,
+      ..._rangeQuery(startDate, endDate),
+    }, '灯塔资金池加载失败');
   }
 
   /// 分析 tab 3D 坐标 + 机会清单（懒加载）。

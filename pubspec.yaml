@@ -57,6 +57,7 @@ dependencies:
   webview_flutter_wkwebview: ^3.26.0
   geolocator: ^14.0.3
   flutter_inappwebview: 6.2.0-beta.3
+  desktop_multi_window: 0.2.1
 dev_dependencies:
   flutter_test:
     sdk: flutter

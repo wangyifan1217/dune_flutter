@@ -6,8 +6,8 @@ import '../../core/navigation/navigation_controller.dart';
 import '../../core/theme/dunes_theme.dart';
 import '../auth/auth_session.dart';
 import '../auth/auth_session_coordinator.dart';
+import '../administrative_notice/native_administrative_notice_page.dart';
 import '../drive/native_drive_page.dart';
-import '../shell/dunes_toast.dart';
 import '../tasks/native_task_home_pane.dart';
 import '../tasks/native_task_hrbp_pane.dart';
 import '../tasks/task_api.dart';
@@ -24,11 +24,13 @@ class NativeQianjiAdminShell extends StatefulWidget {
     required this.session,
     required this.navigation,
     this.onExit,
+    this.onAdministrativeNoticeAcknowledged,
   });
 
   final AuthSession session;
   final DunesNavigationController navigation;
   final VoidCallback? onExit;
+  final ValueChanged<int>? onAdministrativeNoticeAcknowledged;
 
   @override
   State<NativeQianjiAdminShell> createState() => _NativeQianjiAdminShellState();
@@ -43,6 +45,7 @@ enum _WorkbenchView {
   cases,
   pool,
   drive,
+  administrativeNotice,
 }
 
 class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
@@ -65,6 +68,7 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
     _WorkbenchView.cases: '案例库',
     _WorkbenchView.pool: '需求任务池',
     _WorkbenchView.drive: '企业微盘',
+    _WorkbenchView.administrativeNotice: '行政通知',
   };
 
   bool get _isQianjiAdmin => _session.effectiveQianjiAdminAccess;
@@ -353,6 +357,13 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
           embedded: true,
           onChromeChanged: _onTaskChrome,
         );
+      case _WorkbenchView.administrativeNotice:
+        return NativeAdministrativeNoticePage(
+          session: _session,
+          embedded: true,
+          onChromeChanged: _onTaskChrome,
+          onAcknowledged: widget.onAdministrativeNoticeAcknowledged,
+        );
       case _WorkbenchView.overview:
         return _buildOverviewPage();
     }
@@ -400,6 +411,19 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
         ),
     ];
 
+    final administrativeTiles = <_WorkbenchTile>[
+      if (!_session.isExternalUser &&
+          _session.effectiveAdministrativeNoticeAccess)
+        _WorkbenchTile(
+          title: '行政通知',
+          subtitle: '发布通知 · 查看确认进度',
+          icon: Icons.campaign_outlined,
+          color: const Color(0xFF3D7A8C),
+          enabled: true,
+          onTap: () => _open(_WorkbenchView.administrativeNotice),
+        ),
+    ];
+
     return ListView(
       padding: const EdgeInsets.fromLTRB(24, 8, 24, 40),
       children: [
@@ -415,6 +439,14 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
             title: '工具',
             accent: const Color(0xFF1668E8),
             children: toolTiles,
+          ),
+        ],
+        if (administrativeTiles.isNotEmpty) ...[
+          const SizedBox(height: 14),
+          _WorkbenchSection(
+            title: '行政',
+            accent: const Color(0xFF3D7A8C),
+            children: administrativeTiles,
           ),
         ],
       ],

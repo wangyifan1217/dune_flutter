@@ -57,6 +57,8 @@ class NativeConversation {
   bool get isApprovalAssistant => kind == 'APPROVAL_ASSISTANT';
   bool get isTaskAssistant => kind == 'TASK_ASSISTANT';
   bool get isDriveAssistant => kind == 'DRIVE_ASSISTANT';
+  bool get isAdministrativeNotice =>
+      kind.trim().toUpperCase() == 'ADMIN_NOTICE';
   bool get isSelfMemo => kind == 'SELF_MEMO';
   bool get isReconciliationAssistant {
     final normalized = kind.trim().toUpperCase();

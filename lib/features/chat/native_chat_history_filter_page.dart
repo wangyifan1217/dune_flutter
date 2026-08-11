@@ -222,12 +222,40 @@ class _NativeChatHistoryFilterPageState
   Future<void> _openImage(NativeChatMessage m) async {
     final payload = m.payload;
     if (payload == null) return;
+    final images = _items
+        .where((row) => row.kind.toUpperCase() == 'IMAGE' && row.payload != null)
+        .toList(growable: false);
+    final items = images
+        .map(
+          (row) => ChatImagePreviewItem(
+            payload: row.payload,
+            fileName: ConversationService.mediaFileName(
+              row.payload,
+              fallback: 'image-${row.id}.jpg',
+            ),
+            messageId: row.id,
+          ),
+        )
+        .toList(growable: false);
+    var initialIndex = images.indexWhere((row) => row.id == m.id);
+    if (initialIndex < 0) initialIndex = 0;
     try {
       await showChatImagePreview(
         context,
         service: _service,
-        payload: payload,
-        fileName: ConversationService.mediaFileName(payload, fallback: 'image.jpg'),
+        items: items.isEmpty
+            ? [
+                ChatImagePreviewItem(
+                  payload: payload,
+                  fileName: ConversationService.mediaFileName(
+                    payload,
+                    fallback: 'image.jpg',
+                  ),
+                  messageId: m.id,
+                ),
+              ]
+            : items,
+        initialIndex: initialIndex,
         conversationId: widget.conversationId,
       );
     } catch (e) {

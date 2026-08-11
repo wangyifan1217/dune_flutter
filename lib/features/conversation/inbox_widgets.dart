@@ -538,6 +538,7 @@ enum ChatInboxRowKind {
   taskAssistant,
   driveAssistant,
   reconciliationAssistant,
+  administrativeNotice,
   selfMemo,
   systemNotification,
   broadcast,
@@ -618,6 +619,7 @@ class ChatInboxRow extends StatelessWidget {
             kind == ChatInboxRowKind.taskAssistant ||
             kind == ChatInboxRowKind.driveAssistant ||
             kind == ChatInboxRowKind.reconciliationAssistant ||
+            kind == ChatInboxRowKind.administrativeNotice ||
             kind == ChatInboxRowKind.selfMemo ||
             kind == ChatInboxRowKind.robot
         ? const Color(0xFF7B5CD8)
@@ -998,6 +1000,20 @@ class _Avatar extends StatelessWidget {
         );
         child = const Icon(
           Icons.sync_alt_rounded,
+          color: Colors.white,
+          size: 20,
+        );
+      case ChatInboxRowKind.administrativeNotice:
+        decoration = BoxDecoration(
+          borderRadius: borderRadius,
+          gradient: const LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [Color(0xFF3D7A8C), Color(0xFF5DA7A2)],
+          ),
+        );
+        child = const Icon(
+          Icons.campaign_outlined,
           color: Colors.white,
           size: 20,
         );

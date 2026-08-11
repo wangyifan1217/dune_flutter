@@ -54,6 +54,7 @@ class NativeConversationPage extends StatefulWidget {
     this.onOpenApprovalAssistant,
     this.onOpenTaskAssistant,
     this.onOpenDriveAssistant,
+    this.onOpenAdministrativeNotice,
     this.onOpenReconciliationAssistant,
     this.onStartPrivateChat,
     this.selectedConversationId,
@@ -80,6 +81,7 @@ class NativeConversationPage extends StatefulWidget {
   final ValueChanged<NativeConversation>? onOpenApprovalAssistant;
   final ValueChanged<NativeConversation>? onOpenTaskAssistant;
   final ValueChanged<NativeConversation>? onOpenDriveAssistant;
+  final ValueChanged<NativeConversation>? onOpenAdministrativeNotice;
   final VoidCallback? onOpenReconciliationAssistant;
 
   /// 搜索命中尚无会话的联系人时，按 peerId 打开私聊（首条消息前不建会话）。
@@ -764,9 +766,7 @@ class _NativeConversationPageState extends State<NativeConversationPage>
       ]);
       final fetched = results[0] as List<NativeConversation>;
       // 退群后本地软隐藏：若服务端又把会话拉回 inbox，说明已重新入群，应取消隐藏。
-      hidden = await unhideSoftHiddenPresentInInbox(
-        fetched.map((c) => c.id),
-      );
+      hidden = await unhideSoftHiddenPresentInInbox(fetched.map((c) => c.id));
       var rows = fetched
           .where(
             (c) => c.isListedInInbox && !isConversationHidden(hidden, c.id),
@@ -1073,8 +1073,7 @@ class _NativeConversationPageState extends State<NativeConversationPage>
       if (dept.isNotEmpty) dept,
       if (role.isNotEmpty) role,
     ];
-    final preview =
-        previewParts.isEmpty ? '点击发起会话' : previewParts.join(' · ');
+    final preview = previewParts.isEmpty ? '点击发起会话' : previewParts.join(' · ');
     final initial = contact.displayLabel.isNotEmpty
         ? contact.displayLabel.substring(0, 1)
         : '?';
@@ -1160,6 +1159,11 @@ class _NativeConversationPageState extends State<NativeConversationPage>
       onTap = _openWithScrollPersist(
         () => widget.onOpenDriveAssistant?.call(c),
       );
+    } else if (c.isAdministrativeNotice) {
+      rowKind = ChatInboxRowKind.administrativeNotice;
+      onTap = _openWithScrollPersist(
+        () => widget.onOpenAdministrativeNotice?.call(c),
+      );
     } else if (c.isReconciliationAssistant) {
       // 对账助手入口已屏蔽，后端若仍返回对应会话也不展示。
       return null;
@@ -1192,6 +1196,7 @@ class _NativeConversationPageState extends State<NativeConversationPage>
             rowKind == ChatInboxRowKind.robot ||
             rowKind == ChatInboxRowKind.approvalAssistant ||
             rowKind == ChatInboxRowKind.taskAssistant ||
+            rowKind == ChatInboxRowKind.administrativeNotice ||
             rowKind == ChatInboxRowKind.reconciliationAssistant ||
             c.isSelfMemo);
 
@@ -1201,7 +1206,9 @@ class _NativeConversationPageState extends State<NativeConversationPage>
     final selected = widget.selectedConversationId == c.id;
     final row = ChatInboxRow(
       kind: rowKind,
-      title: c.isReconciliationAssistant
+      title: c.isAdministrativeNotice
+          ? '行政通知'
+          : c.isReconciliationAssistant
           ? '对账助手'
           : c.isAiAssistant
           ? _yunshuName
@@ -1222,6 +1229,8 @@ class _NativeConversationPageState extends State<NativeConversationPage>
               generatingStatus: gen.status,
               allowLocalCache: true,
             )
+          : c.isAdministrativeNotice
+          ? (c.preview.isEmpty ? '待确认的行政通知' : c.preview)
           : c.isReconciliationAssistant
           ? (c.preview.isEmpty ? '每日对账 · 待你确认' : c.preview)
           : c.isRobot
@@ -1241,6 +1250,7 @@ class _NativeConversationPageState extends State<NativeConversationPage>
               c.isApprovalAssistant ||
               c.isTaskAssistant ||
               c.isDriveAssistant ||
+              c.isAdministrativeNotice ||
               c.isReconciliationAssistant ||
               kind == 'AI_ASSISTANT' ||
               kind == 'BROADCAST'
@@ -1322,6 +1332,7 @@ class _NativeConversationPageState extends State<NativeConversationPage>
                 c.isApprovalAssistant ||
                 c.isTaskAssistant ||
                 c.isDriveAssistant ||
+                c.isAdministrativeNotice ||
                 c.isReconciliationAssistant,
           )
           .toList(),
@@ -1525,8 +1536,9 @@ class _NativeConversationPageState extends State<NativeConversationPage>
     final showContactSection =
         _searchQuery.isNotEmpty && widget.onStartPrivateChat != null;
     if (showContactSection) {
-      final contactRows =
-          _contactHits.map(_buildContactHitRow).toList(growable: false);
+      final contactRows = _contactHits
+          .map(_buildContactHitRow)
+          .toList(growable: false);
       if (_contactSearching || contactRows.isNotEmpty) {
         children.add(
           ChatInboxSectionHeader(

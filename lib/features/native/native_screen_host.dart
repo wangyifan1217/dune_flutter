@@ -115,6 +115,7 @@ import '../ai_summary/native_ai_summary_detail_page.dart';
 import '../ai_summary/native_ai_summary_hub_page.dart';
 import '../drive/native_drive_page.dart';
 import '../drive/native_drive_assistant_page.dart';
+import '../administrative_notice/native_administrative_notice_page.dart';
 
 class NativeScreenHost extends StatefulWidget {
   const NativeScreenHost({
@@ -146,6 +147,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
   NativeConversation? _selectedApprovalAssistant;
   NativeConversation? _selectedTaskAssistant;
   NativeConversation? _selectedDriveAssistant;
+  NativeConversation? _selectedAdministrativeNotice;
+  int? _administrativeNoticeTargetId;
   int? _driveTargetItemId;
   ApprovalAssistantPickMode _approvalAssistantPickMode =
       ApprovalAssistantPickMode.browse;
@@ -329,6 +332,10 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       final id = _selectedDriveAssistant?.id ?? 0;
       return id > 0 ? id : null;
     }
+    if (screen == 'AN1') {
+      final id = _selectedAdministrativeNotice?.id ?? 0;
+      return id > 0 ? id : null;
+    }
     return null;
   }
 
@@ -433,7 +440,12 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     // Only IM notifications should affect the conversation navigation.  System
     // notifications and broadcasts may also arrive through this handler, but
     // they do not have an IM conversation fallback target.
-    if (event.eventType.trim().toLowerCase() != 'im') return;
+    final eventType = event.eventType.trim().toLowerCase();
+    if (eventType != 'im' &&
+        eventType != 'admin_notice' &&
+        eventType != 'administrative_notice') {
+      return;
+    }
     final conversationId = event.conversationId;
     if (conversationId <= 0) {
       _fallbackToConversationListFromTpns();
@@ -443,7 +455,10 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     unawaited(() async {
       var routed = false;
       try {
-        routed = await _openConversationFromTpns(conversationId);
+        routed = await _openConversationFromTpns(
+          conversationId,
+          noticeId: event.noticeId,
+        );
       } catch (error, stackTrace) {
         debugPrint(
           '[Push] failed to open conversation $conversationId: $error',
@@ -470,7 +485,10 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     widget.navigation.go('C1');
   }
 
-  Future<bool> _openConversationFromTpns(int conversationId) async {
+  Future<bool> _openConversationFromTpns(
+    int conversationId, {
+    int noticeId = 0,
+  }) async {
     NativeConversation? conversation = _commBadgeConversations[conversationId];
     if (conversation == null) {
       final service = ConversationService(session: widget.session);
@@ -507,6 +525,9 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     } else if (resolvedConversation.isDriveAssistant) {
       await _openDriveAssistant(resolvedConversation);
       routed = mounted && widget.navigation.currentScreen == 'DA1';
+    } else if (resolvedConversation.isAdministrativeNotice) {
+      _openAdministrativeNotice(resolvedConversation, noticeId: noticeId);
+      routed = mounted && widget.navigation.currentScreen == 'AN1';
     } else if (resolvedConversation.isAiAssistant) {
       setState(() {
         _novaFocusConversationId = resolvedConversation.id;
@@ -518,7 +539,10 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     }
 
     if (!mounted || !routed) return false;
-    _handleConversationRead(resolvedConversation.id);
+    _handleConversationRead(
+      resolvedConversation.id,
+      preserveUnread: resolvedConversation.isAdministrativeNotice,
+    );
     await clearPushConversationNotifications(resolvedConversation.id);
     return true;
   }
@@ -784,11 +808,16 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     });
   }
 
-  void _handleConversationRead(int conversationId) {
+  void _handleConversationRead(
+    int conversationId, {
+    bool preserveUnread = false,
+  }) {
     if (conversationId > 0) {
       _pendingBadgeZeroSync = true;
-      _commUnread.clearMutedMention(conversationId);
-      _conversationReadSignal.notifyRead(conversationId);
+      if (!preserveUnread) {
+        _commUnread.clearMutedMention(conversationId);
+        _conversationReadSignal.notifyRead(conversationId);
+      }
       // 按 peer 打开私聊时 Host 可能尚无 conversationId；已读回调补一次 active-view。
       if (_userActivelyInChat &&
           !windowsTrayIsWindowInactive() &&
@@ -969,7 +998,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         s == 'C10' ||
         s == 'AA1' ||
         s == 'TA1' ||
-        s == 'DA1') {
+        s == 'DA1' ||
+        s == 'AN1') {
       return true;
     }
     return (_dualPaneSelectedConversationId ?? 0) > 0;
@@ -992,6 +1022,9 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     }
     if (screen == 'TA1' && _selectedTaskAssistant?.id == convId) return true;
     if (screen == 'DA1' && _selectedDriveAssistant?.id == convId) return true;
+    if (screen == 'AN1' && _selectedAdministrativeNotice?.id == convId) {
+      return true;
+    }
     return false;
   }
 
@@ -1204,7 +1237,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         current == 'AA1' ||
         current == 'TA1' ||
         current == 'DA1' ||
-        current == 'RA1') {
+        current == 'RA1' ||
+        current == 'AN1') {
       widget.navigation.replaceTop(screenId);
     } else {
       widget.navigation.go(screenId);
@@ -1380,6 +1414,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         _selectedApprovalAssistant = null;
         _selectedTaskAssistant = null;
         _selectedDriveAssistant = null;
+        _selectedAdministrativeNotice = null;
+        _administrativeNoticeTargetId = null;
       }
     });
     _markUserLeftChat();
@@ -1824,6 +1860,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       onOpenApprovalAssistant: _openApprovalAssistant,
       onOpenTaskAssistant: _openTaskAssistant,
       onOpenDriveAssistant: _openDriveAssistant,
+      onOpenAdministrativeNotice: _openAdministrativeNotice,
       // 对账助手暂为静态预览，先屏蔽入口；恢复时改回：
       // !widget.session.isExternalUser ? _openReconciliationAssistant : null
       onOpenReconciliationAssistant: null,
@@ -1997,6 +2034,26 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     setState(() => _driveTargetItemId = itemId);
     _markUserLeftChat();
     widget.navigation.go('FD1');
+  }
+
+  void _openAdministrativeNotice(NativeConversation? hint, {int noticeId = 0}) {
+    setState(() {
+      _selectedPrivate = null;
+      _selectedPrivatePeerUserId = null;
+      _selectedGroup = null;
+      _selectedRobot = null;
+      _selectedApprovalAssistant = null;
+      _selectedTaskAssistant = null;
+      _selectedDriveAssistant = null;
+      if (hint != null && hint.id > 0) {
+        _selectedAdministrativeNotice = hint;
+      } else {
+        _selectedAdministrativeNotice = null;
+      }
+      _administrativeNoticeTargetId = noticeId > 0 ? noticeId : null;
+    });
+    _markUserEnteredChat();
+    widget.navigation.go('AN1');
   }
 
   Widget _buildDriveAssistantPage({bool showBackButton = true}) {
@@ -2643,6 +2700,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           onExit: isDesktopCommOnly
               ? null
               : () => widget.navigation.popTo('B2'),
+          onAdministrativeNoticeAcknowledged: _handleConversationRead,
         );
       case 'CT1':
         // 每次进入使用独立 key，强制重建，避免复用一次性 Ticket。
@@ -2765,6 +2823,15 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         );
       case 'C1':
         return _buildConversationListPage();
+      case 'AN1':
+        return NativeAdministrativeNoticePage(
+          session: widget.session,
+          conversationHint: _selectedAdministrativeNotice,
+          initialNoticeId: _administrativeNoticeTargetId,
+          showBackButton: true,
+          onBack: () => _leaveChatToInbox(clearSelection: true),
+          onAcknowledged: _handleConversationRead,
+        );
       case 'AA1':
         return _buildApprovalAssistantPage();
       case 'AA2':
@@ -3600,6 +3667,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       'CF',
       'TA1',
       'DA1',
+      'AN1',
       'Z2',
       'AS1',
       'AS2',
@@ -3719,6 +3787,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     }
     // 企业微盘从工作台进入：PC 归工作台 Tab，APP 归「我的」。
     if (screen == 'FD1') return isDesktopCommOnly ? 'QJA' : 'B2';
+    if (screen == 'AN1') return isDesktopCommOnly ? 'QJA' : 'B2';
     if (_isMyRoute(screen)) return 'B2';
     if (screen == 'QJ' ||
         screen == 'QJC' ||

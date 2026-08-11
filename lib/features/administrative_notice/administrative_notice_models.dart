@@ -20,9 +20,7 @@ class AdministrativeNoticeAttachment {
       id: (json['id'] as num?)?.toInt() ?? 0,
       fileName: (json['fileName'] ?? json['file_name'] ?? '').toString(),
       mimeType: (json['mimeType'] ?? json['mime_type'] ?? 'application/octet-stream').toString(),
-      sizeBytes: (json['sizeBytes'] ?? json['size_bytes'] as num?) is num
-          ? ((json['sizeBytes'] ?? json['size_bytes']) as num).toInt()
-          : 0,
+      sizeBytes: _intValue(json['sizeBytes'] ?? json['size_bytes']),
       url: (json['url'] ?? '').toString().trim().isEmpty ? null : (json['url'] ?? '').toString(),
       objectKey: (json['objectKey'] ?? json['object_key'] ?? '').toString().trim().isEmpty
           ? null
@@ -56,9 +54,7 @@ class AdministrativeNoticeRecipient {
 
   factory AdministrativeNoticeRecipient.fromJson(Map<String, dynamic> json) {
     return AdministrativeNoticeRecipient(
-      userId: (json['userId'] ?? json['user_id'] as num?) is num
-          ? ((json['userId'] ?? json['user_id']) as num).toInt()
-          : 0,
+      userId: _intValue(json['userId'] ?? json['user_id']),
       displayName: (json['displayName'] ?? json['display_name'] ?? '用户').toString(),
       readAt: _parseDate(json['readAt'] ?? json['read_at']),
       acknowledgedAt: _parseDate(json['acknowledgedAt'] ?? json['acknowledged_at']),
@@ -79,9 +75,7 @@ class AdministrativeNoticeUser {
 
   factory AdministrativeNoticeUser.fromJson(Map<String, dynamic> json) {
     return AdministrativeNoticeUser(
-      userId: (json['userId'] ?? json['user_id'] as num?) is num
-          ? ((json['userId'] ?? json['user_id']) as num).toInt()
-          : 0,
+      userId: _intValue(json['userId'] ?? json['user_id']),
       displayName: (json['displayName'] ?? json['display_name'] ?? '用户').toString(),
       departmentName: (json['departmentName'] ?? json['department_name'] ?? '').toString().trim().isEmpty
           ? null
@@ -129,19 +123,13 @@ class AdministrativeNotice {
       id: (json['id'] as num?)?.toInt() ?? 0,
       title: (json['title'] ?? '').toString(),
       body: (json['body'] ?? json['bodyText'] ?? '').toString(),
-      senderUserId: (json['senderUserId'] ?? json['sender_user_id'] as num?) is num
-          ? ((json['senderUserId'] ?? json['sender_user_id']) as num).toInt()
-          : 0,
+      senderUserId: _intValue(json['senderUserId'] ?? json['sender_user_id']),
       senderName: (json['senderName'] ?? json['sender_name'] ?? '行政').toString(),
       createdAt: _parseDate(json['createdAt'] ?? json['created_at']),
       readAt: _parseDate(json['readAt'] ?? json['read_at']),
       acknowledgedAt: _parseDate(json['acknowledgedAt'] ?? json['acknowledged_at']),
-      recipientCount: (json['recipientCount'] ?? json['recipient_count'] as num?) is num
-          ? ((json['recipientCount'] ?? json['recipient_count']) as num).toInt()
-          : 0,
-      acknowledgedCount: (json['acknowledgedCount'] ?? json['acknowledged_count'] as num?) is num
-          ? ((json['acknowledgedCount'] ?? json['acknowledged_count']) as num).toInt()
-          : 0,
+      recipientCount: _intValue(json['recipientCount'] ?? json['recipient_count']),
+      acknowledgedCount: _intValue(json['acknowledgedCount'] ?? json['acknowledged_count']),
       attachments: rawAttachments is List
           ? rawAttachments.whereType<Map>().map((e) => AdministrativeNoticeAttachment.fromJson(Map<String, dynamic>.from(e))).toList()
           : const <AdministrativeNoticeAttachment>[],
@@ -156,4 +144,9 @@ DateTime? _parseDate(Object? value) {
   final text = value?.toString().trim() ?? '';
   if (text.isEmpty) return null;
   return DateTime.tryParse(text)?.toLocal();
+}
+
+int _intValue(Object? value) {
+  if (value is num) return value.toInt();
+  return int.tryParse(value?.toString() ?? '') ?? 0;
 }

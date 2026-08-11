@@ -18,12 +18,16 @@ class NativeB1Page extends StatelessWidget {
     required this.session,
     required this.onOpenProposal,
     this.onBack,
+    this.initialStatusFilter = 'MINE',
     this.workbenchRefresh,
   });
 
   final AuthSession session;
   final void Function(XflowProposalItem item) onOpenProposal;
   final VoidCallback? onBack;
+
+  /// 默认「待我审批」；进页时优先于列表缓存里的旧筛选。
+  final String? initialStatusFilter;
   final WorkbenchDataRefreshNotifier? workbenchRefresh;
 
   @override
@@ -33,6 +37,7 @@ class NativeB1Page extends StatelessWidget {
       onOpenProposal: onOpenProposal,
       onBack: onBack,
       type: _ListType.b1,
+      initialStatusFilter: initialStatusFilter,
       workbenchRefresh: workbenchRefresh,
     );
   }
@@ -150,7 +155,9 @@ class _NativeProposalListPageState extends State<_NativeProposalListPage> {
   /// 静默刷新中（切筛选/推送等）：保留当前列表，仅局部更新数据。
   bool _refreshing = false;
   String? _error;
-  late String _statusFilter = widget.initialStatusFilter ?? 'ALL';
+  late String _statusFilter =
+      widget.initialStatusFilter ??
+      (widget.type == _ListType.b1 ? 'MINE' : 'ALL');
   List<XflowProposalItem> _all = const <XflowProposalItem>[];
   /// 快速切换筛选时丢弃过期响应，避免旧请求覆盖新数据。
   int _loadSeq = 0;
@@ -171,7 +178,10 @@ class _NativeProposalListPageState extends State<_NativeProposalListPage> {
     );
     if (cached != null) {
       _all = cached.rows;
-      _statusFilter = cached.statusFilter;
+      // 显式初始筛选（如 B1 默认「待我审批」）优先生效，避免被历史「全部」缓存盖住。
+      if (widget.initialStatusFilter == null) {
+        _statusFilter = cached.statusFilter;
+      }
       _search.text = cached.searchQuery;
       _loading = false;
       _searchListenerReady = true;

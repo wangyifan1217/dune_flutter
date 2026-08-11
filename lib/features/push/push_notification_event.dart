@@ -14,6 +14,7 @@ class PushNotificationClick {
     required this.customContent,
     required this.eventType,
     required this.conversationId,
+    this.noticeId = 0,
   });
 
   final int messageId;
@@ -22,8 +23,16 @@ class PushNotificationClick {
   final String customContent;
   final String eventType;
   final int conversationId;
+  final int noticeId;
 
-  bool get isConversation => eventType.toLowerCase() == 'im' && conversationId > 0;
+  bool get isAdministrativeNotice {
+    final type = eventType.trim().toLowerCase();
+    return type == 'admin_notice' || type == 'administrative_notice';
+  }
+
+  bool get isConversation =>
+      (eventType.toLowerCase() == 'im' || isAdministrativeNotice) &&
+      conversationId > 0;
 
   static PushNotificationClick? fromMethodArguments(Object? arguments) {
     if (arguments is! Map) return null;
@@ -33,9 +42,7 @@ class PushNotificationClick {
     var customContent = '';
     if (customRaw is Map) {
       // iOS MethodChannel 常把 custom 直接传成 Map。
-      custom = customRaw.map(
-        (key, value) => MapEntry(key.toString(), value),
-      );
+      custom = customRaw.map((key, value) => MapEntry(key.toString(), value));
       try {
         customContent = jsonEncode(custom);
       } catch (_) {
@@ -62,6 +69,7 @@ class PushNotificationClick {
     final conversationId = _toInt(
       custom['conversationId'] ?? raw['conversationId'],
     );
+    final noticeId = _toInt(custom['noticeId'] ?? raw['noticeId']);
     return PushNotificationClick(
       messageId: _toInt(raw['messageId'] ?? custom['messageId']),
       title: raw['title']?.toString() ?? '',
@@ -69,6 +77,7 @@ class PushNotificationClick {
       customContent: customContent,
       eventType: eventType,
       conversationId: conversationId,
+      noticeId: noticeId,
     );
   }
 

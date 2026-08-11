@@ -10,12 +10,14 @@ class NativeMyApprovalWorkbenchPage extends StatelessWidget {
     required this.session,
     required this.onOpenProposal,
     this.onBack,
+    this.initialStatusFilter = 'MINE',
     this.workbenchRefresh,
   });
 
   final AuthSession session;
   final void Function(XflowProposalItem item) onOpenProposal;
   final VoidCallback? onBack;
+  final String? initialStatusFilter;
   final WorkbenchDataRefreshNotifier? workbenchRefresh;
 
   @override
@@ -24,6 +26,7 @@ class NativeMyApprovalWorkbenchPage extends StatelessWidget {
       session: session,
       onOpenProposal: onOpenProposal,
       onBack: onBack,
+      initialStatusFilter: initialStatusFilter,
       workbenchRefresh: workbenchRefresh,
     );
   }

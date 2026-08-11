@@ -10,6 +10,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/config/dunes_defaults.dart';
 import '../../core/platform/desktop_features.dart';
 import '../../core/theme/dunes_theme.dart';
+import '../chat/chat_image_preview_window_stub.dart'
+    if (dart.library.io) '../chat/chat_image_preview_window.dart';
 import '../desktop/windows_desktop_tray.dart';
 import '../nova/nova_auth_service.dart';
 import '../nova/nova_web_storage.dart';
@@ -150,6 +152,9 @@ class _LoginFlowState extends State<LoginFlow> with WidgetsBindingObserver {
       _showPostLoginSplash = false;
     });
     _persistSession(session);
+    if (isDesktopCommOnly) {
+      unawaited(warmDesktopChatImagePreviewWindow());
+    }
   }
 
   void _onSessionRefreshed(AuthSession session) {
@@ -258,6 +263,9 @@ class _LoginFlowState extends State<LoginFlow> with WidgetsBindingObserver {
             _session = session;
             _hydrating = false;
           });
+        }
+        if (isDesktopCommOnly) {
+          unawaited(warmDesktopChatImagePreviewWindow());
         }
         return;
       }

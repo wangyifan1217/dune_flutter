@@ -1,16 +1,22 @@
 import 'dart:async';
-import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../core/platform/desktop_features.dart';
 import '../../core/theme/dunes_theme.dart';
 import '../../core/util/friendly_error.dart';
+import '../auth/auth_session.dart';
 import '../conversation/conversation_service.dart';
 import '../shell/dunes_toast.dart';
 import 'chat_image_editor.dart';
+import 'chat_image_preview_models.dart';
+import 'chat_image_preview_window_stub.dart'
+    if (dart.library.io) 'chat_image_preview_window.dart';
 import 'chat_image_utils.dart';
+
+export 'chat_image_preview_models.dart';
 import 'cors_safe_image.dart';
 import 'file_download.dart' as file_dl;
 import 'gallery_save.dart' as gallery;
@@ -488,8 +494,10 @@ class _ChatInlineImageState extends State<_ChatInlineImage> {
       return widget.error();
     }
 
+    // PC：双击打开预览，避免误触；APP 仍单击。
     return GestureDetector(
-      onTap: widget.onTap,
+      onTap: isDesktopCommOnly ? null : widget.onTap,
+      onDoubleTap: isDesktopCommOnly ? widget.onTap : null,
       child: ClipRRect(
         borderRadius: BorderRadius.circular(12),
         child: ConstrainedBox(
@@ -504,65 +512,170 @@ class _ChatInlineImageState extends State<_ChatInlineImage> {
   }
 }
 
-/// 打开会话风格的全屏图片预览（缩放 + 关闭 + 保存到相册）。
+/// 打开会话风格的图片预览（缩放 + 关闭 + 保存/下载）。
+/// PC：真正的系统级独立窗口 + 左右切换同会话其他图片。
 /// 群媒体、会话气泡等共用同一套 UI 与保存逻辑。
 Future<void> showChatImagePreview(
   BuildContext context, {
   required ConversationService service,
-  required Map<String, dynamic>? payload,
-  required String fileName,
+  Map<String, dynamic>? payload,
+  String fileName = 'image.jpg',
+  List<ChatImagePreviewItem>? items,
+  int initialIndex = 0,
   int? conversationId,
   VoidCallback? onLocateInChat,
 }) {
+  final gallery = (items != null && items.isNotEmpty)
+      ? items
+      : <ChatImagePreviewItem>[
+          ChatImagePreviewItem(
+            payload: payload,
+            fileName: fileName,
+            onLocateInChat: onLocateInChat,
+          ),
+        ];
+  final index = initialIndex.clamp(0, gallery.length - 1);
+
+  // PC：真正打开系统级独立窗口（第二 HWND / NSWindow）。
+  if (isDesktopCommOnly) {
+    return _openDesktopChatImagePreviewWithFeedback(
+      context,
+      session: service.session,
+      items: gallery,
+      initialIndex: index,
+      conversationId: conversationId,
+    );
+  }
+
   return showDialog<void>(
     context: context,
     barrierColor: Colors.black87,
-    builder: (_) => _ImagePreviewDialog(
+    builder: (_) => ChatImagePreviewPage(
       service: service,
-      payload: payload,
-      fileName: fileName,
+      items: gallery,
+      initialIndex: index,
       conversationId: conversationId,
-      onLocateInChat: onLocateInChat,
     ),
   );
 }
 
-/// 全屏图片预览：缩放；APP 保存到相册；PC 下载 / 裁剪编辑。
-class _ImagePreviewDialog extends StatefulWidget {
-  const _ImagePreviewDialog({
+/// 主窗立刻给出点击反馈，避免独立引擎启动期间「点了没反应」。
+Future<void> _openDesktopChatImagePreviewWithFeedback(
+  BuildContext context, {
+  required AuthSession session,
+  required List<ChatImagePreviewItem> items,
+  required int initialIndex,
+  int? conversationId,
+}) async {
+  final overlay = Overlay.maybeOf(context, rootOverlay: true);
+  OverlayEntry? entry;
+  if (overlay != null) {
+    entry = OverlayEntry(
+      builder: (_) => IgnorePointer(
+        child: ColoredBox(
+          color: Colors.black.withValues(alpha: 0.18),
+          child: Center(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: Colors.black.withValues(alpha: 0.78),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2.2,
+                        color: Colors.white,
+                      ),
+                    ),
+                    SizedBox(width: 12),
+                    Text(
+                      '正在打开预览…',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                        decoration: TextDecoration.none,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    overlay.insert(entry);
+  }
+  try {
+    await openDesktopChatImagePreviewWindow(
+      session: session,
+      items: items,
+      initialIndex: initialIndex,
+      conversationId: conversationId,
+    );
+  } finally {
+    entry?.remove();
+  }
+}
+
+/// 全屏图片预览：缩放；APP 保存到相册；PC 独立窗 / 裁剪编辑 / 左右切换。
+class ChatImagePreviewPage extends StatefulWidget {
+  const ChatImagePreviewPage({
+    super.key,
     required this.service,
-    required this.payload,
-    required this.fileName,
+    required this.items,
+    required this.initialIndex,
     this.conversationId,
-    this.onLocateInChat,
+    this.initialPreviewBytes,
+    this.onClose,
   });
 
   final ConversationService service;
-  final Map<String, dynamic>? payload;
-  final String fileName;
+  final List<ChatImagePreviewItem> items;
+  final int initialIndex;
   final int? conversationId;
-  final VoidCallback? onLocateInChat;
+
+  /// 主窗口已缓存的当前预览图字节，用于独立窗首帧秒开。
+  final Uint8List? initialPreviewBytes;
+
+  /// 独立窗口关闭回调；为空时走 Navigator.pop。
+  final VoidCallback? onClose;
 
   @override
-  State<_ImagePreviewDialog> createState() => _ImagePreviewDialogState();
+  State<ChatImagePreviewPage> createState() => _ChatImagePreviewPageState();
 }
 
-class _ImagePreviewDialogState extends State<_ImagePreviewDialog> {
+class _ChatImagePreviewPageState extends State<ChatImagePreviewPage> {
+  late int _index;
   Future<Uint8List>? _future;
   String? _webPublicUrl;
   bool _showingOriginal = false;
   bool _saving = false;
   bool _editing = false;
+  bool _consumedInitialBytes = false;
   Uint8List? _editedBytes;
   Uint8List? _metadataBytes;
   Future<(int width, int height)?>? _dimensionsFuture;
+  final FocusNode _focusNode = FocusNode();
 
   bool get _desktop => isDesktopCommOnly;
+  bool get _canBrowse => widget.items.length > 1;
+  ChatImagePreviewItem get _current => widget.items[_index];
+  Map<String, dynamic>? get _payload => _current.payload;
+  String get _fileName => _current.fileName;
+  VoidCallback? get _onLocateInChat => _current.onLocateInChat;
 
   String get _cacheKey {
     final cachePayload = _showingOriginal
-        ? widget.payload
-        : ConversationService.previewMediaPayload(widget.payload);
+        ? _payload
+        : ConversationService.previewMediaPayload(_payload);
     final objectKey = (cachePayload?['objectKey'] ?? '').toString().trim();
     if (objectKey.isNotEmpty) return objectKey;
     return ConversationService.mediaDirectUrl(cachePayload);
@@ -570,14 +683,14 @@ class _ImagePreviewDialogState extends State<_ImagePreviewDialog> {
 
   int? get _payloadSizeBytes {
     final raw =
-        widget.payload?['sizeBytes'] ??
-        widget.payload?['size_bytes'] ??
-        widget.payload?['fileSizeBytes'] ??
-        widget.payload?['fileSize'] ??
-        widget.payload?['file_size'] ??
-        widget.payload?['originalSizeBytes'] ??
-        widget.payload?['original_size_bytes'] ??
-        widget.payload?['size'];
+        _payload?['sizeBytes'] ??
+        _payload?['size_bytes'] ??
+        _payload?['fileSizeBytes'] ??
+        _payload?['fileSize'] ??
+        _payload?['file_size'] ??
+        _payload?['originalSizeBytes'] ??
+        _payload?['original_size_bytes'] ??
+        _payload?['size'];
     if (raw is num && raw >= 0) return raw.toInt();
     return int.tryParse(raw?.toString() ?? '');
   }
@@ -645,26 +758,67 @@ class _ImagePreviewDialogState extends State<_ImagePreviewDialog> {
   @override
   void initState() {
     super.initState();
+    _index = widget.initialIndex.clamp(0, widget.items.length - 1);
+    _bindCurrentItem();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _focusNode.requestFocus();
+    });
+  }
+
+  @override
+  void dispose() {
+    _focusNode.dispose();
+    super.dispose();
+  }
+
+  void _bindCurrentItem() {
+    _showingOriginal = false;
+    _saving = false;
+    _editing = false;
+    _editedBytes = null;
+    _metadataBytes = null;
+    _dimensionsFuture = null;
     // 首次打开保持原有行为，先展示会话内预览图；查看原图由预览页内按钮触发。
-    final publicUrl = ConversationService.mediaPublicImageUrl(widget.payload);
+    final publicUrl = ConversationService.mediaPublicImageUrl(_payload);
     if (kIsWeb && publicUrl != null) {
       _webPublicUrl = publicUrl;
       _future = null;
-    } else {
-      _future = _loadPreviewBytes();
+      return;
     }
+    _webPublicUrl = null;
+    final seed = widget.initialPreviewBytes;
+    if (!_consumedInitialBytes &&
+        seed != null &&
+        seed.isNotEmpty &&
+        _index == widget.initialIndex) {
+      _consumedInitialBytes = true;
+      _future = Future<Uint8List>.value(seed);
+      _prepareMetadata(seed);
+      return;
+    }
+    _future = _loadPreviewBytes();
   }
 
+  void _goTo(int index) {
+    if (!_canBrowse) return;
+    if (index < 0 || index >= widget.items.length || index == _index) return;
+    setState(() {
+      _index = index;
+      _bindCurrentItem();
+    });
+  }
+
+  void _goPrev() => _goTo(_index - 1);
+  void _goNext() => _goTo(_index + 1);
+
   Future<Uint8List> _loadPreviewBytes() async {
-    final previewPayload = ConversationService.previewMediaPayload(
-      widget.payload,
-    );
-    final publicUrl = ConversationService.mediaPublicImageUrl(widget.payload);
+    final previewPayload = ConversationService.previewMediaPayload(_payload);
+    final publicUrl = ConversationService.mediaPublicImageUrl(_payload);
     if (publicUrl != null && publicUrl.isNotEmpty) {
       try {
         return await widget.service.downloadAttachmentBytes(
           objectKey: publicUrl,
-          fileName: widget.fileName,
+          fileName: _fileName,
         );
       } catch (_) {
         // 公网地址失效时回退到鉴权预览下载。
@@ -678,18 +832,16 @@ class _ImagePreviewDialogState extends State<_ImagePreviewDialog> {
   }
 
   void _viewOriginal() {
-    if (_showingOriginal || !_chatImageHasSeparateOriginal(widget.payload)) {
+    if (_showingOriginal || !_chatImageHasSeparateOriginal(_payload)) {
       return;
     }
-    final publicUrl = ConversationService.mediaOriginalPublicImageUrl(
-      widget.payload,
-    );
+    final publicUrl = ConversationService.mediaOriginalPublicImageUrl(_payload);
     // Web 才用公网直链渲染；桌面/APP 一律拉原图像素字节，避免错误 CDN
     // 地址抢占 _webPublicUrl 分支后看起来像「点了没效果」。
     final useWebPublic = kIsWeb && publicUrl != null && publicUrl.isNotEmpty;
     final fullFuture = useWebPublic
         ? null
-        : widget.service.loadFullImageBytes(widget.payload);
+        : widget.service.loadFullImageBytes(_payload);
     setState(() {
       _showingOriginal = true;
       _webPublicUrl = useWebPublic ? publicUrl : null;
@@ -713,9 +865,9 @@ class _ImagePreviewDialogState extends State<_ImagePreviewDialog> {
 
   Future<void> _save(Uint8List bytes, {String? fileName}) async {
     if (_saving) return;
-    final name = (fileName ?? widget.fileName).trim().isEmpty
-        ? widget.fileName
-        : (fileName ?? widget.fileName);
+    final name = (fileName ?? _fileName).trim().isEmpty
+        ? _fileName
+        : (fileName ?? _fileName);
     setState(() => _saving = true);
     try {
       if (_desktop) {
@@ -759,7 +911,7 @@ class _ImagePreviewDialogState extends State<_ImagePreviewDialog> {
     try {
       await file_dl.openUrlAsFile(
         url,
-        widget.fileName,
+        _fileName,
         cacheKey: _cacheKey.isEmpty ? null : _cacheKey,
         conversationId: widget.conversationId,
       );
@@ -782,19 +934,131 @@ class _ImagePreviewDialogState extends State<_ImagePreviewDialog> {
       );
       if (!mounted || edited == null || edited.isEmpty) return;
       setState(() => _editedBytes = edited);
-      await _save(edited, fileName: chatImageEditedFileName(widget.fileName));
+      await _save(edited, fileName: chatImageEditedFileName(_fileName));
     } finally {
       if (mounted) setState(() => _editing = false);
     }
+  }
+
+  Widget _navButton({
+    required IconData icon,
+    required VoidCallback? onTap,
+  }) {
+    return Material(
+      color: Colors.black.withValues(alpha: 0.45),
+      shape: const CircleBorder(),
+      child: InkWell(
+        customBorder: const CircleBorder(),
+        onTap: onTap,
+        child: SizedBox(
+          width: 44,
+          height: 44,
+          child: Icon(
+            icon,
+            color: onTap == null ? Colors.white38 : Colors.white,
+            size: 26,
+          ),
+        ),
+      ),
+    );
+  }
+
+  List<Widget> _buildActionChildren({
+    required bool forWeb,
+    String? webUrl,
+    Uint8List? bytes,
+  }) {
+    return [
+      if (_onLocateInChat != null) ...[
+        _PreviewActionButton(
+          icon: Icons.my_location_rounded,
+          label: '定位聊天',
+          onTap: () {
+            _close();
+            _onLocateInChat!();
+          },
+        ),
+        const SizedBox(width: 8),
+      ],
+      if (!_showingOriginal && _chatImageHasSeparateOriginal(_payload)) ...[
+        _PreviewActionButton(
+          icon: Icons.high_quality_rounded,
+          label: '查看原图',
+          onTap: _viewOriginal,
+        ),
+        const SizedBox(width: 8),
+      ],
+      if (_desktop && !forWeb && bytes != null) ...[
+        _PreviewActionButton(
+          icon: Icons.crop_rounded,
+          label: _editing ? '编辑中…' : '裁剪',
+          onTap: (_saving || _editing)
+              ? null
+              : () => _editAndMaybeDownload(bytes),
+        ),
+        const SizedBox(width: 8),
+      ],
+      _PreviewActionButton(
+        icon: Icons.download_rounded,
+        label: _saving
+            ? (_desktop ? '下载中…' : '保存中…')
+            : (_showingOriginal
+                  ? (_desktop ? '下载原图' : '保存原图')
+                  : (_desktop ? '下载预览' : '保存预览')),
+        onTap: _saving || _editing
+            ? null
+            : () {
+                if (forWeb && webUrl != null) {
+                  unawaited(_saveWebUrl(webUrl));
+                } else if (bytes != null) {
+                  unawaited(_save(bytes));
+                }
+              },
+      ),
+    ];
+  }
+
+  void _close() {
+    final onClose = widget.onClose;
+    if (onClose != null) {
+      onClose();
+      return;
+    }
+    Navigator.of(context).maybePop();
+  }
+
+  Widget _wrapPreviewShell({required Widget child}) {
+    final body = CallbackShortcuts(
+      bindings: <ShortcutActivator, VoidCallback>{
+        const SingleActivator(LogicalKeyboardKey.arrowLeft): _goPrev,
+        const SingleActivator(LogicalKeyboardKey.arrowRight): _goNext,
+        const SingleActivator(LogicalKeyboardKey.escape): _close,
+      },
+      child: Focus(
+        focusNode: _focusNode,
+        autofocus: true,
+        child: Material(
+          color: Colors.black,
+          child: child,
+        ),
+      ),
+    );
+    // 独立系统窗口：铺满；手机端仍用 Dialog。
+    if (widget.onClose != null) {
+      return SizedBox.expand(child: body);
+    }
+    return Dialog(
+      backgroundColor: Colors.black,
+      insetPadding: const EdgeInsets.all(12),
+      child: body,
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     final webUrl = _webPublicUrl;
     if (webUrl != null) {
-      return Dialog(
-        backgroundColor: Colors.black,
-        insetPadding: const EdgeInsets.all(12),
+      return _wrapPreviewShell(
         child: Column(
           children: [
             Expanded(
@@ -817,7 +1081,7 @@ class _ImagePreviewDialogState extends State<_ImagePreviewDialog> {
                     top: 4,
                     right: 4,
                     child: IconButton(
-                      onPressed: () => Navigator.of(context).pop(),
+                      onPressed: _close,
                       icon: const Icon(
                         Icons.close_rounded,
                         color: Colors.white,
@@ -827,17 +1091,70 @@ class _ImagePreviewDialogState extends State<_ImagePreviewDialog> {
                   Positioned(
                     top: 14,
                     left: 14,
-                    child: _metadataPill(
-                      sizeBytes: _showingOriginal ? _payloadSizeBytes : null,
-                      dimensions: null,
-                      original: _showingOriginal,
-                      force: _showingOriginal,
+                    child: Row(
+                      children: [
+                        _metadataPill(
+                          sizeBytes:
+                              _showingOriginal ? _payloadSizeBytes : null,
+                          dimensions: null,
+                          original: _showingOriginal,
+                          force: _showingOriginal,
+                        ),
+                        if (_canBrowse) ...[
+                          const SizedBox(width: 8),
+                          DecoratedBox(
+                            decoration: BoxDecoration(
+                              color: Colors.black.withValues(alpha: 0.55),
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 6,
+                              ),
+                              child: Text(
+                                '${_index + 1} / ${widget.items.length}',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
                   ),
+                  if (_canBrowse) ...[
+                    Positioned(
+                      left: 12,
+                      top: 0,
+                      bottom: 0,
+                      child: Center(
+                        child: _navButton(
+                          icon: Icons.chevron_left_rounded,
+                          onTap: _index > 0 ? _goPrev : null,
+                        ),
+                      ),
+                    ),
+                    Positioned(
+                      right: 12,
+                      top: 0,
+                      bottom: 0,
+                      child: Center(
+                        child: _navButton(
+                          icon: Icons.chevron_right_rounded,
+                          onTap: _index < widget.items.length - 1
+                              ? _goNext
+                              : null,
+                        ),
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
-            // 底栏单独占位，避免挡住图片底部内容。
             SafeArea(
               top: false,
               child: Padding(
@@ -856,41 +1173,10 @@ class _ImagePreviewDialogState extends State<_ImagePreviewDialog> {
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
-                        children: [
-                          if (widget.onLocateInChat != null) ...[
-                            _PreviewActionButton(
-                              icon: Icons.my_location_rounded,
-                              label: '定位聊天',
-                              onTap: () {
-                                Navigator.of(context).pop();
-                                widget.onLocateInChat!();
-                              },
-                            ),
-                            const SizedBox(width: 8),
-                          ],
-                          if (!_showingOriginal &&
-                              _chatImageHasSeparateOriginal(
-                                widget.payload,
-                              )) ...[
-                            _PreviewActionButton(
-                              icon: Icons.high_quality_rounded,
-                              label: '查看原图',
-                              onTap: _viewOriginal,
-                            ),
-                            const SizedBox(width: 8),
-                          ],
-                          _PreviewActionButton(
-                            icon: Icons.download_rounded,
-                            label: _saving
-                                ? '下载中…'
-                                : (_showingOriginal
-                                      ? (_desktop ? '下载原图' : '保存原图')
-                                      : (_desktop ? '下载预览' : '保存预览')),
-                            onTap: _saving
-                                ? null
-                                : () => _saveWebUrl(webUrl),
-                          ),
-                        ],
+                        children: _buildActionChildren(
+                          forWeb: true,
+                          webUrl: webUrl,
+                        ),
                       ),
                     ),
                   ),
@@ -902,10 +1188,9 @@ class _ImagePreviewDialogState extends State<_ImagePreviewDialog> {
       );
     }
 
-    return Dialog(
-      backgroundColor: Colors.black,
-      insetPadding: const EdgeInsets.all(12),
+    return _wrapPreviewShell(
       child: FutureBuilder<Uint8List>(
+        key: ValueKey<int>(_index),
         future: _future,
         builder: (context, snap) {
           final loading = snap.connectionState != ConnectionState.done;
@@ -949,7 +1234,7 @@ class _ImagePreviewDialogState extends State<_ImagePreviewDialog> {
                       top: 4,
                       right: 4,
                       child: IconButton(
-                        onPressed: () => Navigator.of(context).pop(),
+                        onPressed: _close,
                         icon: const Icon(
                           Icons.close_rounded,
                           color: Colors.white,
@@ -960,18 +1245,71 @@ class _ImagePreviewDialogState extends State<_ImagePreviewDialog> {
                       Positioned(
                         top: 14,
                         left: 14,
-                        child: _metadataPill(
-                          sizeBytes: _showingOriginal
-                              ? (_payloadSizeBytes ?? originalBytes?.length)
-                              : originalBytes?.length,
-                          dimensions: _dimensionsFuture,
-                          original: _showingOriginal,
+                        child: Row(
+                          children: [
+                            _metadataPill(
+                              sizeBytes: _showingOriginal
+                                  ? (_payloadSizeBytes ??
+                                        originalBytes?.length)
+                                  : originalBytes?.length,
+                              dimensions: _dimensionsFuture,
+                              original: _showingOriginal,
+                            ),
+                            if (_canBrowse) ...[
+                              const SizedBox(width: 8),
+                              DecoratedBox(
+                                decoration: BoxDecoration(
+                                  color: Colors.black.withValues(alpha: 0.55),
+                                  borderRadius: BorderRadius.circular(14),
+                                ),
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                    vertical: 6,
+                                  ),
+                                  child: Text(
+                                    '${_index + 1} / ${widget.items.length}',
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ],
                         ),
                       ),
+                    if (_canBrowse) ...[
+                      Positioned(
+                        left: 12,
+                        top: 0,
+                        bottom: 0,
+                        child: Center(
+                          child: _navButton(
+                            icon: Icons.chevron_left_rounded,
+                            onTap: _index > 0 ? _goPrev : null,
+                          ),
+                        ),
+                      ),
+                      Positioned(
+                        right: 12,
+                        top: 0,
+                        bottom: 0,
+                        child: Center(
+                          child: _navButton(
+                            icon: Icons.chevron_right_rounded,
+                            onTap: _index < widget.items.length - 1
+                                ? _goNext
+                                : null,
+                          ),
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),
-              // 底栏与图片分区布局，避免「查看原图/裁剪/下载」盖住图底部内容。
               if (!loading && !failed && bytes != null)
                 SafeArea(
                   top: false,
@@ -991,51 +1329,10 @@ class _ImagePreviewDialogState extends State<_ImagePreviewDialog> {
                           ),
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
-                            children: [
-                              if (widget.onLocateInChat != null) ...[
-                                _PreviewActionButton(
-                                  icon: Icons.my_location_rounded,
-                                  label: '定位聊天',
-                                  onTap: () {
-                                    Navigator.of(context).pop();
-                                    widget.onLocateInChat!();
-                                  },
-                                ),
-                                const SizedBox(width: 8),
-                              ],
-                              if (!_showingOriginal &&
-                                  _chatImageHasSeparateOriginal(
-                                    widget.payload,
-                                  )) ...[
-                                _PreviewActionButton(
-                                  icon: Icons.high_quality_rounded,
-                                  label: '查看原图',
-                                  onTap: _viewOriginal,
-                                ),
-                                const SizedBox(width: 8),
-                              ],
-                              if (_desktop) ...[
-                                _PreviewActionButton(
-                                  icon: Icons.crop_rounded,
-                                  label: _editing ? '编辑中…' : '裁剪',
-                                  onTap: (_saving || _editing)
-                                      ? null
-                                      : () => _editAndMaybeDownload(bytes),
-                                ),
-                                const SizedBox(width: 8),
-                              ],
-                              _PreviewActionButton(
-                                icon: Icons.download_rounded,
-                                label: _saving
-                                    ? (_desktop ? '下载中…' : '保存中…')
-                                    : (_showingOriginal
-                                          ? (_desktop ? '下载原图' : '保存原图')
-                                          : (_desktop ? '下载预览' : '保存预览')),
-                                onTap: (_saving || _editing)
-                                    ? null
-                                    : () => _save(bytes),
-                              ),
-                            ],
+                            children: _buildActionChildren(
+                              forWeb: false,
+                              bytes: bytes,
+                            ),
                           ),
                         ),
                       ),

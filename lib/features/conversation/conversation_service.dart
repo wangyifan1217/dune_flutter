@@ -118,6 +118,9 @@ class ConversationService {
   static const int _maxSendAttempts = 3;
   bool _closed = false;
 
+  /// 供桌面子窗口等场景复用同一登录态。
+  AuthSession get session => _session;
+
   /// 释放底层 HTTP 连接；切会话销毁页面时调用，避免旧请求占满连接池。
   void close() {
     if (_closed) return;

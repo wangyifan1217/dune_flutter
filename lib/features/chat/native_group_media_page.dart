@@ -237,14 +237,40 @@ class _NativeGroupMediaPageState extends State<NativeGroupMediaPage> {
   Future<void> _previewImage(NativeChatMessage message) async {
     final payload = message.payload;
     if (payload == null) return;
-    final fileName = ConversationService.mediaFileName(payload, fallback: 'image.jpg');
+    final images = _items
+        .where((m) => m.kind.toUpperCase() == 'IMAGE' && m.payload != null)
+        .toList(growable: false);
+    final items = images
+        .map(
+          (m) => ChatImagePreviewItem(
+            payload: m.payload,
+            fileName: ConversationService.mediaFileName(
+              m.payload,
+              fallback: 'image-${m.id}.jpg',
+            ),
+            messageId: m.id,
+          ),
+        )
+        .toList(growable: false);
+    var initialIndex = images.indexWhere((m) => m.id == message.id);
+    if (initialIndex < 0) initialIndex = 0;
     try {
-      // 与会话内图片点击放大完全一致的 UI 与保存/下载逻辑。
       await showChatImagePreview(
         context,
         service: _service,
-        payload: payload,
-        fileName: fileName,
+        items: items.isEmpty
+            ? [
+                ChatImagePreviewItem(
+                  payload: payload,
+                  fileName: ConversationService.mediaFileName(
+                    payload,
+                    fallback: 'image.jpg',
+                  ),
+                  messageId: message.id,
+                ),
+              ]
+            : items,
+        initialIndex: initialIndex,
         conversationId: widget.conversationId,
       );
     } catch (e) {
@@ -530,6 +556,7 @@ class _FilledMediaSlot extends StatelessWidget {
     required this.meta,
     required this.onTap,
     required this.trailing,
+    this.desktopDoubleClick = false,
   });
 
   final Widget leading;
@@ -537,13 +564,16 @@ class _FilledMediaSlot extends StatelessWidget {
   final String meta;
   final VoidCallback? onTap;
   final Widget trailing;
+  final bool desktopDoubleClick;
 
   @override
   Widget build(BuildContext context) {
+    final useDoubleClick = desktopDoubleClick && isDesktopCommOnly;
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        onTap: onTap,
+        onTap: useDoubleClick ? null : onTap,
+        onDoubleTap: useDoubleClick ? onTap : null,
         borderRadius: BorderRadius.circular(11),
         child: Ink(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
@@ -664,6 +694,7 @@ class _ImageMediaRow extends StatelessWidget {
       title: message.bodyText.isEmpty ? '[图片]' : message.bodyText,
       meta: '${message.senderName} · ${_timeLabel(message.createdAt)}',
       onTap: downloading ? null : onTap,
+      desktopDoubleClick: true,
       trailing: IconButton(
         onPressed: downloading ? null : onDownload,
         icon: downloading

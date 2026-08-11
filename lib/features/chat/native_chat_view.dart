@@ -6617,6 +6617,46 @@ class _NativeChatViewState extends State<NativeChatView>
     );
   }
 
+  /// PC/手机：打开会话图片图集预览，可左右切换同会话其他图片。
+  Future<void> _openChatImageGallery(NativeChatMessage current) async {
+    final items = <ChatImagePreviewItem>[];
+    var initialIndex = 0;
+    for (final m in _messages) {
+      if (m.kind.toUpperCase() != 'IMAGE' || m.payload == null) continue;
+      if (m.id == current.id) initialIndex = items.length;
+      items.add(
+        ChatImagePreviewItem(
+          payload: m.payload,
+          fileName: ConversationService.mediaFileName(
+            m.payload,
+            fallback: 'image-${m.id}.jpg',
+          ),
+          messageId: m.id,
+        ),
+      );
+    }
+    if (items.isEmpty && current.payload != null) {
+      items.add(
+        ChatImagePreviewItem(
+          payload: current.payload,
+          fileName: ConversationService.mediaFileName(
+            current.payload,
+            fallback: 'image.jpg',
+          ),
+          messageId: current.id,
+        ),
+      );
+    }
+    if (items.isEmpty || !mounted) return;
+    await showChatImagePreview(
+      context,
+      service: _service,
+      items: items,
+      initialIndex: initialIndex,
+      conversationId: _chatConversationId,
+    );
+  }
+
   String _mediaDownloadFileName(NativeChatMessage m) {
     final payload = m.payload;
     final fromPayload = ConversationService.mediaFileName(payload);
@@ -6858,6 +6898,7 @@ class _NativeChatViewState extends State<NativeChatView>
           payload: m.payload,
           mine: mine,
           conversationId: _chatConversationId,
+          onTap: () => unawaited(_openChatImageGallery(m)),
         ),
       );
     }

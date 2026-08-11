@@ -4,6 +4,7 @@
 
 list(APPEND FLUTTER_PLUGIN_LIST
   desktop_drop
+  desktop_multi_window
   emoji_picker_flutter
   file_selector_linux
   flutter_inappwebview_linux

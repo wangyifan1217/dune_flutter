@@ -10,7 +10,7 @@ import 'administrative_notice_models.dart';
 
 class AdministrativeNoticeService {
   AdministrativeNoticeService({required this.session, http.Client? client})
-      : _client = client ?? http.Client();
+    : _client = client ?? http.Client();
 
   final AuthSession session;
   final http.Client _client;
@@ -35,29 +35,81 @@ class AdministrativeNoticeService {
   }
 
   Future<bool> canAccess() async {
-    final response = await dunesHttpGet(session, '/admin-notices/access', client: _client);
+    final response = await dunesHttpGet(
+      session,
+      '/admin-notices/access',
+      client: _client,
+    );
     final data = _unwrap(response);
     return data is Map && data['enabled'] == true;
   }
 
+  /// Ensures the user's stable ADMIN_NOTICE conversation exists.  The
+  /// conversation is also used as the authorization scope for attachments
+  /// and the normal IM read cursor.
+  Future<int> ensureConversation() async {
+    final response = await dunesHttpGet(
+      session,
+      '/admin-notices/conversation',
+      client: _client,
+    );
+    final data = _unwrap(response);
+    if (data is! Map) return 0;
+    return (data['conversationId'] as num?)?.toInt() ?? 0;
+  }
+
+  /// Opening the module marks notices as read, but deliberately does not
+  /// acknowledge them.  The server keeps the unread/angle badge until ACK.
+  Future<void> markConversationRead() async {
+    final conversationId = await ensureConversation();
+    if (conversationId <= 0) return;
+    final conversations = ConversationService(session: session);
+    try {
+      await conversations.markConversationRead(conversationId);
+    } finally {
+      conversations.close();
+    }
+  }
+
   Future<List<AdministrativeNoticeUser>> fetchUsers() async {
-    final response = await dunesHttpGet(session, '/admin-notices/users', client: _client);
+    final response = await dunesHttpGet(
+      session,
+      '/admin-notices/users',
+      client: _client,
+    );
     final data = _unwrap(response);
     final rows = data is List ? data : (data is Map ? data['items'] : null);
     if (rows is! List) return const <AdministrativeNoticeUser>[];
-    return rows.whereType<Map>().map((e) => AdministrativeNoticeUser.fromJson(Map<String, dynamic>.from(e))).toList();
+    return rows
+        .whereType<Map>()
+        .map(
+          (e) =>
+              AdministrativeNoticeUser.fromJson(Map<String, dynamic>.from(e)),
+        )
+        .toList();
   }
 
   Future<List<AdministrativeNotice>> fetchNotices() async {
-    final response = await dunesHttpGet(session, '/admin-notices', client: _client);
+    final response = await dunesHttpGet(
+      session,
+      '/admin-notices',
+      client: _client,
+    );
     final data = _unwrap(response);
     final rows = data is List ? data : (data is Map ? data['items'] : null);
     if (rows is! List) return const <AdministrativeNotice>[];
-    return rows.whereType<Map>().map((e) => AdministrativeNotice.fromJson(Map<String, dynamic>.from(e))).toList();
+    return rows
+        .whereType<Map>()
+        .map((e) => AdministrativeNotice.fromJson(Map<String, dynamic>.from(e)))
+        .toList();
   }
 
   Future<AdministrativeNotice> fetchNotice(int id) async {
-    final response = await dunesHttpGet(session, '/admin-notices/$id', client: _client);
+    final response = await dunesHttpGet(
+      session,
+      '/admin-notices/$id',
+      client: _client,
+    );
     final data = _unwrap(response);
     if (data is! Map) throw Exception('行政通知数据为空');
     return AdministrativeNotice.fromJson(Map<String, dynamic>.from(data));
@@ -86,7 +138,11 @@ class AdministrativeNoticeService {
   }
 
   Future<AdministrativeNotice> acknowledge(int id) async {
-    final response = await dunesHttpPost(session, '/admin-notices/$id/ack', client: _client);
+    final response = await dunesHttpPost(
+      session,
+      '/admin-notices/$id/ack',
+      client: _client,
+    );
     final data = _unwrap(response);
     if (data is! Map) throw Exception('行政通知确认失败');
     return AdministrativeNotice.fromJson(Map<String, dynamic>.from(data));
@@ -96,10 +152,12 @@ class AdministrativeNoticeService {
     final bytes = await file.readAsBytes();
     final name = file.name.isEmpty ? 'attachment' : file.name;
     final mime = file.mimeType ?? 'application/octet-stream';
+    final conversationId = await ensureConversation();
+    if (conversationId <= 0) throw Exception('行政通知会话不可用');
     final uploader = ConversationService(session: session);
     try {
       final uploaded = await uploader.uploadAttachment(
-        conversationId: 0,
+        conversationId: conversationId,
         bytes: bytes,
         fileName: name,
         mimeType: mime,

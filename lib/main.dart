@@ -10,6 +10,8 @@ import 'core/platform/desktop_features.dart';
 import 'core/theme/app_text_scale.dart';
 import 'core/theme/dunes_theme.dart';
 import 'core/widgets/app_watermark.dart';
+import 'features/chat/chat_image_preview_window_stub.dart'
+    if (dart.library.io) 'features/chat/chat_image_preview_window.dart';
 import 'features/desktop/windows_desktop_tray.dart';
 import 'features/push/push_service.dart';
 import 'features/shell/splash_screen.dart';
@@ -68,8 +70,15 @@ Widget _initialHome() {
   return const AppBootGate();
 }
 
-Future<void> main() async {
+Future<void> main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // 桌面图片预览：desktop_multi_window 会以独立 Flutter Engine 再进一次 main。
+  if (isDesktopImagePreviewWindowArgs(args)) {
+    await runDesktopImagePreviewWindow(args);
+    return;
+  }
+
   installWebTextInputGuard();
   await AppTextScaleController.instance.load();
   if (isDesktopCommOnly) {

@@ -45,8 +45,9 @@ class NativeKbService {
   Future<void> ensureNovaReady() async {
     _novaApiKey =
         (session.novaLocalStorage?['dunes_nova_api_key'] ?? '').trim();
-    _novaBase = (session.novaLocalStorage?['dunes_nova_base'] ?? NovaConfig.baseUrl)
-        .replaceAll(RegExp(r'/$'), '');
+    _novaBase = NovaConfig.resolveBaseUrl(
+      session.novaLocalStorage?['dunes_nova_base'],
+    );
     if (_novaApiKey.isNotEmpty) return;
 
     final resp = await _client.get(
@@ -61,8 +62,9 @@ class NativeKbService {
         ? body['data'] as Map<String, dynamic>
         : body;
     _novaApiKey = (data['api_token'] ?? data['apiToken'] ?? '').toString().trim();
-    _novaBase = (data['baseUrl'] as String?)?.trim().replaceAll(RegExp(r'/$'), '') ??
-        _novaBase;
+    _novaBase = NovaConfig.resolveBaseUrl(
+      (data['baseUrl'] as String?)?.trim() ?? _novaBase,
+    );
     if (_novaApiKey.isEmpty) {
       throw Exception('Nova 知识库未就绪，请重新登录');
     }

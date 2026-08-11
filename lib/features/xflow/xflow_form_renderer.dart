@@ -239,6 +239,9 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
     if (field.type == 'row') return _rowField(field);
     if (_isUserField(field)) return _userField(field, inRow: inRow);
     if (field.type == 'proposal') return _proposalField(field, inRow: inRow);
+    if (_isRemoteSearchField(field)) {
+      return _remoteSearchField(field, inRow: inRow);
+    }
     switch (field.type) {
       case 'section':
         return _sectionField(field);
@@ -599,6 +602,8 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
     return field.raw['dataSource']?.toString() == 'org_user';
   }
 
+  bool _isRemoteSearchField(XflowField field) => field.remoteSearch != null;
+
   String? _userRoleFilter(XflowField field) {
     final raw = field.raw;
     for (final key in ['roleCode', 'allowedRole', 'userRoleCode']) {
@@ -620,6 +625,24 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
         placeholder: hint,
         readonly: field.readonly,
         onChanged: (v) => widget.onChanged(field.key, v),
+      ),
+      inRow: inRow,
+    );
+  }
+
+  Widget _remoteSearchField(XflowField field, {bool inRow = false}) {
+    final cfg = field.remoteSearch!;
+    final hint = field.placeholder.isEmpty ? '输入关键词搜索' : field.placeholder;
+    return _fieldWrap(
+      field,
+      _XflowRemoteSearchPicker(
+        service: widget.service,
+        config: cfg,
+        fieldKey: field.key,
+        value: widget.values[field.key],
+        placeholder: hint,
+        readonly: field.readonly,
+        onFieldChanged: widget.onChanged,
       ),
       inRow: inRow,
     );
@@ -2073,6 +2096,247 @@ class _XflowProposalPickerState extends State<_XflowProposalPicker> {
           const SizedBox(height: 6),
           Text(
             '无匹配提案',
+            style: DunesTypography.sans(fontSize: 11, color: DunesColors.text3),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+/// 通用远程搜索：行为完全由 [XflowRemoteSearchConfig] 驱动，无业务硬编码。
+class _XflowRemoteSearchPicker extends StatefulWidget {
+  const _XflowRemoteSearchPicker({
+    required this.service,
+    required this.config,
+    required this.fieldKey,
+    required this.value,
+    required this.placeholder,
+    required this.readonly,
+    required this.onFieldChanged,
+  });
+
+  final XflowService? service;
+  final XflowRemoteSearchConfig config;
+  final String fieldKey;
+  final dynamic value;
+  final String placeholder;
+  final bool readonly;
+  final XflowFieldChanged onFieldChanged;
+
+  @override
+  State<_XflowRemoteSearchPicker> createState() =>
+      _XflowRemoteSearchPickerState();
+}
+
+class _XflowRemoteSearchPickerState extends State<_XflowRemoteSearchPicker> {
+  final _controller = TextEditingController();
+  final _focus = FocusNode();
+  List<Map<String, dynamic>> _results = const [];
+  bool _loading = false;
+  bool _searched = false;
+  Timer? _debounce;
+
+  XflowRemoteSearchConfig get _cfg => widget.config;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller.text = _displayText(widget.value);
+  }
+
+  @override
+  void didUpdateWidget(covariant _XflowRemoteSearchPicker oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.value != widget.value) {
+      final next = _displayText(widget.value);
+      // 仅在外部写入（回填/导入）且输入框未聚焦时同步，避免打断手输。
+      if (!_focus.hasFocus && _controller.text != next) {
+        _controller.text = next;
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _debounce?.cancel();
+    _focus.dispose();
+    _controller.dispose();
+    super.dispose();
+  }
+
+  String _displayText(dynamic val) {
+    if (val == null) return '';
+    return val.toString();
+  }
+
+  String _errorMessage(Object e) {
+    final raw = e.toString();
+    if (raw.startsWith('Exception: ')) {
+      return raw.substring('Exception: '.length).trim();
+    }
+    return raw.trim().isEmpty ? '搜索失败' : raw.trim();
+  }
+
+  void _clearSelection() {
+    _debounce?.cancel();
+    setState(() {
+      _controller.clear();
+      _results = const [];
+      _searched = false;
+      _loading = false;
+    });
+    widget.onFieldChanged(widget.fieldKey, '');
+  }
+
+  void _selectRow(Map<String, dynamic> row) {
+    final value = _cfg.valueOf(row);
+    if (value != null) {
+      widget.onFieldChanged(widget.fieldKey, value);
+      _controller.text = value;
+    }
+    for (final entry in _cfg.fillPatches(row).entries) {
+      widget.onFieldChanged(entry.key, entry.value);
+      if (entry.key == widget.fieldKey) {
+        _controller.text = entry.value;
+      }
+    }
+    setState(() {
+      _results = const [];
+      _searched = false;
+      _loading = false;
+    });
+    _focus.unfocus();
+  }
+
+  Future<void> _search(String q) async {
+    final query = q.trim();
+    if (widget.service == null || query.length < _cfg.minChars) {
+      setState(() {
+        _results = const [];
+        _searched = false;
+        _loading = false;
+      });
+      return;
+    }
+    setState(() => _loading = true);
+    try {
+      final rows = await widget.service!.searchRemote(
+        path: _cfg.path,
+        queryParam: _cfg.queryParam,
+        query: query,
+      );
+      if (!mounted || _controller.text.trim() != query) return;
+      setState(() {
+        _results = rows;
+        _searched = true;
+        _loading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _searched = true;
+        _results = const [];
+      });
+      showDunesToast(
+        context,
+        _errorMessage(e),
+        kind: DunesToastKind.error,
+      );
+    }
+  }
+
+  void _onQueryChanged(String q) {
+    if (!widget.readonly && _cfg.allowManual) {
+      widget.onFieldChanged(widget.fieldKey, q);
+    }
+    _debounce?.cancel();
+    final wait = Duration(milliseconds: _cfg.debounceMs);
+    _debounce = Timer(wait, () {
+      if (!mounted) return;
+      if (_controller.text.trim() == q.trim()) _search(q);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final hasText = _controller.text.trim().isNotEmpty;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        TextField(
+          controller: _controller,
+          focusNode: _focus,
+          readOnly: widget.readonly,
+          enableInteractiveSelection: true,
+          contextMenuBuilder: (context, editableTextState) {
+            return AdaptiveTextSelectionToolbar.editableText(
+              editableTextState: editableTextState,
+            );
+          },
+          decoration: xfInputDecoration(hint: widget.placeholder).copyWith(
+            suffixIcon: _loading
+                ? const Padding(
+                    padding: EdgeInsets.all(10),
+                    child: SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  )
+                : hasText && !widget.readonly
+                ? IconButton(
+                    icon: const Icon(
+                      Icons.close_rounded,
+                      size: 18,
+                      color: DunesColors.text3,
+                    ),
+                    onPressed: _clearSelection,
+                    tooltip: '清除',
+                  )
+                : const Icon(
+                    Icons.search,
+                    size: 18,
+                    color: DunesColors.text3,
+                  ),
+          ),
+          style: xfInputTextStyle(),
+          onChanged: widget.readonly ? null : _onQueryChanged,
+        ),
+        if (_results.isNotEmpty) ...[
+          const SizedBox(height: 6),
+          Container(
+            constraints: const BoxConstraints(maxHeight: 220),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: DunesColors.border),
+            ),
+            child: ListView.separated(
+              padding: EdgeInsets.zero,
+              shrinkWrap: true,
+              itemCount: _results.length.clamp(0, 12),
+              separatorBuilder: (_, _) =>
+                  Divider(height: 1, color: DunesColors.borderSoft),
+              itemBuilder: (context, index) {
+                final row = _results[index];
+                final label = _cfg.labelOf(row);
+                return ListTile(
+                  dense: true,
+                  title: Text(
+                    label.isEmpty ? '（无标题）' : label,
+                    style: DunesTypography.sans(fontSize: 12),
+                  ),
+                  onTap: () => _selectRow(row),
+                );
+              },
+            ),
+          ),
+        ] else if (_searched && !_loading && hasText) ...[
+          const SizedBox(height: 6),
+          Text(
+            '无匹配结果',
             style: DunesTypography.sans(fontSize: 11, color: DunesColors.text3),
           ),
         ],

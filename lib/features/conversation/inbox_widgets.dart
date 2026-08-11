@@ -438,7 +438,7 @@ class ChatInboxSearchBar extends StatelessWidget {
                   decoration: InputDecoration(
                     isDense: true,
                     border: InputBorder.none,
-                    hintText: '搜索',
+                    hintText: '搜索会话或联系人',
                     hintStyle: DunesTypography.sans(
                       fontSize: 13,
                       color: const Color(0xFFB2B2B2),

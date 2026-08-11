@@ -18,6 +18,7 @@ class AuthSession {
     this.qianjiAdminAccess = false,
     this.robotAccess = false,
     this.hrbpAccess = false,
+    this.administrativeNoticeAccess = false,
   });
 
   final String phone;
@@ -32,6 +33,8 @@ class AuthSession {
   final bool qianjiAccess;
   final bool qianjiAdminAccess;
   final bool robotAccess;
+  /// Backend-controlled access to the administrative notice module.
+  final bool administrativeNoticeAccess;
   /// 后端下发的「任务汇总」能力开关；未下发时工作台会走接口探测。
   final bool hrbpAccess;
 
@@ -49,6 +52,8 @@ class AuthSession {
 
   bool get effectiveRobotAccess =>
       robotAccess || DunesDefaults.localLighthouseAccessBypass;
+
+  bool get effectiveAdministrativeNoticeAccess => administrativeNoticeAccess;
 
   AuthSession withLocalDevGrants() {
     var next = this;
@@ -98,6 +103,7 @@ class AuthSession {
     bool? qianjiAdminAccess,
     bool? robotAccess,
     bool? hrbpAccess,
+    bool? administrativeNoticeAccess,
   }) {
     return AuthSession(
       phone: phone ?? this.phone,
@@ -114,6 +120,8 @@ class AuthSession {
       qianjiAdminAccess: qianjiAdminAccess ?? this.qianjiAdminAccess,
       robotAccess: robotAccess ?? this.robotAccess,
       hrbpAccess: hrbpAccess ?? this.hrbpAccess,
+      administrativeNoticeAccess:
+          administrativeNoticeAccess ?? this.administrativeNoticeAccess,
     );
   }
 
@@ -149,6 +157,7 @@ class AuthSession {
       qianjiAdminAccess: data['qianjiAdminAccess'] == true,
       robotAccess: data['robotAccess'] == true,
       hrbpAccess: data['hrbpAccess'] == true,
+      administrativeNoticeAccess: data['administrativeNoticeAccess'] == true,
     );
   }
 
@@ -178,6 +187,7 @@ class AuthSession {
       qianjiAdminAccess: claims['qianjiAdminAccess'] == true,
       robotAccess: claims['robotAccess'] == true,
       hrbpAccess: claims['hrbpAccess'] == true,
+      administrativeNoticeAccess: claims['administrativeNoticeAccess'] == true,
     );
   }
 
@@ -214,6 +224,7 @@ class AuthSession {
       'qianjiAdminAccess': qianjiAdminAccess,
       'robotAccess': robotAccess,
       'hrbpAccess': hrbpAccess,
+      'administrativeNoticeAccess': administrativeNoticeAccess,
     };
   }
 
@@ -236,6 +247,7 @@ class AuthSession {
       qianjiAdminAccess: json['qianjiAdminAccess'] == true,
       robotAccess: json['robotAccess'] == true,
       hrbpAccess: json['hrbpAccess'] == true,
+      administrativeNoticeAccess: json['administrativeNoticeAccess'] == true,
     );
   }
 

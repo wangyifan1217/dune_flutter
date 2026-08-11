@@ -30,15 +30,16 @@ class _NativeNotificationsPageState extends State<NativeNotificationsPage> {
   String? _error;
   int _unread = 0;
   List<NativeNotificationItem> _items = const <NativeNotificationItem>[];
+  bool _markingRead = false;
 
   @override
   void initState() {
     super.initState();
     _service = NotificationService(session: widget.session);
-    _load();
+    _load(markReadOnEnter: true);
   }
 
-  Future<void> _load() async {
+  Future<void> _load({bool markReadOnEnter = false}) async {
     setState(() {
       _loading = true;
       _error = null;
@@ -52,6 +53,9 @@ class _NativeNotificationsPageState extends State<NativeNotificationsPage> {
         _items = rows;
         _loading = false;
       });
+      if (markReadOnEnter && summary.unreadCount > 0) {
+        await _markAllRead(reload: false);
+      }
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -61,15 +65,20 @@ class _NativeNotificationsPageState extends State<NativeNotificationsPage> {
     }
   }
 
-  Future<void> _markAllRead() async {
+  Future<void> _markAllRead({bool reload = true}) async {
+    if (_markingRead) return;
+    _markingRead = true;
     try {
       await _service.markAllRead();
+      if (mounted) setState(() => _unread = 0);
       // 通知 host 刷新角标并清理残留通知，避免桌面角标按通知条数虚高。
       widget.onNotificationsRead?.call();
-      await _load();
+      if (reload) await _load();
     } catch (e) {
       if (!mounted) return;
       showDunesToast(context, '标记失败：${friendlyErrorText(e)}', kind: DunesToastKind.error);
+    } finally {
+      _markingRead = false;
     }
   }
 
@@ -79,11 +88,6 @@ class _NativeNotificationsPageState extends State<NativeNotificationsPage> {
       crumb: '沙丘 · 通知',
       title: '全部消息${_unread > 0 ? ' · $_unread 未读' : ''}',
       onBack: widget.onBack,
-      trailing: IconButton(
-        tooltip: '全部已读',
-        onPressed: _markAllRead,
-        icon: const Icon(Icons.done_all_outlined, size: 20),
-      ),
       body: _buildBody(),
     );
   }
@@ -99,7 +103,10 @@ class _NativeNotificationsPageState extends State<NativeNotificationsPage> {
           children: [
             Text(_error!, style: const TextStyle(color: DunesColors.text3)),
             const SizedBox(height: 10),
-            OutlinedButton(onPressed: _load, child: const Text('重试')),
+            OutlinedButton(
+              onPressed: () => _load(markReadOnEnter: true),
+              child: const Text('重试'),
+            ),
           ],
         ),
       );
@@ -108,7 +115,7 @@ class _NativeNotificationsPageState extends State<NativeNotificationsPage> {
       return const Center(child: Text('暂无通知', style: TextStyle(color: DunesColors.text3)));
     }
     return RefreshIndicator(
-      onRefresh: _load,
+      onRefresh: () => _load(markReadOnEnter: true),
       child: ListView.builder(
         padding: const EdgeInsets.only(top: 12, bottom: 24),
         itemCount: _items.length,

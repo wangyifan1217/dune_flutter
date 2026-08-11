@@ -1,6 +1,6 @@
 param(
-  [string]$ApiBase = "http://124.221.216.24:6090/api/v1",
-  [string]$NovaBase = "http://124.221.216.24:3000",
+  [string]$ApiBase = "https://nova.heunion.com/api/v1",
+  [string]$NovaBase = "https://nova.heunion.com",
   [string]$Phone = "15268642022",
   [string]$Code = "66666"
 )

@@ -42,6 +42,7 @@ class _NativeMessageCenterPageState extends State<NativeMessageCenterPage>
   String? _notificationsError;
   int _notificationUnread = 0;
   List<NativeNotificationItem> _notifications = const [];
+  bool _markingNotificationsRead = false;
 
   bool _broadcastLoading = false;
   bool _broadcastLoaded = false;
@@ -56,7 +57,7 @@ class _NativeMessageCenterPageState extends State<NativeMessageCenterPage>
       ..addListener(_onTabChanged);
     _notificationService = NotificationService(session: widget.session);
     _conversationService = ConversationService(session: widget.session);
-    _loadNotifications();
+    _loadNotifications(markReadOnEnter: true);
   }
 
   @override
@@ -70,12 +71,14 @@ class _NativeMessageCenterPageState extends State<NativeMessageCenterPage>
   void _onTabChanged() {
     if (_tabController.indexIsChanging) return;
     setState(() {});
-    if (_tabController.index == 1) {
+    if (_tabController.index == 0) {
+      unawaited(_loadNotifications(markReadOnEnter: true));
+    } else {
       unawaited(_loadBroadcast());
     }
   }
 
-  Future<void> _loadNotifications() async {
+  Future<void> _loadNotifications({bool markReadOnEnter = false}) async {
     setState(() {
       _notificationsLoading = true;
       _notificationsError = null;
@@ -86,12 +89,15 @@ class _NativeMessageCenterPageState extends State<NativeMessageCenterPage>
         _notificationService.fetchAll(),
       ]);
       if (!mounted) return;
+      final summary = results[0] as NativeNotificationSummary;
       setState(() {
-        _notificationUnread =
-            (results[0] as NativeNotificationSummary).unreadCount;
+        _notificationUnread = summary.unreadCount;
         _notifications = results[1] as List<NativeNotificationItem>;
         _notificationsLoading = false;
       });
+      if (markReadOnEnter && summary.unreadCount > 0) {
+        await _markNotificationsRead(reload: false);
+      }
     } catch (error) {
       if (!mounted) return;
       setState(() {
@@ -101,11 +107,16 @@ class _NativeMessageCenterPageState extends State<NativeMessageCenterPage>
     }
   }
 
-  Future<void> _markNotificationsRead() async {
+  Future<void> _markNotificationsRead({bool reload = true}) async {
+    if (_markingNotificationsRead) return;
+    _markingNotificationsRead = true;
     try {
       await _notificationService.markAllRead();
+      if (mounted) {
+        setState(() => _notificationUnread = 0);
+      }
       widget.onNotificationsRead?.call();
-      await _loadNotifications();
+      if (reload) await _loadNotifications();
     } catch (error) {
       if (!mounted) return;
       showDunesToast(
@@ -113,6 +124,8 @@ class _NativeMessageCenterPageState extends State<NativeMessageCenterPage>
         '标记失败：${friendlyErrorText(error)}',
         kind: DunesToastKind.error,
       );
+    } finally {
+      _markingNotificationsRead = false;
     }
   }
 
@@ -156,15 +169,6 @@ class _NativeMessageCenterPageState extends State<NativeMessageCenterPage>
       crumb: '沙丘 · 消息中心',
       title: '系统消息与广播',
       onBack: widget.onBack,
-      trailing: _tabController.index == 0
-          ? IconButton(
-              tooltip: '全部已读',
-              onPressed: _notificationUnread > 0
-                  ? _markNotificationsRead
-                  : null,
-              icon: const Icon(Icons.done_all_outlined, size: 22),
-            )
-          : null,
       body: Column(
         children: [
           Container(
@@ -214,7 +218,7 @@ class _NativeMessageCenterPageState extends State<NativeMessageCenterPage>
     if (_notificationsError != null) {
       return _ErrorState(
         error: _notificationsError!,
-        onRetry: _loadNotifications,
+        onRetry: () => _loadNotifications(markReadOnEnter: true),
       );
     }
     if (_notifications.isEmpty) {
@@ -223,7 +227,7 @@ class _NativeMessageCenterPageState extends State<NativeMessageCenterPage>
       );
     }
     return RefreshIndicator(
-      onRefresh: _loadNotifications,
+      onRefresh: () => _loadNotifications(markReadOnEnter: true),
       child: ListView.builder(
         padding: const EdgeInsets.only(top: 8, bottom: 24),
         itemCount: _notifications.length,

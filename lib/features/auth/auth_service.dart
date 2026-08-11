@@ -18,11 +18,7 @@ class AuthService {
   /// 桌面端与 PC 工作台同用 `pc` channel（后端 JWT 槽）；手机 APP 用 `app`。
   static String get loginChannel => isDesktopCommOnly ? 'pc' : 'app';
 
-  static String _defaultApiBase() {
-    const fromEnv = String.fromEnvironment('DUNES_API_BASE');
-    if (fromEnv.isNotEmpty) return fromEnv;
-    return DunesDefaults.apiBase;
-  }
+  static String _defaultApiBase() => DunesDefaults.apiBase;
 
   Future<void> requestSmsCode({required String phone}) async {
     if (!RegExp(r'^\d{11}$').hasMatch(phone)) {

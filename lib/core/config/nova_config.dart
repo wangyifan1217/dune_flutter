@@ -1,8 +1,8 @@
-/// Nova API 网关（与 DunesDefaults :6090 业务网关分离）。
+/// Nova API 网关（与业务 `/api/v1` 同域时共用 HTTPS 根地址）。
 abstract final class NovaConfig {
   static const baseUrl = String.fromEnvironment(
     'NOVA_BASE_URL',
-    defaultValue: 'http://124.221.216.24:3000',
+    defaultValue: 'https://nova.heunion.com',
   );
 
   static const defaultChatModel = 'nova_deepseek';
@@ -17,6 +17,30 @@ abstract final class NovaConfig {
   /// JS 注入占位符，由 [bindNovaBase] 在运行时替换为 [baseUrl]。
   static const baseUrlPlaceholder = '__NOVA_BASE_URL__';
 
+  static String get baseUrlNormalized =>
+      baseUrl.replaceAll(RegExp(r'/$'), '');
+
+  /// 归一化 Nova 基址：后端若仍下发旧 `http://IP:3000`，改走 HTTPS 域名。
+  static String resolveBaseUrl([String? raw]) {
+    final fallback = baseUrlNormalized;
+    final value = (raw ?? '').trim().replaceAll(RegExp(r'/$'), '');
+    if (value.isEmpty) return fallback;
+
+    final uri = Uri.tryParse(value);
+    if (uri == null || uri.host.isEmpty) return fallback;
+
+    final host = uri.host.toLowerCase();
+    final isLegacyIp = host == '124.221.216.24';
+    final isLegacyHttpPort =
+        uri.hasPort ? uri.port == 3000 : uri.scheme == 'http';
+    if (isLegacyIp && isLegacyHttpPort) return fallback;
+
+    if (host == 'nova.heunion.com' && uri.scheme == 'http') {
+      return fallback;
+    }
+    return value;
+  }
+
   static String bindNovaBase(String source) =>
-      source.replaceAll(baseUrlPlaceholder, baseUrl);
+      source.replaceAll(baseUrlPlaceholder, baseUrlNormalized);
 }

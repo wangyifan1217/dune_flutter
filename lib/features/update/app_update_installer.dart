@@ -142,7 +142,8 @@ class AppUpdateInstaller {
         mode: ProcessStartMode.detached,
         runInShell: false,
       );
-      await Future<void>.delayed(const Duration(milliseconds: 600));
+      // 安装器已 detached 启动；尽快退出，缩短与 CloseApplications 的竞态窗口。
+      await Future<void>.delayed(const Duration(milliseconds: 150));
       await windowsTrayPrepareQuitForAppUpdate(exitProcess: true);
       return;
     }

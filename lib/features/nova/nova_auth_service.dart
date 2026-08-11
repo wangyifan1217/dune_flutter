@@ -92,7 +92,7 @@ class NovaAuthService {
         );
         return NovaSession(
           ready: ready && key != null && key.isNotEmpty,
-          baseUrl: base?.isNotEmpty == true ? base! : NovaConfig.baseUrl,
+          baseUrl: NovaConfig.resolveBaseUrl(base),
           apiKey: key,
           bizUserId: bizUser,
           defaultModel: pickNovaDefaultChatModel(chat, explicit: def),
@@ -110,7 +110,7 @@ class NovaAuthService {
 
     return NovaSession(
       ready: false,
-      baseUrl: NovaConfig.baseUrl,
+      baseUrl: NovaConfig.baseUrlNormalized,
       defaultModel: models.defaultModel,
       allowedModels: models.allowedModels,
       message: 'Nova 账号准备中，请稍后再试',
@@ -121,7 +121,7 @@ class NovaAuthService {
     required String phone,
     required List<String> allowedModels,
   }) async {
-    final uri = Uri.parse('${NovaConfig.baseUrl.replaceAll(RegExp(r'/$'), '')}/api/app/auth/login');
+    final uri = Uri.parse('${NovaConfig.baseUrlNormalized}/api/app/auth/login');
     try {
       final resp = await _client.post(
         uri,
@@ -144,7 +144,7 @@ class NovaAuthService {
       if (token == null || token.isEmpty) return null;
       return NovaSession(
         ready: true,
-        baseUrl: NovaConfig.baseUrl,
+        baseUrl: NovaConfig.baseUrlNormalized,
         apiKey: token,
         bizUserId: (data['bizUserId'] as String?)?.trim(),
         defaultModel: pickNovaDefaultChatModel(resolveNovaChatModels(allowedModels)),

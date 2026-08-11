@@ -795,75 +795,106 @@ class _ImagePreviewDialogState extends State<_ImagePreviewDialog> {
       return Dialog(
         backgroundColor: Colors.black,
         insetPadding: const EdgeInsets.all(12),
-        child: Stack(
+        child: Column(
           children: [
-            Positioned.fill(
-              child: InteractiveViewer(
-                maxScale: 5,
-                child: Center(
-                  child: buildCorsSafeImage(
-                    url: webUrl,
-                    width: 1200,
-                    height: 1200,
-                    fit: BoxFit.contain,
-                  ),
-                ),
-              ),
-            ),
-            Positioned(
-              top: 4,
-              right: 4,
-              child: IconButton(
-                onPressed: () => Navigator.of(context).pop(),
-                icon: const Icon(Icons.close_rounded, color: Colors.white),
-              ),
-            ),
-            Positioned(
-              top: 14,
-              left: 14,
-              child: _metadataPill(
-                sizeBytes: _showingOriginal ? _payloadSizeBytes : null,
-                dimensions: null,
-                original: _showingOriginal,
-                force: _showingOriginal,
-              ),
-            ),
-            Positioned(
-              left: 4,
-              bottom: 4,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
+            Expanded(
+              child: Stack(
                 children: [
-                  if (widget.onLocateInChat != null) ...[
-                    _PreviewActionButton(
-                      icon: Icons.my_location_rounded,
-                      label: '定位聊天',
-                      onTap: () {
-                        Navigator.of(context).pop();
-                        widget.onLocateInChat!();
-                      },
+                  Positioned.fill(
+                    child: InteractiveViewer(
+                      maxScale: 5,
+                      child: Center(
+                        child: buildCorsSafeImage(
+                          url: webUrl,
+                          width: 1200,
+                          height: 1200,
+                          fit: BoxFit.contain,
+                        ),
+                      ),
                     ),
-                    const SizedBox(width: 8),
-                  ],
-                  if (!_showingOriginal &&
-                      _chatImageHasSeparateOriginal(widget.payload)) ...[
-                    _PreviewActionButton(
-                      icon: Icons.high_quality_rounded,
-                      label: '查看原图',
-                      onTap: _viewOriginal,
+                  ),
+                  Positioned(
+                    top: 4,
+                    right: 4,
+                    child: IconButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      icon: const Icon(
+                        Icons.close_rounded,
+                        color: Colors.white,
+                      ),
                     ),
-                    const SizedBox(width: 8),
-                  ],
-                  _PreviewActionButton(
-                    icon: Icons.download_rounded,
-                    label: _saving
-                        ? '下载中…'
-                        : (_showingOriginal
-                              ? (_desktop ? '下载原图' : '保存原图')
-                              : (_desktop ? '下载预览' : '保存预览')),
-                    onTap: _saving ? null : () => _saveWebUrl(webUrl),
+                  ),
+                  Positioned(
+                    top: 14,
+                    left: 14,
+                    child: _metadataPill(
+                      sizeBytes: _showingOriginal ? _payloadSizeBytes : null,
+                      dimensions: null,
+                      original: _showingOriginal,
+                      force: _showingOriginal,
+                    ),
                   ),
                 ],
+              ),
+            ),
+            // 底栏单独占位，避免挡住图片底部内容。
+            SafeArea(
+              top: false,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(12, 4, 12, 10),
+                child: Align(
+                  alignment: Alignment.center,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.55),
+                      borderRadius: BorderRadius.circular(24),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 8,
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (widget.onLocateInChat != null) ...[
+                            _PreviewActionButton(
+                              icon: Icons.my_location_rounded,
+                              label: '定位聊天',
+                              onTap: () {
+                                Navigator.of(context).pop();
+                                widget.onLocateInChat!();
+                              },
+                            ),
+                            const SizedBox(width: 8),
+                          ],
+                          if (!_showingOriginal &&
+                              _chatImageHasSeparateOriginal(
+                                widget.payload,
+                              )) ...[
+                            _PreviewActionButton(
+                              icon: Icons.high_quality_rounded,
+                              label: '查看原图',
+                              onTap: _viewOriginal,
+                            ),
+                            const SizedBox(width: 8),
+                          ],
+                          _PreviewActionButton(
+                            icon: Icons.download_rounded,
+                            label: _saving
+                                ? '下载中…'
+                                : (_showingOriginal
+                                      ? (_desktop ? '下载原图' : '保存原图')
+                                      : (_desktop ? '下载预览' : '保存预览')),
+                            onTap: _saving
+                                ? null
+                                : () => _saveWebUrl(webUrl),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
               ),
             ),
           ],
@@ -908,93 +939,104 @@ class _ImagePreviewDialogState extends State<_ImagePreviewDialog> {
             );
           }
 
-          return Stack(
+          return Column(
             children: [
-              Positioned.fill(child: content),
-              Positioned(
-                top: 4,
-                right: 4,
-                child: IconButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  icon: const Icon(Icons.close_rounded, color: Colors.white),
+              Expanded(
+                child: Stack(
+                  children: [
+                    Positioned.fill(child: content),
+                    Positioned(
+                      top: 4,
+                      right: 4,
+                      child: IconButton(
+                        onPressed: () => Navigator.of(context).pop(),
+                        icon: const Icon(
+                          Icons.close_rounded,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                    if (!loading && !failed && bytes != null)
+                      Positioned(
+                        top: 14,
+                        left: 14,
+                        child: _metadataPill(
+                          sizeBytes: _showingOriginal
+                              ? (_payloadSizeBytes ?? originalBytes?.length)
+                              : originalBytes?.length,
+                          dimensions: _dimensionsFuture,
+                          original: _showingOriginal,
+                        ),
+                      ),
+                  ],
                 ),
               ),
+              // 底栏与图片分区布局，避免「查看原图/裁剪/下载」盖住图底部内容。
               if (!loading && !failed && bytes != null)
-                Positioned(
-                  top: 14,
-                  left: 14,
-                  child: _metadataPill(
-                    sizeBytes: _showingOriginal
-                        ? (_payloadSizeBytes ?? originalBytes?.length)
-                        : originalBytes?.length,
-                    dimensions: _dimensionsFuture,
-                    original: _showingOriginal,
-                  ),
-                ),
-              if (!loading && !failed && bytes != null)
-                Positioned(
-                  left: 12,
-                  right: 12,
-                  bottom: 12,
-                  child: Align(
-                    alignment: Alignment.bottomCenter,
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        color: Colors.black.withValues(alpha: 0.55),
-                        borderRadius: BorderRadius.circular(24),
-                      ),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 8,
+                SafeArea(
+                  top: false,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 4, 12, 10),
+                    child: Align(
+                      alignment: Alignment.center,
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.55),
+                          borderRadius: BorderRadius.circular(24),
                         ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            if (widget.onLocateInChat != null) ...[
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 8,
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (widget.onLocateInChat != null) ...[
+                                _PreviewActionButton(
+                                  icon: Icons.my_location_rounded,
+                                  label: '定位聊天',
+                                  onTap: () {
+                                    Navigator.of(context).pop();
+                                    widget.onLocateInChat!();
+                                  },
+                                ),
+                                const SizedBox(width: 8),
+                              ],
+                              if (!_showingOriginal &&
+                                  _chatImageHasSeparateOriginal(
+                                    widget.payload,
+                                  )) ...[
+                                _PreviewActionButton(
+                                  icon: Icons.high_quality_rounded,
+                                  label: '查看原图',
+                                  onTap: _viewOriginal,
+                                ),
+                                const SizedBox(width: 8),
+                              ],
+                              if (_desktop) ...[
+                                _PreviewActionButton(
+                                  icon: Icons.crop_rounded,
+                                  label: _editing ? '编辑中…' : '裁剪',
+                                  onTap: (_saving || _editing)
+                                      ? null
+                                      : () => _editAndMaybeDownload(bytes),
+                                ),
+                                const SizedBox(width: 8),
+                              ],
                               _PreviewActionButton(
-                                icon: Icons.my_location_rounded,
-                                label: '定位聊天',
-                                onTap: () {
-                                  Navigator.of(context).pop();
-                                  widget.onLocateInChat!();
-                                },
-                              ),
-                              const SizedBox(width: 8),
-                            ],
-                            if (!_showingOriginal &&
-                                _chatImageHasSeparateOriginal(
-                                  widget.payload,
-                                )) ...[
-                              _PreviewActionButton(
-                                icon: Icons.high_quality_rounded,
-                                label: '查看原图',
-                                onTap: _viewOriginal,
-                              ),
-                              const SizedBox(width: 8),
-                            ],
-                            if (_desktop) ...[
-                              _PreviewActionButton(
-                                icon: Icons.crop_rounded,
-                                label: _editing ? '编辑中…' : '裁剪',
+                                icon: Icons.download_rounded,
+                                label: _saving
+                                    ? (_desktop ? '下载中…' : '保存中…')
+                                    : (_showingOriginal
+                                          ? (_desktop ? '下载原图' : '保存原图')
+                                          : (_desktop ? '下载预览' : '保存预览')),
                                 onTap: (_saving || _editing)
                                     ? null
-                                    : () => _editAndMaybeDownload(bytes),
+                                    : () => _save(bytes),
                               ),
-                              const SizedBox(width: 8),
                             ],
-                            _PreviewActionButton(
-                              icon: Icons.download_rounded,
-                              label: _saving
-                                  ? (_desktop ? '下载中…' : '保存中…')
-                                  : (_showingOriginal
-                                        ? (_desktop ? '下载原图' : '保存原图')
-                                        : (_desktop ? '下载预览' : '保存预览')),
-                              onTap: (_saving || _editing)
-                                  ? null
-                                  : () => _save(bytes),
-                            ),
-                          ],
+                          ),
                         ),
                       ),
                     ),

@@ -18,6 +18,7 @@ import '../push/push_service.dart';
 import '../shell/dunes_shell.dart';
 import '../shell/splash_screen.dart';
 import '../update/app_update_dialog.dart';
+import '../update/app_update_notifier.dart';
 import '../update/app_update_service.dart';
 import 'auth_flow_ui.dart';
 import 'auth_service.dart';
@@ -41,7 +42,7 @@ class LoginFlow extends StatefulWidget {
 
 class _LoginFlowState extends State<LoginFlow> with WidgetsBindingObserver {
   static const _sessionStorageKey = 'dunes_auth_session_v1';
-  static const _updateCheckInterval = Duration(hours: 6);
+  static const _updateCheckInterval = Duration(minutes: 30);
   static const _updateRetryInterval = Duration(minutes: 10);
   final _auth = AuthService();
   AuthSession? _session;
@@ -322,14 +323,23 @@ class _LoginFlowState extends State<LoginFlow> with WidgetsBindingObserver {
         result == null ? _updateRetryInterval : _updateCheckInterval,
       );
 
-      if (!mounted ||
-          !_appInForeground ||
-          result == null ||
-          !result.updateAvailable) {
+      if (!mounted || !_appInForeground || result == null) {
+        return;
+      }
+      if (!result.updateAvailable) {
+        AppUpdateNotifier.instance.clear();
         return;
       }
 
-      await showAppUpdateDialog(context, result);
+      // 桌面端：顶部常驻条 + 启动/强更弹窗；点「稍后」后横幅仍在。
+      if (isDesktopCommOnly) {
+        AppUpdateNotifier.instance.offer(result);
+        if (result.forceUpdate || initial) {
+          await showAppUpdateDialog(context, result);
+        }
+      } else {
+        await showAppUpdateDialog(context, result);
+      }
     } finally {
       _updateCheckInFlight = false;
     }

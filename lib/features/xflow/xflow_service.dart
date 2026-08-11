@@ -1188,6 +1188,48 @@ class XflowService {
     return rows.whereType<Map<String, dynamic>>().toList(growable: false);
   }
 
+  /// 通用远程搜索：按模板 `remoteSearch.path` 请求，不做业务分支。
+  /// [path] 可为 `/api/v1/...` 或相对 `apiBase` 的 `/fund/...`。
+  Future<List<Map<String, dynamic>>> searchRemote({
+    required String path,
+    String queryParam = 'q',
+    required String query,
+  }) async {
+    final q = query.trim();
+    if (q.isEmpty) return const [];
+    final normalized = _normalizeApiPath(path);
+    if (normalized.isEmpty) return const [];
+    final param = queryParam.trim().isEmpty ? 'q' : queryParam.trim();
+    final rows = await _requestList(
+      '$normalized?$param=${Uri.encodeQueryComponent(q)}',
+    );
+    return rows
+        .whereType<Map>()
+        .map((row) => Map<String, dynamic>.from(row))
+        .toList(growable: false);
+  }
+
+  /// 将配置里的完整 `/api/v1/...` 路径转为相对 [session.apiBase] 的路径。
+  String _normalizeApiPath(String path) {
+    var p = path.trim();
+    if (p.isEmpty) return '';
+    if (p.startsWith('http://') || p.startsWith('https://')) {
+      try {
+        final uri = Uri.parse(p);
+        p = uri.path;
+      } catch (_) {
+        return '';
+      }
+    }
+    if (p.startsWith('/api/v1/')) {
+      p = p.substring('/api/v1'.length);
+    } else if (p.startsWith('api/v1/')) {
+      p = '/${p.substring('api/v1'.length)}';
+    }
+    if (!p.startsWith('/')) p = '/$p';
+    return p;
+  }
+
   Future<Map<String, dynamic>> uploadProposalFile({
     required Uint8List bytes,
     required String fileName,

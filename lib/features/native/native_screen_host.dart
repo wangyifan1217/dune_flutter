@@ -93,6 +93,7 @@ import '../../core/util/friendly_error.dart';
 import '../shell/dunes_main_tab_bar.dart';
 import '../shell/dunes_toast.dart';
 import '../update/app_update_dialog.dart';
+import '../update/app_update_notifier.dart';
 import '../update/app_update_service.dart';
 import '../workbench/native_avatar_sheet.dart';
 import '../workbench/native_my_workbench_pages.dart';
@@ -240,6 +241,12 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     debugLabel: 'inbox-page-keep-alive',
   );
 
+  /// Keep 通讯录 alive：进 C9 名片再返回时不 dispose，保留列表滚动位置。
+  bool _contactsMounted = false;
+  final GlobalKey _contactsPageKey = GlobalKey(
+    debugLabel: 'contacts-page-keep-alive',
+  );
+
   /// Keep PC 通讯双栏 alive across 灯塔/我的/NOVA tab switches，避免列表整页转圈。
   bool _commDualMounted = false;
   final GlobalKey _commDualKeepAliveKey = GlobalKey(
@@ -263,6 +270,10 @@ class _NativeScreenHostState extends State<NativeScreenHost>
   /// mark-read 成功后通知双栏列表清零对应未读角标。
   final ConversationReadSignal _conversationReadSignal =
       ConversationReadSignal();
+
+  /// 系统通知列表进入后完成已读，通知通讯列表同步本地通知未读数。
+  final NotificationsReadSignal _notificationsReadSignal =
+      NotificationsReadSignal();
 
   /// 资料页切换置顶 / 免打扰后立刻同步会话列表。
   final ConversationMemberSettingsSignal _conversationMemberSettingsSignal =
@@ -564,6 +575,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     _workbenchBadge.dispose();
     _workbenchRefresh.dispose();
     _conversationReadSignal.dispose();
+    _notificationsReadSignal.dispose();
     _conversationMemberSettingsSignal.dispose();
     super.dispose();
   }
@@ -800,6 +812,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
 
   void _handleNotificationsRead() {
     _pendingBadgeZeroSync = true;
+    _notificationsReadSignal.notifyRead();
     print('[Badge] handleNotificationsRead pendingZero=true');
     unawaited(_refreshCommUnreadBadge());
   }
@@ -1298,10 +1311,16 @@ class _NativeScreenHostState extends State<NativeScreenHost>
   }
 
   void _openPrivateByPeerId(int peerUserId) {
+    _approvalAssistantOpenGen++;
     setState(() {
       _selectedPrivate = null;
       _selectedPrivatePeerUserId = peerUserId;
       _selectedGroup = null;
+      // 与 _openPrivateConversation 对齐：清掉机器人/助手，否则双栏仍显示 AI 咨询等旧槽位。
+      _selectedRobot = null;
+      _selectedApprovalAssistant = null;
+      _selectedTaskAssistant = null;
+      _selectedDriveAssistant = null;
       _focusMessageId = null;
       _focusMessageHint = null;
     });
@@ -1726,6 +1745,37 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     );
   }
 
+  /// 普通浏览通讯录（非建群多选）。用稳定 GlobalKey 保活，避免进名片后列表滚回顶部。
+  Widget _buildContactsBrowsePage({bool useKeepAliveKey = false}) {
+    return NativeContactsPage(
+      key: useKeepAliveKey
+          ? _contactsPageKey
+          : const ValueKey<String>('native-contacts-browse'),
+      session: widget.session,
+      initialGroupPickMode: false,
+      initialSelectedUserIds: const <int>{},
+      lockedSelectedUserIds: const <int>{},
+      initialSelectedNames: const <int, String>{},
+      onBack: () {
+        setState(_clearContactsGroupPickState);
+        widget.navigation.back();
+      },
+      onOpenContact: (contact) {
+        setState(() {
+          _clearContactsGroupPickState();
+          _selectedContact = contact;
+          _profileReturnScreen = null;
+        });
+        widget.navigation.go('C9');
+      },
+      onStartPrivateChat: _openPrivateByPeerId,
+      onOpenGroupChat: (conv) {
+        setState(_clearContactsGroupPickState);
+        _openGroupConversation(conv);
+      },
+    );
+  }
+
   Widget _buildConversationListPage({
     int? selectedConversationId,
     bool listVisible = true,
@@ -1741,12 +1791,14 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       workbenchBadge: _workbenchBadge,
       selectedConversationId: selectedConversationId,
       conversationReadSignal: _conversationReadSignal,
+      notificationsReadSignal: _notificationsReadSignal,
       memberSettingsSignal: _conversationMemberSettingsSignal,
       conversationRemovedSignal: _conversationRemovedSignal,
       listVisible: listVisible,
       onOpenPrivate: _openPrivateConversation,
       onOpenGroup: _openGroupConversation,
       onOpenRobot: _openRobotConversation,
+      onStartPrivateChat: _openPrivateByPeerId,
       onOpenContacts: () {
         setState(_clearContactsGroupPickState);
         widget.navigation.go('C3');
@@ -2047,6 +2099,22 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     if (screen == 'RA1' || dual == 'RA1') {
       return 'reconciliation';
     }
+    // 路由优先：通讯录发消息进 C5 时，不能被残留的 AI 咨询选中态盖住。
+    if (screen == 'C5' || dual == 'C5') {
+      if (_selectedPrivate != null || _selectedPrivatePeerUserId != null) {
+        final cid = _selectedPrivate?.id ?? 0;
+        if (cid > 0) return 'private:$cid';
+        final peer =
+            _selectedPrivatePeerUserId ?? _selectedPrivate?.peerUserId ?? 0;
+        return peer > 0 ? 'private-peer:$peer' : null;
+      }
+    }
+    if (screen == 'C2' || dual == 'C2') {
+      if (_selectedGroup != null) return 'group:${_selectedGroup!.id}';
+    }
+    if (screen == 'CR' || dual == 'CR') {
+      if (_selectedRobot != null) return 'robot:${_selectedRobot!.id}';
+    }
     if (_selectedRobot != null) {
       return 'robot:${_selectedRobot!.id}';
     }
@@ -2077,6 +2145,24 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     }
     if (screen == 'RA1' || dual == 'RA1') {
       return const _DualChatSlot.reconciliation();
+    }
+    if (screen == 'C5' || dual == 'C5') {
+      if (_selectedPrivate != null || _selectedPrivatePeerUserId != null) {
+        return _DualChatSlot.private(
+          conversation: _selectedPrivate,
+          peerUserId: _selectedPrivatePeerUserId,
+        );
+      }
+    }
+    if (screen == 'C2' || dual == 'C2') {
+      if (_selectedGroup != null) {
+        return _DualChatSlot.group(_selectedGroup!);
+      }
+    }
+    if (screen == 'CR' || dual == 'CR') {
+      if (_selectedRobot != null) {
+        return _DualChatSlot.robot(_selectedRobot!);
+      }
     }
     if (_selectedRobot != null) {
       return _DualChatSlot.robot(_selectedRobot!);
@@ -2809,6 +2895,10 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           onChatSettingsChanged: _onPrivateChatSettingsChanged,
         );
       case 'C3':
+        // 普通浏览由 keep-alive 层承载；此处仅构建建群多选实例。
+        if (!_contactsGroupPickMode) {
+          return const SizedBox.shrink();
+        }
         final pickKey = _contactsInitialSelectedUserIds.toList()..sort();
         return NativeContactsPage(
           key: ValueKey<String>(
@@ -3367,16 +3457,21 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         (_isQianjiRoute(screen) && _isQianjiRoute(previousScreen));
     final isLighthouse = screen == 'LH';
     final isInbox = screen == 'C1';
+    // 建群多选仍走 AnimatedSwitcher；普通通讯录用 keep-alive 保滚动。
+    final isContacts = screen == 'C3' && !_contactsGroupPickMode;
     if (isLighthouse) {
       _lighthouseMounted = true;
     }
     if (isInbox) {
       _inboxMounted = true;
     }
-    // 双栏 / 灯塔 / 会话列表由 keep-alive 承载；此处占位避免 AnimatedSwitcher 再造一份。
+    if (isContacts) {
+      _contactsMounted = true;
+    }
+    // 双栏 / 灯塔 / 会话列表 / 通讯录由 keep-alive 承载；此处占位避免 AnimatedSwitcher 再造一份。
     final currentScreen = dualNow
         ? const SizedBox.shrink()
-        : (isLighthouse || isInbox)
+        : (isLighthouse || isInbox || isContacts)
         ? const SizedBox.shrink()
         : _buildCurrentScreen(context);
     final child = KeyedSubtree(
@@ -3456,6 +3551,20 @@ class _NativeScreenHostState extends State<NativeScreenHost>
                     listVisible: isInbox,
                     useKeepAliveKey: true,
                   ),
+                ),
+              ),
+            ),
+          ),
+        // 通讯录：进名片（C9）再返回不销毁，保留列表位置。
+        if (_contactsMounted && !dualNow)
+          Positioned.fill(
+            child: TickerMode(
+              enabled: isContacts,
+              child: IgnorePointer(
+                ignoring: !isContacts,
+                child: Opacity(
+                  opacity: isContacts ? 1 : 0,
+                  child: _buildContactsBrowsePage(useKeepAliveKey: true),
                 ),
               ),
             ),
@@ -3903,9 +4012,11 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       return;
     }
     if (!result.updateAvailable) {
+      AppUpdateNotifier.instance.clear();
       showDunesToast(context, '当前已是最新版本');
       return;
     }
+    AppUpdateNotifier.instance.offer(result);
     await showAppUpdateDialog(context, result);
   }
 

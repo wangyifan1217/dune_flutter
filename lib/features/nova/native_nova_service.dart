@@ -663,9 +663,9 @@ class NativeNovaService {
     'Content-Type': 'application/json',
   };
 
-  String get novaBase =>
-      (session.novaLocalStorage?['dunes_nova_base'] ?? NovaConfig.baseUrl)
-          .replaceAll(RegExp(r'/$'), '');
+  String get novaBase => NovaConfig.resolveBaseUrl(
+        session.novaLocalStorage?['dunes_nova_base'],
+      );
   String get novaApiKey =>
       (_cachedApiKey ?? session.novaLocalStorage?['dunes_nova_api_key'] ?? '')
           .trim();

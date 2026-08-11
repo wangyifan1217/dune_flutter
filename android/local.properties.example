@@ -5,6 +5,6 @@ flutter.sdk=/path/to/flutter
 tpns.accessId=your_tpns_access_id
 tpns.accessKey=your_tpns_access_key
 
-# 可选：API / Nova
-dunes.apiHost=your.api.host
-nova.baseUrl=http://your.api.host:3000
+# 可选：API / Nova（生产域名；本地联调可改 127.0.0.1）
+dunes.apiHost=nova.heunion.com
+nova.baseUrl=https://nova.heunion.com

@@ -385,8 +385,9 @@ class _NativeChatViewState extends State<NativeChatView>
   bool _toolsOpen = false;
 
   /// PC：输入框可拖拽高度（托起消息列表）。
+  /// 下限需容纳一行字高 + 上下 padding + 发送按钮行，否则会裁切首行。
   double _pcInputHeight = 108;
-  static const double _pcInputHeightMin = 72;
+  static const double _pcInputHeightMin = 100;
   static const double _pcInputHeightMax = 320;
   final List<_DesktopComposerAttachment> _desktopComposerAttachments =
       <_DesktopComposerAttachment>[];

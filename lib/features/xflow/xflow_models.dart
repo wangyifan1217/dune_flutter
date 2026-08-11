@@ -50,6 +50,108 @@ class XflowFieldOption {
   }
 }
 
+/// 模板字段通用远程搜索配置（`field.remoteSearch`）。
+/// path / fill / label 均由后台配置，客户端不做业务分支。
+class XflowRemoteSearchConfig {
+  const XflowRemoteSearchConfig({
+    required this.path,
+    this.queryParam = 'q',
+    this.minChars = 1,
+    this.debounceMs = 250,
+    this.labelFields = const <String>[],
+    this.labelSeparator = ' · ',
+    this.valueFields = const <String>[],
+    this.fill = const <String, String>{},
+    this.allowManual = true,
+  });
+
+  final String path;
+  final String queryParam;
+  final int minChars;
+  final int debounceMs;
+  final List<String> labelFields;
+  final String labelSeparator;
+  final List<String> valueFields;
+  final Map<String, String> fill;
+  final bool allowManual;
+
+  static XflowRemoteSearchConfig? tryParse(dynamic raw) {
+    if (raw is! Map) return null;
+    final map = Map<String, dynamic>.from(raw);
+    final path = (map['path'] ?? '').toString().trim();
+    if (path.isEmpty) return null;
+    return XflowRemoteSearchConfig(
+      path: path,
+      queryParam: _nonEmpty(map['queryParam'], 'q'),
+      minChars: _positiveInt(map['minChars'], 1),
+      debounceMs: _positiveInt(map['debounceMs'], 250),
+      labelFields: _stringList(map['labelFields']),
+      labelSeparator: _nonEmpty(map['labelSeparator'], ' · '),
+      valueFields: _stringList(map['valueFields']),
+      fill: _stringMap(map['fill']),
+      allowManual: map['allowManual'] != false,
+    );
+  }
+
+  String labelOf(Map<String, dynamic> row) {
+    final parts = <String>[];
+    for (final key in labelFields) {
+      final text = '${row[key] ?? ''}'.trim();
+      if (text.isNotEmpty) parts.add(text);
+    }
+    return parts.join(labelSeparator);
+  }
+
+  String? valueOf(Map<String, dynamic> row) {
+    for (final key in valueFields) {
+      final text = '${row[key] ?? ''}'.trim();
+      if (text.isNotEmpty) return text;
+    }
+    return null;
+  }
+
+  /// 选中回填：表单 key → 非空字符串。
+  Map<String, String> fillPatches(Map<String, dynamic> row) {
+    final out = <String, String>{};
+    fill.forEach((formKey, respKey) {
+      final text = '${row[respKey] ?? ''}'.trim();
+      if (text.isNotEmpty) out[formKey] = text;
+    });
+    return out;
+  }
+
+  static String _nonEmpty(dynamic v, String fallback) {
+    final text = (v ?? '').toString();
+    return text.isEmpty ? fallback : text;
+  }
+
+  static int _positiveInt(dynamic v, int fallback) {
+    if (v is num && v.toInt() > 0) return v.toInt();
+    final parsed = int.tryParse('$v');
+    if (parsed != null && parsed > 0) return parsed;
+    return fallback;
+  }
+
+  static List<String> _stringList(dynamic raw) {
+    if (raw is! List) return const [];
+    return raw
+        .map((e) => e?.toString().trim() ?? '')
+        .where((e) => e.isNotEmpty)
+        .toList(growable: false);
+  }
+
+  static Map<String, String> _stringMap(dynamic raw) {
+    if (raw is! Map) return const {};
+    final out = <String, String>{};
+    raw.forEach((k, v) {
+      final key = k?.toString().trim() ?? '';
+      final val = v?.toString().trim() ?? '';
+      if (key.isNotEmpty && val.isNotEmpty) out[key] = val;
+    });
+    return out;
+  }
+}
+
 class XflowField {
   const XflowField({
     required this.key,
@@ -109,6 +211,10 @@ class XflowField {
       raw: json,
     );
   }
+
+  /// 通用远程搜索配置；path 缺失时返回 null（不当作 remoteSearch 渲染）。
+  XflowRemoteSearchConfig? get remoteSearch =>
+      XflowRemoteSearchConfig.tryParse(raw['remoteSearch']);
 }
 
 class XflowTemplateDetail {

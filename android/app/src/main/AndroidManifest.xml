@@ -51,6 +51,17 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
+        <!-- 华为推送 AppId（与 agconnect-services.json 一致；未使用 agcp 插件时必需） -->
+        <meta-data
+            android:name="com.huawei.hms.client.appid"
+            android:value="appid=118587395" />
+        <service
+            android:name="com.huawei.android.hms.tpns.HWHmsMessageService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.huawei.push.action.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
         <service
             android:name=".MeetingRecordingService"
             android:exported="false"

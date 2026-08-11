@@ -8,6 +8,20 @@
 -keep class com.jg.** { *; }
 -dontwarn com.jg.**
 
+# 华为推送 / HMS
+-ignorewarnings
+-keepattributes *Annotation*
+-keepattributes Exceptions
+-keepattributes InnerClasses
+-keepattributes Signature
+-keepattributes SourceFile,LineNumberTable
+-keep class com.hianalytics.android.** { *; }
+-keep class com.huawei.updatesdk.** { *; }
+-keep class com.huawei.hms.** { *; }
+-keep class com.huawei.agconnect.** { *; }
+-keep class com.huawei.android.hms.tpns.** { *; }
+-dontwarn com.huawei.**
+
 # mobile_scanner / CameraX / ML Kit barcode scanner release 保留规则。
 # 部分机型在 release 构建下内部扫码类被优化后会抛出空引用（如 v7.*）。
 -keep class dev.steenbakker.mobile_scanner.** { *; }

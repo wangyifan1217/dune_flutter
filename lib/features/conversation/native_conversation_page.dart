@@ -13,6 +13,8 @@ import '../../core/util/friendly_error.dart';
 import '../ai_summary/ai_summary_models.dart';
 import '../ai_summary/ai_summary_service.dart';
 import '../auth/auth_session.dart';
+import '../contacts/contact_models.dart';
+import '../contacts/contact_service.dart';
 import '../workbench/workbench_badge_notifier.dart';
 import 'comm_unread_notifier.dart';
 import 'conversation_inbox_cache.dart';
@@ -53,8 +55,10 @@ class NativeConversationPage extends StatefulWidget {
     this.onOpenTaskAssistant,
     this.onOpenDriveAssistant,
     this.onOpenReconciliationAssistant,
+    this.onStartPrivateChat,
     this.selectedConversationId,
     this.conversationReadSignal,
+    this.notificationsReadSignal,
     this.memberSettingsSignal,
     this.conversationRemovedSignal,
     this.listVisible = true,
@@ -78,11 +82,17 @@ class NativeConversationPage extends StatefulWidget {
   final ValueChanged<NativeConversation>? onOpenDriveAssistant;
   final VoidCallback? onOpenReconciliationAssistant;
 
+  /// 搜索命中尚无会话的联系人时，按 peerId 打开私聊（首条消息前不建会话）。
+  final ValueChanged<int>? onStartPrivateChat;
+
   /// 双栏布局中当前选中的会话，用于列表高亮。
   final int? selectedConversationId;
 
   /// Host 在 mark-read 成功后通知列表清零对应未读角标。
   final ConversationReadSignal? conversationReadSignal;
+
+  /// Host 在系统通知列表完成已读后，通知会话列表同步清零通知角标。
+  final NotificationsReadSignal? notificationsReadSignal;
 
   /// Host 在资料页切换置顶/免打扰后，立刻同步列表排序与角标。
   final ConversationMemberSettingsSignal? memberSettingsSignal;
@@ -108,6 +118,11 @@ class ConversationReadSignal extends ChangeNotifier {
     _conversationId = conversationId;
     notifyListeners();
   }
+}
+
+/// Host → 会话列表：系统通知列表进入后完成已读，刷新通讯角标。
+class NotificationsReadSignal extends ChangeNotifier {
+  void notifyRead() => notifyListeners();
 }
 
 /// Host → 会话列表：同步成员级置顶 / 免打扰。
@@ -174,6 +189,7 @@ class _NativeConversationPageState extends State<NativeConversationPage>
   late final ConversationService _service;
   late final NotificationService _notificationService;
   late final AiSummaryService _aiSummaryService;
+  late final ContactService _contactService;
   late final ConversationRealtimeService _realtime;
   final ConversationRealtimeDedup _realtimeDedup = ConversationRealtimeDedup();
   final TextEditingController _searchController = TextEditingController();
@@ -196,6 +212,9 @@ class _NativeConversationPageState extends State<NativeConversationPage>
   );
   Set<int> _onlineUsers = <int>{};
   String _searchQuery = '';
+  List<NativeContact> _contactHits = const <NativeContact>[];
+  bool _contactSearching = false;
+  int _contactSearchSeq = 0;
   Map<String, String> _novaStorage = const {};
   Map<String, InboxHiddenEntry> _hiddenConversations = const {};
 
@@ -205,11 +224,13 @@ class _NativeConversationPageState extends State<NativeConversationPage>
     _service = ConversationService(session: widget.session);
     _notificationService = NotificationService(session: widget.session);
     _aiSummaryService = AiSummaryService(session: widget.session);
+    _contactService = ContactService(session: widget.session);
     _realtime = ConversationRealtimeHub.instance.of(widget.session);
     WidgetsBinding.instance.addObserver(this);
     _listScrollController.addListener(_onListScroll);
     userAvatarRefresh.addListener(_onSelfAvatarUpdated);
     widget.conversationReadSignal?.addListener(_onConversationReadSignal);
+    widget.notificationsReadSignal?.addListener(_onNotificationsReadSignal);
     widget.memberSettingsSignal?.addListener(_onMemberSettingsSignal);
     widget.conversationRemovedSignal?.addListener(_onConversationRemovedSignal);
     final cached = ConversationInboxCache.instance.peek(widget.session.userId);
@@ -301,6 +322,12 @@ class _NativeConversationPageState extends State<NativeConversationPage>
       );
       widget.conversationReadSignal?.addListener(_onConversationReadSignal);
     }
+    if (oldWidget.notificationsReadSignal != widget.notificationsReadSignal) {
+      oldWidget.notificationsReadSignal?.removeListener(
+        _onNotificationsReadSignal,
+      );
+      widget.notificationsReadSignal?.addListener(_onNotificationsReadSignal);
+    }
     if (oldWidget.memberSettingsSignal != widget.memberSettingsSignal) {
       oldWidget.memberSettingsSignal?.removeListener(_onMemberSettingsSignal);
       widget.memberSettingsSignal?.addListener(_onMemberSettingsSignal);
@@ -331,6 +358,26 @@ class _NativeConversationPageState extends State<NativeConversationPage>
   void _onConversationReadSignal() {
     final id = widget.conversationReadSignal?.conversationId ?? 0;
     if (id > 0) _clearUnreadLocally(id);
+  }
+
+  void _onNotificationsReadSignal() {
+    if (!mounted || _notif.unreadCount <= 0) return;
+    setState(() {
+      _notif = NativeNotificationSummary(
+        unreadCount: 0,
+        latest: _notif.latest,
+        aiSummaryUnreadCount: _notif.aiSummaryUnreadCount,
+      );
+    });
+    ConversationInboxCache.instance.put(
+      userId: widget.session.userId,
+      conversations: _items,
+      notif: _notif,
+      novaStorage: _novaStorage,
+      aiSummaryPreview: _aiSummaryPreview,
+      aiSummaryUnread: _aiSummaryUnread,
+    );
+    _updateCommBadge(_items, 0);
   }
 
   void _onMemberSettingsSignal() {
@@ -471,6 +518,7 @@ class _NativeConversationPageState extends State<NativeConversationPage>
     WidgetsBinding.instance.removeObserver(this);
     userAvatarRefresh.removeListener(_onSelfAvatarUpdated);
     widget.conversationReadSignal?.removeListener(_onConversationReadSignal);
+    widget.notificationsReadSignal?.removeListener(_onNotificationsReadSignal);
     widget.memberSettingsSignal?.removeListener(_onMemberSettingsSignal);
     widget.conversationRemovedSignal?.removeListener(
       _onConversationRemovedSignal,
@@ -705,7 +753,7 @@ class _NativeConversationPageState extends State<NativeConversationPage>
       setState(() => _error = null);
     }
     try {
-      final hidden = await InboxHiddenStorage.load();
+      var hidden = await InboxHiddenStorage.load();
       final results = await Future.wait(<Future<Object?>>[
         _service.fetchConversations(),
         _notificationService.fetchSummary(),
@@ -714,7 +762,12 @@ class _NativeConversationPageState extends State<NativeConversationPage>
         if (!widget.session.isExternalUser)
           _aiSummaryService.fetchUnreadCount(),
       ]);
-      var rows = (results[0] as List<NativeConversation>)
+      final fetched = results[0] as List<NativeConversation>;
+      // 退群后本地软隐藏：若服务端又把会话拉回 inbox，说明已重新入群，应取消隐藏。
+      hidden = await unhideSoftHiddenPresentInInbox(
+        fetched.map((c) => c.id),
+      );
+      var rows = fetched
           .where(
             (c) => c.isListedInInbox && !isConversationHidden(hidden, c.id),
           )
@@ -958,10 +1011,91 @@ class _NativeConversationPageState extends State<NativeConversationPage>
 
   void _onSearchChanged(String value) {
     _searchDebounce?.cancel();
-    _searchDebounce = Timer(const Duration(milliseconds: 200), () {
+    final raw = value.trim();
+    _searchDebounce = Timer(const Duration(milliseconds: 220), () {
       if (!mounted) return;
-      setState(() => _searchQuery = value.trim().toLowerCase());
+      setState(() {
+        _searchQuery = raw.toLowerCase();
+        if (raw.isEmpty) {
+          _contactHits = const <NativeContact>[];
+          _contactSearching = false;
+        }
+      });
+      if (raw.isNotEmpty && widget.onStartPrivateChat != null) {
+        unawaited(_searchContacts(raw));
+      }
     });
+  }
+
+  Future<void> _searchContacts(String keyword) async {
+    final seq = ++_contactSearchSeq;
+    if (mounted) setState(() => _contactSearching = true);
+    try {
+      final org = await _contactService.fetchOrgContacts(keyword: keyword);
+      final external = await _contactService.fetchExternalContacts(
+        keyword: keyword,
+      );
+      if (!mounted || seq != _contactSearchSeq) return;
+
+      final existingPeers = <int>{};
+      for (final c in _items) {
+        if (!c.isPrivate || c.isSelfMemo) continue;
+        final peer = c.peerUserId;
+        if (peer != null && peer > 0) existingPeers.add(peer);
+      }
+
+      final seen = <int>{};
+      final hits = <NativeContact>[];
+      for (final c in [...org.searchItems, ...external]) {
+        if (c.userId <= 0 || c.userId == widget.session.userId) continue;
+        if (!c.enabled) continue;
+        if (existingPeers.contains(c.userId)) continue;
+        if (!seen.add(c.userId)) continue;
+        hits.add(c);
+      }
+      setState(() {
+        _contactHits = hits;
+        _contactSearching = false;
+      });
+    } catch (_) {
+      if (!mounted || seq != _contactSearchSeq) return;
+      setState(() {
+        _contactHits = const <NativeContact>[];
+        _contactSearching = false;
+      });
+    }
+  }
+
+  Widget _buildContactHitRow(NativeContact contact) {
+    final dept = (contact.department ?? '').trim();
+    final role = contact.primaryRole;
+    final previewParts = <String>[
+      if (dept.isNotEmpty) dept,
+      if (role.isNotEmpty) role,
+    ];
+    final preview =
+        previewParts.isEmpty ? '点击发起会话' : previewParts.join(' · ');
+    final initial = contact.displayLabel.isNotEmpty
+        ? contact.displayLabel.substring(0, 1)
+        : '?';
+    return KeyedSubtree(
+      key: ValueKey<String>('inbox-contact-${contact.userId}'),
+      child: ChatInboxRow(
+        kind: ChatInboxRowKind.private,
+        title: contact.displayLabel,
+        preview: preview,
+        timeLabel: '',
+        showOnlineDot: _onlineUsers.contains(contact.userId),
+        avatarInitial: initial,
+        avatarSeed: contact.userId,
+        avatarPreset: contact.avatarPreset,
+        avatarObjectKey: contact.avatarObjectKey,
+        avatarService: _service,
+        onTap: _openWithScrollPersist(() {
+          widget.onStartPrivateChat?.call(contact.userId);
+        }),
+      ),
+    );
   }
 
   List<NativeConversation> _sorted(List<NativeConversation> rows) {
@@ -1387,6 +1521,58 @@ class _NativeConversationPageState extends State<NativeConversationPage>
       );
       children.addAll(section.rows);
     }
+
+    final showContactSection =
+        _searchQuery.isNotEmpty && widget.onStartPrivateChat != null;
+    if (showContactSection) {
+      final contactRows =
+          _contactHits.map(_buildContactHitRow).toList(growable: false);
+      if (_contactSearching || contactRows.isNotEmpty) {
+        children.add(
+          ChatInboxSectionHeader(
+            label: '联系人',
+            count: contactRows.length,
+            pinned: false,
+            leading: const Icon(
+              Icons.person_outline_rounded,
+              size: 11,
+              color: DunesColors.text3,
+            ),
+          ),
+        );
+        if (_contactSearching && contactRows.isEmpty) {
+          children.add(
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              child: Text(
+                '正在搜索联系人…',
+                style: TextStyle(fontSize: 12, color: DunesColors.text3),
+              ),
+            ),
+          );
+        } else {
+          children.addAll(contactRows);
+        }
+      }
+    }
+
+    if (_searchQuery.isNotEmpty &&
+        sections.isEmpty &&
+        _contactHits.isEmpty &&
+        !_contactSearching) {
+      children.add(
+        const Padding(
+          padding: EdgeInsets.symmetric(horizontal: 16, vertical: 28),
+          child: Center(
+            child: Text(
+              '无匹配的会话或联系人',
+              style: TextStyle(fontSize: 13, color: DunesColors.text3),
+            ),
+          ),
+        ),
+      );
+    }
+
     children.add(const SizedBox(height: 6));
 
     return RefreshIndicator(

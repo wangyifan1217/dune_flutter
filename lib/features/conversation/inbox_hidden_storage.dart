@@ -114,17 +114,40 @@ bool shouldUnhideFromRealtimeEvent(
   Map<String, InboxHiddenEntry> hidden,
   int _,
 ) {
-  if (event.type != 'message' && event.type != 'system_flow') return false;
   final convId = event.conversationId ?? 0;
   if (convId <= 0 || !isConversationHidden(hidden, convId)) return false;
   if (isConversationPermanentlyHidden(hidden, convId)) return false;
+
+  // 退出后又被拉回：conversation_updated / 入群系统消息应恢复列表（PC 本地软隐藏常见）。
+  if (event.type == 'conversation_updated') return true;
+
+  if (event.type != 'message' && event.type != 'system_flow') return false;
   final msg = event.message;
   if (msg == null) return false;
   final kind = (msg['kind'] ?? '').toString().toUpperCase();
+  if (kind == 'SYSTEM_JOIN') return true;
   if (kind.startsWith('SYSTEM')) return false;
   final senderId = _senderUserId(msg);
   // 自己重新在该会话发言时，也应自动恢复到通讯列表，避免“会话仍被本地隐藏”。
   return senderId > 0;
+}
+
+/// 服务端 inbox 仍返回该会话，说明成员关系已恢复；清除非永久本地隐藏。
+Future<Map<String, InboxHiddenEntry>> unhideSoftHiddenPresentInInbox(
+  Iterable<int> conversationIdsFromServer,
+) async {
+  final map = await InboxHiddenStorage.load();
+  var changed = false;
+  for (final id in conversationIdsFromServer) {
+    if (id <= 0) continue;
+    final key = id.toString();
+    final entry = map[key];
+    if (entry == null || entry.permanent) continue;
+    map.remove(key);
+    changed = true;
+  }
+  if (changed) await InboxHiddenStorage.save(map);
+  return map;
 }
 
 int _senderUserId(Map<String, dynamic> msg) {

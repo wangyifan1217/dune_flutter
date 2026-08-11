@@ -53,6 +53,9 @@ function Get-DunesDartDefines {
     if ($line -match '^\s*dunes\.apiHost=(.+)$') {
       $envVars['DUNES_API_HOST'] = $matches[1].Trim()
     }
+    if ($line -match '^\s*dunes\.apiBase=(.+)$') {
+      $envVars['DUNES_API_BASE'] = $matches[1].Trim()
+    }
     if ($line -match '^\s*nova\.baseUrl=(.+)$') {
       $envVars['NOVA_BASE_URL'] = $matches[1].Trim()
     }
@@ -65,6 +68,7 @@ function Get-DunesDartDefines {
     'TPNS_MI_APP_KEY' = 'TPNS_MI_APP_KEY'
     'TPNS_CLUSTER' = 'TPNS_CLUSTER'
     'DUNES_API_HOST' = 'DUNES_API_HOST'
+    'DUNES_API_BASE' = 'DUNES_API_BASE'
     'NOVA_BASE_URL' = 'NOVA_BASE_URL'
   }
 

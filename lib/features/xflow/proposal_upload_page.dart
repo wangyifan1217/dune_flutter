@@ -23,6 +23,7 @@ import 'package:flutter/material.dart';
 
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/config/dunes_defaults.dart';
 import '../auth/auth_session.dart';
@@ -30,6 +31,7 @@ import '../chat/chat_file_type_icon.dart';
 import '../shell/dunes_toast.dart';
 import 'proposal_archive_models.dart';
 import 'proposal_excel_preview_page.dart';
+import 'proposal_import_template.dart';
 import 'proposal_recognition_ui.dart';
 import 'proposal_upload_config.dart';
 import 'xflow_approval_flow_ui.dart';
@@ -556,6 +558,10 @@ class _ProposalUploadPageState extends State<ProposalUploadPage>
   int _previewSeq = 0;
   bool _previewFailed = false;
   bool _previewLoading = false;
+  List<ProposalImportTemplateItem> _importTemplates =
+      const <ProposalImportTemplateItem>[];
+  bool _importTemplatesLoading = false;
+  String? _importTemplatesError;
 
   int? get _activeDraftId {
     final draft = _draftProposalId;
@@ -580,6 +586,64 @@ class _ProposalUploadPageState extends State<ProposalUploadPage>
         XflowService(session: widget.session, templateKey: widget.templateKey);
     _draftProposalId = widget.editProposalId;
     _loadTemplateConfig();
+    unawaited(_loadImportTemplates());
+  }
+
+  Future<void> _loadImportTemplates() async {
+    if (!mounted) return;
+    setState(() {
+      _importTemplatesLoading = true;
+      _importTemplatesError = null;
+    });
+    try {
+      final items = await fetchProposalImportTemplates(
+        apiBase: _apiBase,
+        token: widget.session.token,
+      );
+      if (!mounted) return;
+      setState(() {
+        _importTemplates = items;
+        _importTemplatesLoading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _importTemplates = const [];
+        _importTemplatesLoading = false;
+        _importTemplatesError = e.toString().replaceFirst('Exception: ', '');
+      });
+    }
+  }
+
+  Future<void> _downloadImportTemplate(ProposalImportTemplateItem item) async {
+    if (!item.available) {
+      final msg = item.message.isNotEmpty ? item.message : '该业务平台暂未提供导入模板';
+      showDunesToast(context, msg, kind: DunesToastKind.error);
+      return;
+    }
+    final url = item.downloadUrl.trim();
+    if (url.isEmpty) {
+      showDunesToast(context, '下载地址为空', kind: DunesToastKind.error);
+      return;
+    }
+    final uri = Uri.tryParse(url);
+    if (uri == null) {
+      showDunesToast(context, '下载地址无效', kind: DunesToastKind.error);
+      return;
+    }
+    try {
+      final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      if (!ok && mounted) {
+        showDunesToast(context, '无法打开下载链接', kind: DunesToastKind.error);
+      }
+    } catch (e) {
+      if (!mounted) return;
+      showDunesToast(
+        context,
+        '下载失败：${e.toString().replaceFirst('Exception: ', '')}',
+        kind: DunesToastKind.error,
+      );
+    }
   }
 
   @override
@@ -1342,6 +1406,8 @@ class _ProposalUploadPageState extends State<ProposalUploadPage>
     return ListView(
       padding: const EdgeInsets.fromLTRB(14, 16, 14, 8),
       children: [
+        _buildImportTemplateSection(),
+        const SizedBox(height: 16),
         if (_pageSubtitle.isNotEmpty) ...[
           Text(
             _pageSubtitle,
@@ -1514,6 +1580,67 @@ class _ProposalUploadPageState extends State<ProposalUploadPage>
     final raw = field.raw['maxSizeBytes'] ?? field.raw['maxBytes'];
     if (raw is num) return raw.toInt();
     return 5 * 1024 * 1024;
+  }
+
+  Widget _buildImportTemplateSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            const Text(
+              '产品模板',
+              style: TextStyle(
+                fontSize: 11.5,
+                fontWeight: FontWeight.w600,
+                color: _PDColors.ink,
+              ),
+            ),
+            const Spacer(),
+            if (_importTemplatesLoading)
+              const SizedBox(
+                width: 14,
+                height: 14,
+                child: CircularProgressIndicator(
+                  strokeWidth: 1.6,
+                  color: _PDColors.mute,
+                ),
+              )
+            else
+              GestureDetector(
+                onTap: _loadImportTemplates,
+                child: const Text(
+                  '刷新',
+                  style: TextStyle(fontSize: 11, color: _PDColors.coral),
+                ),
+              ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        if (_importTemplatesError != null && _importTemplates.isEmpty)
+          Text(
+            _importTemplatesError!,
+            style: const TextStyle(fontSize: 11, color: _PDColors.danger),
+          )
+        else
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final item in _importTemplates)
+                _ImportTemplateChip(
+                  item: item,
+                  onTap: () => _downloadImportTemplate(item),
+                ),
+            ],
+          ),
+        const SizedBox(height: 4),
+        const Text(
+          '先按产品分类下载空白 Excel，填好后再上传识别。',
+          style: TextStyle(fontSize: 10, color: _PDColors.mute2, height: 1.5),
+        ),
+      ],
+    );
   }
 
   Widget _buildExcelImportField(XflowField field) {
@@ -2167,6 +2294,73 @@ class _ProposalUploadPageState extends State<ProposalUploadPage>
           fontSize: 10.5,
           color: _PDColors.ink,
           fontWeight: FontWeight.w500,
+        ),
+      ),
+    );
+  }
+}
+
+class _ImportTemplateChip extends StatelessWidget {
+  const _ImportTemplateChip({required this.item, required this.onTap});
+
+  final ProposalImportTemplateItem item;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = item.available && item.downloadUrl.isNotEmpty;
+    final subtitle = item.profileName.isNotEmpty
+        ? item.profileName
+        : (enabled ? '可下载' : '暂未提供');
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        child: Ink(
+          padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+          decoration: BoxDecoration(
+            color: enabled ? _PDColors.card : _PDColors.cardAlt,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: enabled
+                  ? _PDColors.ink.withAlpha(40)
+                  : _PDColors.line2,
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                enabled
+                    ? Icons.download_outlined
+                    : Icons.hourglass_empty_outlined,
+                size: 15,
+                color: enabled ? _PDColors.coral : _PDColors.mute2,
+              ),
+              const SizedBox(width: 6),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    item.name,
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w600,
+                      color: enabled ? _PDColors.ink : _PDColors.mute,
+                    ),
+                  ),
+                  Text(
+                    subtitle,
+                    style: TextStyle(
+                      fontSize: 9.5,
+                      color: enabled ? _PDColors.mute : _PDColors.mute2,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );

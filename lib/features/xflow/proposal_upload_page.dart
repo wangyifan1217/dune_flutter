@@ -710,6 +710,17 @@ class _ProposalUploadPageState extends State<ProposalUploadPage>
     for (final field in _supplementalFields) {
       final value = _supplementalValues[field.key];
       if (!supplementalFieldHasValue(value, field: field)) continue;
+      if (field.type == 'upload' && value is Iterable) {
+        values[field.key] = value
+            .whereType<Map>()
+            .map((m) => Map<String, dynamic>.from(m))
+            .where((m) {
+              final status = (m['status'] ?? 'done').toString();
+              return status != 'error' && status != 'uploading';
+            })
+            .toList(growable: false);
+        continue;
+      }
       values[field.key] = value;
     }
     return values;
@@ -834,7 +845,10 @@ class _ProposalUploadPageState extends State<ProposalUploadPage>
         _detailConfig = detailConfig;
         _configLoading = false;
         for (final field in supplemental) {
-          _supplementalValues.putIfAbsent(field.key, () => '');
+          _supplementalValues.putIfAbsent(
+            field.key,
+            () => field.type == 'upload' ? <Map<String, dynamic>>[] : '',
+          );
         }
         _supplementalValues.removeWhere(
           (key, _) => supplemental.every((field) => field.key != key),
@@ -1538,10 +1552,8 @@ class _ProposalUploadPageState extends State<ProposalUploadPage>
   }
 
   Widget? _overrideFormField(XflowField field) {
-    if (field.type != 'upload' &&
-        field.raw['actionKind']?.toString() != 'excel-import') {
-      return null;
-    }
+    // 仅 Excel 识别字段走 /proposals/upload；普通附件交给 XflowUploadField。
+    if (!isExcelImportField(field)) return null;
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: _buildExcelImportField(field),

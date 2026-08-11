@@ -9,9 +9,31 @@ bool isRenderableField(XflowField field) {
   return !skip.contains(field.type);
 }
 
+/// Excel 识别上传（走 /proposals/upload）；普通附件 actionKind 为 file / 空。
+bool isExcelImportField(XflowField field) {
+  final kind = (field.raw['actionKind'] ?? '').toString().trim();
+  if (kind == 'excel-import') return true;
+  // 兼容旧配置：仅上传型主字段未写 actionKind，但 key 约定为提案 Excel。
+  if (field.type == 'upload' &&
+      kind.isEmpty &&
+      field.key.trim() == 'proposalExcel') {
+    return true;
+  }
+  return false;
+}
+
+bool isOrdinaryUploadField(XflowField field) {
+  return field.type == 'upload' && !isExcelImportField(field);
+}
+
+/// 识别用主上传字段：优先 excel-import，避免普通附件（planFiles 等）抢占。
 XflowField? findPrimaryUploadField(List<XflowField> fields) {
   for (final field in fields) {
-    if (field.type == 'upload' || field.raw['actionKind'] == 'excel-import') {
+    if (isExcelImportField(field)) return field;
+  }
+  for (final field in fields) {
+    if (field.type == 'upload' ||
+        field.raw['actionKind']?.toString() == 'excel-import') {
       return field;
     }
   }

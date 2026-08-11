@@ -49,6 +49,16 @@ class _XflowUploadFieldState extends State<XflowUploadField> {
       'maxBytes': 10 * 1024 * 1024,
       'icon': Icons.add_photo_alternate_outlined,
     },
+    // 与 planFiles 同义：模板里「产品文件」常用此 key
+    'productFiles': {
+      'variant': 'plan',
+      'hint': 'JPG / PNG / HEIC / PDF · 最多 5 个',
+      'title': '点击选择或拖拽产品文件',
+      'desc': '单个不超过 10MB · 图片 / PDF',
+      'extensions': ['jpg', 'jpeg', 'png', 'heic', 'heif', 'pdf'],
+      'maxBytes': 10 * 1024 * 1024,
+      'icon': Icons.add_photo_alternate_outlined,
+    },
     'contractFiles': {
       'variant': 'contract',
       'hint': 'PDF / DOCX · 最多 5 个',
@@ -63,15 +73,28 @@ class _XflowUploadFieldState extends State<XflowUploadField> {
   Map<String, dynamic> get _uploadMeta {
     final base = _meta[widget.field.key] ?? const {};
     final maxFiles = widget.field.raw['maxFiles'];
+    final fromField = _extensionsFromField(widget.field);
+    final extensions = fromField.isNotEmpty
+        ? fromField
+        : (base['extensions'] as List?)?.cast<String>() ?? const <String>[];
     return {
       'variant': base['variant'] ?? 'plan',
       'hint': base['hint'] ?? '最多 ${maxFiles ?? 5} 个',
       'title': base['title'] ?? '点击选择或拖拽文件',
       'desc': base['desc'] ?? '上传后自动保存到文件服务器',
-      'extensions': base['extensions'] ?? const <String>[],
+      'extensions': extensions,
       'maxBytes': base['maxBytes'] ?? 20 * 1024 * 1024,
       'icon': base['icon'] ?? Icons.upload_outlined,
     };
+  }
+
+  List<String> _extensionsFromField(XflowField field) {
+    final raw = field.raw['accept'] ?? field.raw['extensions'];
+    if (raw is! List || raw.isEmpty) return const [];
+    return raw
+        .map((e) => e.toString().trim().toLowerCase().replaceFirst('.', ''))
+        .where((e) => e.isNotEmpty)
+        .toList(growable: false);
   }
 
   int get _maxFiles {
@@ -81,8 +104,12 @@ class _XflowUploadFieldState extends State<XflowUploadField> {
   }
 
   String get _label {
+    if (widget.field.label.trim().isNotEmpty) return widget.field.label.trim();
     if (widget.field.key == 'contractFiles') return '商务合同附件';
-    return widget.field.label.isEmpty ? widget.field.key : widget.field.label;
+    if (widget.field.key == 'planFiles' || widget.field.key == 'productFiles') {
+      return '产品文件';
+    }
+    return widget.field.key;
   }
 
   bool get _supportsDesktopDrop {

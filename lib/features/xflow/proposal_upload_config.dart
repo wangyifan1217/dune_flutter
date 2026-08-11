@@ -366,17 +366,15 @@ List<int> collectApproverIdsFromStages(Iterable<Map<String, dynamic>> stages) {
   return ids.toList(growable: false);
 }
 
-/// 上传型模板中除 Excel 上传字段外的可填字段（如备注）。
+/// 上传型模板中除 Excel 识别字段外的可填字段（含普通附件 upload）。
 List<XflowField> supplementalFormFields(List<XflowField> fields) {
   final upload = findPrimaryUploadField(fields);
   final uploadKey = upload?.key.trim() ?? '';
   return fields
       .where((field) {
         if (!isRenderableField(field)) return false;
-        if (field.type == 'upload' ||
-            field.raw['actionKind'] == 'excel-import') {
-          return false;
-        }
+        // 仅排除 Excel 识别上传；planFiles / contractFiles 等普通附件保留。
+        if (isExcelImportField(field)) return false;
         if (uploadKey.isNotEmpty && field.key == uploadKey) return false;
         return true;
       })
@@ -398,6 +396,18 @@ bool supplementalFieldHasValue(dynamic value, {XflowField? field}) {
       return name.isNotEmpty;
     }
     return value.toString().trim().isNotEmpty;
+  }
+  if (field != null && field.type == 'upload') {
+    if (value is! Iterable) return false;
+    for (final item in value) {
+      if (item is Map) {
+        final status = (item['status'] ?? 'done').toString();
+        if (status != 'error' && status != 'uploading') return true;
+        continue;
+      }
+      if (item != null && item.toString().trim().isNotEmpty) return true;
+    }
+    return false;
   }
   if (value is String) return value.trim().isNotEmpty;
   if (value is Iterable) return value.isNotEmpty;

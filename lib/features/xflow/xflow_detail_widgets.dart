@@ -622,11 +622,13 @@ class XfDetTabsWrap extends StatelessWidget {
     required this.bundle,
     required this.service,
     required this.showTrack,
+    this.onOpenLinkedProposal,
   });
 
   final XflowDetailBundle bundle;
   final XflowService service;
   final bool showTrack;
+  final void Function(int proposalId)? onOpenLinkedProposal;
 
   @override
   Widget build(BuildContext context) {
@@ -651,7 +653,11 @@ class XfDetTabsWrap extends StatelessWidget {
         XfDetCard(
           title: '填报内容',
           marginBottom: 10,
-          child: XfDetFormSections(sections: sections, service: service),
+          child: XfDetFormSections(
+            sections: sections,
+            service: service,
+            onOpenLinkedProposal: onOpenLinkedProposal,
+          ),
         ),
         if (showTrack)
           XfDetCard(
@@ -669,10 +675,12 @@ class XfDetFormSections extends StatelessWidget {
     super.key,
     required this.sections,
     required this.service,
+    this.onOpenLinkedProposal,
   });
 
   final List<DetailSection> sections;
   final XflowService service;
+  final void Function(int proposalId)? onOpenLinkedProposal;
 
   @override
   Widget build(BuildContext context) {
@@ -689,6 +697,7 @@ class XfDetFormSections extends StatelessWidget {
             section: sections[si],
             sectionIndex: si,
             service: service,
+            onOpenLinkedProposal: onOpenLinkedProposal,
           ),
       ],
     );
@@ -700,11 +709,13 @@ class _SectionBlock extends StatefulWidget {
     required this.section,
     required this.sectionIndex,
     required this.service,
+    this.onOpenLinkedProposal,
   });
 
   final DetailSection section;
   final int sectionIndex;
   final XflowService service;
+  final void Function(int proposalId)? onOpenLinkedProposal;
 
   @override
   State<_SectionBlock> createState() => _SectionBlockState();
@@ -736,7 +747,23 @@ class _SectionBlockState extends State<_SectionBlock> {
           for (final item in visible)
             item.expandable
                 ? XfDetKvExpand(item: item, service: widget.service)
-                : XfDetKv(label: item.label, value: item.value),
+                : Builder(
+                    builder: (context) {
+                      final linkedId = item.field.type == 'proposal'
+                          ? parseLinkedProposalId(item.rawValue)
+                          : 0;
+                      final canOpen =
+                          linkedId > 0 && widget.onOpenLinkedProposal != null;
+                      return XfDetKv(
+                        label: item.label,
+                        value: item.value,
+                        linkStyle: canOpen,
+                        onTap: canOpen
+                            ? () => widget.onOpenLinkedProposal!(linkedId)
+                            : null,
+                      );
+                    },
+                  ),
           if (hiddenCount > 0)
             TextButton(
               onPressed: () => setState(() => _expanded = true),
@@ -768,14 +795,30 @@ class _SectionBlockState extends State<_SectionBlock> {
 }
 
 class XfDetKv extends StatelessWidget {
-  const XfDetKv({super.key, required this.label, required this.value});
+  const XfDetKv({
+    super.key,
+    required this.label,
+    required this.value,
+    this.onTap,
+    this.linkStyle = false,
+  });
 
   final String label;
   final String value;
+  final VoidCallback? onTap;
+  final bool linkStyle;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    final valueStyle = DunesTypography.sans(
+      fontSize: 14,
+      fontWeight: FontWeight.w500,
+      color: linkStyle ? DunesColors.accent : null,
+    ).copyWith(
+      decoration: linkStyle ? TextDecoration.underline : TextDecoration.none,
+      decorationColor: linkStyle ? DunesColors.accent : null,
+    );
+    final row = Container(
       padding: const EdgeInsets.symmetric(vertical: 10),
       decoration: BoxDecoration(
         border: Border(
@@ -801,13 +844,18 @@ class XfDetKv extends StatelessWidget {
             child: Text(
               value,
               textAlign: TextAlign.right,
-              style: DunesTypography.sans(
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
-              ),
+              style: valueStyle,
             ),
           ),
         ],
+      ),
+    );
+    if (onTap == null) return row;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        child: row,
       ),
     );
   }

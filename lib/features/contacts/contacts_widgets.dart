@@ -17,6 +17,8 @@ class ContactsHeader extends StatelessWidget {
     required this.onToggleSearch,
     this.searchOpen = false,
     this.groupPickMode = false,
+    this.groupPickTitle = '创建群聊',
+    this.groupPickSubtitle = '选择成员',
     this.creating = false,
     this.onCreateGroup,
     this.onConfirmCreate,
@@ -27,6 +29,8 @@ class ContactsHeader extends StatelessWidget {
   final VoidCallback onToggleSearch;
   final bool searchOpen;
   final bool groupPickMode;
+  final String groupPickTitle;
+  final String groupPickSubtitle;
   final bool creating;
   final VoidCallback? onCreateGroup;
   final VoidCallback? onConfirmCreate;
@@ -52,7 +56,7 @@ class ContactsHeader extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Text(
-                  groupPickMode ? '创建群聊' : '通讯录',
+                  groupPickMode ? groupPickTitle : '通讯录',
                   style: DunesTypography.sans(
                     fontSize: 17,
                     fontWeight: FontWeight.w700,
@@ -61,7 +65,7 @@ class ContactsHeader extends StatelessWidget {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  groupPickMode ? '选择成员' : '$total 人',
+                  groupPickMode ? groupPickSubtitle : '$total 人',
                   style: DunesTypography.sans(
                     fontSize: 11,
                     color: DunesColors.text3,
@@ -202,6 +206,7 @@ class ContactRowTile extends StatelessWidget {
     this.pickMode = false,
     this.selected = false,
     this.onToggleSelect,
+    this.allowSelfInPickMode = false,
   });
 
   final NativeContact contact;
@@ -213,11 +218,13 @@ class ContactRowTile extends StatelessWidget {
   final bool pickMode;
   final bool selected;
   final VoidCallback? onToggleSelect;
+  final bool allowSelfInPickMode;
 
   @override
   Widget build(BuildContext context) {
     final isMe = contact.userId == currentUserId;
-    final disabled = !contact.enabled || (pickMode && isMe);
+    final disabled =
+        !contact.enabled || (pickMode && isMe && !allowSelfInPickMode);
     final onTap = pickMode
         ? (disabled ? null : onToggleSelect)
         : onOpenProfile;
@@ -354,6 +361,7 @@ class DeptBlockTile extends StatefulWidget {
     this.pickMode = false,
     this.selectedUserIds = const <int>{},
     this.onToggleContact,
+    this.allowSelfInPickMode = false,
   });
 
   final NativeDepartment department;
@@ -365,6 +373,7 @@ class DeptBlockTile extends StatefulWidget {
   final bool pickMode;
   final Set<int> selectedUserIds;
   final ValueChanged<NativeContact>? onToggleContact;
+  final bool allowSelfInPickMode;
 
   @override
   State<DeptBlockTile> createState() => _DeptBlockTileState();
@@ -477,6 +486,7 @@ class _DeptBlockTileState extends State<DeptBlockTile> {
                     onToggleSelect: widget.onToggleContact == null
                         ? null
                         : () => widget.onToggleContact!(dep.users[i]),
+                    allowSelfInPickMode: widget.allowSelfInPickMode,
                   ),
                 ],
                 for (final child in dep.children)
@@ -490,6 +500,7 @@ class _DeptBlockTileState extends State<DeptBlockTile> {
                     pickMode: widget.pickMode,
                     selectedUserIds: widget.selectedUserIds,
                     onToggleContact: widget.onToggleContact,
+                    allowSelfInPickMode: widget.allowSelfInPickMode,
                   ),
               ],
             ),

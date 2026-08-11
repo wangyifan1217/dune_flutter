@@ -14,6 +14,57 @@ import 'xflow_models.dart';
 import 'xflow_service.dart';
 import 'xflow_shared_widgets.dart';
 
+/// 从审批详情打开关联提案：Navigator 叠一层，返回不影响原审批页。
+Future<void> openLinkedProposalDetail({
+  required BuildContext context,
+  required AuthSession session,
+  required int proposalId,
+}) async {
+  if (proposalId <= 0 || !context.mounted) return;
+
+  await Navigator.of(context).push<void>(
+    MaterialPageRoute<void>(
+      builder: (ctx) {
+        void close() {
+          if (Navigator.of(ctx).canPop()) {
+            Navigator.of(ctx).pop();
+          }
+        }
+
+        return Material(
+          color: DunesColors.bgApp,
+          child: NativeB10Page(
+            session: session,
+            navigation: _LinkedProposalBackNav(onClose: close),
+            proposalId: proposalId,
+            todoHint: null,
+            backScreen: 'linked-proposal',
+            onReedit: (_) {
+              showDunesToast(ctx, '请从提案列表重新编辑');
+            },
+          ),
+        );
+      },
+    ),
+  );
+}
+
+class _LinkedProposalBackNav extends DunesNavigationController {
+  _LinkedProposalBackNav({required this.onClose})
+      : super(initialScreen: 'linked-proposal');
+
+  final VoidCallback onClose;
+
+  @override
+  void popTo(String screenId) => onClose();
+
+  @override
+  void back() => onClose();
+
+  @override
+  void go(String screenId) => onClose();
+}
+
 class NativeB10Page extends StatefulWidget {
   const NativeB10Page({
     super.key,
@@ -433,6 +484,13 @@ class _NativeB10PageState extends State<NativeB10Page> {
                               onVoid: _voidProposal,
                               onWithdraw: _withdrawProposal,
                               onReturn: _return,
+                              onOpenLinkedProposal: (proposalId) {
+                                openLinkedProposalDetail(
+                                  context: context,
+                                  session: widget.session,
+                                  proposalId: proposalId,
+                                );
+                              },
                             ),
                             XflowCcRulesCard(
                               rules: _ccRules,

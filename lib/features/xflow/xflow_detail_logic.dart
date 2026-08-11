@@ -121,6 +121,23 @@ String formatProposalDisplay(dynamic val) {
   return val.toString();
 }
 
+/// 从关联提案字段取值解析可跳转的提案 ID；解析不到返回 0。
+int parseLinkedProposalId(dynamic val) {
+  if (val == null || val == '') return 0;
+  if (val is num) return val.toInt() > 0 ? val.toInt() : 0;
+  if (val is String) {
+    final text = val.trim();
+    if (text.isEmpty) return 0;
+    return int.tryParse(text) ?? 0;
+  }
+  if (val is Map) {
+    final pid = val['proposalId'] ?? val['id'];
+    if (pid is num) return pid.toInt() > 0 ? pid.toInt() : 0;
+    if (pid != null) return int.tryParse('$pid') ?? 0;
+  }
+  return 0;
+}
+
 String formatUserDisplay(dynamic val) {
   if (val == null || val == '') return '';
   if (val is String) {

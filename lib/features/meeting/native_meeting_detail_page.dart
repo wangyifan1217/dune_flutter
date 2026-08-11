@@ -567,6 +567,62 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
     }
   }
 
+  /// 导出 PDF 后唤起系统「用其他应用打开」（与聊天附件预览一致）。
+  Future<void> _openSummaryWithOtherApp() async {
+    final detail = _detail;
+    if (detail == null ||
+        _downloadingAudio ||
+        _forwarding ||
+        _savingToDrive ||
+        _uploadingSummaryToKb) {
+      return;
+    }
+    if (!MeetingMinutesExport.canExport(detail)) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('纪要尚未生成，暂无法打开')));
+      return;
+    }
+
+    setState(() {
+      _downloadingAudio = true;
+      _downloadProgress = 0;
+      _downloadLabel = '准备打开';
+    });
+
+    try {
+      final fileName = MeetingMinutesExport.pdfFileName(detail);
+      final bytes = await _service.exportPdfBytes(detail.meetingId);
+      if (!mounted) return;
+      setState(() => _downloadProgress = 0.85);
+      final savedPath = await file_dl.saveBytesAsFile(bytes, fileName);
+      if (!mounted) return;
+      if (savedPath == null || savedPath.isEmpty) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('无法保存文件以供打开')));
+        return;
+      }
+      setState(() => _downloadProgress = 1);
+      await file_dl.openLocalFile(savedPath);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(friendlyErrorText(e, fallback: '无法用其他应用打开')),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _downloadingAudio = false;
+          _downloadProgress = 0;
+          _downloadLabel = null;
+        });
+      }
+    }
+  }
+
   Future<void> _forwardMeetingMinutes() async {
     final detail = _detail;
     if (detail == null || _forwarding || _downloadingAudio || _savingToDrive) {
@@ -1232,6 +1288,17 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
                           ? Icons.cloud_done_outlined
                           : Icons.cloud_upload_outlined,
                     ),
+            ),
+            IconButton(
+              tooltip: isDesktopCommOnly ? '打开' : '用其他应用打开',
+              onPressed:
+                  (_savingToDrive ||
+                      _uploadingSummaryToKb ||
+                      _downloadingAudio ||
+                      _forwarding)
+                  ? null
+                  : _openSummaryWithOtherApp,
+              icon: const Icon(Icons.open_in_new_rounded),
             ),
             PopupMenuButton<MeetingExportFormat>(
               tooltip: '下载',

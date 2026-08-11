@@ -155,6 +155,8 @@
 .xf-det-kv{display:flex;justify-content:space-between;gap:12px;padding:8px 0;border-bottom:1px dashed var(--border-soft,rgba(0,0,0,.06));font-size:12px}
 .xf-det-k{color:var(--text-2,#6b6560);flex:1}
 .xf-det-v{text-align:right;font-weight:500;color:var(--text);font-size:12px}
+.xf-det-v-link{appearance:none;border:0;background:none;padding:0;margin:0;cursor:pointer;color:var(--accent,#2F5D62);text-decoration:underline;text-underline-offset:2px;font:inherit;font-weight:500;text-align:right}
+.xf-det-v-link:active{opacity:.75}
 .xf-det-sol{font-size:12px;line-height:1.6;white-space:pre-wrap;color:var(--text-2,#6b6560)}
 .xf-det-ai,.xf-det-ai-card .xf-det-ai-list{font-size:12px;line-height:1.5}
 .xf-det-ai{padding:8px;background:linear-gradient(135deg,#f0f4ff,#fff);border-radius:8px;border:1px solid #d8e4ff;margin-top:8px}

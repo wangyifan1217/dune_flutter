@@ -9,6 +9,7 @@ import '../auth/auth_session.dart';
 import '../shell/dunes_toast.dart';
 import 'approval_chat_forward.dart';
 import 'approval_chat_share.dart';
+import 'native_b10_page.dart';
 import 'xflow_detail_comments.dart';
 import 'xflow_detail_logic.dart';
 import 'xflow_detail_widgets.dart';
@@ -418,6 +419,13 @@ class _NativeXflowSubmissionPageState extends State<NativeXflowSubmissionPage> {
                               bundle!.detail,
                             ),
                             service: _service,
+                            onOpenLinkedProposal: (proposalId) {
+                              openLinkedProposalDetail(
+                                context: context,
+                                session: widget.session,
+                                proposalId: proposalId,
+                              );
+                            },
                           ),
                         ),
                         const SizedBox(height: 12),

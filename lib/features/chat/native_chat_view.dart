@@ -28,6 +28,7 @@ import '../meeting/meeting_live_controller.dart';
 import '../conversation/chat_message_cache.dart';
 import '../conversation/conversation_inbox_realtime.dart';
 import '../conversation/conversation_models.dart';
+import '../conversation/conversation_picker_sheet.dart';
 import '../conversation/conversation_realtime_dedup.dart';
 import '../conversation/conversation_realtime_hub.dart';
 import '../conversation/conversation_realtime_service.dart';
@@ -48,6 +49,7 @@ import '../xflow/xflow_detail_logic.dart';
 import 'chat_emoji_gif_panel.dart';
 import 'chat_foreground_sync.dart';
 import 'chat_image_batch_preview.dart';
+import 'chat_file_clipboard.dart';
 import 'chat_image_clipboard.dart';
 import 'chat_image_editor.dart';
 import 'chat_image_utils.dart';
@@ -67,7 +69,6 @@ import 'voice_transcript_panel.dart';
 import 'chat_widgets.dart';
 import 'desktop_screenshot.dart';
 import 'file_download.dart' as file_dl;
-import 'group_composite_avatar.dart';
 import 'user_avatar_widget.dart';
 import 'native_audio_recorder.dart';
 
@@ -3090,45 +3091,39 @@ class _NativeChatViewState extends State<NativeChatView>
     await _emitPreparedImageDrafts(confirmed, sourceLabel: label);
   }
 
-  /// 粘贴图片（对齐 admin-web ChatComposer onPaste）。
+  /// 粘贴图片 / 文件（对齐拖入发送；PC 支持从资源管理器复制文件后 Ctrl+V）。
   Future<bool> _attemptPasteImage() async {
     if (_mediaBusy || _conversation == null || _conversation!.dissolved) {
       return false;
     }
     try {
-      // 剪贴板已有普通文本（用户又复制了文字）时，绝不用旧的图片备份抢粘贴。
+      // 剪贴板已有普通文本（用户又复制了文字）时，绝不用旧的图片/文件备份抢粘贴。
       final clipText =
           (await Clipboard.getData(Clipboard.kTextPlain))?.text?.trim() ?? '';
       final hasRealText =
-          clipText.isNotEmpty && !_isImageClipboardPlaceholder(clipText);
+          clipText.isNotEmpty &&
+          !_isImageClipboardPlaceholder(clipText) &&
+          !_isFileClipboardPlaceholder(clipText);
       if (hasRealText) {
         ChatImageClipboard.clear();
+        ChatFileClipboard.clear();
         return false;
       }
 
       final image = await Pasteboard.image;
       if (image != null && image.isNotEmpty && _looksLikeImageBytes(image)) {
+        ChatFileClipboard.clear();
         await _sendPastedImageBytes(image);
         return true;
       }
       if (!kIsWeb) {
         final paths = await Pasteboard.files();
-        for (final path in paths) {
-          final lower = path.toLowerCase();
-          if (!(lower.endsWith('.png') ||
-              lower.endsWith('.jpg') ||
-              lower.endsWith('.jpeg') ||
-              lower.endsWith('.webp') ||
-              lower.endsWith('.gif') ||
-              lower.endsWith('.bmp'))) {
-            continue;
-          }
-          final file = XFile(path);
-          final bytes = await file.readAsBytes();
-          if (bytes.isEmpty) continue;
-          final name = path.replaceAll('\\', '/').split('/').last;
-          await _sendPastedImageBytes(bytes, fileName: name);
-          return true;
+        if (paths.isNotEmpty) {
+          final handled = await _pasteLocalFilePaths(
+            paths,
+            sourceLabel: '粘贴',
+          );
+          if (handled) return true;
         }
       }
       // 系统剪贴板拿不到时，回退到本应用「复制图片」的进程内备份。
@@ -3142,15 +3137,134 @@ class _NativeChatViewState extends State<NativeChatView>
         );
         return true;
       }
+      // PC：本应用「复制文件」的进程内备份。
+      if (isDesktopCommOnly) {
+        final memFile = ChatFileClipboard.peek();
+        if (memFile != null) {
+          Uint8List bytes = memFile.bytes;
+          if (bytes.isEmpty &&
+              (memFile.localPath ?? '').trim().isNotEmpty) {
+            bytes = await XFile(memFile.localPath!.trim()).readAsBytes();
+          }
+          if (bytes.isNotEmpty) {
+            if (_isChatImageFileName(memFile.fileName)) {
+              await _sendPastedImageBytes(
+                bytes,
+                fileName: memFile.fileName,
+                openEditor: false,
+                sourceLabel: '粘贴',
+              );
+            } else if (isChatVideoFileName(memFile.fileName)) {
+              final path = (memFile.localPath ?? '').trim();
+              if (path.isNotEmpty) {
+                await _sendVideoXFile(
+                  XFile(path, name: memFile.fileName),
+                  sourceLabel: '粘贴',
+                );
+              } else {
+                // 无本地路径的视频字节：暂按文件发送。
+                await _sendFileBytes(bytes, fileName: memFile.fileName);
+              }
+            } else {
+              await _sendFileBytes(bytes, fileName: memFile.fileName);
+            }
+            return true;
+          }
+        }
+      }
     } catch (e) {
-      debugPrint('[Chat] paste image failed: $e');
+      debugPrint('[Chat] paste attachment failed: $e');
     }
     return false;
+  }
+
+  /// 将剪贴板中的本地文件路径粘贴为图片 / 视频 / 文件（与拖入逻辑对齐）。
+  Future<bool> _pasteLocalFilePaths(
+    List<String> paths, {
+    required String sourceLabel,
+  }) async {
+    final cleaned = paths
+        .map((p) => p.trim())
+        .where((p) => p.isNotEmpty)
+        .toList(growable: false);
+    if (cleaned.isEmpty) return false;
+
+    const maxPaste = 20;
+    if (cleaned.length > maxPaste) {
+      _showToast('一次最多粘贴 $maxPaste 个文件');
+    }
+    final toSend = cleaned.take(maxPaste).toList();
+    final imageDrafts = <ChatImageDraft>[];
+    var handled = false;
+
+    for (final path in toSend) {
+      if (!mounted || _conversation == null || _conversation!.dissolved) {
+        break;
+      }
+      final fileName = path.replaceAll('\\', '/').split('/').last;
+      try {
+        final bytes = await XFile(path).readAsBytes();
+        if (bytes.isEmpty) {
+          _showToast('$fileName 无法读取');
+          continue;
+        }
+        if (_isChatImageFileName(fileName)) {
+          if (!_checkSizeLimit(bytes.length, _maxImageBytes, fileName)) {
+            continue;
+          }
+          imageDrafts.add(ChatImageDraft(bytes: bytes, fileName: fileName));
+          handled = true;
+        } else if (isDesktopCommOnly &&
+            (isChatVideoFileName(fileName) ||
+                isChatVideoXFile(XFile(path, name: fileName)))) {
+          await _sendVideoXFile(
+            XFile(path, name: fileName),
+            sourceLabel: sourceLabel,
+          );
+          handled = true;
+        } else if (isDesktopCommOnly) {
+          await _sendFileBytes(bytes, fileName: fileName);
+          handled = true;
+        }
+      } catch (e) {
+        _showToast('$fileName 粘贴失败：${friendlyErrorText(e)}', error: true);
+      }
+    }
+
+    if (imageDrafts.isNotEmpty) {
+      ChatFileClipboard.clear();
+      if (imageDrafts.length == 1) {
+        await _sendPastedImageBytes(
+          imageDrafts.first.bytes,
+          fileName: imageDrafts.first.fileName,
+          sourceLabel: sourceLabel,
+        );
+      } else {
+        final confirmed = await _confirmImageDrafts(imageDrafts);
+        if (confirmed != null && confirmed.isNotEmpty) {
+          await _emitPreparedImageDrafts(
+            confirmed,
+            sourceLabel: sourceLabel,
+          );
+        }
+      }
+      return true;
+    }
+    return handled;
   }
 
   bool _isImageClipboardPlaceholder(String text) {
     final t = text.trim();
     return t == '[图片]' || t == '图片' || t == '发送了一张图片';
+  }
+
+  bool _isFileClipboardPlaceholder(String text) {
+    final t = text.trim();
+    if (t.isEmpty) return false;
+    return t == '[文件]' ||
+        t == '文件' ||
+        t.startsWith('[文件]') ||
+        t.startsWith('[附件]');
   }
 
   bool _looksLikeImageBytes(Uint8List bytes) {
@@ -4365,6 +4479,8 @@ class _NativeChatViewState extends State<NativeChatView>
         case 'copy':
           if (selection.isEmpty && isImage) {
             await _copyMessageImage(m);
+          } else if (selection.isEmpty && isFile && desktop) {
+            await _copyMessageFile(m);
           } else {
             await _copyMessageText(copyText);
           }
@@ -4944,10 +5060,44 @@ class _NativeChatViewState extends State<NativeChatView>
         payload,
         fallback: 'image.jpg',
       );
+      ChatFileClipboard.clear();
       await ChatImageClipboard.write(bytes, fileName: name);
       if (mounted) _showToast('已复制图片');
     } catch (_) {
       if (mounted) _showToast('复制失败，请重试', error: true);
+    }
+  }
+
+  /// PC：文件消息复制到系统剪贴板，可在会话输入框粘贴发出。
+  Future<void> _copyMessageFile(NativeChatMessage message) async {
+    try {
+      final payload = message.payload;
+      final fileName = _mediaDownloadFileName(message);
+      final cacheKey = _fileCacheKey(payload);
+      final cachedPath = await file_dl.findCachedChatFile(
+        cacheKey,
+        fileName,
+        conversationId: _chatConversationId,
+      );
+      if (cachedPath != null && cachedPath.trim().isNotEmpty) {
+        await ChatFileClipboard.writePath(
+          cachedPath.trim(),
+          fileName: fileName,
+        );
+        if (mounted) _showToast('已复制文件');
+        return;
+      }
+      final bytes = await _service.loadCachedChatMediaBytes(payload);
+      if (bytes.isEmpty) {
+        if (mounted) _showToast('文件为空', error: true);
+        return;
+      }
+      await ChatFileClipboard.write(bytes, fileName: fileName);
+      if (mounted) _showToast('已复制文件');
+    } catch (e) {
+      if (mounted) {
+        _showToast('复制失败：${friendlyErrorText(e)}', error: true);
+      }
     }
   }
 
@@ -4958,8 +5108,9 @@ class _NativeChatViewState extends State<NativeChatView>
       return;
     }
     try {
-      // 复制文字后清掉图片备份，避免下次粘贴仍发出旧图。
+      // 复制文字后清掉图片/文件备份，避免下次粘贴仍发出旧附件。
       ChatImageClipboard.clear();
+      ChatFileClipboard.clear();
       await Clipboard.setData(ClipboardData(text: value));
       if (mounted) _showToast('已复制');
     } catch (_) {
@@ -5368,188 +5519,14 @@ class _NativeChatViewState extends State<NativeChatView>
     );
   }
 
-  Widget _conversationPickerAvatar(NativeConversation c) {
-    const size = 36.0;
-    const radius = size * 0.18;
-    if (!c.isPrivate) {
-      if (c.avatarMembers.isNotEmpty) {
-        return GroupCompositeAvatar(
-          members: c.avatarMembers,
-          size: size,
-          avatarService: _service,
-        );
-      }
-      if (c.isWorkgroupApproval) {
-        return Container(
-          width: size,
-          height: size,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(radius),
-            gradient: const LinearGradient(
-              colors: [Color(0xFF9079C2), Color(0xFF6A4FA0)],
-            ),
-          ),
-          child: Icon(
-            Icons.assignment_outlined,
-            color: Colors.white,
-            size: size * 0.39,
-          ),
-        );
-      }
-      return Container(
-        width: size,
-        height: size,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(radius),
-          gradient: const LinearGradient(
-            colors: [Color(0xFFCABCEB), Color(0xFFA88CD8)],
-          ),
-        ),
-        child: Icon(
-          Icons.groups_outlined,
-          color: Colors.white,
-          size: size * 0.39,
-        ),
-      );
-    }
-    final initial = c.displayTitle.trim().isNotEmpty
-        ? c.displayTitle.trim().substring(0, 1)
-        : '?';
-    return ImUserAvatar(
-      initial: initial,
-      seed: c.peerUserId ?? c.id,
-      size: size,
-      avatarPreset: c.peerAvatarPreset,
-      avatarObjectKey: c.peerAvatarObjectKey,
-      avatarUrl: c.peerAvatarUrl,
-      avatarService: _service,
-      borderRadius: radius,
-    );
-  }
-
   Future<int?> _pickForwardConversationId() async {
-    final current = _conversation;
-    final currentId = current?.id ?? 0;
-    List<NativeConversation> rows;
-    try {
-      rows = await _service.fetchConversations();
-    } catch (e) {
-      _showToast('会话列表加载失败：${friendlyErrorText(e)}');
-      return null;
-    }
-    if (!mounted) return null;
-    final allowedKinds = <String>{
-      'PRIVATE',
-      'SELF_MEMO',
-      'GROUP',
-      'WORKGROUP',
-      'WORKGROUP_APPROVAL',
-    };
-    final candidates = rows
-        .where(
-          (c) =>
-              c.isListedInInbox &&
-              c.id > 0 &&
-              allowedKinds.contains(c.kind.toUpperCase()),
-        )
-        .toList(growable: false);
-    final searchController = TextEditingController();
-    var keyword = '';
-    return showModalBottomSheet<int>(
+    final currentId = _conversation?.id ?? 0;
+    return showConversationPickerSheet(
       context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
-      builder: (_) => SafeArea(
-        child: StatefulBuilder(
-          builder: (context, setModalState) {
-            final q = keyword.trim().toLowerCase();
-            final filtered = q.isEmpty
-                ? candidates
-                : candidates
-                      .where((c) {
-                        final t = c.displayTitle.toLowerCase();
-                        final p = c.preview.toLowerCase();
-                        return t.contains(q) || p.contains(q);
-                      })
-                      .toList(growable: false);
-            return ConstrainedBox(
-              constraints: BoxConstraints(
-                maxHeight: MediaQuery.of(context).size.height * 0.72,
-              ),
-              child: Column(
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-                    child: Text(
-                      '选择会话',
-                      style: DunesTypography.sans(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-                    child: TextField(
-                      controller: searchController,
-                      onChanged: (value) {
-                        setModalState(() => keyword = value);
-                      },
-                      decoration: InputDecoration(
-                        hintText: '搜索',
-                        prefixIcon: const Icon(Icons.search_rounded, size: 20),
-                        filled: true,
-                        fillColor: DunesColors.bgSoft,
-                        contentPadding: const EdgeInsets.symmetric(vertical: 0),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                          borderSide: BorderSide.none,
-                        ),
-                      ),
-                    ),
-                  ),
-                  Expanded(
-                    child: ListView.separated(
-                      itemCount: filtered.length,
-                      separatorBuilder: (_, _) => const Divider(
-                        height: 1,
-                        color: DunesColors.borderSoft,
-                      ),
-                      itemBuilder: (context, index) {
-                        final c = filtered[index];
-                        final subtitle = c.preview.trim();
-                        return ListTile(
-                          leading: _conversationPickerAvatar(c),
-                          title: Text(
-                            c.displayTitle,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          subtitle: subtitle.isEmpty
-                              ? null
-                              : Text(
-                                  subtitle,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                          trailing: c.id == currentId
-                              ? const Text(
-                                  '当前',
-                                  style: TextStyle(color: DunesColors.text3),
-                                )
-                              : null,
-                          onTap: () => Navigator.of(context).pop(c.id),
-                        );
-                      },
-                    ),
-                  ),
-                ],
-              ),
-            );
-          },
-        ),
-      ),
-    ).whenComplete(searchController.dispose);
+      service: _service,
+      title: '选择会话',
+      highlightConversationId: currentId > 0 ? currentId : null,
+    );
   }
 
   Map<String, dynamic> _buildForwardPayload(List<_ForwardUnit> units) {

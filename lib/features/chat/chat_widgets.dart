@@ -1150,13 +1150,14 @@ class _ChatTextFieldState extends State<_ChatTextField> {
       style: DunesTypography.sans(
         fontSize: widget.wide ? 15 : 16,
         height: widget.wide ? 1.55 : 1.35,
-        color: DunesColors.text,
+        fontWeight: widget.wide ? FontWeight.w500 : null,
+        color: widget.wide ? const Color(0xFF111111) : DunesColors.text,
       ),
       decoration: InputDecoration(
         hintText: widget.hintText ?? '输入消息…',
         hintStyle: DunesTypography.sans(
           fontSize: widget.wide ? 15 : 16,
-          color: widget.wide ? DunesColors.text3 : const Color(0xFFB0B0B0),
+          color: widget.wide ? const Color(0xFF6F6E66) : const Color(0xFFB0B0B0),
         ),
         filled: outline,
         fillColor: outline
@@ -1417,11 +1418,24 @@ class ChatTextBubble extends StatelessWidget {
     return value.text.substring(start, end).trim();
   }
 
+  /// 桌面右键常会变成「光标处单词选区」，不等于用户拖选的片段。
+  /// 含空白/换行，或已覆盖整段，才视为明确选区。
+  bool _isExplicitTextSelection(String fullText, TextSelection selection) {
+    if (!selection.isValid || selection.isCollapsed) return false;
+    if (selection.start == 0 && selection.end == fullText.length) {
+      return false;
+    }
+    final selected = fullText.substring(selection.start, selection.end);
+    return RegExp(r'\s').hasMatch(selected);
+  }
+
   TextSpan _buildMentionTextSpan() {
+    // 对方气泡正文加深一档并略加重，PC/APP 一致，避免发灰难读。
     final baseStyle = DunesTypography.sans(
       fontSize: 13,
       height: 1.5,
-      color: mine ? Colors.white : DunesColors.text,
+      fontWeight: FontWeight.w500,
+      color: mine ? Colors.white : const Color(0xFF111111),
     );
     final mentionStyle = baseStyle.copyWith(
       color: mine ? Colors.white : const Color(0xFF3B5BDB),
@@ -1518,9 +1532,16 @@ class ChatTextBubble extends StatelessWidget {
                 if (selectAllOnLongPress && needsSelectAll && text.isNotEmpty) {
                   editableTextState.selectAll(SelectionChangedCause.longPress);
                 }
-                final selected = _selectedText(
+                var selected = _selectedText(
                   editableTextState.textEditingValue,
                 );
+                // 桌面（尤其 macOS）右键会先选中光标下单词；转发/引用若沿用该选区
+                // 只会带走一词。无明确拖选时按整条消息处理。
+                if (!selectAllOnLongPress &&
+                    selected.isNotEmpty &&
+                    !_isExplicitTextSelection(text, selection)) {
+                  selected = '';
+                }
                 // 与文件消息共用深色宫格菜单：拦截系统选区工具条。
                 // selected 为空时由上层按整条消息处理，避免把「未选中」误当成「全选」。
                 if (onActionsMenu != null) {
@@ -1552,14 +1573,18 @@ class ChatTextBubble extends StatelessWidget {
                     ContextMenuButtonItem(
                       label: '引用',
                       onPressed: () {
-                        onSelectionQuote?.call(selected);
+                        onSelectionQuote?.call(
+                          selected.isNotEmpty ? selected : text.trim(),
+                        );
                         editableTextState.hideToolbar();
                       },
                     ),
                     ContextMenuButtonItem(
                       label: '转发',
                       onPressed: () {
-                        onSelectionForward?.call(selected);
+                        onSelectionForward?.call(
+                          selected.isNotEmpty ? selected : text.trim(),
+                        );
                         editableTextState.hideToolbar();
                       },
                     ),

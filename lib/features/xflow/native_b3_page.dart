@@ -17,7 +17,9 @@ class NativeB3Page extends StatefulWidget {
     required this.onOpenForm,
     this.onBack,
     this.onCategoryChanged,
+    this.onSearchChanged,
     this.initialCategory = 'biz',
+    this.initialSearch = '',
   });
 
   final AuthSession session;
@@ -25,7 +27,9 @@ class NativeB3Page extends StatefulWidget {
   final void Function(String templateKey) onOpenForm;
   final VoidCallback? onBack;
   final void Function(String category)? onCategoryChanged;
+  final void Function(String query)? onSearchChanged;
   final String initialCategory;
+  final String initialSearch;
 
   @override
   State<NativeB3Page> createState() => _NativeB3PageState();
@@ -33,7 +37,7 @@ class NativeB3Page extends StatefulWidget {
 
 class _NativeB3PageState extends State<NativeB3Page> {
   late final XflowService _service;
-  final TextEditingController _search = TextEditingController();
+  late final TextEditingController _search;
   late String _category;
   bool _loading = true;
   String? _error;
@@ -47,10 +51,12 @@ class _NativeB3PageState extends State<NativeB3Page> {
     _category = widget.initialCategory.trim().toLowerCase() == 'adm'
         ? 'adm'
         : 'biz';
+    _search = TextEditingController(text: widget.initialSearch);
     _bizTemplates = XflowService.cachedTemplatesByCategory('biz');
     _admTemplates = XflowService.cachedTemplatesByCategory('adm');
     _loading = _bizTemplates.isEmpty && _admTemplates.isEmpty;
     _search.addListener(() {
+      widget.onSearchChanged?.call(_search.text);
       if (mounted) setState(() {});
     });
     _load();

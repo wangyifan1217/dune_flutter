@@ -193,6 +193,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     '/business/proposals/new',
   );
   String _b3InitialCategory = 'biz';
+  String _b3SearchQuery = '';
   int? _xflowEditProposalId;
   String _xflowEditBusinessType = 'PROPOSAL';
   String _selectedSubmissionBusinessType = '';
@@ -1255,6 +1256,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       _selectedApprovalAssistant = null;
       _selectedTaskAssistant = null;
       _selectedDriveAssistant = null;
+      _selectedAdministrativeNotice = null;
+      _administrativeNoticeTargetId = null;
       _focusMessageId = null;
       _focusMessageHint = null;
     });
@@ -1275,6 +1278,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       _selectedApprovalAssistant = null;
       _selectedTaskAssistant = null;
       _selectedDriveAssistant = null;
+      _selectedAdministrativeNotice = null;
+      _administrativeNoticeTargetId = null;
       _focusMessageId = null;
       _focusMessageHint = null;
     });
@@ -1334,6 +1339,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       _selectedApprovalAssistant = null;
       _selectedTaskAssistant = null;
       _selectedDriveAssistant = null;
+      _selectedAdministrativeNotice = null;
+      _administrativeNoticeTargetId = null;
       _focusMessageId = null;
       _focusMessageHint = null;
     });
@@ -1355,6 +1362,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       _selectedApprovalAssistant = null;
       _selectedTaskAssistant = null;
       _selectedDriveAssistant = null;
+      _selectedAdministrativeNotice = null;
+      _administrativeNoticeTargetId = null;
       _focusMessageId = null;
       _focusMessageHint = null;
     });
@@ -1467,6 +1476,9 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     if (chatScreen == 'DA1') {
       return _selectedDriveAssistant?.id;
     }
+    if (chatScreen == 'AN1') {
+      return _selectedAdministrativeNotice?.id;
+    }
     return null;
   }
 
@@ -1479,6 +1491,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     if (screen == 'AA1' || screen == 'AA2') return screen;
     if (screen == 'TA1') return screen;
     if (screen == 'DA1') return screen;
+    if (screen == 'AN1') return screen;
     if (screen == 'RA1') return screen;
     if (screen == 'C6') return 'C6';
     if (screen == 'C9' && _profileEmbedsInDualPane) return 'C9';
@@ -1491,6 +1504,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     if (_selectedApprovalAssistant != null) return 'AA1';
     if (_selectedTaskAssistant != null) return 'TA1';
     if (_selectedDriveAssistant != null) return 'DA1';
+    if (_selectedAdministrativeNotice != null) return 'AN1';
     return 'C1';
   }
 
@@ -1526,7 +1540,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         screen == 'AA2' ||
         screen == 'RA1' ||
         screen == 'TA1' ||
-        screen == 'DA1';
+        screen == 'DA1' ||
+        screen == 'AN1';
   }
 
   void _onPrivateChatSettingsChanged({
@@ -1895,6 +1910,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       _selectedRobot = null;
       _selectedTaskAssistant = null;
       _selectedDriveAssistant = null;
+      _selectedAdministrativeNotice = null;
+      _administrativeNoticeTargetId = null;
       _focusMessageId = null;
       _focusMessageHint = null;
       if (hint != null && hint.id > 0) {
@@ -1949,6 +1966,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       _selectedRobot = null;
       _selectedApprovalAssistant = null;
       _selectedDriveAssistant = null;
+      _selectedAdministrativeNotice = null;
+      _administrativeNoticeTargetId = null;
       if (hint != null && hint.id > 0) _selectedTaskAssistant = hint;
     });
     if ((_selectedTaskAssistant?.id ?? 0) > 0) {
@@ -2004,6 +2023,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       _selectedRobot = null;
       _selectedApprovalAssistant = null;
       _selectedTaskAssistant = null;
+      _selectedAdministrativeNotice = null;
+      _administrativeNoticeTargetId = null;
       if (hint != null && hint.id > 0) _selectedDriveAssistant = hint;
     });
     if ((_selectedDriveAssistant?.id ?? 0) > 0) {
@@ -2053,7 +2074,32 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       _administrativeNoticeTargetId = noticeId > 0 ? noticeId : null;
     });
     _markUserEnteredChat();
-    widget.navigation.go('AN1');
+    // 行政通知未读以「确认」为准：进入详情不能本地清角标。
+    _goChatScreen('AN1');
+  }
+
+  Widget _buildAdministrativeNoticePage({bool showBackButton = true}) {
+    final hint =
+        _selectedAdministrativeNotice ??
+        const NativeConversation(
+          id: 0,
+          kind: 'ADMIN_NOTICE',
+          title: '行政通知',
+          unreadCount: 0,
+          preview: '',
+          updatedAt: null,
+        );
+    return NativeAdministrativeNoticePage(
+      key: ValueKey<String>(
+        'an1-${hint.id}-${_administrativeNoticeTargetId ?? 0}',
+      ),
+      session: widget.session,
+      conversationHint: hint,
+      initialNoticeId: _administrativeNoticeTargetId,
+      showBackButton: showBackButton,
+      onBack: () => _leaveChatToInbox(clearSelection: true),
+      onAcknowledged: _handleConversationRead,
+    );
   }
 
   Widget _buildDriveAssistantPage({bool showBackButton = true}) {
@@ -2153,6 +2199,9 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     if (screen == 'DA1' || dual == 'DA1') {
       return 'da';
     }
+    if (screen == 'AN1' || dual == 'AN1') {
+      return 'an';
+    }
     if (screen == 'RA1' || dual == 'RA1') {
       return 'reconciliation';
     }
@@ -2199,6 +2248,9 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     }
     if (screen == 'DA1' || dual == 'DA1') {
       return _DualChatSlot.drive(_selectedDriveAssistant);
+    }
+    if (screen == 'AN1' || dual == 'AN1') {
+      return _DualChatSlot.administrativeNotice(_selectedAdministrativeNotice);
     }
     if (screen == 'RA1' || dual == 'RA1') {
       return const _DualChatSlot.reconciliation();
@@ -2322,6 +2374,27 @@ class _NativeScreenHostState extends State<NativeScreenHost>
             onBack: () => _leaveChatToInbox(clearSelection: true),
             onConversationRead: _handleConversationRead,
             onOpenItem: _openDriveItemFromChat,
+          ),
+        );
+      case _DualChatKind.administrativeNotice:
+        return KeyedSubtree(
+          key: key,
+          child: NativeAdministrativeNoticePage(
+            session: widget.session,
+            conversationHint:
+                slot.conversation ??
+                const NativeConversation(
+                  id: 0,
+                  kind: 'ADMIN_NOTICE',
+                  title: '行政通知',
+                  unreadCount: 0,
+                  preview: '',
+                  updatedAt: null,
+                ),
+            initialNoticeId: active ? _administrativeNoticeTargetId : null,
+            showBackButton: false,
+            onBack: () => _leaveChatToInbox(clearSelection: true),
+            onAcknowledged: _handleConversationRead,
           ),
         );
       case _DualChatKind.reconciliation:
@@ -2824,13 +2897,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       case 'C1':
         return _buildConversationListPage();
       case 'AN1':
-        return NativeAdministrativeNoticePage(
-          session: widget.session,
-          conversationHint: _selectedAdministrativeNotice,
-          initialNoticeId: _administrativeNoticeTargetId,
-          showBackButton: true,
-          onBack: () => _leaveChatToInbox(clearSelection: true),
-          onAcknowledged: _handleConversationRead,
+        return _buildAdministrativeNoticePage(
+          showBackButton: !isDesktopCommOnly,
         );
       case 'AA1':
         return _buildApprovalAssistantPage();
@@ -3060,8 +3128,12 @@ class _NativeScreenHostState extends State<NativeScreenHost>
               ? _returnToDesktopSettings
               : null,
           initialCategory: _b3InitialCategory,
+          initialSearch: _b3SearchQuery,
           onCategoryChanged: (category) {
             _b3InitialCategory = category;
+          },
+          onSearchChanged: (query) {
+            _b3SearchQuery = query;
           },
           onOpenForm: (templateKey) {
             _openProposalEntry(templateKey: templateKey, backScreen: 'B3');
@@ -3787,7 +3859,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     }
     // 企业微盘从工作台进入：PC 归工作台 Tab，APP 归「我的」。
     if (screen == 'FD1') return isDesktopCommOnly ? 'QJA' : 'B2';
-    if (screen == 'AN1') return isDesktopCommOnly ? 'QJA' : 'B2';
+    // 会话入口的行政通知归属通讯 Tab；工作台发布走 embedded，不走 AN1 路由。
+    if (screen == 'AN1') return isDesktopCommOnly ? 'C1' : 'B2';
     if (_isMyRoute(screen)) return 'B2';
     if (screen == 'QJ' ||
         screen == 'QJC' ||
@@ -3931,7 +4004,11 @@ class _NativeScreenHostState extends State<NativeScreenHost>
   }
 
   void _goB3({String category = 'biz'}) {
-    setState(() => _b3InitialCategory = category);
+    setState(() {
+      _b3InitialCategory = category;
+      // 从入口重新进入时清空搜索；从表单返回仍走 B3 路由，保留 _b3SearchQuery。
+      _b3SearchQuery = '';
+    });
     widget.navigation.go('B3');
   }
 
@@ -6347,6 +6424,7 @@ enum _DualChatKind {
   approval,
   task,
   drive,
+  administrativeNotice,
   reconciliation,
 }
 
@@ -6399,6 +6477,13 @@ class _DualChatSlot {
   factory _DualChatSlot.drive(NativeConversation? conversation) {
     return _DualChatSlot._(
       kind: _DualChatKind.drive,
+      conversation: conversation,
+    );
+  }
+
+  factory _DualChatSlot.administrativeNotice(NativeConversation? conversation) {
+    return _DualChatSlot._(
+      kind: _DualChatKind.administrativeNotice,
       conversation: conversation,
     );
   }

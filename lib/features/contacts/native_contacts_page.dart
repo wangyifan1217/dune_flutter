@@ -27,6 +27,11 @@ class NativeContactsPage extends StatefulWidget {
     this.initialSelectedUserIds = const <int>{},
     this.lockedSelectedUserIds = const <int>{},
     this.initialSelectedNames = const <int, String>{},
+    this.groupPickTitle = '创建群聊',
+    this.groupPickSubtitle = '选择成员',
+    this.minPickCount = 2,
+    this.onPickCompleted,
+    this.allowSelfInPickMode = false,
   });
 
   final AuthSession session;
@@ -44,6 +49,19 @@ class NativeContactsPage extends StatefulWidget {
 
   /// 预选成员展示名兜底（通讯录尚未加载完时用）。
   final Map<int, String> initialSelectedNames;
+
+  /// 多选模式标题（如行政通知选人）。
+  final String groupPickTitle;
+  final String groupPickSubtitle;
+
+  /// 完成多选所需最少人数；建群默认 2，行政通知等场景可设为 1。
+  final int minPickCount;
+
+  /// 非建群场景：点「完成」时回传已选 userId 与展示名，不再创建群聊。
+  final void Function(Set<int> ids, Map<int, String> names)? onPickCompleted;
+
+  /// 多选时是否允许勾选当前登录用户（如行政通知发给自己）。
+  final bool allowSelfInPickMode;
 
   @override
   State<NativeContactsPage> createState() => _NativeContactsPageState();
@@ -107,9 +125,11 @@ class _NativeContactsPageState extends State<NativeContactsPage> {
   }
 
   Set<int> _normalizedInitialSelected() {
-    return widget.initialSelectedUserIds
-        .where((id) => id > 0 && id != widget.session.userId)
-        .toSet();
+    return widget.initialSelectedUserIds.where((id) {
+      if (id <= 0) return false;
+      if (widget.allowSelfInPickMode) return true;
+      return id != widget.session.userId;
+    }).toSet();
   }
 
   Set<int> get _lockedSelectedIds {
@@ -202,9 +222,10 @@ class _NativeContactsPageState extends State<NativeContactsPage> {
   }
 
   void _toggleSelected(NativeContact contact) {
-    if (!contact.enabled ||
-        contact.userId <= 0 ||
-        contact.userId == widget.session.userId) {
+    if (!contact.enabled || contact.userId <= 0) {
+      return;
+    }
+    if (!widget.allowSelfInPickMode && contact.userId == widget.session.userId) {
       return;
     }
     if (_selectedUserIds.contains(contact.userId)) {
@@ -233,12 +254,13 @@ class _NativeContactsPageState extends State<NativeContactsPage> {
 
   List<NativeContact> _allSelectableContacts() {
     final all = <NativeContact>[];
+    bool selectable(NativeContact c) {
+      if (!c.enabled || c.userId <= 0) return false;
+      if (widget.allowSelfInPickMode) return true;
+      return c.userId != widget.session.userId;
+    }
     void walk(NativeDepartment dep) {
-      all.addAll(
-        dep.users.where(
-          (c) => c.enabled && c.userId != widget.session.userId,
-        ),
-      );
+      all.addAll(dep.users.where(selectable));
       for (final child in dep.children) {
         walk(child);
       }
@@ -248,7 +270,7 @@ class _NativeContactsPageState extends State<NativeContactsPage> {
       walk(dep);
     }
     for (final c in _externalContacts) {
-      if (c.enabled && c.userId != widget.session.userId) {
+      if (selectable(c)) {
         all.add(c);
       }
     }
@@ -339,6 +361,36 @@ class _NativeContactsPageState extends State<NativeContactsPage> {
     widget.onStartPrivateChat(contact.userId);
   }
 
+  Future<void> _confirmGroupPick() async {
+    if (widget.onPickCompleted != null) {
+      final ids = _selectedUserIds.where((id) {
+        if (id <= 0) return false;
+        if (widget.allowSelfInPickMode) return true;
+        return id != widget.session.userId;
+      }).toSet();
+      if (ids.length < widget.minPickCount) {
+        showDunesToast(
+          context,
+          widget.minPickCount <= 1
+              ? '请至少选择一位接收人'
+              : '群聊至少选择 ${widget.minPickCount} 位同事',
+          kind: DunesToastKind.error,
+        );
+        return;
+      }
+      final names = <int, String>{
+        for (final id in ids)
+          id:
+              _contactById(id)?.displayName ??
+              widget.initialSelectedNames[id] ??
+              '成员',
+      };
+      widget.onPickCompleted!(ids, names);
+      return;
+    }
+    await _createGroupChat();
+  }
+
   Future<void> _createGroupChat() async {
     if (_creating) return;
     final onOpenGroup = widget.onOpenGroupChat;
@@ -349,8 +401,8 @@ class _NativeContactsPageState extends State<NativeContactsPage> {
     final ids = _selectedUserIds
         .where((id) => id > 0 && id != widget.session.userId)
         .toList(growable: false);
-    if (ids.length < 2) {
-      showDunesToast(context, '群聊至少选择两位同事', kind: DunesToastKind.error);
+    if (ids.length < widget.minPickCount) {
+      showDunesToast(context, '群聊至少选择 ${widget.minPickCount} 位同事', kind: DunesToastKind.error);
       return;
     }
     final previewNames = ids
@@ -430,10 +482,14 @@ class _NativeContactsPageState extends State<NativeContactsPage> {
                   onBack: _handleBack,
                   searchOpen: _searchOpen,
                   groupPickMode: _groupPickMode,
+                  groupPickTitle: widget.groupPickTitle,
+                  groupPickSubtitle: widget.groupPickSubtitle,
                   creating: _creating,
-                  onCreateGroup:
-                      widget.onOpenGroupChat == null ? null : _enterGroupPickMode,
-                  onConfirmCreate: _createGroupChat,
+                  onCreateGroup: widget.onOpenGroupChat == null ||
+                          widget.onPickCompleted != null
+                      ? null
+                      : _enterGroupPickMode,
+                  onConfirmCreate: _confirmGroupPick,
                   onToggleSearch: () {
                     setState(() {
                       _searchOpen = !_searchOpen;
@@ -590,6 +646,7 @@ class _NativeContactsPageState extends State<NativeContactsPage> {
                         selected:
                             _selectedUserIds.contains(_searchItems[i].userId),
                         onToggleSelect: () => _toggleSelected(_searchItems[i]),
+                        allowSelfInPickMode: widget.allowSelfInPickMode,
                       ),
                     ],
                   ],
@@ -631,6 +688,7 @@ class _NativeContactsPageState extends State<NativeContactsPage> {
                       pickMode: _groupPickMode,
                       selectedUserIds: _selectedUserIds,
                       onToggleContact: _toggleSelected,
+                      allowSelfInPickMode: widget.allowSelfInPickMode,
                     ),
                   ],
                 ],
@@ -671,6 +729,7 @@ class _NativeContactsPageState extends State<NativeContactsPage> {
                       ),
                       onToggleSelect: () =>
                           _toggleSelected(_externalContacts[i]),
+                      allowSelfInPickMode: widget.allowSelfInPickMode,
                     ),
                   ],
                 ],

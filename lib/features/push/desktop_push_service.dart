@@ -1,10 +1,13 @@
 import 'dart:async';
 import 'dart:io' show File, Platform;
 
+import 'package:app_badge_plus/app_badge_plus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:window_manager/window_manager.dart';
+import 'package:windows_taskbar/windows_taskbar.dart';
 
+import '../desktop/desktop_badge.dart';
 import '../desktop/windows_desktop_tray.dart';
 
 /// 桌面端本地系统通知（Win Toast / macOS 通知中心）。
@@ -77,11 +80,46 @@ Future<void> unbindPushSessionImpl() async {
   try {
     await _plugin.cancelAll();
   } catch (_) {}
+  syncPushBadgeCountImpl(0);
 }
 
-void syncPushBadgeCountImpl(int count) {}
+void syncPushBadgeCountImpl(int count) {
+  if (!(Platform.isWindows || Platform.isMacOS)) return;
+  final n = normalizeDesktopBadgeCount(count);
+  unawaited(_syncDesktopBadge(n));
+}
 
-Future<int> readPushBadgeCountImpl() async => 0;
+Future<int> readPushBadgeCountImpl() async => _lastDesktopBadgeCount;
+
+int _lastDesktopBadgeCount = 0;
+
+Future<void> _syncDesktopBadge(int count) async {
+  _lastDesktopBadgeCount = count;
+  try {
+    if (Platform.isMacOS) {
+      // Dock 数字角标；需通知权限（ensurePushInitialized 已申请 badge）。
+      await ensurePushInitializedImpl();
+      if (await AppBadgePlus.isSupported()) {
+        await AppBadgePlus.updateBadge(count);
+      }
+      return;
+    }
+    if (Platform.isWindows) {
+      final asset = windowsTaskbarBadgeAsset(count);
+      final tip = desktopBadgeTooltip(count);
+      if (asset == null) {
+        await WindowsTaskbar.resetOverlayIcon();
+      } else {
+        await WindowsTaskbar.setOverlayIcon(
+          ThumbnailToolbarAssetIcon(asset),
+          tooltip: tip,
+        );
+      }
+    }
+  } catch (e, st) {
+    debugPrint('[DesktopPush] badge sync failed count=$count err=$e\n$st');
+  }
+}
 
 void notifyPushRealtimeMessageImpl({
   required String title,
@@ -122,7 +160,9 @@ Future<void> _showToast({
           presentAlert: true,
           presentBanner: true,
           presentSound: true,
-          presentBadge: true,
+          // Dock 角标统一由 syncPushBadgeCount → AppBadgePlus 控制，
+          // 避免每条通知自行 +1 与真实未读数打架。
+          presentBadge: false,
           threadIdentifier:
               conversationId > 0 ? 'conv_$conversationId' : 'dunes_desktop',
         ),

@@ -23,6 +23,7 @@ class XflowDetailRenderer extends StatelessWidget {
     this.onVoid,
     this.onWithdraw,
     this.onReturn,
+    this.onOpenLinkedProposal,
   });
 
   final XflowDetailBundle bundle;
@@ -36,6 +37,7 @@ class XflowDetailRenderer extends StatelessWidget {
   final VoidCallback? onVoid;
   final VoidCallback? onWithdraw;
   final VoidCallback? onReturn;
+  final void Function(int proposalId)? onOpenLinkedProposal;
 
   @override
   Widget build(BuildContext context) {
@@ -86,7 +88,11 @@ class XflowDetailRenderer extends StatelessWidget {
             return XfDetCard(
               title: showRecognition ? '提交补充' : '填报内容',
               marginBottom: 10,
-              child: XfDetFormSections(sections: sections, service: service),
+              child: XfDetFormSections(
+                sections: sections,
+                service: service,
+                onOpenLinkedProposal: onOpenLinkedProposal,
+              ),
             );
           },
         ),

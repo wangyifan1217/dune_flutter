@@ -346,7 +346,12 @@ class _NativeConversationPageState extends State<NativeConversationPage>
     final selected = widget.selectedConversationId ?? 0;
     final prev = oldWidget.selectedConversationId ?? 0;
     if (selected > 0 && selected != prev) {
-      _clearUnreadLocally(selected);
+      // 行政通知未确认前保留未读；确认后由 onAcknowledged / readSignal 再清。
+      final idx = _items.indexWhere((c) => c.id == selected);
+      final keepUnread = idx >= 0 && _items[idx].isAdministrativeNotice;
+      if (!keepUnread) {
+        _clearUnreadLocally(selected);
+      }
     }
     // 从会话页返回：列表重新可见时强制恢复滚动（并扛住随后的静默刷新）。
     if (!oldWidget.listVisible && widget.listVisible) {
@@ -1256,7 +1261,7 @@ class _NativeConversationPageState extends State<NativeConversationPage>
               kind == 'BROADCAST'
           ? null
           : c.memberCount,
-      unreadCount: selected
+      unreadCount: selected && !c.isAdministrativeNotice
           ? 0
           : (c.isAiAssistant &&
                     NovaBackgroundCoordinator.instance.hasUnreadReplyFor(c.id)

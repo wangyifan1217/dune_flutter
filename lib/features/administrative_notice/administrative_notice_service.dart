@@ -58,8 +58,7 @@ class AdministrativeNoticeService {
     return (data['conversationId'] as num?)?.toInt() ?? 0;
   }
 
-  /// Opening the module marks notices as read, but deliberately does not
-  /// acknowledge them.  The server keeps the unread/angle badge until ACK.
+  /// 仅在确认后由上层触发会话已读；进入模块不再 mark-read，避免未确认就清角标。
   Future<void> markConversationRead() async {
     final conversationId = await ensureConversation();
     if (conversationId <= 0) return;
@@ -89,10 +88,12 @@ class AdministrativeNoticeService {
         .toList();
   }
 
-  Future<List<AdministrativeNotice>> fetchNotices() async {
+  /// [inboxOnly] 为 true 时仅拉取当前用户作为接收人的通知（IM 入口）。
+  Future<List<AdministrativeNotice>> fetchNotices({bool inboxOnly = false}) async {
+    final path = inboxOnly ? '/admin-notices?scope=inbox' : '/admin-notices';
     final response = await dunesHttpGet(
       session,
-      '/admin-notices',
+      path,
       client: _client,
     );
     final data = _unwrap(response);

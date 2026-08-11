@@ -7,6 +7,7 @@ import '../../core/theme/dunes_theme.dart';
 import '../auth/auth_session.dart';
 import '../auth/auth_session_coordinator.dart';
 import '../administrative_notice/native_administrative_notice_page.dart';
+import '../administrative_notice/administrative_notice_service.dart';
 import '../drive/native_drive_page.dart';
 import '../tasks/native_task_home_pane.dart';
 import '../tasks/native_task_hrbp_pane.dart';
@@ -60,6 +61,9 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
   /// null=探测中；以后端 hrbp/overview 鉴权为准，不写死角色。
   bool? _canSeeTaskSummary;
 
+  /// 工作台入口权限由后端实时探测；它只控制发布端入口，不限制接收人。
+  bool? _canSeeAdministrativeNotice;
+
   static const _titles = {
     _WorkbenchView.tasks: '任务',
     _WorkbenchView.hrbp: '任务汇总',
@@ -80,6 +84,7 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
     _session = AuthSessionCoordinator.instance.resolve(widget.session);
     unawaited(_refreshSessionOnEnter());
     unawaited(_resolveTaskSummaryAccess());
+    unawaited(_resolveAdministrativeNoticeAccess());
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _syncBackInterceptor();
     });
@@ -90,9 +95,12 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
     super.didUpdateWidget(oldWidget);
     final incoming = AuthSessionCoordinator.instance.resolve(widget.session);
     if (incoming.token != _session.token ||
-        incoming.roles.join('|') != _session.roles.join('|')) {
+        incoming.roles.join('|') != _session.roles.join('|') ||
+        incoming.effectiveAdministrativeNoticeAccess !=
+            _session.effectiveAdministrativeNoticeAccess) {
       _session = incoming;
       unawaited(_resolveTaskSummaryAccess());
+      unawaited(_resolveAdministrativeNoticeAccess());
     }
   }
 
@@ -103,6 +111,7 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
       _session = refreshed ?? AuthSessionCoordinator.instance.resolve(_session);
     });
     unawaited(_resolveTaskSummaryAccess());
+    unawaited(_resolveAdministrativeNoticeAccess());
   }
 
   Future<void> _resolveTaskSummaryAccess() async {
@@ -114,6 +123,22 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
     final ok = await TaskApi(_session).canAccessHrbpOverview();
     if (!mounted) return;
     setState(() => _canSeeTaskSummary = ok);
+  }
+
+  Future<void> _resolveAdministrativeNoticeAccess() async {
+    final fallback = _session.effectiveAdministrativeNoticeAccess;
+    final service = AdministrativeNoticeService(session: _session);
+    bool allowed = fallback;
+    try {
+      allowed = await service.canAccess();
+    } catch (_) {
+      // 网络异常时沿用登录态，避免入口因一次探测失败闪退；发布接口仍由后端鉴权。
+      allowed = fallback;
+    } finally {
+      service.close();
+    }
+    if (!mounted) return;
+    setState(() => _canSeeAdministrativeNotice = allowed);
   }
 
   @override
@@ -412,8 +437,7 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
     ];
 
     final administrativeTiles = <_WorkbenchTile>[
-      if (!_session.isExternalUser &&
-          _session.effectiveAdministrativeNoticeAccess)
+      if (!_session.isExternalUser && _canSeeAdministrativeNotice == true)
         _WorkbenchTile(
           title: '行政通知',
           subtitle: '发布通知 · 查看确认进度',

@@ -44,7 +44,7 @@ class LoginFlow extends StatefulWidget {
 
 class _LoginFlowState extends State<LoginFlow> with WidgetsBindingObserver {
   static const _sessionStorageKey = 'dunes_auth_session_v1';
-  static const _updateCheckInterval = Duration(minutes: 30);
+  static const _updateCheckInterval = Duration(minutes: 15);
   static const _updateRetryInterval = Duration(minutes: 10);
   final _auth = AuthService();
   AuthSession? _session;
@@ -65,8 +65,9 @@ class _LoginFlowState extends State<LoginFlow> with WidgetsBindingObserver {
     _loadAppVersion();
     _restoreSession();
     // 用较短的 tick 同时覆盖“失败后重试”和“成功后长间隔检查”。
-    // 真正是否发起请求由 _nextUpdateCheckAt 决定，不会每 10 分钟请求一次。
-    _updateCheckTimer = Timer.periodic(const Duration(minutes: 10), (_) {
+    // 真正是否发起请求由 _nextUpdateCheckAt 决定，不会每个 tick 都请求一次。
+    // TODO: 验证弹框效果后改回 Duration(minutes: 10)
+    _updateCheckTimer = Timer.periodic(const Duration(minutes: 1), (_) {
       unawaited(_checkAppUpdateIfDue());
     });
     if (isDesktopCommOnly) {
@@ -339,12 +340,10 @@ class _LoginFlowState extends State<LoginFlow> with WidgetsBindingObserver {
         return;
       }
 
-      // 桌面端：顶部常驻条 + 启动/强更弹窗；点「稍后」后横幅仍在。
+      // 桌面端：顶部常驻条 + 弹窗；点「稍后」后横幅仍在。
       if (isDesktopCommOnly) {
         AppUpdateNotifier.instance.offer(result);
-        if (result.forceUpdate || initial) {
-          await showAppUpdateDialog(context, result);
-        }
+        await showAppUpdateDialog(context, result);
       } else {
         await showAppUpdateDialog(context, result);
       }

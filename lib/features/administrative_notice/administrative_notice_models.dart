@@ -43,21 +43,40 @@ class AdministrativeNoticeRecipient {
     required this.displayName,
     this.readAt,
     this.acknowledgedAt,
+    this.avatarPreset,
+    this.avatarObjectKey,
+    this.avatarUrl,
   });
 
   final int userId;
   final String displayName;
   final DateTime? readAt;
   final DateTime? acknowledgedAt;
+  final String? avatarPreset;
+  final String? avatarObjectKey;
+  final String? avatarUrl;
 
   bool get acknowledged => acknowledgedAt != null;
 
   factory AdministrativeNoticeRecipient.fromJson(Map<String, dynamic> json) {
+    String? opt(Object? raw) {
+      final text = (raw ?? '').toString().trim();
+      return text.isEmpty ? null : text;
+    }
+
     return AdministrativeNoticeRecipient(
       userId: _intValue(json['userId'] ?? json['user_id']),
-      displayName: (json['displayName'] ?? json['display_name'] ?? '用户').toString(),
+      displayName: (json['displayName'] ?? json['display_name'] ?? '用户')
+          .toString(),
       readAt: _parseDate(json['readAt'] ?? json['read_at']),
-      acknowledgedAt: _parseDate(json['acknowledgedAt'] ?? json['acknowledged_at']),
+      acknowledgedAt: _parseDate(
+        json['acknowledgedAt'] ?? json['acknowledged_at'],
+      ),
+      avatarPreset: opt(json['avatarPreset'] ?? json['avatar_preset']),
+      avatarObjectKey: opt(
+        json['avatarObjectKey'] ?? json['avatar_object_key'],
+      ),
+      avatarUrl: opt(json['avatarUrl'] ?? json['avatar_url']),
     );
   }
 }

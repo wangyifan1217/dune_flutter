@@ -81,10 +81,43 @@
     return String(value);
   }
 
+  function formatProposalDisplay(val) {
+    if (val == null || val === '') return '';
+    if (typeof val === 'string') {
+      var text = val.trim();
+      if (!text || text.indexOf('map[') === 0) return '';
+      return text;
+    }
+    if (typeof val === 'object') {
+      var code = String(val.code || val.proposalCode || '').trim();
+      var title = String(val.title || val.name || '').trim();
+      if (code && title) return code + ' · ' + title;
+      if (code) return code;
+      if (title) return title;
+      var pid = val.proposalId != null ? val.proposalId : val.id;
+      if (pid != null && pid !== '') return '提案#' + pid;
+    }
+    return String(val);
+  }
+
+  function parseLinkedProposalId(val) {
+    if (val == null || val === '') return 0;
+    if (typeof val === 'number') return val > 0 ? Math.floor(val) : 0;
+    if (typeof val === 'string') {
+      var n = parseInt(val.trim(), 10);
+      return n > 0 ? n : 0;
+    }
+    if (typeof val === 'object') {
+      return parseLinkedProposalId(val.proposalId != null ? val.proposalId : val.id);
+    }
+    return 0;
+  }
+
   function formatFieldValue(field, val) {
     if (val == null || val === '') return '';
     field = field || {};
     var t = field.type || 'text';
+    if (t === 'proposal') return formatProposalDisplay(val) || '—';
     if (t === 'user') return formatUserDisplay(val) || '—';
     if (t === 'upload') {
       var files = normalizeUploadItems(val);
@@ -131,6 +164,9 @@
       }
       if (val.fileName) return val.fileName;
       if (val.text) return val.text;
+      if (t === 'proposal' || val.proposalId != null || (val.code != null && val.title != null)) {
+        return formatProposalDisplay(val);
+      }
       return formatUserDisplay(val) || JSON.stringify(val);
     }
     if (typeof val === 'boolean') return val ? '是' : '否';
@@ -462,7 +498,7 @@
 
   function kvItem(item, idx) {
     if (item.expandable) return kvExpandable(item, idx);
-    return kv(item.label, item.value);
+    return kv(item.label, item.value, item.linkedProposalId);
   }
 
   function buildFieldSections(fields, formValues, detail) {
@@ -511,6 +547,7 @@
         field: fieldDef,
         rawValue: val,
         expandable: expandable,
+        linkedProposalId: f.type === 'proposal' ? parseLinkedProposalId(val) : 0,
       });
     });
     if (current.items.length) sections.push(current);
@@ -775,14 +812,23 @@
     );
   }
 
-  function kv(label, val) {
+  function kv(label, val, linkedProposalId) {
     if (val == null || val === '') return '';
+    var pid = Number(linkedProposalId) || 0;
+    var valueHtml =
+      pid > 0
+        ? '<button type="button" class="xf-det-v xf-det-v-link" data-open-linked-proposal="' +
+          pid +
+          '">' +
+          esc(String(val)) +
+          '</button>'
+        : '<span class="xf-det-v">' + esc(String(val)) + '</span>';
     return (
       '<div class="xf-det-kv"><span class="xf-det-k">' +
       esc(label) +
-      '</span><span class="xf-det-v">' +
-      esc(String(val)) +
-      '</span></div>'
+      '</span>' +
+      valueHtml +
+      '</div>'
     );
   }
 
@@ -904,9 +950,7 @@
       ' <span class="role">提交人</span></div><div class="tm">' +
       esc(fmtTime((trail && trail.createdAt) || detail.createdAt)) +
       '</div></div>' +
-      '<div class="hs-cmt">提交提案 · ' +
-      esc(detail.code || '') +
-      '</div></div></div>';
+      '<div class="hs-cmt">提交</div></div></div>';
 
     steps.forEach(function (trailStep) {
       var stepNo = Number(trailStep.stepNo) || 0;
@@ -1116,6 +1160,27 @@
     });
   }
 
+  function bindLinkedProposalLinks(root) {
+    if (!root) return;
+    root.querySelectorAll('[data-open-linked-proposal]').forEach(function (btn) {
+      if (btn._linkedBound) return;
+      btn._linkedBound = true;
+      btn.addEventListener('click', function (ev) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        var pid = Number(btn.getAttribute('data-open-linked-proposal') || 0);
+        if (!(pid > 0)) return;
+        if (window.XFlowDynamic && typeof window.XFlowDynamic.openProposalDetail === 'function') {
+          window.XFlowDynamic.openProposalDetail(pid);
+          return;
+        }
+        if (window.WorkbenchLive && typeof window.WorkbenchLive.openProposal === 'function') {
+          window.WorkbenchLive.openProposal(pid);
+        }
+      });
+    });
+  }
+
   function getDetailFileItem(root, fieldKey, idx) {
     var detail = root._xfDetail || {};
     var fv = detail.formValues || {};
@@ -1276,6 +1341,7 @@
     bindTabs(panel);
     bindExpand(panel);
     bindKvExpand(panel);
+    bindLinkedProposalLinks(panel);
     bindFileActions(panel);
     if (window.XFlowDynamic && window.XFlowDynamic.bindStageHelps) {
       window.XFlowDynamic.bindStageHelps(panel);

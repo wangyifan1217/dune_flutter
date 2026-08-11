@@ -20933,13 +20933,25 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             ),
           ),
         ),
-        if (canDetail)
-          Padding(
-            padding: const EdgeInsets.only(left: 4, top: 1),
-            child: Icon(
-              Icons.chevron_right_rounded,
-              size: _fs(14),
-              color: _LhPlum.primary,
+        if (canDetail && onOpenDetail != null)
+          Semantics(
+            button: true,
+            label: '进入$name详情',
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: onOpenDetail,
+              child: Padding(
+                padding: const EdgeInsets.only(left: 4),
+                child: SizedBox(
+                  width: _fs(24),
+                  height: _fs(24),
+                  child: Icon(
+                    Icons.chevron_right_rounded,
+                    size: _fs(16),
+                    color: _LhPlum.primary,
+                  ),
+                ),
+              ),
             ),
           ),
       ],
@@ -20992,14 +21004,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                if (onOpenDetail != null)
-                  GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTap: onOpenDetail,
-                    child: nameRow,
-                  )
-                else
-                  nameRow,
+                nameRow,
                 SizedBox(height: _fs(8)),
                 Row(
                   children: [
@@ -21576,9 +21581,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 shadeColor: isHighlighted
                     ? const Color(0xFFFFD95A).withAlpha(34)
                     : groupColor.withAlpha(isExpanded ? 20 : 10),
-                // 进二级只挂在「名称/›」与右侧指标区；展开箭头在冻结列内独立处理，
-                // 避免点小尖头时父级 onTap 一并进详情。
-                onTap: rowTap,
+                // 正常浏览时只有名称右侧的 › 进入详情；指标区不再响应跳转。
+                // 高亮模式仍保留指标区的整块点击，方便选择整行。
+                onTap: _highlightMode ? rowTap : null,
                 pinned: _buildLedgerPinned(
                   r,
                   idx,

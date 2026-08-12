@@ -20,6 +20,9 @@ import 'cors_safe_image.dart';
 import 'file_download.dart' as file_dl;
 import 'gallery_save.dart' as gallery;
 
+/// macOS 也先尝试独立窗（desktop_multi_window 0.3）；失败/超时回退应用内预览。
+bool get _preferDesktopImageWindow => isDesktopCommOnly;
+
 bool _chatImageHasSeparateOriginal(Map<String, dynamic>? payload) {
   if (payload == null) return false;
   final originalKey = (payload['objectKey'] ?? '').toString().trim();
@@ -535,8 +538,8 @@ Future<void> showChatImagePreview(
         ];
   final index = initialIndex.clamp(0, gallery.length - 1);
 
-  // PC：真正打开系统级独立窗口（第二 HWND / NSWindow）。
-  if (isDesktopCommOnly) {
+  // 桌面：优先独立系统窗；超时/失败回退应用内全屏（尤其 macOS）。
+  if (_preferDesktopImageWindow) {
     return _openDesktopChatImagePreviewWithFeedback(
       context,
       service: service,
@@ -562,15 +565,21 @@ Future<void> _showInAppChatImagePreview(
   required int initialIndex,
   int? conversationId,
 }) {
-  return showDialog<void>(
+  return showGeneralDialog<void>(
     context: context,
+    barrierDismissible: true,
+    barrierLabel: '关闭图片预览',
     barrierColor: Colors.black87,
-    builder: (_) => ChatImagePreviewPage(
-      service: service,
-      items: items,
-      initialIndex: initialIndex,
-      conversationId: conversationId,
-    ),
+    transitionDuration: const Duration(milliseconds: 160),
+    pageBuilder: (ctx, animation, secondaryAnimation) {
+      return ChatImagePreviewPage(
+        service: service,
+        items: items,
+        initialIndex: initialIndex,
+        conversationId: conversationId,
+        onClose: () => Navigator.of(ctx).maybePop(),
+      );
+    },
   );
 }
 
@@ -635,14 +644,10 @@ Future<void> _openDesktopChatImagePreviewWithFeedback(
       items: items,
       initialIndex: initialIndex,
       conversationId: conversationId,
-    );
-  } catch (e) {
+    ).timeout(const Duration(seconds: 4));
+  } catch (_) {
     if (!context.mounted) return;
-    showDunesToast(
-      context,
-      '独立预览窗打开失败，已改用应用内预览',
-      kind: DunesToastKind.error,
-    );
+    // Windows 独立窗超时/失败时回退，避免蒙版永久卡住。
     await _showInAppChatImagePreview(
       context,
       service: service,

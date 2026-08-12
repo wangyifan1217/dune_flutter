@@ -7,6 +7,7 @@ import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:window_manager/window_manager.dart';
 
 import '../../core/platform/desktop_features.dart';
 import '../../core/theme/dunes_theme.dart';
@@ -24,11 +25,34 @@ Future<void>? _openPreviewGate;
 Future<void>? _warmUpGate;
 Directory? _cachedTempDir;
 
-/// 是否为 `desktop_multi_window` 拉起的图片预览子进程入口。
+bool _isPreviewWindowArgument(String arguments) {
+  final raw = arguments.trim();
+  if (raw.isEmpty) return false;
+  try {
+    final map = jsonDecode(raw);
+    return map is Map && (map['type'] ?? '') == _kPreviewWindowType;
+  } catch (_) {
+    return false;
+  }
+}
+
+/// 兼容旧入口签名；0.3.0 改用 [WindowController.fromCurrentEngine]。
 bool isDesktopImagePreviewWindowArgs(List<String> args) {
-  return isDesktopCommOnly &&
-      args.isNotEmpty &&
-      args.first == 'multi_window';
+  if (!isDesktopCommOnly) return false;
+  // 旧版 0.2.x：args = ['multi_window', windowId, json]
+  if (args.isNotEmpty && args.first == 'multi_window') return true;
+  return false;
+}
+
+/// 当前引擎是否为图片预览子窗（desktop_multi_window 0.3）。
+Future<bool> isDesktopImagePreviewEngine() async {
+  if (!isDesktopCommOnly) return false;
+  try {
+    final controller = await WindowController.fromCurrentEngine();
+    return _isPreviewWindowArgument(controller.arguments);
+  } catch (_) {
+    return false;
+  }
 }
 
 Future<Directory> _tempDir() async {
@@ -51,17 +75,17 @@ Future<void> warmDesktopChatImagePreviewWindow() {
 Future<void> _warmDesktopChatImagePreviewWindowImpl() async {
   if (_warmPreviewWindow != null) return;
   try {
-    final window = await DesktopMultiWindow.createWindow(
-      jsonEncode(<String, dynamic>{
-        'type': _kPreviewWindowType,
-        'standby': true,
-      }),
-    );
+    final window = await WindowController.create(
+      WindowConfiguration(
+        hiddenAtLaunch: true,
+        arguments: jsonEncode(<String, dynamic>{
+          'type': _kPreviewWindowType,
+          'standby': true,
+        }),
+      ),
+    ).timeout(const Duration(seconds: 4));
     _warmPreviewWindow = window;
-    await window.setFrame(const Offset(100, 80) & const Size(1120, 780));
-    unawaited(window.center());
-    unawaited(window.setTitle('图片预览'));
-    await window.hide();
+    // 尺寸/标题由子窗内 window_manager 设置；此处仅保持隐藏待命。
   } catch (_) {
     _warmPreviewWindow = null;
   }
@@ -75,7 +99,6 @@ Future<void> openDesktopChatImagePreviewWindow({
   int? conversationId,
 }) {
   if (!isDesktopCommOnly || items.isEmpty) return Future.value();
-  // 串行化连点，避免并发 createWindow。
   final previous = _openPreviewGate ?? Future<void>.value();
   late final Future<void> current;
   current = previous
@@ -98,6 +121,7 @@ Future<void> _openDesktopChatImagePreviewWindowImpl({
   required int initialIndex,
   int? conversationId,
 }) async {
+  const stepTimeout = Duration(seconds: 3);
   final index = initialIndex.clamp(0, items.length - 1);
   final dir = await _tempDir();
   final seedPath = await _writeSeedBytesIfCached(items[index], dir);
@@ -111,38 +135,30 @@ Future<void> _openDesktopChatImagePreviewWindowImpl({
   );
   final payload = <String, dynamic>{'sessionPath': sessionPath};
 
+  Future<void> showWarm(WindowController warm) async {
+    await warm.invokeMethod(_kReloadMethod, payload).timeout(stepTimeout);
+    await warm.show().timeout(stepTimeout);
+  }
+
   final warm = _warmPreviewWindow;
   if (warm != null) {
     try {
-      await DesktopMultiWindow.invokeMethod(
-        warm.windowId,
-        _kReloadMethod,
-        payload,
-      );
-      unawaited(warm.setTitle('图片预览'));
-      await warm.show();
+      await showWarm(warm);
       return;
     } catch (_) {
       _warmPreviewWindow = null;
     }
   }
 
-  // 预热尚未完成时等一下，避免再冷启第二个引擎。
   final warming = _warmUpGate;
   if (warming != null) {
     try {
-      await warming.timeout(const Duration(seconds: 8));
+      await warming.timeout(const Duration(seconds: 2));
     } catch (_) {}
     final ready = _warmPreviewWindow;
     if (ready != null) {
       try {
-        await DesktopMultiWindow.invokeMethod(
-          ready.windowId,
-          _kReloadMethod,
-          payload,
-        );
-        unawaited(ready.setTitle('图片预览'));
-        await ready.show();
+        await showWarm(ready);
         return;
       } catch (_) {
         _warmPreviewWindow = null;
@@ -150,23 +166,17 @@ Future<void> _openDesktopChatImagePreviewWindowImpl({
     }
   }
 
-  final launchArgs = jsonEncode(<String, dynamic>{
-    'type': _kPreviewWindowType,
-    'sessionPath': sessionPath,
-  });
-  final window = await DesktopMultiWindow.createWindow(launchArgs);
+  final window = await WindowController.create(
+    WindowConfiguration(
+      hiddenAtLaunch: true,
+      arguments: jsonEncode(<String, dynamic>{
+        'type': _kPreviewWindowType,
+        'sessionPath': sessionPath,
+      }),
+    ),
+  ).timeout(stepTimeout);
   _warmPreviewWindow = window;
-  await window.setFrame(const Offset(100, 80) & const Size(1120, 780));
-  unawaited(window.center());
-  unawaited(window.setTitle('图片预览'));
-  await window.show();
-  // macOS：子窗首次 show 后偶发未置前，再补一次 show 提升可见性。
-  if (Platform.isMacOS) {
-    try {
-      await Future<void>.delayed(const Duration(milliseconds: 40));
-      await window.show();
-    } catch (_) {}
-  }
+  await window.show().timeout(stepTimeout);
 }
 
 Future<String?> _writeSeedBytesIfCached(
@@ -179,7 +189,6 @@ Future<String?> _writeSeedBytesIfCached(
   final pending = chatMediaBytesCache[key];
   if (pending == null) return null;
   try {
-    // 仅在已缓存（或即将完成）时附带种子图；不阻塞网络下载。
     final bytes = await pending.timeout(const Duration(milliseconds: 40));
     if (bytes.isEmpty) return null;
     final path =
@@ -304,19 +313,45 @@ Future<_PreviewSession?> _loadPreviewSession(String sessionPath) async {
   }
 }
 
-/// 子窗口 Flutter Engine 入口：解析参数并展示预览页。
-Future<void> runDesktopImagePreviewWindow(List<String> args) async {
+Future<void> _preparePreviewNativeWindow() async {
+  await windowManager.ensureInitialized();
+  await windowManager.setTitle('图片预览');
+  await windowManager.setMinimumSize(const Size(720, 520));
+  await windowManager.setSize(const Size(1120, 780));
+  await windowManager.center();
+}
+
+/// 子窗口 Flutter Engine 入口（0.3：从当前引擎 arguments 启动）。
+Future<void> runDesktopImagePreviewWindow([List<String>? args]) async {
   WidgetsFlutterBinding.ensureInitialized();
-  final windowId = int.parse(args[1]);
-  final argMap = args.length > 2 && args[2].trim().isNotEmpty
-      ? (jsonDecode(args[2]) as Map<String, dynamic>)
-      : <String, dynamic>{};
+
+  WindowController controller;
+  Map<String, dynamic> argMap;
+  try {
+    controller = await WindowController.fromCurrentEngine();
+    final raw = controller.arguments.trim();
+    if (raw.isEmpty && args != null && args.length > 2) {
+      // 兼容极端情况下仍走旧 args 形态。
+      argMap = jsonDecode(args[2]) as Map<String, dynamic>;
+    } else {
+      argMap = raw.isEmpty
+          ? <String, dynamic>{}
+          : Map<String, dynamic>.from(jsonDecode(raw) as Map);
+    }
+  } catch (e) {
+    runApp(_PreviewBootstrapError(message: '预览窗初始化失败：$e'));
+    return;
+  }
+
   if ((argMap['type'] ?? '') != _kPreviewWindowType) {
     runApp(const _PreviewBootstrapError(message: '未知的子窗口类型'));
     return;
   }
 
-  final controller = WindowController.fromWindowId(windowId);
+  try {
+    await _preparePreviewNativeWindow();
+  } catch (_) {}
+
   final standby = argMap['standby'] == true;
   _PreviewSession? initial;
   if (!standby) {
@@ -326,6 +361,10 @@ Future<void> runDesktopImagePreviewWindow(List<String> args) async {
       runApp(const _PreviewBootstrapError(message: '预览数据缺失'));
       return;
     }
+    try {
+      await windowManager.show();
+      await windowManager.focus();
+    } catch (_) {}
   }
 
   runApp(
@@ -364,8 +403,6 @@ class _DesktopImagePreviewHostState extends State<_DesktopImagePreviewHost> {
       _session = initial;
       _service = ConversationService(session: initial.session);
     }
-    // macOS + multi_window：切焦点后 Flutter 会停帧，子窗表现为点不开/冻住。
-    // 把 hidden 纠回 inactive，保持帧调度（社区通用绕过）。
     if (Platform.isMacOS) {
       // macOS multi_window 停帧绕过：见 MixinNetwork/flutter-plugins#319
       _macLifecycleFix = AppLifecycleListener(
@@ -376,34 +413,40 @@ class _DesktopImagePreviewHostState extends State<_DesktopImagePreviewHost> {
         },
       );
     }
-    DesktopMultiWindow.setMethodHandler((call, fromWindowId) async {
-      if (call.method != _kReloadMethod) return null;
-      final args = call.arguments;
-      final path = args is Map
-          ? (args['sessionPath'] ?? '').toString()
-          : '';
-      final next = await _loadPreviewSession(path);
-      if (next == null || !mounted) return false;
-      _service?.close();
-      setState(() {
-        _session = next;
-        _service = ConversationService(session: next.session);
-        _reloadToken++;
-      });
-      return true;
-    });
+    unawaited(
+      widget.controller.setWindowMethodHandler((call) async {
+        if (call.method != _kReloadMethod) return null;
+        final args = call.arguments;
+        final path = args is Map
+            ? (args['sessionPath'] ?? '').toString()
+            : '';
+        final next = await _loadPreviewSession(path);
+        if (next == null || !mounted) return false;
+        _service?.close();
+        setState(() {
+          _session = next;
+          _service = ConversationService(session: next.session);
+          _reloadToken++;
+        });
+        try {
+          await windowManager.setTitle('图片预览');
+          await windowManager.show();
+          await windowManager.focus();
+        } catch (_) {}
+        return true;
+      }),
+    );
   }
 
   @override
   void dispose() {
     _macLifecycleFix?.dispose();
-    DesktopMultiWindow.setMethodHandler(null);
+    unawaited(widget.controller.setWindowMethodHandler(null));
     _service?.close();
     super.dispose();
   }
 
   void _hideWindow() {
-    // 隐藏而不是销毁，下次点击可秒开。
     unawaited(widget.controller.hide());
   }
 

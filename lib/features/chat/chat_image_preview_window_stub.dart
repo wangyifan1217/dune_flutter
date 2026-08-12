@@ -3,6 +3,8 @@ import 'chat_image_preview_models.dart';
 
 bool isDesktopImagePreviewWindowArgs(List<String> args) => false;
 
+Future<bool> isDesktopImagePreviewEngine() async => false;
+
 Future<void> warmDesktopChatImagePreviewWindow() async {}
 
 Future<void> openDesktopChatImagePreviewWindow({
@@ -12,4 +14,4 @@ Future<void> openDesktopChatImagePreviewWindow({
   int? conversationId,
 }) async {}
 
-Future<void> runDesktopImagePreviewWindow(List<String> args) async {}
+Future<void> runDesktopImagePreviewWindow([List<String>? args]) async {}

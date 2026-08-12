@@ -73,8 +73,9 @@ Widget _initialHome() {
 Future<void> main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // 桌面图片预览：desktop_multi_window 会以独立 Flutter Engine 再进一次 main。
-  if (isDesktopImagePreviewWindowArgs(args)) {
+  // 桌面图片预览：desktop_multi_window 0.3 以独立 Engine 再进 main。
+  if (isDesktopImagePreviewWindowArgs(args) ||
+      await isDesktopImagePreviewEngine()) {
     await runDesktopImagePreviewWindow(args);
     return;
   }

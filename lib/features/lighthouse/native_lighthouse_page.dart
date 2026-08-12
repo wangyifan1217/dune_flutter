@@ -6018,7 +6018,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
 
   String _tab = 'product';
   String _period = 'day';
-  String _groupFilter = '全部'; // 产品/渠道默认全部；供给默认中石油（见 _defaultGroupFilter）
+  String _groupFilter = '全部'; // 产品/供给/渠道默认全部；中石油等仅置顶
   /// 默认展开分类：Row2；供给/渠道下再跟 HUN 方框。再点当前维可收起。
   bool _tabBarShowsGroups = true;
   String _hunFilter = '全部'; // '全部' | 'U' | 'N' | 'H' | '混合' — 仅 supply/channel
@@ -6427,7 +6427,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   }
 
   /// 下拉里置顶的快捷分类（仍排在「全部」之后）。
-  /// 供给默认选中「中石油」；渠道仅置顶「平安」，默认仍是「全部」。
+  /// 仅置顶方便点选；默认选中一律「全部」，保证三维 Hero 全量口径一致。
   static const _kPinnedCategoryHint = <String, String>{
     'supply': '中石油',
     'channel': '平安',
@@ -6450,36 +6450,13 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     return next;
   }
 
-  /// 默认 L1 分类：供给看中石油；产品 / 渠道为「全部」。
-  String _defaultGroupFilter(String tab) =>
-      tab == 'supply' ? (_kPinnedCategoryHint['supply'] ?? '中石油') : '全部';
+  /// 默认 L1 分类：产品 / 供给 / 渠道一律「全部」。
+  String _defaultGroupFilter(String tab) => lighthouseDefaultGroupFilter(tab);
 
-  /// 解析供给默认分类：优先精确匹配，再模糊包含；分类未就绪时仍返回默认名。
-  String _resolvePreferredGroup(String tab) {
-    final preferred = _defaultGroupFilter(tab);
-    if (preferred == '全部') return preferred;
-    final opts = _categoryOptions(tab);
-    if (opts.contains(preferred)) return preferred;
-    final idx = opts.indexWhere((g) => g != '全部' && g.contains(preferred));
-    if (idx >= 0) return opts[idx];
-    return preferred;
-  }
-
-  /// 展开分类条或切 Tab：供给在「全部」/失效时落到中石油；其余只修失效分类。
+  /// 展开分类条或切 Tab：保留用户选的「全部」；仅失效分类回退。
   void _ensureDefaultGroupFilter() {
     if (_tab == 'analysis') return;
     final opts = _categoryOptions(_tab);
-    if (_tab == 'supply') {
-      final next = _resolvePreferredGroup(_tab);
-      final invalid =
-          _groupFilter != '全部' &&
-          opts.length > 1 &&
-          !opts.contains(_groupFilter);
-      if (_groupFilter == '全部' || invalid) {
-        _groupFilter = next;
-      }
-      return;
-    }
     _groupFilter = lighthouseNormalizeGroupFilter(
       current: _groupFilter,
       options: opts,
@@ -8119,8 +8096,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       _anomalyFilter != '全部';
 
   /// 主 Hero 用当前列表行汇总的场景：
-  /// - L1 分类：与列表同口径即时切换（不再干等 summary；summary 仍负责环比/走势）
+  /// - L1 分类非「全部」：与列表同口径
   /// - HUN / 异常：后端 summary 不含这两层，只能前端聚
+  /// 「全部」且无 HUN/异常时走后端共享 summary，三维 Hero 一致。
   bool get _heroFilterActive =>
       _mainFilterActive ||
       ((_tab == 'supply' || _tab == 'channel') && _hunFilter != '全部') ||
@@ -10564,9 +10542,12 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         sumHandlingFee += (r['handlingFee'] as num?)?.toDouble() ?? 0;
         sumPlatformFee += (r['platformServiceFee'] as num?)?.toDouble() ?? 0;
       }
-      // 有列表行时：销售额/核销/收入/利差/毛利/净利/成本全家桶一律跟当前分类行。
-      // summary 只供环比与走势，且须 filterGroup 与当前分类对齐。
-      final useRowAmounts = rows.isNotEmpty;
+      // 有分类/HUN/异常时：跟当前列表行加总；「全部」无本地筛时走后端共享 summary，
+      // 避免产品/供给/渠道三维列表加总口径不一致。
+      final useRowAmounts = lighthouseHeroUseRowAmounts(
+        filterActive: _heroFilterActive,
+        hasRows: rows.isNotEmpty,
+      );
       final heroSales = useRowAmounts
           ? sumSales
           : ((metrics['sales'] as num?)?.toDouble() ?? sumSales);
@@ -10662,21 +10643,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     final hasProfitTrend = profitSeries.length >= 2;
     final sparkColor = mastheadIsNeg ? LhColors.pos : _LhPlum.deep;
     final title = summaryTitle ?? _l1SummaryTitle;
-    final summaryIconKey = lighthouseHeroSummaryIconKey(title);
-    final summaryAccent = switch (summaryIconKey) {
-      'product' => LhColors.product,
-      'supply' => const Color(0xFF3F7D70),
-      'channel' => _LhPlum.primary,
-      'analysis' => LhColors.copper,
-      _ => _LhPlum.deep,
-    };
-    final summaryIcon = switch (summaryIconKey) {
-      'product' => Icons.inventory_2_outlined,
-      'supply' => Icons.hub_outlined,
-      'channel' => Icons.account_tree_outlined,
-      'analysis' => Icons.bar_chart_rounded,
-      _ => Icons.dashboard_outlined,
-    };
+    // 产品 / 供给 / 渠道的汇总 Hero 共用同一视觉身份；只替换标题和数据。
+    const summaryAccent = _LhPlum.primary;
+    const summaryIcon = Icons.dashboard_outlined;
 
     // v14 · 版式压缩 441 → ~300pt (首屏占比 53% → 36%, 列表可见 2 行 → 4 行)：
     //   · §02 大数与环比并到同一 baseline —— 省一整行 (−24)
@@ -14060,7 +14029,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       sumProfit += (r['profit'] as num?)?.toDouble() ?? 0;
       sumRevenue += (r['revenue'] as num?)?.toDouble() ?? 0;
     }
-    final useRowAmounts = rows.isNotEmpty;
+    final useRowAmounts = lighthouseHeroUseRowAmounts(
+      filterActive: _heroFilterActive,
+      hasRows: rows.isNotEmpty,
+    );
     final heroSales = useRowAmounts
         ? sumSales
         : ((metrics['sales'] as num?)?.toDouble() ?? sumSales);
@@ -21056,7 +21028,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                               TextSpan(
                                 text: '毛利率 ',
                                 style: LhTypography.mono(
-                                  size: _fs(10),
+                                  size: _fs(9.5),
                                   color: LhColors.mute,
                                   weight: FontWeight.w500,
                                   height: 1.0,
@@ -21068,7 +21040,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                                     : '${grossMargin.toStringAsFixed(1)}%',
                                 style: _tabular(
                                   LhTypography.mono(
-                                    size: _fs(10.5),
+                                    size: _fs(10),
                                     color: LhColors.ink,
                                     weight: FontWeight.w700,
                                     height: 1.0,

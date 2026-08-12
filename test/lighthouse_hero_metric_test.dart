@@ -530,6 +530,39 @@ void main() {
     });
   });
 
+  group('lighthouseHeroUseRowAmounts / default group', () {
+    test('all tabs default to 全部', () {
+      expect(lighthouseDefaultGroupFilter('product'), '全部');
+      expect(lighthouseDefaultGroupFilter('supply'), '全部');
+      expect(lighthouseDefaultGroupFilter('channel'), '全部');
+    });
+
+    test('use backend summary when no filter', () {
+      expect(
+        lighthouseHeroUseRowAmounts(filterActive: false, hasRows: true),
+        isFalse,
+      );
+      expect(
+        lighthouseHeroUseRowAmounts(filterActive: true, hasRows: true),
+        isTrue,
+      );
+      expect(
+        lighthouseHeroUseRowAmounts(filterActive: true, hasRows: false),
+        isFalse,
+      );
+    });
+
+    test('normalize keeps 全部 and never forces 中石油', () {
+      expect(
+        lighthouseNormalizeGroupFilter(
+          current: '全部',
+          options: const ['全部', '中石油'],
+        ),
+        '全部',
+      );
+    });
+  });
+
   group('lighthouseLedgerValueWeightValue', () {
     test('summary and sorted numbers are bold', () {
       expect(

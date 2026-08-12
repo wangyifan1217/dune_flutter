@@ -642,6 +642,26 @@ String lighthouseResolvePreferredGroup({
   return '全部';
 }
 
+/// L1 Hero：无分类 / HUN / 异常时走后端共享 summary；有本地筛再按列表行加总。
+///
+/// 产品 / 供给 / 渠道在「全部」下应对齐同一套全量汇总，不能各自加维内列表。
+bool lighthouseHeroUseRowAmounts({
+  required bool filterActive,
+  required bool hasRows,
+}) => filterActive && hasRows;
+
+/// L1 切维默认分类：三维一律「全部」（中石油 / 平安仅置顶，不默认选中）。
+String lighthouseDefaultGroupFilter(String tab) {
+  switch (tab) {
+    case 'product':
+    case 'supply':
+    case 'channel':
+      return '全部';
+    default:
+      return '全部';
+  }
+}
+
 /// 校正当前 L1 分类：用户选的「全部」必须保留；仅选项失效时回退。
 /// 切维 / 展开分类条时用，禁止再把「全部」偷偷改成中石油、平安。
 String lighthouseNormalizeGroupFilter({

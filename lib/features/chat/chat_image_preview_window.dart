@@ -5,6 +5,7 @@ import 'dart:typed_data';
 
 import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../../core/platform/desktop_features.dart';
@@ -159,6 +160,13 @@ Future<void> _openDesktopChatImagePreviewWindowImpl({
   unawaited(window.center());
   unawaited(window.setTitle('图片预览'));
   await window.show();
+  // macOS：子窗首次 show 后偶发未置前，再补一次 show 提升可见性。
+  if (Platform.isMacOS) {
+    try {
+      await Future<void>.delayed(const Duration(milliseconds: 40));
+      await window.show();
+    } catch (_) {}
+  }
 }
 
 Future<String?> _writeSeedBytesIfCached(
@@ -346,6 +354,7 @@ class _DesktopImagePreviewHostState extends State<_DesktopImagePreviewHost> {
   _PreviewSession? _session;
   ConversationService? _service;
   var _reloadToken = 0;
+  AppLifecycleListener? _macLifecycleFix;
 
   @override
   void initState() {
@@ -354,6 +363,18 @@ class _DesktopImagePreviewHostState extends State<_DesktopImagePreviewHost> {
     if (initial != null) {
       _session = initial;
       _service = ConversationService(session: initial.session);
+    }
+    // macOS + multi_window：切焦点后 Flutter 会停帧，子窗表现为点不开/冻住。
+    // 把 hidden 纠回 inactive，保持帧调度（社区通用绕过）。
+    if (Platform.isMacOS) {
+      // macOS multi_window 停帧绕过：见 MixinNetwork/flutter-plugins#319
+      _macLifecycleFix = AppLifecycleListener(
+        onHide: () {
+          SchedulerBinding.instance
+              // ignore: invalid_use_of_protected_member
+              .handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+        },
+      );
     }
     DesktopMultiWindow.setMethodHandler((call, fromWindowId) async {
       if (call.method != _kReloadMethod) return null;
@@ -375,6 +396,7 @@ class _DesktopImagePreviewHostState extends State<_DesktopImagePreviewHost> {
 
   @override
   void dispose() {
+    _macLifecycleFix?.dispose();
     DesktopMultiWindow.setMethodHandler(null);
     _service?.close();
     super.dispose();

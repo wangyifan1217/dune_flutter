@@ -7,7 +7,6 @@ import 'package:flutter/services.dart';
 import '../../core/platform/desktop_features.dart';
 import '../../core/theme/dunes_theme.dart';
 import '../../core/util/friendly_error.dart';
-import '../auth/auth_session.dart';
 import '../conversation/conversation_service.dart';
 import '../shell/dunes_toast.dart';
 import 'chat_image_editor.dart';
@@ -494,10 +493,10 @@ class _ChatInlineImageState extends State<_ChatInlineImage> {
       return widget.error();
     }
 
-    // PC：双击打开预览，避免误触；APP 仍单击。
+    // 桌面 / APP 均单击打开。Mac 触控板双击在 ListView 里极易丢手势，
+    // 表现为「点了没反应」；独立预览窗由 showChatImagePreview 负责。
     return GestureDetector(
-      onTap: isDesktopCommOnly ? null : widget.onTap,
-      onDoubleTap: isDesktopCommOnly ? widget.onTap : null,
+      onTap: widget.onTap,
       child: ClipRRect(
         borderRadius: BorderRadius.circular(12),
         child: ConstrainedBox(
@@ -540,29 +539,46 @@ Future<void> showChatImagePreview(
   if (isDesktopCommOnly) {
     return _openDesktopChatImagePreviewWithFeedback(
       context,
-      session: service.session,
+      service: service,
       items: gallery,
       initialIndex: index,
       conversationId: conversationId,
     );
   }
 
+  return _showInAppChatImagePreview(
+    context,
+    service: service,
+    items: gallery,
+    initialIndex: index,
+    conversationId: conversationId,
+  );
+}
+
+Future<void> _showInAppChatImagePreview(
+  BuildContext context, {
+  required ConversationService service,
+  required List<ChatImagePreviewItem> items,
+  required int initialIndex,
+  int? conversationId,
+}) {
   return showDialog<void>(
     context: context,
     barrierColor: Colors.black87,
     builder: (_) => ChatImagePreviewPage(
       service: service,
-      items: gallery,
-      initialIndex: index,
+      items: items,
+      initialIndex: initialIndex,
       conversationId: conversationId,
     ),
   );
 }
 
 /// 主窗立刻给出点击反馈，避免独立引擎启动期间「点了没反应」。
+/// Mac 上 multi_window 偶发失败时回退到应用内全屏预览，避免「点了没窗」。
 Future<void> _openDesktopChatImagePreviewWithFeedback(
   BuildContext context, {
-  required AuthSession session,
+  required ConversationService service,
   required List<ChatImagePreviewItem> items,
   required int initialIndex,
   int? conversationId,
@@ -615,7 +631,21 @@ Future<void> _openDesktopChatImagePreviewWithFeedback(
   }
   try {
     await openDesktopChatImagePreviewWindow(
-      session: session,
+      session: service.session,
+      items: items,
+      initialIndex: initialIndex,
+      conversationId: conversationId,
+    );
+  } catch (e) {
+    if (!context.mounted) return;
+    showDunesToast(
+      context,
+      '独立预览窗打开失败，已改用应用内预览',
+      kind: DunesToastKind.error,
+    );
+    await _showInAppChatImagePreview(
+      context,
+      service: service,
       items: items,
       initialIndex: initialIndex,
       conversationId: conversationId,

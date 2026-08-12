@@ -568,12 +568,11 @@ class _FilledMediaSlot extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final useDoubleClick = desktopDoubleClick && isDesktopCommOnly;
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        onTap: useDoubleClick ? null : onTap,
-        onDoubleTap: useDoubleClick ? onTap : null,
+        // 统一单击打开；桌面双击参数保留兼容，但不再拦截单击（Mac 触控板双击易丢）。
+        onTap: onTap,
         borderRadius: BorderRadius.circular(11),
         child: Ink(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),

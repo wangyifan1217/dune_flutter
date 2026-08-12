@@ -1,28 +1,36 @@
+; 与 dist/windows/dunes-setup.iss 保持同一 AppId / 权限，否则升级找不到旧目录。
 #define MyAppName "沙丘"
 #define MyAppVersion "1.3.0"
-#define MyAppPublisher "Dunes"
+#define MyAppBuild "130"
+#define MyAppPublisher "沙丘"
 #define MyAppExeName "dunes_app.exe"
 
 [Setup]
-AppId={{B5A14F5D-32E5-484D-BCB1-0156D5F7F5E5}
+; 历史安装（含 1.2.1-110）使用此 AppId；勿改，否则 UsePreviousAppDir 失效。
+AppId={{A8E2C1D4-7B5F-4E9A-9C3D-1F2A6B8E0D71}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
+AppVerName={#MyAppName} {#MyAppVersion} ({#MyAppBuild})
 AppPublisher={#MyAppPublisher}
-DefaultDirName={autopf}\Dunes
+DefaultDirName={localappdata}\Programs\DunesDesktop
 DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=yes
+UsePreviousAppDir=yes
 OutputDir=..\..\build\installer
-OutputBaseFilename=DunesSetup-1.2.1-110
-Compression=lzma
+OutputBaseFilename=DunesSetup-{#MyAppVersion}-{#MyAppBuild}
+VersionInfoVersion={#MyAppVersion}.{#MyAppBuild}
+Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
+; 与历史包一致：默认当前用户安装，才能读到 HKCU 里旧目录（如 D:\DunesDesktop）。
+PrivilegesRequired=lowest
+PrivilegesRequiredOverridesAllowed=dialog
+UninstallDisplayIcon={app}\{#MyAppExeName}
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 ; Flutter 引擎依赖 GetHostNameW（Win8+），且官方仅支持 Windows 10+。
-; 安装阶段拦截 Win7/Win8，避免装完启动才报 WS2_32.dll 入口点错误。
 MinVersion=10.0
 ; 更新时静默强制关闭占用文件的 dunes_app，不再弹出 Files in Use 确认页。
-; 安装完成后由下方 [Run] 拉起新版本，避免 RestartApplications 与 postinstall 双开。
 CloseApplications=force
 RestartApplications=no
 
@@ -33,6 +41,8 @@ WindowsVersionNotSupported=沙丘 PC 端需要 64 位 Windows 10 或更高版本
 Source: "..\..\build\windows\x64\runner\Release\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
+Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
+Name: "{group}\Uninstall {#MyAppName}"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
 
 [Tasks]

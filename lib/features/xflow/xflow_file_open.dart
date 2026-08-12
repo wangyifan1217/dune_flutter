@@ -1,4 +1,4 @@
-import 'dart:typed_data';
+import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -163,6 +163,8 @@ Future<void> openXflowAttachment({
     return;
   }
 
+  if (!context.mounted) return;
+
   // APP：PDF / 图片优先应用内预览（与微盘一致）。
   if (!isDesktopCommOnly &&
       preferPreview &&
@@ -176,12 +178,137 @@ Future<void> openXflowAttachment({
     if (ok) return;
   }
 
+  // PC：图片用应用内小窗预览（系统照片查看器默认窗口过大）；失败回退系统打开。
+  if (isDesktopCommOnly && preferPreview && xflowItemIsImage(item, fileName)) {
+    if (!context.mounted) return;
+    final ok = await _previewImageDialogOnDesktop(
+      context: context,
+      url: url,
+      fileName: fileName,
+      cacheKey: cacheKey,
+    );
+    if (ok) return;
+  }
+
+  if (!context.mounted) return;
   await _openWithSystem(
     context: context,
     url: url,
     fileName: fileName,
     cacheKey: cacheKey,
   );
+}
+
+/// PC 图片小窗预览：约 60% 屏宽（上限 640）居中弹层，支持缩放；
+/// 右上角可切换系统应用打开原图。
+Future<bool> _previewImageDialogOnDesktop({
+  required BuildContext context,
+  required String url,
+  required String fileName,
+  required String cacheKey,
+}) async {
+  Uint8List bytes;
+  try {
+    final client = http.Client();
+    try {
+      final resp = await client.get(Uri.parse(url));
+      if (resp.statusCode < 200 || resp.statusCode >= 300) {
+        return false;
+      }
+      bytes = Uint8List.fromList(resp.bodyBytes);
+      if (bytes.isEmpty) return false;
+    } finally {
+      client.close();
+    }
+  } catch (_) {
+    return false;
+  }
+  if (!context.mounted) return false;
+
+  await showDialog<void>(
+    context: context,
+    barrierDismissible: true,
+    builder: (ctx) {
+      final size = MediaQuery.sizeOf(ctx);
+      final maxW = size.width * 0.6 < 640 ? size.width * 0.6 : 640.0;
+      final maxH = size.height * 0.72;
+      return Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.all(24),
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxWidth: maxW,
+            maxHeight: maxH,
+            minWidth: 280,
+            minHeight: 200,
+          ),
+          child: Material(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            clipBehavior: Clip.antiAlias,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 8, 6, 8),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          fileName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: DunesColors.text,
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        tooltip: '用系统应用打开',
+                        visualDensity: VisualDensity.compact,
+                        onPressed: () {
+                          Navigator.of(ctx).pop();
+                          unawaited(
+                            _openWithSystem(
+                              context: context,
+                              url: url,
+                              fileName: fileName,
+                              cacheKey: cacheKey,
+                            ),
+                          );
+                        },
+                        icon: const Icon(Icons.open_in_new_rounded, size: 17),
+                      ),
+                      IconButton(
+                        tooltip: '关闭',
+                        visualDensity: VisualDensity.compact,
+                        onPressed: () => Navigator.of(ctx).pop(),
+                        icon: const Icon(Icons.close_rounded, size: 18),
+                      ),
+                    ],
+                  ),
+                ),
+                Flexible(
+                  child: ColoredBox(
+                    color: const Color(0xFFF3F4F6),
+                    child: InteractiveViewer(
+                      maxScale: 5,
+                      child: Center(
+                        child: Image.memory(bytes, fit: BoxFit.contain),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    },
+  );
+  return true;
 }
 
 Future<void> _openWithSystem({

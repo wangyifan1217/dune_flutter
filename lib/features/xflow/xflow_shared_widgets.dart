@@ -925,7 +925,7 @@ class XflowProposalListCard extends StatelessWidget {
                       tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     ),
                     child: Text(
-                      '删除草稿',
+                      item.status.toUpperCase() == 'DRAFT' ? '删除草稿' : '删除',
                       style: DunesTypography.sans(
                         fontSize: 11,
                         color: DunesColors.coral,

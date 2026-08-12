@@ -20,36 +20,14 @@ Future<void> showApprovalDetailOverlay({
   void Function(XflowProposalItem item)? onEditSubmission,
   void Function(int proposalId)? onReeditProposal,
 }) {
-  final item = share.toListItem();
-  final isProposal = item.businessType.toUpperCase() == 'PROPOSAL';
-
-  Widget pageFor(VoidCallback close) {
-    final dialogNav = _DialogBackNav(onClose: close, backScreen: 'IM');
-    if (isProposal) {
-      return NativeB10Page(
-        session: session,
-        navigation: dialogNav,
-        proposalId: item.id,
-        todoHint: item.todoHint,
-        backScreen: 'IM',
-        onApprovalCompleted: () => onApprovalCompleted?.call(),
-        onReedit: (proposalId) {
-          close();
-          onReeditProposal?.call(proposalId);
-        },
-      );
-    }
-    return NativeXflowSubmissionPage(
+  Widget hostFor(VoidCallback close) {
+    return _ApprovalDetailOverlayHost(
       session: session,
-      navigation: dialogNav,
-      businessType: item.businessType,
-      businessId: item.id,
-      backScreen: 'IM',
-      onApprovalCompleted: () => onApprovalCompleted?.call(),
-      onEdit: () {
-        close();
-        onEditSubmission?.call(item);
-      },
+      initialShare: share,
+      onClose: close,
+      onApprovalCompleted: onApprovalCompleted,
+      onEditSubmission: onEditSubmission,
+      onReeditProposal: onReeditProposal,
     );
   }
 
@@ -79,7 +57,7 @@ Future<void> showApprovalDetailOverlay({
               color: DunesColors.bgApp,
               borderRadius: BorderRadius.circular(14),
               clipBehavior: Clip.antiAlias,
-              child: SelectionArea(child: pageFor(close)),
+              child: SelectionArea(child: hostFor(close)),
             ),
           ),
         );
@@ -91,7 +69,7 @@ Future<void> showApprovalDetailOverlay({
     MaterialPageRoute<void>(
       builder: (ctx) => Material(
         color: DunesColors.bgApp,
-        child: pageFor(() {
+        child: hostFor(() {
           if (Navigator.of(ctx).canPop()) {
             Navigator.of(ctx).pop();
           }
@@ -118,6 +96,85 @@ Future<void> showApprovalDetailDialog({
     onEditSubmission: onEditSubmission,
     onReeditProposal: onReeditProposal,
   );
+}
+
+/// 覆盖层内可切换下一条待审批，不关闭弹窗/路由。
+class _ApprovalDetailOverlayHost extends StatefulWidget {
+  const _ApprovalDetailOverlayHost({
+    required this.session,
+    required this.initialShare,
+    required this.onClose,
+    this.onApprovalCompleted,
+    this.onEditSubmission,
+    this.onReeditProposal,
+  });
+
+  final AuthSession session;
+  final ApprovalChatShare initialShare;
+  final VoidCallback onClose;
+  final VoidCallback? onApprovalCompleted;
+  final void Function(XflowProposalItem item)? onEditSubmission;
+  final void Function(int proposalId)? onReeditProposal;
+
+  @override
+  State<_ApprovalDetailOverlayHost> createState() =>
+      _ApprovalDetailOverlayHostState();
+}
+
+class _ApprovalDetailOverlayHostState
+    extends State<_ApprovalDetailOverlayHost> {
+  late XflowProposalItem _item;
+
+  @override
+  void initState() {
+    super.initState();
+    _item = widget.initialShare.toListItem();
+  }
+
+  void _openPending(XflowProposalItem next) {
+    setState(() => _item = next);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isProposal = _item.businessType.toUpperCase() == 'PROPOSAL';
+    final dialogNav = _DialogBackNav(onClose: widget.onClose, backScreen: 'IM');
+    final key = ValueKey(
+      '${_item.businessType}:${_item.todoHint?.businessId ?? _item.id}',
+    );
+
+    if (isProposal) {
+      return NativeB10Page(
+        key: key,
+        session: widget.session,
+        navigation: dialogNav,
+        proposalId: _item.id,
+        todoHint: _item.todoHint,
+        backScreen: 'IM',
+        onApprovalCompleted: () => widget.onApprovalCompleted?.call(),
+        onOpenPendingItem: _openPending,
+        onReedit: (proposalId) {
+          widget.onClose();
+          widget.onReeditProposal?.call(proposalId);
+        },
+      );
+    }
+
+    return NativeXflowSubmissionPage(
+      key: key,
+      session: widget.session,
+      navigation: dialogNav,
+      businessType: _item.businessType,
+      businessId: _item.todoHint?.businessId ?? _item.id,
+      backScreen: 'IM',
+      onApprovalCompleted: () => widget.onApprovalCompleted?.call(),
+      onOpenPendingItem: _openPending,
+      onEdit: () {
+        widget.onClose();
+        widget.onEditSubmission?.call(_item);
+      },
+    );
+  }
 }
 
 /// 覆盖层内返回：关闭弹窗/路由，不改动宿主导航栈。

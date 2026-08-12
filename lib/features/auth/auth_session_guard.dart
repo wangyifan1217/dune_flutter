@@ -41,7 +41,7 @@ class AuthSessionGuard {
   }
 
   void inspectStatusCode(int statusCode, {http.Response? response}) {
-    if (statusCode != 401) return;
+    if (statusCode != 401 && statusCode != 403) return;
     if (response != null) {
       inspectResponse(response);
       return;
@@ -50,9 +50,12 @@ class AuthSessionGuard {
   }
 
   void inspectResponse(http.Response response) {
-    if (response.statusCode != 401) return;
+    if (response.statusCode != 401 && response.statusCode != 403) return;
     if (_shouldRevokeForUnauthorized(response)) {
-      unawaited(revoke());
+      final message = AuthSessionCoordinator.readApiMessage(response.body);
+      unawaited(revoke(
+        message: message.contains('账号已停用') ? '账号已停用，请联系管理员' : null,
+      ));
     }
   }
 
@@ -110,9 +113,19 @@ class AuthSessionGuard {
     }
   }
 
+  String? _pendingRevokeMessage;
+
+  /// 取出本次强制登出的提示文案（如「账号已停用」），默认文案由调用方兜底。
+  String? consumePendingRevokeMessage() {
+    final message = _pendingRevokeMessage;
+    _pendingRevokeMessage = null;
+    return message;
+  }
+
   Future<void> revoke({String? message}) async {
     if (_revoking) return;
     _revoking = true;
+    _pendingRevokeMessage = message;
     final callback = _onRevoked;
     unbind();
     AuthSessionCoordinator.instance.clear();
@@ -189,9 +202,11 @@ class _AuthSessionGuardScopeState extends State<AuthSessionGuardScope>
   void _handleRevoked() {
     if (_revoked || !mounted) return;
     _revoked = true;
+    final message = AuthSessionGuard.instance.consumePendingRevokeMessage() ??
+        widget.revokedMessage;
     showDunesToast(
       context,
-      widget.revokedMessage,
+      message,
       kind: DunesToastKind.error,
       duration: const Duration(milliseconds: 3200),
     );

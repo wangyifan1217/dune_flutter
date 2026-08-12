@@ -1,12 +1,24 @@
+import 'dart:async';
+import 'dart:io';
+
+import 'package:desktop_drop/desktop_drop.dart';
+import 'package:file_selector/file_selector.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:mime/mime.dart';
 
 import '../../core/theme/dunes_theme.dart';
+import '../../core/util/friendly_error.dart';
 import '../chat/user_avatar_widget.dart';
 import '../conversation/conversation_service.dart';
 import '../shell/dunes_toast.dart';
+import 'xflow_file_open.dart';
 import 'xflow_models.dart';
 import 'xflow_service.dart';
 import 'xflow_shared_widgets.dart';
+
+const _kMaxCommentAttachments = 6;
+const _kMaxCommentAttachmentBytes = 20 * 1024 * 1024;
 
 /// 审批进度上方的讨论评论区（支持 @ 与楼中楼回复）。
 class XfDetCommentsSection extends StatefulWidget {
@@ -35,9 +47,18 @@ class _XfDetCommentsSectionState extends State<XfDetCommentsSection> {
   List<ApprovalCommentItem> _comments = const [];
   List<ApprovalStakeholderPerson> _people = const [];
   ApprovalCommentItem? _replyParent;
+  final List<_PendingAttachment> _pendingAtts = [];
+  final Map<String, Future<String>> _attUrlFutures = {};
   bool _loading = true;
   bool _sending = false;
+  bool _picking = false;
+  bool _dragging = false;
   String? _error;
+
+  bool get _supportsDesktopDrop {
+    if (kIsWeb) return true;
+    return Platform.isWindows || Platform.isMacOS || Platform.isLinux;
+  }
 
   /// 用于识别退格是否落在 @人名 内，整段删除。
   String _prevInputText = '';
@@ -318,9 +339,170 @@ class _XfDetCommentsSectionState extends State<XfDetCommentsSection> {
     FocusManager.instance.primaryFocus?.unfocus();
   }
 
+  Future<void> _pickAttachments() async {
+    if (_picking || _sending) return;
+    final remain = _kMaxCommentAttachments - _pendingAtts.length;
+    if (remain <= 0) {
+      showDunesToast(context, '附件最多 $_kMaxCommentAttachments 个');
+      return;
+    }
+    setState(() => _picking = true);
+    List<XFile> files = const [];
+    try {
+      files = await openFiles();
+    } catch (_) {
+      files = const [];
+    } finally {
+      if (mounted) setState(() => _picking = false);
+    }
+    if (files.isEmpty || !mounted) return;
+    await _addAttachmentFiles(files);
+  }
+
+  /// 选择/拖入共用：限制数量并在（macOS 安全作用域内）先读出字节再异步上传。
+  Future<void> _addAttachmentFiles(List<XFile> files) async {
+    if (files.isEmpty) return;
+    final remain = _kMaxCommentAttachments - _pendingAtts.length;
+    if (remain <= 0) {
+      showDunesToast(context, '附件最多 $_kMaxCommentAttachments 个');
+      return;
+    }
+    var list = files;
+    if (list.length > remain) {
+      list = list.sublist(0, remain);
+      showDunesToast(context, '附件最多 $_kMaxCommentAttachments 个，已截取前 $remain 个');
+    }
+    for (final f in list) {
+      Uint8List bytes;
+      try {
+        bytes = await f.readAsBytes();
+      } catch (_) {
+        if (mounted) {
+          showDunesToast(
+            context,
+            '无法读取「${f.name}」',
+            kind: DunesToastKind.error,
+          );
+        }
+        continue;
+      }
+      if (!mounted) return;
+      unawaited(_uploadPendingBytes(f.name, bytes));
+    }
+  }
+
+  Future<void> _onDesktopDrop(DropDoneDetails detail) async {
+    if (_sending) return;
+    setState(() => _dragging = false);
+    final accessed = <Uint8List>[];
+    try {
+      final files = <XFile>[];
+      for (final item in detail.files) {
+        if (item is DropItemDirectory) continue;
+        // macOS 沙盒：开启 security-scoped 访问，避免拖入后读文件失败。
+        final bookmark = item.extraAppleBookmark;
+        if (bookmark != null && bookmark.isNotEmpty) {
+          try {
+            final ok = await DesktopDrop.instance
+                .startAccessingSecurityScopedResource(bookmark: bookmark);
+            if (ok) accessed.add(bookmark);
+          } catch (_) {}
+        }
+        files.add(XFile(item.path, name: item.name));
+      }
+      if (files.isEmpty) {
+        if (mounted) showDunesToast(context, '请拖入文件（不支持文件夹）');
+        return;
+      }
+      await _addAttachmentFiles(files);
+    } finally {
+      for (final bookmark in accessed) {
+        try {
+          await DesktopDrop.instance
+              .stopAccessingSecurityScopedResource(bookmark: bookmark);
+        } catch (_) {}
+      }
+    }
+  }
+
+  Future<void> _uploadPendingBytes(String rawName, Uint8List bytes) async {
+    if (!mounted) return;
+    final name = rawName.trim().isEmpty ? '附件' : rawName.trim();
+    if (bytes.length > _kMaxCommentAttachmentBytes) {
+      showDunesToast(
+        context,
+        '「$name」超过 20MB，未添加',
+        kind: DunesToastKind.error,
+      );
+      return;
+    }
+    final pending = _PendingAttachment(
+      name: name,
+      size: bytes.length,
+      mimeType: lookupMimeType(name) ?? '',
+    );
+    setState(() => _pendingAtts.add(pending));
+    try {
+      final data = await widget.service.uploadProposalFile(
+        bytes: bytes,
+        fileName: name,
+      );
+      if (!mounted) return;
+      final key = (data['objectKey'] ?? data['url'] ?? '').toString();
+      setState(() {
+        if (key.isEmpty) {
+          pending
+            ..status = _PendingStatus.error
+            ..error = '上传失败';
+        } else {
+          pending
+            ..status = _PendingStatus.done
+            ..objectKey = key;
+        }
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        pending
+          ..status = _PendingStatus.error
+          ..error = friendlyErrorText(e, fallback: '上传失败');
+      });
+    }
+  }
+
+  void _removePending(_PendingAttachment att) {
+    setState(() => _pendingAtts.remove(att));
+  }
+
   Future<void> _send() async {
     final text = _input.text.trim();
-    if (text.isEmpty || _sending) return;
+    if (_sending) return;
+    if (_pendingAtts.any((a) => a.status == _PendingStatus.uploading)) {
+      showDunesToast(context, '附件上传中，请稍候');
+      return;
+    }
+    final failed = _pendingAtts.where(
+      (a) => a.status == _PendingStatus.error,
+    );
+    if (failed.isNotEmpty) {
+      showDunesToast(
+        context,
+        '有附件上传失败，请移除后重试',
+        kind: DunesToastKind.error,
+      );
+      return;
+    }
+    final attachments = [
+      for (final a in _pendingAtts)
+        if (a.status == _PendingStatus.done && a.objectKey.isNotEmpty)
+          ApprovalCommentAttachment(
+            name: a.name,
+            objectKey: a.objectKey,
+            size: a.size,
+            mimeType: a.mimeType,
+          ),
+    ];
+    if (text.isEmpty && attachments.isEmpty) return;
     final parentId = _replyParent?.id;
     setState(() => _sending = true);
     try {
@@ -330,12 +512,14 @@ class _XfDetCommentsSectionState extends State<XfDetCommentsSection> {
         text: text,
         mentionUserIds: _parseMentionUserIds(text),
         parentId: parentId,
+        attachments: attachments,
       );
       if (!mounted) return;
       setState(() {
         _comments = [..._comments, created];
         _input.clear();
         _replyParent = null;
+        _pendingAtts.clear();
         _sending = false;
       });
       _dismissKeyboard();
@@ -355,6 +539,23 @@ class _XfDetCommentsSectionState extends State<XfDetCommentsSection> {
       }
     }
     return '';
+  }
+
+  /// 预签名 URL 按 objectKey 缓存，避免评论列表重建时反复请求。
+  Future<String> _attachmentUrl(ApprovalCommentAttachment att) {
+    return _attUrlFutures.putIfAbsent(
+      att.objectKey,
+      () => widget.service.resolveFileUrl(att.toFileItem()),
+    );
+  }
+
+  Future<void> _openAttachment(ApprovalCommentAttachment att) {
+    return openXflowAttachment(
+      context: context,
+      service: widget.service,
+      item: att.toFileItem(),
+      preferPreview: true,
+    );
   }
 
   @override
@@ -454,14 +655,48 @@ class _XfDetCommentsSectionState extends State<XfDetCommentsSection> {
                 ],
               ),
             ),
-          Container(
+          _wrapDrop(Container(
             padding: const EdgeInsets.fromLTRB(4, 4, 4, 4),
             decoration: BoxDecoration(
-              color: DunesColors.bgSoft,
+              color: _dragging ? DunesColors.accentSoft : DunesColors.bgSoft,
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: DunesColors.borderSoft),
+              border: Border.all(
+                color: _dragging ? DunesColors.accent : DunesColors.borderSoft,
+                width: _dragging ? 1.4 : 1,
+              ),
             ),
-            child: Row(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (_dragging)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(8, 6, 8, 0),
+                    child: Text(
+                      '松开即可添加为评论附件',
+                      style: DunesTypography.sans(
+                        fontSize: 11.5,
+                        color: DunesColors.accentDeep,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                if (_pendingAtts.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(6, 6, 6, 2),
+                    child: Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      children: [
+                        for (final att in _pendingAtts)
+                          _PendingAttachmentChip(
+                            attachment: att,
+                            onRemove:
+                                _sending ? null : () => _removePending(att),
+                          ),
+                      ],
+                    ),
+                  ),
+                Row(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 Expanded(
@@ -496,6 +731,17 @@ class _XfDetCommentsSectionState extends State<XfDetCommentsSection> {
                         _pickMention();
                       }
                     },
+                  ),
+                ),
+                IconButton(
+                  tooltip: '添加附件',
+                  visualDensity: VisualDensity.compact,
+                  onPressed:
+                      (_sending || _picking) ? null : () => unawaited(_pickAttachments()),
+                  icon: Icon(
+                    Icons.attach_file_rounded,
+                    size: 18,
+                    color: DunesColors.accent,
                   ),
                 ),
                 IconButton(
@@ -543,10 +789,25 @@ class _XfDetCommentsSectionState extends State<XfDetCommentsSection> {
                   ),
                 ),
               ],
+                ),
+              ],
             ),
-          ),
+          )),
         ],
       ),
+    );
+  }
+
+  /// PC / Web：输入框支持拖拽文件作为评论附件。
+  Widget _wrapDrop(Widget child) {
+    if (!_supportsDesktopDrop) return child;
+    return DropTarget(
+      onDragEntered: (_) {
+        if (!_sending) setState(() => _dragging = true);
+      },
+      onDragExited: (_) => setState(() => _dragging = false),
+      onDragDone: (detail) => unawaited(_onDesktopDrop(detail)),
+      child: child,
     );
   }
 
@@ -660,7 +921,16 @@ class _XfDetCommentsSectionState extends State<XfDetCommentsSection> {
                 ],
               ),
               const SizedBox(height: 4),
-              _MentionText(text: c.bodyText, people: _people),
+              if (c.bodyText.trim().isNotEmpty)
+                _MentionText(text: c.bodyText, people: _people),
+              if (c.attachments.isNotEmpty) ...[
+                const SizedBox(height: 6),
+                _CommentAttachments(
+                  attachments: c.attachments,
+                  urlOf: _attachmentUrl,
+                  onOpen: _openAttachment,
+                ),
+              ],
               const SizedBox(height: 2),
               GestureDetector(
                 onTap: _sending ? null : () => _replyTo(c),
@@ -717,6 +987,243 @@ List<_CommentNode> _buildCommentTree(List<ApprovalCommentItem> flat) {
     }
   }
   return roots;
+}
+
+enum _PendingStatus { uploading, done, error }
+
+class _PendingAttachment {
+  _PendingAttachment({
+    required this.name,
+    required this.size,
+    required this.mimeType,
+  });
+
+  final String name;
+  final int size;
+  final String mimeType;
+  _PendingStatus status = _PendingStatus.uploading;
+  String objectKey = '';
+  String error = '';
+}
+
+String _fmtAttachmentSize(int bytes) {
+  if (bytes <= 0) return '';
+  if (bytes < 1024) return '${bytes}B';
+  if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(0)}KB';
+  return '${(bytes / 1024 / 1024).toStringAsFixed(1)}MB';
+}
+
+class _PendingAttachmentChip extends StatelessWidget {
+  const _PendingAttachmentChip({
+    required this.attachment,
+    required this.onRemove,
+  });
+
+  final _PendingAttachment attachment;
+  final VoidCallback? onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    final att = attachment;
+    final isError = att.status == _PendingStatus.error;
+    final size = _fmtAttachmentSize(att.size);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: isError ? const Color(0xFFE7B3B3) : DunesColors.borderSoft,
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (att.status == _PendingStatus.uploading)
+            const SizedBox(
+              width: 12,
+              height: 12,
+              child: CircularProgressIndicator(strokeWidth: 1.6),
+            )
+          else
+            Icon(
+              isError
+                  ? Icons.error_outline_rounded
+                  : Icons.insert_drive_file_outlined,
+              size: 14,
+              color: isError ? const Color(0xFFC44949) : DunesColors.text3,
+            ),
+          const SizedBox(width: 5),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 150),
+            child: Text(
+              att.name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: DunesTypography.sans(
+                fontSize: 11.5,
+                color: isError ? const Color(0xFFC44949) : DunesColors.text2,
+              ),
+            ),
+          ),
+          if (size.isNotEmpty && !isError) ...[
+            const SizedBox(width: 4),
+            Text(
+              size,
+              style: DunesTypography.sans(
+                fontSize: 10.5,
+                color: DunesColors.text3,
+              ),
+            ),
+          ],
+          if (onRemove != null) ...[
+            const SizedBox(width: 4),
+            GestureDetector(
+              onTap: onRemove,
+              child: const Icon(
+                Icons.close_rounded,
+                size: 14,
+                color: DunesColors.text3,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _CommentAttachments extends StatelessWidget {
+  const _CommentAttachments({
+    required this.attachments,
+    required this.urlOf,
+    required this.onOpen,
+  });
+
+  final List<ApprovalCommentAttachment> attachments;
+  final Future<String> Function(ApprovalCommentAttachment) urlOf;
+  final Future<void> Function(ApprovalCommentAttachment) onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    final images = [for (final a in attachments) if (a.isImage) a];
+    final files = [for (final a in attachments) if (!a.isImage) a];
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (images.isNotEmpty)
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              for (final att in images) _imageThumb(att),
+            ],
+          ),
+        if (images.isNotEmpty && files.isNotEmpty) const SizedBox(height: 6),
+        for (var i = 0; i < files.length; i++) ...[
+          if (i > 0) const SizedBox(height: 4),
+          _fileRow(files[i]),
+        ],
+      ],
+    );
+  }
+
+  Widget _imageThumb(ApprovalCommentAttachment att) {
+    return GestureDetector(
+      onTap: () => onOpen(att),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(8),
+        child: SizedBox(
+          width: 72,
+          height: 72,
+          child: FutureBuilder<String>(
+            future: urlOf(att),
+            builder: (context, snap) {
+              final url = snap.data ?? '';
+              if (url.isEmpty) {
+                return Container(
+                  color: DunesColors.bgSoft,
+                  alignment: Alignment.center,
+                  child: snap.connectionState == ConnectionState.waiting
+                      ? const SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(strokeWidth: 1.6),
+                        )
+                      : const Icon(
+                          Icons.broken_image_outlined,
+                          size: 20,
+                          color: DunesColors.text3,
+                        ),
+                );
+              }
+              return Image.network(
+                url,
+                fit: BoxFit.cover,
+                errorBuilder: (_, _, _) => Container(
+                  color: DunesColors.bgSoft,
+                  alignment: Alignment.center,
+                  child: const Icon(
+                    Icons.broken_image_outlined,
+                    size: 20,
+                    color: DunesColors.text3,
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _fileRow(ApprovalCommentAttachment att) {
+    final size = _fmtAttachmentSize(att.size);
+    return GestureDetector(
+      onTap: () => onOpen(att),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        decoration: BoxDecoration(
+          color: DunesColors.bgSoft,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: DunesColors.borderSoft),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(
+              Icons.insert_drive_file_outlined,
+              size: 15,
+              color: DunesColors.text3,
+            ),
+            const SizedBox(width: 6),
+            Flexible(
+              child: Text(
+                att.name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: DunesTypography.sans(
+                  fontSize: 12,
+                  color: const Color(0xFF3B7BB5),
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+            if (size.isNotEmpty) ...[
+              const SizedBox(width: 6),
+              Text(
+                size,
+                style: DunesTypography.sans(
+                  fontSize: 10.5,
+                  color: DunesColors.text3,
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _MentionText extends StatelessWidget {

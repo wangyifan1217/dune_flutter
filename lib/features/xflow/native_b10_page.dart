@@ -9,6 +9,7 @@ import '../auth/auth_session.dart';
 import '../shell/dunes_toast.dart';
 import 'approval_chat_forward.dart';
 import 'approval_chat_share.dart';
+import 'approval_pending_nav.dart';
 import 'xflow_detail_renderer.dart';
 import 'xflow_models.dart';
 import 'xflow_service.dart';
@@ -75,6 +76,7 @@ class NativeB10Page extends StatefulWidget {
     required this.backScreen,
     required this.onReedit,
     this.onApprovalCompleted,
+    this.onOpenPendingItem,
   });
 
   final AuthSession session;
@@ -84,6 +86,8 @@ class NativeB10Page extends StatefulWidget {
   final String backScreen;
   final void Function(int proposalId) onReedit;
   final VoidCallback? onApprovalCompleted;
+  /// 打开下一条待审批（宿主导航 / 覆盖层切换）。
+  final ValueChanged<XflowProposalItem>? onOpenPendingItem;
 
   @override
   State<NativeB10Page> createState() => _NativeB10PageState();
@@ -98,6 +102,8 @@ class _NativeB10PageState extends State<NativeB10Page> {
   bool _ccLoading = true;
   String? _ccError;
   bool _forwarding = false;
+  int _pendingTotal = 0;
+  bool _pendingBusy = false;
 
   @override
   void initState() {
@@ -150,12 +156,68 @@ class _NativeB10PageState extends State<NativeB10Page> {
         _loading = false;
       });
       _loadCcRules();
+      if (bundle.myTodo != null) {
+        unawaited(_refreshPendingQueue());
+      } else if (mounted) {
+        setState(() => _pendingTotal = 0);
+      }
     } catch (e) {
       if (!mounted) return;
       setState(() {
         _error = friendlyErrorText(e);
         _loading = false;
       });
+    }
+  }
+
+  Future<MyOpenApprovalQueue?> _refreshPendingQueue() async {
+    try {
+      final queue = await loadMyOpenApprovalQueue(_service);
+      if (!mounted) return null;
+      setState(() => _pendingTotal = queue.total);
+      return queue;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _goNextPending({required bool afterDecision}) async {
+    if (_pendingBusy) return;
+    setState(() => _pendingBusy = true);
+    try {
+      final queue = await loadMyOpenApprovalQueue(_service);
+      if (!mounted) return;
+      setState(() => _pendingTotal = queue.total);
+
+      final XflowProposalItem? next = afterDecision
+          ? queue.firstOrNull
+          : queue.nextAfter(
+              businessType: 'PROPOSAL',
+              businessId: widget.proposalId,
+            );
+
+      if (next == null) {
+        showDunesToast(context, '没有未审批的内容了');
+        if (afterDecision) await _load();
+        return;
+      }
+
+      final open = widget.onOpenPendingItem;
+      if (open == null) {
+        if (afterDecision) await _load();
+        return;
+      }
+      open(next);
+    } catch (e) {
+      if (!mounted) return;
+      showDunesToast(
+        context,
+        friendlyErrorText(e, fallback: '加载待审批失败'),
+        kind: DunesToastKind.error,
+      );
+      if (afterDecision) await _load();
+    } finally {
+      if (mounted) setState(() => _pendingBusy = false);
     }
   }
 
@@ -170,7 +232,7 @@ class _NativeB10PageState extends State<NativeB10Page> {
     if (!mounted) return;
     showDunesToast(context, '已通过审批');
     widget.onApprovalCompleted?.call();
-    await _load();
+    await _goNextPending(afterDecision: true);
   }
 
   Future<void> _reject(String comment) async {
@@ -184,7 +246,7 @@ class _NativeB10PageState extends State<NativeB10Page> {
     if (!mounted) return;
     showDunesToast(context, '已驳回');
     widget.onApprovalCompleted?.call();
-    await _load();
+    await _goNextPending(afterDecision: true);
   }
 
   Future<void> _forwardApproval() async {
@@ -285,11 +347,15 @@ class _NativeB10PageState extends State<NativeB10Page> {
   Future<void> _deleteDraft() async {
     final id = _bundle?.detail.id ?? 0;
     if (id <= 0) return;
+    final isDraft =
+        (_bundle?.detail.status ?? '').toLowerCase() == 'draft';
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('删除草稿'),
-        content: const Text('确认删除此草稿？删除后不可恢复。'),
+        title: Text(isDraft ? '删除草稿' : '删除单据'),
+        content: Text(
+          isDraft ? '确认删除此草稿？删除后不可恢复。' : '确认删除此已作废单据？删除后不可恢复。',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
@@ -306,7 +372,7 @@ class _NativeB10PageState extends State<NativeB10Page> {
     try {
       await _service.deleteProposal(id);
       if (!mounted) return;
-      showDunesToast(context, '草稿已删除');
+      showDunesToast(context, isDraft ? '草稿已删除' : '单据已删除');
       widget.navigation.popTo(widget.backScreen);
     } catch (e) {
       if (!mounted) return;
@@ -443,6 +509,7 @@ class _NativeB10PageState extends State<NativeB10Page> {
     return ColoredBox(
       color: DunesColors.bgApp,
       child: SafeArea(
+        bottom: false,
         child: Column(
           children: [
             XflowDsBar(
@@ -502,6 +569,14 @@ class _NativeB10PageState extends State<NativeB10Page> {
                       ),
                     ),
             ),
+            if (_bundle?.myTodo != null)
+              XfDetNextPendingFooter(
+                totalCount: _pendingTotal,
+                loading: _pendingBusy,
+                onPressed: _pendingBusy
+                    ? null
+                    : () => unawaited(_goNextPending(afterDecision: false)),
+              ),
           ],
         ),
       ),

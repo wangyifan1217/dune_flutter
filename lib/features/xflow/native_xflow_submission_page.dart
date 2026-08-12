@@ -9,6 +9,7 @@ import '../auth/auth_session.dart';
 import '../shell/dunes_toast.dart';
 import 'approval_chat_forward.dart';
 import 'approval_chat_share.dart';
+import 'approval_pending_nav.dart';
 import 'native_b10_page.dart';
 import 'xflow_detail_comments.dart';
 import 'xflow_detail_logic.dart';
@@ -30,6 +31,7 @@ class NativeXflowSubmissionPage extends StatefulWidget {
     required this.onEdit,
     this.todoHint,
     this.onApprovalCompleted,
+    this.onOpenPendingItem,
   });
 
   final AuthSession session;
@@ -40,6 +42,8 @@ class NativeXflowSubmissionPage extends StatefulWidget {
   final VoidCallback onEdit;
   final XflowTodoHint? todoHint;
   final VoidCallback? onApprovalCompleted;
+  /// 打开下一条待审批（宿主导航 / 覆盖层切换）。
+  final ValueChanged<XflowProposalItem>? onOpenPendingItem;
 
   @override
   State<NativeXflowSubmissionPage> createState() =>
@@ -56,6 +60,8 @@ class _NativeXflowSubmissionPageState extends State<NativeXflowSubmissionPage> {
   String? _error;
   bool _loading = true;
   bool _forwarding = false;
+  int _pendingTotal = 0;
+  bool _pendingBusy = false;
 
   @override
   void initState() {
@@ -100,12 +106,68 @@ class _NativeXflowSubmissionPageState extends State<NativeXflowSubmissionPage> {
         _assigneeNames = assigneeNames;
         _loading = false;
       });
+      if (myTodo != null) {
+        unawaited(_refreshPendingQueue());
+      } else if (mounted) {
+        setState(() => _pendingTotal = 0);
+      }
     } catch (e) {
       if (!mounted) return;
       setState(() {
         _error = friendlyErrorText(e);
         _loading = false;
       });
+    }
+  }
+
+  Future<MyOpenApprovalQueue?> _refreshPendingQueue() async {
+    try {
+      final queue = await loadMyOpenApprovalQueue(_service);
+      if (!mounted) return null;
+      setState(() => _pendingTotal = queue.total);
+      return queue;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _goNextPending({required bool afterDecision}) async {
+    if (_pendingBusy) return;
+    setState(() => _pendingBusy = true);
+    try {
+      final queue = await loadMyOpenApprovalQueue(_service);
+      if (!mounted) return;
+      setState(() => _pendingTotal = queue.total);
+
+      final XflowProposalItem? next = afterDecision
+          ? queue.firstOrNull
+          : queue.nextAfter(
+              businessType: widget.businessType,
+              businessId: widget.businessId,
+            );
+
+      if (next == null) {
+        showDunesToast(context, '没有未审批的内容了');
+        if (afterDecision) await _load();
+        return;
+      }
+
+      final open = widget.onOpenPendingItem;
+      if (open == null) {
+        if (afterDecision) await _load();
+        return;
+      }
+      open(next);
+    } catch (e) {
+      if (!mounted) return;
+      showDunesToast(
+        context,
+        friendlyErrorText(e, fallback: '加载待审批失败'),
+        kind: DunesToastKind.error,
+      );
+      if (afterDecision) await _load();
+    } finally {
+      if (mounted) setState(() => _pendingBusy = false);
     }
   }
 
@@ -144,6 +206,107 @@ class _NativeXflowSubmissionPageState extends State<NativeXflowSubmissionPage> {
     return detail != null &&
         detail.status.toUpperCase() == 'PENDING' &&
         !(_trail?.steps.any((step) => step.decision.trim().isNotEmpty) ?? true);
+  }
+
+  /// 已作废：创建人可删除（与草稿一致）。
+  bool get _canDeleteVoided {
+    if (_isApprover) return false;
+    final detail = _detail;
+    if (detail == null || detail.createdById != widget.session.userId) {
+      return false;
+    }
+    return _resolvedStatus.toUpperCase() == 'VOIDED';
+  }
+
+  Future<void> _deleteVoided() async {
+    final detail = _detail;
+    if (detail == null) return;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('删除单据'),
+        content: const Text('确认删除此已作废单据？删除后不可恢复。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('删除'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    try {
+      await _service.deleteDraft(
+        businessType: detail.businessType,
+        businessId: detail.businessId,
+      );
+      if (!mounted) return;
+      showDunesToast(context, '单据已删除');
+      widget.navigation.popTo(widget.backScreen);
+    } catch (e) {
+      if (!mounted) return;
+      showDunesToast(
+        context,
+        '删除失败：${friendlyErrorText(e)}',
+        kind: DunesToastKind.error,
+      );
+    }
+  }
+
+  /// 与提案详情对齐：仅提交人本人可对「已驳回」单据重新填写 / 作废。
+  bool get _canReedit {
+    if (_isApprover) return false;
+    final detail = _detail;
+    if (detail == null) return false;
+    final st = _resolvedStatus.toLowerCase();
+    if (st != 'rejected') return false;
+    final uid = widget.session.userId;
+    if (uid <= 0) return false;
+    final initiator = _trail?.initiatorId ?? 0;
+    return detail.createdById == uid || (initiator > 0 && initiator == uid);
+  }
+
+  Future<void> _voidSubmission() async {
+    final detail = _detail;
+    if (detail == null || !_canReedit) return;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('作废审批单'),
+        content: const Text('确认作废此审批单？作废后不可恢复。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('确认作废'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    try {
+      await _service.voidSubmission(
+        businessType: detail.businessType,
+        businessId: detail.businessId,
+      );
+      if (!mounted) return;
+      showDunesToast(context, '审批单已作废');
+      await _load();
+    } catch (e) {
+      if (!mounted) return;
+      showDunesToast(
+        context,
+        friendlyErrorText(e, fallback: '作废失败，请稍后重试'),
+        kind: DunesToastKind.error,
+      );
+    }
   }
 
   Future<void> _withdraw() async {
@@ -200,7 +363,7 @@ class _NativeXflowSubmissionPageState extends State<NativeXflowSubmissionPage> {
     if (!mounted) return;
     showDunesToast(context, '已通过审批');
     widget.onApprovalCompleted?.call();
-    await _load();
+    await _goNextPending(afterDecision: true);
   }
 
   Future<void> _reject(String comment) async {
@@ -218,7 +381,7 @@ class _NativeXflowSubmissionPageState extends State<NativeXflowSubmissionPage> {
     if (!mounted) return;
     showDunesToast(context, '已驳回');
     widget.onApprovalCompleted?.call();
-    await _load();
+    await _goNextPending(afterDecision: true);
   }
 
   String get _submitterName {
@@ -277,6 +440,7 @@ class _NativeXflowSubmissionPageState extends State<NativeXflowSubmissionPage> {
       myTodo: _myTodo,
       assigneeNames: _assigneeNames,
       layout: template.layout,
+      canReedit: _canReedit,
     );
   }
 
@@ -410,6 +574,16 @@ class _NativeXflowSubmissionPageState extends State<NativeXflowSubmissionPage> {
                       children: [
                         if (hero != null)
                           XfDetHero(detail: hero, showStatus: false),
+                        if (bundle != null) ...[
+                          XfDetClosedBanner(detail: bundle.detail),
+                          XfDetRejectBanner(
+                            detail: bundle.detail,
+                            info: lastRejectStep(
+                              bundle.trail,
+                              bundle.assigneeNames,
+                            ),
+                          ),
+                        ],
                         XflowFormCard(
                           title: titledForm,
                           child: XfDetFormSections(
@@ -448,12 +622,25 @@ class _NativeXflowSubmissionPageState extends State<NativeXflowSubmissionPage> {
                             onReject: _reject,
                           ),
                         ],
+                        XfDetActions(
+                          detail: bundle.detail,
+                          canReedit: bundle.canReedit,
+                          onReedit: widget.onEdit,
+                          onVoid: _voidSubmission,
+                        ),
                       ],
                     ),
                     ),
             ),
-            if (!_isApprover &&
-                (_canWithdraw || detail?.status.toUpperCase() == 'DRAFT'))
+            if (_myTodo != null)
+              XfDetNextPendingFooter(
+                totalCount: _pendingTotal,
+                loading: _pendingBusy,
+                onPressed: _pendingBusy
+                    ? null
+                    : () => unawaited(_goNextPending(afterDecision: false)),
+              )
+            else if (_canWithdraw || detail?.status.toUpperCase() == 'DRAFT')
               XflowXfActionBar(
                 label: detail?.status.toUpperCase() == 'DRAFT'
                     ? '编辑并重新提交'
@@ -462,6 +649,13 @@ class _NativeXflowSubmissionPageState extends State<NativeXflowSubmissionPage> {
                 onPressed: detail?.status.toUpperCase() == 'DRAFT'
                     ? widget.onEdit
                     : _withdraw,
+              )
+            else if (_canDeleteVoided)
+              XflowXfActionBar(
+                label: '删除',
+                icon: Icons.delete_outline,
+                loading: false,
+                onPressed: _deleteVoided,
               ),
           ],
         ),

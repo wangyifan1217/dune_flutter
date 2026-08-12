@@ -6,47 +6,43 @@ import '../../core/theme/dunes_theme.dart';
 import '../../core/util/friendly_error.dart';
 import '../../core/widgets/horizontal_drag_scroll_view.dart';
 import '../auth/auth_session.dart';
-import '../meeting/native_meeting_models.dart';
-import '../meeting/native_meeting_service.dart';
+import 'kb_supervise_models.dart';
+import 'kb_supervise_service.dart';
 
 const _themePurple = Color(0xFF7B5CD8);
 
-/// 千机 · 会议纪要监管：关键词搜索 + 部门筛选（范围由后端控制）。
-class NativeQianjiMeetingSupervisePage extends StatefulWidget {
-  const NativeQianjiMeetingSupervisePage({
+/// NOVA · 知识库统计：按人统计知识库数量，部门筛选逻辑与会议监管一致。
+class NativeQianjiKbSupervisePage extends StatefulWidget {
+  const NativeQianjiKbSupervisePage({
     super.key,
     required this.session,
     required this.onBack,
-    required this.onOpenDetail,
   });
 
   final AuthSession session;
   final VoidCallback onBack;
-  final ValueChanged<int> onOpenDetail;
 
   @override
-  State<NativeQianjiMeetingSupervisePage> createState() =>
-      _NativeQianjiMeetingSupervisePageState();
+  State<NativeQianjiKbSupervisePage> createState() =>
+      _NativeQianjiKbSupervisePageState();
 }
 
-class _NativeQianjiMeetingSupervisePageState
-    extends State<NativeQianjiMeetingSupervisePage> {
-  late final NativeMeetingService _service = NativeMeetingService(
-    session: widget.session,
-  );
+class _NativeQianjiKbSupervisePageState
+    extends State<NativeQianjiKbSupervisePage> {
+  late final KbSuperviseService _service =
+      KbSuperviseService(session: widget.session);
   final ScrollController _scrollController = ScrollController();
   final TextEditingController _keywordCtrl = TextEditingController();
 
-  List<NativeMeetingSummary> _rows = const [];
-  List<NativeSuperviseDeptStat> _deptStats = const [];
-  /// null = 全部；-1 = 未分配部门；>0 = 指定部门
+  List<KbSuperviseRow> _rows = const [];
+  List<KbSuperviseDeptStat> _deptStats = const [];
   int? _selectedDepartmentId;
   bool _loading = true;
   bool _loadingMore = false;
   bool _hasMore = true;
   bool _superviseAll = false;
   int _page = 0;
-  int _totalMeetings = 0;
+  int _totalFolders = 0;
   static const int _pageSize = 20;
   String? _error;
   Timer? _keywordDebounce;
@@ -93,15 +89,15 @@ class _NativeQianjiMeetingSupervisePageState
       });
     }
     try {
-      final listFuture = _service.fetchSuperviseListPage(
+      final listFuture = _service.fetchListPage(
         page: 0,
         size: _pageSize,
         keyword: _keywordCtrl.text,
         departmentId: _selectedDepartmentId,
       );
-      final statsFuture = _service.fetchSuperviseDeptStats();
+      final statsFuture = _service.fetchDeptStats();
       final result = await listFuture;
-      NativeSuperviseDeptStatsResult? stats;
+      KbSuperviseDeptStatsResult? stats;
       try {
         stats = await statsFuture;
       } catch (_) {
@@ -115,7 +111,7 @@ class _NativeQianjiMeetingSupervisePageState
             result.items.length < result.totalCount;
         if (stats != null) {
           _deptStats = stats.departments;
-          _totalMeetings = stats.totalMeetings;
+          _totalFolders = stats.totalFolders;
           _superviseAll = stats.superviseAll;
         }
       });
@@ -137,7 +133,7 @@ class _NativeQianjiMeetingSupervisePageState
     setState(() => _loadingMore = true);
     try {
       final nextPage = _page + 1;
-      final result = await _service.fetchSuperviseListPage(
+      final result = await _service.fetchListPage(
         page: nextPage,
         size: _pageSize,
         keyword: _keywordCtrl.text,
@@ -145,7 +141,7 @@ class _NativeQianjiMeetingSupervisePageState
       );
       if (!mounted) return;
       setState(() {
-        _rows = <NativeMeetingSummary>[..._rows, ...result.items];
+        _rows = <KbSuperviseRow>[..._rows, ...result.items];
         _page = nextPage;
         _hasMore = result.items.length >= _pageSize;
       });
@@ -166,26 +162,6 @@ class _NativeQianjiMeetingSupervisePageState
     if (_keywordCtrl.text.isEmpty) return;
     _keywordCtrl.clear();
     unawaited(_load(reset: true));
-  }
-
-  String _statusLabel(String status) {
-    return switch (status.toUpperCase()) {
-      'GENERATED' => '已生成',
-      'TRANSCRIBING' => '转写中',
-      'GENERATING' => '生成中',
-      'FAILED' => '失败',
-      'DRAFT' => '草稿',
-      _ => status.isEmpty ? '未知' : status,
-    };
-  }
-
-  Color _statusColor(String status) {
-    return switch (status.toUpperCase()) {
-      'GENERATED' => DunesColors.green,
-      'TRANSCRIBING' || 'GENERATING' => DunesColors.amber,
-      'FAILED' => DunesColors.coral,
-      _ => DunesColors.text3,
-    };
   }
 
   @override
@@ -214,7 +190,7 @@ class _NativeQianjiMeetingSupervisePageState
 
   Widget _buildHeader() {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(8, 10, 16, 4),
+      padding: const EdgeInsets.fromLTRB(8, 8, 16, 4),
       child: Row(
         children: [
           InkWell(
@@ -242,7 +218,7 @@ class _NativeQianjiMeetingSupervisePageState
           const SizedBox(width: 8),
           const Expanded(
             child: Text(
-              '会议纪要监管',
+              '知识库统计',
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.w700,
@@ -250,9 +226,9 @@ class _NativeQianjiMeetingSupervisePageState
               ),
             ),
           ),
-          if (_totalMeetings > 0)
+          if (_totalFolders > 0)
             Text(
-              '合计 $_totalMeetings',
+              '合计 $_totalFolders',
               style: const TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
@@ -272,7 +248,7 @@ class _NativeQianjiMeetingSupervisePageState
         textInputAction: TextInputAction.search,
         onSubmitted: (_) => unawaited(_load(reset: true)),
         decoration: InputDecoration(
-          hintText: '搜索人名、会议名称',
+          hintText: '搜索人名',
           prefixIcon: const Icon(Icons.search_rounded, size: 20),
           suffixIcon: _keywordCtrl.text.isNotEmpty
               ? IconButton(
@@ -338,7 +314,7 @@ class _NativeQianjiMeetingSupervisePageState
               children: [
                 _DeptChip(
                   label: '全部',
-                  count: _totalMeetings,
+                  count: _totalFolders,
                   selected: _selectedDepartmentId == null,
                   onTap: () => _selectDepartment(null),
                 ),
@@ -346,9 +322,8 @@ class _NativeQianjiMeetingSupervisePageState
                 for (final d in _deptStats) ...[
                   _DeptChip(
                     label: d.departmentName,
-                    count: d.meetingCount,
-                    selected: _selectedDepartmentId ==
-                        (d.departmentId ?? -1),
+                    count: d.folderCount,
+                    selected: _selectedDepartmentId == (d.departmentId ?? -1),
                     onTap: () => _selectDepartment(d.departmentId ?? -1),
                   ),
                   const SizedBox(width: 8),
@@ -399,7 +374,7 @@ class _NativeQianjiMeetingSupervisePageState
           SizedBox(height: 120),
           Center(
             child: Text(
-              '暂无会议纪要',
+              '暂无知识库数据',
               style: TextStyle(color: DunesColors.text3, fontSize: 14),
             ),
           ),
@@ -425,12 +400,7 @@ class _NativeQianjiMeetingSupervisePageState
             ),
           );
         }
-        return _MeetingCard(
-          row: _rows[index],
-          statusLabel: _statusLabel(_rows[index].status),
-          statusColor: _statusColor(_rows[index].status),
-          onTap: () => widget.onOpenDetail(_rows[index].meetingId),
-        );
+        return _PersonCard(row: _rows[index]);
       },
     );
   }
@@ -493,103 +463,58 @@ class _DeptChip extends StatelessWidget {
   }
 }
 
-class _MeetingCard extends StatelessWidget {
-  const _MeetingCard({
-    required this.row,
-    required this.statusLabel,
-    required this.statusColor,
-    required this.onTap,
-  });
+class _PersonCard extends StatelessWidget {
+  const _PersonCard({required this.row});
 
-  final NativeMeetingSummary row;
-  final String statusLabel;
-  final Color statusColor;
-  final VoidCallback onTap;
+  final KbSuperviseRow row;
 
   @override
   Widget build(BuildContext context) {
-    final title = row.title.trim().isEmpty ? '未命名会议' : row.title.trim();
-    final person = row.organizerLabel;
+    final dept = row.departmentName.trim().isEmpty
+        ? '未分配部门'
+        : row.departmentName.trim();
     return Material(
       color: Colors.white,
       borderRadius: BorderRadius.circular(12),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: const Color(0xFFE8EAED)),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
-                        color: DunesColors.text,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    statusLabel,
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: statusColor,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  const Icon(
-                    Icons.schedule_outlined,
-                    size: 14,
-                    color: DunesColors.text3,
-                  ),
-                  const SizedBox(width: 4),
-                  Text(
-                    row.displayTime,
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: const Color(0xFFE8EAED)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    row.personLabel,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
-                      fontSize: 12,
-                      color: DunesColors.text3,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                      color: DunesColors.text,
                     ),
                   ),
-                  if (person.isNotEmpty) ...[
-                    const SizedBox(width: 14),
-                    const Icon(
-                      Icons.person_outline,
-                      size: 14,
-                      color: DunesColors.text3,
-                    ),
-                    const SizedBox(width: 4),
-                    Flexible(
-                      child: Text(
-                        person,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: DunesColors.text3,
-                        ),
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ],
-          ),
+                ),
+                Text(
+                  '${row.folderCount} 知识库',
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: _themePurple,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Text(
+              '$dept · ${row.documentCount} 文档',
+              style: const TextStyle(fontSize: 12, color: DunesColors.text3),
+            ),
+          ],
         ),
       ),
     );

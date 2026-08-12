@@ -81,11 +81,16 @@ String friendlyErrorText(Object? error, {String fallback = '操作失败，请�
     return '仅提交人可作废或重新提交';
   }
   if (low.contains('only rejected proposal can be voided') ||
-      low.contains('proposal not rejected')) {
-    return '仅已驳回的提案可作废';
+      low.contains('only rejected submission can be voided') ||
+      low.contains('proposal not rejected') ||
+      low.contains('submission not rejected')) {
+    return '仅已驳回的单据可作废';
   }
-  if (low.contains('proposal already closed') || low.contains('proposal voided')) {
-    return '该提案已关闭，无法作废';
+  if (low.contains('proposal already closed') ||
+      low.contains('proposal voided') ||
+      low.contains('submission already closed') ||
+      low.contains('submission voided')) {
+    return '该单据已关闭，无法作废';
   }
   if (low.contains('only creator can withdraw') ||
       low.contains('only approval initiator can withdraw')) {

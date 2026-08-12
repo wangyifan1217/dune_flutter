@@ -14,8 +14,11 @@ const _hubCardColumns = 3;
 const _hubCardGap = 12.0;
 
 double _hubCardWidth(double availableWidth) {
-  return (availableWidth - (_hubCardColumns - 1) * _hubCardGap) /
-      _hubCardColumns;
+  // Floor so 3×width + 2×gap never exceeds maxWidth (avoids 4th card staying on row 1
+  // on wide screens, and prevents FP overflow wrapping early on APP).
+  final totalGap = (_hubCardColumns - 1) * _hubCardGap;
+  final raw = (availableWidth - totalGap) / _hubCardColumns;
+  return raw.floorToDouble().clamp(1.0, availableWidth);
 }
 
 /// NOVA Hub：机器人（接口目录）+ 管理入口。
@@ -24,6 +27,8 @@ class NativeQianjiHubPage extends StatefulWidget {
     super.key,
     required this.onOpenCursorAccount,
     this.onOpenMeetingSupervise,
+    this.onOpenSessionSupervise,
+    this.onOpenKbSupervise,
     this.onOpenRobotHome,
     this.onOpenRobot,
     this.session,
@@ -31,6 +36,8 @@ class NativeQianjiHubPage extends StatefulWidget {
 
   final VoidCallback onOpenCursorAccount;
   final VoidCallback? onOpenMeetingSupervise;
+  final VoidCallback? onOpenSessionSupervise;
+  final VoidCallback? onOpenKbSupervise;
   final VoidCallback? onOpenRobotHome;
   /// 点击单个机器人名片：由 Host 按 canChat 决定进聊天或提示。
   final ValueChanged<RobotRole>? onOpenRobot;
@@ -134,6 +141,20 @@ class _NativeQianjiHubPageState extends State<NativeQianjiHubPage> {
                         icon: Icons.fact_check_outlined,
                         color: _themePurple,
                         onTap: widget.onOpenMeetingSupervise,
+                      ),
+                      _NovaHubTile(
+                        title: '会话监管',
+                        subtitle: '本人及下级',
+                        icon: Icons.forum_outlined,
+                        color: _themePurple,
+                        onTap: widget.onOpenSessionSupervise,
+                      ),
+                      _NovaHubTile(
+                        title: '知识库统计',
+                        subtitle: '本人及下级',
+                        icon: Icons.folder_shared_outlined,
+                        color: _themePurple,
+                        onTap: widget.onOpenKbSupervise,
                       ),
                     ],
                   ),

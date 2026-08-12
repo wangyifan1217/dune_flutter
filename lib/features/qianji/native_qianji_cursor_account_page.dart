@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/theme/dunes_theme.dart';
 import '../../core/util/friendly_error.dart';
+import '../../core/widgets/horizontal_drag_scroll_view.dart';
 import '../auth/auth_session.dart';
 import 'cursor_supervise_models.dart';
 import 'cursor_supervise_service.dart';
@@ -312,8 +313,7 @@ class _NativeQianjiCursorAccountPageState
             ],
           ),
           const SizedBox(height: 8),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
+          HorizontalDragScrollView(
             child: Row(
               children: [
                 _DeptChip(

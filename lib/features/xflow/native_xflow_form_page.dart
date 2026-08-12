@@ -483,7 +483,11 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage>
     setState(() => _submitting = true);
     try {
       Map<String, dynamic> res;
-      if (_isDynamicSubmission && status == 'draft') {
+      // 动态审批：草稿 / 已驳回 / 已撤回 均走 submissions resubmit。
+      if (_isDynamicSubmission &&
+          (status == 'draft' ||
+              status == 'rejected' ||
+              status == 'withdrawn')) {
         res = await _service.resubmitSubmission(
           businessType: widget.editBusinessType,
           businessId: widget.editProposalId!,

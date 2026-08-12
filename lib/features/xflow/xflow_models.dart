@@ -346,6 +346,8 @@ class XflowSubmissionDetail {
     required this.createdById,
     required this.createdAt,
     this.createdByName = '',
+    this.proposalType = '',
+    this.documentKind = '',
   });
 
   final int id;
@@ -358,6 +360,9 @@ class XflowSubmissionDetail {
   final int createdById;
   final String createdByName;
   final DateTime? createdAt;
+  /// 服务端中文类型标签（模板标题），列表种类/类型展示用。
+  final String proposalType;
+  final String documentKind;
 
   factory XflowSubmissionDetail.fromJson(Map<String, dynamic> json) {
     final form = json['formData'];
@@ -373,6 +378,10 @@ class XflowSubmissionDetail {
       createdByName: (json['createdByName'] ?? json['initiatorName'] ?? '')
           .toString(),
       createdAt: DateTime.tryParse((json['createdAt'] ?? '').toString()),
+      proposalType: (json['proposalType'] ?? json['documentType'] ?? '')
+          .toString()
+          .trim(),
+      documentKind: (json['documentKind'] ?? '').toString().trim(),
     );
   }
 }
@@ -586,6 +595,50 @@ Map<String, dynamic> parseLayout(dynamic rawLayout) {
   return const <String, dynamic>{};
 }
 
+class ApprovalCommentAttachment {
+  const ApprovalCommentAttachment({
+    required this.name,
+    required this.objectKey,
+    this.size = 0,
+    this.mimeType = '',
+  });
+
+  final String name;
+  final String objectKey;
+  final int size;
+  final String mimeType;
+
+  bool get isImage {
+    if (mimeType.toLowerCase().startsWith('image/')) return true;
+    return RegExp(
+      r'\.(jpg|jpeg|png|heic|heif|gif|webp|bmp)$',
+    ).hasMatch(name.trim().toLowerCase());
+  }
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'name': name,
+        'objectKey': objectKey,
+        if (size > 0) 'size': size,
+        if (mimeType.isNotEmpty) 'mimeType': mimeType,
+      };
+
+  /// 供 resolveFileUrl / openXflowAttachment 使用的通用 item 形态。
+  Map<String, dynamic> toFileItem() => <String, dynamic>{
+        'fileName': name,
+        'objectKey': objectKey,
+        if (mimeType.isNotEmpty) 'mimeType': mimeType,
+      };
+
+  factory ApprovalCommentAttachment.fromJson(Map<String, dynamic> json) {
+    return ApprovalCommentAttachment(
+      name: (json['name'] ?? json['fileName'] ?? '附件').toString(),
+      objectKey: (json['objectKey'] ?? '').toString(),
+      size: _xflowInt(json['size']),
+      mimeType: (json['mimeType'] ?? '').toString(),
+    );
+  }
+}
+
 class ApprovalCommentItem {
   const ApprovalCommentItem({
     required this.id,
@@ -593,6 +646,7 @@ class ApprovalCommentItem {
     required this.authorName,
     required this.bodyText,
     this.mentionUserIds = const [],
+    this.attachments = const [],
     this.parentId,
     this.authorAvatarPreset = '',
     this.authorAvatarObjectKey = '',
@@ -604,6 +658,7 @@ class ApprovalCommentItem {
   final String authorName;
   final String bodyText;
   final List<int> mentionUserIds;
+  final List<ApprovalCommentAttachment> attachments;
   final int? parentId;
   final String authorAvatarPreset;
   final String authorAvatarObjectKey;

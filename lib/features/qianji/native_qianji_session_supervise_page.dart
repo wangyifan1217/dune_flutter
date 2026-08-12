@@ -6,50 +6,52 @@ import '../../core/theme/dunes_theme.dart';
 import '../../core/util/friendly_error.dart';
 import '../../core/widgets/horizontal_drag_scroll_view.dart';
 import '../auth/auth_session.dart';
-import '../meeting/native_meeting_models.dart';
-import '../meeting/native_meeting_service.dart';
+import 'session_supervise_models.dart';
+import 'session_supervise_service.dart';
 
 const _themePurple = Color(0xFF7B5CD8);
 
-/// 千机 · 会议纪要监管：关键词搜索 + 部门筛选（范围由后端控制）。
-class NativeQianjiMeetingSupervisePage extends StatefulWidget {
-  const NativeQianjiMeetingSupervisePage({
+enum _SessionRangePreset { week, d7, d30, all, custom }
+
+/// NOVA · 会话监管：按人统计会话量，支持部门与时间范围筛选。
+class NativeQianjiSessionSupervisePage extends StatefulWidget {
+  const NativeQianjiSessionSupervisePage({
     super.key,
     required this.session,
     required this.onBack,
-    required this.onOpenDetail,
   });
 
   final AuthSession session;
   final VoidCallback onBack;
-  final ValueChanged<int> onOpenDetail;
 
   @override
-  State<NativeQianjiMeetingSupervisePage> createState() =>
-      _NativeQianjiMeetingSupervisePageState();
+  State<NativeQianjiSessionSupervisePage> createState() =>
+      _NativeQianjiSessionSupervisePageState();
 }
 
-class _NativeQianjiMeetingSupervisePageState
-    extends State<NativeQianjiMeetingSupervisePage> {
-  late final NativeMeetingService _service = NativeMeetingService(
-    session: widget.session,
-  );
+class _NativeQianjiSessionSupervisePageState
+    extends State<NativeQianjiSessionSupervisePage> {
+  late final SessionSuperviseService _service =
+      SessionSuperviseService(session: widget.session);
   final ScrollController _scrollController = ScrollController();
   final TextEditingController _keywordCtrl = TextEditingController();
 
-  List<NativeMeetingSummary> _rows = const [];
-  List<NativeSuperviseDeptStat> _deptStats = const [];
-  /// null = 全部；-1 = 未分配部门；>0 = 指定部门
+  List<SessionSuperviseRow> _rows = const [];
+  List<SessionSuperviseDeptStat> _deptStats = const [];
   int? _selectedDepartmentId;
   bool _loading = true;
   bool _loadingMore = false;
   bool _hasMore = true;
   bool _superviseAll = false;
   int _page = 0;
-  int _totalMeetings = 0;
+  int _totalSessions = 0;
   static const int _pageSize = 20;
   String? _error;
   Timer? _keywordDebounce;
+
+  _SessionRangePreset _rangePreset = _SessionRangePreset.week;
+  DateTime? _customFrom;
+  DateTime? _customTo;
 
   @override
   void initState() {
@@ -65,6 +67,31 @@ class _NativeQianjiMeetingSupervisePageState
     _scrollController.dispose();
     _keywordCtrl.dispose();
     super.dispose();
+  }
+
+  (DateTime?, DateTime?) get _rangeBounds {
+    final now = DateTime.now();
+    switch (_rangePreset) {
+      case _SessionRangePreset.week:
+        // 本周一 00:00 起
+        final monday = DateTime(now.year, now.month, now.day)
+            .subtract(Duration(days: now.weekday - 1));
+        return (monday, now);
+      case _SessionRangePreset.all:
+        return (null, null);
+      case _SessionRangePreset.d7:
+        return (now.subtract(const Duration(days: 7)), now);
+      case _SessionRangePreset.d30:
+        return (now.subtract(const Duration(days: 30)), now);
+      case _SessionRangePreset.custom:
+        final from = _customFrom;
+        final to = _customTo;
+        if (from == null || to == null) return (null, null);
+        return (
+          DateTime(from.year, from.month, from.day),
+          DateTime(to.year, to.month, to.day, 23, 59, 59, 999),
+        );
+    }
   }
 
   void _onScroll() {
@@ -92,16 +119,22 @@ class _NativeQianjiMeetingSupervisePageState
         _error = null;
       });
     }
+    final bounds = _rangeBounds;
     try {
-      final listFuture = _service.fetchSuperviseListPage(
+      final listFuture = _service.fetchListPage(
         page: 0,
         size: _pageSize,
         keyword: _keywordCtrl.text,
         departmentId: _selectedDepartmentId,
+        from: bounds.$1,
+        to: bounds.$2,
       );
-      final statsFuture = _service.fetchSuperviseDeptStats();
+      final statsFuture = _service.fetchDeptStats(
+        from: bounds.$1,
+        to: bounds.$2,
+      );
       final result = await listFuture;
-      NativeSuperviseDeptStatsResult? stats;
+      SessionSuperviseDeptStatsResult? stats;
       try {
         stats = await statsFuture;
       } catch (_) {
@@ -115,7 +148,7 @@ class _NativeQianjiMeetingSupervisePageState
             result.items.length < result.totalCount;
         if (stats != null) {
           _deptStats = stats.departments;
-          _totalMeetings = stats.totalMeetings;
+          _totalSessions = stats.totalSessions;
           _superviseAll = stats.superviseAll;
         }
       });
@@ -135,17 +168,20 @@ class _NativeQianjiMeetingSupervisePageState
   Future<void> _loadMore() async {
     if (_loading || _loadingMore || !_hasMore) return;
     setState(() => _loadingMore = true);
+    final bounds = _rangeBounds;
     try {
       final nextPage = _page + 1;
-      final result = await _service.fetchSuperviseListPage(
+      final result = await _service.fetchListPage(
         page: nextPage,
         size: _pageSize,
         keyword: _keywordCtrl.text,
         departmentId: _selectedDepartmentId,
+        from: bounds.$1,
+        to: bounds.$2,
       );
       if (!mounted) return;
       setState(() {
-        _rows = <NativeMeetingSummary>[..._rows, ...result.items];
+        _rows = <SessionSuperviseRow>[..._rows, ...result.items];
         _page = nextPage;
         _hasMore = result.items.length >= _pageSize;
       });
@@ -168,24 +204,62 @@ class _NativeQianjiMeetingSupervisePageState
     unawaited(_load(reset: true));
   }
 
-  String _statusLabel(String status) {
-    return switch (status.toUpperCase()) {
-      'GENERATED' => '已生成',
-      'TRANSCRIBING' => '转写中',
-      'GENERATING' => '生成中',
-      'FAILED' => '失败',
-      'DRAFT' => '草稿',
-      _ => status.isEmpty ? '未知' : status,
-    };
+  Future<void> _pickCustomRange() async {
+    final now = DateTime.now();
+    final initialStart = _customFrom ?? now.subtract(const Duration(days: 7));
+    final initialEnd = _customTo ?? now;
+    final range = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime(2020),
+      lastDate: DateTime(now.year + 1),
+      initialDateRange: DateTimeRange(start: initialStart, end: initialEnd),
+      helpText: '选择时间范围',
+      builder: (ctx, child) {
+        final base = Theme.of(ctx);
+        return Theme(
+          data: base.copyWith(
+            colorScheme: base.colorScheme.copyWith(
+              primary: _themePurple,
+              onPrimary: Colors.white,
+              surfaceTint: Colors.transparent,
+            ),
+            datePickerTheme: base.datePickerTheme.copyWith(
+              rangeSelectionBackgroundColor: const Color(0xFFEFEAFA),
+              backgroundColor: Colors.white,
+              headerBackgroundColor: Colors.white,
+              headerForegroundColor: DunesColors.text,
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+    if (range == null || !mounted) return;
+    setState(() {
+      _rangePreset = _SessionRangePreset.custom;
+      _customFrom = range.start;
+      _customTo = range.end;
+    });
+    unawaited(_load(reset: true));
   }
 
-  Color _statusColor(String status) {
-    return switch (status.toUpperCase()) {
-      'GENERATED' => DunesColors.green,
-      'TRANSCRIBING' || 'GENERATING' => DunesColors.amber,
-      'FAILED' => DunesColors.coral,
-      _ => DunesColors.text3,
-    };
+  void _setRangePreset(_SessionRangePreset preset) {
+    if (preset == _SessionRangePreset.custom) {
+      unawaited(_pickCustomRange());
+      return;
+    }
+    if (_rangePreset == preset) return;
+    setState(() => _rangePreset = preset);
+    unawaited(_load(reset: true));
+  }
+
+  String get _customRangeLabel {
+    final from = _customFrom;
+    final to = _customTo;
+    if (from == null || to == null) return '自定义';
+    String fmt(DateTime d) =>
+        '${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+    return '${fmt(from)}~${fmt(to)}';
   }
 
   @override
@@ -199,6 +273,7 @@ class _NativeQianjiMeetingSupervisePageState
           children: [
             _buildHeader(),
             _buildKeywordSearch(),
+            _buildRangeFilter(),
             _buildDeptFilter(),
             Expanded(
               child: RefreshIndicator(
@@ -214,7 +289,7 @@ class _NativeQianjiMeetingSupervisePageState
 
   Widget _buildHeader() {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(8, 10, 16, 4),
+      padding: const EdgeInsets.fromLTRB(8, 8, 16, 4),
       child: Row(
         children: [
           InkWell(
@@ -242,7 +317,7 @@ class _NativeQianjiMeetingSupervisePageState
           const SizedBox(width: 8),
           const Expanded(
             child: Text(
-              '会议纪要监管',
+              '会话监管',
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.w700,
@@ -250,9 +325,9 @@ class _NativeQianjiMeetingSupervisePageState
               ),
             ),
           ),
-          if (_totalMeetings > 0)
+          if (_totalSessions > 0)
             Text(
-              '合计 $_totalMeetings',
+              '合计 $_totalSessions',
               style: const TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
@@ -272,7 +347,7 @@ class _NativeQianjiMeetingSupervisePageState
         textInputAction: TextInputAction.search,
         onSubmitted: (_) => unawaited(_load(reset: true)),
         decoration: InputDecoration(
-          hintText: '搜索人名、会议名称',
+          hintText: '搜索人名',
           prefixIcon: const Icon(Icons.search_rounded, size: 20),
           suffixIcon: _keywordCtrl.text.isNotEmpty
               ? IconButton(
@@ -299,6 +374,49 @@ class _NativeQianjiMeetingSupervisePageState
             borderRadius: BorderRadius.circular(10),
             borderSide: const BorderSide(color: _themePurple),
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRangeFilter() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+      child: HorizontalDragScrollView(
+        child: Row(
+          children: [
+            _RangeChip(
+              label: '本周',
+              selected: _rangePreset == _SessionRangePreset.week,
+              onTap: () => _setRangePreset(_SessionRangePreset.week),
+            ),
+            const SizedBox(width: 8),
+            _RangeChip(
+              label: '近7天',
+              selected: _rangePreset == _SessionRangePreset.d7,
+              onTap: () => _setRangePreset(_SessionRangePreset.d7),
+            ),
+            const SizedBox(width: 8),
+            _RangeChip(
+              label: '近30天',
+              selected: _rangePreset == _SessionRangePreset.d30,
+              onTap: () => _setRangePreset(_SessionRangePreset.d30),
+            ),
+            const SizedBox(width: 8),
+            _RangeChip(
+              label: '全部',
+              selected: _rangePreset == _SessionRangePreset.all,
+              onTap: () => _setRangePreset(_SessionRangePreset.all),
+            ),
+            const SizedBox(width: 8),
+            _RangeChip(
+              label: _rangePreset == _SessionRangePreset.custom
+                  ? _customRangeLabel
+                  : '自定义',
+              selected: _rangePreset == _SessionRangePreset.custom,
+              onTap: () => _setRangePreset(_SessionRangePreset.custom),
+            ),
+          ],
         ),
       ),
     );
@@ -338,7 +456,7 @@ class _NativeQianjiMeetingSupervisePageState
               children: [
                 _DeptChip(
                   label: '全部',
-                  count: _totalMeetings,
+                  count: _totalSessions,
                   selected: _selectedDepartmentId == null,
                   onTap: () => _selectDepartment(null),
                 ),
@@ -346,9 +464,8 @@ class _NativeQianjiMeetingSupervisePageState
                 for (final d in _deptStats) ...[
                   _DeptChip(
                     label: d.departmentName,
-                    count: d.meetingCount,
-                    selected: _selectedDepartmentId ==
-                        (d.departmentId ?? -1),
+                    count: d.sessionCount,
+                    selected: _selectedDepartmentId == (d.departmentId ?? -1),
                     onTap: () => _selectDepartment(d.departmentId ?? -1),
                   ),
                   const SizedBox(width: 8),
@@ -399,7 +516,7 @@ class _NativeQianjiMeetingSupervisePageState
           SizedBox(height: 120),
           Center(
             child: Text(
-              '暂无会议纪要',
+              '暂无会话数据',
               style: TextStyle(color: DunesColors.text3, fontSize: 14),
             ),
           ),
@@ -425,13 +542,49 @@ class _NativeQianjiMeetingSupervisePageState
             ),
           );
         }
-        return _MeetingCard(
-          row: _rows[index],
-          statusLabel: _statusLabel(_rows[index].status),
-          statusColor: _statusColor(_rows[index].status),
-          onTap: () => widget.onOpenDetail(_rows[index].meetingId),
-        );
+        return _PersonCard(row: _rows[index]);
       },
+    );
+  }
+}
+
+class _RangeChip extends StatelessWidget {
+  const _RangeChip({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: selected ? const Color(0xFFF0EEF7) : Colors.white,
+      borderRadius: BorderRadius.circular(8),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(8),
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: selected ? _themePurple : const Color(0xFFE8EAED),
+            ),
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+              color: selected ? _themePurple : DunesColors.text2,
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
@@ -493,104 +646,56 @@ class _DeptChip extends StatelessWidget {
   }
 }
 
-class _MeetingCard extends StatelessWidget {
-  const _MeetingCard({
-    required this.row,
-    required this.statusLabel,
-    required this.statusColor,
-    required this.onTap,
-  });
+class _PersonCard extends StatelessWidget {
+  const _PersonCard({required this.row});
 
-  final NativeMeetingSummary row;
-  final String statusLabel;
-  final Color statusColor;
-  final VoidCallback onTap;
+  final SessionSuperviseRow row;
 
   @override
   Widget build(BuildContext context) {
-    final title = row.title.trim().isEmpty ? '未命名会议' : row.title.trim();
-    final person = row.organizerLabel;
-    return Material(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(12),
-      child: InkWell(
+    final dept = row.departmentName.trim().isEmpty
+        ? '未分配部门'
+        : row.departmentName.trim();
+    return Container(
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
         borderRadius: BorderRadius.circular(12),
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: const Color(0xFFE8EAED)),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+        border: Border.all(color: const Color(0xFFE8EAED)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
             children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
-                        color: DunesColors.text,
-                      ),
-                    ),
+              Expanded(
+                child: Text(
+                  row.personLabel,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    color: DunesColors.text,
                   ),
-                  const SizedBox(width: 8),
-                  Text(
-                    statusLabel,
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: statusColor,
-                    ),
-                  ),
-                ],
+                ),
               ),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  const Icon(
-                    Icons.schedule_outlined,
-                    size: 14,
-                    color: DunesColors.text3,
-                  ),
-                  const SizedBox(width: 4),
-                  Text(
-                    row.displayTime,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: DunesColors.text3,
-                    ),
-                  ),
-                  if (person.isNotEmpty) ...[
-                    const SizedBox(width: 14),
-                    const Icon(
-                      Icons.person_outline,
-                      size: 14,
-                      color: DunesColors.text3,
-                    ),
-                    const SizedBox(width: 4),
-                    Flexible(
-                      child: Text(
-                        person,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: DunesColors.text3,
-                        ),
-                      ),
-                    ),
-                  ],
-                ],
+              Text(
+                '已处理 ${row.sessionCount} 会话',
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: _themePurple,
+                ),
               ),
             ],
           ),
-        ),
+          const SizedBox(height: 6),
+          Text(
+            '$dept · 共 ${row.turnCount} 条',
+            style: const TextStyle(fontSize: 12, color: DunesColors.text3),
+          ),
+        ],
       ),
     );
   }

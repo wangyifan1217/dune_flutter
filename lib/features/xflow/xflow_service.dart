@@ -233,6 +233,14 @@ class XflowService {
 
   Uri _uri(String path) => Uri.parse('${session.apiBase}$path');
 
+  /// 仅 OPEN 待我审批（不 enrich），供详情页「下一条」队列使用。
+  Future<List<XflowProposalItem>> fetchMyOpenApprovalInbox() async {
+    final rows = await _requestList(
+      '/workbench/inbox?kind=APPROVAL&status=OPEN',
+    );
+    return _dedupeB1Todos(_mapInboxApprovalRows(rows));
+  }
+
   Future<List<XflowProposalItem>> fetchB1Approvals() async {
     // 「我审批的」同时展示待办和我已处理的审批：OPEN 仍是唯一的可审批依据，
     // DONE 则仅用于“已通过 / 已驳回”历史筛选。
@@ -241,6 +249,12 @@ class XflowService {
       _requestList('/workbench/inbox?kind=APPROVAL&status=DONE'),
     ]);
     final rows = <dynamic>[...results[0], ...results[1]];
+    final out = _mapInboxApprovalRows(rows);
+    final deduped = _dedupeB1Todos(out);
+    return Future.wait(deduped.map(_enrichB1Item));
+  }
+
+  List<XflowProposalItem> _mapInboxApprovalRows(List<dynamic> rows) {
     final out = <XflowProposalItem>[];
     for (final row in rows.whereType<Map<String, dynamic>>()) {
       if ((row['kind'] ?? 'APPROVAL').toString().toUpperCase() != 'APPROVAL') {
@@ -256,7 +270,11 @@ class XflowService {
         XflowProposalItem(
           id: businessId > 0 ? businessId : todoId,
           businessType: businessType,
-          code: _preferCode(row['code'], idText, businessId > 0 ? businessId : todoId),
+          code: _preferCode(
+            row['code'],
+            idText,
+            businessId > 0 ? businessId : todoId,
+          ),
           title:
               (row['title'] ??
                       row['businessTitle'] ??
@@ -266,6 +284,11 @@ class XflowService {
           templateKey: (row['templateKey'] ?? '').toString().trim().isEmpty
               ? null
               : row['templateKey'].toString(),
+          // 种类/类型取服务端中文标签（模板标题），避免客户端用模板 key 拼英文。
+          documentKind: _trimmedOrNull(row['documentKind']),
+          proposalType:
+              _trimmedOrNull(row['proposalType'] ?? row['documentType']),
+          txType: _trimmedOrNull(row['txType']),
           // 审批卡片展示整单状态；个人 todo 的 DONE 仅说明当前用户已处理。
           status: _resolveInboxListStatus(row),
           createdByName: (row['createdByName'] ?? row['subtitle'] ?? '')
@@ -284,8 +307,7 @@ class XflowService {
         ),
       );
     }
-    final deduped = _dedupeB1Todos(out);
-    return Future.wait(deduped.map(_enrichB1Item));
+    return out;
   }
 
   String _resolveInboxListStatus(Map<String, dynamic> row) {
@@ -730,12 +752,26 @@ class XflowService {
           authorName: (map['authorName'] ?? '').toString(),
           bodyText: (map['bodyText'] ?? '').toString(),
           mentionUserIds: mentions,
+          attachments: _parseCommentAttachments(map['attachments']),
           parentId: _intNullable(map['parentId']),
           authorAvatarPreset: (map['authorAvatarPreset'] ?? '').toString(),
           authorAvatarObjectKey: (map['authorAvatarObjectKey'] ?? '').toString(),
           createdAt: _parseApiDateTime(map['createdAt']),
         ),
       );
+    }
+    return out;
+  }
+
+  List<ApprovalCommentAttachment> _parseCommentAttachments(dynamic raw) {
+    if (raw is! List) return const [];
+    final out = <ApprovalCommentAttachment>[];
+    for (final e in raw) {
+      if (e is! Map) continue;
+      final att = ApprovalCommentAttachment.fromJson(
+        Map<String, dynamic>.from(e),
+      );
+      if (att.objectKey.isNotEmpty) out.add(att);
     }
     return out;
   }
@@ -772,6 +808,7 @@ class XflowService {
     required String text,
     List<int> mentionUserIds = const [],
     int? parentId,
+    List<ApprovalCommentAttachment> attachments = const [],
   }) async {
     final bt = Uri.encodeComponent(businessType.trim().toUpperCase());
     final raw = await _request(
@@ -781,6 +818,8 @@ class XflowService {
         'text': text,
         'mentionUserIds': mentionUserIds,
         if (parentId != null && parentId > 0) 'parentId': parentId,
+        if (attachments.isNotEmpty)
+          'attachments': [for (final a in attachments) a.toJson()],
       },
     );
     final mentions = <int>[];
@@ -797,6 +836,9 @@ class XflowService {
       authorName: (raw['authorName'] ?? '').toString(),
       bodyText: (raw['bodyText'] ?? text).toString(),
       mentionUserIds: mentions,
+      attachments: raw['attachments'] is List
+          ? _parseCommentAttachments(raw['attachments'])
+          : attachments,
       parentId: _intNullable(raw['parentId']) ?? parentId,
       authorAvatarPreset: (raw['authorAvatarPreset'] ?? '').toString(),
       authorAvatarObjectKey: (raw['authorAvatarObjectKey'] ?? '').toString(),
@@ -871,8 +913,9 @@ class XflowService {
         uid > 0 &&
         detail.createdById == uid &&
         ownerId != uid;
+    // 草稿与已作废单据均允许创建人删除。
     final canDeleteDraft =
-        st == 'draft' && uid > 0 && detail.createdById == uid;
+        (st == 'draft' || st == 'voided') && uid > 0 && detail.createdById == uid;
     final canWithdraw =
         st == 'pending' &&
         uid > 0 &&
@@ -1051,6 +1094,19 @@ class XflowService {
   Future<Map<String, dynamic>> voidProposal(int proposalId) {
     return _request(
       '/xflow/proposals/$proposalId/void',
+      method: 'POST',
+      body: const <String, dynamic>{},
+    );
+  }
+
+  /// 作废已驳回的动态审批单（与提案 `/void` 对齐）。
+  Future<Map<String, dynamic>> voidSubmission({
+    required String businessType,
+    required int businessId,
+  }) {
+    final bt = Uri.encodeComponent(businessType.trim().toUpperCase());
+    return _request(
+      '/xflow/submissions/$bt/$businessId/void',
       method: 'POST',
       body: const <String, dynamic>{},
     );
@@ -1585,6 +1641,12 @@ class XflowService {
         templateKey: detail.templateKey.isNotEmpty
             ? detail.templateKey
             : item.templateKey,
+        proposalType: detail.proposalType.isNotEmpty
+            ? detail.proposalType
+            : item.proposalType,
+        documentKind: detail.documentKind.isNotEmpty
+            ? detail.documentKind
+            : item.documentKind,
         currentStep: trail?.currentStep ?? item.currentStep,
         totalSteps: trail?.steps.length ?? item.totalSteps,
       );
@@ -2052,6 +2114,11 @@ class XflowService {
   int _int(dynamic value) => _businessId(value);
 
   int? _intNullable(dynamic value) => _businessIdNullable(value);
+
+  String? _trimmedOrNull(dynamic value) {
+    final s = (value ?? '').toString().trim();
+    return s.isEmpty ? null : s;
+  }
 
   /// 解析接口时间并转为本地时区（兼容 `+00` / 无时区按 UTC）。
   DateTime? _parseApiDateTime(dynamic value) {

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/theme/dunes_theme.dart';
+import '../../core/widgets/horizontal_drag_scroll_view.dart';
 
 /// 与灯塔 / Tab 一致的主题紫。
 abstract final class QianjiPerfTheme {
@@ -432,8 +433,7 @@ class QianjiPerfFilterChips extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
+    return HorizontalDragScrollView(
       child: Row(
         children: [
           for (var i = 0; i < options.length; i++) ...[

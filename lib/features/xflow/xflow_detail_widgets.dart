@@ -242,8 +242,8 @@ class XfDetClosedBanner extends StatelessWidget {
             children: [
               Icon(Icons.block, size: 16, color: DunesColors.text2),
               const SizedBox(width: 6),
-              Text(
-                '提案已作废',
+  Text(
+                '已作废',
                 style: DunesTypography.sans(
                   fontSize: 13,
                   fontWeight: FontWeight.w700,
@@ -264,7 +264,7 @@ class XfDetClosedBanner extends StatelessWidget {
               ),
             ),
             child: Text(
-              '该提案已关闭，不可重新填写或再次提交。',
+              '该单据已关闭，不可重新填写或再次提交。',
               style: DunesTypography.sans(
                 fontSize: 12,
                 height: 1.55,
@@ -1773,6 +1773,17 @@ class XfDetActions extends StatelessWidget {
           ),
         );
       }
+    }
+    // 已作废：创建人可删除（与草稿一致）。
+    if (st == 'voided' && canDeleteDraft && onDelete != null) {
+      buttons.add(
+        _ActBtn(
+          label: '删除',
+          icon: Icons.delete_outline,
+          danger: true,
+          onPressed: onDelete!,
+        ),
+      );
     }
     // 待发起：仅代发起人(被推送人)可继续填写 / 提交审批 / 退回；推送人只读等待。
     if (st == 'pending_initiate' && isDesignatedInitiator) {

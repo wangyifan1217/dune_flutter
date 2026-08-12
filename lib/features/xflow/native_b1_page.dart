@@ -375,11 +375,14 @@ class _NativeProposalListPageState extends State<_NativeProposalListPage> {
   }
 
   Future<void> _deleteDraft(XflowProposalItem item) async {
+    final isDraft = _normalizeStatus(item.status) == 'DRAFT';
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('删除草稿'),
-        content: const Text('确认删除此草稿？删除后不可恢复。'),
+        title: Text(isDraft ? '删除草稿' : '删除单据'),
+        content: Text(
+          isDraft ? '确认删除此草稿？删除后不可恢复。' : '确认删除此已作废单据？删除后不可恢复。',
+        ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('取消')),
           FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('删除')),
@@ -558,7 +561,8 @@ class _NativeProposalListPageState extends State<_NativeProposalListPage> {
                                         mode: _cardMode,
                                         onTap: () => _openProposal(item),
                                         onDeleteDraft: widget.type == _ListType.b14 &&
-                                                _normalizeStatus(item.status) == 'DRAFT'
+                                                (_normalizeStatus(item.status) == 'DRAFT' ||
+                                                    _normalizeStatus(item.status) == 'VOIDED')
                                             ? () => _deleteDraft(item)
                                             : null,
                                       ),

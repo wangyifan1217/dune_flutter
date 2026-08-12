@@ -109,11 +109,18 @@ class AuthSessionCoordinator extends ChangeNotifier {
     return body;
   }
 
-  /// 明确被踢下线 / token 无效，不应再 refresh。
+  /// 明确被踢下线 / 账号停用 / token 无效，不应再 refresh。
   static bool shouldForceLogout(http.Response response) {
-    if (response.statusCode != 401) return false;
     final message = readApiMessage(response.body);
+    // 停用账号：flow/im 中间件返回 401，登录接口返回 403，统一强制登出。
+    if (response.statusCode == 403) {
+      return message.contains('账号已停用');
+    }
+    if (response.statusCode != 401) return false;
     if (message.contains('其他设备登录')) return true;
+    if (message.contains('账号已停用') || message.contains('账号不存在')) {
+      return true;
+    }
     if (message.contains('missing bearer token') ||
         message.contains('invalid token')) {
       return true;

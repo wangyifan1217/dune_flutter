@@ -75,10 +75,12 @@ import '../qianji/native_qianji_cursor_account_page.dart';
 import '../qianji/native_qianji_detail_page.dart';
 import '../qianji/native_qianji_hub_page.dart';
 import '../qianji/native_qianji_iteration_page.dart';
+import '../qianji/native_qianji_kb_supervise_page.dart';
 import '../qianji/native_qianji_meeting_supervise_page.dart';
 import '../qianji/native_qianji_my_perf_page.dart';
 import '../qianji/native_qianji_project_tasks_page.dart';
 import '../qianji/native_qianji_projects_page.dart';
+import '../qianji/native_qianji_session_supervise_page.dart';
 import '../qianji/native_qianji_task_detail_page.dart';
 import '../qianji/native_qianji_team_perf_page.dart';
 import '../qianji/qianji_models.dart';
@@ -2585,6 +2587,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           session: widget.session,
           onOpenCursorAccount: () => widget.navigation.go('QJC'),
           onOpenMeetingSupervise: () => widget.navigation.go('QJMM'),
+          onOpenSessionSupervise: () => widget.navigation.go('QJSS'),
+          onOpenKbSupervise: () => widget.navigation.go('QJKB'),
           onOpenRobotHome: () {
             setState(() {
               _qjrOpenedFromChat = false;
@@ -2741,6 +2745,16 @@ class _NativeScreenHostState extends State<NativeScreenHost>
             setState(() => _meetingId = meetingId);
             widget.navigation.go('QJMD');
           },
+        );
+      case 'QJSS':
+        return NativeQianjiSessionSupervisePage(
+          session: widget.session,
+          onBack: widget.navigation.back,
+        );
+      case 'QJKB':
+        return NativeQianjiKbSupervisePage(
+          session: widget.session,
+          onBack: widget.navigation.back,
         );
       case 'QJMD':
         if (_meetingId <= 0) {
@@ -3171,6 +3185,9 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         );
       case 'XFS':
         return NativeXflowSubmissionPage(
+          key: ValueKey(
+            'XFS-$_selectedSubmissionBusinessType-$_selectedSubmissionBusinessId',
+          ),
           session: widget.session,
           navigation: widget.navigation,
           businessType: _selectedSubmissionBusinessType,
@@ -3178,6 +3195,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           backScreen: _b10BackScreen,
           todoHint: _selectedTodoHint,
           onApprovalCompleted: () => _scheduleWorkbenchBadgeRefresh(),
+          onOpenPendingItem: (item) =>
+              _openProposalDetail(item, from: _b10BackScreen),
           onEdit: () {
             _openProposalEntry(
               templateKey: _xflowTemplateKey,
@@ -3189,12 +3208,15 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         );
       case 'B10':
         return NativeB10Page(
+          key: ValueKey('B10-$_selectedProposalId'),
           session: widget.session,
           navigation: widget.navigation,
           proposalId: _selectedProposalId,
           todoHint: _selectedTodoHint,
           backScreen: _b10BackScreen,
           onApprovalCompleted: () => _scheduleWorkbenchBadgeRefresh(),
+          onOpenPendingItem: (item) =>
+              _openProposalDetail(item, from: _b10BackScreen),
           onReedit: (proposalId) {
             _openProposalEntry(
               templateKey: XflowService.boundTemplateKeyForMenu(
@@ -3793,6 +3815,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       'QJTD',
       'QJMM',
       'QJMD',
+      'QJSS',
+      'QJKB',
       'QJR',
       'QJRA',
       'QJRC',
@@ -3869,6 +3893,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         screen == 'QJI' ||
         screen == 'QJMM' ||
         screen == 'QJMD' ||
+        screen == 'QJSS' ||
+        screen == 'QJKB' ||
         screen == 'QJR' ||
         screen == 'QJRA' ||
         screen == 'QJRC' ||
@@ -3950,6 +3976,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       'QJI',
       'QJMM',
       'QJMD',
+      'QJSS',
+      'QJKB',
       'QJR',
       'QJRA',
       'QJRC',
@@ -3974,6 +4002,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       'QJCD' => const ['QJ', 'QJC', 'QJCD'],
       'QJMM' => const ['QJ', 'QJMM'],
       'QJMD' => const ['QJ', 'QJMM', 'QJMD'],
+      'QJSS' => const ['QJ', 'QJSS'],
+      'QJKB' => const ['QJ', 'QJKB'],
       'QJD' => const ['QJ', 'QJD'],
       'QJI' => const ['QJ', 'QJD', 'QJI'],
       'QJM' => const ['QJ', 'QJM'],

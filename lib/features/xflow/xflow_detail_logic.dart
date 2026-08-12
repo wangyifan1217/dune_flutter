@@ -507,7 +507,7 @@ String trailSubmitterLabel(XflowProposalDetail detail, XflowApprovalTrail? trail
 
 String trailSubmitterComment(XflowProposalDetail detail) {
   final code = detail.code.isEmpty ? '—' : detail.code;
-  return '提交提案 · $code';
+  return '提交 · $code';
 }
 
 String? trailProxyInitiatorNote(XflowProposalDetail detail) {

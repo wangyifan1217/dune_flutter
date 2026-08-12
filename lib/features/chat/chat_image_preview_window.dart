@@ -447,6 +447,20 @@ class _DesktopImagePreviewHostState extends State<_DesktopImagePreviewHost> {
   }
 
   void _hideWindow() {
+    // 关闭即回到待命态并 hide 保活；勿销毁引擎（主窗侧还在复用）。
+    // macOS Dock 恢复只应亮主窗，见 AppDelegate.applicationShouldHandleReopen。
+    if (_session != null || _service != null) {
+      _service?.close();
+      if (mounted) {
+        setState(() {
+          _session = null;
+          _service = null;
+        });
+      } else {
+        _session = null;
+        _service = null;
+      }
+    }
     unawaited(widget.controller.hide());
   }
 

@@ -27,13 +27,18 @@ class AppDelegate: FlutterAppDelegate {
     // 从而跳过恢复；统一交给 Flutter _showFromTray。
     desktopWindowChannel?.invokeMethod("revealFromDock", arguments: nil)
 
-    // 原生兜底（Flutter 尚未挂上 handler 时仍能前置窗口）
-    let flutterWindows = sender.windows.filter {
-      $0.contentViewController is FlutterViewController
-    }
-    let targets = flutterWindows.isEmpty ? sender.windows : flutterWindows
-    for window in targets {
-      window.makeKeyAndOrderFront(self)
+    // 只恢复主窗口。图片预览等 multi_window 子窗关闭后仍 hide 保活，
+    // 若一并 makeKeyAndOrderFront，会出现「关了预览 → 退后台再开 → 预览又弹出」。
+    let mainWindows = sender.windows.compactMap { $0 as? MainFlutterWindow }
+    if !mainWindows.isEmpty {
+      for window in mainWindows {
+        window.makeKeyAndOrderFront(self)
+      }
+    } else {
+      // 兜底：仅前置已可见窗口，避免把隐藏的预览子窗拉起来
+      for window in sender.windows where window.isVisible {
+        window.makeKeyAndOrderFront(self)
+      }
     }
     sender.activate(ignoringOtherApps: true)
     return true

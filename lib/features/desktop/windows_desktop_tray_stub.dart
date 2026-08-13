@@ -10,6 +10,8 @@ void setWindowsTrayOnInactiveChanged(void Function(bool inactive)? callback) {}
 
 void windowsTrayReveal() {}
 
+Future<void> windowsTrayMinimize() async {}
+
 void setWindowsTrayOnBeforeQuit(Future<void> Function()? callback) {}
 
 Future<void> windowsTrayPrepareQuitForAppUpdate({bool exitProcess = false}) async {}

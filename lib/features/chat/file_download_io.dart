@@ -302,22 +302,26 @@ Future<void> openLocalFileImpl(String path) async {
     return;
   }
   if (Platform.isWindows) {
-    // `start` 第一个引号参数是窗口标题，必须留空才能正确打开带空格路径。
-    final result = await Process.run('cmd', <String>[
+    // explorer 对中文/空格路径比 `cmd /c start` 稳，避免打开失败却只看到兜底文案。
+    final explored = await Process.run('explorer.exe', <String>[path]);
+    if (explored.exitCode == 0) return;
+    final started = await Process.run('cmd', <String>[
       '/c',
       'start',
       '',
       path,
     ], runInShell: false);
-    if (result.exitCode != 0) {
+    if (started.exitCode == 0) return;
+    try {
       await Process.start(
         path,
         const <String>[],
         mode: ProcessStartMode.detached,
         runInShell: true,
       );
-    }
-    return;
+      return;
+    } catch (_) {}
+    throw Exception('无法用系统应用打开该文件');
   }
   if (Platform.isLinux) {
     final result = await Process.run('xdg-open', [path]);

@@ -8,7 +8,11 @@ import 'task_models.dart';
 const kTaskPurple = Color(0xFF7B5CD8);
 
 /// 按进度分段取色：低→红橙、中→琥珀、高→青绿、完成→翠绿；逾期偏琥珀棕。
-Color taskProgressTone(num progressPct, {bool overdue = false, bool completed = false}) {
+Color taskProgressTone(
+  num progressPct, {
+  bool overdue = false,
+  bool completed = false,
+}) {
   if (overdue && !completed) return const Color(0xFFB45309);
   final p = progressPct.toDouble().clamp(0, 100);
   if (completed || p >= 100) return const Color(0xFF1F9D76);
@@ -179,11 +183,7 @@ List<TaskProgressBarItem> buildTaskProgressBars(TaskDetail detail) {
 
 /// 竖向柱状图：一柱 = 一个子任务；同一人多子任务并排多柱（同色系）。
 class TaskMemberProgressChart extends StatelessWidget {
-  const TaskMemberProgressChart({
-    super.key,
-    required this.bars,
-    this.onBarTap,
-  });
+  const TaskMemberProgressChart({super.key, required this.bars, this.onBarTap});
 
   final List<TaskProgressBarItem> bars;
   final ValueChanged<int>? onBarTap;
@@ -199,10 +199,7 @@ class TaskMemberProgressChart extends StatelessWidget {
           borderRadius: BorderRadius.circular(12),
           border: Border.all(color: const Color(0xFFE8EAED)),
         ),
-        child: const Text(
-          '暂无进度数据',
-          style: TextStyle(color: DunesColors.text3),
-        ),
+        child: const Text('暂无进度数据', style: TextStyle(color: DunesColors.text3)),
       );
     }
 
@@ -222,9 +219,7 @@ class TaskMemberProgressChart extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
-            bars.length > 1
-                ? '每个子任务一根柱；同一执行人多任务会并排显示（同色）'
-                : '当前任务进度',
+            bars.length > 1 ? '每个子任务一根柱；同一执行人多任务会并排显示（同色）' : '当前任务进度',
             style: const TextStyle(fontSize: 12, color: DunesColors.text3),
           ),
           const SizedBox(height: 12),
@@ -273,8 +268,8 @@ class _VerticalBar extends StatelessWidget {
     final color = item.overdue
         ? const Color(0xFFB45309)
         : item.progressPct >= 100
-            ? const Color(0xFF2F8F7E)
-            : base;
+        ? const Color(0xFF2F8F7E)
+        : base;
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(8),
@@ -292,8 +287,10 @@ class _VerticalBar extends StatelessWidget {
           Expanded(
             child: LayoutBuilder(
               builder: (context, c) {
-                final h =
-                    (c.maxHeight * (pct <= 0 ? 0.04 : pct)).clamp(4.0, c.maxHeight);
+                final h = (c.maxHeight * (pct <= 0 ? 0.04 : pct)).clamp(
+                  4.0,
+                  c.maxHeight,
+                );
                 return Align(
                   alignment: Alignment.bottomCenter,
                   child: Container(
@@ -306,10 +303,7 @@ class _VerticalBar extends StatelessWidget {
                       gradient: LinearGradient(
                         begin: Alignment.bottomCenter,
                         end: Alignment.topCenter,
-                        colors: [
-                          color,
-                          color.withValues(alpha: 0.72),
-                        ],
+                        colors: [color, color.withValues(alpha: 0.72)],
                       ),
                     ),
                   ),
@@ -335,7 +329,11 @@ class _VerticalBar extends StatelessWidget {
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
             textAlign: TextAlign.center,
-            style: const TextStyle(fontSize: 10, color: DunesColors.text3, height: 1.2),
+            style: const TextStyle(
+              fontSize: 10,
+              color: DunesColors.text3,
+              height: 1.2,
+            ),
           ),
         ],
       ),
@@ -395,17 +393,21 @@ class TaskSummaryRow extends StatelessWidget {
         if (c.maxWidth < 720) {
           return Column(
             children: [
-              Row(children: [
-                Expanded(child: cards[0]),
-                const SizedBox(width: 8),
-                Expanded(child: cards[1]),
-              ]),
+              Row(
+                children: [
+                  Expanded(child: cards[0]),
+                  const SizedBox(width: 8),
+                  Expanded(child: cards[1]),
+                ],
+              ),
               const SizedBox(height: 8),
-              Row(children: [
-                Expanded(child: cards[2]),
-                const SizedBox(width: 8),
-                Expanded(child: cards[3]),
-              ]),
+              Row(
+                children: [
+                  Expanded(child: cards[2]),
+                  const SizedBox(width: 8),
+                  Expanded(child: cards[3]),
+                ],
+              ),
             ],
           );
         }
@@ -459,7 +461,10 @@ class _SummaryCard extends StatelessWidget {
                   title,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 11, color: DunesColors.text3),
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: DunesColors.text3,
+                  ),
                 ),
               ),
             ],
@@ -501,7 +506,51 @@ class TaskMetaChip extends StatelessWidget {
       ),
       child: Text(
         text,
-        style: TextStyle(fontSize: 11, color: color, fontWeight: FontWeight.w600),
+        style: TextStyle(
+          fontSize: 11,
+          color: color,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    );
+  }
+}
+
+/// AI 运行态角标（分析中 / 匹配中），带闪烁图标以示进行中。
+class TaskAiStateChip extends StatelessWidget {
+  const TaskAiStateChip({super.key, required this.text});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: kTaskPurple.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const SizedBox(
+            width: 9,
+            height: 9,
+            child: CircularProgressIndicator(
+              strokeWidth: 1.6,
+              color: kTaskPurple,
+            ),
+          ),
+          const SizedBox(width: 4),
+          Text(
+            text,
+            style: const TextStyle(
+              fontSize: 11,
+              color: kTaskPurple,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -520,8 +569,7 @@ class TaskNameCard extends StatelessWidget {
   final TaskItem task;
   final VoidCallback onTap;
 
-  Color get _kindColor =>
-      task.isMain ? kTaskPurple : const Color(0xFF3CBFA9);
+  Color get _kindColor => task.isMain ? kTaskPurple : const Color(0xFF3CBFA9);
 
   Color get _statusColor {
     if (task.overdue) return const Color(0xFFB45309);
@@ -535,11 +583,11 @@ class TaskNameCard extends StatelessWidget {
   }
 
   Color get _priorityColor => switch (task.priority) {
-        'urgent' => const Color(0xFFE35D6A),
-        'high' => const Color(0xFFE8A838),
-        'low' => const Color(0xFF6B7280),
-        _ => kTaskPurple,
-      };
+    'urgent' => const Color(0xFFE35D6A),
+    'high' => const Color(0xFFE8A838),
+    'low' => const Color(0xFF6B7280),
+    _ => kTaskPurple,
+  };
 
   String? get _dateRange {
     String fmt(DateTime d) {
@@ -583,7 +631,9 @@ class TaskNameCard extends StatelessWidget {
                 children: [
                   buildTaskUserAvatar(
                     session: session,
-                    name: task.ownerName.isNotEmpty ? task.ownerName : task.title,
+                    name: task.ownerName.isNotEmpty
+                        ? task.ownerName
+                        : task.title,
                     userId: task.ownerUserId,
                     avatarPreset: task.ownerAvatarPreset,
                     avatarObjectKey: task.ownerAvatarObjectKey,
@@ -636,6 +686,10 @@ class TaskNameCard extends StatelessWidget {
                     text: task.overdue ? '已逾期' : taskStatusLabel(task.status),
                     color: _statusColor,
                   ),
+                  if (task.aiState == 'analyzing')
+                    const TaskAiStateChip(text: 'AI 分析中')
+                  else if (task.aiState == 'binding')
+                    const TaskAiStateChip(text: 'AI 匹配中'),
                 ],
               ),
             ],
@@ -669,14 +723,14 @@ class TaskListTileCard extends StatelessWidget {
 }
 
 MenuStyle get kTaskMenuStyle => MenuStyle(
-      backgroundColor: const WidgetStatePropertyAll(Colors.white),
-      elevation: const WidgetStatePropertyAll(8),
-      shadowColor: WidgetStatePropertyAll(Colors.black.withValues(alpha: 0.12)),
-      shape: WidgetStatePropertyAll(
-        RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      ),
-      padding: const WidgetStatePropertyAll(EdgeInsets.symmetric(vertical: 6)),
-    );
+  backgroundColor: const WidgetStatePropertyAll(Colors.white),
+  elevation: const WidgetStatePropertyAll(8),
+  shadowColor: WidgetStatePropertyAll(Colors.black.withValues(alpha: 0.12)),
+  shape: WidgetStatePropertyAll(
+    RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+  ),
+  padding: const WidgetStatePropertyAll(EdgeInsets.symmetric(vertical: 6)),
+);
 
 class TaskFilterChipDropdown<T> extends StatelessWidget {
   const TaskFilterChipDropdown({
@@ -702,7 +756,9 @@ class TaskFilterChipDropdown<T> extends StatelessWidget {
       builder: (context, controller, child) {
         final open = controller.isOpen;
         return Material(
-          color: open ? kTaskPurple.withValues(alpha: 0.08) : const Color(0xFFF5F6F8),
+          color: open
+              ? kTaskPurple.withValues(alpha: 0.08)
+              : const Color(0xFFF5F6F8),
           borderRadius: BorderRadius.circular(10),
           child: InkWell(
             borderRadius: BorderRadius.circular(10),
@@ -758,7 +814,9 @@ class TaskFilterChipDropdown<T> extends StatelessWidget {
                 item.$2,
                 style: TextStyle(
                   fontSize: 14,
-                  fontWeight: item.$1 == value ? FontWeight.w600 : FontWeight.w400,
+                  fontWeight: item.$1 == value
+                      ? FontWeight.w600
+                      : FontWeight.w400,
                   color: item.$1 == value ? kTaskPurple : DunesColors.text,
                 ),
               ),
@@ -776,7 +834,8 @@ Future<DateTimeRange?> showTaskDateRangePicker(
   String helpText = '选择时间段',
 }) {
   final now = DateTime.now();
-  final initial = initialDateRange ??
+  final initial =
+      initialDateRange ??
       DateTimeRange(
         start: now.subtract(const Duration(days: 30)),
         end: now.add(const Duration(days: 30)),

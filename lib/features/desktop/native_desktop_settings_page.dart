@@ -4,6 +4,7 @@ import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/theme/dunes_theme.dart';
+import '../chat/desktop_image_preview_pref.dart';
 import '../chat/file_download.dart' as file_dl;
 import '../chat/group_info_widgets.dart';
 import '../chat/im_file_save_dir.dart';
@@ -41,11 +42,29 @@ class _NativeDesktopSettingsPageState extends State<NativeDesktopSettingsPage> {
   String _savePath = '加载中…';
   bool _isCustom = false;
   bool _busy = false;
+  bool _imageExtraWindow = false;
 
   @override
   void initState() {
     super.initState();
     unawaited(_reloadPath());
+    unawaited(_reloadImagePreviewPref());
+  }
+
+  Future<void> _reloadImagePreviewPref() async {
+    await DesktopImagePreviewPref.ensureLoaded();
+    if (!mounted) return;
+    setState(() => _imageExtraWindow = DesktopImagePreviewPref.enabled);
+  }
+
+  Future<void> _setImageExtraWindow(bool value) async {
+    await DesktopImagePreviewPref.setEnabled(value);
+    if (!mounted) return;
+    setState(() => _imageExtraWindow = DesktopImagePreviewPref.enabled);
+    showDunesToast(
+      context,
+      value ? '已改为独立窗口查看图片' : '已改为会话内预览图片',
+    );
   }
 
   Future<void> _reloadPath() async {
@@ -172,6 +191,15 @@ class _NativeDesktopSettingsPageState extends State<NativeDesktopSettingsPage> {
                 trailing: const GroupInfoChevron(),
                 onTap: _busy ? null : _resetSaveDir,
               ),
+            GroupInfoRow(
+              icon: Icons.photo_outlined,
+              title: '独立窗口查看图片',
+              subtitle: _imageExtraWindow
+                  ? '点击图片时弹出额外窗口'
+                  : '默认在会话内预览',
+              trailing: GroupInfoToggle(value: _imageExtraWindow),
+              onTap: () => _setImageExtraWindow(!_imageExtraWindow),
+            ),
             if (widget.onCheckForUpdates != null ||
                 widget.onScanWorkstation != null ||
                 widget.onOpenWechatBot != null ||

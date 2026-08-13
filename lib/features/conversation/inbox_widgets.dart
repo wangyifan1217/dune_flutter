@@ -447,6 +447,32 @@ class ChatInboxSearchBar extends StatelessWidget {
                   ),
                 ),
               ),
+              ListenableBuilder(
+                listenable: controller,
+                builder: (context, _) {
+                  if (controller.text.isEmpty) {
+                    return const SizedBox.shrink();
+                  }
+                  return IconButton(
+                    tooltip: '清除',
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(
+                      minWidth: 28,
+                      minHeight: 28,
+                    ),
+                    visualDensity: VisualDensity.compact,
+                    iconSize: 16,
+                    onPressed: () {
+                      controller.clear();
+                      onChanged('');
+                    },
+                    icon: const Icon(
+                      Icons.close,
+                      color: Color(0xFFB2B2B2),
+                    ),
+                  );
+                },
+              ),
             ],
           ),
         ),
@@ -537,6 +563,7 @@ enum ChatInboxRowKind {
   approvalAssistant,
   taskAssistant,
   driveAssistant,
+  weeklySummary,
   reconciliationAssistant,
   administrativeNotice,
   selfMemo,
@@ -618,6 +645,7 @@ class ChatInboxRow extends StatelessWidget {
             kind == ChatInboxRowKind.approvalAssistant ||
             kind == ChatInboxRowKind.taskAssistant ||
             kind == ChatInboxRowKind.driveAssistant ||
+            kind == ChatInboxRowKind.weeklySummary ||
             kind == ChatInboxRowKind.reconciliationAssistant ||
             kind == ChatInboxRowKind.administrativeNotice ||
             kind == ChatInboxRowKind.selfMemo ||
@@ -989,6 +1017,20 @@ class _Avatar extends StatelessWidget {
           borderRadius: borderRadius,
         );
         child = const Icon(Icons.cloud_outlined, color: Colors.white, size: 21);
+      case ChatInboxRowKind.weeklySummary:
+        decoration = BoxDecoration(
+          borderRadius: borderRadius,
+          gradient: const LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [Color(0xFFC4A574), Color(0xFF8B6A3F)],
+          ),
+        );
+        child = const Icon(
+          Icons.auto_stories_outlined,
+          color: Colors.white,
+          size: 20,
+        );
       case ChatInboxRowKind.reconciliationAssistant:
         decoration = BoxDecoration(
           borderRadius: borderRadius,

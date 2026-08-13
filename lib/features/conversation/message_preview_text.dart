@@ -20,6 +20,16 @@ String compactMessagePushPreview({
   if (upperKind == 'FILE' || trimmed.startsWith('[文件]')) {
     return '发送了一个文件';
   }
+  if (upperKind == 'WEEKLY_SUMMARY') {
+    return trimmed.isEmpty ? '[一周小结]' : trimmed;
+  }
+  if (upperKind == 'RECONCILIATION' ||
+      upperKind == 'RECONCILIATION_ASSISTANT') {
+    return trimmed.isEmpty ? '每日对账 · 待你确认' : trimmed;
+  }
+  if (upperKind == 'RECONCILIATION_REMIND') {
+    return trimmed.isEmpty ? '对账催办' : trimmed;
+  }
   if (trimmed.isEmpty) {
     switch (upperKind) {
       case 'IMAGE':

@@ -23,6 +23,9 @@ void setWindowsTrayOnInactiveChanged(void Function(bool inactive)? callback) =>
 /// 从托盘/通知点击恢复窗口。
 void windowsTrayReveal() => impl.windowsTrayReveal();
 
+/// 最小化到任务栏（Esc）；与点关闭进托盘不同。
+Future<void> windowsTrayMinimize() => impl.windowsTrayMinimize();
+
 /// 托盘「退出」前回调（用于清除登录会话）。
 void setWindowsTrayOnBeforeQuit(Future<void> Function()? callback) =>
     impl.setWindowsTrayOnBeforeQuit(callback);

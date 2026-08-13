@@ -42,8 +42,6 @@ class NativeTaskActionView extends StatefulWidget {
 class _NativeTaskActionViewState extends State<NativeTaskActionView> {
   late final TaskApi _api = TaskApi(widget.session);
   late double _pct = widget.task.progressPct.toDouble();
-  late String _level =
-      widget.task.evalLevel.isNotEmpty ? widget.task.evalLevel : 'A';
   final _noteCtrl = TextEditingController();
   late final TextEditingController _commentCtrl;
   List<TaskAttachment> _attachments = const [];
@@ -67,15 +65,17 @@ class _NativeTaskActionViewState extends State<NativeTaskActionView> {
 
   Future<void> _submit() async {
     if (_saving) return;
+    if (!_isProgress && _commentCtrl.text.trim().isEmpty) {
+      showDunesCenterToast(context, '请填写评价意见');
+      return;
+    }
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Text(_isProgress ? '确认更新进度' : '确认提交评价'),
         content: Text(
-          _isProgress
-              ? '将进度更新为 ${_pct.round()}%，确认吗？'
-              : '确认提交等级 $_level 的评价吗？',
+          _isProgress ? '将进度更新为 ${_pct.round()}%，确认吗？' : '确认提交这条评价吗？',
         ),
         actions: [
           TextButton(
@@ -104,7 +104,7 @@ class _NativeTaskActionViewState extends State<NativeTaskActionView> {
       } else {
         await _api.evaluate(
           widget.task.id,
-          level: _level,
+          level: '',
           comment: _commentCtrl.text.trim(),
           attachments: _attachments,
         );
@@ -124,184 +124,166 @@ class _NativeTaskActionViewState extends State<NativeTaskActionView> {
     // Material 供 InkWell 使用；保持内嵌三级页，避免独立路由全屏/撑破双栏。
     return Material(
       color: widget.backgroundColor,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 4, 16, 4),
-            child: Row(
-              children: [
-                InkWell(
-                  borderRadius: BorderRadius.circular(8),
-                  onTap: _saving ? null : widget.onBack,
-                  child: const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 4, vertical: 6),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
+      // 点击输入框外的空白处收起软键盘
+      child: GestureDetector(
+        behavior: HitTestBehavior.translucent,
+        onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 4, 16, 4),
+              child: Row(
+                children: [
+                  InkWell(
+                    borderRadius: BorderRadius.circular(8),
+                    onTap: _saving ? null : widget.onBack,
+                    child: const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.arrow_back_ios_new,
+                            size: 14,
+                            color: DunesColors.text2,
+                          ),
+                          SizedBox(width: 2),
+                          Text(
+                            '返回',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: DunesColors.text2,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      _isProgress ? '调整进度' : '任务评价',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                        color: _accent,
+                      ),
+                    ),
+                  ),
+                  FilledButton(
+                    style: FilledButton.styleFrom(
+                      backgroundColor: _accent,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 18,
+                        vertical: 10,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                    onPressed: _saving ? null : _submit,
+                    child: _saving
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : Text(_isProgress ? '保存' : '提交'),
+                  ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: ListView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: const Color(0xFFE8EAED)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        Icon(Icons.arrow_back_ios_new, size: 14, color: DunesColors.text2),
-                        SizedBox(width: 2),
-                        Text('返回', style: TextStyle(fontSize: 13, color: DunesColors.text2)),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    _isProgress ? '调整进度' : '任务评价',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w700,
-                      color: _accent,
-                    ),
-                  ),
-                ),
-                FilledButton(
-                  style: FilledButton.styleFrom(
-                    backgroundColor: _accent,
-                    padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                  ),
-                  onPressed: _saving ? null : _submit,
-                  child: _saving
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                        )
-                      : Text(_isProgress ? '保存' : '提交'),
-                ),
-              ],
-            ),
-          ),
-          Expanded(
-            child: ListView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: const Color(0xFFE8EAED)),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Text(
-                        widget.task.title,
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      if (_isProgress) ...[
                         Text(
-                          '${_pct.round()}%',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontSize: 32,
+                          widget.task.title,
+                          style: const TextStyle(
+                            fontSize: 16,
                             fontWeight: FontWeight.w700,
-                            color: _accent,
                           ),
                         ),
-                        SliderTheme(
-                          data: SliderTheme.of(context).copyWith(
-                            activeTrackColor: _accent,
-                            inactiveTrackColor: _accent.withValues(alpha: 0.18),
-                            thumbColor: _accent,
-                            overlayColor: _accent.withValues(alpha: 0.12),
-                            activeTickMarkColor: Colors.white70,
-                            inactiveTickMarkColor: _accent.withValues(alpha: 0.35),
+                        const SizedBox(height: 16),
+                        if (_isProgress) ...[
+                          Text(
+                            '${_pct.round()}%',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: 32,
+                              fontWeight: FontWeight.w700,
+                              color: _accent,
+                            ),
                           ),
-                          child: Slider(
-                            value: _pct,
-                            min: 0,
-                            max: 100,
-                            divisions: 20,
-                            label: '${_pct.round()}%',
-                            onChanged: (v) => setState(() => _pct = v),
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        TextField(
-                          controller: _noteCtrl,
-                          maxLines: 3,
-                          decoration: _softDecoration('进展说明（可选）'),
-                        ),
-                      ] else ...[
-                        Row(
-                          children: [
-                            for (final lv in const ['S', 'A', 'B', 'C'])
-                              Expanded(
-                                child: Padding(
-                                  padding: EdgeInsets.only(right: lv == 'C' ? 0 : 6),
-                                  child: InkWell(
-                                    onTap: () => setState(() => _level = lv),
-                                    borderRadius: BorderRadius.circular(8),
-                                    child: Container(
-                                      alignment: Alignment.center,
-                                      padding: const EdgeInsets.symmetric(vertical: 12),
-                                      decoration: BoxDecoration(
-                                        color: _level == lv
-                                            ? _levelColor(lv)
-                                            : const Color(0xFFF5F6F8),
-                                        borderRadius: BorderRadius.circular(8),
-                                        border: Border.all(
-                                          color: _level == lv
-                                              ? _levelColor(lv)
-                                              : const Color(0xFFE8EAED),
-                                        ),
-                                      ),
-                                      child: Text(
-                                        lv,
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.w700,
-                                          color: _level == lv
-                                              ? Colors.white
-                                              : DunesColors.text2,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ),
+                          SliderTheme(
+                            data: SliderTheme.of(context).copyWith(
+                              activeTrackColor: _accent,
+                              inactiveTrackColor: _accent.withValues(
+                                alpha: 0.18,
                               ),
-                          ],
-                        ),
-                        const SizedBox(height: 12),
-                        TextField(
-                          controller: _commentCtrl,
-                          maxLines: 4,
-                          decoration: _softDecoration('评价意见（参考审批意见）'),
+                              thumbColor: _accent,
+                              overlayColor: _accent.withValues(alpha: 0.12),
+                              activeTickMarkColor: Colors.white70,
+                              inactiveTickMarkColor: _accent.withValues(
+                                alpha: 0.35,
+                              ),
+                            ),
+                            child: Slider(
+                              value: _pct,
+                              min: 0,
+                              max: 100,
+                              divisions: 20,
+                              label: '${_pct.round()}%',
+                              onChanged: (v) => setState(() => _pct = v),
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          TextField(
+                            controller: _noteCtrl,
+                            maxLines: 3,
+                            decoration: _softDecoration('进展说明（可选）'),
+                          ),
+                        ] else ...[
+                          TextField(
+                            controller: _commentCtrl,
+                            maxLines: 4,
+                            decoration: _softDecoration('评价意见'),
+                          ),
+                        ],
+                        const SizedBox(height: 16),
+                        TaskAttachmentField(
+                          session: widget.session,
+                          files: _attachments,
+                          accentColor: _accent,
+                          onChanged: (list) =>
+                              setState(() => _attachments = list),
                         ),
                       ],
-                      const SizedBox(height: 16),
-                      TaskAttachmentField(
-                        session: widget.session,
-                        files: _attachments,
-                        accentColor: _accent,
-                        onChanged: (list) => setState(() => _attachments = list),
-                      ),
-                    ],
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
-
-  Color _levelColor(String lv) => switch (lv) {
-        'S' => const Color(0xFFE85D4C),
-        'A' => const Color(0xFFD4A017),
-        'B' => const Color(0xFF3B6FD4),
-        _ => const Color(0xFF2D8A5E),
-      };
 
   InputDecoration _softDecoration(String hint) {
     return InputDecoration(

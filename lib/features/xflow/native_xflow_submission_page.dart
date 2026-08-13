@@ -563,11 +563,12 @@ class _NativeXflowSubmissionPageState extends State<NativeXflowSubmissionPage> {
                     )
                   : _error != null
                   ? Center(child: Text(_error!))
-                  : GestureDetector(
-                      behavior: HitTestBehavior.translucent,
-                      onTap: () =>
-                          FocusManager.instance.primaryFocus?.unfocus(),
-                      child: ListView(
+                  : SelectionArea(
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.translucent,
+                        onTap: () =>
+                            FocusManager.instance.primaryFocus?.unfocus(),
+                        child: ListView(
                       keyboardDismissBehavior:
                           ScrollViewKeyboardDismissBehavior.onDrag,
                       padding: const EdgeInsets.all(14),
@@ -629,6 +630,7 @@ class _NativeXflowSubmissionPageState extends State<NativeXflowSubmissionPage> {
                           onVoid: _voidSubmission,
                         ),
                       ],
+                    ),
                     ),
                     ),
             ),

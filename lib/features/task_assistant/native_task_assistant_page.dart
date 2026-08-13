@@ -5,11 +5,17 @@ import 'package:flutter/material.dart';
 import '../../core/navigation/navigation_controller.dart';
 import '../../core/theme/dunes_theme.dart';
 import '../auth/auth_session.dart';
+import '../chat/assistant_transcript_support.dart';
 import '../chat/chat_widgets.dart';
 import '../conversation/conversation_models.dart';
+import '../conversation/conversation_realtime_hub.dart';
+import '../conversation/conversation_realtime_service.dart';
 import '../conversation/conversation_service.dart';
 import '../conversation/inbox_format.dart';
+import '../desktop/windows_desktop_tray.dart';
+import '../shell/dunes_toast.dart';
 import '../tasks/native_task_action_page.dart';
+import '../tasks/native_task_detail_page.dart';
 import '../tasks/task_api.dart';
 import '../tasks/task_models.dart';
 import '../tasks/task_widgets.dart';
@@ -22,6 +28,7 @@ class NativeTaskAssistantPage extends StatefulWidget {
     required this.conversationHint,
     this.navigation,
     this.showBackButton = true,
+    this.autoMarkRead = true,
     this.onBack,
     this.onConversationRead,
   });
@@ -30,6 +37,7 @@ class NativeTaskAssistantPage extends StatefulWidget {
   final NativeConversation conversationHint;
   final DunesNavigationController? navigation;
   final bool showBackButton;
+  final bool autoMarkRead;
   final VoidCallback? onBack;
   final ValueChanged<int>? onConversationRead;
 
@@ -39,16 +47,28 @@ class NativeTaskAssistantPage extends StatefulWidget {
 }
 
 class _NativeTaskAssistantPageState extends State<NativeTaskAssistantPage> {
-  late final ConversationService _service =
-      ConversationService(session: widget.session);
+  late final ConversationService _service = ConversationService(
+    session: widget.session,
+  );
   late final TaskApi _taskApi = TaskApi(widget.session);
   final List<NativeChatMessage> _messages = [];
   final Map<int, String> _parentTitleById = {};
+  final ScrollController _scroll = ScrollController();
   List<TaskItem> _tasks = const [];
   bool _loading = true;
+  bool _loadingOlder = false;
+  bool _hasMore = false;
+  bool _awayFromLatest = false;
   bool _showTasks = false;
+  bool _clearing = false;
   TaskItem? _actionTask;
+  TaskActionMode _actionMode = TaskActionMode.progress;
+  int? _detailTaskId;
+  int _detailReloadTick = 0;
+  int _resolvedConvId = 0;
   String? _error;
+  StreamSubscription<ConversationRealtimeEvent>? _rtSub;
+  Timer? _rtDebounce;
 
   int get _convId => widget.conversationHint.id;
 
@@ -56,16 +76,47 @@ class _NativeTaskAssistantPageState extends State<NativeTaskAssistantPage> {
   void initState() {
     super.initState();
     _syncBackInterceptor();
+    _scroll.addListener(_onScroll);
     _loadMessages();
+    // 页面常驻（尤其 PC 双栏）时新通知实时进屏，不依赖重新打开
+    final realtime = ConversationRealtimeHub.instance.of(widget.session);
+    unawaited(realtime.connect());
+    _rtSub = realtime.events.listen(_onRealtime);
   }
 
   @override
   void dispose() {
+    _rtSub?.cancel();
+    _rtDebounce?.cancel();
+    _scroll.removeListener(_onScroll);
+    _scroll.dispose();
     _clearBackInterceptor();
     super.dispose();
   }
 
-  bool get _hasInternalBack => _actionTask != null || _showTasks;
+  @override
+  void didUpdateWidget(NativeTaskAssistantPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!oldWidget.autoMarkRead && widget.autoMarkRead) {
+      unawaited(_markReadIfViewing());
+    }
+  }
+
+  void _onRealtime(ConversationRealtimeEvent event) {
+    if (_resolvedConvId <= 0 || event.conversationId != _resolvedConvId) {
+      return;
+    }
+    if (event.type != 'message' && event.type != 'conversation_updated') {
+      return;
+    }
+    _rtDebounce?.cancel();
+    _rtDebounce = Timer(const Duration(milliseconds: 300), () {
+      if (mounted && !_showTasks) unawaited(_loadMessages(silent: true));
+    });
+  }
+
+  bool get _hasInternalBack =>
+      _actionTask != null || _detailTaskId != null || _showTasks;
 
   void _installBackInterceptor() {
     final nav = widget.navigation;
@@ -100,6 +151,10 @@ class _NativeTaskAssistantPageState extends State<NativeTaskAssistantPage> {
       _closeProgress(refresh: false);
       return true;
     }
+    if (_detailTaskId != null) {
+      _closeTaskDetail();
+      return true;
+    }
     if (_showTasks) {
       setState(() {
         _showTasks = false;
@@ -112,28 +167,201 @@ class _NativeTaskAssistantPageState extends State<NativeTaskAssistantPage> {
     return false;
   }
 
-  Future<void> _loadMessages() async {
+  void _openTaskDetail(int taskId) {
+    if (taskId <= 0) return;
     setState(() {
-      _loading = true;
-      _error = null;
+      _detailTaskId = taskId;
+      _detailReloadTick++;
     });
+    _syncBackInterceptor();
+  }
+
+  void _closeTaskDetail() {
+    setState(() => _detailTaskId = null);
+    _syncBackInterceptor();
+  }
+
+  Future<void> _loadMessages({bool silent = false}) async {
+    if (!silent) {
+      setState(() {
+        _loading = true;
+        _error = null;
+      });
+    }
     try {
       var id = _convId;
       if (id <= 0) {
         id = (await _service.ensureTaskAssistantSession()).id;
       }
       if (id <= 0) throw Exception('任务助手会话无效');
-      final messages = await _service.fetchMessages(id);
-      await _service.markConversationRead(id);
-      widget.onConversationRead?.call(id);
+      _resolvedConvId = id;
+      unawaited(
+        ConversationRealtimeHub.instance
+            .of(widget.session)
+            .ensureConversationSubscription(id),
+      );
+      final messages = await _service.fetchMessagePage(id);
+      await _markReadIfViewing();
       if (!mounted) return;
-      setState(() => _messages
-        ..clear()
-        ..addAll(messages));
+      setState(() {
+        final next = silent
+            ? mergeLatestAssistantMessages(
+                current: List<NativeChatMessage>.from(_messages),
+                latest: messages.items,
+              )
+            : messages.items;
+        _messages
+          ..clear()
+          ..addAll(next);
+        if (!silent) {
+          _hasMore = messages.hasMore;
+          _loading = false;
+        }
+      });
+      if (!silent) {
+        _scrollToLatestOnEnter();
+      } else if (!_awayFromLatest) {
+        WidgetsBinding.instance.addPostFrameCallback((_) => _jumpBottom());
+      }
     } catch (e) {
-      if (mounted) setState(() => _error = '$e');
+      if (!silent && mounted) setState(() => _error = '$e');
     } finally {
-      if (mounted) setState(() => _loading = false);
+      if (!silent && mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _markReadIfViewing() async {
+    if (!widget.autoMarkRead || windowsTrayIsWindowInactive()) return;
+    final id = _resolvedConvId > 0 ? _resolvedConvId : _convId;
+    if (id <= 0) return;
+    await _service.markConversationRead(id);
+    widget.onConversationRead?.call(id);
+  }
+
+  void _onScroll() {
+    if (!_scroll.hasClients) return;
+    final pos = _scroll.position;
+    final away = assistantIsAwayFromLatest(pos);
+    if (away != _awayFromLatest && mounted) {
+      setState(() => _awayFromLatest = away);
+    }
+    if (assistantShouldLoadOlder(
+      hasMore: _hasMore,
+      loadingOlder: _loadingOlder,
+      pos: pos,
+    )) {
+      unawaited(_loadOlder());
+    }
+  }
+
+  void _scrollToLatestOnEnter() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _jumpBottom();
+      Future<void>.delayed(const Duration(milliseconds: 80), _jumpBottom);
+      Future<void>.delayed(const Duration(milliseconds: 240), _jumpBottom);
+    });
+  }
+
+  void _jumpBottom({bool animate = false}) {
+    if (!_scroll.hasClients) return;
+    final max = _scroll.position.maxScrollExtent;
+    if (animate) {
+      _scroll.animateTo(
+        max,
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOut,
+      );
+    } else {
+      _scroll.jumpTo(max);
+    }
+    if (_awayFromLatest && mounted) {
+      setState(() => _awayFromLatest = false);
+    }
+  }
+
+  Future<void> _loadOlder() async {
+    if (_loadingOlder || !_hasMore || _messages.isEmpty) return;
+    final convId = _resolvedConvId > 0 ? _resolvedConvId : _convId;
+    if (convId <= 0) return;
+    setState(() => _loadingOlder = true);
+    final firstId = _messages.first.id;
+    final oldMax = _scroll.hasClients ? _scroll.position.maxScrollExtent : 0.0;
+    final oldPixels = _scroll.hasClients ? _scroll.position.pixels : 0.0;
+    try {
+      final page = await _service.fetchMessagePage(convId, before: firstId);
+      if (!mounted) return;
+      final current = List<NativeChatMessage>.from(_messages);
+      setState(() {
+        _messages
+          ..clear()
+          ..addAll(
+            mergeOlderAssistantMessages(current: current, older: page.items),
+          );
+        _hasMore = page.hasMore;
+        _loadingOlder = false;
+      });
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!_scroll.hasClients) return;
+        _scroll.jumpTo(
+          assistantOlderScrollRestore(
+            oldPixels: oldPixels,
+            oldMax: oldMax,
+            newMax: _scroll.position.maxScrollExtent,
+          ),
+        );
+      });
+    } finally {
+      if (mounted) setState(() => _loadingOlder = false);
+    }
+  }
+
+  /// 右上角清空：仅清掉自己可见的通知历史，任务本身不受影响。
+  Future<void> _clearHistory() async {
+    if (_clearing) return;
+    if (_resolvedConvId <= 0) {
+      try {
+        _resolvedConvId = (await _service.ensureTaskAssistantSession()).id;
+      } catch (_) {}
+      if (_resolvedConvId <= 0 || !mounted) {
+        if (mounted) showDunesCenterToast(context, '会话未就绪，请稍后再试');
+        return;
+      }
+    }
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('清空通知记录'),
+        content: const Text(
+          '将清空任务助手里的历史通知（仅自己不可见），任务与进展数据不受影响。确定清空吗？',
+          style: TextStyle(fontSize: 14, height: 1.5),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: const Color(0xFFE35D6A),
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('清空'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    setState(() => _clearing = true);
+    try {
+      await _service.clearConversationHistory(_resolvedConvId);
+      if (!mounted) return;
+      setState(() => _messages.clear());
+      showDunesCenterToast(context, '已清空通知记录');
+    } catch (e) {
+      if (mounted) showDunesCenterToast(context, '$e');
+    } finally {
+      if (mounted) setState(() => _clearing = false);
     }
   }
 
@@ -171,17 +399,20 @@ class _NativeTaskAssistantPageState extends State<NativeTaskAssistantPage> {
       );
     }
     return items
-        .where((t) =>
-            !t.isMain &&
-            t.ownerUserId == widget.session.userId &&
-            (t.status == 'active' || t.status == 'in_progress'))
+        .where(
+          (t) =>
+              !t.isMain &&
+              t.ownerUserId == widget.session.userId &&
+              (t.status == 'active' || t.status == 'in_progress'),
+        )
         .toList(growable: false);
   }
 
   Future<List<TaskItem>> _loadOwnedActiveSubtasksViaDetails({
     List<TaskItem>? seedMains,
   }) async {
-    final mains = seedMains ??
+    final mains =
+        seedMains ??
         await _taskApi.listTasks(scope: 'mine', size: 100, maxPages: 3);
     final out = <TaskItem>[];
     final parentTitles = <int, String>{};
@@ -203,10 +434,12 @@ class _NativeTaskAssistantPageState extends State<NativeTaskAssistantPage> {
   }
 
   List<TaskItem> get _activeSubtasks => _tasks
-      .where((t) =>
-          !t.isMain &&
-          t.ownerUserId == widget.session.userId &&
-          (t.status == 'active' || t.status == 'in_progress'))
+      .where(
+        (t) =>
+            !t.isMain &&
+            t.ownerUserId == widget.session.userId &&
+            (t.status == 'active' || t.status == 'in_progress'),
+      )
       .toList(growable: false);
 
   String _parentTitle(TaskItem task) {
@@ -222,15 +455,29 @@ class _NativeTaskAssistantPageState extends State<NativeTaskAssistantPage> {
     return '主任务 #$pid';
   }
 
-  void _openProgress(TaskItem task) {
-    setState(() => _actionTask = task);
+  void _openProgress(
+    TaskItem task, {
+    TaskActionMode mode = TaskActionMode.progress,
+  }) {
+    setState(() {
+      _actionTask = task;
+      _actionMode = mode;
+    });
     _syncBackInterceptor();
   }
 
   void _closeProgress({required bool refresh}) {
-    setState(() => _actionTask = null);
+    setState(() {
+      _actionTask = null;
+      if (refresh && _detailTaskId != null) {
+        // 从内嵌任务详情发起的操作：完成后强制详情重新拉取
+        _detailReloadTick++;
+      }
+    });
     _syncBackInterceptor();
-    if (refresh) unawaited(_openActiveTasks());
+    if (refresh && _detailTaskId == null && _showTasks) {
+      unawaited(_openActiveTasks());
+    }
   }
 
   void _backFromTasks() {
@@ -255,11 +502,32 @@ class _NativeTaskAssistantPageState extends State<NativeTaskAssistantPage> {
           child: NativeTaskActionView(
             session: widget.session,
             task: action,
-            mode: TaskActionMode.progress,
+            mode: _actionMode,
             accentColor: const Color(0xFF2F8F7E),
             backgroundColor: DunesColors.bgApp,
             onBack: () => _closeProgress(refresh: false),
             onDone: () => _closeProgress(refresh: true),
+          ),
+        ),
+      );
+    }
+
+    final detailTaskId = _detailTaskId;
+    if (detailTaskId != null) {
+      // 点通知卡片打开的内嵌任务详情（进度/评价复用上面的三级页）。
+      return Scaffold(
+        backgroundColor: DunesColors.bgApp,
+        body: SafeArea(
+          bottom: false,
+          child: NativeTaskDetailView(
+            key: ValueKey('ta-task-$detailTaskId-$_detailReloadTick'),
+            session: widget.session,
+            taskId: detailTaskId,
+            onBack: _closeTaskDetail,
+            onOpenTask: _openTaskDetail,
+            onOpenProgress: (t) => _openProgress(t),
+            onOpenEvaluate: (t) =>
+                _openProgress(t, mode: TaskActionMode.evaluate),
           ),
         ),
       );
@@ -280,27 +548,27 @@ class _NativeTaskAssistantPageState extends State<NativeTaskAssistantPage> {
               // 双栏主会话可隐藏返回；进入「进行中的任务」子页时必须能返回消息流。
               showBackButton: _showTasks || widget.showBackButton,
               leadingAvatar: const TaskAssistantAvatar(size: 45),
+              actions: [
+                if (!_showTasks)
+                  IconButton(
+                    tooltip: '清空通知记录',
+                    onPressed: _clearing ? null : _clearHistory,
+                    icon: _clearing
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(
+                            Icons.delete_sweep_outlined,
+                            size: 22,
+                            color: DunesColors.text2,
+                          ),
+                  ),
+              ],
             ),
             Expanded(child: _showTasks ? _buildTasks() : _buildMessages()),
-            if (!_showTasks)
-              SafeArea(
-                top: false,
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 14),
-                  child: SizedBox(
-                    width: double.infinity,
-                    child: FilledButton.icon(
-                      onPressed: _openActiveTasks,
-                      icon: const Icon(Icons.playlist_add_check_circle_outlined),
-                      label: const Text('进行中的任务'),
-                      style: FilledButton.styleFrom(
-                        backgroundColor: const Color(0xFF2F8F7E),
-                        padding: const EdgeInsets.symmetric(vertical: 13),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
+            // 「进行中的任务」入口暂时下线（产品要求先隐藏，代码保留随时可恢复）。
           ],
         ),
       ),
@@ -311,49 +579,77 @@ class _NativeTaskAssistantPageState extends State<NativeTaskAssistantPage> {
     if (_loading) return const Center(child: CircularProgressIndicator());
     if (_error != null) {
       return Center(
-        child: TextButton(
-          onPressed: _loadMessages,
-          child: Text('重试：$_error'),
-        ),
+        child: TextButton(onPressed: _loadMessages, child: Text('重试：$_error')),
       );
     }
     if (_messages.isEmpty) {
       return const Center(
         child: Text(
-          '子任务分配后会在这里提醒你',
+          '任务相关的信息会在这里通知你',
           style: TextStyle(color: DunesColors.text3),
         ),
       );
     }
-    return ListView.builder(
-      physics: const AlwaysScrollableScrollPhysics(),
-      padding: const EdgeInsets.all(12),
-      itemCount: _messages.length,
-      itemBuilder: (context, index) {
-        final m = _messages[index];
-        final payload = m.payload ?? const <String, dynamic>{};
-        final title = (payload['taskTitle'] ?? '').toString();
-        final parent = (payload['parentTitle'] ?? '').toString();
-        return ChatMessageRow(
-          message: m,
-          mine: false,
-          showSenderMeta: true,
-          readLabel: null,
-          timeLabel: InboxFormat.formatTime(m.createdAt, withClock: true),
-          avatar: const TaskAssistantAvatar(size: 45),
-          content: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              ChatTextBubble(text: m.bodyText, mine: false),
-              if (title.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(top: 6),
-                  child: _TaskAssignmentCard(title: title, parentTitle: parent),
+    return Stack(
+      children: [
+        ListView.builder(
+          controller: _scroll,
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.all(12),
+          itemCount: _messages.length + (_loadingOlder ? 1 : 0),
+          itemBuilder: (context, index) {
+            if (_loadingOlder && index == 0) {
+              return const Padding(
+                padding: EdgeInsets.only(bottom: 8),
+                child: Center(
+                  child: SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
                 ),
-            ],
+              );
+            }
+            final m = _messages[_loadingOlder ? index - 1 : index];
+            final payload = m.payload ?? const <String, dynamic>{};
+            final title = (payload['taskTitle'] ?? '').toString();
+            final parent = (payload['parentTitle'] ?? '').toString();
+            final taskId = (payload['taskId'] as num?)?.toInt() ?? 0;
+            return ChatMessageRow(
+              message: m,
+              mine: false,
+              showSenderMeta: true,
+              readLabel: null,
+              timeLabel: InboxFormat.formatTime(m.createdAt, withClock: true),
+              avatar: const TaskAssistantAvatar(size: 45),
+              content: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  ChatTextBubble(text: m.bodyText, mine: false),
+                  if (title.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 6),
+                      child: _TaskAssignmentCard(
+                        title: title,
+                        parentTitle: parent,
+                        onTap: taskId > 0 ? () => _openTaskDetail(taskId) : null,
+                      ),
+                    ),
+                ],
+              ),
+            );
+          },
+        ),
+        if (_awayFromLatest)
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 12,
+            child: AssistantBackToLatestChip(
+              onTap: () => _jumpBottom(animate: true),
+            ),
           ),
-        );
-      },
+      ],
     );
   }
 
@@ -370,10 +666,7 @@ class _NativeTaskAssistantPageState extends State<NativeTaskAssistantPage> {
     final tasks = _activeSubtasks;
     if (tasks.isEmpty) {
       return const Center(
-        child: Text(
-          '暂无你负责的进行中子任务',
-          style: TextStyle(color: DunesColors.text3),
-        ),
+        child: Text('暂无你负责的进行中子任务', style: TextStyle(color: DunesColors.text3)),
       );
     }
     return ListView.separated(
@@ -421,21 +714,44 @@ class TaskAssistantAvatar extends StatelessWidget {
 }
 
 class _TaskAssignmentCard extends StatelessWidget {
-  const _TaskAssignmentCard({required this.title, required this.parentTitle});
+  const _TaskAssignmentCard({
+    required this.title,
+    required this.parentTitle,
+    this.onTap,
+  });
   final String title;
   final String parentTitle;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        color: const Color(0xFFEAF5F3),
+    return Material(
+      color: const Color(0xFFEAF5F3),
+      borderRadius: BorderRadius.circular(10),
+      child: InkWell(
         borderRadius: BorderRadius.circular(10),
-      ),
-      child: Text(
-        parentTitle.isEmpty ? title : '$title\n主任务：$parentTitle',
-        style: const TextStyle(fontSize: 12, height: 1.4),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(10),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  parentTitle.isEmpty ? title : '$title\n主任务：$parentTitle',
+                  style: const TextStyle(fontSize: 12, height: 1.4),
+                ),
+              ),
+              if (onTap != null) ...[
+                const SizedBox(width: 6),
+                const Icon(
+                  Icons.chevron_right_rounded,
+                  size: 18,
+                  color: Color(0xFF2F8F7E),
+                ),
+              ],
+            ],
+          ),
+        ),
       ),
     );
   }

@@ -60,8 +60,13 @@ Future<Directory> _tempDir() async {
 }
 
 /// 登录后后台预热隐藏预览窗，首点不再冷启动引擎。
+///
+/// Windows 上不预热：`desktop_multi_window` 会在同进程再起一个 Flutter Engine，
+/// 部分机器上子窗纯黑、关窗还会拖垮主进程。默认走会话内预览；用户在设置中
+/// 开启独立窗口后，才在点击时冷启动（失败则回退应用内预览）。
 Future<void> warmDesktopChatImagePreviewWindow() {
   if (!isDesktopCommOnly) return Future.value();
+  if (Platform.isWindows) return Future.value();
   if (_warmPreviewWindow != null) return Future.value();
   final existing = _warmUpGate;
   if (existing != null) return existing;
@@ -389,7 +394,8 @@ class _DesktopImagePreviewHost extends StatefulWidget {
       _DesktopImagePreviewHostState();
 }
 
-class _DesktopImagePreviewHostState extends State<_DesktopImagePreviewHost> {
+class _DesktopImagePreviewHostState extends State<_DesktopImagePreviewHost>
+    with WindowListener {
   _PreviewSession? _session;
   ConversationService? _service;
   var _reloadToken = 0;
@@ -398,6 +404,8 @@ class _DesktopImagePreviewHostState extends State<_DesktopImagePreviewHost> {
   @override
   void initState() {
     super.initState();
+    windowManager.addListener(this);
+    unawaited(_armPreviewPreventClose());
     final initial = widget.initial;
     if (initial != null) {
       _session = initial;
@@ -438,8 +446,21 @@ class _DesktopImagePreviewHostState extends State<_DesktopImagePreviewHost> {
     );
   }
 
+  Future<void> _armPreviewPreventClose() async {
+    try {
+      await windowManager.setPreventClose(true);
+    } catch (_) {}
+  }
+
+  @override
+  void onWindowClose() {
+    // 标题栏关闭只 hide 保活，避免销毁子引擎把主进程一起带走。
+    _hideWindow();
+  }
+
   @override
   void dispose() {
+    windowManager.removeListener(this);
     _macLifecycleFix?.dispose();
     unawaited(widget.controller.setWindowMethodHandler(null));
     _service?.close();

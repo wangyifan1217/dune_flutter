@@ -1005,6 +1005,29 @@ class _ChatTextFieldState extends State<_ChatTextField> {
     return composing.isValid && !composing.isCollapsed;
   }
 
+  /// Shift / Ctrl+Space 等是 Windows 中文输入法的中英切换，必须放行。
+  bool _isImeToggleOrModifierKey(KeyEvent event) {
+    final key = event.logicalKey;
+    if (key == LogicalKeyboardKey.shift ||
+        key == LogicalKeyboardKey.shiftLeft ||
+        key == LogicalKeyboardKey.shiftRight ||
+        key == LogicalKeyboardKey.control ||
+        key == LogicalKeyboardKey.controlLeft ||
+        key == LogicalKeyboardKey.controlRight ||
+        key == LogicalKeyboardKey.alt ||
+        key == LogicalKeyboardKey.altLeft ||
+        key == LogicalKeyboardKey.altRight ||
+        key == LogicalKeyboardKey.meta ||
+        key == LogicalKeyboardKey.metaLeft ||
+        key == LogicalKeyboardKey.metaRight ||
+        key == LogicalKeyboardKey.capsLock) {
+      return true;
+    }
+    // Ctrl+Space：微软拼音等常见中/英切换。Ctrl+V 贴图不走这里。
+    return key == LogicalKeyboardKey.space &&
+        HardwareKeyboard.instance.isControlPressed;
+  }
+
   /// 旧版复制图片会写入「[图片]」占位文案，粘贴时不再插入。
   bool _isImagePlaceholderText(String text) {
     final t = text.trim();
@@ -1045,11 +1068,11 @@ class _ChatTextFieldState extends State<_ChatTextField> {
   }
 
   KeyEventResult _onKeyEvent(FocusNode node, KeyEvent event) {
+    // 组字中、中英切换键一律交给 IME；只拦「已上屏后的 Enter 发送 / Ctrl+V 贴图」。
+    if (_isImeComposing() || _isImeToggleOrModifierKey(event)) {
+      return KeyEventResult.ignored;
+    }
     if (_isSendKey(event)) {
-      // macOS / 中文等输入法：候选未上屏前按回车只确认选词，不发送。
-      if (_isImeComposing()) {
-        return KeyEventResult.ignored;
-      }
       widget.onSend?.call();
       return KeyEventResult.handled;
     }
@@ -1087,6 +1110,7 @@ class _ChatTextFieldState extends State<_ChatTextField> {
     final expands = useFixedHeight || widget.fillParent;
     final outline = widget.showOutline;
     final field = TextField(
+      key: const ValueKey<String>('dunes-chat-composer-field'),
       controller: widget.controller,
       focusNode: widget.focusNode,
       scrollController: expands ? _scrollController : null,
@@ -1206,6 +1230,9 @@ class _ChatTextFieldState extends State<_ChatTextField> {
         : field;
 
     return Focus(
+      canRequestFocus: false,
+      skipTraversal: true,
+      includeSemantics: false,
       onKeyEvent: _onKeyEvent,
       child: useFixedHeight
           ? SizedBox(height: fixed, child: wrapped)
@@ -1258,21 +1285,21 @@ class ChatMessageRow extends StatelessWidget {
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
-      child: GestureDetector(
-        onLongPress: onLongPress,
-        onLongPressStart: onLongPressStart,
-        onSecondaryTapDown: onSecondaryTapDown,
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisAlignment: mine
-              ? MainAxisAlignment.end
-              : MainAxisAlignment.start,
-          children: [
-            if (!mine) ...[
-              avatar ?? const SizedBox(width: 45),
-              const SizedBox(width: 8),
-            ],
-            Flexible(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: mine
+            ? MainAxisAlignment.end
+            : MainAxisAlignment.start,
+        children: [
+          if (!mine) ...[
+            avatar ?? const SizedBox(width: 45),
+            const SizedBox(width: 8),
+          ],
+          Flexible(
+            child: GestureDetector(
+              onLongPress: onLongPress,
+              onLongPressStart: onLongPressStart,
+              onSecondaryTapDown: onSecondaryTapDown,
               child: Column(
                 crossAxisAlignment: mine
                     ? CrossAxisAlignment.end
@@ -1365,12 +1392,12 @@ class ChatMessageRow extends StatelessWidget {
                 ],
               ),
             ),
-            if (mine) ...[
-              const SizedBox(width: 8),
-              trailingAvatar ?? avatar ?? const SizedBox(width: 45),
-            ],
+          ),
+          if (mine) ...[
+            const SizedBox(width: 8),
+            trailingAvatar ?? avatar ?? const SizedBox(width: 45),
           ],
-        ),
+        ],
       ),
     );
   }

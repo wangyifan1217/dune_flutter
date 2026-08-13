@@ -13,6 +13,7 @@ import '../../core/platform/desktop_features.dart';
 import '../../core/theme/app_text_scale.dart';
 import '../../core/theme/dunes_theme.dart';
 import '../../core/widgets/cached_network_image.dart';
+import '../weekly_summary/native_weekly_summary_page.dart';
 import '../approval/native_approval_page.dart';
 import '../approval_assistant/native_approval_assistant_page.dart';
 import '../approval_assistant/native_approval_assistant_pending_page.dart';
@@ -149,6 +150,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
   NativeConversation? _selectedApprovalAssistant;
   NativeConversation? _selectedTaskAssistant;
   NativeConversation? _selectedDriveAssistant;
+  NativeConversation? _selectedWeeklySummary;
+  NativeConversation? _selectedReconciliation;
   NativeConversation? _selectedAdministrativeNotice;
   int? _administrativeNoticeTargetId;
   int? _driveTargetItemId;
@@ -333,6 +336,10 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     }
     if (screen == 'DA1') {
       final id = _selectedDriveAssistant?.id ?? 0;
+      return id > 0 ? id : null;
+    }
+    if (screen == 'WS1') {
+      final id = _selectedWeeklySummary?.id ?? 0;
       return id > 0 ? id : null;
     }
     if (screen == 'AN1') {
@@ -528,6 +535,12 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     } else if (resolvedConversation.isDriveAssistant) {
       await _openDriveAssistant(resolvedConversation);
       routed = mounted && widget.navigation.currentScreen == 'DA1';
+    } else if (resolvedConversation.isWeeklySummary) {
+      await _openWeeklySummary(resolvedConversation);
+      routed = mounted && widget.navigation.currentScreen == 'WS1';
+    } else if (resolvedConversation.isReconciliationAssistant) {
+      _openReconciliationAssistant(resolvedConversation);
+      routed = mounted && widget.navigation.currentScreen == 'RA1';
     } else if (resolvedConversation.isAdministrativeNotice) {
       _openAdministrativeNotice(resolvedConversation, noticeId: noticeId);
       routed = mounted && widget.navigation.currentScreen == 'AN1';
@@ -979,8 +992,11 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     final msg = event.raw['message'];
     if (msg is! Map) return false;
     final kind = (msg['kind'] ?? '').toString().toUpperCase();
-    // 机器人回复无真人 sender，仍视为对方消息（角标 / 托盘）。
-    if (kind == 'ROBOT_REPLY') return true;
+    // 机器人回复、对账/审批等助手消息无真人 sender，仍视为对方消息（角标 / 托盘）。
+    if (kind == 'ROBOT_REPLY' ||
+        ConversationInboxRealtime.isIncomingAssistantMessageKind(kind)) {
+      return true;
+    }
     final sender = msg['sender'];
     var senderId = 0;
     if (sender is Map) {
@@ -1002,6 +1018,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         s == 'AA1' ||
         s == 'TA1' ||
         s == 'DA1' ||
+        s == 'WS1' ||
+        s == 'RA1' ||
         s == 'AN1') {
       return true;
     }
@@ -1025,6 +1043,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     }
     if (screen == 'TA1' && _selectedTaskAssistant?.id == convId) return true;
     if (screen == 'DA1' && _selectedDriveAssistant?.id == convId) return true;
+    if (screen == 'WS1' && _selectedWeeklySummary?.id == convId) return true;
+    if (screen == 'RA1' && _selectedReconciliation?.id == convId) return true;
     if (screen == 'AN1' && _selectedAdministrativeNotice?.id == convId) {
       return true;
     }
@@ -1064,6 +1084,10 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     }
     if (screen == 'DA1') {
       final id = _selectedDriveAssistant?.id ?? 0;
+      return id > 0 ? id : null;
+    }
+    if (screen == 'WS1') {
+      final id = _selectedWeeklySummary?.id ?? 0;
       return id > 0 ? id : null;
     }
     return null;
@@ -1240,6 +1264,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         current == 'AA1' ||
         current == 'TA1' ||
         current == 'DA1' ||
+        current == 'WS1' ||
         current == 'RA1' ||
         current == 'AN1') {
       widget.navigation.replaceTop(screenId);
@@ -1258,6 +1283,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       _selectedApprovalAssistant = null;
       _selectedTaskAssistant = null;
       _selectedDriveAssistant = null;
+      _selectedWeeklySummary = null;
+      _selectedReconciliation = null;
       _selectedAdministrativeNotice = null;
       _administrativeNoticeTargetId = null;
       _focusMessageId = null;
@@ -1280,6 +1307,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       _selectedApprovalAssistant = null;
       _selectedTaskAssistant = null;
       _selectedDriveAssistant = null;
+      _selectedWeeklySummary = null;
+      _selectedReconciliation = null;
       _selectedAdministrativeNotice = null;
       _administrativeNoticeTargetId = null;
       _focusMessageId = null;
@@ -1341,6 +1370,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       _selectedApprovalAssistant = null;
       _selectedTaskAssistant = null;
       _selectedDriveAssistant = null;
+      _selectedWeeklySummary = null;
+      _selectedReconciliation = null;
       _selectedAdministrativeNotice = null;
       _administrativeNoticeTargetId = null;
       _focusMessageId = null;
@@ -1364,6 +1395,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       _selectedApprovalAssistant = null;
       _selectedTaskAssistant = null;
       _selectedDriveAssistant = null;
+      _selectedWeeklySummary = null;
+      _selectedReconciliation = null;
       _selectedAdministrativeNotice = null;
       _administrativeNoticeTargetId = null;
       _focusMessageId = null;
@@ -1425,6 +1458,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         _selectedApprovalAssistant = null;
         _selectedTaskAssistant = null;
         _selectedDriveAssistant = null;
+        _selectedWeeklySummary = null;
+        _selectedReconciliation = null;
         _selectedAdministrativeNotice = null;
         _administrativeNoticeTargetId = null;
       }
@@ -1478,6 +1513,12 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     if (chatScreen == 'DA1') {
       return _selectedDriveAssistant?.id;
     }
+    if (chatScreen == 'WS1') {
+      return _selectedWeeklySummary?.id;
+    }
+    if (chatScreen == 'RA1') {
+      return _selectedReconciliation?.id;
+    }
     if (chatScreen == 'AN1') {
       return _selectedAdministrativeNotice?.id;
     }
@@ -1493,6 +1534,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     if (screen == 'AA1' || screen == 'AA2') return screen;
     if (screen == 'TA1') return screen;
     if (screen == 'DA1') return screen;
+    if (screen == 'WS1') return screen;
     if (screen == 'AN1') return screen;
     if (screen == 'RA1') return screen;
     if (screen == 'C6') return 'C6';
@@ -1506,6 +1548,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     if (_selectedApprovalAssistant != null) return 'AA1';
     if (_selectedTaskAssistant != null) return 'TA1';
     if (_selectedDriveAssistant != null) return 'DA1';
+    if (_selectedWeeklySummary != null) return 'WS1';
+    if (_selectedReconciliation != null) return 'RA1';
     if (_selectedAdministrativeNotice != null) return 'AN1';
     return 'C1';
   }
@@ -1543,6 +1587,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         screen == 'RA1' ||
         screen == 'TA1' ||
         screen == 'DA1' ||
+        screen == 'WS1' ||
         screen == 'AN1';
   }
 
@@ -1877,16 +1922,15 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       onOpenApprovalAssistant: _openApprovalAssistant,
       onOpenTaskAssistant: _openTaskAssistant,
       onOpenDriveAssistant: _openDriveAssistant,
+      onOpenWeeklySummary: _openWeeklySummary,
       onOpenAdministrativeNotice: _openAdministrativeNotice,
-      // 对账助手暂为静态预览，先屏蔽入口；恢复时改回：
-      // !widget.session.isExternalUser ? _openReconciliationAssistant : null
-      onOpenReconciliationAssistant: null,
+      onOpenReconciliationAssistant: !widget.session.isExternalUser
+          ? _openReconciliationAssistant
+          : null,
     );
   }
 
-  // 入口已临时屏蔽；恢复 onOpenReconciliationAssistant 时继续用。
-  // ignore: unused_element
-  void _openReconciliationAssistant() {
+  void _openReconciliationAssistant([NativeConversation? hint]) {
     // 对账助手是独立的会话卡片，不应沿用上一个私聊/群聊的右侧状态。
     setState(() {
       _selectedPrivate = null;
@@ -1896,11 +1940,21 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       _selectedApprovalAssistant = null;
       _selectedTaskAssistant = null;
       _selectedDriveAssistant = null;
+      _selectedWeeklySummary = null;
+      _selectedReconciliation = null;
+      _selectedAdministrativeNotice = null;
+      _administrativeNoticeTargetId = null;
       _focusMessageId = null;
       _focusMessageHint = null;
+      if (hint != null && hint.id > 0) {
+        _selectedReconciliation = hint;
+      }
     });
     _markUserEnteredChat();
     _goChatScreen('RA1');
+    if ((_selectedReconciliation?.id ?? 0) > 0) {
+      _conversationReadSignal.notifyRead(_selectedReconciliation!.id);
+    }
   }
 
   Future<void> _openApprovalAssistant([NativeConversation? hint]) async {
@@ -1912,6 +1966,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       _selectedRobot = null;
       _selectedTaskAssistant = null;
       _selectedDriveAssistant = null;
+      _selectedWeeklySummary = null;
+      _selectedReconciliation = null;
       _selectedAdministrativeNotice = null;
       _administrativeNoticeTargetId = null;
       _focusMessageId = null;
@@ -1968,6 +2024,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       _selectedRobot = null;
       _selectedApprovalAssistant = null;
       _selectedDriveAssistant = null;
+      _selectedWeeklySummary = null;
+      _selectedReconciliation = null;
       _selectedAdministrativeNotice = null;
       _administrativeNoticeTargetId = null;
       if (hint != null && hint.id > 0) _selectedTaskAssistant = hint;
@@ -2014,6 +2072,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       showBackButton: showBackButton,
       onBack: () => _leaveChatToInbox(clearSelection: true),
       onConversationRead: _handleConversationRead,
+      autoMarkRead: _userActivelyInChat,
     );
   }
 
@@ -2025,6 +2084,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       _selectedRobot = null;
       _selectedApprovalAssistant = null;
       _selectedTaskAssistant = null;
+      _selectedWeeklySummary = null;
+      _selectedReconciliation = null;
       _selectedAdministrativeNotice = null;
       _administrativeNoticeTargetId = null;
       if (hint != null && hint.id > 0) _selectedDriveAssistant = hint;
@@ -2059,6 +2120,49 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     widget.navigation.go('FD1');
   }
 
+  Future<void> _openWeeklySummary([NativeConversation? hint]) async {
+    setState(() {
+      _selectedPrivate = null;
+      _selectedPrivatePeerUserId = null;
+      _selectedGroup = null;
+      _selectedRobot = null;
+      _selectedApprovalAssistant = null;
+      _selectedTaskAssistant = null;
+      _selectedDriveAssistant = null;
+      _selectedReconciliation = null;
+      _selectedAdministrativeNotice = null;
+      _administrativeNoticeTargetId = null;
+      if (hint != null && hint.id > 0) _selectedWeeklySummary = hint;
+    });
+    if ((_selectedWeeklySummary?.id ?? 0) > 0) {
+      _markUserEnteredChat();
+      _goChatScreen('WS1');
+      _conversationReadSignal.notifyRead(_selectedWeeklySummary!.id);
+    }
+  }
+
+  Widget _buildWeeklySummaryPage({bool showBackButton = true}) {
+    final hint =
+        _selectedWeeklySummary ??
+        const NativeConversation(
+          id: 0,
+          kind: 'WEEKLY_SUMMARY',
+          title: '一周小结',
+          unreadCount: 0,
+          preview: '',
+          updatedAt: null,
+        );
+    return NativeWeeklySummaryPage(
+      key: ValueKey<int>(hint.id),
+      session: widget.session,
+      conversationHint: hint,
+      showBackButton: showBackButton,
+      autoMarkRead: _userActivelyInChat,
+      onBack: () => _leaveChatToInbox(clearSelection: true),
+      onConversationRead: _handleConversationRead,
+    );
+  }
+
   void _openAdministrativeNotice(NativeConversation? hint, {int noticeId = 0}) {
     setState(() {
       _selectedPrivate = null;
@@ -2068,6 +2172,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       _selectedApprovalAssistant = null;
       _selectedTaskAssistant = null;
       _selectedDriveAssistant = null;
+      _selectedWeeklySummary = null;
+      _selectedReconciliation = null;
       if (hint != null && hint.id > 0) {
         _selectedAdministrativeNotice = hint;
       } else {
@@ -2201,6 +2307,9 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     if (screen == 'DA1' || dual == 'DA1') {
       return 'da';
     }
+    if (screen == 'WS1' || dual == 'WS1') {
+      return 'ws';
+    }
     if (screen == 'AN1' || dual == 'AN1') {
       return 'an';
     }
@@ -2251,11 +2360,14 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     if (screen == 'DA1' || dual == 'DA1') {
       return _DualChatSlot.drive(_selectedDriveAssistant);
     }
+    if (screen == 'WS1' || dual == 'WS1') {
+      return _DualChatSlot.weeklySummary(_selectedWeeklySummary);
+    }
     if (screen == 'AN1' || dual == 'AN1') {
       return _DualChatSlot.administrativeNotice(_selectedAdministrativeNotice);
     }
     if (screen == 'RA1' || dual == 'RA1') {
-      return const _DualChatSlot.reconciliation();
+      return _DualChatSlot.reconciliation(_selectedReconciliation);
     }
     if (screen == 'C5' || dual == 'C5') {
       if (_selectedPrivate != null || _selectedPrivatePeerUserId != null) {
@@ -2353,6 +2465,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
                 ),
             navigation: widget.navigation,
             showBackButton: false,
+            autoMarkRead: autoMark,
             onBack: () => _leaveChatToInbox(clearSelection: true),
             onConversationRead: _handleConversationRead,
           ),
@@ -2376,6 +2489,27 @@ class _NativeScreenHostState extends State<NativeScreenHost>
             onBack: () => _leaveChatToInbox(clearSelection: true),
             onConversationRead: _handleConversationRead,
             onOpenItem: _openDriveItemFromChat,
+          ),
+        );
+      case _DualChatKind.weeklySummary:
+        return KeyedSubtree(
+          key: key,
+          child: NativeWeeklySummaryPage(
+            session: widget.session,
+            conversationHint:
+                slot.conversation ??
+                const NativeConversation(
+                  id: 0,
+                  kind: 'WEEKLY_SUMMARY',
+                  title: '一周小结',
+                  unreadCount: 0,
+                  preview: '',
+                  updatedAt: null,
+                ),
+            showBackButton: false,
+            autoMarkRead: autoMark,
+            onBack: () => _leaveChatToInbox(clearSelection: true),
+            onConversationRead: _handleConversationRead,
           ),
         );
       case _DualChatKind.administrativeNotice:
@@ -2404,7 +2538,20 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           key: key,
           child: NativeReconciliationAssistantPage(
             desktopMode: true,
+            session: widget.session,
+            conversationHint: slot.conversation ??
+                const NativeConversation(
+                  id: 0,
+                  kind: 'RECONCILIATION_ASSISTANT',
+                  title: '对账助手',
+                  unreadCount: 0,
+                  preview: '',
+                  updatedAt: null,
+                ),
+            showBackButton: false,
+            autoMarkRead: autoMark,
             onBack: () => _leaveChatToInbox(clearSelection: true),
+            onConversationRead: _handleConversationRead,
           ),
         );
       case _DualChatKind.robot:
@@ -2922,9 +3069,24 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         return _buildTaskAssistantPage();
       case 'DA1':
         return _buildDriveAssistantPage();
+      case 'WS1':
+        return _buildWeeklySummaryPage();
       case 'RA1':
         return NativeReconciliationAssistantPage(
+          key: ValueKey<int>(_selectedReconciliation?.id ?? 0),
           desktopMode: isDesktopCommOnly,
+          session: widget.session,
+          conversationHint: _selectedReconciliation ??
+              const NativeConversation(
+                id: 0,
+                kind: 'RECONCILIATION_ASSISTANT',
+                title: '对账助手',
+                unreadCount: 0,
+                preview: '',
+                updatedAt: null,
+              ),
+          showBackButton: true,
+          autoMarkRead: _userActivelyInChat,
           onBack: () {
             if (widget.navigation.history.contains('C1')) {
               widget.navigation.popTo('C1');
@@ -2932,6 +3094,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
               widget.navigation.back();
             }
           },
+          onConversationRead: _handleConversationRead,
         );
       case 'FD1':
         return NativeDrivePage(
@@ -6454,6 +6617,7 @@ enum _DualChatKind {
   approval,
   task,
   drive,
+  weeklySummary,
   administrativeNotice,
   reconciliation,
 }
@@ -6511,6 +6675,13 @@ class _DualChatSlot {
     );
   }
 
+  factory _DualChatSlot.weeklySummary(NativeConversation? conversation) {
+    return _DualChatSlot._(
+      kind: _DualChatKind.weeklySummary,
+      conversation: conversation,
+    );
+  }
+
   factory _DualChatSlot.administrativeNotice(NativeConversation? conversation) {
     return _DualChatSlot._(
       kind: _DualChatKind.administrativeNotice,
@@ -6518,10 +6689,12 @@ class _DualChatSlot {
     );
   }
 
-  const _DualChatSlot.reconciliation()
-    : kind = _DualChatKind.reconciliation,
-      conversation = null,
-      peerUserId = null;
+  factory _DualChatSlot.reconciliation(NativeConversation? conversation) {
+    return _DualChatSlot._(
+      kind: _DualChatKind.reconciliation,
+      conversation: conversation,
+    );
+  }
 
   final _DualChatKind kind;
   final NativeConversation? conversation;

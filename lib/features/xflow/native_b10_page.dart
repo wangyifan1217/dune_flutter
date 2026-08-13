@@ -529,11 +529,12 @@ class _NativeB10PageState extends State<NativeB10Page> {
                   ? _buildError()
                   : RefreshIndicator(
                       onRefresh: _load,
-                      child: GestureDetector(
-                        behavior: HitTestBehavior.translucent,
-                        onTap: () =>
-                            FocusManager.instance.primaryFocus?.unfocus(),
-                        child: ListView(
+                      child: SelectionArea(
+                        child: GestureDetector(
+                          behavior: HitTestBehavior.translucent,
+                          onTap: () =>
+                              FocusManager.instance.primaryFocus?.unfocus(),
+                          child: ListView(
                           keyboardDismissBehavior:
                               ScrollViewKeyboardDismissBehavior.onDrag,
                           padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
@@ -565,6 +566,7 @@ class _NativeB10PageState extends State<NativeB10Page> {
                               error: _ccError,
                             ),
                           ],
+                        ),
                         ),
                       ),
                     ),

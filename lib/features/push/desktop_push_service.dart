@@ -16,52 +16,69 @@ final FlutterLocalNotificationsPlugin _plugin =
     FlutterLocalNotificationsPlugin();
 
 bool _ready = false;
+Future<void>? _initInFlight;
 int _seq = 1000;
 
 Future<void> ensurePushInitializedImpl() async {
   if (_ready) return;
   if (!(Platform.isWindows || Platform.isMacOS)) return;
-
-  const darwin = DarwinInitializationSettings(
-    requestAlertPermission: true,
-    requestBadgePermission: true,
-    requestSoundPermission: true,
-    defaultPresentAlert: true,
-    defaultPresentBadge: true,
-    defaultPresentSound: true,
-    defaultPresentBanner: true,
-    defaultPresentList: true,
-  );
-  final iconPath = _resolveWindowsNotificationIconPath();
-  final windows = WindowsInitializationSettings(
-    appName: '沙丘',
-    appUserModelId: 'com.nova.dunes.desktop',
-    guid: 'a8e2c1d4-7b5f-4e9a-9c3d-1f2a6b8e0d71',
-    // Debug / EXE 安装包都需要绝对路径，否则 Toast 左侧无应用图标。
-    iconPath: iconPath,
-  );
-  if (iconPath == null) {
-    debugPrint('[DesktopPush] Windows toast iconPath unresolved');
+  final inFlight = _initInFlight;
+  if (inFlight != null) return inFlight;
+  final future = _ensurePushInitializedOnce();
+  _initInFlight = future;
+  try {
+    await future;
+  } finally {
+    if (identical(_initInFlight, future)) _initInFlight = null;
   }
+}
 
-  await _plugin.initialize(
-    settings: InitializationSettings(
-      macOS: Platform.isMacOS ? darwin : null,
-      windows: Platform.isWindows ? windows : null,
-    ),
-    onDidReceiveNotificationResponse: (_) {
-      unawaited(_bringAppToFront());
-    },
-  );
+Future<void> _ensurePushInitializedOnce() async {
+  if (_ready) return;
+  try {
+    const darwin = DarwinInitializationSettings(
+      requestAlertPermission: true,
+      requestBadgePermission: true,
+      requestSoundPermission: true,
+      defaultPresentAlert: true,
+      defaultPresentBadge: true,
+      defaultPresentSound: true,
+      defaultPresentBanner: true,
+      defaultPresentList: true,
+    );
+    final iconPath = _resolveWindowsNotificationIconPath();
+    final windows = WindowsInitializationSettings(
+      appName: '沙丘',
+      appUserModelId: 'com.nova.dunes.desktop',
+      guid: 'a8e2c1d4-7b5f-4e9a-9c3d-1f2a6b8e0d71',
+      // Debug / EXE 安装包都需要绝对路径，否则 Toast 左侧无应用图标。
+      iconPath: iconPath,
+    );
+    if (iconPath == null) {
+      debugPrint('[DesktopPush] Windows toast iconPath unresolved');
+    }
 
-  if (Platform.isMacOS) {
-    await _plugin
-        .resolvePlatformSpecificImplementation<
-            MacOSFlutterLocalNotificationsPlugin>()
-        ?.requestPermissions(alert: true, badge: true, sound: true);
+    await _plugin.initialize(
+      settings: InitializationSettings(
+        macOS: Platform.isMacOS ? darwin : null,
+        windows: Platform.isWindows ? windows : null,
+      ),
+      onDidReceiveNotificationResponse: (_) {
+        unawaited(_bringAppToFront());
+      },
+    );
+
+    if (Platform.isMacOS) {
+      await _plugin
+          .resolvePlatformSpecificImplementation<
+              MacOSFlutterLocalNotificationsPlugin>()
+          ?.requestPermissions(alert: true, badge: true, sound: true);
+    }
+
+    _ready = true;
+  } catch (e, st) {
+    debugPrint('[DesktopPush] initialize failed: $e\n$st');
   }
-
-  _ready = true;
 }
 
 void registerPushLifecycleObserverImpl() {}
@@ -73,7 +90,12 @@ Future<void> bindPushSessionImpl({
   required String token,
   required String apiBase,
 }) async {
-  await ensurePushInitializedImpl();
+  // Windows：登录进会话页时不要同步拉 WinRT Toast。
+  // 未打包/无 AUMID 的机器上 initialize 可能把整进程打崩，且会与
+  // main() 里的预热并发。Toast 延后到第一条桌面通知；任务栏角标不依赖它。
+  if (Platform.isMacOS) {
+    await ensurePushInitializedImpl();
+  }
 }
 
 Future<void> unbindPushSessionImpl() async {

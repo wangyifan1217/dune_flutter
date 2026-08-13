@@ -57,7 +57,7 @@ Future<void> showApprovalDetailOverlay({
               color: DunesColors.bgApp,
               borderRadius: BorderRadius.circular(14),
               clipBehavior: Clip.antiAlias,
-              child: SelectionArea(child: hostFor(close)),
+              child: hostFor(close),
             ),
           ),
         );

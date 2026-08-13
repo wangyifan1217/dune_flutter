@@ -12,6 +12,7 @@ import 'core/theme/dunes_theme.dart';
 import 'core/widgets/app_watermark.dart';
 import 'features/chat/chat_image_preview_window_stub.dart'
     if (dart.library.io) 'features/chat/chat_image_preview_window.dart';
+import 'features/desktop/desktop_esc_minimize.dart';
 import 'features/desktop/windows_desktop_tray.dart';
 import 'features/push/push_service.dart';
 import 'features/shell/splash_screen.dart';
@@ -28,6 +29,7 @@ class DunesApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: '沙丘 · 统一审批',
+      navigatorKey: dunesAppNavigatorKey,
       debugShowCheckedModeBanner: false,
       theme: DunesTheme.light(),
       locale: const Locale('zh', 'CN'),
@@ -43,11 +45,15 @@ class DunesApp extends StatelessWidget {
           builder: (context, _) {
             final scale = AppTextScaleController.instance.scale;
             final media = MediaQuery.of(context);
+            Widget wrapped = MobileViewportShell(
+              child: AppWatermark(child: child ?? const SizedBox.shrink()),
+            );
+            if (isDesktopCommOnly) {
+              wrapped = DesktopEscMinimize(child: wrapped);
+            }
             return MediaQuery(
               data: media.copyWith(textScaler: TextScaler.linear(scale)),
-              child: MobileViewportShell(
-                child: AppWatermark(child: child ?? const SizedBox.shrink()),
-              ),
+              child: wrapped,
             );
           },
         );
@@ -98,7 +104,11 @@ Future<void> main(List<String> args) async {
         systemNavigationBarIconBrightness: Brightness.dark,
       ),
     );
-    unawaited(ensurePushInitialized());
+    // Windows 的 WinRT Toast 延后到第一条通知，避免登录进会话页时
+    // 与 bindPushSession 并发 initialize 把进程打崩。
+    if (defaultTargetPlatform != TargetPlatform.windows) {
+      unawaited(ensurePushInitialized());
+    }
     unawaited(XflowService.hydrateTemplateCache());
   }
   runApp(const DunesApp());

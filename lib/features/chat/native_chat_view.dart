@@ -43,6 +43,9 @@ import '../meeting/meeting_minutes_chat_share.dart';
 import '../meeting/native_meeting_detail_page.dart';
 import '../robots/robot_markdown.dart';
 import '../shell/dunes_toast.dart';
+import '../weekly_summary/native_weekly_summary_page.dart';
+import '../weekly_summary/weekly_summary_card.dart';
+import '../weekly_summary/weekly_summary_models.dart';
 import '../xflow/approval_chat_share.dart';
 import '../xflow/approval_picker_sheet.dart';
 import '../xflow/xflow_detail_logic.dart';
@@ -58,6 +61,8 @@ import 'chat_file_type_icon.dart';
 import 'chat_file_upload_coordinator.dart';
 import 'chat_pdf_preview.dart';
 import 'chat_media_widgets.dart';
+import 'chat_desktop_file_drag_stub.dart'
+    if (dart.library.io) 'chat_desktop_file_drag.dart';
 import 'chat_quote.dart';
 import 'chat_video_utils.dart';
 import 'chat_video_widgets.dart';
@@ -1575,6 +1580,7 @@ class _NativeChatViewState extends State<NativeChatView>
     if (peers.isEmpty) return null;
     final count = _groupReadCountForMessage(message.id);
     if (count <= 0) return '未读';
+    if (count >= peers.length) return '全部已读';
     return '$count人已读';
   }
 
@@ -4355,12 +4361,18 @@ class _NativeChatViewState extends State<NativeChatView>
             icon: Icons.folder_open_rounded,
           ),
         ],
-        if (desktop && isImage)
+        if (desktop && isImage) ...[
+          const _MessageQuickAction(
+            id: 'popup_preview',
+            label: '弹框预览',
+            icon: Icons.photo_size_select_large_outlined,
+          ),
           const _MessageQuickAction(
             id: 'reveal_file',
             label: '打开文件夹',
             icon: Icons.folder_open_rounded,
           ),
+        ],
         if (isAudio)
           const _MessageQuickAction(
             id: 'transcribe',
@@ -4438,6 +4450,9 @@ class _NativeChatViewState extends State<NativeChatView>
       ];
       final action = await _showMessageActionsMenu(actions, anchor: anchor);
       switch (action) {
+        case 'popup_preview':
+          await _openChatImagePopupPreview(m);
+          break;
         case 'open_file':
           await _openFileAttachment(m.payload, attachmentName);
           break;
@@ -5402,6 +5417,8 @@ class _NativeChatViewState extends State<NativeChatView>
                 m.payload!['forward'] as Map,
               ),
             };
+          } else if (WeeklySummaryShare.fromPayload(m.payload) != null) {
+            payload = Map<String, dynamic>.from(m.payload!);
           }
           return (
             senderName: m.senderName.trim().isEmpty
@@ -5597,7 +5614,10 @@ class _NativeChatViewState extends State<NativeChatView>
       _showToast('请先选择消息');
       return;
     }
-    final mode = await _pickForwardMode();
+    final allWeekly = units.every(
+      (u) => u.kind.toUpperCase() == 'WEEKLY_SUMMARY',
+    );
+    final mode = allWeekly ? 'separate' : await _pickForwardMode();
     if (mode == null) return;
     final targetConversationId = await _pickForwardConversationId();
     if (targetConversationId == null || targetConversationId <= 0) return;
@@ -6406,6 +6426,69 @@ class _NativeChatViewState extends State<NativeChatView>
     }
   }
 
+  /// PC：拖到桌面 / Finder 前确保本地有一份文件（复制，不删缓存）。
+  Future<String?> _resolveChatAttachmentPathForDrag(
+    Map<String, dynamic>? payload,
+    String fileName,
+  ) async {
+    if (kIsWeb || !isDesktopCommOnly || payload == null) return null;
+    final cacheKey = _fileCacheKey(payload);
+    final conversationId = _chatConversationId;
+    try {
+      final cached = await file_dl.findCachedChatFile(
+        cacheKey,
+        fileName,
+        conversationId: conversationId,
+      );
+      if (cached != null && cached.isNotEmpty) return cached;
+      if (ConversationService.hasAuthMedia(payload)) {
+        final bytes = await _service.loadChatMediaBytes(payload);
+        if (bytes.isEmpty) return null;
+        final path = await file_dl.saveBytesAsCachedFile(
+          bytes,
+          cacheKey,
+          fileName,
+          conversationId: conversationId,
+        );
+        if (path != null && path.isNotEmpty) {
+          _markFileDownloaded(payload, fileName);
+        }
+        return path;
+      }
+      final url = ConversationService.mediaDirectUrl(payload);
+      if (url.isEmpty) return null;
+      final path = await file_dl.openUrlAsFile(
+        url,
+        fileName,
+        cacheKey: cacheKey.isEmpty ? null : cacheKey,
+        conversationId: conversationId,
+      );
+      if (path != null && path.isNotEmpty) {
+        _markFileDownloaded(payload, fileName);
+      }
+      return path;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Widget _wrapDesktopFileDrag({
+    required Map<String, dynamic>? payload,
+    required String fileName,
+    required Widget child,
+    bool enabled = true,
+  }) {
+    if (!isDesktopCommOnly || !enabled || _messageMultiSelectMode) {
+      return child;
+    }
+    return ChatDesktopFileDrag(
+      fileName: fileName,
+      resolveLocalPath: () =>
+          _resolveChatAttachmentPathForDrag(payload, fileName),
+      child: child,
+    );
+  }
+
   Future<String?> _saveAttachmentToDisk(
     Map<String, dynamic>? payload,
     String fileName, {
@@ -6634,6 +6717,20 @@ class _NativeChatViewState extends State<NativeChatView>
     );
   }
 
+  Future<void> _openChatImagePopupPreview(NativeChatMessage current) async {
+    if (!mounted || current.payload == null) return;
+    await showChatImagePopupPreview(
+      context,
+      service: _service,
+      payload: current.payload,
+      fileName: ConversationService.mediaFileName(
+        current.payload,
+        fallback: 'image-${current.id}.jpg',
+      ),
+      conversationId: _chatConversationId,
+    );
+  }
+
   String _mediaDownloadFileName(NativeChatMessage m) {
     final payload = m.payload;
     final fromPayload = ConversationService.mediaFileName(payload);
@@ -6757,19 +6854,67 @@ class _NativeChatViewState extends State<NativeChatView>
               ? widget.session.displayName!.trim()
               : '我')
         : (m.senderName.isNotEmpty ? m.senderName : (conv?.displayTitle ?? ''));
+    final canAt =
+        !mine &&
+        !_isPrivate &&
+        !_messageMultiSelectMode &&
+        _conversation?.dissolved != true &&
+        name.trim().isNotEmpty;
     return GestureDetector(
       onTap: onOpen == null ? null : () => onOpen(userId, name),
       // 只响应对方头像：私聊插入姓名，群聊插入 @姓名；保留点击头像打开资料。
-      onLongPress:
-          mine ||
-              isDesktopCommOnly ||
-              _messageMultiSelectMode ||
-              name.trim().isEmpty
-          ? null
-          : () => unawaited(_insertAvatarTarget(name, userId: userId)),
+      onLongPress: canAt && !isDesktopCommOnly
+          ? () => unawaited(_insertAvatarTarget(name, userId: userId))
+          : null,
+      onSecondaryTapDown: canAt && isDesktopCommOnly
+          ? (details) => unawaited(
+              _onAvatarContextMenu(
+                details.globalPosition,
+                name: name,
+                userId: userId,
+              ),
+            )
+          : null,
       behavior: HitTestBehavior.opaque,
       child: avatar,
     );
+  }
+
+  Future<void> _onAvatarContextMenu(
+    Offset global, {
+    required String name,
+    required int userId,
+  }) async {
+    if (!mounted || _isPrivate || _messageMultiSelectMode) return;
+    final overlay = Overlay.of(context).context.findRenderObject();
+    if (overlay is! RenderBox) return;
+    final atLabel = '@${name.trim()}';
+    final action = await showMenu<String>(
+      context: context,
+      position: RelativeRect.fromRect(
+        Rect.fromLTWH(global.dx, global.dy, 0, 0),
+        Offset.zero & overlay.size,
+      ),
+      items: [
+        PopupMenuItem<String>(
+          value: 'at',
+          child: Text(atLabel),
+        ),
+        if (widget.onOpenUser != null)
+          const PopupMenuItem<String>(
+            value: 'profile',
+            child: Text('查看资料'),
+          ),
+      ],
+    );
+    if (!mounted || action == null) return;
+    if (action == 'at') {
+      await _insertAvatarTarget(name, userId: userId);
+      return;
+    }
+    if (action == 'profile') {
+      widget.onOpenUser?.call(userId, name);
+    }
   }
 
   Future<void> _insertAvatarTarget(String rawName, {int userId = 0}) async {
@@ -6822,6 +6967,26 @@ class _NativeChatViewState extends State<NativeChatView>
     if (forward != null) {
       return _buildForwardRecordCard(forward, mine: mine);
     }
+    final weekly = WeeklySummaryShare.fromPayload(m.payload);
+    if (weekly != null) {
+      return GestureDetector(
+        onTap: () => unawaited(
+          showWeeklySummaryDetailSheet(
+            context: context,
+            session: widget.session,
+            data: weekly,
+          ),
+        ),
+        onSecondaryTapDown: isDesktopCommOnly && !_messageMultiSelectMode
+            ? (details) =>
+                  _onMessageActions(m, mine, anchor: details.globalPosition)
+            : null,
+        onLongPress: _messageMultiSelectMode
+            ? null
+            : () => _onMessageActions(m, mine),
+        child: WeeklySummaryPoster(data: weekly, compact: true),
+      );
+    }
     final meetingShare = MeetingMinutesChatShare.fromPayload(m.payload);
     if (meetingShare != null) {
       return ChatMeetingMinutesCard(
@@ -6867,29 +7032,46 @@ class _NativeChatViewState extends State<NativeChatView>
         ? null
         : () => _jumpToQuotedMessage(quote.messageId, quote: quote);
     if (kind == 'IMAGE') {
+      final imageName = ConversationService.mediaFileName(
+        m.payload,
+        fallback: 'image-${m.id}.jpg',
+      );
       return _wrapQuotedContent(
         m,
         mine,
-        ChatAuthImageBubble(
-          service: _service,
+        _wrapDesktopFileDrag(
           payload: m.payload,
-          mine: mine,
-          conversationId: _chatConversationId,
-          onTap: () => unawaited(_openChatImageGallery(m)),
+          fileName: imageName,
+          child: ChatAuthImageBubble(
+            service: _service,
+            payload: m.payload,
+            mine: mine,
+            conversationId: _chatConversationId,
+            onTap: () => unawaited(_openChatImageGallery(m)),
+          ),
         ),
       );
     }
     if (kind == 'VIDEO') {
+      final videoName = ConversationService.mediaFileName(
+        m.payload,
+        fallback: 'video-${m.id}.mp4',
+      );
       return _wrapQuotedContent(
         m,
         mine,
-        ChatAuthVideoBubble(
-          service: _service,
+        _wrapDesktopFileDrag(
           payload: m.payload,
-          mine: mine,
-          downloadProgress: _downloadProgressFor(m.payload),
-          onCancelDownload: _downloadCancelFor(m.payload),
-          onTap: () => unawaited(_openChatVideo(m.payload)),
+          fileName: videoName,
+          enabled: _downloadProgressFor(m.payload) == null,
+          child: ChatAuthVideoBubble(
+            service: _service,
+            payload: m.payload,
+            mine: mine,
+            downloadProgress: _downloadProgressFor(m.payload),
+            onCancelDownload: _downloadCancelFor(m.payload),
+            onTap: () => unawaited(_openChatVideo(m.payload)),
+          ),
         ),
       );
     }
@@ -6905,17 +7087,24 @@ class _NativeChatViewState extends State<NativeChatView>
         return _wrapQuotedContent(
           m,
           mine,
-          ChatKbDocCard(
-            title: kbDoc.title.isNotEmpty ? kbDoc.title : fileName,
-            typeLabel: kbDoc.typeLabel,
-            sizeLabel: kbDoc.sizeLabel.isNotEmpty
-                ? kbDoc.sizeLabel
-                : _fileSizeHint(m.payload) ?? '',
-            onTap: () => unawaited(_openKbFileAttachment(m.payload, fileName)),
-            onSecondaryTapDown: isDesktopCommOnly && !_messageMultiSelectMode
-                ? (details) =>
-                      _onMessageActions(m, mine, anchor: details.globalPosition)
-                : null,
+          _wrapDesktopFileDrag(
+            payload: m.payload,
+            fileName: fileName,
+            child: ChatKbDocCard(
+              title: kbDoc.title.isNotEmpty ? kbDoc.title : fileName,
+              typeLabel: kbDoc.typeLabel,
+              sizeLabel: kbDoc.sizeLabel.isNotEmpty
+                  ? kbDoc.sizeLabel
+                  : _fileSizeHint(m.payload) ?? '',
+              onTap: () => unawaited(_openKbFileAttachment(m.payload, fileName)),
+              onSecondaryTapDown: isDesktopCommOnly && !_messageMultiSelectMode
+                  ? (details) => _onMessageActions(
+                      m,
+                      mine,
+                      anchor: details.globalPosition,
+                    )
+                  : null,
+            ),
           ),
         );
       }
@@ -6923,18 +7112,23 @@ class _NativeChatViewState extends State<NativeChatView>
       return _wrapQuotedContent(
         m,
         mine,
-        ChatFileAttach(
+        _wrapDesktopFileDrag(
+          payload: m.payload,
           fileName: fileName,
-          mine: mine,
-          fileSizeBytes: (m.payload?['size'] as num?)?.toInt(),
-          downloaded: _isFileDownloaded(m.payload, fileName),
-          downloadProgress: _downloadProgressFor(m.payload),
-          onCancelDownload: _downloadCancelFor(m.payload),
-          onTap: () => _openFileAttachment(m.payload, fileName),
-          onSecondaryTapDown: isDesktopCommOnly && !_messageMultiSelectMode
-              ? (details) =>
-                    _onMessageActions(m, mine, anchor: details.globalPosition)
-              : null,
+          enabled: _downloadProgressFor(m.payload) == null,
+          child: ChatFileAttach(
+            fileName: fileName,
+            mine: mine,
+            fileSizeBytes: (m.payload?['size'] as num?)?.toInt(),
+            downloaded: _isFileDownloaded(m.payload, fileName),
+            downloadProgress: _downloadProgressFor(m.payload),
+            onCancelDownload: _downloadCancelFor(m.payload),
+            onTap: () => _openFileAttachment(m.payload, fileName),
+            onSecondaryTapDown: isDesktopCommOnly && !_messageMultiSelectMode
+                ? (details) =>
+                      _onMessageActions(m, mine, anchor: details.globalPosition)
+                : null,
+          ),
         ),
       );
     }
@@ -7063,19 +7257,36 @@ class _NativeChatViewState extends State<NativeChatView>
     }
     final kind = e.kind.toUpperCase();
     if (kind == 'IMAGE') {
-      return ChatAuthImageBubble(
-        service: _service,
+      final imageName = ConversationService.mediaFileName(
+        e.payload,
+        fallback: 'image.jpg',
+      );
+      return _wrapDesktopFileDrag(
         payload: e.payload,
-        mine: mine,
-        conversationId: _chatConversationId,
+        fileName: imageName,
+        child: ChatAuthImageBubble(
+          service: _service,
+          payload: e.payload,
+          mine: mine,
+          conversationId: _chatConversationId,
+        ),
       );
     }
     if (kind == 'VIDEO') {
-      return ChatAuthVideoBubble(
-        service: _service,
+      final videoName = ConversationService.mediaFileName(
+        e.payload,
+        fallback: 'video.mp4',
+      );
+      return _wrapDesktopFileDrag(
         payload: e.payload,
-        mine: mine,
-        onTap: () => unawaited(_openChatVideo(e.payload)),
+        fileName: videoName,
+        enabled: _downloadProgressFor(e.payload) == null,
+        child: ChatAuthVideoBubble(
+          service: _service,
+          payload: e.payload,
+          mine: mine,
+          onTap: () => unawaited(_openChatVideo(e.payload)),
+        ),
       );
     }
     if (kind == 'FILE') {
@@ -7086,13 +7297,18 @@ class _NativeChatViewState extends State<NativeChatView>
             ? '文件'
             : e.text.replaceAll(RegExp(r'^\[[^\]]+\]\s*'), ''),
       );
-      return ChatFileAttach(
+      return _wrapDesktopFileDrag(
+        payload: e.payload,
         fileName: fileName,
-        mine: mine,
-        fileSizeBytes: (e.payload?['size'] as num?)?.toInt(),
-        downloadProgress: _downloadProgressFor(e.payload),
-        onCancelDownload: _downloadCancelFor(e.payload),
-        onTap: () => _openFileAttachment(e.payload, fileName),
+        enabled: _downloadProgressFor(e.payload) == null,
+        child: ChatFileAttach(
+          fileName: fileName,
+          mine: mine,
+          fileSizeBytes: (e.payload?['size'] as num?)?.toInt(),
+          downloadProgress: _downloadProgressFor(e.payload),
+          onCancelDownload: _downloadCancelFor(e.payload),
+          onTap: () => _openFileAttachment(e.payload, fileName),
+        ),
       );
     }
     if (kind == 'AUDIO') {
@@ -7587,6 +7803,11 @@ class _NativeChatViewState extends State<NativeChatView>
         _insertingAtMentions ||
         _isPrivate ||
         _conversation?.dissolved == true) {
+      return;
+    }
+    // 拼音未上屏时不要弹 @ 面板，避免抢走 IME；上屏后仍按原文自动弹出。
+    final composing = _inputController.value.composing;
+    if (composing.isValid && !composing.isCollapsed) {
       return;
     }
     final filter = _partialAtFilter(text);

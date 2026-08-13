@@ -7,7 +7,9 @@ import 'inbox_hidden_storage.dart';
 
 /// 与 WebView `applyConvEvent` 对齐的 C1 列表增量更新。
 abstract final class ConversationInboxRealtime {
-  static ConversationRealtimeEventLike fromEvent(ConversationRealtimeEvent event) {
+  static ConversationRealtimeEventLike fromEvent(
+    ConversationRealtimeEvent event,
+  ) {
     final raw = _asStringKeyMap(event.raw);
     final msgRaw = raw['message'];
     return ConversationRealtimeEventLike(
@@ -59,7 +61,9 @@ abstract final class ConversationInboxRealtime {
       selfDisplayName: selfDisplayName,
     );
     // message_updated：只改预览文案，不改 sortTimestamp。
-    final at = event.type == 'message_updated' ? null : _timestampForEvent(event);
+    final at = event.type == 'message_updated'
+        ? null
+        : _timestampForEvent(event);
     if (preview == null && at == null && event.type != 'conversation_updated') {
       return items;
     }
@@ -71,17 +75,25 @@ abstract final class ConversationInboxRealtime {
       selfDisplayName: selfDisplayName,
     );
     final isMutedGroup = CommUnreadNotifier.isMutedGroup(conv);
-    final isMessageEvent = event.type == 'message' || event.type == 'system_flow';
-    final bumpUnread = !activeOnChatScreen &&
+    final isMessageEvent =
+        event.type == 'message' || event.type == 'system_flow';
+    final bumpUnread =
+        !activeOnChatScreen &&
         isMessageEvent &&
         ((fromPeer && !isMutedGroup) || mentionHit);
 
     final copy = items.toList(growable: true);
     final old = copy[index];
+    // conversation_updated 携带服务端未读数时以服务端为准
+    //（任务助手等系统消息 sender 为空，客户端无法靠 fromPeer 判断加一）。
+    final serverUnread = event.type == 'conversation_updated'
+        ? (event.raw['unreadCount'] as num?)?.toInt()
+        : null;
     // 正在看该会话：不累加，并清掉残留未读角标。
     final nextUnread = activeOnChatScreen
         ? 0
-        : (bumpUnread ? old.unreadCount + 1 : old.unreadCount);
+        : (serverUnread ??
+              (bumpUnread ? old.unreadCount + 1 : old.unreadCount));
     copy[index] = copyConversation(
       old,
       preview: preview?.text,
@@ -99,7 +111,10 @@ abstract final class ConversationInboxRealtime {
     return copy;
   }
 
-  static bool needsFullRefresh(ConversationRealtimeEventLike event, List<NativeConversation> items) {
+  static bool needsFullRefresh(
+    ConversationRealtimeEventLike event,
+    List<NativeConversation> items,
+  ) {
     final convId = event.conversationId ?? 0;
     if (convId <= 0) return true;
     if (items.every((c) => c.id != convId)) return true;
@@ -128,29 +143,45 @@ abstract final class ConversationInboxRealtime {
       case 'system_flow':
         final msg = event.message;
         if (msg == null) return null;
-        return _PreviewPatch(_messagePreview(msg, conv: conv, selfUserId: selfUserId, selfDisplayName: selfDisplayName));
+        return _PreviewPatch(
+          _messagePreview(
+            msg,
+            conv: conv,
+            selfUserId: selfUserId,
+            selfDisplayName: selfDisplayName,
+          ),
+        );
       case 'message_recalled':
         var preview = (event.raw['preview'] ?? '消息已撤回').toString();
         if (conv.isGroup || conv.isWorkgroupApproval) {
-          final name = (event.raw['recalledByName'] ??
-                  event.raw['recalledByDisplayName'] ??
-                  '')
-              .toString();
+          final name =
+              (event.raw['recalledByName'] ??
+                      event.raw['recalledByDisplayName'] ??
+                      '')
+                  .toString();
           if (name.isNotEmpty) preview = '$name: $preview';
         }
         return _PreviewPatch(preview);
       case 'message_updated':
         final msg = event.message;
         if (msg == null) return null;
-        return _PreviewPatch(_messagePreview(msg, conv: conv, selfUserId: selfUserId, selfDisplayName: selfDisplayName));
+        return _PreviewPatch(
+          _messagePreview(
+            msg,
+            conv: conv,
+            selfUserId: selfUserId,
+            selfDisplayName: selfDisplayName,
+          ),
+        );
       case 'message_deleted':
         return const _PreviewPatch('消息已删除');
       case 'conversation_updated':
-        final body = (event.raw['lastMessageBodyText'] ??
-                event.raw['lastMessagePreview'] ??
-                event.raw['preview'] ??
-                '')
-            .toString();
+        final body =
+            (event.raw['lastMessageBodyText'] ??
+                    event.raw['lastMessagePreview'] ??
+                    event.raw['preview'] ??
+                    '')
+                .toString();
         if (body.isNotEmpty) return _PreviewPatch(body);
         return null;
       default:
@@ -173,11 +204,25 @@ abstract final class ConversationInboxRealtime {
       final sid = (senderMap['userId'] as num?)?.toInt() ?? 0;
       if (sender.isEmpty && sid == selfUserId) sender = selfDisplayName ?? '';
     }
-    final prefix = (conv.isGroup || conv.isWorkgroupApproval) && sender.isNotEmpty ? '$sender: ' : '';
+    final prefix =
+        (conv.isGroup || conv.isWorkgroupApproval) && sender.isNotEmpty
+        ? '$sender: '
+        : '';
     if (kind == 'IMAGE') return '$prefix[图片]';
     if (kind == 'FILE') return '$prefix[文件]';
     if (kind == 'AUDIO') return '$prefix[语音]';
-    if (kind == 'SYSTEM_FLOW') return body.isEmpty ? '$prefix[系统消息]' : '$prefix$body';
+    if (kind == 'SYSTEM_FLOW') {
+      return body.isEmpty ? '$prefix[系统消息]' : '$prefix$body';
+    }
+    if (kind == 'WEEKLY_SUMMARY') {
+      return body.isEmpty ? '$prefix[一周小结]' : '$prefix$body';
+    }
+    if (kind == 'RECONCILIATION' || kind == 'RECONCILIATION_ASSISTANT') {
+      return body.isEmpty ? '$prefix每日对账 · 待你确认' : '$prefix$body';
+    }
+    if (kind == 'RECONCILIATION_REMIND') {
+      return body.isEmpty ? '$prefix对账催办' : '$prefix$body';
+    }
     if (body.isNotEmpty) return conv.isPrivate ? body : '$prefix$body';
     return body.isEmpty ? '[消息]' : body;
   }
@@ -188,7 +233,9 @@ abstract final class ConversationInboxRealtime {
       return parseNovaDateTime(msg['createdAt']);
     }
     return parseNovaDateTime(
-      event.raw['updatedAt'] ?? event.raw['lastMessageAt'] ?? event.raw['previewAt'],
+      event.raw['updatedAt'] ??
+          event.raw['lastMessageAt'] ??
+          event.raw['previewAt'],
     );
   }
 
@@ -211,7 +258,9 @@ abstract final class ConversationInboxRealtime {
     final msg = event.message;
     if (msg == null) return false;
     final kind = (msg['kind'] ?? '').toString().toUpperCase();
-    if (kind == 'ROBOT_REPLY') return true;
+    if (kind == 'ROBOT_REPLY' || isIncomingAssistantMessageKind(kind)) {
+      return true;
+    }
     final sender = msg['sender'];
     if (sender is Map<String, dynamic>) {
       final uid = (sender['userId'] as num?)?.toInt() ?? 0;
@@ -221,9 +270,29 @@ abstract final class ConversationInboxRealtime {
     return sid > 0 && sid != selfUserId;
   }
 
-  static String? _titleForEvent(ConversationRealtimeEventLike event, NativeConversation current) {
+  /// 助手/系统推送没有真人 sender，但仍应计未读。
+  static bool isIncomingAssistantMessageKind(String kind) {
+    switch (kind.trim().toUpperCase()) {
+      case 'RECONCILIATION':
+      case 'RECONCILIATION_REMIND':
+      case 'RECONCILIATION_ASSISTANT':
+      case 'WEEKLY_SUMMARY':
+      case 'APPROVAL_ASSISTANT':
+      case 'TASK_ASSISTANT':
+        return true;
+      default:
+        return false;
+    }
+  }
+
+  static String? _titleForEvent(
+    ConversationRealtimeEventLike event,
+    NativeConversation current,
+  ) {
     if (event.type != 'conversation_updated') return null;
-    final title = (event.raw['title'] ?? event.raw['peerDisplayName'] ?? '').toString().trim();
+    final title = (event.raw['title'] ?? event.raw['peerDisplayName'] ?? '')
+        .toString()
+        .trim();
     return title.isEmpty ? null : title;
   }
 

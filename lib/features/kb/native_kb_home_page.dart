@@ -89,6 +89,9 @@ class _NativeKbHomePageState extends State<NativeKbHomePage> {
       });
       _syncParsePoll(summary.documents);
       unawaited(_refreshDriveSavedStatus(summary.documents));
+      if (!silent) {
+        unawaited(_healLocalMirror());
+      }
     } catch (e) {
       if (!mounted) return;
       if (!silent) {
@@ -98,6 +101,13 @@ class _NativeKbHomePageState extends State<NativeKbHomePage> {
         });
       }
     }
+  }
+
+  Future<void> _healLocalMirror() async {
+    try {
+      await _service.syncRagflow();
+      if (mounted) await _load(silent: true);
+    } catch (_) {}
   }
 
   String _driveSourceKeyForDoc(NativeKbDocument doc) {
@@ -302,32 +312,47 @@ class _NativeKbHomePageState extends State<NativeKbHomePage> {
 
   Future<T?> _withOpenProgress<T>(Future<T> Function() action) async {
     if (!mounted) return null;
-    unawaited(
-      showDialog<void>(
-        context: context,
-        barrierDismissible: false,
-        builder: (ctx) => const Center(
-          child: Card(
-            child: Padding(
-              padding: EdgeInsets.all(20),
-              child: SizedBox(
-                width: 28,
-                height: 28,
-                child: CircularProgressIndicator(strokeWidth: 2.5),
-              ),
+    final nav = Navigator.of(context, rootNavigator: true);
+    final route = DialogRoute<void>(
+      context: context,
+      barrierDismissible: false,
+      barrierColor: Colors.black26,
+      builder: (_) => const Center(
+        child: Card(
+          child: Padding(
+            padding: EdgeInsets.all(20),
+            child: SizedBox(
+              width: 28,
+              height: 28,
+              child: CircularProgressIndicator(strokeWidth: 2.5),
             ),
           ),
         ),
       ),
     );
+    nav.push(route);
     try {
       return await action();
     } finally {
-      if (mounted) {
-        final nav = Navigator.of(context, rootNavigator: true);
-        if (nav.canPop()) nav.pop();
+      if (route.isActive) {
+        nav.removeRoute(route);
       }
     }
+  }
+
+  bool _useSystemAppToOpen(String fileName, int byteLength) {
+    final name = fileName.trim().toLowerCase();
+    final isPdf = name.endsWith('.pdf') || chatPayloadIsPdf(null, fileName);
+    if (isPdf && (isDesktopCommOnly || byteLength > _inAppPdfMaxBytes)) {
+      return true;
+    }
+    if (!isDesktopCommOnly) return false;
+    return name.endsWith('.xlsx') ||
+        name.endsWith('.xls') ||
+        name.endsWith('.docx') ||
+        name.endsWith('.doc') ||
+        name.endsWith('.pptx') ||
+        name.endsWith('.ppt');
   }
 
   Future<void> _openDoc(NativeKbDocument doc) async {
@@ -367,14 +392,11 @@ class _NativeKbHomePageState extends State<NativeKbHomePage> {
       }
 
       final isPdf = chatPayloadIsPdf(null, fileName);
-      // 桌面端或较大 PDF：pdfx 内存渲染易灰屏，改用系统阅读器。
-      final useSystemPdf = isPdf &&
-          (isDesktopCommOnly || downloaded.bytes.length > _inAppPdfMaxBytes);
-      if (useSystemPdf) {
+      if (_useSystemAppToOpen(fileName, downloaded.bytes.length)) {
         await file_dl.openLocalFile(localPath);
         if (!mounted) return;
         _toast(
-          downloaded.bytes.length > _inAppPdfMaxBytes
+          isPdf && downloaded.bytes.length > _inAppPdfMaxBytes
               ? '文件较大，已用系统应用打开'
               : '已用系统应用打开',
         );
@@ -419,9 +441,13 @@ class _NativeKbHomePageState extends State<NativeKbHomePage> {
         saveToKbSession: widget.session,
         saveToDriveSession: widget.session,
       );
-    } catch (e) {
+    } catch (e, st) {
+      debugPrint('[KB] openDoc failed: $e\n$st');
       if (!mounted) return;
-      _toast(friendlyErrorText(e, fallback: '打开失败，请稍后重试'), error: true);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _toast(friendlyErrorText(e, fallback: '打开失败，请稍后重试'), error: true);
+      });
     }
   }
 

@@ -177,16 +177,10 @@ class NativeKbService {
       if (doc.dunesDocumentId.isNotEmpty) continue;
 
       NativeKbDocument? linked;
-      try {
-        linked = await fetchDunesDocumentByRagflowId(doc.id);
-      } catch (_) {}
-
-      if (linked == null && homeRecents.length == 1 && docs.length == 1) {
+      if (homeRecents.length == 1 && docs.length == 1) {
         linked = homeRecents.first;
       }
-      if (linked == null) {
-        linked = _matchHomeDocument(doc, homeRecents);
-      }
+      linked ??= _matchHomeDocument(doc, homeRecents);
 
       if (linked != null && linked.dunesDocumentId.isNotEmpty) {
         docs[i] = NativeKbDocument(
@@ -301,6 +295,7 @@ class NativeKbService {
         (body['message'] ?? body['error']?['message'] ?? '上传失败').toString(),
       );
     }
+    unawaited(syncRagflow());
   }
 
   NativeKbDocument? findMeetingMinutesDocumentInSummary(
@@ -481,16 +476,24 @@ class NativeKbService {
     NativeKbDocument? doc,
     String docId = '',
   }) async {
+    try {
+      return await _ensureDunesDocumentId(doc: doc, docId: docId);
+    } catch (_) {
+      return '';
+    }
+  }
+
+  /// 按 RAGFlow id 向 kb-go 要本地副本；没有则让后端从 RAGFlow 静默回填到 MinIO。
+  Future<String> _ensureDunesDocumentId({
+    NativeKbDocument? doc,
+    String docId = '',
+  }) async {
     final direct = resolveDunesDocumentId(doc: doc, docId: docId);
     if (direct.isNotEmpty) return direct;
     final ragId = (doc?.id ?? docId).trim();
     if (ragId.isEmpty || int.tryParse(ragId) != null) return '';
-    try {
-      final detail = await fetchDunesDocumentByRagflowId(ragId);
-      return detail.dunesDocumentId;
-    } catch (_) {
-      return '';
-    }
+    final detail = await fetchDunesDocumentByRagflowId(ragId);
+    return detail.dunesDocumentId;
   }
 
   Future<NativeKbDocument> fetchDunesDocumentByRagflowId(String ragflowDocId) async {
@@ -587,37 +590,78 @@ class NativeKbService {
 
     Object? lastError;
 
-    // 快路径：列表项已带 objectKey / url 时，先直接下，少一次详情往返。
-    if (hint != null) {
-      final fastName = pickName(hint);
-      for (final key in _kbStorageKeyCandidates(hint)) {
+    Future<Uint8List?> tryStorage(NativeKbDocument doc) async {
+      for (final key in _kbStorageKeyCandidates(doc)) {
         try {
           final bytes = await _downloadBytesViaStorageProxy(key);
-          if (bytes.isNotEmpty) {
-            return (bytes: bytes, fileName: fastName);
-          }
+          if (bytes.isNotEmpty) return bytes;
         } catch (e) {
           lastError = e;
         }
       }
-      final directUrl = hint.fileUrl.trim();
-      if (isDirectHttpUrl(directUrl) && isUrlLikelyDeviceReachable(directUrl)) {
-        try {
-          final bytes = await _downloadBytesFromUrl(directUrl);
-          if (bytes.isNotEmpty) {
-            return (bytes: bytes, fileName: fastName);
-          }
-        } catch (e) {
-          lastError = e;
+      return null;
+    }
+
+    Future<({Uint8List bytes, String fileName})?> tryDirectUrl(
+      NativeKbDocument? doc,
+    ) async {
+      final directUrl = doc?.fileUrl.trim() ?? '';
+      if (!isDirectHttpUrl(directUrl) || !isUrlLikelyDeviceReachable(directUrl)) {
+        return null;
+      }
+      try {
+        final fetched = await _downloadBytesFromUrl(directUrl);
+        if (fetched.isNotEmpty) {
+          return (bytes: fetched, fileName: pickName(doc));
         }
+      } catch (e) {
+        lastError = e;
+      }
+      return null;
+    }
+
+    // 已镜像到 Dunes MinIO 的文档：用真实 objectKey 快路径。
+    // Nova 直传文档没有 objectKey，不要先猜 `{userId}/{文件名}`，否则 MinIO 403
+    // 会盖掉后面的 RAGFlow 回填。
+    if (hint != null && hint.fileObjectKey.trim().isNotEmpty) {
+      final bytes = await tryStorage(hint);
+      if (bytes != null && bytes.isNotEmpty) {
+        return (bytes: bytes, fileName: pickName(hint));
       }
     }
 
-    final dunesId = await resolveDunesDocumentIdAsync(doc: hint, docId: docId);
+    final viaHintUrl = await tryDirectUrl(hint);
+    if (viaHintUrl != null) return viaHintUrl;
+
+    var dunesId = '';
+    try {
+      dunesId = await _ensureDunesDocumentId(doc: hint, docId: docId);
+    } catch (e) {
+      lastError = e;
+    }
+    // 列表来自 Nova，打开要走 Dunes MinIO。后台 sync 可能还没回填完，点开时再静默拉一次。
     if (dunesId.isEmpty) {
-      throw lastError is Exception
-          ? lastError
-          : Exception('该文档尚未关联本地知识库，请返回刷新后重试');
+      try {
+        await syncRagflow();
+      } catch (e) {
+        lastError = e;
+      }
+      try {
+        dunesId = await _ensureDunesDocumentId(doc: hint, docId: docId);
+      } catch (e) {
+        lastError = e;
+      }
+    }
+    if (dunesId.isEmpty) {
+      // kb-go 回填可能已把文件写入 MinIO（`{userId}/ragflow/{ragId}/{文件名}`），
+      // 但 INSERT 因 content_type 超长失败。此时仍可按猜测 key 下载。
+      if (hint != null) {
+        final bytes = await tryStorage(hint);
+        if (bytes != null && bytes.isNotEmpty) {
+          return (bytes: bytes, fileName: pickName(hint));
+        }
+      }
+      throw Exception('该文档尚未同步到本地存储，请稍后重试或下拉刷新');
     }
     NativeKbDocument? doc = hint;
     try {
@@ -627,22 +671,13 @@ class NativeKbService {
     }
     final fileName = pickName(doc);
 
-    // 1) 鉴权 storage proxy（与预览一致，不依赖预签名）。
-    final keys = <String>[
-      if (doc != null) ..._kbStorageKeyCandidates(doc),
-    ];
-    for (final key in keys) {
-      try {
-        final bytes = await _downloadBytesViaStorageProxy(key);
-        if (bytes.isNotEmpty) {
-          return (bytes: bytes, fileName: fileName);
-        }
-      } catch (e) {
-        lastError = e;
+    if (doc != null) {
+      final bytes = await tryStorage(doc);
+      if (bytes != null && bytes.isNotEmpty) {
+        return (bytes: bytes, fileName: fileName);
       }
     }
 
-    // 2) 预签名直链：切勿 cache-bust，否则签名失效会 403。
     try {
       final download = await fetchDocumentDownload(dunesId);
       final name = download.fileName.trim().isNotEmpty
@@ -656,9 +691,9 @@ class NativeKbService {
       lastError = e;
     }
 
-    throw lastError is Exception
-        ? lastError
-        : Exception(lastError?.toString() ?? '下载文档失败');
+    final err = lastError;
+    if (err is Exception) throw err;
+    throw Exception(err?.toString() ?? '下载文档失败');
   }
 
   Future<Uint8List> _downloadBytesViaStorageProxy(

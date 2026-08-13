@@ -33,6 +33,7 @@ class TaskItem {
     this.parentTitle = '',
     this.overdue = false,
     this.coOwnerUserIds = const [],
+    this.aiState = '',
   });
 
   final int id;
@@ -69,9 +70,15 @@ class TaskItem {
   final bool overdue;
   final List<int> coOwnerUserIds;
 
+  /// 服务端展示态：analyzing = AI 分析中，binding = AI 匹配知识库中。
+  final String aiState;
+
   bool get isMain => parentId == null;
   bool get isPending => status == 'pending_approval';
-  bool get hasEval => evalLevel.trim().isNotEmpty;
+  bool get hasEval =>
+      evalBy != null ||
+      evalLevel.trim().isNotEmpty ||
+      evalComment.trim().isNotEmpty;
 
   factory TaskItem.fromJson(Map<String, dynamic> json) {
     DateTime? parseTime(dynamic v) {
@@ -112,10 +119,12 @@ class TaskItem {
       approverName: '${json['approverName'] ?? ''}',
       parentTitle: '${json['parentTitle'] ?? ''}',
       overdue: json['overdue'] == true,
-      coOwnerUserIds: (json['coOwnerUserIds'] as List?)
+      coOwnerUserIds:
+          (json['coOwnerUserIds'] as List?)
               ?.map((e) => (e as num).toInt())
               .toList(growable: false) ??
           const [],
+      aiState: '${json['aiState'] ?? ''}',
     );
   }
 }
@@ -155,13 +164,13 @@ class TaskAttachment {
   }
 
   Map<String, dynamic> toCreateJson() => {
-        'fileName': fileName,
-        'objectKey': objectKey,
-        'url': url,
-        'bucket': bucket,
-        'sizeBytes': sizeBytes,
-        'mimeType': mimeType,
-      };
+    'fileName': fileName,
+    'objectKey': objectKey,
+    'url': url,
+    'bucket': bucket,
+    'sizeBytes': sizeBytes,
+    'mimeType': mimeType,
+  };
 }
 
 class TaskDetail {
@@ -214,7 +223,8 @@ class TaskProgressLog {
       userId: (json['userId'] as num?)?.toInt() ?? 0,
       progressPct: (json['progressPct'] as num?)?.toInt() ?? 0,
       note: '${json['note'] ?? ''}',
-      createdAt: DateTime.tryParse('${json['createdAt'] ?? ''}') ?? DateTime.now(),
+      createdAt:
+          DateTime.tryParse('${json['createdAt'] ?? ''}') ?? DateTime.now(),
       userName: '${json['userName'] ?? ''}',
       taskTitle: '${json['taskTitle'] ?? ''}',
       isSubtask: json['isSubtask'] == true,
@@ -261,7 +271,8 @@ class TaskEvalLog {
       userId: (json['userId'] as num?)?.toInt() ?? 0,
       level: '${json['level'] ?? ''}',
       comment: '${json['comment'] ?? ''}',
-      createdAt: DateTime.tryParse('${json['createdAt'] ?? ''}') ?? DateTime.now(),
+      createdAt:
+          DateTime.tryParse('${json['createdAt'] ?? ''}') ?? DateTime.now(),
       userName: '${json['userName'] ?? ''}',
       taskTitle: '${json['taskTitle'] ?? ''}',
       isSubtask: json['isSubtask'] == true,
@@ -322,9 +333,9 @@ class TaskListPage {
     final raw = json['items'];
     final items = raw is List
         ? raw
-            .whereType<Map>()
-            .map((e) => TaskItem.fromJson(Map<String, dynamic>.from(e)))
-            .toList(growable: false)
+              .whereType<Map>()
+              .map((e) => TaskItem.fromJson(Map<String, dynamic>.from(e)))
+              .toList(growable: false)
         : const <TaskItem>[];
     return TaskListPage(
       items: items,

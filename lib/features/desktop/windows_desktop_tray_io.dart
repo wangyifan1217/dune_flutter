@@ -55,6 +55,8 @@ void windowsTrayReveal() {
   unawaited(WindowsDesktopTray.instance.reveal());
 }
 
+Future<void> windowsTrayMinimize() => WindowsDesktopTray.instance.minimize();
+
 void setWindowsTrayOnBeforeQuit(Future<void> Function()? callback) {
   WindowsDesktopTray.instance.onBeforeQuit = callback;
 }
@@ -220,6 +222,15 @@ class WindowsDesktopTray with WindowListener, TrayListener {
   }
 
   Future<void> reveal() => _showFromTray();
+
+  Future<void> minimize() async {
+    try {
+      if (await windowManager.isMinimized()) return;
+      await windowManager.minimize();
+    } catch (e, st) {
+      debugPrint('[Tray] minimize failed: $e\n$st');
+    }
+  }
 
   Future<void> _hideToTray() async {
     _hidden = true;

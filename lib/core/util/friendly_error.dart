@@ -109,6 +109,11 @@ String friendlyErrorText(Object? error, {String fallback = '操作失败，请�
   if (low.contains('move is limited to the same space')) {
     return '移动仅限同一空间，跨空间请使用复制';
   }
+  if (low.contains('value too long') ||
+      low.contains('character varying') ||
+      low.contains('varchar')) {
+    return '该文档尚未同步到本地存储，请稍后重试或下拉刷新';
+  }
   // 其它纯英文技术错误统一兜底，不直接暴露给用户。
   return fallback;
 }

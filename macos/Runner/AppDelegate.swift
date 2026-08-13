@@ -4,6 +4,7 @@ import FlutterMacOS
 @main
 class AppDelegate: FlutterAppDelegate {
   private var desktopWindowChannel: FlutterMethodChannel?
+  private var desktopFileDragChannel: FlutterMethodChannel?
 
   /// 由 MainFlutterWindow 在引擎就绪后挂上，用于 Dock reopen → Flutter 恢复窗口。
   func setupDesktopWindowChannel(with messenger: FlutterBinaryMessenger) {
@@ -47,4 +48,69 @@ class AppDelegate: FlutterAppDelegate {
   override func applicationSupportsSecureRestorableState(_ app: NSApplication) -> Bool {
     return true
   }
+
+  func setupDesktopFileDragChannel(with messenger: FlutterBinaryMessenger) {
+    let channel = FlutterMethodChannel(
+      name: "nova.dunes/desktop_file_drag",
+      binaryMessenger: messenger
+    )
+    channel.setMethodCallHandler { call, result in
+      guard call.method == "start" else {
+        result(FlutterMethodNotImplemented)
+        return
+      }
+      let paths = ((call.arguments as? [String: Any])?["paths"] as? [String]) ?? []
+      // 必须同步开始：异步会丢掉当前鼠标拖动手势，Finder 收不到文件。
+      let ok = DesktopFileDragSource.shared.begin(paths: paths)
+      if ok {
+        result(nil)
+      } else {
+        result(
+          FlutterError(
+            code: "no_file",
+            message: "没有可拖出的本地文件",
+            details: nil
+          )
+        )
+      }
+    }
+    desktopFileDragChannel = channel
+  }
 }
+
+/// 把本地文件拖到 Finder / 桌面（复制，不移动应用缓存）。
+final class DesktopFileDragSource: NSObject, NSDraggingSource {
+  static let shared = DesktopFileDragSource()
+
+  func draggingSession(
+    _ session: NSDraggingSession,
+    sourceOperationMaskFor context: NSDraggingContext
+  ) -> NSDragOperation {
+    return .copy
+  }
+
+  func begin(paths: [String]) -> Bool {
+    let urls = paths
+      .map { URL(fileURLWithPath: $0) }
+      .filter { FileManager.default.fileExists(atPath: $0.path) }
+    guard !urls.isEmpty else { return false }
+    guard let event = NSApp.currentEvent else { return false }
+    guard event.type == .leftMouseDown || event.type == .leftMouseDragged else {
+      return false
+    }
+    guard let window = NSApp.keyWindow ?? NSApp.mainWindow else { return false }
+    guard let view = window.contentView else { return false }
+    let loc = view.convert(event.locationInWindow, from: nil)
+    let items: [NSDraggingItem] = urls.map { url in
+      let item = NSDraggingItem(pasteboardWriter: url as NSURL)
+      let icon = NSWorkspace.shared.icon(forFile: url.path)
+      icon.size = NSSize(width: 32, height: 32)
+      item.setDraggingFrame(
+        NSRect(x: loc.x - 16, y: loc.y - 16, width: 32, height: 32),
+        contents: icon
+      )
+      return item
+    }
+    view.beginDraggingSession(with: items, event: event, source: self)
+    return true
+  }

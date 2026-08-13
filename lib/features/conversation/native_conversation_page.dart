@@ -54,6 +54,7 @@ class NativeConversationPage extends StatefulWidget {
     this.onOpenApprovalAssistant,
     this.onOpenTaskAssistant,
     this.onOpenDriveAssistant,
+    this.onOpenWeeklySummary,
     this.onOpenAdministrativeNotice,
     this.onOpenReconciliationAssistant,
     this.onStartPrivateChat,
@@ -81,8 +82,9 @@ class NativeConversationPage extends StatefulWidget {
   final ValueChanged<NativeConversation>? onOpenApprovalAssistant;
   final ValueChanged<NativeConversation>? onOpenTaskAssistant;
   final ValueChanged<NativeConversation>? onOpenDriveAssistant;
+  final ValueChanged<NativeConversation>? onOpenWeeklySummary;
   final ValueChanged<NativeConversation>? onOpenAdministrativeNotice;
-  final VoidCallback? onOpenReconciliationAssistant;
+  final ValueChanged<NativeConversation>? onOpenReconciliationAssistant;
 
   /// 搜索命中尚无会话的联系人时，按 peerId 打开私聊（首条消息前不建会话）。
   final ValueChanged<int>? onStartPrivateChat;
@@ -1164,14 +1166,21 @@ class _NativeConversationPageState extends State<NativeConversationPage>
       onTap = _openWithScrollPersist(
         () => widget.onOpenDriveAssistant?.call(c),
       );
+    } else if (c.isWeeklySummary) {
+      rowKind = ChatInboxRowKind.weeklySummary;
+      onTap = _openWithScrollPersist(
+        () => widget.onOpenWeeklySummary?.call(c),
+      );
     } else if (c.isAdministrativeNotice) {
       rowKind = ChatInboxRowKind.administrativeNotice;
       onTap = _openWithScrollPersist(
         () => widget.onOpenAdministrativeNotice?.call(c),
       );
     } else if (c.isReconciliationAssistant) {
-      // 对账助手入口已屏蔽，后端若仍返回对应会话也不展示。
-      return null;
+      rowKind = ChatInboxRowKind.reconciliationAssistant;
+      onTap = _openWithScrollPersist(
+        () => widget.onOpenReconciliationAssistant?.call(c),
+      );
     } else if (c.isWorkgroupApproval) {
       rowKind = ChatInboxRowKind.workgroupApproval;
       onTap = _openWithScrollPersist(() => widget.onOpenGroup(c));
@@ -1202,6 +1211,7 @@ class _NativeConversationPageState extends State<NativeConversationPage>
             rowKind == ChatInboxRowKind.approvalAssistant ||
             rowKind == ChatInboxRowKind.taskAssistant ||
             rowKind == ChatInboxRowKind.administrativeNotice ||
+            rowKind == ChatInboxRowKind.weeklySummary ||
             rowKind == ChatInboxRowKind.reconciliationAssistant ||
             c.isSelfMemo);
 
@@ -1221,7 +1231,7 @@ class _NativeConversationPageState extends State<NativeConversationPage>
                 ? '审批助手'
                 : (c.isTaskAssistant
                       ? '任务助手'
-                      : (c.isDriveAssistant ? '企业微盘' : title))),
+                      : (c.isDriveAssistant ? '企业微盘' : (c.isWeeklySummary ? '一周小结' : title)))),
       subtitle: null,
       preview: analyzingRobot
           ? '正在分析…'
@@ -1246,6 +1256,8 @@ class _NativeConversationPageState extends State<NativeConversationPage>
           ? '子任务分配 · 进度跟进'
           : c.preview.isEmpty && c.isDriveAssistant
           ? '共享空间文件动态'
+          : c.preview.isEmpty && c.isWeeklySummary
+          ? '每周五 18:00 送达'
           : c.preview,
       timeLabel: InboxFormat.formatTime(c.updatedAt, withClock: c.isPrivate),
       memberCount:
@@ -1255,6 +1267,7 @@ class _NativeConversationPageState extends State<NativeConversationPage>
               c.isApprovalAssistant ||
               c.isTaskAssistant ||
               c.isDriveAssistant ||
+              c.isWeeklySummary ||
               c.isAdministrativeNotice ||
               c.isReconciliationAssistant ||
               kind == 'AI_ASSISTANT' ||
@@ -1337,6 +1350,7 @@ class _NativeConversationPageState extends State<NativeConversationPage>
                 c.isApprovalAssistant ||
                 c.isTaskAssistant ||
                 c.isDriveAssistant ||
+                (c.isWeeklySummary && !widget.session.isExternalUser) ||
                 c.isAdministrativeNotice ||
                 c.isReconciliationAssistant,
           )
@@ -1424,15 +1438,6 @@ class _NativeConversationPageState extends State<NativeConversationPage>
       final ts = _aiSummaryPreview?.sortTime?.millisecondsSinceEpoch ?? 0;
       entries.add((ts: ts, pinned: false, row: aiRow));
     }
-    final reconciliationRow = _buildReconciliationAssistantInboxRow();
-    if (reconciliationRow != null &&
-        !chats.any((c) => c.isReconciliationAssistant)) {
-      entries.add((
-        ts: DateTime.now().millisecondsSinceEpoch,
-        pinned: false,
-        row: reconciliationRow,
-      ));
-    }
     entries.sort((a, b) {
       final ap = a.pinned ? 1 : 0;
       final bp = b.pinned ? 1 : 0;
@@ -1440,11 +1445,6 @@ class _NativeConversationPageState extends State<NativeConversationPage>
       return b.ts.compareTo(a.ts);
     });
     return entries.map((e) => e.row).toList(growable: false);
-  }
-
-  Widget? _buildReconciliationAssistantInboxRow() {
-    // 对账助手暂为静态预览，入口先屏蔽；恢复时按 onOpenReconciliationAssistant 硬插会话行即可。
-    return null;
   }
 
   Widget? _buildAiSummaryInboxRow() {

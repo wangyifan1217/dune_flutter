@@ -49,6 +49,7 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
   final _scrollController = ScrollController();
   Timer? _searchDebounce;
   _TaskPage _page = _TaskPage.list;
+
   /// 当前页切换是否为「返回」（决定滑动方向）。
   bool _pageNavBack = false;
   int? _detailId;
@@ -117,8 +118,7 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
     });
   }
 
-  String get _apiScope =>
-      _scope == 'pending' ? 'pending_approval' : 'mine';
+  String get _apiScope => _scope == 'pending' ? 'pending_approval' : 'mine';
 
   void _publishChrome() {
     if (_page == _TaskPage.detail || _page == _TaskPage.action) {
@@ -140,7 +140,9 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
             backgroundColor: kTaskPurple,
             visualDensity: VisualDensity.compact,
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
           ),
         ),
       ),
@@ -165,9 +167,16 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
         page: 0,
         size: _pageSize,
       );
-      final mineStatsFuture = _api.listTasksPage(scope: 'mine', page: 0, size: 1);
-      final pendingStatsFuture =
-          _api.listTasksPage(scope: 'pending_approval', page: 0, size: 1);
+      final mineStatsFuture = _api.listTasksPage(
+        scope: 'mine',
+        page: 0,
+        size: 1,
+      );
+      final pendingStatsFuture = _api.listTasksPage(
+        scope: 'pending_approval',
+        page: 0,
+        size: 1,
+      );
       final list = await listFuture;
       final mineStats = await mineStatsFuture;
       final pendingStats = await pendingStatsFuture;
@@ -253,9 +262,7 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
   void _openDetail(int id, {TaskItem? asParentCache}) {
     setState(() {
       _pageNavBack = false;
-      if (_page == _TaskPage.detail &&
-          _detailId != null &&
-          _detailId != id) {
+      if (_page == _TaskPage.detail && _detailId != null && _detailId != id) {
         _detailStack.add(_detailId!);
       }
       _page = _TaskPage.detail;
@@ -304,16 +311,14 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
       context,
       session: widget.session,
       parentTaskId: parentId,
-      parentTask: parentTask ??
+      parentTask:
+          parentTask ??
           (parentId != null && _detailParentCache?.id == parentId
               ? _detailParentCache
               : null),
     );
     if (created == null || !mounted) return;
-    showDunesCenterToast(
-      context,
-      parentId == null ? '主任务已创建' : '子任务已创建',
-    );
+    showDunesCenterToast(context, parentId == null ? '主任务已创建' : '子任务已创建');
     await _reload();
     if (parentId != null && mounted) {
       _openDetail(parentId);
@@ -326,9 +331,9 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
   int get _doneCount => _mineDone;
 
   String get _scopeLabel => switch (_scope) {
-        'pending' => '待我审核',
-        _ => '我的任务',
-      };
+    'pending' => '待我审核',
+    _ => '我的任务',
+  };
 
   String get _dateRangeLabel {
     if (_dateFrom == null && _dateTo == null) return '时间段';
@@ -350,7 +355,11 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
     );
     if (!mounted || picked == null) return;
     setState(() {
-      _dateFrom = DateTime(picked.start.year, picked.start.month, picked.start.day);
+      _dateFrom = DateTime(
+        picked.start.year,
+        picked.start.month,
+        picked.start.day,
+      );
       _dateTo = DateTime(picked.end.year, picked.end.month, picked.end.day);
     });
     unawaited(_reload());
@@ -368,7 +377,9 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
   Widget _dateRangeChip() {
     final active = _dateFrom != null || _dateTo != null;
     return Material(
-      color: active ? kTaskPurple.withValues(alpha: 0.08) : const Color(0xFFF5F6F8),
+      color: active
+          ? kTaskPurple.withValues(alpha: 0.08)
+          : const Color(0xFFF5F6F8),
       borderRadius: BorderRadius.circular(10),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -414,54 +425,53 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
   }
 
   String get _statusLabel => switch (_status) {
-        'pending_approval' => '待审核',
-        'completed' => '已完成',
-        'rejected' => '已驳回',
-        'active' => '进行中',
-        _ => '全部状态',
-      };
+    'pending_approval' => '待审核',
+    'completed' => '已完成',
+    'rejected' => '已驳回',
+    'active' => '进行中',
+    _ => '全部状态',
+  };
 
   String get _priorityLabel => switch (_priority) {
-        'low' => '低',
-        'medium' => '中',
-        'high' => '高',
-        'urgent' => '紧急',
-        _ => '全部优先级',
-      };
+    'low' => '低',
+    'medium' => '中',
+    'high' => '高',
+    'urgent' => '紧急',
+    _ => '全部优先级',
+  };
 
   Key get _pageKey => switch (_page) {
-        _TaskPage.list => const ValueKey('task-list'),
-        _TaskPage.detail => ValueKey('task-detail-$_detailId'),
-        _TaskPage.action =>
-          ValueKey('task-action-$_actionMode-${_actionTask?.id}'),
-      };
+    _TaskPage.list => const ValueKey('task-list'),
+    _TaskPage.detail => ValueKey('task-detail-$_detailId'),
+    _TaskPage.action => ValueKey('task-action-$_actionMode-${_actionTask?.id}'),
+  };
 
   Widget _pageBody() {
     return switch (_page) {
       _TaskPage.action => NativeTaskActionView(
-          session: widget.session,
-          task: _actionTask!,
-          mode: _actionMode!,
-          onBack: _backFromAction,
-          onDone: _doneAction,
-        ),
+        session: widget.session,
+        task: _actionTask!,
+        mode: _actionMode!,
+        onBack: _backFromAction,
+        onDone: _doneAction,
+      ),
       _TaskPage.detail => NativeTaskDetailView(
-          session: widget.session,
-          taskId: _detailId!,
-          onBack: _backFromDetail,
-          onAddSubtask: () => _openCreate(
-            parentId: _detailId,
-            parentTask: _detailParentCache?.id == _detailId
-                ? _detailParentCache
-                : null,
-          ),
-          onOpenTask: _openDetail,
-          onOpenProgress: (t) => _openAction(t, TaskActionMode.progress),
-          onOpenEvaluate: (t) => _openAction(t, TaskActionMode.evaluate),
-          onTaskLoaded: (t) {
-            if (t.isMain) _detailParentCache = t;
-          },
+        session: widget.session,
+        taskId: _detailId!,
+        onBack: _backFromDetail,
+        onAddSubtask: () => _openCreate(
+          parentId: _detailId,
+          parentTask: _detailParentCache?.id == _detailId
+              ? _detailParentCache
+              : null,
         ),
+        onOpenTask: _openDetail,
+        onOpenProgress: (t) => _openAction(t, TaskActionMode.progress),
+        onOpenEvaluate: (t) => _openAction(t, TaskActionMode.evaluate),
+        onTaskLoaded: (t) {
+          if (t.isMain) _detailParentCache = t;
+        },
+      ),
       _TaskPage.list => _buildList(),
     };
   }
@@ -471,7 +481,12 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
     final isBack = _pageNavBack;
     final child = KeyedSubtree(
       key: _pageKey,
-      child: _pageBody(),
+      // 点击输入框外的空白处收起软键盘（覆盖任务列表/详情/进度/评价等各级页）
+      child: GestureDetector(
+        behavior: HitTestBehavior.translucent,
+        onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
+        child: _pageBody(),
+      ),
     );
     return AnimatedSwitcher(
       duration: const Duration(milliseconds: 280),
@@ -493,8 +508,10 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
             ? (isBack ? const Offset(-0.18, 0) : const Offset(1, 0))
             : (isBack ? const Offset(1, 0) : const Offset(-0.18, 0));
         return SlideTransition(
-          position: Tween<Offset>(begin: begin, end: Offset.zero)
-              .animate(animation),
+          position: Tween<Offset>(
+            begin: begin,
+            end: Offset.zero,
+          ).animate(animation),
           child: transitionChild,
         );
       },
@@ -520,7 +537,11 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
                   children: [
                     const Text(
                       '主任务可自建 · 子任务仅分给自己或下级 · 自建子任务需上级审核',
-                      style: TextStyle(fontSize: 13, color: DunesColors.text3, height: 1.3),
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: DunesColors.text3,
+                        height: 1.3,
+                      ),
                     ),
                     const SizedBox(height: 12),
                     TaskSummaryRow(
@@ -579,16 +600,26 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
               controller: _search,
               decoration: InputDecoration(
                 hintText: '搜索标题 / 负责人 / 分类',
-                hintStyle: const TextStyle(color: DunesColors.text3, fontSize: 13),
+                hintStyle: const TextStyle(
+                  color: DunesColors.text3,
+                  fontSize: 13,
+                ),
                 isDense: true,
                 filled: true,
                 fillColor: const Color(0xFFF5F6F8),
-                prefixIcon: const Icon(Icons.search, size: 20, color: DunesColors.text3),
+                prefixIcon: const Icon(
+                  Icons.search,
+                  size: 20,
+                  color: DunesColors.text3,
+                ),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(10),
                   borderSide: BorderSide.none,
                 ),
-                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 10,
+                ),
               ),
             ),
           );
@@ -663,10 +694,7 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
             children: [
               search,
               const SizedBox(width: 10),
-              for (final w in filters) ...[
-                const SizedBox(width: 8),
-                w,
-              ],
+              for (final w in filters) ...[const SizedBox(width: 8), w],
             ],
           );
         },
@@ -691,7 +719,11 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(Icons.error_outline, color: Colors.redAccent, size: 36),
+                const Icon(
+                  Icons.error_outline,
+                  color: Colors.redAccent,
+                  size: 36,
+                ),
                 const SizedBox(height: 10),
                 Text(_error!, style: const TextStyle(color: Colors.redAccent)),
                 TextButton(onPressed: _reload, child: const Text('重试')),
@@ -703,7 +735,8 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
     }
 
     final items = _items;
-    final hasFilters = (_status != null && _status!.isNotEmpty) ||
+    final hasFilters =
+        (_status != null && _status!.isNotEmpty) ||
         (_priority != null && _priority!.isNotEmpty) ||
         _search.text.trim().isNotEmpty ||
         _dateFrom != null ||
@@ -750,7 +783,11 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
                       ),
                       borderRadius: BorderRadius.circular(18),
                     ),
-                    child: const Icon(Icons.task_alt_outlined, color: kTaskPurple, size: 30),
+                    child: const Icon(
+                      Icons.task_alt_outlined,
+                      color: kTaskPurple,
+                      size: 30,
+                    ),
                   ),
                   const SizedBox(height: 18),
                   Text(
@@ -766,7 +803,11 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
                   Text(
                     _scope == 'pending' ? '下级自建的子任务会显示在这里' : '创建第一条主任务，开始拆解与跟进',
                     textAlign: TextAlign.center,
-                    style: const TextStyle(fontSize: 13, color: DunesColors.text3, height: 1.4),
+                    style: const TextStyle(
+                      fontSize: 13,
+                      color: DunesColors.text3,
+                      height: 1.4,
+                    ),
                   ),
                   if (_scope == 'mine') ...[
                     const SizedBox(height: 20),
@@ -776,8 +817,13 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
                       label: const Text('新建第一条'),
                       style: FilledButton.styleFrom(
                         backgroundColor: kTaskPurple,
-                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 20,
+                          vertical: 12,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
                       ),
                     ),
                   ],
@@ -792,25 +838,33 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
     return [
       SliverPadding(
         padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
-        sliver: SliverGrid(
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            // APP/PC 统一一行三个，纵向滑动浏览。
-            crossAxisCount: 3,
-            mainAxisSpacing: 12,
-            crossAxisSpacing: 10,
-            mainAxisExtent: 148,
-          ),
-          delegate: SliverChildBuilderDelegate(
-            (context, i) {
-              final t = items[i];
-              return TaskNameCard(
-                session: widget.session,
-                task: t,
-                onTap: () => _openDetail(t.id),
-              );
-            },
-            childCount: items.length,
-          ),
+        sliver: SliverLayoutBuilder(
+          builder: (context, constraints) {
+            // 列数随容器宽度自适应：手机一行一张（卡片规格与详情页子任务一致），
+            // 中等宽度两张，PC 宽屏保持三张，避免窄屏挤压导致内容错位。
+            final width = constraints.crossAxisExtent;
+            final columns = width >= 920
+                ? 3
+                : width >= 600
+                ? 2
+                : 1;
+            return SliverGrid(
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: columns,
+                mainAxisSpacing: 12,
+                crossAxisSpacing: 10,
+                mainAxisExtent: 148,
+              ),
+              delegate: SliverChildBuilderDelegate((context, i) {
+                final t = items[i];
+                return TaskNameCard(
+                  session: widget.session,
+                  task: t,
+                  onTap: () => _openDetail(t.id),
+                );
+              }, childCount: items.length),
+            );
+          },
         ),
       ),
     ];

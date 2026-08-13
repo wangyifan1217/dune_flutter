@@ -19,6 +19,7 @@ import '../kb/native_kb_models.dart';
 import '../kb/native_kb_service.dart';
 import 'meeting_list_cache.dart';
 import 'meeting_minutes_chat_share.dart';
+import 'meeting_task_suggestions_section.dart';
 import 'meeting_minutes_export.dart';
 import 'meeting_minutes_markdown.dart';
 import 'meeting_upload_coordinator.dart';
@@ -1421,6 +1422,12 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
                   ],
                 ),
               ),
+              // 任务建议：组织者可见（非组织者拿到空数据，整块不渲染）
+              if (!summaryOnly && !readOnly)
+                MeetingTaskSuggestionsSection(
+                  session: widget.session,
+                  meetingId: d.meetingId,
+                ),
               if (!summaryOnly) ...[
               const SizedBox(height: 16),
               _buildSection(

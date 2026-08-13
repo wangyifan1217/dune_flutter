@@ -61,14 +61,19 @@ class TaskEditorPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF5F6F8),
-      body: SafeArea(
-        child: _TaskEditorBody(
-          session: session,
-          parentTaskId: parentTaskId,
-          parentTask: parentTask,
-          fullscreen: true,
-          onCancel: () => Navigator.pop(context),
-          onCreated: (item) => Navigator.pop(context, item),
+      // 点击空白处收起软键盘
+      body: GestureDetector(
+        behavior: HitTestBehavior.translucent,
+        onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
+        child: SafeArea(
+          child: _TaskEditorBody(
+            session: session,
+            parentTaskId: parentTaskId,
+            parentTask: parentTask,
+            fullscreen: true,
+            onCancel: () => Navigator.pop(context),
+            onCreated: (item) => Navigator.pop(context, item),
+          ),
         ),
       ),
     );
@@ -242,13 +247,18 @@ class _TaskEditorBodyState extends State<_TaskEditorBody> {
                     alignment: Alignment.centerLeft,
                     child: Text(
                       '选择执行人（自己或下级）',
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
                   ),
                 ),
                 Expanded(
                   child: _loadingAssignees
-                      ? const Center(child: CircularProgressIndicator(color: _themePurple))
+                      ? const Center(
+                          child: CircularProgressIndicator(color: _themePurple),
+                        )
                       : ListView.builder(
                           itemCount: _assignees.length,
                           itemBuilder: (_, i) {
@@ -287,9 +297,7 @@ class _TaskEditorBodyState extends State<_TaskEditorBody> {
 
   Future<void> _pickDate({required bool isStart}) async {
     final now = DateTime.now();
-    final initial = isStart
-        ? (_startAt ?? now)
-        : (_dueAt ?? _startAt ?? now);
+    final initial = isStart ? (_startAt ?? now) : (_dueAt ?? _startAt ?? now);
     final first = DateTime(now.year - 1);
     final last = DateTime(now.year + 5);
     final picked = await showDatePicker(
@@ -301,9 +309,9 @@ class _TaskEditorBodyState extends State<_TaskEditorBody> {
       builder: (context, child) {
         return Theme(
           data: Theme.of(context).copyWith(
-            colorScheme: Theme.of(context).colorScheme.copyWith(
-                  primary: _themePurple,
-                ),
+            colorScheme: Theme.of(
+              context,
+            ).colorScheme.copyWith(primary: _themePurple),
           ),
           child: child!,
         );
@@ -373,7 +381,8 @@ class _TaskEditorBodyState extends State<_TaskEditorBody> {
         if (_attachments.isNotEmpty)
           'attachments': _attachments.map((e) => e.toCreateJson()).toList(),
       };
-      if (_startAt != null) body['startAt'] = _startAt!.toUtc().toIso8601String();
+      if (_startAt != null)
+        body['startAt'] = _startAt!.toUtc().toIso8601String();
       if (_dueAt != null) body['dueAt'] = _dueAt!.toUtc().toIso8601String();
       final TaskItem created;
       if (_isSub) {
@@ -554,7 +563,11 @@ class _TaskEditorBodyState extends State<_TaskEditorBody> {
             _parentSelfCreated
                 ? '仅可分配给自己或下级；主任务由你创建时，自建子任务无需审核。'
                 : '仅可分配给自己或下级；分给自己时需上级审核。',
-            style: const TextStyle(fontSize: 12, color: DunesColors.text3, height: 1.4),
+            style: const TextStyle(
+              fontSize: 12,
+              color: DunesColors.text3,
+              height: 1.4,
+            ),
           ),
         ],
       ],
@@ -586,15 +599,23 @@ class _TaskEditorBodyState extends State<_TaskEditorBody> {
                 FilledButton(
                   style: FilledButton.styleFrom(
                     backgroundColor: _themePurple,
-                    padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 18,
+                      vertical: 10,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
                   ),
                   onPressed: _saving ? null : _submit,
                   child: _saving
                       ? const SizedBox(
                           width: 16,
                           height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
                         )
                       : const Text('保存'),
                 ),
@@ -645,21 +666,32 @@ class _TaskEditorBodyState extends State<_TaskEditorBody> {
             children: [
               TextButton(
                 onPressed: _saving ? null : widget.onCancel,
-                child: const Text('取消', style: TextStyle(color: DunesColors.text2)),
+                child: const Text(
+                  '取消',
+                  style: TextStyle(color: DunesColors.text2),
+                ),
               ),
               const SizedBox(width: 8),
               FilledButton(
                 style: FilledButton.styleFrom(
                   backgroundColor: _themePurple,
-                  padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 22,
+                    vertical: 12,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
                 ),
                 onPressed: _saving ? null : _submit,
                 child: _saving
                     ? const SizedBox(
                         width: 16,
                         height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
                       )
                     : const Text('保存'),
               ),
@@ -688,9 +720,15 @@ class _TaskEditorBodyState extends State<_TaskEditorBody> {
           TextField(
             controller: c,
             maxLines: maxLines,
-            style: const TextStyle(fontSize: 14, color: DunesColors.text, height: 1.3),
+            style: const TextStyle(
+              fontSize: 14,
+              color: DunesColors.text,
+              height: 1.3,
+            ),
             onChanged: (_) {
-              if (_titleError != null && c == _titleCtrl && c.text.trim().isNotEmpty) {
+              if (_titleError != null &&
+                  c == _titleCtrl &&
+                  c.text.trim().isNotEmpty) {
                 setState(() => _titleError = null);
               }
             },
@@ -701,8 +739,13 @@ class _TaskEditorBodyState extends State<_TaskEditorBody> {
                 color: DunesColors.text3.withValues(alpha: 0.85),
               ),
               filled: true,
-              fillColor: hasError ? const Color(0xFFFFF1F2) : const Color(0xFFF5F6F8),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              fillColor: hasError
+                  ? const Color(0xFFFFF1F2)
+                  : const Color(0xFFF5F6F8),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 14,
+                vertical: 12,
+              ),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(10),
                 borderSide: BorderSide.none,
@@ -725,7 +768,10 @@ class _TaskEditorBodyState extends State<_TaskEditorBody> {
           ),
           if (hasError) ...[
             const SizedBox(height: 6),
-            Text(errorText, style: const TextStyle(fontSize: 12, color: Color(0xFFE35D6A))),
+            Text(
+              errorText,
+              style: const TextStyle(fontSize: 12, color: Color(0xFFE35D6A)),
+            ),
           ],
         ],
       ),
@@ -760,7 +806,11 @@ class _TaskEditorBodyState extends State<_TaskEditorBody> {
                   ),
                 ),
                 if (onTap != null)
-                  const Icon(Icons.expand_more, size: 20, color: DunesColors.text3),
+                  const Icon(
+                    Icons.expand_more,
+                    size: 20,
+                    color: DunesColors.text3,
+                  ),
               ],
             ),
           ),
@@ -817,7 +867,10 @@ class _TaskEditorBodyState extends State<_TaskEditorBody> {
                         ListTile(
                           title: Text(item.$2),
                           trailing: item.$1 == value
-                              ? const Icon(Icons.check_rounded, color: _themePurple)
+                              ? const Icon(
+                                  Icons.check_rounded,
+                                  color: _themePurple,
+                                )
                               : null,
                           onTap: () => Navigator.pop(ctx, item.$1),
                         ),
@@ -835,10 +888,17 @@ class _TaskEditorBodyState extends State<_TaskEditorBody> {
                   Expanded(
                     child: Text(
                       current.$2,
-                      style: const TextStyle(fontSize: 14, color: DunesColors.text),
+                      style: const TextStyle(
+                        fontSize: 14,
+                        color: DunesColors.text,
+                      ),
                     ),
                   ),
-                  const Icon(Icons.expand_more, size: 20, color: DunesColors.text3),
+                  const Icon(
+                    Icons.expand_more,
+                    size: 20,
+                    color: DunesColors.text3,
+                  ),
                 ],
               ),
             ),
@@ -869,7 +929,10 @@ class _TaskEditorBodyState extends State<_TaskEditorBody> {
                   borderRadius: BorderRadius.circular(10),
                   onTap: () => open ? controller.close() : controller.open(),
                   child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 12,
+                    ),
                     child: Row(
                       children: [
                         Expanded(
@@ -878,8 +941,9 @@ class _TaskEditorBodyState extends State<_TaskEditorBody> {
                             style: TextStyle(
                               fontSize: 14,
                               color: open ? _themePurple : DunesColors.text,
-                              fontWeight:
-                                  open ? FontWeight.w600 : FontWeight.w400,
+                              fontWeight: open
+                                  ? FontWeight.w600
+                                  : FontWeight.w400,
                             ),
                           ),
                         ),
@@ -914,7 +978,11 @@ class _TaskEditorBodyState extends State<_TaskEditorBody> {
                     minimumSize: WidgetStatePropertyAll(Size(menuWidth, 44)),
                   ),
                   trailingIcon: item.$1 == value
-                      ? const Icon(Icons.check_rounded, size: 16, color: _themePurple)
+                      ? const Icon(
+                          Icons.check_rounded,
+                          size: 16,
+                          color: _themePurple,
+                        )
                       : null,
                   child: SizedBox(
                     width: menuWidth - 48,
@@ -922,9 +990,12 @@ class _TaskEditorBodyState extends State<_TaskEditorBody> {
                       item.$2,
                       style: TextStyle(
                         fontSize: 14,
-                        fontWeight:
-                            item.$1 == value ? FontWeight.w600 : FontWeight.w400,
-                        color: item.$1 == value ? _themePurple : DunesColors.text,
+                        fontWeight: item.$1 == value
+                            ? FontWeight.w600
+                            : FontWeight.w400,
+                        color: item.$1 == value
+                            ? _themePurple
+                            : DunesColors.text,
                       ),
                     ),
                   ),

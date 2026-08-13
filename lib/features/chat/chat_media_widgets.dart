@@ -14,14 +14,15 @@ import 'chat_image_preview_models.dart';
 import 'chat_image_preview_window_stub.dart'
     if (dart.library.io) 'chat_image_preview_window.dart';
 import 'chat_image_utils.dart';
+import 'desktop_image_preview_pref.dart';
 
 export 'chat_image_preview_models.dart';
 import 'cors_safe_image.dart';
 import 'file_download.dart' as file_dl;
 import 'gallery_save.dart' as gallery;
 
-/// macOS 也先尝试独立窗（desktop_multi_window 0.3）；失败/超时回退应用内预览。
-bool get _preferDesktopImageWindow => isDesktopCommOnly;
+/// 左键默认应用内全屏；设置里可改为独立窗口。
+bool get _preferDesktopImageWindow => DesktopImagePreviewPref.enabled;
 
 bool _chatImageHasSeparateOriginal(Map<String, dynamic>? payload) {
   if (payload == null) return false;
@@ -515,7 +516,8 @@ class _ChatInlineImageState extends State<_ChatInlineImage> {
 }
 
 /// 打开会话风格的图片预览（缩放 + 关闭 + 保存/下载）。
-/// PC：真正的系统级独立窗口 + 左右切换同会话其他图片。
+/// PC 左键默认应用内全屏；设置「独立窗口查看图片」开启后走系统子窗。
+/// 右键「弹框预览」走 [showChatImagePopupPreview]。
 /// 群媒体、会话气泡等共用同一套 UI 与保存逻辑。
 Future<void> showChatImagePreview(
   BuildContext context, {
@@ -538,23 +540,78 @@ Future<void> showChatImagePreview(
         ];
   final index = initialIndex.clamp(0, gallery.length - 1);
 
-  // 桌面：优先独立系统窗；超时/失败回退应用内全屏（尤其 macOS）。
-  if (_preferDesktopImageWindow) {
-    return _openDesktopChatImagePreviewWithFeedback(
-      context,
-      service: service,
-      items: gallery,
-      initialIndex: index,
-      conversationId: conversationId,
-    );
-  }
-
-  return _showInAppChatImagePreview(
+  return _openChatImagePreviewByPref(
     context,
     service: service,
     items: gallery,
     initialIndex: index,
     conversationId: conversationId,
+  );
+}
+
+Future<void> _openChatImagePreviewByPref(
+  BuildContext context, {
+  required ConversationService service,
+  required List<ChatImagePreviewItem> items,
+  required int initialIndex,
+  int? conversationId,
+}) async {
+  await DesktopImagePreviewPref.ensureLoaded();
+  if (_preferDesktopImageWindow) {
+    await _openDesktopChatImagePreviewWithFeedback(
+      context,
+      service: service,
+      items: items,
+      initialIndex: initialIndex,
+      conversationId: conversationId,
+    );
+    return;
+  }
+  if (!context.mounted) return;
+  await _showInAppChatImagePreview(
+    context,
+    service: service,
+    items: items,
+    initialIndex: initialIndex,
+    conversationId: conversationId,
+  );
+}
+
+/// PC 右键：居中小窗预览（不另起 Flutter 引擎）。点遮罩或关闭即可关掉。
+Future<void> showChatImagePopupPreview(
+  BuildContext context, {
+  required ConversationService service,
+  Map<String, dynamic>? payload,
+  String fileName = 'image.jpg',
+  int? conversationId,
+}) {
+  return showDialog<void>(
+    context: context,
+    barrierDismissible: true,
+    barrierColor: Colors.black54,
+    builder: (ctx) {
+      final size = MediaQuery.sizeOf(ctx);
+      final maxW = size.width * 0.6 < 640 ? size.width * 0.6 : 640.0;
+      final maxH = size.height * 0.72;
+      return Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.all(24),
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxWidth: maxW,
+            maxHeight: maxH,
+            minWidth: 280,
+            minHeight: 200,
+          ),
+          child: _ChatImagePopupBody(
+            service: service,
+            payload: payload,
+            fileName: fileName,
+            conversationId: conversationId,
+          ),
+        ),
+      );
+    },
   );
 }
 
@@ -1062,6 +1119,17 @@ class _ChatImagePreviewPageState extends State<ChatImagePreviewPage> {
     Navigator.of(context).maybePop();
   }
 
+  /// APP 端：点击图片或黑色背景关闭预览（与微信一致）；
+  /// 桌面独立窗保持原行为（点击不关窗，Esc / 关闭按钮退出）。
+  Widget _dismissOnTap({required Widget child}) {
+    if (_desktop) return child;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: _close,
+      child: child,
+    );
+  }
+
   Widget _wrapPreviewShell({required Widget child}) {
     final body = CallbackShortcuts(
       bindings: <ShortcutActivator, VoidCallback>{
@@ -1091,6 +1159,9 @@ class _ChatImagePreviewPageState extends State<ChatImagePreviewPage> {
 
   @override
   Widget build(BuildContext context) {
+    // 全屏预览会铺到状态栏下方，顶部控件必须避开系统安全区（刘海/挖孔），
+    // 否则关闭按钮被状态栏遮住点不到；桌面独立窗 padding 为 0，不受影响。
+    final topInset = MediaQuery.paddingOf(context).top;
     final webUrl = _webPublicUrl;
     if (webUrl != null) {
       return _wrapPreviewShell(
@@ -1100,20 +1171,22 @@ class _ChatImagePreviewPageState extends State<ChatImagePreviewPage> {
               child: Stack(
                 children: [
                   Positioned.fill(
-                    child: InteractiveViewer(
-                      maxScale: 5,
-                      child: Center(
-                        child: buildCorsSafeImage(
-                          url: webUrl,
-                          width: 1200,
-                          height: 1200,
-                          fit: BoxFit.contain,
+                    child: _dismissOnTap(
+                      child: InteractiveViewer(
+                        maxScale: 5,
+                        child: Center(
+                          child: buildCorsSafeImage(
+                            url: webUrl,
+                            width: 1200,
+                            height: 1200,
+                            fit: BoxFit.contain,
+                          ),
                         ),
                       ),
                     ),
                   ),
                   Positioned(
-                    top: 4,
+                    top: 4 + topInset,
                     right: 4,
                     child: IconButton(
                       onPressed: _close,
@@ -1124,7 +1197,7 @@ class _ChatImagePreviewPageState extends State<ChatImagePreviewPage> {
                     ),
                   ),
                   Positioned(
-                    top: 14,
+                    top: 14 + topInset,
                     left: 14,
                     child: Row(
                       children: [
@@ -1264,9 +1337,9 @@ class _ChatImagePreviewPageState extends State<ChatImagePreviewPage> {
               Expanded(
                 child: Stack(
                   children: [
-                    Positioned.fill(child: content),
+                    Positioned.fill(child: _dismissOnTap(child: content)),
                     Positioned(
-                      top: 4,
+                      top: 4 + topInset,
                       right: 4,
                       child: IconButton(
                         onPressed: _close,
@@ -1278,7 +1351,7 @@ class _ChatImagePreviewPageState extends State<ChatImagePreviewPage> {
                     ),
                     if (!loading && !failed && bytes != null)
                       Positioned(
-                        top: 14,
+                        top: 14 + topInset,
                         left: 14,
                         child: Row(
                           children: [
@@ -1377,6 +1450,198 @@ class _ChatImagePreviewPageState extends State<ChatImagePreviewPage> {
             ],
           );
         },
+      ),
+    );
+  }
+}
+
+class _ChatImagePopupBody extends StatefulWidget {
+  const _ChatImagePopupBody({
+    required this.service,
+    required this.payload,
+    required this.fileName,
+    this.conversationId,
+  });
+
+  final ConversationService service;
+  final Map<String, dynamic>? payload;
+  final String fileName;
+  final int? conversationId;
+
+  @override
+  State<_ChatImagePopupBody> createState() => _ChatImagePopupBodyState();
+}
+
+class _ChatImagePopupBodyState extends State<_ChatImagePopupBody> {
+  late final Future<Uint8List> _future = _loadBytes();
+  var _saving = false;
+
+  Future<Uint8List> _loadBytes() async {
+    final previewPayload = ConversationService.previewMediaPayload(
+      widget.payload,
+    );
+    final publicUrl = ConversationService.mediaPublicImageUrl(widget.payload);
+    if (publicUrl != null && publicUrl.isNotEmpty) {
+      try {
+        return await widget.service.downloadAttachmentBytes(
+          objectKey: publicUrl,
+          fileName: widget.fileName,
+        );
+      } catch (_) {}
+    }
+    return widget.service.loadCachedChatMediaBytesWithFallback(
+      previewPayload: previewPayload,
+      originalPayload: null,
+    );
+  }
+
+  Future<void> _download(Uint8List bytes) async {
+    if (_saving) return;
+    setState(() => _saving = true);
+    try {
+      final key = ConversationService.mediaAuthObjectKey(
+        ConversationService.previewMediaPayload(widget.payload),
+      );
+      if (key.isNotEmpty ||
+          (widget.conversationId != null && widget.conversationId! > 0)) {
+        await file_dl.saveBytesAsCachedFile(
+          bytes,
+          key,
+          widget.fileName,
+          conversationId: widget.conversationId,
+        );
+      } else {
+        await file_dl.saveBytesAsFile(bytes, widget.fileName);
+      }
+      if (!mounted) return;
+      showDunesToast(context, '已下载');
+    } catch (e) {
+      if (!mounted) return;
+      showDunesToast(
+        context,
+        '下载失败：${friendlyErrorText(e)}',
+        kind: DunesToastKind.error,
+      );
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(12),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 8, 6, 8),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    widget.fileName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: DunesColors.text,
+                    ),
+                  ),
+                ),
+                IconButton(
+                  tooltip: '关闭',
+                  visualDensity: VisualDensity.compact,
+                  onPressed: () => Navigator.of(context).pop(),
+                  icon: const Icon(Icons.close_rounded, size: 18),
+                ),
+              ],
+            ),
+          ),
+          Flexible(
+            child: ColoredBox(
+              color: const Color(0xFFF3F4F6),
+              child: FutureBuilder<Uint8List>(
+                future: _future,
+                builder: (context, snap) {
+                  if (snap.connectionState != ConnectionState.done) {
+                    return const Center(
+                      child: SizedBox(
+                        width: 28,
+                        height: 28,
+                        child: CircularProgressIndicator(strokeWidth: 2.4),
+                      ),
+                    );
+                  }
+                  final bytes = snap.data;
+                  if (snap.hasError || bytes == null || bytes.isEmpty) {
+                    return const Center(
+                      child: Icon(
+                        Icons.broken_image_outlined,
+                        size: 48,
+                        color: DunesColors.text3,
+                      ),
+                    );
+                  }
+                  return Stack(
+                    children: [
+                      Positioned.fill(
+                        child: InteractiveViewer(
+                          maxScale: 5,
+                          child: Center(
+                            child: Image.memory(bytes, fit: BoxFit.contain),
+                          ),
+                        ),
+                      ),
+                      Positioned(
+                        right: 10,
+                        bottom: 10,
+                        child: Material(
+                          color: Colors.black.withValues(alpha: 0.55),
+                          borderRadius: BorderRadius.circular(18),
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(18),
+                            onTap: _saving ? null : () => _download(bytes),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 8,
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    Icons.download_rounded,
+                                    size: 16,
+                                    color: Colors.white.withValues(
+                                      alpha: _saving ? 0.5 : 1,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    _saving ? '下载中…' : '下载',
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  );
+                },
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

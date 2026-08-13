@@ -1,11 +1,15 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../core/theme/dunes_theme.dart';
 import '../auth/auth_session.dart';
 import '../shell/dunes_toast.dart';
+import 'task_ai_analysis.dart';
 import 'task_api.dart';
 import 'task_attachment_tile.dart';
 import 'task_avatar.dart';
+import 'task_link_section.dart';
 import 'task_models.dart';
 import 'task_widgets.dart';
 
@@ -44,6 +48,8 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
   String? _error;
   bool _loading = true;
   bool _busy = false;
+  bool _analysisRunning = false;
+  Timer? _analysisTimer;
 
   @override
   void initState() {
@@ -57,6 +63,12 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
     if (oldWidget.taskId != widget.taskId) _reload();
   }
 
+  @override
+  void dispose() {
+    _analysisTimer?.cancel();
+    super.dispose();
+  }
+
   Future<void> _reload() async {
     setState(() {
       _loading = true;
@@ -68,7 +80,9 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
       setState(() {
         _detail = d;
         _loading = false;
+        _analysisRunning = d.task.aiState == 'analyzing';
       });
+      _scheduleAnalysisPoll();
       widget.onTaskLoaded?.call(d.task);
     } catch (e) {
       if (!mounted) return;
@@ -77,6 +91,26 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
         _loading = false;
       });
     }
+  }
+
+  /// 分析进行中时轻量轮询状态，结束后按钮恢复为「AI 分析」。
+  void _scheduleAnalysisPoll() {
+    _analysisTimer?.cancel();
+    if (!_analysisRunning) return;
+    _analysisTimer = Timer(const Duration(seconds: 5), _refreshAnalysisRunning);
+  }
+
+  Future<void> _refreshAnalysisRunning() async {
+    final t = _detail?.task;
+    if (!mounted || t == null || !t.isMain || t.isPending) return;
+    try {
+      final items = await TaskAnalysisApi(widget.session).list(t.id);
+      if (!mounted) return;
+      setState(() {
+        _analysisRunning = items.any((e) => e.isRunning && !e.isStale);
+      });
+    } catch (_) {}
+    _scheduleAnalysisPoll();
   }
 
   /// 负责人 / 创建人 / 协同 / 审核人；否则仅可浏览。
@@ -118,6 +152,16 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
         t.coOwnerUserIds.contains(uid);
   }
 
+  /// 关联的增删只放给能编辑任务的人（负责人/创建人/协同），与后端一致；审核人仅可查看。
+  bool get _canEditLinks {
+    final t = _detail?.task;
+    if (t == null) return false;
+    final uid = widget.session.userId;
+    return t.ownerUserId == uid ||
+        t.creatorUserId == uid ||
+        t.coOwnerUserIds.contains(uid);
+  }
+
   bool get _canEvaluate {
     if (_viewOnly) return false;
     final t = _detail?.task;
@@ -150,7 +194,10 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
         title: Text(pass ? '通过子任务' : '驳回子任务'),
         content: TextField(controller: ctrl, decoration: _softDecoration('意见')),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('取消')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('取消'),
+          ),
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: _themePurple),
             onPressed: () => Navigator.pop(ctx, true),
@@ -185,9 +232,14 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
         title: const Text('删除任务'),
         content: Text('确认删除「${task.title}」？删除后不可恢复。'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('取消')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('取消'),
+          ),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: const Color(0xFFE35D6A)),
+            style: FilledButton.styleFrom(
+              backgroundColor: const Color(0xFFE35D6A),
+            ),
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text('删除'),
           ),
@@ -222,9 +274,14 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
         title: const Text('删除进展记录'),
         content: const Text('确认删除这条进展记录？相关附件也会一并删除。'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('取消')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('取消'),
+          ),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: const Color(0xFFE35D6A)),
+            style: FilledButton.styleFrom(
+              backgroundColor: const Color(0xFFE35D6A),
+            ),
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text('删除'),
           ),
@@ -252,9 +309,14 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
         title: const Text('删除评价记录'),
         content: const Text('确认删除这条评价记录？相关附件也会一并删除。'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('取消')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('取消'),
+          ),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: const Color(0xFFE35D6A)),
+            style: FilledButton.styleFrom(
+              backgroundColor: const Color(0xFFE35D6A),
+            ),
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text('删除'),
           ),
@@ -286,9 +348,7 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
   /// 主任务详情：主任务+子任务一起显示；子任务详情：只看自己。
   List<TaskProgressLog> _visibleProgressLogs(TaskDetail d) {
     if (d.task.isMain) return d.logs;
-    return d.logs
-        .where((l) => l.taskId == d.task.id)
-        .toList(growable: false);
+    return d.logs.where((l) => l.taskId == d.task.id).toList(growable: false);
   }
 
   List<TaskEvalLog> _visibleEvalLogs(TaskDetail d) {
@@ -336,341 +396,418 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
     final d = _detail;
     return ColoredBox(
       color: const Color(0xFFF5F6F8),
-      child: _loading
-          ? const Center(child: CircularProgressIndicator(color: _themePurple))
-          : _error != null
-              ? Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(_error!),
-                      TextButton(onPressed: widget.onBack, child: const Text('返回')),
-                    ],
-                  ),
-                )
-              : d == null
-                  ? const SizedBox.shrink()
-                  : RefreshIndicator(
-                      onRefresh: _reload,
-                      color: _themePurple,
-                      child: ListView(
-                        physics: const AlwaysScrollableScrollPhysics(),
-                        padding: const EdgeInsets.fromLTRB(20, 0, 20, 40),
-                        children: [
-                          Row(
-                            children: [
-                              InkWell(
-                                borderRadius: BorderRadius.circular(8),
-                                onTap: widget.onBack,
-                                child: const Padding(
-                                  padding: EdgeInsets.symmetric(horizontal: 4, vertical: 6),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(Icons.arrow_back_ios_new, size: 14, color: DunesColors.text2),
-                                      SizedBox(width: 2),
-                                      Text('任务', style: TextStyle(fontSize: 13, color: DunesColors.text2)),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              const Expanded(
-                                child: Text(
-                                  '任务详情',
-                                  style: TextStyle(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.w700,
-                                    color: _themePurple,
-                                  ),
-                                ),
-                              ),
-                              if (_canAddSubtask)
-                                TextButton.icon(
-                                  onPressed: _busy ? null : widget.onAddSubtask,
-                                  icon: const Icon(Icons.add_task_outlined, size: 18),
-                                  label: const Text('子任务'),
-                                ),
-                              if (_canDelete)
-                                IconButton(
-                                  tooltip: '删除',
-                                  onPressed: _busy ? null : _delete,
-                                  icon: const Icon(Icons.delete_outline, color: DunesColors.text3),
-                                ),
-                            ],
-                          ),
-                          if (_viewOnly) ...[
-                            const SizedBox(height: 8),
-                            Container(
-                              width: double.infinity,
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 8,
-                              ),
-                              decoration: BoxDecoration(
-                                color: _themePurple.withValues(alpha: 0.08),
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              child: const Text(
-                                '只读：可查看任务信息，不可编辑或操作',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: DunesColors.text2,
-                                  fontWeight: FontWeight.w500,
-                                ),
+      // 点击输入框外的空白处收起软键盘（详情页含描述内联编辑）
+      child: GestureDetector(
+        behavior: HitTestBehavior.translucent,
+        onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
+        child: _buildContent(d),
+      ),
+    );
+  }
+
+  Widget _buildContent(TaskDetail? d) {
+    return _loading
+        ? const Center(child: CircularProgressIndicator(color: _themePurple))
+        : _error != null
+        ? Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(_error!),
+                TextButton(onPressed: widget.onBack, child: const Text('返回')),
+              ],
+            ),
+          )
+        : d == null
+        ? const SizedBox.shrink()
+        : RefreshIndicator(
+            onRefresh: _reload,
+            color: _themePurple,
+            child: ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 40),
+              children: [
+                Row(
+                  children: [
+                    InkWell(
+                      borderRadius: BorderRadius.circular(8),
+                      onTap: widget.onBack,
+                      child: const Padding(
+                        padding: EdgeInsets.symmetric(
+                          horizontal: 4,
+                          vertical: 6,
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.arrow_back_ios_new,
+                              size: 14,
+                              color: DunesColors.text2,
+                            ),
+                            SizedBox(width: 2),
+                            Text(
+                              '任务',
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: DunesColors.text2,
                               ),
                             ),
                           ],
-                          const SizedBox(height: 10),
-                          Container(
-                            padding: const EdgeInsets.all(16),
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(14),
-                              border: Border.all(color: const Color(0xFFE8EAED)),
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  children: [
-                                    buildTaskUserAvatar(
-                                      session: widget.session,
-                                      name: d.task.ownerName.isNotEmpty
-                                          ? d.task.ownerName
-                                          : d.task.title,
-                                      userId: d.task.ownerUserId,
-                                      avatarPreset: d.task.ownerAvatarPreset,
-                                      avatarObjectKey: d.task.ownerAvatarObjectKey,
-                                      avatarUrl: d.task.ownerAvatarUrl,
-                                      size: 40,
-                                    ),
-                                    const SizedBox(width: 12),
-                                    Expanded(
-                                      child: Text(
-                                        d.task.title,
-                                        style: const TextStyle(
-                                          fontSize: 18,
-                                          fontWeight: FontWeight.w700,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 10),
-                                Text(
-                                  [
-                                    taskStatusLabel(d.task.status),
-                                    taskPriorityLabel(d.task.priority),
-                                    if (d.task.ownerName.isNotEmpty) '负责人 ${d.task.ownerName}',
-                                    if (d.task.startAt != null || d.task.dueAt != null)
-                                      _formatTaskRange(d.task.startAt, d.task.dueAt),
-                                  ].join(' · '),
-                                  style: const TextStyle(fontSize: 12, color: DunesColors.text3),
-                                ),
-                                const SizedBox(height: 14),
-                                TaskProgressBar(
-                                  progressPct: d.task.progressPct,
-                                  overdue: d.task.overdue,
-                                  completed: d.task.status == 'completed',
-                                  height: 10,
-                                ),
-                                if (d.task.description.trim().isNotEmpty) ...[
-                                  const SizedBox(height: 14),
-                                  Text(
-                                    d.task.description,
-                                    style: const TextStyle(fontSize: 14, height: 1.45),
-                                  ),
-                                ],
-                              ],
-                            ),
-                          ),
-                          if (d.task.isPending &&
-                              d.task.approverUserId == widget.session.userId) ...[
-                            const SizedBox(height: 12),
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: OutlinedButton(
-                                    onPressed: _busy ? null : () => _approve(pass: false),
-                                    child: const Text('驳回'),
-                                  ),
-                                ),
-                                const SizedBox(width: 10),
-                                Expanded(
-                                  child: FilledButton(
-                                    style: FilledButton.styleFrom(backgroundColor: _themePurple),
-                                    onPressed: _busy ? null : () => _approve(pass: true),
-                                    child: const Text('通过'),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                          if (!d.task.isPending && _canEditProgress) ...[
-                            const SizedBox(height: 12),
-                            OutlinedButton.icon(
-                              onPressed: _busy ? null : _openProgress,
-                              icon: const Icon(Icons.tune, size: 18),
-                              label: Text(
-                                d.task.isMain && d.subtasks.isNotEmpty
-                                    ? '主任务进度由子任务汇总'
-                                    : '调整进度',
-                              ),
-                            ),
-                          ],
-                          if (_canEvaluate) ...[
-                            const SizedBox(height: 10),
-                            OutlinedButton.icon(
-                              onPressed: _busy ? null : _openEvaluate,
-                              icon: const Icon(Icons.rate_review_outlined, size: 18),
-                              label: Text(d.task.hasEval ? '修改评价' : '任务评价'),
-                            ),
-                          ],
-                          const SizedBox(height: 18),
-                          Text(
-                            d.task.isMain && d.subtasks.isNotEmpty
-                                ? '进度柱状图（按子任务）'
-                                : '进度柱状图',
-                            style: const TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          TaskMemberProgressChart(
-                            bars: buildTaskProgressBars(d),
-                            onBarTap: d.task.isMain
-                                ? (id) => widget.onOpenTask?.call(id)
-                                : null,
-                          ),
-                          if (d.attachments.isNotEmpty) ...[
-                            const SizedBox(height: 18),
-                            const Text(
-                              '附件',
-                              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
-                            ),
-                            const SizedBox(height: 8),
-                            for (final a in d.attachments)
-                              TaskAttachmentTile(
-                                session: widget.session,
-                                attachment: a,
-                              ),
-                          ],
-                          if (d.task.isMain) ...[
-                            const SizedBox(height: 18),
-                            const Text(
-                              '子任务',
-                              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
-                            ),
-                            const SizedBox(height: 8),
-                            if (d.subtasks.isEmpty)
-                              Container(
-                                width: double.infinity,
-                                padding: const EdgeInsets.all(16),
-                                decoration: BoxDecoration(
-                                  color: Colors.white,
-                                  borderRadius: BorderRadius.circular(12),
-                                  border: Border.all(color: const Color(0xFFE8EAED)),
-                                ),
-                                child: Text(
-                                  _canAddSubtask
-                                      ? '暂无子任务，可点右上角添加'
-                                      : '暂无子任务',
-                                  style: const TextStyle(color: DunesColors.text3),
-                                ),
-                              )
-                            else
-                              ...d.subtasks.map(
-                                (s) => Padding(
-                                  padding: const EdgeInsets.only(bottom: 8),
-                                  child: SizedBox(
-                                    height: 148,
-                                    child: TaskNameCard(
-                                      session: widget.session,
-                                      task: s,
-                                      onTap: () => widget.onOpenTask?.call(s.id),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                          ],
-                          const SizedBox(height: 18),
-                          Text(
-                            d.task.isMain ? '进展记录（含子任务）' : '进展记录',
-                            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
-                          ),
-                          const SizedBox(height: 8),
-                          if (_visibleProgressLogs(d).isEmpty)
-                            Container(
-                              width: double.infinity,
-                              padding: const EdgeInsets.all(16),
-                              decoration: BoxDecoration(
-                                color: Colors.white,
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(color: const Color(0xFFE8EAED)),
-                              ),
-                              child: const Text(
-                                '暂无进展记录',
-                                style: TextStyle(color: DunesColors.text3),
-                              ),
-                            )
-                          else
-                            for (final log in _visibleProgressLogs(d))
-                              _ActivityCard(
-                                title: '${log.progressPct}%'
-                                    '${log.note.isEmpty ? '' : ' · ${log.note}'}',
-                                taskKind: _activityKind(d, log.taskId, log.isSubtask),
-                                taskTitle: log.taskTitle.isNotEmpty
-                                    ? log.taskTitle
-                                    : (log.taskId == d.task.id ? d.task.title : '任务'),
-                                userName: log.userName.isEmpty ? '未知用户' : log.userName,
-                                timeText: _fmtDateTime(log.createdAt),
-                                attachments: log.attachments,
-                                session: widget.session,
-                                canDelete: !_viewOnly && log.canDelete && !_busy,
-                                onDelete: () => _deleteProgressLog(log),
-                              ),
-                          const SizedBox(height: 18),
-                          Text(
-                            d.task.isMain ? '评价记录（含子任务）' : '评价记录',
-                            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
-                          ),
-                          const SizedBox(height: 8),
-                          if (_visibleEvalLogs(d).isEmpty)
-                            Container(
-                              width: double.infinity,
-                              padding: const EdgeInsets.all(16),
-                              decoration: BoxDecoration(
-                                color: Colors.white,
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(color: const Color(0xFFE8EAED)),
-                              ),
-                              child: const Text(
-                                '暂无评价记录',
-                                style: TextStyle(color: DunesColors.text3),
-                              ),
-                            )
-                          else
-                            for (final log in _visibleEvalLogs(d))
-                              _ActivityCard(
-                                title: '评价 ${log.level}'
-                                    '${log.comment.isEmpty ? '' : '\n${log.comment}'}',
-                                taskKind: _activityKind(d, log.taskId, log.isSubtask),
-                                taskTitle: log.taskTitle.isNotEmpty
-                                    ? log.taskTitle
-                                    : (log.taskId == d.task.id ? d.task.title : '任务'),
-                                userName: log.userName.isEmpty ? '未知用户' : log.userName,
-                                timeText: _fmtDateTime(log.createdAt),
-                                attachments: log.attachments,
-                                session: widget.session,
-                                canDelete: !_viewOnly && log.canDelete && !_busy,
-                                onDelete: () => _deleteEvalLog(log),
-                              ),
-                        ],
+                        ),
                       ),
                     ),
-    );
+                    const SizedBox(width: 8),
+                    const Expanded(
+                      child: Text(
+                        '任务详情',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700,
+                          color: _themePurple,
+                        ),
+                      ),
+                    ),
+                    if (_canAddSubtask)
+                      TextButton.icon(
+                        onPressed: _busy ? null : widget.onAddSubtask,
+                        icon: const Icon(Icons.add_task_outlined, size: 18),
+                        label: const Text('子任务'),
+                      ),
+                    if (_canDelete)
+                      IconButton(
+                        tooltip: '删除',
+                        onPressed: _busy ? null : _delete,
+                        icon: const Icon(
+                          Icons.delete_outline,
+                          color: DunesColors.text3,
+                        ),
+                      ),
+                  ],
+                ),
+                if (_viewOnly) ...[
+                  const SizedBox(height: 8),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
+                    decoration: BoxDecoration(
+                      color: _themePurple.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Text(
+                      '只读：可查看任务信息，不可编辑或操作',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: DunesColors.text2,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 10),
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: const Color(0xFFE8EAED)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          buildTaskUserAvatar(
+                            session: widget.session,
+                            name: d.task.ownerName.isNotEmpty
+                                ? d.task.ownerName
+                                : d.task.title,
+                            userId: d.task.ownerUserId,
+                            avatarPreset: d.task.ownerAvatarPreset,
+                            avatarObjectKey: d.task.ownerAvatarObjectKey,
+                            avatarUrl: d.task.ownerAvatarUrl,
+                            size: 40,
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              d.task.title,
+                              style: const TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      Text(
+                        [
+                          taskStatusLabel(d.task.status),
+                          taskPriorityLabel(d.task.priority),
+                          if (d.task.ownerName.isNotEmpty)
+                            '负责人 ${d.task.ownerName}',
+                          if (d.task.startAt != null || d.task.dueAt != null)
+                            _formatTaskRange(d.task.startAt, d.task.dueAt),
+                        ].join(' · '),
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: DunesColors.text3,
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      TaskProgressBar(
+                        progressPct: d.task.progressPct,
+                        overdue: d.task.overdue,
+                        completed: d.task.status == 'completed',
+                        height: 10,
+                      ),
+                      if (d.task.description.trim().isNotEmpty) ...[
+                        const SizedBox(height: 14),
+                        Text(
+                          d.task.description,
+                          style: const TextStyle(fontSize: 14, height: 1.45),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                if (d.task.isPending &&
+                    d.task.approverUserId == widget.session.userId) ...[
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: _busy ? null : () => _approve(pass: false),
+                          child: const Text('驳回'),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: FilledButton(
+                          style: FilledButton.styleFrom(
+                            backgroundColor: _themePurple,
+                          ),
+                          onPressed: _busy ? null : () => _approve(pass: true),
+                          child: const Text('通过'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+                if (!d.task.isPending && _canEditProgress) ...[
+                  const SizedBox(height: 12),
+                  OutlinedButton.icon(
+                    onPressed: _busy ? null : _openProgress,
+                    icon: const Icon(Icons.tune, size: 18),
+                    label: Text(
+                      d.task.isMain && d.subtasks.isNotEmpty
+                          ? '主任务进度由子任务汇总'
+                          : '调整进度',
+                    ),
+                  ),
+                ],
+                if (_canEvaluate) ...[
+                  const SizedBox(height: 10),
+                  OutlinedButton.icon(
+                    onPressed: _busy ? null : _openEvaluate,
+                    icon: const Icon(Icons.rate_review_outlined, size: 18),
+                    label: Text(d.task.hasEval ? '修改评价' : '任务评价'),
+                  ),
+                ],
+                if (d.task.isMain && !d.task.isPending) ...[
+                  const SizedBox(height: 10),
+                  OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: _themePurple,
+                      side: BorderSide(
+                        color: _themePurple.withValues(alpha: 0.45),
+                      ),
+                    ),
+                    onPressed: _busy
+                        ? null
+                        : () async {
+                            await showTaskAiAnalysis(
+                              context: context,
+                              session: widget.session,
+                              task: d.task,
+                            );
+                            // 面板关掉后立即刷新按钮上的「分析中」状态
+                            unawaited(_refreshAnalysisRunning());
+                          },
+                    icon: _analysisRunning
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: _themePurple,
+                            ),
+                          )
+                        : const Icon(Icons.auto_awesome, size: 18),
+                    label: Text(_analysisRunning ? 'AI 分析中，点击查看' : 'AI 分析'),
+                  ),
+                ],
+                const SizedBox(height: 18),
+                Text(
+                  d.task.isMain && d.subtasks.isNotEmpty
+                      ? '进度柱状图（按子任务）'
+                      : '进度柱状图',
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                TaskMemberProgressChart(
+                  bars: buildTaskProgressBars(d),
+                  onBarTap: d.task.isMain
+                      ? (id) => widget.onOpenTask?.call(id)
+                      : null,
+                ),
+                if (d.attachments.isNotEmpty) ...[
+                  const SizedBox(height: 18),
+                  const Text(
+                    '附件',
+                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+                  ),
+                  const SizedBox(height: 8),
+                  for (final a in d.attachments)
+                    TaskAttachmentTile(session: widget.session, attachment: a),
+                ],
+                if (d.task.isMain && !d.task.isPending) ...[
+                  const SizedBox(height: 18),
+                  TaskLinkSection(
+                    session: widget.session,
+                    task: d.task,
+                    canEdit: _canEditLinks && !_busy,
+                    onTaskChanged: _reload,
+                  ),
+                ],
+                if (d.task.isMain) ...[
+                  const SizedBox(height: 18),
+                  const Text(
+                    '子任务',
+                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+                  ),
+                  const SizedBox(height: 8),
+                  if (d.subtasks.isEmpty)
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: const Color(0xFFE8EAED)),
+                      ),
+                      child: Text(
+                        _canAddSubtask ? '暂无子任务，可点右上角添加' : '暂无子任务',
+                        style: const TextStyle(color: DunesColors.text3),
+                      ),
+                    )
+                  else
+                    ...d.subtasks.map(
+                      (s) => Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: SizedBox(
+                          height: 148,
+                          child: TaskNameCard(
+                            session: widget.session,
+                            task: s,
+                            onTap: () => widget.onOpenTask?.call(s.id),
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+                const SizedBox(height: 18),
+                Text(
+                  d.task.isMain ? '进展记录（含子任务）' : '进展记录',
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                if (_visibleProgressLogs(d).isEmpty)
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: const Color(0xFFE8EAED)),
+                    ),
+                    child: const Text(
+                      '暂无进展记录',
+                      style: TextStyle(color: DunesColors.text3),
+                    ),
+                  )
+                else
+                  for (final log in _visibleProgressLogs(d))
+                    _ActivityCard(
+                      title:
+                          '${log.progressPct}%'
+                          '${log.note.isEmpty ? '' : ' · ${log.note}'}',
+                      taskKind: _activityKind(d, log.taskId, log.isSubtask),
+                      taskTitle: log.taskTitle.isNotEmpty
+                          ? log.taskTitle
+                          : (log.taskId == d.task.id ? d.task.title : '任务'),
+                      userName: log.userName.isEmpty ? '未知用户' : log.userName,
+                      timeText: _fmtDateTime(log.createdAt),
+                      attachments: log.attachments,
+                      session: widget.session,
+                      canDelete: !_viewOnly && log.canDelete && !_busy,
+                      onDelete: () => _deleteProgressLog(log),
+                    ),
+                const SizedBox(height: 18),
+                Text(
+                  d.task.isMain ? '评价记录（含子任务）' : '评价记录',
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                if (_visibleEvalLogs(d).isEmpty)
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: const Color(0xFFE8EAED)),
+                    ),
+                    child: const Text(
+                      '暂无评价记录',
+                      style: TextStyle(color: DunesColors.text3),
+                    ),
+                  )
+                else
+                  for (final log in _visibleEvalLogs(d))
+                    _ActivityCard(
+                      // 历史记录仍可能带 S/A/B/C 等级，保留展示
+                      title:
+                          '评价${log.level.trim().isEmpty ? '' : ' ${log.level}'}'
+                          '${log.comment.isEmpty ? '' : '\n${log.comment}'}',
+                      taskKind: _activityKind(d, log.taskId, log.isSubtask),
+                      taskTitle: log.taskTitle.isNotEmpty
+                          ? log.taskTitle
+                          : (log.taskId == d.task.id ? d.task.title : '任务'),
+                      userName: log.userName.isEmpty ? '未知用户' : log.userName,
+                      timeText: _fmtDateTime(log.createdAt),
+                      attachments: log.attachments,
+                      session: widget.session,
+                      canDelete: !_viewOnly && log.canDelete && !_busy,
+                      onDelete: () => _deleteEvalLog(log),
+                    ),
+              ],
+            ),
+          );
   }
 }
 
@@ -718,7 +855,10 @@ class _ActivityCard extends StatelessWidget {
             Row(
               children: [
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 2,
+                  ),
                   decoration: BoxDecoration(
                     color: kindColor.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(6),
@@ -750,7 +890,11 @@ class _ActivityCard extends StatelessWidget {
                     tooltip: '删除',
                     visualDensity: VisualDensity.compact,
                     onPressed: onDelete,
-                    icon: const Icon(Icons.delete_outline, size: 18, color: DunesColors.text3),
+                    icon: const Icon(
+                      Icons.delete_outline,
+                      size: 18,
+                      color: DunesColors.text3,
+                    ),
                   ),
               ],
             ),

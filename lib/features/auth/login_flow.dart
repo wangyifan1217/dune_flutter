@@ -12,6 +12,7 @@ import '../../core/platform/desktop_features.dart';
 import '../../core/theme/dunes_theme.dart';
 import '../chat/chat_image_preview_window_stub.dart'
     if (dart.library.io) '../chat/chat_image_preview_window.dart';
+import '../chat/desktop_image_preview_pref.dart';
 import '../desktop/windows_desktop_tray.dart';
 import '../nova/nova_auth_service.dart';
 import '../nova/nova_web_storage.dart';
@@ -154,6 +155,7 @@ class _LoginFlowState extends State<LoginFlow> with WidgetsBindingObserver {
     });
     _persistSession(session);
     if (isDesktopCommOnly) {
+      unawaited(DesktopImagePreviewPref.ensureLoaded());
       unawaited(warmDesktopChatImagePreviewWindow());
     }
   }
@@ -266,6 +268,7 @@ class _LoginFlowState extends State<LoginFlow> with WidgetsBindingObserver {
           });
         }
         if (isDesktopCommOnly) {
+          unawaited(DesktopImagePreviewPref.ensureLoaded());
           unawaited(warmDesktopChatImagePreviewWindow());
         }
         return;

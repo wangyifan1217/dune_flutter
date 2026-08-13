@@ -6,6 +6,7 @@ import '../../core/layout/chat_layout.dart';
 import '../../core/theme/dunes_theme.dart';
 import '../../core/util/friendly_error.dart';
 import '../auth/auth_session.dart';
+import '../chat/assistant_transcript_support.dart';
 import '../chat/chat_widgets.dart';
 import '../conversation/conversation_models.dart';
 import '../conversation/conversation_realtime_hub.dart';
@@ -55,6 +56,8 @@ class _NativeApprovalAssistantPageState
   final _scroll = ScrollController();
   final List<NativeChatMessage> _messages = [];
   bool _loading = true;
+  bool _loadingOlder = false;
+  bool _hasMore = false;
   bool _clearing = false;
   bool _awayFromLatest = false;
   String? _error;
@@ -137,15 +140,24 @@ class _NativeApprovalAssistantPageState
 
   Future<void> _reloadMessagesFor(int convId, {bool silent = false}) async {
     try {
-      final list = await _service.fetchMessages(convId);
+      final page = await _service.fetchMessagePage(convId);
       if (!mounted) return;
       final prevLastId = _messages.isEmpty ? 0 : _messages.last.id;
       final stick = !_awayFromLatest;
       setState(() {
+        final next = silent
+            ? mergeLatestAssistantMessages(
+                current: List<NativeChatMessage>.from(_messages),
+                latest: page.items,
+              )
+            : page.items;
         _messages
           ..clear()
-          ..addAll(list);
-        if (!silent) _error = null;
+          ..addAll(next);
+        if (!silent) {
+          _hasMore = page.hasMore;
+          _error = null;
+        }
       });
       final nextLastId = _messages.isEmpty ? 0 : _messages.last.id;
       if (silent && nextLastId > prevLastId) {
@@ -229,10 +241,17 @@ class _NativeApprovalAssistantPageState
 
   void _onScrollPosition() {
     if (!_scroll.hasClients) return;
-    final max = _scroll.position.maxScrollExtent;
-    final away = max - _scroll.position.pixels > 140;
+    final pos = _scroll.position;
+    final away = assistantIsAwayFromLatest(pos);
     if (away != _awayFromLatest && mounted) {
       setState(() => _awayFromLatest = away);
+    }
+    if (assistantShouldLoadOlder(
+      hasMore: _hasMore,
+      loadingOlder: _loadingOlder,
+      pos: pos,
+    )) {
+      unawaited(_loadOlder());
     }
   }
 
@@ -258,6 +277,42 @@ class _NativeApprovalAssistantPageState
     }
     if (_awayFromLatest && mounted) {
       setState(() => _awayFromLatest = false);
+    }
+  }
+
+  Future<void> _loadOlder() async {
+    if (_loadingOlder || !_hasMore || _messages.isEmpty || _convId <= 0) {
+      return;
+    }
+    setState(() => _loadingOlder = true);
+    final firstId = _messages.first.id;
+    final oldMax = _scroll.hasClients ? _scroll.position.maxScrollExtent : 0.0;
+    final oldPixels = _scroll.hasClients ? _scroll.position.pixels : 0.0;
+    try {
+      final page = await _service.fetchMessagePage(_convId, before: firstId);
+      if (!mounted) return;
+      final current = List<NativeChatMessage>.from(_messages);
+      setState(() {
+        _messages
+          ..clear()
+          ..addAll(
+            mergeOlderAssistantMessages(current: current, older: page.items),
+          );
+        _hasMore = page.hasMore;
+        _loadingOlder = false;
+      });
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!_scroll.hasClients) return;
+        _scroll.jumpTo(
+          assistantOlderScrollRestore(
+            oldPixels: oldPixels,
+            oldMax: oldMax,
+            newMax: _scroll.position.maxScrollExtent,
+          ),
+        );
+      });
+    } finally {
+      if (mounted) setState(() => _loadingOlder = false);
     }
   }
 
@@ -291,6 +346,7 @@ class _NativeApprovalAssistantPageState
       setState(() {
         _messages.clear();
         _awayFromLatest = false;
+        _hasMore = false;
         _error = null;
       });
       showDunesToast(context, '已清空会话');
@@ -397,10 +453,23 @@ class _NativeApprovalAssistantPageState
       children: [
         ListView.builder(
           controller: _scroll,
+          physics: const AlwaysScrollableScrollPhysics(),
           padding: EdgeInsets.fromLTRB(wide ? 16 : 12, 12, wide ? 16 : 12, 12),
-          itemCount: _messages.length,
+          itemCount: _messages.length + (_loadingOlder ? 1 : 0),
           itemBuilder: (context, index) {
-            final m = _messages[index];
+            if (_loadingOlder && index == 0) {
+              return const Padding(
+                padding: EdgeInsets.only(bottom: 8),
+                child: Center(
+                  child: SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                ),
+              );
+            }
+            final m = _messages[_loadingOlder ? index - 1 : index];
             final payload = m.payload ?? const <String, dynamic>{};
             final type = (payload['type'] ?? '').toString();
             return ChatMessageRow(
@@ -419,51 +488,8 @@ class _NativeApprovalAssistantPageState
             left: 0,
             right: 0,
             bottom: 12,
-            child: Center(
-              child: Material(
-                color: Colors.transparent,
-                child: InkWell(
-                  onTap: () => _jumpBottom(animate: true),
-                  borderRadius: BorderRadius.circular(999),
-                  child: Ink(
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(999),
-                      color: Colors.white,
-                      border: Border.all(color: DunesColors.borderSoft),
-                      boxShadow: const [
-                        BoxShadow(
-                          color: Color(0x1A000000),
-                          blurRadius: 8,
-                          offset: Offset(0, 2),
-                        ),
-                      ],
-                    ),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 8,
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(
-                          Icons.keyboard_arrow_down_rounded,
-                          size: 16,
-                          color: DunesColors.brandPurpleDeep,
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          '回到最新',
-                          style: DunesTypography.sans(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: DunesColors.brandPurpleDeep,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
+            child: AssistantBackToLatestChip(
+              onTap: () => _jumpBottom(animate: true),
             ),
           ),
       ],

@@ -1,24 +1,44 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 
 import '../../core/theme/dunes_theme.dart';
+import '../../core/util/friendly_error.dart';
+import '../../core/widgets/cached_network_image.dart';
+import '../auth/auth_session.dart';
+import '../chat/assistant_transcript_support.dart';
 import '../chat/chat_widgets.dart';
+import '../chat/user_avatar_widget.dart';
 import '../conversation/conversation_models.dart';
+import '../conversation/conversation_realtime_hub.dart';
+import '../conversation/conversation_realtime_service.dart';
+import '../conversation/conversation_service.dart';
+import '../desktop/windows_desktop_tray.dart';
+import 'reconciliation_shucai_models.dart';
+import 'reconciliation_shucai_service.dart';
+import 'shucai_report_table.dart';
 
-/// 对账助手的静态预览页。
-///
-/// 目前先用本地示例数据把「对账信息—他人评价—我的评论—确认」这条流程
-/// 展示出来，后续再接每日对账单和确认接口。
+/// 对账助手：真实 RECONCILIATION_ASSISTANT 会话，保留原名片/评价/确认风格。
 class NativeReconciliationAssistantPage extends StatefulWidget {
   const NativeReconciliationAssistantPage({
     super.key,
     required this.onBack,
+    required this.session,
+    required this.conversationHint,
     this.desktopMode = false,
+    this.showBackButton = true,
+    this.autoMarkRead = true,
+    this.onConversationRead,
   });
 
   final VoidCallback onBack;
-
-  /// 桌面端已经位于会话右侧面板，直接展示详情，省去消息卡片过渡。
+  final AuthSession session;
+  final NativeConversation conversationHint;
   final bool desktopMode;
+  final bool showBackButton;
+  final bool autoMarkRead;
+  final ValueChanged<int>? onConversationRead;
 
   @override
   State<NativeReconciliationAssistantPage> createState() =>
@@ -28,31 +48,474 @@ class NativeReconciliationAssistantPage extends StatefulWidget {
 class _NativeReconciliationAssistantPageState
     extends State<NativeReconciliationAssistantPage> {
   final TextEditingController _commentController = TextEditingController();
-  bool _confirmed = false;
+  late final ReconciliationShucaiService _shucai;
+  late final ConversationService _convService;
+  final List<NativeChatMessage> _messages = [];
+  final Map<String, ReconCardStatus> _status = {};
+  ShucaiSnapshot? _snapshot;
+  String? _error;
+  bool _loading = true;
+  bool _confirming = false;
   bool _showDetails = false;
+  bool _awayFromLatest = false;
+  bool _loadingOlder = false;
+  bool _hasMore = false;
+  String _detailCardType = 'TAG2';
+  String _detailAsOfDate = '';
+  String _tag3Tab = 'energy';
+  StreamSubscription<ConversationRealtimeEvent>? _rtSub;
+  Timer? _rtDebounce;
+  Timer? _enterJumpTimer;
+  int _latestJumpGen = 0;
+  bool _reloadInFlight = false;
+  bool _reloadQueuedSilent = false;
+  final ScrollController _scroll = ScrollController();
+
+  int get _convId => widget.conversationHint.id;
+
+  @override
+  void initState() {
+    super.initState();
+    _shucai = ReconciliationShucaiService(session: widget.session);
+    _convService = ConversationService(session: widget.session);
+    _bootstrap();
+    _scroll.addListener(_onScrollPosition);
+    final realtime = ConversationRealtimeHub.instance.of(widget.session);
+    unawaited(realtime.connect());
+    _rtSub = realtime.events.listen(_onRealtime);
+    userAvatarRefresh.addListener(_onSelfAvatarUpdated);
+  }
+
+  void _onSelfAvatarUpdated() {
+    if (mounted) setState(() {});
+  }
 
   @override
   void dispose() {
+    userAvatarRefresh.removeListener(_onSelfAvatarUpdated);
+    _rtSub?.cancel();
+    _rtDebounce?.cancel();
+    _enterJumpTimer?.cancel();
+    _scroll.removeListener(_onScrollPosition);
+    _scroll.dispose();
     _commentController.dispose();
+    _shucai.dispose();
     super.dispose();
   }
 
-  void _confirm() {
-    FocusManager.instance.primaryFocus?.unfocus();
-    setState(() => _confirmed = true);
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('已记录你的对账意见并完成确认'),
-        behavior: SnackBarBehavior.floating,
-      ),
+  @override
+  void didUpdateWidget(NativeReconciliationAssistantPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!oldWidget.autoMarkRead && widget.autoMarkRead) {
+      unawaited(_markReadIfViewing());
+    }
+  }
+
+  Future<void> _bootstrap() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      if (_convId <= 0) {
+        throw Exception('暂无对账推送');
+      }
+      unawaited(
+        ConversationRealtimeHub.instance
+            .of(widget.session)
+            .ensureConversationSubscription(_convId),
+      );
+      await _markReadIfViewing();
+      await _reload();
+    } catch (e) {
+      if (mounted) setState(() => _error = friendlyErrorText(e));
+    } finally {
+      if (mounted) setState(() => _loading = false);
+      _scrollToLatestOnEnter();
+    }
+  }
+
+  Future<void> _markReadIfViewing() async {
+    if (!widget.autoMarkRead || windowsTrayIsWindowInactive()) return;
+    if (_convId <= 0) return;
+    await _convService.markConversationRead(_convId);
+    widget.onConversationRead?.call(_convId);
+  }
+
+  void _onRealtime(ConversationRealtimeEvent event) {
+    if (event.conversationId != _convId) return;
+    // 已读上报会回推 conversation_updated。若据此整页刷新+跳底，
+    // 会和 mark-read 形成循环，上滑会被反复拽回底部。
+    if (event.type != 'message') return;
+    _rtDebounce?.cancel();
+    _rtDebounce = Timer(const Duration(milliseconds: 300), () {
+      if (mounted) unawaited(_reload(silent: true));
+    });
+  }
+
+  Future<void> _hydrateStatus(List<NativeChatMessage> list) async {
+    final dates = <String>{};
+    for (final msg in list) {
+      final card = _cardFromMessage(msg);
+      if (card != null && card.asOfDate.isNotEmpty) dates.add(card.asOfDate);
+    }
+    final statusMap = <String, ReconCardStatus>{};
+    for (final date in dates) {
+      try {
+        final status = await _shucai.fetchStatus(asOfDate: date);
+        for (final card in status.cards) {
+          statusMap[_statusKey(card.cardType, card.asOfDate)] = card;
+        }
+      } catch (_) {}
+    }
+    if (!mounted || _statusMapsEqual(_status, statusMap)) return;
+    setState(() {
+      _status
+        ..clear()
+        ..addAll(statusMap);
+    });
+  }
+
+  bool _statusMapsEqual(
+    Map<String, ReconCardStatus> a,
+    Map<String, ReconCardStatus> b,
+  ) {
+    if (identical(a, b) || (a.isEmpty && b.isEmpty)) return true;
+    if (a.length != b.length) return false;
+    for (final e in b.entries) {
+      final cur = a[e.key];
+      if (cur == null) return false;
+      if (cur.confirmedCount != e.value.confirmedCount ||
+          cur.canConfirm != e.value.canConfirm ||
+          cur.confirmed != e.value.confirmed ||
+          (cur.mine?.comment ?? '') != (e.value.mine?.comment ?? '')) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  bool _sameMessageIds(
+    List<NativeChatMessage> a,
+    List<NativeChatMessage> b,
+  ) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i].id != b[i].id) return false;
+    }
+    return true;
+  }
+
+  Future<void> _reload({bool silent = false}) async {
+    if (_reloadInFlight) {
+      if (silent) _reloadQueuedSilent = true;
+      return;
+    }
+    _reloadInFlight = true;
+    try {
+      final page = await _convService.fetchMessagePage(_convId, size: 30);
+      if (!mounted) return;
+      final prevLastId = _messages.isEmpty ? 0 : _messages.last.id;
+      final next = silent
+          ? mergeLatestAssistantMessages(
+              current: List<NativeChatMessage>.from(_messages),
+              latest: page.items,
+            )
+          : page.items;
+      final messagesChanged = !_sameMessageIds(_messages, next);
+      if (messagesChanged) {
+        setState(() {
+          _messages
+            ..clear()
+            ..addAll(next);
+          if (!silent) _hasMore = page.hasMore;
+          if (!silent) _error = null;
+        });
+      } else if (!silent) {
+        setState(() {
+          _hasMore = page.hasMore;
+          _error = null;
+        });
+      }
+      await _hydrateStatus(_messages);
+      if (!mounted) return;
+      final current = _currentStatus;
+      if (current?.mine != null &&
+          _commentController.text.trim().isEmpty &&
+          current!.mine!.comment.isNotEmpty) {
+        _commentController.text = current.mine!.comment;
+      }
+      final nextLastId = _messages.isEmpty ? 0 : _messages.last.id;
+      final grew = nextLastId > prevLastId;
+      if (!silent) {
+        _scrollToLatestOnEnter();
+      } else if (grew) {
+        unawaited(_markReadIfViewing());
+        _jumpBottomIfStuck();
+      }
+    } catch (e) {
+      if (!silent && mounted) {
+        setState(() => _error = friendlyErrorText(e));
+      }
+    } finally {
+      _reloadInFlight = false;
+      if (_reloadQueuedSilent && mounted) {
+        _reloadQueuedSilent = false;
+        unawaited(_reload(silent: true));
+      }
+    }
+  }
+
+  void _onScrollPosition() {
+    if (!_scroll.hasClients) return;
+    if (assistantShouldLoadOlder(
+      hasMore: _hasMore,
+      loadingOlder: _loadingOlder,
+      pos: _scroll.position,
+    )) {
+      unawaited(_loadOlder());
+    }
+  }
+
+  bool _onScrollNotification(ScrollNotification n) {
+    if (n.depth != 0) return false;
+    final wheelUp =
+        n is ScrollUpdateNotification && (n.scrollDelta ?? 0) < 0;
+    final userDrag =
+        (n is ScrollStartNotification && n.dragDetails != null) ||
+        (n is ScrollUpdateNotification && n.dragDetails != null) ||
+        (n is UserScrollNotification && n.direction != ScrollDirection.idle);
+    if (userDrag || wheelUp) {
+      _noteUserMovedScroll();
+    }
+    if (n is ScrollEndNotification) {
+      _syncAwayFromLatest();
+    }
+    return false;
+  }
+
+  bool _isNearLatest({double slop = 24}) {
+    if (!_scroll.hasClients) return true;
+    final pos = _scroll.position;
+    return pos.maxScrollExtent - pos.pixels <= slop;
+  }
+
+  void _noteUserMovedScroll() {
+    _cancelPendingLatestJumps();
+    if (_isNearLatest()) return;
+    if (!_awayFromLatest && mounted) {
+      setState(() => _awayFromLatest = true);
+    } else {
+      _awayFromLatest = true;
+    }
+  }
+
+  void _syncAwayFromLatest() {
+    if (!_scroll.hasClients) return;
+    final away = !_isNearLatest();
+    if (away != _awayFromLatest && mounted) {
+      setState(() => _awayFromLatest = away);
+    }
+  }
+
+  void _cancelPendingLatestJumps() {
+    _latestJumpGen++;
+    _enterJumpTimer?.cancel();
+    _enterJumpTimer = null;
+  }
+
+  void _scrollToLatestOnEnter() {
+    final gen = ++_latestJumpGen;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || gen != _latestJumpGen) return;
+      _jumpBottom(force: true);
+    });
+    _enterJumpTimer?.cancel();
+    _enterJumpTimer = Timer(const Duration(milliseconds: 200), () {
+      if (!mounted || gen != _latestJumpGen || _awayFromLatest) return;
+      _jumpBottom();
+    });
+  }
+
+  void _jumpBottomIfStuck() {
+    if (_awayFromLatest) return;
+    final gen = _latestJumpGen;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || gen != _latestJumpGen || _awayFromLatest) return;
+      _jumpBottom();
+    });
+  }
+
+  void _jumpBottom({bool animate = false, bool force = false}) {
+    if (!_scroll.hasClients) return;
+    if (!force && _awayFromLatest) return;
+    final max = _scroll.position.maxScrollExtent;
+    if (animate) {
+      _scroll.animateTo(
+        max,
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOut,
+      );
+    } else {
+      _scroll.jumpTo(max);
+    }
+    if (force && _awayFromLatest && mounted) {
+      setState(() => _awayFromLatest = false);
+    }
+  }
+
+  Future<void> _loadOlder() async {
+    if (_loadingOlder || !_hasMore || _messages.isEmpty || _convId <= 0) {
+      return;
+    }
+    setState(() => _loadingOlder = true);
+    final firstId = _messages.first.id;
+    final oldMax = _scroll.hasClients ? _scroll.position.maxScrollExtent : 0.0;
+    final oldPixels = _scroll.hasClients ? _scroll.position.pixels : 0.0;
+    try {
+      final page = await _convService.fetchMessagePage(
+        _convId,
+        size: 30,
+        before: firstId,
+      );
+      if (!mounted) return;
+      final current = List<NativeChatMessage>.from(_messages);
+      setState(() {
+        _messages
+          ..clear()
+          ..addAll(
+            mergeOlderAssistantMessages(current: current, older: page.items),
+          );
+        _hasMore = page.hasMore;
+        _loadingOlder = false;
+      });
+      await _hydrateStatus(_messages);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!_scroll.hasClients) return;
+        _scroll.jumpTo(
+          assistantOlderScrollRestore(
+            oldPixels: oldPixels,
+            oldMax: oldMax,
+            newMax: _scroll.position.maxScrollExtent,
+          ),
+        );
+      });
+    } finally {
+      if (mounted) setState(() => _loadingOlder = false);
+    }
+  }
+
+  void _closeDetails() {
+    setState(() => _showDetails = false);
+    _scrollToLatestOnEnter();
+  }
+
+  String _statusKey(String cardType, String asOfDate) =>
+      '${cardType.toUpperCase()}|$asOfDate';
+
+  ReconCardStatus? get _currentStatus =>
+      _status[_statusKey(_detailCardType, _detailAsOfDate)];
+
+  _ReconCardPayload? _cardFromMessage(NativeChatMessage msg) {
+    final kind = msg.kind.trim().toUpperCase();
+    if (kind != 'RECONCILIATION' && kind != 'RECONCILIATION_ASSISTANT') {
+      return null;
+    }
+    final payload = msg.payload ?? const <String, dynamic>{};
+    final cardType = (payload['cardType'] ?? '').toString().trim().toUpperCase();
+    if (cardType.isEmpty) return null;
+    return _ReconCardPayload(
+      cardType: cardType,
+      asOfDate: (payload['asOfDate'] ?? '').toString().trim(),
+      title: (payload['title'] ?? reconCardTitle(cardType)).toString(),
+      subtitle: (payload['subtitle'] ?? '').toString(),
+      metric: (payload['metric'] ?? '').toString(),
+      createdAt: msg.createdAt,
+      viewerOnly: payload['viewerOnly'] == true,
     );
+  }
+
+  Future<void> _openDetails(_ReconCardPayload card, {bool refresh = false}) async {
+    setState(() {
+      _detailCardType = card.cardType;
+      _detailAsOfDate = card.asOfDate;
+      _showDetails = true;
+      if (!refresh) _snapshot = null;
+      final mine = _status[_statusKey(card.cardType, card.asOfDate)]?.mine;
+      _commentController.text = mine?.comment ?? '';
+      if (card.cardType == 'TAG3_ENERGY') {
+        _tag3Tab = 'energy';
+      } else if (card.cardType == 'TAG3_OPERATOR') {
+        _tag3Tab = 'operator';
+      }
+    });
+    try {
+      final snap = await _shucai.fetch(
+        asOfDate: card.asOfDate,
+        cardType: card.cardType,
+        refresh: refresh,
+      );
+      if (!mounted) return;
+      setState(() {
+        _snapshot = snap;
+        if (!snap.tag3.containsKey(_tag3Tab) && snap.tag3.isNotEmpty) {
+          _tag3Tab = snap.tag3.keys.first;
+        }
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _error = friendlyErrorText(e));
+    }
+  }
+
+  Future<void> _confirm() async {
+    final status = _currentStatus;
+    final asOf = _detailAsOfDate;
+    final card = _detailCardType;
+    if (asOf.isEmpty || card.isEmpty || status == null) return;
+    if (!status.canConfirm || status.confirmed) return;
+    setState(() => _confirming = true);
+    FocusManager.instance.primaryFocus?.unfocus();
+    try {
+      await _shucai.confirm(
+        asOfDate: asOf,
+        cardType: card,
+        comment: _commentController.text,
+      );
+      await _reload(silent: true);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('已记录你的对账意见并完成确认'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(friendlyErrorText(e)),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _confirming = false);
+    }
+  }
+
+  bool get _compact => MediaQuery.sizeOf(context).width < 720;
+
+  String get _dateLabel {
+    final date = _detailAsOfDate.isNotEmpty
+        ? _detailAsOfDate
+        : (_snapshot?.asOfDate ?? '');
+    if (date.isEmpty) return '每日对账';
+    return shucaiDisplayDate(date);
   }
 
   @override
   Widget build(BuildContext context) {
     if (widget.desktopMode) {
-      // 桌面端先呈现会话里的名片，点击“查看详情”后直接切换到详情，
-      // 不使用移动端的滑动过渡。
       return _showDetails
           ? _buildDetailScaffold()
           : _buildConversationScaffold();
@@ -96,10 +559,15 @@ class _NativeReconciliationAssistantPageState
           children: [
             ChatConvHeader(
               title: '对账助手',
-              subtitle: '每日对账 · 3 位参与人',
+              subtitle: '每日对账',
               onBack: widget.onBack,
               leadingAvatar: const _ReconciliationAssistantAvatar(size: 45),
               actions: [
+                IconButton(
+                  tooltip: '刷新',
+                  onPressed: _loading ? null : () => _reload(),
+                  icon: const Icon(Icons.refresh_rounded, size: 21),
+                ),
                 IconButton(
                   tooltip: '说明',
                   onPressed: _showInfo,
@@ -107,67 +575,256 @@ class _NativeReconciliationAssistantPageState
                 ),
               ],
             ),
-            Expanded(
-              child: ListView(
-                padding: const EdgeInsets.fromLTRB(12, 18, 12, 28),
-                children: [
-                  Center(
-                    child: Text(
-                      '今天 09:00',
-                      style: DunesTypography.mono(
-                        fontSize: 10,
-                        color: DunesColors.text3,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  ChatMessageRow(
-                    message: const NativeChatMessage(
-                      id: 1001,
-                      senderUserId: 0,
-                      senderName: '对账助手',
-                      kind: 'RECONCILIATION_ASSISTANT',
-                      bodyText: '今日对账信息已生成',
-                      createdAt: null,
-                    ),
-                    mine: false,
-                    showSenderMeta: true,
-                    readLabel: null,
-                    timeLabel: '09:00',
-                    avatar: const _ReconciliationAssistantAvatar(size: 45),
-                    content: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const ChatTextBubble(
-                          text: '今日对账信息已生成，请核对下面的对账卡片并完成确认。',
-                          mine: false,
-                          enableSelection: false,
-                        ),
-                        const SizedBox(height: 8),
-                        _ReconciliationMessageCard(
-                          confirmed: _confirmed,
-                          onTap: () => setState(() => _showDetails = true),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Center(
-                    child: Text(
-                      '点击名片查看明细、评价与确认状态',
-                      style: DunesTypography.sans(
-                        fontSize: 11.5,
-                        color: DunesColors.text3,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
+            Expanded(child: _buildConversationBody()),
           ],
         ),
       ),
     );
+  }
+
+  Widget _buildConversationBody() {
+    if (_loading && _messages.isEmpty) {
+      return const Center(child: CircularProgressIndicator(strokeWidth: 2));
+    }
+    if (_error != null && _messages.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                _error!,
+                textAlign: TextAlign.center,
+                style: DunesTypography.sans(
+                  fontSize: 13,
+                  color: DunesColors.text2,
+                ),
+              ),
+              const SizedBox(height: 12),
+              FilledButton(onPressed: _bootstrap, child: const Text('重试')),
+            ],
+          ),
+        ),
+      );
+    }
+    if (_messages.isEmpty) {
+      return Center(
+        child: Text(
+          '暂无对账推送',
+          style: DunesTypography.sans(fontSize: 13, color: DunesColors.text3),
+        ),
+      );
+    }
+    return Stack(
+      children: [
+        NotificationListener<ScrollNotification>(
+          onNotification: _onScrollNotification,
+          child: ListView(
+            controller: _scroll,
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.fromLTRB(12, 18, 12, 28),
+            children: [
+              if (_loadingOlder)
+                const Padding(
+                  padding: EdgeInsets.only(bottom: 8),
+                  child: Center(
+                    child: SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  ),
+                ),
+              ..._buildConversationItems(),
+            ],
+          ),
+        ),
+        if (_awayFromLatest)
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 12,
+            child: AssistantBackToLatestChip(
+              onTap: () => _jumpBottom(animate: true, force: true),
+            ),
+          ),
+      ],
+    );
+  }
+
+  List<Widget> _buildConversationItems() {
+    const cardOrder = ['TAG2', 'TAG3_ENERGY', 'TAG3_OPERATOR'];
+    final groups = <String, List<({NativeChatMessage msg, _ReconCardPayload card})>>{};
+    final extras = <NativeChatMessage>[];
+    for (final msg in _messages) {
+      final kind = msg.kind.trim().toUpperCase();
+      if (kind == 'RECONCILIATION_REMIND') {
+        extras.add(msg);
+        continue;
+      }
+      final card = _cardFromMessage(msg);
+      if (card == null) {
+        if (msg.bodyText.trim().isNotEmpty) extras.add(msg);
+        continue;
+      }
+      final key = card.asOfDate.isEmpty ? '_' : card.asOfDate;
+      groups.putIfAbsent(key, () => []).add((msg: msg, card: card));
+    }
+    final dates = groups.keys.toList()..sort();
+    final remindByDate = <String, NativeChatMessage>{};
+    final otherExtras = <NativeChatMessage>[];
+    for (final msg in extras) {
+      final kind = msg.kind.trim().toUpperCase();
+      if (kind != 'RECONCILIATION_REMIND') {
+        otherExtras.add(msg);
+        continue;
+      }
+      final date = ((msg.payload ?? const {})['asOfDate'] ?? '').toString();
+      final key = date.isEmpty ? '_${msg.id}' : date;
+      final prev = remindByDate[key];
+      if (prev == null || msg.id > prev.id) {
+        remindByDate[key] = msg;
+      }
+    }
+    final out = <Widget>[];
+    for (final date in dates) {
+      final byType = <String, ({NativeChatMessage msg, _ReconCardPayload card})>{};
+      for (final item in groups[date]!) {
+        final typeKey = item.card.cardType.toUpperCase();
+        final prev = byType[typeKey];
+        if (prev == null || item.msg.id > prev.msg.id) {
+          byType[typeKey] = item;
+        }
+      }
+      final items = byType.values.toList()
+        ..sort((a, b) {
+          final ai = cardOrder.indexOf(a.card.cardType);
+          final bi = cardOrder.indexOf(b.card.cardType);
+          return (ai < 0 ? 99 : ai).compareTo(bi < 0 ? 99 : bi);
+        });
+      final first = items.first.msg;
+      final timeLabel = _timeLabel(first.createdAt);
+      final needsConfirm = items.any((item) {
+        final st = _status[_statusKey(item.card.cardType, item.card.asOfDate)];
+        if (st != null) return st.canConfirm;
+        return !item.card.viewerOnly;
+      });
+      out.add(
+        ChatMessageRow(
+          key: ValueKey<String>('recon-day-$date'),
+          message: first,
+          mine: false,
+          showSenderMeta: true,
+          readLabel: null,
+          timeLabel: timeLabel,
+          avatar: const _ReconciliationAssistantAvatar(size: 45),
+          content: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              ChatTextBubble(
+                text: needsConfirm
+                    ? '今日对账信息已生成，请核对下面的对账卡片并完成确认。'
+                    : '今日对账信息已生成，请查阅下面的对账卡片。',
+                mine: false,
+                enableSelection: false,
+              ),
+              for (final item in items) ...[
+                const SizedBox(height: 8),
+                _ReconciliationMessageCard(
+                  title: item.card.title,
+                  subtitle: item.card.subtitle.isEmpty
+                      ? '${item.card.asOfDate} · 点击查看明细'
+                      : item.card.subtitle,
+                  metric: item.card.metric.isEmpty
+                      ? (_cardViewerOnly(item.card)
+                            ? '查看详情'
+                            : '查看详情并确认')
+                      : item.card.metric,
+                  confirmed:
+                      _status[_statusKey(
+                            item.card.cardType,
+                            item.card.asOfDate,
+                          )]
+                          ?.confirmed ??
+                      false,
+                  viewerOnly: _cardViewerOnly(item.card),
+                  onTap: () => _openDetails(item.card),
+                ),
+              ],
+            ],
+          ),
+        ),
+      );
+      out.add(const SizedBox(height: 8));
+      out.add(
+        Center(
+          child: Text(
+            '点击名片查看明细与确认状态',
+            style: DunesTypography.sans(
+              fontSize: 11.5,
+              color: DunesColors.text3,
+            ),
+          ),
+        ),
+      );
+      out.add(const SizedBox(height: 16));
+      final remind = remindByDate.remove(date);
+      if (remind != null) {
+        out.addAll(_buildExtraMessage(remind));
+      }
+    }
+    final leftoverRemindDates = remindByDate.keys.toList()..sort();
+    for (final date in leftoverRemindDates) {
+      out.addAll(_buildExtraMessage(remindByDate[date]!));
+    }
+    for (final msg in otherExtras) {
+      out.addAll(_buildExtraMessage(msg));
+    }
+    return out;
+  }
+
+  List<Widget> _buildExtraMessage(NativeChatMessage msg) {
+    final kind = msg.kind.trim().toUpperCase();
+    final timeLabel = _timeLabel(msg.createdAt);
+    if (kind == 'RECONCILIATION_REMIND') {
+      return [
+        ChatMessageRow(
+          message: msg,
+          mine: false,
+          showSenderMeta: true,
+          readLabel: null,
+          timeLabel: timeLabel,
+          avatar: const _ReconciliationAssistantAvatar(size: 45),
+          content: _RemindCard(payload: msg.payload ?? const {}),
+        ),
+        const SizedBox(height: 12),
+      ];
+    }
+    return [
+      ChatMessageRow(
+        message: msg,
+        mine: false,
+        showSenderMeta: true,
+        readLabel: null,
+        timeLabel: timeLabel,
+        avatar: const _ReconciliationAssistantAvatar(size: 45),
+        content: ChatTextBubble(
+          text: msg.bodyText,
+          mine: false,
+          enableSelection: false,
+        ),
+      ),
+      const SizedBox(height: 12),
+    ];
+  }
+
+  String _timeLabel(DateTime? at) {
+    if (at == null) return '';
+    final local = at.toLocal();
+    final hh = local.hour.toString().padLeft(2, '0');
+    final mm = local.minute.toString().padLeft(2, '0');
+    return '$hh:$mm';
   }
 
   void _showInfo() {
@@ -175,7 +832,9 @@ class _NativeReconciliationAssistantPageState
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('对账助手'),
-        content: const Text('每天由对账助手推送一份对账信息，参与人可以留下意见并确认。'),
+        content: const Text(
+          '每天由后台推送三种对账名片。请按权限查阅对应的表；一层和二层都需要确认，最终人只查阅不用确认。超时未确认会通知最终人。',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
@@ -187,7 +846,12 @@ class _NativeReconciliationAssistantPageState
   }
 
   Widget _buildDetailScaffold() {
-    final progress = _confirmed ? 1.0 : 2 / 3;
+    final status = _currentStatus;
+    final expected = status?.expectedCount ?? 0;
+    final confirmed = status?.confirmedCount ?? 0;
+    final progress = expected <= 0
+        ? (status?.confirmed == true ? 1.0 : 0.0)
+        : (confirmed / expected).clamp(0.0, 1.0);
     return Scaffold(
       backgroundColor: DunesColors.bgApp,
       appBar: AppBar(
@@ -196,7 +860,7 @@ class _NativeReconciliationAssistantPageState
         elevation: 0,
         leading: IconButton(
           tooltip: '返回对账消息',
-          onPressed: () => setState(() => _showDetails = false),
+          onPressed: _closeDetails,
           icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 19),
         ),
         titleSpacing: 0,
@@ -230,20 +894,26 @@ class _NativeReconciliationAssistantPageState
         ),
         actions: [
           IconButton(
+            tooltip: '刷新',
+            onPressed: _loading
+                ? null
+                : () {
+                    final card = _ReconCardPayload(
+                      cardType: _detailCardType,
+                      asOfDate: _detailAsOfDate,
+                      title: reconCardTitle(_detailCardType),
+                      subtitle: '',
+                      metric: '',
+                      createdAt: null,
+                    );
+                    unawaited(_openDetails(card, refresh: true));
+                    unawaited(_reload(silent: true));
+                  },
+            icon: const Icon(Icons.refresh_rounded, size: 21),
+          ),
+          IconButton(
             tooltip: '说明',
-            onPressed: () => showDialog<void>(
-              context: context,
-              builder: (context) => AlertDialog(
-                title: const Text('对账助手'),
-                content: const Text('每天由对账助手推送一份对账信息，参与人可以留下意见并确认。'),
-                actions: [
-                  TextButton(
-                    onPressed: () => Navigator.of(context).pop(),
-                    child: const Text('知道了'),
-                  ),
-                ],
-              ),
-            ),
+            onPressed: _showInfo,
             icon: const Icon(Icons.help_outline_rounded, size: 21),
           ),
           const SizedBox(width: 4),
@@ -254,28 +924,53 @@ class _NativeReconciliationAssistantPageState
         child: ListView(
           padding: const EdgeInsets.fromLTRB(16, 4, 16, 28),
           children: [
-            _buildHeroCard(),
+            _buildHeroCard(status),
             const SizedBox(height: 14),
-            _buildSectionTitle('本次对账', '示例数据 · 2026年8月1日'),
+            _buildSectionTitle('本次对账', _dateLabel),
             const SizedBox(height: 8),
-            _buildSummaryCard(),
+            _buildCurrentSummaryCard(),
+            const SizedBox(height: 12),
+            _buildDetailTables(),
             const SizedBox(height: 18),
-            _buildSectionTitle('确认进度', _confirmed ? '3/3 人已确认' : '2/3 人已确认'),
+            _buildSectionTitle(
+              '确认进度',
+              expected <= 0
+                  ? (status?.viewerOnly == true
+                        ? '仅查阅'
+                        : (status?.confirmed == true ? '已确认' : '待确认'))
+                  : '$confirmed/$expected 人已确认',
+            ),
             const SizedBox(height: 8),
-            _buildProgressCard(progress),
+            _buildProgressCard(progress, expected, confirmed, status),
             const SizedBox(height: 18),
             _buildSectionTitle('本次评价', '所有参与人可见'),
             const SizedBox(height: 8),
-            _buildReviewCard(),
-            const SizedBox(height: 18),
-            _buildCommentCard(),
+            _buildReviewCard(status),
+            if (status?.canConfirm == true) ...[
+              const SizedBox(height: 18),
+              _buildCommentCard(status),
+            ],
           ],
         ),
       ),
     );
   }
 
-  Widget _buildHeroCard() {
+  bool _cardViewerOnly(_ReconCardPayload card) {
+    final st = _status[_statusKey(card.cardType, card.asOfDate)];
+    if (st != null) return st.viewerOnly;
+    return card.viewerOnly;
+  }
+
+  Widget _buildHeroCard(ReconCardStatus? status) {
+    final viewerOnly = status?.viewerOnly ?? true;
+    final confirmed = status?.confirmed ?? false;
+    final subtitle = viewerOnly
+        ? '本张对账表供你查阅，无需确认'
+        : (confirmed ? '你已完成确认' : '请核对本张对账表并留下你的意见');
+    final pillLabel = viewerOnly
+        ? '查阅'
+        : (confirmed ? '已确认' : '待确认');
     return Container(
       padding: const EdgeInsets.fromLTRB(18, 17, 16, 17),
       decoration: BoxDecoration(
@@ -314,7 +1009,7 @@ class _NativeReconciliationAssistantPageState
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  '今日对账 · 7月结算',
+                  '${reconCardTitle(_detailCardType)} · $_dateLabel',
                   style: DunesTypography.sans(
                     fontSize: 17,
                     fontWeight: FontWeight.w600,
@@ -323,7 +1018,7 @@ class _NativeReconciliationAssistantPageState
                 ),
                 const SizedBox(height: 5),
                 Text(
-                  _confirmed ? '你已完成确认' : '请核对信息并留下你的意见',
+                  subtitle,
                   style: DunesTypography.sans(
                     fontSize: 12.5,
                     color: Colors.white.withValues(alpha: 0.82),
@@ -333,9 +1028,11 @@ class _NativeReconciliationAssistantPageState
             ),
           ),
           _StatusPill(
-            label: _confirmed ? '已确认' : '待确认',
-            color: _confirmed ? const Color(0xFFD7F3E1) : Colors.white,
-            textColor: _confirmed
+            label: pillLabel,
+            color: confirmed
+                ? const Color(0xFFD7F3E1)
+                : Colors.white,
+            textColor: confirmed
                 ? const Color(0xFF267449)
                 : DunesColors.accent,
           ),
@@ -364,39 +1061,133 @@ class _NativeReconciliationAssistantPageState
     );
   }
 
-  Widget _buildSummaryCard() {
-    return _CardSurface(
-      child: Column(
-        children: [
-          const _InfoLine(label: '对账周期', value: '2026.07.01 — 2026.07.31'),
-          const Divider(height: 20, color: DunesColors.borderSoft),
-          Row(
-            children: [
-              const Expanded(
-                child: _AmountCell(label: '应收合计', value: '¥128,640.00'),
-              ),
-              Container(width: 1, height: 40, color: DunesColors.borderSoft),
-              const Expanded(
-                child: _AmountCell(label: '已核销', value: '¥128,640.00'),
-              ),
-              Container(width: 1, height: 40, color: DunesColors.borderSoft),
-              const Expanded(
-                child: _AmountCell(
-                  label: '差异',
-                  value: '¥0.00',
-                  valueColor: DunesColors.green,
+  Widget _buildCurrentSummaryCard() {
+    final snap = _snapshot;
+    if (_detailCardType == 'TAG2') {
+      return _CardSurface(
+        child: Column(
+          children: [
+            _InfoLine(label: '标签二', value: '${snap?.tag2.detailRowCount ?? 0} 行'),
+            const Divider(height: 20, color: DunesColors.borderSoft),
+            Row(
+              children: [
+                Expanded(
+                  child: _AmountCell(
+                    label: '资产合计',
+                    value: formatShucaiCompact(_tag2Amount('资产合计')),
+                  ),
                 ),
-              ),
-            ],
-          ),
-          const Divider(height: 20, color: DunesColors.borderSoft),
-          const _InfoLine(label: '附件', value: '3 份对账单 · 点击查看'),
-        ],
+                Container(width: 1, height: 40, color: DunesColors.borderSoft),
+                Expanded(
+                  child: _AmountCell(
+                    label: '资金池余额',
+                    value: formatShucaiCompact(_tag2Amount('资金池余额')),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      );
+    }
+    if (_detailCardType == 'TAG3_ENERGY') {
+      return _CardSurface(
+        child: _InfoLine(
+          label: '能源明细',
+          value: '${snap?.tag3['energy']?.detailRowCount ?? 0} 条',
+        ),
+      );
+    }
+    final parts = <String>[];
+    for (final tab in ShucaiSnapshot.tag3TabOrder) {
+      if (tab == 'energy') continue;
+      final report = snap?.tag3[tab];
+      if (report == null) continue;
+      parts.add('${ShucaiSnapshot.tabLabel(tab)} ${report.detailRowCount}');
+    }
+    return _CardSurface(
+      child: _InfoLine(
+        label: '运营商及相关',
+        value: parts.isEmpty ? '暂无' : parts.join(' · '),
       ),
     );
   }
 
-  Widget _buildProgressCard(double progress) {
+  Widget _buildDetailTables() {
+    final snap = _snapshot;
+    if (snap == null) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 24),
+        child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+      );
+    }
+    final compact = _compact;
+    if (_detailCardType == 'TAG2') {
+      return ShucaiReportTable(
+        report: snap.tag2.withProvinceColumn,
+        compact: compact,
+      );
+    }
+    final tabs = [
+      for (final tab in ShucaiSnapshot.tag3TabOrder)
+        if (snap.tag3.containsKey(tab)) tab,
+    ];
+    if (tabs.isEmpty) {
+      return _CardSurface(
+        child: Text(
+          '暂无明细',
+          style: DunesTypography.sans(fontSize: 13, color: DunesColors.text3),
+        ),
+      );
+    }
+    final current =
+        snap.tag3[_tag3Tab] ?? snap.tag3[tabs.first]!;
+    if (tabs.length == 1) {
+      return ShucaiReportTable(report: current, compact: compact);
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          height: 36,
+          child: ListView(
+            scrollDirection: Axis.horizontal,
+            children: [
+              for (final tab in tabs) ...[
+                _ShucaiTabChip(
+                  label:
+                      '${ShucaiSnapshot.tabLabel(tab)} ${snap.tag3[tab]?.detailRowCount ?? 0}',
+                  selected: _tag3Tab == tab,
+                  onTap: () => setState(() => _tag3Tab = tab),
+                ),
+                const SizedBox(width: 8),
+              ],
+            ],
+          ),
+        ),
+        const SizedBox(height: 10),
+        ShucaiReportTable(report: current, compact: compact),
+      ],
+    );
+  }
+
+  double? _tag2Amount(String label) {
+    final snap = _snapshot;
+    if (snap == null) return null;
+    final total = snap.tag2.totalRow ??
+        (snap.tag2.rows.isEmpty ? null : snap.tag2.rows.last);
+    final col = snap.tag2.columnByLabel(label);
+    if (col == null || total == null) return null;
+    return shucaiCellAmount(shucaiCellRaw(total, col));
+  }
+
+  Widget _buildProgressCard(
+    double progress,
+    int expected,
+    int confirmed,
+    ReconCardStatus? status,
+  ) {
+    final remain = (expected - confirmed).clamp(0, expected);
     return _CardSurface(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -437,7 +1228,13 @@ class _NativeReconciliationAssistantPageState
           ),
           const SizedBox(height: 10),
           Text(
-            _confirmed ? '全部参与人已完成本次确认' : '还有 1 位参与人待确认',
+            expected <= 0
+                ? (status?.viewerOnly == true
+                      ? '本张名片无需你确认'
+                      : (status?.confirmed == true ? '你已完成本次确认' : '请完成本次确认'))
+                : (remain == 0
+                    ? '全部参与人已完成本次确认'
+                    : '还有 $remain 位参与人待确认'),
             style: DunesTypography.sans(fontSize: 12, color: DunesColors.text3),
           ),
         ],
@@ -445,52 +1242,149 @@ class _NativeReconciliationAssistantPageState
     );
   }
 
-  Widget _buildReviewCard() {
+  Widget _buildReviewCard(ReconCardStatus? status) {
+    final others = status?.others ?? const <ReconPerson>[];
+    final expected = status?.expected ?? const <ReconPerson>[];
+    final ackedIds = {
+      for (final p in status?.acks ?? const <ReconPerson>[]) p.userId,
+    };
+    final pending = expected.where((p) => !ackedIds.contains(p.userId)).toList();
+    final expectedById = <int, ReconPerson>{
+      for (final p in expected) p.userId: p,
+    };
+    final rows = <Widget>[];
+    for (final person in others) {
+      final merged = _personWithAvatar(person, expectedById[person.userId]);
+      rows.add(
+        _ReviewRow(
+          userId: merged.userId,
+          initial: _initial(merged.displayName),
+          name: merged.displayName,
+          role: merged.roleLabel,
+          comment: merged.comment.trim().isEmpty
+              ? '已确认'
+              : merged.comment.trim(),
+          status: '已确认',
+          statusColor: DunesColors.green,
+          avatarColor: const Color(0xFFE7DFF5),
+          avatarTextColor: DunesColors.brandPurpleDeep,
+          avatarPreset: merged.avatarPreset,
+          avatarObjectKey: merged.avatarObjectKey,
+          avatarService: _convService,
+        ),
+      );
+    }
+    for (final person in pending) {
+      if (person.userId == widget.session.userId) continue;
+      rows.add(
+        _ReviewRow(
+          userId: person.userId,
+          initial: _initial(person.displayName),
+          name: person.displayName,
+          role: person.roleLabel,
+          comment: '尚未确认',
+          status: '待确认',
+          statusColor: DunesColors.amber,
+          avatarColor: const Color(0xFFDCEBEA),
+          avatarTextColor: DunesColors.accent,
+          avatarPreset: person.avatarPreset,
+          avatarObjectKey: person.avatarObjectKey,
+          avatarService: _convService,
+        ),
+      );
+    }
+    final selfSnap = userAvatarRefresh.snapshotFor(widget.session.userId);
+    final selfPerson = _personWithAvatar(
+      status?.mine ??
+          ReconPerson(
+            userId: widget.session.userId,
+            userName: (widget.session.displayName ?? '').trim(),
+            role: status?.myRole ?? '',
+          ),
+      expectedById[widget.session.userId],
+    );
+    if (status?.canConfirm == true) {
+      rows.add(
+        _ReviewRow(
+          userId: widget.session.userId,
+          initial: '我',
+          name: '我',
+          role: status?.myRole.isNotEmpty == true
+              ? ReconPerson(userId: widget.session.userId, role: status!.myRole)
+                  .roleLabel
+              : '当前核对人',
+          comment: _commentController.text.trim().isEmpty
+              ? '等待你填写意见'
+              : _commentController.text.trim(),
+          status: status?.confirmed == true ? '已确认' : '待确认',
+          statusColor: status?.confirmed == true
+              ? DunesColors.green
+              : DunesColors.amber,
+          avatarColor: const Color(0xFFD7E8E6),
+          avatarTextColor: DunesColors.accent,
+          avatarPreset: (selfSnap?.avatarPreset ?? '').trim().isNotEmpty
+              ? selfSnap!.avatarPreset
+              : selfPerson.avatarPreset,
+          avatarObjectKey: (selfSnap?.avatarObjectKey ?? '').trim().isNotEmpty
+              ? selfSnap!.avatarObjectKey
+              : selfPerson.avatarObjectKey,
+          avatarUrl: (selfSnap?.avatarUrl ?? '').trim(),
+          avatarService: _convService,
+          isSelf: true,
+        ),
+      );
+    }
+    if (rows.isEmpty) {
+      return _CardSurface(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: Text(
+            '暂无核对人评价',
+            style: DunesTypography.sans(fontSize: 13, color: DunesColors.text3),
+          ),
+        ),
+      );
+    }
+    final children = <Widget>[];
+    for (var i = 0; i < rows.length; i++) {
+      if (i > 0) {
+        children.add(
+          const Divider(height: 1, indent: 68, color: DunesColors.borderSoft),
+        );
+      }
+      children.add(rows[i]);
+    }
     return _CardSurface(
       padding: EdgeInsets.zero,
-      child: Column(
-        children: [
-          const _ReviewRow(
-            initial: '张',
-            name: '张莉',
-            role: '财务核对人',
-            comment: '金额与发票明细一致，可以确认。',
-            status: '已确认',
-            statusColor: DunesColors.green,
-            avatarColor: Color(0xFFE7DFF5),
-            avatarTextColor: DunesColors.brandPurpleDeep,
-          ),
-          const Divider(height: 1, indent: 68, color: DunesColors.borderSoft),
-          const _ReviewRow(
-            initial: '李',
-            name: '李明',
-            role: '业务负责人',
-            comment: '请关注 7 月 31 日的差旅费用。',
-            status: '待确认',
-            statusColor: DunesColors.amber,
-            avatarColor: Color(0xFFDCEBEA),
-            avatarTextColor: DunesColors.accent,
-          ),
-          const Divider(height: 1, indent: 68, color: DunesColors.borderSoft),
-          _ReviewRow(
-            initial: '我',
-            name: '我',
-            role: '当前核对人',
-            comment: _commentController.text.trim().isEmpty
-                ? '等待你填写意见'
-                : _commentController.text.trim(),
-            status: _confirmed ? '已确认' : '待确认',
-            statusColor: _confirmed ? DunesColors.green : DunesColors.amber,
-            avatarColor: const Color(0xFFD7E8E6),
-            avatarTextColor: DunesColors.accent,
-            isSelf: true,
-          ),
-        ],
-      ),
+      child: Column(children: children),
     );
   }
 
-  Widget _buildCommentCard() {
+  String _initial(String name) {
+    final t = name.trim();
+    if (t.isEmpty) return '?';
+    return String.fromCharCode(t.runes.first);
+  }
+
+  ReconPerson _personWithAvatar(ReconPerson person, ReconPerson? extra) {
+    if (extra == null) return person;
+    return ReconPerson(
+      userId: person.userId,
+      userName: person.userName.isNotEmpty ? person.userName : extra.userName,
+      role: person.role.isNotEmpty ? person.role : extra.role,
+      comment: person.comment,
+      confirmedAt: person.confirmedAt,
+      avatarPreset: person.avatarPreset.isNotEmpty
+          ? person.avatarPreset
+          : extra.avatarPreset,
+      avatarObjectKey: person.avatarObjectKey.isNotEmpty
+          ? person.avatarObjectKey
+          : extra.avatarObjectKey,
+    );
+  }
+
+  Widget _buildCommentCard(ReconCardStatus? status) {
+    final confirmed = status?.confirmed ?? false;
     return _CardSurface(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -518,7 +1412,7 @@ class _NativeReconciliationAssistantPageState
           const SizedBox(height: 10),
           TextField(
             controller: _commentController,
-            enabled: !_confirmed,
+            enabled: !confirmed,
             maxLines: 3,
             onChanged: (_) => setState(() {}),
             style: DunesTypography.sans(fontSize: 13, color: DunesColors.text),
@@ -550,12 +1444,16 @@ class _NativeReconciliationAssistantPageState
             width: double.infinity,
             height: 46,
             child: FilledButton.icon(
-              onPressed: _confirmed ? null : _confirm,
+              onPressed: confirmed || _confirming ? null : _confirm,
               icon: Icon(
-                _confirmed ? Icons.check_circle_outline : Icons.check_rounded,
+                confirmed ? Icons.check_circle_outline : Icons.check_rounded,
                 size: 19,
               ),
-              label: Text(_confirmed ? '已确认本次对账' : '确认本次对账'),
+              label: Text(
+                _confirming
+                    ? '提交中…'
+                    : (confirmed ? '已确认本次对账' : '确认本次对账'),
+              ),
               style: FilledButton.styleFrom(
                 backgroundColor: DunesColors.accent,
                 disabledBackgroundColor: DunesColors.greenSoft,
@@ -569,6 +1467,70 @@ class _NativeReconciliationAssistantPageState
                 ),
               ),
             ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ReconCardPayload {
+  const _ReconCardPayload({
+    required this.cardType,
+    required this.asOfDate,
+    required this.title,
+    required this.subtitle,
+    required this.metric,
+    required this.createdAt,
+    this.viewerOnly = false,
+  });
+
+  final String cardType;
+  final String asOfDate;
+  final String title;
+  final String subtitle;
+  final String metric;
+  final DateTime? createdAt;
+  final bool viewerOnly;
+}
+
+class _RemindCard extends StatelessWidget {
+  const _RemindCard({required this.payload});
+
+  final Map<String, dynamic> payload;
+
+  @override
+  Widget build(BuildContext context) {
+    final asOfDate = (payload['asOfDate'] ?? '').toString();
+    final items = payload['items'];
+    final lines = <String>[];
+    if (items is List) {
+      for (final item in items) {
+        if (item is! Map) continue;
+        final title = reconCardTitle((item['cardType'] ?? '').toString());
+        final people = item['unconfirmed'];
+        final names = people is List
+            ? people.map((e) => e.toString()).join('、')
+            : '';
+        if (names.isNotEmpty) lines.add('$title：$names');
+      }
+    }
+    return _CardSurface(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '未确认催办${asOfDate.isEmpty ? '' : ' · ${shucaiDisplayDate(asOfDate)}'}',
+            style: DunesTypography.sans(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              color: DunesColors.text,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            lines.isEmpty ? '仍有核对人未确认' : lines.join('\n'),
+            style: DunesTypography.sans(fontSize: 13, color: DunesColors.text2),
           ),
         ],
       ),
@@ -605,11 +1567,19 @@ class _ReconciliationAssistantAvatar extends StatelessWidget {
 
 class _ReconciliationMessageCard extends StatelessWidget {
   const _ReconciliationMessageCard({
+    required this.title,
+    required this.subtitle,
+    required this.metric,
     required this.confirmed,
     required this.onTap,
+    this.viewerOnly = false,
   });
 
+  final String title;
+  final String subtitle;
+  final String metric;
   final bool confirmed;
+  final bool viewerOnly;
   final VoidCallback onTap;
 
   @override
@@ -640,7 +1610,7 @@ class _ReconciliationMessageCard extends StatelessWidget {
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      '今日对账 · 7月结算',
+                      title,
                       style: DunesTypography.sans(
                         fontSize: 14,
                         fontWeight: FontWeight.w600,
@@ -649,19 +1619,27 @@ class _ReconciliationMessageCard extends StatelessWidget {
                     ),
                   ),
                   _StatusPill(
-                    label: confirmed ? '已确认' : '待确认',
-                    color: confirmed
-                        ? const Color(0xFFD7F3E1)
-                        : const Color(0xFFFFF3DC),
-                    textColor: confirmed
-                        ? const Color(0xFF267449)
-                        : DunesColors.amber,
+                    label: viewerOnly
+                        ? '查阅'
+                        : (confirmed ? '已确认' : '待确认'),
+                    color: viewerOnly
+                        ? const Color(0xFFE4EEEC)
+                        : (confirmed
+                              ? const Color(0xFFD7F3E1)
+                              : const Color(0xFFFFF3DC)),
+                    textColor: viewerOnly
+                        ? DunesColors.accent
+                        : (confirmed
+                              ? const Color(0xFF267449)
+                              : DunesColors.amber),
                   ),
                 ],
               ),
               const SizedBox(height: 10),
               Text(
-                '2026.07.01 — 2026.07.31 · 3 位参与人',
+                subtitle,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
                 style: DunesTypography.sans(
                   fontSize: 12,
                   color: DunesColors.text2,
@@ -670,15 +1648,18 @@ class _ReconciliationMessageCard extends StatelessWidget {
               const SizedBox(height: 8),
               Row(
                 children: [
-                  Text(
-                    '差异 ¥0.00',
-                    style: DunesTypography.mono(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: DunesColors.green,
+                  Expanded(
+                    child: Text(
+                      metric,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: DunesTypography.mono(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: DunesColors.green,
+                      ),
                     ),
                   ),
-                  const Spacer(),
                   Text(
                     '查看详情',
                     style: DunesTypography.sans(
@@ -696,6 +1677,47 @@ class _ReconciliationMessageCard extends StatelessWidget {
                 ],
               ),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ShucaiTabChip extends StatelessWidget {
+  const _ShucaiTabChip({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(18),
+        child: Ink(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+          decoration: BoxDecoration(
+            color: selected ? DunesColors.accentSoft : Colors.white,
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(
+              color: selected ? DunesColors.accentLine : DunesColors.borderSoft,
+            ),
+          ),
+          child: Text(
+            label,
+            style: DunesTypography.sans(
+              fontSize: 12,
+              fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+              color: selected ? DunesColors.accent : DunesColors.text,
+            ),
           ),
         ),
       ),
@@ -772,12 +1794,15 @@ class _InfoLine extends StatelessWidget {
           style: DunesTypography.sans(fontSize: 12, color: DunesColors.text3),
         ),
         const Spacer(),
-        Text(
-          value,
-          style: DunesTypography.sans(
-            fontSize: 12.5,
-            fontWeight: FontWeight.w500,
-            color: DunesColors.text,
+        Flexible(
+          child: Text(
+            value,
+            textAlign: TextAlign.right,
+            style: DunesTypography.sans(
+              fontSize: 12.5,
+              fontWeight: FontWeight.w500,
+              color: DunesColors.text,
+            ),
           ),
         ),
       ],
@@ -786,15 +1811,10 @@ class _InfoLine extends StatelessWidget {
 }
 
 class _AmountCell extends StatelessWidget {
-  const _AmountCell({
-    required this.label,
-    required this.value,
-    this.valueColor = DunesColors.text,
-  });
+  const _AmountCell({required this.label, required this.value});
 
   final String label;
   final String value;
-  final Color valueColor;
 
   @override
   Widget build(BuildContext context) {
@@ -807,10 +1827,12 @@ class _AmountCell extends StatelessWidget {
         const SizedBox(height: 5),
         Text(
           value,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
           style: DunesTypography.mono(
             fontSize: 13,
             fontWeight: FontWeight.w600,
-            color: valueColor,
+            color: DunesColors.text,
           ),
         ),
       ],
@@ -820,6 +1842,7 @@ class _AmountCell extends StatelessWidget {
 
 class _ReviewRow extends StatelessWidget {
   const _ReviewRow({
+    required this.userId,
     required this.initial,
     required this.name,
     required this.role,
@@ -828,9 +1851,14 @@ class _ReviewRow extends StatelessWidget {
     required this.statusColor,
     required this.avatarColor,
     required this.avatarTextColor,
+    this.avatarPreset = '',
+    this.avatarObjectKey = '',
+    this.avatarUrl = '',
+    this.avatarService,
     this.isSelf = false,
   });
 
+  final int userId;
   final String initial;
   final String name;
   final String role;
@@ -839,6 +1867,10 @@ class _ReviewRow extends StatelessWidget {
   final Color statusColor;
   final Color avatarColor;
   final Color avatarTextColor;
+  final String avatarPreset;
+  final String avatarObjectKey;
+  final String avatarUrl;
+  final ConversationService? avatarService;
   final bool isSelf;
 
   @override
@@ -848,22 +1880,17 @@ class _ReviewRow extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            width: 38,
-            height: 38,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: avatarColor,
-              shape: BoxShape.circle,
-            ),
-            child: Text(
-              initial,
-              style: DunesTypography.sans(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: avatarTextColor,
-              ),
-            ),
+          ImUserAvatar(
+            initial: initial,
+            seed: userId,
+            size: 38,
+            avatarPreset: avatarPreset.trim().isEmpty ? null : avatarPreset,
+            avatarObjectKey:
+                avatarObjectKey.trim().isEmpty ? null : avatarObjectKey,
+            avatarUrl: avatarUrl.trim().isEmpty ? null : avatarUrl,
+            avatarService: avatarService,
+            fallbackBackground: avatarColor,
+            fallbackForeground: avatarTextColor,
           ),
           const SizedBox(width: 11),
           Expanded(

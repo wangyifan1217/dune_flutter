@@ -23,6 +23,7 @@ class MainFlutterWindow: NSWindow {
     SparkleUpdaterBridge.shared.setup(with: messenger)
     if let appDelegate = NSApplication.shared.delegate as? AppDelegate {
       appDelegate.setupDesktopWindowChannel(with: messenger)
+      appDelegate.setupDesktopFileDragChannel(with: messenger)
     }
 
     super.awakeFromNib()

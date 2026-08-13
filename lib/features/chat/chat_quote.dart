@@ -113,6 +113,22 @@ class ChatMessageQuote {
           final title = (kb['title'] ?? kb['fileName'] ?? '').toString().trim();
           return title.isEmpty ? '[知识库]' : '[知识库] $title';
         }
+        if (upper == 'WEEKLY_SUMMARY' ||
+            (payload?['type'] ?? '').toString() == 'weeklySummary') {
+          final text = bodyText.trim();
+          return text.isEmpty ? '[一周小结]' : text;
+        }
+        if (upper == 'RECONCILIATION' ||
+            upper == 'RECONCILIATION_ASSISTANT' ||
+            (payload?['type'] ?? '').toString() == 'reconciliation') {
+          final text = bodyText.trim();
+          return text.isEmpty ? '每日对账 · 待你确认' : text;
+        }
+        if (upper == 'RECONCILIATION_REMIND' ||
+            (payload?['type'] ?? '').toString() == 'reconciliationRemind') {
+          final text = bodyText.trim();
+          return text.isEmpty ? '对账催办' : text;
+        }
         final text = bodyText.trim();
         if (text.isEmpty) return '[消息]';
         return text.length > 80 ? '${text.substring(0, 80)}…' : text;

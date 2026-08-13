@@ -114,3 +114,4 @@ final class DesktopFileDragSource: NSObject, NSDraggingSource {
     view.beginDraggingSession(with: items, event: event, source: self)
     return true
   }
+}

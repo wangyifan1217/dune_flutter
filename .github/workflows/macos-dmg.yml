@@ -53,26 +53,6 @@ jobs:
             sed -i '' "s/platform :osx, '.*'/platform :osx, '11.0'/g" macos/Podfile
           fi
 
-      # Xcode 要求 Bundle ID 只能含 A-Z a-z 0-9 - . ；下划线会直接导致 BUILD FAILED
-      - name: Sanitize macOS bundle identifier
-        run: |
-          python3 <<'PY'
-          from pathlib import Path
-          replacements = {
-              Path("macos/Runner/Configs/AppInfo.xcconfig"): None,
-              Path("macos/Runner.xcodeproj/project.pbxproj"): None,
-          }
-          old, new = "nova.dunes.dunes_app", "nova.dunes.dunes-app"
-          for path in replacements:
-              text = path.read_text(encoding="utf-8")
-              updated = text.replace(old, new)
-              if updated != text:
-                  path.write_text(updated, encoding="utf-8")
-                  print(f"replaced {old} -> {new} in {path}")
-              else:
-                  print(f"ok: {path} already uses hyphenated bundle id")
-          PY
-
       # CI 无本机 Apple Development 证书时，先无签名构建，再用 Developer ID 重签
       - name: Disable Xcode automatic signing for CI build
         run: |

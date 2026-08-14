@@ -20749,7 +20749,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                   TextSpan(
                     text: unit,
                     style: LhTypography.mono(
-                      size: _fs(9),
+                      size: _fs(lighthouseLedgerUnitFontSize),
                       color: semanticColor?.withAlpha(185) ?? LhColors.mute,
                       weight: FontWeight.w500,
                       height: 1.0,
@@ -21095,7 +21095,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   }
 
   /// 供给卡片资金池预览 —— 总资产金额←资产合计，资金池余额←标签二同名列。
-  /// 布局对齐上方摘要格：标签左、数字右；数字加粗、单位常规字重。
+  /// 布局对齐上方摘要格：标签左、数字右；数字加粗，万/亿同摘要格单位字号且不加粗。
   Widget _buildSupplyFundPoolPreview(
     double cellHeight, {
     required String provinceName,
@@ -21137,7 +21137,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                     TextSpan(
                       text: parts.unit,
                       style: LhTypography.mono(
-                        size: _fs(9),
+                        size: _fs(lighthouseLedgerUnitFontSize),
                         color: LhColors.mute,
                         weight: FontWeight.w500,
                         height: 1.0,
@@ -21231,23 +21231,72 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
 
   /// 展开态沿用顶部财务概览的分组卡片语言：资金 / 券额 / 票税 / 资产。
   Widget _buildSupplyFundPoolDetails(LighthouseFundPoolAmounts? amounts) {
-    Widget metric(String label, String value) {
+    Widget metricLabel(String label) => Text(
+      label,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: LhTypography.sans(
+        size: _fs(8.8),
+        color: LhColors.ink2,
+        weight: FontWeight.w500,
+        height: 1.0,
+      ),
+    );
+
+    /// 金额：数字加粗，万/亿用摘要格单位字号 + 常规体。
+    Widget metricAmount(String label, double? amount) {
+      final parts = lighthouseFormatFundPoolWanParts(amount);
+      final missing = parts.number == '—';
+      final negative = !missing && (amount ?? 0) < 0;
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          metricLabel(label),
+          SizedBox(height: _fs(3)),
+          Text.rich(
+            TextSpan(
+              children: [
+                TextSpan(
+                  text: parts.number,
+                  style: _tabular(
+                    LhTypography.mono(
+                      size: _fs(lighthouseLedgerValueFontSize),
+                      color: missing
+                          ? LhColors.mute2
+                          : (negative ? LhColors.pos : LhColors.ink),
+                      weight: missing ? FontWeight.w500 : FontWeight.w700,
+                      height: 1.0,
+                    ),
+                  ),
+                ),
+                if (parts.unit.isNotEmpty)
+                  TextSpan(
+                    text: parts.unit,
+                    style: LhTypography.mono(
+                      size: _fs(lighthouseLedgerUnitFontSize),
+                      color: LhColors.mute,
+                      weight: FontWeight.w500,
+                      height: 1.0,
+                      letterSpacing: 0.2,
+                    ),
+                  ),
+              ],
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
+      );
+    }
+
+    Widget metricText(String label, String value) {
       final hasValue = value != '—';
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(
-            label,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: LhTypography.sans(
-              size: _fs(8.8),
-              color: LhColors.ink2,
-              weight: FontWeight.w500,
-              height: 1.0,
-            ),
-          ),
+          metricLabel(label),
           SizedBox(height: _fs(3)),
           Text(
             value,
@@ -21255,9 +21304,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             overflow: TextOverflow.ellipsis,
             style: _tabular(
               LhTypography.mono(
-                size: _fs(11.2),
+                size: _fs(lighthouseLedgerValueFontSize),
                 color: hasValue ? LhColors.ink : LhColors.mute2,
-                weight: FontWeight.w600,
+                weight: FontWeight.w500,
                 height: 1.0,
               ),
             ),
@@ -21266,7 +21315,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       );
     }
 
-    Widget metricGrid(List<(String, String)> items, {int columns = 1}) {
+    Widget metricGrid(List<Widget> items, {int columns = 1}) {
       final rows = <Widget>[];
       for (var start = 0; start < items.length; start += columns) {
         rows.add(
@@ -21277,7 +21326,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 if (index > 0) SizedBox(width: _fs(4)),
                 Expanded(
                   child: start + index < items.length
-                      ? metric(items[start + index].$1, items[start + index].$2)
+                      ? items[start + index]
                       : const SizedBox.shrink(),
                 ),
               ],
@@ -21293,7 +21342,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       required String title,
       required IconData icon,
       required Color accent,
-      required List<(String, String)> items,
+      required List<Widget> items,
       int columns = 1,
     }) {
       return Container(
@@ -21341,7 +21390,6 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       );
     }
 
-    final money = lighthouseFormatFundPoolWan;
     Widget sectionRow(Widget left, Widget right) {
       return IntrinsicHeight(
         child: Row(
@@ -21369,8 +21417,8 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               icon: Icons.account_balance_wallet_outlined,
               accent: const Color(0xFF7B61C8),
               items: [
-                ('期末预付款余额', money(amounts?.endingPrepaymentBalance)),
-                ('期末应收返利', money(amounts?.endingReceivableRebate)),
+                metricAmount('期末预付款余额', amounts?.endingPrepaymentBalance),
+                metricAmount('期末应收返利', amounts?.endingReceivableRebate),
               ],
             ),
             section(
@@ -21379,9 +21427,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               accent: const Color(0xFFBE7A26),
               columns: 2,
               items: [
-                ('库存券余额', money(amounts?.inventoryVoucherBalance)),
-                ('合同券余额', money(amounts?.contractVoucherBalance)),
-                ('系统差异', money(amounts?.systemDifference)),
+                metricAmount('库存券余额', amounts?.inventoryVoucherBalance),
+                metricAmount('合同券余额', amounts?.contractVoucherBalance),
+                metricAmount('系统差异', amounts?.systemDifference),
               ],
             ),
           ),
@@ -21393,9 +21441,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               accent: const Color(0xFF2C8A7A),
               columns: 2,
               items: [
-                ('资产合计', money(amounts?.totalAssets)),
-                ('在途资金', money(amounts?.inTransitFunds)),
-                ('监管户余额', money(amounts?.regulatoryAccountBalance)),
+                metricAmount('资产合计', amounts?.totalAssets),
+                metricAmount('在途资金', amounts?.inTransitFunds),
+                metricAmount('监管户余额', amounts?.regulatoryAccountBalance),
               ],
             ),
             section(
@@ -21404,8 +21452,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               accent: const Color(0xFF5C77B8),
               columns: 2,
               items: [
-                ('应开发票', money(amounts?.invoiceToIssue)),
-                ('发票税率', lighthouseFormatFundPoolRate(amounts?.invoiceTaxRate)),
+                metricAmount('应开发票', amounts?.invoiceToIssue),
+                metricText(
+                  '发票税率',
+                  lighthouseFormatFundPoolRate(amounts?.invoiceTaxRate),
+                ),
               ],
             ),
           ),

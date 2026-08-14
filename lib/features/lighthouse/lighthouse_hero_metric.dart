@@ -161,6 +161,8 @@ const double lighthouseLedgerLongNameFontSize = 11.0;
 /// 二级「项目」名称更长，再降一档。
 const double lighthouseLedgerProjectNameFontSize = 10.0;
 const double lighthouseLedgerValueFontSize = 11.5;
+/// 金额单位（万/亿/%）相对数字略小一档，与摘要格历史口径一致；字重用常规体。
+const double lighthouseLedgerUnitFontSize = 9.0;
 const double lighthouseLedgerMetricLabelFontSize = 10;
 const double lighthouseLedgerDeltaFontSize = 9;
 

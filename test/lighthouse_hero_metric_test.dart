@@ -94,6 +94,7 @@ void main() {
     expect(lighthouseLedgerNameFontSizeForTab('productName'), 11.0);
     expect(lighthouseLedgerNameFontSizeForTab('project'), 10.0);
     expect(lighthouseLedgerValueFontSize, 11.5);
+    expect(lighthouseLedgerUnitFontSize, 9.0);
     expect(lighthouseLedgerMetricLabelFontSize, 10);
     expect(lighthouseLedgerDeltaFontSize, 9);
     expect(lighthouseLedgerPinnedWidthRatio, 0.35);

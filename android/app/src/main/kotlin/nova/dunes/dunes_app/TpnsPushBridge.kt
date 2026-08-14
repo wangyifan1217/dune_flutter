@@ -395,10 +395,10 @@ class TpnsPushBridge(
                 "actionType" to (message?.getActionType() ?: 0L),
             )
             val custom = parseCustomContent(customContent) ?: return payload
-            custom.optString("eventType").trim().takeIf { it.isNotEmpty }?.let {
+            custom.optString("eventType").trim().takeIf { it.isNotEmpty() }?.let {
                 payload["eventType"] = it
             }
-            custom.optString("tab").trim().takeIf { it.isNotEmpty }?.let {
+            custom.optString("tab").trim().takeIf { it.isNotEmpty() }?.let {
                 payload["tab"] = it
             }
             custom.optLong("conversationId", 0L).takeIf { it > 0L }?.let {
@@ -486,10 +486,10 @@ class TpnsPushBridge(
                         "customContent" to json.optString("customContent", ""),
                         "actionType" to actionType,
                     ).apply {
-                        json.optString("eventType").takeIf { it.isNotEmpty }?.let {
+                        json.optString("eventType").takeIf { it.isNotEmpty() }?.let {
                             put("eventType", it)
                         }
-                        json.optString("tab").takeIf { it.isNotEmpty }?.let {
+                        json.optString("tab").takeIf { it.isNotEmpty() }?.let {
                             put("tab", it)
                         }
                         json.optLong("conversationId", 0L).takeIf { it > 0L }?.let {

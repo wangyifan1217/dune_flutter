@@ -188,9 +188,13 @@ class _NativeWorkbenchBroadcastPageState
         ),
       );
     }
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
-      children: [
+    return GestureDetector(
+      onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
+      behavior: HitTestBehavior.translucent,
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+        children: [
         _card(
           title: '发布广播',
           child: Column(
@@ -227,6 +231,9 @@ class _NativeWorkbenchBroadcastPageState
               ],
               TextField(
                 controller: _titleController,
+                textInputAction: TextInputAction.next,
+                onTapOutside: (_) =>
+                    FocusManager.instance.primaryFocus?.unfocus(),
                 decoration: InputDecoration(
                   labelText: '显示标题',
                   hintText: '选填，默认「公司广播」',
@@ -244,6 +251,8 @@ class _NativeWorkbenchBroadcastPageState
                 controller: _bodyController,
                 minLines: 4,
                 maxLines: 8,
+                onTapOutside: (_) =>
+                    FocusManager.instance.primaryFocus?.unfocus(),
                 decoration: InputDecoration(
                   labelText: '广播正文',
                   hintText: '将出现在 APP 沙丘公告 · 公司广播',
@@ -299,7 +308,8 @@ class _NativeWorkbenchBroadcastPageState
                   ],
                 ),
         ),
-      ],
+        ],
+      ),
     );
   }
 

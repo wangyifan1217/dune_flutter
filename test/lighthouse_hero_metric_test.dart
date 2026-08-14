@@ -149,6 +149,9 @@ void main() {
     expect(lighthouseFormatFundPoolWan(1234000), '123.4万');
     expect(lighthouseFormatFundPoolWan(123400000), '1.23亿');
     expect(lighthouseFormatFundPoolWan(null), '—');
+    expect(lighthouseFormatFundPoolWanParts(1234000), (number: '123.4', unit: '万'));
+    expect(lighthouseFormatFundPoolWanParts(123400000), (number: '1.23', unit: '亿'));
+    expect(lighthouseFormatFundPoolWanParts(null), (number: '—', unit: ''));
     expect(lighthouseFormatFundPoolRate(13), '13%');
     expect(lighthouseFormatFundPoolRate(13.14), '13.14%');
     expect(lighthouseLedgerSummaryMetricRowsForTab('supply'), [

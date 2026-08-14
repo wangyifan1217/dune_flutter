@@ -427,15 +427,25 @@ LighthouseFundPoolAmounts? lighthouseLookupFundPool(
 
 /// 标签二返回元；灯塔统一展示为 `12.3万` / `1.20亿`。
 String lighthouseFormatFundPoolWan(double? amount) {
-  if (amount == null) return '—';
+  final parts = lighthouseFormatFundPoolWanParts(amount);
+  return '${parts.number}${parts.unit}';
+}
+
+/// 拆成数字 / 单位，便于与上方指标格一样：数字加粗、单位常规字重。
+({String number, String unit}) lighthouseFormatFundPoolWanParts(double? amount) {
+  if (amount == null) return (number: '—', unit: '');
   final sign = amount < 0 ? '-' : '';
   final wan = amount.abs() / 10000;
   if (wan >= 10000) {
-    return '$sign${(wan / 10000).toStringAsFixed(2)}亿';
+    return (number: '$sign${(wan / 10000).toStringAsFixed(2)}', unit: '亿');
   }
-  if (wan >= 1000) return '$sign${wan.toStringAsFixed(0)}万';
-  if (wan >= 1) return '$sign${wan.toStringAsFixed(1)}万';
-  return '$sign${wan.toStringAsFixed(2)}万';
+  if (wan >= 1000) {
+    return (number: '$sign${wan.toStringAsFixed(0)}', unit: '万');
+  }
+  if (wan >= 1) {
+    return (number: '$sign${wan.toStringAsFixed(1)}', unit: '万');
+  }
+  return (number: '$sign${wan.toStringAsFixed(2)}', unit: '万');
 }
 
 String lighthouseFormatFundPoolRate(double? rate) {

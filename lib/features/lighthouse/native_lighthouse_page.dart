@@ -21095,6 +21095,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   }
 
   /// 供给卡片资金池预览 —— 总资产金额←资产合计，资金池余额←标签二同名列。
+  /// 布局对齐上方摘要格：标签左、数字右；数字加粗、单位常规字重。
   Widget _buildSupplyFundPoolPreview(
     double cellHeight, {
     required String provinceName,
@@ -21104,10 +21105,54 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     final amounts = lighthouseLookupFundPool(_fundPoolByProvince, provinceName);
     Widget metricTile({
       required String label,
-      required String value,
+      required double? amount,
       Widget? trailing,
     }) {
-      final hasValue = value != '—';
+      final parts = lighthouseFormatFundPoolWanParts(amount);
+      final missing = parts.number == '—';
+      final negative = !missing && (amount ?? 0) < 0;
+      final valueRow = Row(
+        mainAxisAlignment: MainAxisAlignment.end,
+        crossAxisAlignment: CrossAxisAlignment.baseline,
+        textBaseline: TextBaseline.alphabetic,
+        children: [
+          Flexible(
+            child: Text.rich(
+              TextSpan(
+                children: [
+                  TextSpan(
+                    text: parts.number,
+                    style: _tabular(
+                      LhTypography.mono(
+                        size: _fs(lighthouseLedgerValueFontSize),
+                        color: missing
+                            ? LhColors.mute2
+                            : (negative ? LhColors.pos : LhColors.ink2),
+                        weight: missing ? FontWeight.w500 : FontWeight.w700,
+                        height: 1.0,
+                      ),
+                    ),
+                  ),
+                  if (parts.unit.isNotEmpty)
+                    TextSpan(
+                      text: parts.unit,
+                      style: LhTypography.mono(
+                        size: _fs(9),
+                        color: LhColors.mute,
+                        weight: FontWeight.w500,
+                        height: 1.0,
+                        letterSpacing: 0.2,
+                      ),
+                    ),
+                ],
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.right,
+            ),
+          ),
+        ],
+      );
       return Expanded(
         child: Container(
           margin: EdgeInsets.symmetric(horizontal: _fs(3), vertical: _fs(2.5)),
@@ -21140,28 +21185,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                       ),
                     ),
                   ),
-                  trailing ?? const SizedBox.shrink(),
+                  if (trailing != null) trailing,
                 ],
               ),
               SizedBox(height: _fs(4)),
-              Expanded(
-                child: Align(
-                  alignment: Alignment.centerRight,
-                  child: Text(
-                    value,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: _tabular(
-                      LhTypography.mono(
-                        size: _fs(lighthouseLedgerValueFontSize),
-                        color: hasValue ? LhColors.ink2 : LhColors.mute2,
-                        weight: hasValue ? FontWeight.w700 : FontWeight.w500,
-                        height: 1.0,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
+              Expanded(child: valueRow),
             ],
           ),
         ),
@@ -21175,34 +21203,23 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         children: [
           metricTile(
             label: '总资产金额',
-            value: lighthouseFormatFundPoolWan(amounts?.totalAssets),
+            amount: amounts?.totalAssets,
           ),
           metricTile(
             label: '资金池余额',
-            value: lighthouseFormatFundPoolWan(amounts?.fundPoolBalance),
+            amount: amounts?.fundPoolBalance,
             trailing: Semantics(
               button: true,
               label: isExpanded ? '收起资金池明细' : '展开资金池明细',
               child: GestureDetector(
                 behavior: HitTestBehavior.opaque,
                 onTap: onToggle,
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 160),
-                  width: _fs(22),
-                  height: _fs(22),
-                  decoration: BoxDecoration(
-                    color: isExpanded
-                        ? _LhPlum.primary.withAlpha(20)
-                        : Colors.transparent,
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(
-                    isExpanded
-                        ? Icons.keyboard_arrow_up_rounded
-                        : Icons.keyboard_arrow_down_rounded,
-                    size: _fs(16),
-                    color: isExpanded ? _LhPlum.deep : LhColors.mute2,
-                  ),
+                child: Icon(
+                  isExpanded
+                      ? Icons.keyboard_arrow_up_rounded
+                      : Icons.keyboard_arrow_down_rounded,
+                  size: _fs(9.5),
+                  color: isExpanded ? _LhPlum.deep : LhColors.mute2,
                 ),
               ),
             ),
@@ -21376,6 +21393,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               accent: const Color(0xFF2C8A7A),
               columns: 2,
               items: [
+                ('资产合计', money(amounts?.totalAssets)),
                 ('在途资金', money(amounts?.inTransitFunds)),
                 ('监管户余额', money(amounts?.regulatoryAccountBalance)),
               ],

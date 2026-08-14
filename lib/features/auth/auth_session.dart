@@ -19,6 +19,7 @@ class AuthSession {
     this.robotAccess = false,
     this.hrbpAccess = false,
     this.administrativeNoticeAccess = false,
+    this.broadcastAccess = false,
   });
 
   final String phone;
@@ -35,6 +36,8 @@ class AuthSession {
   final bool robotAccess;
   /// Backend-controlled access to the administrative notice module.
   final bool administrativeNoticeAccess;
+  /// Backend-controlled access to publish company broadcasts.
+  final bool broadcastAccess;
   /// 后端下发的「任务汇总」能力开关；未下发时工作台会走接口探测。
   final bool hrbpAccess;
 
@@ -54,6 +57,8 @@ class AuthSession {
       robotAccess || DunesDefaults.localLighthouseAccessBypass;
 
   bool get effectiveAdministrativeNoticeAccess => administrativeNoticeAccess;
+
+  bool get effectiveBroadcastAccess => broadcastAccess;
 
   AuthSession withLocalDevGrants() {
     var next = this;
@@ -104,6 +109,7 @@ class AuthSession {
     bool? robotAccess,
     bool? hrbpAccess,
     bool? administrativeNoticeAccess,
+    bool? broadcastAccess,
   }) {
     return AuthSession(
       phone: phone ?? this.phone,
@@ -122,6 +128,7 @@ class AuthSession {
       hrbpAccess: hrbpAccess ?? this.hrbpAccess,
       administrativeNoticeAccess:
           administrativeNoticeAccess ?? this.administrativeNoticeAccess,
+      broadcastAccess: broadcastAccess ?? this.broadcastAccess,
     );
   }
 
@@ -158,6 +165,7 @@ class AuthSession {
       robotAccess: data['robotAccess'] == true,
       hrbpAccess: data['hrbpAccess'] == true,
       administrativeNoticeAccess: data['administrativeNoticeAccess'] == true,
+      broadcastAccess: data['broadcastAccess'] == true,
     );
   }
 
@@ -188,6 +196,7 @@ class AuthSession {
       robotAccess: claims['robotAccess'] == true,
       hrbpAccess: claims['hrbpAccess'] == true,
       administrativeNoticeAccess: claims['administrativeNoticeAccess'] == true,
+      broadcastAccess: claims['broadcastAccess'] == true,
     );
   }
 
@@ -225,6 +234,7 @@ class AuthSession {
       'robotAccess': robotAccess,
       'hrbpAccess': hrbpAccess,
       'administrativeNoticeAccess': administrativeNoticeAccess,
+      'broadcastAccess': broadcastAccess,
     };
   }
 
@@ -248,6 +258,7 @@ class AuthSession {
       robotAccess: json['robotAccess'] == true,
       hrbpAccess: json['hrbpAccess'] == true,
       administrativeNoticeAccess: json['administrativeNoticeAccess'] == true,
+      broadcastAccess: json['broadcastAccess'] == true,
     );
   }
 

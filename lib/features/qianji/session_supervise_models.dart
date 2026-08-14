@@ -79,19 +79,24 @@ class SessionSuperviseDeptStat {
     required this.departmentId,
     required this.departmentName,
     required this.sessionCount,
+    required this.turnCount,
     required this.userCount,
   });
 
   final int? departmentId;
   final String departmentName;
   final int sessionCount;
+  final int turnCount;
   final int userCount;
+
+  int get rankCount => turnCount;
 
   factory SessionSuperviseDeptStat.fromJson(Map<String, dynamic> json) {
     return SessionSuperviseDeptStat(
       departmentId: (json['departmentId'] as num?)?.toInt(),
       departmentName: '${json['departmentName'] ?? '未分配部门'}',
       sessionCount: (json['sessionCount'] as num?)?.toInt() ?? 0,
+      turnCount: (json['turnCount'] as num?)?.toInt() ?? 0,
       userCount: (json['userCount'] as num?)?.toInt() ?? 0,
     );
   }
@@ -101,12 +106,16 @@ class SessionSuperviseDeptStatsResult {
   const SessionSuperviseDeptStatsResult({
     required this.departments,
     required this.totalSessions,
+    required this.totalTurns,
     required this.superviseAll,
   });
 
   final List<SessionSuperviseDeptStat> departments;
   final int totalSessions;
+  final int totalTurns;
   final bool superviseAll;
+
+  int get totalRank => totalTurns;
 
   factory SessionSuperviseDeptStatsResult.fromJson(Map<String, dynamic> json) {
     final content =
@@ -121,6 +130,7 @@ class SessionSuperviseDeptStatsResult {
           )
           .toList(growable: false),
       totalSessions: (json['totalSessions'] as num?)?.toInt() ?? 0,
+      totalTurns: (json['totalTurns'] as num?)?.toInt() ?? 0,
       superviseAll: json['superviseAll'] == true,
     );
   }

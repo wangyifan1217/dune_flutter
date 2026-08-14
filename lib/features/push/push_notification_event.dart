@@ -15,6 +15,7 @@ class PushNotificationClick {
     required this.eventType,
     required this.conversationId,
     this.noticeId = 0,
+    this.announcementTab = '',
   });
 
   final int messageId;
@@ -24,10 +25,18 @@ class PushNotificationClick {
   final String eventType;
   final int conversationId;
   final int noticeId;
+  final String announcementTab;
 
   bool get isAdministrativeNotice {
     final type = eventType.trim().toLowerCase();
     return type == 'admin_notice' || type == 'administrative_notice';
+  }
+
+  bool get isDuneAnnouncement {
+    final type = eventType.trim().toLowerCase();
+    return type == 'dune_announcement' ||
+        type == 'broadcast' ||
+        type == 'notification';
   }
 
   bool get isConversation =>
@@ -70,6 +79,7 @@ class PushNotificationClick {
       custom['conversationId'] ?? raw['conversationId'],
     );
     final noticeId = _toInt(custom['noticeId'] ?? raw['noticeId']);
+    final tab = (custom['tab'] ?? raw['tab'])?.toString().trim() ?? '';
     return PushNotificationClick(
       messageId: _toInt(raw['messageId'] ?? custom['messageId']),
       title: raw['title']?.toString() ?? '',
@@ -78,6 +88,7 @@ class PushNotificationClick {
       eventType: eventType,
       conversationId: conversationId,
       noticeId: noticeId,
+      announcementTab: tab,
     );
   }
 

@@ -314,6 +314,7 @@ abstract final class ConversationInboxRealtime {
       updatedAt: updatedAt ?? c.updatedAt,
       peerUserId: c.peerUserId,
       peerDisplayName: c.peerDisplayName,
+      peerEnabled: c.peerEnabled,
       memberCount: c.memberCount,
       muted: muted ?? c.muted,
       pinned: pinned ?? c.pinned,

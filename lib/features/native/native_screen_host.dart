@@ -25,6 +25,7 @@ import '../auth/qr_login_scan_page.dart';
 import '../chat/native_broadcast_page.dart';
 import '../desktop/native_desktop_settings_page.dart';
 import '../chat/chat_foreground_sync.dart';
+import '../chat/desktop_composer_focus.dart';
 import '../chat/native_chat_search_page.dart';
 import '../chat/native_favorites_page.dart';
 import '../chat/native_group_chat_page.dart';
@@ -51,6 +52,7 @@ import '../conversation/inbox_hidden_storage.dart';
 import '../conversation/native_conversation_page.dart';
 import '../conversation/notification_service.dart';
 import '../desktop/windows_desktop_tray.dart';
+import '../desktop/windows_tray_unread_items.dart';
 import '../kb/native_kb_chat_page.dart';
 import '../kb/native_kb_doc_page.dart';
 import '../kb/native_kb_home_page.dart';
@@ -167,6 +169,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       LinkedHashMap<String, _DualChatSlot>();
   final Map<String, GlobalKey> _dualChatKeys = <String, GlobalKey>{};
   NativeConversation? _selectedBroadcast;
+  String? _messageCenterInitialTab;
+  bool _messageCenterMarkAllOnEnter = false;
   NativeContact? _selectedContact;
 
   /// PC 双栏：从会话打开名片时嵌在右侧栏，返回目标为 C2/C5；通讯录等入口为 null（整页）。
@@ -412,6 +416,14 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     );
     registerPushLifecycleObserver();
     setWindowsTrayOnInactiveChanged(_onDesktopWindowInactiveChanged);
+    setWindowsTrayOnPeekOpen(_onWindowsTrayPeekOpen);
+    windowsTraySetUserLabel((widget.session.displayName ?? '').trim());
+  }
+
+  void _onWindowsTrayPeekOpen(int conversationId) {
+    if (!mounted) return;
+    if (conversationId <= 0) return;
+    unawaited(_openConversationFromTpns(conversationId));
   }
 
   void _onDesktopWindowInactiveChanged(bool inactive) {
@@ -447,10 +459,14 @@ class _NativeScreenHostState extends State<NativeScreenHost>
   }
 
   void _handleTpnsNotificationClick(PushNotificationClick event) {
-    // Only IM notifications should affect the conversation navigation.  System
-    // notifications and broadcasts may also arrive through this handler, but
-    // they do not have an IM conversation fallback target.
     final eventType = event.eventType.trim().toLowerCase();
+    if (event.isDuneAnnouncement) {
+      _openDuneAnnouncementFromTpns(
+        tab: _announcementTabFromTpns(event),
+        conversationId: event.conversationId,
+      );
+      return;
+    }
     if (eventType != 'im' &&
         eventType != 'admin_notice' &&
         eventType != 'administrative_notice') {
@@ -493,6 +509,34 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     if (!mounted) return;
     _markUserEnteredChat();
     widget.navigation.go('C1');
+  }
+
+  String _announcementTabFromTpns(PushNotificationClick event) {
+    final tab = event.announcementTab.trim().toLowerCase();
+    if (tab == 'broadcast' || tab == 'notice') return tab;
+    final eventType = event.eventType.trim().toLowerCase();
+    if (eventType == 'broadcast' || event.conversationId > 0) {
+      return 'broadcast';
+    }
+    return 'notice';
+  }
+
+  void _openDuneAnnouncementFromTpns({String? tab, int conversationId = 0}) {
+    if (!mounted) return;
+    _markUserEnteredChat();
+    setState(() {
+      _messageCenterInitialTab = tab;
+      _messageCenterMarkAllOnEnter = false;
+    });
+    widget.navigation.go('Z2');
+    if (tab == 'notice') {
+      _handleNotificationsRead();
+    } else if (conversationId > 0) {
+      _handleConversationRead(conversationId);
+    }
+    if (conversationId > 0) {
+      unawaited(clearPushConversationNotifications(conversationId));
+    }
   }
 
   Future<bool> _openConversationFromTpns(
@@ -544,6 +588,12 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     } else if (resolvedConversation.isAdministrativeNotice) {
       _openAdministrativeNotice(resolvedConversation, noticeId: noticeId);
       routed = mounted && widget.navigation.currentScreen == 'AN1';
+    } else if (resolvedConversation.isBroadcast) {
+      _openDuneAnnouncementFromTpns(
+        tab: 'broadcast',
+        conversationId: resolvedConversation.id,
+      );
+      routed = true;
     } else if (resolvedConversation.isAiAssistant) {
       setState(() {
         _novaFocusConversationId = resolvedConversation.id;
@@ -592,6 +642,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     setWindowsTrayOnInactiveChanged(null);
+    setWindowsTrayOnPeekOpen(null);
     setPushBadgeRefreshHandler(null);
     setPushNotificationClickHandler(null);
     _activeViewHeartbeat?.cancel();
@@ -1223,6 +1274,13 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         );
         _commUnread.update(serverTotal);
         windowsTrayUpdateUnread(serverTotal);
+        windowsTrayUpdateUnreadItems(
+          windowsTrayUnreadItemsFromConversations(
+            rows: rows,
+            commUnread: _commUnread,
+            viewingId: viewingId,
+          ),
+        );
         if (serverTotal == 0) {
           if (!_pendingBadgeZeroSync) {
             print('[Badge] skip sync 0 (no fresh snapshot/read ack)');
@@ -1295,6 +1353,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       _conversationReadSignal.notifyRead(conv.id);
     }
     _goChatScreen('C5');
+    DesktopComposerFocus.request();
   }
 
   void _openRobotConversation(NativeConversation conv) {
@@ -1382,6 +1441,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       _conversationReadSignal.notifyRead(conv.id);
     }
     _goChatScreen('C2');
+    DesktopComposerFocus.request();
   }
 
   void _openPrivateByPeerId(int peerUserId) {
@@ -1404,6 +1464,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     });
     _markUserEnteredChat();
     _goChatScreen('C5');
+    DesktopComposerFocus.request();
   }
 
   void _openContactProfile(int userId, String displayName) {
@@ -1909,7 +1970,13 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         });
         widget.navigation.go('C4');
       },
-      onOpenNotifications: () => widget.navigation.go('Z2'),
+      onOpenNotifications: (tab) {
+        setState(() {
+          _messageCenterInitialTab = tab;
+          _messageCenterMarkAllOnEnter = true;
+        });
+        widget.navigation.go('Z2');
+      },
       onOpenNewChat: () {
         setState(() {
           _clearContactsGroupPickState();
@@ -3121,10 +3188,16 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         return _buildAiSummaryDetailPage();
       case 'Z2':
         return NativeMessageCenterPage(
+          key: ValueKey<String>(
+            'z2-${_messageCenterInitialTab ?? 'notice'}-'
+            '${_messageCenterMarkAllOnEnter ? 'all' : 'one'}',
+          ),
           session: widget.session,
           onBack: widget.navigation.back,
           onNotificationsRead: _handleNotificationsRead,
           onBroadcastRead: _handleConversationRead,
+          initialTab: _messageCenterInitialTab,
+          markAllReadOnEnter: _messageCenterMarkAllOnEnter,
         );
       case 'CF':
         return NativeFavoritesPage(
@@ -3925,6 +3998,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       'TA1',
       'DA1',
       'AN1',
+      'WS1',
       'Z2',
       'AS1',
       'AS2',

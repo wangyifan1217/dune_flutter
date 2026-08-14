@@ -242,7 +242,7 @@ class _NativeQianjiMeetingSupervisePageState
           const SizedBox(width: 8),
           const Expanded(
             child: Text(
-              '会议纪要监管',
+              '会议纪要',
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.w700,

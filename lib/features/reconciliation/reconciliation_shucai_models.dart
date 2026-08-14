@@ -4,11 +4,15 @@ class ShucaiSnapshot {
     required this.asOfDate,
     required this.tag2,
     required this.tag3,
+    this.tag2Markdown = '',
+    this.tag3Markdown = const {},
   });
 
   final String asOfDate;
   final ShucaiReport tag2;
   final Map<String, ShucaiReport> tag3;
+  final String tag2Markdown;
+  final Map<String, String> tag3Markdown;
 
   static const tag3TabOrder = <String>[
     'energy',
@@ -51,12 +55,24 @@ class ShucaiSnapshot {
       }
     }
     final tag2Raw = json['tag2'];
+    final tag3MdRaw = json['tag3Markdown'];
+    final tag3Markdown = <String, String>{};
+    if (tag3MdRaw is Map) {
+      for (final entry in tag3MdRaw.entries) {
+        final value = entry.value;
+        if (value == null) continue;
+        final text = value.toString().trim();
+        if (text.isNotEmpty) tag3Markdown[entry.key.toString()] = text;
+      }
+    }
     return ShucaiSnapshot(
       asOfDate: (json['asOfDate'] ?? '').toString(),
       tag2: tag2Raw is Map
           ? ShucaiReport.fromJson(Map<String, dynamic>.from(tag2Raw))
           : const ShucaiReport(columns: [], rows: []),
       tag3: tag3,
+      tag2Markdown: (json['tag2Markdown'] ?? '').toString(),
+      tag3Markdown: tag3Markdown,
     );
   }
 }
@@ -343,6 +359,51 @@ String reconCardTitle(String cardType) {
   }
 }
 
+int reconRoleLayer(String role) {
+  switch (role.toUpperCase()) {
+    case 'TAG2_FINANCE':
+    case 'TAG3_FINANCE':
+      return 1;
+    case 'ENERGY_L1':
+    case 'OPERATOR_L1':
+      return 2;
+    case 'ENERGY_L2':
+    case 'OPERATOR_L2':
+      return 3;
+    default:
+      return 99;
+  }
+}
+
+class ReconLayerProgress {
+  const ReconLayerProgress({
+    required this.layer,
+    this.key = '',
+    this.label = '',
+    this.expectedCount = 0,
+    this.confirmedCount = 0,
+    this.complete = false,
+  });
+
+  final int layer;
+  final String key;
+  final String label;
+  final int expectedCount;
+  final int confirmedCount;
+  final bool complete;
+
+  factory ReconLayerProgress.fromJson(Map<String, dynamic> json) {
+    return ReconLayerProgress(
+      layer: (json['layer'] as num?)?.toInt() ?? 0,
+      key: (json['key'] ?? '').toString(),
+      label: (json['label'] ?? '').toString(),
+      expectedCount: (json['expectedCount'] as num?)?.toInt() ?? 0,
+      confirmedCount: (json['confirmedCount'] as num?)?.toInt() ?? 0,
+      complete: json['complete'] == true,
+    );
+  }
+}
+
 class ReconPerson {
   const ReconPerson({
     required this.userId,
@@ -408,6 +469,10 @@ class ReconCardStatus {
     this.others = const [],
     this.mine,
     this.myRole = '',
+    this.myLayer = 0,
+    this.currentLayer = 0,
+    this.waitingReason = '',
+    this.layers = const [],
     this.canConfirm = true,
     this.expectedCount = 0,
     this.confirmedCount = 0,
@@ -421,12 +486,17 @@ class ReconCardStatus {
   final List<ReconPerson> others;
   final ReconPerson? mine;
   final String myRole;
+  final int myLayer;
+  final int currentLayer;
+  final String waitingReason;
+  final List<ReconLayerProgress> layers;
   final bool canConfirm;
   final int expectedCount;
   final int confirmedCount;
 
   bool get confirmed => canConfirm && mine != null;
-  bool get viewerOnly => !canConfirm;
+  bool get viewerOnly => !canConfirm && waitingReason.trim().isEmpty;
+  bool get waitingPrevious => waitingReason.trim().isNotEmpty;
 
   factory ReconCardStatus.fromJson(Map<String, dynamic> json) {
     List<ReconPerson> parseList(dynamic raw) {
@@ -442,6 +512,17 @@ class ReconCardStatus {
     if (mineRaw is Map) {
       mine = ReconPerson.fromJson(Map<String, dynamic>.from(mineRaw));
     }
+    final layersRaw = json['layers'];
+    final layers = <ReconLayerProgress>[];
+    if (layersRaw is List) {
+      for (final item in layersRaw) {
+        if (item is Map) {
+          layers.add(
+            ReconLayerProgress.fromJson(Map<String, dynamic>.from(item)),
+          );
+        }
+      }
+    }
     return ReconCardStatus(
       cardType: (json['cardType'] ?? '').toString(),
       asOfDate: (json['asOfDate'] ?? '').toString(),
@@ -451,6 +532,10 @@ class ReconCardStatus {
       others: parseList(json['others']),
       mine: mine,
       myRole: (json['myRole'] ?? '').toString(),
+      myLayer: (json['myLayer'] as num?)?.toInt() ?? reconRoleLayer((json['myRole'] ?? '').toString()),
+      currentLayer: (json['currentLayer'] as num?)?.toInt() ?? 0,
+      waitingReason: (json['waitingReason'] ?? '').toString(),
+      layers: layers,
       canConfirm: json.containsKey('canConfirm')
           ? json['canConfirm'] == true
           : (json['myRole'] ?? '').toString().toUpperCase() != 'FINAL',

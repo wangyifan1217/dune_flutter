@@ -12,7 +12,7 @@ import '../conversation/notification_service.dart';
 import '../shell/dunes_toast.dart';
 import 'chat_widgets.dart';
 
-/// 通讯页右上角的统一消息中心：系统通知和公司广播在同一页面内切换。
+/// 通讯列表置顶的「沙丘公告」：系统通告和公司广播左右滑动切换。
 class NativeMessageCenterPage extends StatefulWidget {
   const NativeMessageCenterPage({
     super.key,
@@ -20,12 +20,22 @@ class NativeMessageCenterPage extends StatefulWidget {
     required this.onBack,
     this.onNotificationsRead,
     this.onBroadcastRead,
+    this.initialTab,
+    this.markAllReadOnEnter = false,
   });
 
   final AuthSession session;
   final VoidCallback onBack;
   final VoidCallback? onNotificationsRead;
   final ValueChanged<int>? onBroadcastRead;
+
+  /// `notice` 打开系统通告，`broadcast` 打开公司广播。
+  /// 列表入口会按未读选择：仅广播未读进广播，其余（含两侧都未读）进系统通告。
+  final String? initialTab;
+
+  /// 从通讯列表点进「沙丘公告」时两侧都标已读，行上角标立刻消失。
+  /// TPNS 点击只标对应一侧，避免误清另一侧未读。
+  final bool markAllReadOnEnter;
 
   @override
   State<NativeMessageCenterPage> createState() =>
@@ -43,21 +53,34 @@ class _NativeMessageCenterPageState extends State<NativeMessageCenterPage>
   int _notificationUnread = 0;
   List<NativeNotificationItem> _notifications = const [];
   bool _markingNotificationsRead = false;
+  bool _pendingNoticeMarkRead = false;
 
   bool _broadcastLoading = false;
   bool _broadcastLoaded = false;
   String? _broadcastError;
   NativeConversation? _broadcast;
   List<NativeChatMessage> _broadcastMessages = const [];
+  int _broadcastUnread = 0;
+  bool _markingBroadcastRead = false;
+  bool _pendingBroadcastMarkRead = false;
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this)
-      ..addListener(_onTabChanged);
+    final initialIndex =
+        widget.initialTab?.trim().toLowerCase() == 'broadcast' ? 1 : 0;
+    _tabController = TabController(
+      length: 2,
+      vsync: this,
+      initialIndex: initialIndex,
+    )..addListener(_onTabChanged);
     _notificationService = NotificationService(session: widget.session);
     _conversationService = ConversationService(session: widget.session);
-    _loadNotifications(markReadOnEnter: true);
+    final markAll = widget.markAllReadOnEnter;
+    unawaited(
+      _loadNotifications(markReadOnEnter: markAll || initialIndex == 0),
+    );
+    unawaited(_loadBroadcast(markReadOnEnter: markAll || initialIndex == 1));
   }
 
   @override
@@ -72,13 +95,22 @@ class _NativeMessageCenterPageState extends State<NativeMessageCenterPage>
     if (_tabController.indexIsChanging) return;
     setState(() {});
     if (_tabController.index == 0) {
-      unawaited(_loadNotifications(markReadOnEnter: true));
+      _pendingNoticeMarkRead = true;
+      if (_notificationsLoading) return;
+      if (_notificationsError != null) {
+        unawaited(_loadNotifications(markReadOnEnter: true));
+      } else {
+        unawaited(_markNotificationsRead(reload: false));
+      }
+    } else if (_broadcastLoaded) {
+      unawaited(_markBroadcastRead());
     } else {
-      unawaited(_loadBroadcast());
+      unawaited(_loadBroadcast(markReadOnEnter: true));
     }
   }
 
   Future<void> _loadNotifications({bool markReadOnEnter = false}) async {
+    if (markReadOnEnter) _pendingNoticeMarkRead = true;
     setState(() {
       _notificationsLoading = true;
       _notificationsError = null;
@@ -95,7 +127,8 @@ class _NativeMessageCenterPageState extends State<NativeMessageCenterPage>
         _notifications = results[1] as List<NativeNotificationItem>;
         _notificationsLoading = false;
       });
-      if (markReadOnEnter && summary.unreadCount > 0) {
+      if (_pendingNoticeMarkRead) {
+        _pendingNoticeMarkRead = false;
         await _markNotificationsRead(reload: false);
       }
     } catch (error) {
@@ -109,6 +142,7 @@ class _NativeMessageCenterPageState extends State<NativeMessageCenterPage>
 
   Future<void> _markNotificationsRead({bool reload = true}) async {
     if (_markingNotificationsRead) return;
+    _pendingNoticeMarkRead = false;
     _markingNotificationsRead = true;
     try {
       await _notificationService.markAllRead();
@@ -129,7 +163,8 @@ class _NativeMessageCenterPageState extends State<NativeMessageCenterPage>
     }
   }
 
-  Future<void> _loadBroadcast() async {
+  Future<void> _loadBroadcast({bool markReadOnEnter = false}) async {
+    if (markReadOnEnter) _pendingBroadcastMarkRead = true;
     if (_broadcastLoading) return;
     setState(() {
       _broadcastLoading = true;
@@ -146,12 +181,13 @@ class _NativeMessageCenterPageState extends State<NativeMessageCenterPage>
       setState(() {
         _broadcast = conversation;
         _broadcastMessages = messages;
+        _broadcastUnread = conversation?.unreadCount ?? 0;
         _broadcastLoaded = true;
         _broadcastLoading = false;
       });
-      if (conversation != null && conversation.unreadCount > 0) {
-        await _conversationService.markConversationRead(conversation.id);
-        widget.onBroadcastRead?.call(conversation.id);
+      if (_pendingBroadcastMarkRead || markReadOnEnter) {
+        _pendingBroadcastMarkRead = false;
+        await _markBroadcastRead();
       }
     } catch (error) {
       if (!mounted) return;
@@ -163,11 +199,28 @@ class _NativeMessageCenterPageState extends State<NativeMessageCenterPage>
     }
   }
 
+  Future<void> _markBroadcastRead() async {
+    final conversation = _broadcast;
+    if (_markingBroadcastRead || conversation == null) return;
+    _markingBroadcastRead = true;
+    try {
+      await _conversationService.markConversationRead(conversation.id);
+      if (mounted) {
+        setState(() => _broadcastUnread = 0);
+      }
+      widget.onBroadcastRead?.call(conversation.id);
+    } catch (_) {
+      // 已读失败不挡阅读；角标下次刷新会校正。
+    } finally {
+      _markingBroadcastRead = false;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return CommBackScaffold(
-      crumb: '沙丘 · 消息中心',
-      title: '系统消息与广播',
+      crumb: '沙丘公告',
+      title: '沙丘公告',
       onBack: widget.onBack,
       body: Column(
         children: [
@@ -193,10 +246,17 @@ class _NativeMessageCenterPageState extends State<NativeMessageCenterPage>
               ),
               tabs: [
                 Tab(
-                  text:
-                      '系统通知${_notificationUnread > 0 ? ' · $_notificationUnread' : ''}',
+                  child: _AnnouncementTabLabel(
+                    text: '系统通告',
+                    showDot: _notificationUnread > 0,
+                  ),
                 ),
-                const Tab(text: '公司广播'),
+                Tab(
+                  child: _AnnouncementTabLabel(
+                    text: '公司广播',
+                    showDot: _broadcastUnread > 0,
+                  ),
+                ),
               ],
             ),
           ),
@@ -223,7 +283,7 @@ class _NativeMessageCenterPageState extends State<NativeMessageCenterPage>
     }
     if (_notifications.isEmpty) {
       return const Center(
-        child: Text('暂无系统通知', style: TextStyle(color: DunesColors.text3)),
+        child: Text('暂无系统通告', style: TextStyle(color: DunesColors.text3)),
       );
     }
     return RefreshIndicator(
@@ -234,11 +294,11 @@ class _NativeMessageCenterPageState extends State<NativeMessageCenterPage>
         itemBuilder: (_, index) {
           final item = _notifications[index];
           return NotiCard(
-            title: item.title.isEmpty ? '系统通知' : item.title,
+            title: item.title.isEmpty ? '系统通告' : item.title,
             body: item.body,
             timeLabel: InboxFormat.formatTime(item.createdAt, withClock: true),
             tag: item.kind.isEmpty ? null : item.kind,
-            unread: index < _notificationUnread,
+            unread: item.unread && _notificationUnread > 0,
           );
         },
       ),
@@ -259,7 +319,7 @@ class _NativeMessageCenterPageState extends State<NativeMessageCenterPage>
     }
     final title = _broadcast?.title.trim();
     return RefreshIndicator(
-      onRefresh: _loadBroadcast,
+      onRefresh: () => _loadBroadcast(markReadOnEnter: true),
       child: ListView.builder(
         padding: const EdgeInsets.only(top: 8, bottom: 24),
         itemCount: _broadcastMessages.length,
@@ -273,9 +333,39 @@ class _NativeMessageCenterPageState extends State<NativeMessageCenterPage>
               withClock: true,
             ),
             tag: '广播',
+            unread: index < _broadcastUnread,
           );
         },
       ),
+    );
+  }
+}
+
+class _AnnouncementTabLabel extends StatelessWidget {
+  const _AnnouncementTabLabel({required this.text, required this.showDot});
+
+  final String text;
+  final bool showDot;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(text),
+        if (showDot) ...[
+          const SizedBox(width: 5),
+          Container(
+            width: 7,
+            height: 7,
+            decoration: const BoxDecoration(
+              color: DunesColors.coral,
+              shape: BoxShape.circle,
+            ),
+          ),
+        ],
+      ],
     );
   }
 }

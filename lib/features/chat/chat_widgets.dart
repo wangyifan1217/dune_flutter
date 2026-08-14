@@ -3014,6 +3014,17 @@ class NotiCard extends StatelessWidget {
           children: [
             Row(
               children: [
+                if (unread) ...[
+                  Container(
+                    width: 7,
+                    height: 7,
+                    margin: const EdgeInsets.only(right: 6),
+                    decoration: const BoxDecoration(
+                      color: DunesColors.coral,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                ],
                 Expanded(
                   child: Text(
                     title,

@@ -1379,7 +1379,7 @@ final class TpnsPushBridge {
       guard let raw = userInfo[key] else { continue }
       if let custom = notificationJSON(raw) {
         payload["customContent"] = custom
-        for field in ["schemaVersion", "eventType", "conversationId", "messageId", "clickAction"] {
+        for field in ["schemaVersion", "eventType", "conversationId", "messageId", "clickAction", "tab", "noticeId"] {
           if let value = custom[field] {
             payload[field] = value
           }

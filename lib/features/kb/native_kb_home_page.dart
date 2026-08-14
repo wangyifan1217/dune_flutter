@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:desktop_drop/desktop_drop.dart';
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:mime/mime.dart';
@@ -24,6 +25,10 @@ import 'native_kb_service.dart';
 
 const _driveBlue = Color(0xFF3B82F6);
 const _driveBlueSoft = Color(0xFFEFF6FF);
+const _kbAccent = Color(0xFF7B5CD8);
+
+/// 知识库每次上传后都会解析入库，一次过多容易排队过久；5 个够一批相关文档。
+const _maxKbUploadBatch = 5;
 
 class NativeKbHomePage extends StatefulWidget {
   const NativeKbHomePage({
@@ -52,6 +57,8 @@ class _NativeKbHomePageState extends State<NativeKbHomePage> {
   bool _loading = true;
   bool _syncing = false;
   bool _uploading = false;
+  bool _dragging = false;
+  String? _uploadProgress;
   String? _forwardingDocId;
   String? _savingDriveDocId;
   final Set<String> _driveSavedDocKeys = <String>{};
@@ -182,31 +189,142 @@ class _NativeKbHomePageState extends State<NativeKbHomePage> {
     }
   }
 
+  bool get _supportsDesktopDrop => isDesktopCommOnly;
+
   Future<void> _pickAndUpload() async {
     final summary = _summary;
     if (summary == null || !summary.ready) {
       _toast('Nova 知识库未就绪，请稍后重试', error: true);
       return;
     }
+    if (_uploading) return;
     final types = <XTypeGroup>[
       XTypeGroup(
         label: 'kb-upload',
         extensions: kChatKbUploadExtensions.toList(growable: false),
       ),
     ];
-    final file = await _openDocumentFileWithFallback(types);
-    if (file == null) return;
-    if (!chatFileSupportsKbUpload(file.name)) {
+    final List<XFile> files;
+    if (_supportsDesktopDrop) {
+      files = await _openDocumentFilesWithFallback(types);
+    } else {
+      final file = await _openDocumentFileWithFallback(types);
+      files = file == null ? const <XFile>[] : <XFile>[file];
+    }
+    if (files.isEmpty) return;
+    await _ingestKbFiles(files);
+  }
+
+  Future<void> _onDesktopDrop(DropDoneDetails detail) async {
+    if (_uploading) return;
+    final summary = _summary;
+    if (summary == null || !summary.ready) {
+      _toast('Nova 知识库未就绪，请稍后重试', error: true);
+      return;
+    }
+    if (mounted) setState(() => _dragging = false);
+    final files = <XFile>[];
+    for (final item in detail.files) {
+      if (item is DropItemDirectory) continue;
+      if (item.path.isEmpty) continue;
+      files.add(XFile(item.path, name: item.name));
+    }
+    if (files.isEmpty) {
+      _toast('请拖入文件（不支持文件夹）', error: true);
+      return;
+    }
+    await _ingestKbFiles(files);
+  }
+
+  Future<void> _ingestKbFiles(List<XFile> picked) async {
+    if (_uploading || picked.isEmpty) return;
+    final accepted = <XFile>[];
+    var skippedType = 0;
+    for (final file in picked) {
+      if (chatFileSupportsKbUpload(file.name)) {
+        accepted.add(file);
+      } else {
+        skippedType++;
+      }
+    }
+    if (accepted.isEmpty) {
       _toast('仅支持 $kChatKbUploadSupportLabel', error: true);
       return;
     }
+    if (skippedType > 0) {
+      _toast('已忽略 $skippedType 个不支持的文件类型');
+    }
+    var files = accepted;
+    if (files.length > _maxKbUploadBatch) {
+      files = files.take(_maxKbUploadBatch).toList(growable: false);
+      _toast('一次最多 $_maxKbUploadBatch 个，已取前 $_maxKbUploadBatch 个');
+    }
     if (!mounted) return;
-    final confirmed = await showDialog<bool>(
+    final confirmed = await _confirmKbUpload(files);
+    if (confirmed != true || !mounted) return;
+
+    setState(() {
+      _uploading = true;
+      _uploadProgress = files.length == 1
+          ? '正在上传并解析…'
+          : '正在上传 1/${files.length}…';
+    });
+    var ok = 0;
+    var fail = 0;
+    String? lastError;
+    try {
+      for (var i = 0; i < files.length; i++) {
+        if (!mounted) return;
+        setState(() {
+          _uploadProgress = files.length == 1
+              ? '正在上传并解析…'
+              : '正在上传 ${i + 1}/${files.length}…';
+        });
+        try {
+          await _service.uploadDocument(
+            bytes: await files[i].readAsBytes(),
+            fileName: files[i].name,
+          );
+          ok++;
+        } catch (e) {
+          fail++;
+          lastError = friendlyErrorText(e);
+        }
+      }
+      KbDocumentCoordinator.instance.notifyChanged();
+      await _load(silent: true);
+      if (!mounted) return;
+      if (fail == 0) {
+        _toast(
+          ok == 1 ? '上传成功，正在解析入库' : '已上传 $ok 个文件，正在解析入库',
+        );
+      } else if (ok == 0) {
+        _toast('上传失败：${lastError ?? '请稍后重试'}', error: true);
+      } else {
+        _toast('已上传 $ok 个，失败 $fail 个${lastError == null ? '' : '：$lastError'}');
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _uploading = false;
+          _uploadProgress = null;
+        });
+      }
+    }
+  }
+
+  Future<bool?> _confirmKbUpload(List<XFile> files) {
+    final names = files.map((f) => f.name).toList(growable: false);
+    final content = files.length == 1
+        ? '将把「${names.first}」上传到你的知识库，上传后可检索引用。\n\n是否继续？'
+        : '将把以下 ${files.length} 个文件上传到你的知识库，上传后可检索引用。\n\n'
+            '${names.map((n) => '· $n').join('\n')}\n\n是否继续？';
+    return showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('上传到知识库'),
         content: Text(
-          '将把「${file.name}」上传到你的知识库，上传后可检索引用。\n\n是否继续？',
+          content,
           style: DunesTypography.sans(fontSize: 14, height: 1.55),
         ),
         actions: [
@@ -221,23 +339,20 @@ class _NativeKbHomePageState extends State<NativeKbHomePage> {
         ],
       ),
     );
-    if (confirmed != true || !mounted) return;
+  }
 
-    setState(() => _uploading = true);
+  Future<List<XFile>> _openDocumentFilesWithFallback(
+    List<XTypeGroup> types,
+  ) async {
     try {
-      await _service.uploadDocument(
-        bytes: await file.readAsBytes(),
-        fileName: file.name,
-      );
-      KbDocumentCoordinator.instance.notifyChanged();
-      await _load(silent: true);
-      if (!mounted) return;
-      _toast('上传成功，正在解析入库');
-    } catch (e) {
-      if (!mounted) return;
-      _toast('上传失败：${friendlyErrorText(e)}', error: true);
-    } finally {
-      if (mounted) setState(() => _uploading = false);
+      return await openFiles(acceptedTypeGroups: types);
+    } catch (_) {
+      try {
+        return await openFiles();
+      } catch (_) {
+        final file = await _openDocumentFileWithFallback(types);
+        return file == null ? const <XFile>[] : <XFile>[file];
+      }
     }
   }
 
@@ -821,52 +936,85 @@ class _NativeKbHomePageState extends State<NativeKbHomePage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          InkWell(
-            onTap: ready && !_uploading ? _pickAndUpload : null,
-            borderRadius: BorderRadius.circular(10),
-            child: Container(
-              padding: const EdgeInsets.symmetric(vertical: 18),
-              decoration: BoxDecoration(
-                color: const Color(0xFFF7F6F2),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: DunesColors.borderSoft),
-              ),
-              child: Column(
-                children: [
-                  Icon(
-                    Icons.upload_file,
-                    color: ready ? const Color(0xFF7B5CD8) : DunesColors.text3,
-                    size: 28,
-                  ),
-                  const SizedBox(height: 6),
-                  const Text(
-                    '点击选择文档 / 图片 / 语音等文件',
-                    style: TextStyle(fontSize: 11.5),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    ready
-                        ? '支持 $kChatKbUploadSupportLabel · 上传后自动解析'
-                        : 'Nova 知识库未就绪，请稍后重试',
-                    style: const TextStyle(
-                      fontSize: 10,
-                      color: DunesColors.text3,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
+          if (_supportsDesktopDrop)
+            DropTarget(
+              enable: ready && !_uploading,
+              onDragEntered: (_) {
+                if (!_dragging) setState(() => _dragging = true);
+              },
+              onDragExited: (_) {
+                if (_dragging) setState(() => _dragging = false);
+              },
+              onDragDone: (d) => unawaited(_onDesktopDrop(d)),
+              child: _buildUploadZone(ready),
+            )
+          else
+            _buildUploadZone(ready),
           if (_uploading) ...[
             const SizedBox(height: 10),
             const LinearProgressIndicator(minHeight: 2),
             const SizedBox(height: 6),
-            const Text(
-              '正在上传并解析…',
-              style: TextStyle(fontSize: 10, color: DunesColors.text3),
+            Text(
+              _uploadProgress ?? '正在上传并解析…',
+              style: const TextStyle(fontSize: 10, color: DunesColors.text3),
             ),
           ],
         ],
+      ),
+    );
+  }
+
+  Widget _buildUploadZone(bool ready) {
+    final highlight = _dragging && ready && !_uploading;
+    return InkWell(
+      onTap: ready && !_uploading ? _pickAndUpload : null,
+      borderRadius: BorderRadius.circular(10),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 12),
+        decoration: BoxDecoration(
+          color: highlight
+              ? _kbAccent.withValues(alpha: 0.08)
+              : const Color(0xFFF7F6F2),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: highlight ? _kbAccent : DunesColors.borderSoft,
+            width: highlight ? 1.5 : 1,
+          ),
+        ),
+        child: Column(
+          children: [
+            Icon(
+              Icons.upload_file,
+              color: ready ? _kbAccent : DunesColors.text3,
+              size: 28,
+            ),
+            const SizedBox(height: 6),
+            Text(
+              _supportsDesktopDrop
+                  ? (highlight
+                        ? '松开以上传文件（一次最多 $_maxKbUploadBatch 个）'
+                        : '点击选择，或拖拽文件到此处（一次最多 $_maxKbUploadBatch 个）')
+                  : '点击选择文档 / 图片 / 语音等文件',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 11.5,
+                color: highlight ? _kbAccent : null,
+                fontWeight: highlight ? FontWeight.w600 : FontWeight.w400,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              ready
+                  ? '支持 $kChatKbUploadSupportLabel · 上传后自动解析'
+                  : 'Nova 知识库未就绪，请稍后重试',
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 10,
+                color: DunesColors.text3,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

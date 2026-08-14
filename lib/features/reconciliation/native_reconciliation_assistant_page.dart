@@ -1,7 +1,9 @@
 import 'dart:async';
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
 
 import '../../core/theme/dunes_theme.dart';
 import '../../core/util/friendly_error.dart';
@@ -15,6 +17,7 @@ import '../conversation/conversation_realtime_hub.dart';
 import '../conversation/conversation_realtime_service.dart';
 import '../conversation/conversation_service.dart';
 import '../desktop/windows_desktop_tray.dart';
+import '../robots/robot_markdown.dart';
 import 'reconciliation_shucai_models.dart';
 import 'reconciliation_shucai_service.dart';
 import 'shucai_report_table.dart';
@@ -188,6 +191,7 @@ class _NativeReconciliationAssistantPageState
       if (cur.confirmedCount != e.value.confirmedCount ||
           cur.canConfirm != e.value.canConfirm ||
           cur.confirmed != e.value.confirmed ||
+          cur.waitingReason != e.value.waitingReason ||
           (cur.mine?.comment ?? '') != (e.value.mine?.comment ?? '')) {
         return false;
       }
@@ -707,7 +711,7 @@ class _NativeReconciliationAssistantPageState
       final timeLabel = _timeLabel(first.createdAt);
       final needsConfirm = items.any((item) {
         final st = _status[_statusKey(item.card.cardType, item.card.asOfDate)];
-        if (st != null) return st.canConfirm;
+        if (st != null) return !st.viewerOnly;
         return !item.card.viewerOnly;
       });
       out.add(
@@ -833,7 +837,7 @@ class _NativeReconciliationAssistantPageState
       builder: (context) => AlertDialog(
         title: const Text('对账助手'),
         content: const Text(
-          '每天由后台推送三种对账名片。请按权限查阅对应的表；一层和二层都需要确认，最终人只查阅不用确认。超时未确认会通知最终人。',
+          '每天由后台推送三种对账名片。固定时间先发给财务和最终人；财务全部确认后再发给业务一层，一层确认后再发给二层。请按权限查阅对应的表。确认按财务 → 业务一层 → 业务二层依次进行。本层只能看到本层和上一层的进度。最终人只查阅不用确认。超时未确认会通知最终人。',
         ),
         actions: [
           TextButton(
@@ -937,15 +941,32 @@ class _NativeReconciliationAssistantPageState
               expected <= 0
                   ? (status?.viewerOnly == true
                         ? '仅查阅'
-                        : (status?.confirmed == true ? '已确认' : '待确认'))
+                        : (status?.waitingPrevious == true
+                              ? (status?.waitingReason ?? '等待上一层')
+                              : (status?.confirmed == true ? '已确认' : '待确认')))
                   : '$confirmed/$expected 人已确认',
             ),
             const SizedBox(height: 8),
             _buildProgressCard(progress, expected, confirmed, status),
             const SizedBox(height: 18),
-            _buildSectionTitle('本次评价', '所有参与人可见'),
+            _buildSectionTitle(
+              '本次评价',
+              status?.viewerOnly == true ? '全部确认人' : '本层与上一层可见',
+            ),
             const SizedBox(height: 8),
             _buildReviewCard(status),
+            if (status?.waitingPrevious == true) ...[
+              const SizedBox(height: 18),
+              _CardSurface(
+                child: Text(
+                  status?.waitingReason ?? '请等待上一层确认完成后再确认',
+                  style: DunesTypography.sans(
+                    fontSize: 13,
+                    color: DunesColors.text2,
+                  ),
+                ),
+              ),
+            ],
             if (status?.canConfirm == true) ...[
               const SizedBox(height: 18),
               _buildCommentCard(status),
@@ -965,12 +986,17 @@ class _NativeReconciliationAssistantPageState
   Widget _buildHeroCard(ReconCardStatus? status) {
     final viewerOnly = status?.viewerOnly ?? true;
     final confirmed = status?.confirmed ?? false;
+    final waiting = status?.waitingPrevious ?? false;
     final subtitle = viewerOnly
         ? '本张对账表供你查阅，无需确认'
-        : (confirmed ? '你已完成确认' : '请核对本张对账表并留下你的意见');
+        : (confirmed
+              ? '你已完成确认'
+              : (waiting
+                    ? (status?.waitingReason ?? '请等待上一层确认完成')
+                    : '请核对本张对账表并留下你的意见'));
     final pillLabel = viewerOnly
         ? '查阅'
-        : (confirmed ? '已确认' : '待确认');
+        : (confirmed ? '已确认' : (waiting ? '等待中' : '待确认'));
     return Container(
       padding: const EdgeInsets.fromLTRB(18, 17, 16, 17),
       decoration: BoxDecoration(
@@ -1065,28 +1091,9 @@ class _NativeReconciliationAssistantPageState
     final snap = _snapshot;
     if (_detailCardType == 'TAG2') {
       return _CardSurface(
-        child: Column(
-          children: [
-            _InfoLine(label: '标签二', value: '${snap?.tag2.detailRowCount ?? 0} 行'),
-            const Divider(height: 20, color: DunesColors.borderSoft),
-            Row(
-              children: [
-                Expanded(
-                  child: _AmountCell(
-                    label: '资产合计',
-                    value: formatShucaiCompact(_tag2Amount('资产合计')),
-                  ),
-                ),
-                Container(width: 1, height: 40, color: DunesColors.borderSoft),
-                Expanded(
-                  child: _AmountCell(
-                    label: '资金池余额',
-                    value: formatShucaiCompact(_tag2Amount('资金池余额')),
-                  ),
-                ),
-              ],
-            ),
-          ],
+        child: _InfoLine(
+          label: '标签二',
+          value: '${snap?.tag2.detailRowCount ?? 0} 行',
         ),
       );
     }
@@ -1123,14 +1130,17 @@ class _NativeReconciliationAssistantPageState
     }
     final compact = _compact;
     if (_detailCardType == 'TAG2') {
-      return ShucaiReportTable(
+      return _buildMarkdownOrTable(
+        markdown: snap.tag2Markdown,
         report: snap.tag2.withProvinceColumn,
         compact: compact,
       );
     }
     final tabs = [
       for (final tab in ShucaiSnapshot.tag3TabOrder)
-        if (snap.tag3.containsKey(tab)) tab,
+        if (snap.tag3.containsKey(tab) ||
+            (snap.tag3Markdown[tab] ?? '').trim().isNotEmpty)
+          tab,
     ];
     if (tabs.isEmpty) {
       return _CardSurface(
@@ -1140,11 +1150,18 @@ class _NativeReconciliationAssistantPageState
         ),
       );
     }
-    final current =
-        snap.tag3[_tag3Tab] ?? snap.tag3[tabs.first]!;
-    if (tabs.length == 1) {
-      return ShucaiReportTable(report: current, compact: compact);
-    }
+    final currentTab = snap.tag3.containsKey(_tag3Tab) ||
+            (snap.tag3Markdown[_tag3Tab] ?? '').trim().isNotEmpty
+        ? _tag3Tab
+        : tabs.first;
+    final current = snap.tag3[currentTab] ??
+        const ShucaiReport(columns: [], rows: []);
+    final table = _buildMarkdownOrTable(
+      markdown: snap.tag3Markdown[currentTab] ?? '',
+      report: current,
+      compact: compact,
+    );
+    if (tabs.length == 1) return table;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1157,7 +1174,7 @@ class _NativeReconciliationAssistantPageState
                 _ShucaiTabChip(
                   label:
                       '${ShucaiSnapshot.tabLabel(tab)} ${snap.tag3[tab]?.detailRowCount ?? 0}',
-                  selected: _tag3Tab == tab,
+                  selected: currentTab == tab,
                   onTap: () => setState(() => _tag3Tab = tab),
                 ),
                 const SizedBox(width: 8),
@@ -1166,19 +1183,30 @@ class _NativeReconciliationAssistantPageState
           ),
         ),
         const SizedBox(height: 10),
-        ShucaiReportTable(report: current, compact: compact),
+        table,
       ],
     );
   }
 
-  double? _tag2Amount(String label) {
-    final snap = _snapshot;
-    if (snap == null) return null;
-    final total = snap.tag2.totalRow ??
-        (snap.tag2.rows.isEmpty ? null : snap.tag2.rows.last);
-    final col = snap.tag2.columnByLabel(label);
-    if (col == null || total == null) return null;
-    return shucaiCellAmount(shucaiCellRaw(total, col));
+  Widget _buildMarkdownOrTable({
+    required String markdown,
+    required ShucaiReport report,
+    required bool compact,
+  }) {
+    final md = markdown.trim();
+    if (md.isNotEmpty) {
+      final body = RobotMarkdown(
+        markdown: md,
+        compact: compact,
+        selectable: !widget.desktopMode,
+        fitToContent: widget.desktopMode,
+      );
+      if (widget.desktopMode) {
+        return _DesktopMarkdownScroll(child: body);
+      }
+      return _CardSurface(child: body);
+    }
+    return ShucaiReportTable(report: report, compact: compact);
   }
 
   Widget _buildProgressCard(
@@ -1227,14 +1255,30 @@ class _NativeReconciliationAssistantPageState
             ),
           ),
           const SizedBox(height: 10),
+          if (status?.layers.isNotEmpty == true) ...[
+            Text(
+              status!.layers
+                  .map(
+                    (l) =>
+                        '${l.label} ${l.confirmedCount}/${l.expectedCount}',
+                  )
+                  .join(' · '),
+              style: DunesTypography.sans(fontSize: 12, color: DunesColors.text2),
+            ),
+            const SizedBox(height: 8),
+          ],
           Text(
-            expected <= 0
-                ? (status?.viewerOnly == true
-                      ? '本张名片无需你确认'
-                      : (status?.confirmed == true ? '你已完成本次确认' : '请完成本次确认'))
-                : (remain == 0
-                    ? '全部参与人已完成本次确认'
-                    : '还有 $remain 位参与人待确认'),
+            status?.waitingPrevious == true
+                ? (status?.waitingReason ?? '请等待上一层确认完成')
+                : expected <= 0
+                    ? (status?.viewerOnly == true
+                          ? '本张名片无需你确认'
+                          : (status?.confirmed == true
+                                ? '你已完成本次确认'
+                                : '请完成本次确认'))
+                    : (remain == 0
+                        ? '可见范围内已全部确认'
+                        : '还有 $remain 位参与人待确认'),
             style: DunesTypography.sans(fontSize: 12, color: DunesColors.text3),
           ),
         ],
@@ -1252,44 +1296,26 @@ class _NativeReconciliationAssistantPageState
     final expectedById = <int, ReconPerson>{
       for (final p in expected) p.userId: p,
     };
-    final rows = <Widget>[];
+    final entries = <_ReviewEntry>[];
     for (final person in others) {
       final merged = _personWithAvatar(person, expectedById[person.userId]);
-      rows.add(
-        _ReviewRow(
-          userId: merged.userId,
-          initial: _initial(merged.displayName),
-          name: merged.displayName,
-          role: merged.roleLabel,
-          comment: merged.comment.trim().isEmpty
-              ? '已确认'
-              : merged.comment.trim(),
-          status: '已确认',
-          statusColor: DunesColors.green,
-          avatarColor: const Color(0xFFE7DFF5),
-          avatarTextColor: DunesColors.brandPurpleDeep,
-          avatarPreset: merged.avatarPreset,
-          avatarObjectKey: merged.avatarObjectKey,
-          avatarService: _convService,
+      entries.add(
+        _ReviewEntry(
+          person: merged,
+          confirmed: true,
+          isSelf: false,
+          comment: merged.comment.trim().isEmpty ? '已确认' : merged.comment.trim(),
         ),
       );
     }
     for (final person in pending) {
       if (person.userId == widget.session.userId) continue;
-      rows.add(
-        _ReviewRow(
-          userId: person.userId,
-          initial: _initial(person.displayName),
-          name: person.displayName,
-          role: person.roleLabel,
+      entries.add(
+        _ReviewEntry(
+          person: person,
+          confirmed: false,
+          isSelf: false,
           comment: '尚未确认',
-          status: '待确认',
-          statusColor: DunesColors.amber,
-          avatarColor: const Color(0xFFDCEBEA),
-          avatarTextColor: DunesColors.accent,
-          avatarPreset: person.avatarPreset,
-          avatarObjectKey: person.avatarObjectKey,
-          avatarService: _convService,
         ),
       );
     }
@@ -1303,38 +1329,29 @@ class _NativeReconciliationAssistantPageState
           ),
       expectedById[widget.session.userId],
     );
-    if (status?.canConfirm == true) {
-      rows.add(
-        _ReviewRow(
-          userId: widget.session.userId,
-          initial: '我',
-          name: '我',
-          role: status?.myRole.isNotEmpty == true
-              ? ReconPerson(userId: widget.session.userId, role: status!.myRole)
-                  .roleLabel
-              : '当前核对人',
-          comment: _commentController.text.trim().isEmpty
-              ? '等待你填写意见'
-              : _commentController.text.trim(),
-          status: status?.confirmed == true ? '已确认' : '待确认',
-          statusColor: status?.confirmed == true
-              ? DunesColors.green
-              : DunesColors.amber,
-          avatarColor: const Color(0xFFD7E8E6),
-          avatarTextColor: DunesColors.accent,
-          avatarPreset: (selfSnap?.avatarPreset ?? '').trim().isNotEmpty
-              ? selfSnap!.avatarPreset
-              : selfPerson.avatarPreset,
-          avatarObjectKey: (selfSnap?.avatarObjectKey ?? '').trim().isNotEmpty
-              ? selfSnap!.avatarObjectKey
-              : selfPerson.avatarObjectKey,
-          avatarUrl: (selfSnap?.avatarUrl ?? '').trim(),
-          avatarService: _convService,
+    if (status?.canConfirm == true || status?.waitingPrevious == true) {
+      entries.add(
+        _ReviewEntry(
+          person: selfPerson,
+          confirmed: status?.confirmed == true,
           isSelf: true,
+          comment: _commentController.text.trim().isEmpty
+              ? (status?.waitingPrevious == true
+                    ? (status?.waitingReason ?? '等待上一层确认完成')
+                    : '等待你填写意见')
+              : _commentController.text.trim(),
         ),
       );
     }
-    if (rows.isEmpty) {
+    entries.sort((a, b) {
+      final layerCmp = reconRoleLayer(a.person.role)
+          .compareTo(reconRoleLayer(b.person.role));
+      if (layerCmp != 0) return layerCmp;
+      if (a.confirmed != b.confirmed) return a.confirmed ? -1 : 1;
+      if (a.isSelf != b.isSelf) return a.isSelf ? 1 : -1;
+      return a.person.displayName.compareTo(b.person.displayName);
+    });
+    if (entries.isEmpty) {
       return _CardSurface(
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: 8),
@@ -1346,13 +1363,49 @@ class _NativeReconciliationAssistantPageState
       );
     }
     final children = <Widget>[];
-    for (var i = 0; i < rows.length; i++) {
+    for (var i = 0; i < entries.length; i++) {
       if (i > 0) {
         children.add(
           const Divider(height: 1, indent: 68, color: DunesColors.borderSoft),
         );
       }
-      children.add(rows[i]);
+      final item = entries[i];
+      final merged = item.person;
+      children.add(
+        _ReviewRow(
+          userId: merged.userId,
+          initial: item.isSelf ? '我' : _initial(merged.displayName),
+          name: item.isSelf ? '我' : merged.displayName,
+          role: item.isSelf && status?.myRole.isNotEmpty == true
+              ? ReconPerson(
+                  userId: widget.session.userId,
+                  role: status!.myRole,
+                ).roleLabel
+              : merged.roleLabel,
+          comment: item.comment,
+          status: item.confirmed ? '已确认' : '待确认',
+          statusColor: item.confirmed ? DunesColors.green : DunesColors.amber,
+          avatarColor: item.isSelf
+              ? const Color(0xFFD7E8E6)
+              : (item.confirmed
+                    ? const Color(0xFFE7DFF5)
+                    : const Color(0xFFDCEBEA)),
+          avatarTextColor: item.isSelf || !item.confirmed
+              ? DunesColors.accent
+              : DunesColors.brandPurpleDeep,
+          avatarPreset: item.isSelf &&
+                  (selfSnap?.avatarPreset ?? '').trim().isNotEmpty
+              ? selfSnap!.avatarPreset
+              : merged.avatarPreset,
+          avatarObjectKey: item.isSelf &&
+                  (selfSnap?.avatarObjectKey ?? '').trim().isNotEmpty
+              ? selfSnap!.avatarObjectKey
+              : merged.avatarObjectKey,
+          avatarUrl: item.isSelf ? (selfSnap?.avatarUrl ?? '').trim() : '',
+          avatarService: _convService,
+          isSelf: item.isSelf,
+        ),
+      );
     }
     return _CardSurface(
       padding: EdgeInsets.zero,
@@ -1401,7 +1454,7 @@ class _NativeReconciliationAssistantPageState
               ),
               const SizedBox(width: 6),
               Text(
-                '所有参与人可见',
+                '本层与上一层可见',
                 style: DunesTypography.sans(
                   fontSize: 11,
                   color: DunesColors.text3,
@@ -1472,6 +1525,20 @@ class _NativeReconciliationAssistantPageState
       ),
     );
   }
+}
+
+class _ReviewEntry {
+  const _ReviewEntry({
+    required this.person,
+    required this.confirmed,
+    required this.isSelf,
+    required this.comment,
+  });
+
+  final ReconPerson person;
+  final bool confirmed;
+  final bool isSelf;
+  final String comment;
 }
 
 class _ReconCardPayload {
@@ -1584,99 +1651,105 @@ class _ReconciliationMessageCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      borderRadius: BorderRadius.circular(15),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(15),
-        child: Ink(
-          padding: const EdgeInsets.fromLTRB(14, 13, 12, 12),
-          decoration: BoxDecoration(
-            color: const Color(0xFFEAF3F1),
-            borderRadius: BorderRadius.circular(15),
-            border: Border.all(color: const Color(0xFFC9DFDA)),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  const Icon(
-                    Icons.compare_arrows_rounded,
-                    size: 19,
-                    color: DunesColors.accent,
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      title,
-                      style: DunesTypography.sans(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: DunesColors.text,
-                      ),
-                    ),
-                  ),
-                  _StatusPill(
-                    label: viewerOnly
-                        ? '查阅'
-                        : (confirmed ? '已确认' : '待确认'),
-                    color: viewerOnly
-                        ? const Color(0xFFE4EEEC)
-                        : (confirmed
-                              ? const Color(0xFFD7F3E1)
-                              : const Color(0xFFFFF3DC)),
-                    textColor: viewerOnly
-                        ? DunesColors.accent
-                        : (confirmed
-                              ? const Color(0xFF267449)
-                              : DunesColors.amber),
-                  ),
-                ],
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 280),
+        child: Material(
+          color: Colors.transparent,
+          borderRadius: BorderRadius.circular(12),
+          child: InkWell(
+            onTap: onTap,
+            borderRadius: BorderRadius.circular(12),
+            child: Ink(
+              padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+              decoration: BoxDecoration(
+                color: const Color(0xFFEAF3F1),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFFC9DFDA)),
               ),
-              const SizedBox(height: 10),
-              Text(
-                subtitle,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: DunesTypography.sans(
-                  fontSize: 12,
-                  color: DunesColors.text2,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Row(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Expanded(
-                    child: Text(
-                      metric,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: DunesTypography.mono(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: DunesColors.green,
+                  Row(
+                    children: [
+                      const Icon(
+                        Icons.compare_arrows_rounded,
+                        size: 16,
+                        color: DunesColors.accent,
                       ),
-                    ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          title,
+                          style: DunesTypography.sans(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: DunesColors.text,
+                          ),
+                        ),
+                      ),
+                      _StatusPill(
+                        compact: true,
+                        label: viewerOnly
+                            ? '查阅'
+                            : (confirmed ? '已确认' : '待确认'),
+                        color: viewerOnly
+                            ? const Color(0xFFE4EEEC)
+                            : (confirmed
+                                  ? const Color(0xFFD7F3E1)
+                                  : const Color(0xFFFFF3DC)),
+                        textColor: viewerOnly
+                            ? DunesColors.accent
+                            : (confirmed
+                                  ? const Color(0xFF267449)
+                                  : DunesColors.amber),
+                      ),
+                    ],
                   ),
+                  const SizedBox(height: 6),
                   Text(
-                    '查看详情',
+                    subtitle,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
                     style: DunesTypography.sans(
-                      fontSize: 11.5,
-                      fontWeight: FontWeight.w600,
-                      color: DunesColors.accent,
+                      fontSize: 11,
+                      color: DunesColors.text2,
                     ),
                   ),
-                  const SizedBox(width: 4),
-                  const Icon(
-                    Icons.chevron_right_rounded,
-                    size: 19,
-                    color: DunesColors.accent,
+                  const SizedBox(height: 6),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          metric,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: DunesTypography.mono(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: DunesColors.green,
+                          ),
+                        ),
+                      ),
+                      Text(
+                        '查看详情',
+                        style: DunesTypography.sans(
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w600,
+                          color: DunesColors.accent,
+                        ),
+                      ),
+                      const Icon(
+                        Icons.chevron_right_rounded,
+                        size: 16,
+                        color: DunesColors.accent,
+                      ),
+                    ],
                   ),
                 ],
               ),
-            ],
+            ),
           ),
         ),
       ),
@@ -1725,6 +1798,81 @@ class _ShucaiTabChip extends StatelessWidget {
   }
 }
 
+/// PC：宽 Markdown 表可鼠标拖、滚轮/触控板横向滑，并显示底栏滚动条。
+class _DesktopMarkdownScroll extends StatefulWidget {
+  const _DesktopMarkdownScroll({required this.child});
+
+  final Widget child;
+
+  @override
+  State<_DesktopMarkdownScroll> createState() => _DesktopMarkdownScrollState();
+}
+
+class _DesktopMarkdownScrollState extends State<_DesktopMarkdownScroll> {
+  final ScrollController _h = ScrollController();
+
+  @override
+  void dispose() {
+    _h.dispose();
+    super.dispose();
+  }
+
+  void _onPointerSignal(PointerSignalEvent event) {
+    if (event is! PointerScrollEvent || !_h.hasClients) return;
+    var delta = event.scrollDelta.dx;
+    final shift = HardwareKeyboard.instance.logicalKeysPressed.contains(
+          LogicalKeyboardKey.shiftLeft,
+        ) ||
+        HardwareKeyboard.instance.logicalKeysPressed.contains(
+          LogicalKeyboardKey.shiftRight,
+        );
+    if (delta == 0 && shift) {
+      delta = event.scrollDelta.dy;
+    }
+    if (delta == 0 || !_h.position.hasContentDimensions) return;
+    final next = (_h.offset + delta).clamp(
+      _h.position.minScrollExtent,
+      _h.position.maxScrollExtent,
+    );
+    if (next != _h.offset) {
+      _h.jumpTo(next);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return _CardSurface(
+      padding: const EdgeInsets.fromLTRB(15, 15, 15, 8),
+      child: ScrollConfiguration(
+        behavior: ScrollConfiguration.of(context).copyWith(
+          dragDevices: const {
+            PointerDeviceKind.touch,
+            PointerDeviceKind.mouse,
+            PointerDeviceKind.trackpad,
+            PointerDeviceKind.stylus,
+          },
+        ),
+        child: Listener(
+          onPointerSignal: _onPointerSignal,
+          child: Scrollbar(
+            controller: _h,
+            thumbVisibility: true,
+            scrollbarOrientation: ScrollbarOrientation.bottom,
+            notificationPredicate: (n) => n.metrics.axis == Axis.horizontal,
+            child: SingleChildScrollView(
+              controller: _h,
+              scrollDirection: Axis.horizontal,
+              primary: false,
+              padding: const EdgeInsets.only(bottom: 10),
+              child: widget.child,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _CardSurface extends StatelessWidget {
   const _CardSurface({
     required this.child,
@@ -1753,16 +1901,21 @@ class _StatusPill extends StatelessWidget {
     required this.label,
     required this.color,
     required this.textColor,
+    this.compact = false,
   });
 
   final String label;
   final Color color;
   final Color textColor;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+      padding: EdgeInsets.symmetric(
+        horizontal: compact ? 7 : 9,
+        vertical: compact ? 3 : 5,
+      ),
       decoration: BoxDecoration(
         color: color,
         borderRadius: BorderRadius.circular(99),
@@ -1770,7 +1923,7 @@ class _StatusPill extends StatelessWidget {
       child: Text(
         label,
         style: DunesTypography.sans(
-          fontSize: 11,
+          fontSize: compact ? 10 : 11,
           fontWeight: FontWeight.w600,
           color: textColor,
         ),
@@ -1803,36 +1956,6 @@ class _InfoLine extends StatelessWidget {
               fontWeight: FontWeight.w500,
               color: DunesColors.text,
             ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _AmountCell extends StatelessWidget {
-  const _AmountCell({required this.label, required this.value});
-
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Text(
-          label,
-          style: DunesTypography.sans(fontSize: 11, color: DunesColors.text3),
-        ),
-        const SizedBox(height: 5),
-        Text(
-          value,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: DunesTypography.mono(
-            fontSize: 13,
-            fontWeight: FontWeight.w600,
-            color: DunesColors.text,
           ),
         ),
       ],

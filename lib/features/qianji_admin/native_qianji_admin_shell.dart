@@ -8,6 +8,8 @@ import '../auth/auth_session.dart';
 import '../auth/auth_session_coordinator.dart';
 import '../administrative_notice/native_administrative_notice_page.dart';
 import '../administrative_notice/administrative_notice_service.dart';
+import '../broadcast/broadcast_service.dart';
+import '../broadcast/native_workbench_broadcast_page.dart';
 import '../drive/native_drive_page.dart';
 import '../tasks/native_task_home_pane.dart';
 import '../tasks/native_task_hrbp_pane.dart';
@@ -47,6 +49,7 @@ enum _WorkbenchView {
   pool,
   drive,
   administrativeNotice,
+  companyBroadcast,
 }
 
 class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
@@ -63,6 +66,7 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
 
   /// 工作台入口权限由后端实时探测；它只控制发布端入口，不限制接收人。
   bool? _canSeeAdministrativeNotice;
+  bool? _canSeeCompanyBroadcast;
 
   static const _titles = {
     _WorkbenchView.tasks: '任务',
@@ -73,6 +77,7 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
     _WorkbenchView.pool: '需求任务池',
     _WorkbenchView.drive: '企业微盘',
     _WorkbenchView.administrativeNotice: '行政通知',
+    _WorkbenchView.companyBroadcast: '公司广播',
   };
 
   bool get _isQianjiAdmin => _session.effectiveQianjiAdminAccess;
@@ -85,6 +90,7 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
     unawaited(_refreshSessionOnEnter());
     unawaited(_resolveTaskSummaryAccess());
     unawaited(_resolveAdministrativeNoticeAccess());
+    unawaited(_resolveBroadcastAccess());
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _syncBackInterceptor();
     });
@@ -97,10 +103,13 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
     if (incoming.token != _session.token ||
         incoming.roles.join('|') != _session.roles.join('|') ||
         incoming.effectiveAdministrativeNoticeAccess !=
-            _session.effectiveAdministrativeNoticeAccess) {
+            _session.effectiveAdministrativeNoticeAccess ||
+        incoming.effectiveBroadcastAccess !=
+            _session.effectiveBroadcastAccess) {
       _session = incoming;
       unawaited(_resolveTaskSummaryAccess());
       unawaited(_resolveAdministrativeNoticeAccess());
+      unawaited(_resolveBroadcastAccess());
     }
   }
 
@@ -112,6 +121,7 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
     });
     unawaited(_resolveTaskSummaryAccess());
     unawaited(_resolveAdministrativeNoticeAccess());
+    unawaited(_resolveBroadcastAccess());
   }
 
   Future<void> _resolveTaskSummaryAccess() async {
@@ -139,6 +149,21 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
     }
     if (!mounted) return;
     setState(() => _canSeeAdministrativeNotice = allowed);
+  }
+
+  Future<void> _resolveBroadcastAccess() async {
+    final fallback = _session.effectiveBroadcastAccess;
+    final service = BroadcastService(session: _session);
+    bool allowed = fallback;
+    try {
+      allowed = await service.canAccess();
+    } catch (_) {
+      allowed = fallback;
+    } finally {
+      service.close();
+    }
+    if (!mounted) return;
+    setState(() => _canSeeCompanyBroadcast = allowed);
   }
 
   @override
@@ -389,6 +414,8 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
           onChromeChanged: _onTaskChrome,
           onAcknowledged: widget.onAdministrativeNoticeAcknowledged,
         );
+      case _WorkbenchView.companyBroadcast:
+        return NativeWorkbenchBroadcastPage(session: _session);
       case _WorkbenchView.overview:
         return _buildOverviewPage();
     }
@@ -445,6 +472,15 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
           color: const Color(0xFF3D7A8C),
           enabled: true,
           onTap: () => _open(_WorkbenchView.administrativeNotice),
+        ),
+      if (!_session.isExternalUser && _canSeeCompanyBroadcast == true)
+        _WorkbenchTile(
+          title: '公司广播',
+          subtitle: '全员推送 · 发布与历史',
+          icon: Icons.cell_tower_outlined,
+          color: const Color(0xFF7B5CD8),
+          enabled: true,
+          onTap: () => _open(_WorkbenchView.companyBroadcast),
         ),
     ];
 

@@ -8,6 +8,7 @@ import 'package:tray_manager/tray_manager.dart';
 import 'package:window_manager/window_manager.dart';
 
 import '../../core/layout/chat_layout.dart';
+import 'windows_tray_unread_item.dart';
 
 /// [ExitProcess] 会执行所有 DLL_PROCESS_DETACH，某个 Flutter 原生插件
 /// 卡在卸载回调时，进程会变成无窗口却无法再启动的“半退出”状态。
@@ -36,11 +37,24 @@ const _trayIconWin = 'assets/images/tray_icon.ico';
 const _trayIconWinBlank = 'assets/images/tray_icon_blank.ico';
 const _trayIconMac = 'assets/images/tray_icon.png';
 const _trayIconMacBlank = 'assets/images/tray_icon_blank.png';
+const _peekChannel = MethodChannel('nova.dunes/tray_peek');
 
 Future<void> initWindowsDesktopTray() => WindowsDesktopTray.instance.init();
 
 void windowsTrayUpdateUnread(int total) {
   WindowsDesktopTray.instance.updateUnread(total);
+}
+
+void windowsTrayUpdateUnreadItems(List<WindowsTrayUnreadItem> items) {
+  WindowsDesktopTray.instance.updateUnreadItems(items);
+}
+
+void setWindowsTrayOnPeekOpen(void Function(int conversationId)? callback) {
+  WindowsDesktopTray.instance.onPeekOpen = callback;
+}
+
+void windowsTraySetUserLabel(String name) {
+  WindowsDesktopTray.instance.setUserLabel(name);
 }
 
 void windowsTrayNotifyIncomingMessage() {
@@ -91,7 +105,9 @@ class WindowsDesktopTray with WindowListener, TrayListener {
   bool _flashing = false;
   bool _flashVisible = true;
   bool _pendingAlert = false;
+  bool _flashSuppressed = false;
   int _unread = 0;
+  String _userLabel = '';
   bool? _lastInactiveNotified;
   Timer? _flashTimer;
   Future<void> _iconChain = Future<void>.value();
@@ -103,13 +119,16 @@ class WindowsDesktopTray with WindowListener, TrayListener {
   String _trayIconBlank = _trayIconWinBlank;
   Future<void> Function()? onBeforeQuit;
   void Function(bool inactive)? onInactiveChanged;
+  void Function(int conversationId)? onPeekOpen;
+  List<WindowsTrayUnreadItem> _peekItems = const <WindowsTrayUnreadItem>[];
 
   /// 最小化、失焦和关闭到托盘时，当前会话不应被视为“正在查看”。
   bool get isWindowInactive => _hidden || _minimized || !_focused;
 
-  /// 收到新消息时即使主窗口仍打开，也要给托盘一个明确的视觉提示。
-  /// 已有未读数只有在窗口不可见/失焦时继续闪烁，窗口重新聚焦后由新消息事件重新触发。
-  bool get _shouldFlashTray => true;
+  bool get _supportsPeek => Platform.isWindows || Platform.isMacOS;
+
+  bool get _shouldFlashTray =>
+      !_flashSuppressed && (_unread > 0 || _pendingAlert);
 
   void _emitInactiveChanged() {
     final inactive = isWindowInactive;
@@ -167,7 +186,13 @@ class WindowsDesktopTray with WindowListener, TrayListener {
     }
 
     await trayManager.setIcon(_trayIcon);
-    await trayManager.setToolTip('沙丘');
+    if (_supportsPeek) {
+      await _refreshTrayTip();
+      _peekChannel.setMethodCallHandler(_onPeekChannel);
+      unawaited(_pushPeekItems());
+    } else {
+      await trayManager.setToolTip('沙丘');
+    }
     await trayManager.setContextMenu(
       Menu(
         items: [
@@ -193,20 +218,95 @@ class WindowsDesktopTray with WindowListener, TrayListener {
     _ready = true;
   }
 
+  Future<dynamic> _onPeekChannel(MethodCall call) async {
+    if (call.method == 'cancelFlash') {
+      _cancelFlash();
+      return null;
+    }
+    if (call.method != 'open') {
+      throw MissingPluginException(call.method);
+    }
+    final raw = call.arguments;
+    final id = raw is int ? raw : (raw is num ? raw.toInt() : 0);
+    await _showFromTray();
+    try {
+      onPeekOpen?.call(id);
+    } catch (e, st) {
+      debugPrint('[Tray] peek open failed: $e\n$st');
+    }
+    return null;
+  }
+
+  void setUserLabel(String name) {
+    _userLabel = name.trim();
+    unawaited(_refreshTrayTip());
+  }
+
+  void _cancelFlash() {
+    _flashSuppressed = true;
+    _pendingAlert = false;
+    unawaited(_stopFlash());
+    unawaited(_pushPeekItems());
+  }
+
+  void updateUnreadItems(List<WindowsTrayUnreadItem> items) {
+    _peekItems = List<WindowsTrayUnreadItem>.unmodifiable(items);
+    if (!_ready || !_supportsPeek) return;
+    unawaited(_pushPeekItems());
+    unawaited(_refreshTrayTip());
+  }
+
+  Future<void> _pushPeekItems() async {
+    if (!_supportsPeek) return;
+    try {
+      await _peekChannel.invokeMethod<void>('update', <String, Object>{
+        'title': '沙丘',
+        'total': _unread,
+        'flashing': _flashing && _shouldFlashTray,
+        'items': _peekItems.map((item) => item.toMap()).toList(growable: false),
+      });
+    } catch (e, st) {
+      debugPrint('[Tray] peek update failed: $e\n$st');
+    }
+  }
+
+  Future<void> _refreshTrayTip() async {
+    if (!_supportsPeek || _quitting) return;
+    try {
+      if (_peekItems.isEmpty) {
+        final name = _userLabel;
+        await trayManager.setToolTip(name.isEmpty ? '沙丘' : '沙丘: $name');
+      } else {
+        await trayManager.setToolTip('');
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _peekInvoke(String method) async {
+    if (!_supportsPeek) return;
+    try {
+      await _peekChannel.invokeMethod<void>(method);
+    } catch (_) {}
+  }
+
   void updateUnread(int total) {
     if (!_ready) return;
     final next = total < 0 ? 0 : total;
     final changed = next != _unread;
     _unread = next;
-    if (_unread == 0) _pendingAlert = false;
+    if (_unread == 0) {
+      _pendingAlert = false;
+      _flashSuppressed = false;
+    }
     // 未读未变且已在正确闪烁/静止态时跳过，避免弱网角标轮询把 setIcon 打爆。
     if (!changed) return;
     _queueSyncFlash();
+    unawaited(_pushPeekItems());
   }
 
   void notifyIncomingMessage() {
-    // 新消息事件直接标记提醒；窗口重新聚焦时会清掉本次提醒。
     if (!_ready) return;
+    _flashSuppressed = false;
     if (_pendingAlert && _flashing) return;
     _pendingAlert = true;
     _queueSyncFlash();
@@ -303,6 +403,7 @@ class WindowsDesktopTray with WindowListener, TrayListener {
   Future<void> _gracefulExitProcess({required bool runBeforeQuit}) async {
     _allowQuit = true;
     await _stopFlash();
+    unawaited(_peekInvoke('hide'));
     if (runBeforeQuit) {
       try {
         await onBeforeQuit?.call();
@@ -334,6 +435,7 @@ class WindowsDesktopTray with WindowListener, TrayListener {
     // 看门狗：即便后续 await 被插件拖死，仍强制杀进程。
     Timer(const Duration(milliseconds: 800), () => _hardTerminateProcess(0));
 
+    unawaited(_peekInvoke('hide'));
     // tray_manager 在 Windows 内部调用 Shell_NotifyIcon(NIM_DELETE)。
     // TerminateProcess 不会派发 WM_DESTROY，所以必须在强退前显式删除图标。
     try {
@@ -401,18 +503,13 @@ class WindowsDesktopTray with WindowListener, TrayListener {
   }
 
   Future<void> _syncFlash() async {
-    final hasAttention =
-        _pendingAlert || (_unread > 0 && isWindowInactive);
-    final shouldFlashTray = _shouldFlashTray && hasAttention;
-    if (shouldFlashTray) {
+    if (_shouldFlashTray) {
       await _startFlash();
     } else {
       await _stopFlash();
     }
-    final tip = _unread > 0 ? '沙丘（$_unread 条未读）' : '沙丘';
-    try {
-      await trayManager.setToolTip(tip);
-    } catch (_) {}
+    await _refreshTrayTip();
+    unawaited(_pushPeekItems());
   }
 
   Future<void> _startFlash() async {
@@ -420,21 +517,22 @@ class WindowsDesktopTray with WindowListener, TrayListener {
     _flashing = true;
     _flashVisible = false;
     _flashTimer?.cancel();
-    // 立即切到透明帧，避免第一次闪烁要等一个完整周期用户才看得到。
     unawaited(_setTrayIcon(_trayIconBlank));
-    // 放慢节奏；上一帧 setIcon 未完成则跳过，避免队列堆积后狂抖。
-    _flashTimer = Timer.periodic(const Duration(milliseconds: 650), (_) {
+    unawaited(_pushPeekItems());
+    _flashTimer = Timer.periodic(const Duration(milliseconds: 500), (_) {
       if (_iconBusy) return;
       unawaited(_toggleFlashIcon());
     });
   }
 
   Future<void> _stopFlash() async {
+    final wasFlashing = _flashing;
     _flashTimer?.cancel();
     _flashTimer = null;
     _flashing = false;
     _flashVisible = true;
     await _setTrayIcon(_trayIcon);
+    if (wasFlashing) unawaited(_pushPeekItems());
   }
 
   Future<void> _toggleFlashIcon() async {
@@ -499,12 +597,25 @@ class WindowsDesktopTray with WindowListener, TrayListener {
 
   @override
   void onTrayIconMouseDown() {
+    unawaited(_peekInvoke('hide'));
     // macOS 状态栏单击：显示窗口；Windows 左键同理
     unawaited(_showFromTray());
   }
 
   @override
+  void onTrayIconHoverOpen() {
+    if (_peekItems.isEmpty) return;
+    unawaited(_peekInvoke('show'));
+  }
+
+  @override
+  void onTrayIconHoverClose() {
+    unawaited(_peekInvoke('scheduleHide'));
+  }
+
+  @override
   void onTrayIconRightMouseDown() {
+    unawaited(_peekInvoke('hide'));
     unawaited(trayManager.popUpContextMenu());
   }
 

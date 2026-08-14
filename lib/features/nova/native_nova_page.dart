@@ -230,6 +230,7 @@ class _NativeNovaPageState extends State<NativeNovaPage>
     final cached = userAvatarRefresh.snapshotFor(widget.session.userId);
     if (cached != null && mounted) {
       _applyAvatarSnapshot(cached);
+      return;
     }
     try {
       final avatar = await _service.fetchCurrentUserAvatar();

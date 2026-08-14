@@ -1,6 +1,14 @@
+import 'windows_tray_unread_item.dart';
+
 Future<void> initWindowsDesktopTray() async {}
 
 void windowsTrayUpdateUnread(int total) {}
+
+void windowsTrayUpdateUnreadItems(List<WindowsTrayUnreadItem> items) {}
+
+void setWindowsTrayOnPeekOpen(void Function(int conversationId)? callback) {}
+
+void windowsTraySetUserLabel(String name) {}
 
 void windowsTrayNotifyIncomingMessage() {}
 

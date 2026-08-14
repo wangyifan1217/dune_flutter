@@ -374,6 +374,10 @@ class TpnsPushBridge(
                         put("body", payload["body"])
                         put("customContent", payload["customContent"])
                         put("actionType", payload["actionType"])
+                        payload["eventType"]?.let { put("eventType", it) }
+                        payload["tab"]?.let { put("tab", it) }
+                        payload["conversationId"]?.let { put("conversationId", it) }
+                        payload["noticeId"]?.let { put("noticeId", it) }
                     }.toString())
                     .apply()
                 return
@@ -382,26 +386,48 @@ class TpnsPushBridge(
         }
 
         private fun notificationClickPayload(message: XGPushClickedResult?): HashMap<String, Any> {
-            return hashMapOf(
+            val customContent = message?.customContent ?: ""
+            val payload = hashMapOf<String, Any>(
                 "messageId" to (message?.getMsgId() ?: 0L),
                 "title" to (message?.title ?: ""),
                 "body" to (message?.content ?: ""),
-                "customContent" to (message?.customContent ?: ""),
+                "customContent" to customContent,
                 "actionType" to (message?.getActionType() ?: 0L),
             )
+            val custom = parseCustomContent(customContent) ?: return payload
+            custom.optString("eventType").trim().takeIf { it.isNotEmpty }?.let {
+                payload["eventType"] = it
+            }
+            custom.optString("tab").trim().takeIf { it.isNotEmpty }?.let {
+                payload["tab"] = it
+            }
+            custom.optLong("conversationId", 0L).takeIf { it > 0L }?.let {
+                payload["conversationId"] = it
+            }
+            custom.optLong("noticeId", 0L).takeIf { it > 0L }?.let {
+                payload["noticeId"] = it
+            }
+            return payload
+        }
+
+        private fun parseCustomContent(customContent: String?): JSONObject? {
+            val raw = customContent?.trim().orEmpty()
+            if (raw.isEmpty()) return null
+            return runCatching { JSONObject(raw) }.getOrNull()
         }
 
         private fun conversationIdFromCustomContent(customContent: String?): Long {
-            val raw = customContent?.trim().orEmpty()
-            if (raw.isEmpty()) return 0L
-            return runCatching {
-                val json = JSONObject(raw)
-                if (!json.optString("eventType").equals("im", ignoreCase = true)) {
-                    return@runCatching 0L
-                }
-                json.optLong("conversationId", 0L)
+            val json = parseCustomContent(customContent) ?: return 0L
+            val eventType = json.optString("eventType").trim()
+            if (!eventType.equals("im", ignoreCase = true) &&
+                !eventType.equals("dune_announcement", ignoreCase = true) &&
+                !eventType.equals("broadcast", ignoreCase = true) &&
+                !eventType.equals("admin_notice", ignoreCase = true) &&
+                !eventType.equals("administrative_notice", ignoreCase = true)
+            ) {
+                return 0L
             }
-                .getOrDefault(0L)
+            return json.optLong("conversationId", 0L)
         }
 
         private fun readNotificationIndex(
@@ -453,13 +479,26 @@ class TpnsPushBridge(
                     return
                 }
                 dispatchNotificationClicked(
-                    hashMapOf(
+                    hashMapOf<String, Any>(
                         "messageId" to json.optLong("messageId", 0L),
                         "title" to json.optString("title", ""),
                         "body" to json.optString("body", ""),
                         "customContent" to json.optString("customContent", ""),
                         "actionType" to actionType,
-                    )
+                    ).apply {
+                        json.optString("eventType").takeIf { it.isNotEmpty }?.let {
+                            put("eventType", it)
+                        }
+                        json.optString("tab").takeIf { it.isNotEmpty }?.let {
+                            put("tab", it)
+                        }
+                        json.optLong("conversationId", 0L).takeIf { it > 0L }?.let {
+                            put("conversationId", it)
+                        }
+                        json.optLong("noticeId", 0L).takeIf { it > 0L }?.let {
+                            put("noticeId", it)
+                        }
+                    },
                 )
             } catch (e: Exception) {
                 Log.w(TAG, "restore pending TPNS click failed", e)

@@ -21,6 +21,7 @@ class MainFlutterWindow: NSWindow {
     }
     let messenger = flutterViewController.engine.binaryMessenger
     SparkleUpdaterBridge.shared.setup(with: messenger)
+    TrayPeekController.shared.setup(with: messenger)
     if let appDelegate = NSApplication.shared.delegate as? AppDelegate {
       appDelegate.setupDesktopWindowChannel(with: messenger)
       appDelegate.setupDesktopFileDragChannel(with: messenger)

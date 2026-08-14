@@ -51,6 +51,7 @@ import '../xflow/approval_picker_sheet.dart';
 import '../xflow/xflow_detail_logic.dart';
 import 'chat_emoji_gif_panel.dart';
 import 'chat_foreground_sync.dart';
+import 'desktop_composer_focus.dart';
 import 'chat_image_batch_preview.dart';
 import 'chat_file_clipboard.dart';
 import 'chat_image_clipboard.dart';
@@ -528,7 +529,22 @@ class _NativeChatViewState extends State<NativeChatView>
     if (isDesktopCommOnly) {
       // 热键全局只注册一次；切会话只更新回调，避免 native unregister abort。
       unawaited(registerDesktopScreenshotHotkey(_onWindowsHotkeyPressed));
+      DesktopComposerFocus.addListener(_focusDesktopComposerIfActive);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _focusDesktopComposerIfActive();
+      });
     }
+  }
+
+  void _focusDesktopComposerIfActive() {
+    if (!isDesktopCommOnly || !mounted) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (!TickerMode.valuesOf(context).enabled) return;
+      if (_conversation?.dissolved == true) return;
+      if (_voiceMode || _messageMultiSelectMode) return;
+      _inputFocusNode.requestFocus();
+    });
   }
 
   void _onWindowsHotkeyPressed() {
@@ -618,6 +634,8 @@ class _NativeChatViewState extends State<NativeChatView>
             : cached.avatarObjectKey;
         _selfAvatarUrl = cached.avatarUrl.isEmpty ? null : cached.avatarUrl;
       });
+      // 已有进程内缓存则不再打 /users/me（资料不会每秒变，勿当心跳）。
+      return;
     }
     try {
       final resp = await http.get(
@@ -719,6 +737,7 @@ class _NativeChatViewState extends State<NativeChatView>
       }
       unawaited(_restoreComposeDraft(conversation: widget.conversationHint));
       unawaited(_load(silent: hasCache));
+      _focusDesktopComposerIfActive();
       return;
     }
     if (newFocus > 0 && newFocus != oldFocus) {
@@ -828,6 +847,7 @@ class _NativeChatViewState extends State<NativeChatView>
     }
     WidgetsBinding.instance.removeObserver(this);
     ChatForegroundSync.removeListener(_onChatForegroundResumed);
+    DesktopComposerFocus.removeListener(_focusDesktopComposerIfActive);
     ChatFileUploadCoordinator.instance.removeListener(_onFileUploadUpdate);
     userAvatarRefresh.removeListener(_onSelfAvatarUpdated);
     MeetingLiveController.instance.active.removeListener(
@@ -2650,6 +2670,7 @@ class _NativeChatViewState extends State<NativeChatView>
       updatedAt: DateTime.now(),
       peerUserId: peerId,
       peerDisplayName: current?.peerDisplayName,
+      peerEnabled: current?.peerEnabled ?? true,
       peerDepartment: current?.peerDepartment,
       peerRoleLabel: current?.peerRoleLabel,
       peerAvatarPreset: current?.peerAvatarPreset,
@@ -2700,6 +2721,7 @@ class _NativeChatViewState extends State<NativeChatView>
       updatedAt: conv.updatedAt,
       peerUserId: peerId,
       peerDisplayName: contact.displayName,
+      peerEnabled: contact.enabled,
       memberCount: conv.memberCount,
       muted: conv.muted,
       pinned: conv.pinned,
@@ -4636,12 +4658,28 @@ class _NativeChatViewState extends State<NativeChatView>
     );
   }
 
-  void _startQuote(NativeChatMessage message) {
+  void _startQuote(NativeChatMessage message, {String? excerpt}) {
+    final selected = excerpt?.trim() ?? '';
+    final full = ChatMessageQuote.fromMessage(message);
+    final useExcerpt =
+        selected.isNotEmpty && selected != message.bodyText.trim();
     setState(() {
-      _quoteDraft = ChatMessageQuote.fromMessage(message);
+      _quoteDraft = useExcerpt
+          ? ChatMessageQuote(
+              messageId: full.messageId,
+              senderUserId: full.senderUserId,
+              senderName: full.senderName,
+              kind: full.kind,
+              bodyText: selected,
+              preview: selected.length > 80
+                  ? '${selected.substring(0, 80)}…'
+                  : selected,
+            )
+          : full;
       _voiceMode = false;
       _emojiOpen = false;
     });
+    _inputFocusNode.requestFocus();
   }
 
   void _closeEmojiPicker() {
@@ -5139,17 +5177,7 @@ class _NativeChatViewState extends State<NativeChatView>
   }
 
   void _quoteFromSelectedText(NativeChatMessage message, String selectedText) {
-    final text = selectedText.trim();
-    if (text.isEmpty) {
-      _startQuote(message);
-      return;
-    }
-    _startQuote(message);
-    final current = _inputController.text.trim();
-    final next = current.isEmpty ? text : '$current\n$text';
-    _inputController.text = next;
-    _inputController.selection = TextSelection.collapsed(offset: next.length);
-    _inputFocusNode.requestFocus();
+    _startQuote(message, excerpt: selectedText);
   }
 
   bool _canSelectMessageForMulti(NativeChatMessage message) {

@@ -167,11 +167,55 @@ class ReconciliationShucaiService {
     if (tag3.isEmpty) {
       throw Exception('标签三加载失败');
     }
+    var tag2Markdown = '';
+    try {
+      tag2Markdown = await _getAssetString(
+        '/out/shaqiu/cnpc-shucai-tag2/markdown',
+        {'asOfDate': asOfDate},
+      );
+    } catch (_) {}
+    final tag3Markdown = <String, String>{};
+    for (final tab in ShucaiSnapshot.tag3TabOrder) {
+      try {
+        final text = await _getAssetString(
+          '/out/shaqiu/shucai-tag3/markdown',
+          {'tab': tab, 'asOfDate': asOfDate},
+        );
+        if (text.trim().isNotEmpty) tag3Markdown[tab] = text;
+      } catch (_) {}
+    }
     return ShucaiSnapshot.fromJson({
       'asOfDate': asOfDate,
       'tag2': tag2,
       'tag3': tag3,
+      'tag2Markdown': tag2Markdown,
+      'tag3Markdown': tag3Markdown,
     });
+  }
+
+  Future<String> _getAssetString(
+    String path,
+    Map<String, String> query,
+  ) async {
+    final uri = Uri.parse('$_assetBase$path').replace(queryParameters: query);
+    final resp = await _client
+        .get(uri, headers: const {'Accept': 'application/json'})
+        .timeout(const Duration(seconds: 20));
+    final decoded = jsonDecode(utf8.decode(resp.bodyBytes));
+    if (decoded is! Map) return '';
+    final map = Map<String, dynamic>.from(decoded);
+    final code = map['code'];
+    if (resp.statusCode == 403 || code == 403) {
+      throw Exception((map['msg'] ?? 'IP不在白名单').toString());
+    }
+    if (resp.statusCode < 200 ||
+        resp.statusCode >= 300 ||
+        (code is num && code != 200 && code != 0)) {
+      return '';
+    }
+    final data = map['data'];
+    if (data is String) return data;
+    return data == null ? '' : data.toString();
   }
 
   Future<Map<String, dynamic>> _getAsset(

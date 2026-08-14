@@ -15,9 +15,9 @@ Future<String?> saveBytesAsNovaFile(Uint8List bytes, String fileName) async {
   return saveBytesAsNovaFileImpl(bytes, fileName);
 }
 
-/// 按会话目录落盘：`沙丘文件/{conversationId}/{fileName}`。
+/// 按会话 + 文件唯一键落盘：`沙丘文件/{conversationId}/{hash(cacheKey)}/{fileName}`。
 ///
-/// [cacheKey]（通常为 objectKey）用于兼容旧版哈希子目录，以及下载进度标识。
+/// [cacheKey]（通常为 objectKey / URL）避免同名文件命中旧缓存。
 /// 未传 [conversationId] 时仍走旧版 `沙丘文件/{hash(cacheKey)}/{fileName}`。
 Future<String?> saveBytesAsCachedFile(
   Uint8List bytes,

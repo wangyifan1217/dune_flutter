@@ -104,16 +104,45 @@ class RobotMarkdown extends StatelessWidget {
     this.compact = false,
     /// 会话流里关闭可选中，显著降低重排/手势开销。
     this.selectable = true,
+    this.fitToContent = false,
   });
 
   final String markdown;
   final bool compact;
   final bool selectable;
 
+  /// 为 true 时按内容自然撑开（宽表交给外层横向滚动），不钉死父宽。
+  final bool fitToContent;
+
   @override
   Widget build(BuildContext context) {
     final data = markdown.trim();
     if (data.isEmpty) return const SizedBox.shrink();
+
+    MarkdownBody buildBody({required double imageMaxWidth, required bool fit}) {
+      return MarkdownBody(
+        data: data,
+        selectable: selectable && !compact,
+        softLineBreak: true,
+        fitContent: fit,
+        styleSheet: _robotMdStyle(compact: compact),
+        sizedImageBuilder: (config) => _RobotMdImage(
+          uri: config.uri,
+          alt: config.alt,
+          width: config.width,
+          height: config.height,
+          maxWidth: imageMaxWidth,
+        ),
+        onTapLink: (text, href, title) {
+          if (href == null || href.trim().isEmpty) return;
+          final uri = Uri.tryParse(href.trim());
+          if (uri == null) return;
+          launchUrl(uri, mode: LaunchMode.externalApplication);
+        },
+      );
+    }
+
+    if (fitToContent) return buildBody(imageMaxWidth: 480, fit: true);
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -126,27 +155,7 @@ class RobotMarkdown extends StatelessWidget {
           maxScaleFactor: 1.25,
           child: SizedBox(
             width: maxW,
-            child: MarkdownBody(
-              data: data,
-              selectable: selectable && !compact,
-              softLineBreak: true,
-              // 在已钉死的宽度内拉伸，避免 Intrinsic 宽表把父级撑破。
-              fitContent: false,
-              styleSheet: _robotMdStyle(compact: compact),
-              sizedImageBuilder: (config) => _RobotMdImage(
-                uri: config.uri,
-                alt: config.alt,
-                width: config.width,
-                height: config.height,
-                maxWidth: maxW,
-              ),
-              onTapLink: (text, href, title) {
-                if (href == null || href.trim().isEmpty) return;
-                final uri = Uri.tryParse(href.trim());
-                if (uri == null) return;
-                launchUrl(uri, mode: LaunchMode.externalApplication);
-              },
-            ),
+            child: buildBody(imageMaxWidth: maxW, fit: false),
           ),
         );
       },

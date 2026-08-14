@@ -2098,6 +2098,7 @@ class ConversationService {
           (peerMap['userId'] as num?)?.toInt() ??
           (raw['peerUserId'] as num?)?.toInt(),
       peerDisplayName: peerName,
+      peerEnabled: _peerEnabledFrom(raw, peerMap),
       memberCount: (raw['memberCount'] as num?)?.toInt() ?? 0,
       muted: raw['muted'] == true,
       pinned: raw['pinned'] == true,
@@ -2199,6 +2200,17 @@ class ConversationService {
   String? _avatarField(dynamic raw) {
     final value = (raw ?? '').toString().trim();
     return value.isEmpty ? null : value;
+  }
+
+  bool _peerEnabledFrom(
+    Map<String, dynamic> raw,
+    Map<String, dynamic> peerMap,
+  ) {
+    final value = raw['peerEnabled'] ?? raw['peer_enabled'] ?? peerMap['enabled'];
+    if (value == false || value == 0 || value == '0') return false;
+    final text = value?.toString().trim().toLowerCase();
+    if (text == 'false' || text == 'disabled') return false;
+    return true;
   }
 
   List<ConversationAvatarMember> _mapAvatarMembers(dynamic raw) {

@@ -30,6 +30,8 @@ import 'inbox_format.dart';
 import 'inbox_hidden_storage.dart';
 import 'inbox_widgets.dart';
 import 'notification_service.dart';
+import '../desktop/windows_desktop_tray.dart';
+import '../desktop/windows_tray_unread_items.dart';
 import '../robots/robot_analyzing_coordinator.dart';
 import '../robots/robot_catalog_cache.dart';
 import '../robots/robot_character.dart';
@@ -74,7 +76,8 @@ class NativeConversationPage extends StatefulWidget {
   final ValueChanged<NativeConversation> onOpenGroup;
   final VoidCallback onOpenContacts;
   final VoidCallback onOpenNova;
-  final VoidCallback onOpenNotifications;
+  /// 打开沙丘公告。`tab` 为 `notice` / `broadcast`。
+  final ValueChanged<String> onOpenNotifications;
   final VoidCallback onOpenNewChat;
   final VoidCallback onOpenAiSummary;
   final VoidCallback? onOpenFavorites;
@@ -464,6 +467,7 @@ class _NativeConversationPageState extends State<NativeConversationPage>
         updatedAt: old.updatedAt,
         peerUserId: old.peerUserId,
         peerDisplayName: old.peerDisplayName,
+        peerEnabled: old.peerEnabled,
         memberCount: old.memberCount,
         muted: old.muted,
         pinned: old.pinned,
@@ -919,12 +923,19 @@ class _NativeConversationPageState extends State<NativeConversationPage>
 
   void _updateCommBadge(List<NativeConversation> rows, int notifUnread) {
     final selected = widget.selectedConversationId ?? 0;
-    widget.commUnread.update(
-      widget.commUnread.sumConversationUnread(
+    final total = widget.commUnread.sumConversationUnread(
+      rows: rows,
+      notifUnread: notifUnread,
+      aiSummaryUnread: _isViewingAiSummary ? 0 : _aiSummaryUnread,
+      treatAsReadIds: selected > 0 ? <int>{selected} : const <int>{},
+    );
+    widget.commUnread.update(total);
+    windowsTrayUpdateUnread(total);
+    windowsTrayUpdateUnreadItems(
+      windowsTrayUnreadItemsFromConversations(
         rows: rows,
-        notifUnread: notifUnread,
-        aiSummaryUnread: _isViewingAiSummary ? 0 : _aiSummaryUnread,
-        treatAsReadIds: selected > 0 ? <int>{selected} : const <int>{},
+        commUnread: widget.commUnread,
+        viewingId: selected,
       ),
     );
   }
@@ -1189,7 +1200,7 @@ class _NativeConversationPageState extends State<NativeConversationPage>
       onTap = _openWithScrollPersist(() => widget.onOpenGroup(c));
     } else if (c.isBroadcast) {
       rowKind = ChatInboxRowKind.broadcast;
-      onTap = _openWithScrollPersist(widget.onOpenNotifications);
+      onTap = _openWithScrollPersist(_openDuneAnnouncement);
     } else if (c.isAiAssistant) {
       rowKind = ChatInboxRowKind.aiAssistant;
       onTap = _openWithScrollPersist(() => _openNovaConversation(c));
@@ -1361,20 +1372,23 @@ class _NativeConversationPageState extends State<NativeConversationPage>
         rows.map(_buildConvRow).whereType<Widget>().toList();
 
     if (widget.session.isExternalUser) {
+      final chatRows = _buildChatRowsMergedWithAiSummary(chats);
       final sections = <_InboxSection>[
-        if (chats.isNotEmpty)
+        if (chatRows.isNotEmpty)
           _InboxSection(
             key: 'chat',
             label: '聊天',
-            count: chats.length,
-            timestamp: chats.first.sortTimestamp,
+            count: chatRows.length,
+            timestamp: chats.isNotEmpty
+                ? chats.first.sortTimestamp
+                : _duneAnnouncementSortTs,
             pinned: false,
             leading: const Icon(
               Icons.chat_bubble_outline,
               size: 11,
               color: DunesColors.text3,
             ),
-            rows: convRows(chats),
+            rows: chatRows,
           ),
       ];
       sections.sort((a, b) => b.timestamp.compareTo(a.timestamp));
@@ -1383,9 +1397,11 @@ class _NativeConversationPageState extends State<NativeConversationPage>
 
     final chatRows = _buildChatRowsMergedWithAiSummary(chats);
     final aiTs = _aiSummaryPreview?.sortTime?.millisecondsSinceEpoch ?? 0;
+    final announcementTs = _duneAnnouncementSortTs;
     final chatTs = chats.isNotEmpty
         ? (chats.first.sortTimestamp > aiTs ? chats.first.sortTimestamp : aiTs)
         : aiTs;
+    final sectionTs = chatTs > announcementTs ? chatTs : announcementTs;
 
     final sections = <_InboxSection>[
       if (approvals.isNotEmpty)
@@ -1407,7 +1423,7 @@ class _NativeConversationPageState extends State<NativeConversationPage>
           key: 'chat',
           label: '聊天',
           count: chatRows.length,
-          timestamp: chatTs,
+          timestamp: sectionTs,
           pinned: false,
           leading: const Icon(
             Icons.chat_bubble_outline,
@@ -1422,8 +1438,8 @@ class _NativeConversationPageState extends State<NativeConversationPage>
     return sections;
   }
 
-  /// 智能总结与私聊/群/机器人/审批助手/任务助手同一排序：置顶优先，再按最近时间。
-  /// 仅在已有分析结果时显示智能总结（默认不占位）。
+  /// 智能总结、沙丘公告与私聊/群/机器人同一排序：用户置顶优先，再按最近时间。
+  /// 沙丘公告不默认置顶。
   List<Widget> _buildChatRowsMergedWithAiSummary(
     List<NativeConversation> chats,
   ) {
@@ -1438,6 +1454,14 @@ class _NativeConversationPageState extends State<NativeConversationPage>
       final ts = _aiSummaryPreview?.sortTime?.millisecondsSinceEpoch ?? 0;
       entries.add((ts: ts, pinned: false, row: aiRow));
     }
+    final announcementRow = _buildDuneAnnouncementInboxRow();
+    if (announcementRow != null) {
+      entries.add((
+        ts: _duneAnnouncementSortTs,
+        pinned: false,
+        row: announcementRow,
+      ));
+    }
     entries.sort((a, b) {
       final ap = a.pinned ? 1 : 0;
       final bp = b.pinned ? 1 : 0;
@@ -1445,6 +1469,68 @@ class _NativeConversationPageState extends State<NativeConversationPage>
       return b.ts.compareTo(a.ts);
     });
     return entries.map((e) => e.row).toList(growable: false);
+  }
+
+  int get _duneAnnouncementSortTs {
+    final notifTs = _notif.latest?.createdAt?.millisecondsSinceEpoch ?? 0;
+    var broadcastTs = 0;
+    for (final conversation in _items.where((c) => c.isBroadcast)) {
+      if (conversation.sortTimestamp > broadcastTs) {
+        broadcastTs = conversation.sortTimestamp;
+      }
+    }
+    return notifTs > broadcastTs ? notifTs : broadcastTs;
+  }
+
+  Widget? _buildDuneAnnouncementInboxRow() {
+    final latest = _notif.latest;
+    NativeConversation? broadcast;
+    for (final conversation in _items.where((c) => c.isBroadcast)) {
+      if (broadcast == null ||
+          conversation.sortTimestamp > broadcast.sortTimestamp) {
+        broadcast = conversation;
+      }
+    }
+    final notifTime = latest?.createdAt;
+    final broadcastTime = broadcast?.updatedAt;
+    final useBroadcast =
+        broadcastTime != null &&
+        (notifTime == null || broadcastTime.isAfter(notifTime));
+    final preview = useBroadcast
+        ? (broadcast!.preview.trim().isEmpty
+              ? '公司广播'
+              : broadcast.preview.trim())
+        : (latest == null
+              ? '系统通告 · 公司广播'
+              : () {
+                  final title = latest.title.trim();
+                  final body = latest.body.trim();
+                  if (title.isNotEmpty && body.isNotEmpty) {
+                    return '$title · $body';
+                  }
+                  if (body.isNotEmpty) return body;
+                  if (title.isNotEmpty) return title;
+                  return '系统通告';
+                }());
+    final time = useBroadcast ? broadcastTime : notifTime;
+    if (!_matchesSearch('沙丘公告', preview) &&
+        !_matchesSearch('系统通告', preview) &&
+        !_matchesSearch('公司广播', preview)) {
+      return null;
+    }
+    return KeyedSubtree(
+      key: const ValueKey<String>('dune-announcement-inbox'),
+      child: ChatInboxRow(
+        kind: ChatInboxRowKind.duneAnnouncement,
+        title: '沙丘公告',
+        preview: preview,
+        timeLabel: InboxFormat.formatTime(time),
+        unreadCount: _messageCenterUnread,
+        pinned: false,
+        selected: widget.navigation.currentScreen == 'Z2',
+        onTap: _openWithScrollPersist(_openDuneAnnouncement),
+      ),
+    );
   }
 
   Widget? _buildAiSummaryInboxRow() {
@@ -1476,6 +1562,42 @@ class _NativeConversationPageState extends State<NativeConversationPage>
             .fold(0, (total, conversation) => total + conversation.unreadCount);
   }
 
+  int get _broadcastUnread {
+    return _items
+        .where((conversation) => conversation.isBroadcast)
+        .fold(0, (total, conversation) => total + conversation.unreadCount);
+  }
+
+  /// 有未读则进未读一侧；两侧都未读时先系统通告。
+  String get _preferredAnnouncementTab {
+    final noticeUnread = _notif.unreadCount > 0;
+    final broadcastUnread = _broadcastUnread > 0;
+    if (broadcastUnread && !noticeUnread) return 'broadcast';
+    return 'notice';
+  }
+
+  void _openDuneAnnouncement() {
+    final tab = _preferredAnnouncementTab;
+    // 点进合并入口即视为已读：先清本地角标，详情页再写服务端已读。
+    _markDuneAnnouncementReadLocally();
+    widget.onOpenNotifications(tab);
+  }
+
+  void _markDuneAnnouncementReadLocally() {
+    for (final conversation in _items.where((c) => c.isBroadcast)) {
+      _clearUnreadLocally(conversation.id);
+    }
+    if (!mounted || _notif.unreadCount <= 0) return;
+    setState(() {
+      _notif = NativeNotificationSummary(
+        unreadCount: 0,
+        latest: _notif.latest,
+        aiSummaryUnreadCount: _notif.aiSummaryUnreadCount,
+      );
+    });
+    _updateCommBadge(_items, 0);
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -1493,12 +1615,10 @@ class _NativeConversationPageState extends State<NativeConversationPage>
                 onOpenContacts: widget.onOpenContacts,
                 onNewChat: widget.onOpenNewChat,
                 onOpenNova: _openNovaConversation,
-                onOpenMessageCenter: widget.onOpenNotifications,
                 onOpenFavorites: widget.onOpenFavorites,
                 onOpenAiSummary: widget.session.isExternalUser
                     ? null
                     : () => unawaited(_openAiSummaryHub()),
-                messageCenterUnread: _messageCenterUnread,
                 novaThinking: _novaGeneratingFor(
                   _primaryAiConversation(_items),
                 ).generating,

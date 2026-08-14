@@ -129,28 +129,28 @@ class _NativeQianjiHubPageState extends State<NativeQianjiHubPage> {
                     accent: _themePurple,
                     children: [
                       _NovaHubTile(
-                        title: 'Cursor账号监管',
+                        title: 'Cursor账号',
                         subtitle: '账号与用量',
                         icon: Icons.manage_accounts_outlined,
                         color: _themePurple,
                         onTap: widget.onOpenCursorAccount,
                       ),
                       _NovaHubTile(
-                        title: '会议纪要监管',
+                        title: '会议纪要',
                         subtitle: '本人及下级',
                         icon: Icons.fact_check_outlined,
                         color: _themePurple,
                         onTap: widget.onOpenMeetingSupervise,
                       ),
                       _NovaHubTile(
-                        title: '会话监管',
+                        title: 'IM会话',
                         subtitle: '本人及下级',
                         icon: Icons.forum_outlined,
                         color: _themePurple,
                         onTap: widget.onOpenSessionSupervise,
                       ),
                       _NovaHubTile(
-                        title: '知识库统计',
+                        title: '知识库',
                         subtitle: '本人及下级',
                         icon: Icons.folder_shared_outlined,
                         color: _themePurple,

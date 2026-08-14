@@ -137,12 +137,14 @@ String _legacyCachedFilePath(Directory dir, String cacheKey, String fileName) {
   return '$folder${Platform.pathSeparator}${_safeFileName(fileName)}';
 }
 
-String _conversationCachedFilePath(
+String _hashedConversationCachedFilePath(
   Directory dir,
   int conversationId,
+  String cacheKey,
   String fileName,
 ) {
-  final folder = _conversationFolderPath(dir, conversationId);
+  final folder =
+      '${_conversationFolderPath(dir, conversationId)}${Platform.pathSeparator}${_legacyCacheFolderName(cacheKey)}';
   return '$folder${Platform.pathSeparator}${_safeFileName(fileName)}';
 }
 
@@ -152,8 +154,13 @@ Future<String?> _findInDir(
   required String fileName,
   int? conversationId,
 }) async {
-  if (conversationId != null && conversationId > 0) {
-    final path = _conversationCachedFilePath(dir, conversationId, fileName);
+  if (conversationId != null && conversationId > 0 && cacheKey.isNotEmpty) {
+    final path = _hashedConversationCachedFilePath(
+      dir,
+      conversationId,
+      cacheKey,
+      fileName,
+    );
     final file = File(path);
     if (await file.exists() && await file.length() > 0) return path;
   }
@@ -196,10 +203,12 @@ Future<String> saveBytesAsCachedFileImpl(
   }
   final dir = await _resolveSaveDir();
   final String path;
-  if (conversationId != null && conversationId > 0) {
-    path = _conversationCachedFilePath(dir, conversationId, fileName);
-  } else {
+  if (conversationId != null && conversationId > 0 && key.isNotEmpty) {
+    path = _hashedConversationCachedFilePath(dir, conversationId, key, fileName);
+  } else if (key.isNotEmpty) {
     path = _legacyCachedFilePath(dir, key, fileName);
+  } else {
+    return saveBytesAsFileImpl(bytes, fileName);
   }
   await Directory(File(path).parent.path).create(recursive: true);
   await File(path).writeAsBytes(bytes, flush: true);

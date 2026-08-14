@@ -17,10 +17,8 @@ class ChatInboxHeader extends StatelessWidget {
     required this.onOpenContacts,
     this.onNewChat,
     required this.onOpenNova,
-    required this.onOpenMessageCenter,
     this.onOpenAiSummary,
     this.onOpenFavorites,
-    this.messageCenterUnread = 0,
     this.novaThinking = false,
     this.novaUnread = false,
   });
@@ -28,10 +26,8 @@ class ChatInboxHeader extends StatelessWidget {
   final VoidCallback onOpenContacts;
   final VoidCallback? onNewChat;
   final VoidCallback onOpenNova;
-  final VoidCallback onOpenMessageCenter;
   final VoidCallback? onOpenAiSummary;
   final VoidCallback? onOpenFavorites;
-  final int messageCenterUnread;
   final bool novaThinking;
   final bool novaUnread;
 
@@ -75,10 +71,8 @@ class ChatInboxHeader extends StatelessWidget {
               child: _InboxHeaderActions(
                 onOpenContacts: onOpenContacts,
                 onNewChat: onNewChat,
-                onOpenMessageCenter: onOpenMessageCenter,
                 onOpenAiSummary: onOpenAiSummary,
                 onOpenFavorites: onOpenFavorites,
-                messageCenterUnread: messageCenterUnread,
               ),
             ),
           ],
@@ -92,19 +86,15 @@ class ChatInboxHeader extends StatelessWidget {
 class _InboxHeaderActions extends StatefulWidget {
   const _InboxHeaderActions({
     required this.onOpenContacts,
-    required this.onOpenMessageCenter,
     this.onNewChat,
     this.onOpenAiSummary,
     this.onOpenFavorites,
-    this.messageCenterUnread = 0,
   });
 
   final VoidCallback onOpenContacts;
   final VoidCallback? onNewChat;
-  final VoidCallback onOpenMessageCenter;
   final VoidCallback? onOpenAiSummary;
   final VoidCallback? onOpenFavorites;
-  final int messageCenterUnread;
 
   @override
   State<_InboxHeaderActions> createState() => _InboxHeaderActionsState();
@@ -117,8 +107,6 @@ class _InboxHeaderActionsState extends State<_InboxHeaderActions> {
 
   /// APP / PC 统一用「···」下拉，避免手机右上角图标挤在一起。
   bool get _useCluster => true;
-
-  int get _badgeTotal => widget.messageCenterUnread;
 
   @override
   void dispose() {
@@ -169,14 +157,12 @@ class _InboxHeaderActionsState extends State<_InboxHeaderActions> {
               followerAnchor: Alignment.topRight,
               offset: const Offset(0, 6),
               child: _InboxActionsDropdown(
-                messageCenterUnread: widget.messageCenterUnread,
                 showAiSummary: widget.onOpenAiSummary != null,
                 showNewChat: widget.onNewChat != null,
                 showFavorites: widget.onOpenFavorites != null,
                 onAiSummary: widget.onOpenAiSummary == null
                     ? null
                     : () => _runAndClose(widget.onOpenAiSummary!),
-                onMessageCenter: () => _runAndClose(widget.onOpenMessageCenter),
                 onContacts: () => _runAndClose(widget.onOpenContacts),
                 onNewChat: widget.onNewChat == null
                     ? null
@@ -203,11 +189,6 @@ class _InboxHeaderActionsState extends State<_InboxHeaderActions> {
           if (widget.onOpenAiSummary != null)
             AiSummarySparkleIcon(onTap: widget.onOpenAiSummary!),
           _IconBtn(
-            icon: Icons.notifications_none_rounded,
-            onTap: widget.onOpenMessageCenter,
-            unreadCount: widget.messageCenterUnread,
-          ),
-          _IconBtn(
             icon: Icons.people_outline_rounded,
             onTap: widget.onOpenContacts,
           ),
@@ -222,7 +203,6 @@ class _InboxHeaderActionsState extends State<_InboxHeaderActions> {
       child: _IconBtn(
         icon: _expanded ? Icons.close_rounded : Icons.more_horiz_rounded,
         onTap: _toggle,
-        unreadCount: _expanded ? 0 : _badgeTotal,
       ),
     );
   }
@@ -230,23 +210,19 @@ class _InboxHeaderActionsState extends State<_InboxHeaderActions> {
 
 class _InboxActionsDropdown extends StatelessWidget {
   const _InboxActionsDropdown({
-    required this.messageCenterUnread,
     required this.showAiSummary,
     required this.showNewChat,
     required this.showFavorites,
-    required this.onMessageCenter,
     required this.onContacts,
     this.onAiSummary,
     this.onNewChat,
     this.onFavorites,
   });
 
-  final int messageCenterUnread;
   final bool showAiSummary;
   final bool showNewChat;
   final bool showFavorites;
   final VoidCallback? onAiSummary;
-  final VoidCallback onMessageCenter;
   final VoidCallback onContacts;
   final VoidCallback? onNewChat;
   final VoidCallback? onFavorites;
@@ -308,16 +284,6 @@ class _InboxActionsDropdown extends StatelessWidget {
                   label: '智能总结',
                   onTap: onAiSummary!,
                 ),
-              _DropdownItem(
-                leading: const Icon(
-                  Icons.notifications_none_rounded,
-                  size: 20,
-                  color: Color(0xFF4B5563),
-                ),
-                label: '通知',
-                badge: messageCenterUnread,
-                onTap: onMessageCenter,
-              ),
               if (showFavorites && onFavorites != null)
                 _DropdownItem(
                   leading: const Icon(
@@ -341,13 +307,11 @@ class _DropdownItem extends StatelessWidget {
     required this.leading,
     required this.label,
     required this.onTap,
-    this.badge = 0,
   });
 
   final Widget leading;
   final String label;
   final VoidCallback onTap;
-  final int badge;
 
   @override
   Widget build(BuildContext context) {
@@ -370,27 +334,6 @@ class _DropdownItem extends StatelessWidget {
                 ),
               ),
             ),
-            if (badge > 0) ...[
-              const SizedBox(width: 8),
-              Container(
-                constraints: const BoxConstraints(minWidth: 18),
-                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                decoration: BoxDecoration(
-                  color: DunesColors.coral,
-                  borderRadius: BorderRadius.circular(9),
-                ),
-                alignment: Alignment.center,
-                child: Text(
-                  badge > 99 ? '99+' : '$badge',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 10,
-                    fontWeight: FontWeight.w600,
-                    height: 1.2,
-                  ),
-                ),
-              ),
-            ],
           ],
         ),
       ),
@@ -566,6 +509,7 @@ enum ChatInboxRowKind {
   weeklySummary,
   reconciliationAssistant,
   administrativeNotice,
+  duneAnnouncement,
   selfMemo,
   systemNotification,
   broadcast,
@@ -648,6 +592,7 @@ class ChatInboxRow extends StatelessWidget {
             kind == ChatInboxRowKind.weeklySummary ||
             kind == ChatInboxRowKind.reconciliationAssistant ||
             kind == ChatInboxRowKind.administrativeNotice ||
+            kind == ChatInboxRowKind.duneAnnouncement ||
             kind == ChatInboxRowKind.selfMemo ||
             kind == ChatInboxRowKind.robot
         ? const Color(0xFF7B5CD8)
@@ -1059,6 +1004,18 @@ class _Avatar extends StatelessWidget {
           color: Colors.white,
           size: 20,
         );
+      case ChatInboxRowKind.duneAnnouncement:
+        decoration = BoxDecoration(
+          borderRadius: borderRadius,
+          gradient: const LinearGradient(
+            colors: [Color(0xFFC2AEE7), Color(0xFF9C82CE)],
+          ),
+        );
+        child = const Icon(
+          Icons.campaign_outlined,
+          color: Colors.white,
+          size: 20,
+        );
       case ChatInboxRowKind.selfMemo:
         decoration = BoxDecoration(
           color: const Color(0xFF7B5CD8),
@@ -1214,12 +1171,10 @@ class _IconBtn extends StatelessWidget {
   const _IconBtn({
     required this.icon,
     required this.onTap,
-    this.unreadCount = 0,
   });
 
   final IconData icon;
   final VoidCallback onTap;
-  final int unreadCount;
 
   @override
   Widget build(BuildContext context) {
@@ -1231,47 +1186,7 @@ class _IconBtn extends StatelessWidget {
         child: SizedBox(
           width: 36,
           height: 36,
-          child: Stack(
-            clipBehavior: Clip.none,
-            alignment: Alignment.center,
-            children: [
-              Icon(icon, size: 20, color: DunesColors.text2),
-              if (unreadCount > 0)
-                Positioned(
-                  top: 5,
-                  right: 4,
-                  child: Container(
-                    constraints: const BoxConstraints(
-                      minWidth: 8,
-                      minHeight: 8,
-                    ),
-                    padding: unreadCount > 9
-                        ? const EdgeInsets.symmetric(horizontal: 3, vertical: 1)
-                        : EdgeInsets.zero,
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      color: DunesColors.coral,
-                      borderRadius: BorderRadius.circular(99),
-                      border: Border.all(
-                        color: const Color(0xFFF5F5F5),
-                        width: 1.5,
-                      ),
-                    ),
-                    child: unreadCount > 9
-                        ? Text(
-                            unreadCount > 99 ? '99+' : '$unreadCount',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 8,
-                              fontWeight: FontWeight.w700,
-                              height: 1,
-                            ),
-                          )
-                        : null,
-                  ),
-                ),
-            ],
-          ),
+          child: Icon(icon, size: 20, color: DunesColors.text2),
         ),
       ),
     );

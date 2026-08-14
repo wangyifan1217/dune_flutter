@@ -13,7 +13,7 @@ const _themePurple = Color(0xFF7B5CD8);
 
 enum _SessionRangePreset { week, d7, d30, all, custom }
 
-/// NOVA · 会话监管：按人统计会话量，支持部门与时间范围筛选。
+/// NOVA · 会话监管：按人统计聊天条数，支持部门与时间范围筛选。
 class NativeQianjiSessionSupervisePage extends StatefulWidget {
   const NativeQianjiSessionSupervisePage({
     super.key,
@@ -44,7 +44,7 @@ class _NativeQianjiSessionSupervisePageState
   bool _hasMore = true;
   bool _superviseAll = false;
   int _page = 0;
-  int _totalSessions = 0;
+  int _totalTurns = 0;
   static const int _pageSize = 20;
   String? _error;
   Timer? _keywordDebounce;
@@ -148,7 +148,7 @@ class _NativeQianjiSessionSupervisePageState
             result.items.length < result.totalCount;
         if (stats != null) {
           _deptStats = stats.departments;
-          _totalSessions = stats.totalSessions;
+          _totalTurns = stats.totalRank;
           _superviseAll = stats.superviseAll;
         }
       });
@@ -317,7 +317,7 @@ class _NativeQianjiSessionSupervisePageState
           const SizedBox(width: 8),
           const Expanded(
             child: Text(
-              '会话监管',
+              'IM会话',
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.w700,
@@ -325,9 +325,9 @@ class _NativeQianjiSessionSupervisePageState
               ),
             ),
           ),
-          if (_totalSessions > 0)
+          if (_totalTurns > 0)
             Text(
-              '合计 $_totalSessions',
+              '合计 $_totalTurns 条',
               style: const TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
@@ -456,7 +456,7 @@ class _NativeQianjiSessionSupervisePageState
               children: [
                 _DeptChip(
                   label: '全部',
-                  count: _totalSessions,
+                  count: _totalTurns,
                   selected: _selectedDepartmentId == null,
                   onTap: () => _selectDepartment(null),
                 ),
@@ -464,7 +464,7 @@ class _NativeQianjiSessionSupervisePageState
                 for (final d in _deptStats) ...[
                   _DeptChip(
                     label: d.departmentName,
-                    count: d.sessionCount,
+                    count: d.rankCount,
                     selected: _selectedDepartmentId == (d.departmentId ?? -1),
                     onTap: () => _selectDepartment(d.departmentId ?? -1),
                   ),
@@ -681,7 +681,7 @@ class _PersonCard extends StatelessWidget {
                 ),
               ),
               Text(
-                '已处理 ${row.sessionCount} 会话',
+                '${row.turnCount} 条',
                 style: const TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w700,
@@ -692,7 +692,7 @@ class _PersonCard extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           Text(
-            '$dept · 共 ${row.turnCount} 条',
+            '$dept · ${row.sessionCount} 会话',
             style: const TextStyle(fontSize: 12, color: DunesColors.text3),
           ),
         ],

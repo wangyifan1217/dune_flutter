@@ -218,7 +218,7 @@ class _NativeQianjiKbSupervisePageState
           const SizedBox(width: 8),
           const Expanded(
             child: Text(
-              '知识库统计',
+              '知识库',
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.w700,

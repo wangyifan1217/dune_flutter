@@ -283,17 +283,7 @@ class _LoginFlowState extends State<LoginFlow> with WidgetsBindingObserver {
     if (expected.isNotEmpty && session.apiBase.isNotEmpty) {
       final uri = Uri.tryParse(session.apiBase);
       if (uri != null && uri.host != expected) {
-        next = AuthSession(
-          phone: session.phone,
-          userId: session.userId,
-          token: session.token,
-          apiBase: DunesDefaults.apiBase,
-          roles: session.roles,
-          displayName: session.displayName,
-          departmentId: session.departmentId,
-          novaLocalStorage: session.novaLocalStorage,
-          lighthouseAccess: session.lighthouseAccess,
-        );
+        next = session.copyWith(apiBase: DunesDefaults.apiBase);
       }
     }
     return next.withLocalDevGrants();

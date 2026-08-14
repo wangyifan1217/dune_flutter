@@ -325,6 +325,7 @@ class _TableScrollBehavior extends MaterialScrollBehavior {
   @override
   Set<PointerDeviceKind> get dragDevices => const {
     PointerDeviceKind.touch,
+    PointerDeviceKind.mouse,
     PointerDeviceKind.trackpad,
     PointerDeviceKind.stylus,
   };

@@ -5,6 +5,7 @@
 #include "flutter/generated_plugin_registrant.h"
 #include "desktop_multi_window/desktop_multi_window_plugin.h"
 #include "file_drag.h"
+#include "tray_peek.h"
 
 FlutterWindow::FlutterWindow(const flutter::DartProject& project)
     : project_(project) {}
@@ -28,6 +29,7 @@ bool FlutterWindow::OnCreate() {
   }
   RegisterPlugins(flutter_controller_->engine());
   RegisterDesktopFileDragChannel(flutter_controller_->engine()->messenger());
+  RegisterTrayPeekChannel(flutter_controller_->engine()->messenger());
   // 子窗口各自独立 Flutter Engine，需重新注册插件（图片预览独立窗）。
   DesktopMultiWindowSetWindowCreatedCallback([](void* controller) {
     auto* flutter_view_controller =
@@ -50,6 +52,7 @@ bool FlutterWindow::OnCreate() {
 }
 
 void FlutterWindow::OnDestroy() {
+  TrayPeekShutdown();
   if (flutter_controller_) {
     flutter_controller_ = nullptr;
   }

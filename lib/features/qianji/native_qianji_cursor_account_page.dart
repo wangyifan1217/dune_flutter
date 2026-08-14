@@ -222,7 +222,7 @@ class _NativeQianjiCursorAccountPageState
           const SizedBox(width: 8),
           const Expanded(
             child: Text(
-              'Cursor账号监管',
+              'Cursor账号',
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.w700,

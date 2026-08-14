@@ -5,10 +5,23 @@ library;
 import 'windows_desktop_tray_stub.dart'
     if (dart.library.io) 'windows_desktop_tray_io.dart'
     as impl;
+import 'windows_tray_unread_item.dart';
+
+export 'windows_tray_unread_item.dart';
 
 Future<void> initWindowsDesktopTray() => impl.initWindowsDesktopTray();
 
 void windowsTrayUpdateUnread(int total) => impl.windowsTrayUpdateUnread(total);
+
+void windowsTrayUpdateUnreadItems(List<WindowsTrayUnreadItem> items) =>
+    impl.windowsTrayUpdateUnreadItems(items);
+
+/// 点击托盘未读浮层中的会话。`conversationId == 0` 只打开主窗口。
+void setWindowsTrayOnPeekOpen(void Function(int conversationId)? callback) =>
+    impl.setWindowsTrayOnPeekOpen(callback);
+
+/// 无未读时托盘系统 tooltip 显示「沙丘: 姓名」。
+void windowsTraySetUserLabel(String name) => impl.windowsTraySetUserLabel(name);
 
 void windowsTrayNotifyIncomingMessage() =>
     impl.windowsTrayNotifyIncomingMessage();

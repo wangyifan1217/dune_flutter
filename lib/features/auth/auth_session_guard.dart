@@ -8,7 +8,14 @@ import '../shell/dunes_toast.dart';
 import 'auth_session.dart';
 import 'auth_session_coordinator.dart';
 
-/// 检测账号是否已在其他设备登录，401 时优先静默 refresh，仅明确踢下线才退出。
+/// 会话失效检测：资料/权限不会每秒变，禁止把带 JOIN 的 `/users/me` 当心跳。
+///
+/// 只在这些时机请求：
+/// - 登录后进入主壳（首帧一次）
+/// - 从后台回到前台
+/// - 定时 45 秒（防踢下线；任意业务接口 401 也会经 [inspectResponse] 踢出）
+///
+/// 上一次还没返回时不再发下一次，避免网关 ESTAB 堆积。
 class AuthSessionGuard {
   AuthSessionGuard._();
 
@@ -18,11 +25,8 @@ class AuthSessionGuard {
   VoidCallback? _onRevoked;
   bool _revoking = false;
   bool _checking = false;
-  DateTime? _lastCheck;
-  DateTime? _lastActivityCheck;
 
-  static const _activityDebounce = Duration(seconds: 2);
-  static const _checkCooldown = Duration(seconds: 2);
+  static const _requestTimeout = Duration(seconds: 15);
 
   void bind({
     required AuthSession session,
@@ -63,51 +67,39 @@ class AuthSessionGuard {
     return AuthSessionCoordinator.shouldForceLogout(response);
   }
 
-  Future<void> checkOnUserActivity() async {
-    if (_revoking || _session == null) return;
-    final now = DateTime.now();
-    if (_lastActivityCheck != null &&
-        now.difference(_lastActivityCheck!) < _activityDebounce) {
-      return;
-    }
-    _lastActivityCheck = now;
-    await checkNow();
-  }
-
   Future<void> checkNow() async {
     if (_revoking || _checking || _session == null) return;
-    final now = DateTime.now();
-    if (_lastCheck != null && now.difference(_lastCheck!) < _checkCooldown) {
-      return;
-    }
     var session = AuthSessionCoordinator.instance.resolve(_session!);
     _checking = true;
-    _lastCheck = now;
     try {
-      var resp = await http.get(
-        Uri.parse('${session.apiBase}/users/me'),
-        headers: <String, String>{
-          'Authorization': 'Bearer ${session.token}',
-          'Accept': 'application/json',
-        },
-      );
-      if (AuthSessionCoordinator.isRecoverable401(resp)) {
-        final refreshed = await AuthSessionCoordinator.instance.refreshToken();
-        if (refreshed != null) {
-          session = refreshed;
-          _session = refreshed;
-          resp = await http.get(
+      var resp = await http
+          .get(
             Uri.parse('${session.apiBase}/users/me'),
             headers: <String, String>{
               'Authorization': 'Bearer ${session.token}',
               'Accept': 'application/json',
             },
-          );
+          )
+          .timeout(_requestTimeout);
+      if (AuthSessionCoordinator.isRecoverable401(resp)) {
+        final refreshed = await AuthSessionCoordinator.instance.refreshToken();
+        if (refreshed != null) {
+          session = refreshed;
+          _session = refreshed;
+          resp = await http
+              .get(
+                Uri.parse('${session.apiBase}/users/me'),
+                headers: <String, String>{
+                  'Authorization': 'Bearer ${session.token}',
+                  'Accept': 'application/json',
+                },
+              )
+              .timeout(_requestTimeout);
         }
       }
       inspectResponse(resp);
     } catch (_) {
-      // 网络异常不强制退出。
+      // 超时/网络异常不强制退出，等下一轮 45 秒或任意接口 401。
     } finally {
       _checking = false;
     }
@@ -134,7 +126,7 @@ class AuthSessionGuard {
   }
 }
 
-/// 包裹主壳：用户点击任意处 + 定时轮询 + 回到前台时校验会话。
+/// 包裹主壳：登录后、回到前台、每 45 秒校验会话。不在点击时打 `/users/me`。
 class AuthSessionGuardScope extends StatefulWidget {
   const AuthSessionGuardScope({
     super.key,
@@ -162,12 +154,12 @@ class _AuthSessionGuardScopeState extends State<AuthSessionGuardScope>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _bindGuard();
     _periodicTimer = Timer.periodic(const Duration(seconds: 45), (_) {
       unawaited(AuthSessionGuard.instance.checkNow());
     });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
+      _bindGuard();
       unawaited(AuthSessionGuard.instance.checkNow());
     });
   }
@@ -229,13 +221,5 @@ class _AuthSessionGuardScopeState extends State<AuthSessionGuardScope>
   }
 
   @override
-  Widget build(BuildContext context) {
-    return Listener(
-      behavior: HitTestBehavior.translucent,
-      onPointerDown: (_) {
-        unawaited(AuthSessionGuard.instance.checkOnUserActivity());
-      },
-      child: widget.child,
-    );
-  }
+  Widget build(BuildContext context) => widget.child;
 }

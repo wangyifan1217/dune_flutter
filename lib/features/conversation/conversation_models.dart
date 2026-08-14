@@ -8,6 +8,7 @@ class NativeConversation {
     required this.updatedAt,
     this.peerUserId,
     this.peerDisplayName,
+    this.peerEnabled = true,
     this.memberCount = 0,
     this.muted = false,
     this.pinned = false,
@@ -32,6 +33,8 @@ class NativeConversation {
   final DateTime? updatedAt;
   final int? peerUserId;
   final String? peerDisplayName;
+  /// 对端账号是否仍启用。停用/离职的私聊在列表里展示为「姓名-离职」。
+  final bool peerEnabled;
   final int memberCount;
   final bool muted;
   final bool pinned;
@@ -81,10 +84,26 @@ class NativeConversation {
   String get displayTitle {
     if (!isPrivate) return title;
     final peer = peerDisplayName?.trim();
-    if (peer != null && peer.isNotEmpty) return peer;
-    final t = title.trim();
-    if (t.isNotEmpty && t != '私聊') return t;
-    return '私聊';
+    late final String base;
+    if (peer != null && peer.isNotEmpty) {
+      base = peer;
+    } else {
+      final t = title.trim();
+      base = (t.isNotEmpty && t != '私聊') ? t : '私聊';
+    }
+    return _withResignedLabel(base);
+  }
+
+  String _withResignedLabel(String name) {
+    if (kind != 'PRIVATE' || peerEnabled) return name;
+    var base = name.trim();
+    for (final suffix in const ['-离职', '-停用']) {
+      if (base.endsWith(suffix)) {
+        base = base.substring(0, base.length - suffix.length).trim();
+      }
+    }
+    if (base.isEmpty || base == '私聊') return '离职';
+    return '$base-离职';
   }
 
   bool get isVisible {

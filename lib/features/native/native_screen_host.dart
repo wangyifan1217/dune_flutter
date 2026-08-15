@@ -71,6 +71,7 @@ import '../nova/native_nova_history_page.dart';
 import '../nova/native_nova_page.dart';
 import '../nova/nova_background_coordinator.dart';
 import '../nova/nova_web_storage.dart';
+import '../push/in_app_message_banner.dart';
 import '../push/push_service.dart';
 import '../conversation/message_preview_text.dart';
 import '../qianji/native_qianji_cursor_account_detail_page.dart';
@@ -660,6 +661,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     _workbenchBadgeRefreshDebounce?.cancel();
     _commBadgeRtSub?.cancel();
     dismissDunesActionToast();
+    dismissInAppMessageBanner();
     NovaBackgroundCoordinator.instance.removeListener(_onNovaCoordinatorUpdate);
     MeetingUploadCoordinator.instance.removeListener(_onMeetingUploadUpdate);
     _commUnread.dispose();
@@ -767,6 +769,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     if (event.type == 'message' || event.type == 'system_flow') {
       if (!_isPeerRealtimeMessage(event)) return;
       final convId = event.conversationId ?? 0;
+      _maybeShowInAppImBanner(event);
       if (_isViewingConversation(convId)) return;
 
       final mentionHit = ConversationMentionUtils.eventMentionsMeFromRealtime(
@@ -850,6 +853,129 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       }
     }
     notifyPushRealtimeMessage(title: title, body: body, conversationId: convId);
+  }
+
+  /// APP 应用内 IM 横幅：仅追加展示，不改 TPNS / 桌面通知 / 角标。
+  void _maybeShowInAppImBanner(ConversationRealtimeEvent event) {
+    if (isDesktopCommOnly) return;
+    if (!mounted) return;
+    final lifecycle = WidgetsBinding.instance.lifecycleState;
+    if (lifecycle != null && lifecycle != AppLifecycleState.resumed) return;
+
+    final convId = event.conversationId ?? 0;
+    if (convId <= 0) return;
+    if (_isInConversationChatWindow(convId)) return;
+
+    final cached = _commBadgeConversations[convId];
+    if (!_isInAppImBannerConversation(event, cached)) return;
+
+    final isMuted = _mutedConvIds[convId] == true;
+    if (isMuted) {
+      final mentionHit = ConversationMentionUtils.eventMentionsMeFromRealtime(
+        event: event,
+        selfUserId: widget.session.userId,
+        selfDisplayName: widget.session.displayName,
+      );
+      if (!mentionHit) return;
+    }
+
+    var title = '沙丘';
+    var body = '您有新消息';
+    final msg = event.raw['message'];
+    NativeConversation? conversation = cached;
+    if (msg is Map) {
+      final kind = (msg['kind'] ?? '').toString();
+      final rawBody =
+          (msg['bodyText'] ?? msg['content'] ?? msg['text'] ?? body).toString();
+      final preview = compactMessagePushPreview(kind: kind, body: rawBody);
+      final sender = msg['sender'];
+      var senderName = '';
+      if (sender is Map) {
+        senderName = (sender['displayName'] ?? sender['name'] ?? '')
+            .toString()
+            .trim();
+      }
+      final rawTitle =
+          (event.raw['conversationTitle'] ??
+                  event.raw['conversationName'] ??
+                  msg['conversationTitle'] ??
+                  msg['conversationName'] ??
+                  '')
+              .toString()
+              .trim();
+      final conversationTitle = rawTitle.isNotEmpty
+          ? rawTitle
+          : (cached?.title ?? '').trim();
+      final isPrivate =
+          cached?.isPrivate == true ||
+          (msg['conversationKind'] ?? event.raw['conversationKind'] ?? '')
+                  .toString()
+                  .trim()
+                  .toUpperCase() ==
+              'PRIVATE';
+      if (!isPrivate && conversationTitle.isNotEmpty) {
+        title = conversationTitle;
+        body = senderName.isEmpty ? preview : '$senderName：$preview';
+      } else {
+        title = senderName.isEmpty ? '沙丘' : senderName;
+        body = preview;
+      }
+    }
+
+    showInAppMessageBanner(
+      context: context,
+      conversationId: convId,
+      title: title,
+      body: body,
+      conversation: conversation,
+      session: widget.session,
+      onTap: () {
+        if (!mounted) return;
+        unawaited(_openConversationFromTpns(convId));
+      },
+    );
+  }
+
+  bool _isInAppImBannerConversation(
+    ConversationRealtimeEvent event,
+    NativeConversation? cached,
+  ) {
+    if (cached != null) {
+      if (cached.isSelfMemo) return false;
+      return cached.isPrivate || cached.isGroup || cached.isWorkgroupApproval;
+    }
+    final msg = event.raw['message'];
+    final rawKind = (event.raw['conversationKind'] ??
+            (msg is Map ? msg['conversationKind'] : null) ??
+            '')
+        .toString()
+        .trim()
+        .toUpperCase();
+    return rawKind == 'PRIVATE' ||
+        rawKind == 'GROUP' ||
+        rawKind == 'WORKGROUP' ||
+        rawKind == 'WORKGROUP_APPROVAL';
+  }
+
+  /// 仅「该会话的聊天窗口本身」抑制横幅；群资料等子页仍弹。
+  bool _isInConversationChatWindow(int convId) {
+    if (convId <= 0) return false;
+    final screen = widget.navigation.currentScreen;
+    if (screen == 'C5' && _selectedPrivate?.id == convId) return true;
+    if (screen == 'C2' && _selectedGroup?.id == convId) return true;
+    if (screen == 'CR' && _selectedRobot?.id == convId) return true;
+    if (screen == 'C10' && _selectedBroadcast?.id == convId) return true;
+    if (screen == 'AA1' && _selectedApprovalAssistant?.id == convId) {
+      return true;
+    }
+    if (screen == 'TA1' && _selectedTaskAssistant?.id == convId) return true;
+    if (screen == 'DA1' && _selectedDriveAssistant?.id == convId) return true;
+    if (screen == 'WS1' && _selectedWeeklySummary?.id == convId) return true;
+    if (screen == 'RA1' && _selectedReconciliation?.id == convId) return true;
+    if (screen == 'AN1' && _selectedAdministrativeNotice?.id == convId) {
+      return true;
+    }
+    return false;
   }
 
   void _scheduleCommBadgeRefresh() {
@@ -3813,6 +3939,10 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
         _syncActiveViewReport();
+        final bannerConvId = inAppMessageBannerConversationId;
+        if (bannerConvId > 0 && _isInConversationChatWindow(bannerConvId)) {
+          dismissInAppMessageBanner();
+        }
       });
     }
 

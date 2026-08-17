@@ -1032,10 +1032,7 @@ class _ChatImagePreviewPageState extends State<ChatImagePreviewPage> {
     }
   }
 
-  Widget _navButton({
-    required IconData icon,
-    required VoidCallback? onTap,
-  }) {
+  Widget _navButton({required IconData icon, required VoidCallback? onTap}) {
     return Material(
       color: Colors.black.withValues(alpha: 0.45),
       shape: const CircleBorder(),
@@ -1140,10 +1137,7 @@ class _ChatImagePreviewPageState extends State<ChatImagePreviewPage> {
       child: Focus(
         focusNode: _focusNode,
         autofocus: true,
-        child: Material(
-          color: Colors.black,
-          child: child,
-        ),
+        child: Material(color: Colors.black, child: child),
       ),
     );
     // 独立系统窗口：铺满；手机端仍用 Dialog。
@@ -1202,8 +1196,9 @@ class _ChatImagePreviewPageState extends State<ChatImagePreviewPage> {
                     child: Row(
                       children: [
                         _metadataPill(
-                          sizeBytes:
-                              _showingOriginal ? _payloadSizeBytes : null,
+                          sizeBytes: _showingOriginal
+                              ? _payloadSizeBytes
+                              : null,
                           dimensions: null,
                           original: _showingOriginal,
                           force: _showingOriginal,
@@ -1357,8 +1352,7 @@ class _ChatImagePreviewPageState extends State<ChatImagePreviewPage> {
                           children: [
                             _metadataPill(
                               sizeBytes: _showingOriginal
-                                  ? (_payloadSizeBytes ??
-                                        originalBytes?.length)
+                                  ? (_payloadSizeBytes ?? originalBytes?.length)
                                   : originalBytes?.length,
                               dimensions: _dimensionsFuture,
                               original: _showingOriginal,

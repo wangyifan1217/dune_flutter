@@ -15,8 +15,8 @@ int _activeBannerConversationId = 0;
 /// 当前应用内 IM 横幅对应的会话；没有横幅时为 0。
 int get inAppMessageBannerConversationId => _activeBannerConversationId;
 
-/// APP 前台、不在该会话聊天窗口时的微信式顶部消息横幅。
-/// 独立 Overlay 槽位，不占用 [showDunesToast] / [showDunesActionToast]。
+/// APP 前台微信式 IM 横幅（组件保留，当前未接入）。
+/// 暂时恢复为仅 TPNS / 桌面通知。
 void showInAppMessageBanner({
   required BuildContext context,
   required int conversationId,

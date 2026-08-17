@@ -31,6 +31,42 @@ class XflowLinkage {
         values[field.key] = evalExpr(expr, values);
       }
     }
+    sumReadonlyTotalFromCardLists(fields, values);
+  }
+
+  /// 卡片分组里 money 列之和写入只读 `totalAmount`。无 card 列表时不改动。
+  static void sumReadonlyTotalFromCardLists(
+    List<XflowField> fields,
+    Map<String, dynamic> values,
+  ) {
+    XflowField? totalField;
+    for (final field in fields) {
+      if (field.key == 'totalAmount') {
+        totalField = field;
+        break;
+      }
+    }
+    if (totalField == null || !totalField.readonly) return;
+    if (totalField.type == 'computed') return;
+
+    var hasCardMoney = false;
+    num sum = 0;
+    for (final field in fields) {
+      if (!field.isCardDynamicList) continue;
+      final moneyKeys = field.moneyColumnKeys;
+      if (moneyKeys.isEmpty) continue;
+      hasCardMoney = true;
+      final groups = values[field.key];
+      if (groups is! List) continue;
+      for (final row in groups) {
+        if (row is! Map) continue;
+        for (final key in moneyKeys) {
+          sum += _toNumber(row[key]);
+        }
+      }
+    }
+    if (!hasCardMoney) return;
+    values['totalAmount'] = sum.toStringAsFixed(2);
   }
 
   /// 印花税：按目标月规模（万元）的万分之三计算，保留两位小数。

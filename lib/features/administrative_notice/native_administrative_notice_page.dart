@@ -9,12 +9,15 @@ import '../../core/util/friendly_error.dart';
 import '../auth/auth_session.dart';
 import '../chat/chat_file_preview_page.dart';
 import '../chat/chat_file_type_icon.dart';
+import '../chat/chat_foreground_sync.dart';
 import '../chat/chat_media_widgets.dart';
 import '../chat/chat_widgets.dart';
 import '../chat/file_download.dart' as file_dl;
 import '../chat/user_avatar_widget.dart';
 import '../contacts/native_contacts_page.dart';
 import '../conversation/conversation_models.dart';
+import '../conversation/conversation_realtime_hub.dart';
+import '../conversation/conversation_realtime_service.dart';
 import '../conversation/conversation_service.dart';
 import '../shell/dunes_toast.dart';
 import '../tasks/native_task_home_pane.dart';
@@ -33,6 +36,7 @@ class NativeAdministrativeNoticePage extends StatefulWidget {
     this.conversationHint,
     this.initialNoticeId,
     this.embedded = false,
+    this.isActive = true,
     this.showBackButton = false,
     this.onBack,
     this.onChromeChanged,
@@ -43,6 +47,8 @@ class NativeAdministrativeNoticePage extends StatefulWidget {
   final NativeConversation? conversationHint;
   final int? initialNoticeId;
   final bool embedded;
+  /// PC 双栏保活时，切走会话会把页面藏进 Offstage；回到本页时需要补拉列表。
+  final bool isActive;
   final bool showBackButton;
   final VoidCallback? onBack;
   final ValueChanged<TaskShellChrome>? onChromeChanged;
@@ -54,14 +60,14 @@ class NativeAdministrativeNoticePage extends StatefulWidget {
 }
 
 class _NativeAdministrativeNoticePageState
-    extends State<NativeAdministrativeNoticePage> {
+    extends State<NativeAdministrativeNoticePage>
+    with WidgetsBindingObserver {
   late final AdministrativeNoticeService _service = AdministrativeNoticeService(
     session: widget.session,
   );
   late final ConversationService _chatService = ConversationService(
     session: widget.session,
   );
-  late final PageController _pageController = PageController();
   final _titleController = TextEditingController();
   final _bodyController = TextEditingController();
   _AdministrativeNoticePage _page = _AdministrativeNoticePage.list;
@@ -76,22 +82,103 @@ class _NativeAdministrativeNoticePageState
   bool _access = false;
   bool _receiveAccess = false;
   String? _error;
+  StreamSubscription<ConversationRealtimeEvent>? _rtSub;
+  Timer? _rtDebounce;
+  int? _openedInitialNoticeId;
+  int _subscribedConvId = 0;
+  bool _receiptsLoading = false;
+  String? _receiptsError;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) => _publishChrome());
+    ChatForegroundSync.addListener(_onForegroundResumed);
+    final realtime = ConversationRealtimeHub.instance.of(widget.session);
+    unawaited(realtime.connect());
+    _rtSub = realtime.events.listen(_onRealtime);
     unawaited(_load());
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && widget.isActive) {
+      unawaited(_load(silent: true));
+    }
+  }
+
+  @override
+  void didUpdateWidget(NativeAdministrativeNoticePage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final nextId = widget.initialNoticeId ?? 0;
+    final prevId = oldWidget.initialNoticeId ?? 0;
+    final nextConv = widget.conversationHint?.id ?? 0;
+    final prevConv = oldWidget.conversationHint?.id ?? 0;
+    final becameActive = widget.isActive && !oldWidget.isActive;
+    if (nextId > 0 && nextId != prevId) {
+      unawaited(_load());
+      return;
+    }
+    if (becameActive || (nextConv > 0 && nextConv != prevConv)) {
+      unawaited(_load(silent: true));
+    }
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    ChatForegroundSync.removeListener(_onForegroundResumed);
+    _rtSub?.cancel();
+    _rtDebounce?.cancel();
     _service.close();
     _chatService.close();
-    _pageController.dispose();
     _titleController.dispose();
     _bodyController.dispose();
     super.dispose();
+  }
+
+  void _onForegroundResumed() {
+    if (!mounted) return;
+    unawaited(_load(silent: true));
+  }
+
+  void _onRealtime(ConversationRealtimeEvent event) {
+    if (_isAdminNoticeRealtime(event)) {
+      _scheduleRealtimeReload();
+    }
+  }
+
+  bool _isAdminNoticeRealtime(ConversationRealtimeEvent event) {
+    final type = event.type;
+    if (type == 'admin_notice_receipt') return true;
+    if (type != 'message' &&
+        type != 'system_flow' &&
+        type != 'conversation_updated') {
+      return false;
+    }
+    final convId = event.conversationId ?? 0;
+    final hintId = widget.conversationHint?.id ?? 0;
+    if (convId > 0 && (convId == hintId || convId == _subscribedConvId)) {
+      return true;
+    }
+    return _adminNoticeKindOf(event) == 'ADMIN_NOTICE';
+  }
+
+  String _adminNoticeKindOf(ConversationRealtimeEvent event) {
+    final raw = event.raw;
+    final msg = raw['message'];
+    final fromMessage = msg is Map ? (msg['kind'] ?? '').toString() : '';
+    final fromRoot = (raw['kind'] ?? raw['conversationKind'] ?? '').toString();
+    return (fromMessage.isNotEmpty ? fromMessage : fromRoot).toUpperCase();
+  }
+
+  void _scheduleRealtimeReload() {
+    _rtDebounce?.cancel();
+    _rtDebounce = Timer(const Duration(milliseconds: 350), () {
+      if (!mounted) return;
+      unawaited(_load(silent: true));
+    });
   }
 
   void _publishChrome() {
@@ -112,7 +199,7 @@ class _NativeAdministrativeNoticePageState
     );
   }
 
-  Future<void> _load() async {
+  Future<void> _load({bool silent = false}) async {
     try {
       var publishAccess = widget.session.effectiveAdministrativeNoticeAccess;
       try {
@@ -147,25 +234,49 @@ class _NativeAdministrativeNoticePageState
         });
         return;
       }
+      final convIdHint = widget.conversationHint?.id ?? 0;
+      var convId = convIdHint;
+      if (convId <= 0) {
+        try {
+          convId = await _service.ensureConversation();
+        } catch (_) {
+          convId = 0;
+        }
+      }
+      if (convId > 0) {
+        _subscribedConvId = convId;
+        unawaited(
+          ConversationRealtimeHub.instance
+              .of(widget.session)
+              .ensureConversationSubscription(convId),
+        );
+      }
       // 行政通知未读以确认（ACK）为准，进入列表/详情不 mark-read，
       // 否则会清掉 Tab 红点与会话角标，返回后要等刷新才恢复。
       // IM（非 embedded）只看需要自己确认的接收通知；工作台保留发送+接收。
       final rows = await _service.fetchNotices(inboxOnly: !widget.embedded);
       if (!mounted) return;
       setState(() {
-        _items = rows;
+        _items = rows
+            .map((row) => _retainKnownRecipients(row))
+            .toList();
         _loading = false;
+        _error = null;
       });
-      if (targetId > 0) {
+      final selectedId = _selected?.id ?? 0;
+      if (selectedId > 0 && _page == _AdministrativeNoticePage.detail) {
+        unawaited(_refreshSelectedDetail(selectedId));
+      }
+      if (!silent && targetId > 0 && _openedInitialNoticeId != targetId) {
+        _openedInitialNoticeId = targetId;
         final matches = rows.where((item) => item.id == targetId);
         if (matches.isNotEmpty) {
-          final target = matches.first;
-          _showPage(_AdministrativeNoticePage.detail, notice: target);
-          unawaited(_openDetail(target));
+          unawaited(_openDetail(matches.first));
         }
       }
     } catch (e) {
       if (!mounted) return;
+      if (silent) return;
       setState(() {
         _loading = false;
         _error = e.toString().replaceFirst('Exception: ', '');
@@ -183,23 +294,99 @@ class _NativeAdministrativeNoticePageState
       _selected = notice;
     });
     _publishChrome();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_pageController.hasClients) {
-        _pageController.animateToPage(
-          page.index,
-          duration: const Duration(milliseconds: 260),
-          curve: Curves.easeOutCubic,
-        );
-      }
-    });
   }
 
   Future<void> _openDetail(AdministrativeNotice notice) async {
     _showPage(_AdministrativeNoticePage.detail, notice: notice);
+    await _refreshSelectedDetail(notice.id);
+  }
+
+  Future<void> _refreshSelectedDetail(int noticeId) async {
+    if (noticeId <= 0) return;
+    final needPlaceholder =
+        widget.embedded && (_selected?.id != noticeId || _selected!.recipients.isEmpty);
+    if (needPlaceholder && mounted) {
+      setState(() {
+        _receiptsLoading = true;
+        _receiptsError = null;
+      });
+    }
     try {
-      final detail = await _service.fetchNotice(notice.id);
-      if (mounted) setState(() => _selected = detail);
-    } catch (_) {}
+      final detail = await _service.fetchNotice(noticeId);
+      if (!mounted) return;
+      setState(() {
+        _selected = detail;
+        _items = _items
+            .map((item) => item.id == detail.id ? _mergeListItem(item, detail) : item)
+            .toList();
+        _receiptsLoading = false;
+        _receiptsError = null;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _receiptsLoading = false;
+        _receiptsError = e.toString().replaceFirst('Exception: ', '');
+      });
+    }
+  }
+
+  AdministrativeNotice _retainKnownRecipients(AdministrativeNotice fresh) {
+    AdministrativeNotice? prev;
+    for (final item in _items) {
+      if (item.id == fresh.id) {
+        prev = item;
+        break;
+      }
+    }
+    if (fresh.id == _selected?.id && (_selected?.recipients.isNotEmpty ?? false)) {
+      prev = _selected;
+    }
+    if (prev == null || prev.recipients.isEmpty || fresh.recipients.isNotEmpty) {
+      return fresh;
+    }
+    return AdministrativeNotice(
+      id: fresh.id,
+      title: fresh.title,
+      body: fresh.body,
+      senderUserId: fresh.senderUserId,
+      senderName: fresh.senderName.trim().isEmpty
+          ? prev.senderName
+          : fresh.senderName,
+      createdAt: fresh.createdAt,
+      recipientCount: fresh.recipientCount,
+      acknowledgedCount: fresh.acknowledgedCount,
+      readAt: fresh.readAt ?? prev.readAt,
+      acknowledgedAt: fresh.acknowledgedAt ?? prev.acknowledgedAt,
+      attachments: fresh.attachments.isEmpty
+          ? prev.attachments
+          : fresh.attachments,
+      recipients: prev.recipients,
+    );
+  }
+
+  AdministrativeNotice _mergeListItem(
+    AdministrativeNotice current,
+    AdministrativeNotice detail,
+  ) {
+    return AdministrativeNotice(
+      id: detail.id,
+      title: detail.title,
+      body: detail.body,
+      senderUserId: detail.senderUserId,
+      senderName: detail.senderName,
+      createdAt: detail.createdAt,
+      recipientCount: detail.recipientCount,
+      acknowledgedCount: detail.acknowledgedCount,
+      readAt: detail.readAt,
+      acknowledgedAt: detail.acknowledgedAt,
+      attachments: detail.attachments.isEmpty
+          ? current.attachments
+          : detail.attachments,
+      recipients: detail.recipients.isEmpty
+          ? current.recipients
+          : detail.recipients,
+    );
   }
 
   Future<void> _openComposer() async {
@@ -362,7 +549,7 @@ class _NativeAdministrativeNoticePageState
         _sending = false;
       });
       showDunesToast(context, '行政通知已发送');
-      _showPage(_AdministrativeNoticePage.detail, notice: created);
+      unawaited(_openDetail(created));
     } catch (e) {
       if (mounted) {
         setState(() => _sending = false);
@@ -427,15 +614,8 @@ class _NativeAdministrativeNoticePageState
   Widget build(BuildContext context) {
     final content = ColoredBox(
       color: const Color(0xFFF5F6F8),
-      child: PageView(
-        controller: _pageController,
-        physics: const NeverScrollableScrollPhysics(),
-        onPageChanged: (index) {
-          if (_page.index != index) {
-            setState(() => _page = _AdministrativeNoticePage.values[index]);
-            _publishChrome();
-          }
-        },
+      child: IndexedStack(
+        index: _page.index,
         children: [_buildList(), _buildDetail(), _buildComposer()],
       ),
     );
@@ -506,6 +686,9 @@ class _NativeAdministrativeNoticePageState
     return RefreshIndicator(
       onRefresh: _load,
       child: ListView(
+        key: ValueKey<String>(
+          'an-list-${_items.map((e) => '${e.id}:${e.acknowledgedCount}').join(',')}',
+        ),
         // 会话名已在左侧列表 / 顶部 Header 展示，正文不再重复「行政通知」标题。
         padding: const EdgeInsets.fromLTRB(12, 10, 12, 28),
         children: [
@@ -710,10 +893,8 @@ class _NativeAdministrativeNoticePageState
         ? '行政'
         : notice.senderName.trim();
     final senderInitial = senderName.substring(0, 1);
-    // 与 APP 一致：正文可点选长按复制，不额外套「通知详情」页内标题。
-    // IM 会话里只展示自己是否确认；完整确认进度仅工作台 embedded 发布方可见。
-    final showProgress =
-        widget.embedded && isSender && notice.recipients.isNotEmpty;
+    // 工作台始终展示确认人 / 未确认人名单（名单来自详情接口）。
+    final showProgress = widget.embedded && (isSender || _access);
     return ListView(
       padding: const EdgeInsets.fromLTRB(14, 12, 14, 28),
       children: [
@@ -831,8 +1012,15 @@ class _NativeAdministrativeNoticePageState
   }
 
   Widget _receiptCard(AdministrativeNotice notice) {
+    final pending = notice.recipients
+        .where((item) => !item.acknowledged)
+        .toList();
+    final confirmed = notice.recipients
+        .where((item) => item.acknowledged)
+        .toList();
+    final hasNames = notice.recipients.isNotEmpty;
     return Container(
-      padding: const EdgeInsets.fromLTRB(14, 14, 14, 8),
+      padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(14),
@@ -848,8 +1036,82 @@ class _NativeAdministrativeNoticePageState
               color: DunesColors.text,
             ),
           ),
-          const SizedBox(height: 6),
-          ...notice.recipients.map((recipient) {
+          if (_receiptsLoading && !hasNames) ...[
+            const SizedBox(height: 16),
+            const Row(
+              children: [
+                SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+                SizedBox(width: 8),
+                Text(
+                  '正在加载确认名单…',
+                  style: TextStyle(fontSize: 13, color: DunesColors.text3),
+                ),
+              ],
+            ),
+          ] else if (!hasNames && _receiptsError != null) ...[
+            const SizedBox(height: 12),
+            Text(
+              '确认名单加载失败',
+              style: const TextStyle(fontSize: 13, color: DunesColors.text2),
+            ),
+            const SizedBox(height: 8),
+            TextButton(
+              onPressed: () => unawaited(_refreshSelectedDetail(notice.id)),
+              child: const Text('重新加载'),
+            ),
+          ] else ...[
+            const SizedBox(height: 12),
+            _receiptSection(
+              title: '未确认 · ${hasNames ? pending.length : (notice.recipientCount - notice.acknowledgedCount).clamp(0, notice.recipientCount)}',
+              people: pending,
+              emptyText: hasNames ? '没有待确认的人' : '暂无未确认名单',
+              pending: true,
+            ),
+            const SizedBox(height: 14),
+            _receiptSection(
+              title: '已确认 · ${hasNames ? confirmed.length : notice.acknowledgedCount}',
+              people: confirmed,
+              emptyText: hasNames ? '还没有人确认' : '暂无已确认名单',
+              pending: false,
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _receiptSection({
+    required String title,
+    required List<AdministrativeNoticeRecipient> people,
+    required String emptyText,
+    required bool pending,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w700,
+            color: pending ? const Color(0xFFB07A2B) : const Color(0xFF3D7A8C),
+          ),
+        ),
+        const SizedBox(height: 6),
+        if (people.isEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Text(
+              emptyText,
+              style: const TextStyle(fontSize: 13, color: DunesColors.text3),
+            ),
+          )
+        else
+          ...people.map((recipient) {
             final name = recipient.displayName.trim();
             final initial = name.isEmpty ? '行' : name.substring(0, 1);
             return Padding(
@@ -878,20 +1140,19 @@ class _NativeAdministrativeNoticePageState
                     ),
                   ),
                   Text(
-                    recipient.acknowledged ? '已确认' : '待确认',
+                    pending ? '待确认' : '已确认',
                     style: TextStyle(
                       fontSize: 12,
-                      color: recipient.acknowledged
-                          ? const Color(0xFF3D7A8C)
-                          : DunesColors.text3,
+                      color: pending
+                          ? DunesColors.text3
+                          : const Color(0xFF3D7A8C),
                     ),
                   ),
                 ],
               ),
             );
           }),
-        ],
-      ),
+      ],
     );
   }
 

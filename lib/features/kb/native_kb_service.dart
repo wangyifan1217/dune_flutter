@@ -17,10 +17,16 @@ class NativeKbService {
   NativeKbService({
     required this.session,
     http.Client? client,
-  }) : _client = client ?? http.Client();
+  })  : _client = client ?? http.Client(),
+        _ownsClient = client == null;
 
   final AuthSession session;
   final http.Client _client;
+  final bool _ownsClient;
+
+  void close() {
+    if (_ownsClient) _client.close();
+  }
 
   String _novaApiKey = '';
   String _novaBase = NovaConfig.baseUrl;
@@ -274,28 +280,117 @@ class NativeKbService {
     required List<int> bytes,
     required String fileName,
     String? title,
+    void Function(int sent, int total)? onProgress,
   }) async {
-    await ensureNovaReady();
-    final req = http.MultipartRequest(
-      'POST',
-      Uri.parse('$_novaBase/v1/app/kb/documents'),
-    );
-    req.headers.addAll(_novaHeaders());
-    if (title != null && title.trim().isNotEmpty) {
-      req.fields['title'] = title.trim();
+    if (bytes.isEmpty) {
+      throw Exception('文件为空');
     }
-    req.files.add(http.MultipartFile.fromBytes('file', bytes, filename: fileName));
-    final streamed = await _client.send(req);
-    final resp = await http.Response.fromStream(streamed);
-    final body = _decode(resp.body);
-    if (resp.statusCode < 200 ||
-        resp.statusCode >= 300 ||
-        body['success'] == false) {
-      throw Exception(
-        (body['message'] ?? body['error']?['message'] ?? '上传失败').toString(),
+    final initResp = await _client.post(
+      _dunesUri('/kb/documents/uploads'),
+      headers: {
+        ..._dunesHeaders,
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode({
+        'fileName': fileName,
+        'title': (title ?? '').trim(),
+        'fileSizeBytes': bytes.length,
+        'contentType': _guessContentType(fileName),
+      }),
+    );
+    final init = _asDataMap(_unwrap(initResp));
+    final uploadId = '${init['uploadId'] ?? ''}'.trim();
+    if (uploadId.isEmpty) {
+      throw Exception('初始化分片上传失败');
+    }
+    final partSize = (init['partSize'] as num?)?.toInt() ?? (8 * 1024 * 1024);
+    try {
+      var offset = 0;
+      var partNumber = 1;
+      while (offset < bytes.length) {
+        final end = min(offset + partSize, bytes.length);
+        final chunk = bytes.sublist(offset, end);
+        final partResp = await _client.put(
+          _dunesUri('/kb/documents/uploads/$uploadId/parts/$partNumber'),
+          headers: {
+            ..._dunesHeaders,
+            'Content-Type': 'application/octet-stream',
+            'Content-Length': '${chunk.length}',
+          },
+          body: chunk,
+        );
+        _unwrap(partResp);
+        offset = end;
+        partNumber++;
+        onProgress?.call(offset, bytes.length);
+      }
+      final completeResp = await _client.post(
+        _dunesUri('/kb/documents/uploads/$uploadId/complete'),
+        headers: {
+          ..._dunesHeaders,
+          'Content-Type': 'application/json',
+        },
+        body: '{}',
       );
+      _unwrap(completeResp);
+    } catch (e) {
+      try {
+        await _client.delete(
+          _dunesUri('/kb/documents/uploads/$uploadId'),
+          headers: _dunesHeaders,
+        );
+      } catch (_) {}
+      rethrow;
     }
     unawaited(syncRagflow());
+  }
+
+  String _guessContentType(String fileName) {
+    final ext = fileName.contains('.')
+        ? fileName.substring(fileName.lastIndexOf('.') + 1).toLowerCase()
+        : '';
+    switch (ext) {
+      case 'pdf':
+        return 'application/pdf';
+      case 'doc':
+        return 'application/msword';
+      case 'docx':
+        return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+      case 'xls':
+        return 'application/vnd.ms-excel';
+      case 'xlsx':
+        return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+      case 'ppt':
+        return 'application/vnd.ms-powerpoint';
+      case 'pptx':
+        return 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
+      case 'md':
+        return 'text/markdown';
+      case 'txt':
+        return 'text/plain';
+      case 'html':
+      case 'htm':
+        return 'text/html';
+      default:
+        return 'application/octet-stream';
+    }
+  }
+
+  Map<String, dynamic> _asDataMap(dynamic data) {
+    if (data is Map<String, dynamic>) return data;
+    if (data is Map) return Map<String, dynamic>.from(data);
+    return <String, dynamic>{};
+  }
+
+  dynamic _unwrap(http.Response resp) {
+    final body = _decode(resp.body);
+    if (resp.statusCode >= 400 || body['success'] == false) {
+      throw Exception(
+        (body['message'] ?? body['error']?['message'] ?? '上传失败 HTTP ${resp.statusCode}')
+            .toString(),
+      );
+    }
+    return body['data'] ?? body;
   }
 
   NativeKbDocument? findMeetingMinutesDocumentInSummary(

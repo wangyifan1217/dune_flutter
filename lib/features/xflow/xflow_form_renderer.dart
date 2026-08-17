@@ -46,6 +46,8 @@ class XflowFormRenderer extends StatefulWidget {
 }
 
 class _XflowFormRendererState extends State<XflowFormRenderer> {
+  final Set<String> _cardMinPadScheduled = <String>{};
+
   void _dismissKeyboardOnTapOutside(PointerDownEvent _) {
     FocusManager.instance.primaryFocus?.unfocus();
   }
@@ -696,6 +698,9 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
   }
 
   Widget _dynamicListField(XflowField field) {
+    if (field.isCardDynamicList) {
+      return _repeatableGroupField(field);
+    }
     final rows = _listValue(field.key);
     final cols = _columns(field);
     return _fieldWrap(
@@ -993,6 +998,183 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
       row[(col['key'] ?? '').toString()] = '';
     }
     return row;
+  }
+
+  void _scheduleCardMinItems(String fieldKey, List<Map<String, dynamic>> groups) {
+    if (_cardMinPadScheduled.contains(fieldKey)) return;
+    _cardMinPadScheduled.add(fieldKey);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _cardMinPadScheduled.remove(fieldKey);
+      if (!mounted) return;
+      widget.onChanged(fieldKey, groups);
+    });
+  }
+
+  Widget _repeatableGroupField(XflowField field) {
+    final min = field.minItems;
+    var groups = _listValue(field.key);
+    if (groups.length < min) {
+      groups = [
+        ...groups.map(Map<String, dynamic>.from),
+        ...List.generate(min - groups.length, (_) => <String, dynamic>{}),
+      ];
+      _scheduleCardMinItems(field.key, groups);
+    }
+    final canRemove = groups.length > min;
+    return _fieldWrap(
+      field,
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (var i = 0; i < groups.length; i++)
+            _repeatableGroupCard(field, groups, i, canRemove: canRemove),
+          _addRowButton('+ ${field.addText}', () {
+            widget.onChanged(field.key, [
+              ...groups.map(Map<String, dynamic>.from),
+              <String, dynamic>{},
+            ]);
+            setState(() {});
+          }),
+        ],
+      ),
+    );
+  }
+
+  Widget _repeatableGroupCard(
+    XflowField field,
+    List<Map<String, dynamic>> groups,
+    int index, {
+    required bool canRemove,
+  }) {
+    final cols = field.columnsAsFields;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
+      decoration: BoxDecoration(
+        color: DunesColors.bgSoft,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: DunesColors.borderSoft),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  '${field.itemTitle}${index + 1}',
+                  style: DunesTypography.sans(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: DunesColors.text,
+                  ),
+                ),
+              ),
+              if (canRemove)
+                XfRemoveButton(
+                  onTap: () {
+                    final next = [
+                      for (var i = 0; i < groups.length; i++)
+                        if (i != index) Map<String, dynamic>.from(groups[i]),
+                    ];
+                    widget.onChanged(field.key, next);
+                    setState(() {});
+                  },
+                ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          for (final col in cols)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: _groupColumnField(field, col, groups, index),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _groupColumnField(
+    XflowField listField,
+    XflowField col,
+    List<Map<String, dynamic>> groups,
+    int index,
+  ) {
+    void patch(Map<String, dynamic> updates) {
+      final next = [
+        for (var i = 0; i < groups.length; i++)
+          i == index
+              ? <String, dynamic>{...groups[i], ...updates}
+              : Map<String, dynamic>.from(groups[i]),
+      ];
+      widget.onChanged(listField.key, next);
+      setState(() {});
+    }
+
+    final group = index < groups.length ? groups[index] : <String, dynamic>{};
+    if (col.remoteSearch != null) {
+      final cfg = col.remoteSearch!;
+      final hint = col.placeholder.isEmpty ? '输入关键词搜索' : col.placeholder;
+      return _fieldWrap(
+        col,
+        _XflowRemoteSearchPicker(
+          service: widget.service,
+          config: cfg,
+          fieldKey: col.key,
+          value: group[col.key],
+          placeholder: hint,
+          readonly: col.readonly,
+          scopeValues: group,
+          onPatch: patch,
+          onFieldChanged: (key, value) => patch({key: value}),
+        ),
+      );
+    }
+    if (col.type == 'upload') {
+      if (widget.service == null) return const SizedBox.shrink();
+      return XflowUploadField(
+        field: col,
+        service: widget.service!,
+        items: normalizeUploadItems(group[col.key]),
+        onChanged: (items) => patch({col.key: items}),
+      );
+    }
+    if (col.type == 'select') {
+      return _fieldWrap(
+        col,
+        _XflowSelectPicker(
+          options: col.options,
+          value: group[col.key]?.toString() ?? '',
+          placeholder: col.placeholder.isEmpty ? '请选择' : col.placeholder,
+          readonly: col.readonly,
+          onChanged: (v) => patch({col.key: v}),
+        ),
+      );
+    }
+    final keyboardType = switch (col.type) {
+      'number' ||
+      'money' => const TextInputType.numberWithOptions(decimal: true),
+      _ => TextInputType.text,
+    };
+    return _fieldWrap(
+      col,
+      _XflowTextField(
+        key: ValueKey('group_${listField.key}_${index}_${col.key}'),
+        value: group[col.key]?.toString() ?? '',
+        keyboardType: keyboardType,
+        minLines: 1,
+        maxLines: col.type == 'textarea' ? 5 : 1,
+        readOnly: col.readonly,
+        style: col.type == 'money' || col.type == 'number'
+            ? xfInputTextStyle(mono: true)
+            : xfInputTextStyle(),
+        decoration: _inputDecoration(
+          hint: col.placeholder,
+          readonly: col.readonly,
+        ),
+        onChanged: (text) => patch({col.key: text}),
+      ),
+    );
   }
 
   Widget _dynRow(
@@ -2114,6 +2296,8 @@ class _XflowRemoteSearchPicker extends StatefulWidget {
     required this.placeholder,
     required this.readonly,
     required this.onFieldChanged,
+    this.scopeValues,
+    this.onPatch,
   });
 
   final XflowService? service;
@@ -2123,6 +2307,10 @@ class _XflowRemoteSearchPicker extends StatefulWidget {
   final String placeholder;
   final bool readonly;
   final XflowFieldChanged onFieldChanged;
+
+  /// 分组作用域：fill 展示与回填都读/写这张 map，不写顶层 form。
+  final Map<String, dynamic>? scopeValues;
+  final void Function(Map<String, dynamic> patch)? onPatch;
 
   @override
   State<_XflowRemoteSearchPicker> createState() =>
@@ -2136,18 +2324,31 @@ class _XflowRemoteSearchPickerState extends State<_XflowRemoteSearchPicker> {
   bool _loading = false;
   bool _searched = false;
   Timer? _debounce;
+  bool _fromFill = false;
 
   XflowRemoteSearchConfig get _cfg => widget.config;
+
+  bool get _useFillDisplay =>
+      widget.scopeValues != null && _cfg.fill.length > 1;
 
   @override
   void initState() {
     super.initState();
-    _controller.text = _displayText(widget.value);
+    _fromFill =
+        _useFillDisplay && _cfg.fillDisplayOf(widget.scopeValues).isNotEmpty;
+    _controller.text = _resolvedDisplay();
   }
 
   @override
   void didUpdateWidget(covariant _XflowRemoteSearchPicker oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (_useFillDisplay) {
+      final next = _resolvedDisplay();
+      if (!_focus.hasFocus && _controller.text != next) {
+        _controller.text = next;
+      }
+      return;
+    }
     if (oldWidget.value != widget.value) {
       final next = _displayText(widget.value);
       // 仅在外部写入（回填/导入）且输入框未聚焦时同步，避免打断手输。
@@ -2165,6 +2366,14 @@ class _XflowRemoteSearchPickerState extends State<_XflowRemoteSearchPicker> {
     super.dispose();
   }
 
+  String _resolvedDisplay() {
+    if (_useFillDisplay && _fromFill) {
+      final joined = _cfg.fillDisplayOf(widget.scopeValues);
+      if (joined.isNotEmpty) return joined;
+    }
+    return _displayText(widget.value);
+  }
+
   String _displayText(dynamic val) {
     if (val == null) return '';
     return val.toString();
@@ -2178,6 +2387,17 @@ class _XflowRemoteSearchPickerState extends State<_XflowRemoteSearchPicker> {
     return raw.trim().isEmpty ? '搜索失败' : raw.trim();
   }
 
+  void _writeMany(Map<String, dynamic> patch) {
+    final onPatch = widget.onPatch;
+    if (onPatch != null) {
+      onPatch(patch);
+      return;
+    }
+    for (final entry in patch.entries) {
+      widget.onFieldChanged(entry.key, entry.value);
+    }
+  }
+
   void _clearSelection() {
     _debounce?.cancel();
     setState(() {
@@ -2185,22 +2405,37 @@ class _XflowRemoteSearchPickerState extends State<_XflowRemoteSearchPicker> {
       _results = const [];
       _searched = false;
       _loading = false;
+      _fromFill = false;
     });
+    if (widget.onPatch != null) {
+      final patch = <String, dynamic>{widget.fieldKey: ''};
+      for (final key in _cfg.fill.keys) {
+        patch[key] = '';
+      }
+      widget.onPatch!(patch);
+      return;
+    }
     widget.onFieldChanged(widget.fieldKey, '');
   }
 
   void _selectRow(Map<String, dynamic> row) {
+    final patch = <String, dynamic>{};
     final value = _cfg.valueOf(row);
     if (value != null) {
-      widget.onFieldChanged(widget.fieldKey, value);
-      _controller.text = value;
+      patch[widget.fieldKey] = value;
     }
-    for (final entry in _cfg.fillPatches(row).entries) {
-      widget.onFieldChanged(entry.key, entry.value);
-      if (entry.key == widget.fieldKey) {
-        _controller.text = entry.value;
-      }
+    patch.addAll(_cfg.fillPatches(row));
+    _fromFill = _useFillDisplay;
+    if (_fromFill) {
+      final merged = <String, dynamic>{
+        ...?widget.scopeValues,
+        ...patch,
+      };
+      _controller.text = _cfg.fillDisplayOf(merged);
+    } else if (patch.containsKey(widget.fieldKey)) {
+      _controller.text = '${patch[widget.fieldKey]}';
     }
+    _writeMany(patch);
     setState(() {
       _results = const [];
       _searched = false;
@@ -2248,8 +2483,13 @@ class _XflowRemoteSearchPickerState extends State<_XflowRemoteSearchPicker> {
   }
 
   void _onQueryChanged(String q) {
+    _fromFill = false;
     if (!widget.readonly && _cfg.allowManual) {
-      widget.onFieldChanged(widget.fieldKey, q);
+      if (widget.onPatch != null) {
+        widget.onPatch!({widget.fieldKey: q});
+      } else {
+        widget.onFieldChanged(widget.fieldKey, q);
+      }
     }
     _debounce?.cancel();
     final wait = Duration(milliseconds: _cfg.debounceMs);

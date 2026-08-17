@@ -20,6 +20,7 @@ class AuthSession {
     this.hrbpAccess = false,
     this.administrativeNoticeAccess = false,
     this.broadcastAccess = false,
+    this.fundSecondmentAccess = false,
   });
 
   final String phone;
@@ -38,6 +39,8 @@ class AuthSession {
   final bool administrativeNoticeAccess;
   /// Backend-controlled access to publish company broadcasts.
   final bool broadcastAccess;
+  /// 后端下发的 NOVA「资金借调」看板开关。
+  final bool fundSecondmentAccess;
   /// 后端下发的「任务汇总」能力开关；未下发时工作台会走接口探测。
   final bool hrbpAccess;
 
@@ -60,6 +63,9 @@ class AuthSession {
 
   bool get effectiveBroadcastAccess => broadcastAccess;
 
+  bool get effectiveFundSecondmentAccess =>
+      fundSecondmentAccess || DunesDefaults.localLighthouseAccessBypass;
+
   AuthSession withLocalDevGrants() {
     var next = this;
     if (DunesDefaults.localLighthouseAccessBypass) {
@@ -74,6 +80,9 @@ class AuthSession {
       }
       if (!next.robotAccess) {
         next = next.copyWith(robotAccess: true);
+      }
+      if (!next.fundSecondmentAccess) {
+        next = next.copyWith(fundSecondmentAccess: true);
       }
     }
     return next;
@@ -110,6 +119,7 @@ class AuthSession {
     bool? hrbpAccess,
     bool? administrativeNoticeAccess,
     bool? broadcastAccess,
+    bool? fundSecondmentAccess,
   }) {
     return AuthSession(
       phone: phone ?? this.phone,
@@ -129,6 +139,7 @@ class AuthSession {
       administrativeNoticeAccess:
           administrativeNoticeAccess ?? this.administrativeNoticeAccess,
       broadcastAccess: broadcastAccess ?? this.broadcastAccess,
+      fundSecondmentAccess: fundSecondmentAccess ?? this.fundSecondmentAccess,
     );
   }
 
@@ -166,6 +177,7 @@ class AuthSession {
       hrbpAccess: data['hrbpAccess'] == true,
       administrativeNoticeAccess: data['administrativeNoticeAccess'] == true,
       broadcastAccess: data['broadcastAccess'] == true,
+      fundSecondmentAccess: data['fundSecondmentAccess'] == true,
     );
   }
 
@@ -197,6 +209,7 @@ class AuthSession {
       hrbpAccess: claims['hrbpAccess'] == true,
       administrativeNoticeAccess: claims['administrativeNoticeAccess'] == true,
       broadcastAccess: claims['broadcastAccess'] == true,
+      fundSecondmentAccess: claims['fundSecondmentAccess'] == true,
     );
   }
 
@@ -235,6 +248,7 @@ class AuthSession {
       'hrbpAccess': hrbpAccess,
       'administrativeNoticeAccess': administrativeNoticeAccess,
       'broadcastAccess': broadcastAccess,
+      'fundSecondmentAccess': fundSecondmentAccess,
     };
   }
 
@@ -259,6 +273,7 @@ class AuthSession {
       hrbpAccess: json['hrbpAccess'] == true,
       administrativeNoticeAccess: json['administrativeNoticeAccess'] == true,
       broadcastAccess: json['broadcastAccess'] == true,
+      fundSecondmentAccess: json['fundSecondmentAccess'] == true,
     );
   }
 

@@ -120,6 +120,18 @@ class XflowRemoteSearchConfig {
     return out;
   }
 
+  /// 分组内展示：把 fill 映射到的多个非空值拼成一行（去重）。
+  String fillDisplayOf(Map<String, dynamic>? values) {
+    if (values == null || fill.isEmpty) return '';
+    final parts = <String>[];
+    final seen = <String>{};
+    for (final formKey in fill.keys) {
+      final text = '${values[formKey] ?? ''}'.trim();
+      if (text.isNotEmpty && seen.add(text)) parts.add(text);
+    }
+    return parts.join(labelSeparator);
+  }
+
   static String _nonEmpty(dynamic v, String fallback) {
     final text = (v ?? '').toString();
     return text.isEmpty ? fallback : text;
@@ -215,6 +227,98 @@ class XflowField {
   /// 通用远程搜索配置；path 缺失时返回 null（不当作 remoteSearch 渲染）。
   XflowRemoteSearchConfig? get remoteSearch =>
       XflowRemoteSearchConfig.tryParse(raw['remoteSearch']);
+
+  /// 仅 `dynamicList` + `itemLayout=card` 走可新增分组；其它保持旧行编辑。
+  bool get isCardDynamicList =>
+      type == 'dynamicList' &&
+      (raw['itemLayout'] ?? '').toString().trim() == 'card';
+
+  /// 组标题前缀，展示为 `{itemTitle}{index+1}`。
+  String get itemTitle {
+    final title = (raw['itemTitle'] ?? '').toString().trim();
+    if (title.isNotEmpty) return title;
+    return label.isNotEmpty ? label : '一组';
+  }
+
+  String get addText {
+    final text = (raw['addText'] ?? '').toString().trim();
+    return text.isEmpty ? '新增一组' : text;
+  }
+
+  int get minItems {
+    final rawMin = raw['minItems'];
+    if (rawMin is num && rawMin.toInt() >= 0) return rawMin.toInt();
+    final parsed = int.tryParse('$rawMin');
+    if (parsed != null && parsed >= 0) return parsed;
+    return required ? 1 : 0;
+  }
+
+  List<XflowField> get columnsAsFields {
+    final cols = raw['columns'];
+    if (cols is! List || cols.isEmpty) return const [];
+    return cols
+        .whereType<Map>()
+        .map((c) => XflowField.fromJson(Map<String, dynamic>.from(c)))
+        .where((c) => c.key.isNotEmpty)
+        .toList(growable: false);
+  }
+
+  List<String> get moneyColumnKeys => columnsAsFields
+      .where((c) => c.type == 'money')
+      .map((c) => c.key)
+      .toList(growable: false);
+
+  /// 卡片分组的组内必填缺口，文案含「付款1…」。非卡片 dynamicList 返回空。
+  List<String> missingRequiredGroupLabels(dynamic rawValue) {
+    if (!isCardDynamicList) return const [];
+    final groups = _asGroupList(rawValue);
+    final cols = columnsAsFields;
+    final min = minItems;
+    final out = <String>[];
+    if (groups.length < min) {
+      out.add('$itemTitle$min');
+      return out;
+    }
+    for (var i = 0; i < groups.length; i++) {
+      final prefix = '$itemTitle${i + 1}';
+      for (final col in cols) {
+        if (!col.required) continue;
+        if (!_groupCellHasValue(col, groups[i])) {
+          out.add('$prefix${col.label.isEmpty ? col.key : col.label}');
+        }
+      }
+    }
+    return out;
+  }
+}
+
+List<Map<String, dynamic>> _asGroupList(dynamic raw) {
+  if (raw is List) {
+    return raw
+        .map(
+          (e) => e is Map<String, dynamic>
+              ? e
+              : (e is Map ? Map<String, dynamic>.from(e) : null),
+        )
+        .whereType<Map<String, dynamic>>()
+        .toList(growable: false);
+  }
+  if (raw is Map) return [Map<String, dynamic>.from(raw)];
+  return const [];
+}
+
+bool _groupCellHasValue(XflowField col, Map<String, dynamic> group) {
+  final val = group[col.key];
+  if (col.type == 'upload') {
+    if (val is! List) return false;
+    return val.any((e) => e is Map && e['status'] != 'error');
+  }
+  if (val == null) return false;
+  if (val is String) return val.trim().isNotEmpty;
+  if (val is List) return val.isNotEmpty;
+  if (val is Map) return val.isNotEmpty;
+  if (val is num) return true;
+  return val.toString().trim().isNotEmpty;
 }
 
 class XflowTemplateDetail {
@@ -676,4 +780,3 @@ class ApprovalStakeholderPerson {
   final String displayName;
   final String role;
 }
-

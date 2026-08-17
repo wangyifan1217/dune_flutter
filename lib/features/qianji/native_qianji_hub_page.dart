@@ -29,6 +29,7 @@ class NativeQianjiHubPage extends StatefulWidget {
     this.onOpenMeetingSupervise,
     this.onOpenSessionSupervise,
     this.onOpenKbSupervise,
+    this.onOpenFundSecondment,
     this.onOpenRobotHome,
     this.onOpenRobot,
     this.session,
@@ -38,6 +39,7 @@ class NativeQianjiHubPage extends StatefulWidget {
   final VoidCallback? onOpenMeetingSupervise;
   final VoidCallback? onOpenSessionSupervise;
   final VoidCallback? onOpenKbSupervise;
+  final VoidCallback? onOpenFundSecondment;
   final VoidCallback? onOpenRobotHome;
   /// 点击单个机器人名片：由 Host 按 canChat 决定进聊天或提示。
   final ValueChanged<RobotRole>? onOpenRobot;
@@ -156,6 +158,14 @@ class _NativeQianjiHubPageState extends State<NativeQianjiHubPage> {
                         color: _themePurple,
                         onTap: widget.onOpenKbSupervise,
                       ),
+                      if (widget.onOpenFundSecondment != null)
+                        _NovaHubTile(
+                          title: '资金借调',
+                          subtitle: '已通过借款单',
+                          icon: Icons.account_balance_wallet_outlined,
+                          color: _themePurple,
+                          onTap: widget.onOpenFundSecondment,
+                        ),
                     ],
                   ),
                 ],

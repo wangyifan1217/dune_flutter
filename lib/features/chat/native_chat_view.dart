@@ -3147,10 +3147,7 @@ class _NativeChatViewState extends State<NativeChatView>
       if (!kIsWeb) {
         final paths = await Pasteboard.files();
         if (paths.isNotEmpty) {
-          final handled = await _pasteLocalFilePaths(
-            paths,
-            sourceLabel: '粘贴',
-          );
+          final handled = await _pasteLocalFilePaths(paths, sourceLabel: '粘贴');
           if (handled) return true;
         }
       }
@@ -3170,8 +3167,7 @@ class _NativeChatViewState extends State<NativeChatView>
         final memFile = ChatFileClipboard.peek();
         if (memFile != null) {
           Uint8List bytes = memFile.bytes;
-          if (bytes.isEmpty &&
-              (memFile.localPath ?? '').trim().isNotEmpty) {
+          if (bytes.isEmpty && (memFile.localPath ?? '').trim().isNotEmpty) {
             bytes = await XFile(memFile.localPath!.trim()).readAsBytes();
           }
           if (bytes.isNotEmpty) {
@@ -3270,10 +3266,7 @@ class _NativeChatViewState extends State<NativeChatView>
       } else {
         final confirmed = await _confirmImageDrafts(imageDrafts);
         if (confirmed != null && confirmed.isNotEmpty) {
-          await _emitPreparedImageDrafts(
-            confirmed,
-            sourceLabel: sourceLabel,
-          );
+          await _emitPreparedImageDrafts(confirmed, sourceLabel: sourceLabel);
         }
       }
       return true;
@@ -6924,15 +6917,9 @@ class _NativeChatViewState extends State<NativeChatView>
         Offset.zero & overlay.size,
       ),
       items: [
-        PopupMenuItem<String>(
-          value: 'at',
-          child: Text(atLabel),
-        ),
+        PopupMenuItem<String>(value: 'at', child: Text(atLabel)),
         if (widget.onOpenUser != null)
-          const PopupMenuItem<String>(
-            value: 'profile',
-            child: Text('查看资料'),
-          ),
+          const PopupMenuItem<String>(value: 'profile', child: Text('查看资料')),
       ],
     );
     if (!mounted || action == null) return;
@@ -7124,7 +7111,8 @@ class _NativeChatViewState extends State<NativeChatView>
               sizeLabel: kbDoc.sizeLabel.isNotEmpty
                   ? kbDoc.sizeLabel
                   : _fileSizeHint(m.payload) ?? '',
-              onTap: () => unawaited(_openKbFileAttachment(m.payload, fileName)),
+              onTap: () =>
+                  unawaited(_openKbFileAttachment(m.payload, fileName)),
               onSecondaryTapDown: isDesktopCommOnly && !_messageMultiSelectMode
                   ? (details) => _onMessageActions(
                       m,

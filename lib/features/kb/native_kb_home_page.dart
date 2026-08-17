@@ -20,6 +20,7 @@ import '../drive/native_drive_service.dart';
 import '../shell/dunes_toast.dart';
 import 'kb_chat_share.dart';
 import 'kb_document_coordinator.dart';
+import 'kb_upload_coordinator.dart';
 import 'native_kb_models.dart';
 import 'native_kb_service.dart';
 
@@ -56,9 +57,7 @@ class _NativeKbHomePageState extends State<NativeKbHomePage> {
   NativeKbSummary? _summary;
   bool _loading = true;
   bool _syncing = false;
-  bool _uploading = false;
   bool _dragging = false;
-  String? _uploadProgress;
   String? _forwardingDocId;
   String? _savingDriveDocId;
   final Set<String> _driveSavedDocKeys = <String>{};
@@ -66,18 +65,36 @@ class _NativeKbHomePageState extends State<NativeKbHomePage> {
   String _syncStatus = '打开页面自动读本地库 · 后台同步 RAGFlow · 可手动刷新';
   Timer? _parsePollTimer;
 
+  bool get _uploading => KbUploadCoordinator.instance.isUploading;
+  String? get _uploadProgress {
+    final text = KbUploadCoordinator.instance.progressText.trim();
+    return text.isEmpty ? null : text;
+  }
+
   @override
   void initState() {
     super.initState();
     _service = NativeKbService(session: widget.session);
     _chatService = ConversationService(session: widget.session);
+    KbUploadCoordinator.instance.addListener(_onKbUploadChanged);
     _load();
   }
 
   @override
   void dispose() {
+    KbUploadCoordinator.instance.removeListener(_onKbUploadChanged);
     _parsePollTimer?.cancel();
     super.dispose();
+  }
+
+  void _onKbUploadChanged() {
+    if (!mounted) return;
+    setState(() {});
+    final toast = KbUploadCoordinator.instance.takeToast();
+    if (toast != null) {
+      _toast(toast.message, error: toast.error);
+      unawaited(_load(silent: true));
+    }
   }
 
   Future<void> _load({bool silent = false}) async {
@@ -263,54 +280,12 @@ class _NativeKbHomePageState extends State<NativeKbHomePage> {
     final confirmed = await _confirmKbUpload(files);
     if (confirmed != true || !mounted) return;
 
-    setState(() {
-      _uploading = true;
-      _uploadProgress = files.length == 1
-          ? '正在上传并解析…'
-          : '正在上传 1/${files.length}…';
-    });
-    var ok = 0;
-    var fail = 0;
-    String? lastError;
-    try {
-      for (var i = 0; i < files.length; i++) {
-        if (!mounted) return;
-        setState(() {
-          _uploadProgress = files.length == 1
-              ? '正在上传并解析…'
-              : '正在上传 ${i + 1}/${files.length}…';
-        });
-        try {
-          await _service.uploadDocument(
-            bytes: await files[i].readAsBytes(),
-            fileName: files[i].name,
-          );
-          ok++;
-        } catch (e) {
-          fail++;
-          lastError = friendlyErrorText(e);
-        }
-      }
-      KbDocumentCoordinator.instance.notifyChanged();
-      await _load(silent: true);
-      if (!mounted) return;
-      if (fail == 0) {
-        _toast(
-          ok == 1 ? '上传成功，正在解析入库' : '已上传 $ok 个文件，正在解析入库',
-        );
-      } else if (ok == 0) {
-        _toast('上传失败：${lastError ?? '请稍后重试'}', error: true);
-      } else {
-        _toast('已上传 $ok 个，失败 $fail 个${lastError == null ? '' : '：$lastError'}');
-      }
-    } finally {
-      if (mounted) {
-        setState(() {
-          _uploading = false;
-          _uploadProgress = null;
-        });
-      }
-    }
+    unawaited(
+      KbUploadCoordinator.instance.enqueue(
+        session: widget.session,
+        files: files,
+      ),
+    );
   }
 
   Future<bool?> _confirmKbUpload(List<XFile> files) {
@@ -952,7 +927,10 @@ class _NativeKbHomePageState extends State<NativeKbHomePage> {
             _buildUploadZone(ready),
           if (_uploading) ...[
             const SizedBox(height: 10),
-            const LinearProgressIndicator(minHeight: 2),
+            LinearProgressIndicator(
+              minHeight: 2,
+              value: KbUploadCoordinator.instance.progress,
+            ),
             const SizedBox(height: 6),
             Text(
               _uploadProgress ?? '正在上传并解析…',

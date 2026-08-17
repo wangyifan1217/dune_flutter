@@ -923,9 +923,12 @@ class _NativeConversationPageState extends State<NativeConversationPage>
 
   void _updateCommBadge(List<NativeConversation> rows, int notifUnread) {
     final selected = widget.selectedConversationId ?? 0;
+    final visibleRows = widget.session.isExternalUser
+        ? rows.where((c) => !c.isBroadcast && !c.isAiAssistant).toList()
+        : rows;
     final total = widget.commUnread.sumConversationUnread(
-      rows: rows,
-      notifUnread: notifUnread,
+      rows: visibleRows,
+      notifUnread: widget.session.isExternalUser ? 0 : notifUnread,
       aiSummaryUnread: _isViewingAiSummary ? 0 : _aiSummaryUnread,
       treatAsReadIds: selected > 0 ? <int>{selected} : const <int>{},
     );
@@ -933,7 +936,7 @@ class _NativeConversationPageState extends State<NativeConversationPage>
     windowsTrayUpdateUnread(total);
     windowsTrayUpdateUnreadItems(
       windowsTrayUnreadItemsFromConversations(
-        rows: rows,
+        rows: visibleRows,
         commUnread: widget.commUnread,
         viewingId: selected,
       ),
@@ -948,6 +951,7 @@ class _NativeConversationPageState extends State<NativeConversationPage>
   }
 
   void _openNovaConversation([NativeConversation? conversation]) {
+    if (widget.session.isExternalUser) return;
     final nova = conversation ?? _primaryAiConversation(_items);
     if (nova != null) {
       NovaBackgroundCoordinator.instance.markReplySeen(nova.id);
@@ -1149,6 +1153,12 @@ class _NativeConversationPageState extends State<NativeConversationPage>
     final kind = c.kind.toUpperCase();
     final title = c.isPrivate ? _privateTitle(c) : c.title;
     if (!_matchesSearch(title, c.preview)) {
+      return null;
+    }
+    if (widget.session.isExternalUser && c.isAiAssistant) {
+      return null;
+    }
+    if (widget.session.isExternalUser && c.isBroadcast) {
       return null;
     }
 
@@ -1454,13 +1464,15 @@ class _NativeConversationPageState extends State<NativeConversationPage>
       final ts = _aiSummaryPreview?.sortTime?.millisecondsSinceEpoch ?? 0;
       entries.add((ts: ts, pinned: false, row: aiRow));
     }
-    final announcementRow = _buildDuneAnnouncementInboxRow();
-    if (announcementRow != null) {
-      entries.add((
-        ts: _duneAnnouncementSortTs,
-        pinned: false,
-        row: announcementRow,
-      ));
+    if (!widget.session.isExternalUser) {
+      final announcementRow = _buildDuneAnnouncementInboxRow();
+      if (announcementRow != null) {
+        entries.add((
+          ts: _duneAnnouncementSortTs,
+          pinned: false,
+          row: announcementRow,
+        ));
+      }
     }
     entries.sort((a, b) {
       final ap = a.pinned ? 1 : 0;
@@ -1483,6 +1495,7 @@ class _NativeConversationPageState extends State<NativeConversationPage>
   }
 
   Widget? _buildDuneAnnouncementInboxRow() {
+    if (widget.session.isExternalUser) return null;
     final latest = _notif.latest;
     NativeConversation? broadcast;
     for (final conversation in _items.where((c) => c.isBroadcast)) {
@@ -1577,6 +1590,7 @@ class _NativeConversationPageState extends State<NativeConversationPage>
   }
 
   void _openDuneAnnouncement() {
+    if (widget.session.isExternalUser) return;
     final tab = _preferredAnnouncementTab;
     // 点进合并入口即视为已读：先清本地角标，详情页再写服务端已读。
     _markDuneAnnouncementReadLocally();
@@ -1614,15 +1628,21 @@ class _NativeConversationPageState extends State<NativeConversationPage>
               ChatInboxHeader(
                 onOpenContacts: widget.onOpenContacts,
                 onNewChat: widget.onOpenNewChat,
-                onOpenNova: _openNovaConversation,
+                onOpenNova: widget.session.isExternalUser
+                    ? null
+                    : _openNovaConversation,
                 onOpenFavorites: widget.onOpenFavorites,
                 onOpenAiSummary: widget.session.isExternalUser
                     ? null
                     : () => unawaited(_openAiSummaryHub()),
-                novaThinking: _novaGeneratingFor(
-                  _primaryAiConversation(_items),
-                ).generating,
-                novaUnread: NovaBackgroundCoordinator.instance.hasUnreadReply,
+                novaThinking: widget.session.isExternalUser
+                    ? false
+                    : _novaGeneratingFor(
+                        _primaryAiConversation(_items),
+                      ).generating,
+                novaUnread: widget.session.isExternalUser
+                    ? false
+                    : NovaBackgroundCoordinator.instance.hasUnreadReply,
               ),
               ChatInboxSearchBar(
                 controller: _searchController,

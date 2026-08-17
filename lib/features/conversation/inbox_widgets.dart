@@ -16,7 +16,7 @@ class ChatInboxHeader extends StatelessWidget {
     super.key,
     required this.onOpenContacts,
     this.onNewChat,
-    required this.onOpenNova,
+    this.onOpenNova,
     this.onOpenAiSummary,
     this.onOpenFavorites,
     this.novaThinking = false,
@@ -25,7 +25,8 @@ class ChatInboxHeader extends StatelessWidget {
 
   final VoidCallback onOpenContacts;
   final VoidCallback? onNewChat;
-  final VoidCallback onOpenNova;
+  /// 外部用户不开放 Nova，传 null 时左上角入口不展示。
+  final VoidCallback? onOpenNova;
   final VoidCallback? onOpenAiSummary;
   final VoidCallback? onOpenFavorites;
   final bool novaThinking;
@@ -49,23 +50,24 @@ class ChatInboxHeader extends StatelessWidget {
                 color: const Color(0xFF1C1C1C),
               ),
             ),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  _NovaEyesButton(onTap: onOpenNova, unread: novaUnread),
-                  if (novaThinking)
-                    Text(
-                      '正在思考',
-                      style: DunesTypography.sans(
-                        fontSize: 10.5,
-                        color: const Color(0xFF07A957),
+            if (onOpenNova != null)
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _NovaEyesButton(onTap: onOpenNova!, unread: novaUnread),
+                    if (novaThinking)
+                      Text(
+                        '正在思考',
+                        style: DunesTypography.sans(
+                          fontSize: 10.5,
+                          color: const Color(0xFF07A957),
+                        ),
                       ),
-                    ),
-                ],
+                  ],
+                ),
               ),
-            ),
             Align(
               alignment: Alignment.centerRight,
               child: _InboxHeaderActions(

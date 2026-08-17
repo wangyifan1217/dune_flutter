@@ -815,8 +815,12 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage>
     if (template == null) return const [];
     final out = <String>[];
     for (final field in template.fields) {
-      if (!field.required || field.key.isEmpty || field.type == 'section')
+      if (field.key.isEmpty || field.type == 'section') continue;
+      if (field.isCardDynamicList) {
+        out.addAll(field.missingRequiredGroupLabels(_values[field.key]));
         continue;
+      }
+      if (!field.required) continue;
       final value = _values[field.key];
       final ok =
           value != null &&

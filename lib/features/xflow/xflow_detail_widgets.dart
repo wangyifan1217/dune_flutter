@@ -955,9 +955,133 @@ class _ExpandBody extends StatelessWidget {
         service: service,
       );
     }
+    if (item.field.isCardDynamicList) {
+      return XfDetRepeatableGroups(
+        field: item.field,
+        rows: normalizeDynamicListValue(item.rawValue),
+        service: service,
+      );
+    }
     return XfDetTable(
       field: item.field,
       rows: normalizeDynamicListValue(item.rawValue),
+    );
+  }
+}
+
+class XfDetRepeatableGroups extends StatelessWidget {
+  const XfDetRepeatableGroups({
+    super.key,
+    required this.field,
+    required this.rows,
+    required this.service,
+  });
+
+  final XflowField field;
+  final List<Map<String, dynamic>> rows;
+  final XflowService service;
+
+  @override
+  Widget build(BuildContext context) {
+    if (rows.isEmpty) {
+      return Text(
+        '暂无明细',
+        style: DunesTypography.sans(fontSize: 11, color: DunesColors.text3),
+      );
+    }
+    final cols = field.columnsAsFields;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (var i = 0; i < rows.length; i++)
+          _groupCard(cols, rows[i], '${field.itemTitle}${i + 1}'),
+      ],
+    );
+  }
+
+  Widget _groupCard(
+    List<XflowField> cols,
+    Map<String, dynamic> row,
+    String title,
+  ) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
+      decoration: BoxDecoration(
+        color: DunesColors.bgSoft,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: DunesColors.borderSoft),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Text(
+              title,
+              style: DunesTypography.sans(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: DunesColors.text,
+              ),
+            ),
+          ),
+          for (final col in cols)
+            if (col.type == 'upload')
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      col.label.isEmpty ? col.key : col.label,
+                      style: DunesTypography.sans(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                        color: DunesColors.text3,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    XfDetFileList(
+                      items: normalizeUploadItems(row[col.key])
+                          .where((e) => e['status'] != 'error')
+                          .toList(growable: false),
+                      service: service,
+                    ),
+                  ],
+                ),
+              )
+            else
+              Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SizedBox(
+                      width: 88,
+                      child: Text(
+                        col.label.isEmpty ? col.key : col.label,
+                        style: DunesTypography.sans(
+                          fontSize: 12,
+                          color: DunesColors.text3,
+                        ),
+                      ),
+                    ),
+                    Expanded(
+                      child: Text(
+                        formatGroupCellDisplay(col, row),
+                        style: DunesTypography.sans(
+                          fontSize: 13,
+                          color: DunesColors.text2,
+                          height: 1.45,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+        ],
+      ),
     );
   }
 }

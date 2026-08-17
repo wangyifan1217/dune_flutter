@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'chat_image_editor.dart';
 import 'chat_image_utils.dart';
@@ -51,12 +52,19 @@ Future<List<ChatImageDraft>?> openChatImageBatchPreview(
   required List<ChatImageDraft> drafts,
 }) {
   if (drafts.isEmpty) return Future.value(null);
-  return Navigator.of(context).push<List<ChatImageDraft>>(
-    MaterialPageRoute(
-      fullscreenDialog: true,
+  return Navigator.of(context, rootNavigator: true).push<List<ChatImageDraft>>(
+    _ChatImagePreviewRoute(
       builder: (ctx) => ChatImageBatchPreviewPage(drafts: drafts),
     ),
   );
+}
+
+class _ChatImagePreviewRoute<T> extends MaterialPageRoute<T> {
+  _ChatImagePreviewRoute({required WidgetBuilder builder})
+    : super(builder: builder, fullscreenDialog: true);
+
+  @override
+  Duration get reverseTransitionDuration => Duration.zero;
 }
 
 class ChatImageBatchPreviewPage extends StatefulWidget {
@@ -72,11 +80,35 @@ class ChatImageBatchPreviewPage extends StatefulWidget {
 class _ChatImageBatchPreviewPageState extends State<ChatImageBatchPreviewPage> {
   late List<ChatImageDraft> _drafts;
   int _selected = 0;
+  bool _closing = false;
 
   @override
   void initState() {
     super.initState();
     _drafts = widget.drafts;
+    HardwareKeyboard.instance.addHandler(_onKey);
+  }
+
+  @override
+  void dispose() {
+    HardwareKeyboard.instance.removeHandler(_onKey);
+    super.dispose();
+  }
+
+  bool _onKey(KeyEvent event) {
+    if (event is! KeyDownEvent) return false;
+    if (event.logicalKey != LogicalKeyboardKey.escape) return false;
+    if (!mounted) return false;
+    if (_closing) return true;
+    if (ModalRoute.of(context)?.isCurrent != true) return false;
+    _cancel();
+    return true;
+  }
+
+  void _cancel() {
+    if (_closing) return;
+    _closing = true;
+    Navigator.of(context).maybePop();
   }
 
   bool get _anyAllowsOriginal => _drafts.any((d) => !d.isGif && !d.edited);
@@ -133,7 +165,7 @@ class _ChatImageBatchPreviewPageState extends State<ChatImageBatchPreviewPage> {
 
   void _removeCurrent() {
     if (_drafts.length <= 1) {
-      Navigator.pop(context);
+      _cancel();
       return;
     }
     setState(() {
@@ -161,6 +193,7 @@ class _ChatImageBatchPreviewPageState extends State<ChatImageBatchPreviewPage> {
       }
     }
     if (!mounted) return;
+    _closing = true;
     Navigator.pop(context, _drafts);
   }
 
@@ -175,10 +208,7 @@ class _ChatImageBatchPreviewPageState extends State<ChatImageBatchPreviewPage> {
         backgroundColor: Colors.black,
         foregroundColor: Colors.white,
         elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.close),
-          onPressed: () => Navigator.pop(context),
-        ),
+        leading: IconButton(icon: const Icon(Icons.close), onPressed: _cancel),
         title: Text(_drafts.length == 1 ? '预览' : '预览 (${_drafts.length})'),
         actions: [
           if (canEdit)

@@ -53,6 +53,7 @@ import '../conversation/native_conversation_page.dart';
 import '../conversation/notification_service.dart';
 import '../desktop/windows_desktop_tray.dart';
 import '../desktop/windows_tray_unread_items.dart';
+import '../kb/kb_upload_coordinator.dart';
 import '../kb/native_kb_chat_page.dart';
 import '../kb/native_kb_doc_page.dart';
 import '../kb/native_kb_home_page.dart';
@@ -71,11 +72,12 @@ import '../nova/native_nova_history_page.dart';
 import '../nova/native_nova_page.dart';
 import '../nova/nova_background_coordinator.dart';
 import '../nova/nova_web_storage.dart';
-import '../push/in_app_message_banner.dart';
 import '../push/push_service.dart';
 import '../conversation/message_preview_text.dart';
 import '../qianji/native_qianji_cursor_account_detail_page.dart';
 import '../qianji/native_qianji_cursor_account_page.dart';
+import '../qianji/native_qianji_fund_secondment_detail_page.dart';
+import '../qianji/native_qianji_fund_secondment_page.dart';
 import '../qianji/native_qianji_detail_page.dart';
 import '../qianji/native_qianji_hub_page.dart';
 import '../qianji/native_qianji_iteration_page.dart';
@@ -212,6 +214,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
   String? _b14InitialFilter;
   int _meetingId = 0;
   int _cursorBindingId = 0;
+  int _fundSecondmentId = 0;
   String _selectedRobotConsultId = '';
 
   /// 从通讯机器人会话进入 QJR 时带上 robotKey。
@@ -402,6 +405,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     NovaBackgroundCoordinator.instance.addListener(_onNovaCoordinatorUpdate);
     MeetingUploadCoordinator.instance.attach(widget.session);
     MeetingUploadCoordinator.instance.addListener(_onMeetingUploadUpdate);
+    KbUploadCoordinator.instance.addListener(_onKbUploadUpdate);
     unawaited(MeetingUploadCoordinator.instance.resumePending());
     unawaited(_bootCommBadgeRealtime());
     unawaited(_refreshCommUnreadBadge());
@@ -462,6 +466,10 @@ class _NativeScreenHostState extends State<NativeScreenHost>
   void _handleTpnsNotificationClick(PushNotificationClick event) {
     final eventType = event.eventType.trim().toLowerCase();
     if (event.isDuneAnnouncement) {
+      if (widget.session.isExternalUser) {
+        _fallbackToConversationListFromTpns();
+        return;
+      }
       _openDuneAnnouncementFromTpns(
         tab: _announcementTabFromTpns(event),
         conversationId: event.conversationId,
@@ -524,6 +532,10 @@ class _NativeScreenHostState extends State<NativeScreenHost>
 
   void _openDuneAnnouncementFromTpns({String? tab, int conversationId = 0}) {
     if (!mounted) return;
+    if (widget.session.isExternalUser) {
+      _fallbackToConversationListFromTpns();
+      return;
+    }
     _markUserEnteredChat();
     setState(() {
       _messageCenterInitialTab = tab;
@@ -590,12 +602,18 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       _openAdministrativeNotice(resolvedConversation, noticeId: noticeId);
       routed = mounted && widget.navigation.currentScreen == 'AN1';
     } else if (resolvedConversation.isBroadcast) {
+      if (widget.session.isExternalUser) {
+        return false;
+      }
       _openDuneAnnouncementFromTpns(
         tab: 'broadcast',
         conversationId: resolvedConversation.id,
       );
       routed = true;
     } else if (resolvedConversation.isAiAssistant) {
+      if (widget.session.isExternalUser) {
+        return false;
+      }
       setState(() {
         _novaFocusConversationId = resolvedConversation.id;
         _novaFocusMessageId = null;
@@ -661,9 +679,9 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     _workbenchBadgeRefreshDebounce?.cancel();
     _commBadgeRtSub?.cancel();
     dismissDunesActionToast();
-    dismissInAppMessageBanner();
     NovaBackgroundCoordinator.instance.removeListener(_onNovaCoordinatorUpdate);
     MeetingUploadCoordinator.instance.removeListener(_onMeetingUploadUpdate);
+    KbUploadCoordinator.instance.removeListener(_onKbUploadUpdate);
     _commUnread.dispose();
     _workbenchBadge.dispose();
     _workbenchRefresh.dispose();
@@ -704,6 +722,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
 
     // 智能总结终态：Centrifugo +（后台）TPNS；未读走 chat_summary.read_at，不再写 notification。
     if (event.type == 'ai_summary_updated') {
+      if (widget.session.isExternalUser) return;
       final data = event.raw['data'];
       final map = data is Map ? data : event.raw;
       final status = (map['status'] ?? '').toString().toUpperCase();
@@ -769,7 +788,6 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     if (event.type == 'message' || event.type == 'system_flow') {
       if (!_isPeerRealtimeMessage(event)) return;
       final convId = event.conversationId ?? 0;
-      _maybeShowInAppImBanner(event);
       if (_isViewingConversation(convId)) return;
 
       final mentionHit = ConversationMentionUtils.eventMentionsMeFromRealtime(
@@ -853,129 +871,6 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       }
     }
     notifyPushRealtimeMessage(title: title, body: body, conversationId: convId);
-  }
-
-  /// APP 应用内 IM 横幅：仅追加展示，不改 TPNS / 桌面通知 / 角标。
-  void _maybeShowInAppImBanner(ConversationRealtimeEvent event) {
-    if (isDesktopCommOnly) return;
-    if (!mounted) return;
-    final lifecycle = WidgetsBinding.instance.lifecycleState;
-    if (lifecycle != null && lifecycle != AppLifecycleState.resumed) return;
-
-    final convId = event.conversationId ?? 0;
-    if (convId <= 0) return;
-    if (_isInConversationChatWindow(convId)) return;
-
-    final cached = _commBadgeConversations[convId];
-    if (!_isInAppImBannerConversation(event, cached)) return;
-
-    final isMuted = _mutedConvIds[convId] == true;
-    if (isMuted) {
-      final mentionHit = ConversationMentionUtils.eventMentionsMeFromRealtime(
-        event: event,
-        selfUserId: widget.session.userId,
-        selfDisplayName: widget.session.displayName,
-      );
-      if (!mentionHit) return;
-    }
-
-    var title = '沙丘';
-    var body = '您有新消息';
-    final msg = event.raw['message'];
-    NativeConversation? conversation = cached;
-    if (msg is Map) {
-      final kind = (msg['kind'] ?? '').toString();
-      final rawBody =
-          (msg['bodyText'] ?? msg['content'] ?? msg['text'] ?? body).toString();
-      final preview = compactMessagePushPreview(kind: kind, body: rawBody);
-      final sender = msg['sender'];
-      var senderName = '';
-      if (sender is Map) {
-        senderName = (sender['displayName'] ?? sender['name'] ?? '')
-            .toString()
-            .trim();
-      }
-      final rawTitle =
-          (event.raw['conversationTitle'] ??
-                  event.raw['conversationName'] ??
-                  msg['conversationTitle'] ??
-                  msg['conversationName'] ??
-                  '')
-              .toString()
-              .trim();
-      final conversationTitle = rawTitle.isNotEmpty
-          ? rawTitle
-          : (cached?.title ?? '').trim();
-      final isPrivate =
-          cached?.isPrivate == true ||
-          (msg['conversationKind'] ?? event.raw['conversationKind'] ?? '')
-                  .toString()
-                  .trim()
-                  .toUpperCase() ==
-              'PRIVATE';
-      if (!isPrivate && conversationTitle.isNotEmpty) {
-        title = conversationTitle;
-        body = senderName.isEmpty ? preview : '$senderName：$preview';
-      } else {
-        title = senderName.isEmpty ? '沙丘' : senderName;
-        body = preview;
-      }
-    }
-
-    showInAppMessageBanner(
-      context: context,
-      conversationId: convId,
-      title: title,
-      body: body,
-      conversation: conversation,
-      session: widget.session,
-      onTap: () {
-        if (!mounted) return;
-        unawaited(_openConversationFromTpns(convId));
-      },
-    );
-  }
-
-  bool _isInAppImBannerConversation(
-    ConversationRealtimeEvent event,
-    NativeConversation? cached,
-  ) {
-    if (cached != null) {
-      if (cached.isSelfMemo) return false;
-      return cached.isPrivate || cached.isGroup || cached.isWorkgroupApproval;
-    }
-    final msg = event.raw['message'];
-    final rawKind = (event.raw['conversationKind'] ??
-            (msg is Map ? msg['conversationKind'] : null) ??
-            '')
-        .toString()
-        .trim()
-        .toUpperCase();
-    return rawKind == 'PRIVATE' ||
-        rawKind == 'GROUP' ||
-        rawKind == 'WORKGROUP' ||
-        rawKind == 'WORKGROUP_APPROVAL';
-  }
-
-  /// 仅「该会话的聊天窗口本身」抑制横幅；群资料等子页仍弹。
-  bool _isInConversationChatWindow(int convId) {
-    if (convId <= 0) return false;
-    final screen = widget.navigation.currentScreen;
-    if (screen == 'C5' && _selectedPrivate?.id == convId) return true;
-    if (screen == 'C2' && _selectedGroup?.id == convId) return true;
-    if (screen == 'CR' && _selectedRobot?.id == convId) return true;
-    if (screen == 'C10' && _selectedBroadcast?.id == convId) return true;
-    if (screen == 'AA1' && _selectedApprovalAssistant?.id == convId) {
-      return true;
-    }
-    if (screen == 'TA1' && _selectedTaskAssistant?.id == convId) return true;
-    if (screen == 'DA1' && _selectedDriveAssistant?.id == convId) return true;
-    if (screen == 'WS1' && _selectedWeeklySummary?.id == convId) return true;
-    if (screen == 'RA1' && _selectedReconciliation?.id == convId) return true;
-    if (screen == 'AN1' && _selectedAdministrativeNotice?.id == convId) {
-      return true;
-    }
-    return false;
   }
 
   void _scheduleCommBadgeRefresh() {
@@ -1284,6 +1179,20 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     }
   }
 
+  void _onKbUploadUpdate() {
+    if (!mounted) return;
+    if (widget.navigation.currentScreen == 'K1') return;
+    final toast = KbUploadCoordinator.instance.takeToast();
+    if (toast == null) return;
+    showDunesToast(
+      context,
+      toast.message,
+      kind: toast.error || dunesToastLooksLikeError(toast.message)
+          ? DunesToastKind.error
+          : DunesToastKind.normal,
+    );
+  }
+
   Future<void> _handleNovaCoordinatorBadge({required bool shouldBump}) async {
     await _refreshCommUnreadBadge();
     if (!mounted || !shouldBump || widget.navigation.currentScreen == 'C4') {
@@ -1353,7 +1262,11 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           : aiSummaryUnread;
       final rows = allRows
           .where(
-            (c) => c.isListedInInbox && !isConversationHidden(hidden, c.id),
+            (c) =>
+                c.isListedInInbox &&
+                !isConversationHidden(hidden, c.id) &&
+                !(widget.session.isExternalUser &&
+                    (c.isBroadcast || c.isAiAssistant)),
           )
           .toList(growable: false);
       _mutedConvIds
@@ -1377,7 +1290,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         }
         final summedTotal = _commUnread.sumConversationUnread(
           rows: rows,
-          notifUnread: notif.unreadCount,
+          notifUnread: widget.session.isExternalUser ? 0 : notif.unreadCount,
           aiSummaryUnread: effectiveAiUnread,
           treatAsReadIds: treatAsRead,
         );
@@ -1386,7 +1299,9 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         // 当前正在查看的会话已 mark-read / 不计入角标，需从 apiTotal 扣掉。
         final apiRaw = apiTotal ?? 0;
         final apiVal = apiRaw > viewingUnread ? apiRaw - viewingUnread : 0;
-        final serverTotal = apiVal > summedTotal ? apiVal : summedTotal;
+        final serverTotal = widget.session.isExternalUser
+            ? summedTotal
+            : (apiVal > summedTotal ? apiVal : summedTotal);
         final localBadge = await readPushBadgeCount();
         final unreadRows = rows
             .where((c) => c.unreadCount > 0 && c.id != viewingId)
@@ -1656,6 +1571,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
   }
 
   void _openAiSummaryCreate({int? conversationId}) {
+    if (widget.session.isExternalUser) return;
     setState(() {
       _aiSummaryPrefillConversationIds =
           conversationId != null && conversationId > 0
@@ -1663,6 +1579,11 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           : const <int>[];
     });
     widget.navigation.go('AS2');
+  }
+
+  ValueChanged<int>? get _onOpenAiSummaryFromChat {
+    if (widget.session.isExternalUser) return null;
+    return (convId) => _openAiSummaryCreate(conversationId: convId);
   }
 
   void _clearChatFocusMessage() {
@@ -2089,6 +2010,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         widget.navigation.go('C3');
       },
       onOpenNova: () {
+        if (widget.session.isExternalUser) return;
         NovaBackgroundCoordinator.instance.clearPendingCommBadgeBump();
         setState(() {
           _novaFocusConversationId = null;
@@ -2097,6 +2019,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         widget.navigation.go('C4');
       },
       onOpenNotifications: (tab) {
+        if (widget.session.isExternalUser) return;
         setState(() {
           _messageCenterInitialTab = tab;
           _messageCenterMarkAllOnEnter = true;
@@ -2110,7 +2033,9 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         });
         widget.navigation.go('C3');
       },
-      onOpenAiSummary: () => widget.navigation.go('AS1'),
+      onOpenAiSummary: widget.session.isExternalUser
+          ? () {}
+          : () => widget.navigation.go('AS1'),
       onOpenFavorites: () => widget.navigation.go('CF'),
       onOpenApprovalAssistant: _openApprovalAssistant,
       onOpenTaskAssistant: _openTaskAssistant,
@@ -2721,6 +2646,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
                   updatedAt: null,
                 ),
             initialNoticeId: active ? _administrativeNoticeTargetId : null,
+            isActive: active,
             showBackButton: false,
             onBack: () => _leaveChatToInbox(clearSelection: true),
             onAcknowledged: _handleConversationRead,
@@ -2798,8 +2724,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
             });
             widget.navigation.go('C12');
           },
-          onOpenAiSummary: (convId) =>
-              _openAiSummaryCreate(conversationId: convId),
+          onOpenAiSummary: _onOpenAiSummaryFromChat,
           onOpenApprovalShare: (share) =>
               _openApprovalFromChat(share, from: 'C5'),
           onConversationRead: _handleConversationRead,
@@ -2834,8 +2759,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           },
           onOpenGroupInfo: () => widget.navigation.go('C6'),
           onOpenUser: _openContactProfile,
-          onOpenAiSummary: (convId) =>
-              _openAiSummaryCreate(conversationId: convId),
+          onOpenAiSummary: _onOpenAiSummaryFromChat,
           onOpenApprovalShare: (share) =>
               _openApprovalFromChat(share, from: 'C2'),
           onConversationRead: _handleConversationRead,
@@ -2921,6 +2845,17 @@ class _NativeScreenHostState extends State<NativeScreenHost>
   }
 
   Widget _buildCurrentScreen(BuildContext context) {
+    if (widget.session.isExternalUser &&
+        _isRestrictedForExternalUser(widget.navigation.currentScreen)) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        if (widget.session.isExternalUser &&
+            _isRestrictedForExternalUser(widget.navigation.currentScreen)) {
+          widget.navigation.popTo('C1');
+        }
+      });
+      return _buildConversationListPage();
+    }
     switch (widget.navigation.currentScreen) {
       case 'QJ':
         return NativeQianjiHubPage(
@@ -2929,6 +2864,9 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           onOpenMeetingSupervise: () => widget.navigation.go('QJMM'),
           onOpenSessionSupervise: () => widget.navigation.go('QJSS'),
           onOpenKbSupervise: () => widget.navigation.go('QJKB'),
+          onOpenFundSecondment: widget.session.effectiveFundSecondmentAccess
+              ? () => widget.navigation.go('QJFS')
+              : null,
           onOpenRobotHome: () {
             setState(() {
               _qjrOpenedFromChat = false;
@@ -3095,6 +3033,76 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         return NativeQianjiKbSupervisePage(
           session: widget.session,
           onBack: widget.navigation.back,
+        );
+      case 'QJFS':
+        if (!widget.session.effectiveFundSecondmentAccess) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) widget.navigation.go('QJ');
+          });
+          return const Scaffold(
+            backgroundColor: DunesColors.bgApp,
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+        return NativeQianjiFundSecondmentPage(
+          session: widget.session,
+          onBack: widget.navigation.back,
+          onOpenDetail: (id) {
+            if (id <= 0) return;
+            setState(() => _fundSecondmentId = id);
+            widget.navigation.go('QJFSD');
+          },
+        );
+      case 'QJFSD':
+        if (!widget.session.effectiveFundSecondmentAccess) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) widget.navigation.go('QJ');
+          });
+          return const Scaffold(
+            backgroundColor: DunesColors.bgApp,
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+        if (_fundSecondmentId <= 0) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) widget.navigation.go('QJFS');
+          });
+          return const Scaffold(
+            backgroundColor: DunesColors.bgApp,
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+        return NativeQianjiFundSecondmentDetailPage(
+          key: ValueKey<String>('qianji-fund-$_fundSecondmentId'),
+          session: widget.session,
+          recordId: _fundSecondmentId,
+          onBack: () {
+            final nav = widget.navigation;
+            if (nav.history.contains('QJFS')) {
+              nav.popTo('QJFS');
+            } else {
+              nav.back();
+            }
+          },
+          onOpenApproval: (row) {
+            if (row.loanDocId <= 0) return;
+            unawaited(
+              showApprovalDetailOverlay(
+                context: context,
+                session: widget.session,
+                share: ApprovalChatShare(
+                  businessType: 'LOAN_REQUEST',
+                  businessId: row.loanDocId,
+                  title: row.code.isEmpty
+                      ? '借款申请单'
+                      : '借款申请单 ${row.code}',
+                  templateKey: 'loan-request',
+                  code: row.code,
+                  status: 'APPROVED',
+                ),
+              ),
+            );
+          },
         );
       case 'QJMD':
         if (_meetingId <= 0) {
@@ -3765,8 +3773,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           },
           onOpenGroupInfo: () => widget.navigation.go('C6'),
           onOpenUser: _openContactProfile,
-          onOpenAiSummary: (convId) =>
-              _openAiSummaryCreate(conversationId: convId),
+          onOpenAiSummary: _onOpenAiSummaryFromChat,
           onOpenApprovalShare: (share) =>
               _openApprovalFromChat(share, from: 'C2'),
           onConversationRead: _handleConversationRead,
@@ -3808,8 +3815,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
             });
             widget.navigation.go('C12');
           },
-          onOpenAiSummary: (convId) =>
-              _openAiSummaryCreate(conversationId: convId),
+          onOpenAiSummary: _onOpenAiSummaryFromChat,
           onOpenApprovalShare: (share) =>
               _openApprovalFromChat(share, from: 'C5'),
           onConversationRead: _handleConversationRead,
@@ -3881,8 +3887,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           onCheckForUpdates: isWindowsDesktopCommOnly
               ? () => unawaited(_checkDesktopAppUpdate())
               : null,
-          onScanWorkstation:
-              !isWindowsDesktopCommOnly && !widget.session.isExternalUser
+          onScanWorkstation: !isWindowsDesktopCommOnly
               ? () {
                   _leaveDesktopSettingsForChild();
                   unawaited(_openDesktopQrLoginScanner(returnToSettings: true));
@@ -3939,10 +3944,6 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
         _syncActiveViewReport();
-        final bannerConvId = inAppMessageBannerConversationId;
-        if (bannerConvId > 0 && _isInConversationChatWindow(bannerConvId)) {
-          dismissInAppMessageBanner();
-        }
       });
     }
 
@@ -4184,6 +4185,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       'QJMD',
       'QJSS',
       'QJKB',
+      'QJFS',
+      'QJFSD',
       'QJR',
       'QJRA',
       'QJRC',
@@ -4262,6 +4265,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         screen == 'QJMD' ||
         screen == 'QJSS' ||
         screen == 'QJKB' ||
+        screen == 'QJFS' ||
+        screen == 'QJFSD' ||
         screen == 'QJR' ||
         screen == 'QJRA' ||
         screen == 'QJRC' ||
@@ -4326,6 +4331,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     if (!_isNovaTabScreen(last)) return 'QJ';
     if (last == 'QJRC' && _selectedRobotConsultId.isEmpty) return 'QJR';
     if (last == 'QJCD' && _cursorBindingId <= 0) return 'QJC';
+    if (last == 'QJFSD' && _fundSecondmentId <= 0) return 'QJFS';
     if (last == 'QJI' && _selectedQianjiEntity == null) return 'QJD';
     if (last == 'QJTD' && _selectedQianjiTask == null) {
       return _selectedQianjiProject == null ? 'QJM' : 'QJMT';
@@ -4345,6 +4351,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       'QJMD',
       'QJSS',
       'QJKB',
+      'QJFS',
+      'QJFSD',
       'QJR',
       'QJRA',
       'QJRC',
@@ -4354,6 +4362,19 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       'QJMT',
       'QJTD',
     }.contains(screen);
+  }
+
+  bool _isNovaRestrictedScreen(String? screen) {
+    return screen == 'C4' || screen == 'C11' || _isNovaTabScreen(screen);
+  }
+
+  bool _isRestrictedForExternalUser(String? screen) {
+    return _isNovaRestrictedScreen(screen) ||
+        screen == 'Z2' ||
+        screen == 'C10' ||
+        screen == 'AS1' ||
+        screen == 'AS2' ||
+        screen == 'AS3';
   }
 
   /// 重建 NOVA 导航链，保证返回键能逐级回到列表 / 首页。
@@ -4371,6 +4392,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       'QJMD' => const ['QJ', 'QJMM', 'QJMD'],
       'QJSS' => const ['QJ', 'QJSS'],
       'QJKB' => const ['QJ', 'QJKB'],
+      'QJFS' => const ['QJ', 'QJFS'],
+      'QJFSD' => const ['QJ', 'QJFS', 'QJFSD'],
       'QJD' => const ['QJ', 'QJD'],
       'QJI' => const ['QJ', 'QJD', 'QJI'],
       'QJM' => const ['QJ', 'QJM'],
@@ -4957,14 +4980,18 @@ class _NativeB2PageState extends State<_NativeB2Page> {
       final hidden = results[2] as Map<String, InboxHiddenEntry>;
       final rows = allRows
           .where(
-            (c) => c.isListedInInbox && !isConversationHidden(hidden, c.id),
+            (c) =>
+                c.isListedInInbox &&
+                !isConversationHidden(hidden, c.id) &&
+                !(widget.session.isExternalUser &&
+                    (c.isBroadcast || c.isAiAssistant)),
           )
           .toList(growable: false);
       if (mounted) {
         widget.commUnread.update(
           widget.commUnread.sumConversationUnread(
             rows: rows,
-            notifUnread: notif.unreadCount,
+            notifUnread: widget.session.isExternalUser ? 0 : notif.unreadCount,
           ),
         );
       }
@@ -5159,23 +5186,6 @@ class _NativeB2PageState extends State<_NativeB2Page> {
   }
 
   Future<void> _openQrLoginScanner() async {
-    if (widget.session.isExternalUser) {
-      if (!mounted) return;
-      showDialog<void>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text('无法扫码登录'),
-          content: const Text('外部用户不支持登录 PC 工作台'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(),
-              child: const Text('知道了'),
-            ),
-          ],
-        ),
-      );
-      return;
-    }
     if (_qrLoginOpening) return;
     setState(() => _qrLoginOpening = true);
     try {
@@ -5845,15 +5855,14 @@ class _NativeB2PageState extends State<_NativeB2Page> {
           ];
         }
         return [
-          if (!widget.session.isExternalUser)
-            PopupMenuItem(
-              value: _B2MenuAction.scanWorkstation,
-              enabled: !_qrLoginOpening,
-              child: const _B2MenuEntry(
-                icon: Icons.qr_code_scanner_rounded,
-                label: '扫码登录工作台',
-              ),
+          PopupMenuItem(
+            value: _B2MenuAction.scanWorkstation,
+            enabled: !_qrLoginOpening,
+            child: const _B2MenuEntry(
+              icon: Icons.qr_code_scanner_rounded,
+              label: '扫码登录工作台',
             ),
+          ),
           if (!widget.session.isExternalUser)
             const PopupMenuItem(
               value: _B2MenuAction.wechatBot,

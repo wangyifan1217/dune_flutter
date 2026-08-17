@@ -189,7 +189,7 @@ String formatFieldValue(XflowField field, dynamic val) {
   if (val is List) {
     if (val.isEmpty) return '';
     if (field.type == 'dynamicList' || field.type == 'matrix' || field.type == 'structuredTable') {
-      return '${val.length}行';
+      return field.isCardDynamicList ? '${val.length}组' : '${val.length}行';
     }
     if (val.isNotEmpty && val.first is Map) {
       return val
@@ -208,7 +208,7 @@ String formatFieldValue(XflowField field, dynamic val) {
   }
   if (val is Map) {
     if (field.type == 'dynamicList' || field.type == 'matrix' || field.type == 'structuredTable') {
-      return '1行';
+      return field.isCardDynamicList ? '1组' : '1行';
     }
     if (val['fileName'] != null) return val['fileName'].toString();
     if (val['text'] != null) return val['text'].toString();
@@ -259,6 +259,16 @@ List<Map<String, dynamic>> inferColumns(List<Map<String, dynamic>> rows, XflowFi
       .where((k) => k != nestedKey && rows.first[k] is! List && rows.first[k] is! Map)
       .map((k) => {'key': k, 'label': colLabels[k] ?? k})
       .toList(growable: false);
+}
+
+String formatGroupCellDisplay(XflowField col, Map<String, dynamic> row) {
+  if (col.type == 'upload') return '';
+  final cfg = col.remoteSearch;
+  if (cfg != null && cfg.fill.length > 1) {
+    final joined = cfg.fillDisplayOf(row);
+    if (joined.isNotEmpty) return joined;
+  }
+  return formatCellDisplay(row[col.key], col.raw, row);
 }
 
 String formatCellDisplay(dynamic val, Map<String, dynamic> col, Map<String, dynamic> row) {

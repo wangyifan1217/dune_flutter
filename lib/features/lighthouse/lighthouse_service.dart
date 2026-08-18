@@ -199,22 +199,10 @@ class LighthouseService {
   }
 
   /// 供给资金池（资管标签二：资产合计 / 资金池余额），按省份 map。
-  Future<Map<String, dynamic>> fetchFundPool({
-    String? period,
-    String? date,
-    String? fuel,
-    int? offset,
-    DateTime? startDate,
-    DateTime? endDate,
-    String? asOfDate,
-  }) {
+  /// 默认取最新快照；asOfDate 仅用于明确的历史审计查询。
+  Future<Map<String, dynamic>> fetchFundPool({String? asOfDate}) {
     return _getData('/lighthouse/fund-pool', {
-      if (period != null && period.isNotEmpty) 'period': period,
-      if (date != null && date.isNotEmpty) 'date': date,
-      if (fuel != null && fuel.isNotEmpty && fuel != '全部') 'fuel': fuel,
-      if (offset != null && offset != 0) 'offset': '$offset',
       if (asOfDate != null && asOfDate.isNotEmpty) 'asOfDate': asOfDate,
-      ..._rangeQuery(startDate, endDate),
     }, '灯塔资金池加载失败');
   }
 

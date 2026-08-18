@@ -6007,6 +6007,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   final Map<String, String> _detailLoadedFor = {};
   final Set<String> _loadedTrends = {};
   final Set<String> _loadingTrends = {};
+  final Map<String, String> _trendErrors = {};
 
   /// tab → (rowKey → trend)。不依赖该维列表是否已加载；二级/三级展开靠它回填。
   final Map<String, Map<String, Map<String, dynamic>>> _trendCache = {};
@@ -7285,6 +7286,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           _loadingDetails.clear();
           _loadedTrends.clear();
           _loadingTrends.clear();
+          _trendErrors.clear();
           _trendCache.clear();
           _discountsLoading = false;
           _discountsByName = const {};
@@ -7532,14 +7534,24 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       });
       setState(() {
         _trendCache[tab] = cached;
+        _trendErrors.remove(tab);
         final base = _bundle ?? LighthouseDataBundle.empty();
         _bundle = base.withTrends(tab, trends);
         _loadedTrends.add(key);
         _rowsCacheKey = '';
         _rowsCache = null;
       });
-    } catch (_) {
-      // Trend is non-blocking; leave row charts collapsed when it fails.
+    } catch (e) {
+      if (!mounted ||
+          requestedPeriod != _period ||
+          requestedOffset != _periodOffset ||
+          requestedStart != _customStart ||
+          requestedEnd != _customEnd) {
+        return;
+      }
+      setState(() {
+        _trendErrors[tab] = e.toString().replaceFirst('Exception: ', '');
+      });
     } finally {
       _loadingTrends.remove(key);
     }
@@ -7585,26 +7597,12 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
 
   Future<void> _loadFundPool() async {
     if (_fundPoolLoading) return;
-    final requestedPeriod = _period;
-    final requestedOffset = _periodOffset;
-    final requestedStart = _customStart;
-    final requestedEnd = _customEnd;
     _fundPoolLoading = true;
     try {
-      final data = await _service.fetchFundPool(
-        period: requestedPeriod,
-        offset: requestedOffset,
-        startDate: requestedStart,
-        endDate: requestedEnd,
-      );
+      // 资金池是最新快照，不跟随灯塔的业务周期/日期筛选。
+      final data = await _service.fetchFundPool();
       final byProvince = lighthouseParseFundPoolByProvince(data['byProvince']);
-      if (!mounted ||
-          requestedPeriod != _period ||
-          requestedOffset != _periodOffset ||
-          requestedStart != _customStart ||
-          requestedEnd != _customEnd) {
-        return;
-      }
+      if (!mounted) return;
       setState(() {
         _fundPoolByProvince = byProvince;
       });
@@ -13585,18 +13583,68 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           ),
           const SizedBox(height: 14),
           // 折线图主体（单线，跟随日周月季年，无环比对比线）
-          _HeroMetricTrendChart(
-            labels: labels,
-            data: series,
-            metricLabel: metricLabel,
-            color: chartColor,
-            isRate: isRateLike,
-            periodValue: periodValue,
-            chartHeight: 140,
-          ),
+          if (series.isNotEmpty)
+            _HeroMetricTrendChart(
+              labels: labels,
+              data: series,
+              metricLabel: metricLabel,
+              color: chartColor,
+              isRate: isRateLike,
+              periodValue: periodValue,
+              chartHeight: 140,
+            )
+          else
+            SizedBox(
+              height: 140,
+              child: Center(
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => unawaited(_retryCurrentHeroTrend()),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 18,
+                      vertical: 12,
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          '走势暂不可用',
+                          style: LhTypography.sans(
+                            size: 11,
+                            color: LhColors.mute,
+                            weight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          '点击重新加载',
+                          style: LhTypography.mono(
+                            size: 9,
+                            color: _LhPlum.primary,
+                            weight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
         ],
       ),
     );
+  }
+
+  Future<void> _retryCurrentHeroTrend() async {
+    final type = _detailType;
+    final key = _detailKey;
+    if (type != null && key != null) {
+      _detailLoadedFor.remove('$type:$key');
+      await _loadDetail(type, key);
+      return;
+    }
+    await _reloadHeroSummary();
   }
 
   /// 单个 P&L 单元 — v2.5 编辑体简洁大气版
@@ -21201,10 +21249,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          metricTile(
-            label: '总资产金额',
-            amount: amounts?.totalAssets,
-          ),
+          metricTile(label: '总资产金额', amount: amounts?.totalAssets),
           metricTile(
             label: '资金池余额',
             amount: amounts?.fundPoolBalance,
@@ -22012,6 +22057,8 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   // ═══════════════════════════════════════════════════════════════════════════
   Widget _buildInlineExpanded(Map<String, dynamic> r) {
     final trendChart = _trendChartFor(r, showHeader: false);
+    final trendTab = _trendLookupTabForListRow();
+    final trendFailed = trendTab != null && _trendErrors.containsKey(trendTab);
     final headerTitle = _kPeriodTitle[_period] ?? '趋势';
     final headerRange =
         (_resolvedRowTrend(r) ?? (r['trend'] as Map?))?['rangeLabel']
@@ -22098,14 +22145,25 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                   if (trendChart != null)
                     trendChart
                   else
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 18),
-                      child: Center(
-                        child: Text(
-                          '暂无趋势数据',
-                          style: LhTypography.sans(
-                            size: 10,
-                            color: LhColors.mute,
+                    GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: trendFailed
+                          ? () => unawaited(_loadTrend(trendTab, force: true))
+                          : null,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 18),
+                        child: Center(
+                          child: Text(
+                            trendFailed ? '趋势加载失败，点击重试' : '暂无趋势数据',
+                            style: LhTypography.sans(
+                              size: 10,
+                              color: trendFailed
+                                  ? _LhPlum.primary
+                                  : LhColors.mute,
+                              weight: trendFailed
+                                  ? FontWeight.w600
+                                  : FontWeight.normal,
+                            ),
                           ),
                         ),
                       ),

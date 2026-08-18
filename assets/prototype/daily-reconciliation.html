@@ -1,0 +1,565 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>每日对账 · 工作台静态全量</title>
+<link rel="stylesheet" href="tabler-icons.min.css" />
+<style>
+  :root {
+    --bg: #F5F6F8;
+    --app: #FBFAF6;
+    --white: #fff;
+    --text: #1F2421;
+    --text2: #5A5C56;
+    --text3: #94938A;
+    --purple: #7B5CD8;
+    --purple-soft: #F3EEFA;
+    --hrbp: #3D7A8C;
+    --recon: #5B6FC4;
+    --blue: #1668E8;
+    --green: #5D8A4E;
+    --green-soft: #EAEFDF;
+    --coral: #BC5C40;
+    --coral-soft: #F5E5DC;
+    --amber: #B07A2B;
+    --amber-soft: #F4E8D2;
+    --border: #E8EAED;
+    --line: #F0F1F3;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    font-family: "Geist", "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: #eceef2;
+    color: var(--text);
+  }
+  button { font-family: inherit; cursor: pointer; }
+  .studio {
+    display: grid;
+    grid-template-columns: 240px 1fr;
+    height: 100%;
+  }
+  .rail {
+    background: #1f2421;
+    color: #fff;
+    padding: 18px 14px 24px;
+    overflow: auto;
+  }
+  .rail h1 {
+    font-size: 13px;
+    font-weight: 700;
+    margin: 0 0 4px;
+    letter-spacing: .02em;
+  }
+  .rail p { margin: 0 0 16px; font-size: 11px; color: #b7b9b4; line-height: 1.5; }
+  .rail .group { font-size: 10px; color: #8d9088; margin: 14px 0 6px; letter-spacing: .08em; }
+  .rail a, .rail button.nav {
+    display: block; width: 100%; text-align: left; border: 0; background: transparent;
+    color: #e8e6df; padding: 8px 10px; border-radius: 8px; font-size: 13px; margin-bottom: 2px;
+  }
+  .rail a:hover, .rail button.nav:hover, .rail button.nav.active { background: #353a36; color: #fff; }
+  .rail .roles { display: grid; gap: 6px; margin-bottom: 8px; }
+  .rail .roles button {
+    border: 1px solid #3d423e; background: transparent; color: #d5d4ce;
+    border-radius: 8px; padding: 7px 8px; font-size: 12px;
+  }
+  .rail .roles button.on { background: var(--purple); border-color: var(--purple); color: #fff; }
+  .stage {
+    padding: 20px 24px 32px;
+    overflow: auto;
+  }
+  .stage-head {
+    display: flex; align-items: baseline; justify-content: space-between; gap: 16px; margin-bottom: 14px;
+  }
+  .stage-head h2 { margin: 0; font-size: 18px; }
+  .stage-head span { font-size: 12px; color: var(--text3); }
+  .board {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+    gap: 16px;
+  }
+  .phone {
+    background: var(--bg);
+    border: 1px solid #dddfe4;
+    border-radius: 16px;
+    overflow: hidden;
+    min-height: 640px;
+    display: flex;
+    flex-direction: column;
+  }
+  .phone.wide { grid-column: 1 / -1; min-height: 720px; }
+  .caption {
+    font-size: 11px; color: var(--text3); padding: 8px 12px 0; letter-spacing: .04em;
+  }
+  .shell-head {
+    padding: 14px 16px 8px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .back {
+    display: inline-flex; align-items: center; gap: 2px;
+    border: 0; background: transparent; color: var(--text2); font-size: 13px; padding: 6px;
+  }
+  .shell-title {
+    font-size: 24px; font-weight: 700; margin: 0;
+  }
+  .shell-title.sub { font-size: 18px; color: var(--purple); }
+  .content { padding: 8px 24px 40px; flex: 1; overflow: auto; }
+  .content.tight { padding: 8px 16px 32px; }
+  .sec { display: flex; align-items: center; gap: 8px; margin: 8px 0 14px; }
+  .sec b { width: 4px; height: 16px; background: var(--purple); border-radius: 2px; display: block; }
+  .sec span { font-size: 15px; font-weight: 700; color: var(--purple); }
+  .sec.blue b { background: var(--blue); } .sec.blue span { color: var(--blue); }
+  .sec.hrbp b { background: var(--hrbp); } .sec.hrbp span { color: var(--hrbp); }
+  .tiles { display: flex; gap: 10px; }
+  .tile {
+    width: 108px; height: 108px; background: #fff; border: 1px solid var(--border);
+    border-radius: 10px; padding: 10px 10px 8px; display: flex; flex-direction: column;
+    text-align: left;
+  }
+  .tile .ic {
+    width: 32px; height: 32px; border-radius: 8px; display: flex; align-items: center; justify-content: center;
+    font-size: 17px;
+  }
+  .tile .nm { margin-top: auto; font-size: 13px; font-weight: 600; line-height: 1.2; }
+  .tile .ds { margin-top: 2px; font-size: 11px; color: var(--text3); line-height: 1.2; }
+  .row-card, .sector {
+    background: #fff; border-radius: 12px; padding: 14px 16px; margin-bottom: 8px;
+    display: flex; align-items: center; gap: 10px; border: 0; width: 100%; text-align: left;
+  }
+  .row-card .t { font-size: 16px; font-weight: 700; }
+  .row-card .s, .sector .s { font-size: 13px; color: var(--text2); margin-top: 4px; }
+  .pill {
+    font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 999px; white-space: nowrap;
+  }
+  .pill.reject { background: var(--coral-soft); color: var(--coral); }
+  .pill.wait { background: var(--amber-soft); color: var(--amber); }
+  .pill.ok { background: var(--green-soft); color: var(--green); }
+  .chev { margin-left: auto; color: var(--text3); font-size: 18px; }
+  .date-label { font-size: 15px; font-weight: 600; color: var(--text2); margin: 0 0 12px; }
+  .h-title { font-size: 15px; font-weight: 700; margin: 0 0 6px; }
+  .h-sub { font-size: 13px; color: var(--text2); margin: 0 0 14px; }
+  .warn { font-size: 13px; color: var(--amber); margin: -6px 0 12px; }
+  .block-title { font-size: 13px; font-weight: 600; color: var(--text2); margin: 0 0 8px; }
+  table.recon {
+    width: 100%; border-collapse: collapse; background: #fff; border: 1px solid var(--border);
+    border-radius: 12px; overflow: hidden; font-size: 12px; margin-bottom: 16px;
+  }
+  table.recon th {
+    background: #F6F7F9; color: var(--text2); font-weight: 600; text-align: right;
+    padding: 10px 10px; border-bottom: 1px solid var(--border);
+  }
+  table.recon th:first-child, table.recon td:first-child,
+  table.recon th.act, table.recon td.act { text-align: left; }
+  table.recon td {
+    padding: 9px 10px; border-bottom: .5px solid var(--border); text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+  table.recon tr.total { background: #F3F6F5; font-weight: 700; }
+  table.recon tr.total td { color: var(--text); }
+  .act { width: 108px; white-space: nowrap; }
+  .mini {
+    display: inline-flex; align-items: center; justify-content: center;
+    border: 1px solid var(--border); border-radius: 6px; padding: 3px 6px;
+    font-size: 11px; font-weight: 600; color: var(--text2); background: #fff; margin-right: 2px;
+  }
+  .mini.on-ok { background: rgba(93,138,78,.14); border-color: rgba(93,138,78,.55); color: var(--green); }
+  .mini.on-no { background: rgba(188,92,64,.14); border-color: rgba(188,92,64,.55); color: var(--coral); }
+  .st { font-size: 12px; font-weight: 600; }
+  .st.ok { color: var(--green); } .st.no { color: var(--coral); } .st.mu { color: var(--text3); }
+  textarea, .field {
+    width: 100%; border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px;
+    font-size: 13px; margin-bottom: 12px; min-height: 72px; resize: none; font-family: inherit;
+  }
+  .btn {
+    border: 0; background: var(--purple); color: #fff; border-radius: 8px;
+    padding: 10px 16px; font-size: 14px; font-weight: 600;
+  }
+  .btn[disabled] { opacity: .45; }
+  .im {
+    background: #fff; border-radius: 16px; padding: 16px; max-width: 420px;
+  }
+  .im .who { display: flex; gap: 10px; align-items: center; margin-bottom: 10px; }
+  .im .av {
+    width: 45px; height: 45px; border-radius: 14px;
+    background: linear-gradient(135deg,#5B6FC4,#7652B8); color: #fff;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .bubble {
+    background: #F3F4F6; border-radius: 4px 14px 14px 14px; padding: 10px 12px; font-size: 14px; line-height: 1.5;
+  }
+  .card-msg {
+    margin-top: 8px; background: #fff; border: 1px solid var(--border); border-radius: 12px; padding: 12px;
+  }
+  .card-msg .k { font-size: 12px; color: var(--text3); }
+  .card-msg .n { font-size: 15px; font-weight: 700; margin: 4px 0; }
+  .mask {
+    position: fixed; inset: 0; background: rgba(20,22,24,.35); display: none;
+    align-items: center; justify-content: center; z-index: 20;
+  }
+  .mask.on { display: flex; }
+  .dlg { background: #fff; border-radius: 12px; width: 360px; padding: 18px; }
+  .dlg h3 { margin: 0 0 10px; font-size: 16px; }
+  .dlg .row { display: flex; justify-content: flex-end; gap: 8px; }
+  .ghost { background: transparent; border: 0; color: var(--text2); padding: 8px 10px; }
+  @media (max-width: 900px) {
+    .studio { grid-template-columns: 1fr; }
+    .rail { display: none; }
+    .phone.wide { grid-column: auto; }
+  }
+</style>
+</head>
+<body>
+<div class="studio">
+  <aside class="rail">
+    <h1>每日对账 · 静态全量</h1>
+    <p>对齐工作台真实结构：协作入口 → 日期列表 → 五张板块卡 → 明细表。可点、可切角色。</p>
+    <div class="group">当前角色</div>
+    <div class="roles" id="roles"></div>
+    <div class="group">页面</div>
+    <button class="nav active" data-go="workbench">QJA 工作台入口</button>
+    <button class="nav" data-go="dates">日期列表</button>
+    <button class="nav" data-go="cards">五张汇总卡</button>
+    <button class="nav" data-go="cnpc">中石油明细</button>
+    <button class="nav" data-go="energy">能源明细</button>
+    <button class="nav" data-go="private">民营明细</button>
+    <button class="nav" data-go="operator">运营商明细</button>
+    <button class="nav" data-go="travel">出行金明细</button>
+    <button class="nav" data-go="im">IM 分步通知</button>
+    <button class="nav" data-go="all">全部并排</button>
+  </aside>
+  <main class="stage">
+    <div class="stage-head">
+      <h2 id="pageTitle">工作台入口</h2>
+      <span id="pageHint">点击「每日对账」进入日期列表 · 角色决定确认按钮</span>
+    </div>
+    <div class="board" id="board"></div>
+  </main>
+</div>
+
+<div class="mask" id="mask">
+  <div class="dlg">
+    <h3 id="dlgTitle">驳回该明细</h3>
+    <textarea id="dlgText" placeholder="请填写原因（必填）"></textarea>
+    <div class="row">
+      <button class="ghost" id="dlgCancel">取消</button>
+      <button class="btn" id="dlgOk">提交</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const ROLES = [
+  { id: 'l1', name: '业务一层', hint: '只看自己负责的行，按行确认 / 驳回' },
+  { id: 'finance', name: '财务', hint: '一层全确认后解锁，按行确认 / 驳回' },
+  { id: 'l2', name: '业务二层', hint: '整页确认，不按行；看整板块' },
+  { id: 'final', name: '最终人', hint: '全部确认后只读查阅' },
+  { id: 'wait', name: '未到自己', hint: '能看不能确认，等待上一层' },
+];
+let role = 'l1';
+let view = 'workbench';
+const rowState = {};
+
+const DATES = [
+  { date: '2026年8月17日', iso: '2026-08-17', conf: 9, exp: 14, pending: 5, reject: true },
+  { date: '2026年8月16日', iso: '2026-08-16', conf: 14, exp: 14, pending: 0, reject: false },
+  { date: '2026年8月15日', iso: '2026-08-15', conf: 12, exp: 14, pending: 2, reject: false },
+  { date: '2026年8月14日', iso: '2026-08-14', conf: 14, exp: 14, pending: 0, reject: false },
+];
+
+const SECTORS = [
+  { key: 'cnpc', title: '标签二-中石油', conf: 2, pending: 1, go: 'cnpc' },
+  { key: 'energy', title: '标签三-能源', conf: 3, pending: 2, go: 'energy' },
+  { key: 'private', title: '标签三-民营', conf: 2, pending: 1, go: 'private' },
+  { key: 'operator', title: '标签三-运营商', conf: 4, pending: 1, go: 'operator' },
+  { key: 'travel', title: '标签三-出行金', conf: 0, pending: 2, go: 'travel' },
+];
+
+function ic(name, color, bg) {
+  return `<div class="ic" style="color:${color};background:${bg}"><i class="ti ti-${name}"></i></div>`;
+}
+
+function shell(title, back, inner, tight) {
+  const isHome = title === '工作台';
+  return `<div class="phone ${tight ? '' : 'wide'}">
+    <div class="shell-head">
+      ${back ? `<button class="back" data-go="${back}"><i class="ti ti-chevron-left"></i>${isHome ? '' : '工作台'}</button>` : ''}
+      <div class="shell-title ${isHome ? '' : 'sub'}">${title}</div>
+    </div>
+    <div class="content ${tight ? 'tight' : ''}">${inner}</div>
+  </div>`;
+}
+
+function workbench() {
+  const tile = (title, sub, icon, color, go) =>
+    `<button class="tile" ${go ? `data-go="${go}"` : ''}>
+      ${ic(icon, color, color + '1a')}
+      <div class="nm">${title}</div><div class="ds">${sub}</div>
+    </button>`;
+  const inner = `
+    <div class="sec"><b></b><span>协作</span></div>
+    <div class="tiles">
+      ${tile('任务', '主任务 · 子任务', 'checkbox', '#7B5CD8')}
+      ${tile('任务汇总', '部门进度', 'chart-histogram', '#3D7A8C')}
+      ${tile('企业微盘', '文件 · 共享空间', 'cloud', '#7B5CD8')}
+      ${tile('每日对账', '账期快照 · 分板块核对', 'arrows-exchange', '#5B6FC4', 'dates')}
+    </div>
+    <div class="sec blue" style="margin-top:18px"><b></b><span>工具</span></div>
+    <div class="tiles">${tile('携程商旅', '机票 · 酒店 · 用车', 'plane', '#1668E8')}</div>
+    <div class="sec hrbp" style="margin-top:18px"><b></b><span>行政</span></div>
+    <div class="tiles">
+      ${tile('行政通知', '发布通知 · 查看确认进度', 'speakerphone', '#3D7A8C')}
+      ${tile('公司广播', '全员推送 · 发布与历史', 'broadcast', '#7B5CD8')}
+    </div>`;
+  return shell('工作台', '', inner);
+}
+
+function dates() {
+  const rows = DATES.map(d => `
+    <button class="row-card" data-go="cards">
+      <div>
+        <div class="t">${d.date}</div>
+        <div class="s">${d.exp <= 0 ? '暂无核对人' : `${d.conf}/${d.exp} 已核对${d.pending ? ' · ' + d.pending + ' 人未核对' : ''}`}</div>
+      </div>
+      ${d.reject ? '<span class="pill reject">有驳回</span>' : (d.pending === 0 ? '<span class="pill ok">已完成</span>' : '')}
+      <i class="ti ti-chevron-right chev"></i>
+    </button>`).join('');
+  return shell('每日对账', 'workbench', rows, true);
+}
+
+function cards() {
+  const rows = SECTORS.map(s => `
+    <button class="row-card sector" data-go="${s.go}">
+      <div>
+        <div class="t">${s.title}</div>
+        <div class="s">已完全核对 ${s.conf} 人 · 未核对 ${s.pending} 人</div>
+      </div>
+      <i class="ti ti-chevron-right chev"></i>
+    </button>`).join('');
+  return shell('每日对账', 'dates', `<div class="date-label">2026年8月17日</div>${rows}`, true);
+}
+
+function statusLine() {
+  if (role === 'final') return '仅查阅，无需确认';
+  if (role === 'wait') return '请等待上一层全部确认后再操作';
+  if (role === 'l2') return '3/5 人已确认 · 二层整页确认';
+  if (role === 'finance') return '财务已解锁 · 按行确认自己负责的条目';
+  return '待你确认 · 只显示分配给你的行';
+}
+
+function actions(id, locked) {
+  if (locked || role === 'l2' || role === 'final' || role === 'wait') return '';
+  const st = rowState[id] || '';
+  const confirmLabel = st === 'reject' ? '复核' : '确认';
+  return `<td class="act">
+    <button class="mini ${st === 'ok' || st === 're' ? 'on-ok' : ''}" data-row="${id}" data-act="ok">${confirmLabel}</button>
+    <button class="mini ${st === 'reject' ? 'on-no' : ''}" data-row="${id}" data-act="no">驳回</button>
+  </td>`;
+}
+
+function frozenHead() {
+  if (role === 'l2' || role === 'final' || role === 'wait') return '';
+  return '<th class="act">操作</th>';
+}
+
+function statusCell(id) {
+  if (role === 'l2' || role === 'final' || role === 'wait') return '';
+  return actions(id, false);
+}
+
+function table(title, cols, rows, prefix) {
+  const lockedHead = (role === 'l2' || role === 'final' || role === 'wait');
+  const head = `<tr>${lockedHead ? '' : frozenHead()}${cols.map((c,i)=>`<th${i===0?' style="text-align:left"':''}>${c}</th>`).join('')}</tr>`;
+  const body = rows.map((r, i) => {
+    const id = prefix + i;
+    const last = i === rows.length - 1;
+    const tds = r.map((c, idx) => `<td${idx===0?' style="text-align:left"':''}>${c}</td>`).join('');
+    return `<tr class="${last ? 'total' : ''}">${last ? (lockedHead ? '' : '<td class="act"></td>') : statusCell(id)}${tds}</tr>`;
+  }).join('');
+  return `<div class="block-title">${title}</div><table class="recon">${head}${body}</table>`;
+}
+
+function confirmBar(sector) {
+  if (role === 'final') return '';
+  if (role === 'wait') return `<div class="warn">请等待上一层全部确认后再操作</div>`;
+  if (role === 'l2') return `<button class="btn">确认本板块</button>`;
+  return `<textarea class="field" placeholder="可选：留下本板块意见"></textarea>
+    <button class="btn">完成本板块确认</button>`;
+}
+
+function cnpc() {
+  const tag2 = table('各省资金', ['省份','期初','回款','支出','期末'], [
+    ['北京', '1,280,000', '320,400', '118,000', '1,482,400'],
+    ['广东', '2,041,200', '510,000', '226,800', '2,324,400'],
+    ['合计', '3,321,200', '830,400', '344,800', '3,806,800'],
+  ], 'c2-');
+  const inner = `
+    <div class="h-title">2026年8月17日 · 标签二-中石油</div>
+    <div class="h-sub">${statusLine()}</div>
+    ${role === 'wait' ? '<div class="warn">业务一层尚未全部确认</div>' : ''}
+    ${tag2}${confirmBar('cnpc')}`;
+  return shell('每日对账', 'cards', inner, true);
+}
+
+function energy() {
+  const t = table('能源', ['项目','对手方','我方主体','金额'], [
+    ['零售燃油 · 华北', '中石化销售', '沙丘科技', '86,400'],
+    ['合计', '', '', '86,400'],
+  ], 'e3-');
+  return shell('每日对账', 'cards', `
+    <div class="h-title">2026年8月17日 · 标签三-能源</div>
+    <div class="h-sub">${statusLine()}</div>${t}${confirmBar('energy')}`, true);
+}
+
+function privatePage() {
+  const t = table('民营', ['项目','对手方','我方主体','金额'], [
+    ['星河民营 · 华东', '星河商贸', '沙丘科技', '32,600'],
+    ['合计', '', '', '32,600'],
+  ], 'p-');
+  return shell('每日对账', 'cards', `
+    <div class="h-title">2026年8月17日 · 标签三-民营</div>
+    <div class="h-sub">${statusLine()}</div>${t}${confirmBar('private')}`, true);
+}
+
+function operatorPage() {
+  const op = table('运营商', ['项目','渠道','金额'], [
+    ['移动 · 江苏', '运营商', '120,400'],
+    ['合计', '', '120,400'],
+  ], 'o3-');
+  const star = table('明星来电', ['项目','金额'], [
+    ['明星来电 · 华南', '18,600'],
+    ['合计', '18,600'],
+  ], 'os-');
+  const car = table('好车主', ['项目','金额'], [
+    ['好车主 · 浙江', '9,200'],
+    ['合计', '9,200'],
+  ], 'oc-');
+  return shell('每日对账', 'cards', `
+    <div class="h-title">2026年8月17日 · 标签三-运营商</div>
+    <div class="h-sub">${statusLine()}</div>
+    ${op}${star}${car}${confirmBar('operator')}`, true);
+}
+
+function travelPage() {
+  const t = table('出行金', ['项目','对手方','金额'], [
+    ['出行金 · 华北', '出行金渠道', '27,800'],
+    ['合计', '', '27,800'],
+  ], 't-');
+  return shell('每日对账', 'cards', `
+    <div class="h-title">2026年8月17日 · 标签三-出行金</div>
+    <div class="h-sub">${statusLine()}</div>${t}${confirmBar('travel')}`, true);
+}
+
+function imPage() {
+  const msgs = {
+    l1: '2026-08-17对账单已经生成，请点击查看',
+    finance: '2026-08-17业务一层已确认，请财务确认',
+    l2: '2026-08-17财务已确认，请二层确认',
+    final: '2026-08-17对账已全部确认，请查阅',
+    wait: '2026-08-17对账单已经生成，请点击查看',
+  };
+  return `<div class="phone" style="max-width:420px">
+    <div class="shell-head"><div class="shell-title sub" style="font-size:17px;color:var(--text)">对账助手</div></div>
+    <div class="content tight">
+      <div class="im">
+        <div class="who">
+          <div class="av"><i class="ti ti-arrows-exchange"></i></div>
+          <div><b>对账助手</b><div style="font-size:12px;color:var(--text3)">每日对账 · IM 只做分步通知</div></div>
+        </div>
+        <div class="bubble">${msgs[role]}</div>
+        <button class="card-msg" data-go="cards" style="width:100%;text-align:left">
+          <div class="k">点击进入工作台每日对账</div>
+          <div class="n">2026年8月17日</div>
+          <div class="k">${role === 'final' ? '查看详情' : '查看详情并确认'}</div>
+        </button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function allBoard() {
+  return [
+    `<div><div class="caption">QJA · 协作入口</div>${workbench()}</div>`,
+    `<div><div class="caption">日期列表 · 新的在上</div>${dates()}</div>`,
+    `<div><div class="caption">五张汇总卡</div>${cards()}</div>`,
+    `<div><div class="caption">中石油明细 · 标签二各省资金</div>${cnpc()}</div>`,
+    `<div><div class="caption">能源明细 · 当前角色</div>${energy()}</div>`,
+    `<div><div class="caption">运营商（明星来电 / 好车主）</div>${operatorPage()}</div>`,
+    `<div><div class="caption">民营</div>${privatePage()}</div>`,
+    `<div><div class="caption">出行金</div>${travelPage()}</div>`,
+    `<div><div class="caption">IM 分步通知</div>${imPage()}</div>`,
+  ].join('');
+}
+
+const TITLES = {
+  workbench: ['工作台入口', '协作板块第 4 张是每日对账'],
+  dates: ['日期列表', '只列出已生成账期，新的在上，带核对进度'],
+  cards: ['五张汇总卡', '标签二-中石油 / 标签三-能源 / 民营 / 运营商 / 出行金 · 分母不含最终人'],
+  cnpc: ['中石油明细', '标签二 · 各省资金'],
+  energy: ['能源明细', '标签三 energy'],
+  private: ['民营明细', '来自标签三 MY'],
+  operator: ['运营商明细', 'operator / starCall / goodCarOwner，不含各省资金'],
+  travel: ['出行金明细', '来自标签三 travelGold'],
+  im: ['IM 通知', '一人一步一条，点击跳工作台对应账期'],
+  all: ['全部并排', '一次看完入口、三层钻取、五板块和 IM'],
+};
+
+function render() {
+  document.querySelectorAll('.rail button.nav').forEach(b => b.classList.toggle('active', b.dataset.go === view));
+  const t = TITLES[view];
+  document.getElementById('pageTitle').textContent = t[0];
+  document.getElementById('pageHint').textContent = t[1] + ' · ' + ROLES.find(r => r.id === role).hint;
+  const board = document.getElementById('board');
+  const map = { workbench, dates, cards, cnpc, energy, private: privatePage, operator: operatorPage, travel: travelPage, im: imPage, all: allBoard };
+  board.innerHTML = map[view]();
+  board.querySelectorAll('[data-go]').forEach(el => el.addEventListener('click', () => {
+    view = el.dataset.go;
+    render();
+  }));
+  board.querySelectorAll('[data-act]').forEach(el => el.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const id = el.dataset.row;
+    if (el.dataset.act === 'no') {
+      openDlg('驳回该明细', (reason) => { rowState[id] = 'reject'; el.dataset.reason = reason; render(); });
+      return;
+    }
+    if (rowState[id] === 'reject') {
+      openDlg('二次确认该明细', (reason) => { rowState[id] = 're'; render(); });
+      return;
+    }
+    rowState[id] = 'ok';
+    render();
+  }));
+}
+
+function openDlg(title, ok) {
+  document.getElementById('dlgTitle').textContent = title;
+  document.getElementById('dlgText').value = '';
+  document.getElementById('mask').classList.add('on');
+  document.getElementById('dlgOk').onclick = () => {
+    const v = document.getElementById('dlgText').value.trim();
+    if (!v) return;
+    document.getElementById('mask').classList.remove('on');
+    ok(v);
+  };
+}
+document.getElementById('dlgCancel').onclick = () => document.getElementById('mask').classList.remove('on');
+
+document.getElementById('roles').innerHTML = ROLES.map(r =>
+  `<button data-role="${r.id}" class="${r.id===role?'on':''}">${r.name}</button>`
+).join('');
+document.getElementById('roles').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-role]');
+  if (!b) return;
+  role = b.dataset.role;
+  document.querySelectorAll('#roles button').forEach(x => x.classList.toggle('on', x === b));
+  render();
+});
+document.querySelectorAll('.rail button.nav').forEach(b => b.addEventListener('click', () => {
+  view = b.dataset.go;
+  render();
+}));
+render();
+</script>
+</body>
+</html>

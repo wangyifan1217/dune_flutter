@@ -11,7 +11,7 @@ import 'kb_supervise_service.dart';
 
 const _themePurple = Color(0xFF7B5CD8);
 
-/// NOVA · 知识库统计：按人统计知识库数量，部门筛选逻辑与会议监管一致。
+/// NOVA · 知识库统计：按人统计文档数量，部门筛选逻辑与会议监管一致。
 class NativeQianjiKbSupervisePage extends StatefulWidget {
   const NativeQianjiKbSupervisePage({
     super.key,
@@ -42,7 +42,7 @@ class _NativeQianjiKbSupervisePageState
   bool _hasMore = true;
   bool _superviseAll = false;
   int _page = 0;
-  int _totalFolders = 0;
+  int _totalDocuments = 0;
   static const int _pageSize = 20;
   String? _error;
   Timer? _keywordDebounce;
@@ -111,7 +111,7 @@ class _NativeQianjiKbSupervisePageState
             result.items.length < result.totalCount;
         if (stats != null) {
           _deptStats = stats.departments;
-          _totalFolders = stats.totalFolders;
+          _totalDocuments = stats.totalDocuments;
           _superviseAll = stats.superviseAll;
         }
       });
@@ -226,9 +226,9 @@ class _NativeQianjiKbSupervisePageState
               ),
             ),
           ),
-          if (_totalFolders > 0)
+          if (_totalDocuments > 0)
             Text(
-              '合计 $_totalFolders',
+              '合计 $_totalDocuments',
               style: const TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
@@ -314,7 +314,7 @@ class _NativeQianjiKbSupervisePageState
               children: [
                 _DeptChip(
                   label: '全部',
-                  count: _totalFolders,
+                  count: _totalDocuments,
                   selected: _selectedDepartmentId == null,
                   onTap: () => _selectDepartment(null),
                 ),
@@ -322,7 +322,7 @@ class _NativeQianjiKbSupervisePageState
                 for (final d in _deptStats) ...[
                   _DeptChip(
                     label: d.departmentName,
-                    count: d.folderCount,
+                    count: d.documentCount,
                     selected: _selectedDepartmentId == (d.departmentId ?? -1),
                     onTap: () => _selectDepartment(d.departmentId ?? -1),
                   ),
@@ -500,7 +500,7 @@ class _PersonCard extends StatelessWidget {
                   ),
                 ),
                 Text(
-                  '${row.folderCount} 知识库',
+                  '${row.documentCount} 文档',
                   style: const TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w700,
@@ -511,7 +511,7 @@ class _PersonCard extends StatelessWidget {
             ),
             const SizedBox(height: 6),
             Text(
-              '$dept · ${row.documentCount} 文档',
+              '$dept · ${row.folderCount} 知识库',
               style: const TextStyle(fontSize: 12, color: DunesColors.text3),
             ),
           ],

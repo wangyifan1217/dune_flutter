@@ -1,6 +1,12 @@
 import 'package:flutter/widgets.dart';
 
 /// Web / 非 IO 平台：不支持拖出到本地，原样展示子组件。
+class ChatDesktopFileDragSession {
+  ChatDesktopFileDragSession._();
+
+  static bool shouldIgnoreChatDrop(Iterable<String> droppedPaths) => false;
+}
+
 class ChatDesktopFileDrag extends StatelessWidget {
   const ChatDesktopFileDrag({
     super.key,

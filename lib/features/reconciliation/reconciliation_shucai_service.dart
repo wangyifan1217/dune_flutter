@@ -42,16 +42,112 @@ class ReconciliationShucaiService {
     final date = (asOfDate ?? '').trim().isNotEmpty
         ? asOfDate!.trim()
         : _today();
-    final card = (cardType ?? '').trim();
+    final card = _canonicalCardType(cardType, requiredIfPresent: false);
     try {
-      return await _fetchFromDunes(date, cardType: card, refresh: refresh);
+      return await _fetchFromDunes(date, cardType: card ?? '', refresh: refresh);
     } catch (_) {
-      if (card.isNotEmpty) rethrow;
+      if ((card ?? '').isNotEmpty) rethrow;
       return _fetchFromAssetDirect(date);
     }
   }
 
+  Future<bool> canView() async {
+    final base = _session.apiBase.replaceAll(RegExp(r'/$'), '');
+    final uri = Uri.parse('$base/reconciliation/dates');
+    final resp = await _client
+        .get(uri, headers: _headers)
+        .timeout(const Duration(seconds: 12));
+    if (resp.statusCode == 403 || resp.statusCode == 401) return false;
+    try {
+      final decoded = jsonDecode(utf8.decode(resp.bodyBytes));
+      if (decoded is Map && decoded['success'] == false) {
+        final msg = (decoded['message'] ?? '').toString();
+        if (msg.contains('无权') || msg.contains('login')) return false;
+      }
+    } catch (_) {}
+    return resp.statusCode >= 200 && resp.statusCode < 300;
+  }
+
+  Future<void> markVisit(String asOfDate) async {
+    final date = asOfDate.trim();
+    if (date.isEmpty) return;
+    try {
+      final base = _session.apiBase.replaceAll(RegExp(r'/$'), '');
+      final uri = Uri.parse('$base/reconciliation/visit');
+      final resp = await _client
+          .post(
+            uri,
+            headers: {
+              ..._headers,
+              'Content-Type': 'application/json',
+            },
+            body: jsonEncode({'asOfDate': date}),
+          )
+          .timeout(const Duration(seconds: 12));
+      _decodeEnvelope(resp, fallback: '进入对账失败');
+    } catch (_) {}
+  }
+
+  Future<List<ReconDateItem>> fetchDates() async {
+    final base = _session.apiBase.replaceAll(RegExp(r'/$'), '');
+    final uri = Uri.parse('$base/reconciliation/dates');
+    final resp = await _client
+        .get(uri, headers: _headers)
+        .timeout(const Duration(seconds: 20));
+    final map = _decodeEnvelope(resp, fallback: '对账日期加载失败');
+    final raw = map['items'];
+    if (raw is! List) return const [];
+    return raw
+        .whereType<Map>()
+        .map((e) => ReconDateItem.fromJson(Map<String, dynamic>.from(e)))
+        .toList(growable: false);
+  }
+
+  Future<List<ReconSectorOverview>> fetchOverview(String asOfDate) async {
+    final base = _session.apiBase.replaceAll(RegExp(r'/$'), '');
+    final uri = Uri.parse('$base/reconciliation/overview').replace(
+      queryParameters: {'asOfDate': asOfDate.trim()},
+    );
+    final resp = await _client
+        .get(uri, headers: _headers)
+        .timeout(const Duration(seconds: 20));
+    final map = _decodeEnvelope(resp, fallback: '对账概览加载失败');
+    final raw = map['sectors'] ?? map['cards'];
+    if (raw is! List) return const [];
+    return raw
+        .whereType<Map>()
+        .map((e) => ReconSectorOverview.fromJson(Map<String, dynamic>.from(e)))
+        .toList(growable: false);
+  }
+
+  Future<ShucaiSnapshot> fetchStored({
+    required String asOfDate,
+    String? cardType,
+  }) {
+    return _fetchFromDunes(
+      asOfDate.trim(),
+      cardType: _canonicalCardType(cardType) ?? '',
+    );
+  }
+
   Future<ReconStatusResponse> fetchStatus({
+    String? asOfDate,
+    String? cardType,
+  }) async {
+    final card = _canonicalCardType(cardType, requiredIfPresent: false);
+    try {
+      return await _getStatus(asOfDate: asOfDate, cardType: card);
+    } catch (e) {
+      final msg = e.toString();
+      if ((card ?? '').isNotEmpty &&
+          (msg.contains('无权查看该对账名片') || msg.contains('deadlock'))) {
+        return await _getStatus(asOfDate: asOfDate);
+      }
+      rethrow;
+    }
+  }
+
+  Future<ReconStatusResponse> _getStatus({
     String? asOfDate,
     String? cardType,
   }) async {
@@ -89,12 +185,90 @@ class ReconciliationShucaiService {
           },
           body: jsonEncode({
             'asOfDate': asOfDate.trim(),
-            'cardType': cardType.trim(),
+            'cardType': _canonicalCardType(cardType) ?? '',
             'comment': comment.trim(),
           }),
         )
         .timeout(const Duration(seconds: 20));
     _decodeEnvelope(resp, fallback: '确认失败');
+  }
+
+  Future<({List<ReconRowDecision> items, Map<String, List<ReconRowReviewer>> previous})>
+      fetchRowDecisions({
+    required String asOfDate,
+    required String cardType,
+  }) async {
+    Future<Map<String, dynamic>> once() async {
+      final base = _session.apiBase.replaceAll(RegExp(r'/$'), '');
+      final uri = Uri.parse('$base/reconciliation/row-decisions').replace(
+        queryParameters: {
+          'asOfDate': asOfDate.trim(),
+          'cardType': _canonicalCardType(cardType) ?? '',
+        },
+      );
+      final resp = await _client
+          .get(uri, headers: _headers)
+          .timeout(const Duration(seconds: 20));
+      return _decodeEnvelope(resp, fallback: '明细确认状态加载失败');
+    }
+
+    Map<String, dynamic> map;
+    try {
+      map = await once();
+    } catch (e) {
+      if (!e.toString().contains('deadlock')) rethrow;
+      await Future<void>.delayed(const Duration(milliseconds: 400));
+      map = await once();
+    }
+    final raw = map['items'];
+    final items = raw is List
+        ? raw
+            .whereType<Map>()
+            .map((e) => ReconRowDecision.fromJson(Map<String, dynamic>.from(e)))
+            .toList(growable: false)
+        : const <ReconRowDecision>[];
+    final previousRaw = map['previous'];
+    final previous = <String, List<ReconRowReviewer>>{};
+    if (previousRaw is List) {
+      for (final item in previousRaw.whereType<Map>()) {
+        final reviewer = ReconRowReviewer.fromJson(
+          Map<String, dynamic>.from(item),
+        );
+        if (reviewer.rowKey.trim().isEmpty) continue;
+        reconIndexRowReviewer(previous, reviewer);
+      }
+    }
+    return (items: items, previous: previous);
+  }
+
+  Future<List<ReconRowDecision>> saveRowDecisions({
+    required String asOfDate,
+    required String cardType,
+    required List<ReconRowDecision> items,
+  }) async {
+    final base = _session.apiBase.replaceAll(RegExp(r'/$'), '');
+    final uri = Uri.parse('$base/reconciliation/row-decisions');
+    final resp = await _client
+        .post(
+          uri,
+          headers: {
+            ..._headers,
+            'Content-Type': 'application/json',
+          },
+          body: jsonEncode({
+            'asOfDate': asOfDate.trim(),
+            'cardType': _canonicalCardType(cardType) ?? '',
+            'items': [for (final item in items) item.toJson()],
+          }),
+        )
+        .timeout(const Duration(seconds: 20));
+    final map = _decodeEnvelope(resp, fallback: '明细确认失败');
+    final raw = map['items'];
+    if (raw is! List) return items;
+    return raw
+        .whereType<Map>()
+        .map((e) => ReconRowDecision.fromJson(Map<String, dynamic>.from(e)))
+        .toList(growable: false);
   }
 
   Map<String, String> get _headers => {
@@ -108,7 +282,7 @@ class ReconciliationShucaiService {
     required String fallback,
   }) {
     if (resp.statusCode < 200 || resp.statusCode >= 300) {
-      throw Exception('$fallback(${resp.statusCode})');
+      throw Exception(_envelopeMessage(resp, fallback));
     }
     final decoded = jsonDecode(utf8.decode(resp.bodyBytes));
     if (decoded is! Map) throw Exception(fallback);
@@ -119,6 +293,17 @@ class ReconciliationShucaiService {
     final data = map['data'];
     if (data is Map) return Map<String, dynamic>.from(data);
     return <String, dynamic>{};
+  }
+
+  String _envelopeMessage(http.Response resp, String fallback) {
+    try {
+      final decoded = jsonDecode(utf8.decode(resp.bodyBytes));
+      if (decoded is Map) {
+        final msg = (decoded['message'] ?? '').toString().trim();
+        if (msg.isNotEmpty) return msg;
+      }
+    } catch (_) {}
+    return '$fallback(${resp.statusCode})';
   }
 
   Future<ShucaiSnapshot> _fetchFromDunes(
@@ -249,5 +434,17 @@ class ReconciliationShucaiService {
     final m = n.month.toString().padLeft(2, '0');
     final d = n.day.toString().padLeft(2, '0');
     return '$y-$m-$d';
+  }
+
+  String? _canonicalCardType(
+    String? cardType, {
+    bool requiredIfPresent = true,
+  }) {
+    final raw = (cardType ?? '').trim();
+    if (raw.isEmpty) return null;
+    final n = reconSectorFromCard(raw);
+    if (n.isNotEmpty) return n;
+    if (!requiredIfPresent) return null;
+    throw Exception('无效的对账板块');
   }
 }

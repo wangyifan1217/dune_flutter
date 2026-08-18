@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 /// 云枢品牌图标，对齐 WebView `data-nova-icon` / `nova-icon-img`。
 abstract final class NovaIcon {
   static const assetPath = 'assets/prototype/nova-icon.png';
+  static const tabAssetPath = 'assets/images/tau_tab_icon.png';
 }
 
 class NovaIconImage extends StatelessWidget {

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../core/navigation/navigation_controller.dart';
+import '../../core/platform/desktop_features.dart';
 import '../../core/widgets/cached_network_image.dart';
 import '../nova/nova_background_coordinator.dart';
 import '../nova/nova_generating_storage.dart';
@@ -26,6 +27,7 @@ import 'conversation_realtime_dedup.dart';
 import 'conversation_realtime_hub.dart';
 import 'conversation_realtime_service.dart';
 import 'conversation_service.dart';
+import 'inbox_conversation_file_drop.dart';
 import 'inbox_format.dart';
 import 'inbox_hidden_storage.dart';
 import 'inbox_widgets.dart';
@@ -1088,6 +1090,31 @@ class _NativeConversationPageState extends State<NativeConversationPage>
     }
   }
 
+  bool _inboxAcceptsFileDrop(NativeConversation c) {
+    if (c.dissolved || c.id <= 0) return false;
+    return c.isPrivate || c.isGroup || c.isWorkgroupApproval || c.isSelfMemo;
+  }
+
+  Widget _wrapInboxFileDrop({
+    required String targetTitle,
+    required bool acceptsFiles,
+    required Future<int?> Function() resolveConversationId,
+    required Widget child,
+    int? peerUserId,
+    VoidCallback? onActivate,
+  }) {
+    if (!isDesktopCommOnly) return child;
+    return InboxConversationFileDropTarget(
+      targetTitle: targetTitle,
+      acceptsFiles: acceptsFiles,
+      enabled: widget.listVisible,
+      peerUserId: peerUserId,
+      resolveConversationId: resolveConversationId,
+      onActivateTarget: onActivate,
+      child: child,
+    );
+  }
+
   Widget _buildContactHitRow(NativeContact contact) {
     final dept = (contact.department ?? '').trim();
     final role = contact.primaryRole;
@@ -1099,22 +1126,31 @@ class _NativeConversationPageState extends State<NativeConversationPage>
     final initial = contact.displayLabel.isNotEmpty
         ? contact.displayLabel.substring(0, 1)
         : '?';
+    final row = ChatInboxRow(
+      kind: ChatInboxRowKind.private,
+      title: contact.displayLabel,
+      preview: preview,
+      timeLabel: '',
+      showOnlineDot: _onlineUsers.contains(contact.userId),
+      avatarInitial: initial,
+      avatarSeed: contact.userId,
+      avatarPreset: contact.avatarPreset,
+      avatarObjectKey: contact.avatarObjectKey,
+      avatarService: _service,
+      onTap: _openWithScrollPersist(() {
+        widget.onStartPrivateChat?.call(contact.userId);
+      }),
+    );
     return KeyedSubtree(
       key: ValueKey<String>('inbox-contact-${contact.userId}'),
-      child: ChatInboxRow(
-        kind: ChatInboxRowKind.private,
-        title: contact.displayLabel,
-        preview: preview,
-        timeLabel: '',
-        showOnlineDot: _onlineUsers.contains(contact.userId),
-        avatarInitial: initial,
-        avatarSeed: contact.userId,
-        avatarPreset: contact.avatarPreset,
-        avatarObjectKey: contact.avatarObjectKey,
-        avatarService: _service,
-        onTap: _openWithScrollPersist(() {
-          widget.onStartPrivateChat?.call(contact.userId);
-        }),
+      child: _wrapInboxFileDrop(
+        targetTitle: contact.displayLabel,
+        acceptsFiles: contact.userId > 0,
+        peerUserId: contact.userId,
+        resolveConversationId: () =>
+            _service.ensurePrivateConversationForPeer(contact.userId),
+        onActivate: () => widget.onStartPrivateChat?.call(contact.userId),
+        child: row,
       ),
     );
   }
@@ -1340,15 +1376,47 @@ class _NativeConversationPageState extends State<NativeConversationPage>
       onTap: onTap,
     );
 
+    final dropTitle = c.isAdministrativeNotice
+        ? '行政通知'
+        : c.isReconciliationAssistant
+        ? '对账助手'
+        : c.isAiAssistant
+        ? _yunshuName
+        : (c.isApprovalAssistant
+              ? '审批助手'
+              : (c.isTaskAssistant
+                    ? '任务助手'
+                    : (c.isDriveAssistant
+                          ? '企业微盘'
+                          : (c.isWeeklySummary
+                                ? '一周小结'
+                                : (title.isEmpty ? '该会话' : title)))));
+    final dropChild = _wrapInboxFileDrop(
+      targetTitle: dropTitle,
+      acceptsFiles: _inboxAcceptsFileDrop(c),
+      peerUserId: _peerUserId(c),
+      resolveConversationId: () async => c.id,
+      onActivate: _inboxAcceptsFileDrop(c)
+          ? () {
+              if (c.isPrivate || c.isSelfMemo) {
+                widget.onOpenPrivate(c);
+              } else {
+                widget.onOpenGroup(c);
+              }
+            }
+          : null,
+      child: row,
+    );
+
     if (!allowSwipeDelete) {
-      return KeyedSubtree(key: ValueKey<int>(c.id), child: row);
+      return KeyedSubtree(key: ValueKey<int>(c.id), child: dropChild);
     }
 
     return KeyedSubtree(
       key: ValueKey<int>(c.id),
       child: SwipeableChatInboxRow(
         onDelete: () => _hideConversation(c),
-        child: row,
+        child: dropChild,
       ),
     );
   }

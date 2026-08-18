@@ -1028,19 +1028,24 @@ class _ChatTextFieldState extends State<_ChatTextField> {
         HardwareKeyboard.instance.isControlPressed;
   }
 
-  /// 旧版复制图片会写入「[图片]」占位文案，粘贴时不再插入。
-  bool _isImagePlaceholderText(String text) {
+  /// 旧版复制图片/文件会写入占位文案，粘贴时不再插入。
+  bool _isAttachmentPlaceholderText(String text) {
     final t = text.trim();
+    if (t.isEmpty) return false;
     return t == '[图片]' ||
         t == '图片' ||
-        t == '发送了一张图片';
+        t == '发送了一张图片' ||
+        t == '[文件]' ||
+        t == '文件' ||
+        t.startsWith('[文件]') ||
+        t.startsWith('[附件]');
   }
 
   Future<void> _insertClipboardText() async {
     final data = await Clipboard.getData(Clipboard.kTextPlain);
     final text = data?.text;
     if (text == null || text.isEmpty) return;
-    if (_isImagePlaceholderText(text)) return;
+    if (_isAttachmentPlaceholderText(text)) return;
     if (!mounted) return;
     final value = widget.controller.value;
     final selection = value.selection;

@@ -114,6 +114,9 @@ String friendlyErrorText(Object? error, {String fallback = '操作失败，请�
       low.contains('varchar')) {
     return '该文档尚未同步到本地存储，请稍后重试或下拉刷新';
   }
-  // 其它纯英文技术错误统一兜底，不直接暴露给用户。
+  if (low.contains('invalid cardtype') ||
+      low.contains('invalid card type')) {
+    return '对账板块无效，请从工作台重新进入';
+  }
   return fallback;
 }

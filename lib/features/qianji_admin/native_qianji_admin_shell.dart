@@ -11,6 +11,8 @@ import '../administrative_notice/administrative_notice_service.dart';
 import '../broadcast/broadcast_service.dart';
 import '../broadcast/native_workbench_broadcast_page.dart';
 import '../drive/native_drive_page.dart';
+import '../reconciliation/native_daily_reconciliation_page.dart';
+import '../reconciliation/reconciliation_shucai_service.dart';
 import '../tasks/native_task_home_pane.dart';
 import '../tasks/native_task_hrbp_pane.dart';
 import '../tasks/task_api.dart';
@@ -28,12 +30,22 @@ class NativeQianjiAdminShell extends StatefulWidget {
     required this.navigation,
     this.onExit,
     this.onAdministrativeNoticeAcknowledged,
+    this.openDailyRecon = false,
+    this.dailyReconAsOfDate = '',
+    this.dailyReconCardType = '',
+    this.dailyReconOpenToken = 0,
+    this.onDailyReconOpened,
   });
 
   final AuthSession session;
   final DunesNavigationController navigation;
   final VoidCallback? onExit;
   final ValueChanged<int>? onAdministrativeNoticeAcknowledged;
+  final bool openDailyRecon;
+  final String dailyReconAsOfDate;
+  final String dailyReconCardType;
+  final int dailyReconOpenToken;
+  final VoidCallback? onDailyReconOpened;
 
   @override
   State<NativeQianjiAdminShell> createState() => _NativeQianjiAdminShellState();
@@ -50,6 +62,7 @@ enum _WorkbenchView {
   drive,
   administrativeNotice,
   companyBroadcast,
+  dailyRecon,
 }
 
 class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
@@ -67,6 +80,7 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
   /// 工作台入口权限由后端实时探测；它只控制发布端入口，不限制接收人。
   bool? _canSeeAdministrativeNotice;
   bool? _canSeeCompanyBroadcast;
+  bool? _canSeeDailyRecon;
 
   static const _titles = {
     _WorkbenchView.tasks: '任务',
@@ -78,6 +92,7 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
     _WorkbenchView.drive: '企业微盘',
     _WorkbenchView.administrativeNotice: '行政通知',
     _WorkbenchView.companyBroadcast: '公司广播',
+    _WorkbenchView.dailyRecon: '每日对账',
   };
 
   bool get _isQianjiAdmin => _session.effectiveQianjiAdminAccess;
@@ -91,8 +106,12 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
     unawaited(_resolveTaskSummaryAccess());
     unawaited(_resolveAdministrativeNoticeAccess());
     unawaited(_resolveBroadcastAccess());
+    unawaited(_resolveDailyReconAccess());
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _syncBackInterceptor();
+      if (mounted) {
+        _syncBackInterceptor();
+        _maybeOpenDailyRecon();
+      }
     });
   }
 
@@ -110,6 +129,18 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
       unawaited(_resolveTaskSummaryAccess());
       unawaited(_resolveAdministrativeNoticeAccess());
       unawaited(_resolveBroadcastAccess());
+      unawaited(_resolveDailyReconAccess());
+    }
+    if (widget.openDailyRecon && !oldWidget.openDailyRecon) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _maybeOpenDailyRecon();
+      });
+    } else if (widget.dailyReconOpenToken != oldWidget.dailyReconOpenToken &&
+        widget.dailyReconOpenToken > 0 &&
+        widget.openDailyRecon) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _maybeOpenDailyRecon();
+      });
     }
   }
 
@@ -122,6 +153,7 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
     unawaited(_resolveTaskSummaryAccess());
     unawaited(_resolveAdministrativeNoticeAccess());
     unawaited(_resolveBroadcastAccess());
+    unawaited(_resolveDailyReconAccess());
   }
 
   Future<void> _resolveTaskSummaryAccess() async {
@@ -164,6 +196,30 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
     }
     if (!mounted) return;
     setState(() => _canSeeCompanyBroadcast = allowed);
+  }
+
+  Future<void> _resolveDailyReconAccess() async {
+    if (_session.isExternalUser) {
+      if (mounted) setState(() => _canSeeDailyRecon = false);
+      return;
+    }
+    final service = ReconciliationShucaiService(session: _session);
+    bool allowed = false;
+    try {
+      allowed = await service.canView();
+    } catch (_) {
+      allowed = false;
+    } finally {
+      service.dispose();
+    }
+    if (!mounted) return;
+    setState(() => _canSeeDailyRecon = allowed);
+  }
+
+  void _maybeOpenDailyRecon() {
+    if (!widget.openDailyRecon) return;
+    _open(_WorkbenchView.dailyRecon);
+    widget.onDailyReconOpened?.call();
   }
 
   @override
@@ -416,6 +472,14 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
         );
       case _WorkbenchView.companyBroadcast:
         return NativeWorkbenchBroadcastPage(session: _session);
+      case _WorkbenchView.dailyRecon:
+        return NativeDailyReconciliationPage(
+          session: _session,
+          initialAsOfDate: widget.dailyReconAsOfDate,
+          initialCardType: widget.dailyReconCardType,
+          openToken: widget.dailyReconOpenToken,
+          onChromeChanged: _onTaskChrome,
+        );
       case _WorkbenchView.overview:
         return _buildOverviewPage();
     }
@@ -448,6 +512,15 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
           color: _themePurple,
           enabled: true,
           onTap: () => _open(_WorkbenchView.drive),
+        ),
+      if (!_session.isExternalUser && _canSeeDailyRecon == true)
+        _WorkbenchTile(
+          title: '每日对账',
+          subtitle: '账期快照 · 分板块核对',
+          icon: Icons.sync_alt_outlined,
+          color: const Color(0xFF5B6FC4),
+          enabled: true,
+          onTap: () => _open(_WorkbenchView.dailyRecon),
         ),
     ];
 
@@ -612,7 +685,7 @@ class _WorkbenchSection extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 14),
-          // APP/窄屏：一行始终露出 3 张；超出可横向滑动。
+          // 一行 3 张；第 4 张起换到下一行，避免 APP 横向滑走看不到。
           LayoutBuilder(
             builder: (context, c) {
               const gap = 10.0;
@@ -620,19 +693,17 @@ class _WorkbenchSection extends StatelessWidget {
               final cardWidth = ((c.maxWidth - gap * (perRow - 1)) / perRow)
                   .clamp(72.0, 220.0);
               const cardHeight = 108.0;
-              return SizedBox(
-                height: cardHeight,
-                child: ListView.separated(
-                  scrollDirection: Axis.horizontal,
-                  physics: const BouncingScrollPhysics(),
-                  itemCount: children.length,
-                  separatorBuilder: (_, _) => const SizedBox(width: gap),
-                  itemBuilder: (context, i) => SizedBox(
-                    width: cardWidth,
-                    height: cardHeight,
-                    child: _WorkbenchCard(tile: children[i]),
-                  ),
-                ),
+              return Wrap(
+                spacing: gap,
+                runSpacing: gap,
+                children: [
+                  for (final tile in children)
+                    SizedBox(
+                      width: cardWidth,
+                      height: cardHeight,
+                      child: _WorkbenchCard(tile: tile),
+                    ),
+                ],
               );
             },
           ),

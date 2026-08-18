@@ -1,9 +1,7 @@
 import 'dart:async';
 
-import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
-import 'package:flutter/services.dart';
 
 import '../../core/theme/dunes_theme.dart';
 import '../../core/util/friendly_error.dart';
@@ -17,7 +15,8 @@ import '../conversation/conversation_realtime_hub.dart';
 import '../conversation/conversation_realtime_service.dart';
 import '../conversation/conversation_service.dart';
 import '../desktop/windows_desktop_tray.dart';
-import '../robots/robot_markdown.dart';
+import 'recon_gfm.dart';
+import 'recon_markdown_table.dart';
 import 'reconciliation_shucai_models.dart';
 import 'reconciliation_shucai_service.dart';
 import 'shucai_report_table.dart';
@@ -33,6 +32,7 @@ class NativeReconciliationAssistantPage extends StatefulWidget {
     this.showBackButton = true,
     this.autoMarkRead = true,
     this.onConversationRead,
+    this.onOpenWorkbenchDailyRecon,
   });
 
   final VoidCallback onBack;
@@ -42,6 +42,8 @@ class NativeReconciliationAssistantPage extends StatefulWidget {
   final bool showBackButton;
   final bool autoMarkRead;
   final ValueChanged<int>? onConversationRead;
+  final void Function(String asOfDate, {String cardType})?
+      onOpenWorkbenchDailyRecon;
 
   @override
   State<NativeReconciliationAssistantPage> createState() =>
@@ -59,16 +61,18 @@ class _NativeReconciliationAssistantPageState
   String? _error;
   bool _loading = true;
   bool _confirming = false;
+  bool _savingRows = false;
+  final Map<String, ReconRowDecision> _rowDecisions = {};
+  final Set<String> _selectedRowKeys = {};
   bool _showDetails = false;
   bool _awayFromLatest = false;
   bool _loadingOlder = false;
   bool _hasMore = false;
-  String _detailCardType = 'TAG2';
+  String _detailCardType = 'CNPC';
   String _detailAsOfDate = '';
   String _tag3Tab = 'energy';
   StreamSubscription<ConversationRealtimeEvent>? _rtSub;
   Timer? _rtDebounce;
-  Timer? _enterJumpTimer;
   int _latestJumpGen = 0;
   bool _reloadInFlight = false;
   bool _reloadQueuedSilent = false;
@@ -98,7 +102,6 @@ class _NativeReconciliationAssistantPageState
     userAvatarRefresh.removeListener(_onSelfAvatarUpdated);
     _rtSub?.cancel();
     _rtDebounce?.cancel();
-    _enterJumpTimer?.cancel();
     _scroll.removeListener(_onScrollPosition);
     _scroll.dispose();
     _commentController.dispose();
@@ -134,7 +137,6 @@ class _NativeReconciliationAssistantPageState
       if (mounted) setState(() => _error = friendlyErrorText(e));
     } finally {
       if (mounted) setState(() => _loading = false);
-      _scrollToLatestOnEnter();
     }
   }
 
@@ -272,24 +274,24 @@ class _NativeReconciliationAssistantPageState
 
   void _onScrollPosition() {
     if (!_scroll.hasClients) return;
-    if (assistantShouldLoadOlder(
-      hasMore: _hasMore,
-      loadingOlder: _loadingOlder,
-      pos: _scroll.position,
-    )) {
-      unawaited(_loadOlder());
-    }
+    if (!_hasMore || _loadingOlder) return;
+    final pos = _scroll.position;
+    // reverse 列表：pixels≈0 是最新；靠近 max 才是更早消息。
+    final nearOlder =
+        pos.maxScrollExtent <= 24 || pos.maxScrollExtent - pos.pixels <= 72;
+    if (nearOlder) unawaited(_loadOlder());
   }
 
   bool _onScrollNotification(ScrollNotification n) {
     if (n.depth != 0) return false;
-    final wheelUp =
-        n is ScrollUpdateNotification && (n.scrollDelta ?? 0) < 0;
+    // reverse：scrollDelta>0 是往更早消息方向滚。
+    final towardOlder =
+        n is ScrollUpdateNotification && (n.scrollDelta ?? 0) > 0;
     final userDrag =
         (n is ScrollStartNotification && n.dragDetails != null) ||
         (n is ScrollUpdateNotification && n.dragDetails != null) ||
         (n is UserScrollNotification && n.direction != ScrollDirection.idle);
-    if (userDrag || wheelUp) {
+    if (userDrag || towardOlder) {
       _noteUserMovedScroll();
     }
     if (n is ScrollEndNotification) {
@@ -300,8 +302,7 @@ class _NativeReconciliationAssistantPageState
 
   bool _isNearLatest({double slop = 24}) {
     if (!_scroll.hasClients) return true;
-    final pos = _scroll.position;
-    return pos.maxScrollExtent - pos.pixels <= slop;
+    return _scroll.position.pixels <= slop;
   }
 
   void _noteUserMovedScroll() {
@@ -324,20 +325,14 @@ class _NativeReconciliationAssistantPageState
 
   void _cancelPendingLatestJumps() {
     _latestJumpGen++;
-    _enterJumpTimer?.cancel();
-    _enterJumpTimer = null;
   }
 
   void _scrollToLatestOnEnter() {
+    _awayFromLatest = false;
     final gen = ++_latestJumpGen;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || gen != _latestJumpGen) return;
       _jumpBottom(force: true);
-    });
-    _enterJumpTimer?.cancel();
-    _enterJumpTimer = Timer(const Duration(milliseconds: 200), () {
-      if (!mounted || gen != _latestJumpGen || _awayFromLatest) return;
-      _jumpBottom();
     });
   }
 
@@ -353,18 +348,19 @@ class _NativeReconciliationAssistantPageState
   void _jumpBottom({bool animate = false, bool force = false}) {
     if (!_scroll.hasClients) return;
     if (!force && _awayFromLatest) return;
-    final max = _scroll.position.maxScrollExtent;
     if (animate) {
       _scroll.animateTo(
-        max,
+        0,
         duration: const Duration(milliseconds: 220),
         curve: Curves.easeOut,
       );
     } else {
-      _scroll.jumpTo(max);
+      _scroll.jumpTo(0);
     }
     if (force && _awayFromLatest && mounted) {
       setState(() => _awayFromLatest = false);
+    } else if (force) {
+      _awayFromLatest = false;
     }
   }
 
@@ -374,8 +370,6 @@ class _NativeReconciliationAssistantPageState
     }
     setState(() => _loadingOlder = true);
     final firstId = _messages.first.id;
-    final oldMax = _scroll.hasClients ? _scroll.position.maxScrollExtent : 0.0;
-    final oldPixels = _scroll.hasClients ? _scroll.position.pixels : 0.0;
     try {
       final page = await _convService.fetchMessagePage(
         _convId,
@@ -394,23 +388,17 @@ class _NativeReconciliationAssistantPageState
         _loadingOlder = false;
       });
       await _hydrateStatus(_messages);
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!_scroll.hasClients) return;
-        _scroll.jumpTo(
-          assistantOlderScrollRestore(
-            oldPixels: oldPixels,
-            oldMax: oldMax,
-            newMax: _scroll.position.maxScrollExtent,
-          ),
-        );
-      });
+      // reverse 列表锚定最新端，插入更早消息不会挤走当前阅读位置。
     } finally {
       if (mounted) setState(() => _loadingOlder = false);
     }
   }
 
   void _closeDetails() {
-    setState(() => _showDetails = false);
+    setState(() {
+      _showDetails = false;
+      _selectedRowKeys.clear();
+    });
     _scrollToLatestOnEnter();
   }
 
@@ -440,23 +428,44 @@ class _NativeReconciliationAssistantPageState
   }
 
   Future<void> _openDetails(_ReconCardPayload card, {bool refresh = false}) async {
+    final jump = widget.onOpenWorkbenchDailyRecon;
+    if (jump != null && card.asOfDate.trim().isNotEmpty && !refresh) {
+      jump(
+        card.asOfDate.trim(),
+        cardType: reconSectorFromCard(card.cardType),
+      );
+      return;
+    }
+    final sector = reconSectorFromCard(card.cardType);
+    if (sector.isEmpty) {
+      if (jump != null && card.asOfDate.trim().isNotEmpty) {
+        jump(card.asOfDate.trim());
+      }
+      return;
+    }
     setState(() {
-      _detailCardType = card.cardType;
+      _detailCardType = sector;
       _detailAsOfDate = card.asOfDate;
       _showDetails = true;
       if (!refresh) _snapshot = null;
-      final mine = _status[_statusKey(card.cardType, card.asOfDate)]?.mine;
+      final mine = _status[_statusKey(sector, card.asOfDate)]?.mine ??
+          _status[_statusKey(card.cardType, card.asOfDate)]?.mine;
       _commentController.text = mine?.comment ?? '';
-      if (card.cardType == 'TAG3_ENERGY') {
-        _tag3Tab = 'energy';
-      } else if (card.cardType == 'TAG3_OPERATOR') {
-        _tag3Tab = 'operator';
+      switch (sector) {
+        case 'ENERGY':
+          _tag3Tab = 'energy';
+        case 'PRIVATE':
+          _tag3Tab = 'MY';
+        case 'OPERATOR':
+          _tag3Tab = 'operator';
+        case 'TRAVEL':
+          _tag3Tab = 'travelGold';
       }
     });
     try {
       final snap = await _shucai.fetch(
         asOfDate: card.asOfDate,
-        cardType: card.cardType,
+        cardType: sector,
         refresh: refresh,
       );
       if (!mounted) return;
@@ -466,6 +475,7 @@ class _NativeReconciliationAssistantPageState
           _tag3Tab = snap.tag3.keys.first;
         }
       });
+      await _loadRowDecisions();
     } catch (e) {
       if (!mounted) return;
       setState(() => _error = friendlyErrorText(e));
@@ -478,6 +488,16 @@ class _NativeReconciliationAssistantPageState
     final card = _detailCardType;
     if (asOf.isEmpty || card.isEmpty || status == null) return;
     if (!status.canConfirm || status.confirmed) return;
+    final pending = _pendingRowCount();
+    if (!_isL2 && pending > 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('还有 $pending 条明细未确认或反驳'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
     setState(() => _confirming = true);
     FocusManager.instance.primaryFocus?.unfocus();
     try {
@@ -505,6 +525,228 @@ class _NativeReconciliationAssistantPageState
     } finally {
       if (mounted) setState(() => _confirming = false);
     }
+  }
+
+  bool get _isL2 => reconRoleIsL2(_currentStatus?.myRole ?? '');
+
+  bool get _showRowActions =>
+      (_currentStatus?.canConfirm == true) &&
+      !(_currentStatus?.viewerOnly ?? false);
+
+  bool get _showConfirmAction => _showRowActions && !_isL2;
+
+  bool get _rowActionsLocked => _currentStatus?.confirmed == true;
+
+  Map<String, ReconRowDecision> _decisionsForTab(String tab) {
+    return {
+      for (final d in _rowDecisions.values)
+        if (d.tab == tab) d.rowKey: d,
+    };
+  }
+
+  List<(String, ShucaiReport)> _cardReports() {
+    final snap = _snapshot;
+    if (snap == null) return const [];
+    return [
+      for (final item in shucaiReportsForSector(_detailCardType, snap))
+        (item.$2, item.$3),
+    ];
+  }
+
+  List<String> _actionableKeys(ShucaiReport report) {
+    return shucaiActionableRowKeys(report);
+  }
+
+  int _pendingRowCount() {
+    if (_isL2 || (_currentStatus?.viewerOnly ?? false)) return 0;
+    var n = 0;
+    for (final item in _cardReports()) {
+      for (final key in _actionableKeys(item.$2)) {
+        if (!_rowDecisions.containsKey(reconRowDecisionId(item.$1, key))) {
+          n++;
+        }
+      }
+    }
+    return n;
+  }
+
+  Future<void> _loadRowDecisions() async {
+    final asOf = _detailAsOfDate;
+    final card = _detailCardType;
+    if (asOf.isEmpty || card.isEmpty) return;
+    try {
+      final result = await _shucai.fetchRowDecisions(
+        asOfDate: asOf,
+        cardType: card,
+      );
+      if (!mounted) return;
+      setState(() {
+        _rowDecisions
+          ..clear()
+          ..addEntries(result.items.map((d) => MapEntry(d.id, d)));
+      });
+    } catch (_) {}
+  }
+
+  Future<bool> _saveRowDecisions(List<ReconRowDecision> items) async {
+    final asOf = _detailAsOfDate;
+    final card = _detailCardType;
+    if (asOf.isEmpty || card.isEmpty || items.isEmpty) return true;
+    setState(() => _savingRows = true);
+    try {
+      final saved = await _shucai.saveRowDecisions(
+        asOfDate: asOf,
+        cardType: card,
+        items: items,
+      );
+      if (!mounted) return false;
+      setState(() {
+        _rowDecisions
+          ..clear()
+          ..addEntries(saved.map((d) => MapEntry(d.id, d)));
+        _selectedRowKeys.clear();
+      });
+      return true;
+    } catch (e) {
+      if (!mounted) return false;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(friendlyErrorText(e)),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return false;
+    } finally {
+      if (mounted) setState(() => _savingRows = false);
+    }
+  }
+
+  void _toggleRow(String key) {
+    setState(() {
+      if (_selectedRowKeys.contains(key)) {
+        _selectedRowKeys.remove(key);
+      } else {
+        _selectedRowKeys.add(key);
+      }
+    });
+  }
+
+  void _toggleSelectAll(ShucaiReport report) {
+    final keys = _actionableKeys(report);
+    setState(() {
+      if (keys.isNotEmpty && keys.every(_selectedRowKeys.contains)) {
+        _selectedRowKeys.removeAll(keys);
+      } else {
+        _selectedRowKeys.addAll(keys);
+      }
+    });
+  }
+
+  Future<void> _confirmRows(List<String> keys, String tab) async {
+    if (keys.isEmpty || _rowActionsLocked || _savingRows) return;
+    if (keys.length == 1) {
+      final existing = _rowDecisions[reconRowDecisionId(tab, keys.first)];
+      if (existing?.rejected == true) {
+        final reason = await _askRejectReason(1);
+        if (reason == null || reason.trim().isEmpty) return;
+        await _saveRowDecisions([
+          ReconRowDecision(
+            tab: tab,
+            rowKey: keys.first,
+            decision: 'RECONFIRM',
+            reason: reason.trim(),
+          ),
+        ]);
+        return;
+      }
+    }
+    if (_isL2) return;
+    await _saveRowDecisions([
+      for (final key in keys)
+        ReconRowDecision(tab: tab, rowKey: key, decision: 'CONFIRM'),
+    ]);
+  }
+
+  Future<void> _rejectRows(List<String> keys, String tab) async {
+    if (keys.isEmpty || _rowActionsLocked || _savingRows) return;
+    final reason = await _askRejectReason(keys.length);
+    if (reason == null || reason.trim().isEmpty) return;
+    await _saveRowDecisions([
+      for (final key in keys)
+        ReconRowDecision(
+          tab: tab,
+          rowKey: key,
+          decision: 'REJECT',
+          reason: reason.trim(),
+        ),
+    ]);
+  }
+
+  Future<String?> _askRejectReason(int count) async {
+    final controller = TextEditingController();
+    final result = await showDialog<String>(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          title: Text(
+            count <= 0
+                ? '驳回本板块'
+                : (count > 1 ? '反驳 $count 条明细' : '反驳该明细'),
+          ),
+          content: TextField(
+            controller: controller,
+            autofocus: true,
+            maxLines: 4,
+            decoration: InputDecoration(
+              hintText: count <= 0
+                  ? '请填写驳回原因（将写到每一条上）'
+                  : '请填写反驳原因（必填）',
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('取消'),
+            ),
+            FilledButton(
+              onPressed: () {
+                final text = controller.text.trim();
+                if (text.isEmpty) return;
+                Navigator.of(ctx).pop(text);
+              },
+              child: const Text('提交'),
+            ),
+          ],
+        );
+      },
+    );
+    controller.dispose();
+    return result;
+  }
+
+  Future<void> _rejectCard() async {
+    final status = _currentStatus;
+    if (status == null || !status.canConfirm || status.confirmed || _confirming) {
+      return;
+    }
+    final reason = await _askRejectReason(0);
+    if (reason == null || reason.trim().isEmpty || !mounted) return;
+    final items = [
+      for (final item in _cardReports())
+        for (final key in _actionableKeys(item.$2))
+          ReconRowDecision(
+            tab: item.$1,
+            rowKey: key,
+            decision: 'REJECT',
+            reason: reason.trim(),
+          ),
+    ];
+    if (items.isNotEmpty) {
+      final saved = await _saveRowDecisions(items);
+      if (!saved || !mounted) return;
+    }
+    _commentController.text = reason.trim();
+    await _confirm();
   }
 
   bool get _compact => MediaQuery.sizeOf(context).width < 720;
@@ -626,12 +868,14 @@ class _NativeReconciliationAssistantPageState
           onNotification: _onScrollNotification,
           child: ListView(
             controller: _scroll,
+            reverse: true,
             physics: const AlwaysScrollableScrollPhysics(),
-            padding: const EdgeInsets.fromLTRB(12, 18, 12, 28),
+            padding: const EdgeInsets.fromLTRB(12, 28, 12, 18),
             children: [
+              ..._buildConversationItems().reversed,
               if (_loadingOlder)
                 const Padding(
-                  padding: EdgeInsets.only(bottom: 8),
+                  padding: EdgeInsets.only(top: 8),
                   child: Center(
                     child: SizedBox(
                       width: 18,
@@ -640,7 +884,6 @@ class _NativeReconciliationAssistantPageState
                     ),
                   ),
                 ),
-              ..._buildConversationItems(),
             ],
           ),
         ),
@@ -658,7 +901,20 @@ class _NativeReconciliationAssistantPageState
   }
 
   List<Widget> _buildConversationItems() {
-    const cardOrder = ['TAG2', 'TAG3_ENERGY', 'TAG3_OPERATOR'];
+    const cardOrder = [
+      'CNPC',
+      'ENERGY',
+      'PRIVATE',
+      'OPERATOR',
+      'TRAVEL',
+      'TAG2',
+      'TAG3_ENERGY',
+      'TAG3_OPERATOR',
+      'L1',
+      'FINANCE',
+      'L2',
+      'FINAL',
+    ];
     final groups = <String, List<({NativeChatMessage msg, _ReconCardPayload card})>>{};
     final extras = <NativeChatMessage>[];
     for (final msg in _messages) {
@@ -837,7 +1093,7 @@ class _NativeReconciliationAssistantPageState
       builder: (context) => AlertDialog(
         title: const Text('对账助手'),
         content: const Text(
-          '每天由后台推送三种对账名片。固定时间先发给财务和最终人；财务全部确认后再发给业务一层，一层确认后再发给二层。请按权限查阅对应的表。确认按财务 → 业务一层 → 业务二层依次进行。本层只能看到本层和上一层的进度。最终人只查阅不用确认。超时未确认会通知最终人。',
+          '每天由后台推送对账名片。确认顺序为一层 → 财务 → 二层；二层确认整张表即可，无需逐条确认，也可以驳回。最终人只查阅不用确认。超时未确认会通知最终人。',
         ),
         actions: [
           TextButton(
@@ -987,13 +1243,16 @@ class _NativeReconciliationAssistantPageState
     final viewerOnly = status?.viewerOnly ?? true;
     final confirmed = status?.confirmed ?? false;
     final waiting = status?.waitingPrevious ?? false;
+    final isL2 = reconRoleIsL2(status?.myRole ?? '');
     final subtitle = viewerOnly
         ? '本张对账表供你查阅，无需确认'
         : (confirmed
               ? '你已完成确认'
               : (waiting
                     ? (status?.waitingReason ?? '请等待上一层确认完成')
-                    : '请核对本张对账表并留下你的意见'));
+                    : (isL2
+                          ? '请确认或驳回本张对账表，无需逐条确认'
+                          : '请核对本张对账表并留下你的意见')));
     final pillLabel = viewerOnly
         ? '查阅'
         : (confirmed ? '已确认' : (waiting ? '等待中' : '待确认'));
@@ -1089,32 +1348,15 @@ class _NativeReconciliationAssistantPageState
 
   Widget _buildCurrentSummaryCard() {
     final snap = _snapshot;
-    if (_detailCardType == 'TAG2') {
-      return _CardSurface(
-        child: _InfoLine(
-          label: '标签二',
-          value: '${snap?.tag2.detailRowCount ?? 0} 行',
-        ),
-      );
-    }
-    if (_detailCardType == 'TAG3_ENERGY') {
-      return _CardSurface(
-        child: _InfoLine(
-          label: '能源明细',
-          value: '${snap?.tag3['energy']?.detailRowCount ?? 0} 条',
-        ),
-      );
-    }
-    final parts = <String>[];
-    for (final tab in ShucaiSnapshot.tag3TabOrder) {
-      if (tab == 'energy') continue;
-      final report = snap?.tag3[tab];
-      if (report == null) continue;
-      parts.add('${ShucaiSnapshot.tabLabel(tab)} ${report.detailRowCount}');
-    }
+    final reports = snap == null
+        ? const <(String, String, ShucaiReport)>[]
+        : shucaiReportsForSector(_detailCardType, snap);
+    final parts = [
+      for (final item in reports) '${item.$1} ${item.$3.detailRowCount}',
+    ];
     return _CardSurface(
       child: _InfoLine(
-        label: '运营商及相关',
+        label: reconCardTitle(_detailCardType),
         value: parts.isEmpty ? '暂无' : parts.join(' · '),
       ),
     );
@@ -1129,20 +1371,8 @@ class _NativeReconciliationAssistantPageState
       );
     }
     final compact = _compact;
-    if (_detailCardType == 'TAG2') {
-      return _buildMarkdownOrTable(
-        markdown: snap.tag2Markdown,
-        report: snap.tag2.withProvinceColumn,
-        compact: compact,
-      );
-    }
-    final tabs = [
-      for (final tab in ShucaiSnapshot.tag3TabOrder)
-        if (snap.tag3.containsKey(tab) ||
-            (snap.tag3Markdown[tab] ?? '').trim().isNotEmpty)
-          tab,
-    ];
-    if (tabs.isEmpty) {
+    final reports = shucaiReportsForSector(_detailCardType, snap);
+    if (reports.isEmpty) {
       return _CardSurface(
         child: Text(
           '暂无明细',
@@ -1150,18 +1380,38 @@ class _NativeReconciliationAssistantPageState
         ),
       );
     }
-    final currentTab = snap.tag3.containsKey(_tag3Tab) ||
-            (snap.tag3Markdown[_tag3Tab] ?? '').trim().isNotEmpty
+    String markdownFor(String tab) {
+      if (tab == 'tag2' || tab.isEmpty) return snap.tag2Markdown;
+      return snap.tag3Markdown[tab] ?? '';
+    }
+
+    if (reports.length == 1) {
+      final item = reports.first;
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildRowBatchBar(item.$3, item.$2),
+          _buildMarkdownOrTable(
+            markdown: markdownFor(item.$2),
+            report: item.$3,
+            compact: compact,
+            preferStructuredTable: false,
+            tab: item.$2,
+          ),
+        ],
+      );
+    }
+    final currentTab = reports.any((e) => e.$2 == _tag3Tab)
         ? _tag3Tab
-        : tabs.first;
-    final current = snap.tag3[currentTab] ??
-        const ShucaiReport(columns: [], rows: []);
+        : reports.first.$2;
+    final current = reports.firstWhere((e) => e.$2 == currentTab);
     final table = _buildMarkdownOrTable(
-      markdown: snap.tag3Markdown[currentTab] ?? '',
-      report: current,
+      markdown: markdownFor(current.$2),
+      report: current.$3,
       compact: compact,
+      preferStructuredTable: false,
+      tab: current.$2,
     );
-    if (tabs.length == 1) return table;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1170,12 +1420,14 @@ class _NativeReconciliationAssistantPageState
           child: ListView(
             scrollDirection: Axis.horizontal,
             children: [
-              for (final tab in tabs) ...[
+              for (final item in reports) ...[
                 _ShucaiTabChip(
-                  label:
-                      '${ShucaiSnapshot.tabLabel(tab)} ${snap.tag3[tab]?.detailRowCount ?? 0}',
-                  selected: currentTab == tab,
-                  onTap: () => setState(() => _tag3Tab = tab),
+                  label: '${item.$1} ${item.$3.detailRowCount}',
+                  selected: currentTab == item.$2,
+                  onTap: () => setState(() {
+                    _tag3Tab = item.$2;
+                    _selectedRowKeys.clear();
+                  }),
                 ),
                 const SizedBox(width: 8),
               ],
@@ -1183,6 +1435,7 @@ class _NativeReconciliationAssistantPageState
           ),
         ),
         const SizedBox(height: 10),
+        _buildRowBatchBar(current.$3, current.$2),
         table,
       ],
     );
@@ -1192,21 +1445,77 @@ class _NativeReconciliationAssistantPageState
     required String markdown,
     required ShucaiReport report,
     required bool compact,
+    bool preferStructuredTable = false,
+    String tab = '',
   }) {
-    final md = markdown.trim();
-    if (md.isNotEmpty) {
-      final body = RobotMarkdown(
-        markdown: md,
+    if (preferStructuredTable &&
+        report.columns.isNotEmpty &&
+        report.rows.isNotEmpty) {
+      return ShucaiReportTable(
+        report: report,
         compact: compact,
-        selectable: !widget.desktopMode,
-        fitToContent: widget.desktopMode,
+        showRowActions: _showRowActions,
+        showBatchSelect: false,
+        showConfirmAction: _showConfirmAction,
+        rowActionsLocked: _rowActionsLocked,
+        selectedRowKeys: _selectedRowKeys,
+        decisions: _decisionsForTab(tab),
+        onToggleRow: _rowActionsLocked ? null : _toggleRow,
+        onToggleSelectAll: _rowActionsLocked
+            ? null
+            : () => _toggleSelectAll(report),
+        onConfirmRow: _rowActionsLocked
+            ? null
+            : (key) => _confirmRows([key], tab),
+        onRejectRow: _rowActionsLocked
+            ? null
+            : (key) => _rejectRows([key], tab),
       );
-      if (widget.desktopMode) {
-        return _DesktopMarkdownScroll(child: body);
-      }
-      return _CardSurface(child: body);
     }
-    return ShucaiReportTable(report: report, compact: compact);
+    final md = markdown.trim();
+    if (md.isNotEmpty && parseReconGfmTables(md).isNotEmpty) {
+      return ReconMarkdownTable(
+        markdown: md,
+        report: report,
+        compact: compact,
+        showRowActions: _showRowActions,
+        showBatchSelect: false,
+        showConfirmAction: _showConfirmAction,
+        rowActionsLocked: _rowActionsLocked,
+        selectedRowKeys: _selectedRowKeys,
+        decisions: _decisionsForTab(tab),
+        onToggleRow: _rowActionsLocked ? null : _toggleRow,
+        onToggleSelectAll:
+            _rowActionsLocked ? null : () => _toggleSelectAll(report),
+        onConfirmRow: _rowActionsLocked
+            ? null
+            : (key) => _confirmRows([key], tab),
+        onRejectRow: _rowActionsLocked
+            ? null
+            : (key) => _rejectRows([key], tab),
+      );
+    }
+    return ShucaiReportTable(
+      report: report,
+      compact: compact,
+      showRowActions: _showRowActions,
+      showBatchSelect: false,
+      showConfirmAction: _showConfirmAction,
+      rowActionsLocked: _rowActionsLocked,
+      selectedRowKeys: _selectedRowKeys,
+      decisions: _decisionsForTab(tab),
+      onToggleRow: _rowActionsLocked ? null : _toggleRow,
+      onToggleSelectAll:
+          _rowActionsLocked ? null : () => _toggleSelectAll(report),
+      onConfirmRow: _rowActionsLocked
+          ? null
+          : (key) => _confirmRows([key], tab),
+      onRejectRow: _rowActionsLocked ? null : (key) => _rejectRows([key], tab),
+    );
+  }
+
+  Widget _buildRowBatchBar(ShucaiReport report, String tab) {
+    return const SizedBox.shrink();
   }
 
   Widget _buildProgressCard(
@@ -1493,11 +1802,38 @@ class _NativeReconciliationAssistantPageState
             ),
           ),
           const SizedBox(height: 12),
+          if (_isL2 && !confirmed) ...[
+            SizedBox(
+              width: double.infinity,
+              height: 46,
+              child: OutlinedButton.icon(
+                onPressed: _confirming ? null : _rejectCard,
+                icon: const Icon(Icons.undo_rounded, size: 19),
+                label: Text(_confirming ? '提交中…' : '驳回本次对账'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: DunesColors.coral,
+                  side: const BorderSide(color: DunesColors.coral),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  textStyle: DunesTypography.sans(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+          ],
           SizedBox(
             width: double.infinity,
             height: 46,
             child: FilledButton.icon(
-              onPressed: confirmed || _confirming ? null : _confirm,
+              onPressed: confirmed ||
+                      _confirming ||
+                      _pendingRowCount() > 0
+                  ? null
+                  : _confirm,
               icon: Icon(
                 confirmed ? Icons.check_circle_outline : Icons.check_rounded,
                 size: 19,
@@ -1505,7 +1841,13 @@ class _NativeReconciliationAssistantPageState
               label: Text(
                 _confirming
                     ? '提交中…'
-                    : (confirmed ? '已确认本次对账' : '确认本次对账'),
+                    : (confirmed
+                          ? '已确认本次对账'
+                          : (_isL2
+                                ? '确认本次对账'
+                                : (_pendingRowCount() > 0
+                                      ? '还有 ${_pendingRowCount()} 条明细未处理'
+                                      : '确认本次对账'))),
               ),
               style: FilledButton.styleFrom(
                 backgroundColor: DunesColors.accent,
@@ -1790,81 +2132,6 @@ class _ShucaiTabChip extends StatelessWidget {
               fontSize: 12,
               fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
               color: selected ? DunesColors.accent : DunesColors.text,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// PC：宽 Markdown 表可鼠标拖、滚轮/触控板横向滑，并显示底栏滚动条。
-class _DesktopMarkdownScroll extends StatefulWidget {
-  const _DesktopMarkdownScroll({required this.child});
-
-  final Widget child;
-
-  @override
-  State<_DesktopMarkdownScroll> createState() => _DesktopMarkdownScrollState();
-}
-
-class _DesktopMarkdownScrollState extends State<_DesktopMarkdownScroll> {
-  final ScrollController _h = ScrollController();
-
-  @override
-  void dispose() {
-    _h.dispose();
-    super.dispose();
-  }
-
-  void _onPointerSignal(PointerSignalEvent event) {
-    if (event is! PointerScrollEvent || !_h.hasClients) return;
-    var delta = event.scrollDelta.dx;
-    final shift = HardwareKeyboard.instance.logicalKeysPressed.contains(
-          LogicalKeyboardKey.shiftLeft,
-        ) ||
-        HardwareKeyboard.instance.logicalKeysPressed.contains(
-          LogicalKeyboardKey.shiftRight,
-        );
-    if (delta == 0 && shift) {
-      delta = event.scrollDelta.dy;
-    }
-    if (delta == 0 || !_h.position.hasContentDimensions) return;
-    final next = (_h.offset + delta).clamp(
-      _h.position.minScrollExtent,
-      _h.position.maxScrollExtent,
-    );
-    if (next != _h.offset) {
-      _h.jumpTo(next);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return _CardSurface(
-      padding: const EdgeInsets.fromLTRB(15, 15, 15, 8),
-      child: ScrollConfiguration(
-        behavior: ScrollConfiguration.of(context).copyWith(
-          dragDevices: const {
-            PointerDeviceKind.touch,
-            PointerDeviceKind.mouse,
-            PointerDeviceKind.trackpad,
-            PointerDeviceKind.stylus,
-          },
-        ),
-        child: Listener(
-          onPointerSignal: _onPointerSignal,
-          child: Scrollbar(
-            controller: _h,
-            thumbVisibility: true,
-            scrollbarOrientation: ScrollbarOrientation.bottom,
-            notificationPredicate: (n) => n.metrics.axis == Axis.horizontal,
-            child: SingleChildScrollView(
-              controller: _h,
-              scrollDirection: Axis.horizontal,
-              primary: false,
-              padding: const EdgeInsets.only(bottom: 10),
-              child: widget.child,
             ),
           ),
         ),

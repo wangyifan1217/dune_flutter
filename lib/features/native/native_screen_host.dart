@@ -157,6 +157,10 @@ class _NativeScreenHostState extends State<NativeScreenHost>
   NativeConversation? _selectedDriveAssistant;
   NativeConversation? _selectedWeeklySummary;
   NativeConversation? _selectedReconciliation;
+  bool _openDailyReconPending = false;
+  int _dailyReconOpenToken = 0;
+  String _dailyReconAsOfDate = '';
+  String _dailyReconCardType = '';
   NativeConversation? _selectedAdministrativeNotice;
   int? _administrativeNoticeTargetId;
   int? _driveTargetItemId;
@@ -597,7 +601,9 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       routed = mounted && widget.navigation.currentScreen == 'WS1';
     } else if (resolvedConversation.isReconciliationAssistant) {
       _openReconciliationAssistant(resolvedConversation);
-      routed = mounted && widget.navigation.currentScreen == 'RA1';
+      routed = mounted &&
+          (widget.navigation.currentScreen == 'QJA' ||
+              widget.navigation.currentScreen == 'RA1');
     } else if (resolvedConversation.isAdministrativeNotice) {
       _openAdministrativeNotice(resolvedConversation, noticeId: noticeId);
       routed = mounted && widget.navigation.currentScreen == 'AN1';
@@ -2049,7 +2055,6 @@ class _NativeScreenHostState extends State<NativeScreenHost>
   }
 
   void _openReconciliationAssistant([NativeConversation? hint]) {
-    // 对账助手是独立的会话卡片，不应沿用上一个私聊/群聊的右侧状态。
     setState(() {
       _selectedPrivate = null;
       _selectedPrivatePeerUserId = null;
@@ -2059,7 +2064,6 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       _selectedTaskAssistant = null;
       _selectedDriveAssistant = null;
       _selectedWeeklySummary = null;
-      _selectedReconciliation = null;
       _selectedAdministrativeNotice = null;
       _administrativeNoticeTargetId = null;
       _focusMessageId = null;
@@ -2070,8 +2074,41 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     });
     _markUserEnteredChat();
     _goChatScreen('RA1');
-    if ((_selectedReconciliation?.id ?? 0) > 0) {
-      _conversationReadSignal.notifyRead(_selectedReconciliation!.id);
+    if ((hint?.id ?? 0) > 0) {
+      _conversationReadSignal.notifyRead(hint!.id);
+    }
+  }
+
+  void _openDailyReconWorkbench({
+    NativeConversation? hint,
+    String asOfDate = '',
+    String cardType = '',
+  }) {
+    setState(() {
+      _selectedPrivate = null;
+      _selectedPrivatePeerUserId = null;
+      _selectedGroup = null;
+      _selectedRobot = null;
+      _selectedApprovalAssistant = null;
+      _selectedTaskAssistant = null;
+      _selectedDriveAssistant = null;
+      _selectedWeeklySummary = null;
+      _selectedAdministrativeNotice = null;
+      _administrativeNoticeTargetId = null;
+      _focusMessageId = null;
+      _focusMessageHint = null;
+      if (hint != null && hint.id > 0) {
+        _selectedReconciliation = hint;
+      }
+      _dailyReconAsOfDate = asOfDate.trim();
+      _dailyReconCardType = cardType.trim();
+      _dailyReconOpenToken++;
+      _openDailyReconPending = true;
+    });
+    _markUserEnteredChat();
+    widget.navigation.go('QJA');
+    if ((hint?.id ?? 0) > 0) {
+      _conversationReadSignal.notifyRead(hint!.id);
     }
   }
 
@@ -2671,6 +2708,13 @@ class _NativeScreenHostState extends State<NativeScreenHost>
             autoMarkRead: autoMark,
             onBack: () => _leaveChatToInbox(clearSelection: true),
             onConversationRead: _handleConversationRead,
+            onOpenWorkbenchDailyRecon: (date, {cardType = ''}) {
+              _openDailyReconWorkbench(
+                hint: slot.conversation,
+                asOfDate: date,
+                cardType: cardType,
+              );
+            },
           ),
         );
       case _DualChatKind.robot:
@@ -3136,6 +3180,15 @@ class _NativeScreenHostState extends State<NativeScreenHost>
               ? null
               : () => widget.navigation.popTo('B2'),
           onAdministrativeNoticeAcknowledged: _handleConversationRead,
+          openDailyRecon: _openDailyReconPending,
+          dailyReconAsOfDate: _dailyReconAsOfDate,
+          dailyReconCardType: _dailyReconCardType,
+          dailyReconOpenToken: _dailyReconOpenToken,
+          onDailyReconOpened: () {
+            if (_openDailyReconPending) {
+              setState(() => _openDailyReconPending = false);
+            }
+          },
         );
       case 'CT1':
         // 每次进入使用独立 key，强制重建，避免复用一次性 Ticket。
@@ -3296,6 +3349,13 @@ class _NativeScreenHostState extends State<NativeScreenHost>
             }
           },
           onConversationRead: _handleConversationRead,
+          onOpenWorkbenchDailyRecon: (date, {cardType = ''}) {
+            _openDailyReconWorkbench(
+              hint: _selectedReconciliation,
+              asOfDate: date,
+              cardType: cardType,
+            );
+          },
         );
       case 'FD1':
         return NativeDrivePage(

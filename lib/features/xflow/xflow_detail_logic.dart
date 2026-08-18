@@ -462,10 +462,7 @@ String currentApproverLabel(
     });
     final labels = <String>[];
     for (final step in open) {
-      final sn = step.stepNo;
-      final stage = step.stageName.isNotEmpty
-          ? step.stageName
-          : stageLabel(sn, step.stepType, stages);
+      final stage = trailStepRole(step, stages);
       final who = () {
         if (step.assigneeId > 0 && assigneeNames.containsKey(step.assigneeId)) {
           return assigneeNames[step.assigneeId]!;
@@ -483,9 +480,7 @@ String currentApproverLabel(
   final stepNo = trail.currentStep;
   final step = trail.steps.where((s) => s.stepNo == stepNo).firstOrNull;
   if (step == null) return stepNo > 0 ? '第$stepNo步' : '';
-  final stageName = step.stageName.isNotEmpty
-      ? step.stageName
-      : stageLabel(stepNo, step.stepType, stages);
+  final stageName = trailStepRole(step, stages);
   if (step.assigneeId > 0 && assigneeNames.containsKey(step.assigneeId)) {
     return '$stageName · ${assigneeNames[step.assigneeId]}';
   }
@@ -534,21 +529,104 @@ String _designatedInitiatorName(Map<String, dynamic> raw) {
   return '';
 }
 
-String stageLabel(int stepNo, String stepType, List<Map<String, dynamic>> stages) {
-  if (stepNo > 0 && stepNo <= stages.length) {
-    final name = (stages[stepNo - 1]['stageName'] ?? '').toString();
-    if (name.isNotEmpty) return name;
+String trailStepRole(
+  XflowApprovalStep step,
+  List<Map<String, dynamic>> stages,
+) {
+  return humanizeApproverRole(
+    step.stageName.isNotEmpty
+        ? step.stageName
+        : stageLabel(
+            step.stepNo,
+            step.stepType,
+            stages,
+            sourceStageNo: step.sourceStageNo,
+          ),
+    fallbackType: step.stepType,
+  );
+}
+
+String stageLabel(
+  int stepNo,
+  String stepType,
+  List<Map<String, dynamic>> stages, {
+  int sourceStageNo = 0,
+}) {
+  final wantNo = sourceStageNo > 0 ? sourceStageNo : 0;
+  final stepNorm = _normApproverType(stepType);
+  if (wantNo > 0) {
+    for (final stage in stages) {
+      final no = _stageNoOf(stage);
+      if (no != wantNo) continue;
+      final liveNorm = _normApproverType('${stage['approverType'] ?? ''}');
+      if (liveNorm.isNotEmpty &&
+          stepNorm.isNotEmpty &&
+          liveNorm != stepNorm) {
+        continue;
+      }
+      final name = (stage['stageName'] ?? stage['name'] ?? stage['label'] ?? '')
+          .toString()
+          .trim();
+      if (name.isNotEmpty) {
+        return humanizeApproverRole(name, fallbackType: stepType);
+      }
+    }
   }
-  switch (stepType) {
+  return stepTypeLabel(stepType);
+}
+
+/// 接口可能把审批类型枚举（CUSTOM / DIRECT_SUP）写进 stageName，不能当角色名展示。
+String humanizeApproverRole(String raw, {String fallbackType = ''}) {
+  final text = raw.trim();
+  if (text.isEmpty) return stepTypeLabel(fallbackType);
+  if (_isApproverTypeCode(text)) return stepTypeLabel(text);
+  return text;
+}
+
+bool _isApproverTypeCode(String text) {
+  return RegExp(r'^[A-Z][A-Z0-9_]+$').hasMatch(text.trim());
+}
+
+String stepTypeLabel(String stepType) {
+  switch (stepType.toUpperCase().trim()) {
     case 'DIRECT_SUP':
+      return '直接主管';
+    case 'DIVISION':
       return '部门主管';
     case 'FINANCE':
       return '财务总监';
     case 'ROLE':
-      return '技术审批';
+      return '角色审批';
+    case 'FORM_FIELD':
+      return '表单选人';
+    case 'CUSTOM':
+    case 'USER':
+      return '指定审批人';
+    case 'SYSTEM':
+      return '系统自动';
+    case 'CONDITION':
+    case 'CONDITIONAL':
+      return '条件审批';
+    case 'FINAL':
+      return '最终审批';
     default:
-      return stepType.isEmpty ? '审批节点' : stepType;
+      final text = stepType.trim();
+      if (text.isEmpty) return '审批节点';
+      if (RegExp(r'^[A-Z][A-Z0-9_]+$').hasMatch(text)) return '审批节点';
+      return text;
   }
+}
+
+String _normApproverType(String raw) {
+  final v = raw.toUpperCase().trim();
+  if (v == 'USER') return 'CUSTOM';
+  return v;
+}
+
+int _stageNoOf(Map<String, dynamic> stage) {
+  final v = stage['stageNo'] ?? stage['stage_no'];
+  if (v is num) return v.toInt();
+  return int.tryParse('$v') ?? 0;
 }
 
 String fmtDetailTime(dynamic v) {

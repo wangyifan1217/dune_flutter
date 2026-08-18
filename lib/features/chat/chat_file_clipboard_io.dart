@@ -4,6 +4,24 @@ import 'package:flutter/foundation.dart';
 import 'package:pasteboard/pasteboard.dart';
 import 'package:path_provider/path_provider.dart';
 
+/// 过滤出当前能读的本地文件（排除目录、网页 URL、已删除路径）。
+List<String> existingLocalFilePaths(List<String> paths) {
+  final out = <String>[];
+  final seen = <String>{};
+  for (final raw in paths) {
+    final path = raw.trim();
+    if (path.isEmpty || seen.contains(path)) continue;
+    seen.add(path);
+    try {
+      if (FileSystemEntity.typeSync(path, followLinks: true) ==
+          FileSystemEntityType.file) {
+        out.add(path);
+      }
+    } catch (_) {}
+  }
+  return out;
+}
+
 Future<Uint8List> readLocalFileBytes(String filePath) async {
   if (kIsWeb) return Uint8List(0);
   final path = filePath.trim();

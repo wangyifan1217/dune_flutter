@@ -31,6 +31,9 @@ class ChatFileClipboard {
     return path.isNotEmpty;
   }
 
+  static List<String> existingLocalFiles(List<String> paths) =>
+      io.existingLocalFilePaths(paths);
+
   static ({Uint8List bytes, String fileName, String? localPath})? peek() {
     if (!hasFile) return null;
     return (

@@ -7,6 +7,34 @@ import '../../core/platform/desktop_features.dart';
 
 const _kChannel = MethodChannel('nova.dunes/desktop_file_drag');
 
+/// 当前从会话气泡拖出的本地文件（用于忽略拖回当前会话的误投放）。
+class ChatDesktopFileDragSession {
+  ChatDesktopFileDragSession._();
+
+  static String? path;
+  static DateTime? endedAt;
+
+  static bool shouldIgnoreChatDrop(Iterable<String> droppedPaths) {
+    final src = (path ?? '').trim();
+    if (src.isEmpty) return false;
+    final dropped = droppedPaths
+        .map((p) => p.trim())
+        .where((p) => p.isNotEmpty)
+        .toList(growable: false);
+    if (dropped.length != 1) return false;
+    if (!_samePath(dropped.first, src)) return false;
+    final ended = endedAt;
+    if (ended == null) return true;
+    return DateTime.now().difference(ended) < const Duration(milliseconds: 800);
+  }
+
+  static bool _samePath(String a, String b) {
+    final left = a.replaceAll('/', '\\').toLowerCase();
+    final right = b.replaceAll('/', '\\').toLowerCase();
+    return left == right;
+  }
+}
+
 /// 把会话里已落盘的文件/图片拖到资源管理器或 Finder。
 ///
 /// 仅 Windows / macOS 生效；操作为复制，不会挪走应用内缓存。
@@ -44,10 +72,16 @@ class _ChatDesktopFileDragState extends State<ChatDesktopFileDrag> {
       final path = ((await _warmPath)?.trim()) ?? '';
       _warmPath = null;
       if (!mounted || path.isEmpty) return;
-      await _kChannel.invokeMethod<void>('start', <String, dynamic>{
-        'paths': <String>[path],
-        'fileName': widget.fileName,
-      });
+      ChatDesktopFileDragSession.path = path;
+      ChatDesktopFileDragSession.endedAt = null;
+      try {
+        await _kChannel.invokeMethod<void>('start', <String, dynamic>{
+          'paths': <String>[path],
+          'fileName': widget.fileName,
+        });
+      } finally {
+        ChatDesktopFileDragSession.endedAt = DateTime.now();
+      }
     } on MissingPluginException {
       // 旧包未带原生通道时静默忽略。
     } catch (_) {

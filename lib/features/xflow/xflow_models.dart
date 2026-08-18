@@ -674,6 +674,11 @@ extension XflowApprovalTrailExt on XflowApprovalTrail {
 extension XflowApprovalStepExt on XflowApprovalStep {
   String get stepType => (raw['stepType'] ?? '').toString();
   String get stageName => (raw['stageName'] ?? '').toString().trim();
+  int get sourceStageNo {
+    final v = raw['sourceStageNo'];
+    if (v is num) return v.toInt();
+    return int.tryParse('$v') ?? 0;
+  }
   bool? get isCurrent {
     final v = raw['isCurrent'];
     if (v is bool) return v;

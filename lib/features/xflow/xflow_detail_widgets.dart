@@ -1466,15 +1466,13 @@ class XfDetTrackTimeline extends StatelessWidget {
     final curSteps = trail?.currentSteps.toSet() ?? const <int>{};
     final st = detail.status.toLowerCase();
 
-    String assigneeLabel(XflowApprovalStep step, String fallback) {
+    String assigneeName(XflowApprovalStep step) {
       if (step.assigneeId > 0 &&
           bundle.assigneeNames.containsKey(step.assigneeId)) {
-        return '${bundle.assigneeNames[step.assigneeId]} · $fallback';
+        return bundle.assigneeNames[step.assigneeId]!;
       }
-      if (step.assigneeName.isNotEmpty) {
-        return '${step.assigneeName} · $fallback';
-      }
-      return fallback;
+      if (step.assigneeName.isNotEmpty) return step.assigneeName;
+      return '';
     }
 
     // 并行：未决步骤统一「待处理」，勿用 currentStep == 某一步单独高亮
@@ -1498,10 +1496,8 @@ class XfDetTrackTimeline extends StatelessWidget {
     ];
 
     for (final step in steps) {
-      final label = step.stageName.isNotEmpty
-          ? step.stageName
-          : stageLabel(step.stepNo, step.stepType, bundle.stages);
-      final who = assigneeLabel(step, label);
+      final label = trailStepRole(step, bundle.stages);
+      final who = assigneeName(step);
       final decision = step.decision.toUpperCase();
       late XflowApprovalFlowStepState state;
       late String cmt;
@@ -1525,38 +1521,11 @@ class XfDetTrackTimeline extends StatelessWidget {
       }
       rows.add(
         XflowApprovalFlowTrackRowData(
-          title: who,
+          title: who.isNotEmpty ? who : label,
+          role: who.isNotEmpty ? label : null,
           time: tm,
           comment: cmt,
           state: state,
-        ),
-      );
-    }
-
-    // 后端有时只返回已发生步骤，补齐模板后续节点，避免流程仅显示首节点。
-    final shownStepNos = steps.map((s) => s.stepNo).where((n) => n > 0).toSet();
-    for (var no = 1; no <= bundle.stages.length; no++) {
-      if (shownStepNos.contains(no)) continue;
-      final label = stageLabel(no, '', bundle.stages);
-      final stage = bundle.stages[no - 1];
-      final approverIds = stage['approverIds'];
-      var who = label;
-      if (approverIds is List && approverIds.isNotEmpty) {
-        final aid = int.tryParse('${approverIds.first}') ?? 0;
-        final name = bundle.assigneeNames[aid];
-        if (name != null && name.isNotEmpty) who = '$name · $label';
-      }
-      final isCurrent = !parallel &&
-          st == 'pending' &&
-          (curSteps.isNotEmpty ? curSteps.contains(no) : no == curStep);
-      rows.add(
-        XflowApprovalFlowTrackRowData(
-          title: who,
-          time: isCurrent ? '当前处理' : '待处理',
-          comment: isCurrent ? '审批进行中' : '待处理',
-          state: isCurrent
-              ? XflowApprovalFlowStepState.current
-              : XflowApprovalFlowStepState.pending,
         ),
       );
     }

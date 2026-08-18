@@ -892,13 +892,24 @@
     }
 
     function stageLabel(stepNo, stepType, trailStep) {
-      if (trailStep && trailStep.stageName) return trailStep.stageName;
-      var st = stages[stepNo - 1];
-      if (st && st.stageName) return st.stageName;
-      if (stepType === 'DIRECT_SUP') return '部门主管';
-      if (stepType === 'FINANCE') return '财务总监';
-      if (stepType === 'ROLE') return '技术审批';
-      return stepType || '审批节点';
+      var raw = '';
+      if (trailStep && trailStep.stageName) raw = String(trailStep.stageName);
+      if (!raw) {
+        var st = stages[stepNo - 1];
+        if (st && st.stageName) raw = String(st.stageName);
+      }
+      var token = raw || stepType || '';
+      if (/^[A-Z][A-Z0-9_]+$/.test(token)) {
+        if (token === 'DIRECT_SUP') return '直接主管';
+        if (token === 'DIVISION') return '部门主管';
+        if (token === 'FINANCE') return '财务总监';
+        if (token === 'ROLE') return '角色审批';
+        if (token === 'CUSTOM' || token === 'USER') return '指定审批人';
+        if (token === 'FORM_FIELD') return '表单选人';
+        if (token === 'SYSTEM') return '系统自动';
+        return '审批节点';
+      }
+      return token || '审批节点';
     }
 
     function isCurrentStep(trailStep, stepNo) {

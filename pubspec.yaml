@@ -2,7 +2,7 @@ name: dunes_app
 description: "æ²ä¸ Â· ç»ä¸å®¡æ¹ App â åºäº index.html åå 100% è¿åç Flutter å£³"
 publish_to: 'none'
 
-version: 1.4.2+142
+version: 1.4.3+143
 
 environment:
   sdk: ^3.11.0
@@ -90,6 +90,7 @@ flutter:
   assets:
     - assets/images/app_logo.png
     - assets/images/lighthouse_logo.png
+    - assets/images/tau_tab_icon.png
     - assets/images/tray_icon.ico
     - assets/images/tray_icon_blank.ico
     - assets/images/tray_icon.png

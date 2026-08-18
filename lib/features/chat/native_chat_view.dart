@@ -60,6 +60,7 @@ import 'chat_image_utils.dart';
 import 'chat_file_preview_page.dart';
 import 'chat_file_type_icon.dart';
 import 'chat_file_upload_coordinator.dart';
+import 'chat_markdown_preview.dart';
 import 'chat_pdf_preview.dart';
 import 'chat_media_widgets.dart';
 import 'chat_desktop_file_drag_stub.dart'
@@ -73,6 +74,7 @@ import 'chat_compose_draft_store.dart';
 import 'voice_recording_overlay.dart';
 import 'voice_transcript_panel.dart';
 import 'chat_widgets.dart';
+import 'desktop_composer_pending.dart';
 import 'desktop_screenshot.dart';
 import 'file_download.dart' as file_dl;
 import 'user_avatar_widget.dart';
@@ -543,8 +545,31 @@ class _NativeChatViewState extends State<NativeChatView>
       if (!TickerMode.valuesOf(context).enabled) return;
       if (_conversation?.dissolved == true) return;
       if (_voiceMode || _messageMultiSelectMode) return;
+      _consumePendingComposerDrop();
       _inputFocusNode.requestFocus();
     });
+  }
+
+  void _consumePendingComposerDrop() {
+    if (!isDesktopCommOnly || !mounted) return;
+    if (!TickerMode.valuesOf(context).enabled) return;
+    if (_conversation?.dissolved == true) return;
+    final convId = _conversation?.id ?? widget.conversationHint?.id ?? 0;
+    final peerId = widget.peerUserIdHint ?? _conversation?.peerUserId ?? 0;
+    final pending = DesktopComposerPending.take(
+      conversationId: convId,
+      peerUserId: peerId,
+    );
+    if (pending == null || pending.isEmpty) return;
+    for (final file in pending) {
+      _stageDesktopAttachment(
+        bytes: file.bytes,
+        fileName: file.fileName,
+        mimeType: file.mimeType,
+        isImage: file.isImage,
+        sourceLabel: file.sourceLabel,
+      );
+    }
   }
 
   void _onWindowsHotkeyPressed() {
@@ -1696,6 +1721,7 @@ class _NativeChatViewState extends State<NativeChatView>
             setState(() => _peerOnline = online);
           }
         }
+        _focusDesktopComposerIfActive();
         return;
       }
       final NativeMessagePage page;
@@ -1801,6 +1827,7 @@ class _NativeChatViewState extends State<NativeChatView>
       unawaited(_refreshPinnedMessages());
       unawaited(_refreshDownloadedFileFlags());
       unawaited(_restoreComposeDraft(conversation: conv));
+      _focusDesktopComposerIfActive();
       // 有缓存的 silent 首进也要捕获；已捕获过则用 hint/会话未读数取大值补齐。
       final hintUnread = widget.conversationHint?.unreadCount ?? 0;
       final shouldCaptureUnread =
@@ -2774,8 +2801,7 @@ class _NativeChatViewState extends State<NativeChatView>
   }
 
   Future<void> _send() async {
-    if (_useDesktopAttachmentStaging &&
-        _desktopComposerAttachments.isNotEmpty) {
+    if (_desktopComposerAttachments.isNotEmpty) {
       await _sendDesktopStagedBundle();
       return;
     }
@@ -2922,7 +2948,7 @@ class _NativeChatViewState extends State<NativeChatView>
     required bool isImage,
     required String sourceLabel,
   }) {
-    if (!_useDesktopAttachmentStaging) return;
+    if (!isDesktopCommOnly) return;
     if (_desktopComposerAttachments.length >= _maxDesktopComposerAttachments) {
       _showToast('一次最多添加 $_maxDesktopComposerAttachments 个附件');
       return;
@@ -3125,6 +3151,33 @@ class _NativeChatViewState extends State<NativeChatView>
       return false;
     }
     try {
+      // 资源管理器复制文件时，剪贴板常同时带上文件名/路径文本。
+      // 必须先认 CF_HDROP，否则会被当成正文贴进输入框。
+      if (!kIsWeb) {
+        try {
+          final paths = ChatFileClipboard.existingLocalFiles(
+            await Pasteboard.files(),
+          );
+          if (paths.isNotEmpty) {
+            await _pasteLocalFilePaths(paths, sourceLabel: '粘贴');
+            return true;
+          }
+        } catch (e) {
+          debugPrint('[Chat] paste files failed: $e');
+        }
+      }
+
+      try {
+        final image = await Pasteboard.image;
+        if (image != null && image.isNotEmpty && _looksLikeImageBytes(image)) {
+          ChatFileClipboard.clear();
+          await _sendPastedImageBytes(image);
+          return true;
+        }
+      } catch (e) {
+        debugPrint('[Chat] paste image failed: $e');
+      }
+
       // 剪贴板已有普通文本（用户又复制了文字）时，绝不用旧的图片/文件备份抢粘贴。
       final clipText =
           (await Clipboard.getData(Clipboard.kTextPlain))?.text?.trim() ?? '';
@@ -3138,19 +3191,6 @@ class _NativeChatViewState extends State<NativeChatView>
         return false;
       }
 
-      final image = await Pasteboard.image;
-      if (image != null && image.isNotEmpty && _looksLikeImageBytes(image)) {
-        ChatFileClipboard.clear();
-        await _sendPastedImageBytes(image);
-        return true;
-      }
-      if (!kIsWeb) {
-        final paths = await Pasteboard.files();
-        if (paths.isNotEmpty) {
-          final handled = await _pasteLocalFilePaths(paths, sourceLabel: '粘贴');
-          if (handled) return true;
-        }
-      }
       // 系统剪贴板拿不到时，回退到本应用「复制图片」的进程内备份。
       final mem = ChatImageClipboard.peek();
       if (mem != null) {
@@ -3186,11 +3226,18 @@ class _NativeChatViewState extends State<NativeChatView>
                   sourceLabel: '粘贴',
                 );
               } else {
-                // 无本地路径的视频字节：暂按文件发送。
-                await _sendFileBytes(bytes, fileName: memFile.fileName);
+                await _sendFileBytes(
+                  bytes,
+                  fileName: memFile.fileName,
+                  sourceLabel: '粘贴',
+                );
               }
             } else {
-              await _sendFileBytes(bytes, fileName: memFile.fileName);
+              await _sendFileBytes(
+                bytes,
+                fileName: memFile.fileName,
+                sourceLabel: '粘贴',
+              );
             }
             return true;
           }
@@ -3247,7 +3294,11 @@ class _NativeChatViewState extends State<NativeChatView>
           );
           handled = true;
         } else if (isDesktopCommOnly) {
-          await _sendFileBytes(bytes, fileName: fileName);
+          await _sendFileBytes(
+            bytes,
+            fileName: fileName,
+            sourceLabel: sourceLabel,
+          );
           handled = true;
         }
       } catch (e) {
@@ -3655,6 +3706,7 @@ class _NativeChatViewState extends State<NativeChatView>
   Future<void> _sendFileBytes(
     Uint8List bytes, {
     required String fileName,
+    String sourceLabel = '拖入',
   }) async {
     final conv = _conversation;
     if (conv == null || _mediaBusy) return;
@@ -3666,7 +3718,7 @@ class _NativeChatViewState extends State<NativeChatView>
         fileName: fileName,
         mimeType: mimeType,
         isImage: false,
-        sourceLabel: '拖入',
+        sourceLabel: sourceLabel,
       );
       return;
     }
@@ -3727,6 +3779,11 @@ class _NativeChatViewState extends State<NativeChatView>
       }
       if (files.isEmpty) {
         _showToast('请拖入文件或图片（不支持文件夹）');
+        return;
+      }
+      if (ChatDesktopFileDragSession.shouldIgnoreChatDrop(
+        files.map((f) => f.path),
+      )) {
         return;
       }
       const maxDrop = 20;
@@ -4855,8 +4912,7 @@ class _NativeChatViewState extends State<NativeChatView>
           ),
         if (_quoteDraft != null && !_quoteDraft!.isEmpty && !locked)
           ChatQuotePreviewBar(quote: _quoteDraft!, onCancel: _clearQuoteDraft),
-        if (_useDesktopAttachmentStaging &&
-            _desktopComposerAttachments.isNotEmpty)
+        if (_desktopComposerAttachments.isNotEmpty)
           _buildDesktopAttachmentTray(),
         ValueListenableBuilder<bool>(
           valueListenable: MeetingLiveController.instance.active,
@@ -6028,12 +6084,22 @@ class _NativeChatViewState extends State<NativeChatView>
     }
   }
 
-  /// 知识库文件：PDF 预览；其它进 IM 文件详情页（下载 / 用其他应用打开）。
+  /// 知识库文件：Markdown / PDF 应用内预览；其它进文件详情页。
   Future<void> _openKbFileAttachment(
     Map<String, dynamic>? payload,
     String fileName, {
     String? initialLocalPath,
   }) async {
+    if (chatPayloadIsMarkdown(payload, fileName)) {
+      await showChatMarkdownPreview(
+        context: context,
+        service: _service,
+        payload: payload,
+        fileName: fileName,
+        initialLocalPath: initialLocalPath,
+      );
+      return;
+    }
     if (chatPayloadIsPdf(payload, fileName)) {
       await showChatPdfPreview(
         context: context,
@@ -6070,6 +6136,16 @@ class _NativeChatViewState extends State<NativeChatView>
     final kbSession = chatFileSupportsKbUpload(fileName, payload)
         ? widget.session
         : null;
+    // Markdown 在各端统一应用内预览；其它文件保持原有打开方式。
+    if (chatPayloadIsMarkdown(payload, fileName)) {
+      await showChatMarkdownPreview(
+        context: context,
+        service: _service,
+        payload: payload,
+        fileName: fileName,
+      );
+      return;
+    }
     // PC 上 PDF 与 Excel/Word 等文件保持一致：下载后交给系统默认应用打开，
     // 不再使用应用内 PDF 弹框；移动端仍保留内置预览。
     if (isDesktopCommOnly) {

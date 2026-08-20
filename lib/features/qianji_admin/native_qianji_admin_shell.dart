@@ -39,10 +39,12 @@ class NativeQianjiAdminShell extends StatefulWidget {
     this.dailyReconCardType = '',
     this.dailyReconOpenToken = 0,
     this.onDailyReconOpened,
+    this.active = true,
   });
 
   final AuthSession session;
   final DunesNavigationController navigation;
+  final bool active;
   final VoidCallback? onExit;
   final ValueChanged<int>? onAdministrativeNoticeAcknowledged;
   final bool openDailyRecon;
@@ -120,10 +122,9 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
     unawaited(_resolveContractAccess());
     unawaited(_resolveProposalIntakeAccess());
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        _syncBackInterceptor();
-        _maybeOpenDailyRecon();
-      }
+      if (!mounted) return;
+      if (widget.active) _syncBackInterceptor();
+      _maybeOpenDailyRecon();
     });
   }
 
@@ -144,6 +145,17 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
       unawaited(_resolveDailyReconAccess());
       unawaited(_resolveContractAccess());
       unawaited(_resolveProposalIntakeAccess());
+    }
+    if (widget.active != oldWidget.active) {
+      if (widget.active) {
+        _syncBackInterceptor();
+        if (_pageController.hasClients &&
+            _pageController.page?.round() != _pageIndex) {
+          _pageController.jumpToPage(_pageIndex);
+        }
+      } else {
+        _clearBackInterceptor();
+      }
     }
     if (widget.openDailyRecon && !oldWidget.openDailyRecon) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -318,6 +330,10 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
   }
 
   void _syncBackInterceptor() {
+    if (!widget.active) {
+      _clearBackInterceptor();
+      return;
+    }
     if (_canHandleInternalBack()) {
       _installBackInterceptor();
     } else {
@@ -539,6 +555,7 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
         );
       case _WorkbenchView.proposalIntake:
         return NativeProposalIntakePage(
+          key: const ValueKey<String>('workbench-proposal-intake'),
           session: _session,
           onChromeChanged: _onTaskChrome,
         );

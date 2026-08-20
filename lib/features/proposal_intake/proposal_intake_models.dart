@@ -181,11 +181,98 @@ class ProposalIntakeRow {
     myAction: myAction ?? this.myAction,
   );
 
+  String initiatorDisplayName(List<ProposalPerson> people) {
+    final fromForm = '${form['marketOwner2'] ?? ''}'.trim();
+    if (fromForm.isNotEmpty) return fromForm;
+    if (createdBy > 0) {
+      for (final person in people) {
+        if (person.userId == createdBy && person.name.isNotEmpty) {
+          return person.name;
+        }
+      }
+    }
+    return '未指定';
+  }
+
+  bool get isDeletableStatus =>
+      status != 'pending_president' && status != 'done';
+
+  bool canDeleteBy(int userId) {
+    if (userId <= 0 || !isDeletableStatus) return false;
+    if (createdBy == userId) return true;
+    final owner =
+        int.tryParse('${form['marketOwner2UserId'] ?? ''}'.trim()) ?? 0;
+    return owner == userId;
+  }
+
+  List<ProposalStakeholderLine> stakeholderLines({
+    required List<ProposalPerson> people,
+    ProposalIntakeOptions? options,
+  }) {
+    String named(String nameKey, String idKey) {
+      final fromForm = '${form[nameKey] ?? ''}'.trim();
+      if (fromForm.isNotEmpty) return fromForm;
+      final id = int.tryParse('${form[idKey] ?? ''}'.trim()) ?? 0;
+      if (id <= 0) return '未指定';
+      for (final person in people) {
+        if (person.userId == id && person.name.isNotEmpty) {
+          return person.name;
+        }
+      }
+      return '用户$id';
+    }
+
+    var president = named('president', 'presidentUserId');
+    final configured = options?.presidentDisplayNames(people).trim() ?? '';
+    if (configured.isNotEmpty) {
+      president = president == '未指定' ? configured : '$president、$configured';
+    }
+
+    return [
+      ProposalStakeholderLine(
+        role: '发起人/填写人',
+        name: initiatorDisplayName(people),
+      ),
+      ProposalStakeholderLine(
+        role: '市场部负责人一',
+        name: named('marketOwner1', 'marketOwner1UserId'),
+      ),
+      ProposalStakeholderLine(
+        role: '运营',
+        name: named('operator', 'operatorUserId'),
+      ),
+      ProposalStakeholderLine(
+        role: '科技部负责人',
+        name: named('technologyOwner', 'technologyOwnerUserId'),
+      ),
+      ProposalStakeholderLine(
+        role: '财务部负责人一',
+        name: named('financeOwner1', 'financeOwner1UserId'),
+      ),
+      ProposalStakeholderLine(
+        role: '财务部负责人二',
+        name: named('financeOwner2', 'financeOwner2UserId'),
+      ),
+      ProposalStakeholderLine(
+        role: '行政（合同审核）',
+        name: named('contractAdmin', 'contractAdminUserId'),
+      ),
+      ProposalStakeholderLine(role: '最终确认人', name: president),
+    ];
+  }
+
   static Map<String, dynamic> _map(Object? value) {
     if (value is Map<String, dynamic>) return Map<String, dynamic>.from(value);
     if (value is Map) return Map<String, dynamic>.from(value);
     return <String, dynamic>{};
   }
+}
+
+class ProposalStakeholderLine {
+  const ProposalStakeholderLine({required this.role, required this.name});
+
+  final String role;
+  final String name;
 }
 
 class ProposalIntakeListResult {
@@ -492,9 +579,7 @@ Map<String, dynamic> proposalIntakePatchFromContract({
     return _contractText(detail, keys);
   }
 
-  final patch = <String, dynamic>{
-    '${prefix}ContractId': detail['id'],
-  };
+  final patch = <String, dynamic>{'${prefix}ContractId': detail['id']};
   for (final key in proposalIntakeContractFillKeys(prefix)) {
     patch[key] = '';
   }
@@ -505,11 +590,7 @@ Map<String, dynamic> proposalIntakePatchFromContract({
     '${prefix}SignDate',
     pick(['${prefix}SignDate', 'signDate']),
   );
-  _putField(
-    patch,
-    '${prefix}OurParty',
-    pick(['${prefix}OurParty', 'partyA']),
-  );
+  _putField(patch, '${prefix}OurParty', pick(['${prefix}OurParty', 'partyA']));
   _putField(
     patch,
     '${prefix}Counterparty',
@@ -533,11 +614,7 @@ Map<String, dynamic> proposalIntakePatchFromContract({
     _putField(patch, 'channelSettleMode', pick(['channelSettleMode']));
     _putField(patch, 'channelSettleCycle', pick(['channelSettleCycle']));
     _putField(patch, 'channelPayee', pick(['channelPayee']));
-    _putField(
-      patch,
-      'channelReceiveAccount',
-      pick(['channelReceiveAccount']),
-    );
+    _putField(patch, 'channelReceiveAccount', pick(['channelReceiveAccount']));
   }
   return patch;
 }
@@ -545,15 +622,16 @@ Map<String, dynamic> proposalIntakePatchFromContract({
 String proposalIntakeActionLabel(String action) {
   return switch (action) {
     'fill_tech' => '待填写科技',
-    'start_review' => '待开始复核',
+    'start_review' => '待重新提交复核',
     'review_market' => '待复核市场部',
     'review_tech' => '待复核科技',
     'review_finance' => '待复核财务',
     'review_finance_module' => '待整板块复核财务',
     'review_contract' => '待审核合同',
-    'submit_president' => '待最终提交',
-    'president_confirm' => '待总裁确认',
-    'revise' => '总裁已驳回请修改',
+    'submit_president' => '待通知最终人',
+    'president_confirm' => '待最终确认',
+    'revise' => '最终人已驳回请从头填写',
+    'revise_module' => '板块已驳回请修改',
     _ => '',
   };
 }
@@ -561,9 +639,70 @@ String proposalIntakeActionLabel(String action) {
 String proposalIntakeStatusLabel(String status) {
   return switch (status) {
     'done' => '已完成',
-    'pending_president' => '待总裁确认',
+    'pending_president' => '待最终确认',
     'reviewing' => '复核中',
     'filling' => '填写中',
     _ => '草稿',
   };
+}
+
+/// 把后端 UTC 时间转成本地时间，去掉 `Z` / 毫秒，列表展示用。
+String formatProposalIntakeDateTime(String raw) {
+  final text = raw.trim();
+  if (text.isEmpty) return '';
+  final parsed = DateTime.tryParse(text);
+  if (parsed == null) {
+    return text
+        .replaceFirst('T', ' ')
+        .replaceAll(RegExp(r'[Zz]$'), '')
+        .split('.')
+        .first
+        .trim();
+  }
+  final local = parsed.toLocal();
+  String two(int n) => n.toString().padLeft(2, '0');
+  return '${local.year}-${two(local.month)}-${two(local.day)} '
+      '${two(local.hour)}:${two(local.minute)}';
+}
+
+/// 复核相关负责人：没选就不能通知科技 / 提交复核。运营为可选项。
+List<String> missingProposalReviewAssignees(
+  Map<String, dynamic> form, {
+  bool includeTech = true,
+}) {
+  int idOf(String key) => int.tryParse('${form[key] ?? ''}'.trim()) ?? 0;
+  final missing = <String>[];
+  void require(String key, String label) {
+    if (idOf(key) <= 0) missing.add(label);
+  }
+
+  if (includeTech) require('technologyOwnerUserId', '科技部负责人');
+  require('marketOwner1UserId', '市场部负责人一');
+  require('financeOwner1UserId', '财务部负责人一');
+  require('financeOwner2UserId', '财务部负责人二');
+  require('contractAdminUserId', '行政负责人');
+  return missing;
+}
+
+ProposalIntakeRow? nextProposalIntake({
+  required List<ProposalIntakeRow> items,
+  required int currentId,
+  bool afterDecision = false,
+}) {
+  if (items.isEmpty) return null;
+  if (afterDecision) {
+    for (final item in items) {
+      if (item.id != currentId) return item;
+    }
+    return null;
+  }
+  final index = items.indexWhere((item) => item.id == currentId);
+  if (index < 0) {
+    for (final item in items) {
+      if (item.id != currentId) return item;
+    }
+    return null;
+  }
+  if (index + 1 >= items.length) return null;
+  return items[index + 1];
 }

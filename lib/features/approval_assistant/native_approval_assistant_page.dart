@@ -586,9 +586,24 @@ class _NativeApprovalAssistantPageState
       );
     }
     final share = ApprovalChatShare.fromPayload(payload);
-    // 旧版单独名片消息仍保留。
+    // 协作提案：正文说明要对方做什么，名片只承担入口。
     if (share != null &&
         (type == 'approvalCard' || type.isEmpty || type == 'approvalShare')) {
+      final instruction = ApprovalChatShare.proposalIntakeInstruction(
+        share: share,
+        bodyText: m.bodyText,
+        payload: payload,
+      );
+      if (instruction != null) {
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            ChatTextBubble(text: instruction, mine: false),
+            const SizedBox(height: 8),
+            _approvalCardWidget(share),
+          ],
+        );
+      }
       return _approvalCardWidget(share);
     }
     if (type == 'approvalExplain' ||
@@ -649,6 +664,8 @@ class _NativeApprovalAssistantPageState
                 status: share.status,
                 templateKey: share.templateKey,
                 code: share.code,
+                submitterName: share.submitterName,
+                actionLabel: share.actionLabel,
               ),
             ),
       actionLabel: isUrge && !failed && !pending && !sent && (share?.businessId ?? 0) > 0
@@ -667,6 +684,8 @@ class _NativeApprovalAssistantPageState
                     status: share.status,
                     templateKey: share.templateKey,
                     code: share.code,
+                    submitterName: share.submitterName,
+                    actionLabel: share.actionLabel,
                   ),
                   draft: body.isEmpty ? m.bodyText : body,
                   suggestTargets: suggest,
@@ -681,12 +700,16 @@ class _NativeApprovalAssistantPageState
   Widget _approvalCardWidget(ApprovalChatShare share) {
     return ChatApprovalCard(
       title: _approvalCardTitle(share),
-      statusLabel: detailStatusLabel(share.status),
-      subtitle: share.businessType.toUpperCase() == 'PROPOSAL_INTAKE'
-          ? '协作提案'
+      statusLabel: share.isProposalIntake
+          ? ''
+          : detailStatusLabel(share.status),
+      subtitle: share.isProposalIntake
+          ? share.proposalCardLine
           : share.businessType.toUpperCase() == 'PROPOSAL'
           ? '销售提案'
           : '审批单据',
+      brandLabel: share.isProposalIntake ? '协作提案' : '沙丘审批',
+      subtitleMaxLines: share.isProposalIntake ? 2 : 1,
       onTap: () => widget.onOpenApproval?.call(share),
     );
   }
@@ -922,53 +945,45 @@ class _BottomActions extends StatelessWidget {
     final bottom = MediaQuery.paddingOf(context).bottom;
     return Container(
       width: double.infinity,
-      padding: EdgeInsets.fromLTRB(12, 10, 12, bottom > 0 ? bottom + 8 : 12),
+      padding: EdgeInsets.fromLTRB(10, 8, 10, bottom > 0 ? bottom + 6 : 10),
       decoration: const BoxDecoration(
         color: DunesColors.bgApp,
         border: Border(top: BorderSide(color: DunesColors.borderSoft)),
       ),
-      child: Column(
+      child: Row(
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: _ActionBtn(
-                  label: '今日待审',
-                  icon: Icons.inbox_outlined,
-                  primary: true,
-                  onTap: onPending,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: _ActionBtn(
-                  label: '提案审核',
-                  icon: Icons.assignment_outlined,
-                  primary: true,
-                  onTap: onProposals,
-                ),
-              ),
-            ],
+          Expanded(
+            child: _ActionBtn(
+              label: '今日待审',
+              icon: Icons.inbox_outlined,
+              primary: true,
+              onTap: onPending,
+            ),
           ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Expanded(
-                child: _ActionBtn(
-                  label: '解释内容',
-                  icon: Icons.menu_book_outlined,
-                  onTap: onExplain,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: _ActionBtn(
-                  label: '催办进度',
-                  icon: Icons.campaign_outlined,
-                  onTap: onUrge,
-                ),
-              ),
-            ],
+          const SizedBox(width: 6),
+          Expanded(
+            child: _ActionBtn(
+              label: '提案审核',
+              icon: Icons.assignment_outlined,
+              primary: true,
+              onTap: onProposals,
+            ),
+          ),
+          const SizedBox(width: 6),
+          Expanded(
+            child: _ActionBtn(
+              label: '解释内容',
+              icon: Icons.menu_book_outlined,
+              onTap: onExplain,
+            ),
+          ),
+          const SizedBox(width: 6),
+          Expanded(
+            child: _ActionBtn(
+              label: '催办进度',
+              icon: Icons.campaign_outlined,
+              onTap: onUrge,
+            ),
           ),
         ],
       ),
@@ -993,26 +1008,31 @@ class _ActionBtn extends StatelessWidget {
   Widget build(BuildContext context) {
     return Material(
       color: primary ? DunesColors.brandPurple : DunesColors.brandPurpleSoft,
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.circular(10),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(10),
         child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 12),
+          padding: const EdgeInsets.symmetric(vertical: 7, horizontal: 2),
           child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
               Icon(
                 icon,
-                size: 18,
+                size: 15,
                 color: primary ? Colors.white : DunesColors.brandPurpleDeep,
               ),
-              const SizedBox(height: 4),
-              Text(
-                label,
-                style: DunesTypography.sans(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: primary ? Colors.white : DunesColors.brandPurpleDeep,
+              const SizedBox(height: 2),
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  style: DunesTypography.sans(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: primary ? Colors.white : DunesColors.brandPurpleDeep,
+                  ),
                 ),
               ),
             ],

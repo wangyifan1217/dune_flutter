@@ -34,7 +34,10 @@ Future<void> showProposalIntakeOverlay({
         }
 
         return Dialog(
-          insetPadding: const EdgeInsets.symmetric(horizontal: 36, vertical: 24),
+          insetPadding: const EdgeInsets.symmetric(
+            horizontal: 36,
+            vertical: 24,
+          ),
           backgroundColor: Colors.transparent,
           child: ConstrainedBox(
             constraints: BoxConstraints(
@@ -85,7 +88,8 @@ class _ProposalIntakeOverlayHost extends StatefulWidget {
       _ProposalIntakeOverlayHostState();
 }
 
-class _ProposalIntakeOverlayHostState extends State<_ProposalIntakeOverlayHost> {
+class _ProposalIntakeOverlayHostState
+    extends State<_ProposalIntakeOverlayHost> {
   late final ProposalIntakeService _service = ProposalIntakeService(
     session: widget.session,
   );
@@ -164,7 +168,10 @@ class _ProposalIntakeOverlayHostState extends State<_ProposalIntakeOverlayHost> 
     }
     if (_error != null || _row == null || _options == null) {
       return Center(
-        child: Text(_error ?? '加载失败', style: const TextStyle(color: Colors.red)),
+        child: Text(
+          _error ?? '加载失败',
+          style: const TextStyle(color: Colors.red),
+        ),
       );
     }
     return ProposalIntakeForm(
@@ -184,9 +191,18 @@ class _ProposalIntakeOverlayHostState extends State<_ProposalIntakeOverlayHost> 
       },
       onSubmit: (row) {
         setState(() => _row = row);
-        showProposalCenterToast(context, '已提交');
+        showProposalCenterToast(
+          context,
+          row.status == 'done'
+              ? '提案已通过'
+              : row.status == 'pending_president'
+              ? '已通知最终人'
+              : '已提交',
+        );
       },
-      onError: (message) => showProposalCenterToast(context, message, error: true),
+      onError: (message) =>
+          showProposalCenterToast(context, message, error: true),
+      onDeleted: widget.onClose,
     );
   }
 }

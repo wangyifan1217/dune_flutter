@@ -9,12 +9,14 @@ class HorizontalDragScrollView extends StatefulWidget {
     this.padding,
     this.controller,
     this.physics,
+    this.showScrollbar = false,
   });
 
   final Widget child;
   final EdgeInsetsGeometry? padding;
   final ScrollController? controller;
   final ScrollPhysics? physics;
+  final bool showScrollbar;
 
   @override
   State<HorizontalDragScrollView> createState() =>
@@ -64,14 +66,25 @@ class _HorizontalDragScrollViewState extends State<HorizontalDragScrollView> {
       ),
       child: Listener(
         onPointerSignal: _onPointerSignal,
-        child: SingleChildScrollView(
-          controller: _controller,
-          scrollDirection: Axis.horizontal,
-          padding: widget.padding,
-          physics: widget.physics,
-          child: widget.child,
-        ),
+        child: widget.showScrollbar
+            ? Scrollbar(
+                controller: _controller,
+                thumbVisibility: true,
+                interactive: true,
+                child: _scrollView(),
+              )
+            : _scrollView(),
       ),
+    );
+  }
+
+  Widget _scrollView() {
+    return SingleChildScrollView(
+      controller: _controller,
+      scrollDirection: Axis.horizontal,
+      padding: widget.padding,
+      physics: widget.physics,
+      child: widget.child,
     );
   }
 }

@@ -1,4 +1,5 @@
 import 'package:dunes_app/features/proposal_intake/proposal_intake_models.dart';
+import 'package:dunes_app/features/xflow/approval_chat_share.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -53,10 +54,7 @@ void main() {
     expect(options.presidentUserIds, [21, 22]);
     expect(options.isConfiguredPresident(21), isTrue);
     expect(options.isConfiguredPresident(9), isFalse);
-    expect(
-      options.presidentDisplayNames(const []),
-      '张三、用户22',
-    );
+    expect(options.presidentDisplayNames(const []), '张三、用户22');
   });
 
   test('legacy wan thresholds are converted to yuan', () {
@@ -85,6 +83,51 @@ void main() {
     expect(row.review['marketCompleted'], isFalse);
   });
 
+  test('proposal list helpers resolve initiator and stakeholders', () {
+    final row = ProposalIntakeRow.fromJson({
+      'id': 9,
+      'code': 'TA-20260820-000009',
+      'status': 'draft',
+      'createdBy': 11,
+      'form': {
+        'marketOwner2': '王奕凡',
+        'marketOwner2UserId': 11,
+        'operator': '李运营',
+        'operatorUserId': 31,
+      },
+    });
+    const people = [
+      ProposalPerson(userId: 11, name: '王奕凡', positionName: '市场部负责人二'),
+      ProposalPerson(userId: 21, name: '赵总裁', positionName: '总裁'),
+    ];
+    expect(row.initiatorDisplayName(people), '王奕凡');
+    expect(row.canDeleteBy(11), isTrue);
+    expect(row.canDeleteBy(31), isFalse);
+    final lines = row.stakeholderLines(
+      people: people,
+      options: ProposalIntakeOptions.fromJson({
+        'people': {
+          'presidentUserIds': [21],
+          'presidents': [
+            {'userId': 21, 'name': '赵总裁'},
+          ],
+        },
+      }),
+    );
+    expect(
+      lines.map((item) => '${item.role}:${item.name}').toList(),
+      containsAll(['发起人/填写人:王奕凡', '运营:李运营', '市场部负责人一:未指定', '最终确认人:赵总裁']),
+    );
+
+    final reviewing = row.copyWith(status: 'reviewing');
+    expect(reviewing.canDeleteBy(11), isTrue);
+    expect(
+      reviewing.copyWith(status: 'pending_president').canDeleteBy(11),
+      isFalse,
+    );
+    expect(reviewing.copyWith(status: 'done').canDeleteBy(11), isFalse);
+  });
+
   test('proposal row reads stage and myAction', () {
     final row = ProposalIntakeRow.fromJson({
       'id': 8,
@@ -96,8 +139,100 @@ void main() {
     });
     expect(row.resolvedStage, 'reviewing');
     expect(row.myAction, 'review_market');
-    expect(proposalIntakeActionLabel(row.myAction), '待复核市场部');
-    expect(proposalIntakeStatusLabel('pending_president'), '待总裁确认');
+    expect(proposalIntakeActionLabel('submit_president'), '待通知最终人');
+    expect(proposalIntakeActionLabel('revise'), '最终人已驳回请从头填写');
+    expect(proposalIntakeActionLabel('revise_module'), '板块已驳回请修改');
+  });
+
+  test('proposal intake card shows submitter and needed action', () {
+    final card = ApprovalChatShare(
+      businessType: 'PROPOSAL_INTAKE',
+      businessId: 8,
+      title: '测试',
+      status: 'reviewing',
+      submitterName: '王奕凡',
+      actionLabel: '请复核',
+    );
+    expect(card.proposalCardLine, '王奕凡 提交 · 请复核');
+    expect(
+      ApprovalChatShare(
+        businessType: 'PROPOSAL_INTAKE',
+        businessId: 8,
+        title: '测试',
+        status: 'reviewing',
+      ).proposalCardLine,
+      '协作提案 · 复核中',
+    );
+  });
+
+  test('proposal intake share card payload is IM-ready', () {
+    final card = ApprovalChatShare.fromProposalIntake(
+      id: 8,
+      title: '  ',
+      status: 'filling',
+      code: 'TA-2026-0008',
+      submitterName: '王奕凡',
+    );
+    expect(card.businessType, 'PROPOSAL_INTAKE');
+    expect(card.templateKey, 'proposal-intake');
+    expect(card.title, '未命名销售业务提案');
+    expect(card.toMessagePayload()['approvalCard'], {
+      'businessType': 'PROPOSAL_INTAKE',
+      'businessId': 8,
+      'title': '未命名销售业务提案',
+      'status': 'filling',
+      'templateKey': 'proposal-intake',
+      'code': 'TA-2026-0008',
+      'submitterName': '王奕凡',
+    });
+    expect(
+      ApprovalChatShare.fromListItem(card.toListItem()).isProposalIntake,
+      isTrue,
+    );
+  });
+
+  test('proposal intake assistant keeps instruction text besides the card', () {
+    final card = ApprovalChatShare(
+      businessType: 'PROPOSAL_INTAKE',
+      businessId: 8,
+      title: '未命名提案',
+      status: 'filling',
+      submitterName: '王奕凡',
+      actionLabel: '请填写',
+    );
+    expect(
+      ApprovalChatShare.proposalIntakeInstruction(
+        share: card,
+        bodyText: 'TA-20260820-000004 未命名提案：请填写科技部内容',
+      ),
+      'TA-20260820-000004 未命名提案：请填写科技部内容',
+    );
+    expect(
+      ApprovalChatShare.proposalIntakeInstruction(
+        share: card,
+        bodyText: '未命名提案',
+        payload: {'instruction': '请填写科技部内容。提案 TA-1「未命名提案」，请点下方名片进入。'},
+      ),
+      '请填写科技部内容。提案 TA-1「未命名提案」，请点下方名片进入。',
+    );
+    expect(
+      ApprovalChatShare.proposalIntakeInstruction(
+        share: card,
+        bodyText: '未命名提案',
+      ),
+      isNull,
+    );
+    expect(
+      ApprovalChatShare.proposalIntakeInstruction(
+        share: ApprovalChatShare(
+          businessType: 'PROPOSAL',
+          businessId: 1,
+          title: '销售提案',
+        ),
+        bodyText: '请审批',
+      ),
+      isNull,
+    );
   });
 
   test('selecting a signed contract copies proposal-related fields', () {
@@ -211,5 +346,68 @@ void main() {
     expect(form['purchaseValidPeriod'], '');
     expect(form['supplierPolicy'], '');
     expect(form['purchaseFileName'], '');
+  });
+
+  test('next proposal skips the current item and does not wrap', () {
+    ProposalIntakeRow row(int id) => ProposalIntakeRow.fromJson({
+      'id': id,
+      'code': 'TA-$id',
+      'status': 'pending_president',
+    });
+    final items = [row(1), row(2), row(3)];
+    expect(nextProposalIntake(items: items, currentId: 1)?.id, 2);
+    expect(nextProposalIntake(items: items, currentId: 3), isNull);
+    expect(
+      nextProposalIntake(items: items, currentId: 1, afterDecision: true)?.id,
+      2,
+    );
+    expect(
+      nextProposalIntake(items: items, currentId: 9, afterDecision: true)?.id,
+      1,
+    );
+    expect(
+      nextProposalIntake(items: [row(1)], currentId: 1, afterDecision: true),
+      isNull,
+    );
+  });
+
+  test('proposal list time converts utc to local without Z', () {
+    expect(formatProposalIntakeDateTime(''), '');
+    final formatted = formatProposalIntakeDateTime('2026-08-20T13:26:19.123Z');
+    expect(formatted.contains('Z'), isFalse);
+    expect(formatted.contains('T'), isFalse);
+    final local = DateTime.parse('2026-08-20T13:26:19Z').toLocal();
+    String two(int n) => n.toString().padLeft(2, '0');
+    expect(
+      formatted,
+      '${local.year}-${two(local.month)}-${two(local.day)} '
+      '${two(local.hour)}:${two(local.minute)}',
+    );
+  });
+
+  test('review assignees are required before handoff', () {
+    expect(missingProposalReviewAssignees({}), [
+      '科技部负责人',
+      '市场部负责人一',
+      '财务部负责人一',
+      '财务部负责人二',
+      '行政负责人',
+    ]);
+    expect(
+      missingProposalReviewAssignees({
+        'technologyOwnerUserId': '3',
+        'marketOwner1UserId': '4',
+        'financeOwner1UserId': '6',
+        'financeOwner2UserId': '5',
+        'contractAdminUserId': '7',
+      }),
+      isEmpty,
+    );
+    expect(
+      missingProposalReviewAssignees({
+        'technologyOwnerUserId': '3',
+      }, includeTech: false),
+      ['市场部负责人一', '财务部负责人一', '财务部负责人二', '行政负责人'],
+    );
   });
 }

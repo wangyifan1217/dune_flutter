@@ -1,7 +1,7 @@
 ; 与 dist/windows/dunes-setup.iss 保持同一 AppId / 权限，否则升级找不到旧目录。
 #define MyAppName "沙丘"
-#define MyAppVersion "1.4.3"
-#define MyAppBuild "143"
+#define MyAppVersion "1.5.0"
+#define MyAppBuild "150"
 #define MyAppPublisher "沙丘"
 #define MyAppExeName "dunes_app.exe"
 

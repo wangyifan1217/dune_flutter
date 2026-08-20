@@ -25,6 +25,7 @@ class AuthSession {
     this.contractConfigAccess = false,
     this.contractKbSyncAccess = false,
     this.proposalIntakeAccess = false,
+    this.proposalIntakeViewAll = false,
   });
 
   final String phone;
@@ -60,6 +61,9 @@ class AuthSession {
 
   /// 工作台「协作 / 提案」访问权限。
   final bool proposalIntakeAccess;
+
+  /// 工作台协作提案查看全部；未开通时列表由服务端按相关人过滤。
+  final bool proposalIntakeViewAll;
 
   /// 后端下发的「任务汇总」能力开关；未下发时工作台会走接口探测。
   final bool hrbpAccess;
@@ -155,6 +159,7 @@ class AuthSession {
     bool? contractConfigAccess,
     bool? contractKbSyncAccess,
     bool? proposalIntakeAccess,
+    bool? proposalIntakeViewAll,
   }) {
     return AuthSession(
       phone: phone ?? this.phone,
@@ -179,6 +184,8 @@ class AuthSession {
       contractConfigAccess: contractConfigAccess ?? this.contractConfigAccess,
       contractKbSyncAccess: contractKbSyncAccess ?? this.contractKbSyncAccess,
       proposalIntakeAccess: proposalIntakeAccess ?? this.proposalIntakeAccess,
+      proposalIntakeViewAll:
+          proposalIntakeViewAll ?? this.proposalIntakeViewAll,
     );
   }
 
@@ -224,6 +231,7 @@ class AuthSession {
       contractConfigAccess: data['contractConfigAccess'] == true,
       contractKbSyncAccess: data['contractKbSyncAccess'] == true,
       proposalIntakeAccess: data['proposalIntakeAccess'] == true,
+      proposalIntakeViewAll: data['proposalIntakeViewAll'] == true,
     );
   }
 
@@ -260,6 +268,7 @@ class AuthSession {
       contractConfigAccess: claims['contractConfigAccess'] == true,
       contractKbSyncAccess: claims['contractKbSyncAccess'] == true,
       proposalIntakeAccess: claims['proposalIntakeAccess'] == true,
+      proposalIntakeViewAll: claims['proposalIntakeViewAll'] == true,
     );
   }
 
@@ -303,6 +312,7 @@ class AuthSession {
       'contractConfigAccess': contractConfigAccess,
       'contractKbSyncAccess': contractKbSyncAccess,
       'proposalIntakeAccess': proposalIntakeAccess,
+      'proposalIntakeViewAll': proposalIntakeViewAll,
     };
   }
 
@@ -332,6 +342,7 @@ class AuthSession {
       contractConfigAccess: json['contractConfigAccess'] == true,
       contractKbSyncAccess: json['contractKbSyncAccess'] == true,
       proposalIntakeAccess: json['proposalIntakeAccess'] == true,
+      proposalIntakeViewAll: json['proposalIntakeViewAll'] == true,
     );
   }
 

@@ -276,6 +276,12 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     debugLabel: 'comm-dual-keep-alive',
   );
 
+  /// Keep 工作台 alive：切到聊天后再回来，提案填写等内页不销毁。
+  bool _workbenchMounted = false;
+  final GlobalKey _workbenchKeepAliveKey = GlobalKey(
+    debugLabel: 'workbench-keep-alive',
+  );
+
   /// 允许在已读回执或重新拿到服务端快照后把桌面角标同步为 0。
   ///
   /// APP 可能在后台时收不到 PC 端发出的实时已读事件；下次恢复/启动
@@ -2925,6 +2931,41 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     );
   }
 
+  Widget _buildWorkbenchKeepAlive({required bool active}) {
+    return Positioned.fill(
+      child: TickerMode(
+        enabled: active,
+        child: IgnorePointer(
+          ignoring: !active,
+          child: Opacity(
+            opacity: active ? 1 : 0,
+            child: KeyedSubtree(
+              key: _workbenchKeepAliveKey,
+              child: NativeQianjiAdminShell(
+                session: widget.session,
+                navigation: widget.navigation,
+                active: active,
+                onExit: isDesktopCommOnly
+                    ? null
+                    : () => widget.navigation.popTo('B2'),
+                onAdministrativeNoticeAcknowledged: _handleConversationRead,
+                openDailyRecon: _openDailyReconPending,
+                dailyReconAsOfDate: _dailyReconAsOfDate,
+                dailyReconCardType: _dailyReconCardType,
+                dailyReconOpenToken: _dailyReconOpenToken,
+                onDailyReconOpened: () {
+                  if (_openDailyReconPending) {
+                    setState(() => _openDailyReconPending = false);
+                  }
+                },
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildCurrentScreen(BuildContext context) {
     if (widget.session.isExternalUser &&
         _isRestrictedForExternalUser(widget.navigation.currentScreen)) {
@@ -3210,23 +3251,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           },
         );
       case 'QJA':
-        return NativeQianjiAdminShell(
-          session: widget.session,
-          navigation: widget.navigation,
-          onExit: isDesktopCommOnly
-              ? null
-              : () => widget.navigation.popTo('B2'),
-          onAdministrativeNoticeAcknowledged: _handleConversationRead,
-          openDailyRecon: _openDailyReconPending,
-          dailyReconAsOfDate: _dailyReconAsOfDate,
-          dailyReconCardType: _dailyReconCardType,
-          dailyReconOpenToken: _dailyReconOpenToken,
-          onDailyReconOpened: () {
-            if (_openDailyReconPending) {
-              setState(() => _openDailyReconPending = false);
-            }
-          },
-        );
+        return const SizedBox.shrink();
       case 'CT1':
         // 每次进入使用独立 key，强制重建，避免复用一次性 Ticket。
         // 桌面端走 PC 单点（系统浏览器）；手机 APP 继续走 H5 WebView。
@@ -4074,6 +4099,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
                 ),
               ),
             ),
+          if (_workbenchMounted) _buildWorkbenchKeepAlive(active: false),
         ],
       );
     }
@@ -4084,6 +4110,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         (_isQianjiRoute(screen) && _isQianjiRoute(previousScreen));
     final isLighthouse = screen == 'LH';
     final isInbox = screen == 'C1';
+    final isWorkbench = screen == 'QJA';
     // 建群多选仍走 AnimatedSwitcher；普通通讯录用 keep-alive 保滚动。
     final isContacts = screen == 'C3' && !_contactsGroupPickMode;
     if (isLighthouse) {
@@ -4095,10 +4122,13 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     if (isContacts) {
       _contactsMounted = true;
     }
-    // 双栏 / 灯塔 / 会话列表 / 通讯录由 keep-alive 承载；此处占位避免 AnimatedSwitcher 再造一份。
+    if (isWorkbench) {
+      _workbenchMounted = true;
+    }
+    // 双栏 / 灯塔 / 会话列表 / 通讯录 / 工作台由 keep-alive 承载；此处占位避免 AnimatedSwitcher 再造一份。
     final currentScreen = dualNow
         ? const SizedBox.shrink()
-        : (isLighthouse || isInbox || isContacts)
+        : (isLighthouse || isInbox || isContacts || isWorkbench)
         ? const SizedBox.shrink()
         : _buildCurrentScreen(context);
     final child = KeyedSubtree(
@@ -4196,7 +4226,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
               ),
             ),
           ),
-        if (!isLighthouse && !dualNow) animatedContent,
+        if (_workbenchMounted) _buildWorkbenchKeepAlive(active: isWorkbench),
+        if (!isLighthouse && !dualNow && !isWorkbench) animatedContent,
       ],
     );
     // 双栏已自带侧栏，避免再套一层主导航。
@@ -4396,7 +4427,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     if (_isMyRoute(current)) {
       _lastMyScreen = current;
     }
-    // 离开 NOVA 子树时记住位置（不含工作台 QJA）。
+    // 离开 NOVA 子树时记住位置。工作台 QJA 用 keep-alive 保内页，不靠导航栈恢复。
     if (currentTab == 'QJ' && screen != 'QJ') {
       _lastQianjiScreen = current;
     }

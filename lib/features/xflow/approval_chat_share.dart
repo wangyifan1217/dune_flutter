@@ -9,6 +9,8 @@ class ApprovalChatShare {
     this.status = '',
     this.templateKey = '',
     this.code = '',
+    this.submitterName = '',
+    this.actionLabel = '',
   });
 
   final String businessType;
@@ -17,6 +19,44 @@ class ApprovalChatShare {
   final String status;
   final String templateKey;
   final String code;
+  final String submitterName;
+  final String actionLabel;
+
+  bool get isProposalIntake =>
+      businessType.toUpperCase() == 'PROPOSAL_INTAKE';
+
+  /// 协作提案名片旁的待办说明：优先用 payload.instruction，否则用消息正文。
+  static String? proposalIntakeInstruction({
+    required ApprovalChatShare share,
+    required String bodyText,
+    Map<String, dynamic>? payload,
+  }) {
+    if (!share.isProposalIntake) return null;
+    final fromPayload = '${payload?['instruction'] ?? ''}'.trim();
+    final text = fromPayload.isNotEmpty ? fromPayload : bodyText.trim();
+    if (text.isEmpty) return null;
+    final title = share.title.trim();
+    if (title.isNotEmpty && (text == title || text == '[审批] $title')) {
+      return null;
+    }
+    return text;
+  }
+
+  /// 协作提案名片副标题：谁提交的 + 需要填写/复核/最终确认。
+  String get proposalCardLine {
+    final parts = <String>[
+      if (submitterName.trim().isNotEmpty) '${submitterName.trim()} 提交',
+      if (actionLabel.trim().isNotEmpty) actionLabel.trim(),
+    ];
+    if (parts.isNotEmpty) return parts.join(' · ');
+    return switch (status.trim().toLowerCase()) {
+      'reviewing' => '协作提案 · 复核中',
+      'pending_president' => '协作提案 · 待最终确认',
+      'filling' || 'draft' => '协作提案 · 填写中',
+      'done' => '协作提案 · 已完成',
+      _ => '协作提案',
+    };
+  }
 
   String get bodyText {
     final t = title.trim().isEmpty ? '审批单' : title.trim();
@@ -32,6 +72,8 @@ class ApprovalChatShare {
         'status': status,
         'templateKey': templateKey,
         'code': code,
+        if (submitterName.trim().isNotEmpty) 'submitterName': submitterName.trim(),
+        if (actionLabel.trim().isNotEmpty) 'actionLabel': actionLabel.trim(),
       },
     };
   }
@@ -45,24 +87,49 @@ class ApprovalChatShare {
           : (businessId > 0 ? '#$businessId' : ''),
       title: title.isEmpty ? '审批单' : title,
       status: status,
-      createdByName: '',
+      createdByName: submitterName,
       createdAt: null,
       templateKey: templateKey.isEmpty ? null : templateKey,
     );
   }
 
-  factory ApprovalChatShare.fromListItem(XflowProposalItem item) {
+  factory ApprovalChatShare.fromProposalIntake({
+    required int id,
+    required String title,
+    required String status,
+    String code = '',
+    String submitterName = '',
+  }) {
+    final t = title.trim();
     return ApprovalChatShare(
-      businessType: item.businessType.trim().isEmpty
-          ? 'PROPOSAL'
-          : item.businessType.trim(),
+      businessType: 'PROPOSAL_INTAKE',
+      businessId: id,
+      title: t.isEmpty ? '未命名销售业务提案' : t,
+      status: status,
+      templateKey: 'proposal-intake',
+      code: code,
+      submitterName: submitterName.trim(),
+    );
+  }
+
+  factory ApprovalChatShare.fromListItem(XflowProposalItem item) {
+    final businessType = item.businessType.trim().isEmpty
+        ? 'PROPOSAL'
+        : item.businessType.trim();
+    final rawTitle = item.title.trim();
+    return ApprovalChatShare(
+      businessType: businessType,
       businessId: item.id,
-      title: _normalizeApprovalTitle(item.title.trim().isEmpty
-          ? (item.businessType.toUpperCase() == 'PROPOSAL' ? '销售提案' : '审批单')
-          : item.title.trim()),
+      title: _normalizeApprovalTitle(
+        rawTitle.isEmpty ? _fallbackApprovalTitle(businessType) : rawTitle,
+      ),
       status: item.status,
-      templateKey: item.templateKey ?? '',
+      templateKey: item.templateKey ??
+          (businessType.toUpperCase() == 'PROPOSAL_INTAKE'
+              ? 'proposal-intake'
+              : ''),
       code: item.code,
+      submitterName: item.createdByName.trim(),
     );
   }
 
@@ -87,8 +154,20 @@ class ApprovalChatShare {
       status: (map['status'] ?? '').toString(),
       templateKey: (map['templateKey'] ?? '').toString(),
       code: (map['code'] ?? '').toString(),
+      submitterName: (map['submitterName'] ?? map['createdByName'] ?? '')
+          .toString()
+          .trim(),
+      actionLabel: (map['actionLabel'] ?? '').toString().trim(),
     );
   }
+}
+
+String _fallbackApprovalTitle(String businessType) {
+  return switch (businessType.toUpperCase()) {
+    'PROPOSAL_INTAKE' => '未命名销售业务提案',
+    'PROPOSAL' => '销售提案',
+    _ => '审批单',
+  };
 }
 
 /// 兼容历史消息中后端重复加上的同一发起人前缀：

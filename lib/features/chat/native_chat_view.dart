@@ -352,6 +352,9 @@ class _NativeChatViewState extends State<NativeChatView>
   bool _locatedMode = false;
   bool _forceLatestMode = false;
 
+  /// 历史定位正在对准目标：禁止自动补历史/补更新，避免和 ensureVisible 抢滚动。
+  bool _messageLocateSettling = false;
+
   /// 用户已点「回到最新」后忽略的 focusMessageId，防止父级未清掉时再次定位。
   int _suppressedFocusMessageId = 0;
 
@@ -554,6 +557,8 @@ class _NativeChatViewState extends State<NativeChatView>
       if (!TickerMode.valuesOf(context).enabled) return;
       if (_conversation?.dissolved == true) return;
       if (_voiceMode || _messageMultiSelectMode) return;
+      // 历史定位过程中不要抢焦点：requestFocus 会走「回到最新」，把定位冲掉。
+      if (_locatedMode || _effectiveFocusMessageId > 0) return;
       _consumePendingComposerDrop();
       _inputFocusNode.requestFocus();
     });
@@ -796,7 +801,7 @@ class _NativeChatViewState extends State<NativeChatView>
     if (!_hasStableChatViewport || windowsTrayIsWindowInactive()) {
       _freezeHistoryViewportForBackground();
     }
-    if (_isBrowsingHistory) return;
+    if (_isBrowsingHistory || _locatedMode) return;
     final inset = View.of(context).viewInsets.bottom;
     final keyboardOpening =
         _inputFocusNode.hasFocus && inset > _lastKeyboardInset + 1;
@@ -855,11 +860,17 @@ class _NativeChatViewState extends State<NativeChatView>
     _foregroundSyncRunning = true;
     // 最小化会把 reverse 列表 pixels 夹到 0，不能用恢复后的像素判断。
     _freezeHistoryViewportForBackground();
+    final locating = _locatedMode || _effectiveFocusMessageId > 0;
     final browsingHistory = _isBrowsingHistory;
     final nearBottom =
-        !browsingHistory && _hasStableChatViewport && _rawPixelsNearLatest;
+        !browsingHistory &&
+        !locating &&
+        _hasStableChatViewport &&
+        _rawPixelsNearLatest;
     final shouldStick =
-        !browsingHistory && (_pendingStickBottomAfterForeground || nearBottom);
+        !locating &&
+        !browsingHistory &&
+        (_pendingStickBottomAfterForeground || nearBottom);
     try {
       await _realtime.connect();
       if (!mounted) return;
@@ -953,6 +964,13 @@ class _NativeChatViewState extends State<NativeChatView>
       _freezeHistoryViewportForBackground();
       return;
     }
+    // 定位动画期间不要补历史、不要改贴底状态，否则会和 ensureVisible 对拉。
+    if (_messageLocateSettling) {
+      if (pos.pixels > 72) {
+        _enterStickBottomPending = false;
+      }
+      return;
+    }
     // 用户已上滑离开最新端时，清掉进会话贴底标记，避免后续补历史被拽回底部。
     if (pos.pixels > 72) {
       _enterStickBottomPending = false;
@@ -979,7 +997,7 @@ class _NativeChatViewState extends State<NativeChatView>
   /// 定位模式下滑向更新端时自动续拉（需用户已滚动，避免定位落地后连拉到最新）。
   bool _shouldAutoloadNewer(ScrollPosition pos) {
     if (!_locatedMode || !_hasNewer || _loadingNewer) return false;
-    if (!_userInteractedWithScroll) return false;
+    if (_messageLocateSettling || !_userInteractedWithScroll) return false;
     final nowMs = DateTime.now().millisecondsSinceEpoch;
     if (nowMs < _newerLoadCooldownUntilMs) return false;
     return pos.pixels <= 72;
@@ -991,9 +1009,12 @@ class _NativeChatViewState extends State<NativeChatView>
         _loadingOlder ||
         _olderScrollRestorePending ||
         !_hasStableChatViewport ||
-        _historyViewportFrozen) {
+        _historyViewportFrozen ||
+        _messageLocateSettling) {
       return false;
     }
+    // 定位落地后未动手滚动前不要自动补历史，否则 prepend 会把视口拽来拽去。
+    if (_locatedMode && !_userInteractedWithScroll) return false;
     final nowMs = DateTime.now().millisecondsSinceEpoch;
     if (nowMs < _olderLoadCooldownUntilMs) return false;
     // 内容撑不满：无法靠「滑到顶」触发，直接续拉。
@@ -2464,17 +2485,80 @@ class _NativeChatViewState extends State<NativeChatView>
     }
   }
 
-  void _highlightAndScroll(
-    int messageId, {
-    Duration duration = const Duration(milliseconds: 280),
-  }) {
+  void _highlightAndScroll(int messageId) {
     final gen = ++_messageScrollGen;
+    // 作废进会话时已经排队的贴底 jumpTo，避免 50/150/350ms 后再把定位拽回最新。
+    _scrollBottomGen++;
+    _messageLocateSettling = true;
     setState(() => _highlightMessageId = messageId);
     _highlightTimer?.cancel();
     _highlightTimer = Timer(const Duration(seconds: 2), () {
       if (mounted) setState(() => _highlightMessageId = null);
     });
-    _ensureMessageVisible(messageId, gen: gen, duration: duration);
+    unawaited(_ensureLocatedMessageVisible(messageId, gen: gen));
+  }
+
+  /// 历史定位滚动：最多一次动画对准，禁止未读跳转那套左右步进逼近。
+  Future<void> _ensureLocatedMessageVisible(
+    int messageId, {
+    required int gen,
+  }) async {
+    try {
+      for (var i = 0; i < 2; i++) {
+        await WidgetsBinding.instance.endOfFrame;
+        if (!mounted || gen != _messageScrollGen) return;
+      }
+      var ctx = _scrollRestoreKeys[messageId]?.currentContext;
+      if (ctx == null) {
+        _preScrollTowardMessage(messageId, allowNearLatestShortcut: false);
+        await WidgetsBinding.instance.endOfFrame;
+        if (!mounted || gen != _messageScrollGen) return;
+        ctx = _scrollRestoreKeys[messageId]?.currentContext;
+      }
+      if (ctx == null) return;
+      await Scrollable.ensureVisible(
+        ctx,
+        alignment: 0.28,
+        duration: const Duration(milliseconds: 240),
+        curve: Curves.easeOutCubic,
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 160));
+      if (!mounted || gen != _messageScrollGen) return;
+      ctx = _scrollRestoreKeys[messageId]?.currentContext;
+      if (ctx == null) return;
+      if (_isMessageTouchedInViewport(messageId)) return;
+      await Scrollable.ensureVisible(
+        ctx,
+        alignment: 0.28,
+        duration: Duration.zero,
+      );
+    } finally {
+      if (gen == _messageScrollGen) {
+        _messageLocateSettling = false;
+        _olderLoadCooldownUntilMs =
+            DateTime.now().millisecondsSinceEpoch + 800;
+      }
+    }
+  }
+
+  /// 定位落稳判断：任意重叠即可。未读角标那套 45% 高度会让长图永远「未可见」从而反复重试。
+  bool _isMessageTouchedInViewport(int messageId) {
+    if (messageId <= 0) return false;
+    if (_scrollController.hasClients &&
+        _scrollController.position.maxScrollExtent <= 1) {
+      return _messages.any((m) => m.id == messageId);
+    }
+    final itemContext = _scrollRestoreKeys[messageId]?.currentContext;
+    if (itemContext == null) return false;
+    final itemRender = itemContext.findRenderObject();
+    if (itemRender is! RenderBox || !itemRender.hasSize) return false;
+    final scrollable = Scrollable.maybeOf(itemContext);
+    final viewportRender = scrollable?.context.findRenderObject();
+    if (viewportRender is! RenderBox || !viewportRender.hasSize) return false;
+    final itemRect = itemRender.localToGlobal(Offset.zero) & itemRender.size;
+    final viewportRect =
+        viewportRender.localToGlobal(Offset.zero) & viewportRender.size;
+    return itemRect.overlaps(viewportRect);
   }
 
   void _captureSessionUnread(
@@ -2807,7 +2891,7 @@ class _NativeChatViewState extends State<NativeChatView>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || gen != _messageScrollGen) return;
       if (attempt == 0) {
-        _preScrollTowardMessage(messageId);
+        _preScrollTowardMessage(messageId, allowNearLatestShortcut: false);
       }
       final entries = _buildListEntries();
       final listIndex = _listIndexForMessageId(messageId, entries);
@@ -3009,14 +3093,14 @@ class _NativeChatViewState extends State<NativeChatView>
       setState(() => _emojiOpen = false);
     }
     // PC 窗口恢复时输入框会被程序自动 requestFocus。此时如果用户正在看
-    // 历史，不能把“恢复输入焦点”当成用户点击输入框并强制滚到最新。
-    if (_isBrowsingHistory) return;
+    // 历史 / 历史定位结果，不能把“恢复输入焦点”当成用户点击输入框并强制滚到最新。
+    if (_isBrowsingHistory || _locatedMode) return;
     unawaited(_scrollToLatestForInput());
   }
 
   Future<void> _scrollToLatestForInput({bool userInitiated = false}) async {
-    if (_isBrowsingHistory && !userInitiated) return;
-    if (_locatedMode) {
+    if ((_isBrowsingHistory || _locatedMode) && !userInitiated) return;
+    if (_locatedMode && userInitiated) {
       await _jumpToLatest();
       return;
     }
@@ -7359,10 +7443,16 @@ class _NativeChatViewState extends State<NativeChatView>
     if (approvalShare != null) {
       return ChatApprovalCard(
         title: approvalShare.title,
-        statusLabel: _approvalStatusLabel(approvalShare.status),
-        subtitle: approvalShare.businessType.toUpperCase() == 'PROPOSAL'
+        statusLabel: approvalShare.isProposalIntake
+            ? ''
+            : _approvalStatusLabel(approvalShare.status),
+        subtitle: approvalShare.isProposalIntake
+            ? approvalShare.proposalCardLine
+            : approvalShare.businessType.toUpperCase() == 'PROPOSAL'
             ? '销售提案'
             : '审批单据',
+        brandLabel: approvalShare.isProposalIntake ? '协作提案' : '沙丘审批',
+        subtitleMaxLines: approvalShare.isProposalIntake ? 2 : 1,
         onTap: () => _openApprovalShare(approvalShare),
         onSecondaryTapDown: isDesktopCommOnly && !_messageMultiSelectMode
             ? (details) =>
@@ -8087,13 +8177,15 @@ class _NativeChatViewState extends State<NativeChatView>
     bool force = false,
     bool gentle = false,
   }) {
-    if (_locatedMode && !force) return;
+    // 历史定位期间禁止贴底；force 只留给用户点「回到最新」（那时已清掉 locatedMode）。
+    if (_locatedMode && !_forceLatestMode) return;
     if (_historyViewportFrozen) return;
     final gen = ++_scrollBottomGen;
 
     void doScroll() {
       if (!mounted || gen != _scrollBottomGen) return;
       if (!_scrollController.hasClients) return;
+      if (_locatedMode && !_forceLatestMode) return;
       // 只拦最小化冻结；用户点「回到最新」时仍在历史位置，不能用
       // `_isBrowsingHistory` 把主动贴底挡掉。
       if (_historyViewportFrozen) return;

@@ -110,6 +110,7 @@ class _NativeContractRegisterPageState extends State<NativeContractRegisterPage>
   int? _editingId;
   bool _proposalExpanded = false;
   bool _proposalFormExpanded = false;
+  double _listScrollOffset = 0;
 
   @override
   void initState() {
@@ -230,7 +231,29 @@ class _NativeContractRegisterPageState extends State<NativeContractRegisterPage>
     );
   }
 
+  void _rememberListScroll() {
+    if (_scrollController.hasClients) {
+      _listScrollOffset = _scrollController.offset;
+    }
+  }
+
+  void _restoreListScroll() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_scrollController.hasClients) return;
+      final max = _scrollController.position.maxScrollExtent;
+      final target = _listScrollOffset.clamp(0.0, max);
+      if ((_scrollController.offset - target).abs() > 0.5) {
+        _scrollController.jumpTo(target);
+      }
+    });
+  }
+
   Future<void> _goPage(_ContractPage next) async {
+    final leavingList =
+        _page == _ContractPage.list && next != _ContractPage.list;
+    final backToList =
+        next == _ContractPage.list && _page != _ContractPage.list;
+    if (leavingList) _rememberListScroll();
     setState(() {
       _page = next;
       if (next == _ContractPage.list) {
@@ -244,12 +267,14 @@ class _NativeContractRegisterPageState extends State<NativeContractRegisterPage>
       }
     });
     _publishChrome();
-    if (!_pageController.hasClients) return;
-    await _pageController.animateToPage(
-      next.index,
-      duration: const Duration(milliseconds: 300),
-      curve: Curves.easeOutCubic,
-    );
+    if (_pageController.hasClients) {
+      await _pageController.animateToPage(
+        next.index,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOutCubic,
+      );
+    }
+    if (backToList) _restoreListScroll();
   }
 
   void _resetForm() {
@@ -350,6 +375,8 @@ class _NativeContractRegisterPageState extends State<NativeContractRegisterPage>
     setState(() {});
     _keywordDebounce?.cancel();
     _keywordDebounce = Timer(const Duration(milliseconds: 320), () {
+      _listScrollOffset = 0;
+      if (_scrollController.hasClients) _scrollController.jumpTo(0);
       unawaited(_load(reset: true));
     });
   }
@@ -357,7 +384,7 @@ class _NativeContractRegisterPageState extends State<NativeContractRegisterPage>
   Future<void> _load({required bool reset}) async {
     if (reset) {
       setState(() {
-        _loading = true;
+        if (_rows.isEmpty) _loading = true;
         _error = null;
       });
     }
@@ -1102,7 +1129,7 @@ class _NativeContractRegisterPageState extends State<NativeContractRegisterPage>
         controller: _pageController,
         physics: const NeverScrollableScrollPhysics(),
         children: [
-          _buildList(),
+          _KeepAlivePage(child: _buildList()),
           _buildDetail(),
           _buildCompose(),
         ],
@@ -1869,5 +1896,26 @@ class _ContractCard extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+class _KeepAlivePage extends StatefulWidget {
+  const _KeepAlivePage({required this.child});
+
+  final Widget child;
+
+  @override
+  State<_KeepAlivePage> createState() => _KeepAlivePageState();
+}
+
+class _KeepAlivePageState extends State<_KeepAlivePage>
+    with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context);
+    return widget.child;
   }
 }

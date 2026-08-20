@@ -13,13 +13,13 @@ abstract final class ProposalPalette {
   static const text2 = Color(0xFF66606D);
   static const text3 = Color(0xFF958E9E);
   static const purple = Color(0xFF7B5CD8);
-  static const purpleDeep = Color(0xFF6A4FA0);
-  static const purpleSoft = Color(0xFFF3EEFA);
-  static const purpleLine = Color(0xFFC2AEE7);
+  static const purpleDeep = Color(0xFF4F3488);
+  static const purpleSoft = Color(0xFFE8DCF7);
+  static const purpleLine = Color(0xFF9B7AD4);
   static const navTop = Color(0xFF342A49);
   static const navBottom = Color(0xFF2B243C);
-  static const green = Color(0xFF5D8A4E);
-  static const greenSoft = Color(0xFFEAEFDF);
+  static const green = Color(0xFF3F7A38);
+  static const greenSoft = Color(0xFFD7E8C8);
   static const amber = Color(0xFFB07A2B);
   static const amberSoft = Color(0xFFF4E8D2);
   static const coral = Color(0xFFBC5C40);
@@ -288,12 +288,14 @@ class ProposalReviewToggle extends StatelessWidget {
         minimumSize: const Size(0, 30),
         padding: const EdgeInsets.symmetric(horizontal: 9),
         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-        backgroundColor: reviewed ? ProposalPalette.greenSoft : Colors.white,
+        backgroundColor: reviewed
+            ? ProposalPalette.greenSoft
+            : ProposalPalette.purpleSoft,
         foregroundColor: reviewed
             ? ProposalPalette.green
             : ProposalPalette.purpleDeep,
         side: BorderSide(
-          color: reviewed ? ProposalPalette.green : ProposalPalette.purpleLine,
+          color: reviewed ? ProposalPalette.green : ProposalPalette.purple,
         ),
       ),
       child: Row(
@@ -311,7 +313,7 @@ class ProposalReviewToggle extends StatelessWidget {
         ],
       ),
     );
-    final message = tooltip ?? (reviewed ? '取消复核' : pendingLabel);
+    final message = tooltip ?? (reviewed ? '已复核' : pendingLabel);
     return Tooltip(message: message, child: button);
   }
 }
@@ -322,24 +324,119 @@ void showProposalCenterToast(
   String message, {
   bool error = false,
 }) {
-  FocusManager.instance.primaryFocus?.unfocus();
   final overlay = Overlay.maybeOf(context, rootOverlay: true);
   if (overlay == null) return;
-  final entry = OverlayEntry(
-    builder: (_) => DefaultTextStyle.merge(
-      style: const TextStyle(
-        decoration: TextDecoration.none,
-        decorationColor: Colors.transparent,
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    if (!overlay.mounted) return;
+    late final OverlayEntry entry;
+    entry = OverlayEntry(
+      builder: (ctx) => IgnorePointer(
+        child: Material(
+          type: MaterialType.transparency,
+          child: _ProposalCenterToast(message: message, error: error),
+        ),
       ),
-      child: SelectionContainer.disabled(
-        child: _ProposalCenterToast(message: message, error: error),
-      ),
-    ),
-  );
-  overlay.insert(entry);
-  Timer(const Duration(milliseconds: 2000), () {
-    if (entry.mounted) entry.remove();
+    );
+    overlay.insert(entry);
+    Timer(const Duration(milliseconds: 2000), () {
+      if (entry.mounted) entry.remove();
+    });
   });
+}
+
+Future<String?> showProposalRejectDialog({
+  required BuildContext context,
+  required String title,
+  required String hint,
+}) async {
+  FocusManager.instance.primaryFocus?.unfocus();
+  await WidgetsBinding.instance.endOfFrame;
+  if (!context.mounted) return null;
+  final result = await showGeneralDialog<String>(
+    context: context,
+    useRootNavigator: true,
+    barrierDismissible: false,
+    barrierLabel: MaterialLocalizations.of(context).modalBarrierDismissLabel,
+    barrierColor: Colors.black54,
+    transitionDuration: Duration.zero,
+    pageBuilder: (ctx, _, __) {
+      return MediaQuery.removeViewInsets(
+        context: ctx,
+        removeLeft: true,
+        removeTop: true,
+        removeRight: true,
+        removeBottom: true,
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 440),
+              child: Material(
+                type: MaterialType.transparency,
+                child: _ProposalRejectDialog(title: title, hint: hint),
+              ),
+            ),
+          ),
+        ),
+      );
+    },
+  );
+  await WidgetsBinding.instance.endOfFrame;
+  return result;
+}
+
+class _ProposalRejectDialog extends StatefulWidget {
+  const _ProposalRejectDialog({required this.title, required this.hint});
+
+  final String title;
+  final String hint;
+
+  @override
+  State<_ProposalRejectDialog> createState() => _ProposalRejectDialogState();
+}
+
+class _ProposalRejectDialogState extends State<_ProposalRejectDialog> {
+  late final TextEditingController _controller = TextEditingController();
+  late final FocusNode _focusNode = FocusNode();
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _focusNode.requestFocus();
+    });
+  }
+
+  @override
+  void dispose() {
+    _focusNode.dispose();
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _close([String? value]) {
+    Navigator.of(context).pop(value);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(widget.title),
+      content: TextField(
+        controller: _controller,
+        focusNode: _focusNode,
+        maxLines: 4,
+        decoration: InputDecoration(hintText: widget.hint),
+      ),
+      actions: [
+        TextButton(onPressed: _close, child: const Text('取消')),
+        FilledButton(
+          onPressed: () => _close(_controller.text.trim()),
+          child: const Text('确认驳回'),
+        ),
+      ],
+    );
+  }
 }
 
 class _ProposalCenterToast extends StatefulWidget {
@@ -424,10 +521,16 @@ class _ProposalCenterToastState extends State<_ProposalCenterToast> {
 InputDecoration proposalInputDecoration({String? hint, bool readOnly = false}) {
   return InputDecoration(
     hintText: hint,
+    hintMaxLines: 1,
+    hintStyle: const TextStyle(
+      fontSize: 12,
+      height: 1.2,
+      color: ProposalPalette.text3,
+    ),
     filled: true,
     fillColor: readOnly ? const Color(0xFFF5F1F8) : const Color(0xFFFFFEFF),
     isDense: true,
-    contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
     enabledBorder: OutlineInputBorder(
       borderRadius: BorderRadius.circular(8),
       borderSide: const BorderSide(color: Color(0xFFE1D9E8)),
@@ -463,8 +566,8 @@ class ProposalPills extends StatelessWidget {
   final bool enabled;
 
   @override
-  Widget build(BuildContext context) => Opacity(
-    opacity: enabled ? 1 : 0.55,
+  Widget build(BuildContext context) => IgnorePointer(
+    ignoring: !enabled,
     child: Wrap(
       spacing: 6,
       runSpacing: 6,
@@ -473,22 +576,23 @@ class ProposalPills extends StatelessWidget {
           ChoiceChip(
             label: Text(option),
             selected: selected.contains(option),
-            onSelected: enabled ? (_) => onToggle(option) : null,
+            onSelected: (_) => onToggle(option),
             selectedColor: ProposalPalette.purpleSoft,
-            backgroundColor: Colors.white,
+            backgroundColor: const Color(0xFFF7F5FA),
+            surfaceTintColor: Colors.transparent,
             side: BorderSide(
               color: selected.contains(option)
-                  ? ProposalPalette.purpleLine
-                  : ProposalPalette.border,
+                  ? ProposalPalette.purple
+                  : const Color(0xFFC9C0D4),
             ),
             labelStyle: TextStyle(
               color: selected.contains(option)
                   ? ProposalPalette.purpleDeep
-                  : ProposalPalette.text2,
+                  : ProposalPalette.text,
               fontSize: 11,
               fontWeight: selected.contains(option)
-                  ? FontWeight.w600
-                  : FontWeight.w400,
+                  ? FontWeight.w700
+                  : FontWeight.w500,
             ),
             visualDensity: VisualDensity.compact,
             showCheckmark: false,
@@ -513,4 +617,53 @@ class ProposalPills extends StatelessWidget {
       ],
     ),
   );
+}
+
+class ProposalNextPendingFooter extends StatelessWidget {
+  const ProposalNextPendingFooter({
+    super.key,
+    required this.totalCount,
+    required this.onPressed,
+    this.loading = false,
+  });
+
+  final int totalCount;
+  final VoidCallback? onPressed;
+  final bool loading;
+
+  @override
+  Widget build(BuildContext context) {
+    final label = totalCount > 0 ? '下一个($totalCount)' : '下一个';
+    return SafeArea(
+      top: false,
+      child: DecoratedBox(
+        decoration: const BoxDecoration(
+          color: Color(0xFFFBFAFD),
+          border: Border(top: BorderSide(color: Color(0xFFEAE3F0))),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
+          child: SizedBox(
+            width: double.infinity,
+            height: 44,
+            child: FilledButton.icon(
+              onPressed: loading ? null : onPressed,
+              style: FilledButton.styleFrom(
+                backgroundColor: ProposalPalette.purpleDeep,
+                disabledBackgroundColor: ProposalPalette.purpleSoft,
+              ),
+              icon: loading
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.arrow_forward_rounded, size: 18),
+              label: Text(loading ? '加载中…' : label),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }

@@ -45,14 +45,15 @@ class ProposalIntakeService {
         .toList(growable: false);
   }
 
-  Future<List<ProposalContractChoice>> fetchContracts({String keyword = ''}) async {
+  Future<List<ProposalContractChoice>> fetchContracts({
+    String keyword = '',
+  }) async {
     final needle = keyword.trim();
     final data = _unwrap(
       await http.get(
-        _uri(
-          '/proposal-intakes/contracts',
-          {if (needle.isNotEmpty) 'q': needle},
-        ),
+        _uri('/proposal-intakes/contracts', {
+          if (needle.isNotEmpty) 'q': needle,
+        }),
         headers: _headers,
       ),
     );
@@ -121,6 +122,7 @@ class ProposalIntakeService {
     String keyword = '',
     String status = '',
     bool actionable = false,
+    bool relatedOnly = false,
   }) async {
     final query = <String, String>{
       'page': '$page',
@@ -128,6 +130,7 @@ class ProposalIntakeService {
       if (keyword.trim().isNotEmpty) 'q': keyword.trim(),
       if (status.trim().isNotEmpty) 'status': status.trim(),
       if (actionable) 'actionable': '1',
+      if (relatedOnly) 'related': '1',
     };
     final data = _unwrap(
       await http.get(_uri('/proposal-intakes', query), headers: _headers),
@@ -183,8 +186,9 @@ class ProposalIntakeService {
     int id,
     String section,
     bool approved,
-    int version,
-  ) async {
+    int version, {
+    String comment = '',
+  }) async {
     final data = _unwrap(
       await http.post(
         _uri('/proposal-intakes/$id/reviews'),
@@ -192,6 +196,7 @@ class ProposalIntakeService {
         body: jsonEncode({
           'section': section,
           'approved': approved,
+          'comment': comment,
           'version': version,
         }),
       ),
@@ -239,6 +244,12 @@ class ProposalIntakeService {
       ),
     );
     return ProposalIntakeRow.fromJson(_asMap(data));
+  }
+
+  Future<void> delete(int id) async {
+    _unwrap(
+      await http.delete(_uri('/proposal-intakes/$id'), headers: _headers),
+    );
   }
 
   Object? _unwrap(http.Response response) {

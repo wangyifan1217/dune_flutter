@@ -2668,12 +2668,16 @@ class ChatApprovalCard extends StatelessWidget {
     required this.onTap,
     this.statusLabel = '',
     this.subtitle = '审批单据',
+    this.brandLabel = '沙丘审批',
+    this.subtitleMaxLines = 1,
     this.onSecondaryTapDown,
   });
 
   final String title;
   final String statusLabel;
   final String subtitle;
+  final String brandLabel;
+  final int subtitleMaxLines;
   final VoidCallback onTap;
   final GestureTapDownCallback? onSecondaryTapDown;
 
@@ -2734,7 +2738,7 @@ class ChatApprovalCard extends StatelessWidget {
                           subtitle,
                           if (statusLabel.trim().isNotEmpty) statusLabel.trim(),
                         ].join(' · '),
-                        maxLines: 1,
+                        maxLines: subtitleMaxLines,
                         overflow: TextOverflow.ellipsis,
                         style: DunesTypography.sans(
                           fontSize: 10.5,
@@ -2752,7 +2756,7 @@ class ChatApprovalCard extends StatelessWidget {
             Row(
               children: [
                 Text(
-                  '沙丘审批',
+                  brandLabel,
                   style: DunesTypography.sans(
                     fontSize: 10,
                     color: DunesColors.accentDeep,

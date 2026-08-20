@@ -3,12 +3,14 @@ import 'package:flutter/material.dart';
 import '../../core/theme/dunes_theme.dart';
 import '../../core/util/friendly_error.dart';
 import '../auth/auth_session.dart';
+import '../proposal_intake/proposal_intake_models.dart';
+import '../proposal_intake/proposal_intake_service.dart';
 import 'approval_chat_share.dart';
 import 'proposal_upload_config.dart';
 import 'xflow_models.dart';
 import 'xflow_service.dart';
 
-/// 选择要转发到当前会话的审批单（我审批的 / 我发起的）。
+/// 选择要转发到当前会话的审批单（我审批的 / 我发起的 / 协作提案）。
 Future<ApprovalChatShare?> showApprovalPickerSheet({
   required BuildContext context,
   required AuthSession session,
@@ -33,9 +35,10 @@ class _ApprovalPickerSheet extends StatefulWidget {
 class _ApprovalPickerSheetState extends State<_ApprovalPickerSheet>
     with SingleTickerProviderStateMixin {
   late final XflowService _service = XflowService(session: widget.session);
-  late final TabController _tabs = TabController(length: 2, vsync: this);
+  late final TabController _tabs = TabController(length: 3, vsync: this);
   List<XflowProposalItem> _mineApprove = const [];
   List<XflowProposalItem> _mineInitiated = const [];
+  List<XflowProposalItem> _proposalIntakes = const [];
   bool _loading = true;
   String? _error;
   String _query = '';
@@ -61,15 +64,17 @@ class _ApprovalPickerSheetState extends State<_ApprovalPickerSheet>
       final results = await Future.wait([
         _service.fetchB1Approvals(),
         _service.fetchB14Initiated(),
+        _loadProposalIntakes(),
       ]);
       if (!mounted) return;
       setState(() {
-        _mineApprove = results[0]
+        _mineApprove = (results[0] as List<XflowProposalItem>)
             .where(_isForwardable)
             .toList(growable: false);
-        _mineInitiated = results[1]
+        _mineInitiated = (results[1] as List<XflowProposalItem>)
             .where(_isForwardable)
             .toList(growable: false);
+        _proposalIntakes = results[2] as List<XflowProposalItem>;
         _loading = false;
       });
     } catch (e) {
@@ -99,8 +104,39 @@ class _ApprovalPickerSheetState extends State<_ApprovalPickerSheet>
     Navigator.of(context).pop(ApprovalChatShare.fromListItem(item));
   }
 
-  /// 转发审批不展示草稿、已作废。
+  Future<List<XflowProposalItem>> _loadProposalIntakes() async {
+    try {
+      final result = await ProposalIntakeService(
+        session: widget.session,
+      ).fetchList(page: 0, pageSize: 80, relatedOnly: true);
+      return result.items
+          .where((row) => row.id > 0)
+          .map(_proposalToItem)
+          .toList(growable: false);
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  XflowProposalItem _proposalToItem(ProposalIntakeRow row) {
+    final title = row.title.trim();
+    return XflowProposalItem(
+      id: row.id,
+      businessType: 'PROPOSAL_INTAKE',
+      code: row.code,
+      title: title.isEmpty ? '未命名销售业务提案' : title,
+      status: row.status,
+      createdByName: row.initiatorDisplayName(const []),
+      createdAt: DateTime.tryParse(row.createdAt)?.toLocal(),
+      templateKey: 'proposal-intake',
+    );
+  }
+
+  /// xflow 草稿/作废不转发；协作提案只要已落库即可转名片。
   bool _isForwardable(XflowProposalItem item) {
+    if (item.businessType.toUpperCase() == 'PROPOSAL_INTAKE') {
+      return item.id > 0;
+    }
     final st = item.status.toUpperCase();
     return st != 'DRAFT' && st != 'VOIDED';
   }
@@ -161,12 +197,15 @@ class _ApprovalPickerSheetState extends State<_ApprovalPickerSheet>
           ),
           TabBar(
             controller: _tabs,
+            isScrollable: true,
+            tabAlignment: TabAlignment.start,
             labelColor: DunesColors.accentDeep,
             unselectedLabelColor: DunesColors.text3,
             indicatorColor: DunesColors.accentDeep,
             tabs: const [
               Tab(text: '我审批的'),
               Tab(text: '我发起的'),
+              Tab(text: '协作提案'),
             ],
           ),
           Expanded(
@@ -179,6 +218,10 @@ class _ApprovalPickerSheetState extends State<_ApprovalPickerSheet>
                     children: [
                       _list(_filtered(_mineApprove)),
                       _list(_filtered(_mineInitiated)),
+                      _list(
+                        _filtered(_proposalIntakes),
+                        emptyText: '暂无可转发的协作提案',
+                      ),
                     ],
                   ),
           ),
@@ -187,11 +230,14 @@ class _ApprovalPickerSheetState extends State<_ApprovalPickerSheet>
     );
   }
 
-  Widget _list(List<XflowProposalItem> rows) {
+  Widget _list(
+    List<XflowProposalItem> rows, {
+    String emptyText = '暂无可转发的审批',
+  }) {
     if (rows.isEmpty) {
       return Center(
         child: Text(
-          '暂无可转发的审批',
+          emptyText,
           style: DunesTypography.sans(fontSize: 13, color: DunesColors.text3),
         ),
       );
@@ -363,6 +409,18 @@ class _StatusChip extends StatelessWidget {
       bg = DunesColors.coralSoft;
       fg = const Color(0xFF993C1D);
       label = '已驳回';
+    } else if (st == 'FILLING') {
+      bg = DunesColors.blueSoft;
+      fg = DunesColors.blue;
+      label = '填写中';
+    } else if (st == 'REVIEWING') {
+      bg = DunesColors.amberSoft;
+      fg = const Color(0xFF5D3508);
+      label = '复核中';
+    } else if (st == 'PENDING_PRESIDENT') {
+      bg = DunesColors.amberSoft;
+      fg = const Color(0xFF5D3508);
+      label = '待最终确认';
     } else if (st == 'DRAFT' || st == 'PENDING_INITIATE') {
       bg = DunesColors.blueSoft;
       fg = DunesColors.blue;

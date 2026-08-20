@@ -21,6 +21,10 @@ class AuthSession {
     this.administrativeNoticeAccess = false,
     this.broadcastAccess = false,
     this.fundSecondmentAccess = false,
+    this.contractViewAccess = false,
+    this.contractConfigAccess = false,
+    this.contractKbSyncAccess = false,
+    this.proposalIntakeAccess = false,
   });
 
   final String phone;
@@ -35,12 +39,28 @@ class AuthSession {
   final bool qianjiAccess;
   final bool qianjiAdminAccess;
   final bool robotAccess;
+
   /// Backend-controlled access to the administrative notice module.
   final bool administrativeNoticeAccess;
+
   /// Backend-controlled access to publish company broadcasts.
   final bool broadcastAccess;
+
   /// 后端下发的 NOVA「资金借调」看板开关。
   final bool fundSecondmentAccess;
+
+  /// 合同归集查看权限。
+  final bool contractViewAccess;
+
+  /// 合同归集配置/新增权限。
+  final bool contractConfigAccess;
+
+  /// 合同归集：同步台账合同知识库状态。
+  final bool contractKbSyncAccess;
+
+  /// 工作台「协作 / 提案」访问权限。
+  final bool proposalIntakeAccess;
+
   /// 后端下发的「任务汇总」能力开关；未下发时工作台会走接口探测。
   final bool hrbpAccess;
 
@@ -65,6 +85,16 @@ class AuthSession {
 
   bool get effectiveFundSecondmentAccess =>
       fundSecondmentAccess || DunesDefaults.localLighthouseAccessBypass;
+
+  bool get effectiveContractConfigAccess => contractConfigAccess;
+
+  bool get effectiveContractKbSyncAccess => contractKbSyncAccess;
+
+  bool get effectiveContractViewAccess =>
+      contractViewAccess || contractConfigAccess || contractKbSyncAccess;
+
+  bool get effectiveProposalIntakeAccess =>
+      proposalIntakeAccess || DunesDefaults.localLighthouseAccessBypass;
 
   AuthSession withLocalDevGrants() {
     var next = this;
@@ -99,8 +129,9 @@ class AuthSession {
   String get landingScreen =>
       _initialScreenFromDefine.isNotEmpty ? _initialScreenFromDefine : 'C1';
 
-  bool get canUseApproval =>
-      roles.any((r) => {'BUSINESS', 'INITIATOR', 'FINANCE', 'ADMIN'}.contains(r));
+  bool get canUseApproval => roles.any(
+    (r) => {'BUSINESS', 'INITIATOR', 'FINANCE', 'ADMIN'}.contains(r),
+  );
 
   AuthSession copyWith({
     String? phone,
@@ -120,6 +151,10 @@ class AuthSession {
     bool? administrativeNoticeAccess,
     bool? broadcastAccess,
     bool? fundSecondmentAccess,
+    bool? contractViewAccess,
+    bool? contractConfigAccess,
+    bool? contractKbSyncAccess,
+    bool? proposalIntakeAccess,
   }) {
     return AuthSession(
       phone: phone ?? this.phone,
@@ -140,6 +175,10 @@ class AuthSession {
           administrativeNoticeAccess ?? this.administrativeNoticeAccess,
       broadcastAccess: broadcastAccess ?? this.broadcastAccess,
       fundSecondmentAccess: fundSecondmentAccess ?? this.fundSecondmentAccess,
+      contractViewAccess: contractViewAccess ?? this.contractViewAccess,
+      contractConfigAccess: contractConfigAccess ?? this.contractConfigAccess,
+      contractKbSyncAccess: contractKbSyncAccess ?? this.contractKbSyncAccess,
+      proposalIntakeAccess: proposalIntakeAccess ?? this.proposalIntakeAccess,
     );
   }
 
@@ -168,8 +207,11 @@ class AuthSession {
   ) {
     return session.copyWith(
       displayName: (data['displayName'] ?? session.displayName)?.toString(),
-      departmentId: (data['departmentId'] as num?)?.toInt() ?? session.departmentId,
-      userType: (data['userType'] ?? session.userType)?.toString() ?? session.userType,
+      departmentId:
+          (data['departmentId'] as num?)?.toInt() ?? session.departmentId,
+      userType:
+          (data['userType'] ?? session.userType)?.toString() ??
+          session.userType,
       lighthouseAccess: data['lighthouseAccess'] == true,
       qianjiAccess: data['qianjiAccess'] == true,
       qianjiAdminAccess: data['qianjiAdminAccess'] == true,
@@ -178,6 +220,10 @@ class AuthSession {
       administrativeNoticeAccess: data['administrativeNoticeAccess'] == true,
       broadcastAccess: data['broadcastAccess'] == true,
       fundSecondmentAccess: data['fundSecondmentAccess'] == true,
+      contractViewAccess: data['contractViewAccess'] == true,
+      contractConfigAccess: data['contractConfigAccess'] == true,
+      contractKbSyncAccess: data['contractKbSyncAccess'] == true,
+      proposalIntakeAccess: data['proposalIntakeAccess'] == true,
     );
   }
 
@@ -210,6 +256,10 @@ class AuthSession {
       administrativeNoticeAccess: claims['administrativeNoticeAccess'] == true,
       broadcastAccess: claims['broadcastAccess'] == true,
       fundSecondmentAccess: claims['fundSecondmentAccess'] == true,
+      contractViewAccess: claims['contractViewAccess'] == true,
+      contractConfigAccess: claims['contractConfigAccess'] == true,
+      contractKbSyncAccess: claims['contractKbSyncAccess'] == true,
+      proposalIntakeAccess: claims['proposalIntakeAccess'] == true,
     );
   }
 
@@ -249,6 +299,10 @@ class AuthSession {
       'administrativeNoticeAccess': administrativeNoticeAccess,
       'broadcastAccess': broadcastAccess,
       'fundSecondmentAccess': fundSecondmentAccess,
+      'contractViewAccess': contractViewAccess,
+      'contractConfigAccess': contractConfigAccess,
+      'contractKbSyncAccess': contractKbSyncAccess,
+      'proposalIntakeAccess': proposalIntakeAccess,
     };
   }
 
@@ -274,6 +328,10 @@ class AuthSession {
       administrativeNoticeAccess: json['administrativeNoticeAccess'] == true,
       broadcastAccess: json['broadcastAccess'] == true,
       fundSecondmentAccess: json['fundSecondmentAccess'] == true,
+      contractViewAccess: json['contractViewAccess'] == true,
+      contractConfigAccess: json['contractConfigAccess'] == true,
+      contractKbSyncAccess: json['contractKbSyncAccess'] == true,
+      proposalIntakeAccess: json['proposalIntakeAccess'] == true,
     );
   }
 

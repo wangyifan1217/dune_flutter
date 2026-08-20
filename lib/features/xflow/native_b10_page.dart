@@ -11,6 +11,7 @@ import 'approval_chat_forward.dart';
 import 'approval_chat_share.dart';
 import 'approval_pending_nav.dart';
 import 'xflow_detail_renderer.dart';
+import 'xflow_detail_widgets.dart';
 import 'xflow_models.dart';
 import 'xflow_service.dart';
 import 'xflow_shared_widgets.dart';
@@ -506,6 +507,7 @@ class _NativeB10PageState extends State<NativeB10Page> {
   @override
   Widget build(BuildContext context) {
     final detail = _bundle?.detail;
+    final keyboardOpen = MediaQuery.viewInsetsOf(context).bottom > 0;
     return ColoredBox(
       color: DunesColors.bgApp,
       child: SafeArea(
@@ -542,8 +544,6 @@ class _NativeB10PageState extends State<NativeB10Page> {
                             XflowDetailRenderer(
                               bundle: _bundle!,
                               service: _service,
-                              onApprove: _approve,
-                              onReject: _reject,
                               onDelete: _deleteDraft,
                               onPush: _push,
                               onInitiate: _initiate,
@@ -572,6 +572,12 @@ class _NativeB10PageState extends State<NativeB10Page> {
                     ),
             ),
             if (_bundle?.myTodo != null)
+              XfDetApproveDock(
+                onApprove: _approve,
+                onReject: _reject,
+                compact: keyboardOpen,
+              ),
+            if (_bundle?.myTodo != null && !keyboardOpen)
               XfDetNextPendingFooter(
                 totalCount: _pendingTotal,
                 loading: _pendingBusy,

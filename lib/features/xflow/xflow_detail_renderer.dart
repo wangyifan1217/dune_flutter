@@ -14,8 +14,6 @@ class XflowDetailRenderer extends StatelessWidget {
     super.key,
     required this.bundle,
     required this.service,
-    required this.onApprove,
-    required this.onReject,
     this.onDelete,
     this.onPush,
     this.onInitiate,
@@ -28,8 +26,6 @@ class XflowDetailRenderer extends StatelessWidget {
 
   final XflowDetailBundle bundle;
   final XflowService service;
-  final Future<void> Function(String comment) onApprove;
-  final Future<void> Function(String comment) onReject;
   final VoidCallback? onDelete;
   final VoidCallback? onPush;
   final VoidCallback? onInitiate;
@@ -129,8 +125,6 @@ class XflowDetailRenderer extends StatelessWidget {
             child: XfDetTrackTimeline(bundle: bundle),
           ),
         if (showCc) XfDetCcCard(ccList: bundle.ccList),
-        if (bundle.myTodo != null)
-          XfDetApproveCard(onApprove: onApprove, onReject: onReject),
         XfDetActions(
           detail: bundle.detail,
           canReedit: bundle.canReedit,

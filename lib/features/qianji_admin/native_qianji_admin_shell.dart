@@ -10,7 +10,11 @@ import '../administrative_notice/native_administrative_notice_page.dart';
 import '../administrative_notice/administrative_notice_service.dart';
 import '../broadcast/broadcast_service.dart';
 import '../broadcast/native_workbench_broadcast_page.dart';
+import '../contract_register/contract_register_service.dart';
+import '../contract_register/native_contract_register_page.dart';
 import '../drive/native_drive_page.dart';
+import '../proposal_intake/native_proposal_intake_page.dart';
+import '../proposal_intake/proposal_intake_service.dart';
 import '../reconciliation/native_daily_reconciliation_page.dart';
 import '../reconciliation/reconciliation_shucai_service.dart';
 import '../tasks/native_task_home_pane.dart';
@@ -63,6 +67,8 @@ enum _WorkbenchView {
   administrativeNotice,
   companyBroadcast,
   dailyRecon,
+  contracts,
+  proposalIntake,
 }
 
 class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
@@ -81,6 +87,8 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
   bool? _canSeeAdministrativeNotice;
   bool? _canSeeCompanyBroadcast;
   bool? _canSeeDailyRecon;
+  bool? _canSeeContracts;
+  bool? _canSeeProposalIntake;
 
   static const _titles = {
     _WorkbenchView.tasks: '任务',
@@ -93,6 +101,8 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
     _WorkbenchView.administrativeNotice: '行政通知',
     _WorkbenchView.companyBroadcast: '公司广播',
     _WorkbenchView.dailyRecon: '每日对账',
+    _WorkbenchView.contracts: '合同归集',
+    _WorkbenchView.proposalIntake: '提案',
   };
 
   bool get _isQianjiAdmin => _session.effectiveQianjiAdminAccess;
@@ -107,6 +117,8 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
     unawaited(_resolveAdministrativeNoticeAccess());
     unawaited(_resolveBroadcastAccess());
     unawaited(_resolveDailyReconAccess());
+    unawaited(_resolveContractAccess());
+    unawaited(_resolveProposalIntakeAccess());
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         _syncBackInterceptor();
@@ -130,6 +142,8 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
       unawaited(_resolveAdministrativeNoticeAccess());
       unawaited(_resolveBroadcastAccess());
       unawaited(_resolveDailyReconAccess());
+      unawaited(_resolveContractAccess());
+      unawaited(_resolveProposalIntakeAccess());
     }
     if (widget.openDailyRecon && !oldWidget.openDailyRecon) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -154,6 +168,8 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
     unawaited(_resolveAdministrativeNoticeAccess());
     unawaited(_resolveBroadcastAccess());
     unawaited(_resolveDailyReconAccess());
+    unawaited(_resolveContractAccess());
+    unawaited(_resolveProposalIntakeAccess());
   }
 
   Future<void> _resolveTaskSummaryAccess() async {
@@ -214,6 +230,42 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
     }
     if (!mounted) return;
     setState(() => _canSeeDailyRecon = allowed);
+  }
+
+  Future<void> _resolveContractAccess() async {
+    if (_session.isExternalUser) {
+      if (mounted) setState(() => _canSeeContracts = false);
+      return;
+    }
+    final fallback = _session.effectiveContractViewAccess;
+    final service = ContractRegisterService(session: _session);
+    bool allowed = fallback;
+    try {
+      final access = await service.fetchAccess();
+      allowed = access.view || access.config;
+    } catch (_) {
+      allowed = fallback;
+    }
+    if (!mounted) return;
+    setState(() => _canSeeContracts = allowed);
+  }
+
+  Future<void> _resolveProposalIntakeAccess() async {
+    if (_session.isExternalUser) {
+      if (mounted) setState(() => _canSeeProposalIntake = false);
+      return;
+    }
+    bool allowed = _session.effectiveProposalIntakeAccess;
+    try {
+      final access = await ProposalIntakeService(
+        session: _session,
+      ).fetchAccess();
+      allowed = access.view;
+    } catch (_) {
+      allowed = _session.effectiveProposalIntakeAccess;
+    }
+    if (!mounted) return;
+    setState(() => _canSeeProposalIntake = allowed);
   }
 
   void _maybeOpenDailyRecon() {
@@ -396,7 +448,7 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
                         ),
                       ),
                     ),
-                    if (_shellTrailing != null) _shellTrailing!,
+                    ?_shellTrailing,
                   ],
                 ),
               ),
@@ -480,6 +532,16 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
           openToken: widget.dailyReconOpenToken,
           onChromeChanged: _onTaskChrome,
         );
+      case _WorkbenchView.contracts:
+        return NativeContractRegisterPage(
+          session: _session,
+          onChromeChanged: _onTaskChrome,
+        );
+      case _WorkbenchView.proposalIntake:
+        return NativeProposalIntakePage(
+          session: _session,
+          onChromeChanged: _onTaskChrome,
+        );
       case _WorkbenchView.overview:
         return _buildOverviewPage();
     }
@@ -521,6 +583,24 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
           color: const Color(0xFF5B6FC4),
           enabled: true,
           onTap: () => _open(_WorkbenchView.dailyRecon),
+        ),
+      if (!_session.isExternalUser && _canSeeContracts == true)
+        _WorkbenchTile(
+          title: '合同归集',
+          subtitle: '编号 · 名称 · 附件',
+          icon: Icons.description_outlined,
+          color: const Color(0xFF5B6FC4),
+          enabled: true,
+          onTap: () => _open(_WorkbenchView.contracts),
+        ),
+      if (!_session.isExternalUser && _canSeeProposalIntake == true)
+        _WorkbenchTile(
+          title: '提案',
+          subtitle: '分板块填写 · 复核',
+          icon: Icons.assignment_outlined,
+          color: _themePurple,
+          enabled: true,
+          onTap: () => _open(_WorkbenchView.proposalIntake),
         ),
     ];
 

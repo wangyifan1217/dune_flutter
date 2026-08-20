@@ -705,6 +705,7 @@ class _XfDetCommentsSectionState extends State<XfDetCommentsSection> {
                     focusNode: _focus,
                     minLines: 1,
                     maxLines: 4,
+                    scrollPadding: const EdgeInsets.fromLTRB(20, 20, 20, 36),
                     style: DunesTypography.sans(fontSize: 13, color: DunesColors.text),
                     decoration: InputDecoration(
                       hintText: _replyParent == null

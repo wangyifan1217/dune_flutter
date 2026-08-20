@@ -33,6 +33,7 @@ class NativeApprovalAssistantPage extends StatefulWidget {
     this.onBack,
     this.onConversationRead,
     this.onOpenPendingList,
+    this.onOpenProposals,
     this.onOpenApproval,
   });
 
@@ -43,6 +44,7 @@ class NativeApprovalAssistantPage extends StatefulWidget {
   final VoidCallback? onBack;
   final ValueChanged<int>? onConversationRead;
   final void Function(ApprovalAssistantPickMode mode)? onOpenPendingList;
+  final VoidCallback? onOpenProposals;
   final ValueChanged<ApprovalChatShare>? onOpenApproval;
 
   @override
@@ -398,6 +400,7 @@ class _NativeApprovalAssistantPageState
             _BottomActions(
               onPending: () => widget.onOpenPendingList
                   ?.call(ApprovalAssistantPickMode.browse),
+              onProposals: () => widget.onOpenProposals?.call(),
               onExplain: () => widget.onOpenPendingList
                   ?.call(ApprovalAssistantPickMode.explain),
               onUrge: () => widget.onOpenPendingList
@@ -679,7 +682,9 @@ class _NativeApprovalAssistantPageState
     return ChatApprovalCard(
       title: _approvalCardTitle(share),
       statusLabel: detailStatusLabel(share.status),
-      subtitle: share.businessType.toUpperCase() == 'PROPOSAL'
+      subtitle: share.businessType.toUpperCase() == 'PROPOSAL_INTAKE'
+          ? '协作提案'
+          : share.businessType.toUpperCase() == 'PROPOSAL'
           ? '销售提案'
           : '审批单据',
       onTap: () => widget.onOpenApproval?.call(share),
@@ -902,11 +907,13 @@ class ApprovalAssistantAvatar extends StatelessWidget {
 class _BottomActions extends StatelessWidget {
   const _BottomActions({
     required this.onPending,
+    required this.onProposals,
     required this.onExplain,
     required this.onUrge,
   });
 
   final VoidCallback onPending;
+  final VoidCallback onProposals;
   final VoidCallback onExplain;
   final VoidCallback onUrge;
 
@@ -920,31 +927,48 @@ class _BottomActions extends StatelessWidget {
         color: DunesColors.bgApp,
         border: Border(top: BorderSide(color: DunesColors.borderSoft)),
       ),
-      child: Row(
+      child: Column(
         children: [
-          Expanded(
-            child: _ActionBtn(
-              label: '今日待审',
-              icon: Icons.inbox_outlined,
-              primary: true,
-              onTap: onPending,
-            ),
+          Row(
+            children: [
+              Expanded(
+                child: _ActionBtn(
+                  label: '今日待审',
+                  icon: Icons.inbox_outlined,
+                  primary: true,
+                  onTap: onPending,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _ActionBtn(
+                  label: '提案审核',
+                  icon: Icons.assignment_outlined,
+                  primary: true,
+                  onTap: onProposals,
+                ),
+              ),
+            ],
           ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: _ActionBtn(
-              label: '解释内容',
-              icon: Icons.menu_book_outlined,
-              onTap: onExplain,
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: _ActionBtn(
-              label: '催办进度',
-              icon: Icons.campaign_outlined,
-              onTap: onUrge,
-            ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: _ActionBtn(
+                  label: '解释内容',
+                  icon: Icons.menu_book_outlined,
+                  onTap: onExplain,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _ActionBtn(
+                  label: '催办进度',
+                  icon: Icons.campaign_outlined,
+                  onTap: onUrge,
+                ),
+              ),
+            ],
           ),
         ],
       ),

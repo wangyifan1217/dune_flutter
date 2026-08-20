@@ -47,7 +47,7 @@ const kDunesScreens = <DunesScreenInfo>[
   DunesScreenInfo(id: 'A4', name: '费用数据化', region: DunesRegion.adm),
   DunesScreenInfo(id: 'A5', name: '审批流转', region: DunesRegion.adm),
   DunesScreenInfo(id: 'A6', name: '非合同用印', region: DunesRegion.adm),
-  DunesScreenInfo(id: 'A7', name: '合同台账', region: DunesRegion.adm),
+  DunesScreenInfo(id: 'A7', name: '合同归集', region: DunesRegion.adm),
   DunesScreenInfo(id: 'A8', name: '合同穿透', region: DunesRegion.adm),
   DunesScreenInfo(id: 'B1', name: '业务工作台', region: DunesRegion.biz),
   DunesScreenInfo(id: 'B2', name: '我的中心', region: DunesRegion.lh),

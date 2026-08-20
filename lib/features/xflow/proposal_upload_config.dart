@@ -445,6 +445,7 @@ String proposalKindLabel({String? templateKey, String? businessType}) {
 
   final bt = (businessType ?? '').trim().toUpperCase();
   if (bt == 'CONTRACT_SEAL') return '合同用印';
+  if (bt == 'PROPOSAL_INTAKE') return '协作提案';
   if (bt == 'PROPOSAL') return '销售提案';
 
   final key = (templateKey ?? '').trim();
@@ -475,6 +476,8 @@ String? _proposalKindLabelByKey(String key) {
       return '业务采购申请单';
     case 'contract-seal':
       return '合同用印';
+    case 'proposal-intake':
+      return '协作提案';
     default:
       return null;
   }

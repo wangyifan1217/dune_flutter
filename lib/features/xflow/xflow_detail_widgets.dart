@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/platform/desktop_features.dart';
 import '../../core/theme/dunes_theme.dart';
+import '../../core/util/detail_text_format.dart';
 import '../chat/chat_file_type_icon.dart';
 import '../shell/dunes_toast.dart';
 import 'xflow_approval_flow_ui.dart';
@@ -342,10 +343,10 @@ class XfDetRejectBanner extends StatelessWidget {
               ),
             ),
             child: Text(
-              comment,
+              formatDetailPlainText(comment),
               style: DunesTypography.sans(
                 fontSize: 12,
-                height: 1.55,
+                height: 1.65,
                 color: DunesColors.text2,
               ),
             ),
@@ -810,15 +811,19 @@ class XfDetKv extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final text = formatDetailPlainText(value);
+    final long = !linkStyle && isLongDetailPlainText(text);
     final valueStyle = DunesTypography.sans(
       fontSize: 14,
-      fontWeight: FontWeight.w500,
-      color: linkStyle ? DunesColors.accent : null,
+      height: long ? 1.7 : 1.45,
+      fontWeight: long ? FontWeight.w400 : FontWeight.w500,
+      color: linkStyle ? DunesColors.accent : DunesColors.text,
     ).copyWith(
       decoration: linkStyle ? TextDecoration.underline : TextDecoration.none,
       decorationColor: linkStyle ? DunesColors.accent : null,
     );
-    final row = Container(
+    final body = Container(
+      width: double.infinity,
       padding: const EdgeInsets.symmetric(vertical: 10),
       decoration: BoxDecoration(
         border: Border(
@@ -827,35 +832,55 @@ class XfDetKv extends StatelessWidget {
           ),
         ),
       ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            child: Text(
-              label,
-              style: DunesTypography.sans(
-                fontSize: 14,
-                color: DunesColors.text2,
-              ),
+      child: long
+          ? Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  label,
+                  style: DunesTypography.sans(
+                    fontSize: 13,
+                    color: DunesColors.text2,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                SelectableText(
+                  text,
+                  textAlign: TextAlign.left,
+                  style: valueStyle,
+                ),
+              ],
+            )
+          : Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 140),
+                  child: Text(
+                    label,
+                    style: DunesTypography.sans(
+                      fontSize: 14,
+                      color: DunesColors.text2,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    text,
+                    textAlign: TextAlign.right,
+                    style: valueStyle,
+                  ),
+                ),
+              ],
             ),
-          ),
-          const SizedBox(width: 12),
-          Flexible(
-            child: Text(
-              value,
-              textAlign: TextAlign.right,
-              style: valueStyle,
-            ),
-          ),
-        ],
-      ),
     );
-    if (onTap == null) return row;
+    if (onTap == null) return body;
     return Material(
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
-        child: row,
+        child: body,
       ),
     );
   }
@@ -1625,15 +1650,51 @@ class _CcRow extends StatelessWidget {
   }
 }
 
+/// 钉在列表下方、键盘上方，避免意见输入时「驳回 / 通过」被顶出屏幕。
+class XfDetApproveDock extends StatelessWidget {
+  const XfDetApproveDock({
+    super.key,
+    required this.onApprove,
+    required this.onReject,
+    this.compact = false,
+  });
+
+  final Future<void> Function(String comment) onApprove;
+  final Future<void> Function(String comment) onReject;
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: DunesColors.bgApp,
+        border: Border(
+          top: BorderSide(color: DunesColors.borderSoft.withValues(alpha: 0.9)),
+        ),
+      ),
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(14, 10, 14, compact ? 10 : 0),
+        child: XfDetApproveCard(
+          onApprove: onApprove,
+          onReject: onReject,
+          compact: compact,
+        ),
+      ),
+    );
+  }
+}
+
 class XfDetApproveCard extends StatefulWidget {
   const XfDetApproveCard({
     super.key,
     required this.onApprove,
     required this.onReject,
+    this.compact = false,
   });
 
   final Future<void> Function(String comment) onApprove;
   final Future<void> Function(String comment) onReject;
+  final bool compact;
 
   @override
   State<XfDetApproveCard> createState() => _XfDetApproveCardState();
@@ -1685,22 +1746,29 @@ class _XfDetApproveCardState extends State<XfDetApproveCard> {
       ),
       title: '待您审批',
       icon: Icons.gavel_outlined,
+      marginBottom: 0,
+      padding: widget.compact
+          ? const EdgeInsets.fromLTRB(12, 10, 12, 12)
+          : const EdgeInsets.all(12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            '请查看填报内容与流程进度，填写意见后确认。',
-            style: DunesTypography.sans(
-              fontSize: 11.5,
-              color: DunesColors.text3,
-              height: 1.45,
+          if (!widget.compact) ...[
+            Text(
+              '请查看填报内容与流程进度，填写意见后确认。',
+              style: DunesTypography.sans(
+                fontSize: 11.5,
+                color: DunesColors.text3,
+                height: 1.45,
+              ),
             ),
-          ),
-          const SizedBox(height: 10),
+            const SizedBox(height: 10),
+          ],
           TextField(
             controller: _comment,
-            minLines: 2,
-            maxLines: 4,
+            minLines: widget.compact ? 1 : 2,
+            maxLines: widget.compact ? 2 : 4,
+            scrollPadding: const EdgeInsets.fromLTRB(20, 20, 20, 88),
             onTapOutside: (_) => FocusManager.instance.primaryFocus?.unfocus(),
             decoration: InputDecoration(
               hintText: '请填写审批意见（必填）',
@@ -1717,7 +1785,7 @@ class _XfDetApproveCardState extends State<XfDetApproveCard> {
               ),
             ),
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 16),
           Row(
             mainAxisAlignment: MainAxisAlignment.end,
             children: [

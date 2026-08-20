@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../core/util/detail_text_format.dart';
 import 'proposal_upload_config.dart';
 import 'xflow_form_styles.dart';
 
@@ -503,11 +504,11 @@ class _FlowTrackRow extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          data.comment,
+                          formatDetailPlainText(data.comment),
                           style: TextStyle(
                             fontFamily: 'monospace',
                             fontSize: 12.5,
-                            height: 1.5,
+                            height: 1.65,
                             color: commentStyle.fg,
                             fontWeight: data.state == XflowApprovalFlowStepState.current
                                 ? FontWeight.w500

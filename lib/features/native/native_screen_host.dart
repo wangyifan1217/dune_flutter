@@ -17,6 +17,8 @@ import '../weekly_summary/native_weekly_summary_page.dart';
 import '../approval/native_approval_page.dart';
 import '../approval_assistant/native_approval_assistant_page.dart';
 import '../approval_assistant/native_approval_assistant_pending_page.dart';
+import '../approval_assistant/native_approval_assistant_proposal_page.dart';
+import '../proposal_intake/proposal_intake_overlay.dart';
 import '../task_assistant/native_task_assistant_page.dart';
 import '../reconciliation/native_reconciliation_assistant_page.dart';
 import '../auth/auth_session.dart';
@@ -438,6 +440,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
   void _onDesktopWindowInactiveChanged(bool inactive) {
     if (!mounted) return;
     if (inactive) {
+      // 先冻住聊天滚动，避免 Windows 把 reverse 列表夹到 0 后误判贴底。
+      ChatForegroundSync.notifyPaused();
       // 最小化/失焦/托盘：停止 autoMarkRead，避免后台把消息标成已读。
       if (_userActivelyInChat) {
         setState(() => _userActivelyInChat = false);
@@ -644,6 +648,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.inactive ||
         state == AppLifecycleState.hidden) {
+      ChatForegroundSync.notifyPaused();
       if (_userActivelyInChat && mounted) {
         print('[Badge] app backgrounded -> clear activelyInChat');
         setState(() => _userActivelyInChat = false);
@@ -1618,7 +1623,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     if (chatScreen == 'C5') return _selectedPrivate?.id;
     if (chatScreen == 'C2') return _selectedGroup?.id;
     if (chatScreen == 'CR') return _selectedRobot?.id;
-    if (chatScreen == 'AA1' || chatScreen == 'AA2') {
+    if (chatScreen == 'AA1' || chatScreen == 'AA2' || chatScreen == 'AA3') {
       return _selectedApprovalAssistant?.id;
     }
     if (chatScreen == 'TA1') {
@@ -1645,7 +1650,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     // 历史 / 媒体 / 群资料 / 会话内名片 / 智能总结：嵌在右侧会话栏，不撑满整页。
     if (screen == 'C12' || screen == 'C13') return screen;
     if (screen == 'AS1' || screen == 'AS2' || screen == 'AS3') return screen;
-    if (screen == 'AA1' || screen == 'AA2') return screen;
+    if (screen == 'AA1' || screen == 'AA2' || screen == 'AA3') return screen;
     if (screen == 'TA1') return screen;
     if (screen == 'DA1') return screen;
     if (screen == 'WS1') return screen;
@@ -1679,7 +1684,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     if (screen == 'C6') return 'C6';
     if (screen == 'C12' || screen == 'C13') return screen;
     if (screen == 'AS1' || screen == 'AS2' || screen == 'AS3') return screen;
-    if (screen == 'AA2') return screen;
+    if (screen == 'AA2' || screen == 'AA3') return screen;
     if (screen == 'C9' && _profileEmbedsInDualPane) return 'C9';
     return null;
   }
@@ -1698,6 +1703,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         screen == 'AS3' ||
         screen == 'AA1' ||
         screen == 'AA2' ||
+        screen == 'AA3' ||
         screen == 'RA1' ||
         screen == 'TA1' ||
         screen == 'DA1' ||
@@ -2151,7 +2157,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       // 先前没有可用 hint（或仍停在 AA1）时再导航。
       final onAa =
           widget.navigation.currentScreen == 'AA1' ||
-          widget.navigation.currentScreen == 'AA2';
+          widget.navigation.currentScreen == 'AA2' ||
+          widget.navigation.currentScreen == 'AA3';
       if (!onAa) {
         _markUserEnteredChat();
         _goChatScreen('AA1');
@@ -2392,6 +2399,10 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     widget.navigation.go('AA2');
   }
 
+  void _openApprovalAssistantProposals() {
+    widget.navigation.go('AA3');
+  }
+
   Widget _buildApprovalAssistantPage({bool showBackButton = true}) {
     final hint =
         _selectedApprovalAssistant ??
@@ -2412,7 +2423,21 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       onBack: () => _leaveChatToInbox(clearSelection: true),
       onConversationRead: _handleConversationRead,
       onOpenPendingList: _openApprovalAssistantPending,
+      onOpenProposals: _openApprovalAssistantProposals,
       onOpenApproval: (share) => _openApprovalFromChat(share, from: 'AA1'),
+    );
+  }
+
+  Widget _buildApprovalAssistantProposalPage() {
+    return NativeApprovalAssistantProposalPage(
+      session: widget.session,
+      onBack: () {
+        if (widget.navigation.history.contains('AA1')) {
+          widget.navigation.popTo('AA1');
+        } else {
+          widget.navigation.back();
+        }
+      },
     );
   }
 
@@ -2453,7 +2478,12 @@ class _NativeScreenHostState extends State<NativeScreenHost>
   String? _activeDualChatSlotId() {
     final screen = widget.navigation.currentScreen;
     final dual = _dualPaneChatScreen;
-    if (screen == 'AA1' || screen == 'AA2' || dual == 'AA1' || dual == 'AA2') {
+    if (screen == 'AA1' ||
+        screen == 'AA2' ||
+        screen == 'AA3' ||
+        dual == 'AA1' ||
+        dual == 'AA2' ||
+        dual == 'AA3') {
       return 'aa';
     }
     if (screen == 'TA1' || dual == 'TA1') {
@@ -2506,7 +2536,12 @@ class _NativeScreenHostState extends State<NativeScreenHost>
   _DualChatSlot? _captureActiveDualChatSlot() {
     final screen = widget.navigation.currentScreen;
     final dual = _dualPaneChatScreen;
-    if (screen == 'AA1' || screen == 'AA2' || dual == 'AA1' || dual == 'AA2') {
+    if (screen == 'AA1' ||
+        screen == 'AA2' ||
+        screen == 'AA3' ||
+        dual == 'AA1' ||
+        dual == 'AA2' ||
+        dual == 'AA3') {
       return _DualChatSlot.approval(_selectedApprovalAssistant);
     }
     if (screen == 'TA1' || dual == 'TA1') {
@@ -2599,6 +2634,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
             onBack: () => _leaveChatToInbox(clearSelection: true),
             onConversationRead: _handleConversationRead,
             onOpenPendingList: _openApprovalAssistantPending,
+            onOpenProposals: _openApprovalAssistantProposals,
             onOpenApproval: (share) =>
                 _openApprovalFromChat(share, from: 'AA1'),
           ),
@@ -2829,6 +2865,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       'AS2' => _buildAiSummaryCreatePage(),
       'AS3' => _buildAiSummaryDetailPage(),
       'AA2' => _buildApprovalAssistantPendingPage(),
+      'AA3' => _buildApprovalAssistantProposalPage(),
       _ => null,
     };
 
@@ -3319,6 +3356,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         return _buildApprovalAssistantPage();
       case 'AA2':
         return _buildApprovalAssistantPendingPage();
+      case 'AA3':
+        return _buildApprovalAssistantProposalPage();
       case 'TA1':
         return _buildTaskAssistantPage();
       case 'DA1':
@@ -4196,6 +4235,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       'AS3',
       'AA1',
       'AA2',
+      'AA3',
       'RA1',
     }.contains(screen);
   }
@@ -4552,6 +4592,13 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     ApprovalChatShare share, {
     required String from,
   }) {
+    if (share.businessType.toUpperCase() == 'PROPOSAL_INTAKE') {
+      return showProposalIntakeOverlay(
+        context: context,
+        session: widget.session,
+        proposalId: share.businessId,
+      );
+    }
     return showApprovalDetailOverlay(
       context: context,
       session: widget.session,

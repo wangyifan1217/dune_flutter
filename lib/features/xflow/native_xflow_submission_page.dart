@@ -542,6 +542,7 @@ class _NativeXflowSubmissionPageState extends State<NativeXflowSubmissionPage> {
     final submitter = _submitterName.trim();
     final titledForm =
         submitter.isEmpty ? formTitle : '$submitter - $formTitle';
+    final keyboardOpen = MediaQuery.viewInsetsOf(context).bottom > 0;
     return ColoredBox(
       color: DunesColors.bgApp,
       child: SafeArea(
@@ -616,13 +617,6 @@ class _NativeXflowSubmissionPageState extends State<NativeXflowSubmissionPage> {
                           tag: _trail == null ? '待同步' : '流程追踪',
                           child: XfDetTrackTimeline(bundle: bundle),
                         ),
-                        if (_myTodo != null) ...[
-                          const SizedBox(height: 12),
-                          XfDetApproveCard(
-                            onApprove: _approve,
-                            onReject: _reject,
-                          ),
-                        ],
                         XfDetActions(
                           detail: bundle.detail,
                           canReedit: bundle.canReedit,
@@ -634,15 +628,21 @@ class _NativeXflowSubmissionPageState extends State<NativeXflowSubmissionPage> {
                     ),
                     ),
             ),
-            if (_myTodo != null)
-              XfDetNextPendingFooter(
-                totalCount: _pendingTotal,
-                loading: _pendingBusy,
-                onPressed: _pendingBusy
-                    ? null
-                    : () => unawaited(_goNextPending(afterDecision: false)),
-              )
-            else if (_canWithdraw || detail?.status.toUpperCase() == 'DRAFT')
+            if (_myTodo != null) ...[
+              XfDetApproveDock(
+                onApprove: _approve,
+                onReject: _reject,
+                compact: keyboardOpen,
+              ),
+              if (!keyboardOpen)
+                XfDetNextPendingFooter(
+                  totalCount: _pendingTotal,
+                  loading: _pendingBusy,
+                  onPressed: _pendingBusy
+                      ? null
+                      : () => unawaited(_goNextPending(afterDecision: false)),
+                ),
+            ] else if (_canWithdraw || detail?.status.toUpperCase() == 'DRAFT')
               XflowXfActionBar(
                 label: detail?.status.toUpperCase() == 'DRAFT'
                     ? '编辑并重新提交'

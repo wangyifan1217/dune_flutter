@@ -62,11 +62,14 @@ Future<void> showProposalIntakeOverlay({
     MaterialPageRoute<void>(
       builder: (ctx) => Material(
         color: DunesColors.bgApp,
-        child: hostFor(() {
-          if (Navigator.of(ctx).canPop()) {
-            Navigator.of(ctx).pop();
-          }
-        }),
+        child: SafeArea(
+          bottom: false,
+          child: hostFor(() {
+            if (Navigator.of(ctx).canPop()) {
+              Navigator.of(ctx).pop();
+            }
+          }),
+        ),
       ),
     ),
   );
@@ -105,6 +108,12 @@ class _ProposalIntakeOverlayHostState
     _load();
   }
 
+  bool get _formReady =>
+      !_loading && _error == null && _row != null && _options != null;
+
+  /// PC 弹窗保留一层关闭条。APP 把关闭放进表单顶栏，避免刘海下再叠一条。
+  bool get _showHostChrome => isDesktopCommOnly || !_formReady;
+
   Future<void> _load() async {
     setState(() {
       _loading = true;
@@ -136,29 +145,30 @@ class _ProposalIntakeOverlayHostState
   Widget build(BuildContext context) {
     return Column(
       children: [
-        Container(
-          height: 52,
-          padding: const EdgeInsets.symmetric(horizontal: 8),
-          decoration: const BoxDecoration(
-            border: Border(bottom: BorderSide(color: Color(0xFFE9E2EF))),
-          ),
-          child: Row(
-            children: [
-              IconButton(
-                onPressed: widget.onClose,
-                icon: const Icon(Icons.close_rounded),
-              ),
-              const Expanded(
-                child: Text(
-                  '协作提案',
-                  style: TextStyle(fontWeight: FontWeight.w700),
-                ),
-              ),
-            ],
-          ),
-        ),
+        if (_showHostChrome) _hostChrome(),
         Expanded(child: _body()),
       ],
+    );
+  }
+
+  Widget _hostChrome() {
+    return SizedBox(
+      height: 48,
+      child: Row(
+        children: [
+          IconButton(
+            tooltip: '关闭',
+            onPressed: widget.onClose,
+            icon: const Icon(Icons.close_rounded),
+          ),
+          const Expanded(
+            child: Text(
+              '协作提案',
+              style: TextStyle(fontWeight: FontWeight.w700),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -184,6 +194,7 @@ class _ProposalIntakeOverlayHostState
       saving: false,
       service: _service,
       enableComments: true,
+      onClose: isDesktopCommOnly ? null : widget.onClose,
       onChanged: (row) => _row = row,
       onSaved: (row) {
         setState(() => _row = row);

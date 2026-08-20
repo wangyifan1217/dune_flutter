@@ -807,6 +807,7 @@ class ProposalIntakeForm extends StatefulWidget {
     required this.onError,
     this.enableComments = true,
     this.onDeleted,
+    this.onClose,
     this.onNext,
     this.onAfterFinalDecision,
     this.nextCount = 0,
@@ -826,6 +827,7 @@ class ProposalIntakeForm extends StatefulWidget {
   final ValueChanged<ProposalIntakeRow> onSubmit;
   final ValueChanged<String> onError;
   final VoidCallback? onDeleted;
+  final VoidCallback? onClose;
   final VoidCallback? onNext;
   final ValueChanged<int>? onAfterFinalDecision;
   final int nextCount;
@@ -1793,7 +1795,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     if (compact) {
       return Container(
         width: double.infinity,
-        padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+        padding: const EdgeInsets.fromLTRB(8, 8, 12, 10),
         decoration: const BoxDecoration(
           color: Color(0xFFFBFAFD),
           border: Border(bottom: BorderSide(color: Color(0xFFEAE3F0))),
@@ -1802,23 +1804,36 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              _headerTitle,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: ProposalPalette.text,
-                fontWeight: FontWeight.w700,
-                fontSize: 15,
-              ),
+            Row(
+              children: [
+                if (widget.onClose != null) _closeButton(),
+                Expanded(
+                  child: Text(
+                    _headerTitle,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: ProposalPalette.text,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 15,
+                    ),
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: 8),
-            chips,
+            Padding(
+              padding: EdgeInsets.only(left: widget.onClose != null ? 8 : 4),
+              child: chips,
+            ),
             const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: _topActionButtons(compact: true),
+            Padding(
+              padding: EdgeInsets.only(left: widget.onClose != null ? 8 : 4),
+              child: Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: _topActionButtons(compact: true),
+              ),
             ),
           ],
         ),
@@ -1837,7 +1852,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
 
     return Container(
       height: 56,
-      padding: const EdgeInsets.symmetric(horizontal: 18),
+      padding: EdgeInsets.fromLTRB(widget.onClose != null ? 8 : 18, 0, 18, 0),
       decoration: const BoxDecoration(
         color: Color(0xFFFBFAFD),
         border: Border(bottom: BorderSide(color: Color(0xFFEAE3F0))),
@@ -1846,6 +1861,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
+          if (widget.onClose != null) _closeButton(),
           ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 280),
             child: Text(
@@ -1875,6 +1891,17 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _closeButton() {
+    return IconButton(
+      tooltip: '关闭',
+      onPressed: widget.onClose,
+      visualDensity: VisualDensity.compact,
+      padding: EdgeInsets.zero,
+      constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+      icon: const Icon(Icons.close_rounded, size: 22),
     );
   }
 

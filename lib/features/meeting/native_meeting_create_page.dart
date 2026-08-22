@@ -53,8 +53,6 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
   bool _handlingBack = false;
   String? _error;
   _CreateMode _mode = _CreateMode.live;
-  static const double _livePreviewMaxHeight = 280;
-  final ScrollController _livePreviewScrollController = ScrollController();
   late final AnimationController _pulseController = AnimationController(
     vsync: this,
     duration: const Duration(milliseconds: 1100),
@@ -88,8 +86,6 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
     }
     _live.active.addListener(_onLiveChanged);
     _live.paused.addListener(_onLiveChanged);
-    _live.lines.addListener(_onLiveChanged);
-    _live.partial.addListener(_onLiveChanged);
     _live.elapsed.addListener(_onLiveChanged);
     _live.interruptionHint.addListener(_onLiveInterruptionHint);
     _recordingCtrl.state.addListener(_onLiveChanged);
@@ -104,11 +100,6 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
   void _onLiveChanged() {
     if (!mounted) return;
     setState(() {});
-    if (!_live.active.value) return;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || !_livePreviewScrollController.hasClients) return;
-      _livePreviewScrollController.jumpTo(0);
-    });
   }
 
   @override
@@ -117,12 +108,9 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
     _pulseController.dispose();
     _live.active.removeListener(_onLiveChanged);
     _live.paused.removeListener(_onLiveChanged);
-    _live.lines.removeListener(_onLiveChanged);
-    _live.partial.removeListener(_onLiveChanged);
     _live.elapsed.removeListener(_onLiveChanged);
     _live.interruptionHint.removeListener(_onLiveInterruptionHint);
     _recordingCtrl.state.removeListener(_onLiveChanged);
-    _livePreviewScrollController.dispose();
     _titleCtrl.dispose();
     super.dispose();
   }
@@ -182,7 +170,7 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
   String _mapRecordError(Object e) {
     final raw = e.toString().toLowerCase();
     if (raw.contains('meeting session unavailable(501)')) {
-      return '实时转写服务暂未在服务器启用（501），请先使用“上传录音转写”';
+      return '现场录音服务暂不可用，请先使用“上传录音转写”';
     }
     if (e is PlatformException) {
       final code = e.code.toLowerCase();
@@ -223,7 +211,7 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
 
   Future<void> _startLive() async {
     if (!_hasMeetingTitle) {
-      const msg = '请先填写会议标题后再开始实时转写';
+      const msg = '请先填写会议标题后再开始录音';
       setState(() => _error = msg);
       showDunesToast(context, msg, kind: DunesToastKind.error);
       return;
@@ -613,8 +601,6 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
     final state = _recordingCtrl.state.value;
     final liveWorking = _live.active.value;
     final livePaused = _live.paused.value;
-    final liveLines = _live.lines.value;
-    final livePartial = _live.partial.value;
     final liveElapsed = _live.elapsed.value;
     final recording = liveWorking;
     final canSubmit = !_submitting &&
@@ -689,7 +675,7 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
                       Text(
                         _mode == _CreateMode.upload
                             ? '上传或录制音频，生成摘要与待办'
-                            : '边录边看实时转写，结束后一键生成纪要',
+                            : '现场录音，结束后一键生成纪要',
                         style: DunesTypography.sans(
                           fontSize: 12,
                           color: Colors.white.withValues(alpha: 0.85),
@@ -732,7 +718,7 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
                 _CreateMode.live: Padding(
                   padding: const EdgeInsets.symmetric(vertical: 10),
                   child: Text(
-                    '录音实时转写',
+                    '现场录音',
                     textAlign: TextAlign.center,
                     style: DunesTypography.sans(
                       fontSize: 13,
@@ -774,7 +760,7 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
               decoration: InputDecoration(
                 hintText: '请输入会议标题，例如：周例会-销售复盘',
                 helperText: _mode == _CreateMode.live && !recording && !_hasMeetingTitle
-                    ? '开始实时转写前必须填写会议标题'
+                    ? '开始录音前必须填写会议标题'
                     : null,
                 helperStyle: DunesTypography.sans(
                   fontSize: 11,
@@ -880,7 +866,7 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
 
           if (_mode == _CreateMode.live) ...[
             _sectionCard(
-              title: '实时转写控制',
+              title: '录音控制',
               icon: Icons.fiber_manual_record_rounded,
               child: Column(
                 children: [
@@ -943,7 +929,7 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
                       child: OutlinedButton.icon(
                         onPressed: canStartLive ? _startLive : null,
                         icon: const Icon(Icons.mic_rounded),
-                        label: const Text('开始实时转写'),
+                        label: const Text('开始录音'),
                         style: OutlinedButton.styleFrom(
                           foregroundColor: DunesColors.brandPurpleDeep,
                           side: const BorderSide(color: DunesColors.brandPurpleLine),
@@ -1014,22 +1000,13 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
             ),
             const SizedBox(height: 12),
             _sectionCard(
-              title: '实时转写预览',
-              icon: Icons.record_voice_over_outlined,
-              trailing: liveLines.isNotEmpty || livePartial.isNotEmpty
-                  ? Text(
-                      '上下滑动查看更多',
-                      style: DunesTypography.sans(
-                        fontSize: 11,
-                        color: DunesColors.text3,
-                      ),
-                    )
-                  : null,
-              child: _buildLivePreviewContent(
-                liveLines: liveLines,
-                livePartial: livePartial,
-                liveRecording: liveRecording,
-                livePaused: livePaused,
+              title: '录音状态',
+              icon: Icons.graphic_eq_rounded,
+              child: _buildRecordingStatusContent(
+                recording: liveRecording,
+                paused: livePaused,
+                elapsed: liveElapsed,
+                recorderState: state,
               ),
             ),
           ],
@@ -1103,67 +1080,94 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
     );
   }
 
-  Widget _buildLivePreviewContent({
-    required List<String> liveLines,
-    required String livePartial,
-    required bool liveRecording,
-    required bool livePaused,
+  Widget _buildRecordingStatusContent({
+    required bool recording,
+    required bool paused,
+    required Duration elapsed,
+    required MeetingRecordingState recorderState,
   }) {
-    if (liveLines.isEmpty && livePartial.isEmpty) {
+    final elapsedText = _formatLiveElapsed(elapsed);
+    if (!recording) {
       return Text(
-        liveRecording && !livePaused
-            ? '正在监听语音，请开始发言...'
-            : (liveRecording && livePaused)
-            ? '已暂停，点击“继续录音”后恢复录音与实时转写'
-            : '点击“开始实时转写”后，这里会实时显示文字',
+        '点击「开始录音」后，这里会显示录音时长与状态。结束后再上传转写并生成纪要。',
         style: DunesTypography.sans(
           fontSize: 13,
           color: DunesColors.text3,
+          height: 1.5,
         ),
       );
     }
 
-    return ConstrainedBox(
-      constraints: const BoxConstraints(maxHeight: _livePreviewMaxHeight),
-      child: Scrollbar(
-        controller: _livePreviewScrollController,
-        thumbVisibility: true,
-        radius: const Radius.circular(8),
-        child: SingleChildScrollView(
-          controller: _livePreviewScrollController,
-          padding: EdgeInsets.zero,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (livePartial.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: Text(
-                    livePartial,
-                    style: DunesTypography.sans(
-                      fontSize: 13,
-                      color: DunesColors.brandPurple,
-                      height: 1.5,
-                    ).copyWith(fontStyle: FontStyle.italic),
+    final active = !paused;
+    final title = paused ? '录音已暂停' : '正在录音中';
+    final subtitle = paused
+        ? '点击「继续录音」后恢复采集，结束后再转写生成纪要'
+        : switch (recorderState) {
+            MeetingRecordingState.recordingBackground =>
+              '已进入后台/锁屏，录音仍在继续',
+            MeetingRecordingState.stopping => '正在停止并保存录音…',
+            _ => '麦克风采集中，结束后可选择生成纪要或存为草稿',
+          };
+
+    return Column(
+      children: [
+        AnimatedBuilder(
+          animation: _pulseController,
+          builder: (context, child) {
+            final scale = active ? 0.92 + _pulseController.value * 0.16 : 1.0;
+            return Transform.scale(
+              scale: scale,
+              child: Container(
+                width: 72,
+                height: 72,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: (paused ? DunesColors.text3 : DunesColors.coral)
+                      .withValues(alpha: 0.12),
+                  border: Border.all(
+                    color: paused ? DunesColors.text3 : DunesColors.coral,
+                    width: 2,
                   ),
                 ),
-              ...liveLines.map(
-                (line) => Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: Text(
-                    line,
-                    style: DunesTypography.sans(
-                      fontSize: 13,
-                      color: DunesColors.text2,
-                      height: 1.5,
-                    ),
-                  ),
+                child: Icon(
+                  paused ? Icons.pause_rounded : Icons.mic_rounded,
+                  color: paused ? DunesColors.text2 : DunesColors.coral,
+                  size: 32,
                 ),
               ),
-            ],
+            );
+          },
+        ),
+        const SizedBox(height: 12),
+        Text(
+          title,
+          style: DunesTypography.sans(
+            fontSize: 16,
+            fontWeight: FontWeight.w700,
+            color: paused ? DunesColors.text2 : DunesColors.coral,
           ),
         ),
-      ),
+        const SizedBox(height: 6),
+        Text(
+          elapsedText,
+          style: DunesTypography.sans(
+            fontSize: 28,
+            fontWeight: FontWeight.w700,
+            color: DunesColors.brandPurpleDeep,
+            letterSpacing: 1.2,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          subtitle,
+          textAlign: TextAlign.center,
+          style: DunesTypography.sans(
+            fontSize: 12.5,
+            color: DunesColors.text3,
+            height: 1.45,
+          ),
+        ),
+      ],
     );
   }
 

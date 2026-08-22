@@ -5642,6 +5642,15 @@ class _NativeB2PageState extends State<_NativeB2Page> {
                           badge: stats.ccProposalCount,
                           onTap: () => widget.navigation.go('P1'),
                         ),
+                        if (stats.postApprovalTodoEnabled)
+                          _buildMenuItem(
+                            icon: Icons.task_alt_outlined,
+                            title: '审批代办',
+                            desc:
+                                '${stats.pendingTodoForMe} 待办理 · ${stats.handledTodoThisMonth} 本月已办',
+                            badge: stats.pendingTodoForMe,
+                            onTap: () => widget.navigation.go('B13'),
+                          ),
                       ]),
                       const SizedBox(height: 10),
                       _buildMenuList(<Widget>[
@@ -6640,6 +6649,9 @@ class _NativeMyStats {
     required this.ccProposalCount,
     required this.ccProposalPending,
     required this.pendingInitiateForMe,
+    required this.pendingTodoForMe,
+    required this.handledTodoThisMonth,
+    this.postApprovalTodoEnabled = false,
   });
 
   const _NativeMyStats.empty()
@@ -6651,7 +6663,10 @@ class _NativeMyStats {
       approvalRejected = 0,
       ccProposalCount = 0,
       ccProposalPending = 0,
-      pendingInitiateForMe = 0;
+      pendingInitiateForMe = 0,
+      pendingTodoForMe = 0,
+      handledTodoThisMonth = 0,
+      postApprovalTodoEnabled = false;
 
   final int pendingForMe;
   final int initiatedByMe;
@@ -6664,6 +6679,9 @@ class _NativeMyStats {
 
   /// 待我发起：他人推送给我、待我确认发起的提案数。
   final int pendingInitiateForMe;
+  final int pendingTodoForMe;
+  final int handledTodoThisMonth;
+  final bool postApprovalTodoEnabled;
 
   /// 与 B14「我发起的」列表口径对齐，避免 my-stats 历史 approval 行导致数字偏大/横幅闪烁。
   _NativeMyStats alignedWithInitiatedList(List<XflowProposalItem> rows) {
@@ -6709,6 +6727,9 @@ class _NativeMyStats {
       ccProposalCount: ccProposalCount,
       ccProposalPending: ccProposalPending,
       pendingInitiateForMe: pendingInitiateForMe ?? this.pendingInitiateForMe,
+      pendingTodoForMe: pendingTodoForMe,
+      handledTodoThisMonth: handledTodoThisMonth,
+      postApprovalTodoEnabled: postApprovalTodoEnabled,
     );
   }
 
@@ -6735,6 +6756,9 @@ class _NativeMyStats {
       ccProposalCount: readInt(<String>['ccProposalCount']),
       ccProposalPending: readInt(<String>['ccProposalPending']),
       pendingInitiateForMe: readInt(<String>['pendingInitiateForMe']),
+      pendingTodoForMe: readInt(<String>['pendingTodoForMe']),
+      handledTodoThisMonth: readInt(<String>['handledTodoThisMonth']),
+      postApprovalTodoEnabled: json['postApprovalTodoEnabled'] == true,
     );
   }
 }

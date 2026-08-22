@@ -11,6 +11,7 @@ import 'approval_chat_forward.dart';
 import 'approval_chat_share.dart';
 import 'approval_pending_nav.dart';
 import 'native_b10_page.dart';
+import 'task_todo_actions.dart';
 import 'xflow_detail_comments.dart';
 import 'xflow_detail_logic.dart';
 import 'xflow_detail_widgets.dart';
@@ -56,12 +57,15 @@ class _NativeXflowSubmissionPageState extends State<NativeXflowSubmissionPage> {
   XflowTemplateDetail? _template;
   XflowApprovalTrail? _trail;
   XflowTodoHint? _myTodo;
+  XflowProposalItem? _myTask;
+  bool _todoEnabled = false;
   Map<int, String> _assigneeNames = const {};
   String? _error;
   bool _loading = true;
   bool _forwarding = false;
   int _pendingTotal = 0;
   bool _pendingBusy = false;
+  bool _taskBusy = false;
 
   @override
   void initState() {
@@ -90,6 +94,17 @@ class _NativeXflowSubmissionPageState extends State<NativeXflowSubmissionPage> {
           businessType: widget.businessType,
           businessId: widget.businessId,
         ),
+        () async {
+          try {
+            return await _service.findMyOpenTask(
+              businessType: widget.businessType,
+              businessId: widget.businessId,
+            );
+          } catch (_) {
+            return null;
+          }
+        }(),
+        _service.fetchPostApprovalTodoEnabled(),
       ]);
       final trail = results[1] as XflowApprovalTrail?;
       final assigneeNames = await _service.fetchSubmissionAssigneeNames(
@@ -98,11 +113,15 @@ class _NativeXflowSubmissionPageState extends State<NativeXflowSubmissionPage> {
       );
       if (!mounted) return;
       final myTodo = results[2] as XflowTodoHint?;
+      final myTask = results[3] as XflowProposalItem?;
+      final todoEnabled = results[4] == true;
       setState(() {
         _detail = detail;
         _template = results[0] as XflowTemplateDetail;
         _trail = trail;
         _myTodo = myTodo;
+        _myTask = todoEnabled ? myTask : null;
+        _todoEnabled = todoEnabled;
         _assigneeNames = assigneeNames;
         _loading = false;
       });
@@ -384,6 +403,23 @@ class _NativeXflowSubmissionPageState extends State<NativeXflowSubmissionPage> {
     await _goNextPending(afterDecision: true);
   }
 
+  Future<void> _completeMyTask({bool? verifyPassed}) async {
+    final item = _myTask;
+    if (item == null || _taskBusy) return;
+    setState(() => _taskBusy = true);
+    try {
+      final ok = await confirmAndCompleteTaskTodo(
+        context: context,
+        service: _service,
+        item: item,
+        verifyPassed: verifyPassed,
+      );
+      if (ok && mounted) await _load();
+    } finally {
+      if (mounted) setState(() => _taskBusy = false);
+    }
+  }
+
   String get _submitterName {
     final detail = _detail;
     if (detail != null) {
@@ -585,6 +621,11 @@ class _NativeXflowSubmissionPageState extends State<NativeXflowSubmissionPage> {
                               bundle.assigneeNames,
                             ),
                           ),
+                          if (_todoEnabled)
+                            XfDetTaskTodoBanner(
+                              subStatus: detail?.subStatus ?? '',
+                              myTask: _myTask,
+                            ),
                         ],
                         XflowFormCard(
                           title: titledForm,
@@ -642,7 +683,13 @@ class _NativeXflowSubmissionPageState extends State<NativeXflowSubmissionPage> {
                       ? null
                       : () => unawaited(_goNextPending(afterDecision: false)),
                 ),
-            ] else if (_canWithdraw || detail?.status.toUpperCase() == 'DRAFT')
+            ] else if (_todoEnabled && _myTask != null)
+              XfDetTaskDock(
+                item: _myTask!,
+                busy: _taskBusy,
+                onComplete: _completeMyTask,
+              )
+            else if (_canWithdraw || detail?.status.toUpperCase() == 'DRAFT')
               XflowXfActionBar(
                 label: detail?.status.toUpperCase() == 'DRAFT'
                     ? '编辑并重新提交'

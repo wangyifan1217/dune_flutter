@@ -211,6 +211,23 @@ class ProposalSectionTitle extends StatelessWidget {
   );
 }
 
+enum ProposalFieldTone { fill, auto, locked }
+
+ProposalFieldTone proposalFieldTone({required bool enabled, String? source}) {
+  if (!enabled) return ProposalFieldTone.locked;
+  final tag = (source ?? '').trim();
+  if (tag.isEmpty) return ProposalFieldTone.fill;
+  if (tag.contains('系统') ||
+      tag.contains('当前用户') ||
+      tag.contains('管理后台') ||
+      tag.contains('合同抓取') ||
+      tag.contains('从合同归集') ||
+      tag.contains('实时串联')) {
+    return ProposalFieldTone.auto;
+  }
+  return ProposalFieldTone.fill;
+}
+
 class ProposalField extends StatelessWidget {
   const ProposalField({
     super.key,
@@ -219,50 +236,92 @@ class ProposalField extends StatelessWidget {
     this.required = false,
     this.source,
     this.trailing,
+    this.footer,
+    this.tone,
   });
 
   final String label;
   final Widget child;
   final bool required;
   final String? source;
+  final ProposalFieldTone? tone;
 
   /// 行内复核控件，紧贴字段标签右侧展示。
   final Widget? trailing;
 
+  /// 字段下方补充信息，例如合同改动对照。
+  final Widget? footer;
+
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.all(12),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Wrap(
-          spacing: 8,
-          runSpacing: 6,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          children: [
-            Text(
-              label,
-              style: const TextStyle(
-                color: ProposalPalette.text3,
-                fontSize: 11,
-                letterSpacing: .2,
-              ),
-            ),
-            if (required)
-              const Text(
-                '*',
-                style: TextStyle(color: ProposalPalette.coral, fontSize: 12),
-              ),
-            if (source != null)
-              ProposalStatusChip(label: source!, kind: ProposalChipKind.purple),
-            ?trailing,
-          ],
+  Widget build(BuildContext context) {
+    final resolved = tone ?? proposalFieldTone(enabled: true, source: source);
+    final (bg, border, chipKind) = switch (resolved) {
+      ProposalFieldTone.auto => (
+        const Color(0xFFFFF6E8),
+        const Color(0xFFE8D2A8),
+        ProposalChipKind.draft,
+      ),
+      ProposalFieldTone.locked => (
+        const Color(0xFFF4F5F6),
+        const Color(0xFFD5D8DC),
+        ProposalChipKind.draft,
+      ),
+      ProposalFieldTone.fill => (
+        Colors.transparent,
+        Colors.transparent,
+        ProposalChipKind.purple,
+      ),
+    };
+    return Padding(
+      padding: const EdgeInsets.all(4),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: resolved == ProposalFieldTone.fill ? null : bg,
+          borderRadius: BorderRadius.circular(10),
+          border: resolved == ProposalFieldTone.fill
+              ? null
+              : Border.all(color: border),
         ),
-        const SizedBox(height: 7),
-        child,
-      ],
-    ),
-  );
+        child: Padding(
+          padding: const EdgeInsets.all(8),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Wrap(
+                spacing: 8,
+                runSpacing: 6,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  Text(
+                    label,
+                    style: const TextStyle(
+                      color: ProposalPalette.text3,
+                      fontSize: 11,
+                      letterSpacing: .2,
+                    ),
+                  ),
+                  if (required)
+                    const Text(
+                      '*',
+                      style: TextStyle(
+                        color: ProposalPalette.coral,
+                        fontSize: 12,
+                      ),
+                    ),
+                  if (source != null)
+                    ProposalStatusChip(label: source!, kind: chipKind),
+                  ?trailing,
+                ],
+              ),
+              const SizedBox(height: 7),
+              child,
+              if (footer != null) ...[const SizedBox(height: 6), footer!],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 /// 逐条复核开关：复核通过后转为绿色可撤销状态。
@@ -518,7 +577,17 @@ class _ProposalCenterToastState extends State<_ProposalCenterToast> {
   );
 }
 
-InputDecoration proposalInputDecoration({String? hint, bool readOnly = false}) {
+InputDecoration proposalInputDecoration({
+  String? hint,
+  bool readOnly = false,
+  ProposalFieldTone tone = ProposalFieldTone.fill,
+}) {
+  final fillColor = switch (tone) {
+    ProposalFieldTone.auto => const Color(0xFFFFFBF3),
+    ProposalFieldTone.locked => const Color(0xFFF6F7F8),
+    ProposalFieldTone.fill =>
+      readOnly ? const Color(0xFFF6F7F8) : const Color(0xFFFFFEFF),
+  };
   return InputDecoration(
     hintText: hint,
     hintMaxLines: 1,
@@ -528,7 +597,7 @@ InputDecoration proposalInputDecoration({String? hint, bool readOnly = false}) {
       color: ProposalPalette.text3,
     ),
     filled: true,
-    fillColor: readOnly ? const Color(0xFFF5F1F8) : const Color(0xFFFFFEFF),
+    fillColor: fillColor,
     isDense: true,
     contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
     enabledBorder: OutlineInputBorder(
@@ -577,17 +646,23 @@ class ProposalPills extends StatelessWidget {
             label: Text(option),
             selected: selected.contains(option),
             onSelected: (_) => onToggle(option),
-            selectedColor: ProposalPalette.purpleSoft,
-            backgroundColor: const Color(0xFFF7F5FA),
+            selectedColor: enabled
+                ? ProposalPalette.purpleSoft
+                : const Color(0xFFE8E9EB),
+            backgroundColor: enabled
+                ? const Color(0xFFF7F5FA)
+                : const Color(0xFFF4F5F6),
             surfaceTintColor: Colors.transparent,
             side: BorderSide(
               color: selected.contains(option)
-                  ? ProposalPalette.purple
+                  ? (enabled ? ProposalPalette.purple : const Color(0xFFC5C7CB))
                   : const Color(0xFFC9C0D4),
             ),
             labelStyle: TextStyle(
               color: selected.contains(option)
-                  ? ProposalPalette.purpleDeep
+                  ? (enabled
+                        ? ProposalPalette.purpleDeep
+                        : const Color(0xFF5F6368))
                   : ProposalPalette.text,
               fontSize: 11,
               fontWeight: selected.contains(option)
@@ -633,7 +708,7 @@ class ProposalNextPendingFooter extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final label = totalCount > 0 ? '下一个($totalCount)' : '下一个';
+    const label = '下一个';
     return SafeArea(
       top: false,
       child: DecoratedBox(
@@ -663,6 +738,104 @@ class ProposalNextPendingFooter extends StatelessWidget {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+const proposalIntakeProcessSteps = <(String, String)>[
+  ('1', '市场部负责人二新建提案，填写市场、合同、财务与人员指定。'),
+  ('2', '通知科技部负责人填写科技内容。'),
+  ('3', '科技部负责人填写完成后，提交给市场部负责人二。'),
+  ('4', '市场部负责人二提交各板块进入复核。'),
+  ('5', '市场部负责人一复核市场板块；市场部负责人二逐条复核科技；财务部负责人二逐条复核、财务部负责人一整板块复核；行政负责人复核合同。'),
+  ('6', '各板块复核完成后，市场部负责人二通知最终确认人。'),
+  ('7', '最终确认人通过即完成；驳回则退回重填。'),
+];
+
+Future<void> showProposalIntakeProcessHelp(BuildContext context) {
+  return showDialog<void>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: const Text('协作提案流程'),
+      content: SizedBox(
+        width: 420,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              for (final step in proposalIntakeProcessSteps)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        width: 22,
+                        height: 22,
+                        alignment: Alignment.center,
+                        decoration: const BoxDecoration(
+                          color: ProposalPalette.purpleSoft,
+                          shape: BoxShape.circle,
+                        ),
+                        child: Text(
+                          step.$1,
+                          style: const TextStyle(
+                            color: ProposalPalette.purpleDeep,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          step.$2,
+                          style: const TextStyle(
+                            color: ProposalPalette.text,
+                            fontSize: 13,
+                            height: 1.45,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(ctx),
+          child: const Text('知道了'),
+        ),
+      ],
+    ),
+  );
+}
+
+class ProposalIntakeProcessHelpButton extends StatelessWidget {
+  const ProposalIntakeProcessHelpButton({super.key, this.compact = false});
+
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    return IconButton(
+      tooltip: '协作提案流程',
+      visualDensity: VisualDensity.compact,
+      padding: EdgeInsets.zero,
+      constraints: BoxConstraints(
+        minWidth: compact ? 36 : 40,
+        minHeight: compact ? 36 : 40,
+      ),
+      onPressed: () => unawaited(showProposalIntakeProcessHelp(context)),
+      icon: Icon(
+        Icons.help_outline_rounded,
+        size: compact ? 20 : 22,
+        color: ProposalPalette.purpleDeep,
       ),
     );
   }

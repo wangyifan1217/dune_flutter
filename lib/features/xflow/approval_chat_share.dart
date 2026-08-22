@@ -11,6 +11,8 @@ class ApprovalChatShare {
     this.code = '',
     this.submitterName = '',
     this.actionLabel = '',
+    this.todoId = 0,
+    this.kind = '',
   });
 
   final String businessType;
@@ -21,9 +23,32 @@ class ApprovalChatShare {
   final String code;
   final String submitterName;
   final String actionLabel;
+  final int todoId;
+  final String kind;
 
   bool get isProposalIntake =>
       businessType.toUpperCase() == 'PROPOSAL_INTAKE';
+
+  bool get isTaskTodo => kind.toUpperCase() == 'TASK' || todoId > 0;
+
+  /// 协作提案 / 审批待办：正文说明要对方做什么，名片只承担入口。
+  static String? assistantInstruction({
+    required ApprovalChatShare share,
+    required String bodyText,
+    Map<String, dynamic>? payload,
+  }) {
+    if (share.isTaskTodo) {
+      final fromPayload = '${payload?['instruction'] ?? ''}'.trim();
+      final text = fromPayload.isNotEmpty ? fromPayload : bodyText.trim();
+      if (text.isEmpty) return '你有一条审批待办';
+      return text;
+    }
+    return proposalIntakeInstruction(
+      share: share,
+      bodyText: bodyText,
+      payload: payload,
+    );
+  }
 
   /// 协作提案名片旁的待办说明：优先用 payload.instruction，否则用消息正文。
   static String? proposalIntakeInstruction({
@@ -40,6 +65,16 @@ class ApprovalChatShare {
       return null;
     }
     return text;
+  }
+
+  /// 审批待办名片副标题：动作名（付款 / 盖章）+ 子状态。
+  String get taskCardLine {
+    final parts = <String>[
+      if (actionLabel.trim().isNotEmpty) actionLabel.trim(),
+      if (status.trim().isNotEmpty) status.trim(),
+    ];
+    if (parts.isNotEmpty) return parts.join(' · ');
+    return '审批待办';
   }
 
   /// 协作提案名片副标题：谁提交的 + 需要填写/复核/最终确认。
@@ -74,6 +109,8 @@ class ApprovalChatShare {
         'code': code,
         if (submitterName.trim().isNotEmpty) 'submitterName': submitterName.trim(),
         if (actionLabel.trim().isNotEmpty) 'actionLabel': actionLabel.trim(),
+        if (todoId > 0) 'todoId': todoId,
+        if (kind.trim().isNotEmpty) 'kind': kind.trim(),
       },
     };
   }
@@ -90,6 +127,15 @@ class ApprovalChatShare {
       createdByName: submitterName,
       createdAt: null,
       templateKey: templateKey.isEmpty ? null : templateKey,
+      todoHint: todoId > 0
+          ? XflowTodoHint(
+              id: todoId,
+              businessType: businessType,
+              businessId: businessId,
+              status: 'OPEN',
+              kind: kind.trim().isEmpty ? 'TASK' : kind.trim(),
+            )
+          : null,
     );
   }
 
@@ -145,6 +191,9 @@ class ApprovalChatShare {
     final businessType = (map['businessType'] ?? 'PROPOSAL').toString().trim();
     if (businessType.isEmpty) return null;
     final title = (map['title'] ?? '').toString().trim();
+    final todoId = (map['todoId'] as num?)?.toInt() ??
+        int.tryParse((map['todoId'] ?? '').toString()) ??
+        0;
     return ApprovalChatShare(
       businessType: businessType,
       businessId: businessId,
@@ -158,6 +207,8 @@ class ApprovalChatShare {
           .toString()
           .trim(),
       actionLabel: (map['actionLabel'] ?? '').toString().trim(),
+      todoId: todoId,
+      kind: (map['kind'] ?? '').toString().trim(),
     );
   }
 }

@@ -8,6 +8,7 @@ import '../auth/auth_session.dart';
 import '../shell/dunes_toast.dart';
 import '../workbench/workbench_badge_notifier.dart';
 import 'approval_list_cache.dart';
+import 'task_todo_actions.dart';
 import 'xflow_models.dart';
 import 'xflow_service.dart';
 import 'xflow_shared_widgets.dart';
@@ -119,6 +120,7 @@ class NativeB13Page extends StatelessWidget {
       onOpenProposal: onOpenProposal,
       onBack: onBack,
       type: _ListType.b13,
+      initialStatusFilter: 'MINE',
       workbenchRefresh: workbenchRefresh,
     );
   }
@@ -310,7 +312,8 @@ class _NativeProposalListPageState extends State<_NativeProposalListPage> {
     }
     try {
       final rows = switch (widget.type) {
-        _ListType.b1 || _ListType.b13 => await _service.fetchB1Approvals(),
+        _ListType.b1 => await _service.fetchB1Approvals(),
+        _ListType.b13 => await _service.fetchB13Todos(),
         _ListType.b14 => await _service.fetchB14Initiated(),
         _ListType.p1 => await _service.fetchP1CcProposals(),
       };
@@ -344,13 +347,15 @@ class _NativeProposalListPageState extends State<_NativeProposalListPage> {
       };
 
   String get _searchHint => switch (widget.type) {
-        _ListType.b1 || _ListType.b13 => '搜索提案名称、编号、提交人…',
+        _ListType.b1 => '搜索提案名称、编号、提交人…',
+        _ListType.b13 => '搜索单据名称、编号、办理动作…',
         _ListType.b14 => '搜索我发起的提案…',
         _ListType.p1 => '搜索抄送提案…',
       };
 
   XflowListCardMode get _cardMode => switch (widget.type) {
-        _ListType.b1 || _ListType.b13 => XflowListCardMode.b1,
+        _ListType.b1 => XflowListCardMode.b1,
+        _ListType.b13 => XflowListCardMode.b1,
         _ListType.b14 => XflowListCardMode.b14,
         _ListType.p1 => XflowListCardMode.p1,
       };
@@ -359,7 +364,14 @@ class _NativeProposalListPageState extends State<_NativeProposalListPage> {
     final q = _search.text.trim().toLowerCase();
     final list = _all.where((it) {
       if (_statusFilter != 'ALL') {
-        if (_statusFilter == 'MINE') {
+        if (widget.type == _ListType.b13) {
+          if (_statusFilter == 'MINE' && !_isMyOpenTodo(it)) return false;
+          if (_statusFilter == 'DONE' &&
+              (it.todoHint?.status.toUpperCase() ?? '') != 'DONE') {
+            return false;
+          }
+          if (_statusFilter != 'MINE' && _statusFilter != 'DONE') return false;
+        } else if (_statusFilter == 'MINE') {
           if (!_isMyOpenTodo(it)) return false;
         } else if (_normalizeStatus(it.status) != _statusFilter) {
           return false;
@@ -408,13 +420,32 @@ class _NativeProposalListPageState extends State<_NativeProposalListPage> {
     }
   }
 
+  Future<void> _completeB13Task(
+    XflowProposalItem item, {
+    bool? verifyPassed,
+  }) async {
+    final ok = await confirmAndCompleteTaskTodo(
+      context: context,
+      service: _service,
+      item: item,
+      verifyPassed: verifyPassed,
+    );
+    if (!ok || !mounted) return;
+    ApprovalListCache.instance.invalidate(
+      userId: widget.session.userId,
+      listType: _cacheListType,
+    );
+    await _load(silent: true);
+  }
+
   @override
   Widget build(BuildContext context) {
     final counts = _statusCounts(_all);
     final visible = _visible;
     final mine = counts['MINE'] ?? 0;
     final pending = counts['PENDING'] ?? 0;
-    final isB1 = widget.type == _ListType.b1 || widget.type == _ListType.b13;
+    final isB1 = widget.type == _ListType.b1;
+    final isB13 = widget.type == _ListType.b13;
     return ColoredBox(
       color: DunesColors.bgApp,
       child: SafeArea(
@@ -436,25 +467,42 @@ class _NativeProposalListPageState extends State<_NativeProposalListPage> {
                               XflowHeroStatCard(
                                 kicker: isB1
                                     ? '我的审批 · ${_all.length} 项'
-                                    : widget.type == _ListType.b14
-                                        ? '我发起 · ${_all.length} 份'
-                                        : '抄送提案 · ${_all.length} 份',
-                                badgeText: isB1
-                                    ? (mine > 0 ? '$mine 待处理' : '无待办')
+                                    : isB13
+                                        ? '审批代办 · ${_all.length} 项'
+                                        : widget.type == _ListType.b14
+                                            ? '我发起 · ${_all.length} 份'
+                                            : '抄送提案 · ${_all.length} 份',
+                                badgeText: isB1 || isB13
+                                    ? (mine > 0
+                                        ? (isB13 ? '$mine 待办理' : '$mine 待处理')
+                                        : '无待办')
                                     : (counts['REJECTED']! > 0 &&
                                             widget.type == _ListType.b14)
                                         ? '${counts['REJECTED']} 已驳回'
                                         : pending > 0
                                             ? '$pending 审批中'
                                             : '无待审',
-                                badgeUrge: isB1
+                                badgeUrge: isB1 || isB13
                                     ? mine > 0
                                     : (pending > 0 ||
                                         (widget.type == _ListType.b14 &&
                                             (counts['REJECTED'] ?? 0) > 0)),
-                                bigValue: isB1 ? '$mine' : '${_all.length}',
-                                bigUnit: isB1 ? '项' : '份',
-                                footItems: isB1
+                                bigValue: isB1 || isB13 ? '$mine' : '${_all.length}',
+                                bigUnit: isB1 || isB13 ? '项' : '份',
+                                footItems: isB13
+                                    ? <(String, String, String?)>[
+                                        (
+                                          '待办理',
+                                          '$mine',
+                                          mine > 0 ? 'urge' : null,
+                                        ),
+                                        (
+                                          '已办理',
+                                          '${counts['DONE']}',
+                                          'pos',
+                                        ),
+                                      ]
+                                    : isB1
                                     ? <(String, String, String?)>[
                                         (
                                           '待审批',
@@ -560,6 +608,35 @@ class _NativeProposalListPageState extends State<_NativeProposalListPage> {
                                         item: item,
                                         mode: _cardMode,
                                         onTap: () => _openProposal(item),
+                                        onPrimaryAction: widget.type == _ListType.b13 &&
+                                                _isMyOpenTodo(item)
+                                            ? () => _completeB13Task(
+                                                  item,
+                                                  verifyPassed:
+                                                      (item.primaryAction ?? '')
+                                                              .toUpperCase() ==
+                                                          'VERIFY_INVOICE'
+                                                      ? true
+                                                      : null,
+                                                )
+                                            : null,
+                                        primaryActionLabel:
+                                            (item.primaryAction ?? '')
+                                                    .toUpperCase() ==
+                                                'VERIFY_INVOICE'
+                                            ? '核验通过'
+                                            : item.actionTitle,
+                                        onDangerAction: widget.type == _ListType.b13 &&
+                                                _isMyOpenTodo(item) &&
+                                                (item.primaryAction ?? '')
+                                                        .toUpperCase() ==
+                                                    'VERIFY_INVOICE'
+                                            ? () => _completeB13Task(
+                                                  item,
+                                                  verifyPassed: false,
+                                                )
+                                            : null,
+                                        dangerActionLabel: '核验失败',
                                         onDeleteDraft: widget.type == _ListType.b14 &&
                                                 (_normalizeStatus(item.status) == 'DRAFT' ||
                                                     _normalizeStatus(item.status) == 'VOIDED')
@@ -584,15 +661,16 @@ class _NativeProposalListPageState extends State<_NativeProposalListPage> {
       case _ListType.b14:
         return const ['DRAFT', 'PENDING_INITIATE', 'PENDING', 'APPROVED', 'REJECTED', 'VOIDED'];
       case _ListType.b1:
-      case _ListType.b13:
         return const ['MINE', 'PENDING', 'APPROVED', 'REJECTED'];
+      case _ListType.b13:
+        return const ['MINE', 'DONE'];
     }
   }
 
   String _statusLabel(String key) {
     switch (key) {
       case 'MINE':
-        return '待我审批';
+        return widget.type == _ListType.b13 ? '待办理' : '待我审批';
       case 'DRAFT':
         return '草稿';
       case 'PENDING_INITIATE':
@@ -607,6 +685,8 @@ class _NativeProposalListPageState extends State<_NativeProposalListPage> {
         return '已上线';
       case 'VOIDED':
         return '已作废';
+      case 'DONE':
+        return '已办理';
       default:
         return key;
     }
@@ -695,8 +775,10 @@ Map<String, int> _statusCounts(List<XflowProposalItem> rows) {
   var rejected = 0;
   var live = 0;
   var voided = 0;
+  var done = 0;
   for (final row in rows) {
     if (_isMyOpenTodo(row)) mine++;
+    if ((row.todoHint?.status.toUpperCase() ?? '') == 'DONE') done++;
     switch (_normalizeStatus(row.status)) {
       case 'DRAFT':
         draft++;
@@ -733,5 +815,6 @@ Map<String, int> _statusCounts(List<XflowProposalItem> rows) {
     'REJECTED': rejected,
     'LIVE': live,
     'VOIDED': voided,
+    'DONE': done,
   };
 }

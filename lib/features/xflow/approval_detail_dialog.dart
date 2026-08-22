@@ -166,6 +166,7 @@ class _ApprovalDetailOverlayHostState
       navigation: dialogNav,
       businessType: _item.businessType,
       businessId: _item.todoHint?.businessId ?? _item.id,
+      todoHint: _item.todoHint,
       backScreen: 'IM',
       onApprovalCompleted: () => widget.onApprovalCompleted?.call(),
       onOpenPendingItem: _openPending,

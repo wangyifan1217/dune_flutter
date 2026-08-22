@@ -357,6 +357,90 @@ class XfDetRejectBanner extends StatelessWidget {
   }
 }
 
+/// 终审通过后的办理进度：所有人都能看到子状态；办理人还能看到自己的待办动作。
+class XfDetTaskTodoBanner extends StatelessWidget {
+  const XfDetTaskTodoBanner({
+    super.key,
+    this.subStatus = '',
+    this.myTask,
+  });
+
+  final String subStatus;
+  final XflowProposalItem? myTask;
+
+  @override
+  Widget build(BuildContext context) {
+    final mine = myTask;
+    final status = (mine?.tag1 ?? subStatus).trim();
+    final action = (mine?.actionTitle ?? '').trim();
+    if (status.isEmpty && mine == null) return const SizedBox.shrink();
+    final title = mine != null
+        ? (action.isEmpty ? '你有一条审批待办' : '你有一条审批待办：$action')
+        : '当前办理进度';
+    final body = mine != null
+        ? (status.isEmpty
+            ? '办理意见会写到下方评论区。核验失败等原因也会显示在评论里。'
+            : '当前：$status。办理意见会写到下方评论区。')
+        : '当前：$status。办理人可在「审批代办」或本页底部操作。';
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF6E8),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFE8D4B0), width: 1.5),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.task_alt_outlined, size: 16, color: Color(0xFFB26A00)),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  title,
+                  style: DunesTypography.sans(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: const Color(0xFF8A5400),
+                  ),
+                ),
+              ),
+              if (status.isNotEmpty)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(999),
+                    border: Border.all(color: const Color(0xFFE8D4B0)),
+                  ),
+                  child: Text(
+                    status,
+                    style: DunesTypography.sans(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: const Color(0xFF8A5400),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            body,
+            style: DunesTypography.sans(
+              fontSize: 12,
+              height: 1.55,
+              color: DunesColors.text2,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class XfDetPeopleCard extends StatelessWidget {
   const XfDetPeopleCard({super.key, required this.bundle});
 
@@ -1684,6 +1768,65 @@ class XfDetApproveDock extends StatelessWidget {
   }
 }
 
+class XfDetTaskDock extends StatelessWidget {
+  const XfDetTaskDock({
+    super.key,
+    required this.item,
+    required this.onComplete,
+    this.busy = false,
+  });
+
+  final XflowProposalItem item;
+  final Future<void> Function({bool? verifyPassed}) onComplete;
+  final bool busy;
+
+  @override
+  Widget build(BuildContext context) {
+    final action = (item.primaryAction ?? '').toUpperCase();
+    final label = item.actionTitle ?? '办理';
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: DunesColors.bgApp,
+        border: Border(
+          top: BorderSide(color: DunesColors.borderSoft.withValues(alpha: 0.9)),
+        ),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
+        child: action == 'VERIFY_INVOICE'
+            ? Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: busy ? null : () => onComplete(verifyPassed: false),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: DunesColors.coral,
+                        side: BorderSide(color: DunesColors.coral),
+                      ),
+                      child: const Text('核验失败'),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: FilledButton(
+                      onPressed: busy ? null : () => onComplete(verifyPassed: true),
+                      child: const Text('核验通过'),
+                    ),
+                  ),
+                ],
+              )
+            : SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                  onPressed: busy ? null : () => onComplete(),
+                  child: Text(label),
+                ),
+              ),
+      ),
+    );
+  }
+}
+
 class XfDetApproveCard extends StatefulWidget {
   const XfDetApproveCard({
     super.key,
@@ -1712,20 +1855,26 @@ class _XfDetApproveCardState extends State<XfDetApproveCard> {
 
   Future<void> _submit(bool approve) async {
     final text = _comment.text.trim();
-    if (text.isEmpty) {
+    if (approve && text.isEmpty) {
       showDunesToast(context, '请填写审批意见', kind: DunesToastKind.error);
       return;
     }
     final ok = approve
         ? await confirmApproveDecision(context)
-        : await confirmRejectDecision(context);
-    if (!ok) return;
+        : true;
+    if (approve && !ok) return;
+    var comment = text;
+    if (!approve) {
+      final reason = await confirmRejectDecision(context, initial: text);
+      if (reason == null) return;
+      comment = reason;
+    }
     setState(() => _submitting = true);
     try {
       if (approve) {
-        await widget.onApprove(text);
+        await widget.onApprove(comment);
       } else {
-        await widget.onReject(text);
+        await widget.onReject(comment);
       }
     } finally {
       if (mounted) setState(() => _submitting = false);
@@ -1771,7 +1920,7 @@ class _XfDetApproveCardState extends State<XfDetApproveCard> {
             scrollPadding: const EdgeInsets.fromLTRB(20, 20, 20, 88),
             onTapOutside: (_) => FocusManager.instance.primaryFocus?.unfocus(),
             decoration: InputDecoration(
-              hintText: '请填写审批意见（必填）',
+              hintText: '通过请填意见；驳回将在确认时填写原因',
               hintStyle: DunesTypography.sans(
                 fontSize: 12,
                 color: DunesColors.text3,

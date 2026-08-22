@@ -589,7 +589,7 @@ class _NativeApprovalAssistantPageState
     // 协作提案：正文说明要对方做什么，名片只承担入口。
     if (share != null &&
         (type == 'approvalCard' || type.isEmpty || type == 'approvalShare')) {
-      final instruction = ApprovalChatShare.proposalIntakeInstruction(
+      final instruction = ApprovalChatShare.assistantInstruction(
         share: share,
         bodyText: m.bodyText,
         payload: payload,
@@ -700,16 +700,22 @@ class _NativeApprovalAssistantPageState
   Widget _approvalCardWidget(ApprovalChatShare share) {
     return ChatApprovalCard(
       title: _approvalCardTitle(share),
-      statusLabel: share.isProposalIntake
+      statusLabel: share.isProposalIntake || share.isTaskTodo
           ? ''
           : detailStatusLabel(share.status),
-      subtitle: share.isProposalIntake
+      subtitle: share.isTaskTodo
+          ? share.taskCardLine
+          : share.isProposalIntake
           ? share.proposalCardLine
           : share.businessType.toUpperCase() == 'PROPOSAL'
           ? '销售提案'
           : '审批单据',
-      brandLabel: share.isProposalIntake ? '协作提案' : '沙丘审批',
-      subtitleMaxLines: share.isProposalIntake ? 2 : 1,
+      brandLabel: share.isTaskTodo
+          ? '审批待办'
+          : share.isProposalIntake
+          ? '协作提案'
+          : '沙丘审批',
+      subtitleMaxLines: share.isProposalIntake || share.isTaskTodo ? 2 : 1,
       onTap: () => widget.onOpenApproval?.call(share),
     );
   }

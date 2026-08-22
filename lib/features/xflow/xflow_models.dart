@@ -376,6 +376,9 @@ class XflowProposalItem {
     this.currentStep = 0,
     this.totalSteps = 0,
     this.canRefedit = false,
+    this.primaryAction,
+    this.actionTitle,
+    this.requiredFields = const <String>[],
   });
 
   final int id;
@@ -395,6 +398,9 @@ class XflowProposalItem {
   final int currentStep;
   final int totalSteps;
   final bool canRefedit;
+  final String? primaryAction;
+  final String? actionTitle;
+  final List<String> requiredFields;
 
   bool get isPending =>
       status.toUpperCase() == 'OPEN' || status.toUpperCase() == 'PENDING';
@@ -415,6 +421,9 @@ class XflowProposalItem {
     int? totalSteps,
     bool? canRefedit,
     XflowTodoHint? todoHint,
+    String? primaryAction,
+    String? actionTitle,
+    List<String>? requiredFields,
   }) {
     return XflowProposalItem(
       id: id,
@@ -434,6 +443,9 @@ class XflowProposalItem {
       totalSteps: totalSteps ?? this.totalSteps,
       canRefedit: canRefedit ?? this.canRefedit,
       todoHint: todoHint ?? this.todoHint,
+      primaryAction: primaryAction ?? this.primaryAction,
+      actionTitle: actionTitle ?? this.actionTitle,
+      requiredFields: requiredFields ?? this.requiredFields,
     );
   }
 }
@@ -452,6 +464,7 @@ class XflowSubmissionDetail {
     this.createdByName = '',
     this.proposalType = '',
     this.documentKind = '',
+    this.subStatus = '',
   });
 
   final int id;
@@ -467,6 +480,8 @@ class XflowSubmissionDetail {
   /// 服务端中文类型标签（模板标题），列表种类/类型展示用。
   final String proposalType;
   final String documentKind;
+  /// 终审通过后的办理子状态，如「待出纳支付」「待核验发票」。
+  final String subStatus;
 
   factory XflowSubmissionDetail.fromJson(Map<String, dynamic> json) {
     final form = json['formData'];
@@ -486,6 +501,7 @@ class XflowSubmissionDetail {
           .toString()
           .trim(),
       documentKind: (json['documentKind'] ?? '').toString().trim(),
+      subStatus: (json['subStatus'] ?? '').toString().trim(),
     );
   }
 }

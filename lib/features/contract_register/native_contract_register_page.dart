@@ -21,6 +21,13 @@ import 'contract_register_models.dart';
 import 'contract_register_service.dart';
 
 const _themePurple = Color(0xFF7B5CD8);
+const _kbStatusFilters = <(String, String)>[
+  ('', '全部'),
+  ('none', '未入库'),
+  ('pending', '已入库未解析'),
+  ('ready', '已解析'),
+  ('failed', '入库/解析失败'),
+];
 const _maxContractFiles = 1;
 const _maxContractFileBytes = 20 * 1024 * 1024;
 const _contractFileExts = <String>[
@@ -54,12 +61,17 @@ class NativeContractRegisterPage extends StatefulWidget {
       _NativeContractRegisterPageState();
 }
 
-class _NativeContractRegisterPageState extends State<NativeContractRegisterPage> {
-  late final ContractRegisterService _service =
-      ContractRegisterService(session: widget.session);
+class _NativeContractRegisterPageState
+    extends State<NativeContractRegisterPage> {
+  late final ContractRegisterService _service = ContractRegisterService(
+    session: widget.session,
+  );
   late final PageController _pageController;
   final ScrollController _scrollController = ScrollController();
   final TextEditingController _keywordCtrl = TextEditingController();
+  final TextEditingController _filterPartyACtrl = TextEditingController();
+  final TextEditingController _filterPartyBCtrl = TextEditingController();
+  String _kbStatusFilter = '';
 
   _ContractPage _page = _ContractPage.list;
   List<ContractRegisterRow> _rows = const [];
@@ -101,10 +113,10 @@ class _NativeContractRegisterPageState extends State<NativeContractRegisterPage>
   final List<ContractRegisterFile> _pendingFiles = <ContractRegisterFile>[];
   final Map<String, TextEditingController> _proposalCtrls =
       Map<String, TextEditingController>.fromEntries(
-    contractProposalFieldDefs.map(
-      (d) => MapEntry(d.key, TextEditingController()),
-    ),
-  );
+        contractProposalFieldDefs.map(
+          (d) => MapEntry(d.key, TextEditingController()),
+        ),
+      );
   bool _uploadingFile = false;
   bool _fileDragging = false;
   int? _editingId;
@@ -118,6 +130,8 @@ class _NativeContractRegisterPageState extends State<NativeContractRegisterPage>
     _pageController = PageController();
     _scrollController.addListener(_onScroll);
     _keywordCtrl.addListener(_onKeywordChanged);
+    _filterPartyACtrl.addListener(_onKeywordChanged);
+    _filterPartyBCtrl.addListener(_onKeywordChanged);
     _canConfig = widget.session.effectiveContractConfigAccess;
     _canKbSync = widget.session.effectiveContractKbSyncAccess;
     unawaited(_bootstrap());
@@ -130,6 +144,8 @@ class _NativeContractRegisterPageState extends State<NativeContractRegisterPage>
     _pageController.dispose();
     _scrollController.dispose();
     _keywordCtrl.dispose();
+    _filterPartyACtrl.dispose();
+    _filterPartyBCtrl.dispose();
     _noCtrl.dispose();
     _nameCtrl.dispose();
     _partyACtrl.dispose();
@@ -231,15 +247,23 @@ class _NativeContractRegisterPageState extends State<NativeContractRegisterPage>
     );
   }
 
+  void _dismissKeyboard() {
+    FocusManager.instance.primaryFocus?.unfocus();
+  }
+
   void _rememberListScroll() {
     if (_scrollController.hasClients) {
       _listScrollOffset = _scrollController.offset;
     }
   }
 
-  void _restoreListScroll() {
+  void _restoreListScroll({int attempt = 0}) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || !_scrollController.hasClients) return;
+      if (!mounted || _page != _ContractPage.list) return;
+      if (!_scrollController.hasClients) {
+        if (attempt < 10) _restoreListScroll(attempt: attempt + 1);
+        return;
+      }
       final max = _scrollController.position.maxScrollExtent;
       final target = _listScrollOffset.clamp(0.0, max);
       if ((_scrollController.offset - target).abs() > 0.5) {
@@ -362,7 +386,10 @@ class _NativeContractRegisterPageState extends State<NativeContractRegisterPage>
   }
 
   void _onScroll() {
-    if (!_scrollController.hasClients || _loading || _loadingMore || !_hasMore) {
+    if (!_scrollController.hasClients ||
+        _loading ||
+        _loadingMore ||
+        !_hasMore) {
       return;
     }
     final pos = _scrollController.position;
@@ -374,11 +401,42 @@ class _NativeContractRegisterPageState extends State<NativeContractRegisterPage>
   void _onKeywordChanged() {
     setState(() {});
     _keywordDebounce?.cancel();
-    _keywordDebounce = Timer(const Duration(milliseconds: 320), () {
-      _listScrollOffset = 0;
-      if (_scrollController.hasClients) _scrollController.jumpTo(0);
-      unawaited(_load(reset: true));
-    });
+    _keywordDebounce = Timer(const Duration(milliseconds: 320), _reloadFromTop);
+  }
+
+  void _reloadFromTop() {
+    if (!mounted) return;
+    _listScrollOffset = 0;
+    if (_scrollController.hasClients) _scrollController.jumpTo(0);
+    unawaited(_load(reset: true));
+  }
+
+  bool get _hasListFilters =>
+      _keywordCtrl.text.trim().isNotEmpty ||
+      _kbStatusFilter.isNotEmpty ||
+      _filterPartyACtrl.text.trim().isNotEmpty ||
+      _filterPartyBCtrl.text.trim().isNotEmpty;
+
+  void _selectKbStatus(String status) {
+    if (_kbStatusFilter == status) return;
+    _keywordDebounce?.cancel();
+    setState(() => _kbStatusFilter = status);
+    _reloadFromTop();
+  }
+
+  void _clearListFilters() {
+    _keywordDebounce?.cancel();
+    _keywordCtrl.removeListener(_onKeywordChanged);
+    _filterPartyACtrl.removeListener(_onKeywordChanged);
+    _filterPartyBCtrl.removeListener(_onKeywordChanged);
+    _keywordCtrl.clear();
+    _filterPartyACtrl.clear();
+    _filterPartyBCtrl.clear();
+    _keywordCtrl.addListener(_onKeywordChanged);
+    _filterPartyACtrl.addListener(_onKeywordChanged);
+    _filterPartyBCtrl.addListener(_onKeywordChanged);
+    setState(() => _kbStatusFilter = '');
+    _reloadFromTop();
   }
 
   Future<void> _load({required bool reset}) async {
@@ -393,6 +451,9 @@ class _NativeContractRegisterPageState extends State<NativeContractRegisterPage>
         page: 0,
         size: _pageSize,
         keyword: _keywordCtrl.text,
+        kbStatus: _kbStatusFilter,
+        partyA: _filterPartyACtrl.text,
+        partyB: _filterPartyBCtrl.text,
       );
       if (!mounted) return;
       setState(() {
@@ -400,7 +461,8 @@ class _NativeContractRegisterPageState extends State<NativeContractRegisterPage>
         _pageIndex = 0;
         _total = result.total;
         _hasMore =
-            result.items.length >= _pageSize && result.items.length < result.total;
+            result.items.length >= _pageSize &&
+            result.items.length < result.total;
       });
     } catch (e) {
       if (!mounted) return;
@@ -424,6 +486,9 @@ class _NativeContractRegisterPageState extends State<NativeContractRegisterPage>
         page: nextPage,
         size: _pageSize,
         keyword: _keywordCtrl.text,
+        kbStatus: _kbStatusFilter,
+        partyA: _filterPartyACtrl.text,
+        partyB: _filterPartyBCtrl.text,
       );
       if (!mounted) return;
       setState(() {
@@ -461,6 +526,10 @@ class _NativeContractRegisterPageState extends State<NativeContractRegisterPage>
   }
 
   void _applySelected(ContractRegisterRow detail) {
+    final proposal = detail.proposalRelated;
+    for (final def in contractProposalFieldDefs) {
+      _proposalCtrls[def.key]?.text = proposal?.valueOf(def.key) ?? '';
+    }
     setState(() {
       _selected = detail;
       final idx = _rows.indexWhere((e) => e.id == detail.id);
@@ -507,13 +576,18 @@ class _NativeContractRegisterPageState extends State<NativeContractRegisterPage>
     try {
       final detail = await _service.fetchDetail(id);
       if (!mounted || _selected?.id != id) return;
-      final wasPending = _selected?.aiParsePending == true;
+      final wasPending = _selected?.aiParsePending == true || _parsing;
       _applySelected(detail);
       if (detail.aiParsePending) return;
       _stopAIPoll();
-      if (wasPending && detail.aiParseStatus == 'ready') {
+      if (detail.aiParseStatus == 'ready') {
         setState(() => _proposalExpanded = true);
-        showDunesToast(context, detail.aiParseMessage.isEmpty ? '已填充提案相关字段' : detail.aiParseMessage);
+        if (wasPending) {
+          showDunesToast(
+            context,
+            detail.aiParseMessage.isEmpty ? '已填充提案相关字段' : detail.aiParseMessage,
+          );
+        }
       } else if (wasPending && detail.aiParseStatus == 'failed') {
         showDunesToast(
           context,
@@ -535,8 +609,23 @@ class _NativeContractRegisterPageState extends State<NativeContractRegisterPage>
     }
     setState(() => _parsing = true);
     try {
-      await _service.parseAI(row.id);
+      final result = await _service.parseAI(row.id);
       if (!mounted) return;
+      _applySelected(
+        row.copyWith(
+          aiParseStatus: result.status,
+          aiParseCanWithdraw: result.canWithdraw,
+          proposalRelated: result.proposalRelated ?? row.proposalRelated,
+        ),
+      );
+      if (result.status == 'ready') {
+        setState(() => _proposalExpanded = true);
+        showDunesToast(
+          context,
+          result.message.isEmpty ? '已填充提案相关字段' : result.message,
+        );
+        return;
+      }
       _startAIPoll(row.id);
     } catch (e) {
       if (!mounted) return;
@@ -616,9 +705,13 @@ class _NativeContractRegisterPageState extends State<NativeContractRegisterPage>
             const SizedBox(height: 6),
             Text('合同名称：$name'),
             const SizedBox(height: 6),
-            Text('甲方：${_partyACtrl.text.trim().isEmpty ? '—' : _partyACtrl.text.trim()}'),
+            Text(
+              '甲方：${_partyACtrl.text.trim().isEmpty ? '—' : _partyACtrl.text.trim()}',
+            ),
             const SizedBox(height: 6),
-            Text('乙方：${_partyBCtrl.text.trim().isEmpty ? '—' : _partyBCtrl.text.trim()}'),
+            Text(
+              '乙方：${_partyBCtrl.text.trim().isEmpty ? '—' : _partyBCtrl.text.trim()}',
+            ),
             const SizedBox(height: 6),
             Text('合同金额：${amountText.isEmpty ? '—' : amountText}'),
             const SizedBox(height: 6),
@@ -842,7 +935,8 @@ class _NativeContractRegisterPageState extends State<NativeContractRegisterPage>
       final uploaded = await _service.uploadFile(
         bytes: bytes,
         fileName: name,
-        mimeType: lookupMimeType(name, headerBytes: bytes) ??
+        mimeType:
+            lookupMimeType(name, headerBytes: bytes) ??
             file.mimeType ??
             'application/octet-stream',
       );
@@ -936,7 +1030,11 @@ class _NativeContractRegisterPageState extends State<NativeContractRegisterPage>
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Row(
         children: [
-          const Icon(Icons.picture_as_pdf_outlined, size: 18, color: _themePurple),
+          const Icon(
+            Icons.picture_as_pdf_outlined,
+            size: 18,
+            color: _themePurple,
+          ),
           const SizedBox(width: 8),
           Expanded(
             child: Column(
@@ -954,7 +1052,10 @@ class _NativeContractRegisterPageState extends State<NativeContractRegisterPage>
                 ),
                 Text(
                   statusLabel,
-                  style: const TextStyle(fontSize: 11, color: DunesColors.text3),
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: DunesColors.text3,
+                  ),
                 ),
               ],
             ),
@@ -1033,8 +1134,8 @@ class _NativeContractRegisterPageState extends State<NativeContractRegisterPage>
                 _uploadingFile
                     ? '上传中…'
                     : (_supportsDesktopDrop || isDesktopCommOnly
-                        ? '点击选择，或拖拽合同文件到此处'
-                        : '点击选择合同文件'),
+                          ? '点击选择，或拖拽合同文件到此处'
+                          : '点击选择合同文件'),
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 13,
@@ -1077,7 +1178,11 @@ class _NativeContractRegisterPageState extends State<NativeContractRegisterPage>
       ),
       child: Row(
         children: [
-          const Icon(Icons.insert_drive_file_outlined, size: 18, color: _themePurple),
+          const Icon(
+            Icons.insert_drive_file_outlined,
+            size: 18,
+            color: _themePurple,
+          ),
           const SizedBox(width: 8),
           Expanded(
             child: InkWell(
@@ -1098,7 +1203,10 @@ class _NativeContractRegisterPageState extends State<NativeContractRegisterPage>
                   if (size.isNotEmpty)
                     Text(
                       size,
-                      style: const TextStyle(fontSize: 11, color: DunesColors.text3),
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: DunesColors.text3,
+                      ),
                     ),
                 ],
               ),
@@ -1114,7 +1222,11 @@ class _NativeContractRegisterPageState extends State<NativeContractRegisterPage>
             IconButton(
               tooltip: '打开',
               onPressed: onTap,
-              icon: const Icon(Icons.open_in_new, size: 16, color: DunesColors.text3),
+              icon: const Icon(
+                Icons.open_in_new,
+                size: 16,
+                color: DunesColors.text3,
+              ),
             ),
         ],
       ),
@@ -1123,16 +1235,20 @@ class _NativeContractRegisterPageState extends State<NativeContractRegisterPage>
 
   @override
   Widget build(BuildContext context) {
-    return ColoredBox(
-      color: const Color(0xFFF5F6F8),
-      child: PageView(
-        controller: _pageController,
-        physics: const NeverScrollableScrollPhysics(),
-        children: [
-          _KeepAlivePage(child: _buildList()),
-          _buildDetail(),
-          _buildCompose(),
-        ],
+    return GestureDetector(
+      onTap: _dismissKeyboard,
+      behavior: HitTestBehavior.translucent,
+      child: ColoredBox(
+        color: const Color(0xFFF5F6F8),
+        child: PageView(
+          controller: _pageController,
+          physics: const NeverScrollableScrollPhysics(),
+          children: [
+            _KeepAlivePage(child: _buildList()),
+            _buildDetail(),
+            _buildCompose(),
+          ],
+        ),
       ),
     );
   }
@@ -1145,6 +1261,7 @@ class _NativeContractRegisterPageState extends State<NativeContractRegisterPage>
           padding: const EdgeInsets.fromLTRB(16, 6, 16, 6),
           child: TextField(
             controller: _keywordCtrl,
+            onTapOutside: (_) => _dismissKeyboard(),
             decoration: InputDecoration(
               hintText: '搜索合同编号或合同名称',
               isDense: true,
@@ -1154,13 +1271,15 @@ class _NativeContractRegisterPageState extends State<NativeContractRegisterPage>
                   : IconButton(
                       onPressed: () {
                         _keywordCtrl.clear();
-                        unawaited(_load(reset: true));
                       },
                       icon: const Icon(Icons.close, size: 18),
                     ),
               filled: true,
               fillColor: Colors.white,
-              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 8,
+              ),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(10),
                 borderSide: const BorderSide(color: Color(0xFFE8EAED)),
@@ -1170,6 +1289,44 @@ class _NativeContractRegisterPageState extends State<NativeContractRegisterPage>
                 borderSide: const BorderSide(color: Color(0xFFE8EAED)),
               ),
             ),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                for (var i = 0; i < _kbStatusFilters.length; i++) ...[
+                  if (i > 0) const SizedBox(width: 8),
+                  _FilterChip(
+                    label: _kbStatusFilters[i].$2,
+                    active: _kbStatusFilter == _kbStatusFilters[i].$1,
+                    onTap: () => _selectKbStatus(_kbStatusFilters[i].$1),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+          child: Row(
+            children: [
+              Expanded(
+                child: _compactFilterField(
+                  controller: _filterPartyACtrl,
+                  hint: '甲方',
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _compactFilterField(
+                  controller: _filterPartyBCtrl,
+                  hint: '乙方',
+                ),
+              ),
+            ],
           ),
         ),
         if (_canKbSync)
@@ -1182,7 +1339,10 @@ class _NativeContractRegisterPageState extends State<NativeContractRegisterPage>
                     _kbSyncHint.isEmpty ? '同步「台账合同」知识库状态' : _kbSyncHint,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: 12, color: DunesColors.text3),
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: DunesColors.text3,
+                    ),
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -1200,10 +1360,26 @@ class _NativeContractRegisterPageState extends State<NativeContractRegisterPage>
             ),
           ),
         Padding(
-          padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
-          child: Text(
-            '$_total 条',
-            style: const TextStyle(fontSize: 12, color: DunesColors.text3),
+          padding: const EdgeInsets.fromLTRB(20, 0, 12, 8),
+          child: Row(
+            children: [
+              Text(
+                '$_total 条',
+                style: const TextStyle(fontSize: 12, color: DunesColors.text3),
+              ),
+              if (_hasListFilters) ...[
+                const SizedBox(width: 8),
+                TextButton(
+                  onPressed: _clearListFilters,
+                  style: TextButton.styleFrom(
+                    visualDensity: VisualDensity.compact,
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    foregroundColor: _themePurple,
+                  ),
+                  child: const Text('清除筛选'),
+                ),
+              ],
+            ],
           ),
         ),
         Expanded(
@@ -1250,19 +1426,21 @@ class _NativeContractRegisterPageState extends State<NativeContractRegisterPage>
     if (_rows.isEmpty) {
       return ListView(
         physics: const AlwaysScrollableScrollPhysics(),
-        children: const [
-          SizedBox(height: 80),
+        children: [
+          const SizedBox(height: 80),
           Center(
             child: Text(
-              '暂无合同归集',
-              style: TextStyle(color: DunesColors.text3, fontSize: 14),
+              _hasListFilters ? '没有符合筛选条件的合同' : '暂无合同归集',
+              style: const TextStyle(color: DunesColors.text3, fontSize: 14),
             ),
           ),
         ],
       );
     }
     return ListView.separated(
+      key: const PageStorageKey('contract-register-list'),
       controller: _scrollController,
+      keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
       physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 40),
       itemCount: _rows.length + (_loadingMore ? 1 : 0),
@@ -1281,7 +1459,10 @@ class _NativeContractRegisterPageState extends State<NativeContractRegisterPage>
           );
         }
         final row = _rows[index];
-        return _ContractCard(row: row, onTap: () => unawaited(_openDetail(row)));
+        return _ContractCard(
+          row: row,
+          onTap: () => unawaited(_openDetail(row)),
+        );
       },
     );
   }
@@ -1352,6 +1533,7 @@ class _NativeContractRegisterPageState extends State<NativeContractRegisterPage>
 
   Widget _buildCompose() {
     return SingleChildScrollView(
+      keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 40),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1381,7 +1563,11 @@ class _NativeContractRegisterPageState extends State<NativeContractRegisterPage>
           const SizedBox(height: 10),
           _section('日期', [
             _dateField('用印日期', _sealDate, (v) => setState(() => _sealDate = v)),
-            _dateField('归档日期', _archiveDate, (v) => setState(() => _archiveDate = v)),
+            _dateField(
+              '归档日期',
+              _archiveDate,
+              (v) => setState(() => _archiveDate = v),
+            ),
             _dateField('签订日期', _signDate, (v) => setState(() => _signDate = v)),
             _dateField('截止日期', _endDate, (v) => setState(() => _endDate = v)),
           ]),
@@ -1419,11 +1605,45 @@ class _NativeContractRegisterPageState extends State<NativeContractRegisterPage>
               foregroundColor: Colors.white,
               minimumSize: const Size.fromHeight(44),
             ),
-            child: Text(_saving || _uploadingFile
-                ? '提交中…'
-                : (_editingId != null ? '保存合同' : '新增合同')),
+            child: Text(
+              _saving || _uploadingFile
+                  ? '提交中…'
+                  : (_editingId != null ? '保存合同' : '新增合同'),
+            ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _compactFilterField({
+    required TextEditingController controller,
+    required String hint,
+  }) {
+    return TextField(
+      controller: controller,
+      onTapOutside: (_) => _dismissKeyboard(),
+      decoration: InputDecoration(
+        hintText: hint,
+        isDense: true,
+        prefixIcon: const Icon(Icons.apartment_outlined, size: 18),
+        suffixIcon: controller.text.isEmpty
+            ? null
+            : IconButton(
+                onPressed: controller.clear,
+                icon: const Icon(Icons.close, size: 16),
+              ),
+        filled: true,
+        fillColor: Colors.white,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: Color(0xFFE8EAED)),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: Color(0xFFE8EAED)),
+        ),
       ),
     );
   }
@@ -1490,9 +1710,7 @@ class _NativeContractRegisterPageState extends State<NativeContractRegisterPage>
     final canParse = row.kbParsed && !busy;
     final hint = !row.kbParsed
         ? '需合同知识库解析成功后才能识别'
-        : (row.aiParsePending
-            ? '正在识别提案相关信息…'
-            : row.aiParseMessage);
+        : (row.aiParsePending ? '正在识别提案相关信息…' : row.aiParseMessage);
     return _collapsibleSection(
       title: '提案关联相关内容',
       expanded: _proposalExpanded,
@@ -1735,6 +1953,7 @@ class _NativeContractRegisterPageState extends State<NativeContractRegisterPage>
         keyboardType: keyboard,
         inputFormatters: inputFormatters,
         maxLines: maxLines,
+        onTapOutside: (_) => _dismissKeyboard(),
         decoration: InputDecoration(
           labelText: requiredField ? '$label *' : label,
           isDense: true,
@@ -1861,6 +2080,21 @@ class _ContractCard extends StatelessWidget {
                         color: DunesColors.text,
                       ),
                     ),
+                    if (row.partyA.isNotEmpty || row.partyB.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        [
+                          if (row.partyA.isNotEmpty) '甲 ${row.partyA}',
+                          if (row.partyB.isNotEmpty) '乙 ${row.partyB}',
+                        ].join('  ·  '),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 11,
+                          color: DunesColors.text3,
+                        ),
+                      ),
+                    ],
                     if (row.files.isNotEmpty) ...[
                       const SizedBox(height: 4),
                       Text(
@@ -1892,6 +2126,47 @@ class _ContractCard extends StatelessWidget {
               ),
               const Icon(Icons.chevron_right, color: DunesColors.text3),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _FilterChip extends StatelessWidget {
+  const _FilterChip({
+    required this.label,
+    required this.active,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool active;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: active ? _themePurple : Colors.white,
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: active ? _themePurple : const Color(0xFFE8EAED),
+            ),
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: active ? Colors.white : DunesColors.text2,
+            ),
           ),
         ),
       ),

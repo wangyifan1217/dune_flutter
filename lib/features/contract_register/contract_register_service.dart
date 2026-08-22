@@ -41,6 +41,9 @@ class ContractRegisterService {
     int page = 0,
     int size = 20,
     String keyword = '',
+    String kbStatus = '',
+    String partyA = '',
+    String partyB = '',
   }) async {
     final q = <String, String>{
       'page': page.toString(),
@@ -48,6 +51,12 @@ class ContractRegisterService {
     };
     final k = keyword.trim();
     if (k.isNotEmpty) q['q'] = k;
+    final status = kbStatus.trim();
+    if (status.isNotEmpty) q['kbStatus'] = status;
+    final a = partyA.trim();
+    if (a.isNotEmpty) q['partyA'] = a;
+    final b = partyB.trim();
+    if (b.isNotEmpty) q['partyB'] = b;
     final resp = await http.get(
       _uri('/contract-registers', q),
       headers: _headers,

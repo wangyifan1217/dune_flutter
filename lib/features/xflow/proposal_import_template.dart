@@ -56,6 +56,7 @@ Future<List<ProposalImportTemplateItem>> fetchProposalImportTemplates({
   required String apiBase,
   required String token,
   http.Client? client,
+  bool allowDirectFallback = true,
 }) async {
   final c = client ?? http.Client();
   try {
@@ -65,8 +66,9 @@ Future<List<ProposalImportTemplateItem>> fetchProposalImportTemplates({
         token: token,
         client: c,
       );
-      if (fromApi.isNotEmpty) return fromApi;
+      if (fromApi.isNotEmpty || !allowDirectFallback) return fromApi;
     } catch (_) {
+      if (!allowDirectFallback) rethrow;
       // flow-go 未部署时走资管直连兜底。
     }
     return _fetchFromAssetDirect(client: c);

@@ -31,26 +31,66 @@ Future<bool> confirmApproveDecision(BuildContext context) async {
   return ok == true;
 }
 
-/// 审批驳回前的二次确认。
-Future<bool> confirmRejectDecision(BuildContext context) async {
-  final ok = await showDialog<bool>(
+/// 审批驳回前的二次确认，必须填写原因。
+Future<String?> confirmRejectDecision(
+  BuildContext context, {
+  String title = '确认驳回',
+  String message = '驳回后流程将终止，发起人需根据原因修改后重新提交。',
+  String hint = '请填写驳回原因（必填）',
+  String confirmLabel = '确认驳回',
+  String initial = '',
+}) async {
+  final controller = TextEditingController(text: initial);
+  final result = await showDialog<String>(
     context: context,
-    builder: (ctx) => AlertDialog(
-      title: const Text('确认驳回'),
-      content: const Text('确认驳回该审批？驳回后流程将终止，发起人需修改后重新提交。'),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(ctx, false),
-          child: const Text('取消'),
+    builder: (ctx) {
+      var error = '';
+      return StatefulBuilder(
+        builder: (ctx, setLocal) => AlertDialog(
+          title: Text(title),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(message),
+              const SizedBox(height: 12),
+              TextField(
+                controller: controller,
+                minLines: 2,
+                maxLines: 4,
+                autofocus: initial.trim().isEmpty,
+                decoration: InputDecoration(
+                  hintText: hint,
+                  errorText: error.isEmpty ? null : error,
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('取消'),
+            ),
+            FilledButton(
+              onPressed: () {
+                final text = controller.text.trim();
+                if (text.isEmpty) {
+                  setLocal(() => error = '请填写原因后再确认');
+                  return;
+                }
+                Navigator.pop(ctx, text);
+              },
+              child: Text(confirmLabel),
+            ),
+          ],
         ),
-        FilledButton(
-          onPressed: () => Navigator.pop(ctx, true),
-          child: const Text('确认驳回'),
-        ),
-      ],
-    ),
+      );
+    },
   );
-  return ok == true;
+  controller.dispose();
+  final text = result?.trim() ?? '';
+  if (text.isEmpty) return null;
+  return text;
 }
 
 /// 提交审批前的二次确认。
@@ -641,6 +681,10 @@ class XflowProposalListCard extends StatelessWidget {
     this.showTrackButton = false,
     this.onTrackTap,
     this.onDeleteDraft,
+    this.onPrimaryAction,
+    this.primaryActionLabel,
+    this.onDangerAction,
+    this.dangerActionLabel,
   });
 
   final XflowProposalItem item;
@@ -649,6 +693,10 @@ class XflowProposalListCard extends StatelessWidget {
   final bool showTrackButton;
   final VoidCallback? onTrackTap;
   final VoidCallback? onDeleteDraft;
+  final VoidCallback? onPrimaryAction;
+  final String? primaryActionLabel;
+  final VoidCallback? onDangerAction;
+  final String? dangerActionLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -999,6 +1047,32 @@ class XflowProposalListCard extends StatelessWidget {
               ],
               const SizedBox(height: 4),
               _compactMetaRow('时间', timeText),
+              if (onPrimaryAction != null || onDangerAction != null) ...[
+                const SizedBox(height: 10),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      if (onDangerAction != null)
+                        OutlinedButton(
+                          onPressed: onDangerAction,
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: DunesColors.coral,
+                            side: const BorderSide(color: DunesColors.coral),
+                          ),
+                          child: Text(dangerActionLabel ?? '核验失败'),
+                        ),
+                      if (onPrimaryAction != null)
+                        FilledButton(
+                          onPressed: onPrimaryAction,
+                          child: Text(primaryActionLabel ?? '办理'),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
             ],
           ),
         ),

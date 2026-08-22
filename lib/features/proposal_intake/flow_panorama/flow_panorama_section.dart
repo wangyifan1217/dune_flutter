@@ -146,12 +146,16 @@ class FlowPanoramaSection extends StatefulWidget {
     required this.ctx,
     this.compact = false,
     this.canRename = true,
+    this.allowFullscreen = true,
+    this.immersive = false,
     this.onNodeRenamed,
   });
 
   final FlowCtx ctx;
   final bool compact;
   final bool canRename;
+  final bool allowFullscreen;
+  final bool immersive;
   final void Function(String nodeId, String name)? onNodeRenamed;
 
   @override
@@ -635,6 +639,35 @@ class _FlowPanoramaSectionState extends State<FlowPanoramaSection>
     }
   }
 
+  void _openFullscreen() {
+    Navigator.of(context, rootNavigator: true).push(
+      MaterialPageRoute<void>(
+        fullscreenDialog: true,
+        builder: (_) => _FlowPanoramaFullscreenPage(
+          ctx: widget.ctx,
+          canRename: widget.canRename,
+          onNodeRenamed: widget.onNodeRenamed,
+        ),
+      ),
+    );
+  }
+
+  Widget _fullscreenFab() {
+    return Material(
+      color: const Color(0xCC2B2340),
+      borderRadius: BorderRadius.circular(10),
+      child: InkWell(
+        onTap: _openFullscreen,
+        borderRadius: BorderRadius.circular(10),
+        child: const SizedBox(
+          width: 36,
+          height: 36,
+          child: Icon(Icons.fullscreen, size: 18, color: Colors.white),
+        ),
+      ),
+    );
+  }
+
   // —— 构建 ——
   @override
   Widget build(BuildContext context) {
@@ -671,77 +704,86 @@ class _FlowPanoramaSectionState extends State<FlowPanoramaSection>
             children: [
               _toolbar(),
               const SizedBox(height: 10),
-              LayoutBuilder(
-                builder: (c, box) {
-                  final canvas = SizedBox(
-                    width: kFlowW,
-                    height: kFlowH,
-                    child: _canvas(counts),
-                  );
-                  final fitted = FittedBox(fit: BoxFit.contain, child: canvas);
-                  final viewportSize = widget.compact
-                      ? Size(box.maxWidth, 420)
-                      : Size(box.maxWidth, box.maxWidth * kFlowH / kFlowW);
-                  _viewportSize = viewportSize;
-                  final viewer = _AbsorbParentScroll(
-                    absorbDrag: _zoomed,
-                    onPointerSignal: widget.compact ? null : _onWheelZoom,
-                    child: GestureDetector(
-                      onDoubleTapDown: (details) =>
-                          _doubleTapAt = details.localPosition,
-                      onDoubleTap: _onDoubleTapZoom,
-                      child: InteractiveViewer(
-                        transformationController: _transform,
-                        minScale: _minScale,
-                        maxScale: _maxScale,
-                        boundaryMargin: const EdgeInsets.all(80),
-                        panEnabled: _zoomed,
-                        scaleEnabled: widget.compact,
-                        trackpadScrollCausesScale: false,
-                        child: SizedBox.expand(child: fitted),
-                      ),
-                    ),
-                  );
-                  final viewport = widget.compact
-                      ? SizedBox(
-                          height: 420,
-                          width: box.maxWidth,
-                          child: viewer,
-                        )
-                      : AspectRatio(
-                          aspectRatio: kFlowW / kFlowH,
-                          child: viewer,
-                        );
-                  return Container(
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: const Color(0xFF221B31)),
-                      boxShadow: [
-                        BoxShadow(
-                          color: const Color(0xFF382A56).withOpacity(0.18),
-                          blurRadius: 40,
-                          offset: const Offset(0, 16),
-                        ),
-                      ],
-                    ),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(15),
-                      child: Stack(
-                        children: [
-                          viewport,
-                          if (widget.compact) _mobileZoomOverlay(),
-                        ],
-                      ),
-                    ),
-                  );
-                },
-              ),
-              const SizedBox(height: 12),
-              _detail(),
+              if (widget.immersive)
+                Expanded(child: ClipRect(child: _canvasViewport(counts)))
+              else ...[
+                _canvasViewport(counts),
+                const SizedBox(height: 12),
+                _detail(),
+              ],
             ],
           ),
         ),
       ),
+    );
+  }
+
+  Widget _canvasViewport(Map<FlowLevel, int> counts) {
+    return LayoutBuilder(
+      builder: (c, box) {
+        final canvas = SizedBox(
+          width: kFlowW,
+          height: kFlowH,
+          child: _canvas(counts),
+        );
+        final fitted = FittedBox(fit: BoxFit.contain, child: canvas);
+        final width = box.maxWidth.isFinite && box.maxWidth > 0
+            ? box.maxWidth
+            : kFlowW;
+        final height = widget.immersive
+            ? (box.maxHeight.isFinite && box.maxHeight > 0
+                  ? box.maxHeight
+                  : 420.0)
+            : widget.compact
+            ? 420.0
+            : width * kFlowH / kFlowW;
+        _viewportSize = Size(width, height);
+        final viewer = _AbsorbParentScroll(
+          absorbDrag: _zoomed || widget.immersive,
+          onPointerSignal: widget.compact ? null : _onWheelZoom,
+          child: GestureDetector(
+            onDoubleTapDown: (details) => _doubleTapAt = details.localPosition,
+            onDoubleTap: _onDoubleTapZoom,
+            child: InteractiveViewer(
+              transformationController: _transform,
+              minScale: _minScale,
+              maxScale: _maxScale,
+              boundaryMargin: const EdgeInsets.all(80),
+              panEnabled: _zoomed || widget.immersive,
+              scaleEnabled: widget.compact || widget.immersive,
+              trackpadScrollCausesScale: false,
+              child: SizedBox(width: width, height: height, child: fitted),
+            ),
+          ),
+        );
+        final viewport = widget.immersive || widget.compact
+            ? SizedBox(width: width, height: height, child: viewer)
+            : AspectRatio(aspectRatio: kFlowW / kFlowH, child: viewer);
+        return Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: const Color(0xFF221B31)),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFF382A56).withOpacity(0.18),
+                blurRadius: 40,
+                offset: const Offset(0, 16),
+              ),
+            ],
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(15),
+            child: Stack(
+              children: [
+                viewport,
+                if (widget.compact) _mobileZoomOverlay(),
+                if (widget.allowFullscreen && !widget.compact)
+                  Positioned(right: 10, top: 10, child: _fullscreenFab()),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -957,11 +999,14 @@ class _FlowPanoramaSectionState extends State<FlowPanoramaSection>
                     fontSize: 10.5,
                     color: Color(0xFF5B5069),
                     fontFamily: 'monospace',
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
               ),
               toggle('＋', false, (_) => _zoomBy(1.25)),
               if (_zoomed) toggle('复位', true, (_) => _resetZoom()),
+              if (widget.allowFullscreen)
+                toggle('全屏', false, (_) => _openFullscreen()),
             ]),
           ],
         ),
@@ -1010,6 +1055,8 @@ class _FlowPanoramaSectionState extends State<FlowPanoramaSection>
               ),
               btn(Icons.remove, () => _zoomBy(1 / 1.25), tooltip: '缩小'),
               btn(Icons.center_focus_strong, _resetZoom, tooltip: '复位'),
+              if (widget.allowFullscreen)
+                btn(Icons.fullscreen, _openFullscreen, tooltip: '全屏'),
             ],
           ),
         ),
@@ -2263,4 +2310,41 @@ class _FlowPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _FlowPainter old) => true;
+}
+
+class _FlowPanoramaFullscreenPage extends StatelessWidget {
+  const _FlowPanoramaFullscreenPage({
+    required this.ctx,
+    required this.canRename,
+    this.onNodeRenamed,
+  });
+
+  final FlowCtx ctx;
+  final bool canRename;
+  final void Function(String nodeId, String name)? onNodeRenamed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFF151020),
+      appBar: AppBar(
+        backgroundColor: const Color(0xFF241D36),
+        foregroundColor: Colors.white,
+        title: const Text('四流全屏'),
+      ),
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+          child: FlowPanoramaSection(
+            ctx: ctx,
+            compact: MediaQuery.sizeOf(context).width < 700,
+            canRename: canRename,
+            allowFullscreen: false,
+            immersive: true,
+            onNodeRenamed: onNodeRenamed,
+          ),
+        ),
+      ),
+    );
+  }
 }

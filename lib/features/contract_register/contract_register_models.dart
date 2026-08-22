@@ -134,12 +134,58 @@ class ContractRegisterRow {
             '${json['aiParseStatus'] ?? ''}',
             json['aiParseResult'],
           ),
-      proposalRelated: proposalRaw is Map
-          ? ContractRegisterProposal.fromJson(Map<String, dynamic>.from(proposalRaw))
-          : null,
+      proposalRelated: () {
+        final status = '${json['aiParseStatus'] ?? ''}'.trim();
+        final fromAi = _proposalFromAiResult(json['aiParseResult']);
+        if (status == 'ready' && fromAi != null && fromAi.hasContent) {
+          return fromAi;
+        }
+        final fromField = proposalRaw is Map
+            ? ContractRegisterProposal.fromJson(
+                Map<String, dynamic>.from(proposalRaw),
+              )
+            : null;
+        if (fromField != null && fromField.hasContent) return fromField;
+        return fromAi;
+      }(),
       kbFile: kbFileRaw is Map
           ? ContractRegisterKbFile.fromJson(Map<String, dynamic>.from(kbFileRaw))
           : null,
+    );
+  }
+
+  ContractRegisterRow copyWith({
+    String? aiParseStatus,
+    Object? aiParseResult,
+    bool? aiParseCanWithdraw,
+    ContractRegisterProposal? proposalRelated,
+  }) {
+    return ContractRegisterRow(
+      id: id,
+      contractNo: contractNo,
+      contractName: contractName,
+      partyA: partyA,
+      partyB: partyB,
+      partyC: partyC,
+      partyD: partyD,
+      oaContact: oaContact,
+      sealDate: sealDate,
+      archiveDate: archiveDate,
+      signDate: signDate,
+      endDate: endDate,
+      copies: copies,
+      companyContact: companyContact,
+      keywords: keywords,
+      counterpartyNo: counterpartyNo,
+      amount: amount,
+      remark: remark,
+      files: files,
+      kbStatus: kbStatus,
+      aiParseStatus: aiParseStatus ?? this.aiParseStatus,
+      aiParseResult: aiParseResult ?? this.aiParseResult,
+      aiParseCanWithdraw: aiParseCanWithdraw ?? this.aiParseCanWithdraw,
+      proposalRelated: proposalRelated ?? this.proposalRelated,
+      kbFile: kbFile,
     );
   }
 
@@ -184,6 +230,16 @@ class ContractRegisterRow {
 bool _aiParseCanWithdrawFromResult(String status, Object? result) {
   if (status.trim() != 'ready' || result is! Map) return false;
   return result.containsKey('snapshot') && result['snapshot'] != null;
+}
+
+ContractRegisterProposal? _proposalFromAiResult(Object? result) {
+  if (result is! Map) return null;
+  final raw = result['proposalRelated'];
+  if (raw is! Map) return null;
+  final proposal = ContractRegisterProposal.fromJson(
+    Map<String, dynamic>.from(raw),
+  );
+  return proposal.hasContent ? proposal : null;
 }
 
 class ContractRegisterKbFile {

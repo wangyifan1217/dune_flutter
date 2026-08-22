@@ -583,7 +583,13 @@ Map<String, dynamic> proposalIntakePatchFromContract({
   for (final key in proposalIntakeContractFillKeys(prefix)) {
     patch[key] = '';
   }
-  _putField(patch, '${prefix}No', pick(['${prefix}No', 'contractNo']));
+  // 合同编号必须用合同归集编号；AI 抽到的对方文号不能盖掉所选合同。
+  final registerNo = _contractText(detail, ['contractNo']);
+  _putField(
+    patch,
+    '${prefix}No',
+    registerNo.isNotEmpty ? registerNo : pick(['${prefix}No']),
+  );
   _putField(patch, '${prefix}Name', pick(['${prefix}Name', 'contractName']));
   _putField(
     patch,
@@ -617,6 +623,122 @@ Map<String, dynamic> proposalIntakePatchFromContract({
     _putField(patch, 'channelReceiveAccount', pick(['channelReceiveAccount']));
   }
   return patch;
+}
+
+const kProposalContractSnapshotKey = 'contractFieldSnapshots';
+const kProposalContractEditsKey = 'contractFieldEdits';
+
+Map<String, String> proposalIntakeContractSnapshotValues(
+  String prefix,
+  Map<String, dynamic> form,
+) {
+  return <String, String>{
+    for (final key in proposalIntakeContractFillKeys(prefix))
+      key: '${form[key] ?? ''}'.trim(),
+  };
+}
+
+Map<String, dynamic> proposalIntakeRememberContractSnapshot({
+  required Map<String, dynamic> form,
+  required String prefix,
+}) {
+  final next = Map<String, dynamic>.from(form);
+  final snapshots = next[kProposalContractSnapshotKey] is Map
+      ? Map<String, dynamic>.from(next[kProposalContractSnapshotKey] as Map)
+      : <String, dynamic>{};
+  snapshots[prefix] = proposalIntakeContractSnapshotValues(prefix, next);
+  next[kProposalContractSnapshotKey] = snapshots;
+  final edits = next[kProposalContractEditsKey] is Map
+      ? Map<String, dynamic>.from(next[kProposalContractEditsKey] as Map)
+      : <String, dynamic>{};
+  for (final key in proposalIntakeContractFillKeys(prefix)) {
+    edits.remove(key);
+  }
+  next[kProposalContractEditsKey] = edits;
+  return next;
+}
+
+Map<String, dynamic> proposalIntakeConfirmContractEdits(
+  Map<String, dynamic> form,
+) {
+  final snapshots = form[kProposalContractSnapshotKey] is Map
+      ? Map<String, dynamic>.from(form[kProposalContractSnapshotKey] as Map)
+      : const <String, dynamic>{};
+  final edits = <String, dynamic>{};
+  for (final prefix in const ['purchase', 'sales']) {
+    final raw = snapshots[prefix];
+    if (raw is! Map) continue;
+    final original = Map<String, dynamic>.from(raw);
+    for (final key in proposalIntakeContractFillKeys(prefix)) {
+      final before = '${original[key] ?? ''}'.trim();
+      final after = '${form[key] ?? ''}'.trim();
+      if (before == after) continue;
+      edits[key] = <String, String>{'original': before, 'current': after};
+    }
+  }
+  final next = Map<String, dynamic>.from(form);
+  next[kProposalContractEditsKey] = edits;
+  return next;
+}
+
+ProposalContractFieldEdit? proposalIntakeContractEdit(
+  Map<String, dynamic> form,
+  String key,
+) {
+  final raw = form[kProposalContractEditsKey];
+  if (raw is! Map) return null;
+  final item = raw[key];
+  if (item is! Map) return null;
+  final original = '${item['original'] ?? ''}'.trim();
+  final current = '${item['current'] ?? ''}'.trim();
+  if (original == current) return null;
+  return ProposalContractFieldEdit(
+    key: key,
+    original: original,
+    current: current,
+  );
+}
+
+class ProposalContractFieldEdit {
+  const ProposalContractFieldEdit({
+    required this.key,
+    required this.original,
+    required this.current,
+  });
+
+  final String key;
+  final String original;
+  final String current;
+}
+
+const _proposalIntakeAutoFormKeys = <String>{
+  'marketOwner2',
+  'marketOwner2UserId',
+};
+
+/// 仅当用户真正填写了业务内容时才算可以生成草稿。
+/// 当前登录人自动带出的市场部负责人二不计入。
+bool proposalIntakeHasMeaningfulContent(ProposalIntakeRow row) {
+  if (row.title.trim().isNotEmpty) return true;
+  return _formHasUserInput(row.form);
+}
+
+bool _formHasUserInput(Map<String, dynamic> form) {
+  for (final entry in form.entries) {
+    if (_proposalIntakeAutoFormKeys.contains(entry.key)) continue;
+    if (_valueHasUserInput(entry.value)) return true;
+  }
+  return false;
+}
+
+bool _valueHasUserInput(Object? value) {
+  if (value == null) return false;
+  if (value is String) return value.trim().isNotEmpty;
+  if (value is bool) return value;
+  if (value is num) return true;
+  if (value is List) return value.any(_valueHasUserInput);
+  if (value is Map) return value.values.any(_valueHasUserInput);
+  return true;
 }
 
 String proposalIntakeActionLabel(String action) {

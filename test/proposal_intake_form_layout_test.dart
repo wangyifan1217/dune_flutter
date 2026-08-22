@@ -179,6 +179,7 @@ void main() {
     expect(find.byTooltip('转发'), findsOneWidget);
     expect(find.byTooltip('通知科技负责人'), findsOneWidget);
     expect(find.byTooltip('删除'), findsOneWidget);
+    expect(find.byTooltip('协作提案流程'), findsOneWidget);
     expect(find.text('保存'), findsNothing);
     expect(find.text('转发'), findsNothing);
     expect(find.text('通知科技'), findsNothing);
@@ -186,6 +187,55 @@ void main() {
     expect(find.text('D'), findsNothing);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('proposal form help icon shows the collaboration process', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1440, 1400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(_harness(1440));
+    await tester.pump();
+
+    expect(find.byTooltip('协作提案流程'), findsOneWidget);
+    await tester.tap(find.byTooltip('协作提案流程'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+    expect(find.text('协作提案流程'), findsWidgets);
+    expect(find.textContaining('通知科技部负责人填写科技内容'), findsOneWidget);
+    expect(find.text('知道了'), findsOneWidget);
+  });
+
+  testWidgets(
+    'unsaved new proposal hides server actions until content is saved',
+    (tester) async {
+      tester.view.physicalSize = const Size(1440, 900);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+
+      await tester.pumpWidget(
+        _harness(
+          1440,
+          row: ProposalIntakeRow.fromJson({
+            'id': 0,
+            'code': '',
+            'status': 'draft',
+            'createdBy': 11,
+            'form': {'marketOwner2UserId': 11, 'marketOwner2': '王奕凡'},
+          }),
+        ),
+      );
+      await tester.pump();
+
+      expect(find.text('未保存'), findsOneWidget);
+      expect(find.byTooltip('保存'), findsOneWidget);
+      expect(find.byTooltip('转发'), findsOneWidget);
+      expect(find.byTooltip('通知科技负责人'), findsNothing);
+      expect(find.byTooltip('删除'), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets('pc top bar shows proposal name and keeps locator aligned', (
     tester,
@@ -342,7 +392,8 @@ void main() {
     await tester.pump();
 
     expect(find.text('市场部负责人二（填写人）'), findsOneWidget);
-    expect(find.text('当前用户'), findsOneWidget);
+    expect(find.text('当前用户'), findsNothing);
+    expect(find.text('管理后台配置'), findsNothing);
     expect(
       tester
           .widgetList<TextFormField>(find.byType(TextFormField))
@@ -841,7 +892,8 @@ void main() {
 
     expect(find.text('销售合同.pdf'), findsOneWidget);
     expect(find.text('查看合同'), findsOneWidget);
-    expect(find.text('未签合同 · 可查看'), findsOneWidget);
+    expect(find.text('下载合同'), findsOneWidget);
+    expect(find.text('未签合同 · 可查看下载'), findsOneWidget);
     expect(
       tester
           .widget<TextButton>(
@@ -868,6 +920,64 @@ void main() {
           .onTap,
       isNotNull,
     );
+  });
+
+  testWidgets('new proposal shows product templates and launch files', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1440, 1800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(_harness(1440));
+    await tester.pump();
+    await _scrollUntil(tester, '产品模板与上线文件');
+    expect(find.text('产品模板与上线文件'), findsOneWidget);
+    expect(find.text('上线产品文件'), findsOneWidget);
+    expect(find.text('点击选择上线产品文件'), findsOneWidget);
+    expect(find.text('点击上传图片 / PDF，最多 5 个'), findsNothing);
+    expect(
+      find.text('支持 PDF / Word / Excel / PPT，单个不超过 20MB。'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('uploaded product file can be viewed and downloaded', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1440, 1800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      _harness(
+        1440,
+        row: ProposalIntakeRow.fromJson({
+          'id': 1,
+          'code': 'TA-2026-0001',
+          'title': '测试提案',
+          'status': 'filling',
+          'version': 3,
+          'createdBy': 11,
+          'form': {
+            'marketOwner2': '王奕凡',
+            'marketOwner2UserId': 11,
+            'onlineProductFiles': [
+              {
+                'fileName': '产品说明书.pdf',
+                'objectKey': 'proposals/product.pdf',
+                'url': 'https://example.com/product.pdf',
+              },
+            ],
+          },
+        }),
+      ),
+    );
+    await tester.pump();
+    await _scrollUntil(tester, '上线产品文件');
+    expect(find.text('产品说明书.pdf'), findsOneWidget);
+    expect(find.byTooltip('查看'), findsOneWidget);
+    expect(find.byTooltip('下载'), findsOneWidget);
   });
 
   testWidgets('submitter can delete before final review', (tester) async {
@@ -948,8 +1058,8 @@ void main() {
       ),
     );
     await tester.pump();
-    expect(find.text('下一个(2)'), findsOneWidget);
-    await tester.tap(find.text('下一个(2)'));
+    expect(find.text('下一个'), findsOneWidget);
+    await tester.tap(find.text('下一个'));
     expect(tapped, isTrue);
   });
 }

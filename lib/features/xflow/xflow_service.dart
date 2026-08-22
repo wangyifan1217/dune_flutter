@@ -254,6 +254,78 @@ class XflowService {
     return Future.wait(deduped.map(_enrichB1Item));
   }
 
+  Future<List<XflowProposalItem>> fetchB13Todos() async {
+    if (!await fetchPostApprovalTodoEnabled()) return const [];
+    final results = await Future.wait([
+      _requestList('/workbench/inbox?kind=TASK&status=OPEN'),
+      _requestList('/workbench/inbox?kind=TASK&status=DONE'),
+    ]);
+    final rows = <dynamic>[...results[0], ...results[1]];
+    return _dedupeB1Todos(_mapInboxTaskRows(rows));
+  }
+
+  List<XflowProposalItem> _mapInboxTaskRows(List<dynamic> rows) {
+    final out = <XflowProposalItem>[];
+    for (final row in rows.whereType<Map<String, dynamic>>()) {
+      if ((row['kind'] ?? '').toString().toUpperCase() != 'TASK') {
+        continue;
+      }
+      final businessType = (row['businessType'] ?? '').toString().toUpperCase();
+      if (businessType.isEmpty) continue;
+      final idText = _businessIdText(row['businessId']);
+      if (idText.isEmpty) continue;
+      final businessId = _businessId(row['businessId']);
+      final todoId = _int(row['id']);
+      final todoStatus = (row['todoStatus'] ?? row['status'] ?? '').toString();
+      final actionTitle =
+          (row['actionTitle'] ?? row['primaryAction'] ?? '').toString();
+      final subStatus = (row['subStatus'] ?? row['subtitle'] ?? '').toString();
+      out.add(
+        XflowProposalItem(
+          id: businessId > 0 ? businessId : todoId,
+          businessType: businessType,
+          code: _preferCode(
+            row['code'],
+            idText,
+            businessId > 0 ? businessId : todoId,
+          ),
+          title:
+              (row['title'] ??
+                      row['businessTitle'] ??
+                      row['description'] ??
+                      businessType)
+                  .toString(),
+          templateKey: (row['templateKey'] ?? '').toString().trim().isEmpty
+              ? null
+              : row['templateKey'].toString(),
+          documentKind: _trimmedOrNull(row['documentKind']),
+          proposalType:
+              _trimmedOrNull(row['proposalType'] ?? row['documentType']),
+          txType: _trimmedOrNull(actionTitle.isEmpty ? subStatus : actionTitle),
+          status: todoStatus.toUpperCase() == 'DONE' ? 'DONE' : 'PENDING',
+          createdByName: (row['createdByName'] ?? row['subtitle'] ?? '')
+              .toString(),
+          createdAt: DateTime.tryParse(
+            (row['createdAt'] ?? row['updatedAt'] ?? '').toString(),
+          ),
+          tag1: _trimmedOrNull(subStatus),
+          primaryAction: _trimmedOrNull(row['primaryAction'] ?? row['action']),
+          actionTitle: _trimmedOrNull(actionTitle),
+          requiredFields: _stringList(row['requiredFields']),
+          todoHint: XflowTodoHint(
+            id: todoId,
+            sourceStepId: _intNullable(row['sourceStepId']),
+            kind: 'TASK',
+            businessType: businessType,
+            businessId: businessId > 0 ? businessId : todoId,
+            status: todoStatus,
+          ),
+        ),
+      );
+    }
+    return out;
+  }
+
   List<XflowProposalItem> _mapInboxApprovalRows(List<dynamic> rows) {
     final out = <XflowProposalItem>[];
     for (final row in rows.whereType<Map<String, dynamic>>()) {
@@ -875,6 +947,33 @@ class XflowService {
     return null;
   }
 
+  Future<bool> fetchPostApprovalTodoEnabled() async {
+    try {
+      final raw = await _request('/xflow/todo-feature');
+      return raw['enabled'] == true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// 当前用户在该单据上的 OPEN 审批待办（付款/回票/核验等），与审批 todo 分开查询。
+  Future<XflowProposalItem?> findMyOpenTask({
+    required String businessType,
+    required int businessId,
+  }) async {
+    if (!await fetchPostApprovalTodoEnabled()) return null;
+    final rows = await _requestList('/workbench/inbox?kind=TASK&status=OPEN');
+    final bt = businessType.toUpperCase();
+    for (final item in _mapInboxTaskRows(rows)) {
+      final hint = item.todoHint;
+      if (hint == null) continue;
+      if (hint.businessType.toUpperCase() == bt && hint.businessId == businessId) {
+        return item;
+      }
+    }
+    return null;
+  }
+
   Future<XflowDetailBundle> fetchB10Bundle({
     required int proposalId,
     int? currentUserId,
@@ -1220,6 +1319,23 @@ class XflowService {
       method: 'POST',
       body: <String, dynamic>{
         'decision': approve ? 'APPROVED' : 'REJECTED',
+        'comment': comment,
+      },
+    );
+  }
+
+  Future<void> completeTask({
+    required int todoId,
+    String action = '',
+    Map<String, dynamic> payload = const <String, dynamic>{},
+    String comment = '',
+  }) async {
+    await _request(
+      '/todos/$todoId/complete-task',
+      method: 'POST',
+      body: <String, dynamic>{
+        'action': action,
+        'payload': payload,
         'comment': comment,
       },
     );
@@ -2118,6 +2234,13 @@ class XflowService {
   String? _trimmedOrNull(dynamic value) {
     final s = (value ?? '').toString().trim();
     return s.isEmpty ? null : s;
+  }
+
+  List<String> _stringList(dynamic value) {
+    if (value is List) {
+      return value.map((e) => e.toString().trim()).where((e) => e.isNotEmpty).toList();
+    }
+    return const <String>[];
   }
 
   /// 解析接口时间并转为本地时区（兼容 `+00` / 无时区按 UTC）。

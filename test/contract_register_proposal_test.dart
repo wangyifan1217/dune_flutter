@@ -16,10 +16,7 @@ void main() {
     expect(p.valueOf('purchaseName'), '前期物业服务协议');
     expect(p.valueOf('salesName'), '');
     expect(p.hasContent, isTrue);
-    expect(
-      p.toJson()['purchaseName'],
-      '前期物业服务协议',
-    );
+    expect(p.toJson()['purchaseName'], '前期物业服务协议');
   });
 
   test('contract detail json keeps proposalRelated', () {
@@ -64,6 +61,33 @@ void main() {
     expect(ready.aiParseCanWithdraw, isTrue);
     expect(ready.aiParseMessage, '已识别并填充提案相关字段');
     expect(ready.proposalRelated?.valueOf('purchaseName'), '新值');
+
+    final fromResult = ContractRegisterRow.fromJson({
+      'id': 4,
+      'contractNo': 'A',
+      'contractName': 'B',
+      'kbStatus': 'ready',
+      'aiParseStatus': 'ready',
+      'aiParseResult': {
+        'message': '已识别并填充提案相关字段',
+        'proposalRelated': {'purchaseName': 'AI回填名称'},
+      },
+    });
+    expect(fromResult.proposalRelated?.valueOf('purchaseName'), 'AI回填名称');
+
+    final aiWinsOverJoin = ContractRegisterRow.fromJson({
+      'id': 5,
+      'contractNo': 'A',
+      'contractName': 'B',
+      'kbStatus': 'ready',
+      'aiParseStatus': 'ready',
+      'aiParseResult': {
+        'message': '已识别并填充提案相关字段',
+        'proposalRelated': {'purchaseName': 'AI识别名称'},
+      },
+      'proposalRelated': {'purchaseName': '手改后的名称'},
+    });
+    expect(aiWinsOverJoin.proposalRelated?.valueOf('purchaseName'), 'AI识别名称');
 
     final pending = ContractRegisterRow.fromJson({
       'id': 3,

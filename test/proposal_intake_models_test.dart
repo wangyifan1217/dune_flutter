@@ -268,6 +268,26 @@ void main() {
     expect(patch.containsKey('channelPolicy'), isFalse);
   });
 
+  test(
+    'selected contract number stays the register number, not AI purchaseNo',
+    () {
+      final patch = proposalIntakePatchFromContract(
+        prefix: 'purchase',
+        detail: {
+          'id': 91,
+          'contractNo': '2026-23-YW-00001',
+          'contractName': '宣传推广服务协议',
+          'proposalRelated': {
+            'purchaseNo': 'Z07—3-Yw-000',
+            'purchaseName': '宣传推广服务协议',
+          },
+        },
+      );
+      expect(patch['purchaseNo'], '2026-23-YW-00001');
+      expect(patch['purchaseName'], '宣传推广服务协议');
+    },
+  );
+
   test('switching contracts clears previous grab fields', () {
     final first = proposalIntakePatchFromContract(
       prefix: 'purchase',
@@ -311,6 +331,30 @@ void main() {
     expect(form['purchaseCoreTerms'], '');
     expect(form['supplierPolicy'], '');
     expect(form['supplyPayer'], '');
+  });
+
+  test('confirmed contract edits keep original vs current for reviewers', () {
+    final matched = proposalIntakeRememberContractSnapshot(
+      form: proposalIntakePatchFromContract(
+        prefix: 'purchase',
+        detail: {
+          'id': 91,
+          'contractNo': 'CG-2026-0001',
+          'contractName': '框架采购合同',
+          'partyA': '沙丘科技',
+          'partyB': '供应商甲',
+          'proposalRelated': {'purchaseName': '现金券采购合同'},
+        },
+      ),
+      prefix: 'purchase',
+    );
+    matched['purchaseName'] = '用户改过的合同名称';
+    final confirmed = proposalIntakeConfirmContractEdits(matched);
+    final edit = proposalIntakeContractEdit(confirmed, 'purchaseName');
+    expect(edit, isNotNull);
+    expect(edit!.original, '现金券采购合同');
+    expect(edit.current, '用户改过的合同名称');
+    expect(proposalIntakeContractEdit(confirmed, 'purchaseNo'), isNull);
   });
 
   test('resetting contract fields clears grabbed values but keeps mode', () {
@@ -408,6 +452,55 @@ void main() {
         'technologyOwnerUserId': '3',
       }, includeTech: false),
       ['市场部负责人一', '财务部负责人一', '财务部负责人二', '行政负责人'],
+    );
+  });
+
+  test('auto-filled owner alone is not enough to create a draft', () {
+    final row = ProposalIntakeRow.fromJson({
+      'id': 0,
+      'status': 'draft',
+      'form': {
+        'marketOwner2': '王奕凡',
+        'marketOwner2UserId': 11,
+        'supplies': <String>[],
+        'channels': <String>[],
+        'profitModes': <String>[],
+        'technologyCapabilities': <String>[],
+        'outputForms': <String>[],
+        'developmentTypes': <String>[],
+        'costItems': <String>[],
+        'purchaseProducts': <String>[],
+        'financeInterfaces': <String, dynamic>{},
+      },
+    });
+    expect(proposalIntakeHasMeaningfulContent(row), isFalse);
+  });
+
+  test('filled proposal name or title can create a draft', () {
+    expect(
+      proposalIntakeHasMeaningfulContent(
+        ProposalIntakeRow.fromJson({
+          'form': {'marketOwner2': '王奕凡', 'proposalName': '智能投放试点'},
+        }),
+      ),
+      isTrue,
+    );
+    expect(
+      proposalIntakeHasMeaningfulContent(
+        ProposalIntakeRow.fromJson({'title': '智能投放试点'}),
+      ),
+      isTrue,
+    );
+    expect(
+      proposalIntakeHasMeaningfulContent(
+        ProposalIntakeRow.fromJson({
+          'form': {
+            'marketOwner2': '王奕凡',
+            'supplies': ['头部媒体供给'],
+          },
+        }),
+      ),
+      isTrue,
     );
   });
 }

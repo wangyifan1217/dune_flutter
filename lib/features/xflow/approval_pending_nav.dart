@@ -57,7 +57,7 @@ class XfDetNextPendingBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final label = totalCount > 0 ? '下一个($totalCount)' : '下一个';
+    const label = '下一个';
     return SafeArea(
       top: false,
       child: Padding(

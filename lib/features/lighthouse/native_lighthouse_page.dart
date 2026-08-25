@@ -1914,35 +1914,6 @@ class _TrendLinesPainter extends CustomPainter {
     } else if (heroDrawable) {
       drawFillArea(heroPts, heroColor, heroBounds);
     }
-    if (available.isNotEmpty && available[0]) {
-      drawLine(
-        series.revenue,
-        colors[0],
-        bounds.revenue,
-        strokeWidth: 0.9,
-        alpha: 180,
-      );
-    }
-    if (available.length > 1 && available[1]) {
-      drawLine(
-        series.cost,
-        colors[1],
-        bounds.cost,
-        strokeWidth: 0.9,
-        alpha: 180,
-      );
-    }
-    if (hasProfitLine && heroIsScale) {
-      // 规模是 hero 时毛利仍留在同一张图里 (会议: 规模和利润都要塞进去),
-      // 只是降到 1.4px —— 主次分明,不跟规模抢线宽.
-      drawLine(
-        series.profit,
-        colors[2],
-        bounds.profit,
-        strokeWidth: 1.4,
-        alpha: 225,
-      );
-    }
     if (altDrawable) {
       // 同色系、细一档：两条都是「规模」，层级靠线宽而不是换个颜色。
       drawLine(
@@ -1951,6 +1922,33 @@ class _TrendLinesPainter extends CustomPainter {
         heroBounds,
         strokeWidth: 1.1,
         alpha: 150,
+      );
+    }
+    if (available.isNotEmpty && available[0]) {
+      drawLine(
+        series.revenue,
+        colors[0],
+        bounds.revenue,
+        strokeWidth: 1.4,
+        alpha: 255,
+      );
+    }
+    if (available.length > 1 && available[1]) {
+      drawLine(
+        series.cost,
+        colors[1],
+        bounds.cost,
+        strokeWidth: 1.4,
+        alpha: 255,
+      );
+    }
+    if (hasProfitLine && heroIsScale) {
+      drawLine(
+        series.profit,
+        colors[2],
+        bounds.profit,
+        strokeWidth: 1.7,
+        alpha: 255,
       );
     }
     if (heroDrawable) {
@@ -4295,15 +4293,9 @@ class _TrendChartState extends State<_TrendChart> {
   static const double _kChartPadH = 6.0;
   // v3.8 · 反转层级:行 context 是"这一行的毛利趋势",毛利上升为 hero deep,
   // 收入/成本降为柔粉描线,视觉上让毛利粗线主导.color 顺序不变,只是深浅换位.
-  static const Color _cRev = _LhPlum.soft; // 收入 = 柔粉描线
-  static const Color _cCost = Color(0xFFC7BADF); // 成本 = 更淡描线
-  static const Color _cProf = _LhPlum.deep; // 毛利 = 次线 (规模在场时)
-  // v4.1 · 规模 = 主线 hero，用 hero「规模」卡同一个 accent。
-  //   跨屏语义一致优先：主 hero 上标着「规模」的那个紫，和这张图里的规模线
-  //   是同一个颜色，用户不用再学第二套编码。
-  //   代价是它和毛利的 _LhPlum.deep (#5A458F) 同为紫族 —— 靠线宽和明度分层：
-  //   规模 2.0px + 填充带，毛利 1.4px α225，两条的取值域也各自独立。
-  //   真机上若仍认错，最省的解法是把毛利挪成中性墨色，而不是再动规模的颜色。
+  static const Color _cRev = Color(lighthouseRevenueAccentValue);
+  static const Color _cCost = Color(lighthouseCostAccentValue);
+  static const Color _cProf = Color(lighthouseProfitAccentValue);
   static const Color _cScale = Color(lighthouseScaleAccentValue);
   static const List<Color> _kColors = [_cRev, _cCost, _cProf, _cScale];
 
@@ -4572,6 +4564,63 @@ class _TrendChartState extends State<_TrendChart> {
     );
   }
 
+  Widget _trendLegendChip({
+    required String label,
+    required Color color,
+    required bool negative,
+    required String absFmt,
+    required String unitFmt,
+  }) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 10,
+          height: 2.5,
+          decoration: BoxDecoration(
+            color: color,
+            borderRadius: BorderRadius.circular(1),
+          ),
+        ),
+        const SizedBox(width: 5),
+        Text(
+          label,
+          style: LhTypography.mono(
+            size: 7.5,
+            color: LhColors.mute2,
+            weight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(width: 4),
+        if (negative)
+          Text(
+            '-',
+            style: LhTypography.mono(
+              size: 9,
+              color: LhColors.pos,
+              weight: FontWeight.w700,
+            ),
+          ),
+        Text(
+          absFmt,
+          style: LhTypography.mono(
+            size: 9,
+            color: negative ? LhColors.pos : color,
+            weight: FontWeight.w700,
+          ),
+        ),
+        Text(
+          unitFmt,
+          style: LhTypography.mono(
+            size: 7.5,
+            color: LhColors.mute,
+            weight: FontWeight.w500,
+          ),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final si = _selectedIndex;
@@ -4628,9 +4677,18 @@ class _TrendChartState extends State<_TrendChart> {
     final cAbsFmt = _fmtMoney(cVal.abs());
     final cUnitFmt = _unitMoney(cVal.abs());
 
-    final editorialLegend = Row(
-      crossAxisAlignment: CrossAxisAlignment.center,
+    final pnlLegendKeys = lighthouseTrendPnlLegendKeys(
+      hasProfit: heroIsScale,
+      hasRevenue: _hasRev || rVal.abs() > 1e-9,
+      hasCost: _hasCost || cVal.abs() > 1e-9,
+      hasScaleAlt: showAltScale,
+    );
+    final editorialLegend = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
         // ── 状态锚 (本期合计 / 选中日期) —— mono UPPER, 无边框, 极简 ──
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -4649,12 +4707,13 @@ class _TrendChartState extends State<_TrendChart> {
           ),
         ),
         const SizedBox(width: 10),
-        // ── hero 块 (规模优先, 缺规模才是毛利) —— label + 大数字 + delta ──
-        _LhAnimatedNumber(
+        Flexible(
+          child: _LhAnimatedNumber(
           value: hVal.abs(),
           immediate: isSelected,
           duration: const Duration(milliseconds: 700),
           builder: (ctx, v) => RichText(
+            overflow: TextOverflow.ellipsis,
             text: TextSpan(
               children: [
                 TextSpan(
@@ -4697,6 +4756,7 @@ class _TrendChartState extends State<_TrendChart> {
             ),
           ),
         ),
+        ),
         if (profitMomDelta != null && !isSelected) ...[
           const SizedBox(width: 5),
           Text(
@@ -4709,200 +4769,6 @@ class _TrendChartState extends State<_TrendChart> {
             ),
           ),
         ],
-        const Spacer(),
-        // ── 收入/成本 secondary block (mono 灰字, 主副分明) ──
-        //     v3.9 · 缺数据的序列不显示 (跟 painter 一致, 避免"三条其中两条是零"的误导)
-        if (heroIsScale || _hasRev || _hasCost)
-          Flexible(
-            child: RichText(
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.right,
-              text: TextSpan(
-                children: [
-                  // v4.1 · 另一口径的规模排最前 —— 它和 hero 是同一族，
-                  //   两个数并排才看得出核销率，副行被截断时也最先保住它。
-                  if (showAltScale) ...[
-                    TextSpan(
-                      text: '${widget.scaleAltLabel} ',
-                      style: LhTypography.mono(
-                        size: 7.5,
-                        color: LhColors.mute2,
-                        weight: FontWeight.w500,
-                      ),
-                    ),
-                    TextSpan(
-                      text: sAltAbsFmt,
-                      style: LhTypography.mono(
-                        size: 9,
-                        color: _cScale,
-                        weight: FontWeight.w700,
-                      ),
-                    ),
-                    TextSpan(
-                      text: sAltUnitFmt,
-                      style: LhTypography.mono(
-                        size: 7.5,
-                        color: LhColors.mute,
-                        weight: FontWeight.w500,
-                      ),
-                    ),
-                    TextSpan(
-                      text: '   ·   ',
-                      style: LhTypography.mono(
-                        size: 7.5,
-                        color: LhColors.mute2,
-                        weight: FontWeight.w500,
-                        letterSpacing: 0.2,
-                      ),
-                    ),
-                  ],
-                  // v4.0 · 规模上位后毛利搬到副行 —— 会议要求两个都在同一张图上。
-                  if (heroIsScale) ...[
-                    TextSpan(
-                      text: '毛利 ',
-                      style: LhTypography.mono(
-                        size: 7.5,
-                        color: LhColors.mute2,
-                        weight: FontWeight.w500,
-                      ),
-                    ),
-                    if (pIsNeg)
-                      TextSpan(
-                        text: '-',
-                        style: LhTypography.mono(
-                          size: 9,
-                          color: LhColors.pos,
-                          weight: FontWeight.w600,
-                        ),
-                      ),
-                    TextSpan(
-                      text: pAbsFmt,
-                      style: LhTypography.mono(
-                        size: 9,
-                        color: pIsNeg ? LhColors.pos : _cProf,
-                        weight: FontWeight.w700,
-                      ),
-                    ),
-                    TextSpan(
-                      text: pUnitFmt,
-                      style: LhTypography.mono(
-                        size: 7.5,
-                        color: LhColors.mute,
-                        weight: FontWeight.w500,
-                      ),
-                    ),
-                    if (_hasRev || _hasCost)
-                      TextSpan(
-                        text: '   ·   ',
-                        style: LhTypography.mono(
-                          size: 7.5,
-                          color: LhColors.mute2,
-                          weight: FontWeight.w500,
-                          letterSpacing: 0.2,
-                        ),
-                      ),
-                  ],
-                  if (_hasRev) ...[
-                    TextSpan(
-                      text: '收入 ',
-                      style: LhTypography.mono(
-                        size: 7.5,
-                        color: LhColors.mute2,
-                        weight: FontWeight.w500,
-                      ),
-                    ),
-                    if (rVal < 0)
-                      TextSpan(
-                        text: '-',
-                        style: LhTypography.mono(
-                          size: 9,
-                          color: LhColors.pos,
-                          weight: FontWeight.w600,
-                        ),
-                      ),
-                    TextSpan(
-                      text: rAbsFmt,
-                      style: LhTypography.mono(
-                        size: 9,
-                        color: rVal < 0 ? LhColors.pos : LhColors.ink2,
-                        weight: FontWeight.w600,
-                      ),
-                    ),
-                    TextSpan(
-                      text: rUnitFmt,
-                      style: LhTypography.mono(
-                        size: 7.5,
-                        color: LhColors.mute,
-                        weight: FontWeight.w500,
-                      ),
-                    ),
-                  ],
-                  if (_hasRev && _hasCost)
-                    TextSpan(
-                      text: '   ·   ',
-                      style: LhTypography.mono(
-                        size: 7.5,
-                        color: LhColors.mute2,
-                        weight: FontWeight.w500,
-                        letterSpacing: 0.2,
-                      ),
-                    ),
-                  if (_hasCost) ...[
-                    TextSpan(
-                      text: '成本 ',
-                      style: LhTypography.mono(
-                        size: 7.5,
-                        color: LhColors.mute2,
-                        weight: FontWeight.w500,
-                        letterSpacing: 0.2,
-                      ),
-                    ),
-                    if (cVal < 0)
-                      TextSpan(
-                        text: '-',
-                        style: LhTypography.mono(
-                          size: 9,
-                          color: LhColors.pos,
-                          weight: FontWeight.w600,
-                        ),
-                      ),
-                    TextSpan(
-                      text: cAbsFmt,
-                      style: LhTypography.mono(
-                        size: 9,
-                        color: cVal < 0 ? LhColors.pos : LhColors.ink2,
-                        weight: FontWeight.w600,
-                      ),
-                    ),
-                    TextSpan(
-                      text: cUnitFmt,
-                      style: LhTypography.mono(
-                        size: 7.5,
-                        color: LhColors.mute,
-                        weight: FontWeight.w500,
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          )
-        else
-          // 只有毛利: 用一小段 mono 副文案说明 "单指标视图", 而非留白
-          Flexible(
-            child: Align(
-              alignment: Alignment.centerRight,
-              child: Text(
-                'PROFIT ONLY',
-                style: LhTypography.mono(
-                  size: 7.5,
-                  color: LhColors.mute2,
-                  weight: FontWeight.w700,
-                  letterSpacing: 1.0,
-                ),
-              ),
-            ),
-          ),
         if (isSelected) ...[
           const SizedBox(width: 6),
           GestureDetector(
@@ -4912,6 +4778,50 @@ class _TrendChartState extends State<_TrendChart> {
               padding: EdgeInsets.all(2),
               child: Icon(Icons.close_rounded, size: 11, color: LhColors.mute2),
             ),
+          ),
+        ],
+          ],
+        ),
+        if (pnlLegendKeys.isNotEmpty) ...[
+          const SizedBox(height: 6),
+          Wrap(
+            spacing: 12,
+            runSpacing: 6,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              for (final key in pnlLegendKeys)
+                switch (key) {
+                  'profit' => _trendLegendChip(
+                    label: '毛利',
+                    color: _cProf,
+                    negative: pIsNeg,
+                    absFmt: pAbsFmt,
+                    unitFmt: pUnitFmt,
+                  ),
+                  'revenue' => _trendLegendChip(
+                    label: '收入',
+                    color: _cRev,
+                    negative: rVal < 0,
+                    absFmt: rAbsFmt,
+                    unitFmt: rUnitFmt,
+                  ),
+                  'cost' => _trendLegendChip(
+                    label: '成本',
+                    color: _cCost,
+                    negative: cVal < 0,
+                    absFmt: cAbsFmt,
+                    unitFmt: cUnitFmt,
+                  ),
+                  'scaleAlt' => _trendLegendChip(
+                    label: widget.scaleAltLabel,
+                    color: _cScale,
+                    negative: sAltVal < 0,
+                    absFmt: sAltAbsFmt,
+                    unitFmt: sAltUnitFmt,
+                  ),
+                  _ => const SizedBox.shrink(),
+                },
+            ],
           ),
         ],
       ],
@@ -22556,8 +22466,8 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     final periodScaleDeltaPct = _ledgerDelta(r, scaleKey);
     return _TrendChart(
       labels: labels,
-      revenue: nums(t['revenue']),
-      cost: nums(t['cost']),
+      revenue: _seriesFromTrendMap(t, 'revenue'),
+      cost: _seriesFromTrendMap(t, 'totalCost'),
       profit: profit,
       scale: scale,
       scaleLabel: scaleLabel,

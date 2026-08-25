@@ -47,6 +47,31 @@ const lighthouseHeroSectionIconKeys = <String, String>{
 /// 「规模」在跨屏时是同一个东西，所以抽成一个常量，别再各写各的字面量。
 const int lighthouseScaleAccentValue = 0xFF7565C7;
 
+/// 走势图毛利线。不能跟规模 accent 同紫族：规模带一铺，毛利就溶进带里，
+/// APP 一级/二级更窄，副行再一截断，毛利数字也会一起消失。
+const int lighthouseProfitAccentValue = 0xFFC45C26;
+
+/// 走势图收入线。冷蓝，跟紫色规模带、琥珀成本、橙色毛利都能分开。
+const int lighthouseRevenueAccentValue = 0xFF185FA5;
+
+/// 走势图成本线。琥珀，对应利润恒等式「支出」，不能再跟规模同紫。
+const int lighthouseCostAccentValue = 0xFF854F0B;
+
+/// APP 窄屏图例必须换行；毛利/收入/成本排在可裁的规模副线前面。
+List<String> lighthouseTrendPnlLegendKeys({
+  required bool hasProfit,
+  required bool hasRevenue,
+  required bool hasCost,
+  required bool hasScaleAlt,
+}) {
+  return [
+    if (hasProfit) 'profit',
+    if (hasRevenue) 'revenue',
+    if (hasCost) 'cost',
+    if (hasScaleAlt) 'scaleAlt',
+  ];
+}
+
 const lighthouseHeroSectionAccentValues = <String, int>{
   'scale': lighthouseScaleAccentValue,
   'cost': 0xFFB47A32,

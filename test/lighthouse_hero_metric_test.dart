@@ -746,4 +746,30 @@ void main() {
       expect(lighthouseMergedSubRowGroup('中石油', '中石化'), '');
     });
   });
+
+  group('trend chart profit visibility', () {
+    test('pnl accents are distinct from scale and each other', () {
+      expect(
+        {
+          lighthouseScaleAccentValue,
+          lighthouseProfitAccentValue,
+          lighthouseRevenueAccentValue,
+          lighthouseCostAccentValue,
+        }.length,
+        4,
+      );
+    });
+
+    test('compact legend keeps 毛利 收入 成本 before optional scaleAlt', () {
+      expect(
+        lighthouseTrendPnlLegendKeys(
+          hasProfit: true,
+          hasRevenue: true,
+          hasCost: true,
+          hasScaleAlt: true,
+        ),
+        ['profit', 'revenue', 'cost', 'scaleAlt'],
+      );
+    });
+  });
 }

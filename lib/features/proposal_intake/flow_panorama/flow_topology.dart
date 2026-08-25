@@ -12,9 +12,9 @@ class ZoneDef {
 }
 
 const List<ZoneDef> kZones = [
-  ZoneDef(24, 110, 284, 470, '上游 · 供给与补贴'),
+  ZoneDef(24, 110, 284, 470, '上游 · 供给'),
   ZoneDef(450, 76, 380, 674, '我方 · 主体与中台'),
-  ZoneDef(1000, 110, 364, 520, '渠道 · 清算'),
+  ZoneDef(1000, 110, 364, 520, '渠道'),
 ];
 
 class NodeDef {
@@ -52,22 +52,9 @@ class NodeDef {
 
 final List<NodeDef> kNodes = [
   NodeDef(
-    id: 'subsidy',
-    x: 46,
-    y: 150,
-    w: 240,
-    h: 92,
-    role: '补贴出资方',
-    icon: Icons.card_giftcard,
-    accent: const Color(0xFFC08A3E),
-    editable: true,
-    fallback: (c) => c.subsidyName,
-    meta: (c) => '补贴结算 · ${c.supplyMode}',
-  ),
-  NodeDef(
     id: 'supplier',
     x: 46,
-    y: 440,
+    y: 300,
     w: 240,
     h: 92,
     role: '供给方 · 采购对方',
@@ -106,19 +93,6 @@ final List<NodeDef> kNodes = [
     ],
   ),
   NodeDef(
-    id: 'billing',
-    x: 500,
-    y: 620,
-    w: 280,
-    h: 92,
-    role: '我方开票主体',
-    icon: Icons.receipt_long,
-    accent: const Color(0xFFC08A3E),
-    editable: true,
-    fallback: (c) => c.billingName.isEmpty ? c.salesOurs : c.billingName,
-    meta: (c) => c.taxLabel,
-  ),
-  NodeDef(
     id: 'channel',
     x: 1040,
     y: 150,
@@ -129,32 +103,6 @@ final List<NodeDef> kNodes = [
     accent: const Color(0xFF6C7BD6),
     name: (c) => c.salesTheirs,
     meta: (c) => '${c.channelMode} · ${c.channelCycle}',
-  ),
-  NodeDef(
-    id: 'clearing',
-    x: 1040,
-    y: 330,
-    w: 240,
-    h: 92,
-    role: '清算 / 支付机构',
-    icon: Icons.payments_outlined,
-    accent: const Color(0xFFC08A3E),
-    editable: true,
-    fallback: (c) => c.clearingName,
-    meta: (c) => '收款账户 ${c.payeeAccount}',
-  ),
-  NodeDef(
-    id: 'insti',
-    x: 1040,
-    y: 510,
-    w: 240,
-    h: 92,
-    role: '服务 / 承接机构',
-    icon: Icons.verified_user_outlined,
-    accent: const Color(0xFF8A6BA8),
-    editable: true,
-    fallback: (c) => c.serviceOrgName,
-    meta: (c) => c.project,
   ),
 ];
 
@@ -236,27 +184,6 @@ final List<EdgeDef> kEdges = [
     note: (c) => '以 ${_join(c.outputs)} 发放至 ${c.salesTheirs}',
   ),
   EdgeDef(
-    id: 'f2',
-    kind: FlowKind.fund,
-    own: 'fin1',
-    a: const Anchor('clearing', 'L', -20),
-    b: const Anchor('hub', 'R', -60),
-    d: const [110, 110],
-    t: 0.42,
-    label: (c) => '${c.channelMode} · ${c.channelCycle}',
-    sub: (c) => c.payeeAccount,
-    note: (c) => '按 ${c.channelCycle} 回款至 ${c.salesOurs}（${c.payeeAccount}）',
-    st: (c) {
-      if (c.financePending > 0) {
-        return FlowStatus(FlowLevel.warn, '${c.financePending} 项财务字段待复核');
-      }
-      if (c.hasRevenue && c.hasScale && c.revenueRate < 60) {
-        return FlowStatus(FlowLevel.warn, '回款进度 ${c.revenueRate}%，低于账期');
-      }
-      return null;
-    },
-  ),
-  EdgeDef(
     id: 'f4',
     kind: FlowKind.fund,
     own: 'fin1',
@@ -300,24 +227,6 @@ final List<EdgeDef> kEdges = [
         '${c.purchaseTheirs} 向 ${c.purchaseOurs} 开票 · ${c.purchaseTerms.isEmpty ? c.purchaseName : c.purchaseTerms}',
   ),
   EdgeDef(
-    id: 'i5',
-    kind: FlowKind.invoice,
-    own: 'fin1',
-    a: const Anchor('hub', 'B', -110),
-    b: const Anchor('billing', 'T', -40),
-    d: const [70, 70],
-    label: (c) => c.billingName,
-    sub: (c) => [
-      if (c.hasInvoiceAmount) '已开票 ${c.invoiceWanText}',
-      c.taxLabel,
-    ].join(' · '),
-    note: (c) =>
-        '${c.salesOurs} 指定 ${c.billingName} 开票${c.salesTerms.isEmpty ? '' : ' · ${c.salesTerms}'}',
-    st: (c) => c.hasInvoiceGap
-        ? FlowStatus(FlowLevel.block, '开票滞后 ${FlowCtx.n(c.invoiceGap)} 万')
-        : null,
-  ),
-  EdgeDef(
     id: 'n1',
     kind: FlowKind.info,
     own: 'tech',
@@ -353,18 +262,6 @@ final List<EdgeDef> kEdges = [
     st: (c) => c.missingIf.isNotEmpty
         ? FlowStatus(FlowLevel.block, '缺 ${c.missingIf.length} 项必需对账字段')
         : null,
-  ),
-  EdgeDef(
-    id: 'n6',
-    kind: FlowKind.info,
-    own: 'fin1',
-    a: const Anchor('hub', 'R', 65),
-    b: const Anchor('clearing', 'L', 30),
-    d: const [110, 110],
-    t: 0.58,
-    label: (c) => c.channelCycle,
-    sub: (c) => c.clearingName,
-    note: (c) => '与 ${c.clearingName} 按 ${c.channelCycle} 交换对账文件',
   ),
 ];
 

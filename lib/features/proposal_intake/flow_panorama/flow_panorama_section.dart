@@ -201,8 +201,8 @@ class _FlowPanoramaSectionState extends State<FlowPanoramaSection>
   double _scale = 1;
   Size _viewportSize = Size.zero;
 
-  double get _minScale => widget.compact ? 1.0 : 0.75;
-  double get _maxScale => widget.compact ? 3.5 : 4.0;
+  double get _minScale => widget.compact ? 0.85 : 0.75;
+  double get _maxScale => 4.0;
   Offset? _doubleTapAt;
 
   // 每条边的动画相位与周期
@@ -671,9 +671,6 @@ class _FlowPanoramaSectionState extends State<FlowPanoramaSection>
   // —— 构建 ——
   @override
   Widget build(BuildContext context) {
-    // 开票主体名写入 ctx，供开票链路文案使用
-    ctx.billingName = nodeName(kNodeById['billing']!);
-
     final counts = <FlowLevel, int>{
       FlowLevel.ok: 0,
       FlowLevel.warn: 0,
@@ -735,7 +732,7 @@ class _FlowPanoramaSectionState extends State<FlowPanoramaSection>
                   ? box.maxHeight
                   : 420.0)
             : widget.compact
-            ? 420.0
+            ? math.max(300.0, math.min(width * kFlowH / kFlowW + 24, 520.0))
             : width * kFlowH / kFlowW;
         _viewportSize = Size(width, height);
         final viewer = _AbsorbParentScroll(
@@ -749,7 +746,7 @@ class _FlowPanoramaSectionState extends State<FlowPanoramaSection>
               minScale: _minScale,
               maxScale: _maxScale,
               boundaryMargin: const EdgeInsets.all(80),
-              panEnabled: _zoomed || widget.immersive,
+              panEnabled: _zoomed || widget.immersive || widget.compact,
               scaleEnabled: widget.compact || widget.immersive,
               trackpadScrollCausesScale: false,
               child: SizedBox(width: width, height: height, child: fitted),
@@ -1479,7 +1476,7 @@ class _FlowPanoramaSectionState extends State<FlowPanoramaSection>
       left: 0,
       right: 0,
       bottom: 0,
-      height: 42,
+      height: widget.compact ? 56 : 42,
       child: IgnorePointer(
         child: Container(
           decoration: BoxDecoration(
@@ -1492,48 +1489,57 @@ class _FlowPanoramaSectionState extends State<FlowPanoramaSection>
               ],
             ),
           ),
-          padding: const EdgeInsets.symmetric(horizontal: 18),
-          child: Row(
-            children: [
-              for (final k in FlowKind.values) ...[
-                Container(
-                  width: 18,
-                  height: 2.5,
-                  decoration: BoxDecoration(
-                    color: kKind[k]!.color,
-                    borderRadius: BorderRadius.circular(2),
+          padding: EdgeInsets.fromLTRB(
+            widget.compact ? 12 : 18,
+            8,
+            widget.compact ? 56 : 18,
+            8,
+          ),
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                for (final k in FlowKind.values) ...[
+                  Container(
+                    width: 18,
+                    height: 2.5,
+                    decoration: BoxDecoration(
+                      color: kKind[k]!.color,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
                   ),
-                ),
-                const SizedBox(width: 7),
-                Text(
-                  kKind[k]!.name,
-                  style: const TextStyle(
-                    fontSize: 10,
-                    color: Color(0xFF948AA8),
+                  const SizedBox(width: 7),
+                  Text(
+                    kKind[k]!.name,
+                    style: const TextStyle(
+                      fontSize: 10,
+                      color: Color(0xFF948AA8),
+                    ),
                   ),
-                ),
-                const SizedBox(width: 4),
+                  if (!widget.compact) ...[
+                    const SizedBox(width: 4),
+                    Text(
+                      kKind[k]!.desc,
+                      style: const TextStyle(
+                        fontSize: 10,
+                        color: Color(0xFF6E6486),
+                      ),
+                    ),
+                  ],
+                  const SizedBox(width: 16),
+                ],
                 Text(
-                  kKind[k]!.desc,
+                  widget.compact
+                      ? '拖动查看 · 双指缩放 · 右下角可全屏'
+                      : '点击补贴方 / 清算 / 开票 / 承接机构即可填写',
                   style: const TextStyle(
-                    fontSize: 10,
+                    fontSize: 9.5,
+                    fontFamily: 'monospace',
                     color: Color(0xFF6E6486),
                   ),
                 ),
-                const SizedBox(width: 16),
               ],
-              const Spacer(),
-              Text(
-                widget.compact
-                    ? '点击查看 · 双指缩放 · 长按主体改名'
-                    : '点击补贴方 / 清算 / 开票 / 承接机构即可填写',
-                style: TextStyle(
-                  fontSize: 9.5,
-                  fontFamily: 'monospace',
-                  color: Color(0xFF6E6486),
-                ),
-              ),
-            ],
+            ),
           ),
         ),
       ),

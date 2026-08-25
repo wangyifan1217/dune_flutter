@@ -12,15 +12,27 @@ void main() {
       'g5',
       'g6',
       'f1',
+      'f2',
       'f3',
       'f6',
       'i2',
       'i3',
       'i4',
+      'i5',
       'n3',
       'n5',
+      'n6',
     };
     expect(kEdges.map((e) => e.id).toSet().intersection(removed), isEmpty);
+    expect(
+      kNodes.map((n) => n.id).toSet().intersection({
+        'subsidy',
+        'clearing',
+        'billing',
+        'insti',
+      }),
+      isEmpty,
+    );
 
     final nodeIds = kNodes.map((n) => n.id).toSet();
     for (final e in kEdges) {

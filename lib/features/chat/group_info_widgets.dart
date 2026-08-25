@@ -228,7 +228,6 @@ class GroupInfoMemberGrid extends StatelessWidget {
   const GroupInfoMemberGrid({
     super.key,
     required this.members,
-    required this.selfUserId,
     required this.avatarService,
     this.showAdd = false,
     this.showRemove = false,
@@ -244,7 +243,6 @@ class GroupInfoMemberGrid extends StatelessWidget {
   static const int maxColumns = 6;
 
   final List<NativeGroupMember> members;
-  final int selfUserId;
   final ConversationService avatarService;
   final bool showAdd;
   final bool showRemove;
@@ -281,8 +279,6 @@ class GroupInfoMemberGrid extends StatelessWidget {
                 avatarPreset: m.avatarPreset,
                 avatarObjectKey: m.avatarObjectKey,
                 avatarService: avatarService,
-                isOwner: m.isOwner,
-                isSelf: m.userId == selfUserId,
                 onTap: onMemberTap == null ? null : () => onMemberTap!(m),
               ),
             if (showAdd)
@@ -343,8 +339,6 @@ class _MemberCell extends StatelessWidget {
     required this.avatarSize,
     this.avatarPreset,
     this.avatarObjectKey,
-    this.isOwner = false,
-    this.isSelf = false,
     this.onTap,
   });
 
@@ -354,8 +348,6 @@ class _MemberCell extends StatelessWidget {
   final double avatarSize;
   final String? avatarPreset;
   final String? avatarObjectKey;
-  final bool isOwner;
-  final bool isSelf;
   final VoidCallback? onTap;
 
   @override
@@ -387,14 +379,6 @@ class _MemberCell extends StatelessWidget {
               color: _textPrimary,
             ),
           ),
-          if (isOwner || isSelf)
-            Text(
-              isOwner ? '群主' : '我',
-              style: DunesTypography.sans(
-                fontSize: 10,
-                color: _textSecondary,
-              ),
-            ),
         ],
       ),
     );

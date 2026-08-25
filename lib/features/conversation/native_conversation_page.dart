@@ -275,6 +275,10 @@ class _NativeConversationPageState extends State<NativeConversationPage>
   void _onListScroll() {
     // 隐藏期间不写入，避免异常布局把 0 偏移覆盖掉真实位置。
     if (!widget.listVisible) return;
+    if (windowsTrayIsWindowInactive()) return;
+    if (!_listScrollController.hasClients) return;
+    // 最小化时视口坍缩也会把 offset 打成 0。
+    if (_listScrollController.position.viewportDimension <= 80) return;
     _persistScrollNow();
   }
 
@@ -507,6 +511,9 @@ class _NativeConversationPageState extends State<NativeConversationPage>
     // 从后台（含点击推送通知）回到前台时，重连实时通道并刷新未读，
     // 避免会话列表未读条数图标停留在旧状态。
     unawaited(_realtime.connect());
+    if (widget.listVisible) {
+      _scheduleScrollRestore();
+    }
     if (mounted && !_loading) {
       _load(silent: true);
     }
@@ -936,12 +943,12 @@ class _NativeConversationPageState extends State<NativeConversationPage>
     );
     widget.commUnread.update(total);
     windowsTrayUpdateUnread(total);
-    windowsTrayUpdateUnreadItems(
-      windowsTrayUnreadItemsFromConversations(
-        rows: visibleRows,
-        commUnread: widget.commUnread,
-        viewingId: selected,
-      ),
+    windowsTrayPushUnreadFromConversations(
+      rows: visibleRows,
+      commUnread: widget.commUnread,
+      viewingId: selected,
+      session: widget.session,
+      avatarService: _service,
     );
   }
 

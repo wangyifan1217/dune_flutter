@@ -38,7 +38,6 @@ void main() {
             width: surface.width,
             child: GroupInfoMemberGrid(
               members: members,
-              selfUserId: 1,
               avatarService: service,
               showAdd: true,
               showRemove: true,

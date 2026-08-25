@@ -274,6 +274,7 @@ private struct TrayPeekItem {
   let unread: Int
   let initial: String
   let color: NSColor
+  let avatar: NSImage?
 
   init?(map: [String: Any]) {
     let id: Int
@@ -308,6 +309,13 @@ private struct TrayPeekItem {
     let g = CGFloat((argb >> 8) & 0xFF) / 255.0
     let b = CGFloat(argb & 0xFF) / 255.0
     color = NSColor(srgbRed: r, green: g, blue: b, alpha: 1)
+    if let typed = map["avatarPng"] as? FlutterStandardTypedData {
+      avatar = NSImage(data: typed.data)
+    } else if let data = map["avatarPng"] as? Data {
+      avatar = NSImage(data: data)
+    } else {
+      avatar = nil
+    }
   }
 }
 
@@ -442,15 +450,23 @@ private final class TrayPeekView: NSView {
       let ax = Self.pad
       let ay = row.midY - av / 2
       let avatarRect = NSRect(x: ax, y: ay, width: av, height: av)
-      item.color.setFill()
-      NSBezierPath(roundedRect: avatarRect, xRadius: 6, yRadius: 6).fill()
-      drawText(
-        item.initial,
-        in: avatarRect,
-        font: .systemFont(ofSize: 12, weight: .semibold),
-        color: .white,
-        align: .center
-      )
+      let corner = max(2, av * 0.18)
+      if let avatar = item.avatar {
+        NSGraphicsContext.saveGraphicsState()
+        NSBezierPath(roundedRect: avatarRect, xRadius: corner, yRadius: corner).addClip()
+        avatar.draw(in: avatarRect)
+        NSGraphicsContext.restoreGraphicsState()
+      } else {
+        item.color.setFill()
+        NSBezierPath(roundedRect: avatarRect, xRadius: corner, yRadius: corner).fill()
+        drawText(
+          item.initial,
+          in: avatarRect,
+          font: .systemFont(ofSize: 12, weight: .semibold),
+          color: .white,
+          align: .center
+        )
+      }
 
       let textLeft = ax + av + 8
       let textRight = bounds.width - 28

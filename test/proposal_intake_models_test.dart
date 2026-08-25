@@ -30,16 +30,16 @@ void main() {
           },
         ],
       },
-      'rules': {'ratingS': 50000000, 'ratingA': 20000000, 'ratingB': 5000000},
+      'rules': {'ratingS': 5000, 'ratingA': 2000, 'ratingB': 500},
     });
 
     expect(options.products.single.children, ['项目甲', '项目乙']);
     expect(options.platforms.single.children, ['发放', '核销']);
     expect(options.financeInterfaces.single.required, isTrue);
-    expect(options.ratingFor(50000000), 'S');
-    expect(options.ratingFor(20000000), 'A');
-    expect(options.ratingFor(5000000), 'B');
-    expect(options.ratingFor(4999999), 'C');
+    expect(options.ratingFor(5000), 'S');
+    expect(options.ratingFor(2000), 'A');
+    expect(options.ratingFor(500), 'B');
+    expect(options.ratingFor(499), 'C');
   });
 
   test('proposal options parse configured presidents', () {
@@ -57,7 +57,7 @@ void main() {
     expect(options.presidentDisplayNames(const []), '张三、用户22');
   });
 
-  test('legacy wan thresholds are converted to yuan', () {
+  test('wan thresholds stay wan', () {
     final options = ProposalIntakeOptions.fromJson({
       'rules': {
         'ratingS': 5000,
@@ -66,8 +66,8 @@ void main() {
         'minimumScale': 500,
       },
     });
-    expect(options.minimumScale, 5000000);
-    expect(options.ratingS, 50000000);
+    expect(options.minimumScale, 500);
+    expect(options.ratingS, 5000);
   });
 
   test('historical values remain available in proposal row form', () {
@@ -101,6 +101,18 @@ void main() {
       ProposalPerson(userId: 21, name: '赵总裁', positionName: '总裁'),
     ];
     expect(row.initiatorDisplayName(people), '王奕凡');
+    expect(
+      row
+          .copyWith(
+            form: {
+              ...row.form,
+              'marketOwner2': '吴姝瑶',
+              'marketOwner2UserId': 99,
+            },
+          )
+          .initiatorDisplayName(people),
+      '王奕凡',
+    );
     expect(row.canDeleteBy(11), isTrue);
     expect(row.canDeleteBy(31), isFalse);
     final lines = row.stakeholderLines(
@@ -116,7 +128,13 @@ void main() {
     );
     expect(
       lines.map((item) => '${item.role}:${item.name}').toList(),
-      containsAll(['发起人/填写人:王奕凡', '运营:李运营', '市场部负责人一:未指定', '最终确认人:赵总裁']),
+      containsAll([
+        '创建人:王奕凡',
+        '市场部负责人二:王奕凡',
+        '运营:李运营',
+        '市场部负责人一:未指定',
+        '最终确认人:赵总裁',
+      ]),
     );
 
     final reviewing = row.copyWith(status: 'reviewing');
@@ -140,8 +158,30 @@ void main() {
     expect(row.resolvedStage, 'reviewing');
     expect(row.myAction, 'review_market');
     expect(proposalIntakeActionLabel('submit_president'), '待通知最终人');
+    expect(proposalIntakeActionLabel('fill'), '待填写');
     expect(proposalIntakeActionLabel('revise'), '最终人已驳回请从头填写');
     expect(proposalIntakeActionLabel('revise_module'), '板块已驳回请修改');
+  });
+
+  test('clearing contract review does not reset other modules', () {
+    final next = proposalIntakeClearContractReview({
+      'marketCompleted': true,
+      'technologyCompleted': true,
+      'financeInterfaceCompleted': true,
+      'financeCompleted': true,
+      'purchaseContractCompleted': true,
+      'salesContractCompleted': true,
+      'contractItems': {'purchase.Name': true, 'sales.Name': true},
+    }, prefix: 'sales');
+    expect(next['marketCompleted'], isTrue);
+    expect(next['technologyCompleted'], isTrue);
+    expect(next['financeInterfaceCompleted'], isTrue);
+    expect(next['financeCompleted'], isTrue);
+    expect(next['purchaseContractCompleted'], isTrue);
+    expect(next['salesContractCompleted'], isFalse);
+    expect(next['contractsCompleted'], isFalse);
+    expect((next['contractItems'] as Map)['purchase.Name'], isTrue);
+    expect((next['contractItems'] as Map).containsKey('sales.Name'), isFalse);
   });
 
   test('proposal intake card shows submitter and needed action', () {
@@ -432,6 +472,7 @@ void main() {
   test('review assignees are required before handoff', () {
     expect(missingProposalReviewAssignees({}), [
       '科技部负责人',
+      '市场部负责人二',
       '市场部负责人一',
       '财务部负责人一',
       '财务部负责人二',
@@ -440,6 +481,7 @@ void main() {
     expect(
       missingProposalReviewAssignees({
         'technologyOwnerUserId': '3',
+        'marketOwner2UserId': '2',
         'marketOwner1UserId': '4',
         'financeOwner1UserId': '6',
         'financeOwner2UserId': '5',
@@ -451,7 +493,7 @@ void main() {
       missingProposalReviewAssignees({
         'technologyOwnerUserId': '3',
       }, includeTech: false),
-      ['市场部负责人一', '财务部负责人一', '财务部负责人二', '行政负责人'],
+      ['市场部负责人二', '市场部负责人一', '财务部负责人一', '财务部负责人二', '行政负责人'],
     );
   });
 

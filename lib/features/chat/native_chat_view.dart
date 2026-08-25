@@ -344,9 +344,15 @@ class _NativeChatViewState extends State<NativeChatView>
   double _olderScrollHoldPixels = 0;
 
   /// 最小化期间收到新消息但贴底失败时，恢复前台后再滚一次。
+  /// 也会在「最小化前贴在最新端」时置位，避免还原窗口把列表拽去历史方向。
   bool _pendingStickBottomAfterForeground = false;
   bool _foregroundSyncRunning = false;
   DateTime? _lastForegroundSyncAt;
+
+  /// 窗口收起/还原时 reverse 列表会乱跳，这段时间不要把像素变化当成用户上滑。
+  bool _backgroundLayoutActive = false;
+  DateTime? _foregroundRestoredAt;
+  DateTime? _lastPointerSignalScrollAt;
   double _olderScrollHoldMax = 0;
   bool _loadingNewer = false;
   bool _locatedMode = false;
@@ -799,6 +805,7 @@ class _NativeChatViewState extends State<NativeChatView>
     super.didChangeMetrics();
     if (!mounted) return;
     if (!_hasStableChatViewport || windowsTrayIsWindowInactive()) {
+      _backgroundLayoutActive = true;
       _freezeHistoryViewportForBackground();
     }
     if (_isBrowsingHistory || _locatedMode) return;
@@ -822,25 +829,52 @@ class _NativeChatViewState extends State<NativeChatView>
     if (state == AppLifecycleState.inactive ||
         state == AppLifecycleState.hidden ||
         state == AppLifecycleState.paused) {
+      _backgroundLayoutActive = true;
       _freezeHistoryViewportForBackground();
+      if (!_historyViewportFrozen && !_locatedMode) {
+        _pendingStickBottomAfterForeground = true;
+      }
       return;
     }
     if (state == AppLifecycleState.resumed) {
-      unawaited(_syncLatestOnForeground());
+      _onChatForegroundResumed();
     }
   }
 
   void _onChatForegroundPaused() {
+    _backgroundLayoutActive = true;
     _freezeHistoryViewportForBackground();
+    if (!_historyViewportFrozen && !_locatedMode) {
+      _pendingStickBottomAfterForeground = true;
+    }
   }
 
   void _onChatForegroundResumed() {
+    _foregroundRestoredAt = DateTime.now();
     // 窗口恢复后先用失焦前快照复位；即使补拉被防抖跳过，也不能停在
-    // Windows 最小化时夹出的 pixels=0。
+    // Windows 最小化时夹出的 pixels=0，也不能停在还原时被拽去的历史位置。
     if (_isBrowsingHistory) {
       _restoreHistoryViewportAfterForeground();
+    } else if (!_locatedMode) {
+      _pendingStickBottomAfterForeground = true;
+      _scrollBottom(force: true, gentle: false);
     }
     unawaited(_syncLatestOnForeground());
+    // 等视口重新铺开后再允许把滚动当用户操作；过长会卡住滚轮加载历史。
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      Future<void>.delayed(const Duration(milliseconds: 180), () {
+        if (!mounted) return;
+        if (_hasStableChatViewport && !windowsTrayIsWindowInactive()) {
+          _backgroundLayoutActive = false;
+        }
+      });
+      Future<void>.delayed(const Duration(milliseconds: 900), () {
+        if (!mounted) return;
+        if (!windowsTrayIsWindowInactive()) {
+          _backgroundLayoutActive = false;
+        }
+      });
+    });
   }
 
   /// 从最小化/失焦恢复后：重连 realtime、REST 补最新消息。
@@ -858,8 +892,8 @@ class _NativeChatViewState extends State<NativeChatView>
     if (_foregroundSyncRunning) return;
     _lastForegroundSyncAt = now;
     _foregroundSyncRunning = true;
-    // 最小化会把 reverse 列表 pixels 夹到 0，不能用恢复后的像素判断。
-    _freezeHistoryViewportForBackground();
+    // 不要用还原后的像素重新冻结：Windows 还原窗口时 reverse 列表会先跳到
+    // 历史方向，再冻就会把「贴底」误判成「在看历史」，会话被往上拽。
     final locating = _locatedMode || _effectiveFocusMessageId > 0;
     final browsingHistory = _isBrowsingHistory;
     final nearBottom =
@@ -949,8 +983,20 @@ class _NativeChatViewState extends State<NativeChatView>
     if (!_scrollController.hasClients) return;
     final pos = _scrollController.position;
     _scheduleUnreadVisibilityCheck();
+    if (_isBackgroundLayoutNoise) {
+      if (!_historyViewportFrozen && !_locatedMode) {
+        _freezeHistoryViewportForBackground();
+      }
+      if (_pendingStickBottomAfterForeground &&
+          !_historyViewportFrozen &&
+          !_rawPixelsNearLatest) {
+        _scrollBottom(force: true, gentle: true);
+      }
+      return;
+    }
     if (_historyViewportFrozen) {
-      if (_hasStableChatViewport && !_rawPixelsNearLatest) {
+      // 只有用户真的在滚，才解除冻结；还原窗口造成的 pixels 变化不能解冻。
+      if (_userScrollActive && !_rawPixelsNearLatest) {
         _historyViewportFrozen = false;
       } else {
         return;
@@ -1013,6 +1059,11 @@ class _NativeChatViewState extends State<NativeChatView>
         _messageLocateSettling) {
       return false;
     }
+    // 还原窗口时的程序化滚动不要去补历史（ensureVisible 会把会话往上拽）。
+    // 最小化前贴底时仍允许续拉填满视口，且走贴底分支。
+    if (_isBackgroundLayoutNoise && !_pendingStickBottomAfterForeground) {
+      return false;
+    }
     // 定位落地后未动手滚动前不要自动补历史，否则 prepend 会把视口拽来拽去。
     if (_locatedMode && !_userInteractedWithScroll) return false;
     final nowMs = DateTime.now().millisecondsSinceEpoch;
@@ -1044,6 +1095,9 @@ class _NativeChatViewState extends State<NativeChatView>
   void _onMessageListPointerSignal(PointerSignalEvent event) {
     if (event is! PointerScrollEvent) return;
     if (!_scrollController.hasClients) return;
+    _lastPointerSignalScrollAt = DateTime.now();
+    _userInteractedWithScroll = true;
+    _enterStickBottomPending = false;
     final pos = _scrollController.position;
     // reverse 列表：dy<0 朝历史；dy>0 朝更新。
     if (event.scrollDelta.dy < 0) {
@@ -1087,6 +1141,7 @@ class _NativeChatViewState extends State<NativeChatView>
       _freezeHistoryViewportForBackground();
       return;
     }
+    if (_isBackgroundLayoutNoise) return;
     if (_historyViewportFrozen) return;
     if (_looksLikeBackgroundScrollClamp) {
       _freezeHistoryViewportForBackground();
@@ -1426,11 +1481,13 @@ class _NativeChatViewState extends State<NativeChatView>
       _userInteractedWithScroll = true;
       _enterStickBottomPending = false;
     }
-    // PC 滚轮常无 dragDetails；仅桌面用 scrollDelta 兜底，避免 APP 把程序化滚动误判成用户上滑。
+    // PC 滚轮常无 dragDetails；必须有最近的 PointerScroll，才能当成用户滚动。
+    // 否则 Windows 最小化/还原时 reverse 列表的程序化 delta 会被误判成上滑。
     if (isDesktopCommOnly &&
         notification is ScrollUpdateNotification &&
         notification.dragDetails == null &&
-        (notification.scrollDelta ?? 0).abs() > 0.5) {
+        (notification.scrollDelta ?? 0).abs() > 0.5 &&
+        _hasRecentPointerScroll) {
       _userInteractedWithScroll = true;
       _enterStickBottomPending = false;
     }
@@ -1477,7 +1534,9 @@ class _NativeChatViewState extends State<NativeChatView>
       }
     } else if (notification is ScrollEndNotification) {
       _userScrollActive = false;
-      _updateStickBottomState();
+      if (!_isBackgroundLayoutNoise) {
+        _updateStickBottomState();
+      }
       if (_canMarkReadNow && _isNearBottom) {
         unawaited(_markReadIfNeeded());
       }
@@ -1489,6 +1548,31 @@ class _NativeChatViewState extends State<NativeChatView>
     final at = _lastUserScrollTowardLatestAt;
     if (at == null) return false;
     return DateTime.now().difference(at) < const Duration(milliseconds: 480);
+  }
+
+  bool get _hasRecentPointerScroll {
+    final at = _lastPointerSignalScrollAt;
+    if (at == null) return false;
+    return DateTime.now().difference(at) < const Duration(milliseconds: 480);
+  }
+
+  bool get _isForegroundSettling {
+    final at = _foregroundRestoredAt;
+    if (at == null) return false;
+    return DateTime.now().difference(at) < const Duration(milliseconds: 900);
+  }
+
+  /// 最小化收起、还原窗口、视口尚未铺开时的程序化滚动，不能当成用户上滑。
+  bool get _isBackgroundLayoutNoise {
+    if (windowsTrayIsWindowInactive()) return true;
+    if (_backgroundLayoutActive) return true;
+    if (_scrollController.hasClients &&
+        _scrollController.position.viewportDimension <= 80) {
+      return true;
+    }
+    return _isForegroundSettling &&
+        !_userScrollActive &&
+        !_hasRecentPointerScroll;
   }
 
   /// 最小化等后台场景会把 reverse 列表一下子夹到 0；用户自己滑回底部、
@@ -1508,6 +1592,10 @@ class _NativeChatViewState extends State<NativeChatView>
   bool get _isNearBottom {
     // 冻结看历史时 pixels 可能已被夹到 0，不能当成贴底。
     if (_historyViewportFrozen) return false;
+    // 最小化前贴在最新端：还原窗口时 pixels 会先跳到历史方向。
+    if (_pendingStickBottomAfterForeground && !_stableAwayFromLatest) {
+      return true;
+    }
     return _rawPixelsNearLatest;
   }
 
@@ -1526,6 +1614,10 @@ class _NativeChatViewState extends State<NativeChatView>
   /// 用户正在看历史。最小化后 pixels 会被夹到 0，必须优先用冻结快照。
   bool get _isBrowsingHistory {
     if (_locatedMode) return false;
+    // 最小化前贴在最新端：还原时列表会往上跳，不能当成在看历史。
+    if (_pendingStickBottomAfterForeground && !_historyViewportFrozen) {
+      return false;
+    }
     if (_historyViewportFrozen || _stableAwayFromLatest) return true;
     if (!_hasStableChatViewport) return false;
     return !_rawPixelsNearLatest &&
@@ -1534,6 +1626,7 @@ class _NativeChatViewState extends State<NativeChatView>
 
   void _captureStableHistoryViewport() {
     if (_historyViewportFrozen) return;
+    if (_isBackgroundLayoutNoise) return;
     if (!_hasStableChatViewport) return;
     final away =
         !_rawPixelsNearLatest &&
@@ -1551,7 +1644,10 @@ class _NativeChatViewState extends State<NativeChatView>
 
   void _freezeHistoryViewportForBackground() {
     if (_locatedMode || _historyViewportFrozen) return;
-    if (_hasStableChatViewport && !_rawPixelsNearLatest) {
+    // 窗口正在收起时 pixels 已不可信，只用上一帧稳定快照。
+    if (_hasStableChatViewport &&
+        !windowsTrayIsWindowInactive() &&
+        !_backgroundLayoutActive) {
       _captureStableHistoryViewport();
     }
     if (_stableAwayFromLatest ||

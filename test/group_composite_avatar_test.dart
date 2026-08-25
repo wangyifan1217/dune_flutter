@@ -12,4 +12,14 @@ void main() {
       expect(groupCompositeAvatarCellSize(45, 2), closeTo(21, 0.001));
     });
   });
+
+  group('groupCompositeAvatarRowPattern', () {
+    test('keeps the WeChat-style 9-grid', () {
+      expect(groupCompositeAvatarRowPattern(9), [
+        [0, 1, 2],
+        [3, 4, 5],
+        [6, 7, 8],
+      ]);
+    });
+  });
 }

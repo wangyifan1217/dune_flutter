@@ -101,36 +101,42 @@ class ProposalCard extends StatelessWidget {
   const ProposalCard({
     super.key,
     required this.child,
-    this.padding = const EdgeInsets.all(18),
+    this.padding,
     this.margin = const EdgeInsets.only(bottom: 14),
     this.gradient,
   });
 
   final Widget child;
-  final EdgeInsets padding;
-  final EdgeInsets margin;
+  final EdgeInsetsGeometry? padding;
+  final EdgeInsetsGeometry margin;
   final Gradient? gradient;
 
   @override
-  Widget build(BuildContext context) => Container(
-    width: double.infinity,
-    margin: margin,
-    padding: padding,
-    decoration: BoxDecoration(
-      color: gradient == null ? ProposalPalette.card : null,
-      gradient: gradient,
-      borderRadius: BorderRadius.circular(12),
-      border: Border.all(color: const Color(0xFFE9E2EF)),
-      boxShadow: const [
-        BoxShadow(
-          color: Color(0x0C4E3A6C),
-          blurRadius: 20,
-          offset: Offset(0, 6),
-        ),
-      ],
-    ),
-    child: child,
-  );
+  Widget build(BuildContext context) {
+    final narrow = MediaQuery.sizeOf(context).width < 620;
+    final resolvedPadding =
+        padding ??
+        (narrow ? const EdgeInsets.all(12) : const EdgeInsets.all(18));
+    return Container(
+      width: double.infinity,
+      margin: margin,
+      padding: resolvedPadding,
+      decoration: BoxDecoration(
+        color: gradient == null ? ProposalPalette.card : null,
+        gradient: gradient,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFE9E2EF)),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x0C4E3A6C),
+            blurRadius: 20,
+            offset: Offset(0, 6),
+          ),
+        ],
+      ),
+      child: child,
+    );
+  }
 }
 
 class ProposalSectionTitle extends StatelessWidget {
@@ -272,51 +278,58 @@ class ProposalField extends StatelessWidget {
         ProposalChipKind.purple,
       ),
     };
-    return Padding(
-      padding: const EdgeInsets.all(4),
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: resolved == ProposalFieldTone.fill ? null : bg,
-          borderRadius: BorderRadius.circular(10),
-          border: resolved == ProposalFieldTone.fill
-              ? null
-              : Border.all(color: border),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(8),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Wrap(
-                spacing: 8,
-                runSpacing: 6,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                children: [
-                  Text(
-                    label,
-                    style: const TextStyle(
-                      color: ProposalPalette.text3,
-                      fontSize: 11,
-                      letterSpacing: .2,
-                    ),
-                  ),
-                  if (required)
-                    const Text(
-                      '*',
-                      style: TextStyle(
-                        color: ProposalPalette.coral,
-                        fontSize: 12,
+    final narrow = MediaQuery.sizeOf(context).width < 620;
+    return SizedBox(
+      width: double.infinity,
+      child: Padding(
+        padding: EdgeInsets.all(narrow ? 2 : 4),
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: resolved == ProposalFieldTone.fill ? null : bg,
+            borderRadius: BorderRadius.circular(10),
+            border: resolved == ProposalFieldTone.fill
+                ? null
+                : Border.all(color: border),
+          ),
+          child: Padding(
+            padding: EdgeInsets.symmetric(
+              horizontal: narrow ? 10 : 8,
+              vertical: narrow ? 10 : 8,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 6,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    Text(
+                      label,
+                      style: const TextStyle(
+                        color: ProposalPalette.text3,
+                        fontSize: 11,
+                        letterSpacing: .2,
                       ),
                     ),
-                  if (source != null)
-                    ProposalStatusChip(label: source!, kind: chipKind),
-                  ?trailing,
-                ],
-              ),
-              const SizedBox(height: 7),
-              child,
-              if (footer != null) ...[const SizedBox(height: 6), footer!],
-            ],
+                    if (required)
+                      const Text(
+                        '*',
+                        style: TextStyle(
+                          color: ProposalPalette.coral,
+                          fontSize: 12,
+                        ),
+                      ),
+                    if (source != null)
+                      ProposalStatusChip(label: source!, kind: chipKind),
+                    ?trailing,
+                  ],
+                ),
+                const SizedBox(height: 7),
+                child,
+                if (footer != null) ...[const SizedBox(height: 6), footer!],
+              ],
+            ),
           ),
         ),
       ),
@@ -616,6 +629,56 @@ InputDecoration proposalInputDecoration({
   );
 }
 
+class ProposalChoiceChip extends StatelessWidget {
+  const ProposalChoiceChip({
+    super.key,
+    required this.label,
+    required this.selected,
+    required this.onSelected,
+    this.enabled = true,
+  });
+
+  final String label;
+  final bool selected;
+  final ValueChanged<bool>? onSelected;
+  final bool enabled;
+
+  static const selectedFill = Color(0xFF2F8F46);
+
+  @override
+  Widget build(BuildContext context) {
+    final canTap = enabled && onSelected != null;
+    final background = !enabled
+        ? (selected ? const Color(0xFFB7C4B5) : const Color(0xFFF4F5F6))
+        : (selected ? selectedFill : Colors.white);
+    final foreground = selected
+        ? Colors.white
+        : (enabled ? ProposalPalette.text : const Color(0xFF8A8490));
+    final border = selected
+        ? (enabled ? const Color(0xFF1F6B32) : const Color(0xFF9AA0A6))
+        : const Color(0xFFC9C0D4);
+    return Material(
+      color: background,
+      shape: StadiumBorder(side: BorderSide(color: border)),
+      child: InkWell(
+        customBorder: const StadiumBorder(),
+        onTap: canTap ? () => onSelected!(!selected) : null,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          child: Text(
+            label,
+            style: TextStyle(
+              color: foreground,
+              fontSize: 11,
+              fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class ProposalPills extends StatelessWidget {
   const ProposalPills({
     super.key,
@@ -642,36 +705,11 @@ class ProposalPills extends StatelessWidget {
       runSpacing: 6,
       children: [
         for (final option in options)
-          ChoiceChip(
-            label: Text(option),
+          ProposalChoiceChip(
+            label: option,
             selected: selected.contains(option),
+            enabled: enabled,
             onSelected: (_) => onToggle(option),
-            selectedColor: enabled
-                ? ProposalPalette.purpleSoft
-                : const Color(0xFFE8E9EB),
-            backgroundColor: enabled
-                ? const Color(0xFFF7F5FA)
-                : const Color(0xFFF4F5F6),
-            surfaceTintColor: Colors.transparent,
-            side: BorderSide(
-              color: selected.contains(option)
-                  ? (enabled ? ProposalPalette.purple : const Color(0xFFC5C7CB))
-                  : const Color(0xFFC9C0D4),
-            ),
-            labelStyle: TextStyle(
-              color: selected.contains(option)
-                  ? (enabled
-                        ? ProposalPalette.purpleDeep
-                        : const Color(0xFF5F6368))
-                  : ProposalPalette.text,
-              fontSize: 11,
-              fontWeight: selected.contains(option)
-                  ? FontWeight.w700
-                  : FontWeight.w500,
-            ),
-            visualDensity: VisualDensity.compact,
-            showCheckmark: false,
-            shape: const StadiumBorder(),
           ),
         if (onAdd != null)
           ActionChip(
@@ -744,75 +782,82 @@ class ProposalNextPendingFooter extends StatelessWidget {
 }
 
 const proposalIntakeProcessSteps = <(String, String)>[
-  ('1', '市场部负责人二新建提案，填写市场、合同、财务与人员指定。'),
-  ('2', '通知科技部负责人填写科技内容。'),
-  ('3', '科技部负责人填写完成后，提交给市场部负责人二。'),
-  ('4', '市场部负责人二提交各板块进入复核。'),
-  ('5', '市场部负责人一复核市场板块；市场部负责人二逐条复核科技；财务部负责人二逐条复核、财务部负责人一整板块复核；行政负责人复核合同。'),
-  ('6', '各板块复核完成后，市场部负责人二通知最终确认人。'),
-  ('7', '最终确认人通过即完成；驳回则退回重填。'),
+  ('1', '提交人新建提案，填写市场、合同、财务，并指定市场部负责人二等审核人。'),
+  ('2', '提交人通知科技部负责人填写科技内容。'),
+  ('3', '科技部负责人填写完成后，提交给提交人。'),
+  ('4', '提交人提交各板块进入复核。'),
+  (
+    '5',
+    '市场部负责人一复核市场板块；市场部负责人二逐条复核科技；财务部负责人二逐条复核、财务部负责人一整板块复核；行政负责人复核合同。发现问题可直接整板块驳回，不必先逐条点完复核。',
+  ),
+  ('6', '各板块复核完成后，提交人通知最终确认人。'),
+  ('7', '最终确认人通过即完成；整单驳回则退回提交人重填。板块驳回后，填写人修改再点「重新提交并通知审核人」，系统会通知该板块审核人。'),
 ];
 
 Future<void> showProposalIntakeProcessHelp(BuildContext context) {
   return showDialog<void>(
     context: context,
-    builder: (ctx) => AlertDialog(
-      title: const Text('协作提案流程'),
-      content: SizedBox(
-        width: 420,
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              for (final step in proposalIntakeProcessSteps)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Container(
-                        width: 22,
-                        height: 22,
-                        alignment: Alignment.center,
-                        decoration: const BoxDecoration(
-                          color: ProposalPalette.purpleSoft,
-                          shape: BoxShape.circle,
-                        ),
-                        child: Text(
-                          step.$1,
-                          style: const TextStyle(
-                            color: ProposalPalette.purpleDeep,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w700,
+    builder: (ctx) {
+      final maxWidth = MediaQuery.sizeOf(ctx).width - 48;
+      return AlertDialog(
+        title: const Text('协作提案流程'),
+        insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+        content: SizedBox(
+          width: maxWidth < 420 ? maxWidth : 420,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                for (final step in proposalIntakeProcessSteps)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          width: 22,
+                          height: 22,
+                          alignment: Alignment.center,
+                          decoration: const BoxDecoration(
+                            color: ProposalPalette.purpleSoft,
+                            shape: BoxShape.circle,
+                          ),
+                          child: Text(
+                            step.$1,
+                            style: const TextStyle(
+                              color: ProposalPalette.purpleDeep,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                            ),
                           ),
                         ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Text(
-                          step.$2,
-                          style: const TextStyle(
-                            color: ProposalPalette.text,
-                            fontSize: 13,
-                            height: 1.45,
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            step.$2,
+                            style: const TextStyle(
+                              color: ProposalPalette.text,
+                              fontSize: 13,
+                              height: 1.45,
+                            ),
                           ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                ),
-            ],
+              ],
+            ),
           ),
         ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(ctx),
-          child: const Text('知道了'),
-        ),
-      ],
-    ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('知道了'),
+          ),
+        ],
+      );
+    },
   );
 }
 

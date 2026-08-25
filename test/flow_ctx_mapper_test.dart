@@ -46,7 +46,7 @@ void main() {
     expect(ctx.financePending, 3);
   });
 
-  test('maps filled form, converts yuan to wan, and computes invoice gap', () {
+  test('maps filled form and computes invoice gap', () {
     final ctx = FlowCtxMapper.fromForm(
       form: {
         'proposalName': '中石化平安业务提案',
@@ -67,9 +67,9 @@ void main() {
         'technologyCapabilities': ['中石油现金券'],
         'outputForms': ['API接口', '小程序'],
         'financeInterfaces': {'face': true},
-        'salesScale': 32000000,
-        'revenue': 14200000,
-        'invoiceAmount': 11800000,
+        'salesScale': 3200,
+        'revenue': 1420,
+        'invoiceAmount': 1180,
         'margin': 4.6,
         'subsidyName': '万里通权益',
         'clearingName': '平安清算',

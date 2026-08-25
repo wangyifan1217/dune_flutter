@@ -37,7 +37,7 @@ const Map<FlowKind, KindStyle> kKind = {
     Color(0xFFEDB86A),
     Color(0xFF96661F),
     Color(0xFFFBF0DE),
-    '合同核心条款 · 开票主体',
+    '合同核心条款',
   ),
   FlowKind.info: KindStyle(
     '信息流',
@@ -85,13 +85,8 @@ const Map<String, String> kOwnerRole = {
   'fin2': '财务部负责人二',
 };
 
-/// 可改名主体 → 表单字段
-const Map<String, String> kEditableNodeFields = {
-  'subsidy': 'subsidyName',
-  'clearing': 'clearingName',
-  'billing': 'billingName',
-  'insti': 'serviceOrgName',
-};
+/// 可改名主体 → 表单字段。四流主体填写已下线，图中节点不再允许改名。
+const Map<String, String> kEditableNodeFields = {};
 
 class FlowStatus {
   const FlowStatus(this.level, this.text, {this.manual = false});
@@ -100,7 +95,7 @@ class FlowStatus {
   final bool manual;
 }
 
-/// 全景图唯一输入。金额字段为「万元」（由表单元换算）。
+/// 全景图唯一输入。金额字段为「万元」。
 class FlowCtx {
   FlowCtx({
     required this.proposal,

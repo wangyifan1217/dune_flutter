@@ -8,6 +8,7 @@ import '../auth/auth_session.dart';
 import '../shell/dunes_toast.dart';
 import '../workbench/workbench_badge_notifier.dart';
 import 'approval_list_cache.dart';
+import 'approval_todo_flow_guide.dart';
 import 'task_todo_actions.dart';
 import 'xflow_models.dart';
 import 'xflow_service.dart';
@@ -379,7 +380,7 @@ class _NativeProposalListPageState extends State<_NativeProposalListPage> {
       }
       if (q.isEmpty) return true;
       final text =
-          '${it.code} ${it.title} ${it.createdByName} ${it.tag1 ?? ''} ${it.txType ?? ''}'
+          '${it.code} ${it.title} ${it.createdByName} ${it.tag1 ?? ''} ${it.txType ?? ''} ${it.actionTitle ?? ''} ${it.primaryAction ?? ''} ${it.documentKind ?? ''}'
               .toLowerCase();
       return text.contains(q);
     }).toList(growable: false);
@@ -714,6 +715,12 @@ class _NativeProposalListPageState extends State<_NativeProposalListPage> {
               style: DunesTypography.sans(fontSize: 16, fontWeight: FontWeight.w700),
             ),
           ),
+          if (widget.type == _ListType.b13)
+            IconButton(
+              onPressed: () => showApprovalTodoFlowGuide(context),
+              icon: const Icon(Icons.help_outline, size: 20),
+              tooltip: '通过后待办流程',
+            ),
           IconButton(onPressed: _load, icon: const Icon(Icons.refresh, size: 20)),
         ],
       ),

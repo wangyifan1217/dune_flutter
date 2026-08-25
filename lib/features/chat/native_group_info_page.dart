@@ -281,8 +281,10 @@ class _NativeGroupInfoPageState extends State<NativeGroupInfoPage> {
 
   Future<void> _openAddMembers() async {
     final info = _detail;
-    if (info == null || !info.isOwner) {
-      _toast(context, '仅群主可添加成员');
+    if (info == null || info.dissolved) {
+      if (info != null && info.dissolved) {
+        _toast(context, '群聊已解散');
+      }
       return;
     }
     final exclude = info.members.map((m) => m.userId).toSet();
@@ -392,6 +394,7 @@ class _NativeGroupInfoPageState extends State<NativeGroupInfoPage> {
     final info = _detail!;
     final members = sortGroupMembers(info.members);
     final showOwnerActions = info.isOwner && !info.dissolved;
+    final showAdd = !info.dissolved;
     final canLeave = info.canLeave || info.dissolved;
     final wide = isWideChatLayout(context);
 
@@ -406,9 +409,8 @@ class _NativeGroupInfoPageState extends State<NativeGroupInfoPage> {
         const SizedBox(height: 10),
         GroupInfoMemberGrid(
           members: members,
-          selfUserId: widget.session.userId,
           avatarService: _service,
-          showAdd: showOwnerActions,
+          showAdd: showAdd,
           showRemove: showOwnerActions,
           onMemberTap: widget.onOpenMember == null
               ? null

@@ -48,6 +48,7 @@ ProposalIntakeRow _row() => ProposalIntakeRow.fromJson({
   'title': '',
   'status': 'filling',
   'version': 3,
+  'createdBy': 11,
   'form': <String, dynamic>{},
   'review': <String, dynamic>{},
 });
@@ -383,7 +384,9 @@ void main() {
     expect(after, lessThan(260));
   });
 
-  testWidgets('market filler is locked to the current user', (tester) async {
+  testWidgets('market owner2 is a person picker, not locked to current user', (
+    tester,
+  ) async {
     tester.view.physicalSize = const Size(1440, 1400);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
@@ -391,18 +394,18 @@ void main() {
     await tester.pumpWidget(_harness(1440));
     await tester.pump();
 
-    expect(find.text('市场部负责人二（填写人）'), findsOneWidget);
-    expect(find.text('当前用户'), findsNothing);
-    expect(find.text('管理后台配置'), findsNothing);
+    expect(find.text('市场部负责人二（科技审核）'), findsOneWidget);
+    expect(find.text('市场部负责人二（填写人）'), findsNothing);
     expect(
-      tester
-          .widgetList<TextFormField>(find.byType(TextFormField))
-          .any((field) => field.initialValue == '王奕凡'),
-      isTrue,
+      _childInField<ProposalSelectField<int>>(
+        tester,
+        '市场部负责人二（科技审核）',
+      ).onSelected,
+      isNotNull,
     );
   });
 
-  testWidgets('empty proposal form has no mock values, 万元, or draft wording', (
+  testWidgets('empty proposal form has no mock values or draft wording', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(390, 1800);
@@ -417,7 +420,6 @@ void main() {
     expect(find.text('保存草稿'), findsNothing);
     expect(find.byTooltip('保存'), findsWidgets);
     expect(find.text('保存'), findsNothing);
-    expect(find.textContaining('万元'), findsNothing);
     expect(find.text('选择合同'), findsNothing);
     expect(find.text('行政复核'), findsWidgets);
 
@@ -427,17 +429,17 @@ void main() {
 
     await scrollUntil('市场部负责人二复核');
     expect(find.text('市场部负责人二复核'), findsWidgets);
-    await scrollUntil('销售规模目标（元）');
-    expect(find.text('销售规模目标（元）'), findsOneWidget);
-    expect(find.text('收入（元）'), findsOneWidget);
-    expect(find.text('发票（元）'), findsOneWidget);
+    await scrollUntil('销售规模目标（万元）');
+    expect(find.text('销售规模目标（万元）'), findsOneWidget);
+    expect(find.text('收入（万元）'), findsOneWidget);
+    expect(find.text('发票（万元）'), findsOneWidget);
     expect(find.text('财务部负责人二复核'), findsWidgets);
-    await scrollUntil('补贴出资方');
-    expect(find.text('补贴出资方'), findsWidgets);
-    expect(find.text('清算 / 支付机构'), findsWidgets);
-    expect(find.text('我方开票主体'), findsWidgets);
-    expect(find.text('服务 / 承接机构'), findsWidgets);
-    expect(find.textContaining('万元'), findsNothing);
+    await scrollUntil('提案全链路');
+    expect(find.text('提案全链路'), findsWidgets);
+    expect(find.text('补贴出资方'), findsNothing);
+    expect(find.text('清算 / 支付机构'), findsNothing);
+    expect(find.text('我方开票主体'), findsNothing);
+    expect(find.text('服务 / 承接机构'), findsNothing);
     expect(find.textContaining('万里通'), findsNothing);
     expect(find.textContaining('平安（清算'), findsNothing);
     expect(find.textContaining('13% 油专'), findsNothing);
@@ -447,9 +449,7 @@ void main() {
     expect(find.textContaining('用户领取'), findsNothing);
   });
 
-  testWidgets('four-flow entity fields do not overflow in a two-column grid', (
-    tester,
-  ) async {
+  testWidgets('four-flow entity fields are hidden', (tester) async {
     tester.view.physicalSize = const Size(760, 1400);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
@@ -463,6 +463,7 @@ void main() {
           'title': '',
           'status': 'filling',
           'version': 3,
+          'createdBy': 11,
           'form': {
             'subsidyName': '是',
             'clearingName': '测试',
@@ -474,11 +475,14 @@ void main() {
       ),
     );
     await tester.pump();
-    await _scrollUntil(tester, '清算 / 支付机构');
+    await _scrollUntil(tester, '提案全链路');
 
     expect(tester.takeException(), isNull);
-    expect(find.text('测试'), findsWidgets);
-    expect(find.textContaining('由市场部负责人二（填写人）填写'), findsOneWidget);
+    expect(find.text('补贴出资方'), findsNothing);
+    expect(find.text('清算 / 支付机构'), findsNothing);
+    expect(find.text('我方开票主体'), findsNothing);
+    expect(find.text('服务 / 承接机构'), findsNothing);
+    expect(find.textContaining('由提交人填写；也可直接点图中节点改名'), findsNothing);
   });
 
   testWidgets('configured dropdown lists all options when opened', (
@@ -669,13 +673,13 @@ void main() {
       await tester.pump();
     }
 
-    final chip = tester.widget<ChoiceChip>(
-      find.widgetWithText(ChoiceChip, '开票接口 *'),
+    final chip = tester.widget<ProposalChoiceChip>(
+      find.widgetWithText(ProposalChoiceChip, '开票接口 *'),
     );
     expect(chip.selected, isFalse);
     expect(
       find.ancestor(
-        of: find.widgetWithText(ChoiceChip, '开票接口 *'),
+        of: find.widgetWithText(ProposalChoiceChip, '开票接口 *'),
         matching: find.byWidgetPredicate(
           (widget) => widget is IgnorePointer && widget.ignoring,
         ),
@@ -684,7 +688,9 @@ void main() {
     );
     expect(
       tester
-          .widget<ChoiceChip>(find.widgetWithText(ChoiceChip, '结算对账接口'))
+          .widget<ProposalChoiceChip>(
+            find.widgetWithText(ProposalChoiceChip, '结算对账接口'),
+          )
           .selected,
       isFalse,
     );
@@ -706,7 +712,10 @@ void main() {
     );
 
     await _scrollUntil(tester, '科技部负责人（填写人）');
-    expect(find.text('请指定科技部负责人。技术字段由对方填写，你只做逐条复核。'), findsOneWidget);
+    expect(
+      find.text('请指定科技部负责人。技术字段由对方填写，市场部负责人二做逐条复核。'),
+      findsOneWidget,
+    );
     expect(
       _childInField<ProposalSelectField<int>>(tester, '科技部负责人（填写人）').onSelected,
       isNotNull,
@@ -759,7 +768,7 @@ void main() {
       _childInField<ProposalSelectField<String>>(tester, '业务板块').onSelected,
       isNull,
     );
-    expect(find.text('由市场部负责人二填写。当前账号不可编辑本板块。'), findsOneWidget);
+    expect(find.text('由提交人填写。当前账号不可编辑本板块。'), findsOneWidget);
 
     await _scrollUntil(tester, '交付时间');
     expect(
@@ -778,6 +787,43 @@ void main() {
     );
   });
 
+  testWidgets('market owner2 cannot edit submitter-owned market fields', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1440, 1800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    final session = AuthSession.fromJson(const {
+      'userId': 12,
+      'displayName': '李思',
+    });
+    final row = ProposalIntakeRow.fromJson({
+      'id': 1,
+      'code': 'TA-2026-0001',
+      'title': '',
+      'status': 'filling',
+      'version': 3,
+      'createdBy': 11,
+      'form': {
+        'marketOwner2': '李思',
+        'marketOwner2UserId': 12,
+        'proposalName': '智能投放试点',
+      },
+      'review': <String, dynamic>{},
+    });
+
+    await tester.pumpWidget(_harness(1440, session: session, row: row));
+    await tester.pump();
+
+    expect(
+      _childInField<ProposalSelectField<String>>(tester, '业务板块').onSelected,
+      isNull,
+    );
+    expect(find.text('由提交人填写。当前账号不可编辑本板块。'), findsOneWidget);
+    expect(find.byTooltip('通知科技负责人'), findsNothing);
+  });
+
   testWidgets(
     'unsigned contract shows a file picker and purchase products add',
     (tester) async {
@@ -791,6 +837,7 @@ void main() {
         'title': '',
         'status': 'filling',
         'version': 3,
+        'createdBy': 11,
         'form': {'purchaseMode': '未签署合同'},
         'review': <String, dynamic>{},
       });
@@ -922,7 +969,7 @@ void main() {
     );
   });
 
-  testWidgets('new proposal shows product templates and launch files', (
+  testWidgets('new proposal shows launch files without product templates', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(1440, 1800);
@@ -931,9 +978,10 @@ void main() {
 
     await tester.pumpWidget(_harness(1440));
     await tester.pump();
-    await _scrollUntil(tester, '产品模板与上线文件');
-    expect(find.text('产品模板与上线文件'), findsOneWidget);
-    expect(find.text('上线产品文件'), findsOneWidget);
+    await _scrollUntil(tester, '上线产品文件');
+    expect(find.text('产品模板与上线文件'), findsNothing);
+    expect(find.text('产品模板'), findsNothing);
+    expect(find.text('上线产品文件'), findsWidgets);
     expect(find.text('点击选择上线产品文件'), findsOneWidget);
     expect(find.text('点击上传图片 / PDF，最多 5 个'), findsNothing);
     expect(
@@ -1061,5 +1109,277 @@ void main() {
     expect(find.text('下一个'), findsOneWidget);
     await tester.tap(find.text('下一个'));
     expect(tapped, isTrue);
+  });
+
+  testWidgets('long core terms expand to show full content', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1440, 1800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    final longTerms = List.generate(
+      24,
+      (i) => '${i + 1}. 您自愿就生活服务业务与甲方开展合作并遵守本条款。',
+    ).join('\n');
+    await tester.pumpWidget(
+      _harness(
+        1440,
+        row: ProposalIntakeRow.fromJson({
+          'id': 1,
+          'code': 'TA-2026-0001',
+          'title': '',
+          'status': 'filling',
+          'version': 3,
+          'createdBy': 11,
+          'form': {
+            'purchaseMode': '未签署合同',
+            'purchaseCoreTerms': longTerms,
+          },
+          'review': <String, dynamic>{},
+        }),
+      ),
+    );
+    await tester.pump();
+    await _scrollUntil(tester, '核心条款');
+
+    final box = tester.getSize(
+      find
+          .descendant(
+            of: _fieldOf('核心条款'),
+            matching: find.byType(TextFormField),
+          )
+          .first,
+    );
+    expect(box.height, greaterThan(200));
+  });
+
+  testWidgets('selected product pill uses green fill', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1440, 1800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      _harness(
+        1440,
+        row: ProposalIntakeRow.fromJson({
+          'id': 1,
+          'code': 'TA-2026-0001',
+          'title': '',
+          'status': 'filling',
+          'version': 3,
+          'createdBy': 11,
+          'form': {
+            'purchaseMode': '未签署合同',
+            'purchaseProducts': ['智能投放平台'],
+          },
+          'review': <String, dynamic>{},
+        }),
+      ),
+    );
+    await tester.pump();
+    await _scrollUntil(tester, '采购产品');
+
+    final chip = tester.widget<ProposalChoiceChip>(
+      find.widgetWithText(ProposalChoiceChip, '智能投放平台'),
+    );
+    expect(chip.selected, isTrue);
+    final material = tester.widget<Material>(
+      find
+          .descendant(
+            of: find.widgetWithText(ProposalChoiceChip, '智能投放平台'),
+            matching: find.byType(Material),
+          )
+          .first,
+    );
+    expect(material.color, ProposalChoiceChip.selectedFill);
+  });
+
+  testWidgets('module reject is available before item-by-item reviews', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1440, 1800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      _harness(
+        1440,
+        row: ProposalIntakeRow.fromJson({
+          'id': 1,
+          'code': 'TA-2026-0001',
+          'title': '测试提案',
+          'status': 'reviewing',
+          'version': 3,
+          'createdBy': 11,
+          'form': {
+            'contractAdmin': '王奕凡',
+            'contractAdminUserId': 11,
+            'salesMode': '未签署合同',
+            'salesName': '测试销售合同',
+          },
+          'review': {'stage': 'reviewing'},
+        }),
+      ),
+    );
+    await tester.pump();
+    await _scrollUntil(tester, '销售合同行政审核');
+
+    expect(
+      tester
+          .widget<OutlinedButton>(
+            find.byKey(
+              const ValueKey('proposal-module-approve-salesContractCompleted'),
+            ),
+          )
+          .onPressed,
+      isNull,
+    );
+    expect(
+      tester
+          .widget<OutlinedButton>(
+            find.byKey(
+              const ValueKey('proposal-module-reject-salesContractCompleted'),
+            ),
+          )
+          .onPressed,
+      isNotNull,
+    );
+    expect(find.textContaining('发现问题可直接点「驳回」'), findsWidgets);
+  });
+
+  testWidgets('rejected module banner tells submitter to notify reviewer', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1440, 1400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      _harness(
+        1440,
+        row: ProposalIntakeRow.fromJson({
+          'id': 1,
+          'code': 'TA-2026-0001',
+          'title': '测试提案',
+          'status': 'filling',
+          'version': 4,
+          'createdBy': 11,
+          'form': {
+            'contractAdmin': '王奕凡',
+            'contractAdminUserId': 11,
+          },
+          'review': {
+            'stage': 'awaiting_start_review',
+            'reviewRejected': true,
+            'reviewRejectSection': 'salesContract',
+            'reviewRejectComment': '合同主体不对',
+            'reviewRejectUserId': 11,
+          },
+        }),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.textContaining('重新提交并通知审核人'), findsWidgets);
+    expect(find.textContaining('行政负责人'), findsWidgets);
+    expect(find.byTooltip('重新提交并通知审核人'), findsOneWidget);
+  });
+
+  testWidgets('filled proposal form adapts on a phone-width layout', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 1800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      _harness(
+        390,
+        row: ProposalIntakeRow.fromJson({
+          'id': 1,
+          'code': 'TA-2026-0001',
+          'title': '华东区域智能投放年度框架合作提案（含补充说明）',
+          'status': 'reviewing',
+          'version': 3,
+          'createdBy': 11,
+          'form': {
+            'sector': '数字营销事业部',
+            'proposalName': '华东区域智能投放年度框架合作提案（含补充说明）',
+            'contractAdmin': '王奕凡',
+            'contractAdminUserId': 11,
+            'salesMode': '未签署合同',
+            'salesName': '上海某某数字科技有限公司智能投放平台年度框架采购合同（含补充协议）',
+            'salesCoreTerms': List.generate(
+              8,
+              (i) => '${i + 1}. 双方就合作范围、结算周期与开票主体达成一致。',
+            ).join('\n'),
+            'purchaseProducts': ['智能投放平台'],
+            'channels': ['直客渠道', '代理商渠道', '生态合作渠道'],
+          },
+          'review': {'stage': 'reviewing'},
+        }),
+      ),
+    );
+    await tester.pump();
+
+    expect(tester.takeException(), isNull);
+    await _scrollUntil(tester, '销售合同行政审核');
+    expect(find.textContaining('发现问题可直接点「驳回」'), findsWidgets);
+    expect(
+      tester
+          .widget<OutlinedButton>(
+            find.byKey(
+              const ValueKey('proposal-module-reject-salesContractCompleted'),
+            ),
+          )
+          .onPressed,
+      isNotNull,
+    );
+    await _scrollUntil(tester, '提案全链路');
+    expect(find.text('提案全链路'), findsWidgets);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('phone-width proposal fields share a full-width column', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 1800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      _harness(
+        390,
+        row: ProposalIntakeRow.fromJson({
+          'id': 1,
+          'code': 'TA-2026-0001',
+          'title': '测试提案',
+          'status': 'filling',
+          'version': 3,
+          'createdBy': 11,
+          'form': {
+            'product': '中石油—现金券',
+            'projectName': '抖音渠道中石油产品上线提案',
+            'supplies': ['江苏'],
+            'channels': ['抖音'],
+            'marketOwner1': '王奕凡',
+            'marketOwner1UserId': 11,
+          },
+        }),
+      ),
+    );
+    await tester.pump();
+    await _scrollUntil(tester, '产品（标签一）');
+
+    final product = tester.getSize(_fieldOf('产品（标签一）').first);
+    final project = tester.getSize(_fieldOf('项目名称（标签一二级）').first);
+    final supply = tester.getSize(_fieldOf('供给（标签二）').first);
+    expect(product.width, closeTo(project.width, 1));
+    expect(product.width, closeTo(supply.width, 1));
+    expect(product.width, greaterThan(300));
+    expect(tester.takeException(), isNull);
   });
 }

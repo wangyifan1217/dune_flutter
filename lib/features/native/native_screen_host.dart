@@ -1332,12 +1332,12 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         );
         _commUnread.update(serverTotal);
         windowsTrayUpdateUnread(serverTotal);
-        windowsTrayUpdateUnreadItems(
-          windowsTrayUnreadItemsFromConversations(
-            rows: rows,
-            commUnread: _commUnread,
-            viewingId: viewingId,
-          ),
+        windowsTrayPushUnreadFromConversations(
+          rows: rows,
+          commUnread: _commUnread,
+          viewingId: viewingId,
+          session: widget.session,
+          avatarService: convService,
         );
         if (serverTotal == 0) {
           if (!_pendingBadgeZeroSync) {

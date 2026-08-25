@@ -3,8 +3,12 @@
 #include <windows.h>
 #include <windowsx.h>
 #include <shellapi.h>
+#include <objidl.h>
+#include <gdiplus.h>
 
 #include <algorithm>
+#include <cstdint>
+#include <cstring>
 #include <memory>
 #include <string>
 #include <vector>
@@ -26,6 +30,7 @@ struct PeekItem {
   int unread = 0;
   std::wstring initial;
   COLORREF color = RGB(123, 92, 216);
+  std::unique_ptr<Gdiplus::Bitmap> avatar;
 };
 
 std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>> g_channel;
@@ -37,6 +42,89 @@ bool g_flashing = false;
 int g_hot = -1;  // row index, or -2 footer
 bool g_class_reg = false;
 int g_dpi = 96;
+ULONG_PTR g_gdiplus_token = 0;
+
+bool EnsureGdiplus() {
+  if (g_gdiplus_token != 0) return true;
+  Gdiplus::GdiplusStartupInput input;
+  const Gdiplus::Status st =
+      Gdiplus::GdiplusStartup(&g_gdiplus_token, &input, nullptr);
+  if (st != Gdiplus::Ok) {
+    g_gdiplus_token = 0;
+    return false;
+  }
+  return true;
+}
+
+void ShutdownGdiplus() {
+  g_items.clear();
+  if (g_gdiplus_token == 0) return;
+  Gdiplus::GdiplusShutdown(g_gdiplus_token);
+  g_gdiplus_token = 0;
+}
+
+void AddRoundRect(Gdiplus::GraphicsPath* path, int x, int y, int w, int h,
+                  int r) {
+  if (!path) return;
+  if (r <= 0) {
+    path->AddRectangle(Gdiplus::Rect(x, y, w, h));
+    return;
+  }
+  const int d = r * 2;
+  path->AddArc(x, y, d, d, 180.0f, 90.0f);
+  path->AddArc(x + w - d, y, d, d, 270.0f, 90.0f);
+  path->AddArc(x + w - d, y + h - d, d, d, 0.0f, 90.0f);
+  path->AddArc(x, y + h - d, d, d, 90.0f, 90.0f);
+  path->CloseFigure();
+}
+
+std::unique_ptr<Gdiplus::Bitmap> BitmapFromPng(
+    const std::vector<uint8_t>& bytes) {
+  if (bytes.empty() || !EnsureGdiplus()) return nullptr;
+  HGLOBAL mem = GlobalAlloc(GMEM_MOVEABLE, bytes.size());
+  if (!mem) return nullptr;
+  void* locked = GlobalLock(mem);
+  if (!locked) {
+    GlobalFree(mem);
+    return nullptr;
+  }
+  std::memcpy(locked, bytes.data(), bytes.size());
+  GlobalUnlock(mem);
+  IStream* stream = nullptr;
+  if (FAILED(CreateStreamOnHGlobal(mem, TRUE, &stream)) || !stream) {
+    GlobalFree(mem);
+    return nullptr;
+  }
+  std::unique_ptr<Gdiplus::Bitmap> src(Gdiplus::Bitmap::FromStream(stream));
+  if (!src || src->GetLastStatus() != Gdiplus::Ok) {
+    stream->Release();
+    return nullptr;
+  }
+  const UINT w = src->GetWidth();
+  const UINT h = src->GetHeight();
+  if (w == 0 || h == 0) {
+    stream->Release();
+    return nullptr;
+  }
+  std::unique_ptr<Gdiplus::Bitmap> clone(src->Clone(
+      0, 0, static_cast<INT>(w), static_cast<INT>(h), PixelFormat32bppPARGB));
+  stream->Release();
+  if (!clone || clone->GetLastStatus() != Gdiplus::Ok) return src;
+  return clone;
+}
+
+void DrawAvatarImage(HDC hdc, Gdiplus::Bitmap* bmp, int x, int y, int size,
+                     int radius) {
+  if (!hdc || !bmp) return;
+  Gdiplus::Graphics g(hdc);
+  g.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+  g.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
+  g.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHighQuality);
+  Gdiplus::GraphicsPath path;
+  AddRoundRect(&path, x, y, size, size, radius);
+  g.SetClip(&path);
+  g.DrawImage(bmp, x, y, size, size);
+}
 
 int Dip(int v) { return MulDiv(v, g_dpi, 96); }
 int Width() { return Dip(248); }
@@ -45,7 +133,6 @@ int HeaderH() { return Dip(28); }
 int RowH() { return Dip(44); }
 int FooterH() { return g_flashing ? Dip(32) : 0; }
 int Avatar() { return Dip(28); }
-int Radius() { return Dip(6); }
 
 std::wstring Utf8ToWide(const std::string& utf8) {
   if (utf8.empty()) return std::wstring();
@@ -89,6 +176,7 @@ int ContentHeight() {
 }
 
 void TrackLeave(HWND hwnd);
+bool GetTrayIconRect(RECT* out);
 bool CursorShouldKeepPeek();
 void HidePeek(bool force);
 void ScheduleHide();
@@ -101,6 +189,17 @@ void TrackLeave(HWND hwnd) {
   TrackMouseEvent(&tme);
 }
 
+bool GetTrayIconRect(RECT* out) {
+  if (!out) return false;
+  HWND main = FindWindowW(L"FLUTTER_RUNNER_WIN32_WINDOW", nullptr);
+  if (!main) return false;
+  NOTIFYICONIDENTIFIER id{};
+  id.cbSize = sizeof(id);
+  id.hWnd = main;
+  id.uID = 1;
+  return SUCCEEDED(Shell_NotifyIconGetRect(&id, out));
+}
+
 bool CursorShouldKeepPeek() {
   POINT pt;
   GetCursorPos(&pt);
@@ -110,14 +209,8 @@ bool CursorShouldKeepPeek() {
     InflateRect(&rc, 4, 4);
     if (PtInRect(&rc, pt)) return true;
   }
-  HWND main = FindWindowW(L"FLUTTER_RUNNER_WIN32_WINDOW", nullptr);
-  if (!main) return false;
-  NOTIFYICONIDENTIFIER id{};
-  id.cbSize = sizeof(id);
-  id.hWnd = main;
-  id.uID = 1;
   RECT icon{};
-  if (FAILED(Shell_NotifyIconGetRect(&id, &icon))) return false;
+  if (!GetTrayIconRect(&icon)) return false;
   InflateRect(&icon, 12, 12);
   return PtInRect(&icon, pt) != FALSE;
 }
@@ -243,20 +336,24 @@ void Paint(HWND hwnd) {
     const int cy = row.top + row_h / 2;
     const int ax = pad;
     const int ay = cy - av / 2;
-    const int rr = Radius();
-    HBRUSH brush = CreateSolidBrush(it.color);
-    HGDIOBJ old_br = SelectObject(mem, brush);
-    HGDIOBJ old_pen = SelectObject(mem, GetStockObject(NULL_PEN));
-    RoundRect(mem, ax, ay, ax + av, ay + av, rr, rr);
-    SelectObject(mem, old_br);
-    SelectObject(mem, old_pen);
-    DeleteObject(brush);
-
-    SelectObject(mem, av_font);
-    SetTextColor(mem, RGB(255, 255, 255));
+    const int rr = (std::max)(2, av * 18 / 100);
     RECT avrc = {ax, ay, ax + av, ay + av};
-    DrawTextW(mem, it.initial.c_str(), -1, &avrc,
-              DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+    if (it.avatar) {
+      DrawAvatarImage(mem, it.avatar.get(), ax, ay, av, rr);
+    } else {
+      HBRUSH brush = CreateSolidBrush(it.color);
+      HGDIOBJ old_br = SelectObject(mem, brush);
+      HGDIOBJ old_pen = SelectObject(mem, GetStockObject(NULL_PEN));
+      RoundRect(mem, ax, ay, ax + av, ay + av, rr, rr);
+      SelectObject(mem, old_br);
+      SelectObject(mem, old_pen);
+      DeleteObject(brush);
+
+      SelectObject(mem, av_font);
+      SetTextColor(mem, RGB(255, 255, 255));
+      DrawTextW(mem, it.initial.c_str(), -1, &avrc,
+                DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+    }
 
     const int text_left = ax + av + Dip(8);
     const int text_right = rc.right - Dip(28);
@@ -330,19 +427,31 @@ bool HitFooter(int y, int height) {
 
 void PlaceWindow() {
   RefreshDpi();
-  POINT pt;
-  GetCursorPos(&pt);
   const int w = Width();
   const int h = ContentHeight();
-  int x = pt.x - w / 2;
-  int y = pt.y - h - Dip(12);
-  HMONITOR mon = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
+  RECT icon{};
+  POINT anchor{};
+  if (GetTrayIconRect(&icon)) {
+    anchor.x = (icon.left + icon.right) / 2;
+    anchor.y = (icon.top + icon.bottom) / 2;
+  } else {
+    GetCursorPos(&anchor);
+    icon = {anchor.x - 12, anchor.y - 12, anchor.x + 12, anchor.y + 12};
+  }
+  int x = anchor.x - w / 2;
+  int y = icon.top - h - Dip(8);
+  HMONITOR mon = MonitorFromRect(&icon, MONITOR_DEFAULTTONEAREST);
   MONITORINFO mi{sizeof(mi)};
   if (GetMonitorInfoW(mon, &mi)) {
-    x = (std::max)(static_cast<int>(mi.rcWork.left + 8),
-                   (std::min)(x, static_cast<int>(mi.rcWork.right - w - 8)));
-    if (y < mi.rcWork.top + 8) {
-      y = pt.y + Dip(16);
+    const RECT& work = mi.rcWork;
+    x = (std::max)(static_cast<int>(work.left + 8),
+                   (std::min)(x, static_cast<int>(work.right - w - 8)));
+    if (y < work.top + 8) {
+      y = icon.bottom + Dip(8);
+    }
+    if (y + h > work.bottom - 8) {
+      y = (std::max)(static_cast<int>(work.top + 8),
+                     static_cast<int>(work.bottom - h - 8));
     }
   }
   SetWindowPos(g_hwnd, HWND_TOPMOST, x, y, w, h,
@@ -446,6 +555,14 @@ int64_t AsInt(const flutter::EncodableValue* v) {
   return 0;
 }
 
+const std::vector<uint8_t>* AsBytes(const flutter::EncodableValue* v) {
+  if (!v) return nullptr;
+  if (std::holds_alternative<std::vector<uint8_t>>(*v)) {
+    return &std::get<std::vector<uint8_t>>(*v);
+  }
+  return nullptr;
+}
+
 void ParseItem(const flutter::EncodableMap& map, PeekItem* item) {
   item->id = AsInt(MapGet(map, "id"));
   if (const auto* v = MapGet(map, "title");
@@ -464,6 +581,9 @@ void ParseItem(const flutter::EncodableMap& map, PeekItem* item) {
   }
   if (const auto* v = MapGet(map, "color")) {
     item->color = ArgbToColor(AsInt(v));
+  }
+  if (const auto* bytes = AsBytes(MapGet(map, "avatarPng"))) {
+    item->avatar = BitmapFromPng(*bytes);
   }
   if (item->initial.empty()) item->initial = L"?";
   if (item->unread < 1) item->unread = 1;
@@ -519,6 +639,7 @@ void UpdateItems(const flutter::EncodableValue* args) {
 
 void RegisterTrayPeekChannel(flutter::BinaryMessenger* messenger) {
   if (!messenger) return;
+  EnsureGdiplus();
   g_channel =
       std::make_unique<flutter::MethodChannel<flutter::EncodableValue>>(
           messenger, "nova.dunes/tray_peek",
@@ -558,4 +679,5 @@ void TrayPeekShutdown() {
     g_hwnd = nullptr;
   }
   g_channel.reset();
+  ShutdownGdiplus();
 }

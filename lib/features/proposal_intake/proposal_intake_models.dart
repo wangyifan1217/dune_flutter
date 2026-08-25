@@ -182,8 +182,6 @@ class ProposalIntakeRow {
   );
 
   String initiatorDisplayName(List<ProposalPerson> people) {
-    final fromForm = '${form['marketOwner2'] ?? ''}'.trim();
-    if (fromForm.isNotEmpty) return fromForm;
     if (createdBy > 0) {
       for (final person in people) {
         if (person.userId == createdBy && person.name.isNotEmpty) {
@@ -191,6 +189,9 @@ class ProposalIntakeRow {
         }
       }
     }
+    final fromForm = '${form['createdByName'] ?? form['initiatorName'] ?? ''}'
+        .trim();
+    if (fromForm.isNotEmpty) return fromForm;
     return '未指定';
   }
 
@@ -229,9 +230,10 @@ class ProposalIntakeRow {
     }
 
     return [
+      ProposalStakeholderLine(role: '创建人', name: initiatorDisplayName(people)),
       ProposalStakeholderLine(
-        role: '发起人/填写人',
-        name: initiatorDisplayName(people),
+        role: '市场部负责人二',
+        name: named('marketOwner2', 'marketOwner2UserId'),
       ),
       ProposalStakeholderLine(
         role: '市场部负责人一',
@@ -428,11 +430,11 @@ class ProposalIntakeOptions {
           .toList(growable: false),
       costItems: _strings(finance['costItems']),
       rollbackOptions: _strings(finance['rollbackOptions']),
-      // 金额口径为元。旧配置若仍是「万元」整数，这里一并换算。
-      ratingS: _yuan(_number(rules['ratingS'], 50000000)),
-      ratingA: _yuan(_number(rules['ratingA'], 20000000)),
-      ratingB: _yuan(_number(rules['ratingB'], 5000000)),
-      minimumScale: _yuan(_number(rules['minimumScale'], 5000000)),
+      // 金额口径为万元。
+      ratingS: _number(rules['ratingS'], 5000),
+      ratingA: _number(rules['ratingA'], 2000),
+      ratingB: _number(rules['ratingB'], 500),
+      minimumScale: _number(rules['minimumScale'], 500),
       minimumMargin: _number(rules['minimumMargin'], 4.5),
       presidentUserIds: presidentIds.toList(growable: false),
       presidents: presidents,
@@ -506,9 +508,6 @@ List<String> _strings(Object? value) => _list(value)
 
 double _number(Object? value, double fallback) =>
     value is num ? value.toDouble() : double.tryParse('$value') ?? fallback;
-
-double _yuan(double value) =>
-    value > 0 && value < 10000 ? value * 10000 : value;
 
 String _contractText(Map<String, dynamic> source, List<String> keys) {
   for (final key in keys) {
@@ -628,6 +627,22 @@ Map<String, dynamic> proposalIntakePatchFromContract({
 const kProposalContractSnapshotKey = 'contractFieldSnapshots';
 const kProposalContractEditsKey = 'contractFieldEdits';
 
+/// 只作废指定合同板块复核，不牵连市场、科技、财务等其他板块。
+Map<String, dynamic> proposalIntakeClearContractReview(
+  Map<String, dynamic> review, {
+  required String prefix,
+}) {
+  final flag = '${prefix}ContractCompleted';
+  final contractItems = review['contractItems'] is Map
+      ? Map<String, dynamic>.from(review['contractItems'] as Map)
+      : <String, dynamic>{};
+  contractItems.removeWhere((key, _) => key.startsWith('$prefix.'));
+  return Map<String, dynamic>.from(review)
+    ..[flag] = false
+    ..['contractsCompleted'] = false
+    ..['contractItems'] = contractItems;
+}
+
 Map<String, String> proposalIntakeContractSnapshotValues(
   String prefix,
   Map<String, dynamic> form,
@@ -743,6 +758,7 @@ bool _valueHasUserInput(Object? value) {
 
 String proposalIntakeActionLabel(String action) {
   return switch (action) {
+    'fill' => '待填写',
     'fill_tech' => '待填写科技',
     'start_review' => '待重新提交复核',
     'review_market' => '待复核市场部',
@@ -799,6 +815,7 @@ List<String> missingProposalReviewAssignees(
   }
 
   if (includeTech) require('technologyOwnerUserId', '科技部负责人');
+  require('marketOwner2UserId', '市场部负责人二');
   require('marketOwner1UserId', '市场部负责人一');
   require('financeOwner1UserId', '财务部负责人一');
   require('financeOwner2UserId', '财务部负责人二');

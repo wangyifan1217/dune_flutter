@@ -2,10 +2,6 @@ import '../proposal_intake_models.dart';
 import 'flow_ctx.dart';
 
 abstract final class FlowCtxMapper {
-  static const subsidyPlaceholder = '请填写补贴出资方';
-  static const clearingPlaceholder = '请填写清算 / 支付机构';
-  static const servicePlaceholder = '请填写服务 / 承接机构';
-
   static FlowCtx fromForm({
     required Map<String, dynamic> form,
     required Map<String, dynamic> review,
@@ -57,13 +53,13 @@ abstract final class FlowCtxMapper {
       financeInterfaces: selectedInterfaces.isEmpty
           ? const ['待配置对账字段']
           : selectedInterfaces,
-      scale: _yuanToWan(form, 'salesScale'),
-      revenue: _yuanToWan(form, 'revenue'),
-      invoiceAmount: _yuanToWan(form, 'invoiceAmount'),
-      profit: _yuanToWan(form, 'profit'),
-      projectCost: _yuanToWan(form, 'projectCost'),
-      taxCost: _yuanToWan(form, 'taxCost'),
-      opsCost: _yuanToWan(form, 'operatingCost'),
+      scale: _amount(form, 'salesScale'),
+      revenue: _amount(form, 'revenue'),
+      invoiceAmount: _amount(form, 'invoiceAmount'),
+      profit: _amount(form, 'profit'),
+      projectCost: _amount(form, 'projectCost'),
+      taxCost: _amount(form, 'taxCost'),
+      opsCost: _amount(form, 'operatingCost'),
       margin: _number(form, 'margin'),
       hasScale: _hasNumber(form, 'salesScale'),
       hasRevenue: _hasNumber(form, 'revenue'),
@@ -123,8 +119,8 @@ abstract final class FlowCtxMapper {
     return double.tryParse(_text(form, key)) ?? 0;
   }
 
-  static double _yuanToWan(Map<String, dynamic> form, String key) {
+  static double _amount(Map<String, dynamic> form, String key) {
     if (!_hasNumber(form, key)) return 0;
-    return _number(form, key) / 10000;
+    return _number(form, key);
   }
 }

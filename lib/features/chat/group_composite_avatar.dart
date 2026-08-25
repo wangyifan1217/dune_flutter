@@ -141,6 +141,11 @@ class GroupCompositeAvatar extends StatelessWidget {
   }
 }
 
+/// WeChat-style row layout for [memberCount] tiles (1–9).
+List<List<int>> groupCompositeAvatarRowPattern(int memberCount) {
+  return _groupAvatarRowPattern(memberCount.clamp(1, 9));
+}
+
 /// Returns the side length of each member tile in a composite group avatar.
 ///
 /// The inbox prefetcher uses the same calculation so it warms the exact

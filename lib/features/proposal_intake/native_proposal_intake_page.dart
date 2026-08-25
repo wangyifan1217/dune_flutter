@@ -43,12 +43,14 @@ class NativeProposalIntakePage extends StatefulWidget {
     this.onChromeChanged,
     this.showCreate = true,
     this.assistantMode = false,
+    this.initialIntakeId,
   });
 
   final AuthSession session;
   final ValueChanged<TaskShellChrome>? onChromeChanged;
   final bool showCreate;
   final bool assistantMode;
+  final int? initialIntakeId;
 
   @override
   State<NativeProposalIntakePage> createState() =>
@@ -75,6 +77,7 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
   String _statusFilter = '';
   List<ProposalIntakeRow> _actionQueue = const [];
   double _listScrollOffset = 0;
+  bool _didOpenInitial = false;
 
   @override
   void initState() {
@@ -157,6 +160,28 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
     } finally {
       if (mounted) setState(() => _loading = false);
     }
+    await _openInitialIfNeeded();
+  }
+
+  Future<void> _openInitialIfNeeded() async {
+    if (_didOpenInitial) return;
+    final id = widget.initialIntakeId ?? 0;
+    if (id <= 0) return;
+    _didOpenInitial = true;
+    await _openExisting(
+      ProposalIntakeRow(
+        id: id,
+        code: '',
+        title: '',
+        status: 'draft',
+        form: const {},
+        review: const {},
+        createdBy: 0,
+        createdAt: '',
+        updatedAt: '',
+        version: 0,
+      ),
+    );
   }
 
   Future<void> _refreshLookups() async {

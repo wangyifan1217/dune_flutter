@@ -37,6 +37,9 @@ ProposalIntakeOptions _options() => ProposalIntakeOptions.fromJson({
   },
   'finance': {
     'costItems': ['服务器成本', '人力成本', '第三方采购成本'],
+    'businessCostItems': ['员工提成'],
+    'businessCostRules': '员工提成按已定规则累计，提案不填发生额。',
+    'operatingCostRules': '差旅、小额营销按项目收入的 2% 为阈值。',
     'rollbackOptions': ['不回滚', '按季度回滚', '按年度回滚'],
   },
   'rules': {'minimumScale': 500, 'minimumMargin': 4.5},
@@ -64,6 +67,11 @@ List<ProposalPerson> _people() => [
     'displayName': '李思',
     'positionName': '科技部负责人',
   }),
+  ProposalPerson.fromJson({
+    'userId': 4,
+    'displayName': '市场一',
+    'positionName': '市场部负责人一',
+  }),
 ];
 
 /// 合同下拉曾因选项过长导致横向溢出，这里刻意使用超长文案。
@@ -81,6 +89,7 @@ Widget _harness(
   double width, {
   AuthSession? session,
   ProposalIntakeRow? row,
+  ProposalIntakeOptions? options,
   VoidCallback? onNext,
   int nextCount = 0,
 }) {
@@ -95,7 +104,7 @@ Widget _harness(
         child: ProposalIntakeForm(
           row: row ?? _row(),
           session: auth,
-          options: _options(),
+          options: options ?? _options(),
           people: _people(),
           contracts: _contracts(),
           saving: false,
@@ -421,7 +430,8 @@ void main() {
     expect(find.byTooltip('保存'), findsWidgets);
     expect(find.text('保存'), findsNothing);
     expect(find.text('选择合同'), findsNothing);
-    expect(find.text('行政复核'), findsWidgets);
+    expect(find.text('行政复核'), findsNothing);
+    expect(find.text('财务部负责人二复核'), findsWidgets);
 
     Future<void> scrollUntil(String label) async {
       await _scrollUntil(tester, label);
@@ -712,10 +722,7 @@ void main() {
     );
 
     await _scrollUntil(tester, '科技部负责人（填写人）');
-    expect(
-      find.text('请指定科技部负责人。技术字段由对方填写，市场部负责人二做逐条复核。'),
-      findsOneWidget,
-    );
+    expect(find.text('请指定科技部负责人。技术字段由对方填写，市场部负责人二做逐条复核。'), findsOneWidget);
     expect(
       _childInField<ProposalSelectField<int>>(tester, '科技部负责人（填写人）').onSelected,
       isNotNull,
@@ -881,8 +888,8 @@ void main() {
       'form': {
         'marketOwner2': '王奕凡',
         'marketOwner2UserId': 11,
-        'contractAdmin': '王奕凡',
-        'contractAdminUserId': 11,
+        'financeOwner2': '王奕凡',
+        'financeOwner2UserId': 11,
         'salesName': '测试',
       },
       'review': {'stage': 'reviewing', 'contractItems': reviewed},
@@ -895,13 +902,14 @@ void main() {
     expect(find.text('选择合同'), findsNothing);
     expect(find.text('合同编号'), findsWidgets);
     expect(find.textContaining('还差：合同编号'), findsWidgets);
-    expect(find.text('指定审核人 · 无需复核'), findsWidgets);
+    expect(find.text('行政负责人（合同审核）'), findsNothing);
+    expect(find.text('指定审核人 · 无需复核'), findsNothing);
     expect(
       tester
           .widget<OutlinedButton>(
             find.descendant(
               of: _fieldOf('合同编号').first,
-              matching: find.widgetWithText(OutlinedButton, '行政复核'),
+              matching: find.widgetWithText(OutlinedButton, '财务部负责人二复核'),
             ),
           )
           .onPressed,
@@ -1111,9 +1119,7 @@ void main() {
     expect(tapped, isTrue);
   });
 
-  testWidgets('long core terms expand to show full content', (
-    tester,
-  ) async {
+  testWidgets('long core terms expand to show full content', (tester) async {
     tester.view.physicalSize = const Size(1440, 1800);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
@@ -1132,10 +1138,7 @@ void main() {
           'status': 'filling',
           'version': 3,
           'createdBy': 11,
-          'form': {
-            'purchaseMode': '未签署合同',
-            'purchaseCoreTerms': longTerms,
-          },
+          'form': {'purchaseMode': '未签署合同', 'purchaseCoreTerms': longTerms},
           'review': <String, dynamic>{},
         }),
       ),
@@ -1154,9 +1157,7 @@ void main() {
     expect(box.height, greaterThan(200));
   });
 
-  testWidgets('selected product pill uses green fill', (
-    tester,
-  ) async {
+  testWidgets('selected product pill uses green fill', (tester) async {
     tester.view.physicalSize = const Size(1440, 1800);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
@@ -1215,8 +1216,8 @@ void main() {
           'version': 3,
           'createdBy': 11,
           'form': {
-            'contractAdmin': '王奕凡',
-            'contractAdminUserId': 11,
+            'financeOwner2': '王奕凡',
+            'financeOwner2UserId': 11,
             'salesMode': '未签署合同',
             'salesName': '测试销售合同',
           },
@@ -1225,7 +1226,7 @@ void main() {
       ),
     );
     await tester.pump();
-    await _scrollUntil(tester, '销售合同行政审核');
+    await _scrollUntil(tester, '销售合同复核');
 
     expect(
       tester
@@ -1267,10 +1268,7 @@ void main() {
           'status': 'filling',
           'version': 4,
           'createdBy': 11,
-          'form': {
-            'contractAdmin': '王奕凡',
-            'contractAdminUserId': 11,
-          },
+          'form': {'financeOwner2': '王奕凡', 'financeOwner2UserId': 11},
           'review': {
             'stage': 'awaiting_start_review',
             'reviewRejected': true,
@@ -1284,7 +1282,7 @@ void main() {
     await tester.pump();
 
     expect(find.textContaining('重新提交并通知审核人'), findsWidgets);
-    expect(find.textContaining('行政负责人'), findsWidgets);
+    expect(find.textContaining('财务部负责人二'), findsWidgets);
     expect(find.byTooltip('重新提交并通知审核人'), findsOneWidget);
   });
 
@@ -1308,8 +1306,8 @@ void main() {
           'form': {
             'sector': '数字营销事业部',
             'proposalName': '华东区域智能投放年度框架合作提案（含补充说明）',
-            'contractAdmin': '王奕凡',
-            'contractAdminUserId': 11,
+            'financeOwner2': '王奕凡',
+            'financeOwner2UserId': 11,
             'salesMode': '未签署合同',
             'salesName': '上海某某数字科技有限公司智能投放平台年度框架采购合同（含补充协议）',
             'salesCoreTerms': List.generate(
@@ -1326,7 +1324,7 @@ void main() {
     await tester.pump();
 
     expect(tester.takeException(), isNull);
-    await _scrollUntil(tester, '销售合同行政审核');
+    await _scrollUntil(tester, '销售合同复核');
     expect(find.textContaining('发现问题可直接点「驳回」'), findsWidgets);
     expect(
       tester
@@ -1381,5 +1379,270 @@ void main() {
     expect(product.width, closeTo(supply.width, 1));
     expect(product.width, greaterThan(300));
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+    'finance cost buckets ask for expected amounts without rule copy',
+    (tester) async {
+      tester.view.physicalSize = const Size(1440, 2200);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+
+      await tester.pumpWidget(
+        _harness(
+          1440,
+          row: _row().copyWith(
+            form: {
+              'costItems': ['服务器成本'],
+            },
+          ),
+        ),
+      );
+      await tester.pump();
+      await _scrollUntil(tester, '经营成本（万元）');
+
+      expect(find.text('项目成本标准（万元）'), findsNothing);
+      expect(find.text('税务成本标准（万元）'), findsNothing);
+      expect(find.text('税务成本（万元）'), findsOneWidget);
+      expect(find.text('项目成本'), findsOneWidget);
+      expect(find.text('业务成本'), findsOneWidget);
+      expect(find.text('经营成本（万元）'), findsOneWidget);
+      expect(find.text('由市场部负责人一在财务复核时填写'), findsOneWidget);
+      expect(find.textContaining('已加密上锁'), findsNothing);
+      expect(
+        tester.getTopLeft(find.text('税务成本（万元）')).dy,
+        greaterThan(tester.getTopLeft(find.text('经营成本（万元）')).dy),
+      );
+      expect(find.text('规则已定，整块默认可藏。提案只挂表头，不填提成等发生额。'), findsNothing);
+      expect(find.text('经营成本（提案留空）'), findsNothing);
+      expect(find.textContaining('差旅、小额营销按项目收入的 2%'), findsNothing);
+      expect(find.text('预计/标准，非发生额'), findsNothing);
+      expect(find.text('合计 0 万元'), findsOneWidget);
+      expect(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is TextField && widget.decoration?.hintText == '预计（万元）',
+        ),
+        findsOneWidget,
+      );
+    },
+  );
+
+  testWidgets('finance cost items show asset bill-type headers', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1440, 2200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      _harness(
+        1440,
+        options: ProposalIntakeOptions.fromJson({
+          'finance': {
+            'costItems': ['机构返佣', '平台服务费'],
+            'businessCostItems': ['供给侧H'],
+            'costItemSource': 'asset',
+            'costItemOptions': [
+              {'code': 'ap_YFFY_JGFY', 'name': '机构返佣'},
+              {'code': 'ap_FW_PTF', 'name': '平台服务费'},
+            ],
+            'businessCostItemOptions': [
+              {'code': 'ap_YWCB_GJCH', 'name': '供给侧H'},
+            ],
+          },
+        }),
+      ),
+    );
+    await tester.pump();
+    await _scrollUntil(tester, '项目成本');
+
+    expect(find.text('资管账单三级 · 勾选适用表头'), findsNothing);
+    expect(find.text('机构返佣'), findsOneWidget);
+    expect(find.text('平台服务费'), findsOneWidget);
+    expect(find.text('新增成本项'), findsNothing);
+  });
+
+  testWidgets('business cost stays locked for every owner 2', (tester) async {
+    tester.view.physicalSize = const Size(1440, 2200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      _harness(
+        1440,
+        session: AuthSession.fromJson(const {
+          'userId': 12,
+          'displayName': '李思',
+        }),
+        row: ProposalIntakeRow.fromJson({
+          'id': 1,
+          'code': 'TA-2026-0001',
+          'status': 'reviewing',
+          'createdBy': 11,
+          'form': {
+            'financeOwner2UserId': 12,
+            'businessCostItems': ['供给侧H'],
+            'businessCostItemAmounts': {'ap_YWCB_GJCH': 8},
+            'businessCost': 8,
+          },
+          'review': {'stage': 'reviewing'},
+        }),
+      ),
+    );
+    await tester.pump();
+    await _scrollUntil(tester, '业务成本');
+
+    expect(find.textContaining('已加密上锁'), findsOneWidget);
+    expect(find.text('供给侧H'), findsNothing);
+    expect(find.text('合计 8 万元'), findsNothing);
+  });
+
+  testWidgets('market owner 1 fills business cost during finance review', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1440, 2200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      _harness(
+        1440,
+        session: AuthSession.fromJson(const {
+          'userId': 4,
+          'displayName': '市场一',
+        }),
+        row: ProposalIntakeRow.fromJson({
+          'id': 1,
+          'code': 'TA-2026-0001',
+          'status': 'reviewing',
+          'createdBy': 11,
+          'form': {'marketOwner1UserId': 4},
+          'review': {'stage': 'reviewing'},
+        }),
+      ),
+    );
+    await tester.pump();
+    await _scrollUntil(tester, '业务成本');
+
+    expect(find.text('员工提成'), findsOneWidget);
+    expect(find.text('由市场部负责人一在财务复核时填写'), findsNothing);
+    expect(find.textContaining('已加密上锁'), findsNothing);
+    expect(
+      tester
+          .widget<ProposalPills>(
+            find.descendant(
+              of: _fieldOf('业务成本'),
+              matching: find.byType(ProposalPills),
+            ),
+          )
+          .enabled,
+      isTrue,
+    );
+  });
+
+  testWidgets('done proposal shows start tech revision for tech owner', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1440, 1400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      _harness(
+        1440,
+        session: AuthSession.fromJson(const {
+          'userId': 12,
+          'displayName': '李思',
+        }),
+        row: ProposalIntakeRow.fromJson({
+          'id': 1,
+          'code': 'TA-2026-0001',
+          'status': 'done',
+          'createdBy': 11,
+          'form': {'technologyOwnerUserId': 12, 'technologyOwner': '李思'},
+          'review': {'stage': 'done'},
+        }),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('发起科技变更'), findsWidgets);
+    expect(find.byTooltip('发起科技变更'), findsOneWidget);
+    expect(find.text('科技变更中'), findsNothing);
+  });
+
+  testWidgets('tech revising shows add-record and confirm actions', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1440, 1800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      _harness(
+        1440,
+        session: AuthSession.fromJson(const {
+          'userId': 12,
+          'displayName': '李思',
+        }),
+        row: ProposalIntakeRow.fromJson({
+          'id': 1,
+          'code': 'TA-2026-0001',
+          'status': 'done',
+          'createdBy': 11,
+          'form': {
+            'technologyOwnerUserId': 12,
+            'technologyOwner': '李思',
+            'technologyPlatform': '数据智能平台',
+          },
+          'review': {'stage': 'tech_revising', 'techRevisionRound': 2},
+        }),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('科技变更中'), findsOneWidget);
+    expect(find.text('确认本轮科技变更'), findsWidgets);
+    expect(find.byTooltip('确认本轮科技变更'), findsOneWidget);
+    await _scrollUntil(tester, '新增对接记录');
+    expect(find.text('新增对接记录'), findsOneWidget);
+  });
+
+  testWidgets('tech reviewing locks market until technology is done', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1440, 1800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      _harness(
+        1440,
+        session: AuthSession.fromJson(const {
+          'userId': 4,
+          'displayName': '市场一',
+        }),
+        row: ProposalIntakeRow.fromJson({
+          'id': 1,
+          'code': 'TA-2026-0001',
+          'status': 'done',
+          'createdBy': 11,
+          'form': {'marketOwner1UserId': 4, 'technologyOwnerUserId': 12},
+          'review': {
+            'stage': 'tech_reviewing',
+            'technologyCompleted': false,
+            'marketCompleted': false,
+          },
+        }),
+      ),
+    );
+    await tester.pump();
+    await _scrollUntil(tester, '整个板块复核通过');
+
+    final button = tester.widget<OutlinedButton>(
+      find.byKey(const ValueKey('proposal-module-approve-marketCompleted')),
+    );
+    expect(button.onPressed, isNull);
   });
 }

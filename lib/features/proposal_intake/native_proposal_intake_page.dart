@@ -313,6 +313,11 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
     'outputForms': <String>[],
     'developmentTypes': <String>[],
     'costItems': <String>[],
+    'costItemCodes': <String>[],
+    'costItemAmounts': <String, dynamic>{},
+    'businessCostItems': <String>[],
+    'businessCostItemCodes': <String>[],
+    'businessCostItemAmounts': <String, dynamic>{},
     'purchaseProducts': <String>[],
     'financeInterfaces': <String, dynamic>{},
   };
@@ -960,9 +965,6 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     ('revenue', '收入（万元）'),
     ('invoiceAmount', '发票（万元）'),
     ('profit', '利润（万元）'),
-    ('projectCost', '项目成本（万元）'),
-    ('taxCost', '税务成本（万元）'),
-    ('operatingCost', '经营成本（万元）'),
     ('margin', '毛利率（%）'),
     ('turnoverCash', '预计周转资金（万元）'),
     ('turnoverTimes', '月周转次数'),
@@ -1013,16 +1015,12 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
 
   static const _techReviewLabel = '市场部负责人二复核';
   static const _financeReviewLabel = '财务部负责人二复核';
-  static const _contractReviewLabel = '行政复核';
 
   static const _financeReviewKeys = <String>[
     'salesScale',
     'revenue',
     'invoiceAmount',
     'profit',
-    'projectCost',
-    'taxCost',
-    'operatingCost',
     'margin',
     'turnoverCash',
     'turnoverTimes',
@@ -1036,6 +1034,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     'channelReceiveAccount',
     'financeRemark',
     'costItems',
+    'operatingCost',
+    'taxCost',
     'rollback',
   ];
 
@@ -1049,15 +1049,24 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   int get _me => widget.session.userId;
 
   bool get _isLocked =>
-      _row.status == 'done' || _row.status == 'pending_president';
+      _row.status == 'pending_president' ||
+      (_row.status == 'done' && !_row.techRevisionOpen);
 
   /// 最终审核人、已通过提案只看已填结果，不铺开未选项。
-  bool get _showSelectedAsText => _isLocked;
+  bool get _showSelectedAsText =>
+      _row.status == 'pending_president' ||
+      (_row.status == 'done' && !_row.isTechRevising);
 
-  bool get _isReviewing => _stage == 'reviewing' || _stage == 'awaiting_submit';
+  bool get _isReviewing =>
+      _stage == 'reviewing' ||
+      _stage == 'awaiting_submit' ||
+      _stage == 'tech_reviewing';
 
-  /// 复核开始后整单只读；要改内容必须先驳回。
-  bool get _isContentFrozen => _isLocked || _isReviewing;
+  /// 复核开始后整单只读；要改内容必须先驳回。科技变更填写轮除外。
+  bool get _isContentFrozen =>
+      _row.status == 'pending_president' ||
+      (_row.status == 'done' && !_row.isTechRevising) ||
+      _isReviewing;
 
   int _ownerId(String key) => int.tryParse(_text('${key}UserId')) ?? 0;
 
@@ -1085,11 +1094,42 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
 
   String get _stage => _row.resolvedStage;
 
-  bool get _canEditMarket => !_isContentFrozen && _isSubmitter;
+  bool get _canEditMarket =>
+      !_isContentFrozen && _isSubmitter && !_row.techRevisionOpen;
 
-  bool get _canEditTech => !_isContentFrozen && _isTechFiller;
+  bool get _canEditTech =>
+      _isTechFiller && (!_isContentFrozen || _row.isTechRevising);
 
-  bool get _canSave => !_isContentFrozen && (_isSubmitter || _isTechFiller);
+  bool get _canEditProductFiles =>
+      _canEditMarket || (_row.isTechRevising && (_isTechFiller || _isSubmitter));
+
+  bool get _isMarketOwner1 => _isOwner('marketOwner1');
+
+  bool get _isAnyOwner2 =>
+      _isOwner('financeOwner2') || _isOwner('marketOwner2');
+
+  bool get _businessCostSealed =>
+      _form['businessCostRedacted'] == true ||
+      (_isAnyOwner2 && !_isMarketOwner1);
+
+  bool get _canEditBusinessCost =>
+      !_isLocked && _isMarketOwner1 && _stage == 'reviewing';
+
+  bool get _canSave =>
+      (_row.isTechRevising && _isTechFiller) ||
+      _canEditBusinessCost ||
+      (!_isContentFrozen &&
+          !_row.techRevisionOpen &&
+          (_isSubmitter || _isTechFiller));
+
+  bool get _canStartTechRevision =>
+      _row.id > 0 &&
+      _row.status == 'done' &&
+      !_row.techRevisionOpen &&
+      _isTechFiller;
+
+  bool get _canConfirmTechRevision =>
+      _row.id > 0 && _row.isTechRevising && _isTechFiller;
 
   bool get _canNotifyTech =>
       _row.id > 0 &&
@@ -1115,8 +1155,10 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
 
   bool get _canDelete => _row.id > 0 && _row.canDeleteBy(_me);
 
-  bool _fillEnabled(bool? writable) =>
-      !_isContentFrozen && (writable ?? _canEditMarket);
+  bool _fillEnabled(bool? writable) {
+    if (writable != null) return writable;
+    return !_isContentFrozen && _canEditMarket;
+  }
 
   bool get _supportsDesktopDrop {
     if (kIsWeb) return true;
@@ -1144,20 +1186,37 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   bool _reviewEnabled(String? section) {
     if (section == null || !_isReviewing || _me <= 0) return false;
     if (section.startsWith('technologyItem:')) return _isMarketOwner2;
-    if (section.startsWith('financeItem:')) return _isOwner('financeOwner2');
-    if (section.startsWith('contractItem:')) return _isOwner('contractAdmin');
+    if (section.startsWith('financeItem:')) {
+      return !_row.techRevisionOpen && _isOwner('financeOwner2');
+    }
+    if (section.startsWith('contractItem:')) {
+      return !_row.techRevisionOpen && _isOwner('financeOwner2');
+    }
     return false;
   }
 
+  bool get _financeInterfaceNeedsReview =>
+      _row.isTechReviewing &&
+      !proposalIntakeFinanceInterfacesUnchanged(form: _form, review: _review);
+
   bool _moduleReviewEnabled(String keyName) {
     if (!_isReviewing || _me <= 0) return false;
+    if (_row.techRevisionOpen) {
+      return switch (keyName) {
+        'marketCompleted' => _isOwner('marketOwner1'),
+        'technologyCompleted' => _isMarketOwner2,
+        'financeInterfaceCompleted' =>
+          _isOwner('financeOwner2') && _financeInterfaceNeedsReview,
+        _ => false,
+      };
+    }
     return switch (keyName) {
       'marketCompleted' => _isOwner('marketOwner1'),
       'technologyCompleted' => _isMarketOwner2,
       'financeInterfaceCompleted' => _isOwner('financeOwner2'),
       'financeCompleted' => _isOwner('financeOwner1'),
       'purchaseContractCompleted' ||
-      'salesContractCompleted' => _isOwner('contractAdmin'),
+      'salesContractCompleted' => _isOwner('financeOwner2'),
       _ => false,
     };
   }
@@ -1197,13 +1256,16 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       'purchaseContract' ||
       'purchaseContractCompleted' ||
       'salesContract' ||
-      'salesContractCompleted' => '行政负责人',
+      'salesContractCompleted' => '财务部负责人二',
       _ => '对应审核人',
     };
   }
 
   /// 板块驳回后的修改只动被驳板块，不要把整单打回「填写中」以免其他复核被清掉。
   String get _statusAfterEdit {
+    if (_row.status == 'done' || _row.status == 'pending_president') {
+      return _row.status;
+    }
     if (_isContentFrozen) return _row.status;
     final moduleRevise =
         _review['reviewRejected'] == true &&
@@ -1432,7 +1494,88 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   void _toggleList(String key, String value, {String? resetReview}) {
     final values = _setOf(key);
     values.contains(value) ? values.remove(value) : values.add(value);
-    _set(key, values.toList(), resetReview: resetReview);
+    final next = values.toList();
+    if (key == 'costItems') {
+      _setCostSelection(
+        namesKey: 'costItems',
+        codesKey: 'costItemCodes',
+        amountsKey: 'costItemAmounts',
+        totalKey: 'projectCost',
+        names: next,
+        catalog: widget.options.costItemOptions,
+        resetReview: resetReview,
+      );
+      return;
+    }
+    if (key == 'businessCostItems') {
+      if (!_canEditBusinessCost) return;
+      _setCostSelection(
+        namesKey: 'businessCostItems',
+        codesKey: 'businessCostItemCodes',
+        amountsKey: 'businessCostItemAmounts',
+        totalKey: 'businessCost',
+        names: next,
+        catalog: widget.options.businessCostItemOptions,
+        resetReview: resetReview,
+      );
+      return;
+    }
+    _set(key, next, resetReview: resetReview);
+  }
+
+  void _setCostSelection({
+    required String namesKey,
+    required String codesKey,
+    required String amountsKey,
+    required String totalKey,
+    required List<String> names,
+    required List<ProposalCostItemOption> catalog,
+    String? resetReview,
+  }) {
+    final form = proposalSyncCostSelection(
+      form: _form,
+      names: names,
+      catalog: catalog,
+      namesKey: namesKey,
+      codesKey: codesKey,
+      amountsKey: amountsKey,
+      totalKey: totalKey,
+    );
+    final review = Map<String, dynamic>.from(_review);
+    if (resetReview != null) review[resetReview] = false;
+    _dirty = true;
+    _row = _row.copyWith(form: form, review: review, status: _statusAfterEdit);
+    if (mounted) setState(() {});
+    widget.onChanged(_row);
+  }
+
+  void _setCostAmount({
+    required String amountsKey,
+    required String totalKey,
+    required String id,
+    required double? value,
+    String? resetReview,
+  }) {
+    if (amountsKey == 'businessCostItemAmounts' && !_canEditBusinessCost) {
+      return;
+    }
+    final amounts = proposalCostAmountMap(_form[amountsKey]);
+    if (value == null) {
+      amounts.remove(id);
+    } else {
+      amounts[id] = value;
+    }
+    final form = Map<String, dynamic>.from(_form)
+      ..[amountsKey] = {
+        for (final entry in amounts.entries) entry.key: entry.value,
+      }
+      ..[totalKey] = proposalCostAmountTotal(amounts);
+    final review = Map<String, dynamic>.from(_review);
+    if (resetReview != null) review[resetReview] = false;
+    _dirty = true;
+    _row = _row.copyWith(form: form, review: review, status: _statusAfterEdit);
+    if (mounted) setState(() {});
+    widget.onChanged(_row);
   }
 
   String _text(String key) => '${_form[key] ?? ''}';
@@ -1666,6 +1809,16 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       'start_review' => (
         '确认重新提交复核',
         '确认后将通知${_rejectSectionRole('${_review['reviewRejectSection'] ?? ''}'.trim())}重新复核本板块，其他已通过板块保持不变。这是本步骤的最终确认。',
+        '确认提交',
+      ),
+      'start_tech_revision' => (
+        '确认发起科技变更',
+        '确认后可修改科技部内容和上线产品文件。市场将按先科技后市场重新打勾。财务接口没变则不重审财务。',
+        '确认发起',
+      ),
+      'confirm_tech_revision' => (
+        '确认提交本轮科技变更',
+        '确认后由市场部负责人二复核科技，再由市场部负责人一复核市场。',
         '确认提交',
       ),
       _ => ('', '', ''),
@@ -1915,6 +2068,13 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                 ? ProposalChipKind.ok
                 : ProposalChipKind.purple,
           ),
+          if (_row.techRevisionOpen) ...[
+            const SizedBox(width: 7),
+            const ProposalStatusChip(
+              label: '科技变更中',
+              kind: ProposalChipKind.purple,
+            ),
+          ],
           const SizedBox(width: 7),
           ProposalStatusChip(
             label: '评级 $_rating',
@@ -2168,6 +2328,32 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     return Tooltip(message: tooltip, child: button);
   }
 
+  Widget _topLabeledAction({
+    required IconData icon,
+    required String label,
+    required VoidCallback onPressed,
+    required bool compact,
+  }) {
+    final height = compact ? 32.0 : 36.0;
+    return Tooltip(
+      message: label,
+      child: FilledButton.icon(
+        onPressed: onPressed,
+        icon: Icon(icon, size: compact ? 15 : 16),
+        label: Text(label, style: TextStyle(fontSize: compact ? 12 : 13)),
+        style: FilledButton.styleFrom(
+          backgroundColor: ProposalPalette.purple,
+          foregroundColor: Colors.white,
+          minimumSize: Size(0, height),
+          maximumSize: Size(double.infinity, height),
+          padding: EdgeInsets.symmetric(horizontal: compact ? 10 : 12),
+          visualDensity: VisualDensity.compact,
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        ),
+      ),
+    );
+  }
+
   List<Widget> _topActionButtons({required bool compact}) {
     final dim = compact ? 32.0 : 36.0;
     Widget btn({
@@ -2227,6 +2413,26 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           tooltip: '确认并提交复核',
           filled: true,
           onPressed: () => unawaited(_handoff('notify_market2')),
+        ),
+      );
+    }
+    if (_canStartTechRevision) {
+      actions.add(
+        _topLabeledAction(
+          icon: Icons.science_outlined,
+          label: '发起科技变更',
+          onPressed: () => unawaited(_handoff('start_tech_revision')),
+          compact: compact,
+        ),
+      );
+    }
+    if (_canConfirmTechRevision) {
+      actions.add(
+        _topLabeledAction(
+          icon: Icons.assignment_turned_in_outlined,
+          label: '确认本轮科技变更',
+          onPressed: () => unawaited(_handoff('confirm_tech_revision')),
+          compact: compact,
         ),
       );
     }
@@ -2309,12 +2515,17 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     final who = rejector.isEmpty
         ? role
         : (president ? '最终人 $rejector' : '$role $rejector');
+    final techRound = _row.isTechRevising || _row.isTechReviewing;
     final text = comment.isEmpty
         ? (president
               ? '$who 已驳回，请修改后重新通知科技负责人，全部流程重新开始。'
+              : techRound
+              ? '$who 已驳回本轮科技变更。请修改后点右上角「确认本轮科技变更」。'
               : '$who 已驳回本板块。填写人修改后请点右上角「重新提交并通知审核人」，将通知$role再次审核。其他板块复核仍保留。')
         : (president
               ? '$who 驳回意见：$comment。请修改后重新通知科技负责人，全部流程重新开始。'
+              : techRound
+              ? '$who 驳回意见：$comment。请修改后重新提交本轮科技变更。'
               : '$who 驳回意见：$comment。填写人修改后请点右上角「重新提交并通知审核人」，将通知$role再次审核。其他板块复核仍保留。');
     return Container(
       width: double.infinity,
@@ -2450,7 +2661,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           title: '一、市场部内容',
           tag: 'Market',
           description: _canEditMarket
-              ? '提交人填写；市场部负责人一复核市场整板块，市场部负责人二复核科技。'
+              ? '提交人填写；市场部负责人一复核市场整板块，采购/销售合同由财务部负责人二复核。'
               : '由提交人填写。当前账号不可编辑本板块。',
         ),
       ),
@@ -2599,12 +2810,155 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       ),
       _moduleReview(
         title: '市场部板块统一复核',
-        description: '市场部负责人一确认提交人填写的全部业务内容',
+        description: proposalIntakeMarketReviewBlocked(_review)
+            ? '请先完成科技部复核，再复核市场（先科技后市场）。'
+            : '市场部负责人一确认提交人填写的全部业务内容',
         keyName: 'marketCompleted',
         buttonLabel: '整个板块复核通过',
+        locked: proposalIntakeMarketReviewBlocked(_review),
       ),
     ],
   );
+
+  void _appendTechnologyRecord() {
+    if (!_canEditTech) return;
+    final next = proposalIntakeAppendTechnologyRecord(_form);
+    final review = Map<String, dynamic>.from(_review)
+      ..['technologyCompleted'] = false;
+    setState(() {
+      _dirty = true;
+      _row = _row.copyWith(
+        form: next,
+        review: review,
+        status: _statusAfterEdit,
+      );
+    });
+    widget.onChanged(_row);
+  }
+
+  void _renameTechnologyRecord(int index, String title) {
+    final records = [
+      for (final item in (_form['technologyRecords'] is List
+          ? _form['technologyRecords'] as List
+          : const []))
+        if (item is Map) Map<String, dynamic>.from(item),
+    ];
+    if (index < 0 || index >= records.length) return;
+    records[index]['title'] = title.trim();
+    _set('technologyRecords', records, resetReview: 'technologyCompleted');
+  }
+
+  List<Widget> _technologyRecordCards() {
+    final records = proposalIntakeTechnologyRecords(_form);
+    if (records.isEmpty) return const [];
+    return [
+      const SizedBox(height: 12),
+      for (var i = 0; i < records.length; i++) ...[
+        _technologySnapshotCard(
+          title: records[i].title,
+          subtitle: '累计对接记录 ${i + 1}',
+          record: records[i],
+          titleEditable: _canEditTech,
+          onTitle: (value) => _renameTechnologyRecord(i, value),
+        ),
+        if (i != records.length - 1) const SizedBox(height: 8),
+      ],
+    ];
+  }
+
+  List<Widget> _technologyHistoryCards() {
+    final history = proposalIntakeTechnologyHistory(_form);
+    if (history.isEmpty) return const [];
+    return [
+      const SizedBox(height: 12),
+      ExpansionTile(
+        tilePadding: EdgeInsets.zero,
+        childrenPadding: EdgeInsets.zero,
+        title: Text(
+          '历史轮次（${history.length}）',
+          style: const TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w700,
+            color: ProposalPalette.text,
+          ),
+        ),
+        children: [
+          for (final item in history.reversed)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: _technologySnapshotCard(
+                title: item.title.isEmpty ? '第 ${item.round} 轮' : item.title,
+                subtitle: '已归档',
+                record: item,
+              ),
+            ),
+        ],
+      ),
+    ];
+  }
+
+  Widget _technologySnapshotCard({
+    required String title,
+    required String subtitle,
+    required ProposalTechnologyRecord record,
+    bool titleEditable = false,
+    ValueChanged<String>? onTitle,
+  }) {
+    final summary = [
+      if (record.platform.isNotEmpty) record.platform,
+      if (record.capabilities.isNotEmpty) record.capabilities.join('、'),
+      if (record.deliveryDate.isNotEmpty) '交付 ${record.deliveryDate}',
+    ].join(' · ');
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF7F4FA),
+        border: Border.all(color: const Color(0xFFE2D8EC)),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            subtitle,
+            style: const TextStyle(fontSize: 10, color: ProposalPalette.text3),
+          ),
+          if (titleEditable)
+            TextFormField(
+              initialValue: title,
+              onChanged: onTitle,
+              decoration: const InputDecoration(
+                isDense: true,
+                border: InputBorder.none,
+                hintText: '对接记录标题',
+              ),
+              style: const TextStyle(
+                fontWeight: FontWeight.w700,
+                fontSize: 13,
+              ),
+            )
+          else
+            Text(
+              title,
+              style: const TextStyle(
+                fontWeight: FontWeight.w700,
+                fontSize: 13,
+                color: ProposalPalette.text,
+              ),
+            ),
+          if (summary.isNotEmpty)
+            Text(
+              summary,
+              style: const TextStyle(
+                fontSize: 12,
+                color: ProposalPalette.text2,
+              ),
+            ),
+        ],
+      ),
+    );
+  }
 
   Widget _techSection(bool wide) {
     final platform = widget.options.platforms
@@ -2621,11 +2975,15 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           child: ProposalSectionTitle(
             title: '二、科技部内容',
             tag: 'Tech',
-            description: _canEditTech
+            description: _canStartTechRevision
+                ? '提案已通过。点右上角「发起科技变更」后，可覆盖当前字段或新增对接记录。'
+                : _row.isTechRevising
+                ? '本轮科技变更可覆盖当前字段，或新增一条对接记录。改完后提交，由市场部先科技后市场重新打勾。'
+                : _canEditTech
                 ? '请填写科技部内容；完成后由市场部负责人二逐条复核。'
                 : _canEditMarket
                 ? '请指定科技部负责人。技术字段由对方填写，市场部负责人二做逐条复核。'
-                : '科技部负责人填写；市场部负责人二逐条复核。',
+                : '科技部负责人填写；市场部负责人二做逐条复核。',
           ),
         ),
         ProposalCard(
@@ -2766,6 +3124,19 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                   reviewLabel: _techReviewLabel,
                 ),
               ]),
+              if (_canEditTech) ...[
+                const SizedBox(height: 12),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: OutlinedButton.icon(
+                    onPressed: _appendTechnologyRecord,
+                    icon: const Icon(Icons.add, size: 16),
+                    label: const Text('新增对接记录'),
+                  ),
+                ),
+              ],
+              ..._technologyRecordCards(),
+              ..._technologyHistoryCards(),
             ],
           ),
         ),
@@ -2778,12 +3149,13 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           progress:
               '逐条复核 ${_reviewedCount('technologyItem', _technologyReviewFields)}/${_technologyReviewFields.length}',
         ),
-        _moduleReview(
-          title: '财务技术接口复核',
-          description: '由本单财务部负责人二确认科技填写的财务技术接口，不是财务整板块复核。',
-          keyName: 'financeInterfaceCompleted',
-          buttonLabel: '确认财务技术接口',
-        ),
+        if (!_row.techRevisionOpen || _financeInterfaceNeedsReview)
+          _moduleReview(
+            title: '财务技术接口复核',
+            description: '由本单财务部负责人二确认科技填写的财务技术接口，不是财务整板块复核。',
+            keyName: 'financeInterfaceCompleted',
+            buttonLabel: '确认财务技术接口',
+          ),
       ],
     );
   }
@@ -2796,9 +3168,11 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         child: ProposalSectionTitle(
           title: '三、财务部内容',
           tag: 'Finance',
-          description: _canEditMarket
-              ? '提交人填写 · 财务部负责人二逐条复核 · 财务部负责人一整板块复核。'
-              : '本板块由提交人填写；财务负责人只做复核。',
+          description: _canEditBusinessCost
+              ? '业务成本由你在财务复核时填写；其余财务项由提交人填写，财务部负责人二逐条复核。'
+              : _canEditMarket
+              ? '提交人填写 · 业务成本由市场部负责人一在财务复核时填写 · 财务部负责人二逐条复核 · 财务部负责人一整板块复核。'
+              : '本板块由提交人填写；业务成本由市场部负责人一在财务复核时填写。',
         ),
       ),
       ProposalCard(
@@ -2886,13 +3260,34 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               },
             ),
             const SizedBox(height: 12),
-            _multiField(
-              '项目成本明细',
-              'costItems',
-              widget.options.costItems,
-              '新增成本项',
-              resetReview: 'financeCompleted',
+            _costSelectField(
+              label: '项目成本',
+              namesKey: 'costItems',
+              amountsKey: 'costItemAmounts',
+              totalKey: 'projectCost',
+              options: widget.options.costItems,
+              catalog: widget.options.costItemOptions,
+              addLabel: widget.options.costItemSource == 'asset'
+                  ? null
+                  : '新增成本项',
               reviewSection: 'financeItem:costItems',
+            ),
+            const SizedBox(height: 10),
+            _businessCostField(),
+            const SizedBox(height: 10),
+            _numberField(
+              '经营成本（万元）',
+              'operatingCost',
+              resetReview: 'financeCompleted',
+              reviewSection: 'financeItem:operatingCost',
+              reviewLabel: _financeReviewLabel,
+            ),
+            const SizedBox(height: 10),
+            _numberField(
+              '税务成本（万元）',
+              'taxCost',
+              resetReview: 'financeCompleted',
+              reviewSection: 'financeItem:taxCost',
               reviewLabel: _financeReviewLabel,
             ),
             const SizedBox(height: 10),
@@ -3209,15 +3604,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               const ['已签署合同', '未签署合同'],
               resetReview: flag,
               reviewSection: 'contractItem:$prefix.Mode',
-              reviewLabel: _contractReviewLabel,
+              reviewLabel: _financeReviewLabel,
               onSelected: (value) => _setContractMode(prefix, value),
-            ),
-            _personField(
-              '行政负责人（合同审核）',
-              'contractAdmin',
-              positionIncludes: '行政',
-              badge: '指定审核人 · 无需复核',
-              required: true,
             ),
             if (signed) _contractSelector(prefix),
             _textField(
@@ -3230,7 +3618,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                   : null,
               resetReview: flag,
               reviewSection: 'contractItem:$prefix.No',
-              reviewLabel: _contractReviewLabel,
+              reviewLabel: _financeReviewLabel,
             ),
             if (unsigned) _unsignedFileField(prefix),
             _textField(
@@ -3239,7 +3627,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               source: '合同抓取 · 可修改',
               resetReview: flag,
               reviewSection: 'contractItem:$prefix.Name',
-              reviewLabel: _contractReviewLabel,
+              reviewLabel: _financeReviewLabel,
             ),
             _textField(
               '签署时间',
@@ -3247,7 +3635,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               source: '合同抓取 · 可修改',
               resetReview: flag,
               reviewSection: 'contractItem:$prefix.SignDate',
-              reviewLabel: _contractReviewLabel,
+              reviewLabel: _financeReviewLabel,
             ),
             _textField(
               '我方签约主体',
@@ -3255,7 +3643,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               source: '合同抓取 · 可修改',
               resetReview: flag,
               reviewSection: 'contractItem:$prefix.OurParty',
-              reviewLabel: _contractReviewLabel,
+              reviewLabel: _financeReviewLabel,
             ),
             _textField(
               '对方签约主体',
@@ -3263,7 +3651,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               source: '合同抓取 · 可修改',
               resetReview: flag,
               reviewSection: 'contractItem:$prefix.Counterparty',
-              reviewLabel: _contractReviewLabel,
+              reviewLabel: _financeReviewLabel,
             ),
             _textField(
               '有效期',
@@ -3271,7 +3659,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               source: '合同抓取 · 可修改',
               resetReview: flag,
               reviewSection: 'contractItem:$prefix.ValidPeriod',
-              reviewLabel: _contractReviewLabel,
+              reviewLabel: _financeReviewLabel,
             ),
             _textField(
               '核心条款',
@@ -3280,7 +3668,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               source: '合同抓取 · 可修改',
               resetReview: flag,
               reviewSection: 'contractItem:$prefix.CoreTerms',
-              reviewLabel: _contractReviewLabel,
+              reviewLabel: _financeReviewLabel,
             ),
             if (prefix == 'purchase')
               _multiField(
@@ -3293,11 +3681,11 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           ]),
           const SizedBox(height: 8),
           _moduleReview(
-            title: '$title行政审核',
+            title: '$title复核',
             description: [
-              _isOwner('contractAdmin')
-                  ? '你就是本单行政负责人（可与填写人同一人），点各字段右侧「行政复核」即可。发现问题可直接驳回本板块。行政负责人姓名本身不用复核。'
-                  : '由行政负责人逐条点「行政复核」，或直接整板块驳回。填写人若不是行政负责人，请等对方审核。',
+              _isOwner('financeOwner2')
+                  ? '由你逐条点「财务部负责人二复核」，或直接整板块驳回。'
+                  : '采购/销售合同由财务部负责人二逐条复核，或直接整板块驳回。',
               if (pending.isNotEmpty) '还差：${pending.join('、')}。',
             ].join(),
             keyName: flag,
@@ -3305,7 +3693,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
             compact: true,
             locked: !_itemsReviewed('contractItem', keys),
             progress:
-                '行政复核 ${_reviewedCount('contractItem', keys)}/${keys.length}',
+                '财务部负责人二复核 ${_reviewedCount('contractItem', keys)}/${keys.length}',
           ),
         ],
       ),
@@ -3511,7 +3899,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   }
 
   Future<void> _pickOnlineProductFiles() async {
-    if (!_canEditMarket || _uploadingProductFile) return;
+    if (!_canEditProductFiles || _uploadingProductFile) return;
     final current = _onlineProductFiles();
     final room = _maxProductFiles - current.length;
     if (room <= 0) {
@@ -3537,7 +3925,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   }
 
   Future<void> _onProductFilesDropped(DropDoneDetails detail) async {
-    if (!_canEditMarket || _uploadingProductFile) return;
+    if (!_canEditProductFiles || _uploadingProductFile) return;
     final current = _onlineProductFiles();
     final room = _maxProductFiles - current.length;
     if (room <= 0) {
@@ -3600,7 +3988,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   }
 
   void _removeOnlineProductFile(int index) {
-    if (!_canEditMarket) return;
+    if (!_canEditProductFiles) return;
     final next = [..._onlineProductFiles()]..removeAt(index);
     _set('onlineProductFiles', next, resetReview: 'marketCompleted');
   }
@@ -3690,7 +4078,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
 
   Widget _productAssetsCard() {
     final files = _onlineProductFiles();
-    final enabled = _canEditMarket;
+    final enabled = _canEditProductFiles;
     return _stepCard(
       '02b',
       _showProductTemplates ? '产品模板与上线文件' : '上线产品文件',
@@ -5069,23 +5457,315 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     );
   }
 
+  Widget _businessCostField() {
+    if (_businessCostSealed) {
+      return const ProposalField(
+        label: '业务成本',
+        tone: ProposalFieldTone.locked,
+        child: Text(
+          '已加密上锁，负责人二不可查看。由市场部负责人一在财务复核时填写。',
+          style: TextStyle(
+            color: ProposalPalette.text2,
+            fontSize: 13,
+            height: 1.45,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      );
+    }
+    if (_canEditBusinessCost) {
+      return _costSelectField(
+        label: '业务成本',
+        namesKey: 'businessCostItems',
+        amountsKey: 'businessCostItemAmounts',
+        totalKey: 'businessCost',
+        options: widget.options.businessCostItems,
+        catalog: widget.options.businessCostItemOptions,
+        addLabel: widget.options.costItemSource == 'asset'
+            ? null
+            : (widget.options.businessCostItems.isEmpty ? null : '新增成本项'),
+        writable: true,
+        allowDuringReview: true,
+      );
+    }
+    final names = _form['businessCostItems'] is List
+        ? [
+            for (final item in _form['businessCostItems'] as List)
+              if ('$item'.trim().isNotEmpty) '$item'.trim(),
+          ]
+        : const <String>[];
+    final amounts = proposalCostAmountMap(_form['businessCostItemAmounts']);
+    if (names.isEmpty) {
+      return const ProposalField(
+        label: '业务成本',
+        tone: ProposalFieldTone.locked,
+        child: Text(
+          '由市场部负责人一在财务复核时填写',
+          style: TextStyle(
+            color: ProposalPalette.text3,
+            fontSize: 13,
+            height: 1.45,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      );
+    }
+    final catalog = widget.options.businessCostItemOptions;
+    final total = proposalCostAmountTotal(amounts);
+    return ProposalField(
+      label: '业务成本',
+      tone: ProposalFieldTone.locked,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          for (final name in names)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: Text(
+                '$name  ${_money(amounts[proposalCostAmountId(name, catalog)] ?? amounts[name] ?? 0)}',
+                style: const TextStyle(
+                  color: ProposalPalette.text,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          Text(
+            '合计 ${_money(total)}',
+            style: const TextStyle(
+              color: ProposalPalette.text2,
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _costSelectField({
+    required String label,
+    required String namesKey,
+    required String amountsKey,
+    required String totalKey,
+    required List<String> options,
+    required List<ProposalCostItemOption> catalog,
+    String? reviewSection,
+    String? addLabel,
+    bool? writable,
+    bool allowDuringReview = false,
+  }) {
+    final enabled = allowDuringReview
+        ? (!_isLocked && (writable ?? false))
+        : _fillEnabled(writable);
+    final tone = proposalFieldTone(enabled: enabled);
+    final selected = _setOf(namesKey);
+    final names = _form[namesKey] is List
+        ? [
+            for (final item in _form[namesKey] as List)
+              if ('$item'.trim().isNotEmpty) '$item'.trim(),
+          ]
+        : selected.toList();
+    final amounts = proposalCostAmountMap(_form[amountsKey]);
+    final total = proposalCostAmountTotal(amounts);
+    Widget amountRows() {
+      if (names.isEmpty) return const SizedBox.shrink();
+      return Padding(
+        padding: const EdgeInsets.only(top: 10),
+        child: Column(
+          children: [
+            for (final name in names)
+              _costAmountRow(
+                name: name,
+                id: proposalCostAmountId(name, catalog),
+                amount:
+                    amounts[proposalCostAmountId(name, catalog)] ??
+                    amounts[name] ??
+                    0,
+                amountsKey: amountsKey,
+                totalKey: totalKey,
+                enabled: enabled,
+              ),
+            Align(
+              alignment: Alignment.centerRight,
+              child: Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Text(
+                  '合计 ${_money(total)}',
+                  style: const TextStyle(
+                    color: ProposalPalette.text2,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (_showSelectedAsText) {
+      return _FullWidthField(
+        child: ProposalField(
+          label: label,
+          tone: tone,
+          trailing: _rowReviewToggle(reviewSection, _financeReviewLabel),
+          child: names.isEmpty
+              ? _readonlySelectedText('')
+              : Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    for (final name in names)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 4),
+                        child: Text(
+                          '$name  ${_money(amounts[proposalCostAmountId(name, catalog)] ?? amounts[name] ?? 0)}',
+                          style: const TextStyle(
+                            color: ProposalPalette.text,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    Text(
+                      '合计 ${_money(total)}',
+                      style: const TextStyle(
+                        color: ProposalPalette.text2,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+        ),
+      );
+    }
+
+    return _FullWidthField(
+      child: ProposalField(
+        label: label,
+        tone: tone,
+        trailing: _rowReviewToggle(reviewSection, _financeReviewLabel),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            ProposalPills(
+              options: [
+                ...options,
+                ...names.where((value) => !options.contains(value)),
+              ],
+              selected: selected,
+              enabled: enabled,
+              onToggle: (value) {
+                if (enabled) {
+                  _toggleList(namesKey, value, resetReview: 'financeCompleted');
+                }
+              },
+              onAdd: addLabel == null || !enabled
+                  ? null
+                  : () => _addOption(
+                      namesKey,
+                      addLabel,
+                      resetReview: 'financeCompleted',
+                    ),
+            ),
+            amountRows(),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _costAmountRow({
+    required String name,
+    required String id,
+    required double amount,
+    required String amountsKey,
+    required String totalKey,
+    required bool enabled,
+  }) {
+    final tone = proposalFieldTone(enabled: enabled);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: ProposalPalette.text,
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          SizedBox(
+            width: 148,
+            child: TextFormField(
+              key: ValueKey('$amountsKey-$id-${_row.id}-$_fieldEpoch'),
+              initialValue: amount == 0 ? '' : _textFromAmount(amount),
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
+              enabled: enabled,
+              readOnly: !enabled,
+              onTapOutside: (_) =>
+                  FocusManager.instance.primaryFocus?.unfocus(),
+              style: TextStyle(
+                fontSize: 13,
+                height: 1.35,
+                color: enabled ? ProposalPalette.text : ProposalPalette.text3,
+              ),
+              onChanged: enabled
+                  ? (value) => _setCostAmount(
+                      amountsKey: amountsKey,
+                      totalKey: totalKey,
+                      id: id,
+                      value: value.trim().isEmpty
+                          ? null
+                          : double.tryParse(value),
+                      resetReview: 'financeCompleted',
+                    )
+                  : null,
+              decoration: proposalInputDecoration(
+                hint: '预计（万元）',
+                readOnly: !enabled,
+                tone: tone,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _textFromAmount(double value) => value == value.roundToDouble()
+      ? value.toStringAsFixed(0)
+      : value.toStringAsFixed(2);
+
   Widget _multiField(
     String label,
     String key,
     List<String> options,
     String? addLabel, {
+    String? source,
     String? resetReview,
     String? reviewSection,
     String reviewLabel = '复核',
     bool? writable,
   }) {
     final enabled = _fillEnabled(writable);
-    final tone = proposalFieldTone(enabled: enabled);
+    final tone = proposalFieldTone(enabled: enabled, source: source);
     final selected = _setOf(key);
     if (_showSelectedAsText) {
       return _FullWidthField(
         child: ProposalField(
           label: label,
+          source: source,
           tone: tone,
           trailing: _rowReviewToggle(reviewSection, reviewLabel),
           child: _readonlySelectedText(selected.join('、')),
@@ -5095,6 +5775,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     return _FullWidthField(
       child: ProposalField(
         label: label,
+        source: source,
         tone: tone,
         trailing: _rowReviewToggle(reviewSection, reviewLabel),
         child: ProposalPills(

@@ -70,6 +70,83 @@ void main() {
     expect(options.ratingS, 5000);
   });
 
+  test('finance cost headers parse project and business buckets', () {
+    final options = ProposalIntakeOptions.fromJson({
+      'finance': {
+        'costItems': ['平台服务费', '支付手续费'],
+        'businessCostItems': ['员工提成'],
+        'businessCostRules': '提成按规则累计',
+        'operatingCostRules': '差旅不超过收入 2%',
+      },
+    });
+    expect(options.costItems, ['平台服务费', '支付手续费']);
+    expect(options.businessCostItems, ['员工提成']);
+    expect(options.businessCostRules, '提成按规则累计');
+    expect(options.operatingCostRules, '差旅不超过收入 2%');
+  });
+
+  test('finance cost item options keep codes from asset', () {
+    final options = ProposalIntakeOptions.fromJson({
+      'finance': {
+        'costItems': ['机构返佣'],
+        'costItemSource': 'asset',
+        'costItemOptions': [
+          {
+            'code': 'ap_YFFY_JGFY',
+            'name': '机构返佣',
+            'l2': '返佣',
+            'category': 'PROJECT_COST',
+          },
+        ],
+        'businessCostItemOptions': [
+          {'code': 'ap_YWCB_GJCH', 'name': '供给侧H', 'category': 'BUSINESS_COST'},
+        ],
+      },
+    });
+    expect(options.costItemSource, 'asset');
+    expect(options.costItemOptions.single.code, 'ap_YFFY_JGFY');
+    expect(options.businessCostItemOptions.single.name, '供给侧H');
+  });
+
+  test('selected cost items keep expected amounts and sum the total', () {
+    const catalog = [
+      ProposalCostItemOption(code: 'ap_FW_PTF', name: '平台服务费'),
+      ProposalCostItemOption(code: 'ap_YFFY_JGFY', name: '机构返佣'),
+    ];
+    var form = proposalSyncCostSelection(
+      form: {
+        'costItemAmounts': {'ap_FW_PTF': 10, 'ap_YFFY_JGFY': 2.5},
+      },
+      names: ['平台服务费', '机构返佣'],
+      catalog: catalog,
+      namesKey: 'costItems',
+      codesKey: 'costItemCodes',
+      amountsKey: 'costItemAmounts',
+      totalKey: 'projectCost',
+    );
+    expect(form['costItemCodes'], ['ap_FW_PTF', 'ap_YFFY_JGFY']);
+    expect(form['projectCost'], 12.5);
+
+    form = proposalSyncCostSelection(
+      form: form,
+      names: ['平台服务费'],
+      catalog: catalog,
+      namesKey: 'costItems',
+      codesKey: 'costItemCodes',
+      amountsKey: 'costItemAmounts',
+      totalKey: 'projectCost',
+    );
+    expect(form['costItems'], ['平台服务费']);
+    expect(form['costItemAmounts'], {'ap_FW_PTF': 10});
+    expect(form['projectCost'], 10);
+  });
+
+  test('finance cost rules fall back when missing', () {
+    final options = ProposalIntakeOptions.fromJson({});
+    expect(options.operatingCostRules, contains('2%'));
+    expect(options.businessCostRules, contains('员工提成'));
+  });
+
   test('historical values remain available in proposal row form', () {
     final row = ProposalIntakeRow.fromJson({
       'id': 7,
@@ -476,7 +553,6 @@ void main() {
       '市场部负责人一',
       '财务部负责人一',
       '财务部负责人二',
-      '行政负责人',
     ]);
     expect(
       missingProposalReviewAssignees({
@@ -485,7 +561,6 @@ void main() {
         'marketOwner1UserId': '4',
         'financeOwner1UserId': '6',
         'financeOwner2UserId': '5',
-        'contractAdminUserId': '7',
       }),
       isEmpty,
     );
@@ -493,7 +568,7 @@ void main() {
       missingProposalReviewAssignees({
         'technologyOwnerUserId': '3',
       }, includeTech: false),
-      ['市场部负责人二', '市场部负责人一', '财务部负责人一', '财务部负责人二', '行政负责人'],
+      ['市场部负责人二', '市场部负责人一', '财务部负责人一', '财务部负责人二'],
     );
   });
 
@@ -544,5 +619,95 @@ void main() {
       ),
       isTrue,
     );
+  });
+
+  test('done proposal keeps tech revision stage from review', () {
+    final row = ProposalIntakeRow.fromJson({
+      'id': 8,
+      'status': 'done',
+      'form': {
+        'technologyRecords': [
+          {'id': 'rec_1', 'title': '对接程序1', 'technologyPlatform': '能源平台'},
+        ],
+        'technologyHistory': [
+          {'round': 1, 'technologyPlatform': '旧平台'},
+        ],
+      },
+      'review': {'stage': 'tech_revising', 'techRevisionRound': 2},
+    });
+    expect(row.resolvedStage, 'tech_revising');
+    expect(row.techRevisionRound, 2);
+    expect(row.isTechRevising, isTrue);
+    expect(row.isTechReviewing, isFalse);
+    expect(proposalIntakeTechnologyRecords(row.form).single.title, '对接程序1');
+    expect(proposalIntakeTechnologyHistory(row.form).single.platform, '旧平台');
+  });
+
+  test('append technology record copies the live tech snapshot', () {
+    final next = proposalIntakeAppendTechnologyRecord({
+      'technologyPlatform': '能源平台',
+      'technologyCapabilities': ['发放'],
+      'deliveryDate': '2026-09-01',
+      'financeInterfaces': {'face': true},
+    });
+    final records = proposalIntakeTechnologyRecords(next);
+    expect(records, hasLength(1));
+    expect(records.single.title, '对接记录1');
+    expect(records.single.platform, '能源平台');
+    expect(records.single.capabilities, ['发放']);
+  });
+
+  test('market review waits for technology during tech revision', () {
+    expect(
+      proposalIntakeMarketReviewBlocked({
+        'stage': 'tech_reviewing',
+        'technologyCompleted': false,
+      }),
+      isTrue,
+    );
+    expect(
+      proposalIntakeMarketReviewBlocked({
+        'stage': 'tech_reviewing',
+        'technologyCompleted': true,
+      }),
+      isFalse,
+    );
+    expect(
+      proposalIntakeMarketReviewBlocked({
+        'stage': 'reviewing',
+        'technologyCompleted': false,
+      }),
+      isFalse,
+    );
+  });
+
+  test('unchanged finance interfaces skip finance re-review', () {
+    expect(
+      proposalIntakeFinanceInterfacesUnchanged(
+        form: {
+          'financeInterfaces': {'face': true},
+        },
+        review: {
+          'lastFinanceInterfaces': {'face': true},
+        },
+      ),
+      isTrue,
+    );
+    expect(
+      proposalIntakeFinanceInterfacesUnchanged(
+        form: {
+          'financeInterfaces': {'face': true, 'settle': true},
+        },
+        review: {
+          'lastFinanceInterfaces': {'face': true},
+        },
+      ),
+      isFalse,
+    );
+  });
+
+  test('tech revision action labels', () {
+    expect(proposalIntakeActionLabel('start_tech_revision'), '待发起科技变更');
+    expect(proposalIntakeActionLabel('fill_tech'), '待填写科技');
   });
 }

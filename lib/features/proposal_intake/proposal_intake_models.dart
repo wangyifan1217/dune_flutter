@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 class ProposalIntakeAccess {
   const ProposalIntakeAccess({
     required this.view,
@@ -158,6 +160,19 @@ class ProposalIntakeRow {
     };
   }
 
+  int get techRevisionRound {
+    final raw = review['techRevisionRound'];
+    if (raw is int) return raw;
+    if (raw is num) return raw.toInt();
+    return int.tryParse('$raw'.trim()) ?? 0;
+  }
+
+  bool get isTechRevising => resolvedStage == 'tech_revising';
+
+  bool get isTechReviewing => resolvedStage == 'tech_reviewing';
+
+  bool get techRevisionOpen => isTechRevising || isTechReviewing;
+
   ProposalIntakeRow copyWith({
     String? title,
     String? status,
@@ -255,10 +270,6 @@ class ProposalIntakeRow {
         role: '财务部负责人二',
         name: named('financeOwner2', 'financeOwner2UserId'),
       ),
-      ProposalStakeholderLine(
-        role: '行政（合同审核）',
-        name: named('contractAdmin', 'contractAdminUserId'),
-      ),
       ProposalStakeholderLine(role: '最终确认人', name: president),
     ];
   }
@@ -345,6 +356,94 @@ class ProposalFinanceInterface {
   }
 }
 
+class ProposalCostItemOption {
+  const ProposalCostItemOption({
+    required this.code,
+    required this.name,
+    this.l1 = '',
+    this.l2 = '',
+    this.category = '',
+  });
+
+  final String code;
+  final String name;
+  final String l1;
+  final String l2;
+  final String category;
+
+  factory ProposalCostItemOption.fromJson(Object? raw) {
+    final map = raw is Map
+        ? Map<String, dynamic>.from(raw)
+        : const <String, dynamic>{};
+    return ProposalCostItemOption(
+      code: '${map['code'] ?? ''}'.trim(),
+      name: '${map['name'] ?? ''}'.trim(),
+      l1: '${map['l1'] ?? ''}'.trim(),
+      l2: '${map['l2'] ?? ''}'.trim(),
+      category: '${map['category'] ?? ''}'.trim(),
+    );
+  }
+}
+
+String proposalCostAmountId(
+  String name, [
+  List<ProposalCostItemOption> catalog = const [],
+]) {
+  for (final item in catalog) {
+    if (item.name == name && item.code.isNotEmpty) return item.code;
+  }
+  return name;
+}
+
+double proposalCostAmountValue(Object? raw) {
+  if (raw is num) return raw.toDouble();
+  return double.tryParse('$raw'.trim()) ?? 0;
+}
+
+Map<String, double> proposalCostAmountMap(Object? raw) {
+  if (raw is! Map) return {};
+  final out = <String, double>{};
+  for (final entry in raw.entries) {
+    final id = '${entry.key}'.trim();
+    if (id.isEmpty) continue;
+    out[id] = proposalCostAmountValue(entry.value);
+  }
+  return out;
+}
+
+double proposalCostAmountTotal(Object? raw) => proposalCostAmountMap(
+  raw,
+).values.fold<double>(0, (sum, value) => sum + value);
+
+Map<String, dynamic> proposalSyncCostSelection({
+  required Map<String, dynamic> form,
+  required List<String> names,
+  required List<ProposalCostItemOption> catalog,
+  required String namesKey,
+  required String codesKey,
+  required String amountsKey,
+  required String totalKey,
+}) {
+  final byName = {for (final item in catalog) item.name: item.code};
+  final codes = [
+    for (final name in names)
+      if ((byName[name] ?? '').isNotEmpty) byName[name]!,
+  ];
+  final keep = <String>{
+    ...names,
+    for (final name in names) proposalCostAmountId(name, catalog),
+  };
+  final amounts = proposalCostAmountMap(form[amountsKey])
+    ..removeWhere((id, _) => !keep.contains(id));
+  return Map<String, dynamic>.from(form)
+    ..[namesKey] = names
+    ..[codesKey] = codes
+    ..[amountsKey] = {
+      for (final entry in amounts.entries) entry.key: entry.value,
+    }
+    ..[totalKey] = proposalCostAmountTotal(amounts);
+}
+
 class ProposalIntakeOptions {
   const ProposalIntakeOptions({
     required this.sectors,
@@ -358,6 +457,12 @@ class ProposalIntakeOptions {
     required this.developmentTypes,
     required this.financeInterfaces,
     required this.costItems,
+    this.costItemOptions = const [],
+    this.businessCostItems = const [],
+    this.businessCostItemOptions = const [],
+    this.businessCostRules = '',
+    this.operatingCostRules = '',
+    this.costItemSource = '',
     required this.rollbackOptions,
     required this.ratingS,
     required this.ratingA,
@@ -379,6 +484,12 @@ class ProposalIntakeOptions {
   final List<String> developmentTypes;
   final List<ProposalFinanceInterface> financeInterfaces;
   final List<String> costItems;
+  final List<ProposalCostItemOption> costItemOptions;
+  final List<String> businessCostItems;
+  final List<ProposalCostItemOption> businessCostItemOptions;
+  final String businessCostRules;
+  final String operatingCostRules;
+  final String costItemSource;
   final List<String> rollbackOptions;
   final double ratingS;
   final double ratingA;
@@ -429,6 +540,20 @@ class ProposalIntakeOptions {
           .where((item) => item.key.isNotEmpty && item.label.isNotEmpty)
           .toList(growable: false),
       costItems: _strings(finance['costItems']),
+      costItemOptions: _costItemOptions(finance['costItemOptions']),
+      businessCostItems: _strings(finance['businessCostItems']),
+      businessCostItemOptions: _costItemOptions(
+        finance['businessCostItemOptions'],
+      ),
+      businessCostRules: _nonEmpty(
+        finance['businessCostRules'],
+        '员工提成等按公司已定规则累计。提案只勾选适用表头，不填发生额。',
+      ),
+      operatingCostRules: _nonEmpty(
+        finance['operatingCostRules'],
+        '差旅、小额营销按项目收入的 2% 为阈值：以内直接批，超过另走新流程。提案阶段不填发生额。',
+      ),
+      costItemSource: '${finance['costItemSource'] ?? ''}'.trim(),
       rollbackOptions: _strings(finance['rollbackOptions']),
       // 金额口径为万元。
       ratingS: _number(rules['ratingS'], 5000),
@@ -501,10 +626,21 @@ List<int> _ints(Object? value) {
   return List<int>.unmodifiable(out);
 }
 
+List<ProposalCostItemOption> _costItemOptions(Object? value) => _list(value)
+    .map(ProposalCostItemOption.fromJson)
+    .where((item) => item.code.isNotEmpty && item.name.isNotEmpty)
+    .toList(growable: false);
+
 List<String> _strings(Object? value) => _list(value)
     .map((item) => '$item'.trim())
     .where((item) => item.isNotEmpty)
     .toList(growable: false);
+
+String _nonEmpty(Object? value, String fallback) {
+  final text = '$value'.trim();
+  if (text.isEmpty || text == 'null') return fallback;
+  return text;
+}
 
 double _number(Object? value, double fallback) =>
     value is num ? value.toDouble() : double.tryParse('$value') ?? fallback;
@@ -768,6 +904,7 @@ String proposalIntakeActionLabel(String action) {
     'review_contract' => '待审核合同',
     'submit_president' => '待通知最终人',
     'president_confirm' => '待最终确认',
+    'start_tech_revision' => '待发起科技变更',
     'revise' => '最终人已驳回请从头填写',
     'revise_module' => '板块已驳回请修改',
     _ => '',
@@ -803,6 +940,160 @@ String formatProposalIntakeDateTime(String raw) {
       '${two(local.hour)}:${two(local.minute)}';
 }
 
+class ProposalTechnologyRecord {
+  const ProposalTechnologyRecord({
+    required this.id,
+    required this.title,
+    required this.platform,
+    required this.capabilities,
+    required this.outputForms,
+    required this.developmentTypes,
+    required this.hasRdCost,
+    required this.rdAmount,
+    required this.deliveryDate,
+    required this.round,
+    this.raw = const {},
+  });
+
+  final String id;
+  final String title;
+  final String platform;
+  final List<String> capabilities;
+  final List<String> outputForms;
+  final List<String> developmentTypes;
+  final String hasRdCost;
+  final String rdAmount;
+  final String deliveryDate;
+  final int round;
+  final Map<String, dynamic> raw;
+
+  factory ProposalTechnologyRecord.fromJson(Map<String, dynamic> json) {
+    List<String> strings(Object? value) {
+      if (value is List) {
+        return [
+          for (final item in value)
+            if ('$item'.trim().isNotEmpty) '$item'.trim(),
+        ];
+      }
+      return const [];
+    }
+
+    int asInt(Object? value) {
+      if (value is int) return value;
+      if (value is num) return value.toInt();
+      return int.tryParse('$value'.trim()) ?? 0;
+    }
+
+    return ProposalTechnologyRecord(
+      id: '${json['id'] ?? ''}'.trim(),
+      title: '${json['title'] ?? ''}'.trim(),
+      platform: '${json['technologyPlatform'] ?? json['platform'] ?? ''}'.trim(),
+      capabilities: strings(
+        json['technologyCapabilities'] ?? json['capabilities'],
+      ),
+      outputForms: strings(json['outputForms']),
+      developmentTypes: strings(json['developmentTypes']),
+      hasRdCost: '${json['hasRdCost'] ?? ''}'.trim(),
+      rdAmount: '${json['rdAmount'] ?? ''}'.trim(),
+      deliveryDate: '${json['deliveryDate'] ?? ''}'.trim(),
+      round: asInt(json['round']),
+      raw: Map<String, dynamic>.from(json),
+    );
+  }
+}
+
+const proposalTechnologySnapshotKeys = <String>[
+  'technologyPlatform',
+  'technologyCapabilities',
+  'outputForms',
+  'developmentTypes',
+  'hasRdCost',
+  'rdAmount',
+  'deliveryDate',
+  'financeInterfaces',
+  'onlineProductFiles',
+];
+
+Map<String, dynamic> proposalIntakeTechnologySnapshot(Map<String, dynamic> form) {
+  final snap = <String, dynamic>{};
+  for (final key in proposalTechnologySnapshotKeys) {
+    if (!form.containsKey(key)) continue;
+    final value = form[key];
+    if (value is Map) {
+      snap[key] = Map<String, dynamic>.from(value);
+    } else if (value is List) {
+      snap[key] = [...value];
+    } else {
+      snap[key] = value;
+    }
+  }
+  return snap;
+}
+
+List<ProposalTechnologyRecord> proposalIntakeTechnologyRecords(
+  Map<String, dynamic> form,
+) {
+  final raw = form['technologyRecords'];
+  if (raw is! List) return const [];
+  return [
+    for (final item in raw)
+      if (item is Map)
+        ProposalTechnologyRecord.fromJson(Map<String, dynamic>.from(item)),
+  ];
+}
+
+List<ProposalTechnologyRecord> proposalIntakeTechnologyHistory(
+  Map<String, dynamic> form,
+) {
+  final raw = form['technologyHistory'];
+  if (raw is! List) return const [];
+  return [
+    for (final item in raw)
+      if (item is Map)
+        ProposalTechnologyRecord.fromJson(Map<String, dynamic>.from(item)),
+  ];
+}
+
+Map<String, dynamic> proposalIntakeAppendTechnologyRecord(
+  Map<String, dynamic> form,
+) {
+  final records = [
+    for (final item in (form['technologyRecords'] is List
+        ? form['technologyRecords'] as List
+        : const []))
+      if (item is Map) Map<String, dynamic>.from(item),
+  ];
+  final snap = proposalIntakeTechnologySnapshot(form);
+  records.add({
+    'id': 'rec_${DateTime.now().microsecondsSinceEpoch}',
+    'title': '对接记录${records.length + 1}',
+    'createdAt': DateTime.now().toUtc().toIso8601String(),
+    ...snap,
+  });
+  return {...form, 'technologyRecords': records};
+}
+
+bool proposalIntakeMarketReviewBlocked(Map<String, dynamic> review) {
+  final stage = '${review['stage'] ?? ''}'.trim();
+  if (stage != 'tech_reviewing') return false;
+  return review['technologyCompleted'] != true;
+}
+
+bool proposalIntakeFinanceInterfacesUnchanged({
+  required Map<String, dynamic> form,
+  required Map<String, dynamic> review,
+}) {
+  return _proposalJsonEqual(
+    form['financeInterfaces'],
+    review['lastFinanceInterfaces'],
+  );
+}
+
+bool _proposalJsonEqual(Object? left, Object? right) {
+  return jsonEncode(left ?? <String, dynamic>{}) ==
+      jsonEncode(right ?? <String, dynamic>{});
+}
+
 /// 复核相关负责人：没选就不能通知科技 / 提交复核。运营为可选项。
 List<String> missingProposalReviewAssignees(
   Map<String, dynamic> form, {
@@ -819,7 +1110,6 @@ List<String> missingProposalReviewAssignees(
   require('marketOwner1UserId', '市场部负责人一');
   require('financeOwner1UserId', '财务部负责人一');
   require('financeOwner2UserId', '财务部负责人二');
-  require('contractAdminUserId', '行政负责人');
   return missing;
 }
 

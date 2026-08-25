@@ -713,7 +713,7 @@ class XfDetTabsWrap extends StatelessWidget {
   final XflowDetailBundle bundle;
   final XflowService service;
   final bool showTrack;
-  final void Function(int proposalId)? onOpenLinkedProposal;
+  final OpenLinkedProposalCallback? onOpenLinkedProposal;
 
   @override
   Widget build(BuildContext context) {
@@ -765,7 +765,7 @@ class XfDetFormSections extends StatelessWidget {
 
   final List<DetailSection> sections;
   final XflowService service;
-  final void Function(int proposalId)? onOpenLinkedProposal;
+  final OpenLinkedProposalCallback? onOpenLinkedProposal;
 
   @override
   Widget build(BuildContext context) {
@@ -800,7 +800,7 @@ class _SectionBlock extends StatefulWidget {
   final DetailSection section;
   final int sectionIndex;
   final XflowService service;
-  final void Function(int proposalId)? onOpenLinkedProposal;
+  final OpenLinkedProposalCallback? onOpenLinkedProposal;
 
   @override
   State<_SectionBlock> createState() => _SectionBlockState();
@@ -844,7 +844,10 @@ class _SectionBlockState extends State<_SectionBlock> {
                         value: item.value,
                         linkStyle: canOpen,
                         onTap: canOpen
-                            ? () => widget.onOpenLinkedProposal!(linkedId)
+                            ? () => widget.onOpenLinkedProposal!(
+                                linkedId,
+                                parseLinkedProposalSource(item.rawValue),
+                              )
                             : null,
                       );
                     },

@@ -508,6 +508,7 @@ enum ChatInboxRowKind {
   approvalAssistant,
   taskAssistant,
   driveAssistant,
+  xrxsAssistant,
   weeklySummary,
   reconciliationAssistant,
   administrativeNotice,
@@ -591,6 +592,7 @@ class ChatInboxRow extends StatelessWidget {
             kind == ChatInboxRowKind.approvalAssistant ||
             kind == ChatInboxRowKind.taskAssistant ||
             kind == ChatInboxRowKind.driveAssistant ||
+            kind == ChatInboxRowKind.xrxsAssistant ||
             kind == ChatInboxRowKind.weeklySummary ||
             kind == ChatInboxRowKind.reconciliationAssistant ||
             kind == ChatInboxRowKind.administrativeNotice ||
@@ -964,6 +966,12 @@ class _Avatar extends StatelessWidget {
           borderRadius: borderRadius,
         );
         child = const Icon(Icons.cloud_outlined, color: Colors.white, size: 21);
+      case ChatInboxRowKind.xrxsAssistant:
+        decoration = BoxDecoration(
+          color: const Color(0xFF0F766E),
+          borderRadius: borderRadius,
+        );
+        child = const Icon(Icons.badge_outlined, color: Colors.white, size: 21);
       case ChatInboxRowKind.weeklySummary:
         decoration = BoxDecoration(
           borderRadius: borderRadius,

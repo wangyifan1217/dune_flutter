@@ -714,6 +714,20 @@ class XflowService {
         .toList(growable: false);
   }
 
+  Future<List<Map<String, dynamic>>> searchCompletedProposalIntakes(
+    String query,
+  ) async {
+    final q = query.trim();
+    final path = q.isEmpty
+        ? '/xflow/proposals/intake-done'
+        : '/xflow/proposals/intake-done?q=${Uri.encodeQueryComponent(q)}';
+    final rows = await _requestList(path);
+    return rows
+        .whereType<Map>()
+        .map((row) => Map<String, dynamic>.from(row))
+        .toList(growable: false);
+  }
+
   String resolveProposalAssetUrl(String urlOrPath) {
     final value = urlOrPath.trim();
     if (value.isEmpty) return '';

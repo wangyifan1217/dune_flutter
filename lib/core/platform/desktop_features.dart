@@ -34,6 +34,10 @@ bool isDesktopAllowedCommScreen(String screenId) {
     'AA1',
     'AA2',
     'AA3',
+    'TA1',
+    'DA1',
+    'XA1',
+    'WS1',
     'RA1',
     'AN1',
     // 我的及审批 / 知识库 / 企业微盘
@@ -64,6 +68,7 @@ bool isDesktopAllowedCommScreen(String screenId) {
     'QJI',
     'QJA',
     'CT1',
+    'XR1',
     'QJT',
     'QJP',
     'QJM',

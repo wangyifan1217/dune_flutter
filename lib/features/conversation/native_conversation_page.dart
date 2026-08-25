@@ -58,6 +58,7 @@ class NativeConversationPage extends StatefulWidget {
     this.onOpenApprovalAssistant,
     this.onOpenTaskAssistant,
     this.onOpenDriveAssistant,
+    this.onOpenXrxsAssistant,
     this.onOpenWeeklySummary,
     this.onOpenAdministrativeNotice,
     this.onOpenReconciliationAssistant,
@@ -87,6 +88,7 @@ class NativeConversationPage extends StatefulWidget {
   final ValueChanged<NativeConversation>? onOpenApprovalAssistant;
   final ValueChanged<NativeConversation>? onOpenTaskAssistant;
   final ValueChanged<NativeConversation>? onOpenDriveAssistant;
+  final ValueChanged<NativeConversation>? onOpenXrxsAssistant;
   final ValueChanged<NativeConversation>? onOpenWeeklySummary;
   final ValueChanged<NativeConversation>? onOpenAdministrativeNotice;
   final ValueChanged<NativeConversation>? onOpenReconciliationAssistant;
@@ -853,6 +855,29 @@ class _NativeConversationPageState extends State<NativeConversationPage>
           // 后端灰度期间不影响其它会话列表。
         }
       }
+      if (!widget.session.isExternalUser &&
+          widget.onOpenXrxsAssistant != null &&
+          !rows.any((c) => c.isXrxsAssistant)) {
+        try {
+          final ensured = await _service.ensureXrxsAssistantSession();
+          if (ensured.id > 0 && !rows.any((c) => c.id == ensured.id)) {
+            rows = <NativeConversation>[...rows, ensured];
+          }
+        } catch (e) {
+          debugPrint('[xrxs-assistant] ensure failed: $e');
+          rows = <NativeConversation>[
+            ...rows,
+            NativeConversation(
+              id: 0,
+              kind: 'XRXS_ASSISTANT',
+              title: '薪人薪事',
+              unreadCount: 0,
+              preview: '审批待办 · 抄送 · 催办',
+              updatedAt: DateTime.now(),
+            ),
+          ];
+        }
+      }
       rows = List<NativeConversation>.unmodifiable(rows);
       final dissolved = (results[0] as List<NativeConversation>)
           .where((c) => c.dissolved && c.id > 0)
@@ -1230,6 +1255,11 @@ class _NativeConversationPageState extends State<NativeConversationPage>
       onTap = _openWithScrollPersist(
         () => widget.onOpenDriveAssistant?.call(c),
       );
+    } else if (c.isXrxsAssistant) {
+      rowKind = ChatInboxRowKind.xrxsAssistant;
+      onTap = _openWithScrollPersist(
+        () => widget.onOpenXrxsAssistant?.call(c),
+      );
     } else if (c.isWeeklySummary) {
       rowKind = ChatInboxRowKind.weeklySummary;
       onTap = _openWithScrollPersist(
@@ -1277,25 +1307,34 @@ class _NativeConversationPageState extends State<NativeConversationPage>
             rowKind == ChatInboxRowKind.administrativeNotice ||
             rowKind == ChatInboxRowKind.weeklySummary ||
             rowKind == ChatInboxRowKind.reconciliationAssistant ||
+            rowKind == ChatInboxRowKind.driveAssistant ||
+            rowKind == ChatInboxRowKind.xrxsAssistant ||
             c.isSelfMemo);
 
     final robotKey = c.robotKey ?? '';
     final analyzingRobot =
         c.isRobot && RobotAnalyzingCoordinator.instance.isAnalyzing(c.id);
     final selected = widget.selectedConversationId == c.id;
+    final inboxTitle = c.isAdministrativeNotice
+        ? '行政通知'
+        : c.isReconciliationAssistant
+        ? '对账助手'
+        : c.isAiAssistant
+        ? _yunshuName
+        : c.isApprovalAssistant
+        ? '审批助手'
+        : c.isTaskAssistant
+        ? '任务助手'
+        : c.isDriveAssistant
+        ? '企业微盘'
+        : c.isXrxsAssistant
+        ? '薪人薪事'
+        : c.isWeeklySummary
+        ? '一周小结'
+        : title;
     final row = ChatInboxRow(
       kind: rowKind,
-      title: c.isAdministrativeNotice
-          ? '行政通知'
-          : c.isReconciliationAssistant
-          ? '对账助手'
-          : c.isAiAssistant
-          ? _yunshuName
-          : (c.isApprovalAssistant
-                ? '审批助手'
-                : (c.isTaskAssistant
-                      ? '任务助手'
-                      : (c.isDriveAssistant ? '企业微盘' : (c.isWeeklySummary ? '一周小结' : title)))),
+      title: inboxTitle,
       subtitle: null,
       preview: analyzingRobot
           ? '正在分析…'
@@ -1320,6 +1359,8 @@ class _NativeConversationPageState extends State<NativeConversationPage>
           ? '子任务分配 · 进度跟进'
           : c.preview.isEmpty && c.isDriveAssistant
           ? '共享空间文件动态'
+          : c.preview.isEmpty && c.isXrxsAssistant
+          ? '审批待办 · 抄送 · 催办'
           : c.preview.isEmpty && c.isWeeklySummary
           ? '每周五 18:00 送达'
           : c.preview,
@@ -1331,6 +1372,7 @@ class _NativeConversationPageState extends State<NativeConversationPage>
               c.isApprovalAssistant ||
               c.isTaskAssistant ||
               c.isDriveAssistant ||
+              c.isXrxsAssistant ||
               c.isWeeklySummary ||
               c.isAdministrativeNotice ||
               c.isReconciliationAssistant ||
@@ -1389,15 +1431,17 @@ class _NativeConversationPageState extends State<NativeConversationPage>
         ? '对账助手'
         : c.isAiAssistant
         ? _yunshuName
-        : (c.isApprovalAssistant
-              ? '审批助手'
-              : (c.isTaskAssistant
-                    ? '任务助手'
-                    : (c.isDriveAssistant
-                          ? '企业微盘'
-                          : (c.isWeeklySummary
-                                ? '一周小结'
-                                : (title.isEmpty ? '该会话' : title)))));
+        : c.isApprovalAssistant
+        ? '审批助手'
+        : c.isTaskAssistant
+        ? '任务助手'
+        : c.isDriveAssistant
+        ? '企业微盘'
+        : c.isXrxsAssistant
+        ? '薪人薪事'
+        : c.isWeeklySummary
+        ? '一周小结'
+        : (title.isEmpty ? '该会话' : title);
     final dropChild = _wrapInboxFileDrop(
       targetTitle: dropTitle,
       acceptsFiles: _inboxAcceptsFileDrop(c),
@@ -1446,6 +1490,7 @@ class _NativeConversationPageState extends State<NativeConversationPage>
                 c.isApprovalAssistant ||
                 c.isTaskAssistant ||
                 c.isDriveAssistant ||
+                c.isXrxsAssistant ||
                 (c.isWeeklySummary && !widget.session.isExternalUser) ||
                 c.isAdministrativeNotice ||
                 c.isReconciliationAssistant,

@@ -631,6 +631,38 @@ class ConversationService {
     );
   }
 
+  /// 确保“薪人薪事”只读会话存在。
+  Future<NativeConversation> ensureXrxsAssistantSession() async {
+    final resp = await _client.post(
+      _uri('/xrxs/assistant/sessions/ensure'),
+      headers: _headers,
+      body: '{}',
+    );
+    if (resp.statusCode < 200 || resp.statusCode >= 300) {
+      throw Exception('打开薪人薪事会话失败: HTTP ${resp.statusCode}');
+    }
+    final body = _decode(resp.body);
+    if (body['success'] == false) {
+      throw Exception((body['message'] ?? '打开薪人薪事会话失败').toString());
+    }
+    final data = body['data'];
+    final map = data is Map<String, dynamic>
+        ? data
+        : data is Map
+        ? Map<String, dynamic>.from(data)
+        : <String, dynamic>{};
+    final convId = (map['conversationId'] as num?)?.toInt() ?? 0;
+    if (convId <= 0) throw Exception('empty conversationId');
+    return NativeConversation(
+      id: convId,
+      kind: 'XRXS_ASSISTANT',
+      title: (map['title'] ?? '薪人薪事').toString(),
+      unreadCount: 0,
+      preview: '',
+      updatedAt: DateTime.now(),
+    );
+  }
+
   Future<Map<String, dynamic>> approvalAssistantExplain({
     required String businessType,
     required int businessId,

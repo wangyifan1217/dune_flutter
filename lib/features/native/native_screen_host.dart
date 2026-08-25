@@ -41,6 +41,8 @@ import '../contacts/native_contact_profile_page.dart';
 import '../contacts/native_contacts_page.dart';
 import '../ctrip/native_ctrip_h5_page_v2.dart';
 import '../ctrip/native_ctrip_pc_page.dart';
+import '../xrxs/native_xrxs_h5_page.dart';
+import '../xrxs/native_xrxs_pc_page.dart';
 import '../conversation/chat_dual_pane_shell.dart';
 import '../conversation/comm_unread_notifier.dart';
 import '../conversation/conversation_inbox_realtime.dart';
@@ -125,6 +127,7 @@ import '../ai_summary/native_ai_summary_detail_page.dart';
 import '../ai_summary/native_ai_summary_hub_page.dart';
 import '../drive/native_drive_page.dart';
 import '../drive/native_drive_assistant_page.dart';
+import '../xrxs/native_xrxs_assistant_page.dart';
 import '../administrative_notice/native_administrative_notice_page.dart';
 
 class NativeScreenHost extends StatefulWidget {
@@ -157,6 +160,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
   NativeConversation? _selectedApprovalAssistant;
   NativeConversation? _selectedTaskAssistant;
   NativeConversation? _selectedDriveAssistant;
+  NativeConversation? _selectedXrxsAssistant;
   NativeConversation? _selectedWeeklySummary;
   NativeConversation? _selectedReconciliation;
   bool _openDailyReconPending = false;
@@ -166,6 +170,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
   NativeConversation? _selectedAdministrativeNotice;
   int? _administrativeNoticeTargetId;
   int? _driveTargetItemId;
+  String? _xrxsLoginSid;
+  String? _xrxsLoginRole;
   ApprovalAssistantPickMode _approvalAssistantPickMode =
       ApprovalAssistantPickMode.browse;
 
@@ -356,6 +362,10 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     }
     if (screen == 'DA1') {
       final id = _selectedDriveAssistant?.id ?? 0;
+      return id > 0 ? id : null;
+    }
+    if (screen == 'XA1') {
+      final id = _selectedXrxsAssistant?.id ?? 0;
       return id > 0 ? id : null;
     }
     if (screen == 'WS1') {
@@ -606,6 +616,9 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     } else if (resolvedConversation.isDriveAssistant) {
       await _openDriveAssistant(resolvedConversation);
       routed = mounted && widget.navigation.currentScreen == 'DA1';
+    } else if (resolvedConversation.isXrxsAssistant) {
+      await _openXrxsAssistant(resolvedConversation);
+      routed = mounted && widget.navigation.currentScreen == 'XA1';
     } else if (resolvedConversation.isWeeklySummary) {
       await _openWeeklySummary(resolvedConversation);
       routed = mounted && widget.navigation.currentScreen == 'WS1';
@@ -1107,6 +1120,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         s == 'AA1' ||
         s == 'TA1' ||
         s == 'DA1' ||
+        s == 'XA1' ||
         s == 'WS1' ||
         s == 'RA1' ||
         s == 'AN1') {
@@ -1132,6 +1146,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     }
     if (screen == 'TA1' && _selectedTaskAssistant?.id == convId) return true;
     if (screen == 'DA1' && _selectedDriveAssistant?.id == convId) return true;
+    if (screen == 'XA1' && _selectedXrxsAssistant?.id == convId) return true;
     if (screen == 'WS1' && _selectedWeeklySummary?.id == convId) return true;
     if (screen == 'RA1' && _selectedReconciliation?.id == convId) return true;
     if (screen == 'AN1' && _selectedAdministrativeNotice?.id == convId) {
@@ -1173,6 +1188,10 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     }
     if (screen == 'DA1') {
       final id = _selectedDriveAssistant?.id ?? 0;
+      return id > 0 ? id : null;
+    }
+    if (screen == 'XA1') {
+      final id = _selectedXrxsAssistant?.id ?? 0;
       return id > 0 ? id : null;
     }
     if (screen == 'WS1') {
@@ -1380,6 +1399,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         current == 'AA1' ||
         current == 'TA1' ||
         current == 'DA1' ||
+        current == 'XA1' ||
         current == 'WS1' ||
         current == 'RA1' ||
         current == 'AN1') {
@@ -1399,6 +1419,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       _selectedApprovalAssistant = null;
       _selectedTaskAssistant = null;
       _selectedDriveAssistant = null;
+      _selectedXrxsAssistant = null;
       _selectedWeeklySummary = null;
       _selectedReconciliation = null;
       _selectedAdministrativeNotice = null;
@@ -1424,6 +1445,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       _selectedApprovalAssistant = null;
       _selectedTaskAssistant = null;
       _selectedDriveAssistant = null;
+      _selectedXrxsAssistant = null;
       _selectedWeeklySummary = null;
       _selectedReconciliation = null;
       _selectedAdministrativeNotice = null;
@@ -1487,6 +1509,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       _selectedApprovalAssistant = null;
       _selectedTaskAssistant = null;
       _selectedDriveAssistant = null;
+      _selectedXrxsAssistant = null;
       _selectedWeeklySummary = null;
       _selectedReconciliation = null;
       _selectedAdministrativeNotice = null;
@@ -1513,6 +1536,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       _selectedApprovalAssistant = null;
       _selectedTaskAssistant = null;
       _selectedDriveAssistant = null;
+      _selectedXrxsAssistant = null;
       _selectedWeeklySummary = null;
       _selectedReconciliation = null;
       _selectedAdministrativeNotice = null;
@@ -1577,6 +1601,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         _selectedApprovalAssistant = null;
         _selectedTaskAssistant = null;
         _selectedDriveAssistant = null;
+        _selectedXrxsAssistant = null;
         _selectedWeeklySummary = null;
         _selectedReconciliation = null;
         _selectedAdministrativeNotice = null;
@@ -1638,6 +1663,9 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     if (chatScreen == 'DA1') {
       return _selectedDriveAssistant?.id;
     }
+    if (chatScreen == 'XA1') {
+      return _selectedXrxsAssistant?.id;
+    }
     if (chatScreen == 'WS1') {
       return _selectedWeeklySummary?.id;
     }
@@ -1659,6 +1687,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     if (screen == 'AA1' || screen == 'AA2' || screen == 'AA3') return screen;
     if (screen == 'TA1') return screen;
     if (screen == 'DA1') return screen;
+    if (screen == 'XA1') return screen;
     if (screen == 'WS1') return screen;
     if (screen == 'AN1') return screen;
     if (screen == 'RA1') return screen;
@@ -1673,6 +1702,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     if (_selectedApprovalAssistant != null) return 'AA1';
     if (_selectedTaskAssistant != null) return 'TA1';
     if (_selectedDriveAssistant != null) return 'DA1';
+    if (_selectedXrxsAssistant != null) return 'XA1';
     if (_selectedWeeklySummary != null) return 'WS1';
     if (_selectedReconciliation != null) return 'RA1';
     if (_selectedAdministrativeNotice != null) return 'AN1';
@@ -1713,6 +1743,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         screen == 'RA1' ||
         screen == 'TA1' ||
         screen == 'DA1' ||
+        screen == 'XA1' ||
         screen == 'WS1' ||
         screen == 'AN1';
   }
@@ -2058,6 +2089,9 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       onOpenApprovalAssistant: _openApprovalAssistant,
       onOpenTaskAssistant: _openTaskAssistant,
       onOpenDriveAssistant: _openDriveAssistant,
+      onOpenXrxsAssistant: widget.session.isExternalUser
+          ? null
+          : _openXrxsAssistant,
       onOpenWeeklySummary: _openWeeklySummary,
       onOpenAdministrativeNotice: _openAdministrativeNotice,
       onOpenReconciliationAssistant: !widget.session.isExternalUser
@@ -2075,6 +2109,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       _selectedApprovalAssistant = null;
       _selectedTaskAssistant = null;
       _selectedDriveAssistant = null;
+      _selectedXrxsAssistant = null;
       _selectedWeeklySummary = null;
       _selectedAdministrativeNotice = null;
       _administrativeNoticeTargetId = null;
@@ -2104,6 +2139,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       _selectedApprovalAssistant = null;
       _selectedTaskAssistant = null;
       _selectedDriveAssistant = null;
+      _selectedXrxsAssistant = null;
       _selectedWeeklySummary = null;
       _selectedAdministrativeNotice = null;
       _administrativeNoticeTargetId = null;
@@ -2133,6 +2169,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       _selectedRobot = null;
       _selectedTaskAssistant = null;
       _selectedDriveAssistant = null;
+      _selectedXrxsAssistant = null;
       _selectedWeeklySummary = null;
       _selectedReconciliation = null;
       _selectedAdministrativeNotice = null;
@@ -2192,6 +2229,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       _selectedRobot = null;
       _selectedApprovalAssistant = null;
       _selectedDriveAssistant = null;
+      _selectedXrxsAssistant = null;
       _selectedWeeklySummary = null;
       _selectedReconciliation = null;
       _selectedAdministrativeNotice = null;
@@ -2252,6 +2290,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       _selectedRobot = null;
       _selectedApprovalAssistant = null;
       _selectedTaskAssistant = null;
+      _selectedXrxsAssistant = null;
       _selectedWeeklySummary = null;
       _selectedReconciliation = null;
       _selectedAdministrativeNotice = null;
@@ -2297,6 +2336,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       _selectedApprovalAssistant = null;
       _selectedTaskAssistant = null;
       _selectedDriveAssistant = null;
+      _selectedXrxsAssistant = null;
       _selectedReconciliation = null;
       _selectedAdministrativeNotice = null;
       _administrativeNoticeTargetId = null;
@@ -2340,6 +2380,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       _selectedApprovalAssistant = null;
       _selectedTaskAssistant = null;
       _selectedDriveAssistant = null;
+      _selectedXrxsAssistant = null;
       _selectedWeeklySummary = null;
       _selectedReconciliation = null;
       if (hint != null && hint.id > 0) {
@@ -2398,6 +2439,77 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       onConversationRead: _handleConversationRead,
       onOpenItem: _openDriveItemFromChat,
     );
+  }
+
+  Future<void> _openXrxsAssistant([NativeConversation? hint]) async {
+    setState(() {
+      _selectedPrivate = null;
+      _selectedPrivatePeerUserId = null;
+      _selectedGroup = null;
+      _selectedRobot = null;
+      _selectedApprovalAssistant = null;
+      _selectedTaskAssistant = null;
+      _selectedDriveAssistant = null;
+      _selectedWeeklySummary = null;
+      _selectedReconciliation = null;
+      _selectedAdministrativeNotice = null;
+      _administrativeNoticeTargetId = null;
+      if (hint != null && hint.id > 0) _selectedXrxsAssistant = hint;
+    });
+    if ((_selectedXrxsAssistant?.id ?? 0) > 0) {
+      _markUserEnteredChat();
+      _goChatScreen('XA1');
+      _conversationReadSignal.notifyRead(_selectedXrxsAssistant!.id);
+    }
+    try {
+      final conv = await ConversationService(
+        session: widget.session,
+      ).ensureXrxsAssistantSession();
+      if (!mounted) return;
+      setState(() => _selectedXrxsAssistant = conv);
+      _conversationReadSignal.notifyRead(conv.id);
+      if (widget.navigation.currentScreen != 'XA1') {
+        _markUserEnteredChat();
+        _goChatScreen('XA1');
+      }
+    } catch (_) {
+      if (mounted && (_selectedXrxsAssistant?.id ?? 0) <= 0) {
+        showDunesToast(context, '薪人薪事会话同步失败', kind: DunesToastKind.error);
+      }
+    }
+  }
+
+  Widget _buildXrxsAssistantPage({bool showBackButton = true}) {
+    final hint =
+        _selectedXrxsAssistant ??
+        const NativeConversation(
+          id: 0,
+          kind: 'XRXS_ASSISTANT',
+          title: '薪人薪事',
+          unreadCount: 0,
+          preview: '',
+          updatedAt: null,
+        );
+    return NativeXrxsAssistantPage(
+      key: ValueKey<int>(hint.id),
+      session: widget.session,
+      conversationHint: hint,
+      showBackButton: showBackButton,
+      onBack: () => _leaveChatToInbox(clearSelection: true),
+      onConversationRead: _handleConversationRead,
+      onOpenHome: () => _openXrxsPortal(),
+      onOpenDetail: (sid, role) => _openXrxsPortal(sid: sid, role: role),
+    );
+  }
+
+  /// APP：内嵌 XR1 WebView；PC 桌面：XR1 取免登后系统浏览器打开。
+  void _openXrxsPortal({String? sid, String? role}) {
+    _markUserLeftChat();
+    setState(() {
+      _xrxsLoginSid = sid?.trim().isEmpty == true ? null : sid?.trim();
+      _xrxsLoginRole = role?.trim().isEmpty == true ? null : role?.trim();
+    });
+    widget.navigation.go('XR1');
   }
 
   void _openApprovalAssistantPending(ApprovalAssistantPickMode mode) {
@@ -2498,6 +2610,9 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     if (screen == 'DA1' || dual == 'DA1') {
       return 'da';
     }
+    if (screen == 'XA1' || dual == 'XA1') {
+      return 'xa';
+    }
     if (screen == 'WS1' || dual == 'WS1') {
       return 'ws';
     }
@@ -2555,6 +2670,9 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     }
     if (screen == 'DA1' || dual == 'DA1') {
       return _DualChatSlot.drive(_selectedDriveAssistant);
+    }
+    if (screen == 'XA1' || dual == 'XA1') {
+      return _DualChatSlot.xrxs(_selectedXrxsAssistant);
     }
     if (screen == 'WS1' || dual == 'WS1') {
       return _DualChatSlot.weeklySummary(_selectedWeeklySummary);
@@ -2686,6 +2804,28 @@ class _NativeScreenHostState extends State<NativeScreenHost>
             onBack: () => _leaveChatToInbox(clearSelection: true),
             onConversationRead: _handleConversationRead,
             onOpenItem: _openDriveItemFromChat,
+          ),
+        );
+      case _DualChatKind.xrxs:
+        return KeyedSubtree(
+          key: key,
+          child: NativeXrxsAssistantPage(
+            session: widget.session,
+            conversationHint:
+                slot.conversation ??
+                const NativeConversation(
+                  id: 0,
+                  kind: 'XRXS_ASSISTANT',
+                  title: '薪人薪事',
+                  unreadCount: 0,
+                  preview: '',
+                  updatedAt: null,
+                ),
+            showBackButton: false,
+            onBack: () => _leaveChatToInbox(clearSelection: true),
+            onConversationRead: _handleConversationRead,
+            onOpenHome: () => _openXrxsPortal(),
+            onOpenDetail: (sid, role) => _openXrxsPortal(sid: sid, role: role),
           ),
         );
       case _DualChatKind.weeklySummary:
@@ -2932,37 +3072,65 @@ class _NativeScreenHostState extends State<NativeScreenHost>
   }
 
   Widget _buildWorkbenchKeepAlive({required bool active}) {
+    final useSlide = !isDesktopCommOnly;
+    final panel = KeyedSubtree(
+      key: _workbenchKeepAliveKey,
+      child: NativeQianjiAdminShell(
+        session: widget.session,
+        navigation: widget.navigation,
+        active: active,
+        onExit: isDesktopCommOnly
+            ? null
+            : () => widget.navigation.popTo('B2'),
+        onAdministrativeNoticeAcknowledged: _handleConversationRead,
+        openDailyRecon: _openDailyReconPending,
+        dailyReconAsOfDate: _dailyReconAsOfDate,
+        dailyReconCardType: _dailyReconCardType,
+        dailyReconOpenToken: _dailyReconOpenToken,
+        onDailyReconOpened: () {
+          if (_openDailyReconPending) {
+            setState(() => _openDailyReconPending = false);
+          }
+        },
+      ),
+    );
     return Positioned.fill(
       child: TickerMode(
-        enabled: active,
+        // APP 侧滑进出时需保持 ticker，否则收起动画会被冻住。
+        enabled: active || useSlide,
         child: IgnorePointer(
           ignoring: !active,
-          child: Opacity(
-            opacity: active ? 1 : 0,
-            child: KeyedSubtree(
-              key: _workbenchKeepAliveKey,
-              child: NativeQianjiAdminShell(
-                session: widget.session,
-                navigation: widget.navigation,
-                active: active,
-                onExit: isDesktopCommOnly
-                    ? null
-                    : () => widget.navigation.popTo('B2'),
-                onAdministrativeNoticeAcknowledged: _handleConversationRead,
-                openDailyRecon: _openDailyReconPending,
-                dailyReconAsOfDate: _dailyReconAsOfDate,
-                dailyReconCardType: _dailyReconCardType,
-                dailyReconOpenToken: _dailyReconOpenToken,
-                onDailyReconOpened: () {
-                  if (_openDailyReconPending) {
-                    setState(() => _openDailyReconPending = false);
-                  }
-                },
-              ),
-            ),
-          ),
+          child: useSlide
+              ? AnimatedSlide(
+                  offset: active ? Offset.zero : const Offset(1, 0),
+                  duration: const Duration(milliseconds: 280),
+                  curve: Curves.easeOutCubic,
+                  child: ColoredBox(color: DunesColors.bgApp, child: panel),
+                )
+              : Opacity(
+                  opacity: active ? 1 : 0,
+                  child: panel,
+                ),
         ),
       ),
+    );
+  }
+
+  /// APP 工作台滑入时垫在底下的「我的」，避免 keep-alive 瞬切丢滑动感。
+  Widget _buildMyWorkbenchUnderlay() {
+    return _NativeB2Page(
+      session: widget.session,
+      navigation: widget.navigation,
+      commUnread: _commUnread,
+      workbenchBadge: _workbenchBadge,
+      workbenchRefresh: _workbenchRefresh,
+      onOpenB14: _goB14,
+      onOpenB3: _goB3,
+      onOpenXflowForm: _openXflowFormFromB2,
+      onOpenWorkbench: !widget.session.isExternalUser
+          ? () => widget.navigation.go('QJA')
+          : null,
+      onLogout: widget.onLogout,
     );
   }
 
@@ -3283,6 +3451,41 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           embedded: false,
           onBack: ctripBack,
         );
+      case 'XR1':
+        final xrxsKey = ValueKey<String>(
+          'xrxs-${widget.navigation.history.length}-'
+          '${widget.navigation.history.where((e) => e == 'XR1').length}-'
+          '${_xrxsLoginSid ?? ''}-${_xrxsLoginRole ?? ''}',
+        );
+        void xrxsBack() {
+          if (widget.navigation.history.contains('XA1')) {
+            widget.navigation.popTo('XA1');
+          } else if (widget.navigation.history.contains('QJA')) {
+            widget.navigation.popTo('QJA');
+          } else if (widget.navigation.canGoBack) {
+            widget.navigation.back();
+          } else {
+            widget.navigation.popTo(isDesktopCommOnly ? 'QJA' : 'B2');
+          }
+        }
+        if (isDesktopCommOnly) {
+          return NativeXrxsPCPage(
+            key: xrxsKey,
+            session: widget.session,
+            navigation: widget.navigation,
+            onBack: xrxsBack,
+            loginSid: _xrxsLoginSid,
+            loginRole: _xrxsLoginRole,
+          );
+        }
+        return NativeXrxsH5Page(
+          key: xrxsKey,
+          session: widget.session,
+          navigation: widget.navigation,
+          onBack: xrxsBack,
+          loginSid: _xrxsLoginSid,
+          loginRole: _xrxsLoginRole,
+        );
       case 'QJD':
         final entity =
             _selectedQianjiEntity ?? QianjiStaticCatalog.entities.first;
@@ -3387,6 +3590,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         return _buildTaskAssistantPage();
       case 'DA1':
         return _buildDriveAssistantPage();
+      case 'XA1':
+        return _buildXrxsAssistantPage();
       case 'WS1':
         return _buildWeeklySummaryPage();
       case 'RA1':
@@ -4111,6 +4316,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     final isLighthouse = screen == 'LH';
     final isInbox = screen == 'C1';
     final isWorkbench = screen == 'QJA';
+    // APP：工作台从「我的」右侧滑入，底下继续保留 B2；PC 工作台是独立 Tab，仍走 keep-alive 显隐。
+    final workbenchAsSlideOver = isWorkbench && !isDesktopCommOnly;
     // 建群多选仍走 AnimatedSwitcher；普通通讯录用 keep-alive 保滚动。
     final isContacts = screen == 'C3' && !_contactsGroupPickMode;
     if (isLighthouse) {
@@ -4126,13 +4333,22 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       _workbenchMounted = true;
     }
     // 双栏 / 灯塔 / 会话列表 / 通讯录 / 工作台由 keep-alive 承载；此处占位避免 AnimatedSwitcher 再造一份。
+    // APP 打开工作台时 AnimatedSwitcher 继续渲染「我的」底页，配合右侧滑入。
+    final switcherScreenId = workbenchAsSlideOver ? 'B2' : screen;
     final currentScreen = dualNow
         ? const SizedBox.shrink()
-        : (isLighthouse || isInbox || isContacts || isWorkbench)
+        : (isLighthouse ||
+              isInbox ||
+              isContacts ||
+              (isWorkbench && isDesktopCommOnly))
         ? const SizedBox.shrink()
+        : workbenchAsSlideOver
+        ? _buildMyWorkbenchUnderlay()
         : _buildCurrentScreen(context);
     final child = KeyedSubtree(
-      key: ValueKey<String>(dualNow ? 'dual-$screen' : 'screen-$screen'),
+      key: ValueKey<String>(
+        dualNow ? 'dual-$screen' : 'screen-$switcherScreenId',
+      ),
       child: currentScreen,
     );
 
@@ -4226,8 +4442,12 @@ class _NativeScreenHostState extends State<NativeScreenHost>
               ),
             ),
           ),
+        if (!isLighthouse &&
+            !dualNow &&
+            !(isWorkbench && isDesktopCommOnly))
+          animatedContent,
+        // 须叠在「我的」之上，否则 APP 侧滑展开后仍被 B2 挡住、看起来像点不动。
         if (_workbenchMounted) _buildWorkbenchKeepAlive(active: isWorkbench),
-        if (!isLighthouse && !dualNow && !isWorkbench) animatedContent,
       ],
     );
     // 双栏已自带侧栏，避免再套一层主导航。
@@ -4258,6 +4478,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       'CF',
       'TA1',
       'DA1',
+      'XA1',
       'AN1',
       'WS1',
       'Z2',
@@ -4379,7 +4600,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
   }
 
   String _mainTabScreenFor(String screen) {
-    if (!isDesktopCommOnly && (screen == 'QJA' || screen == 'CT1')) {
+    if (!isDesktopCommOnly &&
+        (screen == 'QJA' || screen == 'CT1' || screen == 'XR1')) {
       return 'B2';
     }
     // 企业微盘从工作台进入：PC 归工作台 Tab，APP 归「我的」。
@@ -4408,7 +4630,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         screen == 'QJTD') {
       return 'QJ';
     }
-    if (screen == 'QJA' || screen == 'CT1') return 'QJA';
+    if (screen == 'QJA' || screen == 'CT1' || screen == 'XR1') return 'QJA';
     if (screen == 'LH' || screen == 'LM') return 'LH';
     return 'C1';
   }
@@ -6992,6 +7214,7 @@ enum _DualChatKind {
   approval,
   task,
   drive,
+  xrxs,
   weeklySummary,
   administrativeNotice,
   reconciliation,
@@ -7046,6 +7269,13 @@ class _DualChatSlot {
   factory _DualChatSlot.drive(NativeConversation? conversation) {
     return _DualChatSlot._(
       kind: _DualChatKind.drive,
+      conversation: conversation,
+    );
+  }
+
+  factory _DualChatSlot.xrxs(NativeConversation? conversation) {
+    return _DualChatSlot._(
+      kind: _DualChatKind.xrxs,
       conversation: conversation,
     );
   }

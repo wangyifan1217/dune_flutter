@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/theme/dunes_theme.dart';
 import '../shell/dunes_toast.dart';
+import 'xflow_detail_logic.dart';
 import 'xflow_form_styles.dart';
 import 'xflow_models.dart';
 import 'xflow_service.dart';
@@ -618,7 +619,7 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
   }
 
   Widget _proposalField(XflowField field, {bool inRow = false}) {
-    final hint = field.placeholder.isEmpty ? '搜索已通过的销售提案' : field.placeholder;
+    final hint = field.placeholder.isEmpty ? '搜索已完成的协作提案' : field.placeholder;
     return _fieldWrap(
       field,
       _XflowProposalPicker(
@@ -2144,11 +2145,9 @@ class _XflowProposalPickerState extends State<_XflowProposalPicker> {
     final id = _int(row['proposalId'] ?? row['id']);
     final code = (row['code'] ?? '').toString().trim();
     final title = (row['title'] ?? row['name'] ?? '').toString().trim();
-    widget.onChanged({
-      'proposalId': id,
-      'code': code,
-      'title': title,
-    });
+    widget.onChanged(
+      linkedProposalIntakePayload(id: id, code: code, title: title),
+    );
     setState(() {
       _controller.text = code.isNotEmpty && title.isNotEmpty
           ? '$code · $title'
@@ -2176,7 +2175,7 @@ class _XflowProposalPickerState extends State<_XflowProposalPicker> {
     }
     setState(() => _loading = true);
     try {
-      final rows = await widget.service!.searchApprovedProposals(q);
+      final rows = await widget.service!.searchCompletedProposalIntakes(q);
       if (!mounted || _controller.text.trim() != q.trim()) return;
       setState(() {
         _results = rows;

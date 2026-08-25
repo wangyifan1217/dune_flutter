@@ -33,7 +33,7 @@ class XflowDetailRenderer extends StatelessWidget {
   final VoidCallback? onVoid;
   final VoidCallback? onWithdraw;
   final VoidCallback? onReturn;
-  final void Function(int proposalId)? onOpenLinkedProposal;
+  final OpenLinkedProposalCallback? onOpenLinkedProposal;
 
   @override
   Widget build(BuildContext context) {

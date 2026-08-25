@@ -6,10 +6,12 @@ import '../../core/navigation/navigation_controller.dart';
 import '../../core/theme/dunes_theme.dart';
 import '../../core/util/friendly_error.dart';
 import '../auth/auth_session.dart';
+import '../proposal_intake/native_proposal_intake_page.dart';
 import '../shell/dunes_toast.dart';
 import 'approval_chat_forward.dart';
 import 'approval_chat_share.dart';
 import 'approval_pending_nav.dart';
+import 'xflow_detail_logic.dart';
 import 'xflow_detail_renderer.dart';
 import 'xflow_detail_widgets.dart';
 import 'xflow_models.dart';
@@ -21,8 +23,27 @@ Future<void> openLinkedProposalDetail({
   required BuildContext context,
   required AuthSession session,
   required int proposalId,
+  String source = '',
 }) async {
   if (proposalId <= 0 || !context.mounted) return;
+
+  if (linkedProposalOpensIntake(source)) {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (ctx) {
+          return Material(
+            color: DunesColors.bgApp,
+            child: NativeProposalIntakePage(
+              session: session,
+              initialIntakeId: proposalId,
+              showCreate: false,
+            ),
+          );
+        },
+      ),
+    );
+    return;
+  }
 
   await Navigator.of(context).push<void>(
     MaterialPageRoute<void>(
@@ -552,11 +573,12 @@ class _NativeB10PageState extends State<NativeB10Page> {
                               onVoid: _voidProposal,
                               onWithdraw: _withdrawProposal,
                               onReturn: _return,
-                              onOpenLinkedProposal: (proposalId) {
+                              onOpenLinkedProposal: (proposalId, source) {
                                 openLinkedProposalDetail(
                                   context: context,
                                   session: widget.session,
                                   proposalId: proposalId,
+                                  source: source,
                                 );
                               },
                             ),

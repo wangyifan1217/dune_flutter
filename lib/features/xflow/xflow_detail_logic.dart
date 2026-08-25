@@ -138,6 +138,37 @@ int parseLinkedProposalId(dynamic val) {
   return 0;
 }
 
+const linkedProposalSourceIntake = 'proposal_intake';
+
+/// 解析关联提案来源：协作提案为 `proposal_intake`，历史销售提案为空。
+String parseLinkedProposalSource(dynamic val) {
+  if (val is! Map) return '';
+  final source = '${val['source'] ?? ''}'.trim().toLowerCase();
+  if (source == linkedProposalSourceIntake) return linkedProposalSourceIntake;
+  final businessType = '${val['businessType'] ?? ''}'.trim().toUpperCase();
+  if (businessType == 'PROPOSAL_INTAKE') return linkedProposalSourceIntake;
+  return '';
+}
+
+bool linkedProposalOpensIntake(String source) =>
+    source.trim().toLowerCase() == linkedProposalSourceIntake;
+
+Map<String, dynamic> linkedProposalIntakePayload({
+  required int id,
+  required String code,
+  required String title,
+}) {
+  return <String, dynamic>{
+    'proposalId': id,
+    'code': code,
+    'title': title,
+    'source': linkedProposalSourceIntake,
+    'businessType': 'PROPOSAL_INTAKE',
+  };
+}
+
+typedef OpenLinkedProposalCallback = void Function(int proposalId, String source);
+
 String formatUserDisplay(dynamic val) {
   if (val == null || val == '') return '';
   if (val is String) {

@@ -631,6 +631,15 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
           enabled: true,
           onTap: () => widget.navigation.go('CT1'),
         ),
+      if (!_session.isExternalUser)
+        _WorkbenchTile(
+          title: '薪人薪事',
+          subtitle: '人事 · 薪酬 · 考勤',
+          icon: Icons.badge_outlined,
+          color: const Color(0xFF0F766E),
+          enabled: true,
+          onTap: () => widget.navigation.go('XR1'),
+        ),
     ];
 
     final administrativeTiles = <_WorkbenchTile>[

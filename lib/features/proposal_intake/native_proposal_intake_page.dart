@@ -817,12 +817,16 @@ class _ProposalListTile extends StatelessWidget {
                       ),
                       IconButton(
                         tooltip: '转发',
-                        visualDensity: VisualDensity.compact,
+                        visualDensity: VisualDensity.standard,
+                        constraints: const BoxConstraints(
+                          minWidth: 44,
+                          minHeight: 44,
+                        ),
                         onPressed: onForward,
                         icon: const Icon(
                           Icons.forward_outlined,
                           color: ProposalPalette.purpleDeep,
-                          size: 20,
+                          size: 24,
                         ),
                       ),
                       if (canDelete)
@@ -1130,6 +1134,9 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
 
   bool get _canConfirmTechRevision =>
       _row.id > 0 && _row.isTechRevising && _isTechFiller;
+
+  bool get _canDecidePresident =>
+      _row.id > 0 && _row.status == 'pending_president' && _isPresident;
 
   bool get _canNotifyTech =>
       _row.id > 0 &&
@@ -1975,12 +1982,13 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       child: LayoutBuilder(
         builder: (context, constraints) {
           final wide = constraints.maxWidth >= 900;
+          final compact = constraints.maxWidth < 620;
           return ColoredBox(
             color: ProposalPalette.page,
             child: Column(
               children: [
-                _topbar(compact: constraints.maxWidth < 620),
-                _sectionNav(compact: constraints.maxWidth < 620),
+                _topbar(compact: compact),
+                _sectionNav(compact: compact),
                 Expanded(
                   child: Container(
                     decoration: const BoxDecoration(
@@ -2001,7 +2009,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                             wide ? 28 : 14,
                             wide ? 22 : 14,
                             wide ? 28 : 14,
-                            80,
+                            _canDecidePresident ? 24 : 80,
                           ),
                           sliver: SliverToBoxAdapter(
                             child: Column(
@@ -2028,6 +2036,12 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                     ),
                   ),
                 ),
+                if (_canDecidePresident)
+                  ProposalPresidentDecisionBar(
+                    onApprove: () => unawaited(_decidePresident(approved: true)),
+                    onReject: () =>
+                        unawaited(_decidePresident(approved: false)),
+                  ),
                 if (widget.onNext != null)
                   ProposalNextPendingFooter(
                     totalCount: widget.nextCount,
@@ -2331,27 +2345,59 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   Widget _topLabeledAction({
     required IconData icon,
     required String label,
-    required VoidCallback onPressed,
+    required VoidCallback? onPressed,
     required bool compact,
+    bool filled = true,
+    bool loading = false,
+    Color? foreground,
+    Color? border,
   }) {
-    final height = compact ? 32.0 : 36.0;
-    return Tooltip(
-      message: label,
-      child: FilledButton.icon(
-        onPressed: onPressed,
-        icon: Icon(icon, size: compact ? 15 : 16),
-        label: Text(label, style: TextStyle(fontSize: compact ? 12 : 13)),
-        style: FilledButton.styleFrom(
-          backgroundColor: ProposalPalette.purple,
-          foregroundColor: Colors.white,
-          minimumSize: Size(0, height),
-          maximumSize: Size(double.infinity, height),
-          padding: EdgeInsets.symmetric(horizontal: compact ? 10 : 12),
-          visualDensity: VisualDensity.compact,
-          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-        ),
+    final height = compact ? 44.0 : 40.0;
+    final iconWidget = loading
+        ? SizedBox(
+            width: 16,
+            height: 16,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              color: filled
+                  ? Colors.white
+                  : (foreground ?? ProposalPalette.purpleDeep),
+            ),
+          )
+        : Icon(icon, size: compact ? 18 : 17);
+    final labelWidget = Text(
+      label,
+      style: TextStyle(
+        fontSize: compact ? 14 : 13,
+        fontWeight: FontWeight.w700,
       ),
     );
+    final button = filled
+        ? FilledButton.icon(
+            onPressed: onPressed,
+            icon: iconWidget,
+            label: labelWidget,
+            style: FilledButton.styleFrom(
+              backgroundColor: ProposalPalette.purple,
+              foregroundColor: Colors.white,
+              minimumSize: Size(0, height),
+              padding: EdgeInsets.symmetric(horizontal: compact ? 12 : 12),
+              tapTargetSize: MaterialTapTargetSize.padded,
+            ),
+          )
+        : OutlinedButton.icon(
+            onPressed: onPressed,
+            icon: iconWidget,
+            label: labelWidget,
+            style: OutlinedButton.styleFrom(
+              foregroundColor: foreground ?? ProposalPalette.purpleDeep,
+              side: BorderSide(color: border ?? const Color(0xFFDDD1E8)),
+              minimumSize: Size(0, height),
+              padding: EdgeInsets.symmetric(horizontal: compact ? 12 : 12),
+              tapTargetSize: MaterialTapTargetSize.padded,
+            ),
+          );
+    return Tooltip(message: label, child: button);
   }
 
   List<Widget> _topActionButtons({required bool compact}) {
@@ -2380,16 +2426,20 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     }
 
     final actions = <Widget>[
-      btn(
+      _topLabeledAction(
         icon: Icons.save_outlined,
-        tooltip: '保存',
+        label: '保存',
+        filled: false,
+        compact: compact,
         onPressed: widget.saving || !_canSave
             ? null
             : () => unawaited(_saveDraft()),
       ),
-      btn(
+      _topLabeledAction(
         icon: Icons.forward_outlined,
-        tooltip: _forwarding ? '转发中…' : '转发',
+        label: _forwarding ? '转发中…' : '转发',
+        filled: false,
+        compact: compact,
         loading: _forwarding,
         onPressed: _forwarding || _row.id <= 0
             ? null
@@ -2457,24 +2507,25 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         ),
       );
     }
-    if (_row.status == 'pending_president' && _isPresident) {
+    if (_canDecidePresident && !compact) {
       actions
         ..add(
-          btn(
+          _topLabeledAction(
             icon: Icons.check_rounded,
-            tooltip: '确认通过',
-            filled: true,
-            background: ProposalPalette.purpleDeep,
+            label: '确认通过',
             onPressed: () => unawaited(_decidePresident(approved: true)),
+            compact: compact,
           ),
         )
         ..add(
-          btn(
+          _topLabeledAction(
             icon: Icons.close_rounded,
-            tooltip: '驳回',
+            label: '驳回',
+            onPressed: () => unawaited(_decidePresident(approved: false)),
+            compact: compact,
+            filled: false,
             foreground: ProposalPalette.coral,
             border: const Color(0xFFE7C2B0),
-            onPressed: () => unawaited(_decidePresident(approved: false)),
           ),
         );
     }

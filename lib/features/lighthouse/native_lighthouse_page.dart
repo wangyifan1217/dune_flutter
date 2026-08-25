@@ -82,7 +82,9 @@ const _kPeriodShort = {
 };
 
 const _kPeriodVs = {
-  'day': 'vs 昨日',
+  // 2026-08 运营会：日环比是「上个月同一天」，不是昨日。后端 period.go 的
+  // day 分支已同步改；这里只是后端没回包时的兜底文案，不能自己说另一套。
+  'day': 'vs 上月同日',
   'week': 'vs 上周',
   'month': 'vs 上月',
   'quarter': 'vs 上季',
@@ -824,10 +826,16 @@ class _TrendSeries {
     required this.cost,
     required this.profit,
     this.scale = const <double>[],
+    this.scaleAlt = const <double>[],
   });
   final List<double> revenue;
   final List<double> cost;
   final List<double> profit;
+
+  /// 另一口径的规模（anchor 是核销时这里是销售，反之亦然）。
+  /// 与 [scale] 共用一个 Y 值域 —— 两者同单位、可直接比，中间的带宽就是
+  /// 「销售了但还没核销」的部分，核销率一眼可读。
+  final List<double> scaleAlt;
 
   /// 规模（核销 / 销售，跟当前 anchor 口径走）。
   /// 2026-08 运营会："在这个走势图里面，如果只能显示一个，我更希望显示规模。"
@@ -1012,7 +1020,11 @@ _TrendBounds _computeBounds(_TrendSeries s, {double? scaleForecast}) {
     return _SeriesRange(mn - pad, mx + pad);
   }
 
-  var scaleRange = computeOne(s.scale);
+  // 核销规模与销售规模共用一个值域 —— 各算各的会把「销售多、核销少」这个
+  // 关键差额抹平，两条线会贴在一起，带就没意义了。
+  var scaleRange = computeOne(
+    s.scaleAlt.isEmpty ? s.scale : <double>[...s.scale, ...s.scaleAlt],
+  );
   if (scaleForecast != null && s.scale.isNotEmpty) {
     if (scaleForecast > scaleRange.max) {
       final pad = (scaleForecast - scaleRange.min).abs() * 0.08;
@@ -1057,6 +1069,36 @@ void _addSmoothPath(Path path, List<Offset> points, {double tension = 1.0}) {
     final c2x = p2.dx - (p3.dx - p1.dx) * t;
     final c2y = p2.dy - (p3.dy - p1.dy) * t;
     path.cubicTo(c1x, c1y, c2x, c2y, p2.dx, p2.dy);
+  }
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// appendSmoothPath —— 把点序以同样的 Catmull-Rom 平滑续接到已有 path 上
+//   (_addSmoothPath 会 moveTo 起点, 画闭合带的回程需要 lineTo 起点再续)。
+//   两处必须用同一套控制点算法, 否则带的边缘和画出来的线会错开。
+void appendSmoothPath(Path path, List<Offset> points, {double tension = 1.0}) {
+  final n = points.length;
+  if (n == 0) return;
+  path.lineTo(points[0].dx, points[0].dy);
+  if (n == 1) return;
+  if (n == 2) {
+    path.lineTo(points[1].dx, points[1].dy);
+    return;
+  }
+  final t = tension / 6.0;
+  for (int i = 0; i < n - 1; i++) {
+    final p0 = points[i == 0 ? 0 : i - 1];
+    final p1 = points[i];
+    final p2 = points[i + 1];
+    final p3 = points[i + 2 < n ? i + 2 : n - 1];
+    path.cubicTo(
+      p1.dx + (p2.dx - p0.dx) * t,
+      p1.dy + (p2.dy - p0.dy) * t,
+      p2.dx - (p3.dx - p1.dx) * t,
+      p2.dy - (p3.dy - p1.dy) * t,
+      p2.dx,
+      p2.dy,
+    );
   }
 }
 
@@ -1678,14 +1720,14 @@ class _TrendLinesPainter extends CustomPainter {
     required this.bounds,
     required this.colors,
     required this.padH,
-    this.available = const [true, true, true, false],
+    this.available = const [true, true, true, false, false],
     this.scaleForecast,
   });
   final _TrendSeries series;
   final _TrendBounds bounds;
   final List<Color> colors;
   final double padH;
-  // v3.9 · [revenue, cost, profit, scale] 每条序列是否可见 (缺数据的不画)
+  // v3.9 · [revenue, cost, profit, scale, scaleAlt] 每条序列是否可见
   final List<bool> available;
 
   /// 月化预测值（仅「点月 + 当前月 + 规模类指标」给）。
@@ -1718,6 +1760,12 @@ class _TrendLinesPainter extends CustomPainter {
     final heroDrawable =
         heroPts.length >= 2 &&
         (heroIsScale || (available.length > 2 && available[2]));
+    // 第二条规模线只在 hero 也是规模时才画 —— 单独一条 alt 没有参照物。
+    final altDrawable =
+        heroIsScale &&
+        available.length > 4 &&
+        available[4] &&
+        series.scaleAlt.length >= 2;
     final actualMaxProfit = heroPts.isEmpty ? 0.0 : heroPts.reduce(math.max);
     final actualMinProfit = heroPts.isEmpty ? 0.0 : heroPts.reduce(math.min);
     // 换算成 y 坐标 (用 hero bounds,跟画线保持一致)
@@ -1836,12 +1884,34 @@ class _TrendLinesPainter extends CustomPainter {
       }
     }
 
-    // v4.0 · 绘制顺序:MAX/MIN hairline (已画) → fill area (hero) → 副线
-    //   (收入/成本 浅描) → 毛利 (规模在场时降到 1.4px) → 主线 (hero 粗)
-    //   → 数据点 (仅主线) → 末端 dot → 月化预测虚线.
+    // v4.1 · 绘制顺序:MAX/MIN hairline (已画) → 规模带 (核销↔销售, 没有第二
+    //   条规模时退回 hero fill area) → 副线 (收入/成本 浅描) → 毛利 (规模在场
+    //   时降到 1.4px) → 另一口径规模 (1.1px 同色) → 主线 (hero 粗) → 数据点
+    //   (仅主线) → 末端 dot → 月化预测虚线.
     final hasProfitLine =
         available.length > 2 && available[2] && series.profit.length >= 2;
-    if (heroDrawable) {
+    if (altDrawable) {
+      // 「销售 − 核销」带：上缘销售、下缘核销（或反之），带宽 = 未核销部分。
+      // 比两条各自 fill-to-baseline 的线更能说明问题 —— 看的是差额。
+      final alt = series.scaleAlt;
+      final n = math.min(heroPts.length, alt.length);
+      final top = <Offset>[
+        for (int i = 0; i < n; i++) Offset(xOf(i), yOf(alt[i], heroBounds)),
+      ];
+      final bottom = <Offset>[
+        for (int i = 0; i < n; i++) Offset(xOf(i), yOf(heroPts[i], heroBounds)),
+      ];
+      final band = Path();
+      _addSmoothPath(band, top);
+      appendSmoothPath(band, bottom.reversed.toList(growable: false));
+      band.close();
+      canvas.drawPath(
+        band,
+        Paint()
+          ..color = heroColor.withAlpha(30)
+          ..style = PaintingStyle.fill,
+      );
+    } else if (heroDrawable) {
       drawFillArea(heroPts, heroColor, heroBounds);
     }
     if (available.isNotEmpty && available[0]) {
@@ -1873,6 +1943,16 @@ class _TrendLinesPainter extends CustomPainter {
         alpha: 225,
       );
     }
+    if (altDrawable) {
+      // 同色系、细一档：两条都是「规模」，层级靠线宽而不是换个颜色。
+      drawLine(
+        series.scaleAlt,
+        heroColor,
+        heroBounds,
+        strokeWidth: 1.1,
+        alpha: 150,
+      );
+    }
     if (heroDrawable) {
       drawLine(heroPts, heroColor, heroBounds, strokeWidth: 2.0);
       drawDataDots(heroPts, heroColor, heroBounds);
@@ -1885,6 +1965,9 @@ class _TrendLinesPainter extends CustomPainter {
     }
     if (hasProfitLine && heroIsScale) {
       drawEndDot(series.profit, colors[2], bounds.profit);
+    }
+    if (altDrawable) {
+      drawEndDot(series.scaleAlt, heroColor, heroBounds);
     }
     if (heroDrawable) {
       drawEndDot(heroPts, heroColor, heroBounds, hero: true);
@@ -1947,7 +2030,7 @@ class _TrendOverlayPainter extends CustomPainter {
     required this.colors,
     required this.padH,
     required this.selectedIndex,
-    this.available = const [true, true, true, false],
+    this.available = const [true, true, true, false, false],
   });
   final _TrendSeries series;
   final _TrendBounds bounds;
@@ -2043,11 +2126,11 @@ class _TrendOverlayPainter extends CustomPainter {
       }
     }
     if (heroIsScale) {
-      heroMarker(
-        series.scale[si],
-        colors.length > 3 ? colors[3] : colors[2],
-        bounds.scale,
-      );
+      final scaleColor = colors.length > 3 ? colors[3] : colors[2];
+      if (available.length > 4 && available[4] && si < series.scaleAlt.length) {
+        softMarker(series.scaleAlt[si], scaleColor, bounds.scale);
+      }
+      heroMarker(series.scale[si], scaleColor, bounds.scale);
     }
   }
 
@@ -4130,7 +4213,10 @@ class _TrendChart extends StatefulWidget {
     required this.title,
     this.scale = const <double>[],
     this.scaleLabel = '规模',
+    this.scaleAlt = const <double>[],
+    this.scaleAltLabel = '',
     this.periodScale,
+    this.periodScaleAlt,
     this.periodScaleDeltaPct,
     this.scaleForecast,
     this.partialPeriod = false,
@@ -4170,6 +4256,16 @@ class _TrendChart extends StatefulWidget {
   /// 规模的中文口径名（核销规模 / 销售规模），legend 直接显示。
   final String scaleLabel;
 
+  /// 另一口径的规模序列。anchor 是核销时这里是销售，反之亦然。
+  /// 两条共用一个 Y 值域，中间填成带 —— 带宽就是「销售了还没核销」的部分。
+  final List<double> scaleAlt;
+
+  /// 另一口径规模的中文名；为空表示这条线不画。
+  final String scaleAltLabel;
+
+  /// 本期另一口径规模合计。
+  final double? periodScaleAlt;
+
   /// 本期规模合计（与列表行同口径）；缺省时才回退序列求和。
   final double? periodScale;
 
@@ -4202,9 +4298,13 @@ class _TrendChartState extends State<_TrendChart> {
   static const Color _cRev = _LhPlum.soft; // 收入 = 柔粉描线
   static const Color _cCost = Color(0xFFC7BADF); // 成本 = 更淡描线
   static const Color _cProf = _LhPlum.deep; // 毛利 = 次线 (规模在场时)
-  // v4.0 · 规模 = 主线 hero。铜色跟 TREND kicker / 达标语言同族，
-  //        跟毛利的紫墨拉开，两条线同图不打架。
-  static const Color _cScale = LhColors.copper;
+  // v4.1 · 规模 = 主线 hero，用 hero「规模」卡同一个 accent。
+  //   跨屏语义一致优先：主 hero 上标着「规模」的那个紫，和这张图里的规模线
+  //   是同一个颜色，用户不用再学第二套编码。
+  //   代价是它和毛利的 _LhPlum.deep (#5A458F) 同为紫族 —— 靠线宽和明度分层：
+  //   规模 2.0px + 填充带，毛利 1.4px α225，两条的取值域也各自独立。
+  //   真机上若仍认错，最省的解法是把毛利挪成中性墨色，而不是再动规模的颜色。
+  static const Color _cScale = Color(lighthouseScaleAccentValue);
   static const List<Color> _kColors = [_cRev, _cCost, _cProf, _cScale];
 
   int? _selectedIndex;
@@ -4214,6 +4314,7 @@ class _TrendChartState extends State<_TrendChart> {
   late List<String> _xLabels;
   late List<int> _xAnchors;
   double _totRev = 0, _totCost = 0, _totProf = 0, _totScale = 0;
+  double _totScaleAlt = 0;
   // v3.9 · 每条序列是否"真的有数据"(非空 & 非全 0). 后端有时只下发 profit,
   //         revenue/cost 缺 → 之前 pad(0) 后 painter 恒画 3 条线, legend 恒
   //         3 chip, 视觉上"只有一条动". 现在改成: 缺的序列 legend 不显示,
@@ -4222,6 +4323,7 @@ class _TrendChartState extends State<_TrendChart> {
   bool _hasCost = false;
   bool _hasProf = false;
   bool _hasScale = false;
+  bool _hasScaleAlt = false;
   int get _visibleCount =>
       (_hasRev ? 1 : 0) + (_hasCost ? 1 : 0) + (_hasProf ? 1 : 0);
 
@@ -4240,6 +4342,8 @@ class _TrendChartState extends State<_TrendChart> {
         !listEquals(old.revenue, widget.revenue) ||
         !listEquals(old.cost, widget.cost) ||
         !listEquals(old.scale, widget.scale) ||
+        !listEquals(old.scaleAlt, widget.scaleAlt) ||
+        old.periodScaleAlt != widget.periodScaleAlt ||
         !listEquals(old.labels, widget.labels) ||
         old.periodScaleDeltaPct != widget.periodScaleDeltaPct ||
         old.partialPeriod != widget.partialPeriod ||
@@ -4268,12 +4372,15 @@ class _TrendChartState extends State<_TrendChart> {
     _hasCost = _seriesHasData(widget.cost);
     _hasProf = _seriesHasData(widget.profit);
     _hasScale = _seriesHasData(widget.scale);
+    _hasScaleAlt =
+        widget.scaleAltLabel.isNotEmpty && _seriesHasData(widget.scaleAlt);
 
     final n = [
       widget.revenue.length,
       widget.cost.length,
       widget.profit.length,
       widget.scale.length,
+      widget.scaleAlt.length,
     ].fold<int>(0, math.max);
     List<double> pad(List<double> l) =>
         l.length == n ? l : [...l, ...List<double>.filled(n - l.length, 0.0)];
@@ -4281,7 +4388,10 @@ class _TrendChartState extends State<_TrendChart> {
       revenue: pad(widget.revenue),
       cost: pad(widget.cost),
       profit: pad(widget.profit),
-      scale: pad(widget.scale),
+      // 没数据的规模序列留空，别喂 pad 出来的全 0 —— 它会把共用值域拉到 0，
+      // 两条规模线就被压扁了。
+      scale: _hasScale ? pad(widget.scale) : const <double>[],
+      scaleAlt: _hasScaleAlt ? pad(widget.scaleAlt) : const <double>[],
     );
     // 预测虚线要画得进画布 —— 把预测值一并纳入规模值域。
     _bounds = _computeBounds(
@@ -4295,6 +4405,8 @@ class _TrendChartState extends State<_TrendChart> {
     _totCost = widget.periodCost ?? _series.cost.fold(0.0, (a, b) => a + b);
     _totProf = widget.periodProfit ?? _series.profit.fold(0.0, (a, b) => a + b);
     _totScale = widget.periodScale ?? _series.scale.fold(0.0, (a, b) => a + b);
+    _totScaleAlt =
+        widget.periodScaleAlt ?? _series.scaleAlt.fold(0.0, (a, b) => a + b);
     final (xs, anchors) = _computeSparse(widget.labels, n);
     _xLabels = xs;
     _xAnchors = anchors;
@@ -4504,6 +4616,10 @@ class _TrendChartState extends State<_TrendChart> {
         ? LhColors.mute2
         : (trendUp ? LhColors.neg : LhColors.pos); // 中国金融色: 上=红, 下=绿
     final hIsNeg = hVal < 0;
+    final showAltScale = heroIsScale && _hasScaleAlt;
+    final sAltVal = isSelected ? at(_series.scaleAlt, si) : _totScaleAlt;
+    final sAltAbsFmt = _fmtMoney(sAltVal.abs());
+    final sAltUnitFmt = _unitMoney(sAltVal.abs());
     final pIsNeg = pVal < 0;
     final pAbsFmt = _fmtMoney(pVal.abs());
     final pUnitFmt = _unitMoney(pVal.abs());
@@ -4603,6 +4719,43 @@ class _TrendChartState extends State<_TrendChart> {
               textAlign: TextAlign.right,
               text: TextSpan(
                 children: [
+                  // v4.1 · 另一口径的规模排最前 —— 它和 hero 是同一族，
+                  //   两个数并排才看得出核销率，副行被截断时也最先保住它。
+                  if (showAltScale) ...[
+                    TextSpan(
+                      text: '${widget.scaleAltLabel} ',
+                      style: LhTypography.mono(
+                        size: 7.5,
+                        color: LhColors.mute2,
+                        weight: FontWeight.w500,
+                      ),
+                    ),
+                    TextSpan(
+                      text: sAltAbsFmt,
+                      style: LhTypography.mono(
+                        size: 9,
+                        color: _cScale,
+                        weight: FontWeight.w700,
+                      ),
+                    ),
+                    TextSpan(
+                      text: sAltUnitFmt,
+                      style: LhTypography.mono(
+                        size: 7.5,
+                        color: LhColors.mute,
+                        weight: FontWeight.w500,
+                      ),
+                    ),
+                    TextSpan(
+                      text: '   ·   ',
+                      style: LhTypography.mono(
+                        size: 7.5,
+                        color: LhColors.mute2,
+                        weight: FontWeight.w500,
+                        letterSpacing: 0.2,
+                      ),
+                    ),
+                  ],
                   // v4.0 · 规模上位后毛利搬到副行 —— 会议要求两个都在同一张图上。
                   if (heroIsScale) ...[
                     TextSpan(
@@ -4862,6 +5015,7 @@ class _TrendChartState extends State<_TrendChart> {
                               _hasCost,
                               _hasProf,
                               _hasScale,
+                              _hasScaleAlt,
                             ],
                             scaleForecast: _hasScale
                                 ? widget.scaleForecast?.forecast
@@ -4883,6 +5037,7 @@ class _TrendChartState extends State<_TrendChart> {
                             _hasCost,
                             _hasProf,
                             _hasScale,
+                            _hasScaleAlt,
                           ],
                         ),
                       ),
@@ -5026,6 +5181,8 @@ class _HeroMetricTrendChart extends StatefulWidget {
     this.warnTint,
     this.compareData,
     this.forecast,
+    this.periodDeltaPct,
+    this.partialPeriod = false,
     this.chartHeight = 168,
     this.onInteractionChanged,
   });
@@ -5044,6 +5201,17 @@ class _HeroMetricTrendChart extends StatefulWidget {
 
   /// 月化预测（仅点月 + 当前月 + 规模/金额类）。非空时画月末预测虚线。
   final LighthousePaceForecast? forecast;
+
+  /// 本期环比（%，比率类为 pp），带符号，由后端按同期对齐窗口算出。
+  ///
+  /// 走势序列在点月时是「整月桶」：末位是本月未走完的 MTD，末位前一格是上月
+  /// 整月。拿这两格相减，就是 2026-08 运营会当场否掉的口径，所以「本期合计」
+  /// 态的环比必须走这个字段，而不是自己拿序列减。
+  final double? periodDeltaPct;
+
+  /// 本期是否还没走完（当前月/周看到一半）。
+  /// 为 true 且没有 [periodDeltaPct] 时，宁可不显示环比，也不显示错的。
+  final bool partialPeriod;
   final double chartHeight;
   final ValueChanged<bool>? onInteractionChanged;
 
@@ -5254,7 +5422,10 @@ class _HeroMetricTrendChartState extends State<_HeroMetricTrendChart> {
                         compareData: widget.compareData,
                         compareColor: LhColors.mute,
                         forecast: widget.forecast?.forecast,
-                        forecastColor: LhColors.copper,
+                        // 预测是这条线自己的延伸，跟随它的颜色即可 ——
+                        // 虚线 + 空心端点已经把「预测」和「已发生」分开了，
+                        // 不需要再借一个额外的强调色。
+                        forecastColor: null,
                         isRate: widget.isRate,
                         selectedIndex: _selectedIndex,
                         xLabels: widget.labels,
@@ -5778,12 +5949,51 @@ class _HeroMetricTrendChartState extends State<_HeroMetricTrendChart> {
   //   Delta —— 本期读数 vs 环比参照 (未选中时: series 末 vs series[-2])
   //   selected 态: 相对上一期 (i vs i-1)
   // ═══════════════════════════════════════════════════════════════════════
+  /// 把带符号的环比值渲染成 delta 视觉（中文财报语义：涨 = 红，跌 = 绿）。
+  ({String text, Color color, IconData icon}) _deltaVisual(
+    double v,
+    String unit,
+  ) {
+    if (v.abs() < 0.05) {
+      return (
+        text: '0.0$unit',
+        color: LhColors.mute,
+        icon: Icons.remove_rounded,
+      );
+    }
+    final isUp = v > 0;
+    return (
+      text: '${v.toStringAsFixed(1)}$unit',
+      color: isUp ? LhColors.neg : LhColors.pos,
+      icon: isUp ? Icons.arrow_upward_rounded : Icons.arrow_downward_rounded,
+    );
+  }
+
   ({String text, Color color, IconData icon})? _computeDelta({
     required bool isSelected,
     required double displayValue,
   }) {
     final data = widget.data;
     if (data.length < 2) return null;
+
+    // v4.0 · 本期未走完时，「序列末位 vs 前一位」＝ 本期 MTD vs 上期整期，
+    //   正是会上被否掉的口径。这种情况一律走后端的同期对齐值；后端没给就留空。
+    //   比率类不受窗口长短影响（MTD 毛利率 vs 上月毛利率仍可比），照旧兜底。
+    final onPartialPoint =
+        widget.partialPeriod &&
+        (!isSelected || _selectedIndex == data.length - 1);
+    if (onPartialPoint) {
+      final api = widget.periodDeltaPct;
+      if (api != null) return _deltaVisual(api, widget.isRate ? 'pp' : '%');
+      if (!widget.isRate) return null;
+    } else if (!isSelected && widget.periodDeltaPct != null) {
+      // 本期已走完：后端值和序列相减同口径，优先用后端的，跟卡片/列表一个数。
+      return _deltaVisual(
+        widget.periodDeltaPct!,
+        widget.isRate ? 'pp' : '%',
+      );
+    }
+
     late double base;
     if (isSelected) {
       final i = _selectedIndex!;
@@ -13871,6 +14081,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     final paceForecast = isRateLike || series.isEmpty
         ? null
         : _monthPaceForecast(keyId, series.last);
+    // 环比走后端同期对齐值（L1 读 hero metrics，L2/L3 读当前实体 deltas），
+    // 跟卡片和列表是同一个数，不再由图自己拿序列末两期相减。
+    final apiDeltaPct = _deltaForMetric(keyId)?.pct;
 
     return Container(
       padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
@@ -13956,6 +14169,8 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               isRate: isRateLike,
               periodValue: periodValue,
               forecast: paceForecast,
+              periodDeltaPct: apiDeltaPct,
+              partialPeriod: _isCurrentMonthView,
               chartHeight: 140,
             )
           else
@@ -14784,6 +14999,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     final paceForecast = isRateLike || series.isEmpty
         ? null
         : _monthPaceForecast(m.key, series.last);
+    final apiDeltaPct = _deltaForMetric(m.key)?.pct;
 
     showModalBottomSheet(
       context: context,
@@ -14896,6 +15112,8 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                           isRate: isRateLike,
                           periodValue: periodValue,
                           forecast: paceForecast,
+                          periodDeltaPct: apiDeltaPct,
+                          partialPeriod: _isCurrentMonthView,
                           chartHeight: 168,
                           onInteractionChanged: (active) {
                             if (chartScrollLocked == active) return;
@@ -16389,7 +16607,28 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   }
 
   /// 当前周期环比对照文案（跟日/周/月/季/年走；不依赖后端回包时机）。
-  String get _periodVsLabel => _kPeriodVs[_period] ?? 'vs 上月';
+  /// 环比对照文案。
+  ///
+  /// 优先用后端下发的 deltaVs —— 只有后端知道这一次到底比了哪两个窗口：本期
+  /// 没走完时是「vs 上月同期」而不是「vs 上月」。前端常量只做兜底，两边不一致
+  /// 时以后端为准，免得文案说一套、数字算另一套。
+  String get _periodVsLabel {
+    final fromApi = _bundle?.metrics['deltaVs']?.toString().trim() ?? '';
+    if (fromApi.isNotEmpty) return fromApi;
+    return _kPeriodVs[_period] ?? 'vs 上月';
+  }
+
+  /// 后端下发的环比窗口，形如 `08.01–08.25 vs 07.01–07.25`；缺字段返回空串。
+  ///
+  /// 会上要求「你的环比逻辑回去核对一下」—— 把真正比较的两个窗口摆在数字旁边，
+  /// 就不用靠信任，看一眼就能核。
+  String get _periodCompareWindow {
+    final m = _bundle?.metrics ?? const <String, dynamic>{};
+    final cur = m['deltaWindow']?.toString().trim() ?? '';
+    final prev = m['deltaPrevWindow']?.toString().trim() ?? '';
+    if (cur.isEmpty || prev.isEmpty) return '';
+    return '$cur vs $prev';
+  }
 
   /// 统一环比文案：`环比 ↑ 1.2% · vs 昨日` / `环比 — · vs 上周`
   String _momText(
@@ -18284,7 +18523,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               ),
               const SizedBox(height: 3),
               Text(
-                '${_heroInfo.label}  ·  对比${_periodVsLabel.replaceFirst('vs ', '')}',
+                [
+                  _heroInfo.label,
+                  '对比${_periodVsLabel.replaceFirst('vs ', '')}',
+                  if (_periodCompareWindow.isNotEmpty) _periodCompareWindow,
+                ].join('  ·  '),
                 style: LhTypography.mono(
                   size: 10.5,
                   color: LhColors.mute,
@@ -22278,18 +22521,34 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     // v4.0 · 规模上位 —— 会议："这个走势图应该把利润和规模都塞进去……
     //   如果只能显示一个，我更希望显示规模，因为规模能推导出利润。"
     //   规模跟当前 anchor 口径走（核销为主口径，缺核销序列时退销售）。
+    //   v4.1 · 核销规模和销售规模两条都画：anchor 决定谁是主线，另一条同色
+    //   细一档，中间填成带 —— 带宽 = 销售了还没核销的部分，核销率一眼可读。
     final preferVerified = _anchor == _LhAnchor.verified;
+    final verifiedSeries = _seriesFromTrendMap(t, 'verifiedSales');
+    final salesSeries = _seriesFromTrendMap(t, 'sales');
     var scaleKey = preferVerified ? 'verifiedSales' : 'sales';
-    var scale = _seriesFromTrendMap(t, scaleKey);
-    if (scale.isEmpty && preferVerified) {
-      scaleKey = 'sales';
-      scale = _seriesFromTrendMap(t, 'sales');
+    var scale = preferVerified ? verifiedSeries : salesSeries;
+    var altKey = preferVerified ? 'sales' : 'verifiedSales';
+    var scaleAlt = preferVerified ? salesSeries : verifiedSeries;
+    if (scale.isEmpty) {
+      // 主口径序列缺失 → 让另一条顶上当主线，别让规模整条消失。
+      scaleKey = altKey;
+      scale = scaleAlt;
+      altKey = '';
+      scaleAlt = const <double>[];
     }
-    final scaleLabel = scaleKey == 'verifiedSales' ? '核销规模' : '销售规模';
+    String scaleNameOf(String k) =>
+        k == 'verifiedSales' ? '核销规模' : '销售规模';
+    final scaleLabel = scaleNameOf(scaleKey);
+    final scaleAltLabel = altKey.isEmpty ? '' : scaleNameOf(altKey);
     // 本期规模合计：优先行上同口径字段，缺了就用序列末点（＝本期那一格）。
     final periodScale =
         (r[scaleKey] as num?)?.toDouble() ??
         (scale.isNotEmpty ? scale.last : null);
+    final periodScaleAlt = altKey.isEmpty
+        ? null
+        : ((r[altKey] as num?)?.toDouble() ??
+              (scaleAlt.isNotEmpty ? scaleAlt.last : null));
     final scaleForecast = scale.isEmpty
         ? null
         : _monthPaceForecast(scaleKey, scale.last);
@@ -22302,7 +22561,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       profit: profit,
       scale: scale,
       scaleLabel: scaleLabel,
+      scaleAlt: scaleAlt,
+      scaleAltLabel: scaleAltLabel,
       periodScale: periodScale,
+      periodScaleAlt: periodScaleAlt,
       periodScaleDeltaPct: periodScaleDeltaPct,
       scaleForecast: scaleForecast,
       partialPeriod: _isCurrentMonthView,

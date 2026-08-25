@@ -190,8 +190,12 @@ void main() {
     expect(find.byTooltip('通知科技负责人'), findsOneWidget);
     expect(find.byTooltip('删除'), findsOneWidget);
     expect(find.byTooltip('协作提案流程'), findsOneWidget);
-    expect(find.text('保存'), findsNothing);
-    expect(find.text('转发'), findsNothing);
+    expect(find.text('保存'), findsOneWidget);
+    expect(find.text('转发'), findsOneWidget);
+    expect(tester.getSize(find.widgetWithText(OutlinedButton, '保存')).height,
+        greaterThanOrEqualTo(44));
+    expect(tester.getSize(find.widgetWithText(OutlinedButton, '转发')).height,
+        greaterThanOrEqualTo(44));
     expect(find.text('通知科技'), findsNothing);
     expect(find.text('删除'), findsNothing);
     expect(find.text('D'), findsNothing);
@@ -428,7 +432,7 @@ void main() {
     expect(find.text('章节'), findsNothing);
     expect(find.text('保存草稿'), findsNothing);
     expect(find.byTooltip('保存'), findsWidgets);
-    expect(find.text('保存'), findsNothing);
+    expect(find.text('保存'), findsWidgets);
     expect(find.text('选择合同'), findsNothing);
     expect(find.text('行政复核'), findsNothing);
     expect(find.text('财务部负责人二复核'), findsWidgets);
@@ -1117,6 +1121,65 @@ void main() {
     expect(find.text('下一个'), findsOneWidget);
     await tester.tap(find.text('下一个'));
     expect(tapped, isTrue);
+  });
+
+  testWidgets('mobile president sees large labeled confirm and reject', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      _harness(
+        390,
+        row: ProposalIntakeRow.fromJson({
+          'id': 1,
+          'code': 'TA-2026-0001',
+          'title': 'Fintech保险分发试点',
+          'status': 'pending_president',
+          'createdBy': 11,
+          'form': {'presidentUserId': 11, 'president': '王奕凡'},
+        }),
+      ),
+    );
+    await tester.pump();
+
+    final approve = find.byKey(const ValueKey('proposal-president-approve'));
+    final reject = find.byKey(const ValueKey('proposal-president-reject'));
+    expect(approve, findsOneWidget);
+    expect(reject, findsOneWidget);
+    expect(find.text('确认通过'), findsWidgets);
+    expect(find.text('驳回'), findsWidgets);
+    expect(tester.getSize(approve).height, greaterThanOrEqualTo(48));
+    expect(tester.getSize(reject).height, greaterThanOrEqualTo(48));
+    expect(find.byTooltip('确认通过'), findsNothing);
+  });
+
+  testWidgets('mobile non-president does not see decision bar', (tester) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      _harness(
+        390,
+        session: AuthSession.fromJson(const {
+          'userId': 12,
+          'displayName': '李思',
+        }),
+        row: ProposalIntakeRow.fromJson({
+          'id': 1,
+          'code': 'TA-2026-0001',
+          'status': 'pending_president',
+          'createdBy': 11,
+          'form': {'presidentUserId': 11, 'president': '王奕凡'},
+        }),
+      ),
+    );
+    await tester.pump();
+    expect(find.byKey(const ValueKey('proposal-president-approve')), findsNothing);
+    expect(find.byKey(const ValueKey('proposal-president-reject')), findsNothing);
   });
 
   testWidgets('long core terms expand to show full content', (tester) async {

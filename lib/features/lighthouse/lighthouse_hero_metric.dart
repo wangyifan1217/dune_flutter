@@ -42,8 +42,13 @@ const lighthouseHeroSectionIconKeys = <String, String>{
   'cash': 'wallet',
   'profit': 'trendingUp',
 };
+/// 「规模」语义色。hero 规模卡的 accent 和走势图的规模线族（核销主线 /
+/// 销售细线 / 两者之间的带 / 月末预测虚线）共用它 —— 两处同色才能让
+/// 「规模」在跨屏时是同一个东西，所以抽成一个常量，别再各写各的字面量。
+const int lighthouseScaleAccentValue = 0xFF7565C7;
+
 const lighthouseHeroSectionAccentValues = <String, int>{
-  'scale': 0xFF7565C7,
+  'scale': lighthouseScaleAccentValue,
   'cost': 0xFFB47A32,
   'cash': 0xFF7B5CD8,
   'profit': 0xFF5C6FB5,

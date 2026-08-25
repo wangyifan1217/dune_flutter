@@ -732,6 +732,92 @@ class ProposalPills extends StatelessWidget {
   );
 }
 
+class ProposalPresidentDecisionBar extends StatelessWidget {
+  const ProposalPresidentDecisionBar({
+    super.key,
+    required this.onApprove,
+    required this.onReject,
+  });
+
+  final VoidCallback onApprove;
+  final VoidCallback onReject;
+
+  @override
+  Widget build(BuildContext context) {
+    const height = 48.0;
+    return SafeArea(
+      top: false,
+      child: DecoratedBox(
+        decoration: const BoxDecoration(
+          color: Color(0xFFFBFAFD),
+          border: Border(top: BorderSide(color: Color(0xFFEAE3F0))),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                '最终确认',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: ProposalPalette.text2,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      key: const ValueKey('proposal-president-reject'),
+                      onPressed: onReject,
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: ProposalPalette.coral,
+                        side: const BorderSide(color: Color(0xFFE7C2B0)),
+                        minimumSize: const Size(0, height),
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                      ),
+                      child: const Text(
+                        '驳回',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: FilledButton(
+                      key: const ValueKey('proposal-president-approve'),
+                      onPressed: onApprove,
+                      style: FilledButton.styleFrom(
+                        backgroundColor: ProposalPalette.purpleDeep,
+                        foregroundColor: Colors.white,
+                        minimumSize: const Size(0, height),
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                      ),
+                      child: const Text(
+                        '确认通过',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class ProposalNextPendingFooter extends StatelessWidget {
   const ProposalNextPendingFooter({
     super.key,

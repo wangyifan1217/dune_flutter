@@ -81,7 +81,10 @@ class _TauVoiceCallPageState extends State<TauVoiceCallPage>
   void initState() {
     super.initState();
     _client = TauVoiceCallClient(widget.session);
-    _player = AudioPlayer();
+    _player = AudioPlayer(
+      handleInterruptions: defaultTargetPlatform != TargetPlatform.iOS,
+      handleAudioSessionActivation: defaultTargetPlatform != TargetPlatform.iOS,
+    );
     _pulse = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1200),
@@ -184,8 +187,12 @@ class _TauVoiceCallPageState extends State<TauVoiceCallPage>
       }
       _callStarted = true;
       _startedAt = DateTime.now();
-      unawaited(_startCallKit());
       unawaited(_startAuditSession());
+      try {
+        await _startCallKit();
+      } catch (_) {
+        // CallKit is best-effort; capture and playback must still start.
+      }
     } else if (_recording) {
       return;
     }
@@ -459,7 +466,19 @@ class _TauVoiceCallPageState extends State<TauVoiceCallPage>
   void _showError(String message) {
     ScaffoldMessenger.of(
       context,
-    ).showSnackBar(SnackBar(content: Text(message)));
+    ).showSnackBar(SnackBar(content: Text(_friendlyCallError(message))));
+  }
+
+  String _friendlyCallError(String message) {
+    final text = message.replaceFirst('Exception: ', '');
+    final low = text.toLowerCase();
+    if (low.contains('561017449') ||
+        low.contains('osstatus') ||
+        low.contains('cannotstartplaying') ||
+        low.contains('voice_call_play_failed')) {
+      return '暂时无法播放语音，请再说一次';
+    }
+    return text;
   }
 
   @override

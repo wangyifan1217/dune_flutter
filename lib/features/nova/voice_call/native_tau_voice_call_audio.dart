@@ -113,6 +113,34 @@ class NativeTauVoiceCallAudio {
     }
   }
 
+  Future<void> playWav(Uint8List bytes) async {
+    if (kIsWeb ||
+        (defaultTargetPlatform != TargetPlatform.iOS &&
+            defaultTargetPlatform != TargetPlatform.android)) {
+      return;
+    }
+    try {
+      await _channel.invokeMethod<void>('play', bytes);
+    } on PlatformException catch (e) {
+      throw Exception(e.message ?? '无法播放语音');
+    } on MissingPluginException {
+      // Desktop and web builds intentionally have no native call channel.
+    }
+  }
+
+  Future<void> stopPlayback() async {
+    if (kIsWeb ||
+        (defaultTargetPlatform != TargetPlatform.iOS &&
+            defaultTargetPlatform != TargetPlatform.android)) {
+      return;
+    }
+    try {
+      await _channel.invokeMethod<void>('stopPlayback');
+    } on MissingPluginException {
+      // Desktop and web builds intentionally have no native call channel.
+    }
+  }
+
   /// Stops capture and releases the voice communication audio route.
   Future<void> stop() async {
     if (!isSupported) return;

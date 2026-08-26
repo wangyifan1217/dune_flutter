@@ -7,6 +7,8 @@ import 'package:ffi/ffi.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:path_provider/path_provider.dart';
 
+import 'native_tau_voice_call_audio.dart';
+
 const _sndSync = 0x0000;
 const _sndNoDefault = 0x0002;
 const _sndFilename = 0x00020000;
@@ -29,6 +31,10 @@ Future<void> playTauVoiceBytes(
   bool Function()? isCancelled,
 }) async {
   if (isCancelled?.call() == true) return;
+  if (Platform.isIOS || Platform.isAndroid) {
+    await NativeTauVoiceCallAudio.instance.playWav(bytes);
+    return;
+  }
   final ext = mimeType.contains('wav')
       ? 'wav'
       : mimeType.contains('ogg')
@@ -49,6 +55,11 @@ Future<void> playTauVoiceBytes(
 Future<void> stopTauVoicePlayback(AudioPlayer player) async {
   if (Platform.isWindows) {
     _lookupPlaySound()?.call(nullptr, 0, 0);
+  }
+  if (Platform.isIOS || Platform.isAndroid) {
+    try {
+      await NativeTauVoiceCallAudio.instance.stopPlayback();
+    } catch (_) {}
   }
   try {
     await player.stop();

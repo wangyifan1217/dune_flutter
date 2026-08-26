@@ -142,6 +142,7 @@ final class TauVoiceCallCallKit: NSObject, CXProviderDelegate {
       return
     }
 
+    try? TauVoiceCallAudio.configureSession(activate: false)
     let now = Date()
     provider.reportOutgoingCall(with: action.callUUID, startedConnectingAt: now)
     provider.reportOutgoingCall(with: action.callUUID, connectedAt: now)
@@ -165,7 +166,9 @@ final class TauVoiceCallCallKit: NSObject, CXProviderDelegate {
     action.fail()
   }
 
-  func provider(_ provider: CXProvider, didActivate audioSession: AVAudioSession) {}
+  func provider(_ provider: CXProvider, didActivate audioSession: AVAudioSession) {
+    TauVoiceCallAudio.shared?.handleAudioSessionActivated()
+  }
 
   func provider(_ provider: CXProvider, didDeactivate audioSession: AVAudioSession) {}
 

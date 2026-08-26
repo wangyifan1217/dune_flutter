@@ -141,6 +141,99 @@ void main() {
     expect(form['projectCost'], 10);
   });
 
+  test('selected project cost items require settlement terms', () {
+    const catalog = [
+      ProposalCostItemOption(code: 'ap_YFFY_JGFY', name: '机构返佣'),
+    ];
+    expect(
+      proposalIntakeCostItemSettleIssues(
+        {
+          'costItems': ['机构返佣'],
+        },
+        catalog: catalog,
+      ),
+      ['项目成本「机构返佣」请填写结算单价/比例、结算规则、对方主体、我方主体、税率'],
+    );
+
+    var form = proposalSyncCostSelection(
+      form: {
+        'costItemSettleTerms': {
+          'ap_YFFY_JGFY': {
+            'settlePrice': '1.2%',
+            'settleRule': '核销结算',
+            'counterparty': '中石化',
+            'ourParty': '沙丘',
+            'taxRate': '6%',
+          },
+          'ap_FW_PTF': {
+            'settlePrice': '2%',
+            'settleRule': '月结',
+            'counterparty': '中石油',
+            'ourParty': '沙丘',
+            'taxRate': '6%',
+          },
+        },
+      },
+      names: ['机构返佣'],
+      catalog: catalog,
+      namesKey: 'costItems',
+      codesKey: 'costItemCodes',
+      amountsKey: 'costItemAmounts',
+      totalKey: 'projectCost',
+      settleTermsKey: 'costItemSettleTerms',
+    );
+    expect(form['costItemSettleTerms'].keys, ['ap_YFFY_JGFY']);
+    expect(proposalIntakeCostItemSettleIssues(form, catalog: catalog), isEmpty);
+  });
+
+  test('selected business cost items require settlement terms', () {
+    const catalog = [
+      ProposalCostItemOption(code: 'ap_YWCB_GJCH', name: '供给侧H'),
+    ];
+    expect(
+      proposalIntakeCostItemSettleIssues(
+        {
+          'businessCostItems': ['供给侧H'],
+        },
+        businessCatalog: catalog,
+      ),
+      ['业务成本「供给侧H」请填写结算单价/比例、结算规则、对方主体、我方主体、税率'],
+    );
+
+    var form = proposalSyncCostSelection(
+      form: {
+        'businessCostItemSettleTerms': {
+          'ap_YWCB_GJCH': {
+            'settlePrice': '3%',
+            'settleRule': '核销结算',
+            'counterparty': '渠道方',
+            'ourParty': '沙丘',
+            'taxRate': '6%',
+          },
+          'ap_YWCB_OTHER': {
+            'settlePrice': '1%',
+            'settleRule': '月结',
+            'counterparty': '其他',
+            'ourParty': '沙丘',
+            'taxRate': '6%',
+          },
+        },
+      },
+      names: ['供给侧H'],
+      catalog: catalog,
+      namesKey: 'businessCostItems',
+      codesKey: 'businessCostItemCodes',
+      amountsKey: 'businessCostItemAmounts',
+      totalKey: 'businessCost',
+      settleTermsKey: 'businessCostItemSettleTerms',
+    );
+    expect(form['businessCostItemSettleTerms'].keys, ['ap_YWCB_GJCH']);
+    expect(
+      proposalIntakeCostItemSettleIssues(form, businessCatalog: catalog),
+      isEmpty,
+    );
+  });
+
   test('finance cost rules fall back when missing', () {
     final options = ProposalIntakeOptions.fromJson({});
     expect(options.operatingCostRules, contains('2%'));
@@ -709,5 +802,75 @@ void main() {
   test('tech revision action labels', () {
     expect(proposalIntakeActionLabel('start_tech_revision'), '待发起科技变更');
     expect(proposalIntakeActionLabel('fill_tech'), '待填写科技');
+  });
+
+  test('launch row without channel links or reuses finance module', () {
+    const row = ProposalLaunchRow(
+      id: 'lr-1',
+      province: '河南',
+      faceValue: '100',
+      needFinanceModule: true,
+    );
+    final created = proposalIntakeLinkFinanceModule(
+      rows: const [row],
+      modules: const [],
+      launchRowId: 'lr-1',
+    );
+    expect(created.modules, hasLength(1));
+    expect(created.rows.single.financeModuleId, created.modules.single.id);
+
+    final associated = proposalIntakeLinkFinanceModule(
+      rows: [
+        const ProposalLaunchRow(
+          id: 'lr-2',
+          province: '广东',
+          faceValue: '100',
+          needFinanceModule: true,
+        ),
+      ],
+      modules: created.modules,
+      launchRowId: 'lr-2',
+      associateModuleId: created.modules.single.id,
+    );
+    expect(associated.modules, hasLength(1));
+    expect(associated.rows.single.financeModuleId, created.modules.single.id);
+  });
+
+  test('same settlement fingerprint can be reused', () {
+    const terms = ProposalFinanceSettleTerms(
+      settlePrice: '1.2%',
+      settleRule: '核销结算',
+      counterparty: '中石化',
+      ourParty: '沙丘科技',
+      taxRate: '6%',
+    );
+    const a = ProposalFinanceModule(id: 'fm-a', revenue: terms);
+    const b = ProposalFinanceModule(id: 'fm-b', revenue: terms);
+    expect(proposalIntakeMatchingFinanceModule([a], b), a);
+    expect(
+      proposalIntakeMatchingFinanceModule([a], const ProposalFinanceModule(id: 'fm-c')),
+      isNull,
+    );
+  });
+
+  test('market need-finance rows require a complete module', () {
+    final issues = proposalIntakeLaunchFinanceIssues({
+      'launchRows': [
+        {
+          'id': 'lr-1',
+          'province': '河南',
+          'faceValue': '100',
+          'needFinanceModule': true,
+        },
+        {
+          'id': 'lr-2',
+          'province': '广东',
+          'faceValue': '50',
+          'needFinanceModule': false,
+        },
+      ],
+    });
+    expect(issues, contains('上线第1行已勾选需要财务模块，请新增或关联财务模块'));
+    expect(issues.where((item) => item.contains('第2行')), isEmpty);
   });
 }

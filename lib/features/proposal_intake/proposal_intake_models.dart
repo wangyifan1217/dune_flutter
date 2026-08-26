@@ -423,6 +423,7 @@ Map<String, dynamic> proposalSyncCostSelection({
   required String codesKey,
   required String amountsKey,
   required String totalKey,
+  String settleTermsKey = '',
 }) {
   final byName = {for (final item in catalog) item.name: item.code};
   final codes = [
@@ -435,14 +436,91 @@ Map<String, dynamic> proposalSyncCostSelection({
   };
   final amounts = proposalCostAmountMap(form[amountsKey])
     ..removeWhere((id, _) => !keep.contains(id));
-  return Map<String, dynamic>.from(form)
+  final next = Map<String, dynamic>.from(form)
     ..[namesKey] = names
     ..[codesKey] = codes
     ..[amountsKey] = {
       for (final entry in amounts.entries) entry.key: entry.value,
     }
     ..[totalKey] = proposalCostAmountTotal(amounts);
+  if (settleTermsKey.isNotEmpty) {
+    final terms = proposalCostSettleTermsMap(form[settleTermsKey])
+      ..removeWhere((id, _) => !keep.contains(id));
+    next[settleTermsKey] = {
+      for (final entry in terms.entries) entry.key: entry.value.toJson(),
+    };
+  }
+  return next;
 }
+
+Map<String, ProposalFinanceSettleTerms> proposalCostSettleTermsMap(
+  Object? raw,
+) {
+  if (raw is! Map) return {};
+  final out = <String, ProposalFinanceSettleTerms>{};
+  for (final entry in raw.entries) {
+    final id = '${entry.key}'.trim();
+    if (id.isEmpty) continue;
+    out[id] = ProposalFinanceSettleTerms.fromJson(entry.value);
+  }
+  return out;
+}
+
+ProposalFinanceSettleTerms proposalCostSettleTermsOf({
+  required Map<String, ProposalFinanceSettleTerms> terms,
+  required String name,
+  required String id,
+}) => terms[id] ?? terms[name] ?? const ProposalFinanceSettleTerms();
+
+List<String> proposalIntakeNamedCostSettleIssues(
+  Map<String, dynamic> form, {
+  required String namesKey,
+  required String termsKey,
+  required String label,
+  List<ProposalCostItemOption> catalog = const [],
+}) {
+  final raw = form[namesKey];
+  if (raw is! List) return const [];
+  final names = [
+    for (final item in raw)
+      if ('$item'.trim().isNotEmpty) '$item'.trim(),
+  ];
+  if (names.isEmpty) return const [];
+  final terms = proposalCostSettleTermsMap(form[termsKey]);
+  final issues = <String>[];
+  for (final name in names) {
+    final id = proposalCostAmountId(name, catalog);
+    if (!proposalCostSettleTermsOf(
+      terms: terms,
+      name: name,
+      id: id,
+    ).isComplete) {
+      issues.add('$label「$name」请填写结算单价/比例、结算规则、对方主体、我方主体、税率');
+    }
+  }
+  return issues;
+}
+
+List<String> proposalIntakeCostItemSettleIssues(
+  Map<String, dynamic> form, {
+  List<ProposalCostItemOption> catalog = const [],
+  List<ProposalCostItemOption> businessCatalog = const [],
+}) => [
+  ...proposalIntakeNamedCostSettleIssues(
+    form,
+    namesKey: 'costItems',
+    termsKey: 'costItemSettleTerms',
+    label: '项目成本',
+    catalog: catalog,
+  ),
+  ...proposalIntakeNamedCostSettleIssues(
+    form,
+    namesKey: 'businessCostItems',
+    termsKey: 'businessCostItemSettleTerms',
+    label: '业务成本',
+    catalog: businessCatalog,
+  ),
+];
 
 class ProposalIntakeOptions {
   const ProposalIntakeOptions({
@@ -1134,4 +1212,328 @@ ProposalIntakeRow? nextProposalIntake({
   }
   if (index + 1 >= items.length) return null;
   return items[index + 1];
+}
+
+/// 结算条款：收入或单条成本共用。
+class ProposalFinanceSettleTerms {
+  const ProposalFinanceSettleTerms({
+    this.settlePrice = '',
+    this.settleRule = '',
+    this.counterparty = '',
+    this.ourParty = '',
+    this.taxRate = '',
+  });
+
+  final String settlePrice;
+  final String settleRule;
+  final String counterparty;
+  final String ourParty;
+  final String taxRate;
+
+  bool get isBlank =>
+      settlePrice.isEmpty &&
+      settleRule.isEmpty &&
+      counterparty.isEmpty &&
+      ourParty.isEmpty &&
+      taxRate.isEmpty;
+
+  bool get isComplete =>
+      settlePrice.isNotEmpty &&
+      settleRule.isNotEmpty &&
+      counterparty.isNotEmpty &&
+      ourParty.isNotEmpty &&
+      taxRate.isNotEmpty;
+
+  String get fingerprint =>
+      [settlePrice, settleRule, counterparty, ourParty, taxRate].join('|');
+
+  ProposalFinanceSettleTerms copyWith({
+    String? settlePrice,
+    String? settleRule,
+    String? counterparty,
+    String? ourParty,
+    String? taxRate,
+  }) => ProposalFinanceSettleTerms(
+    settlePrice: settlePrice ?? this.settlePrice,
+    settleRule: settleRule ?? this.settleRule,
+    counterparty: counterparty ?? this.counterparty,
+    ourParty: ourParty ?? this.ourParty,
+    taxRate: taxRate ?? this.taxRate,
+  );
+
+  Map<String, dynamic> toJson() => {
+    'settlePrice': settlePrice,
+    'settleRule': settleRule,
+    'counterparty': counterparty,
+    'ourParty': ourParty,
+    'taxRate': taxRate,
+  };
+
+  factory ProposalFinanceSettleTerms.fromJson(Object? raw) {
+    if (raw is! Map) return const ProposalFinanceSettleTerms();
+    String read(String key) => '${raw[key] ?? ''}'.trim();
+    return ProposalFinanceSettleTerms(
+      settlePrice: read('settlePrice'),
+      settleRule: read('settleRule'),
+      counterparty: read('counterparty'),
+      ourParty: read('ourParty'),
+      taxRate: read('taxRate'),
+    );
+  }
+}
+
+class ProposalFinanceCostLine {
+  const ProposalFinanceCostLine({
+    required this.id,
+    this.name = '',
+    this.terms = const ProposalFinanceSettleTerms(),
+  });
+
+  final String id;
+  final String name;
+  final ProposalFinanceSettleTerms terms;
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'name': name,
+    ...terms.toJson(),
+  };
+
+  factory ProposalFinanceCostLine.fromJson(Object? raw) {
+    if (raw is! Map) {
+      return const ProposalFinanceCostLine(id: '');
+    }
+    return ProposalFinanceCostLine(
+      id: '${raw['id'] ?? ''}'.trim(),
+      name: '${raw['name'] ?? ''}'.trim(),
+      terms: ProposalFinanceSettleTerms.fromJson(raw),
+    );
+  }
+}
+
+class ProposalFinanceModule {
+  const ProposalFinanceModule({
+    required this.id,
+    this.title = '',
+    this.revenue = const ProposalFinanceSettleTerms(),
+    this.projectCosts = const [],
+    this.businessCosts = const [],
+  });
+
+  final String id;
+  final String title;
+  final ProposalFinanceSettleTerms revenue;
+  final List<ProposalFinanceCostLine> projectCosts;
+  final List<ProposalFinanceCostLine> businessCosts;
+
+  String get fingerprint {
+    final costs = [
+      for (final line in projectCosts) 'P:${line.name}:${line.terms.fingerprint}',
+      for (final line in businessCosts) 'B:${line.name}:${line.terms.fingerprint}',
+    ]..sort();
+    return '${revenue.fingerprint}#${costs.join(';')}';
+  }
+
+  bool get hasIdentity => !revenue.isBlank;
+
+  bool get revenueComplete => revenue.isComplete;
+
+  bool get costsComplete {
+    for (final line in [...projectCosts, ...businessCosts]) {
+      if (line.name.isEmpty || !line.terms.isComplete) return false;
+    }
+    return true;
+  }
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'title': title,
+    'revenue': revenue.toJson(),
+    'projectCosts': [for (final line in projectCosts) line.toJson()],
+    'businessCosts': [for (final line in businessCosts) line.toJson()],
+  };
+
+  factory ProposalFinanceModule.fromJson(Object? raw) {
+    if (raw is! Map) return const ProposalFinanceModule(id: '');
+    List<ProposalFinanceCostLine> lines(Object? value) {
+      if (value is! List) return const [];
+      return [
+        for (final item in value)
+          if (item is Map) ProposalFinanceCostLine.fromJson(item),
+      ].where((line) => line.id.isNotEmpty || line.name.isNotEmpty).toList();
+    }
+
+    return ProposalFinanceModule(
+      id: '${raw['id'] ?? ''}'.trim(),
+      title: '${raw['title'] ?? ''}'.trim(),
+      revenue: ProposalFinanceSettleTerms.fromJson(raw['revenue']),
+      projectCosts: lines(raw['projectCosts']),
+      businessCosts: lines(raw['businessCosts']),
+    );
+  }
+}
+
+class ProposalLaunchRow {
+  const ProposalLaunchRow({
+    required this.id,
+    this.province = '',
+    this.faceValue = '',
+    this.needFinanceModule = false,
+    this.financeModuleId = '',
+  });
+
+  final String id;
+  final String province;
+  final String faceValue;
+  final bool needFinanceModule;
+  final String financeModuleId;
+
+  bool get isBlank =>
+      province.isEmpty && faceValue.isEmpty && !needFinanceModule;
+
+  ProposalLaunchRow copyWith({
+    String? province,
+    String? faceValue,
+    bool? needFinanceModule,
+    String? financeModuleId,
+  }) => ProposalLaunchRow(
+    id: id,
+    province: province ?? this.province,
+    faceValue: faceValue ?? this.faceValue,
+    needFinanceModule: needFinanceModule ?? this.needFinanceModule,
+    financeModuleId: financeModuleId ?? this.financeModuleId,
+  );
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'province': province,
+    'faceValue': faceValue,
+    'needFinanceModule': needFinanceModule,
+    'financeModuleId': financeModuleId,
+  };
+
+  factory ProposalLaunchRow.fromJson(Object? raw) {
+    if (raw is! Map) return const ProposalLaunchRow(id: '');
+    return ProposalLaunchRow(
+      id: '${raw['id'] ?? ''}'.trim(),
+      province: '${raw['province'] ?? ''}'.trim(),
+      faceValue: '${raw['faceValue'] ?? ''}'.trim(),
+      needFinanceModule: _asBool(raw['needFinanceModule']),
+      financeModuleId: '${raw['financeModuleId'] ?? ''}'.trim(),
+    );
+  }
+}
+
+bool _asBool(Object? value) {
+  if (value is bool) return value;
+  final text = '$value'.trim().toLowerCase();
+  return text == 'true' || text == '1' || text == '需要' || text == 'yes';
+}
+
+List<ProposalLaunchRow> proposalIntakeLaunchRows(Map<String, dynamic> form) {
+  final raw = form['launchRows'];
+  if (raw is! List) return const [];
+  return [
+    for (final item in raw)
+      if (item is Map) ProposalLaunchRow.fromJson(item),
+  ].where((row) => row.id.isNotEmpty).toList();
+}
+
+List<ProposalFinanceModule> proposalIntakeFinanceModules(
+  Map<String, dynamic> form,
+) {
+  final raw = form['financeModules'];
+  if (raw is! List) return const [];
+  return [
+    for (final item in raw)
+      if (item is Map) ProposalFinanceModule.fromJson(item),
+  ].where((item) => item.id.isNotEmpty).toList();
+}
+
+String proposalIntakeNewLaunchId() =>
+    'lr-${DateTime.now().microsecondsSinceEpoch}';
+
+String proposalIntakeNewFinanceModuleId() =>
+    'fm-${DateTime.now().microsecondsSinceEpoch}';
+
+/// 条款相同（且已填过收入条款）则返回可关联的模块。
+ProposalFinanceModule? proposalIntakeMatchingFinanceModule(
+  List<ProposalFinanceModule> modules,
+  ProposalFinanceModule candidate, {
+  String skipId = '',
+}) {
+  if (!candidate.hasIdentity) return null;
+  for (final item in modules) {
+    if (item.id.isEmpty || item.id == skipId || item.id == candidate.id) {
+      continue;
+    }
+    if (item.fingerprint == candidate.fingerprint) return item;
+  }
+  return null;
+}
+
+({List<ProposalLaunchRow> rows, List<ProposalFinanceModule> modules})
+proposalIntakeLinkFinanceModule({
+  required List<ProposalLaunchRow> rows,
+  required List<ProposalFinanceModule> modules,
+  required String launchRowId,
+  String? associateModuleId,
+}) {
+  final nextRows = [for (final row in rows) row];
+  final nextModules = [for (final item in modules) item];
+  final index = nextRows.indexWhere((row) => row.id == launchRowId);
+  if (index < 0) {
+    return (rows: nextRows, modules: nextModules);
+  }
+  var moduleId = (associateModuleId ?? '').trim();
+  if (moduleId.isEmpty) {
+    final created = ProposalFinanceModule(
+      id: proposalIntakeNewFinanceModuleId(),
+      title: '财务模块${nextModules.length + 1}',
+    );
+    nextModules.add(created);
+    moduleId = created.id;
+  } else if (!nextModules.any((item) => item.id == moduleId)) {
+    return (rows: nextRows, modules: nextModules);
+  }
+  nextRows[index] = nextRows[index].copyWith(financeModuleId: moduleId);
+  return (rows: nextRows, modules: nextModules);
+}
+
+List<String> proposalIntakeLaunchFinanceIssues(Map<String, dynamic> form) {
+  final rows = proposalIntakeLaunchRows(form);
+  final modules = {
+    for (final item in proposalIntakeFinanceModules(form)) item.id: item,
+  };
+  final issues = <String>[];
+  for (var i = 0; i < rows.length; i++) {
+    final row = rows[i];
+    final n = i + 1;
+    if (row.province.isEmpty || row.faceValue.isEmpty) {
+      issues.add('上线第$n行请填写省份和面值');
+    }
+    if (!row.needFinanceModule) continue;
+    if (row.financeModuleId.isEmpty || modules[row.financeModuleId] == null) {
+      issues.add('上线第$n行已勾选需要财务模块，请新增或关联财务模块');
+      continue;
+    }
+    final module = modules[row.financeModuleId]!;
+    if (!module.revenueComplete) {
+      issues.add('财务模块「${module.title.isEmpty ? module.id : module.title}」收入条款未填完');
+    }
+    if (!module.costsComplete) {
+      issues.add('财务模块「${module.title.isEmpty ? module.id : module.title}」成本项条款未填完');
+    }
+  }
+  return issues;
+}
+
+List<String> proposalIntakeLaunchModuleReviewKeys(Map<String, dynamic> form) {
+  final ids = <String>{};
+  for (final row in proposalIntakeLaunchRows(form)) {
+    if (row.needFinanceModule && row.financeModuleId.isNotEmpty) {
+      ids.add(row.financeModuleId);
+    }
+  }
+  return [for (final id in ids) 'launchModule:$id'];
 }

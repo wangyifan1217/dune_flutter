@@ -10,7 +10,7 @@ const int lighthouseCompactHeroKpiFlex = 3;
 const int lighthouseCompactHeroTrendFlex = 7;
 
 /// 给左侧 KPI（标签 + 大数 +「↓xx% vs 昨日」）留足高度，避免环比被裁切。
-const double lighthouseCompactHeroSparkHeight = 100;
+const double lighthouseCompactHeroSparkHeight = 180;
 const double lighthouseCompactHeroMetricGap = 6;
 const bool lighthouseHeroUsesCategoryTint = false;
 const bool lighthouseHeroUsesAccentRail = false;
@@ -51,11 +51,56 @@ const int lighthouseScaleAccentValue = 0xFF7565C7;
 /// APP 一级/二级更窄，副行再一截断，毛利数字也会一起消失。
 const int lighthouseProfitAccentValue = 0xFFC45C26;
 
-/// 走势图收入线。冷蓝，跟紫色规模带、琥珀成本、橙色毛利都能分开。
-const int lighthouseRevenueAccentValue = 0xFF185FA5;
+/// 走势图收入线。青 —— 由 #185FA5（冷蓝）换来。
+///
+/// 换的原因是量过的：蓝 #185FA5 与规模紫 #7565C7 在 OKLab 下正常视力色差只有
+/// 12.3（安全线 15），红绿色觉下只有 6.6 —— 它们本来就是一个色团，五条线叠在
+/// 一起时收入和规模根本分不开。换成青之后，紫/青/琥珀/橙 四色两两最差色差：
+/// 正常视力 13.0、红绿色觉 8.4，紫青这一对提到 20.0。
+///
+/// 剩下那个 13.0 是「成本琥珀 ↔ 毛利橙」—— 相邻色相，靠调深浅解决不了。它现在
+/// 可接受，是因为 v16 的三种排版都不再把线叠在一起：每条线自己一格 / 一条带，
+/// 身份由「位置 + 常驻名字和数字」承担，颜色只是辅助。真要把这一对也拉开，
+/// 毛利得挪到朱红 #D63F3F（四色全过线）—— 但中国金融色里红=涨，得先确认。
+const int lighthouseRevenueAccentValue = 0xFF0E9384;
 
 /// 走势图成本线。琥珀，对应利润恒等式「支出」，不能再跟规模同紫。
 const int lighthouseCostAccentValue = 0xFF854F0B;
+
+/// 核销 / 销售几乎同量级，叠同一根 Y 会贴成一条线，所以各占一行、各自归一。
+/// 收入 / 成本 / 毛利量级接近，仍共用一格。
+bool lighthouseHeroTrendIsScaleKey(String key) =>
+    key == 'verifiedSales' || key == 'sales';
+
+/// 规模每条单独一格；损益三条合为一格。
+List<List<int>> lighthouseHeroTrendPaneIndexes(List<String> keys) {
+  final scale = <int>[];
+  final pnl = <int>[];
+  for (var i = 0; i < keys.length; i++) {
+    if (lighthouseHeroTrendIsScaleKey(keys[i])) {
+      scale.add(i);
+    } else {
+      pnl.add(i);
+    }
+  }
+  return [
+    for (final i in scale) <int>[i],
+    if (pnl.isNotEmpty) pnl,
+  ];
+}
+
+/// 叠线的损益格多留高度；规模单行矮一档。
+int lighthouseHeroTrendPaneFlex(int lineCount) => lineCount >= 3 ? 3 : 2;
+
+/// 格内量级差得开时把下沿收到 0，让收入 / 成本 / 毛利的高低有真实比例。
+/// 核销和销售几乎贴在一起，不能收到 0，否则两条都会贴死在格顶。
+bool lighthouseHeroPaneSnapsToZero({
+  required double min,
+  required double max,
+}) {
+  if (min < -1e-9 || max <= 1e-9) return false;
+  return min < max * 0.5;
+}
 
 /// APP 窄屏图例必须换行；毛利/收入/成本排在可裁的规模副线前面。
 List<String> lighthouseTrendPnlLegendKeys({
@@ -70,6 +115,56 @@ List<String> lighthouseTrendPnlLegendKeys({
     if (hasCost) 'cost',
     if (hasScaleAlt) 'scaleAlt',
   ];
+}
+
+/// `_TrendChart` 五条序列在 `available` 里的下标。
+/// [revenue, cost, profit, scale, scaleAlt]
+const lighthouseTrendSeriesKeys = <String>[
+  'revenue',
+  'cost',
+  'profit',
+  'scale',
+  'scaleAlt',
+];
+
+/// 点图例：再点当前项（或点「全部」）恢复全显；点另一项只留该项。
+String? lighthouseTrendSoloAfterTap(String? current, String tapped) {
+  if (tapped.isEmpty) return null;
+  return current == tapped ? null : tapped;
+}
+
+/// 应用 solo 后的可见性，长度恒为 5。solo 指向没有数据的项时保持原样。
+List<bool> lighthouseTrendVisibleFlags({
+  required bool hasRevenue,
+  required bool hasCost,
+  required bool hasProfit,
+  required bool hasScale,
+  required bool hasScaleAlt,
+  String? soloKey,
+}) {
+  final base = <bool>[
+    hasRevenue,
+    hasCost,
+    hasProfit,
+    hasScale,
+    hasScaleAlt,
+  ];
+  if (soloKey == null || soloKey.isEmpty) return base;
+  final i = lighthouseTrendSeriesKeys.indexOf(soloKey);
+  if (i < 0 || !base[i]) return base;
+  return <bool>[
+    for (var k = 0; k < 5; k++) k == i,
+  ];
+}
+
+/// 粗线 / 填充 / MAX·MIN 跟哪条走：规模在场时归规模，否则第一条可见的
+/// 规模副线 / 毛利 / 收入 / 成本。
+int lighthouseTrendHeroIndex(List<bool> available) {
+  const order = <int>[3, 4, 2, 0, 1];
+  for (final i in order) {
+    if (i < available.length && available[i]) return i;
+  }
+  return 2;
 }
 
 const lighthouseHeroSectionAccentValues = <String, int>{
@@ -663,6 +758,42 @@ List<double> lighthouseGrossMarginSeries({
 }
 
 bool lighthouseCanFallbackToRootTrend({required bool isDrill}) => !isDrill;
+
+/// L3 可以用「本实体在交叉维上的走势」，不能用 L2 父级走势冒充。
+bool lighthouseCanFallbackToChildTrend({required bool isDrill}) => isDrill;
+
+/// 子维对应哪张走势缓存。没有一级 tab 的维（SKU）返回 null，只吃详情 payload。
+String? lighthouseTrendTabForSubDim(String dim) {
+  switch (dim) {
+    case 'product':
+    case 'supply':
+    case 'channel':
+    case 'province':
+    case 'project':
+      return dim;
+    default:
+      return null;
+  }
+}
+
+bool lighthouseTrendMapUsable(Map<String, dynamic> t) {
+  bool longEnough(Object? raw) {
+    if (raw is! List) return false;
+    var n = 0;
+    for (final item in raw) {
+      if (item is num) n++;
+    }
+    return n >= 2;
+  }
+
+  return longEnough(t['profit']) ||
+      longEnough(t['points']) ||
+      longEnough(t['revenue']) ||
+      longEnough(t['sales']) ||
+      longEnough(t['verifiedSales']) ||
+      longEnough(t['totalCost']) ||
+      longEnough(t['cost']);
+}
 
 bool lighthouseCanUseRootComparison({required bool hasTotalsOverride}) =>
     !hasTotalsOverride;

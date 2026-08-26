@@ -1043,6 +1043,27 @@ _TrendBounds _computeBounds(_TrendSeries s, {double? scaleForecast}) {
   );
 }
 
+({List<double> pts, _SeriesRange range, Color color}) _trendPaintSpec({
+  required _TrendSeries series,
+  required _TrendBounds bounds,
+  required List<Color> colors,
+  required int index,
+}) {
+  final scaleColor = colors.length > 3 ? colors[3] : colors[2];
+  switch (index) {
+    case 0:
+      return (pts: series.revenue, range: bounds.revenue, color: colors[0]);
+    case 1:
+      return (pts: series.cost, range: bounds.cost, color: colors[1]);
+    case 2:
+      return (pts: series.profit, range: bounds.profit, color: colors[2]);
+    case 4:
+      return (pts: series.scaleAlt, range: bounds.scale, color: scaleColor);
+    default:
+      return (pts: series.scale, range: bounds.scale, color: scaleColor);
+  }
+}
+
 // ═════════════════════════════════════════════════════════════════════════════
 // 平滑折线 helper (v2.8 · Chart smoothing)
 //   把点序 → cubic bezier path,用 Catmull-Rom → Bezier 换算。tension=1.0 等价
@@ -1100,6 +1121,97 @@ void appendSmoothPath(Path path, List<Offset> points, {double tension = 1.0}) {
       p2.dy,
     );
   }
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// _addMonotonePath —— 单调三次插值 (Fritsch–Carlson)
+//
+//   为什么不接着用上面的 Catmull-Rom：Catmull-Rom 的控制点只看邻居的位差，
+//   在拐点处会 overshoot —— 画出数据里根本不存在的峰和谷。折线是装饰图时这
+//   只是风格，是财务折线时它就是把假数据画进了图里（8.26 那道断崖之前的小
+//   起伏，有一部分就是它 overshoot 出来的，不全是真数据）。
+//
+//   Fritsch–Carlson 的做法：先给每个点算一条切线，再逐段把切线夹回「不越过
+//   相邻数据点」的范围（α² + β² ≤ 9 判据），保证曲线在每个单调区间内保持
+//   单调 —— 两点之间既不会高过较高的那点，也不会低过较低的那点。
+//   代价是拐点附近略显生硬，但那正是数据本来的样子。
+// ═════════════════════════════════════════════════════════════════════════════
+void _addMonotonePath(Path path, List<Offset> points) {
+  final n = points.length;
+  if (n == 0) return;
+  path.moveTo(points[0].dx, points[0].dy);
+  if (n == 1) return;
+  if (n == 2) {
+    path.lineTo(points[1].dx, points[1].dy);
+    return;
+  }
+  final dx = List<double>.filled(n - 1, 0);
+  final delta = List<double>.filled(n - 1, 0);
+  for (var i = 0; i < n - 1; i++) {
+    final d = points[i + 1].dx - points[i].dx;
+    // x 严格递增是前提（等间距采样），1e-9 只是防除零的兜底。
+    dx[i] = d.abs() < 1e-9 ? 1e-9 : d;
+    delta[i] = (points[i + 1].dy - points[i].dy) / dx[i];
+  }
+  final m = List<double>.filled(n, 0);
+  m[0] = delta[0];
+  m[n - 1] = delta[n - 2];
+  for (var i = 1; i < n - 1; i++) {
+    // 左右斜率异号 = 这里是拐点，切线必须归 0，否则曲线会从拐点冲出去。
+    m[i] = delta[i - 1] * delta[i] <= 0 ? 0.0 : (delta[i - 1] + delta[i]) / 2;
+  }
+  for (var i = 0; i < n - 1; i++) {
+    if (delta[i].abs() < 1e-12) {
+      // 平段两端切线都归 0，否则平的地方会鼓起来。
+      m[i] = 0;
+      m[i + 1] = 0;
+      continue;
+    }
+    final a = m[i] / delta[i];
+    final b = m[i + 1] / delta[i];
+    final q = a * a + b * b;
+    if (q > 9) {
+      final t = 3 / math.sqrt(q);
+      m[i] = t * a * delta[i];
+      m[i + 1] = t * b * delta[i];
+    }
+  }
+  for (var i = 0; i < n - 1; i++) {
+    final p1 = points[i], p2 = points[i + 1];
+    // Hermite → 三次 Bezier：控制点落在段长的 1/3 处，这是两种表示的等价换算，
+    // 不是可调的手感参数。
+    final h = dx[i] / 3;
+    path.cubicTo(
+      p1.dx + h,
+      p1.dy + m[i] * h,
+      p2.dx - h,
+      p2.dy - m[i + 1] * h,
+      p2.dx,
+      p2.dy,
+    );
+  }
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// _niceStep —— 人能心算的刻度步长
+//   span / target 落到 {1, 2, 2.5, 5} × 10^k 里最接近的一档。target = 3 是因为
+//   小尺寸图上水平网格最多给 3 条，步长按 3 格算才不会算出一格都放不下的数。
+// ═════════════════════════════════════════════════════════════════════════════
+double _niceStep(double span, {int target = 3}) {
+  if (!span.isFinite || span <= 0) return 1;
+  final raw = span / target;
+  final mag = math.pow(10, (math.log(raw) / math.ln10).floor()).toDouble();
+  final norm = raw / mag;
+  final mult = norm <= 1
+      ? 1.0
+      : norm <= 2
+      ? 2.0
+      : norm <= 2.5
+      ? 2.5
+      : norm <= 5
+      ? 5.0
+      : 10.0;
+  return mult * mag;
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -1747,25 +1859,26 @@ class _TrendLinesPainter extends CustomPainter {
     double yOf(double v, _SeriesRange r) =>
         padTop + (r.max - v) / r.span * usableH;
 
-    // v3.8 · MAX/MIN 虚线 hairline —— 只画毛利这条(hero series)的 max/min,
-    //   editorial 手法,比 3 条 grid 更聚焦."这行的毛利在哪里到顶/触底"一眼可读.
-    // v4.0 · hero 线从毛利改成「规模」—— 会议: "如果只能显示一个,我更希望
-    //        显示规模。规模能推导利润"。规模缺失时退回毛利,保持旧行为.
-    final heroIsScale =
-        available.length > 3 && available[3] && series.scale.length >= 2;
-    final heroPts = heroIsScale ? series.scale : series.profit;
-    final heroBounds = heroIsScale ? bounds.scale : bounds.profit;
-    final heroColor = heroIsScale && colors.length > 3 ? colors[3] : colors[2];
-    // 规模和毛利都缺时不画 hero —— pad 出来的全 0 序列不能当成一条线.
-    final heroDrawable =
-        heroPts.length >= 2 &&
-        (heroIsScale || (available.length > 2 && available[2]));
-    // 第二条规模线只在 hero 也是规模时才画 —— 单独一条 alt 没有参照物。
+    // MAX/MIN / 填充 / 粗线跟「当前可见的主线」走。图例 solo 只留一条时，
+    // 那条就是主线，避免毛利被千万级规模压扁、或收入单独看时没有体积。
+    final flags = available.length >= 5
+        ? available
+        : <bool>[
+            for (var i = 0; i < 5; i++) i < available.length && available[i],
+          ];
+    final heroIndex = lighthouseTrendHeroIndex(flags);
+    final heroSpec = _trendPaintSpec(
+      series: series,
+      bounds: bounds,
+      colors: colors,
+      index: heroIndex,
+    );
+    final heroPts = heroSpec.pts;
+    final heroBounds = heroSpec.range;
+    final heroColor = heroSpec.color;
+    final heroDrawable = flags[heroIndex] && heroPts.length >= 2;
     final altDrawable =
-        heroIsScale &&
-        available.length > 4 &&
-        available[4] &&
-        series.scaleAlt.length >= 2;
+        flags[3] && flags[4] && series.scale.length >= 2 && series.scaleAlt.length >= 2;
     final actualMaxProfit = heroPts.isEmpty ? 0.0 : heroPts.reduce(math.max);
     final actualMinProfit = heroPts.isEmpty ? 0.0 : heroPts.reduce(math.min);
     // 换算成 y 坐标 (用 hero bounds,跟画线保持一致)
@@ -1884,12 +1997,8 @@ class _TrendLinesPainter extends CustomPainter {
       }
     }
 
-    // v4.1 · 绘制顺序:MAX/MIN hairline (已画) → 规模带 (核销↔销售, 没有第二
-    //   条规模时退回 hero fill area) → 副线 (收入/成本 浅描) → 毛利 (规模在场
-    //   时降到 1.4px) → 另一口径规模 (1.1px 同色) → 主线 (hero 粗) → 数据点
-    //   (仅主线) → 末端 dot → 月化预测虚线.
-    final hasProfitLine =
-        available.length > 2 && available[2] && series.profit.length >= 2;
+    // 绘制顺序:MAX/MIN hairline → 规模带（核销↔销售都在）或主线 fill →
+    //   副线 → 主线 → 末端 dot → 月化预测虚线（仅规模主线）。
     if (altDrawable) {
       // 「销售 − 核销」带：上缘销售、下缘核销（或反之），带宽 = 未核销部分。
       // 比两条各自 fill-to-baseline 的线更能说明问题 —— 看的是差额。
@@ -1914,58 +2023,36 @@ class _TrendLinesPainter extends CustomPainter {
     } else if (heroDrawable) {
       drawFillArea(heroPts, heroColor, heroBounds);
     }
-    if (altDrawable) {
-      // 同色系、细一档：两条都是「规模」，层级靠线宽而不是换个颜色。
-      drawLine(
-        series.scaleAlt,
-        heroColor,
-        heroBounds,
-        strokeWidth: 1.1,
-        alpha: 150,
+    for (var i = 0; i < 5; i++) {
+      if (!flags[i] || i == heroIndex) continue;
+      final spec = _trendPaintSpec(
+        series: series,
+        bounds: bounds,
+        colors: colors,
+        index: i,
       );
-    }
-    if (available.isNotEmpty && available[0]) {
+      final besideScale = i == 4 && flags[3];
       drawLine(
-        series.revenue,
-        colors[0],
-        bounds.revenue,
-        strokeWidth: 1.4,
-        alpha: 255,
-      );
-    }
-    if (available.length > 1 && available[1]) {
-      drawLine(
-        series.cost,
-        colors[1],
-        bounds.cost,
-        strokeWidth: 1.4,
-        alpha: 255,
-      );
-    }
-    if (hasProfitLine && heroIsScale) {
-      drawLine(
-        series.profit,
-        colors[2],
-        bounds.profit,
-        strokeWidth: 1.7,
-        alpha: 255,
+        spec.pts,
+        spec.color,
+        spec.range,
+        strokeWidth: besideScale ? 1.1 : (i == 2 ? 1.7 : 1.4),
+        alpha: besideScale ? 150 : 255,
       );
     }
     if (heroDrawable) {
       drawLine(heroPts, heroColor, heroBounds, strokeWidth: 2.0);
       drawDataDots(heroPts, heroColor, heroBounds);
     }
-    if (available.isNotEmpty && available[0]) {
-      drawEndDot(series.revenue, colors[0], bounds.revenue);
-    }
-    if (available.length > 1 && available[1]) {
-      drawEndDot(series.cost, colors[1], bounds.cost);
-    }
-    if (hasProfitLine && heroIsScale) {
-      drawEndDot(series.profit, colors[2], bounds.profit);
-    }
-    if (altDrawable) {
-      drawEndDot(series.scaleAlt, heroColor, heroBounds);
+    for (var i = 0; i < 5; i++) {
+      if (!flags[i] || i == heroIndex) continue;
+      final spec = _trendPaintSpec(
+        series: series,
+        bounds: bounds,
+        colors: colors,
+        index: i,
+      );
+      drawEndDot(spec.pts, spec.color, spec.range);
     }
     if (heroDrawable) {
       drawEndDot(heroPts, heroColor, heroBounds, hero: true);
@@ -1975,7 +2062,7 @@ class _TrendLinesPainter extends CustomPainter {
     //   会议要求: 已发生画实线, 月末预测画虚线, 就在当月这一列往上延伸,
     //   端点一个空心圈 —— "像柱状图似的", 一眼看出还差多少走到月末.
     final fc = scaleForecast;
-    if (fc != null && heroDrawable) {
+    if (fc != null && heroDrawable && heroIndex == 3) {
       final lastX = xOf(heroPts.length - 1);
       final fromY = yOf(heroPts.last, heroBounds);
       final toY = yOf(fc, heroBounds);
@@ -2106,29 +2193,26 @@ class _TrendOverlayPainter extends CustomPainter {
       canvas.drawCircle(Offset(x, cy), 2.2, Paint()..color = color);
     }
 
-    // v3.9 · marker 只画有数据的序列
-    // v4.0 · 规模在场时 hero marker 归规模,毛利降为 soft marker.
-    final heroIsScale =
-        available.length > 3 && available[3] && si < series.scale.length;
-    if (available.isNotEmpty && available[0]) {
-      softMarker(series.revenue[si], colors[0], bounds.revenue);
-    }
-    if (available.length > 1 && available[1] && si < series.cost.length) {
-      softMarker(series.cost[si], colors[1], bounds.cost);
-    }
-    if (available.length > 2 && available[2] && si < series.profit.length) {
-      if (heroIsScale) {
-        softMarker(series.profit[si], colors[2], bounds.profit);
+    final flags = available.length >= 5
+        ? available
+        : <bool>[
+            for (var i = 0; i < 5; i++) i < available.length && available[i],
+          ];
+    final heroIndex = lighthouseTrendHeroIndex(flags);
+    for (var i = 0; i < 5; i++) {
+      if (!flags[i]) continue;
+      final spec = _trendPaintSpec(
+        series: series,
+        bounds: bounds,
+        colors: colors,
+        index: i,
+      );
+      if (si >= spec.pts.length) continue;
+      if (i == heroIndex) {
+        heroMarker(spec.pts[si], spec.color, spec.range);
       } else {
-        heroMarker(series.profit[si], colors[2], bounds.profit);
+        softMarker(spec.pts[si], spec.color, spec.range);
       }
-    }
-    if (heroIsScale) {
-      final scaleColor = colors.length > 3 ? colors[3] : colors[2];
-      if (available.length > 4 && available[4] && si < series.scaleAlt.length) {
-        softMarker(series.scaleAlt[si], scaleColor, bounds.scale);
-      }
-      heroMarker(series.scale[si], scaleColor, bounds.scale);
     }
   }
 
@@ -2769,6 +2853,1932 @@ class _HeroBigSparkPainter extends CustomPainter {
       !identical(old.compare, compare);
 }
 
+// ═════════════════════════════════════════════════════════════════════════════
+// Hero 走势图 (v18 · 山脊)
+//
+//   v15 把五条线各自归一化后叠进同一个 50pt 带子 —— 等于一张图上放了五套刻度，
+//   线的高低和交叉点都不表示任何事。v16 拆成三种排版（五联 / 山脊 / 主图+副轨）
+//   来给每条线自己的地盘。v18 砍到只剩山脊一种：三选一的 chip 本身要占标题行
+//   的位置，而三种里只有山脊同时满足「五条一起看」和「同日事件能对齐」。
+//
+//   山脊的关键参数是 overlap = 振幅 / 行距：
+//     overlap = 1    五条贴着排，互不相犯，但 98pt 的卡里每条只剩 12pt，
+//                    折线压成一条几乎平的横杠 —— 这是 v17 的病。
+//     overlap = 2.2  每条振幅 ≈ 26pt，山脊互相叠上去一截。起落回来了，
+//                    而且前面的山把后面的挡掉一段，五条不会糊成一团。
+//   叠加的代价说清楚：跨条比高度没有意义（每条自己一套值域），所以每条的
+//   名字、基线、读数三样都常驻，颜色只是辅助。要精确读数就点右下角放大。
+// ═════════════════════════════════════════════════════════════════════════════
+
+/// 主线跑珠总开关。
+///
+/// 这一条是明知故犯 —— §6.27 写着「禁止无限循环的装饰动画」，理由是仪表盘被
+/// 长时间盯着，永动的东西会从「有活力」变成噪音，还白耗一整块屏幕的重绘。
+/// 产品明确要它，那就把代价压到最小：只有主线一颗、扫描时立刻停、系统减弱
+/// 动效时不跑、CustomPaint 外面套 RepaintBoundary（重绘只烧图卡不烧整页）。
+/// 想彻底关掉：把这里改成 false，其余代码不用动。
+const bool _kHeroBeadEnabled = true;
+const int _kHeroBeadPeriodMs = 2800;
+
+/// Hero 走势里的一条线。
+///
+/// [hero] 只允许一条 —— 它拿最粗的线宽、最实的颜色，以及那颗跑珠。
+class _HeroTrendLine {
+  const _HeroTrendLine({
+    required this.key,
+    required this.name,
+    required this.color,
+    required this.values,
+    this.total,
+    this.sharedRange = false,
+    this.hero = false,
+  });
+
+  final String key;
+
+  /// 图上的短名（两个字）。全称留给 stat rail 和详情面板。
+  final String name;
+  final Color color;
+  final List<double> values;
+
+  /// 本期真实合计（与 hero 大数同口径）。缺省时回退序列末点 —— 走势序列覆盖
+  /// 近 N 期，任何情况下都不许对序列求和冒充「本期合计」。
+  final double? total;
+
+  /// 规模族标记（核销 / 销售同单位）。两条不叠成带 —— 叠的前提是差得开，而
+  /// 实测核销/销售常年只差个位数百分点，带宽画出来不到 2px。现在它只用来把
+  /// 非主线的那条规模压淡一档。
+  final bool sharedRange;
+  final bool hero;
+
+  /// 空序列和全 0 都算「这个维度没数据」：后端有时只下发部分字段，pad 成全 0
+  /// 会在图上多出一条贴底的假线，读数里多出一个恒为 0 的数。
+  bool get hasData {
+    if (values.length < 2) return false;
+    for (final v in values) {
+      if (v.abs() > 1e-9) return true;
+    }
+    return false;
+  }
+
+  double get lastOrTotal => total ?? (values.isNotEmpty ? values.last : 0.0);
+
+  _HeroTrendLine asHero() => _HeroTrendLine(
+    key: key,
+    name: name,
+    color: color,
+    values: values,
+    total: total,
+    sharedRange: sharedRange,
+    hero: true,
+  );
+}
+
+/// 一条序列的 Y 值域 —— nice-number 版。
+///
+/// 旧版是「min/max 各外扩 span 的百分之几」。百分比 padding 有两个毛病：
+///   1. 边界落在 137.4 这种数上 —— 任何刻度、任何网格都没法心算；
+///   2. padding 跟着 span 变，数据一刷新整条线就在格子里上下漂，
+///      看起来像「形状变了」，其实只是留白变了。
+/// 现在先求 nice step（span/3 落到 1/2/2.5/5 × 10^k），再把上下界向外取整到
+/// step 的整数倍，然后上下各留 [headSteps]/[footSteps] 个 step 的空气。留白量
+/// 由 step 决定，边界因此永远是整数，且只在跨过一个 step 时才动一次。
+_SeriesRange _heroNiceRange(
+  List<double> values, {
+  double headSteps = 0.5,
+  double footSteps = 0.5,
+}) {
+  if (values.isEmpty) return const _SeriesRange(0, 1);
+  var mn = values.first;
+  var mx = values.first;
+  for (final v in values) {
+    if (v < mn) mn = v;
+    if (v > mx) mx = v;
+  }
+  final span = mx - mn;
+  if (span.abs() < 1e-9) {
+    // 全等值：给一个对称的假 span 让线居中，别让它贴在格子边上。
+    final pad = math.max(mx.abs() * 0.1, 1.0);
+    return _SeriesRange(mn - pad, mx + pad);
+  }
+  final step = _niceStep(span);
+  final lo = (mn / step).floorToDouble() * step - step * footSteps;
+  final hi = (mx / step).ceilToDouble() * step + step * headSteps;
+  if (hi - lo < 1e-9) return _SeriesRange(lo, lo + step);
+  return _SeriesRange(lo, hi);
+}
+
+_SeriesRange _heroPaneRange(Iterable<_HeroTrendLine> pane) {
+  final values = <double>[for (final l in pane) ...l.values];
+  var r = _heroNiceRange(values, headSteps: 0.2, footSteps: 0.15);
+  if (lighthouseHeroPaneSnapsToZero(min: r.min, max: r.max)) {
+    r = _SeriesRange(0, r.max);
+  }
+  return r;
+}
+
+/// 山脊几何 —— 小图和全屏共用同一套算法，放大只是换了 [height] 和 overlap。
+///
+/// [amp] / [pitch] = overlap：等于 1 时五条贴着排、互不相犯；大于 1 才叠上去。
+/// 小图取 2.2（叠得狠，98pt 里才有起落），全屏取 1.15（每条要留出自己的刻度
+/// 带，叠太多刻度会被前面那条山盖住）。
+class _RidgeGeom {
+  const _RidgeGeom({
+    required this.top,
+    required this.pitch,
+    required this.amp,
+    required this.count,
+  });
+
+  final double top;
+  final double pitch;
+  final double amp;
+  final int count;
+
+  factory _RidgeGeom.fit({
+    required double top,
+    required double height,
+    required int count,
+    required double overlap,
+  }) {
+    final c = count < 1 ? 1 : count;
+    // height = pitch * (c - 1) + amp = pitch * (c - 1 + overlap)
+    final denom = (c - 1) + overlap;
+    final pitch = denom <= 0 ? height : height / denom;
+    return _RidgeGeom(top: top, pitch: pitch, amp: pitch * overlap, count: c);
+  }
+
+  /// 第 j 条的基线 y。j 越大越靠下，也越靠前（后画，盖住前面的）。
+  double baseY(int j) => top + amp + j * pitch;
+}
+
+class _LhHeroMultiTrend extends StatefulWidget {
+  const _LhHeroMultiTrend({
+    required this.lines,
+    this.labels = const <String>[],
+    this.height = lighthouseCompactHeroSparkHeight,
+    this.partialLast = false,
+    this.title = '走势',
+    this.subtitle = '',
+  });
+
+  final List<_HeroTrendLine> lines;
+  final List<String> labels;
+  final double height;
+
+  /// 末期是不是「还在进行中」（当日只跑了一部分）。
+  ///
+  /// 没有这个开关的话，当天的四分之一天和昨天的整天会被画成同一种实线，图上
+  /// 看起来像业务崩了 —— 这是最常见的一类图表撒谎。为 true 时末段改虚线、
+  /// 降到 60% 透明、末点空心、轴末标签挂「进行中」。
+  final bool partialLast;
+
+  /// 放大页的抬头（指标口径 + 区间），只在全屏里用。
+  final String title;
+  final String subtitle;
+
+  @override
+  State<_LhHeroMultiTrend> createState() => _LhHeroMultiTrendState();
+}
+
+class _LhHeroMultiTrendState extends State<_LhHeroMultiTrend>
+    with TickerProviderStateMixin {
+  late final AnimationController _draw;
+  late final AnimationController _bead;
+  late final AnimationController _selectFade;
+
+  int? _selectedIndex;
+  double _lastWidth = 0;
+  bool _reduceMotion = false;
+
+  int get _pointCount {
+    var n = 0;
+    for (final l in widget.lines) {
+      if (l.values.length > n) n = l.values.length;
+    }
+    return n;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    // 600ms 而不是 900：入场擦出是「告诉你这张图从哪开始读」，不是表演。
+    // 超过 600ms，每次数据刷新都要等它演完（§6.26）。
+    _draw = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 600),
+    )..forward();
+    _bead = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: _kHeroBeadPeriodMs),
+    );
+    _selectFade = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 180),
+      value: 0,
+    );
+    _syncBead();
+  }
+
+  /// 跑珠只在「已画完 + 没在扫描 + 没开减弱动效」这三条同时成立时跑。
+  /// 手指按在图上时它停住让位 —— 扫描要看的是那一期的五个数，不是一颗跑动
+  /// 的点；两个动的东西同时在图上会互相抢。
+  void _syncBead() {
+    final wantRun =
+        _kHeroBeadEnabled && !_reduceMotion && _selectedIndex == null;
+    if (wantRun) {
+      if (!_bead.isAnimating) _bead.repeat();
+    } else if (_bead.isAnimating) {
+      _bead.stop();
+    }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // 系统开了「减弱动效」就直接渲染终态 —— 不是把时长调短，是根本不播（§6.30）。
+    final reduce = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
+    if (reduce == _reduceMotion) return;
+    _reduceMotion = reduce;
+    if (reduce) {
+      _draw
+        ..stop()
+        ..value = 1.0;
+    }
+    _syncBead();
+  }
+
+  @override
+  void didUpdateWidget(_LhHeroMultiTrend old) {
+    super.didUpdateWidget(old);
+    if (_signature(old.lines) != _signature(widget.lines)) {
+      _draw.stop();
+      if (_reduceMotion) {
+        _draw.value = 1.0;
+      } else {
+        _draw.forward(from: 0);
+      }
+      if (_selectedIndex != null && _selectedIndex! >= _pointCount) {
+        _selectedIndex = null;
+        _selectFade.value = 0;
+        _syncBead();
+      }
+    }
+  }
+
+  static String _signature(List<_HeroTrendLine> lines) {
+    final b = StringBuffer();
+    for (final l in lines) {
+      b
+        ..write(l.key)
+        ..write('#')
+        ..write(l.values.length)
+        ..write('@');
+      if (l.values.isNotEmpty) {
+        b
+          ..write(l.values.first.toStringAsFixed(2))
+          ..write('~')
+          ..write(l.values.last.toStringAsFixed(2));
+      }
+      b.write(';');
+    }
+    return b.toString();
+  }
+
+  @override
+  void dispose() {
+    _draw.dispose();
+    _bead.dispose();
+    _selectFade.dispose();
+    super.dispose();
+  }
+
+  int _hitIndex(double localX, double width) {
+    final n = _pointCount;
+    if (n <= 1 || width <= 0) return 0;
+    final band = _HeroMultiTrendPainter.plotX(width);
+    final usable = band.x1 - band.x0;
+    if (usable <= 0) return 0;
+    final step = usable / (n - 1);
+    if (step <= 0) return 0;
+    return ((localX - band.x0) / step).round().clamp(0, n - 1);
+  }
+
+  void _setSelected(int? idx) {
+    if (idx == _selectedIndex) return;
+    HapticFeedback.selectionClick();
+    setState(() => _selectedIndex = idx);
+    if (_reduceMotion) {
+      _selectFade.value = idx == null ? 0.0 : 1.0;
+    } else if (idx == null) {
+      _selectFade.reverse();
+    } else {
+      _selectFade.forward();
+    }
+    _syncBead();
+  }
+
+  void _onTap(Offset local, double width) {
+    if (_pointCount < 2) return;
+    final i = _hitIndex(local.dx, width);
+    _setSelected(_selectedIndex == i ? null : i);
+  }
+
+  void _onDrag(Offset local, double width) {
+    if (_pointCount < 2) return;
+    _setSelected(_hitIndex(local.dx, width));
+  }
+
+  void _openFull() {
+    if (widget.lines.isEmpty) return;
+    HapticFeedback.selectionClick();
+    Navigator.of(context).push(
+      PageRouteBuilder<void>(
+        opaque: false,
+        barrierColor: Colors.black.withAlpha(28),
+        transitionDuration: const Duration(milliseconds: 260),
+        reverseTransitionDuration: const Duration(milliseconds: 200),
+        pageBuilder: (_, __, ___) => _LhRidgeFullPage(
+          lines: widget.lines,
+          labels: widget.labels,
+          partialLast: widget.partialLast,
+          title: widget.title,
+          subtitle: widget.subtitle,
+        ),
+        transitionsBuilder: (_, anim, __, child) {
+          // 从小图「长大」到全屏：缩放起点 0.94 而不是 0，让它读起来是同一张
+          // 图放大，不是另开了一个页面。
+          final t = Curves.easeOutCubic.transform(anim.value);
+          return Opacity(
+            opacity: t,
+            child: Transform.scale(scale: 0.94 + 0.06 * t, child: child),
+          );
+        },
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, box) {
+        if (box.maxWidth.isFinite && box.maxWidth > 0) {
+          _lastWidth = box.maxWidth;
+        }
+        // hero 图卡有 0.7px 描边，Container 的可用高度比外面那个 SizedBox 少
+        // 1.4px —— 按 widget.height 写死会 overflow（debug 下的黄黑斜纹）。
+        final h = box.maxHeight.isFinite && box.maxHeight > 0
+            ? box.maxHeight
+            : widget.height;
+        final w = _lastWidth;
+        return Stack(
+          clipBehavior: Clip.none,
+          children: [
+            Positioned.fill(
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTapDown: (d) => _onTap(d.localPosition, w),
+                // 横向拖动扫描；垂直手势留给外层 Scrollable。
+                onHorizontalDragStart: (d) => _onDrag(d.localPosition, w),
+                onHorizontalDragUpdate: (d) => _onDrag(d.localPosition, w),
+                // 跑珠每帧都在动。没有这层边界，重绘会一路冒泡到整个 hero，
+                // 连带 stat rail 和列表一起烧。
+                child: RepaintBoundary(
+                  child: AnimatedBuilder(
+                    animation: Listenable.merge([_draw, _bead, _selectFade]),
+                    builder: (_, __) => CustomPaint(
+                      size: Size(double.infinity, h),
+                      painter: _HeroMultiTrendPainter(
+                        lines: widget.lines,
+                        labels: widget.labels,
+                        partialLast: widget.partialLast,
+                        // hairline 要按物理像素对齐，painter 拿不到 context。
+                        dpr: MediaQuery.devicePixelRatioOf(context),
+                        progress: Curves.easeOutCubic.transform(_draw.value),
+                        bead: _bead.value,
+                        selectedIndex: _selectedIndex,
+                        selectAlpha: Curves.easeOutCubic.transform(
+                          _selectFade.value,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            // 右下角放大。热区 26×26（§7.31 的 24px 下限），视觉只有 15 ——
+            // 图卡满打满算 98pt，按钮再大就压到末条山脊的读数上了。
+            Positioned(
+              right: -3,
+              bottom: -3,
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: _openFull,
+                child: SizedBox(
+                  width: 26,
+                  height: 26,
+                  child: Center(
+                    child: Container(
+                      width: 15,
+                      height: 15,
+                      decoration: BoxDecoration(
+                        // 极淡的紫底而不是纯白：卡本身是 #FFFDFF，纯白按钮
+                        // 只剩一圈描边，在手机上根本注意不到有这么个东西。
+                        color: _LhPlum.primary.withAlpha(20),
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(color: _LhPlum.heroEdge, width: 0.7),
+                      ),
+                      child: Icon(
+                        Icons.open_in_full_rounded,
+                        size: 9,
+                        color: _LhPlum.primary.withAlpha(215),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _HeroMultiTrendPainter extends CustomPainter {
+  const _HeroMultiTrendPainter({
+    required this.lines,
+    required this.labels,
+    this.partialLast = false,
+    this.dpr = 1.0,
+    this.progress = 1.0,
+    this.bead = 0.0,
+    this.selectedIndex,
+    this.selectAlpha = 0.0,
+  });
+
+  final List<_HeroTrendLine> lines;
+  final List<String> labels;
+
+  /// 末期未完成 —— 末段改虚线 + 60% 透明 + 空心末点 + 轴末「进行中」。
+  final bool partialLast;
+
+  /// devicePixelRatio。hairline 宽度取 1/dpr、坐标对齐到 (n+0.5)/dpr，
+  /// 否则 1px 线会跨两个物理像素被平均成 2px 灰带（§8.36）。
+  final double dpr;
+  final double progress;
+
+  /// 跑珠在主线上的位置，0..1 循环。
+  final double bead;
+  final int? selectedIndex;
+  final double selectAlpha;
+
+  static const double _padH = 6.0;
+  static const double _nameW = 34.0;
+  static const double _valW = 56.0;
+  static const double _axisH = 12.0;
+  static const double _topPad = 3.0;
+  static const double _paneGap = 6.0;
+  static const double _plotInset = 5.0;
+
+  static const Color _hair = Color(0xFFEFEAF7);
+
+  /// 命中区映射：扫描按绘图区的 x 区间算，两侧的名字栏和读数栏不算在内。
+  static ({double x0, double x1}) plotX(double w) => (
+    x0: _padH + _nameW,
+    x1: math.max(_padH + _nameW + 1, w - _padH - _valW),
+  );
+
+  int get _pointCount {
+    var n = 0;
+    for (final l in lines) {
+      if (l.values.length > n) n = l.values.length;
+    }
+    return n;
+  }
+
+  double get _p01 => progress.clamp(0.0, 1.0);
+  double get _idleFade => (1.0 - selectAlpha).clamp(0.0, 1.0);
+  double get _endFade => ((_p01 - 0.94) / 0.06).clamp(0.0, 1.0);
+
+  bool _selectionOn(int n) =>
+      selectedIndex != null &&
+      selectedIndex! >= 0 &&
+      selectedIndex! < n &&
+      selectAlpha > 0.001;
+
+  double _valueOf(_HeroTrendLine l) {
+    final i = selectedIndex;
+    if (i != null && i >= 0 && i < l.values.length && selectAlpha > 0.001) {
+      return l.values[i];
+    }
+    return l.lastOrTotal;
+  }
+
+  // ── 共用绘制原语 ─────────────────────────────────────────────────────
+
+  static TextStyle _mono(double size, Color color, FontWeight weight) =>
+      TextStyle(
+        fontFamily: 'monospace',
+        // 等宽字体本来就等宽，但 monospace 在部分安卓上会 fallback 到比例字体；
+        // tabularFigures 保证无论落到哪个 family，数字位宽都一致 —— 否则扫描时
+        // 读数每跳一期就左右抖一下（§4.19）。
+        fontFeatures: const <FontFeature>[FontFeature.tabularFigures()],
+        fontSize: size,
+        color: color,
+        fontWeight: weight,
+        height: 1.0,
+      );
+
+  /// 负号用 U+2212 而不是 ASCII '-'：后者在多数字体里只有半个数字宽，一列数里
+  /// 混着正负就对不齐。[signSlot] 为 true 时给非负数补一个等宽空位（U+2007），
+  /// 让 −12.3 和 12.3 的小数点落在同一列（§4.19）。
+  static String _signed(double v, {bool signSlot = false}) {
+    final t = _fmtChartShort(v.abs());
+    // \u2212 = 数学减号，与数字等宽；ASCII '-' 只有半个数字宽。
+    // \u2007 = figure space，宽度等于一个数字，用来给非负数占住符号位。
+    if (v < 0) return '\u2212$t';
+    return signSlot ? '\u2007$t' : t;
+  }
+
+  /// 这一组线里有没有负数 —— 有才给所有读数留符号位。没有的话每条白占一个
+  /// 字符宽，56pt 的读数栏亏不起。
+  bool get _needsSignSlot {
+    for (final l in lines) {
+      for (final v in l.values) {
+        if (v < 0) return true;
+      }
+      if ((l.total ?? 0) < 0) return true;
+    }
+    return false;
+  }
+
+  /// 1 物理像素的 hairline。宽度 1/dpr、中心对齐到 (n + 0.5)/dpr —— 不这么干
+  /// 的话逻辑坐标上的 1px 线会跨两个物理像素被平均成一条 2px 灰带（§8.36）。
+  void _hairH(Canvas canvas, double y, double x0, double x1, Color c) {
+    final w = 1 / dpr;
+    final sy = ((y * dpr).floorToDouble() + 0.5) / dpr;
+    canvas.drawLine(
+      Offset(x0, sy),
+      Offset(x1, sy),
+      Paint()
+        ..color = c
+        ..strokeWidth = w,
+    );
+  }
+
+  /// 末期未完成时，图上有几个点是「完整周期」。末点自己不算。
+  int _solidCount(int n) => partialLast && n >= 2 ? n - 1 : n;
+
+  /// [at] 是文字的左上角；align 为 right/center 时以 at.dx 为右缘/中线。
+  /// 返回排版后的宽度，给需要串排的地方（轴末「进行中」）用。
+  double _text(
+    Canvas canvas,
+    String s,
+    Offset at,
+    TextStyle style, {
+    TextAlign align = TextAlign.left,
+    double maxWidth = double.infinity,
+  }) {
+    if (s.isEmpty) return 0;
+    final tp = TextPainter(
+      text: TextSpan(text: s, style: style),
+      textDirection: TextDirection.ltr,
+      maxLines: 1,
+    )..layout(maxWidth: maxWidth);
+    var dx = at.dx;
+    if (align == TextAlign.right) {
+      dx -= tp.width;
+    } else if (align == TextAlign.center) {
+      dx -= tp.width / 2;
+    }
+    tp.paint(canvas, Offset(dx, at.dy));
+    return tp.width;
+  }
+
+  void _dash(
+    Canvas canvas,
+    Offset a,
+    Offset b,
+    Paint paint, {
+    double on = 3,
+    double off = 2.5,
+  }) {
+    final total = (b - a).distance;
+    if (total <= 0) return;
+    final dir = (b - a) / total;
+    var t = 0.0;
+    while (t < total) {
+      final e = math.min(t + on, total);
+      canvas.drawLine(a + dir * t, a + dir * e, paint);
+      t = e + off;
+    }
+  }
+
+  /// 一条山脊：不透明底 + 极淡色染 + 基线 + 线。
+  ///
+  /// 这里的填充跟 §2.7 说的「面积编码量」不是一回事。值域不从 0 起，它编不了
+  /// 量；它的职责是遮挡 —— 山脊互相叠着，后面那条必须被前面这条挡掉一截，
+  /// 否则五条糊成一团（那正是 v15 的病）。所以底色用画布色不透明，色染只给
+  /// alpha 16（≈6%），弱到不会被眼睛读成体量。
+  ///
+  /// [reveal] 是 0..1 的左→右擦出比例，五条同时擦（各擦各的会一条接一条地亮，
+  /// 读起来像在排队）。
+  /// [fill] / [stroke] 分两趟是为了让主线永远在最上面。主线在阅读顺序里排
+  /// 第一条，也就是最靠后的那座山 —— 按景深它会被前面四座挡掉大半，而它恰恰
+  /// 是唯一必须完整可读的一条。所以主线在自己的位置只画填充（继续负责遮挡
+  /// 后面），线单独补到所有山脊之上。
+  void _ridge(
+    Canvas canvas,
+    List<Offset> pts,
+    Color color, {
+    required double baseY,
+    required double width,
+    required double reveal,
+    int alpha = 255,
+    int tint = 16,
+    bool fill = true,
+    bool stroke = true,
+  }) {
+    if (pts.length < 2) return;
+    final x0 = pts.first.dx, x1 = pts.last.dx;
+    final solidN = _solidCount(pts.length);
+    // 只有两个点、且末点还在进行中时，没有任何一段是「完整周期」——
+    // 那就整条都走虚线，不要为了有条实线而把半天当成一天画。
+    final hasSolid = solidN >= 2;
+    final solid = hasSolid ? pts.sublist(0, solidN) : const <Offset>[];
+    final sx1 = hasSolid ? solid.last.dx : x0;
+    final top = math.min(baseY, pts.map((p) => p.dy).reduce(math.min)) - 2;
+    canvas.save();
+    canvas.clipRect(
+      Rect.fromLTRB(x0 - 4, top - 8, x0 + (x1 - x0) * reveal + 0.5, baseY + 4),
+    );
+    if (hasSolid && fill) {
+      final path = Path();
+      // monotone cubic：Catmull-Rom 会在拐点 overshoot 出数据里没有的峰谷，
+      // 财务折线上那是数据错误不是风格（§3.10）。
+      _addMonotonePath(path, solid);
+      final area = Path.from(path)
+        ..lineTo(sx1, baseY)
+        ..lineTo(x0, baseY)
+        ..close();
+      // 第一层：画布色，不透明。这一层不是「量」，是遮挡。
+      canvas.drawPath(area, Paint()..color = LhColors.paper);
+      // 第二层：≈6% 的色染，给山脊一点体积感，弱到读不成体量。
+      canvas.drawPath(
+        area,
+        Paint()
+          ..shader = LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: <Color>[color.withAlpha(tint), color.withAlpha(0)],
+          ).createShader(Rect.fromLTRB(x0, top, sx1, baseY)),
+      );
+    }
+    // 基线画在填充之后 —— 画在之前会被自己的不透明底盖掉。
+    if (fill) _hairH(canvas, baseY, x0 - 1, x1 + 1, _hair);
+    if (hasSolid && stroke) {
+      final path = Path();
+      _addMonotonePath(path, solid);
+      canvas.drawPath(
+        path,
+        Paint()
+          ..color = color.withAlpha(alpha.clamp(0, 255))
+          ..strokeWidth = width
+          ..style = PaintingStyle.stroke
+          // 小尺寸下锐角会长出毛刺，round 两头都要（§3.12）。
+          ..strokeCap = StrokeCap.round
+          ..strokeJoin = StrokeJoin.round,
+      );
+    }
+    if (stroke && solidN < pts.length) {
+      // 未完成的那一段：直线 + 虚线 + 60% 透明。画成直线是因为这一段本来就
+      // 没走完，用平滑曲线去猜它的形状等于替数据编故事（§3.15）。
+      _dash(
+        canvas,
+        pts[solidN >= 1 ? solidN - 1 : 0],
+        pts.last,
+        Paint()
+          ..color = color.withAlpha((alpha * 0.6).round().clamp(0, 255))
+          ..strokeWidth = width
+          ..strokeCap = StrokeCap.round,
+        on: 2.6,
+        off: 2.4,
+      );
+    }
+    canvas.restore();
+  }
+
+  /// 末端点。直径取偶数（§8.37）。
+  ///
+  /// 未完成的末期画成空心圈：实心 = 这个数定了，空心 = 还在动。虚线之外再给
+  /// 一层冗余编码，去掉颜色变灰度也还认得出来（§7.35 / §10.10）。
+  void _endDot(Canvas canvas, Offset at, Color color, {required bool hero}) {
+    final f = _endFade;
+    if (f <= 0.01) return;
+    final r = hero ? 3.0 : 2.0;
+    final a = (255 * f).round();
+    if (partialLast) {
+      canvas.drawCircle(at, r, Paint()..color = Colors.white.withAlpha(a));
+      canvas.drawCircle(
+        at,
+        r,
+        Paint()
+          ..color = color.withAlpha((a * 0.65).round())
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = hero ? 1.4 : 1.2,
+      );
+      return;
+    }
+    canvas.drawCircle(at, r + 1.2, Paint()..color = Colors.white.withAlpha(a));
+    canvas.drawCircle(at, r, Paint()..color = color.withAlpha(a));
+  }
+
+  /// 沿主线跑的那颗珠子 —— 一颗头 + 一截衰减拖尾。
+  ///
+  /// 拖尾用 8 颗等距衰减的点而不是渐变描边：Canvas 上沿路径的渐变只能拿包围盒
+  /// 近似，曲线一弯就漏色。开关和代价见文件顶部 _kHeroBeadEnabled 的注释。
+  void _bead(Canvas canvas, List<Offset> pts, Color color) {
+    if (!_kHeroBeadEnabled || _p01 < 1.0 || _idleFade <= 0.05) return;
+    final solidN = _solidCount(pts.length);
+    if (solidN < 2) return;
+    final path = Path();
+    _addMonotonePath(path, pts.sublist(0, solidN));
+    final metrics = path.computeMetrics().toList(growable: false);
+    if (metrics.isEmpty) return;
+    final m = metrics.first;
+    if (m.length <= 1) return;
+    final headD = bead.clamp(0.0, 1.0) * m.length;
+    final a0 = _idleFade;
+    const tailN = 8;
+    const tailLen = 26.0;
+    for (var t = tailN; t >= 1; t--) {
+      final d = headD - tailLen * t / tailN;
+      if (d < 0) continue;
+      final tan = m.getTangentForOffset(d);
+      if (tan == null) continue;
+      final f = 1 - t / (tailN + 1.0);
+      canvas.drawCircle(
+        tan.position,
+        0.7 + f * 1.4,
+        Paint()..color = color.withAlpha((a0 * f * f * 160).round().clamp(0, 255)),
+      );
+    }
+    final head = m.getTangentForOffset(headD)?.position;
+    if (head == null) return;
+    canvas.drawCircle(head, 5.6, Paint()..color = color.withAlpha((a0 * 38).round()));
+    canvas.drawCircle(head, 3.0, Paint()..color = color.withAlpha((a0 * 235).round()));
+    canvas.drawCircle(head, 1.2, Paint()..color = Colors.white.withAlpha((a0 * 255).round()));
+  }
+
+  String _periodLabel(int i, int n) {
+    final raw = (i >= 0 && i < labels.length && labels[i].trim().isNotEmpty)
+        ? labels[i].trim()
+        : (i == n - 1 ? '现' : 'T−${n - 1 - i}');
+    return lighthouseHeroCompactPeriodLabel(raw);
+  }
+
+  /// 扫描时底部那颗期标 pill —— 数值都在图上常驻，这里只回答「哪一期」。
+  void _pill(
+    Canvas canvas,
+    Size size,
+    double cx,
+    double top,
+    String label,
+    double sA,
+  ) {
+    if (label.isEmpty) return;
+    final tp = TextPainter(
+      text: TextSpan(
+        text: label,
+        style: _mono(
+          7.5,
+          _LhPlum.heroNum.withAlpha((255 * sA).round()),
+          FontWeight.w700,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+      maxLines: 1,
+    )..layout();
+    const padX = 5.0, padY = 2.0;
+    final w = tp.width + padX * 2, h = tp.height + padY * 2;
+    final x = (cx - w / 2).clamp(0.0, math.max(0.0, size.width - w)).toDouble();
+    final rr = RRect.fromRectAndRadius(
+      Rect.fromLTWH(x, top, w, h),
+      const Radius.circular(5),
+    );
+    canvas.drawRRect(
+      rr,
+      Paint()..color = LhColors.paper.withAlpha((255 * sA).round()),
+    );
+    canvas.drawRRect(
+      rr,
+      Paint()
+        ..color = _LhPlum.heroEdge.withAlpha((255 * sA).round())
+        ..strokeWidth = 0.6
+        ..style = PaintingStyle.stroke,
+    );
+    tp.paint(canvas, Offset(x + padX, top + padY));
+  }
+
+  /// 轴末标签。末期未完成时在它左边挂一个「进行中」—— 虚线告诉眼睛「这段不
+  /// 一样」，这三个字告诉大脑「不一样在哪」（§3.15）。
+  void _axisEndLabel(
+    Canvas canvas,
+    double xRight,
+    double y,
+    String label,
+    double fade,
+  ) {
+    final a = (255 * fade).round().clamp(0, 255);
+    final w = _text(
+      canvas,
+      label,
+      Offset(xRight, y),
+      _mono(8, LhColors.ink2.withAlpha(a), FontWeight.w700),
+      align: TextAlign.right,
+    );
+    if (!partialLast) return;
+    // +0.5 是把 7pt 和 8pt 两段文字的视觉中线拉平，不是随手加的空隙。
+    _text(
+      canvas,
+      '进行中',
+      Offset(xRight - w - 4, y + 0.5),
+      _mono(7, LhColors.mute2.withAlpha((a * 0.85).round()), FontWeight.w600),
+      align: TextAlign.right,
+    );
+  }
+
+  // ── 双格叠线（规模一格、损益一格）────────────────────────────────
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final n = _pointCount;
+    if (lines.isEmpty || n < 2 || progress <= 0.0 || size.width <= 8) return;
+    final cw = size.width, ch = size.height;
+    final band = plotX(cw);
+    final x0 = band.x0, x1 = band.x1;
+    if (x1 - x0 < 20) return;
+    final panes = lighthouseHeroTrendPaneIndexes([
+      for (final l in lines) l.key,
+    ]);
+    if (panes.isEmpty) return;
+
+    final availableH = ch - _topPad - _axisH;
+    if (availableH < 28) return;
+    var flexSum = 0;
+    for (var p = 0; p < panes.length; p++) {
+      flexSum += lighthouseHeroTrendPaneFlex(panes[p].length);
+    }
+    final gapTotal = panes.length > 1 ? _paneGap * (panes.length - 1) : 0.0;
+    final unit = (availableH - gapTotal) / flexSum;
+    final paneRects = <Rect>[];
+    var y = _topPad;
+    for (var p = 0; p < panes.length; p++) {
+      final h = unit * lighthouseHeroTrendPaneFlex(panes[p].length);
+      paneRects.add(Rect.fromLTWH(0, y, cw, h));
+      y += h + _paneGap;
+    }
+
+    double xOf(int k) => x0 + k * (x1 - x0) / (n - 1);
+
+    final sel = _selectionOn(n);
+    final i = selectedIndex ?? 0;
+    final sA = selectAlpha.clamp(0.0, 1.0);
+    final signSlot = _needsSignSlot;
+
+    final allPts = List<List<Offset>>.generate(
+      lines.length,
+      (_) => const <Offset>[],
+    );
+    List<Offset>? heroPts;
+    var heroColor = lines.first.color;
+
+    for (var p = 0; p < panes.length; p++) {
+      final indexes = panes[p];
+      final paneLines = [for (final j in indexes) lines[j]];
+      final rect = paneRects[p];
+      final r = _heroPaneRange(paneLines);
+      final plotTop = rect.top + _plotInset;
+      final plotBot = rect.bottom - _plotInset;
+      final plotH = math.max(8.0, plotBot - plotTop);
+      double yOf(double v) => plotBot - (v - r.min) / r.span * plotH;
+
+      _hairH(canvas, plotBot, x0, x1, _hair);
+      if (p > 0) {
+        _hairH(
+          canvas,
+          rect.top - _paneGap / 2,
+          x0,
+          x1,
+          const Color(0xFFE6E0F0),
+        );
+      }
+
+      var heroInPane = -1;
+      for (var k = 0; k < indexes.length; k++) {
+        final j = indexes[k];
+        final l = lines[j];
+        final pts = <Offset>[
+          for (var t = 0; t < l.values.length; t++)
+            Offset(xOf(t), yOf(l.values[t])),
+        ];
+        allPts[j] = pts;
+        if (l.hero) {
+          heroPts = pts;
+          heroColor = l.color;
+          heroInPane = j;
+        }
+      }
+
+      for (var k = 0; k < indexes.length; k++) {
+        final j = indexes[k];
+        if (j == heroInPane) continue;
+        final l = lines[j];
+        _ridge(
+          canvas,
+          allPts[j],
+          l.color,
+          baseY: plotBot,
+          width: l.sharedRange ? 1.35 : 1.5,
+          alpha: l.sharedRange ? 165 : 220,
+          reveal: _p01,
+          fill: false,
+        );
+        if (allPts[j].isNotEmpty) {
+          _endDot(canvas, allPts[j].last, l.color, hero: false);
+        }
+      }
+      if (heroInPane >= 0) {
+        _ridge(
+          canvas,
+          allPts[heroInPane],
+          heroColor,
+          baseY: plotBot,
+          width: 2.15,
+          reveal: _p01,
+          fill: false,
+        );
+      }
+
+      final rowH = math.min(14.0, rect.height / math.max(1, paneLines.length));
+      var labelY = rect.center.dy - (paneLines.length * rowH) / 2 + 1.5;
+      for (var k = 0; k < paneLines.length; k++) {
+        final l = paneLines[k];
+        canvas.drawRRect(
+          RRect.fromRectAndRadius(
+            Rect.fromLTWH(_padH, labelY + 3.2, l.hero ? 9.0 : 6.0, 2.4),
+            const Radius.circular(1.2),
+          ),
+          Paint()..color = l.color.withAlpha(l.hero ? 255 : 190),
+        );
+        _text(
+          canvas,
+          l.name,
+          Offset(_padH + (l.hero ? 12 : 9), labelY),
+          _mono(9, LhColors.ink2, FontWeight.w600),
+          maxWidth: _nameW - 12,
+        );
+        _text(
+          canvas,
+          _signed(_valueOf(l), signSlot: signSlot),
+          Offset(cw - _padH, labelY - 0.6),
+          _mono(10.5, l.color, l.hero ? FontWeight.w800 : FontWeight.w700),
+          align: TextAlign.right,
+          maxWidth: _valW,
+        );
+        labelY += rowH;
+      }
+    }
+
+    if (heroPts != null && heroPts.isNotEmpty) {
+      _endDot(canvas, heroPts.last, heroColor, hero: true);
+      _bead(canvas, heroPts, heroColor);
+    }
+
+    if (sel) {
+      final x = xOf(i);
+      canvas.drawLine(
+        Offset(x, paneRects.first.top + 1),
+        Offset(x, paneRects.last.bottom - 1),
+        Paint()
+          ..color = _LhPlum.deep.withAlpha((88 * sA).round())
+          ..strokeWidth = 1.0,
+      );
+      for (var j = 0; j < lines.length; j++) {
+        final pts = allPts[j];
+        if (i >= pts.length) continue;
+        final p = pts[i];
+        canvas.drawCircle(
+          p,
+          3.0,
+          Paint()..color = Colors.white.withAlpha((255 * sA).round()),
+        );
+        canvas.drawCircle(
+          p,
+          1.9,
+          Paint()..color = lines[j].color.withAlpha((255 * sA).round()),
+        );
+      }
+    }
+
+    final scanX = sel ? xOf(i) : double.nan;
+    if (_p01 >= 1.0) {
+      final axFade = (0.35 + _idleFade * 0.65).clamp(0.0, 1.0);
+      if (!sel || (scanX - x0).abs() > 22) {
+        _text(
+          canvas,
+          _periodLabel(0, n),
+          Offset(x0, ch - 9),
+          _mono(
+            8,
+            LhColors.mute2.withAlpha((255 * axFade).round()),
+            FontWeight.w500,
+          ),
+        );
+      }
+      if (!sel || (scanX - x1).abs() > 34) {
+        _axisEndLabel(canvas, x1, ch - 9, _periodLabel(n - 1, n), axFade);
+      }
+    }
+    if (sel) {
+      _pill(canvas, size, scanX, ch - 13, _periodLabel(i, n), sA);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_HeroMultiTrendPainter old) =>
+      !identical(old.lines, lines) ||
+      !identical(old.labels, labels) ||
+      old.partialLast != partialLast ||
+      old.dpr != dpr ||
+      old.progress != progress ||
+      old.bead != bead ||
+      old.selectedIndex != selectedIndex ||
+      old.selectAlpha != selectAlpha;
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// 山脊放大页 (v18)
+//
+//   小图里被砍掉的三样东西在这里补回来，因为这里有地方：
+//     · 每条山脊自己的 Y 刻度（2–3 个 nice number）和对应的横网格；
+//     · 每一期的日期都标出来，不只是首末；
+//     · 读数字号从 10.5 提到 18，扫描时不用眯眼。
+//   刻意没做的：五条共用一根 Y 轴。核销 1152 万和毛利 1.18 万差了 1000 倍，
+//   共轴之后四条会压成贴底的直线 —— 放大只是给了更多像素，没有改变量级差。
+// ═════════════════════════════════════════════════════════════════════════════
+
+class _LhRidgeFullPage extends StatefulWidget {
+  const _LhRidgeFullPage({
+    required this.lines,
+    required this.labels,
+    required this.partialLast,
+    required this.title,
+    required this.subtitle,
+  });
+
+  final List<_HeroTrendLine> lines;
+  final List<String> labels;
+  final bool partialLast;
+  final String title;
+  final String subtitle;
+
+  @override
+  State<_LhRidgeFullPage> createState() => _LhRidgeFullPageState();
+}
+
+class _LhRidgeFullPageState extends State<_LhRidgeFullPage>
+    with TickerProviderStateMixin {
+  late final AnimationController _draw;
+  late final AnimationController _bead;
+  late final AnimationController _selectFade;
+
+  int? _selectedIndex;
+  double _lastWidth = 0;
+  bool _reduceMotion = false;
+
+  int get _pointCount {
+    var n = 0;
+    for (final l in widget.lines) {
+      if (l.values.length > n) n = l.values.length;
+    }
+    return n;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _draw = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 600),
+    )..forward();
+    _bead = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: _kHeroBeadPeriodMs),
+    );
+    _selectFade = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 160),
+      value: 0,
+    );
+    _syncBead();
+  }
+
+  void _syncBead() {
+    final wantRun =
+        _kHeroBeadEnabled && !_reduceMotion && _selectedIndex == null;
+    if (wantRun) {
+      if (!_bead.isAnimating) _bead.repeat();
+    } else if (_bead.isAnimating) {
+      _bead.stop();
+    }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final reduce = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
+    if (reduce == _reduceMotion) return;
+    _reduceMotion = reduce;
+    if (reduce) {
+      _draw
+        ..stop()
+        ..value = 1.0;
+    }
+    _syncBead();
+  }
+
+  @override
+  void dispose() {
+    _draw.dispose();
+    _bead.dispose();
+    _selectFade.dispose();
+    super.dispose();
+  }
+
+  int _hitIndex(double localX, double width) {
+    final n = _pointCount;
+    if (n <= 1 || width <= 0) return 0;
+    final band = _LhRidgeFullPainter.plotX(width);
+    final usable = band.x1 - band.x0;
+    if (usable <= 0) return 0;
+    return ((localX - band.x0) / (usable / (n - 1))).round().clamp(0, n - 1);
+  }
+
+  void _setSelected(int? idx) {
+    if (idx == _selectedIndex) return;
+    HapticFeedback.selectionClick();
+    setState(() => _selectedIndex = idx);
+    if (_reduceMotion) {
+      _selectFade.value = idx == null ? 0.0 : 1.0;
+    } else if (idx == null) {
+      _selectFade.reverse();
+    } else {
+      _selectFade.forward();
+    }
+    _syncBead();
+  }
+
+  String _periodLabel(int i) {
+    final n = _pointCount;
+    final raw = (i >= 0 && i < widget.labels.length &&
+            widget.labels[i].trim().isNotEmpty)
+        ? widget.labels[i].trim()
+        : (i == n - 1 ? '现' : 'T−${n - 1 - i}');
+    return lighthouseHeroCompactPeriodLabel(raw);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final n = _pointCount;
+    final count = widget.lines.length;
+    final scanned = _selectedIndex;
+    return Scaffold(
+      backgroundColor: Colors.transparent,
+      body: Container(
+        decoration: const BoxDecoration(
+          // 纵向渐变而不是纯色：全屏一整片 #FFFDFF 会显得空，往下压一点雾紫
+          // 让山脊的下缘有个落脚的地。两端色差只有 8 点亮度，不会抢线。
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: <Color>[Color(0xFFFFFDFF), Color(0xFFF4EFFA)],
+          ),
+        ),
+        child: SafeArea(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _buildHeader(scanned),
+              Expanded(
+                child: LayoutBuilder(
+                  builder: (context, box) {
+                    if (box.maxWidth.isFinite && box.maxWidth > 0) {
+                      _lastWidth = box.maxWidth;
+                    }
+                    final w = _lastWidth;
+                    // 一条山脊低于 88pt 就放不下刻度了，那时候宁可让页面滚动，
+                    // 也不要把刻度挤掉 —— 刻度是这一页存在的理由。
+                    final needH = count * 96.0 + _LhRidgeFullPainter.axisH + 16;
+                    final h = math.max(box.maxHeight, needH);
+                    return SingleChildScrollView(
+                      physics: h > box.maxHeight
+                          ? const ClampingScrollPhysics()
+                          : const NeverScrollableScrollPhysics(),
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTapDown: (d) {
+                          if (n < 2) return;
+                          final i = _hitIndex(d.localPosition.dx, w);
+                          _setSelected(_selectedIndex == i ? null : i);
+                        },
+                        onHorizontalDragStart: (d) {
+                          if (n < 2) return;
+                          _setSelected(_hitIndex(d.localPosition.dx, w));
+                        },
+                        onHorizontalDragUpdate: (d) {
+                          if (n < 2) return;
+                          _setSelected(_hitIndex(d.localPosition.dx, w));
+                        },
+                        child: RepaintBoundary(
+                          child: AnimatedBuilder(
+                            animation: Listenable.merge([
+                              _draw,
+                              _bead,
+                              _selectFade,
+                            ]),
+                            builder: (_, __) => CustomPaint(
+                              size: Size(w, h),
+                              painter: _LhRidgeFullPainter(
+                                lines: widget.lines,
+                                labels: widget.labels,
+                                partialLast: widget.partialLast,
+                                dpr: MediaQuery.devicePixelRatioOf(context),
+                                progress: Curves.easeOutCubic.transform(
+                                  _draw.value,
+                                ),
+                                bead: _bead.value,
+                                selectedIndex: _selectedIndex,
+                                selectAlpha: Curves.easeOutCubic.transform(
+                                  _selectFade.value,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHeader(int? scanned) {
+    final n = _pointCount;
+    // 抬头右边这块跟着扫描走：没扫时显示区间，扫到哪一期就显示哪一期。
+    // 「现在看的是哪一段时间」必须一眼可见，否则读数没有归属。
+    final right = scanned != null && scanned < n
+        ? _periodLabel(scanned)
+        : widget.subtitle;
+    return Container(
+      padding: const EdgeInsets.fromLTRB(14, 10, 8, 12),
+      decoration: const BoxDecoration(
+        border: Border(bottom: BorderSide(color: Color(0xFFE4DCF4), width: 1)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 3,
+            height: 26,
+            decoration: BoxDecoration(
+              color: _LhPlum.primary,
+              borderRadius: BorderRadius.circular(1.5),
+            ),
+          ),
+          const SizedBox(width: 9),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  widget.title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: LhTypography.sans(
+                    size: 15,
+                    color: LhColors.ink,
+                    weight: FontWeight.w700,
+                    height: 1.1,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      right,
+                      style: LhTypography.mono(
+                        size: 10.5,
+                        color: LhColors.mute,
+                        weight: FontWeight.w600,
+                        height: 1.0,
+                      ),
+                    ),
+                    if (widget.partialLast) ...[
+                      const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 5,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: LhColors.paper,
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(
+                            color: _LhPlum.heroEdge,
+                            width: 0.7,
+                          ),
+                        ),
+                        child: Text(
+                          '末期进行中',
+                          style: LhTypography.mono(
+                            size: 8.5,
+                            color: LhColors.mute2,
+                            weight: FontWeight.w700,
+                            height: 1.0,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ],
+            ),
+          ),
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => Navigator.of(context).maybePop(),
+            child: const SizedBox(
+              width: 44,
+              height: 44,
+              child: Icon(
+                Icons.close_rounded,
+                size: 20,
+                color: LhColors.mute,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _LhRidgeFullPainter extends CustomPainter {
+  const _LhRidgeFullPainter({
+    required this.lines,
+    required this.labels,
+    this.partialLast = false,
+    this.dpr = 1.0,
+    this.progress = 1.0,
+    this.bead = 0.0,
+    this.selectedIndex,
+    this.selectAlpha = 0.0,
+  });
+
+  final List<_HeroTrendLine> lines;
+  final List<String> labels;
+  final bool partialLast;
+  final double dpr;
+  final double progress;
+  final double bead;
+  final int? selectedIndex;
+  final double selectAlpha;
+
+  /// 左边留给刻度读数，右边留给「名字 + 大读数」。两块都在绘图区外面 ——
+  /// 山脊互相重叠，压在图上的字一定会被前面那条山盖掉一半。
+  static const double tickW = 48.0;
+  static const double valW = 98.0;
+  static const double padH = 12.0;
+  static const double axisH = 26.0;
+  static const double topPad = 10.0;
+
+  /// 放大页的 overlap 比小图小得多：这里每条要留出自己的刻度带，叠太狠刻度
+  /// 会被前面那条山盖住。1.15 是「还看得出是一片山脊、但刻度全在」的那一档。
+  static const double overlap = 1.15;
+
+  static const Color _hair = Color(0xFFEFEAF7);
+  static const Color _grid = Color(0xFFF1ECF8);
+
+  static ({double x0, double x1}) plotX(double w) => (
+    x0: padH + tickW,
+    x1: math.max(padH + tickW + 1, w - padH - valW),
+  );
+
+  int get _pointCount {
+    var n = 0;
+    for (final l in lines) {
+      if (l.values.length > n) n = l.values.length;
+    }
+    return n;
+  }
+
+  double get _p01 => progress.clamp(0.0, 1.0);
+  double get _idleFade => (1.0 - selectAlpha).clamp(0.0, 1.0);
+  int _solidCount(int n) => partialLast && n >= 2 ? n - 1 : n;
+
+  double _valueOf(_HeroTrendLine l) {
+    final i = selectedIndex;
+    if (i != null && i >= 0 && i < l.values.length && selectAlpha > 0.001) {
+      return l.values[i];
+    }
+    return l.lastOrTotal;
+  }
+
+  static TextStyle _mono(double size, Color color, FontWeight weight) =>
+      TextStyle(
+        fontFamily: 'monospace',
+        fontFeatures: const <FontFeature>[FontFeature.tabularFigures()],
+        fontSize: size,
+        color: color,
+        fontWeight: weight,
+        height: 1.0,
+      );
+
+  double _text(
+    Canvas canvas,
+    String s,
+    Offset at,
+    TextStyle style, {
+    TextAlign align = TextAlign.left,
+    double maxWidth = double.infinity,
+  }) {
+    if (s.isEmpty) return 0;
+    final tp = TextPainter(
+      text: TextSpan(text: s, style: style),
+      textDirection: TextDirection.ltr,
+      maxLines: 1,
+    )..layout(maxWidth: maxWidth);
+    var dx = at.dx;
+    if (align == TextAlign.right) {
+      dx -= tp.width;
+    } else if (align == TextAlign.center) {
+      dx -= tp.width / 2;
+    }
+    tp.paint(canvas, Offset(dx, at.dy));
+    return tp.width;
+  }
+
+  void _hairH(Canvas canvas, double y, double x0, double x1, Color c) {
+    final w = 1 / dpr;
+    final sy = ((y * dpr).floorToDouble() + 0.5) / dpr;
+    canvas.drawLine(
+      Offset(x0, sy),
+      Offset(x1, sy),
+      Paint()
+        ..color = c
+        ..strokeWidth = w,
+    );
+  }
+
+  void _dash(Canvas canvas, Offset a, Offset b, Paint paint) {
+    final total = (b - a).distance;
+    if (total <= 0) return;
+    final dir = (b - a) / total;
+    var t = 0.0;
+    while (t < total) {
+      final e = math.min(t + 4.0, total);
+      canvas.drawLine(a + dir * t, a + dir * e, paint);
+      t = e + 3.5;
+    }
+  }
+
+  String _periodLabel(int i, int n) {
+    final raw = (i >= 0 && i < labels.length && labels[i].trim().isNotEmpty)
+        ? labels[i].trim()
+        : (i == n - 1 ? '现' : 'T−${n - 1 - i}');
+    return lighthouseHeroCompactPeriodLabel(raw);
+  }
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final n = _pointCount;
+    if (lines.isEmpty || n < 2 || _p01 <= 0 || size.width <= 80) return;
+    final cw = size.width, ch = size.height;
+    final count = lines.length;
+    final band = plotX(cw);
+    final x0 = band.x0, x1 = band.x1;
+    if (x1 - x0 < 60) return;
+    final g = _RidgeGeom.fit(
+      top: topPad,
+      height: ch - topPad - axisH,
+      count: count,
+      overlap: overlap,
+    );
+    if (g.amp < 24) return;
+    double xOf(int k) => x0 + k * (x1 - x0) / (n - 1);
+
+    final sel =
+        selectedIndex != null &&
+        selectedIndex! >= 0 &&
+        selectedIndex! < n &&
+        selectAlpha > 0.001;
+    final si = selectedIndex ?? 0;
+    final sA = selectAlpha.clamp(0.0, 1.0);
+
+    final allPts = <List<Offset>>[];
+    List<Offset>? heroPts;
+    var heroColor = lines.first.color;
+    var heroBaseY = 0.0;
+
+    for (var j = 0; j < count; j++) {
+      final l = lines[j];
+      final r = _heroNiceRange(l.values, headSteps: 0.3, footSteps: 0.15);
+      final baseY = g.baseY(j);
+      double yOf(double v) => baseY - (v - r.min) / r.span * g.amp;
+
+      final pts = <Offset>[
+        for (var k = 0; k < l.values.length; k++)
+          Offset(xOf(k), yOf(l.values[k])),
+      ];
+      allPts.add(pts);
+      if (l.hero) {
+        heroPts = pts;
+        heroColor = l.color;
+        heroBaseY = baseY;
+      }
+      final alpha = l.hero
+          ? 255
+          : l.sharedRange
+          ? 180
+          : 225;
+      final width = l.hero ? 2.6 : 1.8;
+
+      // 每条山脊分三步画，顺序是有原因的：
+      //   1. 填充 —— 不透明底，负责把它后面（上面）那座山挡掉一截；
+      //   2. 刻度带 —— 必须在填充之后，画在之前会被自己那座山的不透明底盖掉
+      //      一半，而刻度正是这一页存在的理由；
+      //   3. 线 —— 最后压上去。
+      _ridge(
+        canvas,
+        pts,
+        l.color,
+        baseY: baseY,
+        width: width,
+        alpha: alpha,
+        reveal: _p01,
+        stroke: false,
+      );
+
+      // 步长按「这一条自己的跨度 / 2」求 nice number，最多 3 条横网格。
+      // 3 条以上在 150pt 的带子里就成了斑马线，而且没人会去数第 4 条。
+      final step = _niceStep(r.max - r.min, target: 2);
+      var drawn = 0;
+      var v = (r.min / step).ceilToDouble() * step;
+      // guard：step 理论上恒 > 0，但值域算错时这个循环会转不完，
+      // 宁可少画刻度也不能让一帧卡死。
+      for (
+        var guard = 0;
+        guard < 16 && v <= r.max + 1e-9 && drawn < 3;
+        guard++
+      ) {
+        final tick = v;
+        v += step;
+        final gy = yOf(tick);
+        if (gy < baseY - g.amp - 0.5 || gy > baseY + 0.5) continue;
+        // 网格是实线。虚线在这张图里只有一个意思：未完成（§5.22）。
+        _hairH(canvas, gy, x0, x1, _grid);
+        _text(
+          canvas,
+          _fmtChartShort(tick),
+          Offset(x0 - 7, gy - 4),
+          _mono(9, LhColors.mute2, FontWeight.w500),
+          align: TextAlign.right,
+          maxWidth: tickW,
+        );
+        drawn++;
+      }
+      _hairH(canvas, baseY, x0, x1, _hair);
+
+      if (!l.hero) {
+        _ridge(
+          canvas,
+          pts,
+          l.color,
+          baseY: baseY,
+          width: width,
+          alpha: alpha,
+          reveal: _p01,
+          fill: false,
+        );
+        if (pts.isNotEmpty) {
+          _dots(canvas, pts, l.color, hero: false);
+          _endDot(canvas, pts.last, l.color, hero: false);
+        }
+      }
+
+      // ── 右栏：名字 + 大读数 ──
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(
+          Rect.fromLTWH(x1 + 10, baseY - 41, l.hero ? 14.0 : 10.0, 3.0),
+          const Radius.circular(1.5),
+        ),
+        Paint()..color = l.color.withAlpha(l.hero ? 255 : 190),
+      );
+      _text(
+        canvas,
+        l.name,
+        Offset(x1 + 10 + (l.hero ? 19 : 15), baseY - 45),
+        _mono(11, LhColors.ink2, FontWeight.w600),
+        maxWidth: valW - 30,
+      );
+      _text(
+        canvas,
+        _signed(_valueOf(l)),
+        Offset(cw - padH, baseY - 28),
+        _mono(18, l.color, l.hero ? FontWeight.w800 : FontWeight.w700),
+        align: TextAlign.right,
+        maxWidth: valW,
+      );
+      // 扫描时补一行环比，闲置时不占地方 —— 放大页最值钱的信息不是「是多少」
+      // （右边那个 18pt 已经回答了），是「跟上一期比动了多少」。
+      if (sel && si > 0 && si < l.values.length) {
+        final prev = l.values[si - 1];
+        final cur = l.values[si];
+        if (prev.abs() > 1e-9) {
+          final pct = (cur - prev) / prev.abs() * 100;
+          final up = pct >= 0;
+          _text(
+            canvas,
+            '${up ? '+' : '−'}${pct.abs().toStringAsFixed(1)}%',
+            Offset(cw - padH, baseY - 9),
+            _mono(
+              10,
+              (up ? LhColors.neg : LhColors.pos).withAlpha((255 * sA).round()),
+              FontWeight.w700,
+            ),
+            align: TextAlign.right,
+            maxWidth: valW,
+          );
+        }
+      }
+    }
+
+    // 主线补在最上层：线 + 数据点 + 末端点 + 跑珠。
+    if (heroPts != null && heroPts.isNotEmpty) {
+      _ridge(
+        canvas,
+        heroPts,
+        heroColor,
+        baseY: heroBaseY,
+        width: 2.6,
+        reveal: _p01,
+        fill: false,
+      );
+      _dots(canvas, heroPts, heroColor, hero: true);
+      _endDot(canvas, heroPts.last, heroColor, hero: true);
+      _bead(canvas, heroPts, heroColor);
+    }
+
+    // ── 扫描：一条竖线贯穿五条 + 每条一个点 ──
+    if (sel) {
+      final x = xOf(si);
+      canvas.drawLine(
+        Offset(x, topPad),
+        Offset(x, g.baseY(count - 1)),
+        Paint()
+          ..color = _LhPlum.deep.withAlpha((90 * sA).round())
+          ..strokeWidth = 1.0,
+      );
+      for (var j = 0; j < count; j++) {
+        final pts = allPts[j];
+        if (si >= pts.length) continue;
+        canvas.drawCircle(
+          pts[si],
+          4.4,
+          Paint()..color = Colors.white.withAlpha((255 * sA).round()),
+        );
+        canvas.drawCircle(
+          pts[si],
+          2.8,
+          Paint()..color = lines[j].color.withAlpha((255 * sA).round()),
+        );
+      }
+    }
+
+    // ── X 轴：放大了就把每一期都标出来 ──
+    final axisY = ch - axisH + 7;
+    _hairH(canvas, ch - axisH, x0, x1, _hair);
+    final solidN = _solidCount(n);
+    for (var k = 0; k < n; k++) {
+      final isSel = sel && k == si;
+      final isPartial = k >= solidN;
+      final base = isSel
+          ? _LhPlum.heroNum
+          : (k == n - 1 ? LhColors.ink2 : LhColors.mute2);
+      _text(
+        canvas,
+        _periodLabel(k, n),
+        Offset(xOf(k), axisY),
+        _mono(
+          isSel ? 10 : 9,
+          base.withAlpha(isPartial && !isSel ? 150 : 255),
+          isSel || k == n - 1 ? FontWeight.w700 : FontWeight.w500,
+        ),
+        align: TextAlign.center,
+      );
+    }
+    if (partialLast) {
+      _text(
+        canvas,
+        '进行中',
+        Offset(xOf(n - 1), axisY + 12),
+        _mono(8, LhColors.mute2, FontWeight.w600),
+        align: TextAlign.center,
+      );
+    }
+  }
+
+  // ── 与小图共用同一套画法，只是尺寸放大 ────────────────────────────────
+
+  static String _signed(double v) {
+    final t = _fmtChartShort(v.abs());
+    return v < 0 ? '\u2212$t' : t;
+  }
+
+  /// [fill] / [stroke] 分两趟的理由同小图：主线是最靠后的那座山，它的线要补
+  /// 到所有山脊之上才不会被前面的挡掉。
+  void _ridge(
+    Canvas canvas,
+    List<Offset> pts,
+    Color color, {
+    required double baseY,
+    required double width,
+    required double reveal,
+    int alpha = 255,
+    bool fill = true,
+    bool stroke = true,
+  }) {
+    if (pts.length < 2) return;
+    final x0 = pts.first.dx, x1 = pts.last.dx;
+    final solidN = _solidCount(pts.length);
+    final hasSolid = solidN >= 2;
+    final solid = hasSolid ? pts.sublist(0, solidN) : const <Offset>[];
+    final sx1 = hasSolid ? solid.last.dx : x0;
+    final top = math.min(baseY, pts.map((p) => p.dy).reduce(math.min)) - 2;
+    canvas.save();
+    canvas.clipRect(
+      Rect.fromLTRB(x0 - 6, top - 12, x0 + (x1 - x0) * reveal + 0.5, baseY + 4),
+    );
+    if (hasSolid && fill) {
+      final path = Path();
+      _addMonotonePath(path, solid);
+      final area = Path.from(path)
+        ..lineTo(sx1, baseY)
+        ..lineTo(x0, baseY)
+        ..close();
+      // 不透明底负责遮挡后面那条山；色染 alpha 20（≈8%）是装饰上限 ——
+      // 值域不从 0 起，这块面积编码不了量，只能弱到读不成量（§2.7）。
+      canvas.drawPath(area, Paint()..color = LhColors.paper);
+      canvas.drawPath(
+        area,
+        Paint()
+          ..shader = LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: <Color>[color.withAlpha(20), color.withAlpha(0)],
+          ).createShader(Rect.fromLTRB(x0, top, sx1, baseY)),
+      );
+    }
+    if (hasSolid && stroke) {
+      final path = Path();
+      _addMonotonePath(path, solid);
+      canvas.drawPath(
+        path,
+        Paint()
+          ..color = color.withAlpha(alpha.clamp(0, 255))
+          ..strokeWidth = width
+          ..style = PaintingStyle.stroke
+          ..strokeCap = StrokeCap.round
+          ..strokeJoin = StrokeJoin.round,
+      );
+    }
+    if (stroke && solidN < pts.length) {
+      _dash(
+        canvas,
+        pts[solidN >= 1 ? solidN - 1 : 0],
+        pts.last,
+        Paint()
+          ..color = color.withAlpha((alpha * 0.6).round().clamp(0, 255))
+          ..strokeWidth = width
+          ..strokeCap = StrokeCap.round,
+      );
+    }
+    canvas.restore();
+  }
+
+  /// n ≤ 10 才画数据点（§3.13）。放大页一条山脊 150pt 高、点距 35pt，
+  /// 画出来「哪一天」就有了实体，不用去猜曲线上哪个位置是一期。
+  void _dots(Canvas canvas, List<Offset> pts, Color color, {required bool hero}) {
+    final n = pts.length;
+    if (n > 10 || n < 2 || _p01 < 1.0) return;
+    final solidN = _solidCount(n);
+    final upto = partialLast ? solidN : solidN - 1;
+    var hi = 0, lo = 0;
+    for (var k = 1; k < solidN; k++) {
+      if (pts[k].dy < pts[hi].dy) hi = k;
+      if (pts[k].dy > pts[lo].dy) lo = k;
+    }
+    for (var k = 0; k < upto; k++) {
+      final ext = k == hi || k == lo;
+      canvas.drawCircle(
+        pts[k],
+        ext ? 4.0 : 3.0,
+        Paint()..color = Colors.white,
+      );
+      canvas.drawCircle(
+        pts[k],
+        hero ? 3.0 : 2.6,
+        Paint()
+          ..color = color.withAlpha(ext ? 255 : 185)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.4,
+      );
+    }
+  }
+
+  void _endDot(Canvas canvas, Offset at, Color color, {required bool hero}) {
+    if (_p01 < 1.0) return;
+    final r = hero ? 4.2 : 3.2;
+    if (partialLast) {
+      canvas.drawCircle(at, r, Paint()..color = Colors.white);
+      canvas.drawCircle(
+        at,
+        r,
+        Paint()
+          ..color = color.withAlpha(170)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.8,
+      );
+      return;
+    }
+    canvas.drawCircle(at, r + 1.6, Paint()..color = Colors.white);
+    canvas.drawCircle(at, r, Paint()..color = color);
+  }
+
+  void _bead(Canvas canvas, List<Offset> pts, Color color) {
+    if (!_kHeroBeadEnabled || _p01 < 1.0 || _idleFade <= 0.05) return;
+    final solidN = _solidCount(pts.length);
+    if (solidN < 2) return;
+    final path = Path();
+    _addMonotonePath(path, pts.sublist(0, solidN));
+    final metrics = path.computeMetrics().toList(growable: false);
+    if (metrics.isEmpty) return;
+    final m = metrics.first;
+    if (m.length <= 1) return;
+    final headD = bead.clamp(0.0, 1.0) * m.length;
+    final a0 = _idleFade;
+    const tailN = 10;
+    const tailLen = 48.0;
+    for (var t = tailN; t >= 1; t--) {
+      final d = headD - tailLen * t / tailN;
+      if (d < 0) continue;
+      final tan = m.getTangentForOffset(d);
+      if (tan == null) continue;
+      final f = 1 - t / (tailN + 1.0);
+      canvas.drawCircle(
+        tan.position,
+        1.0 + f * 2.0,
+        Paint()..color = color.withAlpha((a0 * f * f * 170).round().clamp(0, 255)),
+      );
+    }
+    final head = m.getTangentForOffset(headD)?.position;
+    if (head == null) return;
+    canvas.drawCircle(head, 9.0, Paint()..color = color.withAlpha((a0 * 34).round()));
+    canvas.drawCircle(head, 4.4, Paint()..color = color.withAlpha((a0 * 240).round()));
+    canvas.drawCircle(head, 1.8, Paint()..color = Colors.white.withAlpha((a0 * 255).round()));
+  }
+
+  @override
+  bool shouldRepaint(_LhRidgeFullPainter old) =>
+      !identical(old.lines, lines) ||
+      !identical(old.labels, labels) ||
+      old.partialLast != partialLast ||
+      old.dpr != dpr ||
+      old.progress != progress ||
+      old.bead != bead ||
+      old.selectedIndex != selectedIndex ||
+      old.selectAlpha != selectAlpha;
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
 // _HeroSparkPainter — 单卡右上的微型趋势线 (40×12)
 //   目的：给 hero 数字加"来路"——用户不仅看到终点，也看到形状（爬升 vs 突涨）。
 //   规范：
@@ -4219,6 +6229,8 @@ class _TrendChart extends StatefulWidget {
     this.scaleForecast,
     this.partialPeriod = false,
     this.showHeader = true,
+    this.showScrubHint = true,
+    this.fitHeight = false,
     this.chartHeight = 76,
     this.onInteractionChanged,
 
@@ -4240,6 +6252,12 @@ class _TrendChart extends StatefulWidget {
   final String rangeLabel;
   final String title;
   final bool showHeader;
+
+  /// 图下「拖动查看每点」。Hero 卡高度紧，关掉以免把图例和下方面板挤出卡片。
+  final bool showScrubHint;
+
+  /// true 时折线吃掉图例下方剩余高度（主 Hero 卡）；账本展开保持固定 chartHeight。
+  final bool fitHeight;
   final double chartHeight;
   final double? periodRevenue;
   final double? periodCost;
@@ -4300,6 +6318,9 @@ class _TrendChartState extends State<_TrendChart> {
   static const List<Color> _kColors = [_cRev, _cCost, _cProf, _cScale];
 
   int? _selectedIndex;
+
+  /// 非空时只画这一条（`lighthouseTrendSeriesKeys`）。再点同一项或「全部」恢复。
+  String? _soloKey;
   late _TrendSeries _series;
   late _TrendBounds _bounds;
   late List<String> _pointLabels;
@@ -4318,6 +6339,37 @@ class _TrendChartState extends State<_TrendChart> {
   bool _hasScaleAlt = false;
   int get _visibleCount =>
       (_hasRev ? 1 : 0) + (_hasCost ? 1 : 0) + (_hasProf ? 1 : 0);
+
+  List<bool> get _baseFlags => lighthouseTrendVisibleFlags(
+        hasRevenue: _hasRev,
+        hasCost: _hasCost,
+        hasProfit: _hasProf,
+        hasScale: _hasScale,
+        hasScaleAlt: _hasScaleAlt,
+      );
+
+  List<bool> get _visibleFlags => lighthouseTrendVisibleFlags(
+        hasRevenue: _hasRev,
+        hasCost: _hasCost,
+        hasProfit: _hasProf,
+        hasScale: _hasScale,
+        hasScaleAlt: _hasScaleAlt,
+        soloKey: _soloKey,
+      );
+
+  void _toggleSolo(String key) {
+    final next = lighthouseTrendSoloAfterTap(_soloKey, key);
+    final i = lighthouseTrendSeriesKeys.indexOf(key);
+    if (i < 0 || !_baseFlags[i]) return;
+    HapticFeedback.selectionClick();
+    setState(() => _soloKey = next);
+  }
+
+  void _clearSolo() {
+    if (_soloKey == null) return;
+    HapticFeedback.selectionClick();
+    setState(() => _soloKey = null);
+  }
 
   int get _n => _series.profit.length;
 
@@ -4402,6 +6454,10 @@ class _TrendChartState extends State<_TrendChart> {
     final (xs, anchors) = _computeSparse(widget.labels, n);
     _xLabels = xs;
     _xAnchors = anchors;
+    if (_soloKey != null) {
+      final i = lighthouseTrendSeriesKeys.indexOf(_soloKey!);
+      if (i < 0 || !_baseFlags[i]) _soloKey = null;
+    }
   }
 
   /// 后端给的是逐点全标签，这里挑最多 5 个均匀锚点作稀疏 X 轴。
@@ -4436,6 +6492,157 @@ class _TrendChartState extends State<_TrendChart> {
 
   void _notifyInteraction(bool active) {
     widget.onInteractionChanged?.call(active);
+  }
+
+  Widget _trendCanvas() {
+    return LayoutBuilder(
+      builder: (ctx, c) {
+        final w = c.maxWidth;
+        const padTop = 12.0;
+        const padBottom = 10.0;
+        final chartH = c.maxHeight.isFinite && c.maxHeight < 4000
+            ? c.maxHeight
+            : widget.chartHeight;
+        final usableH = chartH - padTop - padBottom;
+        if (usableH <= 0) return const SizedBox.shrink();
+        final vis = _visibleFlags;
+        final heroIndex = lighthouseTrendHeroIndex(vis);
+        final extremeSpec = _trendPaintSpec(
+          series: _series,
+          bounds: _bounds,
+          colors: _kColors,
+          index: heroIndex,
+        );
+        final profitBounds = extremeSpec.range;
+        final extremePts = extremeSpec.pts;
+        final hasProfit = vis[heroIndex] && extremePts.isNotEmpty;
+        final actualMaxP = hasProfit ? extremePts.reduce(math.max) : 0.0;
+        final actualMinP = hasProfit ? extremePts.reduce(math.min) : 0.0;
+        double yOf(double v) =>
+            padTop + (profitBounds.max - v) / profitBounds.span * usableH;
+        final maxY = yOf(actualMaxP);
+        final minY = yOf(actualMinP);
+        final showExtremes =
+            hasProfit &&
+            (actualMaxP - actualMinP).abs() > 1e-6 &&
+            (minY - maxY) > 22;
+        return GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTapDown: (d) {
+            _notifyInteraction(true);
+            _setSelectionFromX(d.localPosition.dx, w);
+          },
+          onTapUp: (d) {
+            _setSelectionFromX(d.localPosition.dx, w);
+            _notifyInteraction(false);
+          },
+          onTapCancel: () => _notifyInteraction(false),
+          onHorizontalDragStart: (d) {
+            _notifyInteraction(true);
+            _setSelectionFromX(d.localPosition.dx, w);
+          },
+          onHorizontalDragUpdate: (d) {
+            _setSelectionFromX(d.localPosition.dx, w);
+          },
+          onHorizontalDragEnd: (_) => _notifyInteraction(false),
+          onHorizontalDragCancel: () => _notifyInteraction(false),
+          child: SizedBox(
+            height: chartH,
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Positioned.fill(
+                  child: RepaintBoundary(
+                    child: CustomPaint(
+                      painter: _TrendLinesPainter(
+                        series: _series,
+                        bounds: _bounds,
+                        colors: _kColors,
+                        padH: _kChartPadH,
+                        available: vis,
+                        scaleForecast: vis[3]
+                            ? widget.scaleForecast?.forecast
+                            : null,
+                      ),
+                    ),
+                  ),
+                ),
+                Positioned.fill(
+                  child: CustomPaint(
+                    painter: _TrendOverlayPainter(
+                      series: _series,
+                      bounds: _bounds,
+                      colors: _kColors,
+                      padH: _kChartPadH,
+                      selectedIndex: _selectedIndex,
+                      available: vis,
+                    ),
+                  ),
+                ),
+                if (showExtremes)
+                  Positioned(
+                    right: 2,
+                    top: (maxY - 10).clamp(-2.0, chartH - 12),
+                    child: RichText(
+                      text: TextSpan(
+                        children: [
+                          TextSpan(
+                            text: 'MAX ',
+                            style: LhTypography.mono(
+                              size: 6.8,
+                              color: LhColors.mute2,
+                              weight: FontWeight.w700,
+                              letterSpacing: 0.8,
+                            ),
+                          ),
+                          TextSpan(
+                            text: _fmtChartShort(actualMaxP),
+                            style: LhTypography.mono(
+                              size: 8,
+                              color: _LhPlum.deep,
+                              weight: FontWeight.w700,
+                              letterSpacing: 0.1,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                if (showExtremes)
+                  Positioned(
+                    right: 2,
+                    top: (minY + 2).clamp(0.0, chartH - 10),
+                    child: RichText(
+                      text: TextSpan(
+                        children: [
+                          TextSpan(
+                            text: 'MIN ',
+                            style: LhTypography.mono(
+                              size: 6.8,
+                              color: LhColors.mute2,
+                              weight: FontWeight.w700,
+                              letterSpacing: 0.8,
+                            ),
+                          ),
+                          TextSpan(
+                            text: _fmtChartShort(actualMinP),
+                            style: LhTypography.mono(
+                              size: 8,
+                              color: _LhPlum.deep,
+                              weight: FontWeight.w700,
+                              letterSpacing: 0.1,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 
   Widget _legendChip(String label, double value, Color color, bool isSelected) {
@@ -4570,15 +6777,19 @@ class _TrendChartState extends State<_TrendChart> {
     required bool negative,
     required String absFmt,
     required String unitFmt,
+    String? seriesKey,
   }) {
-    return Row(
+    final soloing = _soloKey != null;
+    final active = seriesKey != null && _soloKey == seriesKey;
+    final dimmed = soloing && !active;
+    final chip = Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         Container(
           width: 10,
           height: 2.5,
           decoration: BoxDecoration(
-            color: color,
+            color: dimmed ? color.withAlpha(90) : color,
             borderRadius: BorderRadius.circular(1),
           ),
         ),
@@ -4587,7 +6798,7 @@ class _TrendChartState extends State<_TrendChart> {
           label,
           style: LhTypography.mono(
             size: 7.5,
-            color: LhColors.mute2,
+            color: active ? LhColors.ink2 : LhColors.mute2,
             weight: FontWeight.w600,
           ),
         ),
@@ -4619,6 +6830,18 @@ class _TrendChartState extends State<_TrendChart> {
         ),
       ],
     );
+    if (seriesKey == null) return chip;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () => _toggleSolo(seriesKey),
+      child: Opacity(
+        opacity: dimmed ? 0.38 : 1,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 2),
+          child: chip,
+        ),
+      ),
+    );
   }
 
   @override
@@ -4639,16 +6862,47 @@ class _TrendChartState extends State<_TrendChart> {
     //   毛利用 hero 语言 (sans 12.5 w700 -0.2), 收/成 mono 小字降为 context.
     //
     // 环比：优先用行上本期 vs 上期；缺省时用走势末两期（仍是相邻环比，不是首末跨度）。
-    // v4.0 · hero 从毛利换成规模；环比也跟着 hero 序列走，规模缺失才退回毛利。
-    final heroIsScale = _hasScale;
-    final heroLabel = heroIsScale ? widget.scaleLabel : '毛利';
-    final heroColor = heroIsScale ? _cScale : _cProf;
-    final heroSeries = heroIsScale ? _series.scale : _series.profit;
     final sVal = isSelected ? at(_series.scale, si) : _totScale;
-    final hVal = heroIsScale ? sVal : pVal;
-    double? profitMomDelta = heroIsScale
-        ? widget.periodScaleDeltaPct
-        : widget.periodProfitDeltaPct;
+    final sAltVal = isSelected ? at(_series.scaleAlt, si) : _totScaleAlt;
+    final displayHeroKey = _soloKey ?? (_hasScale ? 'scale' : 'profit');
+    late final String heroLabel;
+    late final Color heroColor;
+    late final double hVal;
+    late final List<double> heroSeries;
+    double? profitMomDelta;
+    switch (displayHeroKey) {
+      case 'scale':
+        heroLabel = widget.scaleLabel;
+        heroColor = _cScale;
+        hVal = sVal;
+        heroSeries = _series.scale;
+        profitMomDelta = widget.periodScaleDeltaPct;
+        break;
+      case 'scaleAlt':
+        heroLabel = widget.scaleAltLabel;
+        heroColor = _cScale;
+        hVal = sAltVal;
+        heroSeries = _series.scaleAlt;
+        break;
+      case 'revenue':
+        heroLabel = '收入';
+        heroColor = _cRev;
+        hVal = rVal;
+        heroSeries = _series.revenue;
+        break;
+      case 'cost':
+        heroLabel = '成本';
+        heroColor = _cCost;
+        hVal = cVal;
+        heroSeries = _series.cost;
+        break;
+      default:
+        heroLabel = '毛利';
+        heroColor = _cProf;
+        hVal = pVal;
+        heroSeries = _series.profit;
+        profitMomDelta = widget.periodProfitDeltaPct;
+    }
     // 兜底只在「本期已走完」时允许：末两期是相邻整期对比，口径成立。
     // 本期没走完时这个兜底＝本期截至今天 vs 上期整期，就是会上被否掉的算法，
     // 所以宁可留空显示「—」。
@@ -4665,8 +6919,6 @@ class _TrendChartState extends State<_TrendChart> {
         ? LhColors.mute2
         : (trendUp ? LhColors.neg : LhColors.pos); // 中国金融色: 上=红, 下=绿
     final hIsNeg = hVal < 0;
-    final showAltScale = heroIsScale && _hasScaleAlt;
-    final sAltVal = isSelected ? at(_series.scaleAlt, si) : _totScaleAlt;
     final sAltAbsFmt = _fmtMoney(sAltVal.abs());
     final sAltUnitFmt = _unitMoney(sAltVal.abs());
     final pIsNeg = pVal < 0;
@@ -4678,10 +6930,10 @@ class _TrendChartState extends State<_TrendChart> {
     final cUnitFmt = _unitMoney(cVal.abs());
 
     final pnlLegendKeys = lighthouseTrendPnlLegendKeys(
-      hasProfit: heroIsScale,
+      hasProfit: _hasProf && (_hasScale || _soloKey != null),
       hasRevenue: _hasRev || rVal.abs() > 1e-9,
       hasCost: _hasCost || cVal.abs() > 1e-9,
-      hasScaleAlt: showAltScale,
+      hasScaleAlt: _hasScaleAlt,
     );
     final editorialLegend = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -4708,7 +6960,10 @@ class _TrendChartState extends State<_TrendChart> {
         ),
         const SizedBox(width: 10),
         Flexible(
-          child: _LhAnimatedNumber(
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => _toggleSolo(displayHeroKey),
+            child: _LhAnimatedNumber(
           value: hVal.abs(),
           immediate: isSelected,
           duration: const Duration(milliseconds: 700),
@@ -4757,6 +7012,7 @@ class _TrendChartState extends State<_TrendChart> {
           ),
         ),
         ),
+        ),
         if (profitMomDelta != null && !isSelected) ...[
           const SizedBox(width: 5),
           Text(
@@ -4789,6 +7045,29 @@ class _TrendChartState extends State<_TrendChart> {
             runSpacing: 6,
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
+              if (_soloKey != null)
+                GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: _clearSolo,
+                  child: Text(
+                    '全部',
+                    style: LhTypography.mono(
+                      size: 7.5,
+                      color: _LhPlum.deep,
+                      weight: FontWeight.w700,
+                      letterSpacing: 0.6,
+                    ),
+                  ),
+                ),
+              if (_soloKey != null && _hasScale && _soloKey != 'scale')
+                _trendLegendChip(
+                  label: widget.scaleLabel,
+                  color: _cScale,
+                  negative: sVal < 0,
+                  absFmt: _fmtMoney(sVal.abs()),
+                  unitFmt: _unitMoney(sVal.abs()),
+                  seriesKey: 'scale',
+                ),
               for (final key in pnlLegendKeys)
                 switch (key) {
                   'profit' => _trendLegendChip(
@@ -4797,6 +7076,7 @@ class _TrendChartState extends State<_TrendChart> {
                     negative: pIsNeg,
                     absFmt: pAbsFmt,
                     unitFmt: pUnitFmt,
+                    seriesKey: 'profit',
                   ),
                   'revenue' => _trendLegendChip(
                     label: '收入',
@@ -4804,6 +7084,7 @@ class _TrendChartState extends State<_TrendChart> {
                     negative: rVal < 0,
                     absFmt: rAbsFmt,
                     unitFmt: rUnitFmt,
+                    seriesKey: 'revenue',
                   ),
                   'cost' => _trendLegendChip(
                     label: '成本',
@@ -4811,6 +7092,7 @@ class _TrendChartState extends State<_TrendChart> {
                     negative: cVal < 0,
                     absFmt: cAbsFmt,
                     unitFmt: cUnitFmt,
+                    seriesKey: 'cost',
                   ),
                   'scaleAlt' => _trendLegendChip(
                     label: widget.scaleAltLabel,
@@ -4818,6 +7100,7 @@ class _TrendChartState extends State<_TrendChart> {
                     negative: sAltVal < 0,
                     absFmt: sAltAbsFmt,
                     unitFmt: sAltUnitFmt,
+                    seriesKey: 'scaleAlt',
                   ),
                   _ => const SizedBox.shrink(),
                 },
@@ -4828,6 +7111,7 @@ class _TrendChartState extends State<_TrendChart> {
     );
 
     return Column(
+      mainAxisSize: widget.fitHeight ? MainAxisSize.max : MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         if (widget.showHeader) ...[
@@ -4857,167 +7141,15 @@ class _TrendChartState extends State<_TrendChart> {
           const SizedBox(height: 8),
         ],
         editorialLegend,
-        if (widget.scaleForecast != null) ...[
+        if (widget.scaleForecast != null && _visibleFlags[3]) ...[
           const SizedBox(height: 7),
           _forecastStrip(widget.scaleForecast!),
         ],
         const SizedBox(height: 10),
-        // v3.8 · 双 Painter Stack + MAX/MIN Positioned 标注:
-        //   • 主线毛利: 顶部/底部 dashed hairline 已在 painter 画
-        //   • 数字标注: 这里 Stack 里加 Positioned Text (画布外做,好维护)
-        LayoutBuilder(
-          builder: (ctx, c) {
-            final w = c.maxWidth;
-            const padTop = 12.0;
-            const padBottom = 10.0;
-            final usableH = widget.chartHeight - padTop - padBottom;
-            // v4.0 · MAX/MIN 标注跟 hero 线走 (规模优先)，跟 painter 一致。
-            final profitBounds = heroIsScale ? _bounds.scale : _bounds.profit;
-            final extremePts = heroIsScale ? _series.scale : _series.profit;
-            final hasProfit =
-                extremePts.isNotEmpty && (heroIsScale || _hasProf);
-            final actualMaxP = hasProfit ? extremePts.reduce(math.max) : 0.0;
-            final actualMinP = hasProfit ? extremePts.reduce(math.min) : 0.0;
-            double yOf(double v) =>
-                padTop + (profitBounds.max - v) / profitBounds.span * usableH;
-            final maxY = yOf(actualMaxP);
-            final minY = yOf(actualMinP);
-            // MAX/MIN 数字标注: 只在 max/min 拉开距离时展示,否则叠一起丑
-            final showExtremes =
-                hasProfit &&
-                (actualMaxP - actualMinP).abs() > 1e-6 &&
-                (minY - maxY) > 22;
-            return GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTapDown: (d) {
-                _notifyInteraction(true);
-                _setSelectionFromX(d.localPosition.dx, w);
-              },
-              onTapUp: (d) {
-                _setSelectionFromX(d.localPosition.dx, w);
-                _notifyInteraction(false);
-              },
-              onTapCancel: () => _notifyInteraction(false),
-              onHorizontalDragStart: (d) {
-                _notifyInteraction(true);
-                _setSelectionFromX(d.localPosition.dx, w);
-              },
-              onHorizontalDragUpdate: (d) {
-                _setSelectionFromX(d.localPosition.dx, w);
-              },
-              onHorizontalDragEnd: (_) => _notifyInteraction(false),
-              onHorizontalDragCancel: () => _notifyInteraction(false),
-              child: SizedBox(
-                height: widget.chartHeight,
-                child: Stack(
-                  clipBehavior: Clip.none,
-                  children: [
-                    Positioned.fill(
-                      child: RepaintBoundary(
-                        child: CustomPaint(
-                          painter: _TrendLinesPainter(
-                            series: _series,
-                            bounds: _bounds,
-                            colors: _kColors,
-                            padH: _kChartPadH,
-                            available: [
-                              _hasRev,
-                              _hasCost,
-                              _hasProf,
-                              _hasScale,
-                              _hasScaleAlt,
-                            ],
-                            scaleForecast: _hasScale
-                                ? widget.scaleForecast?.forecast
-                                : null,
-                          ),
-                        ),
-                      ),
-                    ),
-                    Positioned.fill(
-                      child: CustomPaint(
-                        painter: _TrendOverlayPainter(
-                          series: _series,
-                          bounds: _bounds,
-                          colors: _kColors,
-                          padH: _kChartPadH,
-                          selectedIndex: _selectedIndex,
-                          available: [
-                            _hasRev,
-                            _hasCost,
-                            _hasProf,
-                            _hasScale,
-                            _hasScaleAlt,
-                          ],
-                        ),
-                      ),
-                    ),
-                    // ── MAX 数字 (顶右,虚线上方) ──
-                    if (showExtremes)
-                      Positioned(
-                        right: 2,
-                        top: (maxY - 10).clamp(-2.0, widget.chartHeight - 12),
-                        child: RichText(
-                          text: TextSpan(
-                            children: [
-                              TextSpan(
-                                text: 'MAX ',
-                                style: LhTypography.mono(
-                                  size: 6.8,
-                                  color: LhColors.mute2,
-                                  weight: FontWeight.w700,
-                                  letterSpacing: 0.8,
-                                ),
-                              ),
-                              TextSpan(
-                                text: _fmtChartShort(actualMaxP),
-                                style: LhTypography.mono(
-                                  size: 8,
-                                  color: _LhPlum.deep,
-                                  weight: FontWeight.w700,
-                                  letterSpacing: 0.1,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    // ── MIN 数字 (底右,虚线下方) ──
-                    if (showExtremes)
-                      Positioned(
-                        right: 2,
-                        top: (minY + 2).clamp(0.0, widget.chartHeight - 10),
-                        child: RichText(
-                          text: TextSpan(
-                            children: [
-                              TextSpan(
-                                text: 'MIN ',
-                                style: LhTypography.mono(
-                                  size: 6.8,
-                                  color: LhColors.mute2,
-                                  weight: FontWeight.w700,
-                                  letterSpacing: 0.8,
-                                ),
-                              ),
-                              TextSpan(
-                                text: _fmtChartShort(actualMinP),
-                                style: LhTypography.mono(
-                                  size: 8,
-                                  color: _LhPlum.deep,
-                                  weight: FontWeight.w700,
-                                  letterSpacing: 0.1,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-            );
-          },
-        ),
+        if (widget.fitHeight)
+          Expanded(child: _trendCanvas())
+        else
+          _trendCanvas(),
         const SizedBox(height: 4),
         SizedBox(
           height: 14,
@@ -5055,22 +7187,23 @@ class _TrendChartState extends State<_TrendChart> {
             },
           ),
         ),
-        const SizedBox(height: 4),
-        // 固定高度的提示位，避免出现/消失带来跳动
-        SizedBox(
-          height: 12,
-          child: isSelected
-              ? const SizedBox.shrink()
-              : Text(
-                  '拖动查看每点',
-                  style: LhTypography.sans(
-                    size: 9,
-                    color: LhColors.mute2,
-                    weight: FontWeight.w500,
-                    letterSpacing: 0.4,
+        if (widget.showScrubHint) ...[
+          const SizedBox(height: 4),
+          SizedBox(
+            height: 12,
+            child: isSelected
+                ? const SizedBox.shrink()
+                : Text(
+                    '拖动查看每点',
+                    style: LhTypography.sans(
+                      size: 9,
+                      color: LhColors.mute2,
+                      weight: FontWeight.w500,
+                      letterSpacing: 0.4,
+                    ),
                   ),
-                ),
-        ),
+          ),
+        ],
       ],
     );
   }
@@ -6573,6 +8706,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   // v7: 会议原话"点那个数字就能看到日的" —— 从弹 sheet 改成 hero 下方直接展开
   //     再点已展开的格子 → 收起
   String? _expandedTrendKey;
+
+  /// Hero 走势图排版：五联 / 山脊 / 主图+副轨。点标题行右侧的 chip 循环切换，
+  /// 选择持久化 —— 这是「先各自试一段时间再定」的开关，不是每次都要选一遍。
 
   // ── AI 解读 ────────────────────────────────────────────────────────────
   //   _aiLoadedKey / _aiInflightKey 都存「上下文指纹」而不是 bool，
@@ -8290,6 +10426,26 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   /// 返回的 DateTime 是 isUtc=true 的"伪 CST"对象，hour/minute/day/weekday 都是
   /// 北京时间的值，直接读用即可（不要再 .toLocal()）。
   DateTime _nowCST() => DateTime.now().toUtc().add(const Duration(hours: 8));
+
+  /// hero 走势末点是不是「还在进行中的当期」。
+  ///
+  /// hero 序列按天采样、末点 = 区间最后一天。只要看的是「至今」的区间
+  /// （offset 0 且不是自定义区间），那一天就只跑了一部分 —— 8.26 早上看到的
+  /// 量大约只有整天的四分之一。把它和 8.25 的整天画成同一种实线，图上就是
+  /// 一道假断崖，读者会以为业务崩了（§3.15）。
+  ///
+  /// 后端下发了 heroSeriesLabels 时以标签为准：末期标签等于今天才算进行中。
+  /// 拿不到标签才回退到「offset 0 即进行中」。
+  bool get _heroTrendLastIsPartial {
+    if (_isCustomRange || _periodOffset != 0) return false;
+    final raw = _bundle?.metrics['heroSeriesLabels'];
+    if (raw is List && raw.isNotEmpty) {
+      final now = _nowCST();
+      final today = '${now.month}.${now.day.toString().padLeft(2, '0')}';
+      return raw.last.toString().trim() == today;
+    }
+    return true;
+  }
 
   /// 当前视图是不是「点月 + 当前月」—— 月化预测唯一适用的口径。
   /// 会议明确：点日 / 点周 / 点季 / 点年都不预测；自定义区间也不预测。
@@ -10735,20 +12891,12 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   /// 列表行展开走势时，到哪张一级 tab 去对齐同名实体的 trend。
   String? _trendLookupTabForListRow() {
     if (_detailKey != null) {
-      final sub = _detailSubTab;
-      if (sub == 'product' || sub == 'supply' || sub == 'channel') return sub;
-      return null;
+      return lighthouseTrendTabForSubDim(_detailSubTab);
     }
-    if (_tab == 'product' || _tab == 'supply' || _tab == 'channel') return _tab;
-    return null;
+    return lighthouseTrendTabForSubDim(_tab);
   }
 
-  bool _trendMapUsable(Map<String, dynamic> t) {
-    final profit = _trendNums(t['profit']);
-    final points = _trendNums(t['points']);
-    final revenue = _trendNums(t['revenue']);
-    return profit.length >= 2 || points.length >= 2 || revenue.length >= 2;
-  }
+  bool _trendMapUsable(Map<String, dynamic> t) => lighthouseTrendMapUsable(t);
 
   Map<String, dynamic>? _trendFromCache(
     String tab,
@@ -10813,28 +12961,41 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   }
 
   void _ensureTrendLoaded(String tab) {
-    if (tab == 'product' || tab == 'supply' || tab == 'channel') {
-      unawaited(_loadTrend(tab));
+    final resolved = lighthouseTrendTabForSubDim(tab);
+    if (resolved == 'product' ||
+        resolved == 'supply' ||
+        resolved == 'channel' ||
+        resolved == 'province') {
+      unawaited(_loadTrend(resolved!));
     }
   }
 
-  /// 详情 Hero / 展开走势：优先 payload.trend → 缓存 → 一级列表行。
+  /// 详情 Hero / 展开走势：优先 payload.trend。
+  /// L2 可回填同实体一级缓存；L3 只回填本实体所在交叉维，禁止用父级走势。
   Map<String, dynamic>? _resolvedDetailTrend(Map<String, dynamic> e) {
     final direct = e['trend'];
     if (direct is Map) {
       final m = Map<String, dynamic>.from(direct);
       if (_trendMapUsable(m)) return m;
     }
-    if (!lighthouseCanFallbackToRootTrend(
-      isDrill: _drillKey != null || _codeDrillKey != null,
-    )) {
-      return null;
+    final name = e['name']?.toString() ?? '';
+    final isDrill = _drillKey != null || _codeDrillKey != null;
+    if (isDrill) {
+      if (!lighthouseCanFallbackToChildTrend(isDrill: true)) return null;
+      final childTab = lighthouseTrendTabForSubDim(_drillDim ?? '');
+      if (childTab == null) return null;
+      final key = _dimensionRowKey(e);
+      return _trendFromCache(childTab, key, name);
     }
+    if (!lighthouseCanFallbackToRootTrend(isDrill: false)) return null;
     final type = _detailType;
     final key = _detailKey;
     if (type == null || key == null) return null;
-    final name = e['name']?.toString() ?? key.split('::').first;
-    final fromCache = _trendFromCache(type, key, name);
+    final fromCache = _trendFromCache(
+      type,
+      key,
+      name.isEmpty ? key.split('::').first : name,
+    );
     if (fromCache != null) return fromCache;
     final row = _findDimensionRow(type, key);
     final t = row?['trend'];
@@ -10940,16 +13101,179 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               ],
       ),
       clipBehavior: Clip.antiAlias,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Container(height: 2, color: _LhPlum.primary.withAlpha(190)),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
-            child: child,
-          ),
-        ],
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
+        child: child,
       ),
+    );
+  }
+
+  /// Hero 主图的五条线：规模族（核销额 / 销售额）+ 收入 / 成本合计 / 毛利。
+  ///
+  /// 列表顺序 = 图例顺序 = 阅读顺序：先规模（会议口径「规模能推导利润，
+  /// 监测先看规模」，anchor 那条是主线），再利润恒等式的收入 / 成本 / 毛利。
+  /// 序列缺失或全 0 的线直接不进图也不进图例 —— pad 成全 0 会在图上多出一条
+  /// 贴底的假线，图例里多出一个恒为 0 的数。
+  List<_HeroTrendLine> _buildHeroTrendLines(
+    Map<String, double> totals,
+    List<double> profitSeries,
+  ) {
+    const scaleColor = Color(lighthouseScaleAccentValue);
+    const revenueColor = Color(lighthouseRevenueAccentValue);
+    const costColor = Color(lighthouseCostAccentValue);
+    const profitColor = Color(lighthouseProfitAccentValue);
+
+    final verified = _seriesForMetric('verifiedSales');
+    final sales = _seriesForMetric('sales');
+    final revenue = _seriesForMetric('revenue');
+    final totalCost = _seriesForMetric('totalCost');
+
+    bool usable(List<double> s) {
+      if (s.length < 2) return false;
+      for (final v in s) {
+        if (v.abs() > 1e-9) return true;
+      }
+      return false;
+    }
+
+    // anchor 决定规模族谁是主线；主口径序列缺了就让另一条顶上，
+    // 别让「规模」整条从 hero 图里消失。
+    var verifiedIsHero = _anchor == _LhAnchor.verified;
+    final verifiedOk = usable(verified);
+    final salesOk = usable(sales);
+    if (verifiedIsHero && !verifiedOk && salesOk) verifiedIsHero = false;
+    if (!verifiedIsHero && !salesOk && verifiedOk) verifiedIsHero = true;
+
+    // 两条都是「规模」，同单位同色 —— 换色会让人以为它们是两个不同的东西。
+    // anchor 那条拿 hero：A/B 里它是粗线，C 里它直接当主图。
+    _HeroTrendLine scaleLine(String key, String name, List<double> values) {
+      return _HeroTrendLine(
+        key: key,
+        name: name,
+        color: scaleColor,
+        values: values,
+        total: totals[key],
+        sharedRange: true,
+        hero: (key == 'verifiedSales') == verifiedIsHero,
+      );
+    }
+
+    final verifiedLine = scaleLine('verifiedSales', '核销', verified);
+    final salesLine = scaleLine('sales', '销售', sales);
+
+    final out = <_HeroTrendLine>[];
+    for (final l in verifiedIsHero
+        ? <_HeroTrendLine>[verifiedLine, salesLine]
+        : <_HeroTrendLine>[salesLine, verifiedLine]) {
+      if (l.hasData) out.add(l);
+    }
+    for (final l in <_HeroTrendLine>[
+      _HeroTrendLine(
+        key: 'revenue',
+        name: '收入',
+        color: revenueColor,
+        values: revenue,
+        total: totals['revenue'],
+      ),
+      _HeroTrendLine(
+        key: 'totalCost',
+        name: '成本',
+        color: costColor,
+        values: totalCost,
+        total: totals['totalCost'],
+      ),
+      _HeroTrendLine(
+        key: 'profit',
+        name: '毛利',
+        color: profitColor,
+        values: profitSeries,
+        total: totals['profit'],
+      ),
+    ]) {
+      if (l.hasData) out.add(l);
+    }
+
+    if (out.isNotEmpty && !out.any((l) => l.hero)) {
+      final i = out.indexWhere((l) => l.key == 'profit');
+      out[i >= 0 ? i : out.length - 1] = out[i >= 0 ? i : out.length - 1]
+          .asHero();
+    }
+    return out;
+  }
+
+  Widget _buildHeroUnifiedTrendChart({
+    required Map<String, double> totals,
+    required List<double> profitSeries,
+    required List<String> labels,
+  }) {
+    final preferVerified = _anchor == _LhAnchor.verified;
+    final verified = _seriesForMetric('verifiedSales');
+    final sales = _seriesForMetric('sales');
+    var scaleKey = preferVerified ? 'verifiedSales' : 'sales';
+    var scale = preferVerified ? verified : sales;
+    var altKey = preferVerified ? 'sales' : 'verifiedSales';
+    var scaleAlt = preferVerified ? sales : verified;
+    bool usable(List<double> s) {
+      if (s.length < 2) return false;
+      for (final v in s) {
+        if (v.abs() > 1e-9) return true;
+      }
+      return false;
+    }
+
+    if (!usable(scale) && usable(scaleAlt)) {
+      scaleKey = altKey;
+      scale = scaleAlt;
+      altKey = '';
+      scaleAlt = const <double>[];
+    } else if (!usable(scale)) {
+      scale = const <double>[];
+      altKey = '';
+      scaleAlt = const <double>[];
+    } else if (!usable(scaleAlt)) {
+      altKey = '';
+      scaleAlt = const <double>[];
+    }
+    String scaleNameOf(String k) =>
+        k == 'verifiedSales' ? '核销规模' : '销售规模';
+    return LayoutBuilder(
+      builder: (context, box) {
+        final maxH = box.maxHeight.isFinite && box.maxHeight > 0
+            ? box.maxHeight
+            : lighthouseCompactHeroSparkHeight;
+        final reserved =
+            62.0 +
+            18.0 +
+            (_isCurrentMonthView && scale.isNotEmpty ? 24.0 : 0.0);
+        final chartH = (maxH - reserved).clamp(48.0, 84.0);
+        return _TrendChart(
+          labels: labels,
+          revenue: _seriesForMetric('revenue'),
+          cost: _seriesForMetric('totalCost'),
+          profit: profitSeries,
+          scale: scale,
+          scaleLabel: scaleNameOf(scaleKey),
+          scaleAlt: scaleAlt,
+          scaleAltLabel: altKey.isEmpty ? '' : scaleNameOf(altKey),
+          periodScale: totals[scaleKey],
+          periodScaleAlt: altKey.isEmpty ? null : totals[altKey],
+          periodScaleDeltaPct: _deltaForMetric(scaleKey)?.pct,
+          scaleForecast: scale.isEmpty
+              ? null
+              : _monthPaceForecast(scaleKey, scale.last),
+          partialPeriod: _heroTrendLastIsPartial,
+          rangeLabel: _heroTrendRangeLabel(labels),
+          title: _heroTrendTitle(),
+          showHeader: false,
+          showScrubHint: false,
+          fitHeight: true,
+          chartHeight: chartH,
+          periodRevenue: totals['revenue'],
+          periodCost: totals['totalCost'],
+          periodProfit: totals['profit'],
+          periodProfitDeltaPct: _deltaForMetric('profit')?.pct,
+        );
+      },
     );
   }
 
@@ -11119,7 +13443,19 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         ? profitLabelsOverride
         : _heroTrendLabels(profitSeries.length);
     final hasProfitTrend = profitSeries.length >= 2;
-    final sparkColor = mastheadIsNeg ? LhColors.pos : _LhPlum.deep;
+    // 主 Hero 与账本展开共用 _TrendChart：叠线 + 图例，点图例只留一条。
+    final heroTrendLines = _buildHeroTrendLines(totals, profitSeries);
+    final hasMultiTrend = heroTrendLines.length >= 2;
+    final hasHeroTrend = hasMultiTrend || hasProfitTrend;
+    final heroTrendPointCount = heroTrendLines.fold<int>(
+      0,
+      (acc, l) => math.max(acc, l.values.length),
+    );
+    final heroTrendLabels =
+        (profitLabelsOverride != null &&
+            profitLabelsOverride.length == heroTrendPointCount)
+        ? profitLabelsOverride
+        : _heroTrendLabels(heroTrendPointCount);
     final title = summaryTitle ?? _l1SummaryTitle;
     // 产品 / 供给 / 渠道的汇总 Hero 共用同一视觉身份；只替换标题和数据。
     const summaryAccent = _LhPlum.primary;
@@ -11325,6 +13661,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 Expanded(
                   flex: lighthouseCompactHeroTrendFlex,
                   child: Container(
+                    clipBehavior: Clip.hardEdge,
                     padding: const EdgeInsets.all(
                       lighthouseHeroChartCardPadding,
                     ),
@@ -11349,21 +13686,13 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                                 : null,
                           )
                         : null,
-                    child: hasProfitTrend
-                        ? _LhHeroSparkline(
-                            data: profitSeries,
-                            labels: profitLabels,
-                            compare:
-                                (mastheadKey != 'profit' ||
-                                    !lighthouseCanUseRootComparison(
-                                      hasTotalsOverride: totalsOverride != null,
-                                    ))
-                                ? null
-                                : (_heroSummaryMatchesGroup
-                                      ? _readMetricSeries('profitSeriesPrev')
-                                      : null),
-                            color: sparkColor,
-                            height: lighthouseCompactHeroSparkHeight,
+                    child: hasHeroTrend
+                        ? _buildHeroUnifiedTrendChart(
+                            totals: totals,
+                            profitSeries: profitSeries,
+                            labels: heroTrendLabels.isNotEmpty
+                                ? heroTrendLabels
+                                : profitLabels,
                           )
                         : const SizedBox(
                             height: lighthouseCompactHeroSparkHeight,
@@ -22413,7 +24742,15 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         : <double>[];
     var profit = nums(t['profit']);
     if (profit.isEmpty) profit = nums(t['points']);
-    if (profit.isEmpty) return null;
+    final sales = nums(t['sales']);
+    final verified = nums(t['verifiedSales']);
+    final revenue = nums(t['revenue']);
+    if (profit.length < 2 &&
+        sales.length < 2 &&
+        verified.length < 2 &&
+        revenue.length < 2) {
+      return null;
+    }
     final labels =
         ((t['labels'] ?? t['xLabels']) as List?)
             ?.map((e) => e.toString())
@@ -23247,6 +25584,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       if (!mounted || _detailKey == null) return;
       _ensureTrendLoaded(type);
       _ensureTrendLoaded(_detailSubTab);
+      if (_drillDim != null) _ensureTrendLoaded(_drillDim!);
     });
 
     // Same metrics source as main list (HTML: state.metrics[type])

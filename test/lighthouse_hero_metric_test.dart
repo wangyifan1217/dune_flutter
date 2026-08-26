@@ -259,7 +259,7 @@ void main() {
   test('compact hero keeps KPI and trend side by side', () {
     expect(lighthouseCompactHeroKpiFlex, 3);
     expect(lighthouseCompactHeroTrendFlex, 7);
-    expect(lighthouseCompactHeroSparkHeight, 100);
+    expect(lighthouseCompactHeroSparkHeight, 180);
     expect(lighthouseCompactHeroMetricGap, 6);
     expect(lighthouseHeroUsesCategoryTint, isFalse);
     expect(lighthouseHeroUsesAccentRail, isFalse);
@@ -325,6 +325,40 @@ void main() {
       lighthouseLedgerHighlightModeLabel(rowMode: false, cellMode: true),
       '格标记',
     );
+  });
+
+  group('lighthouseHeroTrendPanes', () {
+    test('keeps scale and pnl on separate axes', () {
+      expect(
+        lighthouseHeroTrendPaneIndexes([
+          'verifiedSales',
+          'sales',
+          'revenue',
+          'totalCost',
+          'profit',
+        ]),
+        [
+          [0],
+          [1],
+          [2, 3, 4],
+        ],
+      );
+      expect(lighthouseHeroTrendIsScaleKey('verifiedSales'), isTrue);
+      expect(lighthouseHeroTrendIsScaleKey('revenue'), isFalse);
+      expect(lighthouseHeroTrendPaneFlex(1), 2);
+      expect(lighthouseHeroTrendPaneFlex(3), 3);
+    });
+
+    test('does not snap near-equal scale down to zero', () {
+      expect(
+        lighthouseHeroPaneSnapsToZero(min: 1211, max: 1220),
+        isFalse,
+      );
+      expect(
+        lighthouseHeroPaneSnapsToZero(min: 6, max: 16.1),
+        isTrue,
+      );
+    });
   });
 
   group('lighthouseHeroAxisTicks', () {
@@ -500,6 +534,21 @@ void main() {
       // L3 必须用 detail 接口下发的 drill.trend；禁止串父级折线。
       expect(lighthouseCanFallbackToRootTrend(isDrill: false), isTrue);
       expect(lighthouseCanFallbackToRootTrend(isDrill: true), isFalse);
+      expect(lighthouseCanFallbackToChildTrend(isDrill: true), isTrue);
+      expect(lighthouseTrendTabForSubDim('supply'), 'supply');
+      expect(lighthouseTrendTabForSubDim('productName'), isNull);
+      expect(
+        lighthouseTrendMapUsable({
+          'sales': [1, 2],
+        }),
+        isTrue,
+      );
+      expect(
+        lighthouseTrendMapUsable({
+          'profit': [1],
+        }),
+        isFalse,
+      );
     });
 
     test('detail totals never reuse L1 comparison line', () {
@@ -769,6 +818,73 @@ void main() {
           hasScaleAlt: true,
         ),
         ['profit', 'revenue', 'cost', 'scaleAlt'],
+      );
+    });
+  });
+
+  group('lighthouseTrendSolo', () {
+    test('tap same key restores all, tap another isolates it', () {
+      expect(lighthouseTrendSoloAfterTap(null, 'profit'), 'profit');
+      expect(lighthouseTrendSoloAfterTap('profit', 'profit'), isNull);
+      expect(lighthouseTrendSoloAfterTap('profit', 'revenue'), 'revenue');
+      expect(lighthouseTrendSoloAfterTap('revenue', ''), isNull);
+    });
+
+    test('solo hides every other series that actually has data', () {
+      expect(
+        lighthouseTrendVisibleFlags(
+          hasRevenue: true,
+          hasCost: true,
+          hasProfit: true,
+          hasScale: true,
+          hasScaleAlt: true,
+          soloKey: 'profit',
+        ),
+        [false, false, true, false, false],
+      );
+      expect(
+        lighthouseTrendVisibleFlags(
+          hasRevenue: true,
+          hasCost: true,
+          hasProfit: true,
+          hasScale: true,
+          hasScaleAlt: true,
+        ),
+        [true, true, true, true, true],
+      );
+      expect(
+        lighthouseTrendVisibleFlags(
+          hasRevenue: true,
+          hasCost: false,
+          hasProfit: true,
+          hasScale: true,
+          hasScaleAlt: false,
+          soloKey: 'cost',
+        ),
+        [true, false, true, true, false],
+      );
+    });
+
+    test('hero index follows scale, then the remaining visible line', () {
+      expect(
+        lighthouseTrendHeroIndex(const [true, true, true, true, true]),
+        3,
+      );
+      expect(
+        lighthouseTrendHeroIndex(const [true, true, true, false, true]),
+        4,
+      );
+      expect(
+        lighthouseTrendHeroIndex(const [true, true, true, false, false]),
+        2,
+      );
+      expect(
+        lighthouseTrendHeroIndex(const [true, false, false, false, false]),
+        0,
+      );
+      expect(
+        lighthouseTrendHeroIndex(const [false, true, false, false, false]),
+        1,
       );
     });
   });

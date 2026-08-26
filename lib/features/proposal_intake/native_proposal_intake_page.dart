@@ -340,9 +340,11 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
     'costItems': <String>[],
     'costItemCodes': <String>[],
     'costItemAmounts': <String, dynamic>{},
+    'costItemSettleTerms': <String, dynamic>{},
     'businessCostItems': <String>[],
     'businessCostItemCodes': <String>[],
     'businessCostItemAmounts': <String, dynamic>{},
+    'businessCostItemSettleTerms': <String, dynamic>{},
     'purchaseProducts': <String>[],
     'financeInterfaces': <String, dynamic>{},
   };
@@ -1045,7 +1047,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   static const _techReviewLabel = '市场部负责人二复核';
   static const _financeReviewLabel = '财务部负责人二复核';
 
-  static const _financeReviewKeys = <String>[
+  static const _kFinanceReviewKeys = <String>[
     'salesScale',
     'revenue',
     'invoiceAmount',
@@ -1132,6 +1134,17 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   bool get _canEditProductFiles =>
       _canEditMarket || (_row.isTechRevising && (_isTechFiller || _isSubmitter));
 
+  bool get _canEditFinanceModules =>
+      !_isLocked &&
+      _isOwner('financeOwner2') &&
+      _row.status == 'reviewing' &&
+      !_row.techRevisionOpen;
+
+  List<String> get _financeReviewKeys => [
+    ..._kFinanceReviewKeys,
+    ...proposalIntakeLaunchModuleReviewKeys(_form),
+  ];
+
   bool get _isMarketOwner1 => _isOwner('marketOwner1');
 
   bool get _isAnyOwner2 =>
@@ -1147,6 +1160,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   bool get _canSave =>
       (_row.isTechRevising && _isTechFiller) ||
       _canEditBusinessCost ||
+      _canEditFinanceModules ||
       (!_isContentFrozen &&
           !_row.techRevisionOpen &&
           (_isSubmitter || _isTechFiller));
@@ -1535,6 +1549,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         totalKey: 'projectCost',
         names: next,
         catalog: widget.options.costItemOptions,
+        settleTermsKey: 'costItemSettleTerms',
         resetReview: resetReview,
       );
       return;
@@ -1548,6 +1563,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         totalKey: 'businessCost',
         names: next,
         catalog: widget.options.businessCostItemOptions,
+        settleTermsKey: 'businessCostItemSettleTerms',
         resetReview: resetReview,
       );
       return;
@@ -1562,6 +1578,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     required String totalKey,
     required List<String> names,
     required List<ProposalCostItemOption> catalog,
+    String settleTermsKey = '',
     String? resetReview,
   }) {
     final form = proposalSyncCostSelection(
@@ -1572,6 +1589,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       codesKey: codesKey,
       amountsKey: amountsKey,
       totalKey: totalKey,
+      settleTermsKey: settleTermsKey,
     );
     final review = Map<String, dynamic>.from(_review);
     if (resetReview != null) review[resetReview] = false;
@@ -1604,6 +1622,29 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       ..[totalKey] = proposalCostAmountTotal(amounts);
     final review = Map<String, dynamic>.from(_review);
     if (resetReview != null) review[resetReview] = false;
+    _dirty = true;
+    _row = _row.copyWith(form: form, review: review, status: _statusAfterEdit);
+    if (mounted) setState(() {});
+    widget.onChanged(_row);
+  }
+
+  void _setCostSettleTerms({
+    required String settleTermsKey,
+    required String id,
+    required ProposalFinanceSettleTerms terms,
+  }) {
+    if (settleTermsKey == 'businessCostItemSettleTerms' &&
+        !_canEditBusinessCost) {
+      return;
+    }
+    final map = proposalCostSettleTermsMap(_form[settleTermsKey]);
+    map[id] = terms;
+    final form = Map<String, dynamic>.from(_form)
+      ..[settleTermsKey] = {
+        for (final entry in map.entries) entry.key: entry.value.toJson(),
+      };
+    final review = Map<String, dynamic>.from(_review)
+      ..['financeCompleted'] = false;
     _dirty = true;
     _row = _row.copyWith(form: form, review: review, status: _statusAfterEdit);
     if (mounted) setState(() {});
@@ -1775,6 +1816,14 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     for (final name in missingProposalReviewAssignees(_form)) {
       issues.add('请指定$name');
     }
+    issues.addAll(proposalIntakeLaunchFinanceIssues(_form));
+    issues.addAll(
+      proposalIntakeCostItemSettleIssues(
+        _form,
+        catalog: widget.options.costItemOptions,
+        businessCatalog: widget.options.businessCostItemOptions,
+      ),
+    );
     for (final entry in const {
       'marketCompleted': '市场部',
       'technologyCompleted': '科技部',
@@ -2835,54 +2884,62 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           _personField('运营', 'operator', positionIncludes: '运营'),
         ]),
       ),
-      _productAssetsCard(),
       _contractCard('03', '采购合同', 'purchase', wide),
       _contractCard('04', '销售合同', 'sales', wide),
       _stepCard(
         '05',
         '政策与执行',
-        '合同政策、合作计划与盈利方式',
-        _fieldGrid(wide, [
-          _textField(
-            '供货商政策',
-            'supplierPolicy',
-            maxLines: 3,
-            source: '合同抓取 · 可修改',
-            resetReview: 'marketCompleted',
-          ),
-          _textField(
-            '渠道政策',
-            'channelPolicy',
-            maxLines: 3,
-            source: '合同抓取 · 可修改',
-            resetReview: 'marketCompleted',
-          ),
-          _textField(
-            '提案执行计划',
-            'executionPlan',
-            maxLines: 4,
-            resetReview: 'marketCompleted',
-          ),
-          _textField(
-            '合作风险点',
-            'riskPoints',
-            maxLines: 4,
-            resetReview: 'marketCompleted',
-          ),
-          _multiField(
-            '盈利模式 · 需写明计算方式',
-            'profitModes',
-            widget.options.profitModes,
-            '新增盈利模式',
-            resetReview: 'marketCompleted',
-          ),
-          _textField(
-            '盈利计算说明',
-            'profitFormula',
-            maxLines: 3,
-            resetReview: 'marketCompleted',
-          ),
-        ]),
+        '合同政策、合作计划、盈利方式与产品上线',
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _fieldGrid(wide, [
+              _textField(
+                '供货商政策',
+                'supplierPolicy',
+                maxLines: 3,
+                source: '合同抓取 · 可修改',
+                resetReview: 'marketCompleted',
+              ),
+              _textField(
+                '渠道政策',
+                'channelPolicy',
+                maxLines: 3,
+                source: '合同抓取 · 可修改',
+                resetReview: 'marketCompleted',
+              ),
+              _textField(
+                '提案执行计划',
+                'executionPlan',
+                maxLines: 4,
+                resetReview: 'marketCompleted',
+              ),
+              _textField(
+                '合作风险点',
+                'riskPoints',
+                maxLines: 4,
+                resetReview: 'marketCompleted',
+              ),
+              _multiField(
+                '盈利模式 · 需写明计算方式',
+                'profitModes',
+                widget.options.profitModes,
+                '新增盈利模式',
+                resetReview: 'marketCompleted',
+              ),
+              _textField(
+                '盈利计算说明',
+                'profitFormula',
+                maxLines: 3,
+                resetReview: 'marketCompleted',
+              ),
+            ]),
+            const SizedBox(height: 16),
+            _launchRowsBlock(wide),
+            const SizedBox(height: 16),
+            _productAssetsCard(),
+          ],
+        ),
       ),
       _moduleReview(
         title: '市场部板块统一复核',
@@ -3347,9 +3404,11 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                   ? null
                   : '新增成本项',
               reviewSection: 'financeItem:costItems',
+              settleTermsKey: 'costItemSettleTerms',
+              wide: wide,
             ),
             const SizedBox(height: 10),
-            _businessCostField(),
+            _businessCostField(wide: wide),
             const SizedBox(height: 10),
             _numberField(
               '经营成本（万元）',
@@ -3375,6 +3434,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               reviewSection: 'financeItem:rollback',
               reviewLabel: _financeReviewLabel,
             ),
+            const SizedBox(height: 16),
+            _financeModulesBlock(wide),
           ],
         ),
       ),
@@ -4149,19 +4210,569 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       onDragExited: (_) => onHover(false),
       onDragDone: (detail) => unawaited(onDrop(detail)),
       child: child,
+      );
+  }
+
+  void _writeLaunchFinance({
+    required List<ProposalLaunchRow> rows,
+    required List<ProposalFinanceModule> modules,
+    String? resetReview,
+  }) {
+    final form = Map<String, dynamic>.from(_form)
+      ..['launchRows'] = [for (final row in rows) row.toJson()]
+      ..['financeModules'] = [for (final item in modules) item.toJson()];
+    final review = Map<String, dynamic>.from(_review);
+    if (resetReview != null) review[resetReview] = false;
+    if (resetReview != 'financeCompleted') {
+      review['financeCompleted'] = false;
+    }
+    _dirty = true;
+    _row = _row.copyWith(
+      status: _statusAfterEdit,
+      form: form,
+      review: review,
     );
+    if (mounted) setState(() {});
+    widget.onChanged(_row);
+  }
+
+  List<String> get _launchProvinceOptions {
+    final selected = _setOf('supplies');
+    final values = <String>[
+      ...selected,
+      for (final item in widget.options.supplies)
+        if (!selected.contains(item)) item,
+    ];
+    return values;
+  }
+
+  void _addLaunchRow() {
+    if (!_canEditMarket) return;
+    final rows = [
+      ...proposalIntakeLaunchRows(_form),
+      ProposalLaunchRow(id: proposalIntakeNewLaunchId()),
+    ];
+    _writeLaunchFinance(
+      rows: rows,
+      modules: proposalIntakeFinanceModules(_form),
+      resetReview: 'marketCompleted',
+    );
+  }
+
+  void _patchLaunchRow(
+    String id,
+    ProposalLaunchRow Function(ProposalLaunchRow row) update,
+  ) {
+    final rows = [
+      for (final row in proposalIntakeLaunchRows(_form))
+        if (row.id == id) update(row) else row,
+    ];
+    _writeLaunchFinance(
+      rows: rows,
+      modules: proposalIntakeFinanceModules(_form),
+      resetReview: 'marketCompleted',
+    );
+  }
+
+  void _removeLaunchRow(String id) {
+    if (!_canEditMarket) return;
+    _writeLaunchFinance(
+      rows: [
+        for (final row in proposalIntakeLaunchRows(_form))
+          if (row.id != id) row,
+      ],
+      modules: proposalIntakeFinanceModules(_form),
+      resetReview: 'marketCompleted',
+    );
+  }
+
+  Future<void> _linkFinanceModule(ProposalLaunchRow row) async {
+    if (!_canEditFinanceModules) return;
+    final modules = proposalIntakeFinanceModules(_form);
+    String? associateId;
+    if (modules.isNotEmpty) {
+      associateId = await showDialog<String>(
+        context: context,
+        builder: (context) => SimpleDialog(
+          title: const Text('财务模块'),
+          children: [
+            SimpleDialogOption(
+              onPressed: () => Navigator.pop(context, ''),
+              child: const Text('新建财务模块'),
+            ),
+            for (final item in modules)
+              SimpleDialogOption(
+                onPressed: () => Navigator.pop(context, item.id),
+                child: Text(
+                  item.title.isEmpty ? '关联 ${item.id}' : '关联 ${item.title}',
+                ),
+              ),
+          ],
+        ),
+      );
+      if (!mounted || associateId == null) return;
+    }
+    final linked = proposalIntakeLinkFinanceModule(
+      rows: proposalIntakeLaunchRows(_form),
+      modules: modules,
+      launchRowId: row.id,
+      associateModuleId: (associateId ?? '').isEmpty ? null : associateId,
+    );
+    _writeLaunchFinance(
+      rows: linked.rows,
+      modules: linked.modules,
+      resetReview: 'financeCompleted',
+    );
+  }
+
+  void _patchFinanceModule(
+    String id,
+    ProposalFinanceModule Function(ProposalFinanceModule item) update,
+  ) {
+    if (!_canEditFinanceModules) return;
+    final modules = [
+      for (final item in proposalIntakeFinanceModules(_form))
+        if (item.id == id) update(item) else item,
+    ];
+    _writeLaunchFinance(
+      rows: proposalIntakeLaunchRows(_form),
+      modules: modules,
+      resetReview: 'financeCompleted',
+    );
+  }
+
+  Widget _launchRowsBlock(bool wide) {
+    final rows = proposalIntakeLaunchRows(_form);
+    final modules = {
+      for (final item in proposalIntakeFinanceModules(_form)) item.id: item,
+    };
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Expanded(
+              child: Text(
+                '产品上线',
+                style: TextStyle(
+                  color: ProposalPalette.text,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 13,
+                ),
+              ),
+            ),
+            if (_canEditMarket)
+              TextButton.icon(
+                onPressed: _addLaunchRow,
+                icon: const Icon(Icons.add, size: 16),
+                label: const Text('新增上线'),
+              ),
+          ],
+        ),
+        const Text(
+          '按省份和面值新增上线行，不带渠道。是否需要财务模块由市场部填写；条款一样则关联已有模块。',
+          style: TextStyle(color: ProposalPalette.text3, fontSize: 11),
+        ),
+        if (rows.isEmpty)
+          const Padding(
+            padding: EdgeInsets.only(top: 8),
+            child: Text(
+              '尚未添加上线行',
+              style: TextStyle(color: ProposalPalette.text3, fontSize: 12),
+            ),
+          ),
+        for (final row in rows) ...[
+          const SizedBox(height: 10),
+          _launchRowCard(row, modules[row.financeModuleId], wide),
+        ],
+      ],
+    );
+  }
+
+  Widget _launchRowCard(
+    ProposalLaunchRow row,
+    ProposalFinanceModule? module,
+    bool wide,
+  ) {
+    final provinces = [
+      ..._launchProvinceOptions,
+      if (row.province.isNotEmpty &&
+          !_launchProvinceOptions.contains(row.province))
+        row.province,
+    ];
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFAF8FC),
+        border: Border.all(color: const Color(0xFFE2D8EC)),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _fieldGrid(wide, [
+            ProposalField(
+              label: '省份',
+              required: true,
+              child: _showSelectedAsText || !_canEditMarket
+                  ? _readonlySelectedText(row.province)
+                  : ProposalSelectField<String>(
+                      value: row.province.isEmpty ? null : row.province,
+                      title: '省份',
+                      hint: '请选择省份',
+                      searchable: true,
+                      options: [
+                        for (final item in provinces)
+                          ProposalSelectOption(value: item, label: item),
+                      ],
+                      onSelected: (value) => _patchLaunchRow(
+                        row.id,
+                        (current) => current.copyWith(province: value ?? ''),
+                      ),
+                    ),
+            ),
+            ProposalField(
+              label: '面值',
+              required: true,
+              child: _showSelectedAsText || !_canEditMarket
+                  ? _readonlySelectedText(row.faceValue)
+                  : TextFormField(
+                      key: ValueKey('face-${row.id}-$_fieldEpoch'),
+                      initialValue: row.faceValue,
+                      onTapOutside: (_) =>
+                          FocusManager.instance.primaryFocus?.unfocus(),
+                      onChanged: (value) => _patchLaunchRow(
+                        row.id,
+                        (current) => current.copyWith(faceValue: value.trim()),
+                      ),
+                      decoration: proposalInputDecoration(hint: '如 100'),
+                    ),
+            ),
+            ProposalField(
+              label: '需要财务模块',
+              child: _showSelectedAsText || !_canEditMarket
+                  ? _readonlySelectedText(row.needFinanceModule ? '需要' : '不需要')
+                  : ProposalSelectField<String>(
+                      value: row.needFinanceModule ? '需要' : '不需要',
+                      title: '需要财务模块',
+                      allowClear: false,
+                      options: const [
+                        ProposalSelectOption(value: '需要', label: '需要'),
+                        ProposalSelectOption(value: '不需要', label: '不需要'),
+                      ],
+                      onSelected: (value) => _patchLaunchRow(
+                        row.id,
+                        (current) => current.copyWith(
+                          needFinanceModule: value == '需要',
+                          financeModuleId: value == '需要'
+                              ? current.financeModuleId
+                              : '',
+                        ),
+                      ),
+                    ),
+            ),
+          ]),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  !row.needFinanceModule
+                      ? '本行不需要财务模块'
+                      : module == null
+                      ? '待财务新增或关联模块'
+                      : '已关联：${module.title.isEmpty ? module.id : module.title}',
+                  style: const TextStyle(
+                    color: ProposalPalette.text2,
+                    fontSize: 12,
+                  ),
+                ),
+              ),
+              if (row.needFinanceModule && _canEditFinanceModules)
+                TextButton(
+                  onPressed: () => unawaited(_linkFinanceModule(row)),
+                  child: Text(module == null ? '新增财务模块' : '改关联'),
+                ),
+              if (_canEditMarket)
+                TextButton(
+                  onPressed: () => _removeLaunchRow(row.id),
+                  child: const Text('删除'),
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _financeModulesBlock(bool wide) {
+    final modules = proposalIntakeFinanceModules(_form);
+    if (modules.isEmpty) {
+      return const Text(
+        '上线行勾选「需要财务模块」后，由财务在对应行点新增或关联。',
+        style: TextStyle(color: ProposalPalette.text3, fontSize: 12),
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          '财务模块',
+          style: TextStyle(
+            color: ProposalPalette.text,
+            fontWeight: FontWeight.w700,
+            fontSize: 13,
+          ),
+        ),
+        const SizedBox(height: 4),
+        const Text(
+          '收入和每条项目成本 / 业务成本都填写结算单价或比例、结算规则、对方主体、我方主体、税率。条款相同会自动关联。',
+          style: TextStyle(color: ProposalPalette.text3, fontSize: 11),
+        ),
+        for (final item in modules) ...[
+          const SizedBox(height: 10),
+          _financeModuleCard(item, wide),
+        ],
+      ],
+    );
+  }
+
+  Widget _financeModuleCard(ProposalFinanceModule module, bool wide) {
+    final enabled = _canEditFinanceModules && !_showSelectedAsText;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF7F9FC),
+        border: Border.all(color: const Color(0xFFD9E3F0)),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  module.title.isEmpty ? '财务模块' : module.title,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w700,
+                    color: ProposalPalette.text,
+                  ),
+                ),
+              ),
+              _rowReviewToggle(
+                'financeItem:launchModule:${module.id}',
+                _financeReviewLabel,
+              ) ??
+                  const SizedBox.shrink(),
+            ],
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            '收入',
+            style: TextStyle(
+              fontWeight: FontWeight.w700,
+              fontSize: 12,
+              color: ProposalPalette.text2,
+            ),
+          ),
+          _settleTermsGrid(
+            wide: wide,
+            keyPrefix: '${module.id}-rev',
+            terms: module.revenue,
+            enabled: enabled,
+            onChanged: (terms) => _patchFinanceModule(
+              module.id,
+              (current) => ProposalFinanceModule(
+                id: current.id,
+                title: current.title,
+                revenue: terms,
+                projectCosts: current.projectCosts,
+                businessCosts: current.businessCosts,
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+          _financeCostLines(
+            wide: wide,
+            label: '项目成本',
+            lines: module.projectCosts,
+            names: widget.options.costItems,
+            enabled: enabled,
+            onChanged: (lines) => _patchFinanceModule(
+              module.id,
+              (current) => ProposalFinanceModule(
+                id: current.id,
+                title: current.title,
+                revenue: current.revenue,
+                projectCosts: lines,
+                businessCosts: current.businessCosts,
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+          _financeCostLines(
+            wide: wide,
+            label: '业务成本',
+            lines: module.businessCosts,
+            names: widget.options.businessCostItems,
+            enabled: enabled,
+            onChanged: (lines) => _patchFinanceModule(
+              module.id,
+              (current) => ProposalFinanceModule(
+                id: current.id,
+                title: current.title,
+                revenue: current.revenue,
+                projectCosts: current.projectCosts,
+                businessCosts: lines,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _financeCostLines({
+    required bool wide,
+    required String label,
+    required List<ProposalFinanceCostLine> lines,
+    required List<String> names,
+    required bool enabled,
+    required ValueChanged<List<ProposalFinanceCostLine>> onChanged,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                label,
+                style: const TextStyle(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 12,
+                  color: ProposalPalette.text2,
+                ),
+              ),
+            ),
+            if (enabled)
+              TextButton(
+                onPressed: () {
+                  final unused = names.where(
+                    (name) => !lines.any((line) => line.name == name),
+                  );
+                  final name = unused.isNotEmpty
+                      ? unused.first
+                      : '成本项${lines.length + 1}';
+                  onChanged([
+                    ...lines,
+                    ProposalFinanceCostLine(
+                      id: 'cl-${DateTime.now().microsecondsSinceEpoch}',
+                      name: name,
+                    ),
+                  ]);
+                },
+                child: const Text('新增成本项'),
+              ),
+          ],
+        ),
+        if (lines.isEmpty)
+          const Text(
+            '暂无成本项',
+            style: TextStyle(color: ProposalPalette.text3, fontSize: 12),
+          ),
+        for (final line in lines) ...[
+          const SizedBox(height: 8),
+          Text(
+            line.name,
+            style: const TextStyle(
+              fontWeight: FontWeight.w600,
+              fontSize: 12,
+              color: ProposalPalette.text,
+            ),
+          ),
+          _settleTermsGrid(
+            wide: wide,
+            keyPrefix: line.id,
+            terms: line.terms,
+            enabled: enabled,
+            onChanged: (terms) => onChanged([
+              for (final item in lines)
+                if (item.id == line.id)
+                  ProposalFinanceCostLine(
+                    id: item.id,
+                    name: item.name,
+                    terms: terms,
+                  )
+                else
+                  item,
+            ]),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _settleTermsGrid({
+    required bool wide,
+    required String keyPrefix,
+    required ProposalFinanceSettleTerms terms,
+    required bool enabled,
+    required ValueChanged<ProposalFinanceSettleTerms> onChanged,
+    int? columns,
+  }) {
+    Widget field(
+      String label,
+      String value,
+      ProposalFinanceSettleTerms Function(String) write,
+    ) {
+      return ProposalField(
+        label: label,
+        child: !enabled
+            ? _readonlySelectedText(value)
+            : TextFormField(
+                key: ValueKey('settle-$keyPrefix-$label-$_fieldEpoch'),
+                initialValue: value,
+                onTapOutside: (_) =>
+                    FocusManager.instance.primaryFocus?.unfocus(),
+                onChanged: (next) => onChanged(write(next.trim())),
+                decoration: proposalInputDecoration(),
+              ),
+      );
+    }
+
+    return _fieldGrid(wide, [
+      field(
+        '结算单价/比例',
+        terms.settlePrice,
+        (value) => terms.copyWith(settlePrice: value),
+      ),
+      field(
+        '结算规则',
+        terms.settleRule,
+        (value) => terms.copyWith(settleRule: value),
+      ),
+      field(
+        '对方主体',
+        terms.counterparty,
+        (value) => terms.copyWith(counterparty: value),
+      ),
+      field(
+        '我方主体',
+        terms.ourParty,
+        (value) => terms.copyWith(ourParty: value),
+      ),
+      field('税率', terms.taxRate, (value) => terms.copyWith(taxRate: value)),
+    ], columns: columns);
   }
 
   Widget _productAssetsCard() {
     final files = _onlineProductFiles();
     final enabled = _canEditProductFiles;
-    return _stepCard(
-      '02b',
-      _showProductTemplates ? '产品模板与上线文件' : '上线产品文件',
-      _showProductTemplates
-          ? '下载提案审批同款产品模板；上线产品文件由提交人上传，最多 5 个'
-          : '上线产品文件由提交人上传，最多 5 个',
-      Column(
+    return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (_showProductTemplates) ...[
@@ -4338,8 +4949,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
             ),
           ),
         ],
-      ),
-    );
+      );
   }
 
   Widget? _contractEditFooter(String key) {
@@ -4997,16 +5607,18 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     );
   }
 
-  Widget _fieldGrid(bool wide, List<Widget> fields) => LayoutBuilder(
+  Widget _fieldGrid(bool wide, List<Widget> fields, {int? columns}) =>
+      LayoutBuilder(
     builder: (_, constraints) {
-      final columns = !wide
-          ? 1
-          : constraints.maxWidth >= 1080
-          ? 3
-          : constraints.maxWidth >= 660
-          ? 2
-          : 1;
-      final rows = _groupFields(fields, columns);
+      final resolved = columns ??
+          (!wide
+              ? 1
+              : constraints.maxWidth >= 1080
+              ? 3
+              : constraints.maxWidth >= 660
+              ? 2
+              : 1);
+      final rows = _groupFields(fields, resolved);
       return Container(
         width: double.infinity,
         decoration: BoxDecoration(
@@ -5019,7 +5631,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             for (var row = 0; row < rows.length; row++)
-              _gridRow(rows[row], columns, lastRow: row == rows.length - 1),
+              _gridRow(rows[row], resolved, lastRow: row == rows.length - 1),
           ],
         ),
       );
@@ -5533,7 +6145,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     );
   }
 
-  Widget _businessCostField() {
+  Widget _businessCostField({bool wide = true}) {
     if (_businessCostSealed) {
       return const ProposalField(
         label: '业务成本',
@@ -5549,29 +6161,13 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         ),
       );
     }
-    if (_canEditBusinessCost) {
-      return _costSelectField(
-        label: '业务成本',
-        namesKey: 'businessCostItems',
-        amountsKey: 'businessCostItemAmounts',
-        totalKey: 'businessCost',
-        options: widget.options.businessCostItems,
-        catalog: widget.options.businessCostItemOptions,
-        addLabel: widget.options.costItemSource == 'asset'
-            ? null
-            : (widget.options.businessCostItems.isEmpty ? null : '新增成本项'),
-        writable: true,
-        allowDuringReview: true,
-      );
-    }
     final names = _form['businessCostItems'] is List
         ? [
             for (final item in _form['businessCostItems'] as List)
               if ('$item'.trim().isNotEmpty) '$item'.trim(),
           ]
         : const <String>[];
-    final amounts = proposalCostAmountMap(_form['businessCostItemAmounts']);
-    if (names.isEmpty) {
+    if (!_canEditBusinessCost && names.isEmpty) {
       return const ProposalField(
         label: '业务成本',
         tone: ProposalFieldTone.locked,
@@ -5586,36 +6182,20 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         ),
       );
     }
-    final catalog = widget.options.businessCostItemOptions;
-    final total = proposalCostAmountTotal(amounts);
-    return ProposalField(
+    return _costSelectField(
       label: '业务成本',
-      tone: ProposalFieldTone.locked,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          for (final name in names)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 4),
-              child: Text(
-                '$name  ${_money(amounts[proposalCostAmountId(name, catalog)] ?? amounts[name] ?? 0)}',
-                style: const TextStyle(
-                  color: ProposalPalette.text,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-          Text(
-            '合计 ${_money(total)}',
-            style: const TextStyle(
-              color: ProposalPalette.text2,
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ],
-      ),
+      namesKey: 'businessCostItems',
+      amountsKey: 'businessCostItemAmounts',
+      totalKey: 'businessCost',
+      options: widget.options.businessCostItems,
+      catalog: widget.options.businessCostItemOptions,
+      addLabel: widget.options.costItemSource == 'asset'
+          ? null
+          : (widget.options.businessCostItems.isEmpty ? null : '新增成本项'),
+      writable: _canEditBusinessCost,
+      allowDuringReview: true,
+      settleTermsKey: 'businessCostItemSettleTerms',
+      wide: wide,
     );
   }
 
@@ -5630,6 +6210,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     String? addLabel,
     bool? writable,
     bool allowDuringReview = false,
+    String settleTermsKey = '',
+    bool wide = true,
   }) {
     final enabled = allowDuringReview
         ? (!_isLocked && (writable ?? false))
@@ -5644,38 +6226,81 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         : selected.toList();
     final amounts = proposalCostAmountMap(_form[amountsKey]);
     final total = proposalCostAmountTotal(amounts);
+    final settleMap = settleTermsKey.isEmpty
+        ? const <String, ProposalFinanceSettleTerms>{}
+        : proposalCostSettleTermsMap(_form[settleTermsKey]);
+    Widget settleFields(String name) {
+      if (settleTermsKey.isEmpty) return const SizedBox.shrink();
+      final id = proposalCostAmountId(name, catalog);
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 10),
+        child: _settleTermsGrid(
+          wide: wide,
+          keyPrefix: '$settleTermsKey-$id',
+          terms: proposalCostSettleTermsOf(terms: settleMap, name: name, id: id),
+          enabled: enabled,
+          columns: 5,
+          onChanged: (terms) => _setCostSettleTerms(
+            settleTermsKey: settleTermsKey,
+            id: id,
+            terms: terms,
+          ),
+        ),
+      );
+    }
+
     Widget amountRows() {
       if (names.isEmpty) return const SizedBox.shrink();
+      final withSettle = settleTermsKey.isNotEmpty;
       return Padding(
         padding: const EdgeInsets.only(top: 10),
         child: Column(
           children: [
-            for (final name in names)
-              _costAmountRow(
-                name: name,
-                id: proposalCostAmountId(name, catalog),
-                amount:
-                    amounts[proposalCostAmountId(name, catalog)] ??
-                    amounts[name] ??
-                    0,
-                amountsKey: amountsKey,
-                totalKey: totalKey,
-                enabled: enabled,
-              ),
-            Align(
-              alignment: Alignment.centerRight,
-              child: Padding(
-                padding: const EdgeInsets.only(top: 6),
-                child: Text(
-                  '合计 ${_money(total)}',
-                  style: const TextStyle(
-                    color: ProposalPalette.text2,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
+            for (final name in names) ...[
+              if (withSettle)
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Padding(
+                    padding: const EdgeInsets.only(bottom: 6),
+                    child: Text(
+                      name,
+                      style: const TextStyle(
+                        color: ProposalPalette.text,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                )
+              else
+                _costAmountRow(
+                  name: name,
+                  id: proposalCostAmountId(name, catalog),
+                  amount:
+                      amounts[proposalCostAmountId(name, catalog)] ??
+                      amounts[name] ??
+                      0,
+                  amountsKey: amountsKey,
+                  totalKey: totalKey,
+                  enabled: enabled,
+                ),
+              settleFields(name),
+            ],
+            if (!withSettle)
+              Align(
+                alignment: Alignment.centerRight,
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: Text(
+                    '合计 ${_money(total)}',
+                    style: const TextStyle(
+                      color: ProposalPalette.text2,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                 ),
               ),
-            ),
           ],
         ),
       );
@@ -5692,11 +6317,13 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               : Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    for (final name in names)
+                    for (final name in names) ...[
                       Padding(
                         padding: const EdgeInsets.only(bottom: 4),
                         child: Text(
-                          '$name  ${_money(amounts[proposalCostAmountId(name, catalog)] ?? amounts[name] ?? 0)}',
+                          settleTermsKey.isEmpty
+                              ? '$name  ${_money(amounts[proposalCostAmountId(name, catalog)] ?? amounts[name] ?? 0)}'
+                              : name,
                           style: const TextStyle(
                             color: ProposalPalette.text,
                             fontSize: 13,
@@ -5704,14 +6331,17 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                           ),
                         ),
                       ),
-                    Text(
-                      '合计 ${_money(total)}',
-                      style: const TextStyle(
-                        color: ProposalPalette.text2,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
+                      settleFields(name),
+                    ],
+                    if (settleTermsKey.isEmpty)
+                      Text(
+                        '合计 ${_money(total)}',
+                        style: const TextStyle(
+                          color: ProposalPalette.text2,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
-                    ),
                   ],
                 ),
         ),

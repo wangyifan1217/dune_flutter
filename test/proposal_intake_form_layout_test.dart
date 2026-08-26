@@ -1002,6 +1002,88 @@ void main() {
     );
   });
 
+  testWidgets('policy section hosts launch rows without channel', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1440, 2400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      _harness(
+        1440,
+        row: ProposalIntakeRow.fromJson({
+          'id': 1,
+          'code': 'TA-2026-0001',
+          'title': '测试提案',
+          'status': 'filling',
+          'version': 3,
+          'createdBy': 11,
+          'form': {
+            'launchRows': [
+              {
+                'id': 'lr-1',
+                'province': '河南',
+                'faceValue': '100',
+                'needFinanceModule': true,
+              },
+            ],
+          },
+        }),
+      ),
+    );
+    await tester.pump();
+    await _scrollUntil(tester, '产品上线');
+    expect(find.text('产品上线'), findsOneWidget);
+    expect(find.text('新增上线'), findsOneWidget);
+    expect(find.textContaining('不带渠道'), findsOneWidget);
+    expect(find.text('产品上线表'), findsNothing);
+    expect(find.text('需要财务模块'), findsOneWidget);
+    expect(find.text('面值'), findsOneWidget);
+    expect(find.text('待财务新增或关联模块'), findsOneWidget);
+  });
+
+  testWidgets('finance owner 2 can add modules during review', (tester) async {
+    tester.view.physicalSize = const Size(1440, 2400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      _harness(
+        1440,
+        session: AuthSession.fromJson(const {
+          'userId': 12,
+          'displayName': '李思',
+        }),
+        row: ProposalIntakeRow.fromJson({
+          'id': 1,
+          'code': 'TA-2026-0001',
+          'title': '测试提案',
+          'status': 'reviewing',
+          'createdBy': 11,
+          'form': {
+            'financeOwner2': '李思',
+            'financeOwner2UserId': 12,
+            'launchRows': [
+              {
+                'id': 'lr-1',
+                'province': '河南',
+                'faceValue': '100',
+                'needFinanceModule': true,
+              },
+            ],
+          },
+          'review': {'stage': 'reviewing'},
+        }),
+      ),
+    );
+    await tester.pump();
+    await _scrollUntil(tester, '新增财务模块');
+    expect(find.text('新增财务模块'), findsOneWidget);
+    expect(find.text('新增上线'), findsNothing);
+    expect(find.textContaining('由财务在对应行点新增或关联'), findsOneWidget);
+  });
+
   testWidgets('uploaded product file can be viewed and downloaded', (
     tester,
   ) async {
@@ -1480,13 +1562,26 @@ void main() {
       expect(find.text('经营成本（提案留空）'), findsNothing);
       expect(find.textContaining('差旅、小额营销按项目收入的 2%'), findsNothing);
       expect(find.text('预计/标准，非发生额'), findsNothing);
-      expect(find.text('合计 0 万元'), findsOneWidget);
+      expect(find.text('合计 0 万元'), findsNothing);
+      expect(find.text('结算单价/比例'), findsOneWidget);
+      expect(find.text('结算规则'), findsOneWidget);
+      expect(find.text('对方主体'), findsWidgets);
+      expect(find.text('我方主体'), findsWidgets);
+      expect(find.text('税率'), findsOneWidget);
+      expect(
+        tester.getTopLeft(find.text('结算单价/比例')).dy,
+        closeTo(tester.getTopLeft(find.text('结算规则')).dy, 2),
+      );
+      expect(
+        tester.getTopLeft(find.text('结算规则')).dy,
+        closeTo(tester.getTopLeft(find.text('税率')).dy, 2),
+      );
       expect(
         find.byWidgetPredicate(
           (widget) =>
               widget is TextField && widget.decoration?.hintText == '预计（万元）',
         ),
-        findsOneWidget,
+        findsNothing,
       );
     },
   );
@@ -1601,6 +1696,58 @@ void main() {
           )
           .enabled,
       isTrue,
+    );
+  });
+
+  testWidgets('selected business cost items show five settlement columns', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1440, 2200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      _harness(
+        1440,
+        session: AuthSession.fromJson(const {
+          'userId': 4,
+          'displayName': '市场一',
+        }),
+        row: ProposalIntakeRow.fromJson({
+          'id': 1,
+          'code': 'TA-2026-0001',
+          'status': 'reviewing',
+          'createdBy': 11,
+          'form': {
+            'marketOwner1UserId': 4,
+            'businessCostItems': ['员工提成'],
+          },
+          'review': {'stage': 'reviewing'},
+        }),
+      ),
+    );
+    await tester.pump();
+    await _scrollUntil(tester, '业务成本');
+
+    expect(find.text('员工提成'), findsWidgets);
+    expect(find.text('结算单价/比例'), findsOneWidget);
+    expect(find.text('结算规则'), findsOneWidget);
+    expect(find.text('税率'), findsOneWidget);
+    expect(
+      tester.getTopLeft(find.text('结算单价/比例')).dy,
+      closeTo(tester.getTopLeft(find.text('结算规则')).dy, 2),
+    );
+    expect(
+      tester.getTopLeft(find.text('结算规则')).dy,
+      closeTo(tester.getTopLeft(find.text('税率')).dy, 2),
+    );
+    expect(find.text('合计 0 万元'), findsNothing);
+    expect(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is TextField && widget.decoration?.hintText == '预计（万元）',
+      ),
+      findsNothing,
     );
   });
 

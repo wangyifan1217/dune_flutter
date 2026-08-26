@@ -86,6 +86,7 @@ import '../qianji/native_qianji_detail_page.dart';
 import '../qianji/native_qianji_hub_page.dart';
 import '../qianji/native_qianji_iteration_page.dart';
 import '../qianji/native_qianji_kb_supervise_page.dart';
+import '../qianji/native_meeting_assistant_preview_page.dart';
 import '../qianji/native_qianji_meeting_supervise_page.dart';
 import '../qianji/native_qianji_my_perf_page.dart';
 import '../qianji/native_qianji_project_tasks_page.dart';
@@ -3165,6 +3166,11 @@ class _NativeScreenHostState extends State<NativeScreenHost>
             widget.navigation.go('QJR');
           },
           onOpenRobot: (role) => unawaited(_openRobotFromCatalog(role)),
+          onOpenMeetingAssistant: () => widget.navigation.go('QJMA'),
+        );
+      case 'QJMA':
+        return NativeMeetingAssistantPreviewPage(
+          onBack: widget.navigation.back,
         );
       case 'QJR':
         if (!widget.session.effectiveRobotAccess) {
@@ -4535,6 +4541,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       'QJTD',
       'QJMM',
       'QJMD',
+      'QJMA',
       'QJSS',
       'QJKB',
       'QJFS',
@@ -4616,6 +4623,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         screen == 'QJI' ||
         screen == 'QJMM' ||
         screen == 'QJMD' ||
+        screen == 'QJMA' ||
         screen == 'QJSS' ||
         screen == 'QJKB' ||
         screen == 'QJFS' ||
@@ -4702,6 +4710,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       'QJI',
       'QJMM',
       'QJMD',
+      'QJMA',
       'QJSS',
       'QJKB',
       'QJFS',
@@ -4743,6 +4752,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       'QJCD' => const ['QJ', 'QJC', 'QJCD'],
       'QJMM' => const ['QJ', 'QJMM'],
       'QJMD' => const ['QJ', 'QJMM', 'QJMD'],
+      'QJMA' => const ['QJ', 'QJMA'],
       'QJSS' => const ['QJ', 'QJSS'],
       'QJKB' => const ['QJ', 'QJKB'],
       'QJFS' => const ['QJ', 'QJFS'],

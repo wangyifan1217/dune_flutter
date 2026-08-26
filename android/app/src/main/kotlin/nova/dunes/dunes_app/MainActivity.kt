@@ -23,6 +23,7 @@ class MainActivity : FlutterActivity() {
     private val meetingAudioChannel = "dunes/meeting_audio"
     private val mainHandler = Handler(Looper.getMainLooper())
     private var tpnsBridge: TpnsPushBridge? = null
+    private var tauVoiceCallAudio: TauVoiceCallAudio? = null
     private var voiceStreamSink: EventChannel.EventSink? = null
     private var recorderEventSink: EventChannel.EventSink? = null
     private var audioFocusRequest: AudioFocusRequest? = null
@@ -54,6 +55,7 @@ class MainActivity : FlutterActivity() {
         tpnsBridge = TpnsPushBridge(applicationContext).also {
             it.attach(flutterEngine)
         }
+        tauVoiceCallAudio = TauVoiceCallAudio(applicationContext, flutterEngine.dartExecutor.binaryMessenger)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, voiceChannel)
             .setMethodCallHandler { call, result ->
                 when (call.method) {
@@ -387,23 +389,32 @@ class MainActivity : FlutterActivity() {
     }
 
     private fun stopRecord(result: MethodChannel.Result, deleteFile: Boolean) {
-        try {
-            val duration = stopInternal(deleteFile)
-            val path = outputPath
-            if (deleteFile || path.isNullOrBlank()) {
-                result.success(null)
-                return
+        Thread({
+            try {
+                val duration = stopInternal(deleteFile)
+                val path = outputPath
+                mainHandler.post {
+                    if (deleteFile || path.isNullOrBlank()) {
+                        result.success(null)
+                    } else {
+                        result.success(
+                            mapOf(
+                                "path" to path,
+                                "durationMs" to duration
+                            )
+                        )
+                    }
+                }
+            } catch (e: Exception) {
+                try {
+                    stopInternal(deleteFile = true)
+                } catch (_: Exception) {
+                }
+                mainHandler.post {
+                    result.error("AUDIO_STOP_FAILED", e.message, null)
+                }
             }
-            result.success(
-                mapOf(
-                    "path" to path,
-                    "durationMs" to duration
-                )
-            )
-        } catch (e: Exception) {
-            stopInternal(deleteFile = true)
-            result.error("AUDIO_STOP_FAILED", e.message, null)
-        }
+        }, "dunes-audio-stop").start()
     }
 
     private fun currentSegmentDurationMs(): Long {
@@ -419,6 +430,8 @@ class MainActivity : FlutterActivity() {
         isRecording = false
         isPaused = false
         micConflictDetected = false
+        // 先停采集，避免录音线程卡在 read() 上，join 把主线程拖死。
+        stopAudioRecordCapture()
         try {
             recordThread?.join(3000)
         } catch (_: InterruptedException) {

@@ -66,6 +66,10 @@
             android:name=".MeetingRecordingService"
             android:exported="false"
             android:foregroundServiceType="microphone" />
+        <service
+            android:name=".TauVoiceCallForegroundService"
+            android:exported="false"
+            android:foregroundServiceType="microphone" />
         <receiver
             android:name=".DunesTpnsReceiver"
             android:exported="true">

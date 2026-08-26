@@ -15,6 +15,9 @@ class AuthSession {
     this.novaLocalStorage,
     this.lighthouseAccess = false,
     this.qianjiAccess = false,
+    this.novaVoiceCallAccess = false,
+    this.novaVoiceCallLang = 'zh',
+    this.novaVoiceCallVoice = 'female',
     this.qianjiAdminAccess = false,
     this.robotAccess = false,
     this.hrbpAccess = false,
@@ -38,6 +41,9 @@ class AuthSession {
   final String userType;
   final bool lighthouseAccess;
   final bool qianjiAccess;
+  final bool novaVoiceCallAccess;
+  final String novaVoiceCallLang;
+  final String novaVoiceCallVoice;
   final bool qianjiAdminAccess;
   final bool robotAccess;
 
@@ -76,6 +82,9 @@ class AuthSession {
 
   bool get effectiveQianjiAccess =>
       qianjiAccess || DunesDefaults.localLighthouseAccessBypass;
+
+  bool get effectiveNovaVoiceCallAccess =>
+      novaVoiceCallAccess || DunesDefaults.localLighthouseAccessBypass;
 
   bool get effectiveQianjiAdminAccess =>
       qianjiAdminAccess || DunesDefaults.localLighthouseAccessBypass;
@@ -149,6 +158,9 @@ class AuthSession {
     Map<String, String>? novaLocalStorage,
     bool? lighthouseAccess,
     bool? qianjiAccess,
+    bool? novaVoiceCallAccess,
+    String? novaVoiceCallLang,
+    String? novaVoiceCallVoice,
     bool? qianjiAdminAccess,
     bool? robotAccess,
     bool? hrbpAccess,
@@ -173,6 +185,9 @@ class AuthSession {
       novaLocalStorage: novaLocalStorage ?? this.novaLocalStorage,
       lighthouseAccess: lighthouseAccess ?? this.lighthouseAccess,
       qianjiAccess: qianjiAccess ?? this.qianjiAccess,
+      novaVoiceCallAccess: novaVoiceCallAccess ?? this.novaVoiceCallAccess,
+      novaVoiceCallLang: novaVoiceCallLang ?? this.novaVoiceCallLang,
+      novaVoiceCallVoice: novaVoiceCallVoice ?? this.novaVoiceCallVoice,
       qianjiAdminAccess: qianjiAdminAccess ?? this.qianjiAdminAccess,
       robotAccess: robotAccess ?? this.robotAccess,
       hrbpAccess: hrbpAccess ?? this.hrbpAccess,
@@ -221,6 +236,9 @@ class AuthSession {
           session.userType,
       lighthouseAccess: data['lighthouseAccess'] == true,
       qianjiAccess: data['qianjiAccess'] == true,
+      novaVoiceCallAccess: data['novaVoiceCallAccess'] == true,
+      novaVoiceCallLang: (data['novaVoiceCallLang'] ?? 'zh').toString(),
+      novaVoiceCallVoice: (data['novaVoiceCallVoice'] ?? 'female').toString(),
       qianjiAdminAccess: data['qianjiAdminAccess'] == true,
       robotAccess: data['robotAccess'] == true,
       hrbpAccess: data['hrbpAccess'] == true,
@@ -258,6 +276,9 @@ class AuthSession {
       userType: _resolveUserType(claims),
       lighthouseAccess: claims['lighthouseAccess'] == true,
       qianjiAccess: claims['qianjiAccess'] == true,
+      novaVoiceCallAccess: claims['novaVoiceCallAccess'] == true,
+      novaVoiceCallLang: (claims['novaVoiceCallLang'] ?? 'zh').toString(),
+      novaVoiceCallVoice: (claims['novaVoiceCallVoice'] ?? 'female').toString(),
       qianjiAdminAccess: claims['qianjiAdminAccess'] == true,
       robotAccess: claims['robotAccess'] == true,
       hrbpAccess: claims['hrbpAccess'] == true,
@@ -302,6 +323,9 @@ class AuthSession {
         'novaLocalStorage': novaLocalStorage,
       'lighthouseAccess': lighthouseAccess,
       'qianjiAccess': qianjiAccess,
+      'novaVoiceCallAccess': novaVoiceCallAccess,
+      'novaVoiceCallLang': novaVoiceCallLang,
+      'novaVoiceCallVoice': novaVoiceCallVoice,
       'qianjiAdminAccess': qianjiAdminAccess,
       'robotAccess': robotAccess,
       'hrbpAccess': hrbpAccess,
@@ -332,6 +356,9 @@ class AuthSession {
       novaLocalStorage: _parseNovaStorage(json['novaLocalStorage']),
       lighthouseAccess: json['lighthouseAccess'] == true,
       qianjiAccess: json['qianjiAccess'] == true,
+      novaVoiceCallAccess: json['novaVoiceCallAccess'] == true,
+      novaVoiceCallLang: (json['novaVoiceCallLang'] ?? 'zh').toString(),
+      novaVoiceCallVoice: (json['novaVoiceCallVoice'] ?? 'female').toString(),
       qianjiAdminAccess: json['qianjiAdminAccess'] == true,
       robotAccess: json['robotAccess'] == true,
       hrbpAccess: json['hrbpAccess'] == true,

@@ -79,6 +79,7 @@ class NativeConversationPage extends StatefulWidget {
   final ValueChanged<NativeConversation> onOpenGroup;
   final VoidCallback onOpenContacts;
   final VoidCallback onOpenNova;
+
   /// 打开沙丘公告。`tab` 为 `notice` / `broadcast`。
   final ValueChanged<String> onOpenNotifications;
   final VoidCallback onOpenNewChat;
@@ -938,11 +939,7 @@ class _NativeConversationPageState extends State<NativeConversationPage>
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (!mounted) return;
           unawaited(
-            prefetchConversationAvatars(
-              context,
-              merged,
-              avatarService: _service,
-            ),
+            prefetchConversationAvatars(merged, avatarService: _service),
           );
         });
       }
@@ -1257,14 +1254,10 @@ class _NativeConversationPageState extends State<NativeConversationPage>
       );
     } else if (c.isXrxsAssistant) {
       rowKind = ChatInboxRowKind.xrxsAssistant;
-      onTap = _openWithScrollPersist(
-        () => widget.onOpenXrxsAssistant?.call(c),
-      );
+      onTap = _openWithScrollPersist(() => widget.onOpenXrxsAssistant?.call(c));
     } else if (c.isWeeklySummary) {
       rowKind = ChatInboxRowKind.weeklySummary;
-      onTap = _openWithScrollPersist(
-        () => widget.onOpenWeeklySummary?.call(c),
-      );
+      onTap = _openWithScrollPersist(() => widget.onOpenWeeklySummary?.call(c));
     } else if (c.isAdministrativeNotice) {
       rowKind = ChatInboxRowKind.administrativeNotice;
       onTap = _openWithScrollPersist(

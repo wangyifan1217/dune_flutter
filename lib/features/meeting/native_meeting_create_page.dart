@@ -46,6 +46,7 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
   final TextEditingController _titleCtrl = TextEditingController();
   String _filePath = '';
   bool _submitting = false;
+  bool _endingLive = false;
   bool _persistingAfterEnd = false;
   bool? _persistGenerate;
   bool _pendingPersistAfterEnd = false;
@@ -231,7 +232,7 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
   }
 
   Future<void> _confirmEndLive() async {
-    if (!_live.active.value || _persistingAfterEnd) return;
+    if (!_live.active.value || _endingLive || _persistingAfterEnd) return;
     _dismissKeyboard();
     final title = _resolvedPersistTitle();
     final confirmed = await showDialog<bool>(
@@ -261,11 +262,18 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
   }
 
   Future<void> _endLive() async {
+    setState(() {
+      _endingLive = true;
+      _error = null;
+    });
+    // 先画出「保存中」遮罩，再进入可能耗时的原生 stop/合并。
+    await _waitForBusyOverlayFrame();
     try {
       final path = await _live.end();
       if (!mounted) return;
       final resolvedTitle = _resolvedPersistTitle();
       setState(() {
+        _endingLive = false;
         if (path != null && path.isNotEmpty) {
           _filePath = path;
           _pendingPersistAfterEnd = true;
@@ -283,7 +291,14 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
       await _promptPersistAfterEnd(filePath: path);
     } catch (e) {
       if (!mounted) return;
-      setState(() => _error = _mapRecordError(e));
+      setState(() {
+        _endingLive = false;
+        _error = _mapRecordError(e);
+      });
+    } finally {
+      if (mounted && _endingLive) {
+        setState(() => _endingLive = false);
+      }
     }
   }
 
@@ -357,9 +372,11 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
       builder: (ctx) => AlertDialog(
         title: const Text('正在处理中'),
         content: Text(
-          _persistingAfterEnd
-              ? '正在创建会议记录，请稍候...'
-              : '录音正在后台上传，现在离开不影响上传进度。',
+          _endingLive
+              ? '正在保存录音文件，现在离开可能中断保存。'
+              : _persistingAfterEnd
+                  ? '正在创建会议记录，请稍候...'
+                  : '录音正在后台上传，现在离开不影响上传进度。',
           style: DunesTypography.sans(fontSize: 13.5, height: 1.55),
         ),
         actions: [
@@ -381,7 +398,7 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
     if (_handlingBack) return;
     _handlingBack = true;
     try {
-      if (_submitting || _persistingAfterEnd) {
+      if (_endingLive || _submitting || _persistingAfterEnd) {
         final leave = await _confirmLeaveWhileProcessing();
         if (!leave || !mounted) return;
         widget.onBack();
@@ -438,6 +455,7 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
       _persistGenerate = generate;
       _error = null;
     });
+    await _waitForBusyOverlayFrame();
     try {
       final meetingDate = DateTime.now().toIso8601String().substring(0, 10);
       final meetingId = await MeetingUploadCoordinator.instance.enqueue(
@@ -485,9 +503,29 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
     }
   }
 
-  bool get _showBusyOverlay => false;
+  Future<void> _waitForBusyOverlayFrame() async {
+    await WidgetsBinding.instance.endOfFrame;
+    await Future<void>.delayed(Duration.zero);
+  }
 
-  String get _busyOverlayMessage => '';
+  bool get _showBusyOverlay =>
+      _endingLive || _persistingAfterEnd || _submitting;
+
+  String get _busyOverlayMessage {
+    if (_endingLive) return '正在保存录音…';
+    if (_persistingAfterEnd) {
+      return _persistGenerate == true ? '正在创建会议记录…' : '正在保存草稿…';
+    }
+    if (_submitting) return '正在创建会议记录…';
+    return '处理中…';
+  }
+
+  String get _busyOverlayHint {
+    if (_endingLive) {
+      return '录音越长，保存可能需要更久，请稍候';
+    }
+    return '完成后会自动进入会议详情';
+  }
 
   Widget _buildBusyOverlay() {
     return Positioned.fill(
@@ -530,7 +568,7 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    '请勿离开页面，上传完成后会自动跳转',
+                    _busyOverlayHint,
                     textAlign: TextAlign.center,
                     style: DunesTypography.sans(
                       fontSize: 12,
@@ -561,6 +599,7 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
       return;
     }
     setState(() => _submitting = true);
+    await _waitForBusyOverlayFrame();
     try {
       final meetingId = await MeetingUploadCoordinator.instance.enqueue(
         session: widget.session,
@@ -604,12 +643,14 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
     final liveElapsed = _live.elapsed.value;
     final recording = liveWorking;
     final canSubmit = !_submitting &&
+        !_endingLive &&
         !_persistingAfterEnd &&
         _titleCtrl.text.trim().isNotEmpty &&
         _filePath.isNotEmpty &&
         (_mode != _CreateMode.live || !_live.active.value);
-    final canEndLive = recording && !_persistingAfterEnd;
-    final canStartLive = !recording && _hasMeetingTitle;
+    final canEndLive = recording && !_endingLive && !_persistingAfterEnd;
+    final canStartLive =
+        !recording && _hasMeetingTitle && !_endingLive && !_persistingAfterEnd;
     final liveRecording = _mode == _CreateMode.live && recording;
     final statusText = switch (state) {
       MeetingRecordingState.recordingForeground => '正在录音（前台）',
@@ -945,7 +986,9 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
                       children: [
                         Expanded(
                           child: OutlinedButton.icon(
-                            onPressed: livePaused ? _resumeLive : _pauseLive,
+                            onPressed: (_endingLive || _persistingAfterEnd)
+                                ? null
+                                : (livePaused ? _resumeLive : _pauseLive),
                             icon: Icon(
                               livePaused
                                   ? Icons.play_arrow_rounded
@@ -966,7 +1009,7 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
                         Expanded(
                           child: FilledButton.icon(
                             onPressed: canEndLive ? _confirmEndLive : null,
-                            icon: _persistingAfterEnd
+                            icon: (_endingLive || _persistingAfterEnd)
                                 ? const SizedBox(
                                     width: 16,
                                     height: 16,
@@ -977,7 +1020,9 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
                                   )
                                 : const Icon(Icons.stop_rounded),
                             label: Text(
-                              _persistingAfterEnd ? '保存中...' : '结束并保存',
+                              (_endingLive || _persistingAfterEnd)
+                                  ? '保存中...'
+                                  : '结束并保存',
                             ),
                             style: FilledButton.styleFrom(
                               backgroundColor: DunesColors.coral,

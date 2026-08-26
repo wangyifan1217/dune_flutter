@@ -2,7 +2,7 @@ name: dunes_app
 description: "æ²ä¸ Â· ç»ä¸å®¡æ¹ App â åºäº index.html åå 100% è¿åç Flutter å£³"
 publish_to: 'none'
 
-version: 1.5.2+152
+version: 1.5.3+153
 
 environment:
   sdk: ^3.11.0
@@ -33,6 +33,7 @@ dependencies:
   just_audio: ^0.10.5
   # Windows æ¡é¢éè¦é¢å¤å®ç°ï¼å¦å IM è¯­é³ç¹å»æ å£°ã
   just_audio_windows: ^0.2.3
+  ffi: ^2.1.0
   image: ^4.9.1
   gal: ^2.3.2
   flutter_local_notifications: ^22.0.1
@@ -60,6 +61,7 @@ dependencies:
   geolocator: ^14.0.3
   flutter_inappwebview: 6.2.0-beta.3
   desktop_multi_window: ^0.3.0
+  record: ^7.1.1
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -91,6 +93,8 @@ flutter:
     - assets/images/app_logo.png
     - assets/images/lighthouse_logo.png
     - assets/images/tau_tab_icon.png
+    - assets/images/tau_voice_avatar_female.png
+    - assets/images/tau_voice_avatar_male.png
     - assets/images/tray_icon.ico
     - assets/images/tray_icon_blank.ico
     - assets/images/tray_icon.png

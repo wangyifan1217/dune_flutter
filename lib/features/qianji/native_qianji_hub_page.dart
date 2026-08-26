@@ -32,6 +32,7 @@ class NativeQianjiHubPage extends StatefulWidget {
     this.onOpenFundSecondment,
     this.onOpenRobotHome,
     this.onOpenRobot,
+    this.onOpenMeetingAssistant,
     this.session,
   });
 
@@ -41,8 +42,10 @@ class NativeQianjiHubPage extends StatefulWidget {
   final VoidCallback? onOpenKbSupervise;
   final VoidCallback? onOpenFundSecondment;
   final VoidCallback? onOpenRobotHome;
+
   /// 点击单个机器人名片：由 Host 按 canChat 决定进聊天或提示。
   final ValueChanged<RobotRole>? onOpenRobot;
+  final VoidCallback? onOpenMeetingAssistant;
   final AuthSession? session;
 
   @override
@@ -58,6 +61,12 @@ class _NativeQianjiHubPageState extends State<NativeQianjiHubPage> {
 
   bool get _canUseRobots =>
       widget.session == null || widget.session!.effectiveRobotAccess;
+
+  void _showMeetingAssistantComingSoon() {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(const SnackBar(content: Text('会议纪要 AI 助理即将上线')));
+  }
 
   @override
   void initState() {
@@ -117,7 +126,12 @@ class _NativeQianjiHubPageState extends State<NativeQianjiHubPage> {
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(16, 16, 16, 40),
                 children: [
-                  if (_canUseRobots && (_loadingRobots || _robots.isNotEmpty)) ...[
+                  _TauHubPreview(
+                    onOpenMeetingAssistant: _showMeetingAssistantComingSoon,
+                  ),
+                  const SizedBox(height: 16),
+                  if (_canUseRobots &&
+                      (_loadingRobots || _robots.isNotEmpty)) ...[
                     _RobotHubPreview(
                       robots: _robots,
                       loading: _loadingRobots,
@@ -227,6 +241,63 @@ class _NativeQianjiHubPageState extends State<NativeQianjiHubPage> {
   }
 }
 
+class _TauHubPreview extends StatelessWidget {
+  const _TauHubPreview({this.onOpenMeetingAssistant});
+
+  final VoidCallback? onOpenMeetingAssistant;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFE8EAED)),
+      ),
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 4,
+                height: 16,
+                decoration: BoxDecoration(
+                  color: _themePurple,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(width: 8),
+              const Text(
+                'τ',
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                  color: _themePurple,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          LayoutBuilder(
+            builder: (context, constraints) => _NovaHubCard(
+              width: _hubCardWidth(constraints.maxWidth),
+              tile: _NovaHubTile(
+                title: '会议纪要',
+                subtitle: 'AI 助理 · 即将上线',
+                icon: Icons.auto_awesome_rounded,
+                color: _themePurple,
+                onTap: onOpenMeetingAssistant,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _RobotHubPreview extends StatelessWidget {
   const _RobotHubPreview({
     required this.robots,
@@ -312,11 +383,7 @@ class _RobotHubPreview extends StatelessWidget {
 }
 
 class _RobotMiniCard extends StatelessWidget {
-  const _RobotMiniCard({
-    required this.role,
-    required this.width,
-    this.onTap,
-  });
+  const _RobotMiniCard({required this.role, required this.width, this.onTap});
 
   final RobotRole role;
   final double width;
@@ -359,7 +426,8 @@ class _RobotMiniCard extends StatelessWidget {
                             role: role,
                             size: 36,
                             animate: true,
-                            busy: status == RobotConsultStatus.running ||
+                            busy:
+                                status == RobotConsultStatus.running ||
                                 status == RobotConsultStatus.queued,
                           ),
                         ),
@@ -423,9 +491,7 @@ class _RobotMiniCard extends StatelessWidget {
                       )
                     else if (status != null)
                       Text(
-                        active > 1
-                            ? '${status.label} · $active'
-                            : status.label,
+                        active > 1 ? '${status.label} · $active' : status.label,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
@@ -474,10 +540,7 @@ class _StatusDot extends StatelessWidget {
         color: Colors.white,
         shape: BoxShape.circle,
         boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.08),
-            blurRadius: 3,
-          ),
+          BoxShadow(color: Colors.black.withValues(alpha: 0.08), blurRadius: 3),
         ],
       ),
       alignment: Alignment.center,

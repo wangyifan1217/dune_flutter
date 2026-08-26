@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:mime/mime.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -41,6 +42,7 @@ import 'nova_models_service.dart';
 import 'nova_web_storage.dart';
 import 'nova_stream_parser.dart';
 import 'nova_widgets.dart';
+import 'voice_call/tau_voice_call_page.dart';
 
 class NativeNovaPage extends StatefulWidget {
   const NativeNovaPage({
@@ -1268,8 +1270,8 @@ class _NativeNovaPageState extends State<NativeNovaPage>
       userMessage: effectiveUser.text,
       assistantMessage: assistantText,
       thinkText: assistant?.thinkText ?? fallbackThinkText,
-      userPayload: effectiveUser.payload != null ||
-              effectiveUser.attachments.isNotEmpty
+      userPayload:
+          effectiveUser.payload != null || effectiveUser.attachments.isNotEmpty
           ? _service.historyUserPayloadFromMessage(effectiveUser)
           : effectiveUser.payload,
       existingMessages: rows,
@@ -2718,20 +2720,27 @@ class _NativeNovaPageState extends State<NativeNovaPage>
   }
 
   void _scrollBottom() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    void jump() {
       if (!mounted || !_scrollController.hasClients) return;
-      _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
-    });
+      final phase = SchedulerBinding.instance.schedulerPhase;
+      if (phase == SchedulerPhase.persistentCallbacks ||
+          phase == SchedulerPhase.midFrameMicrotasks) {
+        WidgetsBinding.instance.addPostFrameCallback((_) => jump());
+        return;
+      }
+      final position = _scrollController.position;
+      if (!position.hasContentDimensions || !position.hasPixels) return;
+      final max = position.maxScrollExtent;
+      if ((position.pixels - max).abs() > 2) {
+        position.jumpTo(max);
+      }
+    }
+
+    WidgetsBinding.instance.addPostFrameCallback((_) => jump());
     // 历史里的图片/富文本异步撑高后高度才稳定，单次跳转会停在中间；
     // 入场后再做几次兜底贴底，确保展示到最底部（用户已主动上滑则不打扰）。
     for (final ms in const [60, 120, 240, 480, 800, 1200]) {
-      Future.delayed(Duration(milliseconds: ms), () {
-        if (!mounted || !_scrollController.hasClients) return;
-        final max = _scrollController.position.maxScrollExtent;
-        if ((_scrollController.offset - max).abs() > 2) {
-          _scrollController.jumpTo(max);
-        }
-      });
+      Future.delayed(Duration(milliseconds: ms), jump);
     }
   }
 
@@ -3348,6 +3357,47 @@ class _NativeNovaPageState extends State<NativeNovaPage>
     );
   }
 
+  Future<void> _openTauVoiceCall() async {
+    if (!_novaReady) return;
+    if (MeetingLiveController.instance.isActive) {
+      _toast('会议录音进行中，暂无法使用 τ 电话');
+      return;
+    }
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        fullscreenDialog: true,
+        builder: (_) => TauVoiceCallPage(
+          session: widget.session,
+          onProfessionalPrompt: (heardText) async {
+            if (_isTauIdentityQuestion(heardText)) return '我是韬';
+            await _sendMessage(text: heardText);
+            final assistant = _messages.lastWhere(
+              (message) => message.role == 'assistant',
+              orElse: () => const NativeNovaMessage(
+                id: 0,
+                role: 'assistant',
+                text: '',
+                createdAt: null,
+              ),
+            );
+            return assistant.text.trim();
+          },
+        ),
+      ),
+    );
+  }
+
+  bool _isTauIdentityQuestion(String text) {
+    final compact = text.replaceAll(RegExp(r'\s+'), '');
+    return compact.contains('你是谁') ||
+        compact.contains('你叫什么') ||
+        compact.contains('你的名字') ||
+        compact.contains('你是哪个') ||
+        compact.contains('你是小智') ||
+        compact.contains('是不是小智') ||
+        compact.contains('叫小智');
+  }
+
   @override
   Widget build(BuildContext context) {
     final inputEnabled = _novaReady;
@@ -3372,12 +3422,19 @@ class _NativeNovaPageState extends State<NativeNovaPage>
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    NovaPageHeader(
-                      onBack: _handleBack,
-                      onNewChat: _novaReady ? _startNewChat : null,
-                      onHistory: widget.onHistory,
-                      onOpenKb: widget.onOpenKb,
-                      actionsEnabled: !_isGenerating,
+                    ValueListenableBuilder<bool>(
+                      valueListenable: MeetingLiveController.instance.active,
+                      builder: (context, meetingLive, _) {
+                        return NovaPageHeader(
+                          onBack: _handleBack,
+                          onNewChat: _novaReady ? _startNewChat : null,
+                          onHistory: widget.onHistory,
+                          onOpenKb: widget.onOpenKb,
+                          onVoiceCall: _novaReady ? _openTauVoiceCall : null,
+                          actionsEnabled: !_isGenerating,
+                          voiceCallBlocked: meetingLive,
+                        );
+                      },
                     ),
                     if (_loading)
                       const Expanded(

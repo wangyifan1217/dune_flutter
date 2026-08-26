@@ -19,6 +19,7 @@ import UserNotifications
   private var accumulatedDurationMs: Int = 0
   private var outputPath: String?
   private var segmentPaths: [String] = []
+  private var pendingMergeSegmentPaths: [String] = []
   private var needsCaptureRebuild = false
   private var isRecording = false
   private var isPaused = false
@@ -29,6 +30,8 @@ import UserNotifications
   private var recorderEventSink: FlutterEventSink?
   private let recorderEventLock = NSLock()
   private let recorderEventHandler = AudioRecorderEventHandler()
+  private var tauVoiceCallAudio: TauVoiceCallAudio?
+  private var tauVoiceCallCallKit: TauVoiceCallCallKit?
   private var tpnsBridge: TpnsPushBridge?
   private var pendingTpnsNotificationClick: [AnyHashable: Any]?
   private var audioConverter: AVAudioConverter?
@@ -57,6 +60,8 @@ import UserNotifications
       pushDelegate: self
     )
     tpnsBridge?.attach()
+    tauVoiceCallAudio = TauVoiceCallAudio(messenger: messenger)
+    tauVoiceCallCallKit = TauVoiceCallCallKit(messenger: messenger)
     if let pending = pendingTpnsNotificationClick {
       tpnsBridge?.handleNotificationClicked(userInfo: pending)
       pendingTpnsNotificationClick = nil
@@ -467,19 +472,43 @@ import UserNotifications
   }
 
   private func stopRecord(result: @escaping FlutterResult, deleteFile: Bool) {
-    let durationMs = stopInternal(deleteFile: deleteFile)
+    let durationMs = stopInternal(deleteFile: deleteFile, mergeIfNeeded: false)
     if deleteFile {
       result(nil)
       return
     }
-    guard let path = outputPath, !path.isEmpty else {
-      result(nil)
+    let paths = pendingMergeSegmentPaths
+    pendingMergeSegmentPaths = []
+    if paths.isEmpty {
+      guard let path = outputPath, !path.isEmpty else {
+        result(nil)
+        return
+      }
+      result([
+        "path": path,
+        "durationMs": durationMs
+      ])
       return
     }
-    result([
-      "path": path,
-      "durationMs": durationMs
-    ])
+
+    DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+      guard let self else {
+        DispatchQueue.main.async { result(nil) }
+        return
+      }
+      let finalPath = self.resolveFinalRecordingPath(from: paths)
+      DispatchQueue.main.async {
+        self.outputPath = finalPath
+        guard let path = finalPath, !path.isEmpty else {
+          result(nil)
+          return
+        }
+        result([
+          "path": path,
+          "durationMs": durationMs
+        ])
+      }
+    }
   }
 
   private func pauseRecord(result: @escaping FlutterResult) {
@@ -537,7 +566,7 @@ import UserNotifications
   }
 
   @discardableResult
-  private func stopInternal(deleteFile: Bool) -> Int {
+  private func stopInternal(deleteFile: Bool, mergeIfNeeded: Bool = true) -> Int {
     let durationMs = currentDurationMs()
     isRecording = false
     isPaused = false
@@ -559,45 +588,59 @@ import UserNotifications
         try? FileManager.default.removeItem(atPath: path)
       }
       segmentPaths.removeAll()
+      pendingMergeSegmentPaths = []
       return durationMs
     }
 
     finalizeCurrentSegmentIfNeeded()
     let paths = segmentPaths
     segmentPaths.removeAll()
+    pendingMergeSegmentPaths = []
 
     guard !paths.isEmpty else {
       outputPath = nil
       return durationMs
     }
 
-    let finalPath: String?
     if paths.count == 1 {
-      finalPath = paths[0]
-    } else {
-      let merged = newVoiceRecordingPath(prefix: "voice-merged")
-      if mergeAudioSegments(paths, to: merged) {
-        finalPath = merged
-        for path in paths where path != merged {
-          try? FileManager.default.removeItem(atPath: path)
-        }
-      } else {
-        // 合并失败时保留体积最大的片段，避免整段录音丢失。
-        finalPath = Self.largestExistingAudioPath(paths)
-        if let keep = finalPath {
-          for path in paths where path != keep {
-            try? FileManager.default.removeItem(atPath: path)
-          }
-        } else {
-          for path in paths {
-            try? FileManager.default.removeItem(atPath: path)
-          }
-        }
-      }
+      outputPath = paths[0]
+      return durationMs
     }
 
-    outputPath = finalPath
+    if !mergeIfNeeded {
+      pendingMergeSegmentPaths = paths
+      outputPath = nil
+      return durationMs
+    }
+
+    outputPath = resolveFinalRecordingPath(from: paths)
     return durationMs
+  }
+
+  private func resolveFinalRecordingPath(from paths: [String]) -> String? {
+    if paths.isEmpty { return nil }
+    if paths.count == 1 { return paths[0] }
+
+    let merged = newVoiceRecordingPath(prefix: "voice-merged")
+    if mergeAudioSegments(paths, to: merged) {
+      for path in paths where path != merged {
+        try? FileManager.default.removeItem(atPath: path)
+      }
+      return merged
+    }
+
+    // 合并失败时保留体积最大的片段，避免整段录音丢失。
+    let keep = Self.largestExistingAudioPath(paths)
+    if let keep {
+      for path in paths where path != keep {
+        try? FileManager.default.removeItem(atPath: path)
+      }
+    } else {
+      for path in paths {
+        try? FileManager.default.removeItem(atPath: path)
+      }
+    }
+    return keep
   }
 
   private static func largestExistingAudioPath(_ paths: [String]) -> String? {

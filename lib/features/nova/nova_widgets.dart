@@ -64,14 +64,18 @@ class NovaPageHeader extends StatelessWidget {
     this.onNewChat,
     this.onHistory,
     this.onOpenKb,
+    this.onVoiceCall,
     this.actionsEnabled = true,
+    this.voiceCallBlocked = false,
   });
 
   final VoidCallback onBack;
   final VoidCallback? onNewChat;
   final VoidCallback? onHistory;
   final VoidCallback? onOpenKb;
+  final VoidCallback? onVoiceCall;
   final bool actionsEnabled;
+  final bool voiceCallBlocked;
 
   @override
   Widget build(BuildContext context) {
@@ -104,6 +108,15 @@ class NovaPageHeader extends StatelessWidget {
               ),
             ),
           ),
+          if (onVoiceCall != null)
+            IconButton(
+              tooltip: voiceCallBlocked ? '会议录音进行中，暂无法使用 τ 电话' : 'τ 电话',
+              onPressed: actionsEnabled ? onVoiceCall : null,
+              icon: Opacity(
+                opacity: voiceCallBlocked ? 0.38 : 1,
+                child: const Icon(Icons.phone_in_talk_rounded, size: 22),
+              ),
+            ),
           Opacity(
             opacity: actionOpacity,
             child: PopupMenuButton<_NovaHeaderAction>(
@@ -1372,11 +1385,7 @@ class NovaC4MessageRow extends StatelessWidget {
         padding: const EdgeInsets.only(top: 6),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(10),
-          child: Image.memory(
-            a.previewBytes!,
-            width: 170,
-            fit: BoxFit.cover,
-          ),
+          child: Image.memory(a.previewBytes!, width: 170, fit: BoxFit.cover),
         ),
       );
     }
@@ -1948,11 +1957,7 @@ class _NovaExpandedActions extends StatelessWidget {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(
-                      action.icon,
-                      size: 18,
-                      color: const Color(0xFF3B3B3B),
-                    ),
+                    Icon(action.icon, size: 18, color: const Color(0xFF3B3B3B)),
                     const SizedBox(height: 4),
                     Text(
                       action.label,

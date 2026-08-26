@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../core/widgets/cached_network_image.dart';
@@ -177,13 +179,12 @@ void warmConversationAvatarCache(List<NativeConversation> rows) {
 
 /// 列表加载后预解码头像到 Flutter 图片缓存，滚动/刷新时更快出图。
 Future<void> prefetchConversationAvatars(
-  BuildContext context,
   List<NativeConversation> rows, {
   int limit = 48,
   ConversationService? avatarService,
 }) async {
-  if (!context.mounted) return;
-  final dpr = MediaQuery.devicePixelRatioOf(context);
+  final views = WidgetsBinding.instance.platformDispatcher.views;
+  final dpr = views.isEmpty ? 1.0 : views.first.devicePixelRatio;
   final targets = <({String url, double size})>[];
   final seen = <String>{};
   for (final c in rows) {
@@ -217,12 +218,10 @@ Future<void> prefetchConversationAvatars(
   // Keep network/decode work bounded without blocking each image on the last.
   const concurrency = 6;
   for (var index = 0; index < targets.length; index += concurrency) {
-    if (!context.mounted) return;
     final batch = targets.skip(index).take(concurrency);
     await Future.wait(
       batch.map(
         (target) => _prefetchHttpAvatar(
-          context,
           url: target.url,
           size: target.size,
           devicePixelRatio: dpr,
@@ -258,24 +257,39 @@ String? _resolvedAvatarUrl({
   return avatarService?.mediaProxyUrl(source, bucket: 'user-avatars');
 }
 
-Future<void> _prefetchHttpAvatar(
-  BuildContext context, {
+Future<void> _prefetchHttpAvatar({
   required String url,
   required double size,
   required double devicePixelRatio,
 }) async {
-  if (!context.mounted) return;
+  final provider = dunesNetworkImageProvider(
+    url: url,
+    width: size,
+    height: size,
+    devicePixelRatio: devicePixelRatio,
+  );
+  final stream = provider.resolve(
+    ImageConfiguration(
+      devicePixelRatio: devicePixelRatio,
+      size: Size.square(size),
+    ),
+  );
+  final completed = Completer<void>();
+  late final ImageStreamListener listener;
+  listener = ImageStreamListener(
+    (_, _) {
+      if (!completed.isCompleted) completed.complete();
+    },
+    onError: (_, _) {
+      if (!completed.isCompleted) completed.complete();
+    },
+  );
+  stream.addListener(listener);
   try {
-    await precacheImage(
-      dunesNetworkImageProvider(
-        url: url,
-        width: size,
-        height: size,
-        devicePixelRatio: devicePixelRatio,
-      ),
-      context,
-    );
-  } catch (_) {
-    // Prefetch is best-effort; the avatar widget retains its normal fallback.
+    await completed.future;
+  } finally {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      stream.removeListener(listener);
+    });
   }
 }

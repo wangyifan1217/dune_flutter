@@ -213,6 +213,8 @@ class _NativeConversationPageState extends State<NativeConversationPage>
   Timer? _searchDebounce;
   Timer? _novaInboxPollTimer;
   Timer? _scrollRestoreRetry;
+  Timer? _inboxRetryTimer;
+  int _inboxRetryCount = 0;
 
   bool _loading = true;
   String? _error;
@@ -551,6 +553,7 @@ class _NativeConversationPageState extends State<NativeConversationPage>
     NovaBackgroundCoordinator.instance.removeListener(_onNovaBackgroundUpdate);
     RobotAnalyzingCoordinator.instance.removeListener(_onRobotAnalyzingUpdate);
     _scrollRestoreRetry?.cancel();
+    _inboxRetryTimer?.cancel();
     _rtRefreshDebounce?.cancel();
     _searchDebounce?.cancel();
     _novaInboxPollTimer?.cancel();
@@ -657,6 +660,46 @@ class _NativeConversationPageState extends State<NativeConversationPage>
     } catch (_) {
       return null;
     }
+  }
+
+  Future<NativeNotificationSummary> _safeFetchNotif() async {
+    try {
+      return await _notificationService.fetchSummary();
+    } catch (e) {
+      debugPrint('[inbox] notification summary failed: $e');
+      return const NativeNotificationSummary(unreadCount: 0);
+    }
+  }
+
+  Future<int> _safeFetchAiUnread() async {
+    try {
+      return await _aiSummaryService.fetchUnreadCount();
+    } catch (e) {
+      debugPrint('[inbox] ai unread failed: $e');
+      return 0;
+    }
+  }
+
+  Future<Map<String, InboxHiddenEntry>> _safeLoadHidden() async {
+    try {
+      return await InboxHiddenStorage.load();
+    } catch (e) {
+      debugPrint('[inbox] hidden storage failed: $e');
+      return <String, InboxHiddenEntry>{};
+    }
+  }
+
+  void _scheduleInboxRetry() {
+    if (!mounted || _items.isNotEmpty || _inboxRetryCount >= 2) return;
+    _inboxRetryCount += 1;
+    _inboxRetryTimer?.cancel();
+    _inboxRetryTimer = Timer(
+      Duration(milliseconds: 900 * _inboxRetryCount),
+      () {
+        if (!mounted || _items.isNotEmpty) return;
+        unawaited(_load());
+      },
+    );
   }
 
   Future<void> _refreshAiSummaryPreview() async {
@@ -778,18 +821,21 @@ class _NativeConversationPageState extends State<NativeConversationPage>
       setState(() => _error = null);
     }
     try {
-      var hidden = await InboxHiddenStorage.load();
+      var hidden = await _safeLoadHidden();
       final results = await Future.wait(<Future<Object?>>[
         _service.fetchConversations(),
-        _notificationService.fetchSummary(),
+        _safeFetchNotif(),
         NovaWebStorage.load(widget.session.userId),
         if (!widget.session.isExternalUser) _safeFetchAiSummaryPreview(),
-        if (!widget.session.isExternalUser)
-          _aiSummaryService.fetchUnreadCount(),
+        if (!widget.session.isExternalUser) _safeFetchAiUnread(),
       ]);
       final fetched = results[0] as List<NativeConversation>;
       // 退群后本地软隐藏：若服务端又把会话拉回 inbox，说明已重新入群，应取消隐藏。
-      hidden = await unhideSoftHiddenPresentInInbox(fetched.map((c) => c.id));
+      try {
+        hidden = await unhideSoftHiddenPresentInInbox(fetched.map((c) => c.id));
+      } catch (e) {
+        debugPrint('[inbox] unhide failed: $e');
+      }
       var rows = fetched
           .where(
             (c) => c.isListedInInbox && !isConversationHidden(hidden, c.id),
@@ -885,7 +931,11 @@ class _NativeConversationPageState extends State<NativeConversationPage>
           .map((c) => c.id)
           .toList(growable: false);
       if (dissolved.isNotEmpty) {
-        await InboxHiddenStorage.upgradeDissolved(dissolved);
+        try {
+          await InboxHiddenStorage.upgradeDissolved(dissolved);
+        } catch (e) {
+          debugPrint('[inbox] upgrade dissolved failed: $e');
+        }
       }
       final notif = results[1] as NativeNotificationSummary;
       final novaStorage = results[2] as Map<String, String>;
@@ -895,7 +945,7 @@ class _NativeConversationPageState extends State<NativeConversationPage>
       final aiUnread = !widget.session.isExternalUser && results.length > 4
           ? (results[4] as int? ?? 0)
           : 0;
-      final refreshedHidden = await InboxHiddenStorage.load();
+      final refreshedHidden = await _safeLoadHidden();
       if (!mounted) return;
       final selfAvatar = userAvatarRefresh.snapshotFor(widget.session.userId);
       final merged = silent && !skipAvatarMerge
@@ -917,8 +967,9 @@ class _NativeConversationPageState extends State<NativeConversationPage>
           _aiSummaryUnread = 0;
         }
         _loading = false;
-        if (!silent) _error = null;
+        _error = null;
       });
+      _inboxRetryCount = 0;
       ConversationInboxCache.instance.put(
         userId: widget.session.userId,
         conversations: merged,
@@ -944,11 +995,13 @@ class _NativeConversationPageState extends State<NativeConversationPage>
         });
       }
     } catch (e) {
+      debugPrint('[inbox] load failed: $e');
       if (!mounted) return;
       setState(() {
         _error = friendlyErrorText(e);
         _loading = false;
       });
+      _scheduleInboxRetry();
     }
   }
 

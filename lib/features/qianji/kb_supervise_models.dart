@@ -7,6 +7,8 @@ class KbSuperviseRow {
     required this.departmentName,
     required this.folderCount,
     required this.documentCount,
+    required this.uploadedCount,
+    required this.minutesCount,
   });
 
   final int userId;
@@ -16,6 +18,8 @@ class KbSuperviseRow {
   final String departmentName;
   final int folderCount;
   final int documentCount;
+  final int uploadedCount;
+  final int minutesCount;
 
   String get personLabel {
     final name = displayName.trim();
@@ -34,6 +38,8 @@ class KbSuperviseRow {
       departmentName: '${json['departmentName'] ?? ''}',
       folderCount: (json['folderCount'] as num?)?.toInt() ?? 0,
       documentCount: (json['documentCount'] as num?)?.toInt() ?? 0,
+      uploadedCount: (json['uploadedCount'] as num?)?.toInt() ?? 0,
+      minutesCount: (json['minutesCount'] as num?)?.toInt() ?? 0,
     );
   }
 }
@@ -54,6 +60,8 @@ class KbSuperviseDeptStat {
     required this.departmentName,
     required this.folderCount,
     required this.documentCount,
+    required this.uploadedCount,
+    required this.minutesCount,
     required this.userCount,
   });
 
@@ -61,6 +69,8 @@ class KbSuperviseDeptStat {
   final String departmentName;
   final int folderCount;
   final int documentCount;
+  final int uploadedCount;
+  final int minutesCount;
   final int userCount;
 
   factory KbSuperviseDeptStat.fromJson(Map<String, dynamic> json) {
@@ -69,6 +79,8 @@ class KbSuperviseDeptStat {
       departmentName: '${json['departmentName'] ?? '未分配部门'}',
       folderCount: (json['folderCount'] as num?)?.toInt() ?? 0,
       documentCount: (json['documentCount'] as num?)?.toInt() ?? 0,
+      uploadedCount: (json['uploadedCount'] as num?)?.toInt() ?? 0,
+      minutesCount: (json['minutesCount'] as num?)?.toInt() ?? 0,
       userCount: (json['userCount'] as num?)?.toInt() ?? 0,
     );
   }
@@ -79,12 +91,16 @@ class KbSuperviseDeptStatsResult {
     required this.departments,
     required this.totalFolders,
     required this.totalDocuments,
+    required this.totalUploaded,
+    required this.totalMinutes,
     required this.superviseAll,
   });
 
   final List<KbSuperviseDeptStat> departments;
   final int totalFolders;
   final int totalDocuments;
+  final int totalUploaded;
+  final int totalMinutes;
   final bool superviseAll;
 
   factory KbSuperviseDeptStatsResult.fromJson(Map<String, dynamic> json) {
@@ -99,6 +115,8 @@ class KbSuperviseDeptStatsResult {
           .toList(growable: false),
       totalFolders: (json['totalFolders'] as num?)?.toInt() ?? 0,
       totalDocuments: (json['totalDocuments'] as num?)?.toInt() ?? 0,
+      totalUploaded: (json['totalUploaded'] as num?)?.toInt() ?? 0,
+      totalMinutes: (json['totalMinutes'] as num?)?.toInt() ?? 0,
       superviseAll: json['superviseAll'] == true,
     );
   }

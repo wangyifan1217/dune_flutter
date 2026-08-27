@@ -4,6 +4,7 @@ import 'conversation_mention_utils.dart';
 import 'conversation_models.dart';
 import 'conversation_realtime_service.dart';
 import 'inbox_hidden_storage.dart';
+import 'message_preview_text.dart';
 
 /// 与 WebView `applyConvEvent` 对齐的 C1 列表增量更新。
 abstract final class ConversationInboxRealtime {
@@ -176,14 +177,25 @@ abstract final class ConversationInboxRealtime {
       case 'message_deleted':
         return const _PreviewPatch('消息已删除');
       case 'conversation_updated':
+        final kind = (event.raw['lastMessageKind'] ?? '').toString();
+        final bodyText =
+            (event.raw['lastMessageBodyText'] ?? '').toString().trim();
+        if (bodyText.isNotEmpty) {
+          return _PreviewPatch(
+            compactMessagePushPreview(kind: kind, body: bodyText),
+          );
+        }
         final body =
-            (event.raw['lastMessageBodyText'] ??
-                    event.raw['lastMessagePreview'] ??
+            (event.raw['lastMessagePreview'] ??
                     event.raw['preview'] ??
                     '')
-                .toString();
-        if (body.isNotEmpty) return _PreviewPatch(body);
-        return null;
+                .toString()
+                .trim();
+        if (body.isEmpty) return null;
+        // 服务端可能把「测试.jpg」误压成「发送了一张图片」；
+        // message 事件已经写入原文时，不要被这条轻量刷新覆盖。
+        if (isPushStyleMediaPreview(body)) return null;
+        return _PreviewPatch(body);
       default:
         return null;
     }

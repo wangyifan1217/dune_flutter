@@ -25,6 +25,9 @@ class KbSuperviseService {
     int size = 20,
     String keyword = '',
     int? departmentId,
+    DateTime? from,
+    DateTime? to,
+    String source = '',
   }) async {
     final q = <String, String>{
       'page': page.toString(),
@@ -35,6 +38,14 @@ class KbSuperviseService {
     if (departmentId != null) {
       q['departmentId'] = departmentId.toString();
     }
+    if (from != null) {
+      q['from'] = from.toUtc().millisecondsSinceEpoch.toString();
+    }
+    if (to != null) {
+      q['to'] = to.toUtc().millisecondsSinceEpoch.toString();
+    }
+    final sourceKind = source.trim();
+    if (sourceKind.isNotEmpty) q['source'] = sourceKind;
     final resp = await http.get(_uri('supervise', q), headers: _headers);
     final map = _asMap(_unwrap(resp));
     final content =
@@ -49,9 +60,22 @@ class KbSuperviseService {
     );
   }
 
-  Future<KbSuperviseDeptStatsResult> fetchDeptStats() async {
+  Future<KbSuperviseDeptStatsResult> fetchDeptStats({
+    DateTime? from,
+    DateTime? to,
+    String source = '',
+  }) async {
+    final q = <String, String>{};
+    if (from != null) {
+      q['from'] = from.toUtc().millisecondsSinceEpoch.toString();
+    }
+    if (to != null) {
+      q['to'] = to.toUtc().millisecondsSinceEpoch.toString();
+    }
+    final sourceKind = source.trim();
+    if (sourceKind.isNotEmpty) q['source'] = sourceKind;
     final resp = await http.get(
-      _uri('supervise/dept-stats'),
+      _uri('supervise/dept-stats', q.isEmpty ? null : q),
       headers: _headers,
     );
     return KbSuperviseDeptStatsResult.fromJson(_asMap(_unwrap(resp)));

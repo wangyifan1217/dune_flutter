@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 import '../auth/auth_session.dart';
@@ -77,7 +78,20 @@ class NotificationService {
     if (resp.statusCode < 200 || resp.statusCode >= 300) {
       throw Exception('通知加载失败: HTTP ${resp.statusCode}');
     }
-    final body = jsonDecode(resp.body);
+    String text;
+    try {
+      text = utf8.decode(resp.bodyBytes, allowMalformed: true);
+    } catch (_) {
+      text = resp.body;
+    }
+    Object decoded;
+    try {
+      decoded = jsonDecode(text);
+    } on FormatException catch (e) {
+      debugPrint('[NotificationService] json decode failed: $e');
+      throw Exception('通知加载失败，请稍后重试');
+    }
+    final body = decoded;
     if (body is! Map<String, dynamic>) return const <NativeNotificationItem>[];
     if (body['success'] == false) {
       throw Exception((body['message'] ?? '通知加载失败').toString());

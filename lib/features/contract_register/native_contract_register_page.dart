@@ -134,6 +134,9 @@ class _NativeContractRegisterPageState
     _filterPartyBCtrl.addListener(_onKeywordChanged);
     _canConfig = widget.session.effectiveContractConfigAccess;
     _canKbSync = widget.session.effectiveContractKbSyncAccess;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _publishChrome();
+    });
     unawaited(_bootstrap());
   }
 
@@ -162,6 +165,7 @@ class _NativeContractRegisterPageState
     for (final ctrl in _proposalCtrls.values) {
       ctrl.dispose();
     }
+    widget.onChromeChanged?.call(const TaskShellChrome());
     super.dispose();
   }
 
@@ -173,6 +177,7 @@ class _NativeContractRegisterPageState
           _canConfig = access.config;
           _canKbSync = access.kbSync;
         });
+        _publishChrome();
       }
       if (access.kbSync) unawaited(_loadKbSyncHint());
     } catch (_) {

@@ -29,6 +29,8 @@ class AuthSession {
     this.contractKbSyncAccess = false,
     this.proposalIntakeAccess = false,
     this.proposalIntakeViewAll = false,
+    this.travelImportAccess = false,
+    this.travelViewAll = false,
   });
 
   final String phone;
@@ -71,6 +73,12 @@ class AuthSession {
   /// 工作台协作提案查看全部；未开通时列表由服务端按相关人过滤。
   final bool proposalIntakeViewAll;
 
+  /// 工作台行政「差旅导入」。
+  final bool travelImportAccess;
+
+  /// 差旅地图查看全部员工；未开通仅自己及下属。
+  final bool travelViewAll;
+
   /// 后端下发的「任务汇总」能力开关；未下发时工作台会走接口探测。
   final bool hrbpAccess;
 
@@ -108,6 +116,9 @@ class AuthSession {
 
   bool get effectiveProposalIntakeAccess =>
       proposalIntakeAccess || DunesDefaults.localLighthouseAccessBypass;
+
+  bool get effectiveTravelImportAccess =>
+      travelImportAccess || DunesDefaults.localLighthouseAccessBypass;
 
   AuthSession withLocalDevGrants() {
     var next = this;
@@ -172,6 +183,8 @@ class AuthSession {
     bool? contractKbSyncAccess,
     bool? proposalIntakeAccess,
     bool? proposalIntakeViewAll,
+    bool? travelImportAccess,
+    bool? travelViewAll,
   }) {
     return AuthSession(
       phone: phone ?? this.phone,
@@ -201,6 +214,8 @@ class AuthSession {
       proposalIntakeAccess: proposalIntakeAccess ?? this.proposalIntakeAccess,
       proposalIntakeViewAll:
           proposalIntakeViewAll ?? this.proposalIntakeViewAll,
+      travelImportAccess: travelImportAccess ?? this.travelImportAccess,
+      travelViewAll: travelViewAll ?? this.travelViewAll,
     );
   }
 
@@ -250,6 +265,8 @@ class AuthSession {
       contractKbSyncAccess: data['contractKbSyncAccess'] == true,
       proposalIntakeAccess: data['proposalIntakeAccess'] == true,
       proposalIntakeViewAll: data['proposalIntakeViewAll'] == true,
+      travelImportAccess: data['travelImportAccess'] == true,
+      travelViewAll: data['travelViewAll'] == true,
     );
   }
 
@@ -290,6 +307,8 @@ class AuthSession {
       contractKbSyncAccess: claims['contractKbSyncAccess'] == true,
       proposalIntakeAccess: claims['proposalIntakeAccess'] == true,
       proposalIntakeViewAll: claims['proposalIntakeViewAll'] == true,
+      travelImportAccess: claims['travelImportAccess'] == true,
+      travelViewAll: claims['travelViewAll'] == true,
     );
   }
 
@@ -337,6 +356,8 @@ class AuthSession {
       'contractKbSyncAccess': contractKbSyncAccess,
       'proposalIntakeAccess': proposalIntakeAccess,
       'proposalIntakeViewAll': proposalIntakeViewAll,
+      'travelImportAccess': travelImportAccess,
+      'travelViewAll': travelViewAll,
     };
   }
 
@@ -370,6 +391,8 @@ class AuthSession {
       contractKbSyncAccess: json['contractKbSyncAccess'] == true,
       proposalIntakeAccess: json['proposalIntakeAccess'] == true,
       proposalIntakeViewAll: json['proposalIntakeViewAll'] == true,
+      travelImportAccess: json['travelImportAccess'] == true,
+      travelViewAll: json['travelViewAll'] == true,
     );
   }
 

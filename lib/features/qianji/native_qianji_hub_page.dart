@@ -30,6 +30,7 @@ class NativeQianjiHubPage extends StatefulWidget {
     this.onOpenSessionSupervise,
     this.onOpenKbSupervise,
     this.onOpenFundSecondment,
+    this.onOpenTravel,
     this.onOpenRobotHome,
     this.onOpenRobot,
     this.onOpenMeetingAssistant,
@@ -41,6 +42,7 @@ class NativeQianjiHubPage extends StatefulWidget {
   final VoidCallback? onOpenSessionSupervise;
   final VoidCallback? onOpenKbSupervise;
   final VoidCallback? onOpenFundSecondment;
+  final VoidCallback? onOpenTravel;
   final VoidCallback? onOpenRobotHome;
 
   /// 点击单个机器人名片：由 Host 按 canChat 决定进聊天或提示。
@@ -180,6 +182,13 @@ class _NativeQianjiHubPageState extends State<NativeQianjiHubPage> {
                           color: _themePurple,
                           onTap: widget.onOpenFundSecondment,
                         ),
+                      _NovaHubTile(
+                        title: '差旅管理',
+                        subtitle: '出行成本 · 地图',
+                        icon: Icons.flight_takeoff_outlined,
+                        color: _themePurple,
+                        onTap: widget.onOpenTravel,
+                      ),
                     ],
                   ),
                 ],

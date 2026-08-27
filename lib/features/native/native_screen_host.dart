@@ -94,6 +94,7 @@ import '../qianji/native_qianji_projects_page.dart';
 import '../qianji/native_qianji_session_supervise_page.dart';
 import '../qianji/native_qianji_task_detail_page.dart';
 import '../qianji/native_qianji_team_perf_page.dart';
+import '../qianji/travel/native_qianji_travel_page.dart';
 import '../qianji/qianji_models.dart';
 import '../qianji/qianji_project_models.dart';
 import '../qianji_admin/native_qianji_admin_shell.dart';
@@ -3158,6 +3159,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           onOpenFundSecondment: widget.session.effectiveFundSecondmentAccess
               ? () => widget.navigation.go('QJFS')
               : null,
+          onOpenTravel: () => widget.navigation.go('QJTR'),
           onOpenRobotHome: () {
             setState(() {
               _qjrOpenedFromChat = false;
@@ -3327,6 +3329,11 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         );
       case 'QJKB':
         return NativeQianjiKbSupervisePage(
+          session: widget.session,
+          onBack: widget.navigation.back,
+        );
+      case 'QJTR':
+        return NativeQianjiTravelPage(
           session: widget.session,
           onBack: widget.navigation.back,
         );
@@ -4546,6 +4553,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       'QJKB',
       'QJFS',
       'QJFSD',
+      'QJTR',
       'QJR',
       'QJRA',
       'QJRC',
@@ -4628,6 +4636,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         screen == 'QJKB' ||
         screen == 'QJFS' ||
         screen == 'QJFSD' ||
+        screen == 'QJTR' ||
         screen == 'QJR' ||
         screen == 'QJRA' ||
         screen == 'QJRC' ||
@@ -4715,6 +4724,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       'QJKB',
       'QJFS',
       'QJFSD',
+      'QJTR',
       'QJR',
       'QJRA',
       'QJRC',
@@ -4755,6 +4765,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       'QJMA' => const ['QJ', 'QJMA'],
       'QJSS' => const ['QJ', 'QJSS'],
       'QJKB' => const ['QJ', 'QJKB'],
+      'QJTR' => const ['QJ', 'QJTR'],
       'QJFS' => const ['QJ', 'QJFS'],
       'QJFSD' => const ['QJ', 'QJFS', 'QJFSD'],
       'QJD' => const ['QJ', 'QJD'],

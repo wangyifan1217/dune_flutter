@@ -37,10 +37,10 @@ abstract final class InboxHiddenStorage {
   static const _key = 'dunes_c1_hidden_conversations_v1';
 
   static Future<Map<String, InboxHiddenEntry>> load() async {
-    final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(_key);
-    if (raw == null || raw.isEmpty) return <String, InboxHiddenEntry>{};
     try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_key);
+      if (raw == null || raw.isEmpty) return <String, InboxHiddenEntry>{};
       final decoded = jsonDecode(raw);
       if (decoded is! Map) return <String, InboxHiddenEntry>{};
       final out = <String, InboxHiddenEntry>{};
@@ -49,16 +49,20 @@ abstract final class InboxHiddenStorage {
       });
       return out;
     } catch (_) {
+      // Windows 重启/异常退出可能把 SharedPreferences JSON 写坏，
+      // 不能因此让整个通讯列表停在「数据解析失败」。
       return <String, InboxHiddenEntry>{};
     }
   }
 
   static Future<void> save(Map<String, InboxHiddenEntry> map) async {
-    final prefs = await SharedPreferences.getInstance();
-    final encoded = jsonEncode(
-      map.map((key, value) => MapEntry(key, value.toJson())),
-    );
-    await prefs.setString(_key, encoded);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final encoded = jsonEncode(
+        map.map((key, value) => MapEntry(key, value.toJson())),
+      );
+      await prefs.setString(_key, encoded);
+    } catch (_) {}
   }
 
   static Future<void> hide(int conversationId, {bool permanent = false}) async {

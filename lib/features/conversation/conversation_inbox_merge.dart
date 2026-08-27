@@ -6,6 +6,7 @@ import '../../core/widgets/cached_network_image.dart';
 import '../chat/group_composite_avatar.dart';
 import 'conversation_models.dart';
 import 'conversation_service.dart';
+import 'message_preview_text.dart';
 
 /// 会话头像签名，用于判断静默刷新时是否可保留本地已解析头像。
 String conversationAvatarSignature(NativeConversation c) {
@@ -139,7 +140,7 @@ NativeConversation _mergeKeepingAvatars(
     kind: server.kind,
     title: server.title,
     unreadCount: server.unreadCount,
-    preview: server.preview,
+    preview: _previewPreferringLocalBody(prev, server),
     updatedAt: server.updatedAt,
     peerUserId: server.peerUserId,
     peerDisplayName: server.peerDisplayName,
@@ -163,6 +164,24 @@ NativeConversation _mergeKeepingAvatars(
     return applySelfAvatarToConversation(merged, selfAvatar);
   }
   return merged;
+}
+
+String _previewPreferringLocalBody(
+  NativeConversation prev,
+  NativeConversation server,
+) {
+  final local = prev.preview.trim();
+  if (isPushStyleMediaPreview(server.preview) &&
+      !isPushStyleMediaPreview(local) &&
+      local.isNotEmpty &&
+      prev.updatedAt != null &&
+      server.updatedAt != null &&
+      !server.updatedAt!.isAfter(
+        prev.updatedAt!.add(const Duration(seconds: 2)),
+      )) {
+    return prev.preview;
+  }
+  return server.preview;
 }
 
 void warmConversationAvatarCache(List<NativeConversation> rows) {

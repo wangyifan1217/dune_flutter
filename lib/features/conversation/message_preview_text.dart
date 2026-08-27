@@ -48,23 +48,27 @@ String compactMessagePushPreview({
   return trimmed;
 }
 
+bool isPushStyleMediaPreview(String text) {
+  switch (text.trim()) {
+    case '发送了一张图片':
+    case '发送了一个文件':
+    case '发送了一个视频':
+    case '发送了一条语音':
+      return true;
+    default:
+      return false;
+  }
+}
+
 bool _isImageLikeBody(String text) {
   if (text.isEmpty) return false;
   final lower = text.toLowerCase();
-  for (final prefix in ['[相册]', '[拍照]', '[图片]', '[gif]']) {
+  for (final prefix in ['[相册]', '[拍照]', '[图片]', '[gif]', '[多图]']) {
     if (lower.startsWith(prefix)) return true;
   }
-  final name = _attachmentName(text);
+  // 只把 APP 占位（如 `[图片] a.jpg`）当成图片；用户输入的「测试.jpg」仍是文本。
   return RegExp(
-    r'\.(png|jpe?g|gif|webp|bmp|heic|heif)$',
+    r'^\[[^\]]+\]\s+\S+\.(png|jpe?g|gif|webp|bmp|heic|heif)(\s*\(\d+\))?$',
     caseSensitive: false,
-  ).hasMatch(name);
-}
-
-String _attachmentName(String text) {
-  final idx = text.indexOf(']');
-  if (idx >= 0 && idx + 1 < text.length) {
-    return text.substring(idx + 1).trim();
-  }
-  return text.trim();
+  ).hasMatch(text.trim());
 }

@@ -42,6 +42,11 @@
     /* Chrome DOM 拼写/语法黄线；比较表英文/数字特别容易中招 */
     ::spelling-error { text-decoration: none !important; }
     ::grammar-error { text-decoration: none !important; }
+    flt-semantics, flt-semantics *, flt-paragraph, flt-span {
+      spellcheck: false;
+      -webkit-text-decoration: none !important;
+      text-decoration: none !important;
+    }
   </style>
 </head>
 <body spellcheck="false">

@@ -15,6 +15,8 @@ import '../contract_register/native_contract_register_page.dart';
 import '../drive/native_drive_page.dart';
 import '../proposal_intake/native_proposal_intake_page.dart';
 import '../proposal_intake/proposal_intake_service.dart';
+import '../travel_import/native_travel_import_page.dart';
+import '../travel_import/travel_import_service.dart';
 import '../reconciliation/native_daily_reconciliation_page.dart';
 import '../reconciliation/reconciliation_shucai_service.dart';
 import '../tasks/native_task_home_pane.dart';
@@ -71,6 +73,7 @@ enum _WorkbenchView {
   dailyRecon,
   contracts,
   proposalIntake,
+  travelImport,
 }
 
 class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
@@ -81,6 +84,7 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
   bool _hideShellHeader = false;
   Widget? _shellTrailing;
   VoidCallback? _onShellBackOverride;
+  TaskShellChrome? _contentChrome;
 
   /// null=探测中；以后端 hrbp/overview 鉴权为准，不写死角色。
   bool? _canSeeTaskSummary;
@@ -91,6 +95,7 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
   bool? _canSeeDailyRecon;
   bool? _canSeeContracts;
   bool? _canSeeProposalIntake;
+  bool? _canSeeTravelImport;
 
   static const _titles = {
     _WorkbenchView.tasks: '任务',
@@ -105,6 +110,7 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
     _WorkbenchView.dailyRecon: '每日对账',
     _WorkbenchView.contracts: '合同归集',
     _WorkbenchView.proposalIntake: '提案',
+    _WorkbenchView.travelImport: '差旅导入',
   };
 
   bool get _isQianjiAdmin => _session.effectiveQianjiAdminAccess;
@@ -121,6 +127,7 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
     unawaited(_resolveDailyReconAccess());
     unawaited(_resolveContractAccess());
     unawaited(_resolveProposalIntakeAccess());
+    unawaited(_resolveTravelImportAccess());
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       if (widget.active) _syncBackInterceptor();
@@ -145,6 +152,7 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
       unawaited(_resolveDailyReconAccess());
       unawaited(_resolveContractAccess());
       unawaited(_resolveProposalIntakeAccess());
+      unawaited(_resolveTravelImportAccess());
     }
     if (widget.active != oldWidget.active) {
       if (widget.active) {
@@ -182,6 +190,7 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
     unawaited(_resolveDailyReconAccess());
     unawaited(_resolveContractAccess());
     unawaited(_resolveProposalIntakeAccess());
+    unawaited(_resolveTravelImportAccess());
   }
 
   Future<void> _resolveTaskSummaryAccess() async {
@@ -280,6 +289,24 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
     setState(() => _canSeeProposalIntake = allowed);
   }
 
+  Future<void> _resolveTravelImportAccess() async {
+    if (_session.isExternalUser) {
+      if (mounted) setState(() => _canSeeTravelImport = false);
+      return;
+    }
+    bool allowed = _session.effectiveTravelImportAccess;
+    try {
+      final access = await TravelImportService(
+        session: _session,
+      ).fetchAccess();
+      allowed = access.canImport;
+    } catch (_) {
+      allowed = _session.effectiveTravelImportAccess;
+    }
+    if (!mounted) return;
+    setState(() => _canSeeTravelImport = allowed);
+  }
+
   void _maybeOpenDailyRecon() {
     if (!widget.openDailyRecon) return;
     _open(_WorkbenchView.dailyRecon);
@@ -350,18 +377,34 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
       _showNoAccess('千机管理');
       return;
     }
-    setState(() => _contentView = view);
+    setState(() {
+      _contentView = view;
+      _contentChrome = null;
+      _hideShellHeader = false;
+      _shellTrailing = null;
+      _onShellBackOverride = null;
+    });
     _goPage(1);
+  }
+
+  void _applyShellChrome({required bool overview}) {
+    if (overview) {
+      _hideShellHeader = false;
+      _shellTrailing = null;
+      _onShellBackOverride = null;
+      return;
+    }
+    final chrome = _contentChrome;
+    if (chrome == null) return;
+    _hideShellHeader = chrome.hideShellHeader;
+    _shellTrailing = chrome.trailing;
+    _onShellBackOverride = chrome.onBack;
   }
 
   void _goPage(int index) {
     setState(() {
       _pageIndex = index;
-      if (index == 0) {
-        _hideShellHeader = false;
-        _shellTrailing = null;
-        _onShellBackOverride = null;
-      }
+      _applyShellChrome(overview: index == 0);
     });
     _syncBackInterceptor();
     if (!_pageController.hasClients) {
@@ -477,11 +520,7 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
                 onPageChanged: (i) {
                   setState(() {
                     _pageIndex = i;
-                    if (i == 0) {
-                      _hideShellHeader = false;
-                      _shellTrailing = null;
-                      _onShellBackOverride = null;
-                    }
+                    _applyShellChrome(overview: i == 0);
                   });
                   _syncBackInterceptor();
                 },
@@ -496,10 +535,17 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
 
   void _onTaskChrome(TaskShellChrome chrome) {
     if (!mounted) return;
+    _contentChrome = chrome;
     setState(() {
-      _hideShellHeader = chrome.hideShellHeader;
-      _shellTrailing = chrome.trailing;
-      _onShellBackOverride = chrome.onBack;
+      if (_pageIndex == 0) {
+        _hideShellHeader = false;
+        _shellTrailing = null;
+        _onShellBackOverride = null;
+      } else {
+        _hideShellHeader = chrome.hideShellHeader;
+        _shellTrailing = chrome.trailing;
+        _onShellBackOverride = chrome.onBack;
+      }
     });
     _syncBackInterceptor();
   }
@@ -556,6 +602,12 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
       case _WorkbenchView.proposalIntake:
         return NativeProposalIntakePage(
           key: const ValueKey<String>('workbench-proposal-intake'),
+          session: _session,
+          onChromeChanged: _onTaskChrome,
+        );
+      case _WorkbenchView.travelImport:
+        return NativeTravelImportPage(
+          key: const ValueKey<String>('workbench-travel-import'),
           session: _session,
           onChromeChanged: _onTaskChrome,
         );
@@ -660,6 +712,15 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
           color: const Color(0xFF7B5CD8),
           enabled: true,
           onTap: () => _open(_WorkbenchView.companyBroadcast),
+        ),
+      if (!_session.isExternalUser && _canSeeTravelImport == true)
+        _WorkbenchTile(
+          title: '差旅导入',
+          subtitle: '携程订单 · 分类核对',
+          icon: Icons.flight_class_outlined,
+          color: const Color(0xFF5B6FC4),
+          enabled: true,
+          onTap: () => _open(_WorkbenchView.travelImport),
         ),
     ];
 

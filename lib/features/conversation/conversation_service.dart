@@ -12,6 +12,7 @@ import '../../core/widgets/cached_network_image.dart';
 import '../chat/chat_media_cache.dart';
 import '../xflow/approval_chat_share.dart';
 import 'conversation_models.dart';
+import 'message_preview_text.dart';
 
 /// 上传分块大小：把文件切成小块逐块写入，配合 socket 背压才能得到真实的
 /// 上传进度（直接用 fromBytes 会一次性吐出全部字节导致进度瞬间到 100%）。
@@ -136,19 +137,40 @@ class ConversationService {
   };
 
   Future<List<NativeConversation>> fetchConversations() async {
+    try {
+      return await _fetchConversationsOnce();
+    } catch (e) {
+      final msg = e.toString();
+      if (msg.contains('HTTP 401') || msg.contains('HTTP 403')) rethrow;
+      // 重启后网卡/VPN 刚起来时，首次响应可能是截断 JSON 或网关 HTML。
+      debugPrint('[ConversationService] fetchConversations retry after: $e');
+      return _fetchConversationsOnce();
+    }
+  }
+
+  Future<List<NativeConversation>> _fetchConversationsOnce() async {
     final resp = await _client.get(_uri('/conversations'), headers: _headers);
     if (resp.statusCode < 200 || resp.statusCode >= 300) {
       throw Exception('会话列表加载失败: HTTP ${resp.statusCode}');
     }
-    final body = _decode(resp.body);
+    final body = _decode(_responseBody(resp));
     if (body['success'] == false) {
       throw Exception((body['message'] ?? '会话列表加载失败').toString());
     }
-    final data = (body['data'] as List<dynamic>? ?? const <dynamic>[]);
-    final rows = data
-        .whereType<Map<String, dynamic>>()
-        .map(_mapConversation)
-        .toList(growable: false);
+    final data = body['data'];
+    final items = data is List ? data : const <dynamic>[];
+    final rows = <NativeConversation>[];
+    for (final item in items) {
+      if (item is! Map) continue;
+      try {
+        final map = item is Map<String, dynamic>
+            ? item
+            : Map<String, dynamic>.from(item);
+        rows.add(_mapConversation(map));
+      } catch (e) {
+        debugPrint('[ConversationService] skip bad conversation: $e');
+      }
+    }
     for (final c in rows) {
       warmConversationAvatarUrls(
         peerAvatarObjectKey: c.peerAvatarObjectKey,
@@ -2060,11 +2082,46 @@ class ConversationService {
     return _statusRowsFromPayload(data);
   }
 
+  String _responseBody(http.Response resp) {
+    try {
+      return utf8.decode(resp.bodyBytes, allowMalformed: true);
+    } catch (_) {
+      try {
+        return resp.body;
+      } catch (_) {
+        return '';
+      }
+    }
+  }
+
+  bool _looksLikeHtml(String text) {
+    final t = text.trimLeft();
+    if (t.isEmpty) return false;
+    final head = (t.length > 24 ? t.substring(0, 24) : t).toLowerCase();
+    return head.startsWith('<!doctype') ||
+        head.startsWith('<html') ||
+        head.startsWith('<head') ||
+        head.startsWith('<body');
+  }
+
   Map<String, dynamic> _decode(String body) {
-    if (body.isEmpty) return const <String, dynamic>{};
-    final decoded = jsonDecode(body);
-    if (decoded is Map<String, dynamic>) return decoded;
-    return const <String, dynamic>{};
+    final content = body.trim();
+    if (content.isEmpty) return const <String, dynamic>{};
+    if (_looksLikeHtml(content)) {
+      throw Exception('会话数据加载失败，请检查网络后重试');
+    }
+    try {
+      final decoded = jsonDecode(content);
+      if (decoded is Map<String, dynamic>) return decoded;
+      if (decoded is Map) return Map<String, dynamic>.from(decoded);
+      return const <String, dynamic>{};
+    } on FormatException catch (e) {
+      final preview = content.length > 160
+          ? content.substring(0, 160)
+          : content;
+      debugPrint('[ConversationService] json decode failed: $e preview=$preview');
+      throw Exception('数据解析失败，请稍后重试');
+    }
   }
 
   NativeConversation mapConversation(Map<String, dynamic> raw) =>
@@ -2362,16 +2419,22 @@ class ConversationService {
             .toString()
             .toUpperCase();
 
-    final rawText =
-        (raw['lastMessagePreview'] ??
-                raw['preview'] ??
+    final lastBody =
+        (lastMap?['bodyText'] ??
                 raw['lastMessageBodyText'] ??
                 raw['lastMessageText'] ??
-                lastMap?['bodyText'] ??
-                (last is String ? last : '') ??
                 '')
             .toString()
             .trim();
+    final previewField =
+        (raw['lastMessagePreview'] ?? raw['preview'] ?? '').toString().trim();
+    // 服务端 lastMessagePreview 可能已把「测试.jpg」压成「发送了一张图片」，
+    // 有消息正文时以正文 + kind 重新摘要。
+    final rawText = lastBody.isNotEmpty
+        ? lastBody
+        : (previewField.isNotEmpty
+              ? previewField
+              : (last is String ? last.trim() : ''));
 
     if (rawText.isEmpty) return '';
     final effectiveKind = kind.isNotEmpty
@@ -2481,34 +2544,8 @@ class ConversationService {
   }
 
   String _compactPreview(String kind, String text) {
-    final trimmed = text.trim();
-    if (kind == 'IMAGE' ||
-        RegExp(
-          r'^\[(相册|拍照|图片|GIF)\]',
-          caseSensitive: false,
-        ).hasMatch(trimmed)) {
-      return '发送了一张图片';
-    }
-    if (kind == 'AUDIO' || RegExp(r'^\[语音\]').hasMatch(trimmed)) {
-      return '发送了一条语音';
-    }
-    if (kind == 'FILE' || RegExp(r'^\[文件\]').hasMatch(trimmed)) {
-      return '发送了一个文件';
-    }
-    if (RegExp(
-      r'\.(png|jpe?g|gif|webp|bmp|heic|heif)$',
-      caseSensitive: false,
-    ).hasMatch(trimmed)) {
-      return '发送了一张图片';
-    }
-    if (RegExp(
-      r'\.(pdf|docx?|xlsx?|pptx?|zip|rar|7z|txt|csv|md|pages|numbers|key)$',
-      caseSensitive: false,
-    ).hasMatch(trimmed)) {
-      return '发送了一个文件';
-    }
     if (kind == 'SYSTEM_FLOW') return text.isNotEmpty ? text : '[系统消息]';
-    return trimmed;
+    return compactMessagePushPreview(kind: kind, body: text);
   }
 
   bool _isSystemMsgKind(String kind) {

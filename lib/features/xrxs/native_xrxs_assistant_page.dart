@@ -19,6 +19,15 @@ import 'xrxs_service.dart';
 /// 临时静态预览开关；正式联调请保持 false。
 const bool kXrxsAssistantStaticPreview = false;
 
+/// 薪人薪事是审批通知流，不是聊天：接口按时间正序（旧→新）返回，
+/// 展示时改成最新在上，避免 APP 点进去还要滑到最下面才能看到刚收到的通知。
+List<NativeChatMessage> xrxsAssistantFeedMessages(
+  List<NativeChatMessage> chronological,
+) {
+  if (chronological.length <= 1) return chronological;
+  return chronological.reversed.toList(growable: false);
+}
+
 List<NativeChatMessage> xrxsAssistantStaticPreviewMessages() {
   final now = DateTime.now();
   NativeChatMessage card({
@@ -124,6 +133,7 @@ class _NativeXrxsAssistantPageState extends State<NativeXrxsAssistantPage> {
     session: widget.session,
   );
   late final XrxsService _xrxs = XrxsService(widget.session);
+  final ScrollController _scroll = ScrollController();
   List<NativeChatMessage> _messages = const [];
   bool _loading = true;
   bool _clearing = false;
@@ -146,8 +156,16 @@ class _NativeXrxsAssistantPageState extends State<NativeXrxsAssistantPage> {
   void dispose() {
     _realtimeSubscription?.cancel();
     _reloadDebounce?.cancel();
+    _scroll.dispose();
     _service.close();
     super.dispose();
+  }
+
+  void _scrollToFeedTop() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_scroll.hasClients) return;
+      _scroll.jumpTo(0);
+    });
   }
 
   Future<void> _load({bool silent = false}) async {
@@ -166,6 +184,7 @@ class _NativeXrxsAssistantPageState extends State<NativeXrxsAssistantPage> {
           _loading = false;
           _error = null;
         });
+        if (!silent) _scrollToFeedTop();
         return;
       }
       var id = widget.conversationHint.id;
@@ -183,7 +202,8 @@ class _NativeXrxsAssistantPageState extends State<NativeXrxsAssistantPage> {
       await _service.markConversationRead(id);
       widget.onConversationRead?.call(id);
       if (!mounted) return;
-      setState(() => _messages = messages);
+      setState(() => _messages = xrxsAssistantFeedMessages(messages));
+      if (!silent) _scrollToFeedTop();
     } catch (e) {
       if (mounted && !silent) setState(() => _error = '$e');
     } finally {
@@ -369,6 +389,7 @@ class _NativeXrxsAssistantPageState extends State<NativeXrxsAssistantPage> {
     return RefreshIndicator(
       onRefresh: _load,
       child: ListView.builder(
+        controller: _scroll,
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.all(12),
         itemCount: _messages.length,

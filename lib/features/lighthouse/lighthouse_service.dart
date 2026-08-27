@@ -198,7 +198,7 @@ class LighthouseService {
     }, '灯塔折扣加载失败');
   }
 
-  /// 供给资金池（资管标签二：资产合计 / 资金池余额），按省份 map。
+  /// 供给资金池（资管标签二：资产合计 / 票税应开实开原件），按省份 map。
   /// 默认取最新快照；asOfDate 仅用于明确的历史审计查询。
   Future<Map<String, dynamic>> fetchFundPool({String? asOfDate}) {
     return _getData('/lighthouse/fund-pool', {

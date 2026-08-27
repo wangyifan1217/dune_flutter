@@ -82,6 +82,10 @@ class LighthouseDataBundle {
     } else {
       return this;
     }
+    final ui = metrics['ui'];
+    if (ui != null && !incoming.containsKey('ui')) {
+      incoming['ui'] = ui;
+    }
     return copyWith(metrics: incoming);
   }
 

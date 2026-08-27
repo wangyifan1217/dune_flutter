@@ -11,6 +11,30 @@ const int lighthouseCompactHeroTrendFlex = 7;
 
 /// 给左侧 KPI（标签 + 大数 +「↓xx% vs 昨日」）留足高度，避免环比被裁切。
 const double lighthouseCompactHeroSparkHeight = 180;
+
+/// 窄屏仍左右并排：走势图略加高，但不把「本日毛利润」整块挪到图上面。
+const double lighthouseCompactHeroSparkHeightNarrow = 216;
+const double lighthouseCompactHeroChartMaxHeightWide = 84;
+const double lighthouseCompactHeroChartMaxHeightNarrow = 112;
+const double lighthouseCompactHeroNarrowBreakpoint = 600;
+
+bool lighthouseCompactHeroIsNarrow(double width) =>
+    width < lighthouseCompactHeroNarrowBreakpoint;
+
+double lighthouseCompactHeroSparkHeightFor(double width) =>
+    lighthouseCompactHeroIsNarrow(width)
+        ? lighthouseCompactHeroSparkHeightNarrow
+        : lighthouseCompactHeroSparkHeight;
+
+double lighthouseCompactHeroChartMaxHeightFor(double width) =>
+    lighthouseCompactHeroIsNarrow(width)
+        ? lighthouseCompactHeroChartMaxHeightNarrow
+        : lighthouseCompactHeroChartMaxHeightWide;
+
+/// Hero §02 区块总高度（含走势卡 padding）。窄宽都是左右并排。
+double lighthouseCompactHeroBlockHeightFor(double width) =>
+    lighthouseCompactHeroSparkHeightFor(width) + lighthouseHeroChartCardPadding * 2;
+
 const double lighthouseCompactHeroMetricGap = 6;
 const bool lighthouseHeroUsesCategoryTint = false;
 const bool lighthouseHeroUsesAccentRail = false;
@@ -102,19 +126,67 @@ bool lighthouseHeroPaneSnapsToZero({
   return min < max * 0.5;
 }
 
-/// APP 窄屏图例必须换行；毛利/收入/成本排在可裁的规模副线前面。
+/// APP 窄屏图例必须换行；规模主线也在这一行，不再挂在「本期合计」旁边。
 List<String> lighthouseTrendPnlLegendKeys({
   required bool hasProfit,
   required bool hasRevenue,
   required bool hasCost,
   required bool hasScaleAlt,
+  bool hasScale = false,
 }) {
   return [
+    if (hasScale) 'scale',
     if (hasProfit) 'profit',
     if (hasRevenue) 'revenue',
     if (hasCost) 'cost',
     if (hasScaleAlt) 'scaleAlt',
   ];
+}
+
+/// 「本期合计」旁边不再挂主指标大数，所有指标只走下方小图例。
+const bool lighthouseTrendShowsHeroMetricBesideStatus = false;
+
+/// 环比默认折到第二行；第一行只放名称 + 金额，避免跟环比抢宽度。
+const bool lighthouseTrendLegendMomOnSecondLine = true;
+
+/// 手机窄宽时图例按此最小宽度换行，保证「核销规模 463.1万」和环比都能看见。
+const double lighthouseTrendLegendMinChipWidth = 78;
+
+const double lighthouseTrendLegendAllSlotWidth = 28;
+
+/// 图例环比文案自身约占宽度；不再跟金额挤在同一列。
+const double lighthouseTrendLegendMomWidth = 48;
+
+bool lighthouseTrendLegendShouldWrap({
+  required double width,
+  required int metricCount,
+  bool showAll = false,
+}) {
+  if (metricCount <= 0) return false;
+  final need =
+      (showAll ? lighthouseTrendLegendAllSlotWidth : 0) +
+      metricCount * lighthouseTrendLegendMinChipWidth;
+  return width + 1e-6 < need;
+}
+
+/// 环比永远跟在金额后面（含点选某日）；优先后端口径（上月同日 / 上月同期）。
+double? lighthouseTrendMomPct({
+  required double? periodDeltaPct,
+  required bool partialPeriod,
+  required bool isSelected,
+  required List<double> series,
+}) {
+  if (periodDeltaPct != null) return periodDeltaPct;
+  if (isSelected || partialPeriod || series.length < 2) return null;
+  final prev = series[series.length - 2];
+  if (prev.abs() <= 1e-6) return null;
+  return (series.last - prev) / prev.abs() * 100;
+}
+
+/// 图例环比文案：箭头表达方向，数字用绝对值，避免「↓ -12%」。
+/// 固定 1 位小数，四项列宽才齐。
+String lighthouseTrendMomLabel(double pct) {
+  return '${pct >= 0 ? '↑' : '↓'} ${pct.abs().toStringAsFixed(1)}%';
 }
 
 /// `_TrendChart` 五条序列在 `available` 里的下标。
@@ -165,6 +237,39 @@ int lighthouseTrendHeroIndex(List<bool> available) {
     if (i < available.length && available[i]) return i;
   }
   return 2;
+}
+
+/// 核销 / 销售才共用一根 Y（看未核销差额）。项目成本三级量级差百倍，必须各自归一。
+bool lighthouseTrendShareScaleRange({
+  required String scaleLabel,
+  required String scaleAltLabel,
+}) {
+  bool isSalesFamily(String raw) {
+    final s = raw.trim();
+    if (s.isEmpty) return false;
+    return s.contains('核销') || s.contains('销售') || s == '规模';
+  }
+
+  return isSalesFamily(scaleLabel) && isSalesFamily(scaleAltLabel);
+}
+
+/// 单条走势自己的值域：上下留 8% 边，全点相等时扩一截以免贴成一条边。
+({double min, double max}) lighthouseTrendSeriesRange(List<double> values) {
+  if (values.isEmpty) return (min: 0.0, max: 1.0);
+  var mn = values.first;
+  var mx = values.first;
+  for (final v in values) {
+    if (v < mn) mn = v;
+    if (v > mx) mx = v;
+  }
+  final span = mx - mn;
+  if (span.abs() < 1e-9) {
+    final pad = mx.abs() * 0.1;
+    final floor = pad < 1e-9 ? 1.0 : pad;
+    return (min: mn - floor, max: mx + floor);
+  }
+  final pad = span * 0.08;
+  return (min: mn - pad, max: mx + pad);
 }
 
 const lighthouseHeroSectionAccentValues = <String, int>{
@@ -275,6 +380,266 @@ const lighthouseHeroColumnSectionKeys = <List<String>>[
   ['profit'],
 ];
 
+/// 点 Hero 格子不再出公式面板；走势图用与账本总图同一套 `_TrendChart`。
+const bool lighthouseHeroShowsMetricFormulas = false;
+
+/// 底下不再堆每条指标一张图；点格子只改顶部那一张。
+const bool lighthouseHeroShowsAllMetricTrends = false;
+
+/// 顶部总图上的五条线：核销 / 销售 / 收入 / 成本合计 / 毛利。
+/// 点这些格子 = 总图里只留这一条；点其他格子 = 整张图换成该指标。
+const Set<String> lighthouseHeroOverlayMetricKeys = <String>{
+  'sales',
+  'verifiedSales',
+  'revenue',
+  'totalCost',
+  'costTotal',
+  'profit',
+};
+
+bool lighthouseHeroMetricIsOverlay(String key) =>
+    lighthouseHeroOverlayMetricKeys.contains(key);
+
+/// 点同一格回到总图；点另一格切到那一项。
+String? lighthouseHeroTrendFocusAfterTap(String? current, String tapped) {
+  if (tapped.trim().isEmpty) return current;
+  return current == tapped ? null : tapped;
+}
+
+/// 总图五条线对应 `_TrendChart` 的 slot。不是这五条时返回 null，由调用方换整张图。
+String? lighthouseHeroOverlaySoloSlot({
+  required String? metricKey,
+  required String scaleKey,
+  required String scaleAltKey,
+  bool hasScale = true,
+  bool hasScaleAlt = true,
+}) {
+  if (metricKey == null || metricKey.isEmpty) return null;
+  switch (metricKey) {
+    case 'profit':
+      return 'profit';
+    case 'revenue':
+      return 'revenue';
+    case 'totalCost':
+    case 'costTotal':
+      return 'cost';
+    case 'sales':
+    case 'verifiedSales':
+      if (metricKey == scaleKey) return hasScale ? 'scale' : null;
+      if (metricKey == scaleAltKey) return hasScaleAlt ? 'scaleAlt' : null;
+      return hasScale ? 'scale' : (hasScaleAlt ? 'scaleAlt' : null);
+    default:
+      return null;
+  }
+}
+
+List<String> lighthouseHeroMetricTrendKeys() => [
+  for (final section in lighthouseHeroVerticalSections) ...section.metricKeys,
+];
+
+const String lighthouseCostBillMetricPrefix = 'costBill:';
+
+String lighthouseCostBillMetricKey(String code) =>
+    '$lighthouseCostBillMetricPrefix${code.trim()}';
+
+bool lighthouseIsCostBillMetric(String key) =>
+    key.startsWith(lighthouseCostBillMetricPrefix) &&
+    key.length > lighthouseCostBillMetricPrefix.length;
+
+String? lighthouseCostBillCode(String key) {
+  if (!lighthouseIsCostBillMetric(key)) return null;
+  final code = key.substring(lighthouseCostBillMetricPrefix.length).trim();
+  return code.isEmpty ? null : code;
+}
+
+List<Map<String, String>> lighthouseParseCostBillTypes(dynamic raw) {
+  if (raw is! List) return const [];
+  final out = <Map<String, String>>[];
+  final seen = <String>{};
+  for (final item in raw) {
+    if (item is! Map) continue;
+    final key = '${item['key'] ?? item['code'] ?? ''}'.trim();
+    final label = '${item['label'] ?? item['name'] ?? key}'.trim();
+    final category = '${item['category'] ?? ''}'.trim();
+    if (key.isEmpty || !seen.add(key)) continue;
+    out.add({
+      'key': key,
+      'label': label.isEmpty ? key : label,
+      'category': category,
+      'l1': '${item['l1'] ?? item['billTypeL1Name'] ?? ''}'.trim(),
+      'l2': '${item['l2'] ?? item['billTypeL2Name'] ?? ''}'.trim(),
+    });
+  }
+  return out;
+}
+
+List<String> lighthouseHeroCostBillTrendKeys(dynamic raw) => [
+  for (final item in lighthouseParseCostBillTypes(raw))
+    lighthouseCostBillMetricKey(item['key']!),
+];
+
+String lighthouseCostBillTypeLabel(String metricKey, dynamic typesRaw) {
+  final code = lighthouseCostBillCode(metricKey);
+  if (code == null) return lighthouseHeroMetricLabel(metricKey);
+  for (final item in lighthouseParseCostBillTypes(typesRaw)) {
+    if (item['key'] == code) return item['label'] ?? code;
+  }
+  return code;
+}
+
+List<double> lighthouseCostBillTypeSeries(dynamic seriesRaw, String metricKey) {
+  final code = lighthouseCostBillCode(metricKey);
+  if (code == null || seriesRaw is! Map) return const <double>[];
+  final raw = seriesRaw[code] ?? seriesRaw[metricKey];
+  if (raw is! List || raw.isEmpty) return const <double>[];
+  return [
+    for (final e in raw) (e is num) ? e.toDouble() : 0.0,
+  ];
+}
+
+const lighthouseProjectCostPreferredLabels = [
+  '平台服务费',
+  '支付手续费',
+  '机构返佣',
+];
+
+class LighthouseCostBillChartLine {
+  const LighthouseCostBillChartLine({
+    required this.key,
+    required this.label,
+    required this.category,
+    required this.values,
+  });
+  final String key;
+  final String label;
+  final String category;
+  final List<double> values;
+}
+
+String lighthouseCostBillChartLabel(Map<String, String> item) {
+  final l3 = (item['label'] ?? '').trim();
+  return l3.isEmpty ? (item['key'] ?? '') : l3;
+}
+
+/// 趋势图 X 轴：每个数据点都标日期，不做稀疏采样（避免 8.22 / 8.25 等中间日期空白）。
+(List<String>, List<int>) lighthouseTrendXAxisLabels(
+  List<String> labels,
+  int pointCount,
+) {
+  final count = labels.length;
+  if (count == 0 || pointCount == 0) {
+    return (const <String>[], const <int>[]);
+  }
+  return (
+    [
+      for (final label in labels) lighthouseHeroCompactPeriodLabel(label),
+    ],
+    List<int>.generate(count, (i) => i),
+  );
+}
+
+/// 供给卡片资金池展开：右侧独立全高点击条（不缩放，保证手机好点）。
+const double lighthouseFundPoolExpandTapWidth = 44;
+const double lighthouseFundPoolExpandIconSize = 22;
+
+/// 票税收起格有应开 / 实开 / 原件三行，必须高于普通 KPI 格（43），否则会 overflow。
+const double lighthouseFundPoolPreviewHeight = 68;
+
+double lighthouseFundPoolPreviewRowHeight({
+  required double summaryCellHeight,
+  required double scale,
+}) {
+  final scaled = (lighthouseFundPoolPreviewHeight * scale).roundToDouble();
+  return scaled < summaryCellHeight ? summaryCellHeight : scaled;
+}
+
+double lighthouseFundPoolPreviewExtraHeight({
+  required double summaryCellHeight,
+  required double scale,
+}) {
+  return lighthouseFundPoolPreviewRowHeight(
+        summaryCellHeight: summaryCellHeight,
+        scale: scale,
+      ) -
+      summaryCellHeight;
+}
+
+bool lighthouseSeriesHasVisibleData(List<double> series) {
+  if (series.length < 2) return false;
+  for (final v in series) {
+    if (v.abs() > 1e-9) return true;
+  }
+  return false;
+}
+
+int lighthouseProjectCostLineRank(String label) {
+  for (var i = 0; i < lighthouseProjectCostPreferredLabels.length; i++) {
+    if (label.contains(lighthouseProjectCostPreferredLabels[i])) return i;
+  }
+  return lighthouseProjectCostPreferredLabels.length;
+}
+
+/// 项目成本图：资管 PROJECT_COST 三级各一条，优先平台服务费 / 支付手续费 / 机构返佣。
+List<LighthouseCostBillChartLine> lighthouseCostBillChartLines({
+  required dynamic typesRaw,
+  required dynamic seriesRaw,
+  required String category,
+  int maxLines = 5,
+}) {
+  final wanted = category.trim();
+  final lines = <LighthouseCostBillChartLine>[];
+  for (final item in lighthouseParseCostBillTypes(typesRaw)) {
+    if (wanted.isNotEmpty && item['category'] != wanted) continue;
+    final key = item['key'] ?? '';
+    if (key.isEmpty) continue;
+    final values = lighthouseCostBillTypeSeries(
+      seriesRaw,
+      lighthouseCostBillMetricKey(key),
+    );
+    if (!lighthouseSeriesHasVisibleData(values)) continue;
+    lines.add(
+      LighthouseCostBillChartLine(
+        key: key,
+        label: lighthouseCostBillChartLabel(item),
+        category: item['category'] ?? '',
+        values: values,
+      ),
+    );
+  }
+  lines.sort((a, b) {
+    final rank = lighthouseProjectCostLineRank(
+      a.label,
+    ).compareTo(lighthouseProjectCostLineRank(b.label));
+    return rank != 0 ? rank : 0;
+  });
+  if (lines.length <= maxLines) return lines;
+  return lines.take(maxLines).toList(growable: false);
+}
+
+/// 单条 Hero 走势落在 `_TrendChart` 哪一条槽，决定线色。
+String lighthouseHeroTrendChartSlot(String key) {
+  if (lighthouseIsCostBillMetric(key)) return 'cost';
+  switch (key) {
+    case 'revenue':
+      return 'revenue';
+    case 'totalCost':
+    case 'costTotal':
+    case 'projectCost':
+    case 'cost':
+    case 'businessCost':
+      return 'cost';
+    case 'profit':
+    case 'netProfit':
+    case 'spread':
+      return 'profit';
+    default:
+      return 'scale';
+  }
+}
+
+bool lighthouseHeroTrendChartIsRate(String key) =>
+    key == 'rate' || key == 'grossMargin' || key == 'spreadRate';
+
 const int lighthouseLedgerSummaryColumns = 2;
 
 /// 名称略大于右侧核心数字，数字不压过业务名称。
@@ -374,6 +739,7 @@ const double lighthouseLedgerFilterChipRadius = 8;
 const bool lighthouseLedgerCentersPrimaryDimensions = false;
 const bool lighthouseLedgerPrimaryDimensionsFillAvailableWidth = true;
 const bool lighthouseLedgerSeparatesAnalysisTab = false;
+const bool lighthouseLedgerPrimaryTabUsesPeriodSegment = true;
 const bool lighthouseLedgerUsesLavenderPanelFrame = true;
 const double lighthouseLedgerPanelBorderWidth = 0.8;
 const double lighthouseLedgerPanelRadius = 12;
@@ -385,9 +751,13 @@ const double lighthousePeriodSelectedRadius = 8;
 const double lighthousePeriodStatusDotSize = 4;
 const int lighthousePeriodAnimationMs = 180;
 const double lighthouseAppBarTitleFontSize = 18;
+const int lighthouseAppBarTitleColorValue = 0xFF7C5CE6;
 const double lighthouseAppBarEnglishFontSize = 8.5;
 const double lighthouseAppBarToolbarHeight = 34;
 const double lighthouseAppBarToolbarRadius = 11;
+
+/// 日期与同步状态跟「灯塔 LIGHTHOUSE」同一行，不再单独占一行。
+const bool lighthouseAppBarPutsDateOnTitleRow = false;
 const bool lighthouseHeroShowsLiveMetadata = false;
 const double lighthouseHeroSummaryTitleFontSize = 13.5;
 const double lighthouseHeroSummaryIconSize = 20;
@@ -453,12 +823,29 @@ const lighthouseLedgerSummaryMetricRows = <List<String>>[
   ['verifiedSales', 'profit'],
 ];
 
+/// 账本摘要格可点开单条走势的四个指标。
+const lighthouseLedgerSoloTrendKeys = <String>{
+  'sales',
+  'verifiedSales',
+  'prepaid',
+  'profit',
+};
+
+bool lighthouseLedgerMetricOpensSoloTrend(String key) =>
+    lighthouseLedgerSoloTrendKeys.contains(key);
+
+/// 点同一格收起；点另一格切换到那一条。
+String? lighthouseLedgerSoloTrendAfterTap(String? current, String tapped) {
+  if (!lighthouseLedgerMetricOpensSoloTrend(tapped)) return current;
+  return current == tapped ? null : tapped;
+}
+
 /// 保留产品专用名称供既有调用使用，三维实际共用同一布局。
 const lighthouseProductLedgerSummaryMetricRows =
     lighthouseLedgerSummaryMetricRows;
 
 /// 供给卡片追加资金池预览；产品 / 渠道维度不展示。
-/// 数值来自 `/lighthouse/fund-pool`（资管标签二：资产合计 / 资金池余额）。
+/// 收起行：总资产金额 | 票税（资管标签二应开/实开/原件）。展开明细仍按日清/月结决定是否含发票块。
 bool lighthouseLedgerShowsFundPoolPreview(String tab) => tab.trim() == 'supply';
 
 /// 标签二的一行省份资金数据。金额单位沿用接口的「元」，税率为百分数。
@@ -474,7 +861,10 @@ class LighthouseFundPoolAmounts {
     this.regulatoryAccountBalance,
     this.totalAssets,
     this.invoiceToIssue,
+    this.invoiceIssued,
     this.invoiceTaxRate,
+    this.invoiceOriginals = const [],
+    this.advanceVoucherBalance,
   });
 
   final double? endingPrepaymentBalance;
@@ -487,7 +877,10 @@ class LighthouseFundPoolAmounts {
   final double? regulatoryAccountBalance;
   final double? totalAssets;
   final double? invoiceToIssue;
+  final double? invoiceIssued;
   final double? invoiceTaxRate;
+  final List<String> invoiceOriginals;
+  final double? advanceVoucherBalance;
 
   static LighthouseFundPoolAmounts? fromJson(dynamic raw) {
     if (raw is! Map) return null;
@@ -508,7 +901,10 @@ class LighthouseFundPoolAmounts {
       ),
       totalAssets: _asOptionalDouble(raw['totalAssets']),
       invoiceToIssue: _asOptionalDouble(raw['invoiceToIssue']),
+      invoiceIssued: _asOptionalDouble(raw['invoiceIssued']),
       invoiceTaxRate: _asOptionalDouble(raw['invoiceTaxRate']),
+      invoiceOriginals: _asStringList(raw['invoiceOriginals']),
+      advanceVoucherBalance: _asOptionalDouble(raw['advanceVoucherBalance']),
     );
   }
 }
@@ -517,6 +913,53 @@ double? _asOptionalDouble(dynamic v) {
   if (v == null) return null;
   if (v is num) return v.toDouble();
   return double.tryParse(v.toString());
+}
+
+List<String> _asStringList(dynamic v) {
+  if (v == null) return const [];
+  if (v is String) return _splitUrlText(v);
+  if (v is Map) {
+    final one = _urlFromMap(v);
+    return one == null ? const [] : [one];
+  }
+  if (v is! List) return const [];
+  return [
+    for (final item in v)
+      ..._asStringList(item),
+  ];
+}
+
+List<String> _splitUrlText(String raw) {
+  final text = raw.trim();
+  if (text.isEmpty) return const [];
+  if (!text.contains(',')) return [text];
+  return [
+    for (final part in text.split(','))
+      if (part.trim().isNotEmpty) part.trim(),
+  ];
+}
+
+String? _urlFromMap(Map raw) {
+  for (final key in const [
+    'url',
+    'fileUrl',
+    'file_url',
+    'originalUrl',
+    'photoUrl',
+    'src',
+    'path',
+  ]) {
+    final value = raw[key];
+    if (value is String && value.trim().isNotEmpty) return value.trim();
+  }
+  for (final nested in const ['file', 'image', 'photo', 'original']) {
+    final value = raw[nested];
+    if (value is Map) {
+      final inner = _urlFromMap(value);
+      if (inner != null) return inner;
+    }
+  }
+  return null;
 }
 
 /// 将 `/fund-pool` 的 `byProvince` 解析为可匹配 map。
@@ -578,6 +1021,169 @@ String lighthouseFormatFundPoolWan(double? amount) {
 String lighthouseFormatFundPoolRate(double? rate) {
   if (rate == null) return '—';
   return '${rate.toStringAsFixed(rate == rate.roundToDouble() ? 0 : 2)}%';
+}
+
+/// 日清表不含票税；月结 / 季 / 年才把发票块放在资产上方。
+bool lighthouseFundPoolShowsInvoice(String period) {
+  switch (period.trim()) {
+    case 'month':
+    case 'quarter':
+    case 'year':
+      return true;
+    default:
+      return false;
+  }
+}
+
+enum LighthouseFundPoolSectionKind { invoice, assets, funds, vouchers, recon }
+
+class LighthouseFundPoolMetricSpec {
+  const LighthouseFundPoolMetricSpec(this.key, this.label);
+  final String key;
+  final String label;
+}
+
+class LighthouseFundPoolSectionSpec {
+  const LighthouseFundPoolSectionSpec({
+    required this.kind,
+    required this.title,
+    required this.metrics,
+  });
+  final LighthouseFundPoolSectionKind kind;
+  final String title;
+  final List<LighthouseFundPoolMetricSpec> metrics;
+}
+
+class LighthouseFundPoolRowSpec {
+  const LighthouseFundPoolRowSpec(this.left, [this.right]);
+  final LighthouseFundPoolSectionSpec left;
+  final LighthouseFundPoolSectionSpec? right;
+}
+
+class LighthouseFundPoolPreviewMetric {
+  const LighthouseFundPoolPreviewMetric(this.key, this.label);
+  final String key;
+  final String label;
+}
+
+/// 收起行两块并列：左总资产、右票税（不进资产等式；数据来自资管标签二）。
+List<LighthouseFundPoolPreviewMetric> lighthouseFundPoolPreviewMetrics() {
+  return const [
+    LighthouseFundPoolPreviewMetric('totalAssets', '总资产金额'),
+    LighthouseFundPoolPreviewMetric('invoicePreview', '票税'),
+  ];
+}
+
+const lighthouseFundPoolInvoiceSection = LighthouseFundPoolSectionSpec(
+  kind: LighthouseFundPoolSectionKind.invoice,
+  title: '发票',
+  metrics: [
+    LighthouseFundPoolMetricSpec('invoiceOriginals', '发票原件'),
+    LighthouseFundPoolMetricSpec('invoiceToIssue', '应开发票金额'),
+    LighthouseFundPoolMetricSpec('invoiceIssued', '实开金额'),
+  ],
+);
+
+const lighthouseFundPoolAssetsSection = LighthouseFundPoolSectionSpec(
+  kind: LighthouseFundPoolSectionKind.assets,
+  title: '资产',
+  metrics: [
+    LighthouseFundPoolMetricSpec('totalAssets', '资产合计'),
+  ],
+);
+
+const lighthouseFundPoolFundsSection = LighthouseFundPoolSectionSpec(
+  kind: LighthouseFundPoolSectionKind.funds,
+  title: '资金',
+  metrics: [
+    LighthouseFundPoolMetricSpec('regulatoryAccountBalance', '现金 · 监管户'),
+    LighthouseFundPoolMetricSpec('inTransitFunds', '现金 · 在途'),
+    LighthouseFundPoolMetricSpec('endingReceivableRebate', '应收资金'),
+  ],
+);
+
+const lighthouseFundPoolVouchersSection = LighthouseFundPoolSectionSpec(
+  kind: LighthouseFundPoolSectionKind.vouchers,
+  title: '券',
+  metrics: [
+    LighthouseFundPoolMetricSpec('inventoryVoucherBalance', '库存券'),
+    LighthouseFundPoolMetricSpec('contractVoucherBalance', '同步券'),
+    LighthouseFundPoolMetricSpec('advanceVoucherBalance', '预支券'),
+  ],
+);
+
+const lighthouseFundPoolReconSection = LighthouseFundPoolSectionSpec(
+  kind: LighthouseFundPoolSectionKind.recon,
+  title: '期末预付款对账',
+  metrics: [
+    LighthouseFundPoolMetricSpec('fundPoolBalance', '资金池可用'),
+    LighthouseFundPoolMetricSpec('stockAndSyncVouchers', '库存/同步券'),
+    LighthouseFundPoolMetricSpec('systemDifference', '系统差异'),
+    LighthouseFundPoolMetricSpec('endingPrepaymentBalance', '期末预付款余额'),
+  ],
+);
+
+/// 月结：发票与资产并列且发票在上；下面资金 → 券 → 对账。
+/// 日清：不含发票，资金 → 券 → 对账，资产放等式最后。
+List<LighthouseFundPoolRowSpec> lighthouseFundPoolDetailRows({
+  required bool showInvoice,
+}) {
+  if (showInvoice) {
+    return const [
+      LighthouseFundPoolRowSpec(
+        lighthouseFundPoolInvoiceSection,
+        lighthouseFundPoolAssetsSection,
+      ),
+      LighthouseFundPoolRowSpec(
+        lighthouseFundPoolFundsSection,
+        lighthouseFundPoolVouchersSection,
+      ),
+      LighthouseFundPoolRowSpec(lighthouseFundPoolReconSection),
+    ];
+  }
+  return const [
+    LighthouseFundPoolRowSpec(
+      lighthouseFundPoolFundsSection,
+      lighthouseFundPoolVouchersSection,
+    ),
+    LighthouseFundPoolRowSpec(
+      lighthouseFundPoolReconSection,
+      lighthouseFundPoolAssetsSection,
+    ),
+  ];
+}
+
+double? lighthouseFundPoolStockAndSyncVouchers(
+  LighthouseFundPoolAmounts? amounts,
+) {
+  if (amounts == null) return null;
+  final inventory = amounts.inventoryVoucherBalance;
+  final sync = amounts.contractVoucherBalance;
+  if (inventory == null && sync == null) return null;
+  return (inventory ?? 0) + (sync ?? 0);
+}
+
+double? lighthouseFundPoolAmountByKey(
+  LighthouseFundPoolAmounts? amounts,
+  String key,
+) {
+  if (amounts == null) return null;
+  return switch (key) {
+    'endingPrepaymentBalance' => amounts.endingPrepaymentBalance,
+    'endingReceivableRebate' => amounts.endingReceivableRebate,
+    'fundPoolBalance' => amounts.fundPoolBalance,
+    'inventoryVoucherBalance' => amounts.inventoryVoucherBalance,
+    'contractVoucherBalance' => amounts.contractVoucherBalance,
+    'advanceVoucherBalance' => amounts.advanceVoucherBalance,
+    'systemDifference' => amounts.systemDifference,
+    'inTransitFunds' => amounts.inTransitFunds,
+    'regulatoryAccountBalance' => amounts.regulatoryAccountBalance,
+    'totalAssets' => amounts.totalAssets,
+    'invoiceToIssue' => amounts.invoiceToIssue,
+    'invoiceIssued' => amounts.invoiceIssued,
+    'stockAndSyncVouchers' => lighthouseFundPoolStockAndSyncVouchers(amounts),
+    _ => null,
+  };
 }
 
 String lighthouseLedgerSummaryMetricTone(String key) => switch (key) {
@@ -656,6 +1262,8 @@ String lighthouseHeroMetricLabel(String key) {
     'grossMargin': '毛利率',
     'rate': 'ROI',
     'spreadRate': '利差率',
+    'gmv': 'GMV',
+    'prepaid': '预收净增',
   };
   return labels[key] ?? key;
 }
@@ -791,6 +1399,7 @@ bool lighthouseTrendMapUsable(Map<String, dynamic> t) {
       longEnough(t['revenue']) ||
       longEnough(t['sales']) ||
       longEnough(t['verifiedSales']) ||
+      longEnough(t['prepaid']) ||
       longEnough(t['totalCost']) ||
       longEnough(t['cost']);
 }
@@ -822,6 +1431,55 @@ bool lighthouseHeroUseRowAmounts({
   required bool filterActive,
   required bool hasRows,
 }) => filterActive && hasRows;
+
+/// summary 是否对应当前 Tab + 分类。切维后上一档的 filterGroup 不能再喂给「本日毛利润」。
+bool lighthouseHeroSummaryAppliesTo({
+  required String tab,
+  required String group,
+  String? filterTab,
+  String? filterGroup,
+}) {
+  final g = group.trim().isEmpty ? '全部' : group.trim();
+  final fg = (filterGroup ?? '').trim();
+  if (g == '全部') return fg.isEmpty;
+  if (fg != g) return false;
+  final ft = (filterTab ?? '').trim();
+  return ft.isEmpty || ft == tab;
+}
+
+/// 切回「全部」时剥掉分类标记，才能立刻用上一份全量 Hero，不必等接口。
+Map<String, dynamic> lighthouseSharedHeroMetricsSnapshot(
+  Map<String, dynamic> metrics,
+) {
+  final next = Map<String, dynamic>.from(metrics);
+  next.remove('filterGroup');
+  next.remove('filterTab');
+  return next;
+}
+
+/// Hero 金额：分类筛用列表加总；匹配的 summary 优先；切维串档则回退全量快照。
+/// 串档时禁止再用上一维的 metricsValue 冒充「本日毛利润」。
+double lighthouseHeroMetricAmount({
+  required bool useRowAmounts,
+  required bool metricsMatch,
+  double? metricsValue,
+  double? sharedValue,
+  required double rowSum,
+}) {
+  if (useRowAmounts) return rowSum;
+  if (metricsMatch && metricsValue != null) return metricsValue;
+  if (!metricsMatch) return sharedValue ?? rowSum;
+  return metricsValue ?? sharedValue ?? rowSum;
+}
+
+/// 切产品 / 供给 / 渠道时带着当前分类走；新维没有该项才回「全部」。
+String lighthouseGroupAfterTabSwitch({
+  required String currentGroup,
+  required List<String> nextTabOptions,
+}) => lighthouseNormalizeGroupFilter(
+  current: currentGroup,
+  options: nextTabOptions,
+);
 
 /// L1 切维默认分类：三维一律「全部」（中石油 / 平安仅置顶，不默认选中）。
 String lighthouseDefaultGroupFilter(String tab) {

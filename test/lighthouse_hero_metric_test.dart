@@ -83,6 +83,236 @@ void main() {
     ]);
   });
 
+  test('hero metric expand shows all trend charts without formulas', () {
+    expect(lighthouseHeroShowsMetricFormulas, isFalse);
+    expect(lighthouseHeroShowsAllMetricTrends, isFalse);
+    expect(lighthouseHeroMetricIsOverlay('profit'), isTrue);
+    expect(lighthouseHeroMetricIsOverlay('revenue'), isTrue);
+    expect(lighthouseHeroMetricIsOverlay('totalCost'), isTrue);
+    expect(lighthouseHeroMetricIsOverlay('sales'), isTrue);
+    expect(lighthouseHeroMetricIsOverlay('verifiedSales'), isTrue);
+    expect(lighthouseHeroMetricIsOverlay('gmv'), isFalse);
+    expect(lighthouseHeroMetricIsOverlay('projectCost'), isFalse);
+    expect(lighthouseHeroMetricIsOverlay('prepaid'), isFalse);
+    expect(lighthouseHeroMetricIsOverlay('netProfit'), isFalse);
+    expect(
+      lighthouseHeroOverlaySoloSlot(
+        metricKey: 'netProfit',
+        scaleKey: 'verifiedSales',
+        scaleAltKey: 'sales',
+      ),
+      isNull,
+    );
+    expect(lighthouseHeroTrendChartSlot('netProfit'), 'profit');
+    expect(
+      lighthouseHeroOverlaySoloSlot(
+        metricKey: 'profit',
+        scaleKey: 'verifiedSales',
+        scaleAltKey: 'sales',
+      ),
+      'profit',
+    );
+    expect(
+      lighthouseHeroOverlaySoloSlot(
+        metricKey: 'verifiedSales',
+        scaleKey: 'verifiedSales',
+        scaleAltKey: 'sales',
+      ),
+      'scale',
+    );
+    expect(
+      lighthouseHeroOverlaySoloSlot(
+        metricKey: 'sales',
+        scaleKey: 'verifiedSales',
+        scaleAltKey: 'sales',
+      ),
+      'scaleAlt',
+    );
+    expect(
+      lighthouseHeroOverlaySoloSlot(
+        metricKey: 'gmv',
+        scaleKey: 'verifiedSales',
+        scaleAltKey: 'sales',
+      ),
+      isNull,
+    );
+    expect(lighthouseHeroTrendFocusAfterTap(null, 'profit'), 'profit');
+    expect(lighthouseHeroTrendFocusAfterTap('profit', 'profit'), isNull);
+    expect(lighthouseHeroTrendFocusAfterTap('profit', 'gmv'), 'gmv');
+    expect(lighthouseHeroMetricTrendKeys(), [
+      'sales',
+      'verifiedSales',
+      'gmv',
+      'totalCost',
+      'projectCost',
+      'cost',
+      'prepaid',
+      'profit',
+      'netProfit',
+      'revenue',
+      'spread',
+      'grossMargin',
+      'rate',
+    ]);
+    expect(lighthouseHeroTrendChartSlot('sales'), 'scale');
+    expect(lighthouseHeroTrendChartSlot('prepaid'), 'scale');
+    expect(lighthouseHeroTrendChartSlot('revenue'), 'revenue');
+    expect(lighthouseHeroTrendChartSlot('cost'), 'cost');
+    expect(lighthouseHeroTrendChartSlot('projectCost'), 'cost');
+    expect(lighthouseHeroTrendChartSlot('profit'), 'profit');
+    expect(lighthouseHeroTrendChartSlot('spread'), 'profit');
+    expect(lighthouseHeroTrendChartIsRate('grossMargin'), isTrue);
+    expect(lighthouseHeroTrendChartIsRate('rate'), isTrue);
+    expect(lighthouseHeroTrendChartIsRate('sales'), isFalse);
+    expect(lighthouseHeroMetricLabel('gmv'), 'GMV');
+    expect(lighthouseHeroMetricLabel('prepaid'), '预收净增');
+  });
+
+  test('trend x-axis labels every point gets a date', () {
+    final all = lighthouseTrendXAxisLabels(
+      ['8.21', '8.22', '8.23', '8.24', '8.25', '8.26', '8.27'],
+      7,
+    );
+    expect(all.$1, [
+      '8.21',
+      '8.22',
+      '8.23',
+      '8.24',
+      '8.25',
+      '8.26',
+      '8.27',
+    ]);
+    expect(all.$2, [0, 1, 2, 3, 4, 5, 6]);
+    expect(
+      lighthouseTrendXAxisLabels(
+        ['2026.02', '2026.08'],
+        2,
+      ).$1,
+      ['02月', '08月'],
+    );
+    expect(lighthouseFundPoolExpandTapWidth, 44);
+    expect(lighthouseFundPoolExpandIconSize, 22);
+  });
+
+  test('lighthouseTrendShareScaleRange only pairs 核销/销售', () {
+    expect(
+      lighthouseTrendShareScaleRange(
+        scaleLabel: '核销规模',
+        scaleAltLabel: '销售规模',
+      ),
+      isTrue,
+    );
+    expect(
+      lighthouseTrendShareScaleRange(
+        scaleLabel: '支付手续费',
+        scaleAltLabel: '机构返佣',
+      ),
+      isFalse,
+    );
+    expect(
+      lighthouseTrendShareScaleRange(
+        scaleLabel: '规模',
+        scaleAltLabel: '',
+      ),
+      isFalse,
+    );
+  });
+
+  test('lighthouseTrendSeriesRange normalizes each series on its own span', () {
+    final big = lighthouseTrendSeriesRange([3.0, 5.39, 4.2]);
+    final tiny = lighthouseTrendSeriesRange([0.04, 0.06, 0.05]);
+    expect(tiny.max - tiny.min, lessThan(big.max - big.min));
+    expect(tiny.min, lessThan(0.04));
+    expect(tiny.max, greaterThan(0.06));
+    final flat = lighthouseTrendSeriesRange([0.05, 0.05, 0.05]);
+    expect(flat.min, lessThan(0.05));
+    expect(flat.max, greaterThan(0.05));
+  });
+
+  test('cost bill L3 types render as extra cost trend charts', () {
+    const types = [
+      {
+        'key': 'service_ap_PTFWF',
+        'label': '平台服务费',
+        'category': 'PROJECT_COST',
+      },
+      {
+        'key': 'ap_YWCB_GJCH',
+        'label': '供给侧H',
+        'category': 'BUSINESS_COST',
+      },
+    ];
+    expect(
+      lighthouseHeroCostBillTrendKeys(types),
+      ['costBill:service_ap_PTFWF', 'costBill:ap_YWCB_GJCH'],
+    );
+    expect(lighthouseIsCostBillMetric('costBill:service_ap_PTFWF'), isTrue);
+    expect(lighthouseIsCostBillMetric('projectCost'), isFalse);
+    expect(
+      lighthouseCostBillTypeLabel('costBill:service_ap_PTFWF', types),
+      '平台服务费',
+    );
+    expect(
+      lighthouseHeroTrendChartSlot('costBill:ap_YWCB_GJCH'),
+      'cost',
+    );
+    expect(
+      lighthouseCostBillTypeSeries({
+        'service_ap_PTFWF': [1, 2, 3],
+      }, 'costBill:service_ap_PTFWF'),
+      [1, 2, 3],
+    );
+    final projectLines = lighthouseCostBillChartLines(
+      typesRaw: [
+        {
+          'key': 'ap_YFFY_JGFY',
+          'label': '机构返佣',
+          'l2': '返佣',
+          'category': 'PROJECT_COST',
+        },
+        {
+          'key': 'ap_YWCB_GJCH',
+          'label': '供给侧H',
+          'category': 'BUSINESS_COST',
+        },
+        {
+          'key': 'ap_FW_PTF',
+          'label': '平台服务费',
+          'l2': '服务费',
+          'category': 'PROJECT_COST',
+        },
+        {
+          'key': 'service_ap_ZFSXF',
+          'label': '支付手续费',
+          'category': 'PROJECT_COST',
+        },
+      ],
+      seriesRaw: {
+        'ap_FW_PTF': [1, 2, 3],
+        'service_ap_ZFSXF': [4, 5, 6],
+        'ap_YFFY_JGFY': [7, 8, 9],
+        'ap_YWCB_GJCH': [10, 11, 12],
+      },
+      category: 'PROJECT_COST',
+    );
+    expect(
+      projectLines.map((l) => l.label).toList(),
+      ['平台服务费', '支付手续费', '机构返佣'],
+    );
+    expect(projectLines.first.values, [1, 2, 3]);
+    expect(
+      lighthouseCostBillChartLines(
+        typesRaw: types,
+        seriesRaw: {
+          'service_ap_PTFWF': [0, 0],
+          'ap_YWCB_GJCH': [1, 2],
+        },
+        category: 'PROJECT_COST',
+      ),
+      isEmpty,
+    );
+  });
+
   test('ledger rows show four focused metrics in a neutral 2x2 grid', () {
     expect(lighthouseLedgerSummaryColumns, 2);
     expect(lighthouseLedgerNameFontSize, 12.5);
@@ -121,9 +351,40 @@ void main() {
       ['sales', 'prepaid'],
       ['verifiedSales', 'profit'],
     ]);
+    expect(
+      lighthouseLedgerSoloTrendKeys,
+      {'sales', 'verifiedSales', 'prepaid', 'profit'},
+    );
+    expect(lighthouseLedgerMetricOpensSoloTrend('sales'), isTrue);
+    expect(lighthouseLedgerMetricOpensSoloTrend('gmv'), isFalse);
+    expect(lighthouseLedgerSoloTrendAfterTap(null, 'profit'), 'profit');
+    expect(lighthouseLedgerSoloTrendAfterTap('profit', 'profit'), isNull);
+    expect(
+      lighthouseLedgerSoloTrendAfterTap('sales', 'prepaid'),
+      'prepaid',
+    );
+    expect(lighthouseLedgerSoloTrendAfterTap('sales', 'gmv'), 'sales');
     expect(lighthouseLedgerShowsFundPoolPreview('supply'), isTrue);
     expect(lighthouseLedgerShowsFundPoolPreview('product'), isFalse);
     expect(lighthouseLedgerShowsFundPoolPreview('channel'), isFalse);
+    expect(lighthouseFundPoolPreviewHeight, 68);
+    expect(lighthouseFundPoolPreviewHeight, greaterThan(43));
+    expect(
+      lighthouseFundPoolPreviewExtraHeight(
+        summaryCellHeight: 43,
+        scale: 1,
+      ),
+      25,
+    );
+    expect(
+      lighthouseFundPoolPreviewMetrics()
+          .map((m) => [m.key, m.label])
+          .toList(),
+      [
+        ['totalAssets', '总资产金额'],
+        ['invoicePreview', '票税'],
+      ],
+    );
 
     final byProvince = lighthouseParseFundPoolByProvince({
       '广东省': {
@@ -137,7 +398,13 @@ void main() {
         'regulatoryAccountBalance': 780000,
         'totalAssets': 1234000,
         'invoiceToIssue': 890000,
+        'invoiceIssued': 120000,
         'invoiceTaxRate': 13,
+        'invoiceOriginals': [
+          {'url': 'https://cdn.example/a.png'},
+          'https://cdn.example/b.png',
+        ],
+        'advanceVoucherBalance': 45000,
       },
       '__TOTAL__': {'totalAssets': 999, 'fundPoolBalance': 111},
     });
@@ -145,6 +412,12 @@ void main() {
     expect(guangdong?.totalAssets, 1234000);
     expect(guangdong?.endingPrepaymentBalance, 120000);
     expect(guangdong?.invoiceTaxRate, 13);
+    expect(guangdong?.invoiceIssued, 120000);
+    expect(guangdong?.advanceVoucherBalance, 45000);
+    expect(guangdong?.invoiceOriginals, [
+      'https://cdn.example/a.png',
+      'https://cdn.example/b.png',
+    ]);
     expect(lighthouseLookupFundPool(byProvince, '广东')?.fundPoolBalance, 567000);
     expect(lighthouseLookupFundPool(byProvince, '未知省'), isNull);
     expect(lighthouseFormatFundPoolWan(1234000), '123.4万');
@@ -155,6 +428,58 @@ void main() {
     expect(lighthouseFormatFundPoolWanParts(null), (number: '—', unit: ''));
     expect(lighthouseFormatFundPoolRate(13), '13%');
     expect(lighthouseFormatFundPoolRate(13.14), '13.14%');
+    expect(lighthouseFundPoolShowsInvoice('day'), isFalse);
+    expect(lighthouseFundPoolShowsInvoice('week'), isFalse);
+    expect(lighthouseFundPoolShowsInvoice('month'), isTrue);
+    expect(lighthouseFundPoolShowsInvoice('year'), isTrue);
+    final monthly = lighthouseFundPoolDetailRows(showInvoice: true);
+    expect(monthly.first.left.kind, LighthouseFundPoolSectionKind.invoice);
+    expect(monthly.first.right?.kind, LighthouseFundPoolSectionKind.assets);
+    expect(
+      monthly.first.left.metrics.map((m) => m.label).toList(),
+      ['发票原件', '应开发票金额', '实开金额'],
+    );
+    expect(
+      monthly[1].left.metrics.map((m) => m.key).toList(),
+      [
+        'regulatoryAccountBalance',
+        'inTransitFunds',
+        'endingReceivableRebate',
+      ],
+    );
+    expect(
+      monthly[1].right?.metrics.map((m) => m.key).toList(),
+      [
+        'inventoryVoucherBalance',
+        'contractVoucherBalance',
+        'advanceVoucherBalance',
+      ],
+    );
+    expect(
+      monthly.last.left.metrics.map((m) => m.key).toList(),
+      [
+        'fundPoolBalance',
+        'stockAndSyncVouchers',
+        'systemDifference',
+        'endingPrepaymentBalance',
+      ],
+    );
+    final daily = lighthouseFundPoolDetailRows(showInvoice: false);
+    expect(daily.first.left.kind, LighthouseFundPoolSectionKind.funds);
+    expect(daily.last.right?.kind, LighthouseFundPoolSectionKind.assets);
+    expect(
+      daily.any((row) => row.left.kind == LighthouseFundPoolSectionKind.invoice),
+      isFalse,
+    );
+    expect(
+      lighthouseFundPoolStockAndSyncVouchers(
+        const LighthouseFundPoolAmounts(
+          inventoryVoucherBalance: 10,
+          contractVoucherBalance: 5,
+        ),
+      ),
+      15,
+    );
     expect(lighthouseLedgerSummaryMetricRowsForTab('supply'), [
       ['sales', 'prepaid'],
       ['verifiedSales', 'profit'],
@@ -189,6 +514,7 @@ void main() {
     expect(lighthouseLedgerCentersPrimaryDimensions, isFalse);
     expect(lighthouseLedgerPrimaryDimensionsFillAvailableWidth, isTrue);
     expect(lighthouseLedgerSeparatesAnalysisTab, isFalse);
+    expect(lighthouseLedgerPrimaryTabUsesPeriodSegment, isTrue);
     expect(lighthouseLedgerUsesLavenderPanelFrame, isTrue);
     expect(lighthouseLedgerPanelBorderWidth, 0.8);
     expect(lighthouseLedgerPanelRadius, 12);
@@ -206,9 +532,11 @@ void main() {
 
   test('lighthouse header uses refined chrome without LIVE metadata', () {
     expect(lighthouseAppBarTitleFontSize, 18);
+    expect(lighthouseAppBarTitleColorValue, 0xFF7C5CE6);
     expect(lighthouseAppBarEnglishFontSize, 8.5);
     expect(lighthouseAppBarToolbarHeight, 34);
     expect(lighthouseAppBarToolbarRadius, 11);
+    expect(lighthouseAppBarPutsDateOnTitleRow, isFalse);
     expect(lighthouseHeroShowsLiveMetadata, isFalse);
     expect(lighthouseHeroSummaryTitleFontSize, 13.5);
     expect(lighthouseHeroSummaryIconSize, 20);
@@ -256,10 +584,22 @@ void main() {
     },
   );
 
-  test('compact hero keeps KPI and trend side by side', () {
+  test('compact hero keeps KPI and trend side by side on wide screens', () {
     expect(lighthouseCompactHeroKpiFlex, 3);
     expect(lighthouseCompactHeroTrendFlex, 7);
     expect(lighthouseCompactHeroSparkHeight, 180);
+    expect(lighthouseCompactHeroSparkHeightNarrow, 216);
+    expect(lighthouseCompactHeroChartMaxHeightWide, 84);
+    expect(lighthouseCompactHeroChartMaxHeightNarrow, 112);
+    expect(lighthouseCompactHeroNarrowBreakpoint, 600);
+    expect(lighthouseCompactHeroIsNarrow(599), isTrue);
+    expect(lighthouseCompactHeroIsNarrow(600), isFalse);
+    expect(lighthouseCompactHeroSparkHeightFor(390), 216);
+    expect(lighthouseCompactHeroSparkHeightFor(800), 180);
+    expect(lighthouseCompactHeroChartMaxHeightFor(390), 112);
+    expect(lighthouseCompactHeroChartMaxHeightFor(800), 84);
+    expect(lighthouseCompactHeroBlockHeightFor(390), 216 + 16);
+    expect(lighthouseCompactHeroBlockHeightFor(800), 180 + 16);
     expect(lighthouseCompactHeroMetricGap, 6);
     expect(lighthouseHeroUsesCategoryTint, isFalse);
     expect(lighthouseHeroUsesAccentRail, isFalse);
@@ -545,9 +885,9 @@ void main() {
       );
       expect(
         lighthouseTrendMapUsable({
-          'profit': [1],
+          'prepaid': [10, 20],
         }),
-        isFalse,
+        isTrue,
       );
     });
 
@@ -602,6 +942,84 @@ void main() {
       expect(
         lighthouseHeroUseRowAmounts(filterActive: true, hasRows: false),
         isFalse,
+      );
+    });
+
+    test('stale category summary does not apply after switching tab to 全部', () {
+      expect(
+        lighthouseHeroSummaryAppliesTo(
+          tab: 'supply',
+          group: '全部',
+          filterTab: 'product',
+          filterGroup: '能源',
+        ),
+        isFalse,
+      );
+      expect(
+        lighthouseHeroSummaryAppliesTo(
+          tab: 'supply',
+          group: '运营商',
+          filterTab: 'product',
+          filterGroup: '运营商',
+        ),
+        isFalse,
+      );
+      expect(
+        lighthouseHeroSummaryAppliesTo(
+          tab: 'supply',
+          group: '全部',
+          filterTab: null,
+          filterGroup: null,
+        ),
+        isTrue,
+      );
+    });
+
+    test('tab switch falls back to shared 全部 profit, not previous category', () {
+      expect(
+        lighthouseHeroMetricAmount(
+          useRowAmounts: false,
+          metricsMatch: false,
+          metricsValue: 2.91,
+          sharedValue: 10.0,
+          rowSum: 8.0,
+        ),
+        10.0,
+      );
+      expect(
+        lighthouseHeroMetricAmount(
+          useRowAmounts: false,
+          metricsMatch: false,
+          metricsValue: 2.91,
+          sharedValue: null,
+          rowSum: 8.0,
+        ),
+        8.0,
+      );
+      expect(
+        lighthouseSharedHeroMetricsSnapshot(const {
+          'profit': 10.0,
+          'filterGroup': '能源',
+          'filterTab': 'product',
+        }),
+        {'profit': 10.0},
+      );
+    });
+
+    test('tab switch keeps group when the next tab still has it', () {
+      expect(
+        lighthouseGroupAfterTabSwitch(
+          currentGroup: '运营商',
+          nextTabOptions: const ['全部', '中石油', '运营商'],
+        ),
+        '运营商',
+      );
+      expect(
+        lighthouseGroupAfterTabSwitch(
+          currentGroup: '能源',
+          nextTabOptions: const ['全部', '中石油', '运营商'],
+        ),
+        '全部',
       );
     });
 
@@ -818,6 +1236,61 @@ void main() {
           hasScaleAlt: true,
         ),
         ['profit', 'revenue', 'cost', 'scaleAlt'],
+      );
+    });
+
+    test('scale joins the legend; status row never carries the hero number', () {
+      expect(
+        lighthouseTrendPnlLegendKeys(
+          hasScale: true,
+          hasProfit: true,
+          hasRevenue: true,
+          hasCost: true,
+          hasScaleAlt: true,
+        ),
+        ['scale', 'profit', 'revenue', 'cost', 'scaleAlt'],
+      );
+      expect(lighthouseTrendShowsHeroMetricBesideStatus, isFalse);
+    });
+
+    test('legend wraps 环比 to the second line and keeps data on the first', () {
+      expect(lighthouseTrendLegendMomOnSecondLine, isTrue);
+      expect(lighthouseTrendLegendMinChipWidth, 78);
+      expect(lighthouseTrendMomLabel(12.3), '↑ 12.3%');
+      expect(lighthouseTrendMomLabel(-85), '↓ 85.0%');
+      expect(
+        lighthouseTrendLegendShouldWrap(
+          width: 220,
+          metricCount: 5,
+          showAll: true,
+        ),
+        isTrue,
+      );
+      expect(
+        lighthouseTrendLegendShouldWrap(
+          width: 560,
+          metricCount: 5,
+          showAll: true,
+        ),
+        isFalse,
+      );
+      expect(
+        lighthouseTrendMomPct(
+          periodDeltaPct: 12,
+          partialPeriod: false,
+          isSelected: true,
+          series: const [1, 2],
+        ),
+        12,
+      );
+      expect(
+        lighthouseTrendMomPct(
+          periodDeltaPct: null,
+          partialPeriod: true,
+          isSelected: false,
+          series: const [100, 110],
+        ),
+        isNull,
       );
     });
   });

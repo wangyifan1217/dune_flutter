@@ -1,5 +1,29 @@
 import 'dart:convert';
 
+String normalizeProposalIntakeKind(String raw) {
+  switch (raw.trim().toLowerCase()) {
+    case 'purchase':
+    case 'procurement':
+    case 'purchase-proposal':
+    case 'procurement-proposal':
+    case '采购':
+    case '采购提案':
+      return 'purchase';
+    default:
+      return 'sales';
+  }
+}
+
+bool proposalIntakeIsPurchase(String kind) =>
+    normalizeProposalIntakeKind(kind) == 'purchase';
+
+String proposalIntakeUntitledTitle(String kind) => proposalIntakeIsPurchase(kind)
+    ? '未命名采购业务提案'
+    : '未命名销售业务提案';
+
+String proposalIntakeKindEyebrow(String kind) =>
+    proposalIntakeIsPurchase(kind) ? '采购业务提案' : '销售业务提案';
+
 class ProposalIntakeAccess {
   const ProposalIntakeAccess({
     required this.view,
@@ -113,6 +137,7 @@ class ProposalIntakeRow {
     required this.createdAt,
     required this.updatedAt,
     required this.version,
+    this.kind = 'sales',
     this.stage = '',
     this.myAction = '',
   });
@@ -120,6 +145,7 @@ class ProposalIntakeRow {
   final int id;
   final String code;
   final String title;
+  final String kind;
   final String status;
   final Map<String, dynamic> form;
   final Map<String, dynamic> review;
@@ -136,6 +162,7 @@ class ProposalIntakeRow {
       id: (json['id'] as num?)?.toInt() ?? 0,
       code: '${json['code'] ?? ''}'.trim(),
       title: '${json['title'] ?? ''}'.trim(),
+      kind: normalizeProposalIntakeKind('${json['kind'] ?? ''}'),
       status: '${json['status'] ?? 'draft'}'.trim(),
       form: _map(json['form']),
       review: review,
@@ -185,6 +212,7 @@ class ProposalIntakeRow {
     id: id,
     code: code,
     title: title ?? this.title,
+    kind: kind,
     status: status ?? this.status,
     form: form ?? this.form,
     review: review ?? this.review,

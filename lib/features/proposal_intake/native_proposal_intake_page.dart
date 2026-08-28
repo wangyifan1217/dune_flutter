@@ -44,6 +44,7 @@ class NativeProposalIntakePage extends StatefulWidget {
     this.showCreate = true,
     this.assistantMode = false,
     this.initialIntakeId,
+    this.kind = '',
   });
 
   final AuthSession session;
@@ -51,6 +52,9 @@ class NativeProposalIntakePage extends StatefulWidget {
   final bool showCreate;
   final bool assistantMode;
   final int? initialIntakeId;
+
+  /// `sales` / `purchase` 只列该类；空字符串表示全部（审批助手）。
+  final String kind;
 
   @override
   State<NativeProposalIntakePage> createState() =>
@@ -130,6 +134,7 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
         _service.fetchList(
           keyword: widget.assistantMode ? '' : _search.text,
           status: widget.assistantMode ? '' : _statusFilter,
+          kind: widget.assistantMode ? '' : widget.kind,
           actionable: widget.assistantMode,
           pageSize: widget.assistantMode ? 100 : 20,
         ),
@@ -206,9 +211,14 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
           id: 0,
           code: '',
           title: '',
+          kind: widget.kind.trim().isEmpty
+              ? 'sales'
+              : normalizeProposalIntakeKind(widget.kind),
           status: 'draft',
           form: _defaultForm(),
-          review: _defaultReview(),
+          review: _defaultReview(
+            purchase: proposalIntakeIsPurchase(widget.kind),
+          ),
           createdBy: widget.session.userId,
           createdAt: '',
           updatedAt: '',
@@ -349,13 +359,13 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
     'financeInterfaces': <String, dynamic>{},
   };
 
-  Map<String, dynamic> _defaultReview() => {
+  Map<String, dynamic> _defaultReview({bool purchase = false}) => {
     'marketCompleted': false,
     'technologyCompleted': false,
     'financeInterfaceCompleted': false,
     'financeCompleted': false,
     'purchaseContractCompleted': false,
-    'salesContractCompleted': false,
+    'salesContractCompleted': purchase,
     'contractsCompleted': false,
     'technologyItems': <String, dynamic>{},
     'financeItems': <String, dynamic>{},
@@ -440,6 +450,7 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
       try {
         await _service.create(
           title: editing.title,
+          kind: editing.kind,
           form: proposalIntakeConfirmContractEdits(editing.form),
           review: editing.review,
         );
@@ -548,7 +559,9 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
               backgroundColor: ProposalPalette.purple,
             ),
             icon: const Icon(Icons.add, size: 18),
-            label: const Text('新建提案'),
+            label: Text(
+              proposalIntakeIsPurchase(widget.kind) ? '新建采购提案' : '新建提案',
+            ),
           )
         : null;
     final statusFilter = compact
@@ -677,7 +690,11 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
       return _ListMessage(
         icon: Icons.assignment_outlined,
         title: '暂无提案',
-        message: widget.showCreate ? '点击右上角「新建提案」开始录入' : '当前没有需要你处理的提案',
+        message: widget.showCreate
+            ? (proposalIntakeIsPurchase(widget.kind)
+                  ? '点击右上角「新建采购提案」开始录入'
+                  : '点击右上角「新建提案」开始录入')
+            : '当前没有需要你处理的提案',
       );
     }
     final list = ListView.separated(
@@ -784,7 +801,9 @@ class _ProposalListTile extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      row.title.isEmpty ? '未命名销售业务提案' : row.title,
+                      row.title.isEmpty
+                          ? proposalIntakeUntitledTitle(row.kind)
+                          : row.title,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
@@ -1078,6 +1097,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   }
 
   int get _me => widget.session.userId;
+
+  bool get _isPurchase => proposalIntakeIsPurchase(_row.kind);
 
   bool get _isLocked =>
       _row.status == 'pending_president' ||
@@ -2137,7 +2158,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     if (name.isNotEmpty) return name;
     final fromForm = _text('proposalName').trim();
     if (fromForm.isNotEmpty) return fromForm;
-    return '未命名销售业务提案';
+    return proposalIntakeUntitledTitle(_row.kind);
   }
 
   Widget _topbar({required bool compact}) {
@@ -2756,8 +2777,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            '销售业务提案 · 新增',
+          Text(
+            '${proposalIntakeKindEyebrow(_row.kind)} · 新增',
             style: TextStyle(
               color: ProposalPalette.purple,
               fontSize: 10,
@@ -2766,7 +2787,9 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           ),
           const SizedBox(height: 7),
           Text(
-            _row.title.isEmpty ? '未命名销售业务提案' : _row.title,
+            _row.title.isEmpty
+                ? proposalIntakeUntitledTitle(_row.kind)
+                : _row.title,
             style: TextStyle(
               color: ProposalPalette.text,
               fontSize: compact ? 20 : 25,
@@ -2788,7 +2811,9 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           title: '一、市场部内容',
           tag: 'Market',
           description: _canEditMarket
-              ? '提交人填写；市场部负责人一复核市场整板块，采购/销售合同由财务部负责人二复核。'
+              ? (_isPurchase
+                    ? '提交人填写；市场部负责人一复核市场整板块，采购合同由财务部负责人二复核。'
+                    : '提交人填写；市场部负责人一复核市场整板块，采购/销售合同由财务部负责人二复核。')
               : '由提交人填写。当前账号不可编辑本板块。',
         ),
       ),
@@ -2887,11 +2912,13 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         ]),
       ),
       _contractCard('03', '采购合同', 'purchase', wide),
-      _contractCard('04', '销售合同', 'sales', wide),
+      if (!_isPurchase) _contractCard('04', '销售合同', 'sales', wide),
       _stepCard(
-        '05',
+        _isPurchase ? '04' : '05',
         '政策与执行',
-        '合同政策、合作计划、盈利方式与产品上线',
+        _isPurchase
+            ? '供货商政策、合作计划与风险点'
+            : '合同政策、合作计划、盈利方式与产品上线',
         Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -2903,13 +2930,21 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                 source: '合同抓取 · 可修改',
                 resetReview: 'marketCompleted',
               ),
-              _textField(
-                '渠道政策',
-                'channelPolicy',
-                maxLines: 3,
-                source: '合同抓取 · 可修改',
-                resetReview: 'marketCompleted',
-              ),
+              if (!_isPurchase)
+                _textField(
+                  '渠道政策',
+                  'channelPolicy',
+                  maxLines: 3,
+                  source: '合同抓取 · 可修改',
+                  resetReview: 'marketCompleted',
+                ),
+              if (_isPurchase)
+                _textField(
+                  'HUN 联系方式',
+                  'hunContact',
+                  source: '加密处理，仅责任一可见',
+                  resetReview: 'marketCompleted',
+                ),
               _textField(
                 '提案执行计划',
                 'executionPlan',
@@ -2922,19 +2957,21 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                 maxLines: 4,
                 resetReview: 'marketCompleted',
               ),
-              _multiField(
-                '盈利模式 · 需写明计算方式',
-                'profitModes',
-                widget.options.profitModes,
-                '新增盈利模式',
-                resetReview: 'marketCompleted',
-              ),
-              _textField(
-                '盈利计算说明',
-                'profitFormula',
-                maxLines: 3,
-                resetReview: 'marketCompleted',
-              ),
+              if (!_isPurchase) ...[
+                _multiField(
+                  '盈利模式 · 需写明计算方式',
+                  'profitModes',
+                  widget.options.profitModes,
+                  '新增盈利模式',
+                  resetReview: 'marketCompleted',
+                ),
+                _textField(
+                  '盈利计算说明',
+                  'profitFormula',
+                  maxLines: 3,
+                  resetReview: 'marketCompleted',
+                ),
+              ],
             ]),
             const SizedBox(height: 16),
             _launchRowsBlock(wide),
@@ -3434,6 +3471,15 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               reviewSection: 'financeItem:rollback',
               reviewLabel: _financeReviewLabel,
             ),
+            if (_isPurchase) ...[
+              const SizedBox(height: 10),
+              _dropdownField(
+                '渠道侧 · 白名单',
+                'channelWhitelist',
+                const ['是', '否'],
+                resetReview: 'financeCompleted',
+              ),
+            ],
             const SizedBox(height: 16),
             _financeModulesBlock(wide),
           ],

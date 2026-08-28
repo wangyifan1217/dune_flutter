@@ -1,3 +1,5 @@
+import 'lighthouse_hero_metric.dart';
+
 class LighthouseDataBundle {
   LighthouseDataBundle({
     required this.data,
@@ -82,10 +84,12 @@ class LighthouseDataBundle {
     } else {
       return this;
     }
-    final ui = metrics['ui'];
+    final previous = metrics;
+    final ui = previous['ui'];
     if (ui != null && !incoming.containsKey('ui')) {
       incoming['ui'] = ui;
     }
+    lighthouseCarryNetTAMetrics(previous, incoming);
     return copyWith(metrics: incoming);
   }
 

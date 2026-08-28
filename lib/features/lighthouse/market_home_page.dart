@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/theme/dunes_theme.dart';
+import 'lighthouse_scroll_text.dart';
 
 /// 灯塔 · 市场部首屏 (v3.7)
 ///
@@ -110,11 +111,7 @@ class _Body extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _MarketTopBar(
-          period: '2025 · 06',
-          showBack: showBack,
-          onBack: onBack,
-        ),
+        _MarketTopBar(period: '2025 · 06', showBack: showBack, onBack: onBack),
         Expanded(
           child: ListView(
             physics: const BouncingScrollPhysics(),
@@ -181,14 +178,13 @@ class _T {
     FontWeight weight = FontWeight.w400,
     double? letterSpacing,
     double? height,
-  }) =>
-      DunesTypography.mono(
-        fontSize: size,
-        color: color,
-        fontWeight: weight,
-        letterSpacing: letterSpacing,
-        height: height,
-      ).copyWith(fontFeatures: const [FontFeature.tabularFigures()]);
+  }) => DunesTypography.mono(
+    fontSize: size,
+    color: color,
+    fontWeight: weight,
+    letterSpacing: letterSpacing,
+    height: height,
+  ).copyWith(fontFeatures: const [FontFeature.tabularFigures()]);
 
   static TextStyle sansStyle({
     double size = 14,
@@ -196,14 +192,13 @@ class _T {
     FontWeight weight = FontWeight.w400,
     double? letterSpacing,
     double? height,
-  }) =>
-      DunesTypography.sans(
-        fontSize: size,
-        color: color,
-        fontWeight: weight,
-        letterSpacing: letterSpacing,
-        height: height,
-      );
+  }) => DunesTypography.sans(
+    fontSize: size,
+    color: color,
+    fontWeight: weight,
+    letterSpacing: letterSpacing,
+    height: height,
+  );
 }
 
 // ============================================================================
@@ -409,7 +404,7 @@ class _AlertChip extends StatelessWidget {
                 ),
               ],
             ),
-            Text(
+            LhScrollText(
               alert.title,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
@@ -420,7 +415,7 @@ class _AlertChip extends StatelessWidget {
                 height: 1.2,
               ),
             ),
-            Text(
+            LhScrollText(
               alert.detail,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
@@ -568,11 +563,7 @@ class _ChangePill extends StatelessWidget {
         const SizedBox(width: 4),
         Text(
           '$arrow${pct.abs().toStringAsFixed(1)}%',
-          style: _T.monoStyle(
-            size: 11,
-            color: color,
-            weight: FontWeight.w500,
-          ),
+          style: _T.monoStyle(size: 11, color: color, weight: FontWeight.w500),
         ),
       ],
     );
@@ -675,11 +666,7 @@ class _CaliberCell extends StatelessWidget {
           const SizedBox(height: 5),
           Text(
             '毛利率 ${margin.ratePct.toStringAsFixed(2)}%',
-            style: _T.monoStyle(
-              size: 11,
-              color: _T.inkMid,
-              letterSpacing: 0.5,
-            ),
+            style: _T.monoStyle(size: 11, color: _T.inkMid, letterSpacing: 0.5),
             textAlign: textAlign,
           ),
         ],
@@ -794,7 +781,11 @@ class _StructureTop3 extends StatelessWidget {
                 for (var i = 0; i < items.length; i++) ...[
                   _StructureCard(item: items[i], flat: true),
                   if (i < items.length - 1)
-                    const Divider(height: 0.5, thickness: 0.5, color: _T.hairline),
+                    const Divider(
+                      height: 0.5,
+                      thickness: 0.5,
+                      color: _T.hairline,
+                    ),
                 ],
               ],
             ),
@@ -864,11 +855,7 @@ class _StructureCard extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 4),
-          const Icon(
-            Icons.chevron_right,
-            size: 16,
-            color: _T.inkVeryFaint,
-          ),
+          const Icon(Icons.chevron_right, size: 16, color: _T.inkVeryFaint),
         ],
       ),
     );

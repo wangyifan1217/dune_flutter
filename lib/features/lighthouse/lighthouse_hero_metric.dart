@@ -3,7 +3,10 @@ library;
 
 /// Whether [key] should render as a percentage in the Hero masthead.
 bool lighthouseHeroMetricIsRate(String key) =>
-    key == 'rate' || key == 'grossMargin' || key == 'spreadRate';
+    key == 'rate' ||
+    key == 'grossMargin' ||
+    key == 'spreadRate' ||
+    key == 'sharePct';
 
 /// Shared compact Hero geometry for L1/L2/L3.
 const int lighthouseCompactHeroKpiFlex = 3;
@@ -25,6 +28,17 @@ double lighthouseCompactHeroSparkHeightFor(double width) =>
     lighthouseCompactHeroIsNarrow(width)
         ? lighthouseCompactHeroSparkHeightNarrow
         : lighthouseCompactHeroSparkHeight;
+
+/// 净TA 与产品 Hero 同一高度：项目 / 业务成本叠进总览图，不再垫分图。
+/// 左侧再叠银行余额存量块时加高一截，否则「↓xx% vs …」环比行会溢 12px。
+const double lighthouseNetTABankBalanceExtraHeight = 24;
+
+double lighthouseNetTAHeroSparkHeightFor(
+  double width, {
+  bool hasBankBalance = false,
+}) =>
+    lighthouseCompactHeroSparkHeightFor(width) +
+    (hasBankBalance ? lighthouseNetTABankBalanceExtraHeight : 0);
 
 double lighthouseCompactHeroChartMaxHeightFor(double width) =>
     lighthouseCompactHeroIsNarrow(width)
@@ -91,6 +105,9 @@ const int lighthouseRevenueAccentValue = 0xFF0E9384;
 /// 走势图成本线。琥珀，对应利润恒等式「支出」，不能再跟规模同紫。
 const int lighthouseCostAccentValue = 0xFF854F0B;
 
+/// 净TA 业务成本线。钢蓝，与经营成本琥珀、项目成本橙分开。
+const int lighthouseNetTABizCostAccentValue = 0xFF3B6E96;
+
 /// 核销 / 销售几乎同量级，叠同一根 Y 会贴成一条线，所以各占一行、各自归一。
 /// 收入 / 成本 / 毛利量级接近，仍共用一格。
 bool lighthouseHeroTrendIsScaleKey(String key) =>
@@ -133,10 +150,12 @@ List<String> lighthouseTrendPnlLegendKeys({
   required bool hasCost,
   required bool hasScaleAlt,
   bool hasScale = false,
+  bool hasCostAlt = false,
 }) {
   return [
     if (hasScale) 'scale',
     if (hasProfit) 'profit',
+    if (hasCostAlt) 'costAlt',
     if (hasRevenue) 'revenue',
     if (hasCost) 'cost',
     if (hasScaleAlt) 'scaleAlt',
@@ -189,14 +208,15 @@ String lighthouseTrendMomLabel(double pct) {
   return '${pct >= 0 ? '↑' : '↓'} ${pct.abs().toStringAsFixed(1)}%';
 }
 
-/// `_TrendChart` 五条序列在 `available` 里的下标。
-/// [revenue, cost, profit, scale, scaleAlt]
+/// `_TrendChart` 六条序列在 `available` 里的下标。
+/// [revenue, cost, profit, scale, scaleAlt, costAlt]
 const lighthouseTrendSeriesKeys = <String>[
   'revenue',
   'cost',
   'profit',
   'scale',
   'scaleAlt',
+  'costAlt',
 ];
 
 /// 点图例：再点当前项（或点「全部」）恢复全显；点另一项只留该项。
@@ -205,13 +225,14 @@ String? lighthouseTrendSoloAfterTap(String? current, String tapped) {
   return current == tapped ? null : tapped;
 }
 
-/// 应用 solo 后的可见性，长度恒为 5。solo 指向没有数据的项时保持原样。
+/// 应用 solo 后的可见性，长度恒为 6。solo 指向没有数据的项时保持原样。
 List<bool> lighthouseTrendVisibleFlags({
   required bool hasRevenue,
   required bool hasCost,
   required bool hasProfit,
   required bool hasScale,
   required bool hasScaleAlt,
+  bool hasCostAlt = false,
   String? soloKey,
 }) {
   final base = <bool>[
@@ -220,19 +241,20 @@ List<bool> lighthouseTrendVisibleFlags({
     hasProfit,
     hasScale,
     hasScaleAlt,
+    hasCostAlt,
   ];
   if (soloKey == null || soloKey.isEmpty) return base;
   final i = lighthouseTrendSeriesKeys.indexOf(soloKey);
   if (i < 0 || !base[i]) return base;
   return <bool>[
-    for (var k = 0; k < 5; k++) k == i,
+    for (var k = 0; k < 6; k++) k == i,
   ];
 }
 
 /// 粗线 / 填充 / MAX·MIN 跟哪条走：规模在场时归规模，否则第一条可见的
 /// 规模副线 / 毛利 / 收入 / 成本。
 int lighthouseTrendHeroIndex(List<bool> available) {
-  const order = <int>[3, 4, 2, 0, 1];
+  const order = <int>[3, 4, 2, 0, 1, 5];
   for (final i in order) {
     if (i < available.length && available[i]) return i;
   }
@@ -543,7 +565,9 @@ const double lighthouseFundPoolExpandTapWidth = 44;
 const double lighthouseFundPoolExpandIconSize = 22;
 
 /// 票税收起格有应开 / 实开 / 原件三行，必须高于普通 KPI 格（43），否则会 overflow。
-const double lighthouseFundPoolPreviewHeight = 68;
+// 预览行高。票税不再是三行的异形格之后，这里只需要和普通指标格一样高；
+// 实际取值是 max(这个数, summaryCellHeight)，所以给一个不会顶高整行的下限。
+const double lighthouseFundPoolPreviewHeight = 44;
 
 double lighthouseFundPoolPreviewRowHeight({
   required double summaryCellHeight,
@@ -708,6 +732,22 @@ int lighthouseLedgerValueWeightValue({
 
 const double lighthouseLedgerPinnedWidthRatio = 0.35;
 const double lighthouseLedgerPinnedMaxWidth = 164;
+const double lighthouseLedgerPinnedMinWidth = 112;
+
+/// 净TA 五类名只有四字，但收起态还要给 01 和展开箭头留位；左栏再宽一截，
+/// 避免「经营活动 / 经营成本」被箭头和右边指标卡挡住，看起来像同一个词出现两次。
+const double lighthouseLedgerNetTAPinnedWidthRatio = 0.42;
+const double lighthouseLedgerNetTAPinnedMinWidth = 136;
+
+double lighthouseLedgerPinnedWidthFor(double width, {required String tab}) {
+  final ratio = tab == 'netTa'
+      ? lighthouseLedgerNetTAPinnedWidthRatio
+      : lighthouseLedgerPinnedWidthRatio;
+  final min = tab == 'netTa'
+      ? lighthouseLedgerNetTAPinnedMinWidth
+      : lighthouseLedgerPinnedMinWidth;
+  return (width * ratio).clamp(min, lighthouseLedgerPinnedMaxWidth).toDouble();
+}
 
 /// 占比继续显示为文字与走势，不再用整行底色重复编码。
 const bool lighthouseLedgerShowsShareWash = false;
@@ -727,6 +767,25 @@ String lighthouseLedgerSummaryTitle(int count) {
   final n = count >= 0 && count < cn.length ? cn[count] : '$count';
   return '$n项核心指标';
 }
+
+const lighthouseLedgerPrimaryTabs = <String>[
+  'product',
+  'supply',
+  'channel',
+  'netTa',
+  'analysis',
+];
+
+const lighthouseLedgerPrimaryTabLabels = <String, String>{
+  'product': '产品',
+  'supply': '供给方',
+  'channel': '渠道',
+  'netTa': '净TA',
+  'analysis': '分析',
+};
+
+bool lighthouseLedgerTabShowsCategoryChips(String tab) =>
+    tab == 'product' || tab == 'supply' || tab == 'channel';
 
 const lighthouseLedgerNavigationLevels = <String>[
   'primaryTab',
@@ -759,6 +818,16 @@ const double lighthouseAppBarToolbarRadius = 11;
 /// 日期与同步状态跟「灯塔 LIGHTHOUSE」同一行，不再单独占一行。
 const bool lighthouseAppBarPutsDateOnTitleRow = false;
 const bool lighthouseHeroShowsLiveMetadata = false;
+
+/// 同步胶囊时间戳：日期 + 时分，强制由调用方传入 CST 时刻。
+String lighthouseSyncedAtStamp(DateTime t) {
+  final y = t.year.toString();
+  final mo = t.month.toString().padLeft(2, '0');
+  final dd = t.day.toString().padLeft(2, '0');
+  final hh = t.hour.toString().padLeft(2, '0');
+  final mm = t.minute.toString().padLeft(2, '0');
+  return '$y.$mo.$dd $hh:$mm';
+}
 const double lighthouseHeroSummaryTitleFontSize = 13.5;
 const double lighthouseHeroSummaryIconSize = 20;
 const double lighthouseHeroSummaryIconRadius = 6;
@@ -779,6 +848,11 @@ String lighthouseHeroSummaryIconKey(String title) {
   if (normalized.startsWith('渠道') ||
       (normalized.contains('汇总') && normalized.contains('渠道'))) {
     return 'channel';
+  }
+  if (normalized.startsWith('净TA') ||
+      normalized.contains('净TA') ||
+      normalized.toLowerCase().contains('netta')) {
+    return 'netTa';
   }
   if (normalized.contains('分析')) return 'analysis';
   return 'overview';
@@ -809,12 +883,393 @@ String? lighthouseCategoryBrandAsset(String label) {
   return null;
 }
 
+const lighthouseLedgerSummaryBlankKey = '_blank';
+
+/// Flatten 净TA 五类映射为列表行：父行带流入/流出/占比，二级分类留在 secondaries。
+List<Map<String, dynamic>> lighthousePrepareNetTARows(
+  List<Map<String, dynamic>> categories,
+) {
+  final parents = <Map<String, dynamic>>[];
+  for (final raw in categories) {
+    final cat = Map<String, dynamic>.from(raw);
+    final name = cat['name']?.toString() ?? '';
+    if (name.isEmpty) continue;
+    final secondaries = (cat['secondaries'] as List? ?? const [])
+        .whereType<Map>()
+        .map((e) => Map<String, dynamic>.from(e))
+        .where((e) => (e['name']?.toString() ?? '').isNotEmpty)
+        .toList();
+    final net = (cat['netTa'] as num?)?.toDouble() ?? 0;
+    var inflow = (cat['inflow'] as num?)?.toDouble();
+    var outflow = (cat['outflow'] as num?)?.toDouble();
+    if (inflow == null || outflow == null) {
+      var inf = 0.0;
+      var out = 0.0;
+      if (secondaries.isEmpty) {
+        if (net > 0) {
+          inf = net;
+        } else if (net < 0) {
+          out = net;
+        }
+      } else {
+        for (final sub in secondaries) {
+          final v = (sub['netTa'] as num?)?.toDouble() ?? 0;
+          if (v > 0) inf += v;
+          if (v < 0) out += v;
+        }
+      }
+      inflow ??= inf;
+      outflow ??= out;
+    }
+    parents.add({
+      ...cat,
+      'group': cat['group'] ?? name,
+      'netTa': net,
+      'inflow': inflow,
+      'outflow': outflow,
+      'secondaries': secondaries,
+    });
+  }
+  var pos = 0.0;
+  var negAbs = 0.0;
+  for (final row in parents) {
+    final n = (row['netTa'] as num?)?.toDouble() ?? 0;
+    if (n > 0) pos += n;
+    if (n < 0) negAbs += n.abs();
+  }
+  for (final row in parents) {
+    final n = (row['netTa'] as num?)?.toDouble() ?? 0;
+    final share = n >= 0
+        ? (pos == 0 ? 0.0 : n / pos * 100)
+        : (negAbs == 0 ? 0.0 : n.abs() / negAbs * 100);
+    row['sharePct'] = share;
+    row['flow'] = n >= 0 ? 'in' : 'out';
+  }
+  return parents;
+}
+
+
+const lighthouseNetTASecondariesByMapped = <String, List<String>>{
+  '经营活动': ['和包出行回款', '项目付款', '项目回款', '应收保证金', '分润', '预收保证金'],
+  '筹资活动': ['往来款', '亚洲保理', '应付贷款', '应收往来款'],
+  '经营成本': [
+    '财务费用',
+    '车辆使用费',
+    '费用报销',
+    '利息收入',
+    '其他收入',
+    '人员费用',
+    '税费缴纳',
+    '退税',
+    '行政支出',
+    '研发成本',
+    '政府补贴',
+  ],
+  '项目成本': <String>[],
+  '业务成本': ['营销费用'],
+};
+
+List<Map<String, dynamic>> lighthouseNetTASecondariesOrSeed(
+  String mappedName,
+  List<Map<String, dynamic>> secondaries,
+) {
+  if (secondaries.isNotEmpty) return secondaries;
+  return [
+    for (final name in lighthouseNetTASecondariesByMapped[mappedName] ?? const <String>[])
+      {'name': name, 'netTa': 0.0},
+  ];
+}
+
+/// 分组卡格子：超过 [maxCells] 时收成「其余 N 项」。
+List<Map<String, dynamic>> lighthouseNetTACardMetrics(
+  List<Map<String, dynamic>> secondaries, {
+  int maxCells = 6,
+}) {
+  final items = [
+    for (final raw in secondaries)
+      if ((raw['name']?.toString() ?? '').isNotEmpty) Map<String, dynamic>.from(raw),
+  ];
+  if (items.length <= maxCells) return items;
+  final ranked = [...items]..sort((a, b) {
+    final aa = ((a['netTa'] as num?)?.toDouble() ?? 0).abs();
+    final bb = ((b['netTa'] as num?)?.toDouble() ?? 0).abs();
+    return bb.compareTo(aa);
+  });
+  final head = ranked.take(maxCells - 1).toList();
+  final rest = ranked.skip(maxCells - 1).toList();
+  var restSum = 0.0;
+  for (final row in rest) {
+    restSum += (row['netTa'] as num?)?.toDouble() ?? 0;
+  }
+  return [
+    ...head,
+    {'name': '其余 ${rest.length} 项', 'netTa': restSum},
+  ];
+}
+
+String lighthouseNetTAFlowLabel(num? netTa) =>
+    (netTa ?? 0) >= 0 ? '净流入' : '净流出';
+
+String lighthouseNetTAShareLabel(num? netTa) =>
+    (netTa ?? 0) >= 0 ? '占净流入' : '占净流出';
+
+/// 净TA 主 Hero 总览图六槽：净TA / 经营活动 / 筹资活动 / 经营成本 / 项目成本 / 业务成本。
+/// 项目成本、业务成本与其余指标叠在同一张图，各自一条线。
+const lighthouseNetTAHeroOverlaySlots = <String, String>{
+  'netTa': 'scale',
+  'netTaOperating': 'revenue',
+  'netTaFinancing': 'scaleAlt',
+  'netTaOpCost': 'cost',
+  'netTaProjectCost': 'profit',
+  'netTaBizCost': 'costAlt',
+};
+
+/// 净TA 主 Hero 指标栏。三列与产品 / 供给方 / 渠道的
+/// 规模 → 成本 → 利润 一一对应：进了多少 → 出了多少 → 净了多少。
+/// flex 沿用 lighthouseHeroScaleColumnFlex / Cost / Result（10 : 14 : 15），不另开一套。
+const lighthouseNetTAHeroSections = <LighthouseHeroVerticalSection>[
+  LighthouseHeroVerticalSection('scale', '资金流入', [
+    'netTaInflow',
+    'netTaOperatingInflow',
+    'netTaOtherInflow',
+  ]),
+  LighthouseHeroVerticalSection('cost', '资金流出', [
+    'netTaOutflow',
+    'netTaOperatingOutflow',
+    'netTaFinancingOutflow',
+    'netTaCostOutflow',
+  ]),
+  // 净TA 总额是 hero 大数，不进指标栏；未映射走列表顶部提示条，不占一张卡。
+  LighthouseHeroVerticalSection('profit', '五类净额', [
+    'netTaOperating',
+    'netTaFinancing',
+    'netTaOpCost',
+    'netTaProjectCost',
+    'netTaBizCost',
+  ]),
+];
+
+const lighthouseNetTAHeroColumnSectionKeys = <List<String>>[
+  ['scale'],
+  ['cost'],
+  ['profit'],
+];
+
+/// Hero 指标栏用到的全部键，_loadTab 按它把后端 `hero` 摊进 metrics。
+List<String> lighthouseNetTAHeroMetricKeys() => [
+  for (final section in lighthouseNetTAHeroSections) ...section.metricKeys,
+];
+
+String? lighthouseNetTAHeroOverlaySlot(String? metricKey) {
+  if (metricKey == null || metricKey.isEmpty) return null;
+  return lighthouseNetTAHeroOverlaySlots[metricKey];
+}
+
+String? lighthouseNetTAHeroMetricFromSlot(String? slot) {
+  switch (slot) {
+    case 'scale':
+      return 'netTa';
+    case 'revenue':
+      return 'netTaOperating';
+    case 'scaleAlt':
+      return 'netTaFinancing';
+    case 'cost':
+      return 'netTaOpCost';
+    case 'profit':
+      return 'netTaProjectCost';
+    case 'costAlt':
+      return 'netTaBizCost';
+    default:
+      return null;
+  }
+}
+
+class LighthouseNetTAHeroTrend {
+  const LighthouseNetTAHeroTrend({
+    required this.labels,
+    required this.title,
+    required this.rangeLabel,
+    required this.netTa,
+    required this.operating,
+    required this.financing,
+    required this.operatingCost,
+    required this.projectCost,
+    required this.businessCost,
+    required this.projectAndBusiness,
+  });
+
+  final List<String> labels;
+  final String title;
+  final String rangeLabel;
+  final List<double> netTa;
+  final List<double> operating;
+  final List<double> financing;
+  final List<double> operatingCost;
+  final List<double> projectCost;
+  final List<double> businessCost;
+  final List<double> projectAndBusiness;
+}
+
+List<double> lighthouseReadNumberSeries(dynamic raw) {
+  if (raw is! List || raw.isEmpty) return const <double>[];
+  return [
+    for (final e in raw) (e is num) ? e.toDouble() : 0.0,
+  ];
+}
+
+List<double> _lighthouseSumSeries(List<double> a, List<double> b) {
+  if (a.isEmpty && b.isEmpty) return const <double>[];
+  final n = a.length > b.length ? a.length : b.length;
+  return [
+    for (var i = 0; i < n; i++)
+      (i < a.length ? a[i] : 0.0) + (i < b.length ? b[i] : 0.0),
+  ];
+}
+
+double lighthouseNetTANamedAmount(
+  List<Map<String, dynamic>> categories,
+  String name,
+) {
+  for (final row in categories) {
+    if (row['name']?.toString() == name) {
+      return (row['netTa'] as num?)?.toDouble() ?? 0;
+    }
+  }
+  return 0;
+}
+
+LighthouseNetTAHeroTrend lighthouseNetTAHeroTrendFromPayload(
+  Map<String, dynamic> payload,
+) {
+  const labels = ['上期', '本期'];
+  const title = '走势';
+  const range = '上期 — 本期';
+  final series = payload['series'];
+  if (series is Map) {
+    final m = Map<String, dynamic>.from(series);
+    final parsedLabels = (m['labels'] is List && (m['labels'] as List).isNotEmpty)
+        ? [
+            for (final e in m['labels'] as List)
+              if (e.toString().trim().isNotEmpty) e.toString().trim(),
+          ]
+        : labels;
+    final projectCost = lighthouseReadNumberSeries(m['projectCost']);
+    final businessCost = lighthouseReadNumberSeries(m['businessCost']);
+    var projectAndBusiness = lighthouseReadNumberSeries(m['projectAndBusiness']);
+    if (projectAndBusiness.isEmpty &&
+        (projectCost.isNotEmpty || businessCost.isNotEmpty)) {
+      projectAndBusiness = _lighthouseSumSeries(projectCost, businessCost);
+    }
+    return LighthouseNetTAHeroTrend(
+      labels: parsedLabels,
+      title: (m['title']?.toString().trim().isNotEmpty ?? false)
+          ? m['title'].toString().trim()
+          : title,
+      rangeLabel: (m['rangeLabel']?.toString().trim().isNotEmpty ?? false)
+          ? m['rangeLabel'].toString().trim()
+          : range,
+      netTa: lighthouseReadNumberSeries(m['netTa']),
+      operating: lighthouseReadNumberSeries(m['operating']),
+      financing: lighthouseReadNumberSeries(m['financing']),
+      operatingCost: lighthouseReadNumberSeries(m['operatingCost']),
+      projectCost: projectCost,
+      businessCost: businessCost,
+      projectAndBusiness: projectAndBusiness,
+    );
+  }
+  final cats = (payload['categories'] as List? ?? const [])
+      .whereType<Map>()
+      .map((e) => Map<String, dynamic>.from(e))
+      .toList();
+  final total = (payload['total'] as num?)?.toDouble() ?? 0;
+  final projectCost = lighthouseNetTANamedAmount(cats, '项目成本');
+  final businessCost = lighthouseNetTANamedAmount(cats, '业务成本');
+  return LighthouseNetTAHeroTrend(
+    labels: labels,
+    title: title,
+    rangeLabel: range,
+    netTa: [0, total],
+    operating: [0, lighthouseNetTANamedAmount(cats, '经营活动')],
+    financing: [0, lighthouseNetTANamedAmount(cats, '筹资活动')],
+    operatingCost: [0, lighthouseNetTANamedAmount(cats, '经营成本')],
+    projectCost: [0, projectCost],
+    businessCost: [0, businessCost],
+    projectAndBusiness: [0, projectCost + businessCost],
+  );
+}
+
+/// 主 Hero 折线最少两点才画得出来。
+bool lighthouseNetTAHeroSeriesReady(Map<String, dynamic>? metrics) {
+  final raw = metrics?['netTaSeries'];
+  return raw is List && raw.length >= 2;
+}
+
+/// 产品 summary / 「全部」Hero 快照会整表替换 metrics，把净TA 走势冲掉。
+/// 切回净TA 时若仍走「已加载」短路，主图就会空着。把 `netTa*` 键补回去。
+void lighthouseCarryNetTAMetrics(
+  Map<String, dynamic> from,
+  Map<String, dynamic> into,
+) {
+  from.forEach((key, value) {
+    if (!key.startsWith('netTa')) return;
+    final existing = into[key];
+    if (existing == null) {
+      into[key] = value;
+      return;
+    }
+    if (existing is List &&
+        existing.isEmpty &&
+        value is List &&
+        value.isNotEmpty) {
+      into[key] = value;
+    }
+  });
+}
+
+void lighthouseMergeNetTAHeroTrend(
+  Map<String, dynamic> metrics,
+  LighthouseNetTAHeroTrend trend,
+) {
+  double last(List<double> s) => s.isEmpty ? 0 : s.last;
+  metrics['netTaSeries'] = trend.netTa;
+  metrics['netTaOperatingSeries'] = trend.operating;
+  metrics['netTaFinancingSeries'] = trend.financing;
+  metrics['netTaOpCostSeries'] = trend.operatingCost;
+  metrics['netTaProjectCostSeries'] = trend.projectCost;
+  metrics['netTaBizCostSeries'] = trend.businessCost;
+  metrics['netTaProjectBizSeries'] = trend.projectAndBusiness;
+  metrics['netTaSeriesLabels'] = trend.labels;
+  metrics['netTaSeriesTitle'] = trend.title;
+  metrics['netTaSeriesRangeLabel'] = trend.rangeLabel;
+  metrics['netTaOperating'] = last(trend.operating);
+  metrics['netTaFinancing'] = last(trend.financing);
+  metrics['netTaOpCost'] = last(trend.operatingCost);
+  metrics['netTaProjectBiz'] = last(trend.projectAndBusiness);
+}
+
+double? lighthouseSeriesSignedDeltaPct(List<double> series) {
+  if (series.length < 2) return null;
+  final prev = series[series.length - 2];
+  final cur = series.last;
+  if (prev.abs() < 1e-9) return null;
+  return (cur - prev) / prev.abs() * 100;
+}
+
+int lighthouseNetTASecondaryCount(Map<String, dynamic> row) {
+  final secondaries = (row['secondaries'] as List? ?? const [])
+      .whereType<Map>()
+      .where((e) => (e['name']?.toString() ?? '').isNotEmpty)
+      .length;
+  return secondaries == 0 ? 1 : secondaries;
+}
+
 const lighthouseLedgerSummaryMetricKeys = <String>[
   'sales',
   'verifiedSales',
   'prepaid',
   'profit',
   'costTotal',
+  'netTa',
 ];
 
 /// 产品 / 供给 / 渠道统一四核心：左列规模，右列经营结果。
@@ -1070,7 +1525,9 @@ class LighthouseFundPoolPreviewMetric {
 List<LighthouseFundPoolPreviewMetric> lighthouseFundPoolPreviewMetrics() {
   return const [
     LighthouseFundPoolPreviewMetric('totalAssets', '总资产金额'),
-    LighthouseFundPoolPreviewMetric('invoicePreview', '票税'),
+    // 票税收成单值格：预览行里只放应开发票金额，和左边总资产同一个形状。
+    // 实开 / 发票原件在展开的「发票」分区里有，预览行不必挤三行。
+    LighthouseFundPoolPreviewMetric('invoiceToIssue', '票税 · 应开'),
   ];
 }
 
@@ -1099,6 +1556,8 @@ const lighthouseFundPoolFundsSection = LighthouseFundPoolSectionSpec(
     LighthouseFundPoolMetricSpec('regulatoryAccountBalance', '现金 · 监管户'),
     LighthouseFundPoolMetricSpec('inTransitFunds', '现金 · 在途'),
     LighthouseFundPoolMetricSpec('endingReceivableRebate', '应收资金'),
+    // 占位：口径和数据源都还没定，先把格子留出来，取不到值显示「—」。
+    LighthouseFundPoolMetricSpec('turnoverDays', '周转周期'),
   ],
 );
 
@@ -1187,12 +1646,12 @@ double? lighthouseFundPoolAmountByKey(
 }
 
 String lighthouseLedgerSummaryMetricTone(String key) => switch (key) {
-  'prepaid' => 'cash',
+  'prepaid' || 'netTa' || 'sharePct' => 'cash',
   'profit' => 'profit',
   _ => 'neutral',
 };
 
-/// 「结果」指标 —— 经营性净现金流 + 毛利润。老板真正要盯的两个。
+/// 「结果」指标 —— 经营性净现金流 / 净TA / 毛利润。
 bool lighthouseLedgerIsResultMetric(String key) =>
     lighthouseLedgerSummaryMetricTone(key) != 'neutral';
 
@@ -1219,8 +1678,15 @@ const double lighthouseLedgerResultBlockRailWidth = 2;
 /// 想恢复紫/蓝两色数字，把这个改回 true 即可。
 const bool lighthouseLedgerResultBlockKeepsMetricTint = false;
 
-List<List<String>> lighthouseLedgerSummaryMetricRowsForTab(String tab) =>
-    lighthouseLedgerSummaryMetricRows;
+List<List<String>> lighthouseLedgerSummaryMetricRowsForTab(String tab) {
+  if (tab.trim() == 'netTa') {
+    return const [
+      ['inflow', 'netTa'],
+      ['outflow', 'sharePct'],
+    ];
+  }
+  return lighthouseLedgerSummaryMetricRows;
+}
 
 String lighthouseLedgerHighlightModeLabel({
   required bool rowMode,
@@ -1264,9 +1730,48 @@ String lighthouseHeroMetricLabel(String key) {
     'spreadRate': '利差率',
     'gmv': 'GMV',
     'prepaid': '预收净增',
+    'netTa': '净TA',
+    'inflow': '流入',
+    'outflow': '流出',
+    'sharePct': '占比',
+    'netTaInflow': '流入合计',
+    'netTaOperatingInflow': '经营活动流入',
+    'netTaOtherInflow': '其他流入',
+    'netTaOutflow': '流出合计',
+    'netTaOperatingOutflow': '经营性流出',
+    'netTaFinancingOutflow': '筹资流出',
+    'netTaCostOutflow': '项目+业务成本',
+    'netTaOperating': '经营活动',
+    'netTaFinancing': '筹资活动',
+    'netTaOpCost': '经营成本',
+    'netTaProjectCost': '项目成本',
+    'netTaBizCost': '业务成本',
+    'netTaProjectBiz': '项目+业务成本',
+    'netTaUnmapped': '未映射金额',
   };
   return labels[key] ?? key;
 }
+
+/// 净TA 流出 / 成本 / 筹资活动：栏目已标明方向，数字只报规模，不带负号。
+/// 净TA、经营活动仍保留正负（可进可出）。
+const lighthouseNetTAMagnitudeMetricKeys = <String>{
+  'outflow',
+  'netTaOutflow',
+  'netTaOperatingOutflow',
+  'netTaFinancingOutflow',
+  'netTaCostOutflow',
+  'netTaOpCost',
+  'netTaProjectCost',
+  'netTaBizCost',
+  'netTaProjectBiz',
+  'netTaFinancing',
+};
+
+bool lighthouseHeroMetricDisplaysMagnitude(String key) =>
+    lighthouseNetTAMagnitudeMetricKeys.contains(key);
+
+double lighthouseHeroMetricDisplayAmount(String key, double value) =>
+    lighthouseHeroMetricDisplaysMagnitude(key) ? value.abs() : value;
 
 /// Period-prefixed masthead label, e.g. 本日核销额 / 本月毛利润.
 String lighthouseHeroMetricPeriodLabel(String period, String metricKey) {

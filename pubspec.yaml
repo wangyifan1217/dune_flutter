@@ -57,11 +57,12 @@ dependencies:
     path: packages/just_screenshot
   hotkey_manager: ^0.2.3
   webview_flutter_android: 4.12.0
-  webview_flutter_wkwebview: ^3.26.0
+  webview_flutter_wkwebview: ^3.25.1
   geolocator: ^14.0.3
   flutter_inappwebview: 6.2.0-beta.3
   desktop_multi_window: ^0.3.0
-  record: ^7.1.1
+  # 7.x 需要 Flutter 3.44+/Dart 3.12；本机 3.41.9 走 6.2.x，新 SDK 仍可升到 7.x
+  record: '>=6.2.1 <8.0.0'
 dev_dependencies:
   flutter_test:
     sdk: flutter

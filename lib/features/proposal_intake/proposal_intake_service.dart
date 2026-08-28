@@ -121,6 +121,7 @@ class ProposalIntakeService {
     int pageSize = 20,
     String keyword = '',
     String status = '',
+    String kind = '',
     bool actionable = false,
     bool relatedOnly = false,
   }) async {
@@ -129,6 +130,7 @@ class ProposalIntakeService {
       'pageSize': '$pageSize',
       if (keyword.trim().isNotEmpty) 'q': keyword.trim(),
       if (status.trim().isNotEmpty) 'status': status.trim(),
+      if (kind.trim().isNotEmpty) 'kind': kind.trim(),
       if (actionable) 'actionable': '1',
       if (relatedOnly) 'related': '1',
     };
@@ -140,6 +142,7 @@ class ProposalIntakeService {
 
   Future<ProposalIntakeRow> create({
     String title = '',
+    String kind = 'sales',
     Map<String, dynamic> form = const {},
     Map<String, dynamic> review = const {},
   }) async {
@@ -149,6 +152,7 @@ class ProposalIntakeService {
         headers: _headers,
         body: jsonEncode({
           'title': title,
+          'kind': normalizeProposalIntakeKind(kind),
           'status': 'draft',
           'form': form,
           'review': review,

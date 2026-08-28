@@ -31,12 +31,12 @@ import 'lighthouse_theme.dart'; // 假定同目录; 你可以调整路径
 // ═══════════════════════════════════════════════════════════════════════════
 
 enum SealStatus {
-  draft,         // 起草中 - 我写完但没提交
-  approving,     // 审批中 - 已提交, 待审批人处理
-  approved,      // 已通过, 待用印
-  sealed,        // 已用印, 待归档 (合同外发签署中)
-  archived,      // 已归档 (纸质件回收扫描完成)
-  rejected,      // 已驳回
+  draft, // 起草中 - 我写完但没提交
+  approving, // 审批中 - 已提交, 待审批人处理
+  approved, // 已通过, 待用印
+  sealed, // 已用印, 待归档 (合同外发签署中)
+  archived, // 已归档 (纸质件回收扫描完成)
+  rejected, // 已驳回
 }
 
 enum ApprovalAction { pending, approved, rejected, transferred }
@@ -62,14 +62,14 @@ class ApprovalStep {
 ///     2. 审计追踪 (谁 / 何时 / 借哪份 / 有效期到何时)
 ///     3. 到期自动失效 (下载链接过期)
 class BorrowRecord {
-  final String id;              // e.g. JY-20260701-001
-  final String borrowerUnit;    // 借阅单位 (水印动态字段)
-  final String purpose;         // 借阅用途
-  final String medium;          // '电子件' / '纸质件'
+  final String id; // e.g. JY-20260701-001
+  final String borrowerUnit; // 借阅单位 (水印动态字段)
+  final String purpose; // 借阅用途
+  final String medium; // '电子件' / '纸质件'
   final DateTime borrowedAt;
-  final DateTime expiresAt;     // 电子件有效期
-  final String applicant;       // 经办人
-  final int downloadCount;      // 下载次数 (审计)
+  final DateTime expiresAt; // 电子件有效期
+  final String applicant; // 经办人
+  final int downloadCount; // 下载次数 (审计)
 
   const BorrowRecord({
     required this.id,
@@ -86,16 +86,16 @@ class BorrowRecord {
 }
 
 class SealApplication {
-  final String id;              // 系统编号 (自动生成, e.g. YY-20260701-001)
-  final String partyA;          // 甲方 (常为本单位, 可默认填充)
-  final String partyB;          // 乙方
-  final String contractType;    // 借款 / 采购 / 服务 / 保密 / 其它
-  final String purpose;         // 合同标的 / 用印目的
+  final String id; // 系统编号 (自动生成, e.g. YY-20260701-001)
+  final String partyA; // 甲方 (常为本单位, 可默认填充)
+  final String partyB; // 乙方
+  final String contractType; // 借款 / 采购 / 服务 / 保密 / 其它
+  final String purpose; // 合同标的 / 用印目的
   final DateTime? startDate;
   final DateTime? endDate;
   final double? amount;
-  final String applicant;       // 申请人
-  final String? businessOwner;  // 业务负责人
+  final String applicant; // 申请人
+  final String? businessOwner; // 业务负责人
   final SealStatus status;
   final DateTime submittedAt;
   final List<ApprovalStep> approvals;
@@ -155,22 +155,22 @@ class SealApplication {
 
 extension _SealStatusX on SealStatus {
   String get label => const {
-        SealStatus.draft: '起草中',
-        SealStatus.approving: '审批中',
-        SealStatus.approved: '待用印',
-        SealStatus.sealed: '待归档',
-        SealStatus.archived: '已归档',
-        SealStatus.rejected: '已驳回',
-      }[this]!;
+    SealStatus.draft: '起草中',
+    SealStatus.approving: '审批中',
+    SealStatus.approved: '待用印',
+    SealStatus.sealed: '待归档',
+    SealStatus.archived: '已归档',
+    SealStatus.rejected: '已驳回',
+  }[this]!;
 
   String get en => const {
-        SealStatus.draft: 'DRAFT',
-        SealStatus.approving: 'IN REVIEW',
-        SealStatus.approved: 'AWAITING SEAL',
-        SealStatus.sealed: 'AWAITING ARCHIVE',
-        SealStatus.archived: 'ARCHIVED',
-        SealStatus.rejected: 'REJECTED',
-      }[this]!;
+    SealStatus.draft: 'DRAFT',
+    SealStatus.approving: 'IN REVIEW',
+    SealStatus.approved: 'AWAITING SEAL',
+    SealStatus.sealed: 'AWAITING ARCHIVE',
+    SealStatus.archived: 'ARCHIVED',
+    SealStatus.rejected: 'REJECTED',
+  }[this]!;
 
   Color get tint {
     switch (this) {
@@ -238,56 +238,40 @@ Widget buildBackButton({required VoidCallback onTap, String label = '返回'}) {
 
 /// v3.7 warm cream 3-stop 卡装饰 (near-white 纸感)
 BoxDecoration paperCardDecoration({bool isExpanded = false}) => BoxDecoration(
-      gradient: const LinearGradient(
-        begin: Alignment.topCenter,
-        end: Alignment.bottomCenter,
-        colors: [
-          Color(0xFFFFFFFC),
-          Color(0xFFFAF8F0),
-          Color(0xFFF2EFDF),
-        ],
-        stops: [0.0, 0.6, 1.0],
-      ),
-      border: Border.all(
-        color: isExpanded
-            ? LhColors.ink2.withAlpha(50)
-            : const Color(0xFFDDD5C0),
-        width: 1,
-      ),
-      borderRadius: BorderRadius.circular(7),
-      boxShadow: [
-        BoxShadow(
-          color: isExpanded
-              ? const Color(0x140A0A0F)
-              : const Color(0x0C0A0A0F),
-          blurRadius: isExpanded ? 6 : 3,
-          offset: Offset(0, isExpanded ? 2 : 1),
-        ),
-      ],
-    );
+  gradient: const LinearGradient(
+    begin: Alignment.topCenter,
+    end: Alignment.bottomCenter,
+    colors: [Color(0xFFFFFFFC), Color(0xFFFAF8F0), Color(0xFFF2EFDF)],
+    stops: [0.0, 0.6, 1.0],
+  ),
+  border: Border.all(
+    color: isExpanded ? LhColors.ink2.withAlpha(50) : const Color(0xFFDDD5C0),
+    width: 1,
+  ),
+  borderRadius: BorderRadius.circular(7),
+  boxShadow: [
+    BoxShadow(
+      color: isExpanded ? const Color(0x140A0A0F) : const Color(0x0C0A0A0F),
+      blurRadius: isExpanded ? 6 : 3,
+      offset: Offset(0, isExpanded ? 2 : 1),
+    ),
+  ],
+);
 
 /// hero panel 装饰 (warm cream 3-stop, 供 masthead)
 BoxDecoration heroPanelDecoration() => BoxDecoration(
-      gradient: const LinearGradient(
-        begin: Alignment.topCenter,
-        end: Alignment.bottomCenter,
-        colors: [
-          Color(0xFFFFFDF7),
-          Color(0xFFF8F0DA),
-          Color(0xFFEFE4C6),
-        ],
-        stops: [0.0, 0.6, 1.0],
-      ),
-      border: Border.all(color: const Color(0xFFDDD5C0), width: 1),
-      borderRadius: BorderRadius.circular(10),
-      boxShadow: const [
-        BoxShadow(
-          color: Color(0x0F0A0A0F),
-          blurRadius: 4,
-          offset: Offset(0, 1),
-        ),
-      ],
-    );
+  gradient: const LinearGradient(
+    begin: Alignment.topCenter,
+    end: Alignment.bottomCenter,
+    colors: [Color(0xFFFFFDF7), Color(0xFFF8F0DA), Color(0xFFEFE4C6)],
+    stops: [0.0, 0.6, 1.0],
+  ),
+  border: Border.all(color: const Color(0xFFDDD5C0), width: 1),
+  borderRadius: BorderRadius.circular(10),
+  boxShadow: const [
+    BoxShadow(color: Color(0x0F0A0A0F), blurRadius: 4, offset: Offset(0, 1)),
+  ],
+);
 
 /// 状态胶囊 (无 fill, hairline 边框 + 语义色文字)
 Widget buildStatusChip(SealStatus s) {
@@ -456,9 +440,11 @@ class _ContractSealingPageState extends State<ContractSealingPage> {
       list = list.where((a) => a.applicant == '张伟').toList();
     } else if (_seg == 1) {
       list = list
-          .where((a) =>
-              a.status == SealStatus.approving &&
-              a.approvals.any((s) => s.action == ApprovalAction.pending))
+          .where(
+            (a) =>
+                a.status == SealStatus.approving &&
+                a.approvals.any((s) => s.action == ApprovalAction.pending),
+          )
           .toList();
     }
     if (_statusFilter != null) {
@@ -542,17 +528,11 @@ class _ContractSealingPageState extends State<ContractSealingPage> {
           GestureDetector(
             behavior: HitTestBehavior.opaque,
             onTap: () => Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (_) => _SearchPage(allApps: _apps),
-              ),
+              MaterialPageRoute(builder: (_) => _SearchPage(allApps: _apps)),
             ),
             child: const Padding(
               padding: EdgeInsets.all(8),
-              child: Icon(
-                Icons.search_rounded,
-                size: 18,
-                color: LhColors.ink,
-              ),
+              child: Icon(Icons.search_rounded, size: 18, color: LhColors.ink),
             ),
           ),
         ],
@@ -751,7 +731,7 @@ class _ContractSealingPageState extends State<ContractSealingPage> {
                       ),
                       const SizedBox(height: 2),
                       // 乙方
-                      Text(
+                      LhScrollText(
                         a.partyB,
                         style: LhTypography.sans(
                           size: 12.5,
@@ -765,7 +745,7 @@ class _ContractSealingPageState extends State<ContractSealingPage> {
                       ),
                       const SizedBox(height: 3),
                       // 目的
-                      Text(
+                      LhScrollText(
                         '${a.contractType} · ${a.purpose}',
                         style: LhTypography.sans(
                           size: 9.5,
@@ -851,7 +831,9 @@ class _ContractSealingPageState extends State<ContractSealingPage> {
       child: FloatingActionButton.extended(
         onPressed: () async {
           final newApp = await Navigator.of(context).push<SealApplication>(
-            MaterialPageRoute(builder: (_) => const _CreateSealApplicationPage()),
+            MaterialPageRoute(
+              builder: (_) => const _CreateSealApplicationPage(),
+            ),
           );
           if (newApp != null) setState(() => _apps.insert(0, newApp));
         },
@@ -940,179 +922,175 @@ class _SealApplicationDetailPageState
   }
 
   Widget _buildTopBar() => Padding(
-        padding: const EdgeInsets.fromLTRB(14, 4, 14, 6),
-        child: Row(
-          children: [
-            buildBackButton(onTap: () => Navigator.of(context).pop(_app)),
-            const Spacer(),
-            Text(
-              '用印详情 · L2',
-              style: LhTypography.mono(
-                size: 8.5,
-                color: LhColors.mute2,
-                weight: FontWeight.w700,
-                letterSpacing: 1.4,
-              ),
-            ),
-          ],
+    padding: const EdgeInsets.fromLTRB(14, 4, 14, 6),
+    child: Row(
+      children: [
+        buildBackButton(onTap: () => Navigator.of(context).pop(_app)),
+        const Spacer(),
+        Text(
+          '用印详情 · L2',
+          style: LhTypography.mono(
+            size: 8.5,
+            color: LhColors.mute2,
+            weight: FontWeight.w700,
+            letterSpacing: 1.4,
+          ),
         ),
-      );
+      ],
+    ),
+  );
 
   Widget _buildMasthead(SealApplication a) => Container(
-        width: double.infinity,
-        padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
-        decoration: heroPanelDecoration(),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+    width: double.infinity,
+    padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
+    decoration: heroPanelDecoration(),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
           children: [
-            Row(
-              children: [
-                Text(
-                  a.id,
-                  style: LhTypography.mono(
-                    size: 9,
-                    color: LhColors.mute,
-                    weight: FontWeight.w700,
-                    letterSpacing: 1.0,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                buildStatusChip(a.status),
-              ],
-            ),
-            const SizedBox(height: 10),
             Text(
-              a.purpose,
-              style: LhTypography.sans(
-                size: 18,
-                color: LhColors.ink,
-                weight: FontWeight.w700,
-                height: 1.2,
-                letterSpacing: -0.2,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              a.contractType,
+              a.id,
               style: LhTypography.mono(
                 size: 9,
-                color: LhColors.copper,
+                color: LhColors.mute,
                 weight: FontWeight.w700,
                 letterSpacing: 1.0,
               ),
             ),
-            const SizedBox(height: 10),
-            Row(
-              children: [
-                Expanded(child: _miniStat('金额', _fmtAmount(a.amount ?? 0), '元')),
-                Container(
-                  height: 26,
-                  width: 1,
-                  color: const Color(0xFFDDD5C0),
-                ),
-                Expanded(
-                  child: _miniStat(
-                    '期限',
-                    a.startDate != null && a.endDate != null
-                        ? '${a.endDate!.year - a.startDate!.year}'
-                        : '—',
-                    a.startDate != null && a.endDate != null ? '年' : '',
-                  ),
-                ),
-                Container(
-                  height: 26,
-                  width: 1,
-                  color: const Color(0xFFDDD5C0),
-                ),
-                Expanded(
-                  child: _miniStat(
-                    '审批',
-                    '${a.approvals.where((s) => s.action == ApprovalAction.approved).length}',
-                    ' / ${a.approvals.length}',
-                  ),
-                ),
-              ],
+            const SizedBox(width: 8),
+            buildStatusChip(a.status),
+          ],
+        ),
+        const SizedBox(height: 10),
+        Text(
+          a.purpose,
+          style: LhTypography.sans(
+            size: 18,
+            color: LhColors.ink,
+            weight: FontWeight.w700,
+            height: 1.2,
+            letterSpacing: -0.2,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          a.contractType,
+          style: LhTypography.mono(
+            size: 9,
+            color: LhColors.copper,
+            weight: FontWeight.w700,
+            letterSpacing: 1.0,
+          ),
+        ),
+        const SizedBox(height: 10),
+        Row(
+          children: [
+            Expanded(child: _miniStat('金额', _fmtAmount(a.amount ?? 0), '元')),
+            Container(height: 26, width: 1, color: const Color(0xFFDDD5C0)),
+            Expanded(
+              child: _miniStat(
+                '期限',
+                a.startDate != null && a.endDate != null
+                    ? '${a.endDate!.year - a.startDate!.year}'
+                    : '—',
+                a.startDate != null && a.endDate != null ? '年' : '',
+              ),
+            ),
+            Container(height: 26, width: 1, color: const Color(0xFFDDD5C0)),
+            Expanded(
+              child: _miniStat(
+                '审批',
+                '${a.approvals.where((s) => s.action == ApprovalAction.approved).length}',
+                ' / ${a.approvals.length}',
+              ),
             ),
           ],
         ),
-      );
+      ],
+    ),
+  );
 
   Widget _miniStat(String label, String num, String unit) => Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 6),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            Text(
-              label,
-              style: LhTypography.mono(
-                size: 7.5,
-                color: LhColors.mute,
-                weight: FontWeight.w700,
-                letterSpacing: 0.6,
-              ),
-            ),
-            const SizedBox(height: 3),
-            RichText(
-              text: TextSpan(
-                children: [
-                  TextSpan(
-                    text: num,
-                    style: LhTypography.number(size: 14, color: LhColors.ink),
-                  ),
-                  TextSpan(
-                    text: unit,
-                    style: LhTypography.sans(
-                      size: 9,
-                      color: LhColors.mute,
-                      weight: FontWeight.w500,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
+    padding: const EdgeInsets.symmetric(horizontal: 6),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Text(
+          label,
+          style: LhTypography.mono(
+            size: 7.5,
+            color: LhColors.mute,
+            weight: FontWeight.w700,
+            letterSpacing: 0.6,
+          ),
         ),
-      );
+        const SizedBox(height: 3),
+        RichText(
+          text: TextSpan(
+            children: [
+              TextSpan(
+                text: num,
+                style: LhTypography.number(size: 14, color: LhColors.ink),
+              ),
+              TextSpan(
+                text: unit,
+                style: LhTypography.sans(
+                  size: 9,
+                  color: LhColors.mute,
+                  weight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    ),
+  );
 
   Widget _buildKicker(String label) => Text(
-        label,
-        style: LhTypography.mono(
-          size: 8.5,
-          color: LhColors.mute,
-          weight: FontWeight.w700,
-          letterSpacing: 1.6,
-        ),
-      );
+    label,
+    style: LhTypography.mono(
+      size: 8.5,
+      color: LhColors.mute,
+      weight: FontWeight.w700,
+      letterSpacing: 1.6,
+    ),
+  );
 
   Widget _buildFieldsCard(SealApplication a) => Container(
-        width: double.infinity,
-        padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-        decoration: paperCardDecoration(),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _fieldRow('甲方', a.partyA),
-            _fieldRow('乙方', a.partyB),
-            _fieldRow(
-              '起止日期',
-              a.startDate != null && a.endDate != null
-                  ? '${_fmtDate(a.startDate!)}  →  ${_fmtDate(a.endDate!)}'
-                  : '⚠ 未填写 —— 请从合同正文中补齐',
-              highlight: a.startDate == null,
-            ),
-            _fieldRow('申请人', a.applicant),
-            _fieldRow('业务负责人', a.businessOwner ?? '—'),
-            _fieldRow(
-              '提交时间',
-              '${_fmtDate(a.submittedAt)} ${a.submittedAt.hour.toString().padLeft(2, '0')}:${a.submittedAt.minute.toString().padLeft(2, '0')}',
-              last: true,
-            ),
-          ],
+    width: double.infinity,
+    padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+    decoration: paperCardDecoration(),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _fieldRow('甲方', a.partyA),
+        _fieldRow('乙方', a.partyB),
+        _fieldRow(
+          '起止日期',
+          a.startDate != null && a.endDate != null
+              ? '${_fmtDate(a.startDate!)}  →  ${_fmtDate(a.endDate!)}'
+              : '⚠ 未填写 —— 请从合同正文中补齐',
+          highlight: a.startDate == null,
         ),
-      );
+        _fieldRow('申请人', a.applicant),
+        _fieldRow('业务负责人', a.businessOwner ?? '—'),
+        _fieldRow(
+          '提交时间',
+          '${_fmtDate(a.submittedAt)} ${a.submittedAt.hour.toString().padLeft(2, '0')}:${a.submittedAt.minute.toString().padLeft(2, '0')}',
+          last: true,
+        ),
+      ],
+    ),
+  );
 
-  Widget _fieldRow(String label, String value,
-      {bool highlight = false, bool last = false}) {
+  Widget _fieldRow(
+    String label,
+    String value, {
+    bool highlight = false,
+    bool last = false,
+  }) {
     return Padding(
       padding: EdgeInsets.only(bottom: last ? 0 : 8),
       child: Row(
@@ -1161,8 +1139,8 @@ class _SealApplicationDetailPageState
           final Color dotColor = rejected
               ? LhColors.neg
               : done
-                  ? LhColors.copper
-                  : LhColors.mute2;
+              ? LhColors.copper
+              : LhColors.mute2;
           return IntrinsicHeight(
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1237,8 +1215,8 @@ class _SealApplicationDetailPageState
                             color: rejected
                                 ? LhColors.neg
                                 : done
-                                    ? LhColors.copper
-                                    : LhColors.mute2,
+                                ? LhColors.copper
+                                : LhColors.mute2,
                             weight: FontWeight.w700,
                             letterSpacing: 0.5,
                           ),
@@ -1302,35 +1280,40 @@ class _SealApplicationDetailPageState
       decoration: paperCardDecoration(),
       child: Column(
         children: a.attachments
-            .map((f) => Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 4),
-                  child: Row(
-                    children: [
-                      Icon(Icons.description_outlined,
-                          size: 15, color: LhColors.mute),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          f,
-                          style: LhTypography.sans(
-                            size: 11,
-                            color: LhColors.ink2,
-                            weight: FontWeight.w600,
-                          ),
+            .map(
+              (f) => Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.description_outlined,
+                      size: 15,
+                      color: LhColors.mute,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        f,
+                        style: LhTypography.sans(
+                          size: 11,
+                          color: LhColors.ink2,
+                          weight: FontWeight.w600,
                         ),
                       ),
-                      Text(
-                        '预览 ›',
-                        style: LhTypography.mono(
-                          size: 9,
-                          color: LhColors.copper,
-                          weight: FontWeight.w700,
-                          letterSpacing: 0.4,
-                        ),
+                    ),
+                    Text(
+                      '预览 ›',
+                      style: LhTypography.mono(
+                        size: 9,
+                        color: LhColors.copper,
+                        weight: FontWeight.w700,
+                        letterSpacing: 0.4,
                       ),
-                    ],
-                  ),
-                ))
+                    ),
+                  ],
+                ),
+              ),
+            )
             .toList(),
       ),
     );
@@ -1339,8 +1322,10 @@ class _SealApplicationDetailPageState
   // 底部审批操作栏 (仅审批中显示)
   Widget _buildActionBar(SealApplication a) {
     // 简化: 找第一个 pending 的
-    final nextStep = a.approvals
-        .firstWhere((s) => s.action == ApprovalAction.pending, orElse: () => a.approvals.last);
+    final nextStep = a.approvals.firstWhere(
+      (s) => s.action == ApprovalAction.pending,
+      orElse: () => a.approvals.last,
+    );
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
       decoration: const BoxDecoration(
@@ -1364,8 +1349,7 @@ class _SealApplicationDetailPageState
             behavior: HitTestBehavior.opaque,
             onTap: () => _act(ApprovalAction.rejected, nextStep),
             child: Padding(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
               child: Text(
                 '驳回',
                 style: LhTypography.sans(
@@ -1381,8 +1365,7 @@ class _SealApplicationDetailPageState
             behavior: HitTestBehavior.opaque,
             onTap: () => _act(ApprovalAction.approved, nextStep),
             child: Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
               decoration: BoxDecoration(
                 color: LhColors.copper,
                 borderRadius: BorderRadius.circular(5),
@@ -1417,8 +1400,7 @@ class _SealApplicationDetailPageState
     SealStatus newStatus = _app.status;
     if (action == ApprovalAction.rejected) {
       newStatus = SealStatus.rejected;
-    } else if (newApprovals
-        .every((s) => s.action == ApprovalAction.approved)) {
+    } else if (newApprovals.every((s) => s.action == ApprovalAction.approved)) {
       newStatus = SealStatus.approved;
     }
     setState(() {
@@ -1443,9 +1425,7 @@ class _SealApplicationDetailPageState
                 behavior: HitTestBehavior.opaque,
                 onTap: () async {
                   final rec = await Navigator.of(context).push<BorrowRecord>(
-                    MaterialPageRoute(
-                      builder: (_) => _BorrowPage(app: a),
-                    ),
+                    MaterialPageRoute(builder: (_) => _BorrowPage(app: a)),
                   );
                   if (rec != null) {
                     setState(() {
@@ -1481,9 +1461,7 @@ class _SealApplicationDetailPageState
             padding: const EdgeInsets.all(14),
             decoration: paperCardDecoration(),
             child: Text(
-              a.canBorrow
-                  ? '暂无借阅记录  ·  tap 发起借阅生成带水印的电子件'
-                  : '合同尚未通过审批,暂不可借阅',
+              a.canBorrow ? '暂无借阅记录  ·  tap 发起借阅生成带水印的电子件' : '合同尚未通过审批,暂不可借阅',
               style: LhTypography.sans(
                 size: 10.5,
                 color: LhColors.mute2,
@@ -1519,7 +1497,9 @@ class _SealApplicationDetailPageState
                           const SizedBox(width: 8),
                           Container(
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 5, vertical: 1),
+                              horizontal: 5,
+                              vertical: 1,
+                            ),
                             decoration: BoxDecoration(
                               color: r.isExpired
                                   ? LhColors.mute2.withAlpha(20)
@@ -1743,11 +1723,18 @@ class _CreateSealApplicationPageState
                               (v) => setState(() => _contractType = v),
                             ),
                             const SizedBox(height: 12),
-                            _inputField('合同标的 / 用印目的 *', _purposeCtrl,
-                                '简要说明合同内容'),
+                            _inputField(
+                              '合同标的 / 用印目的 *',
+                              _purposeCtrl,
+                              '简要说明合同内容',
+                            ),
                             const SizedBox(height: 12),
-                            _inputField('合同金额', _amountCtrl, '元 (可选)',
-                                keyboard: TextInputType.number),
+                            _inputField(
+                              '合同金额',
+                              _amountCtrl,
+                              '元 (可选)',
+                              keyboard: TextInputType.number,
+                            ),
                           ],
                         ),
                       ),
@@ -1775,7 +1762,9 @@ class _CreateSealApplicationPageState
                               }),
                             ),
                             Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 8),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                              ),
                               child: Text(
                                 '→',
                                 style: LhTypography.mono(
@@ -1814,14 +1803,19 @@ class _CreateSealApplicationPageState
                             colors: [Color(0xFFFFFFFC), Color(0xFFF2EFDF)],
                           ),
                           border: Border.all(
-                              color: const Color(0xFFDDD5C0), width: 1,
-                              style: BorderStyle.solid),
+                            color: const Color(0xFFDDD5C0),
+                            width: 1,
+                            style: BorderStyle.solid,
+                          ),
                           borderRadius: BorderRadius.circular(7),
                         ),
                         child: Column(
                           children: [
-                            Icon(Icons.upload_file_outlined,
-                                size: 22, color: LhColors.mute),
+                            Icon(
+                              Icons.upload_file_outlined,
+                              size: 22,
+                              color: LhColors.mute,
+                            ),
                             const SizedBox(height: 6),
                             Text(
                               '点击上传合同扫描件',
@@ -1854,7 +1848,8 @@ class _CreateSealApplicationPageState
                 decoration: const BoxDecoration(
                   color: Color(0xFFFEFCF5),
                   border: Border(
-                      top: BorderSide(color: Color(0xFFDDD5C0), width: 1)),
+                    top: BorderSide(color: Color(0xFFDDD5C0), width: 1),
+                  ),
                 ),
                 child: Row(
                   children: [
@@ -1863,7 +1858,9 @@ class _CreateSealApplicationPageState
                       onTap: () => Navigator.of(context).pop(),
                       child: Padding(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 8),
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
                         child: Text(
                           '存草稿',
                           style: LhTypography.sans(
@@ -1894,35 +1891,37 @@ class _CreateSealApplicationPageState
                           setState(() => _validated = true);
                           return;
                         }
-                        Navigator.of(context).pop(SealApplication(
-                          id: _autoId,
-                          partyA: '星和电力集团有限公司',
-                          partyB: _partyBCtrl.text.trim(),
-                          contractType: _contractType,
-                          purpose: _purposeCtrl.text.trim(),
-                          startDate: _start,
-                          endDate: _end,
-                          amount: double.tryParse(_amountCtrl.text.trim()),
-                          applicant: '张伟',
-                          businessOwner: _ownerCtrl.text.trim().isEmpty
-                              ? null
-                              : _ownerCtrl.text.trim(),
-                          status: SealStatus.approving,
-                          submittedAt: DateTime.now(),
-                          approvals: const [
-                            ApprovalStep(role: '部门经理', approver: '王强'),
-                            ApprovalStep(role: '分管副总', approver: '陈丽'),
-                            ApprovalStep(role: '法务复核', approver: '刘敏'),
-                          ],
-                        ));
+                        Navigator.of(context).pop(
+                          SealApplication(
+                            id: _autoId,
+                            partyA: '星和电力集团有限公司',
+                            partyB: _partyBCtrl.text.trim(),
+                            contractType: _contractType,
+                            purpose: _purposeCtrl.text.trim(),
+                            startDate: _start,
+                            endDate: _end,
+                            amount: double.tryParse(_amountCtrl.text.trim()),
+                            applicant: '张伟',
+                            businessOwner: _ownerCtrl.text.trim().isEmpty
+                                ? null
+                                : _ownerCtrl.text.trim(),
+                            status: SealStatus.approving,
+                            submittedAt: DateTime.now(),
+                            approvals: const [
+                              ApprovalStep(role: '部门经理', approver: '王强'),
+                              ApprovalStep(role: '分管副总', approver: '陈丽'),
+                              ApprovalStep(role: '法务复核', approver: '刘敏'),
+                            ],
+                          ),
+                        );
                       },
                       child: Container(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 20, vertical: 10),
+                          horizontal: 20,
+                          vertical: 10,
+                        ),
                         decoration: BoxDecoration(
-                          color: _canSubmit
-                              ? LhColors.copper
-                              : LhColors.mute2,
+                          color: _canSubmit ? LhColors.copper : LhColors.mute2,
                           borderRadius: BorderRadius.circular(5),
                         ),
                         child: Text(
@@ -1947,18 +1946,23 @@ class _CreateSealApplicationPageState
   }
 
   Widget _sectionKicker(String label) => Text(
-        label,
-        style: LhTypography.mono(
-          size: 8.5,
-          color: LhColors.mute,
-          weight: FontWeight.w700,
-          letterSpacing: 1.6,
-        ),
-      );
+    label,
+    style: LhTypography.mono(
+      size: 8.5,
+      color: LhColors.mute,
+      weight: FontWeight.w700,
+      letterSpacing: 1.6,
+    ),
+  );
 
-  Widget _inputField(String label, TextEditingController ctrl, String hint,
-      {TextInputType keyboard = TextInputType.text}) {
-    final missing = _validated && ctrl.text.trim().isEmpty && label.endsWith('*');
+  Widget _inputField(
+    String label,
+    TextEditingController ctrl,
+    String hint, {
+    TextInputType keyboard = TextInputType.text,
+  }) {
+    final missing =
+        _validated && ctrl.text.trim().isEmpty && label.endsWith('*');
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1991,13 +1995,15 @@ class _CreateSealApplicationPageState
             contentPadding: const EdgeInsets.symmetric(vertical: 5),
             border: UnderlineInputBorder(
               borderSide: BorderSide(
-                  color: missing ? LhColors.neg : const Color(0xFFDDD5C0),
-                  width: 1),
+                color: missing ? LhColors.neg : const Color(0xFFDDD5C0),
+                width: 1,
+              ),
             ),
             enabledBorder: UnderlineInputBorder(
               borderSide: BorderSide(
-                  color: missing ? LhColors.neg : const Color(0xFFDDD5C0),
-                  width: 1),
+                color: missing ? LhColors.neg : const Color(0xFFDDD5C0),
+                width: 1,
+              ),
             ),
             focusedBorder: const UnderlineInputBorder(
               borderSide: BorderSide(color: LhColors.copper, width: 1.5),
@@ -2009,7 +2015,11 @@ class _CreateSealApplicationPageState
   }
 
   Widget _dropdownField(
-      String label, String value, List<String> options, void Function(String) onPick) {
+    String label,
+    String value,
+    List<String> options,
+    void Function(String) onPick,
+  ) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -2023,8 +2033,7 @@ class _CreateSealApplicationPageState
         ),
         const SizedBox(height: 4),
         Container(
-          padding:
-              const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
           decoration: BoxDecoration(
             color: const Color(0xFFFEFCF5),
             border: Border.all(color: const Color(0xFFDDD5C0), width: 1),
@@ -2035,20 +2044,21 @@ class _CreateSealApplicationPageState
               value: value,
               isDense: true,
               isExpanded: true,
-              icon: Icon(Icons.arrow_drop_down,
-                  color: LhColors.mute, size: 18),
+              icon: Icon(Icons.arrow_drop_down, color: LhColors.mute, size: 18),
               items: options
-                  .map((o) => DropdownMenuItem(
-                        value: o,
-                        child: Text(
-                          o,
-                          style: LhTypography.sans(
-                            size: 12,
-                            color: LhColors.ink,
-                            weight: FontWeight.w600,
-                          ),
+                  .map(
+                    (o) => DropdownMenuItem(
+                      value: o,
+                      child: Text(
+                        o,
+                        style: LhTypography.sans(
+                          size: 12,
+                          color: LhColors.ink,
+                          weight: FontWeight.w600,
                         ),
-                      ))
+                      ),
+                    ),
+                  )
                   .toList(),
               onChanged: (v) {
                 if (v != null) onPick(v);
@@ -2061,7 +2071,10 @@ class _CreateSealApplicationPageState
   }
 
   Widget _dateField(
-      String label, DateTime? value, void Function(DateTime) onPick) {
+    String label,
+    DateTime? value,
+    void Function(DateTime) onPick,
+  ) {
     final missing = _validated && value == null && label.endsWith('*');
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -2087,13 +2100,13 @@ class _CreateSealApplicationPageState
             if (picked != null) onPick(picked);
           },
           child: Container(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
             decoration: BoxDecoration(
               color: const Color(0xFFFEFCF5),
               border: Border.all(
-                  color: missing ? LhColors.neg : const Color(0xFFDDD5C0),
-                  width: 1),
+                color: missing ? LhColors.neg : const Color(0xFFDDD5C0),
+                width: 1,
+              ),
               borderRadius: BorderRadius.circular(5),
             ),
             child: Row(
@@ -2109,8 +2122,11 @@ class _CreateSealApplicationPageState
                     ),
                   ),
                 ),
-                Icon(Icons.calendar_month_outlined,
-                    size: 14, color: LhColors.mute),
+                Icon(
+                  Icons.calendar_month_outlined,
+                  size: 14,
+                  color: LhColors.mute,
+                ),
               ],
             ),
           ),
@@ -2288,12 +2304,14 @@ class _ContractBorrowPageState extends State<ContractBorrowPage> {
                                           border: Border.all(
                                             color: r.isExpired
                                                 ? LhColors.mute2
-                                                : LhColors.copper
-                                                    .withAlpha(120),
+                                                : LhColors.copper.withAlpha(
+                                                    120,
+                                                  ),
                                             width: 0.6,
                                           ),
-                                          borderRadius:
-                                              BorderRadius.circular(2),
+                                          borderRadius: BorderRadius.circular(
+                                            2,
+                                          ),
                                         ),
                                         child: Text(
                                           r.isExpired ? '已失效' : '有效中',
@@ -2412,7 +2430,7 @@ class _ContractBorrowPageState extends State<ContractBorrowPage> {
                                           ),
                                         ),
                                         const SizedBox(height: 2),
-                                        Text(
+                                        LhScrollText(
                                           a.purpose,
                                           style: LhTypography.sans(
                                             size: 9.5,
@@ -2550,9 +2568,9 @@ class ContractSealingEntryCard extends StatelessWidget {
       title: '合同用印',
       subtitle: '检索 · 用印审批 · 追踪归档',
       trailingBadge: pendingCount > 0 ? '$pendingCount 待办' : null,
-      onTap: () => Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => const ContractSealingPage()),
-      ),
+      onTap: () => Navigator.of(
+        context,
+      ).push(MaterialPageRoute(builder: (_) => const ContractSealingPage())),
     );
   }
 }
@@ -2571,9 +2589,9 @@ class ContractBorrowEntryCard extends StatelessWidget {
       title: '合同借阅',
       subtitle: '水印电子件 · 有效期管控 · 审计追溯',
       trailingBadge: count > 0 ? '$count 有效' : null,
-      onTap: () => Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => const ContractBorrowPage()),
-      ),
+      onTap: () => Navigator.of(
+        context,
+      ).push(MaterialPageRoute(builder: (_) => const ContractBorrowPage())),
     );
   }
 }
@@ -2599,7 +2617,7 @@ class _SearchPage extends StatefulWidget {
 class _SearchPageState extends State<_SearchPage> {
   final _searchCtrl = TextEditingController();
   String _query = '';
-  String? _typeFilter;    // 合同类型
+  String? _typeFilter; // 合同类型
   SealStatus? _statusFilter;
   bool _advancedOpen = false;
 
@@ -2622,15 +2640,15 @@ class _SearchPageState extends State<_SearchPage> {
     return widget.allApps.where((a) {
       // 关键词: 乙方/编号/目的/合同类型 任一匹配
       if (q.isNotEmpty) {
-        final hay = '${a.partyB} ${a.id} ${a.purpose} ${a.contractType} ${a.partyA}'
-            .toLowerCase();
+        final hay =
+            '${a.partyB} ${a.id} ${a.purpose} ${a.contractType} ${a.partyA}'
+                .toLowerCase();
         if (!hay.contains(q)) return false;
       }
       if (_typeFilter != null && a.contractType != _typeFilter) return false;
       if (_statusFilter != null && a.status != _statusFilter) return false;
       return true;
-    }).toList()
-      ..sort((a, b) => b.submittedAt.compareTo(a.submittedAt));
+    }).toList()..sort((a, b) => b.submittedAt.compareTo(a.submittedAt));
   }
 
   @override
@@ -2665,17 +2683,24 @@ class _SearchPageState extends State<_SearchPage> {
                     Expanded(
                       child: Container(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 2),
+                          horizontal: 10,
+                          vertical: 2,
+                        ),
                         decoration: BoxDecoration(
                           color: const Color(0xFFFEFCF5),
                           border: Border.all(
-                              color: const Color(0xFFDDD5C0), width: 1),
+                            color: const Color(0xFFDDD5C0),
+                            width: 1,
+                          ),
                           borderRadius: BorderRadius.circular(5),
                         ),
                         child: Row(
                           children: [
-                            Icon(Icons.search_rounded,
-                                size: 15, color: LhColors.mute),
+                            Icon(
+                              Icons.search_rounded,
+                              size: 15,
+                              color: LhColors.mute,
+                            ),
                             const SizedBox(width: 6),
                             Expanded(
                               child: TextField(
@@ -2695,15 +2720,17 @@ class _SearchPageState extends State<_SearchPage> {
                                     weight: FontWeight.w500,
                                   ),
                                   border: InputBorder.none,
-                                  contentPadding:
-                                      const EdgeInsets.symmetric(vertical: 8),
+                                  contentPadding: const EdgeInsets.symmetric(
+                                    vertical: 8,
+                                  ),
                                 ),
                                 onChanged: (v) => setState(() => _query = v),
                                 onSubmitted: (v) {
                                   if (v.trim().isNotEmpty &&
                                       !_recent.contains(v.trim())) {
                                     _recent.insert(0, v.trim());
-                                    if (_recent.length > 5) _recent.removeLast();
+                                    if (_recent.length > 5)
+                                      _recent.removeLast();
                                   }
                                 },
                               ),
@@ -2715,8 +2742,11 @@ class _SearchPageState extends State<_SearchPage> {
                                   _searchCtrl.clear();
                                   setState(() => _query = '');
                                 },
-                                child: Icon(Icons.close, size: 14,
-                                    color: LhColors.mute2),
+                                child: Icon(
+                                  Icons.close,
+                                  size: 14,
+                                  color: LhColors.mute2,
+                                ),
                               ),
                           ],
                         ),
@@ -2727,8 +2757,10 @@ class _SearchPageState extends State<_SearchPage> {
                       onTap: () =>
                           setState(() => _advancedOpen = !_advancedOpen),
                       child: Padding(
-                        padding:
-                            const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 6,
+                        ),
                         child: Icon(
                           Icons.tune,
                           size: 16,
@@ -2747,7 +2779,8 @@ class _SearchPageState extends State<_SearchPage> {
               Container(height: 1, color: const Color(0xFFDDD5C0)),
               // Body
               Expanded(
-                child: _query.trim().isEmpty &&
+                child:
+                    _query.trim().isEmpty &&
                         _typeFilter == null &&
                         _statusFilter == null
                     ? _buildEmptyState()
@@ -2787,7 +2820,9 @@ class _SearchPageState extends State<_SearchPage> {
                 onTap: () => setState(() => _typeFilter = t),
                 child: Container(
                   padding: const EdgeInsets.symmetric(
-                      horizontal: 8, vertical: 3),
+                    horizontal: 8,
+                    vertical: 3,
+                  ),
                   decoration: BoxDecoration(
                     color: on
                         ? LhColors.copper.withAlpha(20)
@@ -2827,45 +2862,48 @@ class _SearchPageState extends State<_SearchPage> {
           Wrap(
             spacing: 6,
             runSpacing: 4,
-            children: [
-              null,
-              SealStatus.approving,
-              SealStatus.approved,
-              SealStatus.sealed,
-              SealStatus.archived,
-              SealStatus.rejected,
-            ].map((s) {
-              final on = _statusFilter == s;
-              return GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTap: () => setState(() => _statusFilter = s),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: on
-                        ? LhColors.copper.withAlpha(20)
-                        : Colors.transparent,
-                    border: Border.all(
-                      color: on
-                          ? LhColors.copper.withAlpha(140)
-                          : const Color(0xFFDDD5C0),
-                      width: 0.8,
+            children:
+                [
+                  null,
+                  SealStatus.approving,
+                  SealStatus.approved,
+                  SealStatus.sealed,
+                  SealStatus.archived,
+                  SealStatus.rejected,
+                ].map((s) {
+                  final on = _statusFilter == s;
+                  return GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () => setState(() => _statusFilter = s),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 3,
+                      ),
+                      decoration: BoxDecoration(
+                        color: on
+                            ? LhColors.copper.withAlpha(20)
+                            : Colors.transparent,
+                        border: Border.all(
+                          color: on
+                              ? LhColors.copper.withAlpha(140)
+                              : const Color(0xFFDDD5C0),
+                          width: 0.8,
+                        ),
+                        borderRadius: BorderRadius.circular(3),
+                      ),
+                      child: Text(
+                        s?.label ?? '全部',
+                        style: LhTypography.sans(
+                          size: 10.5,
+                          color: on ? LhColors.copper : LhColors.mute,
+                          weight: on ? FontWeight.w700 : FontWeight.w500,
+                          letterSpacing: 0.2,
+                        ),
+                      ),
                     ),
-                    borderRadius: BorderRadius.circular(3),
-                  ),
-                  child: Text(
-                    s?.label ?? '全部',
-                    style: LhTypography.sans(
-                      size: 10.5,
-                      color: on ? LhColors.copper : LhColors.mute,
-                      weight: on ? FontWeight.w700 : FontWeight.w500,
-                      letterSpacing: 0.2,
-                    ),
-                  ),
-                ),
-              );
-            }).toList(),
+                  );
+                }).toList(),
           ),
         ],
       ),
@@ -2901,11 +2939,15 @@ class _SearchPageState extends State<_SearchPage> {
                   },
                   child: Container(
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 8, vertical: 4),
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
                     decoration: BoxDecoration(
                       color: const Color(0xFFFEFCF5),
                       border: Border.all(
-                          color: const Color(0xFFDDD5C0), width: 0.8),
+                        color: const Color(0xFFDDD5C0),
+                        width: 0.8,
+                      ),
                       borderRadius: BorderRadius.circular(3),
                     ),
                     child: Row(
@@ -2970,26 +3012,31 @@ class _SearchPageState extends State<_SearchPage> {
   }
 
   Widget _tipLine(String text) => Padding(
-        padding: const EdgeInsets.only(bottom: 4),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('· ',
-                style: LhTypography.mono(
-                    size: 10, color: LhColors.mute2, weight: FontWeight.w700)),
-            Expanded(
-              child: Text(
-                text,
-                style: LhTypography.sans(
-                  size: 10.5,
-                  color: LhColors.mute,
-                  weight: FontWeight.w500,
-                ),
-              ),
-            ),
-          ],
+    padding: const EdgeInsets.only(bottom: 4),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          '· ',
+          style: LhTypography.mono(
+            size: 10,
+            color: LhColors.mute2,
+            weight: FontWeight.w700,
+          ),
         ),
-      );
+        Expanded(
+          child: Text(
+            text,
+            style: LhTypography.sans(
+              size: 10.5,
+              color: LhColors.mute,
+              weight: FontWeight.w500,
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
 
   Widget _buildResults(List<SealApplication> results) {
     if (results.isEmpty) {
@@ -3004,7 +3051,10 @@ class _SearchPageState extends State<_SearchPage> {
               Text(
                 '未找到匹配的合同',
                 style: LhTypography.sans(
-                    size: 12, color: LhColors.mute2, weight: FontWeight.w600),
+                  size: 12,
+                  color: LhColors.mute2,
+                  weight: FontWeight.w600,
+                ),
               ),
             ],
           ),
@@ -3085,7 +3135,7 @@ class _SearchPageState extends State<_SearchPage> {
                   ],
                 ),
                 const SizedBox(height: 4),
-                Text(
+                LhScrollText(
                   a.partyB,
                   style: LhTypography.sans(
                     size: 12.5,
@@ -3098,7 +3148,7 @@ class _SearchPageState extends State<_SearchPage> {
                   overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 3),
-                Text(
+                LhScrollText(
                   '${a.contractType} · ${a.purpose}',
                   style: LhTypography.sans(
                     size: 9.5,
@@ -3152,7 +3202,8 @@ class _BorrowPageState extends State<_BorrowPage> {
     super.dispose();
   }
 
-  bool get _canSubmit => _unitCtrl.text.trim().isNotEmpty && _purposeCtrl.text.trim().isNotEmpty;
+  bool get _canSubmit =>
+      _unitCtrl.text.trim().isNotEmpty && _purposeCtrl.text.trim().isNotEmpty;
 
   String get _autoId {
     final now = DateTime.now();
@@ -3163,7 +3214,9 @@ class _BorrowPageState extends State<_BorrowPage> {
 
   @override
   Widget build(BuildContext context) {
-    final unit = _unitCtrl.text.trim().isEmpty ? '{借阅单位}' : _unitCtrl.text.trim();
+    final unit = _unitCtrl.text.trim().isEmpty
+        ? '{借阅单位}'
+        : _unitCtrl.text.trim();
     return Scaffold(
       backgroundColor: LhColors.paper,
       body: Container(
@@ -3229,7 +3282,10 @@ class _BorrowPageState extends State<_BorrowPage> {
                               ),
                             ),
                             const SizedBox(height: 10),
-                            Container(height: 1, color: const Color(0xFFDDD5C0)),
+                            Container(
+                              height: 1,
+                              color: const Color(0xFFDDD5C0),
+                            ),
                             const SizedBox(height: 10),
                             Text(
                               '合同 · CONTRACT',
@@ -3271,11 +3327,17 @@ class _BorrowPageState extends State<_BorrowPage> {
                         decoration: paperCardDecoration(),
                         child: Column(
                           children: [
-                            _inputField('借阅单位 *', _unitCtrl,
-                                '接收方全称 (将用于水印动态字段)'),
+                            _inputField(
+                              '借阅单位 *',
+                              _unitCtrl,
+                              '接收方全称 (将用于水印动态字段)',
+                            ),
                             const SizedBox(height: 12),
-                            _inputField('借阅用途 *', _purposeCtrl,
-                                '例: 授信审查 / 项目立项 / 尽调'),
+                            _inputField(
+                              '借阅用途 *',
+                              _purposeCtrl,
+                              '例: 授信审查 / 项目立项 / 尽调',
+                            ),
                           ],
                         ),
                       ),
@@ -3293,7 +3355,9 @@ class _BorrowPageState extends State<_BorrowPage> {
                                 behavior: HitTestBehavior.opaque,
                                 onTap: () => setState(() => _medium = m),
                                 child: Padding(
-                                  padding: const EdgeInsets.symmetric(vertical: 6),
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 6,
+                                  ),
                                   child: Row(
                                     mainAxisAlignment: MainAxisAlignment.center,
                                     children: [
@@ -3307,8 +3371,9 @@ class _BorrowPageState extends State<_BorrowPage> {
                                                 : LhColors.mute2,
                                             width: on ? 3 : 1,
                                           ),
-                                          borderRadius:
-                                              BorderRadius.circular(6),
+                                          borderRadius: BorderRadius.circular(
+                                            6,
+                                          ),
                                         ),
                                       ),
                                       const SizedBox(width: 6),
@@ -3358,7 +3423,9 @@ class _BorrowPageState extends State<_BorrowPage> {
                                 onTap: () => setState(() => _validDays = d),
                                 child: Container(
                                   padding: const EdgeInsets.symmetric(
-                                      horizontal: 10, vertical: 5),
+                                    horizontal: 10,
+                                    vertical: 5,
+                                  ),
                                   decoration: BoxDecoration(
                                     color: on
                                         ? LhColors.copper.withAlpha(18)
@@ -3437,21 +3504,25 @@ class _BorrowPageState extends State<_BorrowPage> {
                           return;
                         }
                         final now = DateTime.now();
-                        Navigator.of(context).pop(BorrowRecord(
-                          id: _autoId,
-                          borrowerUnit: _unitCtrl.text.trim(),
-                          purpose: _purposeCtrl.text.trim(),
-                          medium: _medium,
-                          borrowedAt: now,
-                          expiresAt: _medium == '电子件'
-                              ? now.add(Duration(days: _validDays))
-                              : now.add(const Duration(days: 365 * 100)),
-                          applicant: '张伟',
-                        ));
+                        Navigator.of(context).pop(
+                          BorrowRecord(
+                            id: _autoId,
+                            borrowerUnit: _unitCtrl.text.trim(),
+                            purpose: _purposeCtrl.text.trim(),
+                            medium: _medium,
+                            borrowedAt: now,
+                            expiresAt: _medium == '电子件'
+                                ? now.add(Duration(days: _validDays))
+                                : now.add(const Duration(days: 365 * 100)),
+                            applicant: '张伟',
+                          ),
+                        );
                       },
                       child: Container(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 20, vertical: 10),
+                          horizontal: 20,
+                          vertical: 10,
+                        ),
                         decoration: BoxDecoration(
                           color: _canSubmit ? LhColors.copper : LhColors.mute2,
                           borderRadius: BorderRadius.circular(5),
@@ -3485,17 +3556,18 @@ class _BorrowPageState extends State<_BorrowPage> {
   }
 
   Widget _sectionKicker(String label) => Text(
-        label,
-        style: LhTypography.mono(
-          size: 8.5,
-          color: LhColors.mute,
-          weight: FontWeight.w700,
-          letterSpacing: 1.6,
-        ),
-      );
+    label,
+    style: LhTypography.mono(
+      size: 8.5,
+      color: LhColors.mute,
+      weight: FontWeight.w700,
+      letterSpacing: 1.6,
+    ),
+  );
 
   Widget _inputField(String label, TextEditingController ctrl, String hint) {
-    final missing = _validated && ctrl.text.trim().isEmpty && label.endsWith('*');
+    final missing =
+        _validated && ctrl.text.trim().isEmpty && label.endsWith('*');
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -3527,13 +3599,15 @@ class _BorrowPageState extends State<_BorrowPage> {
             contentPadding: const EdgeInsets.symmetric(vertical: 5),
             border: UnderlineInputBorder(
               borderSide: BorderSide(
-                  color: missing ? LhColors.neg : const Color(0xFFDDD5C0),
-                  width: 1),
+                color: missing ? LhColors.neg : const Color(0xFFDDD5C0),
+                width: 1,
+              ),
             ),
             enabledBorder: UnderlineInputBorder(
               borderSide: BorderSide(
-                  color: missing ? LhColors.neg : const Color(0xFFDDD5C0),
-                  width: 1),
+                color: missing ? LhColors.neg : const Color(0xFFDDD5C0),
+                width: 1,
+              ),
             ),
             focusedBorder: const UnderlineInputBorder(
               borderSide: BorderSide(color: LhColors.copper, width: 1.5),

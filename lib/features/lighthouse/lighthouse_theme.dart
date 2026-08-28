@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../../core/theme/dunes_theme.dart';
 
+export 'lighthouse_scroll_text.dart';
+
 /// 灯塔色板 —— 中性色 / 语义色对齐沙丘全站 [DunesColors]；
 /// 分组标签色（中石油/中石化等）保留业务语义。
 abstract final class LhColors {
@@ -83,17 +85,13 @@ abstract final class LhTypography {
     double? letterSpacing,
     double? height,
     FontStyle? fontStyle,
-  }) =>
-      DunesTypography.sans(
-        fontSize: size,
-        fontWeight: weight,
-        letterSpacing: letterSpacing,
-        color: color,
-        height: height,
-      ).copyWith(
-        decoration: TextDecoration.none,
-        fontStyle: fontStyle,
-      );
+  }) => DunesTypography.sans(
+    fontSize: size,
+    fontWeight: weight,
+    letterSpacing: letterSpacing,
+    color: color,
+    height: height,
+  ).copyWith(decoration: TextDecoration.none, fontStyle: fontStyle);
 }
 
 Color lhGroupColor(String group) {

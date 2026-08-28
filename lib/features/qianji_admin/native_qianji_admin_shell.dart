@@ -73,6 +73,7 @@ enum _WorkbenchView {
   dailyRecon,
   contracts,
   proposalIntake,
+  purchaseProposalIntake,
   travelImport,
 }
 
@@ -109,7 +110,8 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
     _WorkbenchView.companyBroadcast: '公司广播',
     _WorkbenchView.dailyRecon: '每日对账',
     _WorkbenchView.contracts: '合同归集',
-    _WorkbenchView.proposalIntake: '提案',
+    _WorkbenchView.proposalIntake: '销售提案',
+    _WorkbenchView.purchaseProposalIntake: '采购提案',
     _WorkbenchView.travelImport: '差旅导入',
   };
 
@@ -601,8 +603,16 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
         );
       case _WorkbenchView.proposalIntake:
         return NativeProposalIntakePage(
-          key: const ValueKey<String>('workbench-proposal-intake'),
+          key: const ValueKey<String>('workbench-proposal-intake-sales'),
           session: _session,
+          kind: 'sales',
+          onChromeChanged: _onTaskChrome,
+        );
+      case _WorkbenchView.purchaseProposalIntake:
+        return NativeProposalIntakePage(
+          key: const ValueKey<String>('workbench-proposal-intake-purchase'),
+          session: _session,
+          kind: 'purchase',
           onChromeChanged: _onTaskChrome,
         );
       case _WorkbenchView.travelImport:
@@ -664,12 +674,21 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
         ),
       if (!_session.isExternalUser && _canSeeProposalIntake == true)
         _WorkbenchTile(
-          title: '提案',
+          title: '销售提案',
           subtitle: '分板块填写 · 复核',
           icon: Icons.assignment_outlined,
           color: _themePurple,
           enabled: true,
           onTap: () => _open(_WorkbenchView.proposalIntake),
+        ),
+      if (!_session.isExternalUser && _canSeeProposalIntake == true)
+        _WorkbenchTile(
+          title: '采购提案',
+          subtitle: '采购合同 · 供货商政策',
+          icon: Icons.shopping_bag_outlined,
+          color: const Color(0xFF3D7A8C),
+          enabled: true,
+          onTap: () => _open(_WorkbenchView.purchaseProposalIntake),
         ),
     ];
 

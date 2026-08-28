@@ -1923,4 +1923,35 @@ void main() {
     );
     expect(button.onPressed, isNull);
   });
+
+  testWidgets('purchase intake uses template title and hides sales contract', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1440, 1800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      _harness(
+        1440,
+        row: ProposalIntakeRow.fromJson({
+          'id': 2,
+          'code': 'CG-2026-0001',
+          'kind': 'purchase',
+          'title': '',
+          'status': 'filling',
+          'createdBy': 11,
+          'form': <String, dynamic>{},
+          'review': <String, dynamic>{},
+        }),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('采购业务提案 · 新增'), findsOneWidget);
+    expect(find.text('未命名采购业务提案'), findsWidgets);
+    expect(find.text('销售合同'), findsNothing);
+    expect(find.text('采购合同'), findsWidgets);
+    expect(find.text('HUN 联系方式'), findsWidgets);
+  });
 }

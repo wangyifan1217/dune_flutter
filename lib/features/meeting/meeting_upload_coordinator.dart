@@ -534,7 +534,20 @@ class MeetingUploadCoordinator extends ChangeNotifier {
     if (await dest.exists()) {
       await dest.delete();
     }
-    await src.copy(destPath);
+    final raf = await src.open();
+    final sink = dest.openWrite();
+    try {
+      const chunkSize = 64 * 1024;
+      while (true) {
+        final chunk = await raf.read(chunkSize);
+        if (chunk.isEmpty) break;
+        sink.add(chunk);
+      }
+      await sink.flush();
+    } finally {
+      await sink.close();
+      await raf.close();
+    }
   }
 
   Future<void> _moveFile(String sourcePath, String destPath) async {

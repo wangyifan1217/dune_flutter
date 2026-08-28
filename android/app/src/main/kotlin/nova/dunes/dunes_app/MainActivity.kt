@@ -1,5 +1,6 @@
 package nova.dunes.dunes_app
 
+import android.content.Intent
 import android.media.AudioAttributes
 import android.media.AudioFocusRequest
 import android.media.AudioFormat
@@ -24,6 +25,7 @@ class MainActivity : FlutterActivity() {
     private val mainHandler = Handler(Looper.getMainLooper())
     private var tpnsBridge: TpnsPushBridge? = null
     private var tauVoiceCallAudio: TauVoiceCallAudio? = null
+    private var meetingAudioPicker: MeetingAudioFilePicker? = null
     private var voiceStreamSink: EventChannel.EventSink? = null
     private var recorderEventSink: EventChannel.EventSink? = null
     private var audioFocusRequest: AudioFocusRequest? = null
@@ -93,9 +95,11 @@ class MainActivity : FlutterActivity() {
                     recorderEventSink = null
                 }
             })
+        meetingAudioPicker = MeetingAudioFilePicker(this)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, meetingAudioChannel)
             .setMethodCallHandler { call, result ->
                 when (call.method) {
+                    "pickAudioFile" -> meetingAudioPicker?.pick(result)
                     "convertWavToM4a" -> {
                         val inputPath = call.argument<String>("inputPath")?.trim().orEmpty()
                         val outputPath = call.argument<String>("outputPath")?.trim().orEmpty()
@@ -115,6 +119,13 @@ class MainActivity : FlutterActivity() {
                     else -> result.notImplemented()
                 }
             }
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        if (meetingAudioPicker?.onActivityResult(requestCode, resultCode, data) == true) {
+            return
+        }
+        super.onActivityResult(requestCode, resultCode, data)
     }
 
     private fun voiceRecordingDir(): File {

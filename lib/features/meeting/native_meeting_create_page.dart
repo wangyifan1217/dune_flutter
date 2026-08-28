@@ -1,6 +1,5 @@
 ﻿import 'dart:async';
 
-import 'package:file_selector/file_selector.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -11,6 +10,7 @@ import '../../core/theme/dunes_theme.dart';
 import '../../core/util/friendly_error.dart';
 import '../auth/auth_session.dart';
 import '../shell/dunes_toast.dart';
+import 'meeting_audio_file_picker.dart';
 import 'meeting_live_controller.dart';
 import 'meeting_upload_coordinator.dart';
 import 'native_meeting_recording_controller.dart';
@@ -46,6 +46,7 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
   final TextEditingController _titleCtrl = TextEditingController();
   String _filePath = '';
   bool _submitting = false;
+  bool _picking = false;
   bool _endingLive = false;
   bool _persistingAfterEnd = false;
   bool? _persistGenerate;
@@ -117,45 +118,26 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
   }
 
   Future<void> _pickFile() async {
-    XFile? file;
-    try {
-      file = await openFile(
-        acceptedTypeGroups: const <XTypeGroup>[
-          XTypeGroup(
-            label: 'audio',
-            extensions: ['wav', 'mp3', 'm4a'],
-            mimeTypes: [
-              'audio/wav',
-              'audio/x-wav',
-              'audio/mpeg',
-              'audio/mp4',
-              'audio/m4a',
-            ],
-            // iOS 必须提供 UTI，否则选择器无法选中音频文件。
-            uniformTypeIdentifiers: [
-              'public.audio',
-              'com.microsoft.waveform-audio',
-              'public.mp3',
-              'public.mpeg-4-audio',
-              'com.apple.m4a-audio',
-            ],
-          ),
-        ],
-      );
-    } catch (_) {
-      // iOS 上类型声明异常时兜底：不加过滤，避免选择器弹不出来。
-      try {
-        file = await openFile();
-      } catch (_) {
-        file = null;
-      }
-    }
-    final picked = file;
-    if (!mounted || picked == null) return;
+    if (_picking || _submitting) return;
     setState(() {
-      _filePath = picked.path;
+      _picking = true;
       _error = null;
     });
+    try {
+      final path = await MeetingAudioFilePicker.pick();
+      if (!mounted || path == null || path.trim().isEmpty) return;
+      setState(() {
+        _filePath = path.trim();
+        _error = null;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      final msg = friendlyErrorText(e);
+      setState(() => _error = msg);
+      showDunesToast(context, msg, kind: DunesToastKind.error);
+    } finally {
+      if (mounted) setState(() => _picking = false);
+    }
   }
 
   Future<bool> _ensureMicPermission() async {
@@ -509,9 +491,10 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
   }
 
   bool get _showBusyOverlay =>
-      _endingLive || _persistingAfterEnd || _submitting;
+      _endingLive || _persistingAfterEnd || _submitting || _picking;
 
   String get _busyOverlayMessage {
+    if (_picking) return '正在导入录音文件…';
     if (_endingLive) return '正在保存录音…';
     if (_persistingAfterEnd) {
       return _persistGenerate == true ? '正在创建会议记录…' : '正在保存草稿…';
@@ -521,6 +504,7 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
   }
 
   String get _busyOverlayHint {
+    if (_picking) return '文件较大时请稍候，不要退出页面';
     if (_endingLive) {
       return '录音越长，保存可能需要更久，请稍候';
     }
@@ -878,7 +862,7 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
                     ),
                     borderRadius: BorderRadius.circular(12),
                     color: DunesColors.brandPurpleSoft,
-                    onPressed: _pickFile,
+                    onPressed: (_picking || _submitting) ? null : _pickFile,
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [

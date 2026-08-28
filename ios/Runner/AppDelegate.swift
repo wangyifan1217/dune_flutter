@@ -1,6 +1,7 @@
 import Flutter
 import UIKit
 import AVFoundation
+import UniformTypeIdentifiers
 import UserNotifications
 
 @main
@@ -34,6 +35,7 @@ import UserNotifications
   private var tauVoiceCallCallKit: TauVoiceCallCallKit?
   private var tpnsBridge: TpnsPushBridge?
   private var pendingTpnsNotificationClick: [AnyHashable: Any]?
+  private var meetingAudioPicker: MeetingAudioFilePicker?
   private var audioConverter: AVAudioConverter?
   private let targetFormat = AVAudioFormat(
     commonFormat: .pcmFormatInt16,
@@ -114,6 +116,11 @@ import UserNotifications
     meetingAudioChannel.setMethodCallHandler { [weak self] call, result in
       guard let self = self else { return result(nil) }
       switch call.method {
+      case "pickAudioFile":
+        if self.meetingAudioPicker == nil {
+          self.meetingAudioPicker = MeetingAudioFilePicker()
+        }
+        self.meetingAudioPicker?.pick(result: result)
       case "convertWavToM4a":
         guard let args = call.arguments as? [String: Any],
           let inputPath = args["inputPath"] as? String,
@@ -1621,5 +1628,102 @@ final class TpnsPushBridge {
     let count = (args["count"] as? NSNumber)?.intValue ?? 0
     applyBadgeCount(count)
     result(true)
+  }
+}
+
+final class MeetingAudioFilePicker: NSObject, UIDocumentPickerDelegate {
+  private var pending: FlutterResult?
+
+  func pick(result: @escaping FlutterResult) {
+    if pending != nil {
+      result(FlutterError(code: "BUSY", message: "already picking", details: nil))
+      return
+    }
+    pending = result
+    let types: [UTType] = [.audio, .mp3, .mpeg4Audio, .wav, .aiff]
+    let picker = UIDocumentPickerViewController(forOpeningContentTypes: types, asCopy: true)
+    picker.allowsMultipleSelection = false
+    picker.delegate = self
+    guard let presenter = Self.topViewController() else {
+      pending = nil
+      result(FlutterError(code: "NO_VC", message: "无法打开文件选择器", details: nil))
+      return
+    }
+    presenter.present(picker, animated: true)
+  }
+
+  func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
+    finish(nil)
+  }
+
+  func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
+    guard let src = urls.first else {
+      finish(nil)
+      return
+    }
+    DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+      do {
+        let dest = try Self.copyToDocuments(src)
+        DispatchQueue.main.async { self?.finish(dest) }
+      } catch {
+        DispatchQueue.main.async {
+          self?.finish(
+            FlutterError(
+              code: "COPY_FAILED",
+              message: error.localizedDescription,
+              details: nil
+            )
+          )
+        }
+      }
+    }
+  }
+
+  private func finish(_ value: Any?) {
+    let callback = pending
+    pending = nil
+    callback?(value)
+  }
+
+  private static func copyToDocuments(_ src: URL) throws -> String {
+    let accessing = src.startAccessingSecurityScopedResource()
+    defer {
+      if accessing { src.stopAccessingSecurityScopedResource() }
+    }
+    let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first
+      ?? FileManager.default.temporaryDirectory
+    let dir = docs.appendingPathComponent("meeting_uploads", isDirectory: true)
+    try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+    var name = src.lastPathComponent
+    if name.isEmpty { name = "recording.m4a" }
+    let dest = dir.appendingPathComponent(
+      "meeting_pick_\(Int(Date().timeIntervalSince1970 * 1000))_\(name)"
+    )
+    if FileManager.default.fileExists(atPath: dest.path) {
+      try FileManager.default.removeItem(at: dest)
+    }
+    try FileManager.default.copyItem(at: src, to: dest)
+    let attrs = try FileManager.default.attributesOfItem(atPath: dest.path)
+    let size = (attrs[.size] as? NSNumber)?.intValue ?? 0
+    if size <= 0 {
+      throw NSError(
+        domain: "dunes.meeting",
+        code: 1,
+        userInfo: [NSLocalizedDescriptionKey: "录音文件保存失败"]
+      )
+    }
+    return dest.path
+  }
+
+  private static func topViewController() -> UIViewController? {
+    let windows = UIApplication.shared.connectedScenes
+      .compactMap { $0 as? UIWindowScene }
+      .flatMap { $0.windows }
+    let window = windows.first(where: \.isKeyWindow) ?? windows.first
+    var vc = window?.rootViewController
+    while let presented = vc?.presentedViewController {
+      vc = presented
+    }
+    return vc
   }
 }

@@ -87,6 +87,8 @@ class _NativeContactsPageState extends State<NativeContactsPage> {
   int _externalTotal = 0;
   Set<int> _onlineUsers = <int>{};
   Set<int> _selectedUserIds = <int>{};
+  /// 跨搜索保留已见过的联系人，避免已选成员头像/姓名退化成 userId。
+  final Map<int, NativeContact> _knownContacts = <int, NativeContact>{};
 
   @override
   void initState() {
@@ -95,6 +97,7 @@ class _NativeContactsPageState extends State<NativeContactsPage> {
     if (_groupPickMode) {
       _selectedUserIds = _normalizedInitialSelected();
     }
+    _seedInitialSelectedNames();
     _service = ContactService(session: widget.session);
     _convService = ConversationService(session: widget.session);
     _realtime = ConversationRealtimeHub.instance.of(widget.session);
@@ -185,6 +188,9 @@ class _NativeContactsPageState extends State<NativeContactsPage> {
         }
         _externalContacts = external;
         _externalTotal = external.length;
+        _rememberContacts(data.searchItems);
+        _rememberDepartments(data.departments);
+        _rememberContacts(external);
         _loading = false;
       });
     } catch (e) {
@@ -228,6 +234,7 @@ class _NativeContactsPageState extends State<NativeContactsPage> {
     if (!widget.allowSelfInPickMode && contact.userId == widget.session.userId) {
       return;
     }
+    _rememberContacts([contact]);
     if (_selectedUserIds.contains(contact.userId)) {
       if (_isLockedSelected(contact.userId)) {
         showDunesToast(context, '当前会话联系人不可移除');
@@ -278,12 +285,42 @@ class _NativeContactsPageState extends State<NativeContactsPage> {
     return all.where((c) => seen.add(c.userId)).toList(growable: false);
   }
 
+  void _seedInitialSelectedNames() {
+    widget.initialSelectedNames.forEach((id, name) {
+      if (id <= 0 || _knownContacts.containsKey(id)) return;
+      final trimmed = name.trim();
+      if (trimmed.isEmpty) return;
+      _knownContacts[id] = NativeContact(userId: id, displayName: trimmed);
+    });
+  }
+
+  void _rememberContacts(Iterable<NativeContact> rows) {
+    for (final c in rows) {
+      if (c.userId > 0) _knownContacts[c.userId] = c;
+    }
+  }
+
+  void _rememberDepartments(List<NativeDepartment> deps) {
+    for (final d in deps) {
+      _rememberContacts(d.users);
+      _rememberDepartments(d.children);
+    }
+  }
+
   NativeContact? _contactById(int userId) {
+    final cached = _knownContacts[userId];
+    if (cached != null) return cached;
     for (final c in _searchItems) {
-      if (c.userId == userId) return c;
+      if (c.userId == userId) {
+        _rememberContacts([c]);
+        return c;
+      }
     }
     for (final c in _externalContacts) {
-      if (c.userId == userId) return c;
+      if (c.userId == userId) {
+        _rememberContacts([c]);
+        return c;
+      }
     }
     NativeContact? hit;
     void walk(NativeDepartment dep) {
@@ -303,15 +340,20 @@ class _NativeContactsPageState extends State<NativeContactsPage> {
       if (hit != null) break;
       walk(dep);
     }
-    if (hit != null) return hit;
+    if (hit != null) {
+      _rememberContacts([hit!]);
+      return hit;
+    }
     final fallbackName = (widget.initialSelectedNames[userId] ?? '').trim();
     if (fallbackName.isEmpty) return null;
     return NativeContact(userId: userId, displayName: fallbackName);
   }
 
   void _selectAllMembers() {
+    final contacts = _allSelectableContacts();
+    _rememberContacts(contacts);
     setState(() {
-      _selectedUserIds = _allSelectableContacts()
+      _selectedUserIds = contacts
           .map((c) => c.userId)
           .where((id) => id > 0)
           .toSet();

@@ -47,6 +47,8 @@ class _NativeNewChatPageState extends State<NativeNewChatPage> {
   List<NativeContact> _externalContacts = const <NativeContact>[];
   Set<int> _onlineUsers = <int>{};
   Set<int> _selectedUserIds = <int>{};
+  /// 跨搜索保留已见过的联系人，避免已选成员头像/姓名退化成 userId。
+  final Map<int, NativeContact> _knownContacts = <int, NativeContact>{};
   StreamSubscription<Set<int>>? _onlineSub;
   _NewChatMode _mode = _NewChatMode.group;
 
@@ -99,6 +101,9 @@ class _NativeNewChatPageState extends State<NativeNewChatPage> {
             .toList(growable: false);
         _searchItems = searching ? mergedSearch : data.searchItems.where((c) => c.enabled && c.userId != widget.session.userId).toList(growable: false);
         _externalContacts = external.where((c) => c.enabled && c.userId != widget.session.userId).toList(growable: false);
+        _rememberContacts(data.searchItems);
+        _rememberDepartments(data.departments);
+        _rememberContacts(external);
         _loading = false;
       });
     } catch (e) {
@@ -127,6 +132,7 @@ class _NativeNewChatPageState extends State<NativeNewChatPage> {
 
   void _toggleSelected(NativeContact contact) {
     if (!contact.enabled || contact.userId <= 0 || contact.userId == widget.session.userId) return;
+    _rememberContacts([contact]);
     setState(() {
       final next = Set<int>.from(_selectedUserIds);
       if (_mode == _NewChatMode.private) {
@@ -148,6 +154,7 @@ class _NativeNewChatPageState extends State<NativeNewChatPage> {
 
   void _selectAllMembers() {
     final contacts = _allSelectableContacts();
+    _rememberContacts(contacts);
     setState(() {
       if (_mode == _NewChatMode.private) {
         _selectedUserIds = contacts.isEmpty ? <int>{} : <int>{contacts.first.userId};
@@ -178,12 +185,33 @@ class _NativeNewChatPageState extends State<NativeNewChatPage> {
     return _searchItems.where((c) => seen.add(c.userId)).toList(growable: false);
   }
 
+  void _rememberContacts(Iterable<NativeContact> rows) {
+    for (final c in rows) {
+      if (c.userId > 0) _knownContacts[c.userId] = c;
+    }
+  }
+
+  void _rememberDepartments(List<NativeDepartment> deps) {
+    for (final d in deps) {
+      _rememberContacts(d.users);
+      _rememberDepartments(d.children);
+    }
+  }
+
   NativeContact? _contactById(int userId) {
+    final cached = _knownContacts[userId];
+    if (cached != null) return cached;
     for (final c in _searchItems) {
-      if (c.userId == userId) return c;
+      if (c.userId == userId) {
+        _rememberContacts([c]);
+        return c;
+      }
     }
     for (final c in _externalContacts) {
-      if (c.userId == userId) return c;
+      if (c.userId == userId) {
+        _rememberContacts([c]);
+        return c;
+      }
     }
     NativeContact? hit;
     void walk(NativeDepartment dep) {
@@ -202,6 +230,7 @@ class _NativeNewChatPageState extends State<NativeNewChatPage> {
       if (hit != null) break;
       walk(dep);
     }
+    if (hit != null) _rememberContacts([hit!]);
     return hit;
   }
 

@@ -86,7 +86,9 @@ import '../qianji/native_qianji_detail_page.dart';
 import '../qianji/native_qianji_hub_page.dart';
 import '../qianji/native_qianji_iteration_page.dart';
 import '../qianji/native_qianji_kb_supervise_page.dart';
-import '../qianji/native_meeting_assistant_preview_page.dart';
+import '../qianji/digital_auto/digital_auto_config.dart';
+import '../qianji/digital_auto/digital_employee_service.dart';
+import '../qianji/digital_auto/native_digital_auto_chat_page.dart';
 import '../qianji/native_qianji_meeting_supervise_page.dart';
 import '../qianji/native_qianji_my_perf_page.dart';
 import '../qianji/native_qianji_project_tasks_page.dart';
@@ -233,6 +235,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
 
   /// 从通讯机器人会话进入 QJR 时带上 robotKey。
   String _qjrRobotKey = 'r_lighthouse';
+  DigitalEmployeeItem? _selectedDigitalEmployee;
 
   /// true：从 IM 机器人会话进咨询明细；false：从 NOVA 板块进入。
   bool _qjrOpenedFromChat = false;
@@ -626,7 +629,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       routed = mounted && widget.navigation.currentScreen == 'WS1';
     } else if (resolvedConversation.isReconciliationAssistant) {
       _openReconciliationAssistant(resolvedConversation);
-      routed = mounted &&
+      routed =
+          mounted &&
           (widget.navigation.currentScreen == 'QJA' ||
               widget.navigation.currentScreen == 'RA1');
     } else if (resolvedConversation.isAdministrativeNotice) {
@@ -2879,7 +2883,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           child: NativeReconciliationAssistantPage(
             desktopMode: true,
             session: widget.session,
-            conversationHint: slot.conversation ??
+            conversationHint:
+                slot.conversation ??
                 const NativeConversation(
                   id: 0,
                   kind: 'RECONCILIATION_ASSISTANT',
@@ -3081,9 +3086,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         session: widget.session,
         navigation: widget.navigation,
         active: active,
-        onExit: isDesktopCommOnly
-            ? null
-            : () => widget.navigation.popTo('B2'),
+        onExit: isDesktopCommOnly ? null : () => widget.navigation.popTo('B2'),
         onAdministrativeNoticeAcknowledged: _handleConversationRead,
         openDailyRecon: _openDailyReconPending,
         dailyReconAsOfDate: _dailyReconAsOfDate,
@@ -3109,10 +3112,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
                   curve: Curves.easeOutCubic,
                   child: ColoredBox(color: DunesColors.bgApp, child: panel),
                 )
-              : Opacity(
-                  opacity: active ? 1 : 0,
-                  child: panel,
-                ),
+              : Opacity(opacity: active ? 1 : 0, child: panel),
         ),
       ),
     );
@@ -3168,11 +3168,54 @@ class _NativeScreenHostState extends State<NativeScreenHost>
             widget.navigation.go('QJR');
           },
           onOpenRobot: (role) => unawaited(_openRobotFromCatalog(role)),
-          onOpenMeetingAssistant: () => widget.navigation.go('QJMA'),
+          onOpenMeetingAssistant: (item) {
+            setState(() => _selectedDigitalEmployee = item);
+            widget.navigation.go('QJMA');
+          },
+          onOpenDigitalAuto: (item) {
+            setState(() => _selectedDigitalEmployee = item);
+            widget.navigation.go('QJTO');
+          },
         );
       case 'QJMA':
-        return NativeMeetingAssistantPreviewPage(
+        if (!widget.session.effectiveDigitalEmployeeAccess) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) widget.navigation.go('QJ');
+          });
+          return const Scaffold(
+            backgroundColor: DunesColors.bgApp,
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+        return NativeDigitalAutoChatPage(
+          key: ValueKey<String>(
+            'qjma-${_selectedDigitalEmployee?.employeeKey ?? 'meeting-minutes'}',
+          ),
+          session: widget.session,
           onBack: widget.navigation.back,
+          configuration: _selectedDigitalEmployee?.isMeetingMinutes == true
+              ? _selectedDigitalEmployee!.chatConfig
+              : DigitalAutoConfig.meetingMinutes,
+        );
+      case 'QJTO':
+        if (!widget.session.effectiveDigitalEmployeeAccess) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) widget.navigation.go('QJ');
+          });
+          return const Scaffold(
+            backgroundColor: DunesColors.bgApp,
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+        return NativeDigitalAutoChatPage(
+          key: ValueKey<String>(
+            'qjto-${_selectedDigitalEmployee?.employeeKey ?? 'channel-dock'}',
+          ),
+          session: widget.session,
+          onBack: widget.navigation.back,
+          configuration: _selectedDigitalEmployee?.screenId == 'QJTO'
+              ? _selectedDigitalEmployee!.chatConfig
+              : DigitalAutoConfig.channelDock,
         );
       case 'QJR':
         if (!widget.session.effectiveRobotAccess) {
@@ -3396,9 +3439,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
                 share: ApprovalChatShare(
                   businessType: 'LOAN_REQUEST',
                   businessId: row.loanDocId,
-                  title: row.code.isEmpty
-                      ? '借款申请单'
-                      : '借款申请单 ${row.code}',
+                  title: row.code.isEmpty ? '借款申请单' : '借款申请单 ${row.code}',
                   templateKey: 'loan-request',
                   code: row.code,
                   status: 'APPROVED',
@@ -3612,7 +3653,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           key: ValueKey<int>(_selectedReconciliation?.id ?? 0),
           desktopMode: isDesktopCommOnly,
           session: widget.session,
-          conversationHint: _selectedReconciliation ??
+          conversationHint:
+              _selectedReconciliation ??
               const NativeConversation(
                 id: 0,
                 kind: 'RECONCILIATION_ASSISTANT',
@@ -4455,9 +4497,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
               ),
             ),
           ),
-        if (!isLighthouse &&
-            !dualNow &&
-            !(isWorkbench && isDesktopCommOnly))
+        if (!isLighthouse && !dualNow && !(isWorkbench && isDesktopCommOnly))
           animatedContent,
         // 须叠在「我的」之上，否则 APP 侧滑展开后仍被 B2 挡住、看起来像点不动。
         if (_workbenchMounted) _buildWorkbenchKeepAlive(active: isWorkbench),
@@ -4549,6 +4589,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       'QJMM',
       'QJMD',
       'QJMA',
+      'QJTO',
       'QJSS',
       'QJKB',
       'QJFS',
@@ -4632,6 +4673,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         screen == 'QJMM' ||
         screen == 'QJMD' ||
         screen == 'QJMA' ||
+        screen == 'QJTO' ||
         screen == 'QJSS' ||
         screen == 'QJKB' ||
         screen == 'QJFS' ||
@@ -4720,6 +4762,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       'QJMM',
       'QJMD',
       'QJMA',
+      'QJTO',
       'QJSS',
       'QJKB',
       'QJFS',
@@ -4763,6 +4806,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       'QJMM' => const ['QJ', 'QJMM'],
       'QJMD' => const ['QJ', 'QJMM', 'QJMD'],
       'QJMA' => const ['QJ', 'QJMA'],
+      'QJTO' => const ['QJ', 'QJTO'],
       'QJSS' => const ['QJ', 'QJSS'],
       'QJKB' => const ['QJ', 'QJKB'],
       'QJTR' => const ['QJ', 'QJTR'],

@@ -212,7 +212,7 @@ class _NativeQianjiTravelPageState extends State<NativeQianjiTravelPage> {
   TravelKind? _kindFilter;
   String _personId = 'all';
   String? _selectedDept;
-  _TravelRangePreset _rangePreset = _TravelRangePreset.all;
+  _TravelRangePreset _rangePreset = _TravelRangePreset.week;
   DateTime? _customFrom;
   DateTime? _customTo;
   final _nameCtrl = TextEditingController();

@@ -146,12 +146,9 @@ void main() {
       ProposalCostItemOption(code: 'ap_YFFY_JGFY', name: '机构返佣'),
     ];
     expect(
-      proposalIntakeCostItemSettleIssues(
-        {
-          'costItems': ['机构返佣'],
-        },
-        catalog: catalog,
-      ),
+      proposalIntakeCostItemSettleIssues({
+        'costItems': ['机构返佣'],
+      }, catalog: catalog),
       ['项目成本「机构返佣」请填写结算单价/比例、结算规则、对方主体、我方主体、税率'],
     );
 
@@ -191,12 +188,9 @@ void main() {
       ProposalCostItemOption(code: 'ap_YWCB_GJCH', name: '供给侧H'),
     ];
     expect(
-      proposalIntakeCostItemSettleIssues(
-        {
-          'businessCostItems': ['供给侧H'],
-        },
-        businessCatalog: catalog,
-      ),
+      proposalIntakeCostItemSettleIssues({
+        'businessCostItems': ['供给侧H'],
+      }, businessCatalog: catalog),
       ['业务成本「供给侧H」请填写结算单价/比例、结算规则、对方主体、我方主体、税率'],
     );
 
@@ -848,7 +842,9 @@ void main() {
     const b = ProposalFinanceModule(id: 'fm-b', revenue: terms);
     expect(proposalIntakeMatchingFinanceModule([a], b), a);
     expect(
-      proposalIntakeMatchingFinanceModule([a], const ProposalFinanceModule(id: 'fm-c')),
+      proposalIntakeMatchingFinanceModule([
+        a,
+      ], const ProposalFinanceModule(id: 'fm-c')),
       isNull,
     );
   });
@@ -872,5 +868,104 @@ void main() {
     });
     expect(issues, contains('上线第1行已勾选需要财务模块，请新增或关联财务模块'));
     expect(issues.where((item) => item.contains('第2行')), isEmpty);
+  });
+
+  test('finance module period is required and parsed from json', () {
+    final natural = ProposalFinanceModule.fromJson({
+      'id': 'fm-1',
+      'title': '模块甲',
+      'naturalMonth': true,
+      'revenue': {
+        'settlePrice': '1.2%',
+        'settleRule': '核销结算',
+        'counterparty': '中石化',
+        'ourParty': '沙丘',
+        'taxRate': '6%',
+      },
+    });
+    expect(natural.naturalMonth, '是');
+    expect(natural.periodComplete, isTrue);
+    expect(natural.usesProjectPeriod, isFalse);
+
+    final missingPeriod = ProposalFinanceModule.fromJson({
+      'id': 'fm-2',
+      'title': '模块乙',
+      'naturalMonth': '否',
+    });
+    expect(missingPeriod.usesProjectPeriod, isTrue);
+    expect(missingPeriod.periodComplete, isFalse);
+
+    final withPeriod = missingPeriod.copyWith(
+      projectPeriodStart: '2026-01-15',
+      projectPeriodEnd: '2026-02-14',
+    );
+    expect(withPeriod.periodComplete, isTrue);
+    expect(withPeriod.projectPeriodLabel, '2026-01-15 ~ 2026-02-14');
+    expect(
+      proposalIntakeLaunchFinanceIssues({
+        'launchRows': [
+          {
+            'id': 'lr-1',
+            'province': '河南',
+            'faceValue': '100',
+            'needFinanceModule': true,
+            'financeModuleId': 'fm-2',
+          },
+        ],
+        'financeModules': [missingPeriod.toJson()],
+      }),
+      contains('财务模块「模块乙」非自然月请选择项目周期'),
+    );
+    expect(
+      proposalIntakeLaunchFinanceIssues({
+        'launchRows': [
+          {
+            'id': 'lr-1',
+            'province': '河南',
+            'faceValue': '100',
+            'needFinanceModule': true,
+            'financeModuleId': 'fm-1',
+          },
+        ],
+        'financeModules': [
+          {'id': 'fm-1', 'title': '模块甲'},
+        ],
+      }),
+      contains('财务模块「模块甲」请选择是否自然月'),
+    );
+  });
+
+  test('natural month vs project period do not share fingerprint', () {
+    const terms = ProposalFinanceSettleTerms(
+      settlePrice: '1.2%',
+      settleRule: '核销结算',
+      counterparty: '中石化',
+      ourParty: '沙丘科技',
+      taxRate: '6%',
+    );
+    const natural = ProposalFinanceModule(
+      id: 'fm-a',
+      naturalMonth: '是',
+      revenue: terms,
+    );
+    const project = ProposalFinanceModule(
+      id: 'fm-b',
+      naturalMonth: '否',
+      projectPeriodStart: '2026-01-15',
+      projectPeriodEnd: '2026-02-14',
+      revenue: terms,
+    );
+    expect(proposalIntakeMatchingFinanceModule([natural], project), isNull);
+    expect(
+      proposalIntakeMatchingFinanceModule(
+        [natural],
+        const ProposalFinanceModule(
+          id: 'fm-c',
+          naturalMonth: '是',
+          revenue: terms,
+        ),
+      ),
+      natural,
+    );
   });
 }

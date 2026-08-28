@@ -8,6 +8,7 @@ import '../robots/robot_character.dart';
 import '../robots/robot_consult_store.dart';
 import '../robots/robot_models.dart';
 import '../robots/robot_service.dart';
+import 'digital_auto/digital_employee_service.dart';
 
 const _themePurple = Color(0xFF7B5CD8);
 const _hubCardColumns = 3;
@@ -34,6 +35,7 @@ class NativeQianjiHubPage extends StatefulWidget {
     this.onOpenRobotHome,
     this.onOpenRobot,
     this.onOpenMeetingAssistant,
+    this.onOpenDigitalAuto,
     this.session,
   });
 
@@ -47,7 +49,8 @@ class NativeQianjiHubPage extends StatefulWidget {
 
   /// 点击单个机器人名片：由 Host 按 canChat 决定进聊天或提示。
   final ValueChanged<RobotRole>? onOpenRobot;
-  final VoidCallback? onOpenMeetingAssistant;
+  final ValueChanged<DigitalEmployeeItem>? onOpenMeetingAssistant;
+  final ValueChanged<DigitalEmployeeItem>? onOpenDigitalAuto;
   final AuthSession? session;
 
   @override
@@ -55,14 +58,39 @@ class NativeQianjiHubPage extends StatefulWidget {
 }
 
 class _NativeQianjiHubPageState extends State<NativeQianjiHubPage> {
+  final ScrollController _scrollController = ScrollController();
   List<RobotRole> _robots = const [];
   bool _loadingRobots = false;
+  List<DigitalEmployeeItem> _digitalEmployees = const [];
+  bool _loadingDigitalEmployees = false;
 
   bool get _hasAccess =>
       widget.session == null || widget.session!.effectiveQianjiAccess;
 
   bool get _canUseRobots =>
       widget.session == null || widget.session!.effectiveRobotAccess;
+
+  bool get _canUseDigitalEmployees =>
+      widget.session == null || widget.session!.effectiveDigitalEmployeeAccess;
+
+  static const _fallbackDigitalEmployees = <DigitalEmployeeItem>[
+    DigitalEmployeeItem(
+      employeeKey: 'meeting-minutes',
+      name: '会议纪要',
+      subtitle: 'AI 助理 · 会议纪要与行动项',
+      iconKey: 'auto_awesome',
+      screenId: 'QJMA',
+      comingSoon: false,
+    ),
+    DigitalEmployeeItem(
+      employeeKey: 'channel-dock',
+      name: '三桶油.渠道对接',
+      subtitle: '数字配置 · AI 助理',
+      iconKey: 'oil_barrel',
+      screenId: 'QJTO',
+      comingSoon: false,
+    ),
+  ];
 
   void _showMeetingAssistantComingSoon() {
     ScaffoldMessenger.of(context)
@@ -76,9 +104,19 @@ class _NativeQianjiHubPageState extends State<NativeQianjiHubPage> {
     final store = RobotConsultStore.instance;
     store.bindSession(widget.session);
     _loadRobots();
+    _loadDigitalEmployees();
     if (widget.session != null && widget.session!.effectiveRobotAccess) {
       store.refreshHub();
     }
+    _scrollToBottom();
+  }
+
+  void _scrollToBottom() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _scrollController.hasClients) {
+        _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
+      }
+    });
   }
 
   Future<void> _loadRobots() async {
@@ -89,6 +127,7 @@ class _NativeQianjiHubPageState extends State<NativeQianjiHubPage> {
           _robots = const [];
           _loadingRobots = false;
         });
+        _scrollToBottom();
       }
       return;
     }
@@ -101,6 +140,7 @@ class _NativeQianjiHubPageState extends State<NativeQianjiHubPage> {
         _robots = list;
         _loadingRobots = false;
       });
+      _scrollToBottom();
       unawaited(RobotConsultStore.instance.refreshHub());
     } catch (_) {
       if (!mounted) return;
@@ -108,7 +148,57 @@ class _NativeQianjiHubPageState extends State<NativeQianjiHubPage> {
         _robots = const [];
         _loadingRobots = false;
       });
+      _scrollToBottom();
     }
+  }
+
+  Future<void> _loadDigitalEmployees() async {
+    final session = widget.session;
+    if (!_canUseDigitalEmployees) {
+      if (mounted) {
+        setState(() {
+          _digitalEmployees = const [];
+          _loadingDigitalEmployees = false;
+        });
+        _scrollToBottom();
+      }
+      return;
+    }
+    if (session == null || !session.digitalEmployeeAccessKnown) {
+      if (mounted) {
+        setState(() {
+          _digitalEmployees = _fallbackDigitalEmployees;
+          _loadingDigitalEmployees = false;
+        });
+        _scrollToBottom();
+      }
+      return;
+    }
+    setState(() => _loadingDigitalEmployees = true);
+    try {
+      final list = await DigitalEmployeeService(
+        session: session,
+      ).listEmployees();
+      if (!mounted) return;
+      setState(() {
+        _digitalEmployees = list;
+        _loadingDigitalEmployees = false;
+      });
+      _scrollToBottom();
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _digitalEmployees = const [];
+        _loadingDigitalEmployees = false;
+      });
+      _scrollToBottom();
+    }
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
   }
 
   @override
@@ -126,19 +216,17 @@ class _NativeQianjiHubPageState extends State<NativeQianjiHubPage> {
           children: [
             Expanded(
               child: ListView(
+                controller: _scrollController,
                 padding: const EdgeInsets.fromLTRB(16, 16, 16, 40),
                 children: [
-                  _TauHubPreview(
-                    onOpenMeetingAssistant: _showMeetingAssistantComingSoon,
-                  ),
-                  const SizedBox(height: 16),
-                  if (_canUseRobots &&
-                      (_loadingRobots || _robots.isNotEmpty)) ...[
-                    _RobotHubPreview(
-                      robots: _robots,
-                      loading: _loadingRobots,
-                      onOpenRobot: widget.onOpenRobot,
-                      onOpenConsultList: widget.onOpenRobotHome,
+                  if (_canUseDigitalEmployees &&
+                      (_loadingDigitalEmployees ||
+                          _digitalEmployees.isNotEmpty)) ...[
+                    _TauHubPreview(
+                      items: _digitalEmployees,
+                      onOpenMeetingAssistant: widget.onOpenMeetingAssistant,
+                      onOpenDigitalAuto: widget.onOpenDigitalAuto,
+                      onComingSoon: _showMeetingAssistantComingSoon,
                     ),
                     const SizedBox(height: 16),
                   ],
@@ -191,6 +279,16 @@ class _NativeQianjiHubPageState extends State<NativeQianjiHubPage> {
                       ),
                     ],
                   ),
+                  if (_canUseRobots &&
+                      (_loadingRobots || _robots.isNotEmpty)) ...[
+                    const SizedBox(height: 16),
+                    _RobotHubPreview(
+                      robots: _robots,
+                      loading: _loadingRobots,
+                      onOpenRobot: widget.onOpenRobot,
+                      onOpenConsultList: widget.onOpenRobotHome,
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -251,9 +349,48 @@ class _NativeQianjiHubPageState extends State<NativeQianjiHubPage> {
 }
 
 class _TauHubPreview extends StatelessWidget {
-  const _TauHubPreview({this.onOpenMeetingAssistant});
+  const _TauHubPreview({
+    required this.items,
+    this.onOpenMeetingAssistant,
+    this.onOpenDigitalAuto,
+    this.onComingSoon,
+  });
 
-  final VoidCallback? onOpenMeetingAssistant;
+  final List<DigitalEmployeeItem> items;
+  final ValueChanged<DigitalEmployeeItem>? onOpenMeetingAssistant;
+  final ValueChanged<DigitalEmployeeItem>? onOpenDigitalAuto;
+  final VoidCallback? onComingSoon;
+
+  IconData _iconFor(String key) {
+    switch (key) {
+      case 'oil_barrel':
+        return Icons.oil_barrel_rounded;
+      case 'support_agent':
+        return Icons.support_agent_rounded;
+      case 'smart_toy':
+        return Icons.smart_toy_outlined;
+      case 'hub':
+        return Icons.hub_outlined;
+      default:
+        return Icons.auto_awesome_rounded;
+    }
+  }
+
+  VoidCallback? _onTap(DigitalEmployeeItem item) {
+    if (item.comingSoon) return onComingSoon;
+    switch (item.screenId) {
+      case 'QJTO':
+        return onOpenDigitalAuto == null
+            ? null
+            : () => onOpenDigitalAuto!(item);
+      case 'QJMA':
+        return onOpenMeetingAssistant == null
+            ? onComingSoon
+            : () => onOpenMeetingAssistant!(item);
+      default:
+        return onComingSoon;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -279,7 +416,7 @@ class _TauHubPreview extends StatelessWidget {
               ),
               const SizedBox(width: 8),
               const Text(
-                'τ',
+                '数字员工',
                 style: TextStyle(
                   fontSize: 15,
                   fontWeight: FontWeight.w700,
@@ -290,16 +427,26 @@ class _TauHubPreview extends StatelessWidget {
           ),
           const SizedBox(height: 14),
           LayoutBuilder(
-            builder: (context, constraints) => _NovaHubCard(
-              width: _hubCardWidth(constraints.maxWidth),
-              tile: _NovaHubTile(
-                title: '会议纪要',
-                subtitle: 'AI 助理 · 即将上线',
-                icon: Icons.auto_awesome_rounded,
-                color: _themePurple,
-                onTap: onOpenMeetingAssistant,
-              ),
-            ),
+            builder: (context, constraints) {
+              final cardWidth = _hubCardWidth(constraints.maxWidth);
+              return Wrap(
+                spacing: _hubCardGap,
+                runSpacing: _hubCardGap,
+                children: [
+                  for (final item in items)
+                    _NovaHubCard(
+                      width: cardWidth,
+                      tile: _NovaHubTile(
+                        title: item.name,
+                        subtitle: item.subtitle,
+                        icon: _iconFor(item.iconKey),
+                        color: _themePurple,
+                        onTap: _onTap(item),
+                      ),
+                    ),
+                ],
+              );
+            },
           ),
         ],
       ),

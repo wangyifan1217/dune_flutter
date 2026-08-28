@@ -1,4 +1,4 @@
-﻿import 'package:dunes_app/features/auth/auth_session.dart';
+import 'package:dunes_app/features/auth/auth_session.dart';
 import 'package:dunes_app/features/proposal_intake/native_proposal_intake_page.dart';
 import 'package:dunes_app/features/proposal_intake/proposal_intake_models.dart';
 import 'package:dunes_app/features/proposal_intake/proposal_intake_select.dart';
@@ -192,10 +192,14 @@ void main() {
     expect(find.byTooltip('协作提案流程'), findsOneWidget);
     expect(find.text('保存'), findsOneWidget);
     expect(find.text('转发'), findsOneWidget);
-    expect(tester.getSize(find.widgetWithText(OutlinedButton, '保存')).height,
-        greaterThanOrEqualTo(44));
-    expect(tester.getSize(find.widgetWithText(OutlinedButton, '转发')).height,
-        greaterThanOrEqualTo(44));
+    expect(
+      tester.getSize(find.widgetWithText(OutlinedButton, '保存')).height,
+      greaterThanOrEqualTo(44),
+    );
+    expect(
+      tester.getSize(find.widgetWithText(OutlinedButton, '转发')).height,
+      greaterThanOrEqualTo(44),
+    );
     expect(find.text('通知科技'), findsNothing);
     expect(find.text('删除'), findsNothing);
     expect(find.text('D'), findsNothing);
@@ -1084,6 +1088,64 @@ void main() {
     expect(find.textContaining('由财务在对应行点新增或关联'), findsOneWidget);
   });
 
+  testWidgets('finance module asks for project period when not natural month', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1440, 2400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      _harness(
+        1440,
+        session: AuthSession.fromJson(const {
+          'userId': 12,
+          'displayName': '李思',
+        }),
+        row: ProposalIntakeRow.fromJson({
+          'id': 1,
+          'code': 'TA-2026-0001',
+          'title': '测试提案',
+          'status': 'reviewing',
+          'createdBy': 11,
+          'form': {
+            'financeOwner2': '李思',
+            'financeOwner2UserId': 12,
+            'launchRows': [
+              {
+                'id': 'lr-1',
+                'province': '河南',
+                'faceValue': '100',
+                'needFinanceModule': true,
+                'financeModuleId': 'fm-1',
+              },
+            ],
+            'financeModules': [
+              {'id': 'fm-1', 'title': '财务模块1'},
+            ],
+          },
+          'review': {'stage': 'reviewing'},
+        }),
+      ),
+    );
+    await tester.pump();
+    await _scrollUntil(tester, '是否自然月');
+    expect(find.text('是否自然月'), findsOneWidget);
+    expect(find.text('项目周期'), findsNothing);
+
+    _childInField<ProposalSelectField<String>>(tester, '是否自然月').onSelected!(
+      '否',
+    );
+    await tester.pump();
+    expect(find.text('项目周期'), findsOneWidget);
+
+    _childInField<ProposalSelectField<String>>(tester, '是否自然月').onSelected!(
+      '是',
+    );
+    await tester.pump();
+    expect(find.text('项目周期'), findsNothing);
+  });
+
   testWidgets('uploaded product file can be viewed and downloaded', (
     tester,
   ) async {
@@ -1260,8 +1322,14 @@ void main() {
       ),
     );
     await tester.pump();
-    expect(find.byKey(const ValueKey('proposal-president-approve')), findsNothing);
-    expect(find.byKey(const ValueKey('proposal-president-reject')), findsNothing);
+    expect(
+      find.byKey(const ValueKey('proposal-president-approve')),
+      findsNothing,
+    );
+    expect(
+      find.byKey(const ValueKey('proposal-president-reject')),
+      findsNothing,
+    );
   });
 
   testWidgets('long core terms expand to show full content', (tester) async {

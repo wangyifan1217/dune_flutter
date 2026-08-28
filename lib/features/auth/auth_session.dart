@@ -20,6 +20,8 @@ class AuthSession {
     this.novaVoiceCallVoice = 'female',
     this.qianjiAdminAccess = false,
     this.robotAccess = false,
+    this.digitalEmployeeAccess = false,
+    this.digitalEmployeeAccessKnown = false,
     this.hrbpAccess = false,
     this.administrativeNoticeAccess = false,
     this.broadcastAccess = false,
@@ -48,6 +50,10 @@ class AuthSession {
   final String novaVoiceCallVoice;
   final bool qianjiAdminAccess;
   final bool robotAccess;
+  final bool digitalEmployeeAccess;
+
+  /// `/users/me` 是否下发了 digitalEmployeeAccess。旧后端无此字段时保持 Hub 全员可见。
+  final bool digitalEmployeeAccessKnown;
 
   /// Backend-controlled access to the administrative notice module.
   final bool administrativeNoticeAccess;
@@ -100,6 +106,12 @@ class AuthSession {
   bool get effectiveRobotAccess =>
       robotAccess || DunesDefaults.localLighthouseAccessBypass;
 
+  bool get effectiveDigitalEmployeeAccess {
+    if (DunesDefaults.localLighthouseAccessBypass) return true;
+    if (!digitalEmployeeAccessKnown) return effectiveQianjiAccess;
+    return digitalEmployeeAccess;
+  }
+
   bool get effectiveAdministrativeNoticeAccess => administrativeNoticeAccess;
 
   bool get effectiveBroadcastAccess => broadcastAccess;
@@ -134,6 +146,12 @@ class AuthSession {
       }
       if (!next.robotAccess) {
         next = next.copyWith(robotAccess: true);
+      }
+      if (!next.digitalEmployeeAccess) {
+        next = next.copyWith(
+          digitalEmployeeAccess: true,
+          digitalEmployeeAccessKnown: true,
+        );
       }
       if (!next.fundSecondmentAccess) {
         next = next.copyWith(fundSecondmentAccess: true);
@@ -174,6 +192,8 @@ class AuthSession {
     String? novaVoiceCallVoice,
     bool? qianjiAdminAccess,
     bool? robotAccess,
+    bool? digitalEmployeeAccess,
+    bool? digitalEmployeeAccessKnown,
     bool? hrbpAccess,
     bool? administrativeNoticeAccess,
     bool? broadcastAccess,
@@ -203,6 +223,10 @@ class AuthSession {
       novaVoiceCallVoice: novaVoiceCallVoice ?? this.novaVoiceCallVoice,
       qianjiAdminAccess: qianjiAdminAccess ?? this.qianjiAdminAccess,
       robotAccess: robotAccess ?? this.robotAccess,
+      digitalEmployeeAccess:
+          digitalEmployeeAccess ?? this.digitalEmployeeAccess,
+      digitalEmployeeAccessKnown:
+          digitalEmployeeAccessKnown ?? this.digitalEmployeeAccessKnown,
       hrbpAccess: hrbpAccess ?? this.hrbpAccess,
       administrativeNoticeAccess:
           administrativeNoticeAccess ?? this.administrativeNoticeAccess,
@@ -256,6 +280,8 @@ class AuthSession {
       novaVoiceCallVoice: (data['novaVoiceCallVoice'] ?? 'female').toString(),
       qianjiAdminAccess: data['qianjiAdminAccess'] == true,
       robotAccess: data['robotAccess'] == true,
+      digitalEmployeeAccess: data['digitalEmployeeAccess'] == true,
+      digitalEmployeeAccessKnown: data.containsKey('digitalEmployeeAccess'),
       hrbpAccess: data['hrbpAccess'] == true,
       administrativeNoticeAccess: data['administrativeNoticeAccess'] == true,
       broadcastAccess: data['broadcastAccess'] == true,
@@ -298,6 +324,8 @@ class AuthSession {
       novaVoiceCallVoice: (claims['novaVoiceCallVoice'] ?? 'female').toString(),
       qianjiAdminAccess: claims['qianjiAdminAccess'] == true,
       robotAccess: claims['robotAccess'] == true,
+      digitalEmployeeAccess: claims['digitalEmployeeAccess'] == true,
+      digitalEmployeeAccessKnown: claims.containsKey('digitalEmployeeAccess'),
       hrbpAccess: claims['hrbpAccess'] == true,
       administrativeNoticeAccess: claims['administrativeNoticeAccess'] == true,
       broadcastAccess: claims['broadcastAccess'] == true,
@@ -347,6 +375,8 @@ class AuthSession {
       'novaVoiceCallVoice': novaVoiceCallVoice,
       'qianjiAdminAccess': qianjiAdminAccess,
       'robotAccess': robotAccess,
+      'digitalEmployeeAccess': digitalEmployeeAccess,
+      'digitalEmployeeAccessKnown': digitalEmployeeAccessKnown,
       'hrbpAccess': hrbpAccess,
       'administrativeNoticeAccess': administrativeNoticeAccess,
       'broadcastAccess': broadcastAccess,
@@ -382,6 +412,9 @@ class AuthSession {
       novaVoiceCallVoice: (json['novaVoiceCallVoice'] ?? 'female').toString(),
       qianjiAdminAccess: json['qianjiAdminAccess'] == true,
       robotAccess: json['robotAccess'] == true,
+      digitalEmployeeAccess: json['digitalEmployeeAccess'] == true,
+      digitalEmployeeAccessKnown: json['digitalEmployeeAccessKnown'] == true ||
+          json.containsKey('digitalEmployeeAccess'),
       hrbpAccess: json['hrbpAccess'] == true,
       administrativeNoticeAccess: json['administrativeNoticeAccess'] == true,
       broadcastAccess: json['broadcastAccess'] == true,

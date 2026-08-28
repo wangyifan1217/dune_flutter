@@ -1132,7 +1132,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       _isTechFiller && (!_isContentFrozen || _row.isTechRevising);
 
   bool get _canEditProductFiles =>
-      _canEditMarket || (_row.isTechRevising && (_isTechFiller || _isSubmitter));
+      _canEditMarket ||
+      (_row.isTechRevising && (_isTechFiller || _isSubmitter));
 
   bool get _canEditFinanceModules =>
       !_isLocked &&
@@ -2112,7 +2113,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                 ),
                 if (_canDecidePresident)
                   ProposalPresidentDecisionBar(
-                    onApprove: () => unawaited(_decidePresident(approved: true)),
+                    onApprove: () =>
+                        unawaited(_decidePresident(approved: true)),
                     onReject: () =>
                         unawaited(_decidePresident(approved: false)),
                   ),
@@ -2971,9 +2973,10 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
 
   void _renameTechnologyRecord(int index, String title) {
     final records = [
-      for (final item in (_form['technologyRecords'] is List
-          ? _form['technologyRecords'] as List
-          : const []))
+      for (final item
+          in (_form['technologyRecords'] is List
+              ? _form['technologyRecords'] as List
+              : const []))
         if (item is Map) Map<String, dynamic>.from(item),
     ];
     if (index < 0 || index >= records.length) return;
@@ -3066,10 +3069,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                 border: InputBorder.none,
                 hintText: '对接记录标题',
               ),
-              style: const TextStyle(
-                fontWeight: FontWeight.w700,
-                fontSize: 13,
-              ),
+              style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
             )
           else
             Text(
@@ -4210,7 +4210,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       onDragExited: (_) => onHover(false),
       onDragDone: (detail) => unawaited(onDrop(detail)),
       child: child,
-      );
+    );
   }
 
   void _writeLaunchFinance({
@@ -4227,11 +4227,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       review['financeCompleted'] = false;
     }
     _dirty = true;
-    _row = _row.copyWith(
-      status: _statusAfterEdit,
-      form: form,
-      review: review,
-    );
+    _row = _row.copyWith(status: _statusAfterEdit, form: form, review: review);
     if (mounted) setState(() {});
     widget.onChanged(_row);
   }
@@ -4527,7 +4523,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         ),
         const SizedBox(height: 4),
         const Text(
-          '收入和每条项目成本 / 业务成本都填写结算单价或比例、结算规则、对方主体、我方主体、税率。条款相同会自动关联。',
+          '先选择是否自然月；非自然月需选择项目周期。收入和每条项目成本 / 业务成本都填写结算单价或比例、结算规则、对方主体、我方主体、税率。条款相同会自动关联。',
           style: TextStyle(color: ProposalPalette.text3, fontSize: 11),
         ),
         for (final item in modules) ...[
@@ -4563,13 +4559,54 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                 ),
               ),
               _rowReviewToggle(
-                'financeItem:launchModule:${module.id}',
-                _financeReviewLabel,
-              ) ??
+                    'financeItem:launchModule:${module.id}',
+                    _financeReviewLabel,
+                  ) ??
                   const SizedBox.shrink(),
             ],
           ),
           const SizedBox(height: 8),
+          _fieldGrid(wide, [
+            ProposalField(
+              label: '是否自然月',
+              required: true,
+              child: _showSelectedAsText || !enabled
+                  ? _readonlySelectedText(module.naturalMonth)
+                  : ProposalSelectField<String>(
+                      value: module.naturalMonth.isEmpty
+                          ? null
+                          : module.naturalMonth,
+                      title: '是否自然月',
+                      hint: '请选择',
+                      allowClear: false,
+                      options: const [
+                        ProposalSelectOption(value: '是', label: '是'),
+                        ProposalSelectOption(value: '否', label: '否'),
+                      ],
+                      onSelected: (value) => _patchFinanceModule(
+                        module.id,
+                        (current) => current.copyWith(
+                          naturalMonth: value ?? '',
+                          projectPeriodStart: value == '否'
+                              ? current.projectPeriodStart
+                              : '',
+                          projectPeriodEnd: value == '否'
+                              ? current.projectPeriodEnd
+                              : '',
+                        ),
+                      ),
+                    ),
+            ),
+            if (module.usesProjectPeriod)
+              ProposalField(
+                label: '项目周期',
+                required: true,
+                child: _showSelectedAsText || !enabled
+                    ? _readonlySelectedText(module.projectPeriodLabel)
+                    : _financeProjectPeriodPicker(module),
+              ),
+          ]),
+          const SizedBox(height: 10),
           const Text(
             '收入',
             style: TextStyle(
@@ -4585,13 +4622,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
             enabled: enabled,
             onChanged: (terms) => _patchFinanceModule(
               module.id,
-              (current) => ProposalFinanceModule(
-                id: current.id,
-                title: current.title,
-                revenue: terms,
-                projectCosts: current.projectCosts,
-                businessCosts: current.businessCosts,
-              ),
+              (current) => current.copyWith(revenue: terms),
             ),
           ),
           const SizedBox(height: 10),
@@ -4603,13 +4634,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
             enabled: enabled,
             onChanged: (lines) => _patchFinanceModule(
               module.id,
-              (current) => ProposalFinanceModule(
-                id: current.id,
-                title: current.title,
-                revenue: current.revenue,
-                projectCosts: lines,
-                businessCosts: current.businessCosts,
-              ),
+              (current) => current.copyWith(projectCosts: lines),
             ),
           ),
           const SizedBox(height: 10),
@@ -4621,16 +4646,54 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
             enabled: enabled,
             onChanged: (lines) => _patchFinanceModule(
               module.id,
-              (current) => ProposalFinanceModule(
-                id: current.id,
-                title: current.title,
-                revenue: current.revenue,
-                projectCosts: current.projectCosts,
-                businessCosts: lines,
-              ),
+              (current) => current.copyWith(businessCosts: lines),
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _financeProjectPeriodPicker(ProposalFinanceModule module) {
+    final start = _parseDate(module.projectPeriodStart);
+    final end = _parseDate(module.projectPeriodEnd);
+    final empty = module.projectPeriodLabel.isEmpty;
+    final tone = proposalFieldTone(enabled: true);
+    return InkWell(
+      key: ValueKey('date-${module.id}-period'),
+      onTap: () async {
+        final picked = await _pickDateRange(start: start, end: end);
+        if (picked == null || !mounted) return;
+        _patchFinanceModule(
+          module.id,
+          (current) => current.copyWith(
+            projectPeriodStart: _fmtDate(picked.start),
+            projectPeriodEnd: _fmtDate(picked.end),
+          ),
+        );
+      },
+      borderRadius: BorderRadius.circular(8),
+      child: InputDecorator(
+        decoration:
+            proposalInputDecoration(
+              hint: '请选择项目周期',
+              readOnly: true,
+              tone: tone,
+            ).copyWith(
+              suffixIcon: const Icon(
+                Icons.calendar_today_outlined,
+                size: 16,
+                color: ProposalPalette.text3,
+              ),
+            ),
+        child: Text(
+          empty ? '请选择项目周期' : module.projectPeriodLabel,
+          style: TextStyle(
+            fontSize: 13,
+            color: empty ? ProposalPalette.text3 : ProposalPalette.text,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
       ),
     );
   }
@@ -4760,11 +4823,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         terms.counterparty,
         (value) => terms.copyWith(counterparty: value),
       ),
-      field(
-        '我方主体',
-        terms.ourParty,
-        (value) => terms.copyWith(ourParty: value),
-      ),
+      field('我方主体', terms.ourParty, (value) => terms.copyWith(ourParty: value)),
       field('税率', terms.taxRate, (value) => terms.copyWith(taxRate: value)),
     ], columns: columns);
   }
@@ -4773,183 +4832,183 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     final files = _onlineProductFiles();
     final enabled = _canEditProductFiles;
     return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (_showProductTemplates) ...[
-            Row(
-              children: [
-                const Text(
-                  '产品模板',
-                  style: TextStyle(
-                    color: ProposalPalette.text,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 13,
-                  ),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (_showProductTemplates) ...[
+          Row(
+            children: [
+              const Text(
+                '产品模板',
+                style: TextStyle(
+                  color: ProposalPalette.text,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 13,
                 ),
-                const Spacer(),
-                if (_importTemplatesLoading)
-                  const SizedBox(
-                    width: 14,
-                    height: 14,
-                    child: CircularProgressIndicator(strokeWidth: 1.6),
-                  )
-                else
-                  TextButton(
-                    onPressed: _loadImportTemplates,
-                    style: TextButton.styleFrom(
-                      visualDensity: VisualDensity.compact,
-                      foregroundColor: ProposalPalette.purpleDeep,
-                    ),
-                    child: const Text('刷新'),
+              ),
+              const Spacer(),
+              if (_importTemplatesLoading)
+                const SizedBox(
+                  width: 14,
+                  height: 14,
+                  child: CircularProgressIndicator(strokeWidth: 1.6),
+                )
+              else
+                TextButton(
+                  onPressed: _loadImportTemplates,
+                  style: TextButton.styleFrom(
+                    visualDensity: VisualDensity.compact,
+                    foregroundColor: ProposalPalette.purpleDeep,
+                  ),
+                  child: const Text('刷新'),
+                ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          if (_importTemplatesError != null && _importTemplates.isEmpty)
+            Text(
+              _importTemplatesError!,
+              style: const TextStyle(
+                color: ProposalPalette.coral,
+                fontSize: 12,
+              ),
+            )
+          else
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final item in _importTemplates)
+                  _ProposalTemplateChip(
+                    item: item,
+                    onTap: () => unawaited(_downloadImportTemplate(item)),
                   ),
               ],
             ),
-            const SizedBox(height: 6),
-            if (_importTemplatesError != null && _importTemplates.isEmpty)
-              Text(
-                _importTemplatesError!,
-                style: const TextStyle(
-                  color: ProposalPalette.coral,
-                  fontSize: 12,
-                ),
-              )
-            else
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  for (final item in _importTemplates)
-                    _ProposalTemplateChip(
-                      item: item,
-                      onTap: () => unawaited(_downloadImportTemplate(item)),
-                    ),
-                ],
+          const SizedBox(height: 6),
+          const Text(
+            '与提案审批相同：数商 / 运营商 / 出行-订阅 / 出行-权益金 / 民营。',
+            style: TextStyle(color: ProposalPalette.text3, fontSize: 11),
+          ),
+          const SizedBox(height: 16),
+        ],
+        ProposalField(
+          label: '上线产品文件',
+          source: '提交人上传',
+          tone: proposalFieldTone(enabled: enabled, source: '提交人上传'),
+          child: _dropTarget(
+            enabled: enabled && !_uploadingProductFile,
+            dragging: _draggingProduct,
+            onHover: (hover) => setState(() => _draggingProduct = hover),
+            onDrop: _onProductFilesDropped,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(8),
+                border: _draggingProduct
+                    ? Border.all(color: ProposalPalette.purple, width: 1.4)
+                    : null,
+                color: _draggingProduct
+                    ? ProposalPalette.purpleSoft.withValues(alpha: 0.35)
+                    : null,
               ),
-            const SizedBox(height: 6),
-            const Text(
-              '与提案审批相同：数商 / 运营商 / 出行-订阅 / 出行-权益金 / 民营。',
-              style: TextStyle(color: ProposalPalette.text3, fontSize: 11),
-            ),
-            const SizedBox(height: 16),
-          ],
-          ProposalField(
-            label: '上线产品文件',
-            source: '提交人上传',
-            tone: proposalFieldTone(enabled: enabled, source: '提交人上传'),
-            child: _dropTarget(
-              enabled: enabled && !_uploadingProductFile,
-              dragging: _draggingProduct,
-              onHover: (hover) => setState(() => _draggingProduct = hover),
-              onDrop: _onProductFilesDropped,
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(8),
-                  border: _draggingProduct
-                      ? Border.all(color: ProposalPalette.purple, width: 1.4)
-                      : null,
-                  color: _draggingProduct
-                      ? ProposalPalette.purpleSoft.withValues(alpha: 0.35)
-                      : null,
-                ),
-                child: Padding(
-                  padding: EdgeInsets.all(_draggingProduct ? 6 : 0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      if (files.isEmpty)
-                        InkWell(
-                          onTap: enabled && !_uploadingProductFile
-                              ? () => unawaited(_pickOnlineProductFiles())
-                              : null,
-                          borderRadius: BorderRadius.circular(8),
-                          child: InputDecorator(
-                            decoration:
-                                proposalInputDecoration(
-                                  hint: _uploadingProductFile
-                                      ? '上传中…'
-                                      : '点击选择文件，最多 5 个',
-                                  readOnly: !enabled,
-                                  tone: proposalFieldTone(
-                                    enabled: enabled,
-                                    source: '提交人上传',
-                                  ),
-                                ).copyWith(
-                                  suffixIcon: Icon(
-                                    _uploadingProductFile
-                                        ? Icons.hourglass_top_rounded
-                                        : Icons.upload_file_outlined,
-                                    size: 18,
-                                    color: enabled
-                                        ? ProposalPalette.purple
-                                        : ProposalPalette.text3,
-                                  ),
+              child: Padding(
+                padding: EdgeInsets.all(_draggingProduct ? 6 : 0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (files.isEmpty)
+                      InkWell(
+                        onTap: enabled && !_uploadingProductFile
+                            ? () => unawaited(_pickOnlineProductFiles())
+                            : null,
+                        borderRadius: BorderRadius.circular(8),
+                        child: InputDecorator(
+                          decoration:
+                              proposalInputDecoration(
+                                hint: _uploadingProductFile
+                                    ? '上传中…'
+                                    : '点击选择文件，最多 5 个',
+                                readOnly: !enabled,
+                                tone: proposalFieldTone(
+                                  enabled: enabled,
+                                  source: '提交人上传',
                                 ),
-                            child: Text(
-                              _uploadingProductFile
-                                  ? '上传中…'
-                                  : (enabled
-                                        ? (_supportsDesktopDrop
-                                              ? '点击选择或拖拽上线产品文件'
-                                              : '点击选择上线产品文件')
-                                        : '由提交人上传'),
-                              style: const TextStyle(
-                                fontSize: 13,
-                                color: ProposalPalette.text3,
+                              ).copyWith(
+                                suffixIcon: Icon(
+                                  _uploadingProductFile
+                                      ? Icons.hourglass_top_rounded
+                                      : Icons.upload_file_outlined,
+                                  size: 18,
+                                  color: enabled
+                                      ? ProposalPalette.purple
+                                      : ProposalPalette.text3,
+                                ),
                               ),
+                          child: Text(
+                            _uploadingProductFile
+                                ? '上传中…'
+                                : (enabled
+                                      ? (_supportsDesktopDrop
+                                            ? '点击选择或拖拽上线产品文件'
+                                            : '点击选择上线产品文件')
+                                      : '由提交人上传'),
+                            style: const TextStyle(
+                              fontSize: 13,
+                              color: ProposalPalette.text3,
                             ),
                           ),
-                        )
-                      else ...[
-                        for (var i = 0; i < files.length; i++)
-                          _OnlineProductFileTile(
-                            file: files[i],
-                            opening:
-                                _openingProductFile ==
-                                '${files[i]['fileName'] ?? files[i]['objectKey'] ?? ''}'
-                                    .trim(),
-                            downloading:
-                                _downloadingProductFile ==
-                                '${files[i]['fileName'] ?? files[i]['objectKey'] ?? ''}'
-                                    .trim(),
-                            canRemove: enabled,
-                            onOpen: () =>
-                                unawaited(_openOnlineProductFile(files[i])),
-                            onDownload: () =>
-                                unawaited(_downloadOnlineProductFile(files[i])),
-                            onRemove: () => _removeOnlineProductFile(i),
-                          ),
-                        if (enabled && files.length < _maxProductFiles)
-                          Align(
-                            alignment: Alignment.centerLeft,
-                            child: TextButton.icon(
-                              onPressed: _uploadingProductFile
-                                  ? null
-                                  : () => unawaited(_pickOnlineProductFiles()),
-                              icon: const Icon(Icons.add, size: 16),
-                              label: Text(
-                                _uploadingProductFile ? '上传中…' : '继续上传',
-                              ),
-                            ),
-                          ),
-                      ],
-                      const SizedBox(height: 6),
-                      Text(
-                        _supportsDesktopDrop
-                            ? '支持 PDF / Word / Excel / PPT / zip，单个不超过 20MB。PC 可拖拽到此处。'
-                            : '支持 PDF / Word / Excel / PPT，单个不超过 20MB。',
-                        style: const TextStyle(
-                          color: ProposalPalette.text3,
-                          fontSize: 11,
                         ),
-                      ),
+                      )
+                    else ...[
+                      for (var i = 0; i < files.length; i++)
+                        _OnlineProductFileTile(
+                          file: files[i],
+                          opening:
+                              _openingProductFile ==
+                              '${files[i]['fileName'] ?? files[i]['objectKey'] ?? ''}'
+                                  .trim(),
+                          downloading:
+                              _downloadingProductFile ==
+                              '${files[i]['fileName'] ?? files[i]['objectKey'] ?? ''}'
+                                  .trim(),
+                          canRemove: enabled,
+                          onOpen: () =>
+                              unawaited(_openOnlineProductFile(files[i])),
+                          onDownload: () =>
+                              unawaited(_downloadOnlineProductFile(files[i])),
+                          onRemove: () => _removeOnlineProductFile(i),
+                        ),
+                      if (enabled && files.length < _maxProductFiles)
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: TextButton.icon(
+                            onPressed: _uploadingProductFile
+                                ? null
+                                : () => unawaited(_pickOnlineProductFiles()),
+                            icon: const Icon(Icons.add, size: 16),
+                            label: Text(
+                              _uploadingProductFile ? '上传中…' : '继续上传',
+                            ),
+                          ),
+                        ),
                     ],
-                  ),
+                    const SizedBox(height: 6),
+                    Text(
+                      _supportsDesktopDrop
+                          ? '支持 PDF / Word / Excel / PPT / zip，单个不超过 20MB。PC 可拖拽到此处。'
+                          : '支持 PDF / Word / Excel / PPT，单个不超过 20MB。',
+                      style: const TextStyle(
+                        color: ProposalPalette.text3,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),
           ),
-        ],
-      );
+        ),
+      ],
+    );
   }
 
   Widget? _contractEditFooter(String key) {
@@ -5609,34 +5668,39 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
 
   Widget _fieldGrid(bool wide, List<Widget> fields, {int? columns}) =>
       LayoutBuilder(
-    builder: (_, constraints) {
-      final resolved = columns ??
-          (!wide
-              ? 1
-              : constraints.maxWidth >= 1080
-              ? 3
-              : constraints.maxWidth >= 660
-              ? 2
-              : 1);
-      final rows = _groupFields(fields, resolved);
-      return Container(
-        width: double.infinity,
-        decoration: BoxDecoration(
-          border: Border.all(color: ProposalPalette.borderSoft),
-          borderRadius: BorderRadius.circular(10),
-          color: Colors.white,
-        ),
-        clipBehavior: Clip.hardEdge,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            for (var row = 0; row < rows.length; row++)
-              _gridRow(rows[row], resolved, lastRow: row == rows.length - 1),
-          ],
-        ),
+        builder: (_, constraints) {
+          final resolved =
+              columns ??
+              (!wide
+                  ? 1
+                  : constraints.maxWidth >= 1080
+                  ? 3
+                  : constraints.maxWidth >= 660
+                  ? 2
+                  : 1);
+          final rows = _groupFields(fields, resolved);
+          return Container(
+            width: double.infinity,
+            decoration: BoxDecoration(
+              border: Border.all(color: ProposalPalette.borderSoft),
+              borderRadius: BorderRadius.circular(10),
+              color: Colors.white,
+            ),
+            clipBehavior: Clip.hardEdge,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                for (var row = 0; row < rows.length; row++)
+                  _gridRow(
+                    rows[row],
+                    resolved,
+                    lastRow: row == rows.length - 1,
+                  ),
+              ],
+            ),
+          );
+        },
       );
-    },
-  );
 
   Widget _gridRow(List<Widget> cells, int columns, {required bool lastRow}) {
     if (cells.length == 1) {
@@ -5789,6 +5853,26 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       helpText: '选择日期',
       cancelText: '取消',
       confirmText: '确定',
+      builder: (context, child) => _datePickerTheme(child),
+    );
+  }
+
+  Future<DateTimeRange?> _pickDateRange({DateTime? start, DateTime? end}) {
+    final now = DateTime.now();
+    final initialStart = start ?? now;
+    final initialEnd = end ?? initialStart;
+    return showDateRangePicker(
+      context: context,
+      firstDate: DateTime(now.year - 20),
+      lastDate: DateTime(now.year + 20),
+      initialDateRange: DateTimeRange(
+        start: initialStart,
+        end: initialEnd.isBefore(initialStart) ? initialStart : initialEnd,
+      ),
+      helpText: '选择项目周期',
+      cancelText: '取消',
+      confirmText: '确定',
+      saveText: '确定',
       builder: (context, child) => _datePickerTheme(child),
     );
   }
@@ -6237,7 +6321,11 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         child: _settleTermsGrid(
           wide: wide,
           keyPrefix: '$settleTermsKey-$id',
-          terms: proposalCostSettleTermsOf(terms: settleMap, name: name, id: id),
+          terms: proposalCostSettleTermsOf(
+            terms: settleMap,
+            name: name,
+            id: id,
+          ),
           enabled: enabled,
           columns: 5,
           onChanged: (terms) => _setCostSettleTerms(

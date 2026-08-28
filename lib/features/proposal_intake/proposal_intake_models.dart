@@ -1065,7 +1065,8 @@ class ProposalTechnologyRecord {
     return ProposalTechnologyRecord(
       id: '${json['id'] ?? ''}'.trim(),
       title: '${json['title'] ?? ''}'.trim(),
-      platform: '${json['technologyPlatform'] ?? json['platform'] ?? ''}'.trim(),
+      platform: '${json['technologyPlatform'] ?? json['platform'] ?? ''}'
+          .trim(),
       capabilities: strings(
         json['technologyCapabilities'] ?? json['capabilities'],
       ),
@@ -1092,7 +1093,9 @@ const proposalTechnologySnapshotKeys = <String>[
   'onlineProductFiles',
 ];
 
-Map<String, dynamic> proposalIntakeTechnologySnapshot(Map<String, dynamic> form) {
+Map<String, dynamic> proposalIntakeTechnologySnapshot(
+  Map<String, dynamic> form,
+) {
   final snap = <String, dynamic>{};
   for (final key in proposalTechnologySnapshotKeys) {
     if (!form.containsKey(key)) continue;
@@ -1136,9 +1139,10 @@ Map<String, dynamic> proposalIntakeAppendTechnologyRecord(
   Map<String, dynamic> form,
 ) {
   final records = [
-    for (final item in (form['technologyRecords'] is List
-        ? form['technologyRecords'] as List
-        : const []))
+    for (final item
+        in (form['technologyRecords'] is List
+            ? form['technologyRecords'] as List
+            : const []))
       if (item is Map) Map<String, dynamic>.from(item),
   ];
   final snap = proposalIntakeTechnologySnapshot(form);
@@ -1293,11 +1297,7 @@ class ProposalFinanceCostLine {
   final String name;
   final ProposalFinanceSettleTerms terms;
 
-  Map<String, dynamic> toJson() => {
-    'id': id,
-    'name': name,
-    ...terms.toJson(),
-  };
+  Map<String, dynamic> toJson() => {'id': id, 'name': name, ...terms.toJson()};
 
   factory ProposalFinanceCostLine.fromJson(Object? raw) {
     if (raw is! Map) {
@@ -1315,6 +1315,9 @@ class ProposalFinanceModule {
   const ProposalFinanceModule({
     required this.id,
     this.title = '',
+    this.naturalMonth = '',
+    this.projectPeriodStart = '',
+    this.projectPeriodEnd = '',
     this.revenue = const ProposalFinanceSettleTerms(),
     this.projectCosts = const [],
     this.businessCosts = const [],
@@ -1322,21 +1325,51 @@ class ProposalFinanceModule {
 
   final String id;
   final String title;
+
+  /// 是 / 否。否时必须填写项目周期。
+  final String naturalMonth;
+  final String projectPeriodStart;
+  final String projectPeriodEnd;
   final ProposalFinanceSettleTerms revenue;
   final List<ProposalFinanceCostLine> projectCosts;
   final List<ProposalFinanceCostLine> businessCosts;
 
+  bool get usesProjectPeriod => naturalMonth == '否';
+
+  String get projectPeriodLabel {
+    if (projectPeriodStart.isEmpty && projectPeriodEnd.isEmpty) return '';
+    if (projectPeriodStart.isNotEmpty && projectPeriodEnd.isNotEmpty) {
+      return '$projectPeriodStart ~ $projectPeriodEnd';
+    }
+    return projectPeriodStart.isNotEmpty
+        ? projectPeriodStart
+        : projectPeriodEnd;
+  }
+
   String get fingerprint {
     final costs = [
-      for (final line in projectCosts) 'P:${line.name}:${line.terms.fingerprint}',
-      for (final line in businessCosts) 'B:${line.name}:${line.terms.fingerprint}',
+      for (final line in projectCosts)
+        'P:${line.name}:${line.terms.fingerprint}',
+      for (final line in businessCosts)
+        'B:${line.name}:${line.terms.fingerprint}',
     ]..sort();
-    return '${revenue.fingerprint}#${costs.join(';')}';
+    final period = usesProjectPeriod
+        ? '$naturalMonth|$projectPeriodStart|$projectPeriodEnd'
+        : naturalMonth;
+    return '${revenue.fingerprint}#${costs.join(';')}#$period';
   }
 
   bool get hasIdentity => !revenue.isBlank;
 
   bool get revenueComplete => revenue.isComplete;
+
+  bool get periodComplete {
+    if (naturalMonth != '是' && naturalMonth != '否') return false;
+    if (usesProjectPeriod) {
+      return projectPeriodStart.isNotEmpty && projectPeriodEnd.isNotEmpty;
+    }
+    return true;
+  }
 
   bool get costsComplete {
     for (final line in [...projectCosts, ...businessCosts]) {
@@ -1345,9 +1378,31 @@ class ProposalFinanceModule {
     return true;
   }
 
+  ProposalFinanceModule copyWith({
+    String? title,
+    String? naturalMonth,
+    String? projectPeriodStart,
+    String? projectPeriodEnd,
+    ProposalFinanceSettleTerms? revenue,
+    List<ProposalFinanceCostLine>? projectCosts,
+    List<ProposalFinanceCostLine>? businessCosts,
+  }) => ProposalFinanceModule(
+    id: id,
+    title: title ?? this.title,
+    naturalMonth: naturalMonth ?? this.naturalMonth,
+    projectPeriodStart: projectPeriodStart ?? this.projectPeriodStart,
+    projectPeriodEnd: projectPeriodEnd ?? this.projectPeriodEnd,
+    revenue: revenue ?? this.revenue,
+    projectCosts: projectCosts ?? this.projectCosts,
+    businessCosts: businessCosts ?? this.businessCosts,
+  );
+
   Map<String, dynamic> toJson() => {
     'id': id,
     'title': title,
+    'naturalMonth': naturalMonth,
+    'projectPeriodStart': usesProjectPeriod ? projectPeriodStart : '',
+    'projectPeriodEnd': usesProjectPeriod ? projectPeriodEnd : '',
     'revenue': revenue.toJson(),
     'projectCosts': [for (final line in projectCosts) line.toJson()],
     'businessCosts': [for (final line in businessCosts) line.toJson()],
@@ -1366,6 +1421,9 @@ class ProposalFinanceModule {
     return ProposalFinanceModule(
       id: '${raw['id'] ?? ''}'.trim(),
       title: '${raw['title'] ?? ''}'.trim(),
+      naturalMonth: _naturalMonthChoice(raw['naturalMonth']),
+      projectPeriodStart: '${raw['projectPeriodStart'] ?? ''}'.trim(),
+      projectPeriodEnd: '${raw['projectPeriodEnd'] ?? ''}'.trim(),
       revenue: ProposalFinanceSettleTerms.fromJson(raw['revenue']),
       projectCosts: lines(raw['projectCosts']),
       businessCosts: lines(raw['businessCosts']),
@@ -1428,6 +1486,20 @@ bool _asBool(Object? value) {
   if (value is bool) return value;
   final text = '$value'.trim().toLowerCase();
   return text == 'true' || text == '1' || text == '需要' || text == 'yes';
+}
+
+String _naturalMonthChoice(Object? value) {
+  if (value is bool) return value ? '是' : '否';
+  final text = '$value'.trim();
+  if (text.isEmpty || text == 'null') return '';
+  final lower = text.toLowerCase();
+  if (lower == 'true' || lower == '1' || text == '是' || lower == 'yes') {
+    return '是';
+  }
+  if (lower == 'false' || lower == '0' || text == '否' || lower == 'no') {
+    return '否';
+  }
+  return text;
 }
 
 List<ProposalLaunchRow> proposalIntakeLaunchRows(Map<String, dynamic> form) {
@@ -1518,11 +1590,19 @@ List<String> proposalIntakeLaunchFinanceIssues(Map<String, dynamic> form) {
       continue;
     }
     final module = modules[row.financeModuleId]!;
+    final title = module.title.isEmpty ? module.id : module.title;
+    if (!module.periodComplete) {
+      issues.add(
+        module.usesProjectPeriod
+            ? '财务模块「$title」非自然月请选择项目周期'
+            : '财务模块「$title」请选择是否自然月',
+      );
+    }
     if (!module.revenueComplete) {
-      issues.add('财务模块「${module.title.isEmpty ? module.id : module.title}」收入条款未填完');
+      issues.add('财务模块「$title」收入条款未填完');
     }
     if (!module.costsComplete) {
-      issues.add('财务模块「${module.title.isEmpty ? module.id : module.title}」成本项条款未填完');
+      issues.add('财务模块「$title」成本项条款未填完');
     }
   }
   return issues;

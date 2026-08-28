@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:dunes_app/features/lighthouse/lighthouse_data.dart';
 import 'package:dunes_app/features/lighthouse/lighthouse_hero_metric.dart';
 
 void main() {
@@ -40,6 +41,7 @@ void main() {
     test('builds 本日核销额 / 本日毛利润', () {
       expect(lighthouseHeroMetricPeriodLabel('day', 'verifiedSales'), '本日核销额');
       expect(lighthouseHeroMetricPeriodLabel('day', 'profit'), '本日毛利润');
+      expect(lighthouseHeroMetricPeriodLabel('day', 'netTa'), '本日净TA');
       expect(lighthouseHeroMetricPeriodLabel('month', 'sales'), '本月销售额');
     });
   });
@@ -94,6 +96,7 @@ void main() {
     expect(lighthouseHeroMetricIsOverlay('gmv'), isFalse);
     expect(lighthouseHeroMetricIsOverlay('projectCost'), isFalse);
     expect(lighthouseHeroMetricIsOverlay('prepaid'), isFalse);
+    expect(lighthouseHeroMetricIsOverlay('netTa'), isFalse);
     expect(lighthouseHeroMetricIsOverlay('netProfit'), isFalse);
     expect(
       lighthouseHeroOverlaySoloSlot(
@@ -166,6 +169,7 @@ void main() {
     expect(lighthouseHeroTrendChartIsRate('sales'), isFalse);
     expect(lighthouseHeroMetricLabel('gmv'), 'GMV');
     expect(lighthouseHeroMetricLabel('prepaid'), '预收净增');
+    expect(lighthouseHeroMetricLabel('netTa'), '净TA');
   });
 
   test('trend x-axis labels every point gets a date', () {
@@ -313,6 +317,21 @@ void main() {
     );
   });
 
+  test('netTA ledger pinned column is wider so four-character names fit', () {
+    expect(lighthouseLedgerPinnedMinWidth, 112);
+    expect(lighthouseLedgerNetTAPinnedMinWidth, 136);
+    expect(lighthouseLedgerPinnedWidthFor(390, tab: 'product'), 136.5);
+    expect(
+      lighthouseLedgerPinnedWidthFor(390, tab: 'netTa'),
+      greaterThan(lighthouseLedgerPinnedWidthFor(390, tab: 'product')),
+    );
+    expect(
+      lighthouseLedgerPinnedWidthFor(390, tab: 'netTa'),
+      lessThanOrEqualTo(lighthouseLedgerPinnedMaxWidth),
+    );
+    expect(lighthouseLedgerPinnedWidthFor(200, tab: 'netTa'), 136);
+  });
+
   test('ledger rows show four focused metrics in a neutral 2x2 grid', () {
     expect(lighthouseLedgerSummaryColumns, 2);
     expect(lighthouseLedgerNameFontSize, 12.5);
@@ -335,6 +354,7 @@ void main() {
     expect(lighthouseLedgerCollapsedShowsGroup, isFalse);
     expect(lighthouseLedgerCollapsedShowsGrossMargin, isTrue);
     expect(lighthouseLedgerSummaryMetricTone('prepaid'), 'cash');
+    expect(lighthouseLedgerSummaryMetricTone('netTa'), 'cash');
     expect(lighthouseLedgerSummaryMetricTone('profit'), 'profit');
     expect(lighthouseLedgerSummaryMetricTone('sales'), 'neutral');
     // v18: 展开箭头移到冻结列最后一行，不再靠 Transform 偏移躲开穿透箭头。
@@ -346,6 +366,7 @@ void main() {
       'prepaid',
       'profit',
       'costTotal',
+      'netTa',
     ]);
     expect(lighthouseLedgerSummaryMetricRows, [
       ['sales', 'prepaid'],
@@ -492,6 +513,127 @@ void main() {
       ['sales', 'prepaid'],
       ['verifiedSales', 'profit'],
     ]);
+    expect(lighthouseLedgerSummaryMetricRowsForTab('netTa'), [
+      ['inflow', 'netTa'],
+      ['outflow', 'sharePct'],
+    ]);
+  });
+
+  test('netTA hero overlay series maps onto the shared trend slots', () {
+    expect(lighthouseNetTAHeroOverlaySlot('netTa'), 'scale');
+    expect(lighthouseNetTAHeroOverlaySlot('netTaOperating'), 'revenue');
+    expect(lighthouseNetTAHeroOverlaySlot('netTaProjectCost'), 'profit');
+    expect(lighthouseNetTAHeroOverlaySlot('netTaBizCost'), 'costAlt');
+    expect(lighthouseNetTAHeroMetricFromSlot('profit'), 'netTaProjectCost');
+    expect(lighthouseNetTAHeroMetricFromSlot('costAlt'), 'netTaBizCost');
+    expect(lighthouseHeroMetricDisplaysMagnitude('netTaOutflow'), isTrue);
+    expect(lighthouseHeroMetricDisplaysMagnitude('netTaOpCost'), isTrue);
+    expect(lighthouseHeroMetricDisplaysMagnitude('netTaProjectCost'), isTrue);
+    expect(lighthouseHeroMetricDisplaysMagnitude('netTaBizCost'), isTrue);
+    expect(lighthouseHeroMetricDisplaysMagnitude('netTaFinancing'), isTrue);
+    expect(lighthouseHeroMetricDisplayAmount('netTaFinancing', -7656.2e4), 7656.2e4);
+    expect(lighthouseHeroMetricDisplayAmount('netTaOutflow', -2.68e8), 2.68e8);
+    expect(lighthouseHeroMetricDisplayAmount('netTaOperating', -10), -10);
+    expect(lighthouseSeriesSignedDeltaPct([80, 100]), closeTo(25, 0.001));
+    expect(lighthouseSeriesSignedDeltaPct([100, 80]), closeTo(-20, 0.001));
+    expect(lighthouseSeriesSignedDeltaPct([0, 10]), isNull);
+
+    final fromSeries = lighthouseNetTAHeroTrendFromPayload({
+      'total': 15,
+      'series': {
+        'labels': ['上期', '本期'],
+        'title': '走势',
+        'rangeLabel': '上期 — 本期',
+        'netTa': [25, 15],
+        'operating': [80, 100],
+        'financing': [-20, -40],
+        'operatingCost': [-25, -30],
+        'projectCost': [-8, -10],
+        'businessCost': [-2, -5],
+      },
+    });
+    expect(fromSeries.netTa, [25, 15]);
+    expect(fromSeries.operating, [80, 100]);
+    expect(fromSeries.projectCost, [-8, -10]);
+    expect(fromSeries.businessCost, [-2, -5]);
+    expect(fromSeries.projectAndBusiness, [-10, -15]);
+
+    final fallback = lighthouseNetTAHeroTrendFromPayload({
+      'total': 12,
+      'categories': [
+        {'name': '经营活动', 'netTa': 20},
+        {'name': '项目成本', 'netTa': -5},
+        {'name': '业务成本', 'netTa': -3},
+      ],
+    });
+    expect(fallback.netTa, [0, 12]);
+    expect(fallback.operating, [0, 20]);
+    expect(fallback.projectCost, [0, -5]);
+    expect(fallback.businessCost, [0, -3]);
+    expect(fallback.projectAndBusiness, [0, -8]);
+
+    final merged = <String, dynamic>{};
+    lighthouseMergeNetTAHeroTrend(merged, fromSeries);
+    expect(merged['netTaSeries'], [25, 15]);
+    expect(merged['netTaOperating'], 100);
+    expect(merged['netTaProjectCostSeries'], [-8, -10]);
+    expect(merged['netTaBizCostSeries'], [-2, -5]);
+    expect(merged['netTaSeriesLabels'], ['上期', '本期']);
+  });
+
+  test('netTA rows keep five mapped parents and split inflow/outflow', () {
+    final rows = lighthousePrepareNetTARows([
+      {
+        'name': '经营活动',
+        'netTa': 100,
+        'secondaries': [
+          {'name': '项目回款', 'netTa': 80},
+          {'name': '分润', 'netTa': 20},
+        ],
+      },
+      {
+        'name': '业务成本',
+        'netTa': -8,
+        'secondaries': [
+          {'name': '营销费用', 'netTa': -8},
+        ],
+      },
+    ]);
+    expect(rows.map((r) => r['name']).toList(), ['经营活动', '业务成本']);
+    expect(rows[0]['inflow'], 100);
+    expect(rows[0]['outflow'], 0);
+    expect(rows[1]['inflow'], 0);
+    expect(rows[1]['outflow'], -8);
+    expect(rows[0]['sharePct'], 100);
+    expect(rows[1]['sharePct'], 100);
+    expect(lighthouseNetTACardMetrics(
+      (rows[0]['secondaries'] as List).cast<Map<String, dynamic>>(),
+    ).map((e) => e['name']).toList(), [
+      '项目回款',
+      '分润',
+    ]);
+    expect(lighthouseNetTAFlowLabel(100), '净流入');
+    expect(lighthouseNetTAFlowLabel(-8), '净流出');
+    expect(lighthouseNetTAShareLabel(100), '占净流入');
+    expect(lighthouseNetTAShareLabel(-8), '占净流出');
+    expect(lighthouseNetTASecondaryCount(rows[0]), 2);
+    expect(lighthouseNetTASecondaryCount({'name': '项目成本'}), 1);
+    expect(
+      lighthouseNetTASecondariesOrSeed('经营活动', const []).map((e) => e['name']),
+      ['和包出行回款', '项目付款', '项目回款', '应收保证金', '分润', '预收保证金'],
+    );
+    expect(
+      lighthouseNetTACardMetrics([
+        for (var i = 0; i < 11; i++) {'name': '项$i', 'netTa': -10.0 * (11 - i)},
+      ]).length,
+      6,
+    );
+    expect(
+      lighthouseNetTACardMetrics([
+        for (var i = 0; i < 11; i++) {'name': '项$i', 'netTa': -10.0 * (11 - i)},
+      ]).last['name'],
+      '其余 6 项',
+    );
   });
 
   test('channel detail removes the redundant province column', () {
@@ -508,6 +650,17 @@ void main() {
       'filterChip',
       'subSegment',
     ]);
+    expect(lighthouseLedgerPrimaryTabs, [
+      'product',
+      'supply',
+      'channel',
+      'netTa',
+      'analysis',
+    ]);
+    expect(lighthouseLedgerPrimaryTabLabels['netTa'], '净TA');
+    expect(lighthouseLedgerTabShowsCategoryChips('product'), isTrue);
+    expect(lighthouseLedgerTabShowsCategoryChips('netTa'), isFalse);
+    expect(lighthouseLedgerTabShowsCategoryChips('analysis'), isFalse);
     expect(lighthouseLedgerPrimaryTabHeight, 44);
     expect(lighthouseLedgerFilterRowHeight, 42);
     expect(lighthouseLedgerFilterChipRadius, 8);
@@ -537,6 +690,10 @@ void main() {
     expect(lighthouseAppBarToolbarHeight, 34);
     expect(lighthouseAppBarToolbarRadius, 11);
     expect(lighthouseAppBarPutsDateOnTitleRow, isFalse);
+    expect(
+      lighthouseSyncedAtStamp(DateTime(2026, 8, 28, 9, 49)),
+      '2026.08.28 09:49',
+    );
     expect(lighthouseHeroShowsLiveMetadata, isFalse);
     expect(lighthouseHeroSummaryTitleFontSize, 13.5);
     expect(lighthouseHeroSummaryIconSize, 20);
@@ -596,6 +753,12 @@ void main() {
     expect(lighthouseCompactHeroIsNarrow(600), isFalse);
     expect(lighthouseCompactHeroSparkHeightFor(390), 216);
     expect(lighthouseCompactHeroSparkHeightFor(800), 180);
+    expect(lighthouseNetTAHeroSparkHeightFor(390), 216);
+    expect(lighthouseNetTAHeroSparkHeightFor(800), 180);
+    expect(
+      lighthouseNetTAHeroSparkHeightFor(800, hasBankBalance: true),
+      180 + lighthouseNetTABankBalanceExtraHeight,
+    );
     expect(lighthouseCompactHeroChartMaxHeightFor(390), 112);
     expect(lighthouseCompactHeroChartMaxHeightFor(800), 84);
     expect(lighthouseCompactHeroBlockHeightFor(390), 216 + 16);
@@ -1006,6 +1169,51 @@ void main() {
       );
     });
 
+    test('product snapshot restore keeps net TA hero series', () {
+      final product = <String, dynamic>{'profit': 10.0, 'profitSeries': [1.0, 2.0]};
+      final withNetTa = <String, dynamic>{
+        'profit': 10.0,
+        'netTa': 3.1,
+        'netTaSeries': [1.0, 2.0, 3.1],
+        'netTaSeriesLabels': ['D1', 'D2', 'D3'],
+        'netTaBankBalance': 15901000.0,
+      };
+      expect(lighthouseNetTAHeroSeriesReady(product), isFalse);
+      expect(lighthouseNetTAHeroSeriesReady(withNetTa), isTrue);
+
+      lighthouseCarryNetTAMetrics(withNetTa, product);
+      expect(product['profit'], 10.0);
+      expect(product['netTaSeries'], [1.0, 2.0, 3.1]);
+      expect(product['netTaSeriesLabels'], ['D1', 'D2', 'D3']);
+      expect(product['netTaBankBalance'], 15901000.0);
+      expect(lighthouseNetTAHeroSeriesReady(product), isTrue);
+
+      final incoming = <String, dynamic>{
+        'profit': 11.0,
+        'netTaSeries': <double>[],
+      };
+      lighthouseCarryNetTAMetrics(withNetTa, incoming);
+      expect(incoming['profit'], 11.0);
+      expect(incoming['netTaSeries'], [1.0, 2.0, 3.1]);
+    });
+
+    test('withSummary does not drop net TA series', () {
+      final bundle = LighthouseDataBundle.empty().copyWith(
+        metrics: {
+          'profit': 10.0,
+          'netTaSeries': [1.0, 2.0, 3.1],
+          'netTaBankBalance': 100.0,
+        },
+      );
+      final next = bundle.withSummary({
+        'metrics': {'profit': 11.0, 'profitSeries': [4.0, 5.0]},
+      });
+      expect(next.metrics['profit'], 11.0);
+      expect(next.metrics['netTaSeries'], [1.0, 2.0, 3.1]);
+      expect(next.metrics['netTaBankBalance'], 100.0);
+      expect(lighthouseNetTAHeroSeriesReady(next.metrics), isTrue);
+    });
+
     test('tab switch keeps group when the next tab still has it', () {
       expect(
         lighthouseGroupAfterTabSwitch(
@@ -1053,7 +1261,7 @@ void main() {
 
   group('lighthouseLedgerDeltaIsFavorable', () {
     test('规模 / 利润 / 现金流：跌为坏，涨为好', () {
-      for (final key in ['sales', 'verifiedSales', 'profit', 'prepaid']) {
+      for (final key in ['sales', 'verifiedSales', 'profit', 'prepaid', 'netTa']) {
         expect(
           lighthouseLedgerDeltaIsFavorable(key, -86.0),
           isFalse,
@@ -1116,14 +1324,19 @@ void main() {
   group('结果区分块', () {
     test('现金流与毛利润是结果指标，规模与成本不是', () {
       expect(lighthouseLedgerIsResultMetric('prepaid'), isTrue);
+      expect(lighthouseLedgerIsResultMetric('netTa'), isTrue);
+      expect(lighthouseLedgerIsResultMetric('sharePct'), isTrue);
+      expect(lighthouseLedgerIsResultMetric('inflow'), isFalse);
+      expect(lighthouseLedgerIsResultMetric('outflow'), isFalse);
       expect(lighthouseLedgerIsResultMetric('profit'), isTrue);
+      expect(lighthouseLedgerIsResultMetric(lighthouseLedgerSummaryBlankKey), isFalse);
       expect(lighthouseLedgerIsResultMetric('sales'), isFalse);
       expect(lighthouseLedgerIsResultMetric('verifiedSales'), isFalse);
       expect(lighthouseLedgerIsResultMetric('costTotal'), isFalse);
     });
 
     test('结果指标一律落在右列，区块才连得成一片', () {
-      for (final tab in ['product', 'supply', 'channel']) {
+      for (final tab in ['product', 'supply', 'channel', 'netTa']) {
         final flat = lighthouseLedgerSummaryMetricRowsForTab(
           tab,
         ).expand((r) => r).toList();
@@ -1250,6 +1463,17 @@ void main() {
         ),
         ['scale', 'profit', 'revenue', 'cost', 'scaleAlt'],
       );
+      expect(
+        lighthouseTrendPnlLegendKeys(
+          hasScale: true,
+          hasProfit: true,
+          hasCostAlt: true,
+          hasRevenue: true,
+          hasCost: true,
+          hasScaleAlt: true,
+        ),
+        ['scale', 'profit', 'costAlt', 'revenue', 'cost', 'scaleAlt'],
+      );
       expect(lighthouseTrendShowsHeroMetricBesideStatus, isFalse);
     });
 
@@ -1313,7 +1537,7 @@ void main() {
           hasScaleAlt: true,
           soloKey: 'profit',
         ),
-        [false, false, true, false, false],
+        [false, false, true, false, false, false],
       );
       expect(
         lighthouseTrendVisibleFlags(
@@ -1323,7 +1547,7 @@ void main() {
           hasScale: true,
           hasScaleAlt: true,
         ),
-        [true, true, true, true, true],
+        [true, true, true, true, true, false],
       );
       expect(
         lighthouseTrendVisibleFlags(
@@ -1334,7 +1558,19 @@ void main() {
           hasScaleAlt: false,
           soloKey: 'cost',
         ),
-        [true, false, true, true, false],
+        [true, false, true, true, false, false],
+      );
+      expect(
+        lighthouseTrendVisibleFlags(
+          hasRevenue: true,
+          hasCost: true,
+          hasProfit: true,
+          hasScale: true,
+          hasScaleAlt: true,
+          hasCostAlt: true,
+          soloKey: 'costAlt',
+        ),
+        [false, false, false, false, false, true],
       );
     });
 

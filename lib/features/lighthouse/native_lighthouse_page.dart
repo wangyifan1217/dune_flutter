@@ -21,6 +21,7 @@ import 'lighthouse_forecast.dart';
 import 'lighthouse_hero_metric.dart';
 import 'lighthouse_service.dart';
 import 'lighthouse_theme.dart';
+import 'lighthouse_scroll_text.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Static period data (mirrors PERIOD_DATA in lighthouse_v13.html)
@@ -383,8 +384,9 @@ Widget _heroSemanticText(
   int maxLines = 1,
   TextOverflow overflow = TextOverflow.ellipsis,
 }) {
-  return Text.rich(
-    TextSpan(
+  return LhScrollRichText(
+    key: key,
+    text: TextSpan(
       children: _heroSemanticSpans(
         text,
         baseColor: baseColor,
@@ -395,7 +397,6 @@ Widget _heroSemanticText(
         height: height,
       ),
     ),
-    key: key,
     maxLines: maxLines,
     overflow: overflow,
   );
@@ -827,6 +828,7 @@ class _TrendSeries {
     required this.profit,
     this.scale = const <double>[],
     this.scaleAlt = const <double>[],
+    this.costAlt = const <double>[],
   });
   final List<double> revenue;
   final List<double> cost;
@@ -841,6 +843,9 @@ class _TrendSeries {
   /// 2026-08 运营会："在这个走势图里面，如果只能显示一个，我更希望显示规模。"
   /// 规模能推导利润，监测先看规模 —— 所以规模是 hero 线，毛利降为次线。
   final List<double> scale;
+
+  /// 第六条：净TA 业务成本。与 [cost] / [profit] 各自值域，不共用 Y。
+  final List<double> costAlt;
 }
 
 // ============================================================================
@@ -1001,7 +1006,8 @@ class _TrendBounds {
     this.cost,
     this.profit,
     this.scale,
-    this.scaleAlt, {
+    this.scaleAlt,
+    this.costAlt, {
     this.shareScaleRange = true,
   });
   final _SeriesRange revenue;
@@ -1009,6 +1015,7 @@ class _TrendBounds {
   final _SeriesRange profit;
   final _SeriesRange scale;
   final _SeriesRange scaleAlt;
+  final _SeriesRange costAlt;
   final bool shareScaleRange;
 }
 
@@ -1028,9 +1035,7 @@ _TrendBounds _computeBounds(
           s.scaleAlt.isEmpty ? s.scale : <double>[...s.scale, ...s.scaleAlt],
         )
       : computeOne(s.scale);
-  final scaleAltRange = shareScaleRange
-      ? scaleRange
-      : computeOne(s.scaleAlt);
+  final scaleAltRange = shareScaleRange ? scaleRange : computeOne(s.scaleAlt);
   if (scaleForecast != null && s.scale.isNotEmpty) {
     if (scaleForecast > scaleRange.max) {
       final pad = (scaleForecast - scaleRange.min).abs() * 0.08;
@@ -1047,6 +1052,7 @@ _TrendBounds _computeBounds(
     computeOne(s.profit),
     scaleRange,
     shareScaleRange ? scaleRange : scaleAltRange,
+    computeOne(s.costAlt),
     shareScaleRange: shareScaleRange,
   );
 }
@@ -1058,6 +1064,7 @@ _TrendBounds _computeBounds(
   required int index,
 }) {
   final scaleColor = colors.length > 3 ? colors[3] : colors[2];
+  final costAltColor = colors.length > 4 ? colors[4] : colors[1];
   switch (index) {
     case 0:
       return (pts: series.revenue, range: bounds.revenue, color: colors[0]);
@@ -1067,6 +1074,8 @@ _TrendBounds _computeBounds(
       return (pts: series.profit, range: bounds.profit, color: colors[2]);
     case 4:
       return (pts: series.scaleAlt, range: bounds.scaleAlt, color: scaleColor);
+    case 5:
+      return (pts: series.costAlt, range: bounds.costAlt, color: costAltColor);
     default:
       return (pts: series.scale, range: bounds.scale, color: scaleColor);
   }
@@ -1840,14 +1849,14 @@ class _TrendLinesPainter extends CustomPainter {
     required this.bounds,
     required this.colors,
     required this.padH,
-    this.available = const [true, true, true, false, false],
+    this.available = const [true, true, true, false, false, false],
     this.scaleForecast,
   });
   final _TrendSeries series;
   final _TrendBounds bounds;
   final List<Color> colors;
   final double padH;
-  // v3.9 · [revenue, cost, profit, scale, scaleAlt] 每条序列是否可见
+  // v3.9 · [revenue, cost, profit, scale, scaleAlt, costAlt] 每条序列是否可见
   final List<bool> available;
 
   /// 月化预测值（仅「点月 + 当前月 + 规模类指标」给）。
@@ -1869,10 +1878,10 @@ class _TrendLinesPainter extends CustomPainter {
 
     // MAX/MIN / 填充 / 粗线跟「当前可见的主线」走。图例 solo 只留一条时，
     // 那条就是主线，避免毛利被千万级规模压扁、或收入单独看时没有体积。
-    final flags = available.length >= 5
+    final flags = available.length >= 6
         ? available
         : <bool>[
-            for (var i = 0; i < 5; i++) i < available.length && available[i],
+            for (var i = 0; i < 6; i++) i < available.length && available[i],
           ];
     final heroIndex = lighthouseTrendHeroIndex(flags);
     final heroSpec = _trendPaintSpec(
@@ -2035,7 +2044,7 @@ class _TrendLinesPainter extends CustomPainter {
     } else if (heroDrawable) {
       drawFillArea(heroPts, heroColor, heroBounds);
     }
-    for (var i = 0; i < 5; i++) {
+    for (var i = 0; i < flags.length; i++) {
       if (!flags[i] || i == heroIndex) continue;
       final spec = _trendPaintSpec(
         series: series,
@@ -2048,7 +2057,8 @@ class _TrendLinesPainter extends CustomPainter {
         spec.pts,
         spec.color,
         spec.range,
-        strokeWidth: besideScale ? 1.1 : (i == 2 ? 1.7 : 1.4),
+        // 上下文线统一收细：颜色已经降成中性，线宽再和主线接近就还是"五条一样重"。
+        strokeWidth: besideScale ? 1.0 : 1.2,
         alpha: besideScale ? 150 : 255,
       );
     }
@@ -2056,7 +2066,7 @@ class _TrendLinesPainter extends CustomPainter {
       drawLine(heroPts, heroColor, heroBounds, strokeWidth: 2.0);
       drawDataDots(heroPts, heroColor, heroBounds);
     }
-    for (var i = 0; i < 5; i++) {
+    for (var i = 0; i < flags.length; i++) {
       if (!flags[i] || i == heroIndex) continue;
       final spec = _trendPaintSpec(
         series: series,
@@ -2127,7 +2137,7 @@ class _TrendOverlayPainter extends CustomPainter {
     required this.colors,
     required this.padH,
     required this.selectedIndex,
-    this.available = const [true, true, true, false, false],
+    this.available = const [true, true, true, false, false, false],
   });
   final _TrendSeries series;
   final _TrendBounds bounds;
@@ -2205,13 +2215,13 @@ class _TrendOverlayPainter extends CustomPainter {
       canvas.drawCircle(Offset(x, cy), 2.2, Paint()..color = color);
     }
 
-    final flags = available.length >= 5
+    final flags = available.length >= 6
         ? available
         : <bool>[
-            for (var i = 0; i < 5; i++) i < available.length && available[i],
+            for (var i = 0; i < 6; i++) i < available.length && available[i],
           ];
     final heroIndex = lighthouseTrendHeroIndex(flags);
-    for (var i = 0; i < 5; i++) {
+    for (var i = 0; i < flags.length; i++) {
       if (!flags[i]) continue;
       final spec = _trendPaintSpec(
         series: series,
@@ -3356,10 +3366,8 @@ class _HeroMultiTrendPainter extends CustomPainter {
   static const Color _hair = Color(0xFFEFEAF7);
 
   /// 命中区映射：扫描按绘图区的 x 区间算，两侧的名字栏和读数栏不算在内。
-  static ({double x0, double x1}) plotX(double w) => (
-    x0: _padH + _nameW,
-    x1: math.max(_padH + _nameW + 1, w - _padH - _valW),
-  );
+  static ({double x0, double x1}) plotX(double w) =>
+      (x0: _padH + _nameW, x1: math.max(_padH + _nameW + 1, w - _padH - _valW));
 
   int get _pointCount {
     var n = 0;
@@ -3633,14 +3641,27 @@ class _HeroMultiTrendPainter extends CustomPainter {
       canvas.drawCircle(
         tan.position,
         0.7 + f * 1.4,
-        Paint()..color = color.withAlpha((a0 * f * f * 160).round().clamp(0, 255)),
+        Paint()
+          ..color = color.withAlpha((a0 * f * f * 160).round().clamp(0, 255)),
       );
     }
     final head = m.getTangentForOffset(headD)?.position;
     if (head == null) return;
-    canvas.drawCircle(head, 5.6, Paint()..color = color.withAlpha((a0 * 38).round()));
-    canvas.drawCircle(head, 3.0, Paint()..color = color.withAlpha((a0 * 235).round()));
-    canvas.drawCircle(head, 1.2, Paint()..color = Colors.white.withAlpha((a0 * 255).round()));
+    canvas.drawCircle(
+      head,
+      5.6,
+      Paint()..color = color.withAlpha((a0 * 38).round()),
+    );
+    canvas.drawCircle(
+      head,
+      3.0,
+      Paint()..color = color.withAlpha((a0 * 235).round()),
+    );
+    canvas.drawCircle(
+      head,
+      1.2,
+      Paint()..color = Colors.white.withAlpha((a0 * 255).round()),
+    );
   }
 
   String _periodLabel(int i, int n) {
@@ -4054,7 +4075,9 @@ class _LhRidgeFullPageState extends State<_LhRidgeFullPage>
 
   String _periodLabel(int i) {
     final n = _pointCount;
-    final raw = (i >= 0 && i < widget.labels.length &&
+    final raw =
+        (i >= 0 &&
+            i < widget.labels.length &&
             widget.labels[i].trim().isNotEmpty)
         ? widget.labels[i].trim()
         : (i == n - 1 ? '现' : 'T−${n - 1 - i}');
@@ -4179,7 +4202,7 @@ class _LhRidgeFullPageState extends State<_LhRidgeFullPage>
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(
+                LhScrollText(
                   widget.title,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -4240,11 +4263,7 @@ class _LhRidgeFullPageState extends State<_LhRidgeFullPage>
             child: const SizedBox(
               width: 44,
               height: 44,
-              child: Icon(
-                Icons.close_rounded,
-                size: 20,
-                color: LhColors.mute,
-              ),
+              child: Icon(Icons.close_rounded, size: 20, color: LhColors.mute),
             ),
           ),
         ],
@@ -4289,10 +4308,8 @@ class _LhRidgeFullPainter extends CustomPainter {
   static const Color _hair = Color(0xFFEFEAF7);
   static const Color _grid = Color(0xFFF1ECF8);
 
-  static ({double x0, double x1}) plotX(double w) => (
-    x0: padH + tickW,
-    x1: math.max(padH + tickW + 1, w - padH - valW),
-  );
+  static ({double x0, double x1}) plotX(double w) =>
+      (x0: padH + tickW, x1: math.max(padH + tickW + 1, w - padH - valW));
 
   int get _pointCount {
     var n = 0;
@@ -4698,7 +4715,12 @@ class _LhRidgeFullPainter extends CustomPainter {
 
   /// n ≤ 10 才画数据点（§3.13）。放大页一条山脊 150pt 高、点距 35pt，
   /// 画出来「哪一天」就有了实体，不用去猜曲线上哪个位置是一期。
-  void _dots(Canvas canvas, List<Offset> pts, Color color, {required bool hero}) {
+  void _dots(
+    Canvas canvas,
+    List<Offset> pts,
+    Color color, {
+    required bool hero,
+  }) {
     final n = pts.length;
     if (n > 10 || n < 2 || _p01 < 1.0) return;
     final solidN = _solidCount(n);
@@ -4710,11 +4732,7 @@ class _LhRidgeFullPainter extends CustomPainter {
     }
     for (var k = 0; k < upto; k++) {
       final ext = k == hi || k == lo;
-      canvas.drawCircle(
-        pts[k],
-        ext ? 4.0 : 3.0,
-        Paint()..color = Colors.white,
-      );
+      canvas.drawCircle(pts[k], ext ? 4.0 : 3.0, Paint()..color = Colors.white);
       canvas.drawCircle(
         pts[k],
         hero ? 3.0 : 2.6,
@@ -4768,14 +4786,27 @@ class _LhRidgeFullPainter extends CustomPainter {
       canvas.drawCircle(
         tan.position,
         1.0 + f * 2.0,
-        Paint()..color = color.withAlpha((a0 * f * f * 170).round().clamp(0, 255)),
+        Paint()
+          ..color = color.withAlpha((a0 * f * f * 170).round().clamp(0, 255)),
       );
     }
     final head = m.getTangentForOffset(headD)?.position;
     if (head == null) return;
-    canvas.drawCircle(head, 9.0, Paint()..color = color.withAlpha((a0 * 34).round()));
-    canvas.drawCircle(head, 4.4, Paint()..color = color.withAlpha((a0 * 240).round()));
-    canvas.drawCircle(head, 1.8, Paint()..color = Colors.white.withAlpha((a0 * 255).round()));
+    canvas.drawCircle(
+      head,
+      9.0,
+      Paint()..color = color.withAlpha((a0 * 34).round()),
+    );
+    canvas.drawCircle(
+      head,
+      4.4,
+      Paint()..color = color.withAlpha((a0 * 240).round()),
+    );
+    canvas.drawCircle(
+      head,
+      1.8,
+      Paint()..color = Colors.white.withAlpha((a0 * 255).round()),
+    );
   }
 
   @override
@@ -5825,7 +5856,7 @@ class _MetaCompareStageState extends State<_MetaCompareStage> {
               ],
             ),
             const SizedBox(height: 3),
-            Text(
+            LhScrollText(
               '${_metricEnKey(m.key)} · ${_metricUnitLabel(m)}',
               style: LhTypography.mono(
                 size: 7.5,
@@ -5915,7 +5946,7 @@ class _MetaCompareStageState extends State<_MetaCompareStage> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Text(
+                  LhScrollText(
                     e.name,
                     style: LhTypography.sans(
                       size: 11.5,
@@ -5927,7 +5958,7 @@ class _MetaCompareStageState extends State<_MetaCompareStage> {
                     overflow: TextOverflow.ellipsis,
                   ),
                   const SizedBox(height: 3),
-                  Text(
+                  LhScrollText(
                     _buildGroupShareText(e.group, shareOfActive),
                     style: LhTypography.mono(
                       size: 8,
@@ -6242,6 +6273,7 @@ class _TrendChart extends StatefulWidget {
     this.periodRevenueDeltaPct,
     this.periodCostDeltaPct,
     this.periodScaleAltDeltaPct,
+    this.periodCostAltDeltaPct,
     this.scaleForecast,
     this.partialPeriod = false,
     this.showHeader = true,
@@ -6255,6 +6287,7 @@ class _TrendChart extends StatefulWidget {
     this.periodRevenue,
     this.periodCost,
     this.periodProfit,
+    this.periodCostAlt,
 
     /// 本期 vs 上期毛利环比（%），与列表行 deltaPct / deltas.profit 同口径。
     /// 禁止用走势首末点代替环比（近 N 期跨度变化 ≠ 环比）。
@@ -6262,6 +6295,9 @@ class _TrendChart extends StatefulWidget {
     this.revenueLabel = '收入',
     this.costLabel = '成本',
     this.profitLabel = '毛利',
+    this.costAlt = const <double>[],
+    this.costAltLabel = '',
+    this.unsignedSlots = const <String>{},
     this.valueIsRate = false,
     this.soloKey,
     this.onSoloChanged,
@@ -6284,10 +6320,18 @@ class _TrendChart extends StatefulWidget {
   final double? periodRevenue;
   final double? periodCost;
   final double? periodProfit;
+  final double? periodCostAlt;
   final double? periodProfitDeltaPct;
   final String revenueLabel;
   final String costLabel;
   final String profitLabel;
+
+  /// 第六条序列（净TA 业务成本）。空 label 表示不画。
+  final List<double> costAlt;
+  final String costAltLabel;
+
+  /// 这些 slot 的图例金额按绝对值显示（流出 / 成本栏目本身已带方向）。
+  final Set<String> unsignedSlots;
 
   /// 主值按百分比显示（毛利率 / ROI），不走万/亿。
   final bool valueIsRate;
@@ -6327,6 +6371,7 @@ class _TrendChart extends StatefulWidget {
   final double? periodRevenueDeltaPct;
   final double? periodCostDeltaPct;
   final double? periodScaleAltDeltaPct;
+  final double? periodCostAltDeltaPct;
 
   /// 月化预测（仅「点月 + 当前月 + 规模类」给）。
   /// 非空时画月末预测虚线 + legend 下方的预测条。
@@ -6354,7 +6399,52 @@ class _TrendChartState extends State<_TrendChart> {
   static const Color _cCost = Color(lighthouseCostAccentValue);
   static const Color _cProf = Color(lighthouseProfitAccentValue);
   static const Color _cScale = Color(lighthouseScaleAccentValue);
-  static const List<Color> _kColors = [_cRev, _cCost, _cProf, _cScale];
+  static const Color _cCostAlt = Color(lighthouseNetTABizCostAccentValue);
+  static const List<Color> _kColors = [_cRev, _cCost, _cProf, _cScale, _cCostAlt];
+
+  /// 上下文线的中性阶：同一支墨色（ink2）不同透明度。
+  ///
+  /// 五条同权彩线画在一张图里必然打架；更要命的是它们各自归一化 —— 纵轴根本
+  /// 不是同一个，颜色越强越像在比高低，其实完全不可比。所以规则定成：
+  /// **任何时刻画面上最多一个强调色**，其余降成中性、只提供形状上下文。
+  /// 想看哪条就点图例，那条变成强调色（solo 已有的交互）。
+  static const List<Color> _kContextColors = [
+    Color(0x8C5A5C56),
+    Color(0x7A5A5C56),
+    Color(0x995A5C56),
+    Color(0x875A5C56),
+    Color(0x6B5A5C56),
+  ];
+
+  /// series key → 颜色槽位。scale / scaleAlt 同属规模族，共用一个槽。
+  static int _colorSlotFor(int seriesIndex) => switch (seriesIndex) {
+    4 => 3,
+    5 => 4,
+    _ => seriesIndex,
+  };
+
+  /// 绘图用色：hero 那条（也是 MAX/MIN 标注的那条）保留语义色，其余走中性阶。
+  /// solo 时只画一条，直接用语义色。
+  List<Color> get _paintColors {
+    if (_soloKey != null) return _kColors;
+    final accent = _colorSlotFor(lighthouseTrendHeroIndex(_visibleFlags));
+    return [
+      for (var i = 0; i < _kColors.length; i++)
+        i == accent ? _kColors[i] : _kContextColors[i],
+    ];
+  }
+
+  /// 图例色块跟线同一套规则：只有强调的那条是彩色，其余是中性点。
+  Color _legendAccent(String key, Color accent) {
+    final i = lighthouseTrendSeriesKeys.indexOf(key);
+    if (i < 0) return accent;
+    final slot = _colorSlotFor(i);
+    if (_soloKey != null) {
+      return _soloKey == key ? accent : _kContextColors[slot];
+    }
+    final heroSlot = _colorSlotFor(lighthouseTrendHeroIndex(_visibleFlags));
+    return slot == heroSlot ? accent : _kContextColors[slot];
+  }
 
   int? _selectedIndex;
 
@@ -6367,6 +6457,7 @@ class _TrendChartState extends State<_TrendChart> {
   late List<int> _xAnchors;
   double _totRev = 0, _totCost = 0, _totProf = 0, _totScale = 0;
   double _totScaleAlt = 0;
+  double _totCostAlt = 0;
   // v3.9 · 每条序列是否"真的有数据"(非空 & 非全 0). 后端有时只下发 profit,
   //         revenue/cost 缺 → 之前 pad(0) 后 painter 恒画 3 条线, legend 恒
   //         3 chip, 视觉上"只有一条动". 现在改成: 缺的序列 legend 不显示,
@@ -6376,25 +6467,31 @@ class _TrendChartState extends State<_TrendChart> {
   bool _hasProf = false;
   bool _hasScale = false;
   bool _hasScaleAlt = false;
+  bool _hasCostAlt = false;
   int get _visibleCount =>
-      (_hasRev ? 1 : 0) + (_hasCost ? 1 : 0) + (_hasProf ? 1 : 0);
+      (_hasRev ? 1 : 0) +
+      (_hasCost ? 1 : 0) +
+      (_hasProf ? 1 : 0) +
+      (_hasCostAlt ? 1 : 0);
 
   List<bool> get _baseFlags => lighthouseTrendVisibleFlags(
-        hasRevenue: _hasRev,
-        hasCost: _hasCost,
-        hasProfit: _hasProf,
-        hasScale: _hasScale,
-        hasScaleAlt: _hasScaleAlt,
-      );
+    hasRevenue: _hasRev,
+    hasCost: _hasCost,
+    hasProfit: _hasProf,
+    hasScale: _hasScale,
+    hasScaleAlt: _hasScaleAlt,
+    hasCostAlt: _hasCostAlt,
+  );
 
   List<bool> get _visibleFlags => lighthouseTrendVisibleFlags(
-        hasRevenue: _hasRev,
-        hasCost: _hasCost,
-        hasProfit: _hasProf,
-        hasScale: _hasScale,
-        hasScaleAlt: _hasScaleAlt,
-        soloKey: _soloKey,
-      );
+    hasRevenue: _hasRev,
+    hasCost: _hasCost,
+    hasProfit: _hasProf,
+    hasScale: _hasScale,
+    hasScaleAlt: _hasScaleAlt,
+    hasCostAlt: _hasCostAlt,
+    soloKey: _soloKey,
+  );
 
   void _toggleSolo(String key) {
     final next = lighthouseTrendSoloAfterTap(_soloKey, key);
@@ -6413,6 +6510,9 @@ class _TrendChartState extends State<_TrendChart> {
   }
 
   int get _n => _series.profit.length;
+
+  bool _legendNegative(String slot, bool isNeg) =>
+      widget.unsignedSlots.contains(slot) ? false : isNeg;
 
   String _fmtHeroAbs(double v) =>
       widget.valueIsRate ? v.toStringAsFixed(2) : _fmtMoney(v);
@@ -6436,6 +6536,7 @@ class _TrendChartState extends State<_TrendChart> {
         !listEquals(old.profit, widget.profit) ||
         !listEquals(old.revenue, widget.revenue) ||
         !listEquals(old.cost, widget.cost) ||
+        !listEquals(old.costAlt, widget.costAlt) ||
         !listEquals(old.scale, widget.scale) ||
         !listEquals(old.scaleAlt, widget.scaleAlt) ||
         old.periodScaleAlt != widget.periodScaleAlt ||
@@ -6444,10 +6545,12 @@ class _TrendChartState extends State<_TrendChart> {
         old.periodRevenueDeltaPct != widget.periodRevenueDeltaPct ||
         old.periodCostDeltaPct != widget.periodCostDeltaPct ||
         old.periodScaleAltDeltaPct != widget.periodScaleAltDeltaPct ||
+        old.periodCostAltDeltaPct != widget.periodCostAltDeltaPct ||
         old.partialPeriod != widget.partialPeriod ||
         old.periodRevenue != widget.periodRevenue ||
         old.periodCost != widget.periodCost ||
         old.periodProfit != widget.periodProfit ||
+        old.periodCostAlt != widget.periodCostAlt ||
         old.periodScale != widget.periodScale ||
         old.scaleForecast?.forecast != widget.scaleForecast?.forecast ||
         old.periodProfitDeltaPct != widget.periodProfitDeltaPct;
@@ -6485,6 +6588,8 @@ class _TrendChartState extends State<_TrendChart> {
     _hasScale = _seriesHasData(widget.scale);
     _hasScaleAlt =
         widget.scaleAltLabel.isNotEmpty && _seriesHasData(widget.scaleAlt);
+    _hasCostAlt =
+        widget.costAltLabel.isNotEmpty && _seriesHasData(widget.costAlt);
 
     final n = [
       widget.revenue.length,
@@ -6492,6 +6597,7 @@ class _TrendChartState extends State<_TrendChart> {
       widget.profit.length,
       widget.scale.length,
       widget.scaleAlt.length,
+      widget.costAlt.length,
     ].fold<int>(0, math.max);
     List<double> pad(List<double> l) =>
         l.length == n ? l : [...l, ...List<double>.filled(n - l.length, 0.0)];
@@ -6503,6 +6609,7 @@ class _TrendChartState extends State<_TrendChart> {
       // 两条规模线就被压扁了。
       scale: _hasScale ? pad(widget.scale) : const <double>[],
       scaleAlt: _hasScaleAlt ? pad(widget.scaleAlt) : const <double>[],
+      costAlt: _hasCostAlt ? pad(widget.costAlt) : const <double>[],
     );
     // 预测虚线要画得进画布 —— 把预测值一并纳入规模值域。
     _bounds = _computeBounds(
@@ -6522,6 +6629,8 @@ class _TrendChartState extends State<_TrendChart> {
     _totScale = widget.periodScale ?? _series.scale.fold(0.0, (a, b) => a + b);
     _totScaleAlt =
         widget.periodScaleAlt ?? _series.scaleAlt.fold(0.0, (a, b) => a + b);
+    _totCostAlt =
+        widget.periodCostAlt ?? _series.costAlt.fold(0.0, (a, b) => a + b);
     final (xs, anchors) = lighthouseTrendXAxisLabels(widget.labels, n);
     _xLabels = xs;
     _xAnchors = anchors;
@@ -6566,7 +6675,7 @@ class _TrendChartState extends State<_TrendChart> {
         final extremeSpec = _trendPaintSpec(
           series: _series,
           bounds: _bounds,
-          colors: _kColors,
+          colors: _paintColors,
           index: heroIndex,
         );
         final profitBounds = extremeSpec.range;
@@ -6613,7 +6722,7 @@ class _TrendChartState extends State<_TrendChart> {
                       painter: _TrendLinesPainter(
                         series: _series,
                         bounds: _bounds,
-                        colors: _kColors,
+                        colors: _paintColors,
                         padH: _kChartPadH,
                         available: vis,
                         scaleForecast: vis[3]
@@ -6628,7 +6737,7 @@ class _TrendChartState extends State<_TrendChart> {
                     painter: _TrendOverlayPainter(
                       series: _series,
                       bounds: _bounds,
-                      colors: _kColors,
+                      colors: _paintColors,
                       padH: _kChartPadH,
                       selectedIndex: _selectedIndex,
                       available: vis,
@@ -6811,7 +6920,7 @@ class _TrendChartState extends State<_TrendChart> {
         ),
         const SizedBox(width: 8),
         Expanded(
-          child: Text(
+          child: LhScrollText(
             '已过 ${f.elapsedDays}/${f.totalDays} 天 · 还差 '
             '${_fmtMoney(gap)}${_unitMoney(gap)}',
             overflow: TextOverflow.ellipsis,
@@ -6868,7 +6977,7 @@ class _TrendChartState extends State<_TrendChart> {
             const SizedBox(width: 4),
             if (expandLabel)
               Flexible(
-                child: Text(
+                child: LhScrollText(
                   label,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -6892,16 +7001,8 @@ class _TrendChartState extends State<_TrendChart> {
                 ),
               ),
             const SizedBox(width: 3),
-            if (negative)
-              Text(
-                '-',
-                style: valueStyle,
-              ),
-            Text(
-              '$absFmt$unitFmt',
-              maxLines: 1,
-              style: valueStyle,
-            ),
+            if (negative) Text('-', style: valueStyle),
+            Text('$absFmt$unitFmt', maxLines: 1, style: valueStyle),
           ],
         ),
         if (lighthouseTrendLegendMomOnSecondLine && momPct != null) ...[
@@ -6953,10 +7054,13 @@ class _TrendChartState extends State<_TrendChart> {
 
     final sVal = isSelected ? at(_series.scale, si) : _totScale;
     final sAltVal = isSelected ? at(_series.scaleAlt, si) : _totScaleAlt;
+    final caVal = isSelected ? at(_series.costAlt, si) : _totCostAlt;
     final sAbsFmt = _fmtHeroAbs(sVal.abs());
     final sUnitFmt = _fmtHeroUnit(sVal.abs());
     final sAltAbsFmt = _fmtHeroAbs(sAltVal.abs());
     final sAltUnitFmt = _fmtHeroUnit(sAltVal.abs());
+    final caAbsFmt = _fmtHeroAbs(caVal.abs());
+    final caUnitFmt = _fmtHeroUnit(caVal.abs());
     final pIsNeg = pVal < 0;
     final pAbsFmt = _fmtHeroAbs(pVal.abs());
     final pUnitFmt = _fmtHeroUnit(pVal.abs());
@@ -6968,6 +7072,7 @@ class _TrendChartState extends State<_TrendChart> {
     final pnlLegendKeys = lighthouseTrendPnlLegendKeys(
       hasScale: _hasScale,
       hasProfit: _hasProf,
+      hasCostAlt: _hasCostAlt,
       hasRevenue: _hasRev || rVal.abs() > 1e-9,
       hasCost: _hasCost || cVal.abs() > 1e-9,
       hasScaleAlt: _hasScaleAlt,
@@ -7022,83 +7127,98 @@ class _TrendChartState extends State<_TrendChart> {
                 showAll: pnlLegendKeys.length > 1,
               );
               Widget chipFor(String key) => switch (key) {
-                    'scale' => _trendLegendChip(
-                      label: widget.scaleLabel,
-                      color: _cScale,
-                      negative: sVal < 0,
-                      absFmt: sAbsFmt,
-                      unitFmt: sUnitFmt,
-                      seriesKey: 'scale',
-                      expandLabel: !wrap,
-                      momPct: lighthouseTrendMomPct(
-                        periodDeltaPct: widget.periodScaleDeltaPct,
-                        partialPeriod: widget.partialPeriod,
-                        isSelected: isSelected,
-                        series: _series.scale,
-                      ),
-                    ),
-                    'profit' => _trendLegendChip(
-                      label: widget.profitLabel,
-                      color: _cProf,
-                      negative: pIsNeg,
-                      absFmt: pAbsFmt,
-                      unitFmt: pUnitFmt,
-                      seriesKey: 'profit',
-                      expandLabel: !wrap,
-                      momPct: lighthouseTrendMomPct(
-                        periodDeltaPct: widget.periodProfitDeltaPct,
-                        partialPeriod: widget.partialPeriod,
-                        isSelected: isSelected,
-                        series: _series.profit,
-                      ),
-                    ),
-                    'revenue' => _trendLegendChip(
-                      label: widget.revenueLabel,
-                      color: _cRev,
-                      negative: rVal < 0,
-                      absFmt: rAbsFmt,
-                      unitFmt: rUnitFmt,
-                      seriesKey: 'revenue',
-                      expandLabel: !wrap,
-                      momPct: lighthouseTrendMomPct(
-                        periodDeltaPct: widget.periodRevenueDeltaPct,
-                        partialPeriod: widget.partialPeriod,
-                        isSelected: isSelected,
-                        series: _series.revenue,
-                      ),
-                    ),
-                    'cost' => _trendLegendChip(
-                      label: widget.costLabel,
-                      color: _cCost,
-                      negative: cVal < 0,
-                      absFmt: cAbsFmt,
-                      unitFmt: cUnitFmt,
-                      seriesKey: 'cost',
-                      expandLabel: !wrap,
-                      momPct: lighthouseTrendMomPct(
-                        periodDeltaPct: widget.periodCostDeltaPct,
-                        partialPeriod: widget.partialPeriod,
-                        isSelected: isSelected,
-                        series: _series.cost,
-                      ),
-                    ),
-                    'scaleAlt' => _trendLegendChip(
-                      label: widget.scaleAltLabel,
-                      color: _cScale,
-                      negative: sAltVal < 0,
-                      absFmt: sAltAbsFmt,
-                      unitFmt: sAltUnitFmt,
-                      seriesKey: 'scaleAlt',
-                      expandLabel: !wrap,
-                      momPct: lighthouseTrendMomPct(
-                        periodDeltaPct: widget.periodScaleAltDeltaPct,
-                        partialPeriod: widget.partialPeriod,
-                        isSelected: isSelected,
-                        series: _series.scaleAlt,
-                      ),
-                    ),
-                    _ => const SizedBox.shrink(),
-                  };
+                'scale' => _trendLegendChip(
+                  label: widget.scaleLabel,
+                  color: _legendAccent('scale', _cScale),
+                  negative: _legendNegative('scale', sVal < 0),
+                  absFmt: sAbsFmt,
+                  unitFmt: sUnitFmt,
+                  seriesKey: 'scale',
+                  expandLabel: !wrap,
+                  momPct: lighthouseTrendMomPct(
+                    periodDeltaPct: widget.periodScaleDeltaPct,
+                    partialPeriod: widget.partialPeriod,
+                    isSelected: isSelected,
+                    series: _series.scale,
+                  ),
+                ),
+                'profit' => _trendLegendChip(
+                  label: widget.profitLabel,
+                  color: _legendAccent('profit', _cProf),
+                  negative: _legendNegative('profit', pIsNeg),
+                  absFmt: pAbsFmt,
+                  unitFmt: pUnitFmt,
+                  seriesKey: 'profit',
+                  expandLabel: !wrap,
+                  momPct: lighthouseTrendMomPct(
+                    periodDeltaPct: widget.periodProfitDeltaPct,
+                    partialPeriod: widget.partialPeriod,
+                    isSelected: isSelected,
+                    series: _series.profit,
+                  ),
+                ),
+                'costAlt' => _trendLegendChip(
+                  label: widget.costAltLabel,
+                  color: _legendAccent('costAlt', _cCostAlt),
+                  negative: _legendNegative('costAlt', caVal < 0),
+                  absFmt: caAbsFmt,
+                  unitFmt: caUnitFmt,
+                  seriesKey: 'costAlt',
+                  expandLabel: !wrap,
+                  momPct: lighthouseTrendMomPct(
+                    periodDeltaPct: widget.periodCostAltDeltaPct,
+                    partialPeriod: widget.partialPeriod,
+                    isSelected: isSelected,
+                    series: _series.costAlt,
+                  ),
+                ),
+                'revenue' => _trendLegendChip(
+                  label: widget.revenueLabel,
+                  color: _legendAccent('revenue', _cRev),
+                  negative: _legendNegative('revenue', rVal < 0),
+                  absFmt: rAbsFmt,
+                  unitFmt: rUnitFmt,
+                  seriesKey: 'revenue',
+                  expandLabel: !wrap,
+                  momPct: lighthouseTrendMomPct(
+                    periodDeltaPct: widget.periodRevenueDeltaPct,
+                    partialPeriod: widget.partialPeriod,
+                    isSelected: isSelected,
+                    series: _series.revenue,
+                  ),
+                ),
+                'cost' => _trendLegendChip(
+                  label: widget.costLabel,
+                  color: _legendAccent('cost', _cCost),
+                  negative: _legendNegative('cost', cVal < 0),
+                  absFmt: cAbsFmt,
+                  unitFmt: cUnitFmt,
+                  seriesKey: 'cost',
+                  expandLabel: !wrap,
+                  momPct: lighthouseTrendMomPct(
+                    periodDeltaPct: widget.periodCostDeltaPct,
+                    partialPeriod: widget.partialPeriod,
+                    isSelected: isSelected,
+                    series: _series.cost,
+                  ),
+                ),
+                'scaleAlt' => _trendLegendChip(
+                  label: widget.scaleAltLabel,
+                  color: _legendAccent('scaleAlt', _cScale),
+                  negative: _legendNegative('scaleAlt', sAltVal < 0),
+                  absFmt: sAltAbsFmt,
+                  unitFmt: sAltUnitFmt,
+                  seriesKey: 'scaleAlt',
+                  expandLabel: !wrap,
+                  momPct: lighthouseTrendMomPct(
+                    periodDeltaPct: widget.periodScaleAltDeltaPct,
+                    partialPeriod: widget.partialPeriod,
+                    isSelected: isSelected,
+                    series: _series.scaleAlt,
+                  ),
+                ),
+                _ => const SizedBox.shrink(),
+              };
               final allChip = pnlLegendKeys.length > 1
                   ? GestureDetector(
                       behavior: HitTestBehavior.opaque,
@@ -7135,18 +7255,12 @@ class _TrendChartState extends State<_TrendChart> {
                   spacing: 8,
                   runSpacing: 8,
                   crossAxisAlignment: WrapCrossAlignment.start,
-                  children: [
-                    if (allChip != null) allChip,
-                    ...metricChips,
-                  ],
+                  children: [if (allChip != null) allChip, ...metricChips],
                 );
               }
               return Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (allChip != null) allChip,
-                  ...metricChips,
-                ],
+                children: [if (allChip != null) allChip, ...metricChips],
               );
             },
           ),
@@ -7213,12 +7327,16 @@ class _TrendChartState extends State<_TrendChart> {
                 children: [
                   for (int i = 0; i < _xAnchors.length; i++)
                     Positioned(
-                      left: (labelCount <= 1 || n <= 1
-                              ? _kChartPadH
-                              : _kChartPadH +
-                                    _xAnchors[i] / (n - 1) * usableW -
-                                    slotW / 2)
-                          .clamp(0.0, (w - slotW).clamp(0.0, double.infinity)),
+                      left:
+                          (labelCount <= 1 || n <= 1
+                                  ? _kChartPadH
+                                  : _kChartPadH +
+                                        _xAnchors[i] / (n - 1) * usableW -
+                                        slotW / 2)
+                              .clamp(
+                                0.0,
+                                (w - slotW).clamp(0.0, double.infinity),
+                              ),
                       width: slotW,
                       child: Center(
                         child: Text(
@@ -7399,7 +7517,7 @@ class _HeroMetricTrendChartState extends State<_HeroMetricTrendChart> {
       }
     }
 
-    return RichText(
+    return LhScrollRichText(
       maxLines: 1,
       overflow: TextOverflow.ellipsis,
       text: TextSpan(children: spans),
@@ -7853,8 +7971,8 @@ class _HeroMetricTrendChartState extends State<_HeroMetricTrendChart> {
         ),
         const SizedBox(width: 2),
         Flexible(
-          child: Text.rich(
-            TextSpan(
+          child: LhScrollRichText(
+            text: TextSpan(
               children: [
                 TextSpan(
                   text: '本期 · ',
@@ -8016,10 +8134,7 @@ class _HeroMetricTrendChartState extends State<_HeroMetricTrendChart> {
       if (!widget.isRate) return null;
     } else if (!isSelected && widget.periodDeltaPct != null) {
       // 本期已走完：后端值和序列相减同口径，优先用后端的，跟卡片/列表一个数。
-      return _deltaVisual(
-        widget.periodDeltaPct!,
-        widget.isRate ? 'pp' : '%',
-      );
+      return _deltaVisual(widget.periodDeltaPct!, widget.isRate ? 'pp' : '%');
     }
 
     late double base;
@@ -8331,7 +8446,7 @@ class _MetricExcelPanelState extends State<_MetricExcelPanel> {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(
+                LhScrollText(
                   name.isEmpty ? '未命名' : name,
                   style: LhTypography.sans(
                     size: 11,
@@ -8344,7 +8459,7 @@ class _MetricExcelPanelState extends State<_MetricExcelPanel> {
                 ),
                 if (group.isNotEmpty) ...[
                   const SizedBox(height: 2),
-                  Text(
+                  LhScrollText(
                     group,
                     style: LhTypography.mono(
                       size: 8.4,
@@ -8604,6 +8719,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   String _groupFilter = '全部'; // 产品/供给/渠道默认全部；中石油等仅置顶
   /// 上一份「全部」Hero，切维时立刻换回全量「本日毛利润」，不等 summary。
   Map<String, dynamic>? _sharedHeroMetrics;
+
   /// 默认展开分类：Row2；供给/渠道下再跟 HUN 方框。再点当前维可收起。
   bool _tabBarShowsGroups = true;
   String _hunFilter = '全部'; // '全部' | 'U' | 'N' | 'H' | '混合' — 仅 supply/channel
@@ -8611,6 +8727,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   final Set<String> _expandedTrends = {}; // 列表行折线默认收起；点「走势」加入此集后展开
   /// 账本行点销售额/核销额/现金流/毛利润时，只展开那一条走势。key 同 [_expandedTrends]。
   final Map<String, String> _expandedLedgerSolo = {};
+
+  /// 点「银行余额」把右边走势位换成按公司的余额明细。
+  /// 存量和流量抢同一块地方是故意的：一次只看一件事，看完点回去。
+  bool _netTaBalanceOpen = false;
   final Set<String> _expandedFundPools = {}; // 供给行资金池明细展开状态
   bool _highlightMode = false;
   bool _cellHighlightMode = false;
@@ -8859,6 +8979,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   }
 
   String _uiResetSortField() {
+    if (_tab == 'netTa') return 'netTa';
     final reset = _uiRoot?['resetSort'];
     if (reset is Map && reset['field'] is String)
       return reset['field'] as String;
@@ -9045,7 +9166,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
 
   /// 展开分类条或切 Tab：保留用户选的「全部」；仅失效分类回退。
   void _ensureDefaultGroupFilter() {
-    if (_tab == 'analysis') return;
+    if (_tab == 'analysis' || _tab == 'netTa') return;
     final opts = _categoryOptions(_tab);
     _groupFilter = lighthouseNormalizeGroupFilter(
       current: _groupFilter,
@@ -9842,7 +9963,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         requestedTab == _tab &&
         requestedGroup == _groupFilter;
     final service = _service;
-    final tabToLoad = requestedTab == 'analysis' ? 'product' : requestedTab;
+    final tabToLoad = (requestedTab == 'analysis' || requestedTab == 'netTa')
+        ? 'product'
+        : requestedTab;
     // 摘要与当前列表没有数据依赖，网络请求并行启动；摘要先到即可先结束首屏遮罩。
     final summaryRequest = service.fetchSummary(
       period: requestedPeriod,
@@ -9852,15 +9975,19 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       tab: tabToLoad,
       group: requestedGroup,
     );
-    final dimensionRequest = service.fetchDimension(
-      tab: tabToLoad,
-      period: requestedPeriod,
-      offset: requestedOffset,
-      startDate: requestedStart,
-      endDate: requestedEnd,
-    );
+    final dimensionRequest = requestedTab == 'netTa'
+        ? null
+        : service.fetchDimension(
+            tab: tabToLoad,
+            period: requestedPeriod,
+            offset: requestedOffset,
+            startDate: requestedStart,
+            endDate: requestedEnd,
+          );
     // 即使摘要失败走 overview 兜底，也要消费并行列表请求的错误，避免未处理 Future。
-    unawaited(dimensionRequest.then<void>((_) {}, onError: (Object _) {}));
+    if (dimensionRequest != null) {
+      unawaited(dimensionRequest.then<void>((_) {}, onError: (Object _) {}));
+    }
     try {
       final summary = await summaryRequest;
       if (mounted && stillCurrent()) {
@@ -9890,11 +10017,18 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           // 「数据已同步」展示前端拉取数据的当前时刻（强制中国时间 UTC+8，不依赖设备时区）。
           _lastSyncedAt = _nowCST();
           _syncMetricsFromUI();
-          _rememberSharedHeroMetricsIfUnfiltered(requestedGroup, _bundle?.metrics);
+          _rememberSharedHeroMetricsIfUnfiltered(
+            requestedGroup,
+            _bundle?.metrics,
+          );
         });
       }
       if (stillCurrent()) {
-        await _loadTab(tabToLoad, prefetched: dimensionRequest);
+        if (requestedTab == 'netTa') {
+          await _loadTab('netTa');
+        } else if (dimensionRequest != null) {
+          await _loadTab(tabToLoad, prefetched: dimensionRequest);
+        }
       }
     } catch (e) {
       try {
@@ -9930,6 +10064,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             );
           });
         }
+        if (stillCurrent() && requestedTab == 'netTa') {
+          await _loadTab('netTa');
+        }
       } catch (_) {
         if (mounted && stillCurrent()) {
           setState(() {
@@ -9943,7 +10080,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
 
   /// 按当前 Tab + L1 分类重拉 Hero（数字 / 环比 / 走势）。列表维度数据保留。
   Future<void> _reloadHeroSummary() async {
-    if (_tab == 'analysis') return;
+    if (_tab == 'analysis' || _tab == 'netTa') return;
     final requestedPeriod = _period;
     final requestedOffset = _periodOffset;
     final requestedStart = _customStart;
@@ -9973,7 +10110,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         _bundle = base.withSummary(summary);
         _lastSyncedAt = _nowCST();
         _syncMetricsFromUI();
-        _rememberSharedHeroMetricsIfUnfiltered(requestedGroup, _bundle?.metrics);
+        _rememberSharedHeroMetricsIfUnfiltered(
+          requestedGroup,
+          _bundle?.metrics,
+        );
       });
     } catch (e) {
       debugPrint('lighthouse hero reload failed: $e');
@@ -10010,45 +10150,68 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     final requestedEnd = _customEnd;
     final cacheKey =
         '$requestedPeriod|$requestedOffset|${requestedStart?.toIso8601String() ?? ""}|${requestedEnd?.toIso8601String() ?? ""}';
-    if (!force && _splitCacheKey == cacheKey && _loadedTabs.contains(tab))
+    final netTaSeriesReady =
+        tab != 'netTa' || lighthouseNetTAHeroSeriesReady(_bundle?.metrics);
+    if (!force &&
+        _splitCacheKey == cacheKey &&
+        _loadedTabs.contains(tab) &&
+        netTaSeriesReady) {
       return;
+    }
     if (_loadingTabs.contains(tab)) return;
     setState(() {
       _loadingTabs.add(tab);
       _tabErrors.remove(tab);
     });
     // 趋势和供给补充指标独立于列表结果，提前并行，不再串在 dimension 后面。
-    unawaited(_loadTrend(tab, force: force));
+    if (tab != 'netTa') unawaited(_loadTrend(tab, force: force));
     if (tab == 'supply') {
       unawaited(_loadDiscounts());
       unawaited(_loadFundPool());
     }
     try {
-      final data =
-          await (prefetched ??
-              _service.fetchDimension(
-                tab: tab,
-                period: requestedPeriod,
-                offset: requestedOffset,
-                startDate: requestedStart,
-                endDate: requestedEnd,
-              ));
-      final rows = (data['rows'] as List? ?? const [])
-          .whereType<Map>()
-          .map((e) => Map<String, dynamic>.from(e))
-          .toList();
+      late final List<Map<String, dynamic>> rows;
       Map<String, dynamic>? tabUi;
-      final metrics = data['metrics'];
-      if (metrics is Map) {
-        final m = Map<String, dynamic>.from(metrics);
-        if (m['tab'] is Map) {
-          tabUi = Map<String, dynamic>.from(m['tab'] as Map);
-        } else {
-          final ui = m['ui'];
-          if (ui is Map) {
-            final tabs = ui['tabs'];
-            if (tabs is Map && tabs[tab] is Map) {
-              tabUi = Map<String, dynamic>.from(tabs[tab] as Map);
+      Map<String, dynamic>? netTaMetrics;
+      if (tab == 'netTa') {
+        final data = await _service.fetchNetTA(
+          period: requestedPeriod,
+          offset: requestedOffset,
+          startDate: requestedStart,
+          endDate: requestedEnd,
+        );
+        netTaMetrics = data;
+        final cats = (data['categories'] as List? ?? const [])
+            .whereType<Map>()
+            .map((e) => Map<String, dynamic>.from(e))
+            .toList();
+        rows = lighthousePrepareNetTARows(cats);
+      } else {
+        final data =
+            await (prefetched ??
+                _service.fetchDimension(
+                  tab: tab,
+                  period: requestedPeriod,
+                  offset: requestedOffset,
+                  startDate: requestedStart,
+                  endDate: requestedEnd,
+                ));
+        rows = (data['rows'] as List? ?? const [])
+            .whereType<Map>()
+            .map((e) => Map<String, dynamic>.from(e))
+            .toList();
+        final metrics = data['metrics'];
+        if (metrics is Map) {
+          final m = Map<String, dynamic>.from(metrics);
+          if (m['tab'] is Map) {
+            tabUi = Map<String, dynamic>.from(m['tab'] as Map);
+          } else {
+            final ui = m['ui'];
+            if (ui is Map) {
+              final tabs = ui['tabs'];
+              if (tabs is Map && tabs[tab] is Map) {
+                tabUi = Map<String, dynamic>.from(tabs[tab] as Map);
+              }
             }
           }
         }
@@ -10063,6 +10226,95 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         base = base.withDimension(tab, rows);
         if (tabUi != null) {
           base = base.withTabUi(tab, tabUi);
+        }
+        if (netTaMetrics != null) {
+          final nextMetrics = Map<String, dynamic>.from(base.metrics);
+          final total = netTaMetrics['total'];
+          if (total is num) nextMetrics['netTa'] = total.toDouble();
+          final pct = netTaMetrics['deltaPct'];
+          if (pct is num) nextMetrics['netTaDeltaPct'] = pct.toDouble();
+          final dir = netTaMetrics['deltaDir'];
+          if (dir is String) nextMetrics['netTaDeltaDir'] = dir;
+          final unmapped = netTaMetrics['unmapped'];
+          if (unmapped is Map) {
+            final amt = unmapped['amount'];
+            if (amt is num) nextMetrics['netTaUnmapped'] = amt.toDouble();
+            final samples = unmapped['samples'];
+            if (samples is List) {
+              nextMetrics['netTaUnmappedSamples'] = [
+                for (final s in samples)
+                  if (s.toString().trim().isNotEmpty) s.toString().trim(),
+              ];
+            }
+          } else {
+            nextMetrics.remove('netTaUnmapped');
+            nextMetrics.remove('netTaUnmappedSamples');
+          }
+          lighthouseMergeNetTAHeroTrend(
+            nextMetrics,
+            lighthouseNetTAHeroTrendFromPayload(netTaMetrics),
+          );
+          // Hero 指标栏三列取数：后端 `hero` 已按 lighthouseNetTAHeroSections
+          // 的键名给好值与环比，这里摊平成 metrics，_deltaForMetric 直接可用。
+          // 放在 trend 合并之后：hero 是区间真实汇总，比曲线末点更权威。
+          final heroStats = netTaMetrics['hero'];
+          if (heroStats is Map) {
+            for (final entry in heroStats.entries) {
+              final key = entry.key.toString().trim();
+              final raw = entry.value;
+              if (key.isEmpty || raw is! Map) continue;
+              final value = raw['value'];
+              if (value is num) nextMetrics[key] = value.toDouble();
+              final pct = raw['deltaPct'];
+              if (pct is num) nextMetrics['${key}DeltaPct'] = pct.toDouble();
+              final dir = raw['deltaDir'];
+              if (dir is String) nextMetrics['${key}DeltaDir'] = dir;
+            }
+          }
+          final unmappedAmount = nextMetrics['netTaUnmapped'];
+          if (unmappedAmount is! num) nextMetrics['netTaUnmapped'] = 0.0;
+          // 存量锚点：账上现在有多少。拿不到就把键清掉 —— 界面上整行不渲染，
+          // 显示 0 会被读成「账上没钱」。
+          final bankBalance = netTaMetrics['bankBalance'];
+          if (bankBalance is Map) {
+            final total = bankBalance['total'];
+            if (total is num) {
+              nextMetrics['netTaBankBalance'] = total.toDouble();
+            } else {
+              nextMetrics.remove('netTaBankBalance');
+            }
+            final asOf = bankBalance['asOf']?.toString().trim() ?? '';
+            if (asOf.isNotEmpty) {
+              nextMetrics['netTaBankBalanceAt'] = asOf;
+            } else {
+              nextMetrics.remove('netTaBankBalanceAt');
+            }
+            final count = bankBalance['companyCount'];
+            if (count is num) {
+              nextMetrics['netTaBankBalanceCount'] = count.toInt();
+            } else {
+              nextMetrics.remove('netTaBankBalanceCount');
+            }
+            // 公司明细接口里已经给了（余额前 8 家），点开时直接用，不再多打一次请求。
+            final list = bankBalance['companies'];
+            if (list is List && list.isNotEmpty) {
+              nextMetrics['netTaBankBalanceList'] = [
+                for (final e in list.whereType<Map>())
+                  {
+                    'company': e['company']?.toString().trim() ?? '',
+                    'balance': (e['balance'] as num?)?.toDouble() ?? 0.0,
+                  },
+              ];
+            } else {
+              nextMetrics.remove('netTaBankBalanceList');
+            }
+          } else {
+            nextMetrics.remove('netTaBankBalance');
+            nextMetrics.remove('netTaBankBalanceAt');
+            nextMetrics.remove('netTaBankBalanceCount');
+            nextMetrics.remove('netTaBankBalanceList');
+          }
+          base = base.copyWith(metrics: nextMetrics);
         }
         _bundle = base;
         _splitCacheKey = cacheKey;
@@ -10084,13 +10336,15 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _loadingTabs.remove(tab);
         _tabErrors[tab] = e.toString().replaceFirst('Exception: ', '');
       });
+    } finally {
+      _loadingTabs.remove(tab);
     }
   }
 
   Future<void> _loadTrend(String tab, {bool force = false}) async {
+    if (tab == 'analysis' || tab == 'netTa') return;
     final requestedPeriod = _period;
     final requestedOffset = _periodOffset;
     final requestedStart = _customStart;
@@ -10476,20 +10730,12 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   }
 
   String _syncedAtLabel() {
-    final t = _lastSyncedAt ?? _nowCST();
-    final mo = t.month.toString().padLeft(2, '0');
-    final dd = t.day.toString().padLeft(2, '0');
-    final hh = t.hour.toString().padLeft(2, '0');
-    final mm = t.minute.toString().padLeft(2, '0');
-    return '$mo-$dd $hh:$mm';
+    return lighthouseSyncedAtStamp(_lastSyncedAt ?? _nowCST());
   }
 
-  /// header 内联版本：日期已展示在标题左侧，pill 只显示 HH:MM，避免重复。
+  /// header 内联版本：顶栏已不再单独放日期，胶囊里带上当天日期 + 时分。
   String _syncedAtLabelShort() {
-    final t = _lastSyncedAt ?? _nowCST();
-    final hh = t.hour.toString().padLeft(2, '0');
-    final mm = t.minute.toString().padLeft(2, '0');
-    return '$hh:$mm';
+    return lighthouseSyncedAtStamp(_lastSyncedAt ?? _nowCST());
   }
 
   Set<String> _liveMetrics(String tab) {
@@ -10585,7 +10831,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   List<Map<String, dynamic>> _rowsBeforeAnomalyFilter() {
     if (_bundle == null) return const [];
     var rows = _bundle!.rowsOf(_tab);
-    if (_groupFilter != '全部') {
+    if (_tab != 'netTa' && _groupFilter != '全部') {
       rows = rows.where((r) => r['group']?.toString() == _groupFilter).toList();
     }
     if (_hunFilter != '全部' && (_tab == 'supply' || _tab == 'channel')) {
@@ -10609,16 +10855,21 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     _discountExpanded = false;
 
     var rows = _rowsBeforeAnomalyFilter();
-    if (_anomalyFilter != '全部') {
+    if (_anomalyFilter != '全部' && _tab != 'netTa') {
       rows = rows.where((r) => _rowMatchesAnomaly(r, _anomalyFilter)).toList();
     }
-    final result = List<Map<String, dynamic>>.from(rows)
-      ..sort((a, b) {
+    final result = List<Map<String, dynamic>>.from(rows);
+    if (_tab != 'netTa') {
+      result.sort((a, b) {
         // costTotal / rate / grossMargin 等须走派生读数
         final pa = _rowMetricValue(a, _sortField);
         final pb = _rowMetricValue(b, _sortField);
         return _sortDesc ? pb.compareTo(pa) : pa.compareTo(pb);
       });
+    }
+    if (_tab == 'netTa') {
+      _listLimit = result.length;
+    }
     _rowsCacheKey = key;
     _rowsCache = result;
     return result;
@@ -10742,6 +10993,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   ///
   /// 切到产品 / 供给 / 渠道后，上一档分类的 summary 不能再显示成「本日毛利润」。
   bool get _heroSummaryMatchesGroup {
+    if (_tab == 'netTa') return true;
     return lighthouseHeroSummaryAppliesTo(
       tab: _tab,
       group: _groupFilter,
@@ -10767,6 +11019,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     final next = Map<String, dynamic>.from(shared);
     final ui = base.metrics['ui'];
     if (ui != null) next['ui'] = ui;
+    lighthouseCarryNetTAMetrics(base.metrics, next);
     _bundle = base.copyWith(metrics: next);
   }
 
@@ -11461,7 +11714,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             child: _wrapWithUiZoom(
               Column(
                 children: [
-                  // L2/L3 详情自带 sticky header（返回·灯塔·级别·生态树/刷新），
+                  // L2/L3 详情自带 sticky header（返回·灯塔·缩放/更新），
                   // 若再挂一级 AppBar 会叠出双份标题与右侧按钮。
                   if (_detailKey == null) _buildAppBar(),
                   Expanded(
@@ -11561,7 +11814,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                   ),
                   const SizedBox(width: 5),
                   Flexible(
-                    child: Text(
+                    child: LhScrollText(
                       _formatDateLabel(),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -11589,53 +11842,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             ),
           ),
           const SizedBox(width: 8),
-          Container(
-            height: lighthouseAppBarToolbarHeight,
-            padding: const EdgeInsets.symmetric(horizontal: 2),
-            decoration: BoxDecoration(
-              color: LhColors.paper,
-              borderRadius: BorderRadius.circular(
-                lighthouseAppBarToolbarRadius,
-              ),
-              border: Border.all(color: LhColors.line2, width: 0.7),
-              boxShadow: [
-                BoxShadow(
-                  color: LhColors.ink.withAlpha(10),
-                  blurRadius: 7,
-                  spreadRadius: -1,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _buildUiZoomButton(embedded: true),
-                Container(width: 0.5, height: 16, color: LhColors.line2),
-                _buildMarketTreeButton(embedded: true),
-                Container(width: 0.5, height: 16, color: LhColors.line2),
-                GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTap: (_isPageBusy || _refreshing || _loading)
-                      ? null
-                      : _refresh,
-                  child: SizedBox(
-                    width: 30,
-                    height: 28,
-                    child: Center(
-                      child: _isPageBusy
-                          ? const _LhBrandLoader(size: 15)
-                          : const Icon(
-                              Icons.refresh_rounded,
-                              size: 15,
-                              color: _LhPlum.primary,
-                            ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
+          _buildAppBarToolbar(),
         ],
       ),
     );
@@ -11769,77 +11976,98 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     unawaited(_persistUiZoom());
   }
 
-  /// 右上角缩放：紧凑 `- 100% +`，默认 100%。
-  Widget _buildUiZoomButton({bool embedded = false}) {
+  /// 右上角工具条：界面缩放 + 更新数据。生态树已从灯塔顶栏拿掉。
+  Widget _buildAppBarToolbar() {
+    return Container(
+      height: lighthouseAppBarToolbarHeight,
+      padding: const EdgeInsets.symmetric(horizontal: 3),
+      decoration: BoxDecoration(
+        color: LhColors.paper,
+        borderRadius: BorderRadius.circular(lighthouseAppBarToolbarRadius),
+        border: Border.all(color: LhColors.line2, width: 0.7),
+        boxShadow: [
+          BoxShadow(
+            color: LhColors.ink.withAlpha(10),
+            blurRadius: 7,
+            spreadRadius: -1,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _buildUiZoomButton(),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 2),
+            child: Container(width: 0.7, height: 14, color: LhColors.line2),
+          ),
+          _buildAppBarRefreshButton(),
+        ],
+      ),
+    );
+  }
+
+  /// 右上角缩放：缩小 / 实际大小 / 放大全部。
+  Widget _buildUiZoomButton() {
     final pct = (_uiZoom * 100).round();
     final atMin = (_uiZoom - _kUiZoomOptions.first).abs() < 0.001;
     final atMax = (_uiZoom - _kUiZoomOptions.last).abs() < 0.001;
+    final atDefault = (_uiZoom - 1.0).abs() < 0.001;
 
-    Widget step(
-      String label, {
+    Widget iconStep({
+      required IconData icon,
+      required String tooltip,
       required bool enabled,
       required VoidCallback onTap,
     }) {
-      return GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: enabled ? onTap : null,
-        child: SizedBox(
-          width: 18,
-          height: 24,
-          child: Center(
-            child: Text(
-              label,
-              style: LhTypography.mono(
-                size: 12,
-                color: enabled
-                    ? _LhPlum.primary
-                    : LhColors.mute2.withAlpha(120),
-                weight: FontWeight.w700,
-                height: 1.0,
-              ),
+      return Tooltip(
+        message: tooltip,
+        waitDuration: const Duration(milliseconds: 400),
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: enabled ? onTap : null,
+          child: SizedBox(
+            width: 30,
+            height: 28,
+            child: Icon(
+              icon,
+              size: 17,
+              color: enabled ? _LhPlum.primary : LhColors.mute2.withAlpha(110),
             ),
           ),
         ),
       );
     }
 
-    return Tooltip(
-      message: '界面缩放',
-      child: Container(
-        height: embedded ? 28 : 26,
-        padding: const EdgeInsets.symmetric(horizontal: 2),
-        decoration: embedded
-            ? null
-            : BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: _LhPlum.lavender, width: 1),
-                boxShadow: [
-                  BoxShadow(
-                    color: _LhPlum.deep.withAlpha(12),
-                    blurRadius: 4,
-                    spreadRadius: -1,
-                    offset: const Offset(0, 1),
-                  ),
-                ],
-              ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            step('−', enabled: !atMin, onTap: () => _nudgeUiZoom(-1)),
-            GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: () {
-                if ((_uiZoom - 1.0).abs() < 0.001) return;
-                setState(() => _uiZoom = 1.0);
-                unawaited(_persistUiZoom());
-              },
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 2),
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        iconStep(
+          icon: Icons.zoom_out_rounded,
+          tooltip: '缩小',
+          enabled: !atMin,
+          onTap: () => _nudgeUiZoom(-1),
+        ),
+        Tooltip(
+          message: atDefault ? '实际大小' : '恢复实际大小',
+          waitDuration: const Duration(milliseconds: 400),
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: atDefault
+                ? null
+                : () {
+                    setState(() => _uiZoom = 1.0);
+                    unawaited(_persistUiZoom());
+                  },
+            child: SizedBox(
+              width: 36,
+              height: 28,
+              child: Center(
                 child: Text(
                   '$pct%',
                   style: LhTypography.mono(
-                    size: 9.5,
+                    size: 10,
                     color: _LhPlum.primary,
                     weight: FontWeight.w700,
                     letterSpacing: 0.1,
@@ -11848,50 +12076,41 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 ),
               ),
             ),
-            step('+', enabled: !atMax, onTap: () => _nudgeUiZoom(1)),
-          ],
+          ),
         ),
-      ),
+        iconStep(
+          icon: Icons.zoom_in_rounded,
+          tooltip: '放大全部',
+          enabled: !atMax,
+          onTap: () => _nudgeUiZoom(1),
+        ),
+      ],
     );
   }
 
-  /// 平台生态树入口：AppBar 右上角小树按钮。
-  Widget _buildMarketTreeButton({bool embedded = false}) {
+  Widget _buildAppBarRefreshButton() {
+    final busy = _isPageBusy || _refreshing || _loading;
     return Tooltip(
-      message: '沙丘 · 生态树',
+      message: busy ? '正在更新…' : '更新数据',
+      waitDuration: const Duration(milliseconds: 400),
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
-        onTap: _openPlatformTree,
-        child: Container(
-          width: embedded ? 30 : 32,
-          height: embedded ? 28 : 32,
-          decoration: embedded
-              ? null
-              : BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: _LhPlum.lavender, width: 1),
-                  boxShadow: [
-                    BoxShadow(
-                      color: _LhPlum.deep.withAlpha(14),
-                      blurRadius: 6,
-                      spreadRadius: -1,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-                ),
-          child: Icon(
-            Icons.account_tree_outlined,
-            size: 16,
-            color: _LhPlum.primary,
+        onTap: busy ? null : _refresh,
+        child: SizedBox(
+          width: 32,
+          height: 28,
+          child: Center(
+            child: busy
+                ? const _LhBrandLoader(size: 15)
+                : const Icon(
+                    Icons.sync_rounded,
+                    size: 16,
+                    color: _LhPlum.primary,
+                  ),
           ),
         ),
       ),
     );
-  }
-
-  void _openPlatformTree() {
-    widget.navigation.go('LM');
   }
 
   // ───── Greeting ───────────────────────────────────────────────────────────
@@ -12541,7 +12760,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 ),
                 const SizedBox(width: 8),
                 Flexible(
-                  child: Text(
+                  child: LhScrollText(
                     _isCustomRange
                         ? '自定义区间'
                         : _periodInstanceLabel(_period, _periodOffset),
@@ -12808,8 +13027,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             children: [
               _buildTabSegment(),
               if (_tab != 'analysis') ...[
-                _buildSortbar(showHighlight: true),
-                Container(height: 0.7, color: LhColors.line2),
+                if (_tab == 'netTa') _buildNetTAListMeta(),
+                if (_tab != 'netTa') ...[
+                  _buildSortbar(showHighlight: true),
+                  Container(height: 0.7, color: LhColors.line2),
+                ],
                 _buildList(embedded: true),
               ],
             ],
@@ -12827,11 +13049,183 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         return '供给方汇总';
       case 'channel':
         return '渠道汇总';
+      case 'netTa':
+        return '净TA汇总';
       case 'analysis':
         return '分析总览';
       default:
         return '汇总';
     }
+  }
+
+  Map<String, dynamic>? _netTACategoryRow(String name) {
+    for (final r
+        in _bundle?.rowsOf('netTa') ?? const <Map<String, dynamic>>[]) {
+      if (r['name']?.toString() == name) return r;
+    }
+    return null;
+  }
+
+  double _netTACategoryAmount(String name) =>
+      (_netTACategoryRow(name)?['netTa'] as num?)?.toDouble() ?? 0;
+
+  Widget _buildNetTAListMeta() {
+    final unmapped = (_bundle?.metrics['netTaUnmapped'] as num?)?.toDouble();
+    if (unmapped == null || unmapped.abs() <= 1e-9) {
+      return const SizedBox.shrink();
+    }
+    final samples =
+        (_bundle?.metrics['netTaUnmappedSamples'] as List? ?? const [])
+            .map((e) => e.toString())
+            .where((e) => e.isNotEmpty)
+            .toList();
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(13, 10, 13, 4),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(11, 9, 11, 9),
+        decoration: BoxDecoration(
+          color: LhColors.copperSoft,
+          border: Border.all(color: const Color(0xFFEEDFC2)),
+          borderRadius: BorderRadius.circular(9),
+        ),
+        child: Text.rich(
+          TextSpan(
+            style: LhTypography.sans(
+              size: 11,
+              color: const Color(0xFF7A5514),
+              height: 1.55,
+            ),
+            children: [
+              const TextSpan(text: '本期 '),
+              TextSpan(
+                text: _fmtAmountWithUnit(unmapped),
+                style: const TextStyle(fontWeight: FontWeight.w700),
+              ),
+              const TextSpan(text: ' 流水未匹配资金分类，未计入净TA'),
+              if (samples.isNotEmpty)
+                TextSpan(text: ' — ${samples.join('、')}'),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// [shareBase] 给了就在环比缺失时退回「占 x%」（占该桶明细绝对值之和）。
+  /// 资管这些二级分类经常没有上期数，一整屏「—」等于什么都没说。
+  Widget _buildNetTAMetricGrid(
+    List<Map<String, dynamic>> metrics, {
+    bool inflowBadge = false,
+    double shareBase = 0,
+  }) {
+    Widget tile(Map<String, dynamic> m) {
+      final name = m['name']?.toString() ?? '';
+      final v = (m['netTa'] as num?)?.toDouble() ?? 0;
+      final delta = _deltaFromEntityRow(m, 'netTa');
+      final share = (delta == null && shareBase > 0 && v.abs() > 0)
+          ? v.abs() / shareBase * 100
+          : null;
+      final showIn = inflowBadge && v > 0 && !name.startsWith('其余');
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Flexible(
+                child: LhScrollText(
+                  name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: LhTypography.sans(
+                    size: 10,
+                    color: LhColors.mute,
+                    weight: FontWeight.w500,
+                  ),
+                ),
+              ),
+              if (showIn) ...[
+                const SizedBox(width: 4),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 3,
+                    vertical: 0,
+                  ),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFEDF3EA),
+                    borderRadius: BorderRadius.circular(3),
+                  ),
+                  child: Text(
+                    '流入',
+                    style: LhTypography.sans(
+                      size: 8,
+                      color: LhColors.pos,
+                      weight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+          const SizedBox(height: 1),
+          Text.rich(
+            TextSpan(
+              children: [
+                TextSpan(
+                  text: _fmtMoney(v),
+                  style: LhTypography.number(
+                    size: lighthouseLedgerValueFontSize,
+                    color: LhColors.ink,
+                  ),
+                ),
+                TextSpan(
+                  text: _unitMoney(v),
+                  style: LhTypography.sans(
+                    size: lighthouseLedgerUnitFontSize,
+                    color: LhColors.mute,
+                    weight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 1),
+          Text(
+            delta != null
+                ? '${delta.isUp ? '↑' : '↓'}'
+                      '${delta.pct.abs().toStringAsFixed(delta.pct.abs() >= 10 ? 0 : 1)}%'
+                : (share != null ? '占 ${share.toStringAsFixed(1)}%' : '—'),
+            style: LhTypography.mono(
+              size: 8.5,
+              color: delta == null
+                  ? LhColors.mute2
+                  : (delta.isUp ? LhColors.neg : LhColors.pos),
+              weight: FontWeight.w600,
+            ),
+          ),
+        ],
+      );
+    }
+
+    final rows = <Widget>[];
+    for (var i = 0; i < metrics.length; i += 2) {
+      rows.add(
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(child: tile(metrics[i])),
+            const SizedBox(width: 16),
+            Expanded(
+              child: i + 1 < metrics.length
+                  ? tile(metrics[i + 1])
+                  : const SizedBox.shrink(),
+            ),
+          ],
+        ),
+      );
+      if (i + 2 < metrics.length) rows.add(const SizedBox(height: 8));
+    }
+    return Column(children: rows);
   }
 
   String get _profitPeriodLabel =>
@@ -12869,10 +13263,12 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         : sales;
     final spreadRate = anchor > 0 ? revenue / anchor * 100 : 0.0;
     final prepaid = (e['prepaid'] as num?)?.toDouble() ?? 0.0;
+    final netTa = (e['netTa'] as num?)?.toDouble();
     return {
       'sales': sales,
       'verifiedSales': verified,
       'prepaid': prepaid,
+      if (netTa != null) 'netTa': netTa,
       'gmv': gmv,
       'cost': cost,
       'projectCost': projectCost,
@@ -13168,6 +13564,81 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     Map<String, double> totals,
     List<double> profitSeries,
   ) {
+    bool usable(List<double> s) {
+      if (s.length < 2) return false;
+      for (final v in s) {
+        if (v.abs() > 1e-9) return true;
+      }
+      return false;
+    }
+
+    if (_tab == 'netTa') {
+      _HeroTrendLine? line({
+        required String key,
+        required String name,
+        required Color color,
+        required List<double> series,
+        double? total,
+        bool hero = false,
+      }) {
+        if (!usable(series)) return null;
+        return _HeroTrendLine(
+          key: key,
+          name: name,
+          color: color,
+          values: series,
+          total: total,
+          hero: hero,
+        );
+      }
+
+      return [
+        ?line(
+          key: 'netTa',
+          name: '累计净TA',
+          color: _LhPlum.primary,
+          series: _seriesForMetric('netTa'),
+          total: totals['netTa'],
+          hero: true,
+        ),
+        ?line(
+          key: 'netTaOperating',
+          name: '经营活动',
+          color: Color(lighthouseRevenueAccentValue),
+          series: _seriesForMetric('netTaOperating'),
+          total: totals['netTaOperating'],
+        ),
+        ?line(
+          key: 'netTaFinancing',
+          name: '筹资活动',
+          color: Color(lighthouseScaleAccentValue),
+          series: _seriesForMetric('netTaFinancing'),
+          total: totals['netTaFinancing'],
+        ),
+        ?line(
+          key: 'netTaOpCost',
+          name: '经营成本',
+          color: Color(lighthouseCostAccentValue),
+          series: _seriesForMetric('netTaOpCost'),
+          total: totals['netTaOpCost'],
+        ),
+        ?line(
+          key: 'netTaProjectCost',
+          name: '项目成本',
+          color: Color(lighthouseProfitAccentValue),
+          series: _seriesForMetric('netTaProjectCost'),
+          total: totals['netTaProjectCost'],
+        ),
+        ?line(
+          key: 'netTaBizCost',
+          name: '业务成本',
+          color: Color(lighthouseNetTABizCostAccentValue),
+          series: _seriesForMetric('netTaBizCost'),
+          total: totals['netTaBizCost'],
+        ),
+      ].whereType<_HeroTrendLine>().toList(growable: false);
+    }
+
     const scaleColor = Color(lighthouseScaleAccentValue);
     const revenueColor = Color(lighthouseRevenueAccentValue);
     const costColor = Color(lighthouseCostAccentValue);
@@ -13177,14 +13648,6 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     final sales = _seriesForMetric('sales');
     final revenue = _seriesForMetric('revenue');
     final totalCost = _seriesForMetric('totalCost');
-
-    bool usable(List<double> s) {
-      if (s.length < 2) return false;
-      for (final v in s) {
-        if (v.abs() > 1e-9) return true;
-      }
-      return false;
-    }
 
     // anchor 决定规模族谁是主线；主口径序列缺了就让另一条顶上，
     // 别让「规模」整条从 hero 图里消失。
@@ -13212,9 +13675,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     final salesLine = scaleLine('sales', '销售', sales);
 
     final out = <_HeroTrendLine>[];
-    for (final l in verifiedIsHero
-        ? <_HeroTrendLine>[verifiedLine, salesLine]
-        : <_HeroTrendLine>[salesLine, verifiedLine]) {
+    for (final l
+        in verifiedIsHero
+            ? <_HeroTrendLine>[verifiedLine, salesLine]
+            : <_HeroTrendLine>[salesLine, verifiedLine]) {
       if (l.hasData) out.add(l);
     }
     for (final l in <_HeroTrendLine>[
@@ -13257,6 +13721,74 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     required List<String> labels,
     double? chartMaxHeight,
   }) {
+    if (_tab == 'netTa') {
+      final netTa = _normalizeTrendSeriesForChart(_seriesForMetric('netTa'));
+      final operating = _normalizeTrendSeriesForChart(
+        _seriesForMetric('netTaOperating'),
+      );
+      final financing = _normalizeTrendSeriesForChart(
+        _seriesForMetric('netTaFinancing'),
+      );
+      final opCost = _normalizeTrendSeriesForChart(
+        _seriesForMetric('netTaOpCost'),
+      );
+      final projectCost = _normalizeTrendSeriesForChart(
+        _seriesForMetric('netTaProjectCost'),
+      );
+      final businessCost = _normalizeTrendSeriesForChart(
+        _seriesForMetric('netTaBizCost'),
+      );
+      return LayoutBuilder(
+        builder: (context, _) {
+          final overlaySlot = lighthouseNetTAHeroOverlaySlot(_expandedTrendKey);
+          final chartLabels = labels.isNotEmpty
+              ? labels
+              : _heroTrendLabels(netTa.length);
+          return _TrendChart(
+            key: const ValueKey('hero-overview-netTa'),
+            labels: chartLabels,
+            scale: netTa,
+            scaleLabel: '净TA',
+            scaleAlt: financing,
+            scaleAltLabel: '筹资活动',
+            revenue: operating,
+            revenueLabel: '经营活动',
+            cost: opCost,
+            costLabel: '经营成本',
+            profit: projectCost,
+            profitLabel: '项目成本',
+            costAlt: businessCost,
+            costAltLabel: '业务成本',
+            unsignedSlots: const {'cost', 'profit', 'costAlt', 'scaleAlt'},
+            periodScale: totals['netTa'],
+            periodScaleAlt: totals['netTaFinancing'],
+            periodRevenue: totals['netTaOperating'],
+            periodCost: totals['netTaOpCost'],
+            periodProfit: totals['netTaProjectCost'],
+            periodCostAlt: totals['netTaBizCost'],
+            periodScaleDeltaPct: lighthouseSeriesSignedDeltaPct(netTa),
+            periodScaleAltDeltaPct: lighthouseSeriesSignedDeltaPct(financing),
+            periodRevenueDeltaPct: lighthouseSeriesSignedDeltaPct(operating),
+            periodCostDeltaPct: lighthouseSeriesSignedDeltaPct(opCost),
+            periodProfitDeltaPct: lighthouseSeriesSignedDeltaPct(projectCost),
+            periodCostAltDeltaPct: lighthouseSeriesSignedDeltaPct(businessCost),
+            showHeader: false,
+            showScrubHint: false,
+            fitHeight: true,
+            chartHeight: 48,
+            rangeLabel: _heroTrendRangeLabel(chartLabels),
+            title: _heroTrendTitle(),
+            partialPeriod: _heroTrendLastIsPartial,
+            soloKey: overlaySlot,
+            onSoloChanged: (slot) {
+              setState(() {
+                _expandedTrendKey = lighthouseNetTAHeroMetricFromSlot(slot);
+              });
+            },
+          );
+        },
+      );
+    }
     final preferVerified = _anchor == _LhAnchor.verified;
     final verified = _seriesForMetric('verifiedSales');
     final sales = _seriesForMetric('sales');
@@ -13285,8 +13817,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       altKey = '';
       scaleAlt = const <double>[];
     }
-    String scaleNameOf(String k) =>
-        k == 'verifiedSales' ? '核销规模' : '销售规模';
+    String scaleNameOf(String k) => k == 'verifiedSales' ? '核销规模' : '销售规模';
     final focus = _expandedTrendKey;
     final overlaySlot = lighthouseHeroOverlaySoloSlot(
       metricKey: focus,
@@ -13306,7 +13837,8 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             76.0 +
             18.0 +
             (_isCurrentMonthView && scale.isNotEmpty ? 24.0 : 0.0);
-        final chartMax = chartMaxHeight ?? lighthouseCompactHeroChartMaxHeightWide;
+        final chartMax =
+            chartMaxHeight ?? lighthouseCompactHeroChartMaxHeightWide;
         final chartH = (maxH - reserved).clamp(48.0, chartMax);
         if (swapMetric) {
           return _heroMetricSoloTrendChart(
@@ -13383,7 +13915,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   }) {
     // 主 Hero 大数固定毛利润；下方小格展开只影响走势面板，不改 masthead。
     // 核销/销售 chip 只切换效率分母（ROI / 毛利率口径）。
-    final mastheadKey = lighthouseHeroMastheadKey(_expandedTrendKey);
+    final mastheadKey = _tab == 'netTa'
+        ? 'netTa'
+        : lighthouseHeroMastheadKey(_expandedTrendKey);
     final mastheadIsRate = lighthouseHeroMetricIsRate(mastheadKey);
 
     late final Map<String, double> totals;
@@ -13554,10 +14088,24 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         keys: const ['prepaid'],
         rowSum: sumPrepaid,
       );
+      // 净TA 是公司级银行流水，不能按产品行加总。
+      final heroNetTa = _heroAmountFrom(
+        metrics: metrics,
+        useRowAmounts: false,
+        metricsMatch: metricsMatch,
+        keys: const ['netTa'],
+        rowSum: 0,
+      );
       totals = {
         'sales': heroSales,
         'verifiedSales': heroVerified,
         'prepaid': heroPrepaid,
+        'netTa': heroNetTa,
+        'netTaOperating': _netTACategoryAmount('经营活动'),
+        'netTaFinancing': _netTACategoryAmount('筹资活动'),
+        'netTaOpCost': _netTACategoryAmount('经营成本'),
+        'netTaProjectBiz':
+            _netTACategoryAmount('项目成本') + _netTACategoryAmount('业务成本'),
         'gmv': heroGmv,
         'cost': heroCost,
         'projectCost': heroProjectCost,
@@ -13574,13 +14122,25 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         'spreadRate': spreadRate,
         'rate': sumRate,
       };
+      if (_tab == 'netTa') {
+        // 净TA 指标栏的流入 / 流出 / 五类净额全部来自 metrics（公司级银行流水），
+        // 不能按行加总，所以在这里补进 totals 而不是走 rowSum。
+        for (final key in lighthouseNetTAHeroMetricKeys()) {
+          final value = _metricNum(metrics, key);
+          if (value != null) totals[key] = value;
+        }
+      }
       heroMastheadValue =
           lighthouseHeroMetricValue(totals, mastheadKey) ?? heroProfit;
       mastheadIsNeg = heroMastheadValue < 0;
-      profitSeries = _seriesForMetric('profit');
+      profitSeries = _tab == 'netTa'
+          ? _seriesForMetric('netTa')
+          : _seriesForMetric('profit');
     }
 
-    final profitDelta = profitDeltaOverride ?? _deltaForMetric('profit');
+    final profitDelta =
+        profitDeltaOverride ??
+        _deltaForMetric(_tab == 'netTa' ? 'netTa' : 'profit');
 
     final profitLabels =
         (profitLabelsOverride != null && profitLabelsOverride.isNotEmpty)
@@ -13590,7 +14150,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     // 主 Hero 与账本展开共用 _TrendChart：叠线 + 图例，点图例只留一条。
     final heroTrendLines = _buildHeroTrendLines(totals, profitSeries);
     final hasMultiTrend = heroTrendLines.length >= 2;
-    final hasHeroTrend = hasMultiTrend || hasProfitTrend;
+    final hasHeroTrend = _tab == 'netTa' || hasMultiTrend || hasProfitTrend;
     final heroTrendPointCount = heroTrendLines.fold<int>(
       0,
       (acc, l) => math.max(acc, l.values.length),
@@ -13657,7 +14217,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             ),
             const SizedBox(width: 7),
             Flexible(
-              child: Text(
+              child: LhScrollText(
                 title,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
@@ -13683,26 +14243,33 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           child: LayoutBuilder(
             builder: (context, box) {
               final heroW = box.maxWidth;
-              final sparkH = lighthouseCompactHeroSparkHeightFor(heroW);
+              final hasBankBalance = _tab == 'netTa' &&
+                  (_bundle?.metrics['netTaBankBalance'] as num?) != null;
+              final sparkH = _tab == 'netTa'
+                  ? lighthouseNetTAHeroSparkHeightFor(
+                      heroW,
+                      hasBankBalance: hasBankBalance,
+                    )
+                  : lighthouseCompactHeroSparkHeightFor(heroW);
               final chartMaxH = lighthouseCompactHeroChartMaxHeightFor(heroW);
-              final trendSectionH =
-                  sparkH + lighthouseHeroChartCardPadding * 2;
+              final trendSectionH = sparkH + lighthouseHeroChartCardPadding * 2;
 
               final kpiCard = Container(
                 padding: EdgeInsets.all(lighthouseHeroCardPadding),
                 decoration: BoxDecoration(
                   color: const Color(0xFFFFFDFF),
                   border: Border.all(color: _LhPlum.heroEdge, width: 0.7),
-                  borderRadius: BorderRadius.circular(
-                    lighthouseHeroCardRadius,
-                  ),
+                  borderRadius: BorderRadius.circular(lighthouseHeroCardRadius),
                 ),
                 // 固定行高内容偏满时勿裁切环比行（↓xx% vs 昨日）。
                 clipBehavior: Clip.none,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
+                  // 存量块加进来之后内容变高，但仍然填不满卡 —— 顶着上边缘会
+                  // 让左卡和右卡的视觉重心错位，所以统一居中。
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
+                    if (_tab == 'netTa') _buildNetTABankBalanceLine(),
                     if (lighthouseHeroMastheadLabelAboveNumber) ...[
                       Container(
                         padding: const EdgeInsets.fromLTRB(5, 4, 7, 4),
@@ -13736,7 +14303,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                             ),
                             const SizedBox(width: 5),
                             Text(
-                              _profitPeriodLabel,
+                              lighthouseHeroMetricPeriodLabel(
+                                _period,
+                                mastheadKey,
+                              ),
                               style: LhTypography.sans(
                                 size: lighthouseHeroMastheadLabelFontSize,
                                 color: LhColors.ink,
@@ -13755,7 +14325,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                           ? heroMastheadValue
                           : heroMastheadValue.abs(),
                       duration: const Duration(milliseconds: 800),
-                      builder: (context, v) => RichText(
+                      builder: (context, v) => LhScrollRichText(
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         text: TextSpan(
@@ -13780,9 +14350,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                               ),
                             ),
                             TextSpan(
-                              text: mastheadIsRate
-                                  ? '%'
-                                  : ' ${_unitMoney(v)}',
+                              text: mastheadIsRate ? '%' : ' ${_unitMoney(v)}',
                               style: LhTypography.sans(
                                 size: 10.5,
                                 color: LhColors.mute,
@@ -13801,16 +14369,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
 
               final trendCard = Container(
                 clipBehavior: Clip.none,
-                padding: const EdgeInsets.all(
-                  lighthouseHeroChartCardPadding,
-                ),
+                padding: const EdgeInsets.all(lighthouseHeroChartCardPadding),
                 decoration: lighthouseHeroChartUsesCardSurface
                     ? BoxDecoration(
                         color: const Color(0xFFFFFDFF),
-                        border: Border.all(
-                          color: _LhPlum.heroEdge,
-                          width: 0.7,
-                        ),
+                        border: Border.all(color: _LhPlum.heroEdge, width: 0.7),
                         borderRadius: BorderRadius.circular(
                           lighthouseHeroCardRadius,
                         ),
@@ -13825,7 +14388,12 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                             : null,
                       )
                     : null,
-                child: hasHeroTrend
+                child:
+                    (_tab == 'netTa' &&
+                        _netTaBalanceOpen &&
+                        _netTABankBalanceRows().isNotEmpty)
+                    ? _buildNetTABankBalancePanel()
+                    : hasHeroTrend
                     ? _buildHeroUnifiedTrendChart(
                         totals: totals,
                         profitSeries: profitSeries,
@@ -13859,6 +14427,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         ),
 
         // ── § 05 · Stat rail (7 格全平铺, 固定 4 列网格) ─────────────
+        // netTa 走同一条路径，只是分区换成 流入 / 流出 / 未映射 / 五类净额。
         _buildHeroStatRail(totals, whiteBackground: totalsOverride != null),
       ],
     );
@@ -13883,7 +14452,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Flexible(
-                  child: Text(
+                  child: LhScrollText(
                     label,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -14083,7 +14652,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 ],
                 ConstrainedBox(
                   constraints: const BoxConstraints(maxWidth: 120),
-                  child: Text(
+                  child: LhScrollText(
                     filters[i].value,
                     style: LhTypography.sans(
                       size: 13,
@@ -14148,7 +14717,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           const SizedBox(width: 7),
           // 中间: 汉字面包屑 (values 用中点分隔, 每个 value 深色, 分隔浅色)
           Expanded(
-            child: RichText(
+            child: LhScrollRichText(
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               text: TextSpan(
@@ -14276,7 +14845,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                             const SizedBox(width: 4),
                             // value — 大号 bold
                             Flexible(
-                              child: Text(
+                              child: LhScrollText(
                                 filters[i].value,
                                 style: LhTypography.sans(
                                   size: 14,
@@ -15571,7 +16140,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           ),
           const SizedBox(width: 5),
           Flexible(
-            child: Text(
+            child: LhScrollText(
               title,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
@@ -15671,6 +16240,66 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                   const SizedBox(height: 7),
                   metric('prepaid', '预收净增', prepaid.toDouble()),
                 ],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // 净TA：公司级银行流水，没有规模 / 成本 / 利润，换成
+    // 资金流入 → 资金流出 → 五类净额，三列 flex 与产品 hero 一致。
+    // 这里只做总览：净TA 总额已经是 hero 大数，不再重复；未映射走列表顶部提示条；
+    // 五个桶的二级分类在列表里点开看，不占 Hero。
+    if (_tab == 'netTa' && entityRow == null) {
+      double nt(String key) => totals[key] ?? 0;
+      ({String key, String label, double value, bool isRate}) cell(
+        String key,
+        String label,
+      ) => (key: key, label: label, value: nt(key), isRate: false);
+      return IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(
+              flex: lighthouseHeroScaleColumnFlex,
+              child: strip(
+                sectionKey: 'scale',
+                title: '资金流入',
+                child: metricGrid([
+                  cell('netTaInflow', '流入合计'),
+                  cell('netTaOperatingInflow', '经营活动流入'),
+                  cell('netTaOtherInflow', '其他流入'),
+                ], columns: 1),
+              ),
+            ),
+            const SizedBox(width: lighthouseHeroCardGap),
+            Expanded(
+              flex: lighthouseHeroCostColumnFlex,
+              child: strip(
+                sectionKey: 'cost',
+                title: '资金流出',
+                child: metricGrid([
+                  cell('netTaOutflow', '流出合计'),
+                  cell('netTaOperatingOutflow', '经营性流出'),
+                  cell('netTaFinancingOutflow', '筹资流出'),
+                  cell('netTaCostOutflow', '项目+业务成本'),
+                ], columns: 2),
+              ),
+            ),
+            const SizedBox(width: lighthouseHeroCardGap),
+            Expanded(
+              flex: lighthouseHeroResultColumnFlex,
+              child: strip(
+                sectionKey: 'profit',
+                title: '五类净额',
+                child: metricGrid([
+                  cell('netTaOperating', '经营活动'),
+                  cell('netTaFinancing', '筹资活动'),
+                  cell('netTaOpCost', '经营成本'),
+                  cell('netTaProjectCost', '项目成本'),
+                  cell('netTaBizCost', '业务成本'),
+                ], columns: 2),
               ),
             ),
           ],
@@ -15798,6 +16427,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     final deltaColor = delta == null
         ? LhColors.mute2
         : (delta.isUp ? LhColors.neg : LhColors.pos);
+    final displayValue = isRate
+        ? value
+        : lighthouseHeroMetricDisplayAmount(keyId, value);
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
@@ -15815,7 +16447,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(
+            LhScrollText(
               label,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
@@ -15837,9 +16469,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             ),
             const SizedBox(height: 3),
             _LhAnimatedNumber(
-              value: value,
+              value: displayValue,
               duration: const Duration(milliseconds: 700),
-              builder: (context, v) => RichText(
+              builder: (context, v) => LhScrollRichText(
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 text: TextSpan(
@@ -16099,7 +16731,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               children: [
                 Container(height: 2, width: 14, color: accent.bar),
                 const SizedBox(height: 6),
-                Text(
+                LhScrollText(
                   label,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -16111,7 +16743,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                   ),
                 ),
                 const SizedBox(height: 5),
-                RichText(
+                LhScrollRichText(
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   text: TextSpan(
@@ -16487,7 +17119,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               if (trendMeta.isNotEmpty) ...[
                 const SizedBox(width: 10),
                 Flexible(
-                  child: Text(
+                  child: LhScrollText(
                     trendMeta,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -16805,7 +17437,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             ),
             const SizedBox(height: 6),
             // ── ③ 环比 (居中) ──────────────────────────────────
-            Text(
+            LhScrollText(
               momCompact,
               textAlign: TextAlign.center,
               style: LhTypography.mono(
@@ -16920,7 +17552,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             const SizedBox(width: 7),
           ],
           Expanded(
-            child: Text(
+            child: LhScrollText(
               rest,
               style: LhTypography.mono(
                 size: 10,
@@ -17385,6 +18017,15 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
 
   /// Hero 走势标签（优先后端 heroSeriesLabels）
   List<String> _heroTrendLabels(int n) {
+    if (_tab == 'netTa') {
+      final raw = _bundle?.metrics['netTaSeriesLabels'];
+      if (raw is List && raw.isNotEmpty) {
+        return raw.map((e) => e.toString()).toList(growable: false);
+      }
+      if (n <= 0) return const <String>[];
+      if (n == 2) return const ['上期', '本期'];
+      return List<String>.generate(n, (i) => '${i + 1}', growable: false);
+    }
     final raw = _bundle?.metrics['heroSeriesLabels'];
     if (raw is List && raw.isNotEmpty) {
       return raw.map((e) => e.toString()).toList(growable: false);
@@ -17400,6 +18041,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   }
 
   String _heroTrendTitle() {
+    if (_tab == 'netTa') {
+      final title = _bundle?.metrics['netTaSeriesTitle']?.toString();
+      if (title != null && title.isNotEmpty) return title;
+      return '走势';
+    }
     final title = _bundle?.metrics['heroSeriesTitle']?.toString();
     if (title != null && title.isNotEmpty && title != '环比上月') {
       return title;
@@ -17418,8 +18064,13 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   }
 
   String _heroTrendRangeLabel(List<String> labels) {
-    final raw = _bundle?.metrics['heroSeriesRangeLabel']?.toString();
-    if (raw != null && raw.isNotEmpty) return raw;
+    if (_tab == 'netTa') {
+      final netTaRange = _bundle?.metrics['netTaSeriesRangeLabel']?.toString();
+      if (netTaRange != null && netTaRange.isNotEmpty) return netTaRange;
+    } else {
+      final raw = _bundle?.metrics['heroSeriesRangeLabel']?.toString();
+      if (raw != null && raw.isNotEmpty) return raw;
+    }
     if (labels.isEmpty) return '';
     if (labels.length == 1) return labels.first;
     return '${labels.first} — ${labels.last}';
@@ -17439,6 +18090,8 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       case 'spread':
         return _LhPlum.primary;
       case 'prepaid':
+        return Color(lighthouseHeroSectionAccentValues['cash']!);
+      case 'netTa':
         return Color(lighthouseHeroSectionAccentValues['cash']!);
       case 'profit':
       case 'netProfit':
@@ -17943,6 +18596,18 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   /// 二级/三级：只使用当前实体 trend；缺失时留空，禁止跨层串档。
   /// L1：仅当 summary.filterGroup 与当前分类一致时才用序列，避免串档。
   List<double> _seriesForMetric(String key) {
+    if (_tab == 'netTa' && _detailKey == null) {
+      return switch (key) {
+        'netTa' => _readMetricSeries('netTaSeries'),
+        'netTaOperating' => _readMetricSeries('netTaOperatingSeries'),
+        'netTaFinancing' => _readMetricSeries('netTaFinancingSeries'),
+        'netTaOpCost' => _readMetricSeries('netTaOpCostSeries'),
+        'netTaProjectCost' => _readMetricSeries('netTaProjectCostSeries'),
+        'netTaBizCost' => _readMetricSeries('netTaBizCostSeries'),
+        'netTaProjectBiz' => _readMetricSeries('netTaProjectBizSeries'),
+        _ => _readMetricSeries('${key}Series'),
+      };
+    }
     if (_detailKey != null) {
       final detail = _currentDetailSummaryForTrend();
       if (detail != null) {
@@ -18245,6 +18910,17 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         final prepaid = (r['prepaid'] as num?)?.toDouble();
         if (prepaid != null) return prepaid;
         return null;
+      case 'netTa':
+        return (r['netTa'] as num?)?.toDouble();
+      case 'inflow':
+      case 'outflow':
+        final flow = (r[key] as num?)?.toDouble();
+        if (flow == null || flow.abs() < 1e-9) return null;
+        return flow;
+      case 'sharePct':
+        return (r['sharePct'] as num?)?.toDouble();
+      case lighthouseLedgerSummaryBlankKey:
+        return null;
       default:
         // discount 等字段是 Map，不能按 num 强转
         final raw = r[key];
@@ -18434,7 +19110,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text(
+        LhScrollText(
           label,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
@@ -18449,7 +19125,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         const SizedBox(height: 3),
         _metricPageStripValue(key),
         const SizedBox(height: 2),
-        Text(
+        LhScrollText(
           _momText(delta, unit: deltaUnit, prefix: false, up: '▲', down: '▼'),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
@@ -18484,7 +19160,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       height: numSize,
       child: Align(
         alignment: Alignment.centerLeft,
-        child: RichText(
+        child: LhScrollRichText(
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           text: TextSpan(children: spans),
@@ -18770,7 +19446,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               ),
               const SizedBox(width: 8),
               Flexible(
-                child: Text(
+                child: LhScrollText(
                   name,
                   style: LhTypography.sans(
                     size: 14,
@@ -18975,7 +19651,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         );
       }
     }
-    return RichText(
+    return LhScrollRichText(
       text: TextSpan(children: spans),
       overflow: TextOverflow.ellipsis,
       maxLines: 1,
@@ -19161,7 +19837,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       }
       return null;
     } else {
-      if (_heroLocalOnlyFilterActive) return null;
+      if (_tab != 'netTa' && _heroLocalOnlyFilterActive) return null;
       final m = _bundle?.metrics ?? const <String, dynamic>{};
       final deltaAvailable = m['deltaAvailable'] != false;
 
@@ -19316,11 +19992,13 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       {'key': 'product', 'label': '产品'},
       {'key': 'supply', 'label': '供给方'},
       {'key': 'channel', 'label': '渠道'},
+      {'key': 'netTa', 'label': '净TA'},
       {'key': 'analysis', 'label': '分析'},
     ];
     // 供给默认选中中石油；渠道下拉里平安仅置顶，默认仍是「全部」。
     final groups = _categoryOptions(_tab).toList();
-    final showGroups = _tabBarShowsGroups && _tab != 'analysis';
+    final showGroups =
+        _tabBarShowsGroups && lighthouseLedgerTabShowsCategoryChips(_tab);
     final showHun = showGroups && (_tab == 'supply' || _tab == 'channel');
 
     // ── ROW 1 · 维度锚点 (biggest) ─────────────────────────────────────
@@ -19328,7 +20006,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       final key = t['key']!;
       final label = t['label']!;
       final isOn = _tab == key;
-      final canExpand = key != 'analysis';
+      final canExpand = lighthouseLedgerTabShowsCategoryChips(key);
       final IconData? trailing;
       if (!isOn) {
         trailing = null;
@@ -19356,6 +20034,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               _groupFilter = '全部';
               _tabBarShowsGroups = false;
               _hunFilter = '全部';
+              if (_sortField == 'netTa') _sortField = 'profit';
               _listLimit = _listPageSize;
               _rowsCacheKey = '';
               _rowsCache = null;
@@ -19364,6 +20043,27 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             });
             if (hadGroup) unawaited(_reloadHeroSummary());
             _loadAnalysisCube();
+            return;
+          }
+          if (key == 'netTa') {
+            if (key == _tab) return;
+            _closeDropdown();
+            setState(() {
+              _tab = key;
+              _groupFilter = '全部';
+              _tabBarShowsGroups = false;
+              _hunFilter = '全部';
+              _anomalyFilter = '全部';
+              _sortField = 'netTa';
+              _listLimit = _listPageSize;
+              _rowsCacheKey = '';
+              _rowsCache = null;
+              _netTaBalanceOpen = false;
+              _closeMetricPage();
+              _invalidateAiSummary();
+              _restoreSharedHeroMetrics();
+            });
+            unawaited(_loadTab('netTa'));
             return;
           }
           _closeDropdown();
@@ -19392,6 +20092,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           setState(() {
             _tab = key;
             _tabBarShowsGroups = true; // 切维仍默认展开分类
+            if (_sortField == 'netTa') _sortField = 'profit';
             _groupFilter = lighthouseGroupAfterTabSwitch(
               currentGroup: prevGroup,
               nextTabOptions: _categoryOptions(key),
@@ -19493,7 +20194,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                   if (i == dimCells.length - 1 &&
                       lighthouseLedgerSeparatesAnalysisTab)
                     Container(width: 0.5, height: 18, color: LhColors.line2),
-                  Expanded(child: Center(child: dimCells[i])),
+                  Expanded(child: dimCells[i]),
                 ],
               ],
             ),
@@ -19635,6 +20336,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           ? Padding(
               padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 4),
               child: AnimatedContainer(
+                width: double.infinity,
                 height: double.infinity,
                 duration: const Duration(
                   milliseconds: lighthousePeriodAnimationMs,
@@ -19666,12 +20368,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                       ),
                       const SizedBox(width: 5),
                     ],
-                    if (leading != null) ...[
-                      leading,
-                      const SizedBox(width: 5),
-                    ],
+                    if (leading != null) ...[leading, const SizedBox(width: 5)],
                     Flexible(
-                      child: Text(
+                      child: LhScrollText(
                         label,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
@@ -19722,7 +20421,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   if (leading != null) ...[leading, const SizedBox(width: 5)],
-                  Text(
+                  LhScrollText(
                     label,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -19859,7 +20558,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             crossAxisAlignment: CrossAxisAlignment.baseline,
             textBaseline: TextBaseline.alphabetic,
             children: [
-              Text(
+              LhScrollText(
                 short,
                 style: LhTypography.sans(
                   size: 9.5,
@@ -20666,7 +21365,12 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
 
     final listBody = Column(
       children: [
-        _buildLedger(visible, shareRows: rows),
+        _buildLedger(
+          visible,
+          shareRows: rows,
+          showRowChevron: _tab != 'netTa',
+          allowDefaultDetailOpen: _tab != 'netTa',
+        ),
         if (hasMore)
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 14),
@@ -20869,7 +21573,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               ),
             ),
             const SizedBox(height: 2),
-            Text(
+            LhScrollText(
               value,
               style: LhTypography.sans(
                 size: 11.5,
@@ -20914,7 +21618,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
+                LhScrollText(
                   name,
                   style: LhTypography.sans(
                     size: 11,
@@ -20926,7 +21630,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                   overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 3),
-                Text(
+                LhScrollText(
                   'ROI ${roi.toStringAsFixed(2)}% · 毛利 ${profitV == null ? '—' : '${profitV.toStringAsFixed(2)}$profitU'}',
                   style: LhTypography.mono(
                     size: 8,
@@ -22246,7 +22950,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         ),
         const SizedBox(width: 6),
         Expanded(
-          child: Text(
+          child: LhScrollText(
             name,
             style: LhTypography.sans(
               size: 11.5,
@@ -23603,7 +24307,12 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     ).expand((row) => row);
     return keys
         .map(
-          (key) => _LedgerCol(key, _ledgerSummaryMetricLabel(key), false, colW),
+          (key) => _LedgerCol(
+            key,
+            _ledgerSummaryMetricLabel(key),
+            lighthouseHeroMetricIsRate(key),
+            colW,
+          ),
         )
         .toList(growable: false);
   }
@@ -23692,7 +24401,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     if (_kLedgerScaleKeys.contains(key)) {
       return _LhPlum.primary.withAlpha(7);
     }
-    if (key == 'prepaid') return LhColors.pos.withAlpha(8);
+    if (key == 'prepaid' || key == 'netTa') return LhColors.pos.withAlpha(8);
     if (key == 'profit') return _LhPlum.deep.withAlpha(8);
     return null;
   }
@@ -23701,6 +24410,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     'sales' => '销售额',
     'verifiedSales' => '核销额',
     'prepaid' => '经营性净现金流',
+    'netTa' => '净额',
+    'inflow' => '流入',
+    'outflow' => '流出',
+    'sharePct' => '占比',
     'costTotal' => '成本合计',
     'profit' => '毛利润',
     _ => _metricShort(key),
@@ -23773,7 +24486,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
                 Flexible(
-                  child: Text(
+                  child: LhScrollText(
                     c.label,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -23803,7 +24516,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               ],
             ),
             SizedBox(height: _fs(2)),
-            Text(
+            LhScrollText(
               _ledgerSummaryMetricLabel(c.key),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
@@ -23838,6 +24551,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     bool isSoloTrendActive = false,
     VoidCallback? onSoloTrendTap,
   }) {
+    if (c.key == lighthouseLedgerSummaryBlankKey) {
+      return const SizedBox.shrink();
+    }
     final inResultBlock =
         showCategory &&
         lighthouseLedgerUsesResultBlock &&
@@ -23845,6 +24561,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     final vOrNull = _rowMetricValueOrNull(r, c.key);
     final missing = vOrNull == null;
     final v = vOrNull ?? 0;
+    final cellLabel = (tab == 'netTa' && c.key == 'sharePct')
+        ? lighthouseNetTAShareLabel(_rowMetricValueOrNull(r, 'netTa'))
+        : c.label;
     final String numPart;
     final String unit;
     if (missing) {
@@ -23854,7 +24573,8 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       numPart = v.toStringAsFixed(1);
       unit = '%';
     } else {
-      final s = _fmtAmountWithUnit(v);
+      final displayV = lighthouseHeroMetricDisplayAmount(c.key, v);
+      final s = _fmtAmountWithUnit(displayV);
       final m = RegExp(r'[^\d\.\-,]+$').firstMatch(s);
       unit = m?.group(0) ?? '';
       numPart = unit.isEmpty ? s : s.substring(0, s.length - unit.length);
@@ -23889,8 +24609,8 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       textBaseline: TextBaseline.alphabetic,
       children: [
         Flexible(
-          child: Text.rich(
-            TextSpan(
+          child: LhScrollRichText(
+            text: TextSpan(
               children: [
                 TextSpan(
                   text: numPart,
@@ -23992,8 +24712,8 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 Row(
                   children: [
                     Expanded(
-                      child: Text(
-                        c.label,
+                      child: LhScrollText(
+                        cellLabel,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: LhTypography.sans(
@@ -24065,19 +24785,27 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
 
     // 收起态只保留名称和分类；占比、走势、毛利率进入展开区。
     final nameRow = Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: tab == 'netTa'
+          ? CrossAxisAlignment.center
+          : CrossAxisAlignment.start,
       children: [
         Expanded(
-          child: Text(
-            name,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: LhTypography.sans(
-              size: _fs(nameFontSize),
-              weight: FontWeight.w600,
-              color: LhColors.ink,
-              height: 1.15,
-              letterSpacing: -0.1,
+          child: Padding(
+            padding: EdgeInsets.only(left: r['isChild'] == true ? _fs(14) : 0),
+            child: LhScrollText(
+              name,
+              maxLines: tab == 'netTa' ? 1 : 2,
+              overflow: TextOverflow.ellipsis,
+              style: LhTypography.sans(
+                size: _fs(nameFontSize) - (r['isChild'] == true ? 1 : 0),
+                weight: r['isChild'] == true
+                    ? FontWeight.w500
+                    : FontWeight.w600,
+                color: r['isChild'] == true ? LhColors.ink2 : LhColors.ink,
+                // 净TA 用过 1.0，汉字底部横笔（业 / 本 / 资）会被 LhScrollText 裁掉。
+                height: tab == 'netTa' ? 1.3 : 1.15,
+                letterSpacing: -0.1,
+              ),
             ),
           ),
         ),
@@ -24105,8 +24833,47 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       ],
     );
 
+    final expandButton = GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onToggle,
+      child: tab == 'netTa'
+          ? SizedBox(
+              width: _fs(22),
+              height: _fs(22),
+              child: Icon(
+                isExpanded
+                    ? Icons.keyboard_arrow_up_rounded
+                    : Icons.keyboard_arrow_down_rounded,
+                size: _fs(18),
+                color: isExpanded
+                    ? _LhPlum.deep
+                    : _LhPlum.primary.withAlpha(185),
+              ),
+            )
+          : AnimatedContainer(
+              duration: const Duration(milliseconds: 160),
+              width: _fs(27),
+              height: _fs(27),
+              decoration: BoxDecoration(
+                color: isExpanded
+                    ? _LhPlum.primary.withAlpha(24)
+                    : const Color(0xFFF4F1FA),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                isExpanded
+                    ? Icons.keyboard_arrow_up_rounded
+                    : Icons.keyboard_arrow_down_rounded,
+                size: _fs(18),
+                color: isExpanded
+                    ? _LhPlum.deep
+                    : _LhPlum.primary.withAlpha(185),
+              ),
+            ),
+    );
+
     return Padding(
-      padding: const EdgeInsets.only(left: 11, right: 6),
+      padding: EdgeInsets.only(left: 11, right: tab == 'netTa' ? 8 : 6),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
@@ -24147,130 +24914,117 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           ] else
             const SizedBox(width: 6),
           Expanded(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                nameRow,
-                SizedBox(height: _fs(8)),
-                Row(
-                  children: [
-                    if (lighthouseLedgerCollapsedShowsGroup) ...[
-                      if (hun != null && hun.hasAny) ...[
-                        Text(
-                          _hunBadgeFor(hun.primary),
-                          style: LhTypography.mono(
-                            size: _fs(9.5),
-                            color: _hunColorFor(hun.primary),
-                            weight: FontWeight.w700,
-                            height: 1.0,
-                            letterSpacing: 0.3,
-                          ),
-                        ),
-                        Text(
-                          ' · ',
-                          style: LhTypography.mono(
-                            size: _fs(9.5),
-                            color: LhColors.mute2,
-                            height: 1.0,
-                          ),
-                        ),
-                      ],
-                      Expanded(
-                        child: Text(
-                          group.isEmpty ? '未分类' : group,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: LhTypography.mono(
-                            size: _fs(10),
-                            color: LhColors.mute,
-                            weight: FontWeight.w500,
-                            height: 1.0,
-                            letterSpacing: 0.2,
-                          ),
-                        ),
-                      ),
+            // 净TA 收起态没有毛利率第二行：标题、01、展开箭头同一条水平线。
+            child: tab == 'netTa'
+                ? Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Expanded(child: nameRow),
+                      SizedBox(width: _fs(6)),
+                      expandButton,
                     ],
-                    // v19: 毛利率放在名称正下方的左槽（分组关掉后空着的位置），
-                    // 与表头冻结列「产品 / 毛利率」的两行标签对上；
-                    // 旧版被 Spacer 顶到最右，和 22px 的展开箭头零间距贴在一起，
-                    // 看着像一个可点控件，实际左半是静态文本 —— 误触源。
-                    if (lighthouseLedgerCollapsedShowsGrossMargin) ...[
-                      Flexible(
-                        child: Text.rich(
-                          TextSpan(
-                            children: [
-                              TextSpan(
-                                text: '毛利率 ',
+                  )
+                : Column(
+                    mainAxisSize: MainAxisSize.min,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      nameRow,
+                      SizedBox(height: _fs(8)),
+                      Row(
+                        children: [
+                          if (lighthouseLedgerCollapsedShowsGroup) ...[
+                            if (hun != null && hun.hasAny) ...[
+                              Text(
+                                _hunBadgeFor(hun.primary),
                                 style: LhTypography.mono(
                                   size: _fs(9.5),
-                                  color: LhColors.mute,
-                                  weight: FontWeight.w500,
+                                  color: _hunColorFor(hun.primary),
+                                  weight: FontWeight.w700,
+                                  height: 1.0,
+                                  letterSpacing: 0.3,
+                                ),
+                              ),
+                              Text(
+                                ' · ',
+                                style: LhTypography.mono(
+                                  size: _fs(9.5),
+                                  color: LhColors.mute2,
                                   height: 1.0,
                                 ),
                               ),
-                              TextSpan(
-                                text: grossMargin == null
-                                    ? '—'
-                                    : '${grossMargin.toStringAsFixed(1)}%',
-                                style: _tabular(
-                                  LhTypography.mono(
-                                    size: _fs(10),
-                                    color: LhColors.ink,
-                                    weight: FontWeight.w700,
-                                    height: 1.0,
-                                  ),
+                            ],
+                            Expanded(
+                              child: LhScrollText(
+                                group.isEmpty ? '未分类' : group,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: LhTypography.mono(
+                                  size: _fs(10),
+                                  color: LhColors.mute,
+                                  weight: FontWeight.w500,
+                                  height: 1.0,
+                                  letterSpacing: 0.2,
                                 ),
                               ),
-                            ],
-                          ),
-                          maxLines: 1,
-                          softWrap: false,
-                          overflow: TextOverflow.fade,
-                        ),
+                            ),
+                          ],
+                          // v19: 毛利率放在名称正下方的左槽（分组关掉后空着的位置），
+                          // 与表头冻结列「产品 / 毛利率」的两行标签对上；
+                          // 旧版被 Spacer 顶到最右，和 22px 的展开箭头零间距贴在一起，
+                          // 看着像一个可点控件，实际左半是静态文本 —— 误触源。
+                          if (lighthouseLedgerCollapsedShowsGrossMargin) ...[
+                            Flexible(
+                              child: Text.rich(
+                                TextSpan(
+                                  children: [
+                                    TextSpan(
+                                      text: '毛利率 ',
+                                      style: LhTypography.mono(
+                                        size: _fs(9.5),
+                                        color: LhColors.mute,
+                                        weight: FontWeight.w500,
+                                        height: 1.0,
+                                      ),
+                                    ),
+                                    TextSpan(
+                                      text: grossMargin == null
+                                          ? '—'
+                                          : '${grossMargin.toStringAsFixed(1)}%',
+                                      style: _tabular(
+                                        LhTypography.mono(
+                                          size: _fs(10),
+                                          color: LhColors.ink,
+                                          weight: FontWeight.w700,
+                                          height: 1.0,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                maxLines: 1,
+                                softWrap: false,
+                                overflow: TextOverflow.fade,
+                              ),
+                            ),
+                          ],
+                          if (!lighthouseLedgerCollapsedShowsGroup &&
+                              !lighthouseLedgerCollapsedShowsGrossMargin)
+                            const Spacer(),
+                          SizedBox(width: _fs(6)),
+                          expandButton,
+                        ],
                       ),
                     ],
-                    if (!lighthouseLedgerCollapsedShowsGroup &&
-                        !lighthouseLedgerCollapsedShowsGrossMargin)
-                      const Spacer(),
-                    // 静态文本与展开热区之间留一段空隙，别再连成一体。
-                    SizedBox(width: _fs(6)),
-                    GestureDetector(
-                      behavior: HitTestBehavior.opaque,
-                      onTap: onToggle,
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 160),
-                        width: _fs(27),
-                        height: _fs(27),
-                        decoration: BoxDecoration(
-                          color: isExpanded
-                              ? _LhPlum.primary.withAlpha(24)
-                              : const Color(0xFFF4F1FA),
-                          shape: BoxShape.circle,
-                        ),
-                        child: Icon(
-                          isExpanded
-                              ? Icons.keyboard_arrow_up_rounded
-                              : Icons.keyboard_arrow_down_rounded,
-                          size: _fs(18),
-                          color: isExpanded
-                              ? _LhPlum.deep
-                              : _LhPlum.primary.withAlpha(185),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
+                  ),
           ),
         ],
       ),
     );
   }
 
-  /// 供给卡片资金池预览。左总资产、右票税（资管标签二应开/实开/原件）。
+  /// 供给卡片资金池预览：左总资产、右票税（应开发票金额）。两格同形，
+  /// 不再让票税撑成三行 —— 异形格会把整行顶高，冻结列也得跟着补高。
   Widget _buildSupplyFundPoolPreview(
     double cellHeight, {
     required String provinceName,
@@ -24279,10 +25033,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   }) {
     final amounts = lighthouseLookupFundPool(_fundPoolByProvince, provinceName);
     final metrics = lighthouseFundPoolPreviewMetrics();
-    Widget metricTile({
-      required String label,
-      required double? amount,
-    }) {
+    Widget metricTile({required String label, required double? amount}) {
       final parts = lighthouseFormatFundPoolWanParts(amount);
       final missing = parts.number == '—';
       final negative = !missing && (amount ?? 0) < 0;
@@ -24292,8 +25043,8 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         textBaseline: TextBaseline.alphabetic,
         children: [
           Flexible(
-            child: Text.rich(
-              TextSpan(
+            child: LhScrollRichText(
+              text: TextSpan(
                 children: [
                   TextSpan(
                     text: parts.number,
@@ -24344,7 +25095,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Text(
+              LhScrollText(
                 label,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
@@ -24358,143 +25109,6 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               ),
               SizedBox(height: _fs(4)),
               Expanded(child: valueRow),
-            ],
-          ),
-        ),
-      );
-    }
-
-    Widget amountLine(String label, double? amount) {
-      final parts = lighthouseFormatFundPoolWanParts(amount);
-      final missing = parts.number == '—';
-      final negative = !missing && (amount ?? 0) < 0;
-      return Row(
-        crossAxisAlignment: CrossAxisAlignment.baseline,
-        textBaseline: TextBaseline.alphabetic,
-        children: [
-          Text(
-            label,
-            style: LhTypography.sans(
-              size: _fs(8.2),
-              color: LhColors.mute,
-              weight: FontWeight.w500,
-              height: 1.0,
-            ),
-          ),
-          SizedBox(width: _fs(4)),
-          Expanded(
-            child: Text.rich(
-              TextSpan(
-                children: [
-                  TextSpan(
-                    text: parts.number,
-                    style: _tabular(
-                      LhTypography.mono(
-                        size: _fs(10),
-                        color: missing
-                            ? LhColors.mute2
-                            : (negative ? LhColors.pos : LhColors.ink2),
-                        weight: missing ? FontWeight.w500 : FontWeight.w700,
-                        height: 1.0,
-                      ),
-                    ),
-                  ),
-                  if (parts.unit.isNotEmpty)
-                    TextSpan(
-                      text: parts.unit,
-                      style: LhTypography.mono(
-                        size: _fs(8.5),
-                        color: LhColors.mute,
-                        weight: FontWeight.w500,
-                        height: 1.0,
-                      ),
-                    ),
-                ],
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.right,
-            ),
-          ),
-        ],
-      );
-    }
-
-    Widget invoicePreviewTile() {
-      final urls = amounts?.invoiceOriginals ?? const [];
-      return Expanded(
-        child: Container(
-          margin: EdgeInsets.symmetric(horizontal: _fs(3), vertical: _fs(2.5)),
-          padding: EdgeInsets.fromLTRB(_fs(8), _fs(5), _fs(7), _fs(4)),
-          decoration: BoxDecoration(
-            color: const Color(0xFFF9F8FC),
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(
-              color: LhColors.line2.withAlpha(210),
-              width: 0.7,
-            ),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(
-                '票税',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: LhTypography.sans(
-                  size: _fs(lighthouseLedgerMetricLabelFontSize),
-                  color: LhColors.mute,
-                  weight: FontWeight.w500,
-                  letterSpacing: 0.2,
-                  height: 1.0,
-                ),
-              ),
-              SizedBox(height: _fs(3)),
-              amountLine('应开发票', amounts?.invoiceToIssue),
-              SizedBox(height: _fs(2)),
-              amountLine('实开', amounts?.invoiceIssued),
-              SizedBox(height: _fs(3)),
-              if (urls.isEmpty)
-                Text(
-                  '发票原件 —',
-                  style: LhTypography.sans(
-                    size: _fs(8.2),
-                    color: LhColors.mute2,
-                    height: 1.0,
-                  ),
-                )
-              else
-                Wrap(
-                  spacing: _fs(3),
-                  runSpacing: _fs(3),
-                  children: [
-                    for (final url in urls.take(3))
-                      GestureDetector(
-                        onTap: () => _openFundPoolInvoicePhoto(url),
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(3),
-                          child: Image.network(
-                            url,
-                            width: _fs(22),
-                            height: _fs(22),
-                            fit: BoxFit.cover,
-                            errorBuilder: (context, error, stack) => Container(
-                              width: _fs(22),
-                              height: _fs(22),
-                              color: LhColors.line2,
-                              alignment: Alignment.center,
-                              child: Icon(
-                                Icons.photo_outlined,
-                                size: _fs(11),
-                                color: LhColors.mute,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
             ],
           ),
         ),
@@ -24542,16 +25156,13 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 for (var i = 0; i < metrics.length; i++)
-                  if (metrics[i].key == 'invoicePreview')
-                    invoicePreviewTile()
-                  else
-                    metricTile(
-                      label: metrics[i].label,
-                      amount: lighthouseFundPoolAmountByKey(
-                        amounts,
-                        metrics[i].key,
-                      ),
+                  metricTile(
+                    label: metrics[i].label,
+                    amount: lighthouseFundPoolAmountByKey(
+                      amounts,
+                      metrics[i].key,
                     ),
+                  ),
               ],
             ),
           ),
@@ -24618,7 +25229,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 ),
                 SizedBox(width: _fs(5)),
                 Flexible(
-                  child: Text(
+                  child: LhScrollText(
                     title,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -24689,7 +25300,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     })
     section,
   ) {
-    Widget metricLabel(String label) => Text(
+    Widget metricLabel(String label) => LhScrollText(
       label,
       maxLines: 1,
       overflow: TextOverflow.ellipsis,
@@ -24762,8 +25373,8 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       children: [
         metricLabel(label),
         SizedBox(height: _fs(3)),
-        Text.rich(
-          TextSpan(
+        LhScrollRichText(
+          text: TextSpan(
             children: [
               TextSpan(
                 text: parts.number,
@@ -24900,16 +25511,14 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       builder: (ctx, cons) {
         final w = cons.maxWidth;
         _ledgerScale = _lhLedgerScale(w);
-        final pinnedW = _ledgerPinnedW(w);
+        final pinnedW = _ledgerPinnedW(w, tab: tab);
         final cols = _ledgerSummaryCols(w, tab);
         final summaryCellH = _ledgerSummaryCellH(tab);
         // 供给维在四项经营指标下增加一行资金摘要；票税格比普通 KPI 高，冻结列要跟高。
         final summaryMetricCount =
             cols.length + (lighthouseLedgerShowsFundPoolPreview(tab) ? 2 : 0);
-        final rowH = _ledgerSummaryRowH(
-              summaryMetricCount,
-              cellHeight: summaryCellH,
-            ) +
+        final rowH =
+            _ledgerSummaryRowH(summaryMetricCount, cellHeight: summaryCellH) +
             (lighthouseLedgerShowsFundPoolPreview(tab)
                 ? lighthouseFundPoolPreviewExtraHeight(
                     summaryCellHeight: summaryCellH,
@@ -25089,7 +25698,8 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                           cellIndex: i,
                           gridColumns: lighthouseLedgerSummaryColumns,
                           isSoloTrendActive: soloMetricKey == c.key,
-                          onSoloTrendTap: lighthouseLedgerMetricOpensSoloTrend(c.key)
+                          onSoloTrendTap:
+                              lighthouseLedgerMetricOpensSoloTrend(c.key)
                               ? () {
                                   if (_highlightMode) {
                                     _toggleLedgerHighlight(tab, r);
@@ -25102,9 +25712,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                                     _expandedTrends.remove(trendKey);
                                     final next =
                                         lighthouseLedgerSoloTrendAfterTap(
-                                      soloMetricKey,
-                                      c.key,
-                                    );
+                                          soloMetricKey,
+                                          c.key,
+                                        );
                                     if (next == null) {
                                       _expandedLedgerSolo.remove(trendKey);
                                     } else {
@@ -25143,10 +25753,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               if (isExpanded)
                 GestureDetector(
                   onTap: () {},
-                  child: _buildInlineExpanded(
-                    r,
-                    soloMetricKey: soloMetricKey,
-                  ),
+                  child: _buildInlineExpanded(r, soloMetricKey: soloMetricKey),
                 ),
             ],
           ),
@@ -25349,8 +25956,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       altKey = '';
       scaleAlt = const <double>[];
     }
-    String scaleNameOf(String k) =>
-        k == 'verifiedSales' ? '核销规模' : '销售规模';
+    String scaleNameOf(String k) => k == 'verifiedSales' ? '核销规模' : '销售规模';
     final scaleLabel = scaleNameOf(scaleKey);
     final scaleAltLabel = altKey.isEmpty ? '' : scaleNameOf(altKey);
     // 本期规模合计：优先行上同口径字段，缺了就用序列末点（＝本期那一格）。
@@ -25581,10 +26187,487 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   //   展开态承担两个职责：保留当前行走势，并按主 Hero 的四分类版式展示
   //   规模 / 成本 / 经营性现金流 / 利润。L1/L2/L3 共用这一入口。
   // ═══════════════════════════════════════════════════════════════════════════
-  Widget _buildInlineExpanded(
-    Map<String, dynamic> r, {
-    String? soloMetricKey,
-  }) {
+  /// 「截至」只留月日时分：2026-08-28 16:20 → 08.28 16:20。
+  /// 年份在这里是噪点 —— 存量数永远是最新的那条，看的人只关心新到什么时候。
+  String _netTABalanceAsOf(String raw) {
+    final t = raw.trim();
+    if (t.isEmpty) return '';
+    final m = RegExp(r'^\d{4}-(\d{2})-(\d{2})[ T](\d{2}:\d{2})').firstMatch(t);
+    if (m != null) return '${m.group(1)}.${m.group(2)} ${m.group(3)}';
+    final d = RegExp(r'^\d{4}-(\d{2})-(\d{2})$').firstMatch(t);
+    if (d != null) return '${d.group(1)}.${d.group(2)}';
+    return t;
+  }
+
+  /// 存量锚点：银行余额（来自资管 bank-balance 接口，全公司合计）。
+  ///
+  /// 净TA 是流量 —— 「这段时间多了还是少了」，答不了「当下什么状态」：
+  /// 每月 1 号打开时本月净TA 接近 0，但账上可能正躺着几千万，也可能正在失血。
+  /// 存量不随周期变，所以它在 hero 顶部，切日/周/月时这一块不动。
+  /// 拿不到余额时整块不渲染 —— 显示 0 会被读成「账上没钱」。
+  ///
+  /// 视觉上用一块浅色底把「存量」和下面的「流量」分开：两个数不同源、
+  /// 不同口径，靠一条细线区分不够，底色才让人一眼知道这是两件事。
+  ///
+  /// 三行纵向排，不做「标签左 + 时间右」的同排布局 —— KPI 卡在窄屏下只有
+  /// 一百多像素宽，标签和时间在一行里必然挤爆。每行只放一个元素，
+  /// 宽度再窄也只会省略号，不会溢出。
+  ///
+  /// 有公司明细时整块可点：点开右边走势位换成按公司的余额清单，再点收回。
+  Widget _buildNetTABankBalanceLine() {
+    final balance = (_bundle?.metrics['netTaBankBalance'] as num?)?.toDouble();
+    if (balance == null) return const SizedBox.shrink();
+    final accent = Color(lighthouseHeroSectionAccentValues['cash']!);
+    final asOf = _netTABalanceAsOf(
+      _bundle?.metrics['netTaBankBalanceAt']?.toString() ?? '',
+    );
+    final canOpen = _netTABankBalanceRows().isNotEmpty;
+    final open = canOpen && _netTaBalanceOpen;
+
+    final block = Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(9, 5, 9, 6),
+      decoration: BoxDecoration(
+        color: accent.withAlpha(open ? 20 : 10),
+        borderRadius: BorderRadius.circular(9),
+        border: Border.all(
+          color: accent.withAlpha(open ? 90 : 28),
+          width: open ? 0.9 : 0.7,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.account_balance_rounded,
+                size: 11,
+                color: accent.withAlpha(210),
+              ),
+              const SizedBox(width: 4),
+              Flexible(
+                child: Text(
+                  '银行余额',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: LhTypography.sans(
+                    size: 10,
+                    color: LhColors.ink2,
+                    weight: FontWeight.w600,
+                    letterSpacing: 0.2,
+                  ),
+                ),
+              ),
+              if (canOpen) ...[
+                const SizedBox(width: 3),
+                Icon(
+                  open
+                      ? Icons.keyboard_arrow_up_rounded
+                      : Icons.keyboard_arrow_down_rounded,
+                  size: 13,
+                  color: accent.withAlpha(open ? 230 : 150),
+                ),
+              ],
+            ],
+          ),
+          const SizedBox(height: 4),
+          LhScrollRichText(
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            text: TextSpan(
+              children: [
+                TextSpan(
+                  text: _fmtMoney(balance),
+                  style: LhTypography.number(size: 18, color: LhColors.ink),
+                ),
+                TextSpan(
+                  text: _unitMoney(balance),
+                  style: LhTypography.sans(
+                    size: 10,
+                    color: LhColors.mute,
+                    weight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (asOf.isNotEmpty) ...[
+            const SizedBox(height: 2),
+            Text(
+              '截至 $asOf',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: LhTypography.mono(
+                size: 8.5,
+                color: LhColors.mute2,
+                weight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: canOpen
+          ? GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () =>
+                  setState(() => _netTaBalanceOpen = !_netTaBalanceOpen),
+              child: block,
+            )
+          : block,
+    );
+  }
+
+  /// 按公司的余额行。资管这支接口到公司一层就停了 —— 没有账号、没有开户行，
+  /// 也没有业务日期，所以这里能给的就是「哪家公司账上多少」。
+  List<Map<String, dynamic>> _netTABankBalanceRows() {
+    final raw = _bundle?.metrics['netTaBankBalanceList'];
+    if (raw is! List) return const [];
+    final out = <Map<String, dynamic>>[];
+    for (final e in raw.whereType<Map>()) {
+      final name = e['company']?.toString().trim() ?? '';
+      if (name.isEmpty) continue;
+      out.add({
+        'company': name,
+        'balance': (e['balance'] as num?)?.toDouble() ?? 0.0,
+      });
+    }
+    return out;
+  }
+
+  /// 点开银行余额后，走势位换成这块：按公司列余额。
+  ///
+  /// 每家公司一行：名称在左、金额在右、占比在最右，**进度条是这一行的底色**。
+  /// 上一版把条单独占一行，名字下面空一截，38 家排下来全是空白；
+  /// 做成行底填充之后，同样的信息量少一半高度，条也不再是"多出来的一条线"。
+  Widget _buildNetTABankBalancePanel() {
+    final rows = _netTABankBalanceRows();
+    final accent = Color(lighthouseHeroSectionAccentValues['cash']!);
+    final total =
+        (_bundle?.metrics['netTaBankBalance'] as num?)?.toDouble() ?? 0;
+    final count =
+        (_bundle?.metrics['netTaBankBalanceCount'] as num?)?.toInt() ??
+        rows.length;
+    var sumAbs = 0.0;
+    var maxAbs = 0.0;
+    for (final r in rows) {
+      final a = (r['balance'] as double).abs();
+      sumAbs += a;
+      if (a > maxAbs) maxAbs = a;
+    }
+
+    Widget tile(Map<String, dynamic> r) {
+      final v = r['balance'] as double;
+      final share = sumAbs <= 0 ? 0.0 : v.abs() / sumAbs * 100;
+      // 条长按「相对最大那家」：占比里第一名 84%、其余全是个位数，
+      // 按占比画后面 37 家会缩成看不见的一截，相对最大值至少能比出彼此。
+      final frac = maxAbs <= 0 ? 0.0 : (v.abs() / maxAbs).clamp(0.0, 1.0);
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 6),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(7),
+          child: Stack(
+            children: [
+              Positioned.fill(child: Container(color: LhColors.mist)),
+              Positioned.fill(
+                child: FractionallySizedBox(
+                  alignment: Alignment.centerLeft,
+                  widthFactor: frac < 0.02 ? 0.02 : frac,
+                  child: Container(
+                    color: accent.withAlpha(v < 0 ? 22 : 38),
+                  ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(9, 7, 9, 7),
+                child: Row(
+                  children: [
+                    Flexible(
+                      child: LhScrollText(
+                        r['company'] as String,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: LhTypography.sans(
+                          size: 11,
+                          color: LhColors.ink,
+                          weight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    LhScrollRichText(
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      text: TextSpan(
+                        children: [
+                          TextSpan(
+                            text: _fmtMoney(v),
+                            style: LhTypography.number(
+                              size: 12.5,
+                              color: v < 0 ? LhColors.neg : LhColors.ink,
+                            ),
+                          ),
+                          TextSpan(
+                            text: _unitMoney(v),
+                            style: LhTypography.sans(
+                              size: 9,
+                              color: LhColors.mute,
+                              weight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 7),
+                    SizedBox(
+                      width: 32,
+                      child: Text(
+                        share < 0.05 ? '—' : '${share.toStringAsFixed(1)}%',
+                        textAlign: TextAlign.right,
+                        style: LhTypography.mono(
+                          size: 9,
+                          color: LhColors.mute2,
+                          weight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return LayoutBuilder(
+      builder: (context, box) {
+        final columns = box.maxWidth >= 360 ? 2 : 1;
+        final grid = <Widget>[];
+        for (var start = 0; start < rows.length; start += columns) {
+          final rowItems = rows.skip(start).take(columns).toList();
+          grid.add(
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                for (var c = 0; c < columns; c++) ...[
+                  if (c > 0) const SizedBox(width: 8),
+                  Expanded(
+                    child: c < rowItems.length
+                        ? tile(rowItems[c])
+                        : const SizedBox.shrink(),
+                  ),
+                ],
+              ],
+            ),
+          );
+        }
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: 15,
+                  height: 15,
+                  decoration: BoxDecoration(
+                    color: accent.withAlpha(24),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Icon(
+                    Icons.account_balance_rounded,
+                    size: 9,
+                    color: accent,
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  '银行余额 · 按公司',
+                  style: LhTypography.sans(
+                    size: 11,
+                    color: LhColors.ink2,
+                    weight: FontWeight.w600,
+                  ),
+                ),
+                const Spacer(),
+                Flexible(
+                  child: Text(
+                    '$count 家',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.right,
+                    style: LhTypography.sans(size: 10, color: LhColors.mute),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  _fmtAmountWithUnit(total),
+                  style: LhTypography.number(size: 13, color: LhColors.ink),
+                ),
+                GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => setState(() => _netTaBalanceOpen = false),
+                  child: const Padding(
+                    padding: EdgeInsets.only(left: 8),
+                    child: Icon(
+                      Icons.close_rounded,
+                      size: 14,
+                      color: LhColors.mute2,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Container(height: 0.7, color: _LhPlum.line),
+            const SizedBox(height: 8),
+            // 排不下就滚动，不截断 —— 截断会让人以为公司只有这么多家。
+            Flexible(
+              child: SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  mainAxisSize: MainAxisSize.min,
+                  children: grid,
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  /// 行展开体。版式对齐产品 Tab 展开里的 规模 / 成本 / 利润 那三张卡：
+  /// 白底圆角卡 + 小图标标题 + 两列指标格，而不是把格子裸贴在展开区里。
+  Widget _buildNetTAExpanded(Map<String, dynamic> r) {
+    final secondaries = (r['secondaries'] as List? ?? const [])
+        .whereType<Map>()
+        .map((e) => Map<String, dynamic>.from(e))
+        .where((e) => (e['name']?.toString() ?? '').isNotEmpty)
+        .toList();
+    final isBill = r['secondaryCaliber']?.toString() == 'bill';
+    final bucket = r['name']?.toString() ?? '';
+    final accent = bucket == '经营活动'
+        ? LhColors.pos
+        : (bucket == '筹资活动' ? LhColors.copper : LhColors.neg);
+    var sumAbs = 0.0;
+    for (final e in secondaries) {
+      sumAbs += ((e['netTa'] as num?)?.toDouble() ?? 0).abs();
+    }
+    final inflow = (r['inflow'] as num?)?.toDouble();
+    final outflow = (r['outflow'] as num?)?.toDouble();
+
+    Widget card() => Container(
+      padding: const EdgeInsets.fromLTRB(11, 9, 11, 11),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFFDFF),
+        border: Border.all(color: _LhPlum.heroEdge, width: 0.7),
+        borderRadius: BorderRadius.circular(lighthouseHeroCardRadius),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withAlpha(8),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 15,
+                height: 15,
+                decoration: BoxDecoration(
+                  color: accent.withAlpha(24),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Icon(
+                  isBill
+                      ? Icons.receipt_long_rounded
+                      : Icons.account_tree_rounded,
+                  size: 9,
+                  color: accent,
+                ),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                isBill ? '账单三级' : '二级分类',
+                style: LhTypography.sans(
+                  size: 11,
+                  color: LhColors.ink2,
+                  weight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(width: 5),
+              Text(
+                '${secondaries.length} 项',
+                style: LhTypography.sans(size: 10, color: LhColors.mute),
+              ),
+              const Spacer(),
+              if (inflow != null && outflow != null)
+                Flexible(
+                  child: LhScrollText(
+                    '流入 ${_fmtAmountWithUnit(inflow)} · 流出 ${_fmtAmountWithUnit(outflow)}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: LhTypography.sans(size: 9.5, color: LhColors.mute2),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 9),
+          Container(height: 0.5, color: LhColors.line2),
+          const SizedBox(height: 10),
+          _buildNetTAMetricGrid(
+            secondaries,
+            inflowBadge: bucket == '经营成本',
+            shareBase: sumAbs,
+          ),
+        ],
+      ),
+    );
+
+    return AnimatedSize(
+      duration: const Duration(milliseconds: 220),
+      child: Container(
+        width: double.infinity,
+        color: Colors.white,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(height: 0.5, color: _LhPlum.line),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+              child: secondaries.isEmpty
+                  ? Text(
+                      '无下级分类',
+                      style: LhTypography.sans(
+                        size: 10.5,
+                        color: LhColors.mute,
+                      ),
+                    )
+                  : card(),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildInlineExpanded(Map<String, dynamic> r, {String? soloMetricKey}) {
+    if (_tab == 'netTa' && soloMetricKey == null) {
+      return _buildNetTAExpanded(r);
+    }
     if (soloMetricKey != null &&
         lighthouseLedgerMetricOpensSoloTrend(soloMetricKey)) {
       return _buildLedgerSoloTrendPanel(r, soloMetricKey);
@@ -26032,7 +27115,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               ),
             ),
             const SizedBox(height: 4),
-            Text(
+            LhScrollText(
               label,
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
@@ -26420,42 +27503,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                     ),
                   ),
                   const Spacer(),
-                  _buildUiZoomButton(),
-                  const SizedBox(width: 8),
-                  _buildMarketTreeButton(),
-                  const SizedBox(width: 8),
-                  GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTap: (_isPageBusy || _refreshing || _loading)
-                        ? null
-                        : _refresh,
-                    child: Container(
-                      width: 32,
-                      height: 32,
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: LhColors.line2, width: 0.5),
-                        boxShadow: [
-                          BoxShadow(
-                            color: LhColors.ink.withAlpha(12),
-                            blurRadius: 6,
-                            spreadRadius: -1,
-                            offset: const Offset(0, 2),
-                          ),
-                        ],
-                      ),
-                      child: Center(
-                        child: _isPageBusy
-                            ? const _LhBrandLoader(size: 16)
-                            : Icon(
-                                Icons.refresh_rounded,
-                                size: 16,
-                                color: _LhPlum.primary,
-                              ),
-                      ),
-                    ),
-                  ),
+                  _buildAppBarToolbar(),
                 ],
               ),
             ],
@@ -26695,42 +27743,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 ),
               ),
               const Spacer(),
-              _buildUiZoomButton(),
-              const SizedBox(width: 8),
-              _buildMarketTreeButton(),
-              const SizedBox(width: 8),
-              GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTap: (_isPageBusy || _refreshing || _loading)
-                    ? null
-                    : _refresh,
-                child: Container(
-                  width: 32,
-                  height: 32,
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: LhColors.line2, width: 0.5),
-                    boxShadow: [
-                      BoxShadow(
-                        color: LhColors.ink.withAlpha(12),
-                        blurRadius: 6,
-                        spreadRadius: -1,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
-                  ),
-                  child: Center(
-                    child: _isPageBusy
-                        ? const _LhBrandLoader(size: 16)
-                        : Icon(
-                            Icons.refresh_rounded,
-                            size: 16,
-                            color: _LhPlum.primary,
-                          ),
-                  ),
-                ),
-              ),
+              _buildAppBarToolbar(),
             ],
           ),
         ),
@@ -26761,7 +27774,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
+                    LhScrollText(
                       _codeDrillDisplayName,
                       style: LhTypography.sans(
                         size: 13.5,
@@ -27000,7 +28013,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           ),
           const SizedBox(width: 10),
           Expanded(
-            child: Text(
+            child: LhScrollText(
               label,
               style: LhTypography.sans(
                 size: 11,
@@ -27090,7 +28103,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                     ),
                     const SizedBox(width: 6),
                     Expanded(
-                      child: Text(
+                      child: LhScrollText(
                         name,
                         style: LhTypography.mono(
                           size: 13,
@@ -28009,7 +29022,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           ),
           const SizedBox(height: 6),
           // ── ③ 环比 (居中) ──
-          Text(
+          LhScrollText(
             momCompact,
             textAlign: TextAlign.center,
             style: LhTypography.mono(
@@ -28166,8 +29179,8 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                       spacing: 6,
                       runSpacing: 4,
                       children: [
-                        Text.rich(
-                          TextSpan(
+                        LhScrollRichText(
+                          text: TextSpan(
                             children: [
                               TextSpan(
                                 text: name,
@@ -28220,7 +29233,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                     ),
                     if (showSupplierCode && supplierCode.isNotEmpty) ...[
                       const SizedBox(height: 4),
-                      Text(
+                      LhScrollText(
                         supplierCode,
                         style: LhTypography.mono(
                           size: 8.6,
@@ -28689,7 +29702,7 @@ class _AnalysisCard extends StatelessWidget {
                   ),
                   const SizedBox(width: 7),
                   Expanded(
-                    child: Text(
+                    child: LhScrollText(
                       sub,
                       style: LhTypography.mono(
                         size: 8.8,
@@ -30103,9 +31116,8 @@ double _ledgerColW(double w) => (72 * _lhLedgerScale(w)).roundToDouble();
 
 /// 冻结首列（序号 + 名称 + 分类 + 占比 + 走势 + 毛利率）宽度。
 /// 四个重点指标改为 2×2 后，左栏可放宽到 35%，让常见产品名优先单行。
-double _ledgerPinnedW(double w) => (w * lighthouseLedgerPinnedWidthRatio)
-    .clamp(112.0, lighthouseLedgerPinnedMaxWidth)
-    .toDouble();
+double _ledgerPinnedW(double w, {required String tab}) =>
+    lighthouseLedgerPinnedWidthFor(w, tab: tab);
 
 /// 一条物理行 = 冻结首列 + 指标网格。
 /// v17 起不再横滚：网格自适应铺满剩余宽度，行高由调用方按网格行数算好传入。

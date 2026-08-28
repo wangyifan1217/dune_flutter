@@ -3,6 +3,19 @@ import 'package:dunes_app/features/xflow/approval_chat_share.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('proposal intake kind normalizes sales vs purchase', () {
+    expect(normalizeProposalIntakeKind(''), 'sales');
+    expect(normalizeProposalIntakeKind('purchase-proposal'), 'purchase');
+    expect(proposalIntakeIsPurchase('purchase'), isTrue);
+    expect(proposalIntakeUntitledTitle('sales'), '未命名销售业务提案');
+    expect(proposalIntakeUntitledTitle('purchase'), '未命名采购业务提案');
+    expect(
+      ProposalIntakeRow.fromJson({'kind': 'purchase'}).kind,
+      'purchase',
+    );
+    expect(ProposalIntakeRow.fromJson({}).kind, 'sales');
+  });
+
   test('proposal options parse linked choices and rating thresholds', () {
     final options = ProposalIntakeOptions.fromJson({
       'market': {

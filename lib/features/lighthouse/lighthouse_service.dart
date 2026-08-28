@@ -206,6 +206,22 @@ class LighthouseService {
     }, '灯塔资金池加载失败');
   }
 
+  /// 净TA tab：bank_flow_mapped_daily 五类映射加总及分类明细。
+  Future<Map<String, dynamic>> fetchNetTA({
+    String? period,
+    String? date,
+    int? offset,
+    DateTime? startDate,
+    DateTime? endDate,
+  }) {
+    return _getData('/lighthouse/net-ta', {
+      if (period != null && period.isNotEmpty) 'period': period,
+      if (date != null && date.isNotEmpty) 'date': date,
+      if (offset != null && offset != 0) 'offset': '$offset',
+      ..._rangeQuery(startDate, endDate),
+    }, '灯塔净TA加载失败');
+  }
+
   /// 分析 tab 3D 坐标 + 机会清单（懒加载）。
   Future<Map<String, dynamic>> fetchAnalysisCube({
     String? period,

@@ -10,6 +10,7 @@ class HorizontalDragScrollView extends StatefulWidget {
     this.controller,
     this.physics,
     this.showScrollbar = false,
+    this.reverse = false,
   });
 
   final Widget child;
@@ -17,6 +18,7 @@ class HorizontalDragScrollView extends StatefulWidget {
   final ScrollController? controller;
   final ScrollPhysics? physics;
   final bool showScrollbar;
+  final bool reverse;
 
   @override
   State<HorizontalDragScrollView> createState() =>
@@ -40,12 +42,15 @@ class _HorizontalDragScrollViewState extends State<HorizontalDragScrollView> {
     final c = _controller;
     if (!c.hasClients) return;
     // 鼠标滚轮多为 dy；把垂直滚轮映射为横向位移。
-    final delta =
-        event.scrollDelta.dx != 0 ? event.scrollDelta.dx : event.scrollDelta.dy;
+    final delta = event.scrollDelta.dx != 0
+        ? event.scrollDelta.dx
+        : event.scrollDelta.dy;
     if (delta == 0) return;
     final pos = c.position;
-    final next =
-        (pos.pixels + delta).clamp(pos.minScrollExtent, pos.maxScrollExtent);
+    final next = (pos.pixels + delta).clamp(
+      pos.minScrollExtent,
+      pos.maxScrollExtent,
+    );
     if (next != pos.pixels) {
       c.jumpTo(next);
     }
@@ -82,6 +87,7 @@ class _HorizontalDragScrollViewState extends State<HorizontalDragScrollView> {
     return SingleChildScrollView(
       controller: _controller,
       scrollDirection: Axis.horizontal,
+      reverse: widget.reverse,
       padding: widget.padding,
       physics: widget.physics,
       child: widget.child,

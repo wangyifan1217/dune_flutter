@@ -133,6 +133,7 @@ import '../drive/native_drive_page.dart';
 import '../drive/native_drive_assistant_page.dart';
 import '../xrxs/native_xrxs_assistant_page.dart';
 import '../administrative_notice/native_administrative_notice_page.dart';
+import '../profile/native_user_work_profile_page.dart';
 
 class NativeScreenHost extends StatefulWidget {
   const NativeScreenHost({
@@ -3628,6 +3629,11 @@ class _NativeScreenHostState extends State<NativeScreenHost>
               : null,
           onLogout: widget.onLogout,
         );
+      case 'B2P':
+        return NativeUserWorkProfilePage(
+          session: widget.session,
+          onBack: widget.navigation.back,
+        );
       case 'C1':
         return _buildConversationListPage();
       case 'AN1':
@@ -4548,6 +4554,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
   bool _isMyRoute(String? screen) {
     return const <String>{
       'B2',
+      'B2P',
       'B1',
       'B3',
       'B10',
@@ -5254,6 +5261,7 @@ class _NativeB2Page extends StatefulWidget {
 class _NativeB2PageState extends State<_NativeB2Page> {
   static bool get _showDeferredTools => false;
   static bool get _showQuickStats => false;
+  static bool get _showQuickLaunch => false;
   static bool get _showItemBadges => false;
 
   _NativeMyStats? _stats;
@@ -5864,8 +5872,10 @@ class _NativeB2PageState extends State<_NativeB2Page> {
                         _buildQuickStats(stats),
                         const SizedBox(height: 14),
                       ],
-                      _buildQuickLaunch(),
-                      const SizedBox(height: 14),
+                      if (_showQuickLaunch) ...[
+                        _buildQuickLaunch(),
+                        const SizedBox(height: 14),
+                      ],
                       if (stats.pendingForMe > 0)
                         _buildReminderBanner(
                           icon: Icons.notifications_active_outlined,
@@ -5906,13 +5916,31 @@ class _NativeB2PageState extends State<_NativeB2Page> {
                             onTap: widget.onOpenWorkbench,
                           ),
                         _buildMenuItem(
-                          icon: Icons.description_outlined,
-                          title: '我发起的审批',
-                          desc:
-                              '$initiatedTotal 条总数 · ${stats.approvalPending} 审批中',
-                          badge: initiatedTotal,
-                          onTap: () => widget.onOpenB14(),
+                          icon: Icons.add_task_outlined,
+                          title: '审批填写',
+                          desc: '选择并填写审批单',
+                          onTap: widget.onOpenB3,
                         ),
+                      ]),
+                      const SizedBox(height: 10),
+                      _buildMenuList(<Widget>[
+                        _buildMenuItem(
+                          icon: Icons.article_outlined,
+                          title: '会议纪要',
+                          desc: '$_meetingCount 场 · 录音转写 · 纪要生成',
+                          badge: _meetingCount,
+                          onTap: () => widget.navigation.go('MM-L'),
+                        ),
+                        _buildMenuItem(
+                          icon: Icons.auto_stories_outlined,
+                          title: '知识库',
+                          desc: '$kbDocCount 文档 · $kbCategoryCount 分类',
+                          badge: kbUnreadCount,
+                          onTap: () => widget.navigation.go('K1'),
+                        ),
+                      ]),
+                      const SizedBox(height: 10),
+                      _buildMenuList(<Widget>[
                         _buildMenuItem(
                           icon: Icons.edit_note_outlined,
                           title: '我审批的',
@@ -5920,14 +5948,6 @@ class _NativeB2PageState extends State<_NativeB2Page> {
                               '${stats.pendingForMe} 待我审 · ${stats.handledThisMonth} 已审核',
                           badge: stats.pendingForMe,
                           onTap: () => widget.navigation.go('B1'),
-                        ),
-                        _buildMenuItem(
-                          icon: Icons.check_box_outlined,
-                          title: '抄送我的',
-                          desc:
-                              '${stats.ccProposalCount} 份抄送 · ${stats.ccProposalPending} 审批中',
-                          badge: stats.ccProposalCount,
-                          onTap: () => widget.navigation.go('P1'),
                         ),
                         if (stats.postApprovalTodoEnabled)
                           _buildMenuItem(
@@ -5938,31 +5958,21 @@ class _NativeB2PageState extends State<_NativeB2Page> {
                             badge: stats.pendingTodoForMe,
                             onTap: () => widget.navigation.go('B13'),
                           ),
-                      ]),
-                      const SizedBox(height: 10),
-                      _buildMenuList(<Widget>[
                         _buildMenuItem(
-                          icon: Icons.auto_stories_outlined,
-                          title: '知识库',
-                          desc: '$kbDocCount 文档 · $kbCategoryCount 分类',
-                          badge: kbUnreadCount,
-                          onTap: () => widget.navigation.go('K1'),
+                          icon: Icons.description_outlined,
+                          title: '我发起的审批',
+                          desc:
+                              '$initiatedTotal 条总数 · ${stats.approvalPending} 审批中',
+                          badge: initiatedTotal,
+                          onTap: () => widget.onOpenB14(),
                         ),
-                        if (_showDeferredTools)
-                          _buildMenuItem(
-                            icon: Icons.edit_outlined,
-                            title: '写汇报',
-                            desc: '0 篇 · 0 草稿 · 日 / 周 / 月 / 季',
-                            badge: 0,
-                            comingSoon: true,
-                            onTap: () => _showSoonToast(),
-                          ),
                         _buildMenuItem(
-                          icon: Icons.article_outlined,
-                          title: '会议纪要',
-                          desc: '$_meetingCount 场 · 录音转写 · 纪要生成',
-                          badge: _meetingCount,
-                          onTap: () => widget.navigation.go('MM-L'),
+                          icon: Icons.check_box_outlined,
+                          title: '抄送我的',
+                          desc:
+                              '${stats.ccProposalCount} 份抄送 · ${stats.ccProposalPending} 审批中',
+                          badge: stats.ccProposalCount,
+                          onTap: () => widget.navigation.go('P1'),
                         ),
                       ]),
                       if (_showDeferredTools) ...[
@@ -6456,6 +6466,37 @@ class _NativeB2PageState extends State<_NativeB2Page> {
                   ),
                 ),
               ],
+            ),
+          ),
+          Semantics(
+            button: true,
+            label: '查看个人工作画像',
+            child: Tooltip(
+              message: '个人工作画像',
+              child: InkWell(
+                borderRadius: BorderRadius.circular(18),
+                onTap: () => widget.navigation.go('B2P'),
+                child: Padding(
+                  padding: const EdgeInsets.all(4),
+                  child: Container(
+                    width: 34,
+                    height: 34,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF7F3FC),
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: const Color(0xFFC1B0D6),
+                        width: 1.5,
+                      ),
+                    ),
+                    child: const Icon(
+                      Icons.insights_rounded,
+                      size: 19,
+                      color: Color(0xFF7651B8),
+                    ),
+                  ),
+                ),
+              ),
             ),
           ),
         ],

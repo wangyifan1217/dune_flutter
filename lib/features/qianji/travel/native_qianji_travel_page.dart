@@ -81,9 +81,8 @@ List<({String name, int trips})> _travelDeptStats(List<TravelEmployee> all) {
     final key = _deptKeyOf(p);
     map[key] = (map[key] ?? 0) + p.trips;
   }
-  final list = [
-    for (final e in map.entries) (name: e.key, trips: e.value),
-  ]..sort((a, b) => b.trips.compareTo(a.trips));
+  final list = [for (final e in map.entries) (name: e.key, trips: e.value)]
+    ..sort((a, b) => b.trips.compareTo(a.trips));
   return list;
 }
 
@@ -153,11 +152,7 @@ void _showTravelKindCosts(BuildContext context, List<TravelEmployee> people) {
             ),
             const SizedBox(height: 12),
             for (final kind in TravelKind.values)
-              _KindCostLine(
-                kind: kind,
-                amount: costs[kind] ?? 0,
-                total: total,
-              ),
+              _KindCostLine(kind: kind, amount: costs[kind] ?? 0, total: total),
           ],
         ),
       ),
@@ -223,14 +218,24 @@ class _NativeQianjiTravelPageState extends State<NativeQianjiTravelPage> {
   String? _error;
 
   List<TravelEmployee> get _people => _visibleTravelPeople(
-        all: _all,
-        dept: _selectedDept,
-        nameQuery: _nameQuery,
-        personId: _personId,
-      );
+    all: _all,
+    dept: _selectedDept,
+    nameQuery: _nameQuery,
+    personId: _personId,
+  );
 
   bool get _hasPeopleFilter =>
-      _selectedDept != null || _nameQuery.trim().isNotEmpty;
+      _personId != 'all' ||
+      _selectedDept != null ||
+      _nameQuery.trim().isNotEmpty;
+
+  String? get _selectedPersonName {
+    if (_personId == 'all') return null;
+    for (final person in _all) {
+      if (person.id == _personId) return person.name;
+    }
+    return null;
+  }
 
   String _deptKey(TravelEmployee e) => _deptKeyOf(e);
 
@@ -325,44 +330,40 @@ class _NativeQianjiTravelPageState extends State<NativeQianjiTravelPage> {
               child: _loading
                   ? const Center(child: CircularProgressIndicator())
                   : _error != null
-                      ? Center(
-                          child: Padding(
-                            padding: const EdgeInsets.all(24),
+                  ? Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(24),
+                        child: Text(
+                          _error!,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(color: Color(0xFFB42318)),
+                        ),
+                      ),
+                    )
+                  : _view == _TravelView.list
+                  ? (_people.isEmpty
+                        ? Center(
                             child: Text(
-                              _error!,
-                              textAlign: TextAlign.center,
-                              style: const TextStyle(color: Color(0xFFB42318)),
+                              _hasPeopleFilter ? '没有符合条件的人员' : '暂无导入的差旅数据',
+                              style: const TextStyle(color: DunesColors.text3),
                             ),
-                          ),
-                        )
-                      : _view == _TravelView.list
-                          ? (_people.isEmpty
-                              ? Center(
-                                  child: Text(
-                                    _hasPeopleFilter
-                                        ? '没有符合条件的人员'
-                                        : '暂无导入的差旅数据',
-                                    style: const TextStyle(
-                                      color: DunesColors.text3,
-                                    ),
-                                  ),
-                                )
-                              : _EmployeeList(
-                                  people: people,
-                                  onOpen: (id) {
-                                    setState(() {
-                                      _personId = id;
-                                      _view = _TravelView.map;
-                                      _mapMode = _MapMode.province;
-                                    });
-                                  },
-                                ))
-                          : _ChinaTravelMap(
-                              people: people,
-                              mode: _mapMode,
-                              kindFilter: _kindFilter,
-                              onFullscreen: _openMapFullscreen,
-                            ),
+                          )
+                        : _EmployeeList(
+                            people: people,
+                            onOpen: (id) {
+                              setState(() {
+                                _personId = id;
+                                _view = _TravelView.map;
+                                _mapMode = _MapMode.province;
+                              });
+                            },
+                          ))
+                  : _ChinaTravelMap(
+                      people: people,
+                      mode: _mapMode,
+                      kindFilter: _kindFilter,
+                      onFullscreen: _openMapFullscreen,
+                    ),
             ),
           ],
         ),
@@ -425,23 +426,25 @@ class _NativeQianjiTravelPageState extends State<NativeQianjiTravelPage> {
   }
 
   Future<void> _openMapFullscreen() async {
-    final result = await Navigator.of(context, rootNavigator: true).push<_MapFullscreenResult>(
-      PageRouteBuilder(
-        fullscreenDialog: true,
-        pageBuilder: (ctx, animation, secondary) {
-          return _TravelMapFullscreenPage(
-            session: widget.session,
-            mode: _mapMode,
-            kindFilter: _kindFilter,
-            nameQuery: _nameQuery,
-            rangePreset: _rangePreset,
-            customFrom: _customFrom,
-            customTo: _customTo,
-            selectedDept: _selectedDept,
-          );
-        },
-      ),
-    );
+    final result = await Navigator.of(context, rootNavigator: true)
+        .push<_MapFullscreenResult>(
+          PageRouteBuilder(
+            fullscreenDialog: true,
+            pageBuilder: (ctx, animation, secondary) {
+              return _TravelMapFullscreenPage(
+                session: widget.session,
+                mode: _mapMode,
+                kindFilter: _kindFilter,
+                nameQuery: _nameQuery,
+                rangePreset: _rangePreset,
+                customFrom: _customFrom,
+                customTo: _customTo,
+                selectedDept: _selectedDept,
+                personId: _personId,
+              );
+            },
+          ),
+        );
     if (!mounted || result == null) return;
     setState(() {
       _mapMode = result.mode;
@@ -452,7 +455,7 @@ class _NativeQianjiTravelPageState extends State<NativeQianjiTravelPage> {
       _customFrom = result.customFrom;
       _customTo = result.customTo;
       _selectedDept = result.selectedDept;
-      _personId = 'all';
+      _personId = result.personId;
     });
     unawaited(_reload());
   }
@@ -525,6 +528,21 @@ class _NativeQianjiTravelPageState extends State<NativeQianjiTravelPage> {
             ],
           ),
         ),
+        if (_selectedPersonName case final name?)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: InputChip(
+                avatar: const Icon(Icons.person_outline_rounded, size: 16),
+                label: Text('当前查看：$name'),
+                onPressed: () => setState(() => _personId = 'all'),
+                deleteIcon: const Icon(Icons.close_rounded, size: 16),
+                onDeleted: () => setState(() => _personId = 'all'),
+                tooltip: '清除人员筛选',
+              ),
+            ),
+          ),
       ],
     );
   }
@@ -603,11 +621,7 @@ class _NativeQianjiTravelPageState extends State<NativeQianjiTravelPage> {
 }
 
 class _StatChip extends StatelessWidget {
-  const _StatChip({
-    required this.label,
-    required this.value,
-    this.onInfo,
-  });
+  const _StatChip({required this.label, required this.value, this.onInfo});
   final String label;
   final String value;
   final VoidCallback? onInfo;
@@ -640,15 +654,14 @@ class _StatChip extends StatelessWidget {
               Expanded(
                 child: Text(
                   label,
-                  style: const TextStyle(fontSize: 11, color: DunesColors.text3),
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: DunesColors.text3,
+                  ),
                 ),
               ),
               if (onInfo != null)
-                const Icon(
-                  Icons.info_outline,
-                  size: 14,
-                  color: _themePurple,
-                ),
+                const Icon(Icons.info_outline, size: 14, color: _themePurple),
             ],
           ),
         ],
@@ -727,7 +740,10 @@ class _KindCostLine extends StatelessWidget {
                 child: Text(
                   '$pct%',
                   textAlign: TextAlign.right,
-                  style: const TextStyle(fontSize: 12, color: DunesColors.text3),
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: DunesColors.text3,
+                  ),
                 ),
               ),
             ],
@@ -774,9 +790,14 @@ class _Segmented<T> extends StatelessWidget {
               onTap: () => onChanged(item.value),
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 160),
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 7,
+                ),
                 decoration: BoxDecoration(
-                  color: value == item.value ? Colors.white : Colors.transparent,
+                  color: value == item.value
+                      ? Colors.white
+                      : Colors.transparent,
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
@@ -787,7 +808,9 @@ class _Segmented<T> extends StatelessWidget {
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
                     decoration: TextDecoration.none,
-                    color: value == item.value ? _themePurple : DunesColors.text2,
+                    color: value == item.value
+                        ? _themePurple
+                        : DunesColors.text2,
                   ),
                 ),
               ),
@@ -934,10 +957,7 @@ class _TravelSearchFilters extends StatelessWidget {
 }
 
 class _PersonSearchField extends StatelessWidget {
-  const _PersonSearchField({
-    required this.controller,
-    required this.onChanged,
-  });
+  const _PersonSearchField({required this.controller, required this.onChanged});
   final TextEditingController controller;
   final ValueChanged<String> onChanged;
 
@@ -952,7 +972,11 @@ class _PersonSearchField extends StatelessWidget {
         decoration: InputDecoration(
           hintText: '搜索人员',
           hintStyle: const TextStyle(fontSize: 13, color: DunesColors.text3),
-          prefixIcon: const Icon(Icons.search, size: 18, color: DunesColors.text3),
+          prefixIcon: const Icon(
+            Icons.search,
+            size: 18,
+            color: DunesColors.text3,
+          ),
           suffixIcon: controller.text.isEmpty
               ? null
               : IconButton(
@@ -960,12 +984,19 @@ class _PersonSearchField extends StatelessWidget {
                     controller.clear();
                     onChanged('');
                   },
-                  icon: const Icon(Icons.close, size: 16, color: DunesColors.text3),
+                  icon: const Icon(
+                    Icons.close,
+                    size: 16,
+                    color: DunesColors.text3,
+                  ),
                 ),
           filled: true,
           fillColor: Colors.white,
           isDense: true,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 8,
+            vertical: 8,
+          ),
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(10),
             borderSide: const BorderSide(color: Color(0xFFE8EAED)),
@@ -1139,7 +1170,10 @@ class _EmployeeList extends StatelessWidget {
                   const SizedBox(height: 4),
                   Text(
                     '${p.dept.trim().isEmpty ? '' : '${p.dept} · '}${p.trips} 段行程',
-                    style: const TextStyle(fontSize: 12, color: DunesColors.text3),
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: DunesColors.text3,
+                    ),
                   ),
                   const SizedBox(height: 8),
                   Wrap(
@@ -1148,7 +1182,10 @@ class _EmployeeList extends StatelessWidget {
                     children: [
                       for (final kind in kinds)
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 3,
+                          ),
                           decoration: BoxDecoration(
                             color: _kindColor(kind).withValues(alpha: 0.12),
                             borderRadius: BorderRadius.circular(999),
@@ -1164,7 +1201,10 @@ class _EmployeeList extends StatelessWidget {
                         ),
                       for (final name in p.provinces)
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 3,
+                          ),
                           decoration: BoxDecoration(
                             color: const Color(0xFFF0EEF7),
                             borderRadius: BorderRadius.circular(999),
@@ -1316,10 +1356,8 @@ class _MapFit {
   Offset toScreen(double x, double y) =>
       Offset(origin.dx + x * scale, origin.dy + y * scale);
 
-  Offset toViewBox(Offset screen) => Offset(
-        (screen.dx - origin.dx) / scale,
-        (screen.dy - origin.dy) / scale,
-      );
+  Offset toViewBox(Offset screen) =>
+      Offset((screen.dx - origin.dx) / scale, (screen.dy - origin.dy) / scale);
 }
 
 double _pathDistance(Path path, Offset p) {
@@ -1344,6 +1382,7 @@ class _MapFullscreenResult {
     required this.customFrom,
     required this.customTo,
     required this.selectedDept,
+    required this.personId,
   });
   final _MapMode mode;
   final TravelKind? kindFilter;
@@ -1352,6 +1391,7 @@ class _MapFullscreenResult {
   final DateTime? customFrom;
   final DateTime? customTo;
   final String? selectedDept;
+  final String personId;
 }
 
 class _TravelMapFullscreenPage extends StatefulWidget {
@@ -1364,6 +1404,7 @@ class _TravelMapFullscreenPage extends StatefulWidget {
     required this.customFrom,
     required this.customTo,
     required this.selectedDept,
+    required this.personId,
   });
   final AuthSession session;
   final _MapMode mode;
@@ -1373,9 +1414,11 @@ class _TravelMapFullscreenPage extends StatefulWidget {
   final DateTime? customFrom;
   final DateTime? customTo;
   final String? selectedDept;
+  final String personId;
 
   @override
-  State<_TravelMapFullscreenPage> createState() => _TravelMapFullscreenPageState();
+  State<_TravelMapFullscreenPage> createState() =>
+      _TravelMapFullscreenPageState();
 }
 
 class _TravelMapFullscreenPageState extends State<_TravelMapFullscreenPage> {
@@ -1385,6 +1428,7 @@ class _TravelMapFullscreenPageState extends State<_TravelMapFullscreenPage> {
   DateTime? _customFrom;
   DateTime? _customTo;
   String? _selectedDept;
+  late String _personId;
   late final TextEditingController _nameCtrl;
   late String _nameQuery;
   late final TravelService _service;
@@ -1393,14 +1437,23 @@ class _TravelMapFullscreenPageState extends State<_TravelMapFullscreenPage> {
   String? _error;
 
   List<TravelEmployee> get _people => _visibleTravelPeople(
-        all: _all,
-        dept: _selectedDept,
-        nameQuery: _nameQuery,
-      );
+    all: _all,
+    dept: _selectedDept,
+    nameQuery: _nameQuery,
+    personId: _personId,
+  );
 
   List<({String name, int trips})> get _deptStats => _travelDeptStats(_all);
 
   int get _totalTrips => _all.fold<int>(0, (s, p) => s + p.trips);
+
+  String? get _selectedPersonName {
+    if (_personId == 'all') return null;
+    for (final person in _all) {
+      if (person.id == _personId) return person.name;
+    }
+    return null;
+  }
 
   @override
   void initState() {
@@ -1411,6 +1464,7 @@ class _TravelMapFullscreenPageState extends State<_TravelMapFullscreenPage> {
     _customFrom = widget.customFrom;
     _customTo = widget.customTo;
     _selectedDept = widget.selectedDept;
+    _personId = widget.personId;
     _nameQuery = widget.nameQuery;
     _nameCtrl = TextEditingController(text: widget.nameQuery);
     _service = TravelService(session: widget.session);
@@ -1496,6 +1550,7 @@ class _TravelMapFullscreenPageState extends State<_TravelMapFullscreenPage> {
         customFrom: _customFrom,
         customTo: _customTo,
         selectedDept: _selectedDept,
+        personId: _personId,
       ),
     );
   }
@@ -1544,17 +1599,42 @@ class _TravelMapFullscreenPageState extends State<_TravelMapFullscreenPage> {
                   ],
                 ),
               ),
-              _TravelSearchFilters(
-                nameCtrl: _nameCtrl,
-                onNameChanged: (v) => setState(() => _nameQuery = v),
-                rangePreset: _rangePreset,
-                customRangeLabel: _travelCustomRangeLabel(_customFrom, _customTo),
-                onRangePreset: _setRangePreset,
-                viewAllDepts: widget.session.travelViewAll,
-                deptStats: _deptStats,
-                totalTrips: _totalTrips,
-                selectedDept: _selectedDept,
-                onSelectDept: _selectDepartment,
+              Material(
+                color: Colors.white,
+                child: ExpansionTile(
+                  tilePadding: const EdgeInsets.symmetric(horizontal: 16),
+                  title: Text(
+                    _selectedPersonName == null
+                        ? '筛选条件'
+                        : '当前查看：$_selectedPersonName',
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: DunesColors.text,
+                    ),
+                  ),
+                  subtitle: const Text(
+                    '展开后可调整人员、时间和部门',
+                    style: TextStyle(fontSize: 11, color: DunesColors.text3),
+                  ),
+                  children: [
+                    _TravelSearchFilters(
+                      nameCtrl: _nameCtrl,
+                      onNameChanged: (v) => setState(() => _nameQuery = v),
+                      rangePreset: _rangePreset,
+                      customRangeLabel: _travelCustomRangeLabel(
+                        _customFrom,
+                        _customTo,
+                      ),
+                      onRangePreset: _setRangePreset,
+                      viewAllDepts: widget.session.travelViewAll,
+                      deptStats: _deptStats,
+                      totalTrips: _totalTrips,
+                      selectedDept: _selectedDept,
+                      onSelectDept: _selectDepartment,
+                    ),
+                  ],
+                ),
               ),
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
@@ -1589,24 +1669,24 @@ class _TravelMapFullscreenPageState extends State<_TravelMapFullscreenPage> {
                 child: _loading
                     ? const Center(child: CircularProgressIndicator())
                     : _error != null
-                        ? Center(
-                            child: Padding(
-                              padding: const EdgeInsets.all(24),
-                              child: Text(
-                                _error!,
-                                textAlign: TextAlign.center,
-                                style: const TextStyle(color: Color(0xFFB42318)),
-                              ),
-                            ),
-                          )
-                        : _ChinaTravelMap(
-                            people: _people,
-                            mode: _mode,
-                            kindFilter: _kindFilter,
-                            edgeToEdge: true,
-                            onFullscreen: _close,
-                            fullscreen: true,
+                    ? Center(
+                        child: Padding(
+                          padding: const EdgeInsets.all(24),
+                          child: Text(
+                            _error!,
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(color: Color(0xFFB42318)),
                           ),
+                        ),
+                      )
+                    : _ChinaTravelMap(
+                        people: _people,
+                        mode: _mode,
+                        kindFilter: _kindFilter,
+                        edgeToEdge: true,
+                        onFullscreen: _close,
+                        fullscreen: true,
+                      ),
               ),
             ],
           ),
@@ -1684,7 +1764,8 @@ class _ChinaTravelMapState extends State<_ChinaTravelMap>
       for (final bundle in bundles) {
         final a = travelCityOf(bundle.from);
         final b = travelCityOf(bundle.to);
-        final point = bundle.items.any((e) => routeIsPoint(e.leg)) ||
+        final point =
+            bundle.items.any((e) => routeIsPoint(e.leg)) ||
             bundle.from == bundle.to;
         double? dist;
         if (point) {
@@ -1752,7 +1833,9 @@ class _ChinaTravelMapState extends State<_ChinaTravelMap>
     }
 
     final province = hit;
-    final related = legs.where((e) => legTouchesProvince(e.leg, province.name)).toList();
+    final related = legs
+        .where((e) => legTouchesProvince(e.leg, province.name))
+        .toList();
     final byPerson = <String, _PickLine>{};
     for (final item in related) {
       final id = item.person.id;
@@ -1798,106 +1881,109 @@ class _ChinaTravelMapState extends State<_ChinaTravelMap>
             builder: (context, outer) {
               final viewport = Size(outer.maxWidth, outer.maxHeight);
               return Stack(
-            children: [
-              Positioned.fill(
-                child: InteractiveViewer(
-                  minScale: 0.7,
-                  maxScale: 4.0,
-                  child: LayoutBuilder(
-                    builder: (context, c) {
-                      final size = Size(c.maxWidth, c.maxHeight);
-                      return Listener(
-                        behavior: HitTestBehavior.opaque,
-                        onPointerDown: (e) => _pointerDown = e.localPosition,
-                        onPointerCancel: (_) => _pointerDown = null,
-                        onPointerUp: (e) {
-                          final start = _pointerDown;
-                          _pointerDown = null;
-                          if (start == null) return;
-                          if ((e.localPosition - start).distance > 14) {
-                            return;
-                          }
-                          _onTap(e.localPosition, size);
+                children: [
+                  Positioned.fill(
+                    child: InteractiveViewer(
+                      minScale: 0.5,
+                      maxScale: 4.0,
+                      child: LayoutBuilder(
+                        builder: (context, c) {
+                          final size = Size(c.maxWidth, c.maxHeight);
+                          return Listener(
+                            behavior: HitTestBehavior.opaque,
+                            onPointerDown: (e) =>
+                                _pointerDown = e.localPosition,
+                            onPointerCancel: (_) => _pointerDown = null,
+                            onPointerUp: (e) {
+                              final start = _pointerDown;
+                              _pointerDown = null;
+                              if (start == null) return;
+                              if ((e.localPosition - start).distance > 14) {
+                                return;
+                              }
+                              _onTap(e.localPosition, size);
+                            },
+                            child: AnimatedBuilder(
+                              animation: Listenable.merge([_pulse, _flow]),
+                              builder: (context, _) {
+                                return CustomPaint(
+                                  painter: _TravelMapPainter(
+                                    people: widget.people,
+                                    mode: widget.mode,
+                                    kindFilter: widget.kindFilter,
+                                    pulse: _pulse.value,
+                                    flow: _flow.value,
+                                    selectedProvince: _pick?.province,
+                                    selectedRouteKey: _pick?.routeKey,
+                                  ),
+                                  child: const SizedBox.expand(),
+                                );
+                              },
+                            ),
+                          );
                         },
-                        child: AnimatedBuilder(
-                          animation: Listenable.merge([_pulse, _flow]),
-                          builder: (context, _) {
-                            return CustomPaint(
-                              painter: _TravelMapPainter(
-                                people: widget.people,
-                                mode: widget.mode,
-                                kindFilter: widget.kindFilter,
-                                pulse: _pulse.value,
-                                flow: _flow.value,
-                                selectedProvince: _pick?.province,
-                                selectedRouteKey: _pick?.routeKey,
-                              ),
-                              child: const SizedBox.expand(),
-                            );
-                          },
-                        ),
-                      );
-                    },
-                  ),
-                ),
-              ),
-              if (widget.onFullscreen != null)
-                Positioned(
-                  top: 8,
-                  right: 8,
-                  child: Material(
-                    color: Colors.white.withValues(alpha: 0.92),
-                    shape: const CircleBorder(),
-                    elevation: 1,
-                    child: IconButton(
-                      tooltip: widget.fullscreen ? '退出全屏' : '全屏',
-                      onPressed: widget.onFullscreen,
-                      icon: Icon(
-                        widget.fullscreen ? Icons.fullscreen_exit : Icons.fullscreen,
-                        color: _themePurple,
                       ),
                     ),
                   ),
-                ),
-              Positioned(
-                left: 12,
-                right: 12,
-                bottom: 12,
-                child: Align(
-                  alignment: Alignment.bottomLeft,
-                  child: widget.mode == _MapMode.route
-                      ? const _RouteLegend()
-                      : const _HintChip(text: '点击省份查看费用'),
-                ),
-              ),
-              if (_pick != null)
-                Positioned.fill(
-                  child: Material(
-                    color: const Color(0x59000000),
-                    child: GestureDetector(
-                      behavior: HitTestBehavior.opaque,
-                      onTap: () => setState(() => _pick = null),
-                      child: Center(
-                        child: GestureDetector(
-                          onTap: () {},
-                          child: _CostCard(
-                            pick: _pick!,
-                            maxWidth: math.min(
-                              320.0,
-                              math.max(220.0, viewport.width - 40),
-                            ),
-                            maxHeight: math.min(
-                              420.0,
-                              math.max(180.0, viewport.height - 64),
-                            ),
-                            onClose: () => setState(() => _pick = null),
+                  if (widget.onFullscreen != null)
+                    Positioned(
+                      top: 8,
+                      right: 8,
+                      child: Material(
+                        color: Colors.white.withValues(alpha: 0.92),
+                        shape: const CircleBorder(),
+                        elevation: 1,
+                        child: IconButton(
+                          tooltip: widget.fullscreen ? '退出全屏' : '全屏',
+                          onPressed: widget.onFullscreen,
+                          icon: Icon(
+                            widget.fullscreen
+                                ? Icons.fullscreen_exit
+                                : Icons.fullscreen,
+                            color: _themePurple,
                           ),
                         ),
                       ),
                     ),
+                  Positioned(
+                    left: 12,
+                    right: 12,
+                    bottom: 12,
+                    child: Align(
+                      alignment: Alignment.bottomLeft,
+                      child: widget.mode == _MapMode.route
+                          ? const _RouteLegend()
+                          : const _HintChip(text: '点击省份查看费用'),
+                    ),
                   ),
-                ),
-            ],
+                  if (_pick != null)
+                    Positioned.fill(
+                      child: Material(
+                        color: const Color(0x59000000),
+                        child: GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onTap: () => setState(() => _pick = null),
+                          child: Center(
+                            child: GestureDetector(
+                              onTap: () {},
+                              child: _CostCard(
+                                pick: _pick!,
+                                maxWidth: math.min(
+                                  320.0,
+                                  math.max(220.0, viewport.width - 40),
+                                ),
+                                maxHeight: math.min(
+                                  420.0,
+                                  math.max(180.0, viewport.height - 64),
+                                ),
+                                onClose: () => setState(() => _pick = null),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
               );
             },
           ),
@@ -1949,7 +2035,10 @@ class _CostCard extends StatelessWidget {
     const headerH = 108.0;
     final listH = pick.lines.isEmpty
         ? 0.0
-        : math.min(pick.lines.length * 50.0, math.max(0.0, maxHeight - headerH));
+        : math.min(
+            pick.lines.length * 50.0,
+            math.max(0.0, maxHeight - headerH),
+          );
 
     return Material(
       color: Colors.white,
@@ -1982,7 +2071,11 @@ class _CostCard extends StatelessWidget {
                     borderRadius: BorderRadius.circular(12),
                     child: const Padding(
                       padding: EdgeInsets.all(4),
-                      child: Icon(Icons.close, size: 16, color: DunesColors.text3),
+                      child: Icon(
+                        Icons.close,
+                        size: 16,
+                        color: DunesColors.text3,
+                      ),
                     ),
                   ),
                 ],
@@ -2142,10 +2235,9 @@ Path _parseProvincePath(String d) {
     final path = Path();
     for (final part in d.split(RegExp(r'(?=[Mm])'))) {
       if (part.trim().isEmpty) continue;
-      final nums = RegExp(r'-?\d+\.?\d*')
-          .allMatches(part)
-          .map((m) => double.parse(m.group(0)!))
-          .toList();
+      final nums = RegExp(
+        r'-?\d+\.?\d*',
+      ).allMatches(part).map((m) => double.parse(m.group(0)!)).toList();
       if (nums.length < 2) continue;
       path.moveTo(nums[0], nums[1]);
       for (var i = 2; i + 1 < nums.length; i += 2) {
@@ -2289,7 +2381,9 @@ class _TravelMapPainter extends CustomPainter {
       _paintLitProvince(
         canvas,
         p,
-        intensity: max <= 0 ? 0.7 : ((costs[p.name] ?? 0) / max).clamp(0.55, 1.0),
+        intensity: max <= 0
+            ? 0.7
+            : ((costs[p.name] ?? 0) / max).clamp(0.55, 1.0),
         selected: p.name == selectedProvince,
       );
     }
@@ -2300,11 +2394,7 @@ class _TravelMapPainter extends CustomPainter {
     _paintRoutes(canvas, fit);
   }
 
-  void _paintProvinceLabels(
-    Canvas canvas,
-    _MapFit fit,
-    Set<String> lit,
-  ) {
+  void _paintProvinceLabels(Canvas canvas, _MapFit fit, Set<String> lit) {
     final tp = TextPainter(textDirection: ui.TextDirection.ltr);
     for (final p in chinaProvinces) {
       if (p.name.isEmpty) continue;
@@ -2318,19 +2408,20 @@ class _TravelMapPainter extends CustomPainter {
           color: selected
               ? const Color(0xFF4C1D95)
               : on
-                  ? const Color(0xFF3F2A7A)
-                  : const Color(0xFF4B5563),
+              ? const Color(0xFF3F2A7A)
+              : const Color(0xFF4B5563),
           shadows: const [
-            Shadow(color: Color(0xF7FFFFFF), blurRadius: 3, offset: Offset(0, 0.4)),
+            Shadow(
+              color: Color(0xF7FFFFFF),
+              blurRadius: 3,
+              offset: Offset(0, 0.4),
+            ),
           ],
         ),
       );
       tp.layout();
       final pos = fit.toScreen(p.cx, p.cy);
-      tp.paint(
-        canvas,
-        Offset(pos.dx - tp.width / 2, pos.dy - tp.height / 2),
-      );
+      tp.paint(canvas, Offset(pos.dx - tp.width / 2, pos.dy - tp.height / 2));
     }
   }
 
@@ -2353,11 +2444,10 @@ class _TravelMapPainter extends CustomPainter {
       intensity,
     )!;
     final fill = Paint()
-      ..shader = ui.Gradient.linear(
-        bounds.topCenter,
-        bounds.bottomCenter,
-        [top, bottom],
-      );
+      ..shader = ui.Gradient.linear(bounds.topCenter, bounds.bottomCenter, [
+        top,
+        bottom,
+      ]);
     final glow = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = selected ? 6 : 4
@@ -2381,7 +2471,8 @@ class _TravelMapPainter extends CustomPainter {
     for (final bundle in bundles) {
       final a = travelCityOf(bundle.from);
       final b = travelCityOf(bundle.to);
-      final point = bundle.items.any((e) => routeIsPoint(e.leg)) ||
+      final point =
+          bundle.items.any((e) => routeIsPoint(e.leg)) ||
           bundle.from == bundle.to;
       if (point) {
         final city = a ?? b;
@@ -2417,11 +2508,7 @@ class _TravelMapPainter extends CustomPainter {
     _paintCityLabels(canvas, cities, fit);
   }
 
-  void _paintCityLabels(
-    Canvas canvas,
-    Set<String> cities,
-    _MapFit fit,
-  ) {
+  void _paintCityLabels(Canvas canvas, Set<String> cities, _MapFit fit) {
     final tp = TextPainter(textDirection: ui.TextDirection.ltr);
     for (final name in cities) {
       final city = travelCityOf(name);
@@ -2429,11 +2516,7 @@ class _TravelMapPainter extends CustomPainter {
       final pt = ChinaMapProj.project(city.lon, city.lat);
       final pos = fit.toScreen(pt.x, pt.y);
       canvas.drawCircle(pos, 5.2, Paint()..color = Colors.white);
-      canvas.drawCircle(
-        pos,
-        3.6,
-        Paint()..color = const Color(0xFF7B5CD8),
-      );
+      canvas.drawCircle(pos, 3.6, Paint()..color = const Color(0xFF7B5CD8));
       tp.text = TextSpan(
         text: name,
         style: const TextStyle(

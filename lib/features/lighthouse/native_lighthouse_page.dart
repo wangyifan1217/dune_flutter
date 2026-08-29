@@ -9449,6 +9449,29 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         _clearBackInterceptor();
       }
     }
+    _recoverFromUnavailableNetTa();
+  }
+
+  /// A session refresh can revoke Net TA while this keep-alive page is open.
+  /// Return to the safe default instead of leaving an inaccessible tab selected.
+  void _recoverFromUnavailableNetTa() {
+    if (_tab != 'netTa' || _hasNetTaAccess) return;
+    setState(() {
+      _tab = 'product';
+      _groupFilter = '全部';
+      _tabBarShowsGroups = true;
+      _hunFilter = '全部';
+      _anomalyFilter = '全部';
+      _sortField = 'profit';
+      _listLimit = _listPageSize;
+      _rowsCacheKey = '';
+      _rowsCache = null;
+      _netTaBalanceOpen = false;
+      _closeMetricPage();
+      _invalidateAiSummary();
+      _restoreSharedHeroMetrics();
+    });
+    unawaited(_loadTab('product'));
   }
 
   void _installBackInterceptor() {
@@ -11639,6 +11662,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   }
 
   bool get _hasAccess => widget.session.effectiveLighthouseAccess;
+  bool get _hasNetTaAccess => widget.session.effectiveNetTaAccess;
 
   bool _isNoPermissionError(Object? error) {
     if (error == null) return false;
@@ -19988,11 +20012,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   ///   Row1 维度 · Row2 = 产品 sync_source 映射 / 供给·渠道 L1 · Row3 = HUN（供给/渠道）
   /// 再点当前维可收起 Row2/Row3。列表列本身是 L2 / province_name。
   Widget _buildTabSegment() {
-    const dims = [
+    final dims = [
       {'key': 'product', 'label': '产品'},
       {'key': 'supply', 'label': '供给方'},
       {'key': 'channel', 'label': '渠道'},
-      {'key': 'netTa', 'label': '净TA'},
+      if (_hasNetTaAccess) {'key': 'netTa', 'label': '净TA'},
       {'key': 'analysis', 'label': '分析'},
     ];
     // 供给默认选中中石油；渠道下拉里平安仅置顶，默认仍是「全部」。
@@ -20046,6 +20070,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             return;
           }
           if (key == 'netTa') {
+            if (!_hasNetTaAccess) return;
             if (key == _tab) return;
             _closeDropdown();
             setState(() {

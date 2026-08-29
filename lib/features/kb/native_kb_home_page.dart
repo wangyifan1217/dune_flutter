@@ -64,6 +64,10 @@ class _NativeKbHomePageState extends State<NativeKbHomePage> {
   String? _error;
   String _syncStatus = '打开页面自动读本地库 · 后台同步 RAGFlow · 可手动刷新';
   Timer? _parsePollTimer;
+  final TextEditingController _search = TextEditingController();
+  Timer? _searchDebounce;
+  List<NativeKbDocument>? _searchResults;
+  bool _searching = false;
 
   bool get _uploading => KbUploadCoordinator.instance.isUploading;
   String? get _uploadProgress {
@@ -84,6 +88,8 @@ class _NativeKbHomePageState extends State<NativeKbHomePage> {
   void dispose() {
     KbUploadCoordinator.instance.removeListener(_onKbUploadChanged);
     _parsePollTimer?.cancel();
+    _searchDebounce?.cancel();
+    _search.dispose();
     super.dispose();
   }
 
@@ -293,7 +299,7 @@ class _NativeKbHomePageState extends State<NativeKbHomePage> {
     final content = files.length == 1
         ? '将把「${names.first}」上传到你的知识库，上传后可检索引用。\n\n是否继续？'
         : '将把以下 ${files.length} 个文件上传到你的知识库，上传后可检索引用。\n\n'
-            '${names.map((n) => '· $n').join('\n')}\n\n是否继续？';
+              '${names.map((n) => '· $n').join('\n')}\n\n是否继续？';
     return showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -362,8 +368,9 @@ class _NativeKbHomePageState extends State<NativeKbHomePage> {
     final previous = _summary;
     // 先局部移除，避免整页 loading 闪烁。
     if (previous != null) {
-      final nextDocs =
-          previous.documents.where((d) => d.id != doc.id).toList(growable: false);
+      final nextDocs = previous.documents
+          .where((d) => d.id != doc.id)
+          .toList(growable: false);
       setState(() {
         _summary = NativeKbSummary(
           documentCount: nextDocs.length,
@@ -563,8 +570,11 @@ class _NativeKbHomePageState extends State<NativeKbHomePage> {
       );
       final fileName = downloaded.fileName.trim().isNotEmpty
           ? downloaded.fileName.trim()
-          : (doc.fileName.trim().isNotEmpty ? doc.fileName.trim() : share.title);
-      final mimeType = lookupMimeType(fileName) ??
+          : (doc.fileName.trim().isNotEmpty
+                ? doc.fileName.trim()
+                : share.title);
+      final mimeType =
+          lookupMimeType(fileName) ??
           lookupMimeType('file.${doc.fileExtension}') ??
           'application/octet-stream';
       await _chatService.sendFile(
@@ -600,8 +610,11 @@ class _NativeKbHomePageState extends State<NativeKbHomePage> {
       if (!mounted) return;
       final fileName = downloaded.fileName.trim().isNotEmpty
           ? downloaded.fileName.trim()
-          : (doc.fileName.trim().isNotEmpty ? doc.fileName.trim() : share.title);
-      final mimeType = lookupMimeType(fileName) ??
+          : (doc.fileName.trim().isNotEmpty
+                ? doc.fileName.trim()
+                : share.title);
+      final mimeType =
+          lookupMimeType(fileName) ??
           lookupMimeType('file.${doc.fileExtension}') ??
           'application/octet-stream';
       final sourceKey = _driveSourceKeyForDoc(doc);
@@ -663,8 +676,10 @@ class _NativeKbHomePageState extends State<NativeKbHomePage> {
                           _sectionLabel(
                             '我的',
                             '文档',
-                            count: '${_summary?.documentCount ?? 0} 篇',
+                            count: '${_filteredDocuments.length} 篇',
                           ),
+                          const SizedBox(height: 8),
+                          _buildDocumentSearch(),
                           const SizedBox(height: 8),
                           _buildDocList(),
                         ],
@@ -786,7 +801,9 @@ class _NativeKbHomePageState extends State<NativeKbHomePage> {
                 padding: const EdgeInsets.only(top: 10),
                 decoration: BoxDecoration(
                   border: Border(
-                    top: BorderSide(color: Colors.white.withValues(alpha: 0.13)),
+                    top: BorderSide(
+                      color: Colors.white.withValues(alpha: 0.13),
+                    ),
                   ),
                 ),
                 child: Row(
@@ -986,10 +1003,7 @@ class _NativeKbHomePageState extends State<NativeKbHomePage> {
                   ? '支持 $kChatKbUploadSupportLabel · 上传后自动解析'
                   : 'Nova 知识库未就绪，请稍后重试',
               textAlign: TextAlign.center,
-              style: const TextStyle(
-                fontSize: 10,
-                color: DunesColors.text3,
-              ),
+              style: const TextStyle(fontSize: 10, color: DunesColors.text3),
             ),
           ],
         ),
@@ -998,7 +1012,7 @@ class _NativeKbHomePageState extends State<NativeKbHomePage> {
   }
 
   Widget _buildDocList() {
-    final docs = _summary?.documents ?? const <NativeKbDocument>[];
+    final docs = _filteredDocuments;
     if (docs.isEmpty) {
       return Container(
         padding: const EdgeInsets.all(14),
@@ -1007,13 +1021,13 @@ class _NativeKbHomePageState extends State<NativeKbHomePage> {
           borderRadius: BorderRadius.circular(12),
           border: Border.all(color: DunesColors.border),
         ),
-        child: const Row(
+        child: Row(
           children: [
             Icon(Icons.info_outline, size: 16, color: DunesColors.text3),
             SizedBox(width: 8),
             Expanded(
               child: Text(
-                '暂无文档，请先上传',
+                _search.text.trim().isEmpty ? '暂无文档，请先上传' : '未找到匹配的文档',
                 style: TextStyle(fontSize: 11, color: DunesColors.text3),
               ),
             ),
@@ -1033,7 +1047,10 @@ class _NativeKbHomePageState extends State<NativeKbHomePage> {
               child: Container(
                 key: ValueKey(doc.id),
                 margin: const EdgeInsets.only(bottom: 8),
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 10,
+                ),
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(10),
                   border: Border.all(color: DunesColors.border),
@@ -1106,7 +1123,8 @@ class _NativeKbHomePageState extends State<NativeKbHomePage> {
                     Builder(
                       builder: (context) {
                         final driveKey = _driveSourceKeyForDoc(doc);
-                        final driveSaved = driveKey.isNotEmpty &&
+                        final driveSaved =
+                            driveKey.isNotEmpty &&
                             _driveSavedDocKeys.contains(driveKey);
                         return Tooltip(
                           message: driveSaved ? '再次存入微盘' : '存入微盘',
@@ -1114,7 +1132,8 @@ class _NativeKbHomePageState extends State<NativeKbHomePage> {
                             color: _driveBlueSoft,
                             borderRadius: BorderRadius.circular(8),
                             child: InkWell(
-                              onTap: _savingDriveDocId == doc.id ||
+                              onTap:
+                                  _savingDriveDocId == doc.id ||
                                       _forwardingDocId != null
                                   ? null
                                   : () => unawaited(_saveDocToDrive(doc)),
@@ -1148,7 +1167,8 @@ class _NativeKbHomePageState extends State<NativeKbHomePage> {
                       color: DunesColors.brandPurpleSoft,
                       borderRadius: BorderRadius.circular(8),
                       child: InkWell(
-                        onTap: _forwardingDocId == doc.id ||
+                        onTap:
+                            _forwardingDocId == doc.id ||
                                 _savingDriveDocId != null
                             ? null
                             : () => unawaited(_forwardDoc(doc)),
@@ -1196,6 +1216,82 @@ class _NativeKbHomePageState extends State<NativeKbHomePage> {
             ),
           ),
       ],
+    );
+  }
+
+  List<NativeKbDocument> get _filteredDocuments {
+    if (_searchResults != null) return _searchResults!;
+    final docs = _summary?.documents ?? const <NativeKbDocument>[];
+    return docs;
+  }
+
+  void _onKeywordChanged(String value) {
+    _searchDebounce?.cancel();
+    final keyword = value.trim();
+    if (keyword.isEmpty) {
+      setState(() {
+        _searchResults = null;
+        _searching = false;
+      });
+      return;
+    }
+    setState(() => _searching = true);
+    _searchDebounce = Timer(const Duration(milliseconds: 320), () async {
+      try {
+        final docs = await _service.searchDocuments(keyword: keyword);
+        if (!mounted || _search.text.trim() != keyword) return;
+        setState(() {
+          _searchResults = docs;
+          _searching = false;
+        });
+      } catch (_) {
+        if (!mounted || _search.text.trim() != keyword) return;
+        setState(() {
+          _searchResults = const <NativeKbDocument>[];
+          _searching = false;
+        });
+      }
+    });
+  }
+
+  Widget _buildDocumentSearch() {
+    return TextField(
+      controller: _search,
+      onChanged: _onKeywordChanged,
+      decoration: InputDecoration(
+        hintText: '搜索文档名称、文件类型…',
+        prefixIcon: const Icon(Icons.search_rounded, size: 19),
+        suffixIcon: _searching
+            ? const Padding(
+                padding: EdgeInsets.all(12),
+                child: SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              )
+            : _search.text.isEmpty
+            ? null
+            : IconButton(
+                tooltip: '清除搜索',
+                icon: const Icon(Icons.close_rounded, size: 18),
+                onPressed: () {
+                  _search.clear();
+                  _onKeywordChanged('');
+                },
+              ),
+        filled: true,
+        fillColor: Colors.white,
+        contentPadding: const EdgeInsets.symmetric(vertical: 0),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: DunesColors.border),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: DunesColors.border),
+        ),
+      ),
     );
   }
 }

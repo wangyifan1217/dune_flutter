@@ -35,14 +35,18 @@ class _NativeMeetingListPageState extends State<NativeMeetingListPage> {
     session: widget.session,
   );
   final ScrollController _scrollController = ScrollController();
+  final TextEditingController _search = TextEditingController();
   List<NativeMeetingSummary> _rows = const [];
   bool _loading = true;
+  bool _searching = false;
   bool _loadingMore = false;
   bool _hasMore = true;
   int _page = 0;
   static const int _pageSize = 20;
   String? _error;
   Timer? _scrollRestoreRetry;
+  Timer? _searchDebounce;
+
   /// 新建等已 invalidate 时，dispose 勿再 put 旧快照把缓存「复活」。
   bool _suppressPersistOnDispose = false;
 
@@ -72,9 +76,11 @@ class _NativeMeetingListPageState extends State<NativeMeetingListPage> {
       _persistListSnapshot();
     }
     _scrollRestoreRetry?.cancel();
+    _searchDebounce?.cancel();
     MeetingUploadCoordinator.instance.removeListener(_onUploadUpdate);
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
+    _search.dispose();
     super.dispose();
   }
 
@@ -91,7 +97,7 @@ class _NativeMeetingListPageState extends State<NativeMeetingListPage> {
   }
 
   void _persistListSnapshot() {
-    if (_rows.isEmpty) return;
+    if (_rows.isEmpty || _search.text.trim().isNotEmpty) return;
     MeetingListCache.instance.put(
       userId: widget.session.userId,
       rows: _rows,
@@ -145,7 +151,11 @@ class _NativeMeetingListPageState extends State<NativeMeetingListPage> {
 
   void _onScroll() {
     _persistScrollNow();
-    if (!_scrollController.hasClients || _loading || _loadingMore || !_hasMore) {
+    if (!_scrollController.hasClients ||
+        _loading ||
+        _searching ||
+        _loadingMore ||
+        !_hasMore) {
       return;
     }
     final pos = _scrollController.position;
@@ -154,16 +164,34 @@ class _NativeMeetingListPageState extends State<NativeMeetingListPage> {
     }
   }
 
-  Future<void> _load({required bool reset}) async {
+  void _onKeywordChanged(String _) {
+    setState(() {});
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(const Duration(milliseconds: 320), () {
+      if (mounted) unawaited(_load(reset: true, silent: true));
+    });
+  }
+
+  Future<void> _load({required bool reset, bool silent = false}) async {
+    final keyword = _search.text.trim();
     if (reset) {
       setState(() {
-        _loading = true;
+        if (!silent && _rows.isEmpty) {
+          _loading = true;
+        } else {
+          _searching = true;
+        }
         _error = null;
       });
     }
     try {
-      final rows = await _service.fetchList(page: 0, size: _pageSize);
+      final rows = await _service.fetchList(
+        page: 0,
+        size: _pageSize,
+        keyword: keyword,
+      );
       if (!mounted) return;
+      if (keyword != _search.text.trim()) return;
       setState(() {
         _rows = rows;
         _page = 0;
@@ -172,11 +200,13 @@ class _NativeMeetingListPageState extends State<NativeMeetingListPage> {
       _persistListSnapshot();
     } catch (e) {
       if (!mounted) return;
+      if (keyword != _search.text.trim()) return;
       setState(() => _error = e.toString());
     } finally {
-      if (mounted) {
+      if (mounted && keyword == _search.text.trim()) {
         setState(() {
           _loading = false;
+          _searching = false;
           _loadingMore = false;
         });
       }
@@ -184,11 +214,15 @@ class _NativeMeetingListPageState extends State<NativeMeetingListPage> {
   }
 
   Future<void> _loadMore() async {
-    if (_loading || _loadingMore || !_hasMore) return;
+    if (_loading || _searching || _loadingMore || !_hasMore) return;
     setState(() => _loadingMore = true);
     try {
       final nextPage = _page + 1;
-      final rows = await _service.fetchList(page: nextPage, size: _pageSize);
+      final rows = await _service.fetchList(
+        page: nextPage,
+        size: _pageSize,
+        keyword: _search.text,
+      );
       if (!mounted) return;
       setState(() {
         _rows = <NativeMeetingSummary>[..._rows, ...rows];
@@ -208,9 +242,14 @@ class _NativeMeetingListPageState extends State<NativeMeetingListPage> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('删除会议纪要'),
-        content: Text('确定删除「${row.title.isEmpty ? '未命名会议' : row.title}」吗？此操作不可恢复。'),
+        content: Text(
+          '确定删除「${row.title.isEmpty ? '未命名会议' : row.title}」吗？此操作不可恢复。',
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('取消')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('取消'),
+          ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: FilledButton.styleFrom(backgroundColor: DunesColors.coral),
@@ -223,7 +262,9 @@ class _NativeMeetingListPageState extends State<NativeMeetingListPage> {
     try {
       await _service.deleteMeeting(row.meetingId);
       if (!mounted) return;
-      setState(() => _rows = _rows.where((e) => e.meetingId != row.meetingId).toList());
+      setState(
+        () => _rows = _rows.where((e) => e.meetingId != row.meetingId).toList(),
+      );
       _persistListSnapshot();
     } catch (e) {
       if (!mounted) return;
@@ -244,12 +285,55 @@ class _NativeMeetingListPageState extends State<NativeMeetingListPage> {
     };
   }
 
+  List<NativeMeetingSummary> get _visibleRows {
+    return _rows;
+  }
+
+  Widget _buildSearchField() {
+    return TextField(
+      controller: _search,
+      onChanged: _onKeywordChanged,
+      decoration: InputDecoration(
+        hintText: '搜索会议标题、摘要、组织人…',
+        prefixIcon: const Icon(Icons.search_rounded, size: 20),
+        suffixIcon: _searching
+            ? const Padding(
+                padding: EdgeInsets.all(12),
+                child: SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              )
+            : _search.text.isEmpty
+            ? null
+            : IconButton(
+                tooltip: '清除搜索',
+                icon: const Icon(Icons.close_rounded, size: 18),
+                onPressed: () {
+                  _search.clear();
+                  _onKeywordChanged('');
+                },
+              ),
+        filled: true,
+        fillColor: Colors.white,
+        contentPadding: const EdgeInsets.symmetric(vertical: 0),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: DunesColors.borderSoft),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: DunesColors.borderSoft),
+        ),
+      ),
+    );
+  }
+
   String _uploadStatusLabel(MeetingUploadJob job) {
     return switch (job.phase) {
       MeetingUploadPhase.pending =>
-        job.error != null && job.error!.isNotEmpty
-            ? '上传重试中'
-            : '排队上传中',
+        job.error != null && job.error!.isNotEmpty ? '上传重试中' : '排队上传中',
       MeetingUploadPhase.uploading => '录音上传中 ${job.uploadProgressPercent}%',
       MeetingUploadPhase.attaching => '正在保存',
       MeetingUploadPhase.failed => '上传失败',
@@ -300,62 +384,14 @@ class _NativeMeetingListPageState extends State<NativeMeetingListPage> {
             )
           : null,
       body: RefreshIndicator(
-        onRefresh: () => _load(reset: true),
+        onRefresh: () => _load(reset: true, silent: true),
         child: _buildBody(canCreate: canCreate),
       ),
     );
   }
 
   Widget _buildBody({required bool canCreate}) {
-    if (_loading) {
-      return ListView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        children: const [
-          SizedBox(height: 180),
-          Center(child: CircularProgressIndicator()),
-        ],
-      );
-    }
-
-    if (_error != null) {
-      return ListView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.all(24),
-        children: [
-          const SizedBox(height: 80),
-          _buildHeroCard(),
-          const SizedBox(height: 24),
-          _buildMessageCard(
-            icon: Icons.error_outline,
-            title: '加载失败',
-            message: _error!,
-            actionLabel: '重试',
-            onAction: () => _load(reset: true),
-          ),
-        ],
-      );
-    }
-
-    if (_rows.isEmpty) {
-      return ListView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.all(20),
-        children: [
-          _buildHeroCard(),
-          const SizedBox(height: 32),
-          _buildMessageCard(
-            icon: Icons.history_rounded,
-            title: '暂无会议记录',
-            message: canCreate
-                ? '点击下方麦克风按钮，上传录音并开始 AI 转写'
-                : '暂无会议纪要，请在手机端录制或上传后查看',
-            actionLabel: canCreate ? '新建会议' : null,
-            onAction: canCreate ? _onCreatePressed : null,
-          ),
-        ],
-      );
-    }
-
+    final searching = _search.text.trim().isNotEmpty;
     return ListView(
       controller: _scrollController,
       physics: const AlwaysScrollableScrollPhysics(),
@@ -363,40 +399,71 @@ class _NativeMeetingListPageState extends State<NativeMeetingListPage> {
       children: [
         _buildHeroCard(),
         const SizedBox(height: 16),
-        Text(
-          '我的会议 · ${_rows.length} 场',
-          style: DunesTypography.sans(
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
-            color: DunesColors.text2,
-          ),
-        ),
-        const SizedBox(height: 10),
-        ..._rows.map(_buildMeetingCard),
-        if (_loadingMore)
+        _buildSearchField(),
+        const SizedBox(height: 14),
+        if (_loading && _rows.isEmpty)
           const Padding(
-            padding: EdgeInsets.only(top: 6, bottom: 8),
-            child: Center(
-              child: SizedBox(
-                width: 18,
-                height: 18,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              ),
+            padding: EdgeInsets.only(top: 80),
+            child: Center(child: CircularProgressIndicator()),
+          )
+        else if (_error != null && _rows.isEmpty)
+          _buildMessageCard(
+            icon: Icons.error_outline,
+            title: '加载失败',
+            message: _error!,
+            actionLabel: '重试',
+            onAction: () => _load(reset: true),
+          )
+        else if (_rows.isEmpty)
+          _buildMessageCard(
+            icon: searching ? Icons.search_off_rounded : Icons.history_rounded,
+            title: searching ? '未找到匹配会议' : '暂无会议记录',
+            message: searching
+                ? '换一个关键词试试，支持搜索会议标题和摘要。'
+                : (canCreate
+                      ? '点击下方麦克风按钮，上传录音并开始 AI 转写'
+                      : '暂无会议纪要，请在手机端录制或上传后查看'),
+            actionLabel: !searching && canCreate ? '新建会议' : null,
+            onAction: !searching && canCreate ? _onCreatePressed : null,
+          )
+        else ...[
+          Text(
+            searching
+                ? '搜索结果 · ${_visibleRows.length} 场'
+                : '我的会议 · ${_visibleRows.length} 场',
+            style: DunesTypography.sans(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: DunesColors.text2,
             ),
           ),
-        if (!_hasMore && _rows.isNotEmpty)
-          Padding(
-            padding: const EdgeInsets.only(top: 8),
-            child: Center(
-              child: Text(
-                '没有更多会议记录了',
-                style: DunesTypography.sans(
-                  fontSize: 11,
-                  color: DunesColors.text3,
+          const SizedBox(height: 10),
+          ..._visibleRows.map(_buildMeetingCard),
+          if (_loadingMore)
+            const Padding(
+              padding: EdgeInsets.only(top: 6, bottom: 8),
+              child: Center(
+                child: SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
                 ),
               ),
             ),
-          ),
+          if (!_hasMore && _rows.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Center(
+                child: Text(
+                  '没有更多会议记录了',
+                  style: DunesTypography.sans(
+                    fontSize: 11,
+                    color: DunesColors.text3,
+                  ),
+                ),
+              ),
+            ),
+        ],
       ],
     );
   }
@@ -496,8 +563,10 @@ class _NativeMeetingListPageState extends State<NativeMeetingListPage> {
               style: FilledButton.styleFrom(
                 backgroundColor: DunesColors.brandPurple,
                 foregroundColor: Colors.white,
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 12,
+                ),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
@@ -511,7 +580,9 @@ class _NativeMeetingListPageState extends State<NativeMeetingListPage> {
   }
 
   Widget _buildMeetingCard(NativeMeetingSummary row) {
-    final uploadJob = MeetingUploadCoordinator.instance.jobForMeeting(row.meetingId);
+    final uploadJob = MeetingUploadCoordinator.instance.jobForMeeting(
+      row.meetingId,
+    );
     final status = uploadJob != null
         ? _uploadStatusLabel(uploadJob)
         : _statusLabel(row.status);
@@ -519,10 +590,12 @@ class _NativeMeetingListPageState extends State<NativeMeetingListPage> {
         ? _uploadStatusColor(uploadJob)
         : _statusColor(row.status);
     final enabled = row.meetingId > 0;
-    final showUploadProgressBar = uploadJob != null &&
+    final showUploadProgressBar =
+        uploadJob != null &&
         uploadJob.phase == MeetingUploadPhase.uploading &&
         uploadJob.uploadProgressPercent < 100;
-    final deletingDisabled = uploadJob != null &&
+    final deletingDisabled =
+        uploadJob != null &&
         (uploadJob.phase == MeetingUploadPhase.pending ||
             uploadJob.phase == MeetingUploadPhase.uploading ||
             uploadJob.phase == MeetingUploadPhase.attaching);
@@ -635,7 +708,9 @@ class _NativeMeetingListPageState extends State<NativeMeetingListPage> {
                       ? () => _deleteMeeting(row)
                       : null,
                   icon: const Icon(Icons.delete_outline_rounded, size: 20),
-                  color: deletingDisabled ? DunesColors.border : DunesColors.text3,
+                  color: deletingDisabled
+                      ? DunesColors.border
+                      : DunesColors.text3,
                   tooltip: deletingDisabled ? '上传处理中，暂不可删除' : '删除',
                 ),
                 Icon(

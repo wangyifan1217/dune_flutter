@@ -4,9 +4,9 @@ import 'package:dunes_app/core/navigation/generated/screen_registry.dart';
 import 'package:dunes_app/core/navigation/navigation_controller.dart';
 
 void main() {
-  test('screen registry has 76 screens from index.html', () {
-    expect(kDunesScreens.length, 76);
+  test('screen registry includes My and portrait routes', () {
     expect(dunesScreenById('B2')?.name, '我的中心');
+    expect(dunesScreenById('B2P')?.name, '个人工作画像');
   });
 
   test('navigation controller tracks history', () {

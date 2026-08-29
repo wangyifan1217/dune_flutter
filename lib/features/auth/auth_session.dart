@@ -11,9 +11,14 @@ class AuthSession {
     required this.roles,
     this.displayName,
     this.departmentId,
+    this.departmentName = '',
+    this.jobTitle = '',
+    this.avatarUrl = '',
+    this.avatarPreset = '',
     this.userType = 'ORG',
     this.novaLocalStorage,
     this.lighthouseAccess = false,
+    this.netTaAccess = false,
     this.qianjiAccess = false,
     this.novaVoiceCallAccess = false,
     this.novaVoiceCallLang = 'zh',
@@ -42,8 +47,13 @@ class AuthSession {
   final List<String> roles;
   final String? displayName;
   final int? departmentId;
+  final String departmentName;
+  final String jobTitle;
+  final String avatarUrl;
+  final String avatarPreset;
   final String userType;
   final bool lighthouseAccess;
+  final bool netTaAccess;
   final bool qianjiAccess;
   final bool novaVoiceCallAccess;
   final String novaVoiceCallLang;
@@ -94,6 +104,10 @@ class AuthSession {
   bool get effectiveLighthouseAccess =>
       lighthouseAccess || DunesDefaults.localLighthouseAccessBypass;
 
+  /// 后端下发的灯塔「净TA」标签访问权限。
+  bool get effectiveNetTaAccess =>
+      netTaAccess || DunesDefaults.localLighthouseAccessBypass;
+
   bool get effectiveQianjiAccess =>
       qianjiAccess || DunesDefaults.localLighthouseAccessBypass;
 
@@ -137,6 +151,9 @@ class AuthSession {
     if (DunesDefaults.localLighthouseAccessBypass) {
       if (!next.lighthouseAccess) {
         next = next.copyWith(lighthouseAccess: true);
+      }
+      if (!next.netTaAccess) {
+        next = next.copyWith(netTaAccess: true);
       }
       if (!next.qianjiAccess) {
         next = next.copyWith(qianjiAccess: true);
@@ -183,9 +200,14 @@ class AuthSession {
     List<String>? roles,
     String? displayName,
     int? departmentId,
+    String? departmentName,
+    String? jobTitle,
+    String? avatarUrl,
+    String? avatarPreset,
     String? userType,
     Map<String, String>? novaLocalStorage,
     bool? lighthouseAccess,
+    bool? netTaAccess,
     bool? qianjiAccess,
     bool? novaVoiceCallAccess,
     String? novaVoiceCallLang,
@@ -214,9 +236,14 @@ class AuthSession {
       roles: roles ?? this.roles,
       displayName: displayName ?? this.displayName,
       departmentId: departmentId ?? this.departmentId,
+      departmentName: departmentName ?? this.departmentName,
+      jobTitle: jobTitle ?? this.jobTitle,
+      avatarUrl: avatarUrl ?? this.avatarUrl,
+      avatarPreset: avatarPreset ?? this.avatarPreset,
       userType: userType ?? this.userType,
       novaLocalStorage: novaLocalStorage ?? this.novaLocalStorage,
       lighthouseAccess: lighthouseAccess ?? this.lighthouseAccess,
+      netTaAccess: netTaAccess ?? this.netTaAccess,
       qianjiAccess: qianjiAccess ?? this.qianjiAccess,
       novaVoiceCallAccess: novaVoiceCallAccess ?? this.novaVoiceCallAccess,
       novaVoiceCallLang: novaVoiceCallLang ?? this.novaVoiceCallLang,
@@ -258,6 +285,14 @@ class AuthSession {
       roles: fromJwt.roles,
       displayName: fromJwt.displayName ?? displayName,
       departmentId: fromJwt.departmentId ?? departmentId,
+      departmentName: fromJwt.departmentName.isNotEmpty
+          ? fromJwt.departmentName
+          : departmentName,
+      jobTitle: fromJwt.jobTitle.isNotEmpty ? fromJwt.jobTitle : jobTitle,
+      avatarUrl: fromJwt.avatarUrl.isNotEmpty ? fromJwt.avatarUrl : avatarUrl,
+      avatarPreset: fromJwt.avatarPreset.isNotEmpty
+          ? fromJwt.avatarPreset
+          : avatarPreset,
       userType: fromJwt.userType,
     );
   }
@@ -270,10 +305,22 @@ class AuthSession {
       displayName: (data['displayName'] ?? session.displayName)?.toString(),
       departmentId:
           (data['departmentId'] as num?)?.toInt() ?? session.departmentId,
+      departmentName:
+          (data['departmentName'] ??
+                  data['department'] ??
+                  session.departmentName)
+              .toString(),
+      jobTitle: (data['jobTitle'] ?? data['title'] ?? session.jobTitle)
+          .toString(),
+      avatarUrl:
+          (data['avatarUrl'] ?? data['avatarFullUrl'] ?? session.avatarUrl)
+              .toString(),
+      avatarPreset: (data['avatarPreset'] ?? session.avatarPreset).toString(),
       userType:
           (data['userType'] ?? session.userType)?.toString() ??
           session.userType,
       lighthouseAccess: data['lighthouseAccess'] == true,
+      netTaAccess: data['netTaAccess'] == true,
       qianjiAccess: data['qianjiAccess'] == true,
       novaVoiceCallAccess: data['novaVoiceCallAccess'] == true,
       novaVoiceCallLang: (data['novaVoiceCallLang'] ?? 'zh').toString(),
@@ -316,8 +363,15 @@ class AuthSession {
       roles: roles,
       displayName: claims['displayName'] as String?,
       departmentId: (claims['departmentId'] as num?)?.toInt(),
+      departmentName: (claims['departmentName'] ?? claims['department'] ?? '')
+          .toString(),
+      jobTitle: (claims['jobTitle'] ?? claims['title'] ?? '').toString(),
+      avatarUrl: (claims['avatarUrl'] ?? claims['avatarFullUrl'] ?? '')
+          .toString(),
+      avatarPreset: (claims['avatarPreset'] ?? '').toString(),
       userType: _resolveUserType(claims),
       lighthouseAccess: claims['lighthouseAccess'] == true,
+      netTaAccess: claims['netTaAccess'] == true,
       qianjiAccess: claims['qianjiAccess'] == true,
       novaVoiceCallAccess: claims['novaVoiceCallAccess'] == true,
       novaVoiceCallLang: (claims['novaVoiceCallLang'] ?? 'zh').toString(),
@@ -365,10 +419,15 @@ class AuthSession {
       'roles': roles,
       'displayName': displayName,
       'departmentId': departmentId,
+      'departmentName': departmentName,
+      'jobTitle': jobTitle,
+      'avatarUrl': avatarUrl,
+      'avatarPreset': avatarPreset,
       'userType': userType,
       if (novaLocalStorage != null && novaLocalStorage!.isNotEmpty)
         'novaLocalStorage': novaLocalStorage,
       'lighthouseAccess': lighthouseAccess,
+      'netTaAccess': netTaAccess,
       'qianjiAccess': qianjiAccess,
       'novaVoiceCallAccess': novaVoiceCallAccess,
       'novaVoiceCallLang': novaVoiceCallLang,
@@ -403,9 +462,15 @@ class AuthSession {
       roles: roles,
       displayName: json['displayName'] as String?,
       departmentId: (json['departmentId'] as num?)?.toInt(),
+      departmentName: (json['departmentName'] ?? json['department'] ?? '')
+          .toString(),
+      jobTitle: (json['jobTitle'] ?? json['title'] ?? '').toString(),
+      avatarUrl: (json['avatarUrl'] ?? json['avatarFullUrl'] ?? '').toString(),
+      avatarPreset: (json['avatarPreset'] ?? '').toString(),
       userType: (json['userType'] as String?)?.toUpperCase() ?? 'ORG',
       novaLocalStorage: _parseNovaStorage(json['novaLocalStorage']),
       lighthouseAccess: json['lighthouseAccess'] == true,
+      netTaAccess: json['netTaAccess'] == true,
       qianjiAccess: json['qianjiAccess'] == true,
       novaVoiceCallAccess: json['novaVoiceCallAccess'] == true,
       novaVoiceCallLang: (json['novaVoiceCallLang'] ?? 'zh').toString(),
@@ -413,7 +478,8 @@ class AuthSession {
       qianjiAdminAccess: json['qianjiAdminAccess'] == true,
       robotAccess: json['robotAccess'] == true,
       digitalEmployeeAccess: json['digitalEmployeeAccess'] == true,
-      digitalEmployeeAccessKnown: json['digitalEmployeeAccessKnown'] == true ||
+      digitalEmployeeAccessKnown:
+          json['digitalEmployeeAccessKnown'] == true ||
           json.containsKey('digitalEmployeeAccess'),
       hrbpAccess: json['hrbpAccess'] == true,
       administrativeNoticeAccess: json['administrativeNoticeAccess'] == true,

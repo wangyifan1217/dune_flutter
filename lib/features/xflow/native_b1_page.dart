@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../core/theme/dunes_theme.dart';
 import '../../core/util/friendly_error.dart';
 import '../auth/auth_session.dart';
+import '../proposal_intake/proposal_intake_select.dart';
 import '../shell/dunes_toast.dart';
 import '../workbench/workbench_badge_notifier.dart';
 import 'approval_list_cache.dart';
@@ -147,7 +148,8 @@ class _NativeProposalListPage extends StatefulWidget {
   final WorkbenchDataRefreshNotifier? workbenchRefresh;
 
   @override
-  State<_NativeProposalListPage> createState() => _NativeProposalListPageState();
+  State<_NativeProposalListPage> createState() =>
+      _NativeProposalListPageState();
 }
 
 class _NativeProposalListPageState extends State<_NativeProposalListPage> {
@@ -155,13 +157,17 @@ class _NativeProposalListPageState extends State<_NativeProposalListPage> {
   final TextEditingController _search = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   bool _loading = true;
+
   /// 静默刷新中（切筛选/推送等）：保留当前列表，仅局部更新数据。
   bool _refreshing = false;
   String? _error;
   late String _statusFilter =
       widget.initialStatusFilter ??
       (widget.type == _ListType.b1 ? 'MINE' : 'ALL');
+  String _templateFilter = 'ALL';
+  Map<String, String> _templateTitles = const <String, String>{};
   List<XflowProposalItem> _all = const <XflowProposalItem>[];
+
   /// 快速切换筛选时丢弃过期响应，避免旧请求覆盖新数据。
   int _loadSeq = 0;
   Timer? _scrollRestoreRetry;
@@ -297,6 +303,7 @@ class _NativeProposalListPageState extends State<_NativeProposalListPage> {
 
   Future<void> _load({bool silent = false}) async {
     final seq = ++_loadSeq;
+    final templateTitlesFuture = _fetchTemplateTitles();
     if (!silent) {
       setState(() {
         _loading = true;
@@ -313,14 +320,28 @@ class _NativeProposalListPageState extends State<_NativeProposalListPage> {
     }
     try {
       final rows = switch (widget.type) {
-        _ListType.b1 => await _service.fetchB1Approvals(),
-        _ListType.b13 => await _service.fetchB13Todos(),
-        _ListType.b14 => await _service.fetchB14Initiated(),
-        _ListType.p1 => await _service.fetchP1CcProposals(),
+        _ListType.b1 => await _service.fetchB1Approvals(
+          templateKey: _templateFilter == 'ALL' ? '' : _templateFilter,
+        ),
+        _ListType.b13 => await _service.fetchB13Todos(
+          templateKey: _templateFilter == 'ALL' ? '' : _templateFilter,
+        ),
+        _ListType.b14 => await _service.fetchB14Initiated(
+          templateKey: _templateFilter == 'ALL' ? '' : _templateFilter,
+        ),
+        _ListType.p1 => await _service.fetchP1CcProposals(
+          templateKey: _templateFilter == 'ALL' ? '' : _templateFilter,
+        ),
       };
+      final templateTitles = await templateTitlesFuture;
       if (!mounted || seq != _loadSeq) return;
       setState(() {
         _all = rows;
+        _templateTitles = templateTitles;
+        if (_templateFilter != 'ALL' &&
+            !_templateOptions.contains(_templateFilter)) {
+          _templateFilter = 'ALL';
+        }
         _loading = false;
         _refreshing = false;
       });
@@ -340,50 +361,79 @@ class _NativeProposalListPageState extends State<_NativeProposalListPage> {
     }
   }
 
+  Future<Map<String, String>> _fetchTemplateTitles() async {
+    final templates = <XflowTemplateCard>[
+      ...XflowService.cachedTemplatesByCategory('biz'),
+      ...XflowService.cachedTemplatesByCategory('adm'),
+    ];
+    try {
+      final remote = await Future.wait([
+        _service.fetchTemplatesByCategory('biz'),
+        _service.fetchTemplatesByCategory('adm'),
+      ]);
+      templates.addAll(remote.expand((items) => items));
+    } catch (_) {
+      // 模板目录加载失败时，仍使用当前列表记录中的模板信息筛选。
+    }
+    return Map<String, String>.fromEntries(
+      templates
+          .where((item) => item.enabled && item.templateKey.trim().isNotEmpty)
+          .map((item) => MapEntry(item.templateKey, item.title)),
+    );
+  }
+
   String get _title => switch (widget.type) {
-        _ListType.b1 => '我审批的',
-        _ListType.b14 => '我发起的',
-        _ListType.p1 => '抄送我的提案',
-        _ListType.b13 => '审批待办',
-      };
+    _ListType.b1 => '我审批的',
+    _ListType.b14 => '我发起的',
+    _ListType.p1 => '抄送我的提案',
+    _ListType.b13 => '审批待办',
+  };
 
   String get _searchHint => switch (widget.type) {
-        _ListType.b1 => '搜索提案名称、编号、提交人…',
-        _ListType.b13 => '搜索单据名称、编号、办理动作…',
-        _ListType.b14 => '搜索我发起的提案…',
-        _ListType.p1 => '搜索抄送提案…',
-      };
+    _ListType.b1 => '搜索提案名称、编号、提交人…',
+    _ListType.b13 => '搜索单据名称、编号、办理动作…',
+    _ListType.b14 => '搜索我发起的提案…',
+    _ListType.p1 => '搜索抄送提案…',
+  };
 
   XflowListCardMode get _cardMode => switch (widget.type) {
-        _ListType.b1 => XflowListCardMode.b1,
-        _ListType.b13 => XflowListCardMode.b1,
-        _ListType.b14 => XflowListCardMode.b14,
-        _ListType.p1 => XflowListCardMode.p1,
-      };
+    _ListType.b1 => XflowListCardMode.b1,
+    _ListType.b13 => XflowListCardMode.b1,
+    _ListType.b14 => XflowListCardMode.b14,
+    _ListType.p1 => XflowListCardMode.p1,
+  };
 
   List<XflowProposalItem> get _visible {
     final q = _search.text.trim().toLowerCase();
-    final list = _all.where((it) {
-      if (_statusFilter != 'ALL') {
-        if (widget.type == _ListType.b13) {
-          if (_statusFilter == 'MINE' && !_isMyOpenTodo(it)) return false;
-          if (_statusFilter == 'DONE' &&
-              (it.todoHint?.status.toUpperCase() ?? '') != 'DONE') {
+    final list = _all
+        .where((it) {
+          if (_statusFilter != 'ALL') {
+            if (widget.type == _ListType.b13) {
+              if (_statusFilter == 'MINE' && !_isMyOpenTodo(it)) return false;
+              if (_statusFilter == 'DONE' &&
+                  (it.todoHint?.status.toUpperCase() ?? '') != 'DONE') {
+                return false;
+              }
+              if (_statusFilter != 'MINE' && _statusFilter != 'DONE') {
+                return false;
+              }
+            } else if (_statusFilter == 'MINE') {
+              if (!_isMyOpenTodo(it)) return false;
+            } else if (_normalizeStatus(it.status) != _statusFilter) {
+              return false;
+            }
+          }
+          if (_templateFilter != 'ALL' &&
+              _approvalTemplateKey(it) != _templateFilter) {
             return false;
           }
-          if (_statusFilter != 'MINE' && _statusFilter != 'DONE') return false;
-        } else if (_statusFilter == 'MINE') {
-          if (!_isMyOpenTodo(it)) return false;
-        } else if (_normalizeStatus(it.status) != _statusFilter) {
-          return false;
-        }
-      }
-      if (q.isEmpty) return true;
-      final text =
-          '${it.code} ${it.title} ${it.createdByName} ${it.tag1 ?? ''} ${it.txType ?? ''} ${it.actionTitle ?? ''} ${it.primaryAction ?? ''} ${it.documentKind ?? ''}'
-              .toLowerCase();
-      return text.contains(q);
-    }).toList(growable: false);
+          if (q.isEmpty) return true;
+          final text =
+              '${it.code} ${it.title} ${it.createdByName} ${it.tag1 ?? ''} ${it.txType ?? ''} ${it.actionTitle ?? ''} ${it.primaryAction ?? ''} ${it.documentKind ?? ''} ${it.proposalType ?? ''} ${it.templateKey ?? ''} ${it.businessType}'
+                  .toLowerCase();
+          return text.contains(q);
+        })
+        .toList(growable: false);
     return list;
   }
 
@@ -393,12 +443,16 @@ class _NativeProposalListPageState extends State<_NativeProposalListPage> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text(isDraft ? '删除草稿' : '删除单据'),
-        content: Text(
-          isDraft ? '确认删除此草稿？删除后不可恢复。' : '确认删除此已作废单据？删除后不可恢复。',
-        ),
+        content: Text(isDraft ? '确认删除此草稿？删除后不可恢复。' : '确认删除此已作废单据？删除后不可恢复。'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('取消')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('删除')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('删除'),
+          ),
         ],
       ),
     );
@@ -417,7 +471,11 @@ class _NativeProposalListPageState extends State<_NativeProposalListPage> {
       await _load(silent: true);
     } catch (e) {
       if (!mounted) return;
-      showDunesToast(context, '删除失败：${friendlyErrorText(e)}', kind: DunesToastKind.error);
+      showDunesToast(
+        context,
+        '删除失败：${friendlyErrorText(e)}',
+        kind: DunesToastKind.error,
+      );
     }
   }
 
@@ -455,199 +513,230 @@ class _NativeProposalListPageState extends State<_NativeProposalListPage> {
             _buildTopBar(),
             Expanded(
               child: _loading
-                  ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
+                  ? const Center(
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
                   : _error != null
-                      ? _buildError()
-                      : RefreshIndicator(
-                          onRefresh: () => _load(),
-                          child: ListView(
-                            controller: _scrollController,
-                            physics: const AlwaysScrollableScrollPhysics(),
-                            padding: const EdgeInsets.fromLTRB(14, 10, 14, 14),
-                            children: [
-                              XflowHeroStatCard(
-                                kicker: isB1
-                                    ? '我的审批 · ${_all.length} 项'
-                                    : isB13
-                                        ? '审批代办 · ${_all.length} 项'
-                                        : widget.type == _ListType.b14
-                                            ? '我发起 · ${_all.length} 份'
-                                            : '抄送提案 · ${_all.length} 份',
-                                badgeText: isB1 || isB13
-                                    ? (mine > 0
-                                        ? (isB13 ? '$mine 待办理' : '$mine 待处理')
-                                        : '无待办')
-                                    : (counts['REJECTED']! > 0 &&
-                                            widget.type == _ListType.b14)
-                                        ? '${counts['REJECTED']} 已驳回'
-                                        : pending > 0
-                                            ? '$pending 审批中'
-                                            : '无待审',
-                                badgeUrge: isB1 || isB13
-                                    ? mine > 0
-                                    : (pending > 0 ||
-                                        (widget.type == _ListType.b14 &&
-                                            (counts['REJECTED'] ?? 0) > 0)),
-                                bigValue: isB1 || isB13 ? '$mine' : '${_all.length}',
-                                bigUnit: isB1 || isB13 ? '项' : '份',
-                                footItems: isB13
-                                    ? <(String, String, String?)>[
-                                        (
-                                          '待办理',
-                                          '$mine',
-                                          mine > 0 ? 'urge' : null,
-                                        ),
-                                        (
-                                          '已办理',
-                                          '${counts['DONE']}',
-                                          'pos',
-                                        ),
-                                      ]
-                                    : isB1
-                                    ? <(String, String, String?)>[
-                                        (
-                                          '待审批',
-                                          '$mine',
-                                          mine > 0 ? 'urge' : null,
-                                        ),
-                                        ('抄送', '0', null),
-                                        ('任务', '0', null),
-                                        ('执行', '0', null),
-                                      ]
-                                    : widget.type == _ListType.b14
-                                        ? <(String, String, String?)>[
-                                            (
-                                              '审批中',
-                                              '$pending',
-                                              pending > 0 ? 'urge' : null,
-                                            ),
-                                            (
-                                              '已通过',
-                                              '${counts['APPROVED']}',
-                                              'pos',
-                                            ),
-                                            (
-                                              '已驳回',
-                                              '${counts['REJECTED']}',
-                                              (counts['REJECTED'] ?? 0) > 0
-                                                  ? 'neg'
-                                                  : null,
-                                            ),
-                                          ]
-                                        : <(String, String, String?)>[
-                                            (
-                                              '审批中',
-                                              '$pending',
-                                              pending > 0 ? 'urge' : null,
-                                            ),
-                                            (
-                                              '已通过',
-                                              '${counts['APPROVED']}',
-                                              'pos',
-                                            ),
-                                            (
-                                              '已上线',
-                                              '${counts['LIVE']}',
-                                              null,
-                                            ),
-                                          ],
-                              ),
-                              const SizedBox(height: 10),
-                              SingleChildScrollView(
-                                scrollDirection: Axis.horizontal,
-                                child: Row(
-                                  children: [
-                                    XflowStatusChip(
-                                      label: '全部 ${counts['ALL'] ?? 0}',
-                                      active: _statusFilter == 'ALL',
-                                      showDot: true,
-                                      onTap: () => _selectStatusFilter('ALL'),
+                  ? _buildError()
+                  : RefreshIndicator(
+                      onRefresh: () => _load(),
+                      child: ListView(
+                        controller: _scrollController,
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        padding: const EdgeInsets.fromLTRB(14, 10, 14, 14),
+                        children: [
+                          XflowHeroStatCard(
+                            kicker: isB1
+                                ? '我的审批 · ${_all.length} 项'
+                                : isB13
+                                ? '审批代办 · ${_all.length} 项'
+                                : widget.type == _ListType.b14
+                                ? '我发起 · ${_all.length} 份'
+                                : '抄送提案 · ${_all.length} 份',
+                            badgeText: isB1 || isB13
+                                ? (mine > 0
+                                      ? (isB13 ? '$mine 待办理' : '$mine 待处理')
+                                      : '无待办')
+                                : (counts['REJECTED']! > 0 &&
+                                      widget.type == _ListType.b14)
+                                ? '${counts['REJECTED']} 已驳回'
+                                : pending > 0
+                                ? '$pending 审批中'
+                                : '无待审',
+                            badgeUrge: isB1 || isB13
+                                ? mine > 0
+                                : (pending > 0 ||
+                                      (widget.type == _ListType.b14 &&
+                                          (counts['REJECTED'] ?? 0) > 0)),
+                            bigValue: isB1 || isB13
+                                ? '$mine'
+                                : '${_all.length}',
+                            bigUnit: isB1 || isB13 ? '项' : '份',
+                            footItems: isB13
+                                ? <(String, String, String?)>[
+                                    ('待办理', '$mine', mine > 0 ? 'urge' : null),
+                                    ('已办理', '${counts['DONE']}', 'pos'),
+                                  ]
+                                : isB1
+                                ? <(String, String, String?)>[
+                                    ('待审批', '$mine', mine > 0 ? 'urge' : null),
+                                    ('抄送', '0', null),
+                                    ('任务', '0', null),
+                                    ('执行', '0', null),
+                                  ]
+                                : widget.type == _ListType.b14
+                                ? <(String, String, String?)>[
+                                    (
+                                      '审批中',
+                                      '$pending',
+                                      pending > 0 ? 'urge' : null,
                                     ),
-                                    const SizedBox(width: 6),
-                                    for (final key in _chipKeys) ...[
-                                      XflowStatusChip(
-                                        label: '${_statusLabel(key)} ${counts[key] ?? 0}',
-                                        active: _statusFilter == key,
-                                        onTap: () => _selectStatusFilter(key),
-                                      ),
-                                      const SizedBox(width: 6),
-                                    ],
+                                    ('已通过', '${counts['APPROVED']}', 'pos'),
+                                    (
+                                      '已驳回',
+                                      '${counts['REJECTED']}',
+                                      (counts['REJECTED'] ?? 0) > 0
+                                          ? 'neg'
+                                          : null,
+                                    ),
+                                  ]
+                                : <(String, String, String?)>[
+                                    (
+                                      '审批中',
+                                      '$pending',
+                                      pending > 0 ? 'urge' : null,
+                                    ),
+                                    ('已通过', '${counts['APPROVED']}', 'pos'),
+                                    ('已上线', '${counts['LIVE']}', null),
                                   ],
+                          ),
+                          const SizedBox(height: 10),
+                          SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            child: Row(
+                              children: [
+                                XflowStatusChip(
+                                  label: '全部 ${counts['ALL'] ?? 0}',
+                                  active: _statusFilter == 'ALL',
+                                  showDot: true,
+                                  onTap: () => _selectStatusFilter('ALL'),
                                 ),
-                              ),
-                              const SizedBox(height: 10),
-                              XflowWfListSearch(controller: _search, hint: _searchHint),
-                              const SizedBox(height: 10),
-                              XflowSectionLabel(
-                                accent: widget.type == _ListType.p1 ? '抄送' : '审批',
-                                title: '按发起时间倒序',
-                              ),
-                              if (_refreshing) ...[
-                                const SizedBox(height: 10),
-                                const Center(
-                                  child: SizedBox(
-                                    width: 22,
-                                    height: 22,
-                                    child: CircularProgressIndicator(strokeWidth: 2),
+                                const SizedBox(width: 6),
+                                for (final key in _chipKeys) ...[
+                                  XflowStatusChip(
+                                    label:
+                                        '${_statusLabel(key)} ${counts[key] ?? 0}',
+                                    active: _statusFilter == key,
+                                    onTap: () => _selectStatusFilter(key),
                                   ),
-                                ),
+                                  const SizedBox(width: 6),
+                                ],
                               ],
-                              const SizedBox(height: 8),
-                              if (visible.isEmpty)
-                                Container(
-                                  padding: const EdgeInsets.all(16),
-                                  alignment: Alignment.center,
-                                  child: Text(
-                                    _search.text.trim().isEmpty ? '暂无数据' : '无匹配结果',
-                                    style: DunesTypography.sans(fontSize: 12, color: DunesColors.text3),
-                                  ),
-                                )
-                              else
-                                ...visible.map((item) => Padding(
-                                      padding: const EdgeInsets.only(bottom: 9),
-                                      child: XflowProposalListCard(
-                                        item: item,
-                                        mode: _cardMode,
-                                        onTap: () => _openProposal(item),
-                                        onPrimaryAction: widget.type == _ListType.b13 &&
-                                                _isMyOpenTodo(item)
-                                            ? () => _completeB13Task(
-                                                  item,
-                                                  verifyPassed:
-                                                      (item.primaryAction ?? '')
-                                                              .toUpperCase() ==
-                                                          'VERIFY_INVOICE'
-                                                      ? true
-                                                      : null,
-                                                )
-                                            : null,
-                                        primaryActionLabel:
-                                            (item.primaryAction ?? '')
-                                                    .toUpperCase() ==
-                                                'VERIFY_INVOICE'
-                                            ? '核验通过'
-                                            : item.actionTitle,
-                                        onDangerAction: widget.type == _ListType.b13 &&
-                                                _isMyOpenTodo(item) &&
-                                                (item.primaryAction ?? '')
-                                                        .toUpperCase() ==
-                                                    'VERIFY_INVOICE'
-                                            ? () => _completeB13Task(
-                                                  item,
-                                                  verifyPassed: false,
-                                                )
-                                            : null,
-                                        dangerActionLabel: '核验失败',
-                                        onDeleteDraft: widget.type == _ListType.b14 &&
-                                                (_normalizeStatus(item.status) == 'DRAFT' ||
-                                                    _normalizeStatus(item.status) == 'VOIDED')
-                                            ? () => _deleteDraft(item)
-                                            : null,
-                                      ),
-                                    )),
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Row(
+                            children: [
+                              Text(
+                                '审批模板',
+                                style: DunesTypography.sans(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: DunesColors.text2,
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: ProposalSelectField<String>(
+                                  value: _templateFilter == 'ALL'
+                                      ? null
+                                      : _templateFilter,
+                                  hint: '全部模板',
+                                  searchable: true,
+                                  options: _templateOptions
+                                      .where((key) => key != 'ALL')
+                                      .map(
+                                        (key) => ProposalSelectOption(
+                                          value: key,
+                                          label: _templateLabel(key),
+                                          meta: key,
+                                        ),
+                                      )
+                                      .toList(growable: false),
+                                  onSelected: (key) =>
+                                      _selectTemplateFilter(key ?? 'ALL'),
+                                ),
+                              ),
                             ],
                           ),
-                        ),
+                          const SizedBox(height: 10),
+                          XflowWfListSearch(
+                            controller: _search,
+                            hint: _searchHint,
+                          ),
+                          const SizedBox(height: 10),
+                          XflowSectionLabel(
+                            accent: widget.type == _ListType.p1 ? '抄送' : '审批',
+                            title: '按发起时间倒序',
+                          ),
+                          if (_refreshing) ...[
+                            const SizedBox(height: 10),
+                            const Center(
+                              child: SizedBox(
+                                width: 22,
+                                height: 22,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              ),
+                            ),
+                          ],
+                          const SizedBox(height: 8),
+                          if (visible.isEmpty)
+                            Container(
+                              padding: const EdgeInsets.all(16),
+                              alignment: Alignment.center,
+                              child: Text(
+                                _search.text.trim().isEmpty ? '暂无数据' : '无匹配结果',
+                                style: DunesTypography.sans(
+                                  fontSize: 12,
+                                  color: DunesColors.text3,
+                                ),
+                              ),
+                            )
+                          else
+                            ...visible.map(
+                              (item) => Padding(
+                                padding: const EdgeInsets.only(bottom: 9),
+                                child: XflowProposalListCard(
+                                  item: item,
+                                  mode: _cardMode,
+                                  onTap: () => _openProposal(item),
+                                  onPrimaryAction:
+                                      widget.type == _ListType.b13 &&
+                                          _isMyOpenTodo(item)
+                                      ? () => _completeB13Task(
+                                          item,
+                                          verifyPassed:
+                                              (item.primaryAction ?? '')
+                                                      .toUpperCase() ==
+                                                  'VERIFY_INVOICE'
+                                              ? true
+                                              : null,
+                                        )
+                                      : null,
+                                  primaryActionLabel:
+                                      (item.primaryAction ?? '')
+                                              .toUpperCase() ==
+                                          'VERIFY_INVOICE'
+                                      ? '核验通过'
+                                      : item.actionTitle,
+                                  onDangerAction:
+                                      widget.type == _ListType.b13 &&
+                                          _isMyOpenTodo(item) &&
+                                          (item.primaryAction ?? '')
+                                                  .toUpperCase() ==
+                                              'VERIFY_INVOICE'
+                                      ? () => _completeB13Task(
+                                          item,
+                                          verifyPassed: false,
+                                        )
+                                      : null,
+                                  dangerActionLabel: '核验失败',
+                                  onDeleteDraft:
+                                      widget.type == _ListType.b14 &&
+                                          (_normalizeStatus(item.status) ==
+                                                  'DRAFT' ||
+                                              _normalizeStatus(item.status) ==
+                                                  'VOIDED')
+                                      ? () => _deleteDraft(item)
+                                      : null,
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
             ),
           ],
         ),
@@ -660,12 +749,50 @@ class _NativeProposalListPageState extends State<_NativeProposalListPage> {
       case _ListType.p1:
         return const ['DRAFT', 'PENDING', 'APPROVED', 'LIVE'];
       case _ListType.b14:
-        return const ['DRAFT', 'PENDING_INITIATE', 'PENDING', 'APPROVED', 'REJECTED', 'VOIDED'];
+        return const [
+          'DRAFT',
+          'PENDING_INITIATE',
+          'PENDING',
+          'APPROVED',
+          'REJECTED',
+          'VOIDED',
+        ];
       case _ListType.b1:
         return const ['MINE', 'PENDING', 'APPROVED', 'REJECTED'];
       case _ListType.b13:
         return const ['MINE', 'DONE'];
     }
+  }
+
+  List<String> get _templateOptions {
+    final keys = <String>{
+      ..._templateTitles.keys,
+      ..._all.map(_approvalTemplateKey).where((key) => key.isNotEmpty),
+    }.toList()..sort((a, b) => _templateLabel(a).compareTo(_templateLabel(b)));
+    return <String>['ALL', ...keys];
+  }
+
+  String _approvalTemplateKey(XflowProposalItem item) {
+    final templateKey = item.templateKey?.trim() ?? '';
+    if (templateKey.isNotEmpty) return templateKey;
+    for (final value in [
+      item.documentKind,
+      item.proposalType,
+      item.txType,
+      item.businessType,
+    ]) {
+      final key = value?.trim() ?? '';
+      if (key.isNotEmpty) return key;
+    }
+    return '';
+  }
+
+  String _templateLabel(String key) => _templateTitles[key] ?? key;
+
+  void _selectTemplateFilter(String? value) {
+    if (value == null || value == _templateFilter) return;
+    setState(() => _templateFilter = value);
+    unawaited(_load(silent: true));
   }
 
   String _statusLabel(String key) {
@@ -712,7 +839,10 @@ class _NativeProposalListPageState extends State<_NativeProposalListPage> {
           Expanded(
             child: Text(
               _title,
-              style: DunesTypography.sans(fontSize: 16, fontWeight: FontWeight.w700),
+              style: DunesTypography.sans(
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+              ),
             ),
           ),
           if (widget.type == _ListType.b13)
@@ -721,7 +851,10 @@ class _NativeProposalListPageState extends State<_NativeProposalListPage> {
               icon: const Icon(Icons.help_outline, size: 20),
               tooltip: '通过后待办流程',
             ),
-          IconButton(onPressed: _load, icon: const Icon(Icons.refresh, size: 20)),
+          IconButton(
+            onPressed: _load,
+            icon: const Icon(Icons.refresh, size: 20),
+          ),
         ],
       ),
     );

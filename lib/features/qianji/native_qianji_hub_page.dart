@@ -58,7 +58,6 @@ class NativeQianjiHubPage extends StatefulWidget {
 }
 
 class _NativeQianjiHubPageState extends State<NativeQianjiHubPage> {
-  final ScrollController _scrollController = ScrollController();
   List<RobotRole> _robots = const [];
   bool _loadingRobots = false;
   List<DigitalEmployeeItem> _digitalEmployees = const [];
@@ -108,15 +107,6 @@ class _NativeQianjiHubPageState extends State<NativeQianjiHubPage> {
     if (widget.session != null && widget.session!.effectiveRobotAccess) {
       store.refreshHub();
     }
-    _scrollToBottom();
-  }
-
-  void _scrollToBottom() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted && _scrollController.hasClients) {
-        _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
-      }
-    });
   }
 
   Future<void> _loadRobots() async {
@@ -127,7 +117,6 @@ class _NativeQianjiHubPageState extends State<NativeQianjiHubPage> {
           _robots = const [];
           _loadingRobots = false;
         });
-        _scrollToBottom();
       }
       return;
     }
@@ -140,7 +129,6 @@ class _NativeQianjiHubPageState extends State<NativeQianjiHubPage> {
         _robots = list;
         _loadingRobots = false;
       });
-      _scrollToBottom();
       unawaited(RobotConsultStore.instance.refreshHub());
     } catch (_) {
       if (!mounted) return;
@@ -148,7 +136,6 @@ class _NativeQianjiHubPageState extends State<NativeQianjiHubPage> {
         _robots = const [];
         _loadingRobots = false;
       });
-      _scrollToBottom();
     }
   }
 
@@ -160,7 +147,6 @@ class _NativeQianjiHubPageState extends State<NativeQianjiHubPage> {
           _digitalEmployees = const [];
           _loadingDigitalEmployees = false;
         });
-        _scrollToBottom();
       }
       return;
     }
@@ -170,7 +156,6 @@ class _NativeQianjiHubPageState extends State<NativeQianjiHubPage> {
           _digitalEmployees = _fallbackDigitalEmployees;
           _loadingDigitalEmployees = false;
         });
-        _scrollToBottom();
       }
       return;
     }
@@ -184,21 +169,13 @@ class _NativeQianjiHubPageState extends State<NativeQianjiHubPage> {
         _digitalEmployees = list;
         _loadingDigitalEmployees = false;
       });
-      _scrollToBottom();
     } catch (_) {
       if (!mounted) return;
       setState(() {
         _digitalEmployees = const [];
         _loadingDigitalEmployees = false;
       });
-      _scrollToBottom();
     }
-  }
-
-  @override
-  void dispose() {
-    _scrollController.dispose();
-    super.dispose();
   }
 
   @override
@@ -216,7 +193,6 @@ class _NativeQianjiHubPageState extends State<NativeQianjiHubPage> {
           children: [
             Expanded(
               child: ListView(
-                controller: _scrollController,
                 padding: const EdgeInsets.fromLTRB(16, 16, 16, 40),
                 children: [
                   if (_canUseDigitalEmployees &&

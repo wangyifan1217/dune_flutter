@@ -23,20 +23,30 @@ class NativeMeetingService {
   Future<List<NativeMeetingSummary>> fetchList({
     int page = 0,
     int size = 20,
+    String keyword = '',
   }) async {
-    final result = await fetchListPage(page: page, size: size);
+    final result = await fetchListPage(
+      page: page,
+      size: size,
+      keyword: keyword,
+    );
     return result.items;
   }
 
   Future<NativeMeetingListPageResult> fetchListPage({
     int page = 0,
     int size = 20,
+    String keyword = '',
   }) async {
     final q = <String, String>{
       'owner': 'me',
       'page': page.toString(),
       'size': size.toString(),
     };
+    final trimmedKeyword = keyword.trim();
+    if (trimmedKeyword.isNotEmpty) {
+      q['q'] = trimmedKeyword;
+    }
     final resp = await _requestMeeting(
       'GET',
       '?${Uri(queryParameters: q).query}',
@@ -158,9 +168,15 @@ class NativeMeetingService {
     required String meetingDate,
     required String filePath,
   }) async {
-    final meetingId = await createMeeting(title: title, meetingDate: meetingDate);
+    final meetingId = await createMeeting(
+      title: title,
+      meetingDate: meetingDate,
+    );
     final filename = filenameFromPath(filePath);
-    final upload = await uploadAudioFile(filePath: filePath, fileName: filename);
+    final upload = await uploadAudioFile(
+      filePath: filePath,
+      fileName: filename,
+    );
     final audioObjectKey = (upload['objectKey'] ?? '').toString();
     final audioUrl = (upload['url'] ?? upload['objectKey'] ?? '').toString();
     final contentType = contentTypeForPath(filePath);
@@ -427,9 +443,7 @@ class NativeMeetingService {
     if (detail.contains('已开始转写') || detail.contains('TRANSCRIBING')) {
       throw Exception('会议纪要服务未更新，无法存草稿（已开始转写）');
     }
-    throw Exception(
-      detail.isEmpty ? '草稿保存失败，请稍后重试' : '草稿保存失败：$detail',
-    );
+    throw Exception(detail.isEmpty ? '草稿保存失败，请稍后重试' : '草稿保存失败：$detail');
   }
 
   String _stripExceptionPrefix(Exception e) {
@@ -456,12 +470,18 @@ class NativeMeetingService {
     required String meetingDate,
     required String filePath,
   }) async {
-    final meetingId = await createMeeting(title: title, meetingDate: meetingDate);
+    final meetingId = await createMeeting(
+      title: title,
+      meetingDate: meetingDate,
+    );
     if (meetingId <= 0) {
       throw Exception('创建会议记录失败，请重试');
     }
     final filename = filenameFromPath(filePath);
-    final upload = await uploadAudioFile(filePath: filePath, fileName: filename);
+    final upload = await uploadAudioFile(
+      filePath: filePath,
+      fileName: filename,
+    );
     final audioObjectKey = (upload['objectKey'] ?? '').toString().trim();
     if (audioObjectKey.isEmpty) {
       throw Exception('录音上传失败，未获得文件标识');

@@ -41,6 +41,35 @@ void main() {
     expect(restored.userType, 'EXTERNAL');
     expect(restored.isExternalUser, isTrue);
   });
+
+  test('AuthSession reads and persists Net TA access', () {
+    final fromJwt = AuthSession.fromJwt(
+      phone: '13800138000',
+      userId: 0,
+      token: _fakeJwt({'userId': 7, 'netTaAccess': true}),
+      apiBase: 'http://example/api/v1',
+    );
+    expect(fromJwt.netTaAccess, isTrue);
+    expect(fromJwt.effectiveNetTaAccess, isTrue);
+
+    final restored = AuthSession.fromJson(fromJwt.toJson());
+    expect(restored.netTaAccess, isTrue);
+    expect(restored.effectiveNetTaAccess, isTrue);
+  });
+
+  test('AuthSession applies Net TA access from users/me', () {
+    const base = AuthSession(
+      phone: '13800138000',
+      userId: 7,
+      token: 't',
+      apiBase: 'http://example/api/v1',
+      roles: [],
+    );
+
+    final session = AuthSession.enrichFromUsersMe(base, {'netTaAccess': true});
+    expect(session.netTaAccess, isTrue);
+    expect(session.effectiveNetTaAccess, isTrue);
+  });
 }
 
 String _fakeJwt(Map<String, dynamic> claims) {

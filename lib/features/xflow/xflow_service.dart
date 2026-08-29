@@ -241,12 +241,14 @@ class XflowService {
     return _dedupeB1Todos(_mapInboxApprovalRows(rows));
   }
 
-  Future<List<XflowProposalItem>> fetchB1Approvals() async {
+  Future<List<XflowProposalItem>> fetchB1Approvals({
+    String templateKey = '',
+  }) async {
     // 「我审批的」同时展示待办和我已处理的审批：OPEN 仍是唯一的可审批依据，
     // DONE 则仅用于“已通过 / 已驳回”历史筛选。
     final results = await Future.wait([
-      _requestList('/workbench/inbox?kind=APPROVAL&status=OPEN'),
-      _requestList('/workbench/inbox?kind=APPROVAL&status=DONE'),
+      _requestList(_inboxPath('APPROVAL', 'OPEN', templateKey)),
+      _requestList(_inboxPath('APPROVAL', 'DONE', templateKey)),
     ]);
     final rows = <dynamic>[...results[0], ...results[1]];
     final out = _mapInboxApprovalRows(rows);
@@ -254,14 +256,24 @@ class XflowService {
     return Future.wait(deduped.map(_enrichB1Item));
   }
 
-  Future<List<XflowProposalItem>> fetchB13Todos() async {
+  Future<List<XflowProposalItem>> fetchB13Todos({
+    String templateKey = '',
+  }) async {
     if (!await fetchPostApprovalTodoEnabled()) return const [];
     final results = await Future.wait([
-      _requestList('/workbench/inbox?kind=TASK&status=OPEN'),
-      _requestList('/workbench/inbox?kind=TASK&status=DONE'),
+      _requestList(_inboxPath('TASK', 'OPEN', templateKey)),
+      _requestList(_inboxPath('TASK', 'DONE', templateKey)),
     ]);
     final rows = <dynamic>[...results[0], ...results[1]];
     return _dedupeB1Todos(_mapInboxTaskRows(rows));
+  }
+
+  String _inboxPath(String kind, String status, String templateKey) {
+    final query = <String, String>{'kind': kind, 'status': status};
+    if (templateKey.trim().isNotEmpty) {
+      query['templateKey'] = templateKey.trim();
+    }
+    return '/workbench/inbox?${Uri(queryParameters: query).query}';
   }
 
   List<XflowProposalItem> _mapInboxTaskRows(List<dynamic> rows) {
@@ -277,8 +289,8 @@ class XflowService {
       final businessId = _businessId(row['businessId']);
       final todoId = _int(row['id']);
       final todoStatus = (row['todoStatus'] ?? row['status'] ?? '').toString();
-      final actionTitle =
-          (row['actionTitle'] ?? row['primaryAction'] ?? '').toString();
+      final actionTitle = (row['actionTitle'] ?? row['primaryAction'] ?? '')
+          .toString();
       final subStatus = (row['subStatus'] ?? row['subtitle'] ?? '').toString();
       out.add(
         XflowProposalItem(
@@ -299,8 +311,9 @@ class XflowService {
               ? null
               : row['templateKey'].toString(),
           documentKind: _trimmedOrNull(row['documentKind']),
-          proposalType:
-              _trimmedOrNull(row['proposalType'] ?? row['documentType']),
+          proposalType: _trimmedOrNull(
+            row['proposalType'] ?? row['documentType'],
+          ),
           txType: _trimmedOrNull(actionTitle.isEmpty ? subStatus : actionTitle),
           status: todoStatus.toUpperCase() == 'DONE' ? 'DONE' : 'PENDING',
           createdByName: (row['createdByName'] ?? row['subtitle'] ?? '')
@@ -358,8 +371,9 @@ class XflowService {
               : row['templateKey'].toString(),
           // 种类/类型取服务端中文标签（模板标题），避免客户端用模板 key 拼英文。
           documentKind: _trimmedOrNull(row['documentKind']),
-          proposalType:
-              _trimmedOrNull(row['proposalType'] ?? row['documentType']),
+          proposalType: _trimmedOrNull(
+            row['proposalType'] ?? row['documentType'],
+          ),
           txType: _trimmedOrNull(row['txType']),
           // 审批卡片展示整单状态；个人 todo 的 DONE 仅说明当前用户已处理。
           status: _resolveInboxListStatus(row),
@@ -386,8 +400,9 @@ class XflowService {
     final todoStatus = (row['todoStatus'] ?? '').toString().toUpperCase();
     if (todoStatus == 'OPEN') return 'PENDING';
 
-    final approvalStatus =
-        (row['approvalStatus'] ?? '').toString().toUpperCase();
+    final approvalStatus = (row['approvalStatus'] ?? '')
+        .toString()
+        .toUpperCase();
     if (approvalStatus == 'APPROVED' ||
         approvalStatus == 'REJECTED' ||
         approvalStatus == 'WITHDRAWN' ||
@@ -424,7 +439,9 @@ class XflowService {
     return out;
   }
 
-  Future<List<XflowProposalItem>> fetchB14Initiated() async {
+  Future<List<XflowProposalItem>> fetchB14Initiated({
+    String templateKey = '',
+  }) async {
     final byId = <String, XflowProposalItem>{};
     Object? err1;
     Object? err2;
@@ -432,7 +449,9 @@ class XflowService {
     // 中的同类项，避免 19 位 businessId 精度差导致「假重复」两条。
     var submissionsOk = false;
     try {
-      final rows = await _requestList('/xflow/submissions/mine');
+      final rows = await _requestList(
+        _templateFilteredPath('/xflow/submissions/mine', templateKey),
+      );
       submissionsOk = true;
       for (final row in rows.whereType<Map>()) {
         final it = _mapSubmissionItem(Map<String, dynamic>.from(row));
@@ -444,7 +463,9 @@ class XflowService {
     }
     // `my-initiated`：我已正式发起、进入审批流的提案。
     try {
-      final rows = await _requestList('/workbench/my-initiated');
+      final rows = await _requestList(
+        _templateFilteredPath('/workbench/my-initiated', templateKey),
+      );
       for (final row in rows.whereType<Map>()) {
         final map = Map<String, dynamic>.from(row);
         final bt = (map['businessType'] ?? map['business_type'] ?? 'PROPOSAL')
@@ -467,7 +488,9 @@ class XflowService {
     // （status=pending_initiate）。这类提案不在 my-initiated 中，必须并集补入，
     // 否则在「我发起的」列表里看不到被推送过来的提案（与 WebView loadB14Initiated 对齐）。
     try {
-      final rows = await _requestList('/xflow/proposals/mine');
+      final rows = await _requestList(
+        _templateFilteredPath('/xflow/proposals/mine', templateKey),
+      );
       for (final row in rows.whereType<Map>()) {
         final map = Map<String, dynamic>.from(row);
         if (!_shouldIncludeMyInitiatedRow(map)) continue;
@@ -542,12 +565,22 @@ class XflowService {
     );
   }
 
-  Future<List<XflowProposalItem>> fetchP1CcProposals() async {
-    final rows = await _requestList('/xflow/proposals/cc');
+  Future<List<XflowProposalItem>> fetchP1CcProposals({
+    String templateKey = '',
+  }) async {
+    final rows = await _requestList(
+      _templateFilteredPath('/xflow/proposals/cc', templateKey),
+    );
     final items = _dedupeById(
       rows.whereType<Map<String, dynamic>>().map(_mapProposalItem).toList(),
     );
     return Future.wait(items.map(_enrichP1Item));
+  }
+
+  String _templateFilteredPath(String path, String templateKey) {
+    final key = templateKey.trim();
+    if (key.isEmpty) return path;
+    return '$path?${Uri(queryParameters: {'templateKey': key}).query}';
   }
 
   Future<Map<String, dynamic>> fetchWorkbenchConfig() async {
@@ -841,7 +874,8 @@ class XflowService {
           attachments: _parseCommentAttachments(map['attachments']),
           parentId: _intNullable(map['parentId']),
           authorAvatarPreset: (map['authorAvatarPreset'] ?? '').toString(),
-          authorAvatarObjectKey: (map['authorAvatarObjectKey'] ?? '').toString(),
+          authorAvatarObjectKey: (map['authorAvatarObjectKey'] ?? '')
+              .toString(),
           createdAt: _parseApiDateTime(map['createdAt']),
         ),
       );
@@ -981,7 +1015,8 @@ class XflowService {
     for (final item in _mapInboxTaskRows(rows)) {
       final hint = item.todoHint;
       if (hint == null) continue;
-      if (hint.businessType.toUpperCase() == bt && hint.businessId == businessId) {
+      if (hint.businessType.toUpperCase() == bt &&
+          hint.businessId == businessId) {
         return item;
       }
     }
@@ -1028,7 +1063,9 @@ class XflowService {
         ownerId != uid;
     // 草稿与已作废单据均允许创建人删除。
     final canDeleteDraft =
-        (st == 'draft' || st == 'voided') && uid > 0 && detail.createdById == uid;
+        (st == 'draft' || st == 'voided') &&
+        uid > 0 &&
+        detail.createdById == uid;
     final canWithdraw =
         st == 'pending' &&
         uid > 0 &&
@@ -1740,6 +1777,18 @@ class XflowService {
           txType: (detail.raw['txType'] ?? '').toString().isEmpty
               ? null
               : detail.raw['txType'].toString(),
+          proposalType:
+              (detail.raw['proposalType'] ?? detail.raw['txType'] ?? '')
+                  .toString()
+                  .isEmpty
+              ? null
+              : (detail.raw['proposalType'] ?? detail.raw['txType']).toString(),
+          documentKind: (detail.raw['documentKind'] ?? '').toString().isEmpty
+              ? null
+              : detail.raw['documentKind'].toString(),
+          templateKey: (detail.raw['templateKey'] ?? '').toString().isNotEmpty
+              ? detail.raw['templateKey'].toString()
+              : item.templateKey,
           scaleWan: _scaleWanFromDetail(detail),
           currentStep: trail?.raw['currentStep'] is num
               ? (trail!.raw['currentStep'] as num).toInt()
@@ -1788,14 +1837,14 @@ class XflowService {
         );
         var createdByName = item.createdByName;
         if (trail != null) {
-          final fromTrail =
-              (trail.raw['initiatorName'] ?? '').toString().trim();
+          final fromTrail = (trail.raw['initiatorName'] ?? '')
+              .toString()
+              .trim();
           if (fromTrail.isNotEmpty) {
             createdByName = fromTrail;
           } else if (trail.initiatorId > 0) {
             final names = await fetchUserDisplayNames([trail.initiatorId]);
-            createdByName =
-                names[trail.initiatorId]?.trim().isNotEmpty == true
+            createdByName = names[trail.initiatorId]?.trim().isNotEmpty == true
                 ? names[trail.initiatorId]!.trim()
                 : createdByName;
           }
@@ -1841,13 +1890,14 @@ class XflowService {
       // 与 B1 一致：销售提案列表标题依赖 createdByName 拼「人名 - 销售提案」。
       var initiator = detail.ownerName.trim();
       if (initiator.isEmpty) {
-        initiator = (detail.raw['createdByName'] ??
-                detail.raw['createdBy'] ??
-                detail.raw['initiatorName'] ??
-                detail.raw['initiator'] ??
-                item.createdByName)
-            .toString()
-            .trim();
+        initiator =
+            (detail.raw['createdByName'] ??
+                    detail.raw['createdBy'] ??
+                    detail.raw['initiatorName'] ??
+                    detail.raw['initiator'] ??
+                    item.createdByName)
+                .toString()
+                .trim();
       }
       if (initiator.isEmpty && trail != null) {
         initiator = (trail.raw['initiatorName'] ?? '').toString().trim();
@@ -1887,6 +1937,16 @@ class XflowService {
         status: detail.status.isNotEmpty ? detail.status : item.status,
         tag1: (detail.raw['tag1'] ?? item.tag1)?.toString(),
         txType: (detail.raw['txType'] ?? item.txType)?.toString(),
+        proposalType:
+            (detail.raw['proposalType'] ??
+                    detail.raw['txType'] ??
+                    item.proposalType)
+                ?.toString(),
+        documentKind: (detail.raw['documentKind'] ?? item.documentKind)
+            ?.toString(),
+        templateKey: (detail.raw['templateKey'] ?? '').toString().isNotEmpty
+            ? detail.raw['templateKey'].toString()
+            : item.templateKey,
         scaleWan: _scaleWanFromDetail(detail) ?? item.scaleWan,
         currentStep: trail?.raw['currentStep'] is num
             ? (trail!.raw['currentStep'] as num).toInt()
@@ -2252,7 +2312,10 @@ class XflowService {
 
   List<String> _stringList(dynamic value) {
     if (value is List) {
-      return value.map((e) => e.toString().trim()).where((e) => e.isNotEmpty).toList();
+      return value
+          .map((e) => e.toString().trim())
+          .where((e) => e.isNotEmpty)
+          .toList();
     }
     return const <String>[];
   }

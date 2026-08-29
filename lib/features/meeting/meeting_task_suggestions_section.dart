@@ -65,9 +65,11 @@ class _MeetingTaskSuggestionsSectionState
 
   void _onKbChanged() {
     for (final delay in const [Duration(seconds: 3), Duration(seconds: 10)]) {
-      _delayed.add(Timer(delay, () {
-        if (mounted) _load();
-      }));
+      _delayed.add(
+        Timer(delay, () {
+          if (mounted) _load();
+        }),
+      );
     }
   }
 
@@ -121,8 +123,14 @@ class _MeetingTaskSuggestionsSectionState
 
   Future<void> _acceptAll() async {
     if (_busy) return;
-    setState(() => _busy = true);
     final all = List<MeetingTaskSuggestion>.from(_data.suggestions);
+    final confirmed = await _confirmTaskAction(
+      title: '确认全部创建任务',
+      content: '将根据本次会议纪要创建 ${all.length} 个任务，创建后会同步到相关负责人的任务列表。',
+      confirmLabel: '全部创建',
+    );
+    if (!confirmed || !mounted) return;
+    setState(() => _busy = true);
     try {
       for (final sug in all) {
         await _accept(sug, silent: true);
@@ -137,6 +145,13 @@ class _MeetingTaskSuggestionsSectionState
 
   Future<void> _dismiss(MeetingTaskSuggestion sug) async {
     if (_busy) return;
+    final confirmed = await _confirmTaskAction(
+      title: '确认忽略任务建议',
+      content: '“${sug.suggestedTitle}”将不再出现在本次会议的任务建议中。',
+      confirmLabel: '确认忽略',
+      destructive: true,
+    );
+    if (!confirmed || !mounted) return;
     setState(() => _busy = true);
     try {
       await _api.dismissSuggestion(widget.meetingId, sug.id);
@@ -185,9 +200,14 @@ class _MeetingTaskSuggestionsSectionState
           ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('取消')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('取消'),
+          ),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: DunesColors.brandPurple),
+            style: FilledButton.styleFrom(
+              backgroundColor: DunesColors.brandPurple,
+            ),
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text('创建'),
           ),
@@ -195,6 +215,12 @@ class _MeetingTaskSuggestionsSectionState
       ),
     );
     if (ok != true || !mounted) return;
+    final confirmed = await _confirmTaskAction(
+      title: '确认创建任务',
+      content: '将创建任务“${titleCtrl.text.trim()}”，并同步到相关负责人的任务列表。',
+      confirmLabel: '确认创建',
+    );
+    if (!confirmed || !mounted) return;
     setState(() => _busy = true);
     try {
       await _accept(
@@ -220,10 +246,45 @@ class _MeetingTaskSuggestionsSectionState
     );
   }
 
+  Future<bool> _confirmTaskAction({
+    required String title,
+    required String content,
+    required String confirmLabel,
+    bool destructive = false,
+  }) async {
+    return await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            title: Text(title),
+            content: Text(content),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('取消'),
+              ),
+              FilledButton(
+                style: FilledButton.styleFrom(
+                  backgroundColor: destructive
+                      ? DunesColors.coral
+                      : DunesColors.brandPurple,
+                ),
+                onPressed: () => Navigator.pop(ctx, true),
+                child: Text(confirmLabel),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+  }
+
   @override
   Widget build(BuildContext context) {
     final running = _data.bindRun?.isRunningFresh == true;
-    if (!_loaded || (_data.suggestions.isEmpty && _data.syncedTasks.isEmpty && !running)) {
+    if (!_loaded ||
+        (_data.suggestions.isEmpty && _data.syncedTasks.isEmpty && !running)) {
       return const SizedBox.shrink();
     }
     return Container(
@@ -240,7 +301,11 @@ class _MeetingTaskSuggestionsSectionState
         children: [
           Row(
             children: [
-              const Icon(Icons.task_alt_outlined, size: 18, color: DunesColors.brandPurple),
+              const Icon(
+                Icons.task_alt_outlined,
+                size: 18,
+                color: DunesColors.brandPurple,
+              ),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
@@ -299,19 +364,29 @@ class _MeetingTaskSuggestionsSectionState
                 padding: const EdgeInsets.only(bottom: 6),
                 child: Row(
                   children: [
-                    const Icon(Icons.check_circle_outline, size: 15, color: DunesColors.readReceipt),
+                    const Icon(
+                      Icons.check_circle_outline,
+                      size: 15,
+                      color: DunesColors.readReceipt,
+                    ),
                     const SizedBox(width: 6),
                     Expanded(
                       child: Text(
                         t.taskTitle,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: DunesTypography.sans(fontSize: 13, color: DunesColors.text2),
+                        style: DunesTypography.sans(
+                          fontSize: 13,
+                          color: DunesColors.text2,
+                        ),
                       ),
                     ),
                     Text(
                       '${t.progressPct}%',
-                      style: DunesTypography.sans(fontSize: 12, color: DunesColors.text3),
+                      style: DunesTypography.sans(
+                        fontSize: 12,
+                        color: DunesColors.text3,
+                      ),
                     ),
                   ],
                 ),
@@ -363,7 +438,10 @@ class _MeetingTaskSuggestionsSectionState
               '来源：${sug.decisionExcerpt}',
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
-              style: DunesTypography.sans(fontSize: 11, color: DunesColors.text3),
+              style: DunesTypography.sans(
+                fontSize: 11,
+                color: DunesColors.text3,
+              ),
             ),
           ],
           const SizedBox(height: 8),
@@ -378,6 +456,13 @@ class _MeetingTaskSuggestionsSectionState
                 onPressed: _busy
                     ? null
                     : () async {
+                        final confirmed = await _confirmTaskAction(
+                          title: '确认创建任务',
+                          content:
+                              '将创建任务“${sug.suggestedTitle}”，并同步到相关负责人的任务列表。',
+                          confirmLabel: '确认创建',
+                        );
+                        if (!confirmed || !mounted) return;
                         setState(() => _busy = true);
                         try {
                           await _accept(sug);

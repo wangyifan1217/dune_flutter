@@ -14,11 +14,9 @@ import '../nova/nova_file_utils.dart';
 import 'native_kb_models.dart';
 
 class NativeKbService {
-  NativeKbService({
-    required this.session,
-    http.Client? client,
-  })  : _client = client ?? http.Client(),
-        _ownsClient = client == null;
+  NativeKbService({required this.session, http.Client? client})
+    : _client = client ?? http.Client(),
+      _ownsClient = client == null;
 
   final AuthSession session;
   final http.Client _client;
@@ -35,9 +33,9 @@ class NativeKbService {
       Uri.parse('${session.apiBase.replaceAll(RegExp(r'/$'), '')}$path');
 
   Map<String, String> get _dunesHeaders => <String, String>{
-        'Authorization': 'Bearer ${session.token}',
-        'Accept': 'application/json',
-      };
+    'Authorization': 'Bearer ${session.token}',
+    'Accept': 'application/json',
+  };
 
   Map<String, String> _novaHeaders({Map<String, String>? extra}) {
     final headers = <String, String>{
@@ -49,8 +47,8 @@ class NativeKbService {
   }
 
   Future<void> ensureNovaReady() async {
-    _novaApiKey =
-        (session.novaLocalStorage?['dunes_nova_api_key'] ?? '').trim();
+    _novaApiKey = (session.novaLocalStorage?['dunes_nova_api_key'] ?? '')
+        .trim();
     _novaBase = NovaConfig.resolveBaseUrl(
       session.novaLocalStorage?['dunes_nova_base'],
     );
@@ -67,7 +65,9 @@ class NativeKbService {
     final data = body['data'] is Map<String, dynamic>
         ? body['data'] as Map<String, dynamic>
         : body;
-    _novaApiKey = (data['api_token'] ?? data['apiToken'] ?? '').toString().trim();
+    _novaApiKey = (data['api_token'] ?? data['apiToken'] ?? '')
+        .toString()
+        .trim();
     _novaBase = NovaConfig.resolveBaseUrl(
       (data['baseUrl'] as String?)?.trim() ?? _novaBase,
     );
@@ -98,7 +98,9 @@ class NativeKbService {
       headers: _novaHeaders(),
     );
     final body = _decode(resp.body);
-    if (resp.statusCode < 200 || resp.statusCode >= 300 || body['success'] == false) {
+    if (resp.statusCode < 200 ||
+        resp.statusCode >= 300 ||
+        body['success'] == false) {
       throw Exception(
         (body['message'] ?? body['error']?['message'] ?? '知识库状态获取失败')
             .toString(),
@@ -112,8 +114,51 @@ class NativeKbService {
     return summary;
   }
 
+  Future<List<NativeKbDocument>> searchDocuments({
+    required String keyword,
+    int page = 0,
+    int size = 50,
+  }) async {
+    final query = <String, String>{
+      'q': keyword.trim(),
+      'page': page.toString(),
+      'size': size.toString(),
+    };
+    final resp = await _client.get(
+      _dunesUri('/kb/documents?${Uri(queryParameters: query).query}'),
+      headers: _dunesHeaders,
+    );
+    final body = _decode(resp.body);
+    if (resp.statusCode < 200 ||
+        resp.statusCode >= 300 ||
+        body['success'] == false) {
+      throw Exception(
+        (body['message'] ?? body['error']?['message'] ?? '知识库搜索失败').toString(),
+      );
+    }
+    final data = body['data'] is Map<String, dynamic>
+        ? body['data'] as Map<String, dynamic>
+        : body;
+    final content =
+        (data['content'] as List?) ?? (data['items'] as List?) ?? const [];
+    return content
+        .whereType<Map>()
+        .toList(growable: false)
+        .asMap()
+        .entries
+        .map(
+          (entry) => NativeKbDocument.fromJson(
+            Map<String, dynamic>.from(entry.value),
+            index: entry.key,
+          ),
+        )
+        .toList(growable: false);
+  }
+
   NativeKbSummary _parseSummary(Map<String, dynamic> st) {
-    final rawDocs = st['documents'] is List ? st['documents'] as List : const [];
+    final rawDocs = st['documents'] is List
+        ? st['documents'] as List
+        : const [];
     final docs = <NativeKbDocument>[];
     for (var i = 0; i < rawDocs.length; i++) {
       final row = rawDocs[i];
@@ -130,15 +175,16 @@ class NativeKbService {
     if (docCount == 0) docCount = _num((st['stats'] as Map?)?['documentCount']);
     if (docCount == 0) docCount = docs.length;
     var categoryCount = folders.length;
-    final folderId = (st['folderId'] ??
-            st['datasetId'] ??
-            st['dataset_id'] ??
-            (folders.isNotEmpty
-                ? ((folders.first as Map?)?['id'] ??
-                    (folders.first as Map?)?['datasetId'])
-                : null) ??
-            'mine')
-        .toString();
+    final folderId =
+        (st['folderId'] ??
+                st['datasetId'] ??
+                st['dataset_id'] ??
+                (folders.isNotEmpty
+                    ? ((folders.first as Map?)?['id'] ??
+                          (folders.first as Map?)?['datasetId'])
+                    : null) ??
+                'mine')
+            .toString();
     if (categoryCount == 0 &&
         (folderId.isNotEmpty || docCount > 0 || st['ready'] == true)) {
       categoryCount = 1;
@@ -146,9 +192,10 @@ class NativeKbService {
     final unreadCount = _num(st['unreadCount']) > 0
         ? _num(st['unreadCount'])
         : (_num(st['unreadDocuments']) > 0
-            ? _num(st['unreadDocuments'])
-            : _num((st['stats'] as Map?)?['unreadCount']));
-    var ready = st['canChat'] == true ||
+              ? _num(st['unreadDocuments'])
+              : _num((st['stats'] as Map?)?['unreadCount']));
+    var ready =
+        st['canChat'] == true ||
         st['ready'] == true ||
         (st['status'] ?? '').toString().toLowerCase() == 'ready' ||
         (st['kb_status'] ?? '').toString().toLowerCase() == 'ready';
@@ -172,7 +219,9 @@ class NativeKbService {
 
   int _num(dynamic v) => v is num ? v.toInt() : int.tryParse('$v') ?? 0;
 
-  Future<void> _enrichDocumentsWithDunesLinks(List<NativeKbDocument> docs) async {
+  Future<void> _enrichDocumentsWithDunesLinks(
+    List<NativeKbDocument> docs,
+  ) async {
     if (docs.isEmpty) return;
     final needsLink = docs.where((d) => d.dunesDocumentId.isEmpty).toList();
     if (needsLink.isEmpty) return;
@@ -193,14 +242,22 @@ class NativeKbService {
           id: doc.id,
           title: doc.title.isNotEmpty ? doc.title : linked.title,
           fileName: doc.fileName.isNotEmpty ? doc.fileName : linked.fileName,
-          fileExtension: doc.fileExtension.isNotEmpty ? doc.fileExtension : linked.fileExtension,
-          ingestionStatus: doc.ingestionStatus.isNotEmpty ? doc.ingestionStatus : linked.ingestionStatus,
+          fileExtension: doc.fileExtension.isNotEmpty
+              ? doc.fileExtension
+              : linked.fileExtension,
+          ingestionStatus: doc.ingestionStatus.isNotEmpty
+              ? doc.ingestionStatus
+              : linked.ingestionStatus,
           indexed: doc.indexed || linked.indexed,
-          runStatus: doc.runStatus.isNotEmpty ? doc.runStatus : linked.runStatus,
+          runStatus: doc.runStatus.isNotEmpty
+              ? doc.runStatus
+              : linked.runStatus,
           fileObjectKey: linked.fileObjectKey,
           fileUrl: linked.fileUrl,
           localDocId: linked.dunesDocumentId,
-          fileSizeBytes: linked.fileSizeBytes > 0 ? linked.fileSizeBytes : doc.fileSizeBytes,
+          fileSizeBytes: linked.fileSizeBytes > 0
+              ? linked.fileSizeBytes
+              : doc.fileSizeBytes,
         );
       }
     }
@@ -208,7 +265,10 @@ class NativeKbService {
 
   Future<List<NativeKbDocument>> _fetchHomeRecentDocuments() async {
     try {
-      final resp = await _client.get(_dunesUri('/kb/home'), headers: _dunesHeaders);
+      final resp = await _client.get(
+        _dunesUri('/kb/home'),
+        headers: _dunesHeaders,
+      );
       if (resp.statusCode < 200 || resp.statusCode >= 300) return const [];
       final body = _decode(resp.body);
       final data = body['data'] is Map<String, dynamic>
@@ -287,10 +347,7 @@ class NativeKbService {
     }
     final initResp = await _client.post(
       _dunesUri('/kb/documents/uploads'),
-      headers: {
-        ..._dunesHeaders,
-        'Content-Type': 'application/json',
-      },
+      headers: {..._dunesHeaders, 'Content-Type': 'application/json'},
       body: jsonEncode({
         'fileName': fileName,
         'title': (title ?? '').trim(),
@@ -326,10 +383,7 @@ class NativeKbService {
       }
       final completeResp = await _client.post(
         _dunesUri('/kb/documents/uploads/$uploadId/complete'),
-        headers: {
-          ..._dunesHeaders,
-          'Content-Type': 'application/json',
-        },
+        headers: {..._dunesHeaders, 'Content-Type': 'application/json'},
         body: '{}',
       );
       _unwrap(completeResp);
@@ -386,7 +440,9 @@ class NativeKbService {
     final body = _decode(resp.body);
     if (resp.statusCode >= 400 || body['success'] == false) {
       throw Exception(
-        (body['message'] ?? body['error']?['message'] ?? '上传失败 HTTP ${resp.statusCode}')
+        (body['message'] ??
+                body['error']?['message'] ??
+                '上传失败 HTTP ${resp.statusCode}')
             .toString(),
       );
     }
@@ -480,9 +536,7 @@ class NativeKbService {
   Future<List<NativeKbDocument>> listIndexedDocumentsForPrd() async {
     await ensureNovaReady();
     final summary = await fetchSummary();
-    final docs = summary.documents
-        .where(nativeKbDocumentIndexed)
-        .toList();
+    final docs = summary.documents.where(nativeKbDocumentIndexed).toList();
     // 会议纪要类文档优先，其余已索引文档排后。
     docs.sort((a, b) {
       final aScore = _prdDocSortScore(a);
@@ -513,11 +567,13 @@ class NativeKbService {
     final expectedFile = kbFileName.trim().toLowerCase();
     final expectedTitle = kbTitle.trim().toLowerCase();
     if (expectedFile.isNotEmpty &&
-        (fileName == expectedFile || fileName == expectedFile.replaceAll('.md', ''))) {
+        (fileName == expectedFile ||
+            fileName == expectedFile.replaceAll('.md', ''))) {
       return true;
     }
     if (expectedTitle.isNotEmpty && title == expectedTitle) return true;
-    if (expectedTitle.isNotEmpty && fileName.contains(expectedTitle)) return true;
+    if (expectedTitle.isNotEmpty && fileName.contains(expectedTitle))
+      return true;
 
     // 兼容 minutes-go upload-to-kb：meeting-minutes-{id}.md
     final backendFile = 'meeting-minutes-$meetingId'.toLowerCase();
@@ -534,7 +590,8 @@ class NativeKbService {
 
   Future<void> deleteDocument(String documentId, {String? folderId}) async {
     await ensureNovaReady();
-    var url = '$_novaBase/v1/app/kb/documents/${Uri.encodeComponent(documentId)}';
+    var url =
+        '$_novaBase/v1/app/kb/documents/${Uri.encodeComponent(documentId)}';
     if (folderId != null && folderId.isNotEmpty) {
       url += '?folderId=${Uri.encodeComponent(folderId)}';
     }
@@ -591,7 +648,9 @@ class NativeKbService {
     return detail.dunesDocumentId;
   }
 
-  Future<NativeKbDocument> fetchDunesDocumentByRagflowId(String ragflowDocId) async {
+  Future<NativeKbDocument> fetchDunesDocumentByRagflowId(
+    String ragflowDocId,
+  ) async {
     final id = ragflowDocId.trim();
     if (id.isEmpty) {
       throw Exception('文档 ID 无效');
@@ -601,10 +660,10 @@ class NativeKbService {
       headers: _dunesHeaders,
     );
     final body = _decode(resp.body);
-    if (resp.statusCode < 200 || resp.statusCode >= 300 || body['success'] == false) {
-      throw Exception(
-        (body['message'] ?? '文档不存在或暂不可用').toString(),
-      );
+    if (resp.statusCode < 200 ||
+        resp.statusCode >= 300 ||
+        body['success'] == false) {
+      throw Exception((body['message'] ?? '文档不存在或暂不可用').toString());
     }
     final data = body['data'] is Map<String, dynamic>
         ? body['data'] as Map<String, dynamic>
@@ -627,10 +686,10 @@ class NativeKbService {
       headers: _dunesHeaders,
     );
     final body = _decode(resp.body);
-    if (resp.statusCode < 200 || resp.statusCode >= 300 || body['success'] == false) {
-      throw Exception(
-        (body['message'] ?? '文档不存在或暂不可用').toString(),
-      );
+    if (resp.statusCode < 200 ||
+        resp.statusCode >= 300 ||
+        body['success'] == false) {
+      throw Exception((body['message'] ?? '文档不存在或暂不可用').toString());
     }
     final data = body['data'] is Map<String, dynamic>
         ? body['data'] as Map<String, dynamic>
@@ -654,10 +713,10 @@ class NativeKbService {
       headers: _dunesHeaders,
     );
     final body = _decode(resp.body);
-    if (resp.statusCode < 200 || resp.statusCode >= 300 || body['success'] == false) {
-      throw Exception(
-        (body['message'] ?? '获取下载链接失败').toString(),
-      );
+    if (resp.statusCode < 200 ||
+        resp.statusCode >= 300 ||
+        body['success'] == false) {
+      throw Exception((body['message'] ?? '获取下载链接失败').toString());
     }
     final data = body['data'] is Map<String, dynamic>
         ? body['data'] as Map<String, dynamic>
@@ -701,7 +760,8 @@ class NativeKbService {
       NativeKbDocument? doc,
     ) async {
       final directUrl = doc?.fileUrl.trim() ?? '';
-      if (!isDirectHttpUrl(directUrl) || !isUrlLikelyDeviceReachable(directUrl)) {
+      if (!isDirectHttpUrl(directUrl) ||
+          !isUrlLikelyDeviceReachable(directUrl)) {
         return null;
       }
       try {
@@ -850,7 +910,10 @@ class NativeKbService {
 
   Future<NativeKbDocument> fetchDocumentDetail(String documentId) async {
     final hint = await findDocumentById(documentId);
-    final dunesId = await resolveDunesDocumentIdAsync(doc: hint, docId: documentId);
+    final dunesId = await resolveDunesDocumentIdAsync(
+      doc: hint,
+      docId: documentId,
+    );
     if (dunesId.isEmpty) {
       throw Exception('该文档尚未关联本地知识库，请返回刷新后重试');
     }
@@ -926,13 +989,17 @@ class NativeKbService {
         ),
         headers: _dunesHeaders,
       );
-      if (resp.statusCode >= 200 && resp.statusCode < 300 && resp.body.isNotEmpty) {
+      if (resp.statusCode >= 200 &&
+          resp.statusCode < 300 &&
+          resp.body.isNotEmpty) {
         return decodeHttpResponseText(
           resp.bodyBytes,
           contentType: resp.headers['content-type'] ?? '',
         );
       }
-      if (resp.statusCode >= 200 && resp.statusCode < 300 && resp.body.isEmpty) {
+      if (resp.statusCode >= 200 &&
+          resp.statusCode < 300 &&
+          resp.body.isEmpty) {
         lastError = Exception('文档内容为空');
         lastStatus = resp.statusCode;
         continue;
@@ -954,36 +1021,38 @@ class NativeKbService {
 
     add(doc.fileObjectKey);
     final ragId = doc.id.trim();
-    final names = <String>{
-      doc.fileName.trim(),
-      doc.title.trim(),
-    }..removeWhere((s) => s.isEmpty);
+    final names = <String>{doc.fileName.trim(), doc.title.trim()}
+      ..removeWhere((s) => s.isEmpty);
 
     for (final name in names) {
       add('$userId/$name');
       if (ragId.isNotEmpty && int.tryParse(ragId) == null) {
         add('$userId/ragflow/$ragId/$name');
       }
-      final meetingMatch =
-          RegExp(r'meeting-minutes-(\d+)', caseSensitive: false).firstMatch(name);
+      final meetingMatch = RegExp(
+        r'meeting-minutes-(\d+)',
+        caseSensitive: false,
+      ).firstMatch(name);
       if (meetingMatch != null) {
         add('$userId/meeting-minutes-${meetingMatch.group(1)}.md');
       }
     }
 
     final objectKey = doc.fileObjectKey.trim().toLowerCase();
-    final legacyInKey =
-        RegExp(r'meeting-minutes-(\d+)').firstMatch(objectKey);
+    final legacyInKey = RegExp(r'meeting-minutes-(\d+)').firstMatch(objectKey);
     if (legacyInKey != null) {
       add('$userId/meeting-minutes-${legacyInKey.group(1)}.md');
     }
     return out;
   }
 
-  Future<List<String>> _meetingMinutesLegacyStorageKeys(NativeKbDocument doc) async {
+  Future<List<String>> _meetingMinutesLegacyStorageKeys(
+    NativeKbDocument doc,
+  ) async {
     final title = doc.title.trim();
     final fileName = doc.fileName.trim();
-    final looksLikeMeetingMinutes = title.startsWith('会议纪要') ||
+    final looksLikeMeetingMinutes =
+        title.startsWith('会议纪要') ||
         fileName.startsWith('会议纪要') ||
         title.contains('meeting-minutes') ||
         fileName.contains('meeting-minutes');
@@ -1005,14 +1074,17 @@ class NativeKbService {
         : null;
 
     try {
-      final meetings =
-          await NativeMeetingService(session: session).fetchList(page: 0, size: 100);
+      final meetings = await NativeMeetingService(
+        session: session,
+      ).fetchList(page: 0, size: 100);
       for (final meeting in meetings) {
         if (meeting.meetingId <= 0) continue;
         if (meetingId != null && meeting.meetingId != meetingId) continue;
         add('${session.userId}/meeting-minutes-${meeting.meetingId}.md');
         final kbTitle = MeetingMinutesExport.kbUploadTitleFromSummary(meeting);
-        final kbFile = MeetingMinutesExport.kbUploadFileNameFromSummary(meeting);
+        final kbFile = MeetingMinutesExport.kbUploadFileNameFromSummary(
+          meeting,
+        );
         add('${session.userId}/$kbFile');
         add('${session.userId}/${kbTitle}.md');
       }
@@ -1021,7 +1093,9 @@ class NativeKbService {
   }
 
   /// 优先读文档记录关联的对象；仅在记录缺失时扫描 MinIO 遗留路径。
-  Future<String?> _tryFetchKbMarkdownLegacyFallback(NativeKbDocument doc) async {
+  Future<String?> _tryFetchKbMarkdownLegacyFallback(
+    NativeKbDocument doc,
+  ) async {
     final ragId = doc.id.trim();
     // RAGFlow 直传文档没有 MinIO 镜像时，遗留路径会命中旧版 meeting-minutes 文件。
     if (ragId.isNotEmpty && int.tryParse(ragId) == null) {
@@ -1086,12 +1160,14 @@ class NativeKbService {
   static String _withCacheBust(String url) {
     final uri = Uri.tryParse(url.trim());
     if (uri == null) return url;
-    return uri.replace(
-      queryParameters: {
-        ...uri.queryParameters,
-        '_': '${DateTime.now().millisecondsSinceEpoch}',
-      },
-    ).toString();
+    return uri
+        .replace(
+          queryParameters: {
+            ...uri.queryParameters,
+            '_': '${DateTime.now().millisecondsSinceEpoch}',
+          },
+        )
+        .toString();
   }
 
   Future<String> fetchKbDocumentText({
@@ -1183,8 +1259,15 @@ class NativeKbService {
     return doc.title.toLowerCase().endsWith('.md');
   }
 
-  Future<({NativeKbDocument doc, String fileName, String? downloadUrl, String? markdown})>
-      loadDocumentPreview({
+  Future<
+    ({
+      NativeKbDocument doc,
+      String fileName,
+      String? downloadUrl,
+      String? markdown,
+    })
+  >
+  loadDocumentPreview({
     required String docId,
     NativeKbDocument? initialDoc,
   }) async {
@@ -1240,19 +1323,28 @@ class NativeKbService {
     required void Function(List<NativeKbCitation> citations) onCitations,
   }) async {
     await ensureNovaReady();
-    final model = (session.novaLocalStorage?['dunes_nova_chat_model'] ??
-            session.novaLocalStorage?['dunes_nova_default_model'] ??
-            NovaConfig.defaultChatModel)
-        .trim();
-    final bizUser = (session.novaLocalStorage?['dunes_nova_biz_user_id'] ??
-            session.userId.toString())
-        .trim();
-    final req = http.Request('POST', Uri.parse('$_novaBase/v1/chat/completions'));
-    req.headers.addAll(_novaHeaders(extra: {
-      'Content-Type': 'application/json',
-      'Accept': 'text/event-stream',
-      if (sessionId.isNotEmpty) 'X-Nova-Chat-Session-Id': sessionId,
-    }));
+    final model =
+        (session.novaLocalStorage?['dunes_nova_chat_model'] ??
+                session.novaLocalStorage?['dunes_nova_default_model'] ??
+                NovaConfig.defaultChatModel)
+            .trim();
+    final bizUser =
+        (session.novaLocalStorage?['dunes_nova_biz_user_id'] ??
+                session.userId.toString())
+            .trim();
+    final req = http.Request(
+      'POST',
+      Uri.parse('$_novaBase/v1/chat/completions'),
+    );
+    req.headers.addAll(
+      _novaHeaders(
+        extra: {
+          'Content-Type': 'application/json',
+          'Accept': 'text/event-stream',
+          if (sessionId.isNotEmpty) 'X-Nova-Chat-Session-Id': sessionId,
+        },
+      ),
+    );
     req.body = jsonEncode(<String, dynamic>{
       'model': model.isEmpty ? NovaConfig.defaultChatModel : model,
       'stream': true,
@@ -1284,8 +1376,9 @@ class NativeKbService {
         final json = _parseSseBlock(block);
         if (json == null) continue;
         if (json['error'] != null) {
-          streamError = (json['error']?['message'] ?? json['message'] ?? 'Nova 流式错误')
-              .toString();
+          streamError =
+              (json['error']?['message'] ?? json['message'] ?? 'Nova 流式错误')
+                  .toString();
           continue;
         }
         if (json['rag'] is Map) {
@@ -1323,12 +1416,13 @@ class NativeKbService {
       final map = Map<String, dynamic>.from(c);
       out.add(
         NativeKbCitation(
-          sourceTitle: (map['sourceTitle'] ??
-                  map['documentTitle'] ??
-                  map['title'] ??
-                  map['fileName'] ??
-                  '引用')
-              .toString(),
+          sourceTitle:
+              (map['sourceTitle'] ??
+                      map['documentTitle'] ??
+                      map['title'] ??
+                      map['fileName'] ??
+                      '引用')
+                  .toString(),
           chunkText: (map['text'] ?? map['chunkText'] ?? map['content'] ?? '')
               .toString(),
           page: (map['page'] ?? map['pageNo'] as num?)?.toInt(),
@@ -1356,10 +1450,14 @@ class NativeKbService {
   String _parseNovaError(int status, String text) {
     try {
       final j = _decode(text);
-      return (j['error']?['message'] ?? j['message'] ?? 'Nova 请求失败 HTTP $status')
+      return (j['error']?['message'] ??
+              j['message'] ??
+              'Nova 请求失败 HTTP $status')
           .toString();
     } catch (_) {
-      return text.isEmpty ? 'Nova 请求失败 HTTP $status' : text.substring(0, min(320, text.length));
+      return text.isEmpty
+          ? 'Nova 请求失败 HTTP $status'
+          : text.substring(0, min(320, text.length));
     }
   }
 

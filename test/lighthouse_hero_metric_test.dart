@@ -483,6 +483,59 @@ void main() {
       lighthouseFundPoolTraceAfterTap('totalAssets', 'fundPoolBalance'),
       'totalAssets',
     );
+    // 资金卡回到四格纯余额；两条利润是流量，落在资产卡（存量 + 增量）。
+    expect(
+      lighthouseFundPoolFundsSection.metrics.map((m) => m.key).toList(),
+      [
+        'regulatoryAccountBalance',
+        'inTransitFunds',
+        'endingReceivableRebate',
+        'turnoverDays',
+      ],
+    );
+    expect(
+      lighthouseFundPoolAssetsSection.metrics.map((m) => m.key).toList(),
+      ['totalAssets', 'profitMonth', 'profitDay'],
+    );
+    expect(
+      lighthouseFundPoolAssetsSection.metrics.map((m) => m.label).toList(),
+      ['资产合计', '本月新增利润', '本日新增利润'],
+    );
+    // 资产卡是唯一存量 / 流量混排的卡：第 1 格起是流量，中间画分隔。
+    expect(lighthouseFundPoolAssetsSection.flowStartIndex, 1);
+    expect(lighthouseFundPoolFundsSection.flowStartIndex, isNull);
+    expect(lighthouseFundPoolVouchersSection.flowStartIndex, isNull);
+    expect(lighthouseFundPoolReconSection.flowStartIndex, isNull);
+    expect(lighthouseFundPoolInvoiceSection.flowStartIndex, isNull);
+    expect(lighthouseFundPoolFlowDividerLabel, '期间新增');
+    // 只有这两格按增长显示；余额格保持中性，不染涨跌色。
+    expect(lighthouseFundPoolGrowthMetricKeys, {'profitMonth', 'profitDay'});
+    expect(
+      lighthouseFundPoolGrowthMetricKeys.contains('totalAssets'),
+      isFalse,
+    );
+    expect(lighthouseFundPoolExternalMetricKeys, {'profitMonth', 'profitDay'});
+    expect(
+      lighthouseFundPoolAmountByKey(
+        const LighthouseFundPoolAmounts(totalAssets: 1),
+        'profitMonth',
+      ),
+      isNull,
+    );
+    // 省份取值：先精确，再双向包含；合计行不参与模糊。
+    expect(
+      lighthouseLookupProvinceAmount(const {'广西壮族自治区': 12.0}, '广西壮族自治区'),
+      12.0,
+    );
+    expect(
+      lighthouseLookupProvinceAmount(const {'广西壮族自治区': 12.0}, '广西'),
+      12.0,
+    );
+    expect(
+      lighthouseLookupProvinceAmount(const {'__TOTAL__': 99.0}, '广西'),
+      isNull,
+    );
+    expect(lighthouseLookupProvinceAmount(const {}, '广西'), isNull);
     expect(
       lighthouseFundPoolPanelFormulas(lighthouseFundPoolPanelInvoice),
       isEmpty,
@@ -989,6 +1042,30 @@ void main() {
       'profit': 'trendingUp',
     });
     expect(lighthouseHeroSectionAccentValues.keys, {
+      'scale',
+      'cost',
+      'cash',
+      'profit',
+    });
+    // 分区四色跑过色盲分离：旧的现金流紫和利润蓝正常视力下只差 ΔE 8.7，
+    // 做成 14px 图标片看不出来，铺成彩带就是两条分不开的带子。
+    expect(lighthouseHeroSectionAccentValues['scale'], 0xFF7B5CD8);
+    expect(lighthouseHeroSectionAccentValues['cost'], 0xFFC4791C);
+    expect(lighthouseHeroSectionAccentValues['cash'], 0xFF1E9E72);
+    expect(lighthouseHeroSectionAccentValues['profit'], 0xFFB8478F);
+    // 分区靠整卡淡底，不用彩带、也不只给标题上色。
+    expect(lighthouseHeroShowsSectionBand, isFalse);
+    expect(lighthouseHeroSectionTintValues['scale'], 0xFFF6F3FD);
+    expect(lighthouseHeroSectionTintValues['cost'], 0xFFFCF6EC);
+    expect(lighthouseHeroSectionTintValues['cash'], 0xFFEDF8F3);
+    expect(lighthouseHeroSectionTintValues['profit'], 0xFFFBF1F7);
+    expect(lighthouseHeroSectionEdgeValues.keys, {
+      'scale',
+      'cost',
+      'cash',
+      'profit',
+    });
+    expect(lighthouseHeroSectionTitleValues.keys, {
       'scale',
       'cost',
       'cash',
@@ -1765,8 +1842,9 @@ void main() {
         ),
         [false, false, true, false, false, false],
       );
+      // 图例可点性看「有没有数据」，不受单线规则影响。
       expect(
-        lighthouseTrendVisibleFlags(
+        lighthouseTrendBaseFlags(
           hasRevenue: true,
           hasCost: true,
           hasProfit: true,
@@ -1775,6 +1853,42 @@ void main() {
         ),
         [true, true, true, true, true, false],
       );
+      // v20：没有 solo 时只画主线，不再五条全开。
+      expect(
+        lighthouseTrendVisibleFlags(
+          hasRevenue: true,
+          hasCost: true,
+          hasProfit: true,
+          hasScale: true,
+          hasScaleAlt: true,
+        ),
+        [false, false, false, true, false, false],
+      );
+      // 核销 + 销售共用真轴时，这一对例外地一起画（两线之间是未核销差额）。
+      expect(
+        lighthouseTrendVisibleFlags(
+          hasRevenue: true,
+          hasCost: true,
+          hasProfit: true,
+          hasScale: true,
+          hasScaleAlt: true,
+          pairScale: true,
+        ),
+        [false, false, false, true, true, false],
+      );
+      // 规模缺席时主线退到毛利。
+      expect(
+        lighthouseTrendVisibleFlags(
+          hasRevenue: true,
+          hasCost: true,
+          hasProfit: true,
+          hasScale: false,
+          hasScaleAlt: false,
+          pairScale: true,
+        ),
+        [false, false, true, false, false, false],
+      );
+      // solo 指向一条没数据的线 → 回落到主线，而不是把五条全打开。
       expect(
         lighthouseTrendVisibleFlags(
           hasRevenue: true,
@@ -1784,7 +1898,7 @@ void main() {
           hasScaleAlt: false,
           soloKey: 'cost',
         ),
-        [true, false, true, true, false, false],
+        [false, false, false, true, false, false],
       );
       expect(
         lighthouseTrendVisibleFlags(

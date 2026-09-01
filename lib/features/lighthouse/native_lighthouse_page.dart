@@ -1940,7 +1940,8 @@ class _TrendLinesPainter extends CustomPainter {
           ..shader = LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: [color.withAlpha(42), color.withAlpha(0)],
+            // 单线之后不用再让着四条灰线，填充给足，主线才有体积。
+            colors: [color.withAlpha(64), color.withAlpha(0)],
           ).createShader(rect)
           ..style = PaintingStyle.fill,
       );
@@ -6465,13 +6466,19 @@ class _TrendChartState extends State<_TrendChart> {
       (_hasProf ? 1 : 0) +
       (_hasCostAlt ? 1 : 0);
 
-  List<bool> get _baseFlags => lighthouseTrendVisibleFlags(
+  List<bool> get _baseFlags => lighthouseTrendBaseFlags(
     hasRevenue: _hasRev,
     hasCost: _hasCost,
     hasProfit: _hasProf,
     hasScale: _hasScale,
     hasScaleAlt: _hasScaleAlt,
     hasCostAlt: _hasCostAlt,
+  );
+
+  /// 核销 / 销售是否共用真轴 —— 只有这一对才允许同时画两条。
+  bool get _pairsScale => lighthouseTrendShareScaleRange(
+    scaleLabel: widget.scaleLabel,
+    scaleAltLabel: widget.scaleAltLabel,
   );
 
   List<bool> get _visibleFlags => lighthouseTrendVisibleFlags(
@@ -6482,7 +6489,16 @@ class _TrendChartState extends State<_TrendChart> {
     hasScaleAlt: _hasScaleAlt,
     hasCostAlt: _hasCostAlt,
     soloKey: _soloKey,
+    pairScale: _pairsScale,
   );
+
+  /// 图例上这一条现在画没画在图里 —— 决定要不要给它色块。
+  bool _isDrawnSeries(String key) {
+    final i = lighthouseTrendSeriesKeys.indexOf(key);
+    if (i < 0) return false;
+    final vis = _visibleFlags;
+    return i < vis.length && vis[i];
+  }
 
   void _toggleSolo(String key) {
     final next = lighthouseTrendSoloAfterTap(_soloKey, key);
@@ -6940,14 +6956,18 @@ class _TrendChartState extends State<_TrendChart> {
     final soloing = _soloKey != null;
     final active = seriesKey != null && _soloKey == seriesKey;
     final dimmed = soloing && !active;
+    // 画在图上的那条（主线，或核销 / 销售那一对）。其余是纯数字。
+    final drawn = seriesKey != null && _isDrawnSeries(seriesKey);
     final momUp = momPct != null && momPct >= 0;
     final momColor = momPct == null
         ? LhColors.mute2
         : (momUp ? LhColors.neg : LhColors.pos);
     final valueStyle = LhTypography.mono(
       size: 9,
-      color: negative ? LhColors.pos : color,
-      weight: FontWeight.w700,
+      color: negative
+          ? LhColors.pos
+          : (drawn || seriesKey == null ? color : LhColors.ink2),
+      weight: drawn ? FontWeight.w700 : FontWeight.w600,
       height: 1.0,
     );
     final chip = Column(
@@ -6957,15 +6977,19 @@ class _TrendChartState extends State<_TrendChart> {
         Row(
           mainAxisSize: expandLabel ? MainAxisSize.max : MainAxisSize.min,
           children: [
-            Container(
-              width: 10,
-              height: 2.5,
-              decoration: BoxDecoration(
-                color: dimmed ? color.withAlpha(90) : color,
-                borderRadius: BorderRadius.circular(1),
+            // 色块只给真画在图上的那条。没画的线还挂个色块，等于骗人说
+            // 「它在图里，你自己找」—— 那正是五条线时代最费眼的地方。
+            if (drawn) ...[
+              Container(
+                width: 12,
+                height: 2.5,
+                decoration: BoxDecoration(
+                  color: dimmed ? color.withAlpha(90) : color,
+                  borderRadius: BorderRadius.circular(1),
+                ),
               ),
-            ),
-            const SizedBox(width: 4),
+              const SizedBox(width: 4),
+            ],
             if (expandLabel)
               Flexible(
                 child: LhScrollText(
@@ -6974,8 +6998,8 @@ class _TrendChartState extends State<_TrendChart> {
                   overflow: TextOverflow.ellipsis,
                   style: LhTypography.mono(
                     size: 7.5,
-                    color: active ? LhColors.ink2 : LhColors.mute2,
-                    weight: FontWeight.w600,
+                    color: active || drawn ? LhColors.ink2 : LhColors.mute2,
+                    weight: drawn ? FontWeight.w700 : FontWeight.w600,
                     height: 1.0,
                   ),
                 ),
@@ -6986,8 +7010,8 @@ class _TrendChartState extends State<_TrendChart> {
                 maxLines: 1,
                 style: LhTypography.mono(
                   size: 7.5,
-                  color: active ? LhColors.ink2 : LhColors.mute2,
-                  weight: FontWeight.w600,
+                  color: active || drawn ? LhColors.ink2 : LhColors.mute2,
+                  weight: drawn ? FontWeight.w700 : FontWeight.w600,
                   height: 1.0,
                 ),
               ),
@@ -6999,7 +7023,7 @@ class _TrendChartState extends State<_TrendChart> {
         if (lighthouseTrendLegendMomOnSecondLine && momPct != null) ...[
           const SizedBox(height: 2),
           Padding(
-            padding: const EdgeInsets.only(left: 14),
+            padding: EdgeInsets.only(left: drawn ? 16 : 0),
             child: Text(
               lighthouseTrendMomLabel(momPct),
               maxLines: 1,
@@ -7022,8 +7046,14 @@ class _TrendChartState extends State<_TrendChart> {
       onTap: () => _toggleSolo(seriesKey),
       child: Opacity(
         opacity: dimmed ? 0.38 : 1,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 2, horizontal: 2),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 2, horizontal: 4),
+          decoration: BoxDecoration(
+            // 当前画在图上的那条挂一层极淡的底：五个 chip 排在一起时，
+            // 「哪条是图里那条」要一眼看出来，不能只靠色块的有无。
+            color: drawn ? _LhPlum.mist : Colors.transparent,
+            borderRadius: BorderRadius.circular(5),
+          ),
           child: chip,
         ),
       ),
@@ -8703,6 +8733,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   Map<String, dynamic> _discountsByName = const {};
   bool _fundPoolLoading = false;
   Map<String, LighthouseFundPoolAmounts> _fundPoolByProvince = const {};
+  // 资金卡末尾那两格：按「现在」取的当月 / 当日毛利，按省份加总。
+  // 不跟随页面上的周期筛选 —— 它俩问的就是「此刻本月/本日赚了多少」。
+  bool _fundPoolProfitLoading = false;
+  Map<String, double> _fundPoolProfitMonth = const {};
+  Map<String, double> _fundPoolProfitDay = const {};
   String _splitCacheKey = '';
 
   String _tab = 'product';
@@ -10028,6 +10063,8 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           _discountsByName = const {};
           _fundPoolLoading = false;
           _fundPoolByProvince = const {};
+          _fundPoolProfitMonth = const {};
+          _fundPoolProfitDay = const {};
           _expandedFundPools.clear();
           _fundPoolTraces.clear();
           _rowsCacheKey = '';
@@ -10189,6 +10226,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     if (tab == 'supply') {
       unawaited(_loadDiscounts());
       unawaited(_loadFundPool());
+      unawaited(_loadFundPoolProfit());
     }
     try {
       late final List<Map<String, dynamic>> rows;
@@ -10481,6 +10519,45 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       // Fund-pool is supplemental; keep "—" when unavailable (e.g. IP whitelist).
     } finally {
       _fundPoolLoading = false;
+    }
+  }
+
+  /// 当月 / 当日毛利 —— offset 0 + period day|month 就是「此刻这一天 / 这一月」，
+  /// 不用自己拼日期，也不受页面上选的周期影响。
+  ///
+  /// 供给列表是按「标签二 + 供给分类」分行的，一个省份会有多行，所以按省份加总。
+  Future<void> _loadFundPoolProfit() async {
+    if (_fundPoolProfitLoading) return;
+    _fundPoolProfitLoading = true;
+    try {
+      final results = await Future.wait([
+        _service.fetchDimension(tab: 'supply', period: 'month', offset: 0),
+        _service.fetchDimension(tab: 'supply', period: 'day', offset: 0),
+      ]);
+      Map<String, double> sumByProvince(Map<String, dynamic> data) {
+        final out = <String, double>{};
+        for (final raw in (data['rows'] as List? ?? const [])) {
+          if (raw is! Map) continue;
+          final name = raw['name']?.toString().trim() ?? '';
+          if (name.isEmpty) continue;
+          final profit = (raw['profit'] as num?)?.toDouble();
+          if (profit == null) continue;
+          out[name] = (out[name] ?? 0) + profit;
+        }
+        return out;
+      }
+
+      final month = sumByProvince(results[0]);
+      final day = sumByProvince(results[1]);
+      if (!mounted) return;
+      setState(() {
+        _fundPoolProfitMonth = month;
+        _fundPoolProfitDay = day;
+      });
+    } catch (_) {
+      // 和资金池一样是补充数据：取不到就留「—」，不打断主流程。
+    } finally {
+      _fundPoolProfitLoading = false;
     }
   }
 
@@ -14304,9 +14381,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                       Container(
                         padding: const EdgeInsets.fromLTRB(5, 4, 7, 4),
                         decoration: BoxDecoration(
-                          color: Color(
-                            lighthouseHeroSectionAccentValues['profit']!,
-                          ).withAlpha(12),
+                          // 大数那块钉在主题紫上，不跟利润分区色走 ——
+                          // 分区色是给下面四张卡做分组的，大数是页面的锚，
+                          // 让它跟着分组色改会把整页的重心也改掉。
+                          color: _LhPlum.primary.withAlpha(12),
                           borderRadius: BorderRadius.circular(
                             lighthouseHeroMastheadLabelRadius,
                           ),
@@ -14318,17 +14396,13 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                               width: lighthouseHeroMastheadLabelIconSize,
                               height: lighthouseHeroMastheadLabelIconSize,
                               decoration: BoxDecoration(
-                                color: Color(
-                                  lighthouseHeroSectionAccentValues['profit']!,
-                                ).withAlpha(24),
+                                color: _LhPlum.primary.withAlpha(24),
                                 borderRadius: BorderRadius.circular(5),
                               ),
-                              child: Icon(
+                              child: const Icon(
                                 Icons.trending_up_rounded,
                                 size: 11,
-                                color: Color(
-                                  lighthouseHeroSectionAccentValues['profit']!,
-                                ),
+                                color: _LhPlum.primary,
                               ),
                             ),
                             const SizedBox(width: 5),
@@ -16181,10 +16255,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             width: lighthouseHeroSectionIconSize,
             height: lighthouseHeroSectionIconSize,
             decoration: BoxDecoration(
-              color: accent.withAlpha(24),
+              // chip 底已经带色，图标片走实心 + 白图标，chip 里才有个焦点。
+              color: accent,
               borderRadius: BorderRadius.circular(5),
             ),
-            child: Icon(sectionIcon(key), size: 11, color: accent),
+            child: Icon(sectionIcon(key), size: 10.5, color: LhColors.paper),
           ),
           const SizedBox(width: 5),
           Flexible(
@@ -16194,8 +16269,8 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               overflow: TextOverflow.ellipsis,
               style: LhTypography.sans(
                 size: lighthouseHeroGroupTitleFontSize,
-                color: LhColors.ink2,
-                weight: FontWeight.w600,
+                color: Color(lighthouseHeroSectionTitleValues[key]!),
+                weight: FontWeight.w700,
                 height: 1.1,
               ),
             ),
@@ -16215,20 +16290,32 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       );
     }
 
+
+    // 分区靠整张卡的淡色底区分。查表取固定值，不用 accent.withAlpha ——
+    // 透明度叠色压在白底上掉彩度，四张卡会一起发灰。
+    Color sectionTint(String key) =>
+        Color(lighthouseHeroSectionTintValues[key]!);
+    Color sectionEdge(String key) =>
+        Color(lighthouseHeroSectionEdgeValues[key]!);
+
     Widget strip({
       required String sectionKey,
       required String title,
       required Widget child,
       Widget? footer,
     }) {
-      final accent = sectionAccent(sectionKey);
       return Container(
         padding: const EdgeInsets.all(lighthouseHeroCardPadding),
         decoration: BoxDecoration(
-          color: lighthouseHeroUsesCategoryTint && !whiteBackground
-              ? accent.withAlpha(10)
-              : const Color(0xFFFFFDFF),
-          border: Border.all(color: _LhPlum.heroEdge, width: 0.7),
+          color: whiteBackground
+              ? const Color(0xFFFFFDFF)
+              : sectionTint(sectionKey),
+          border: Border.all(
+            color: whiteBackground
+                ? _LhPlum.heroEdge
+                : sectionEdge(sectionKey),
+            width: 0.8,
+          ),
           borderRadius: BorderRadius.circular(lighthouseHeroCardRadius),
           boxShadow: lighthouseHeroUsesCardShadow
               ? [
@@ -16257,14 +16344,16 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     }
 
     Widget compactCashStrip() {
-      final accent = sectionAccent('cash');
       return Container(
         padding: const EdgeInsets.all(lighthouseHeroCardPadding),
         decoration: BoxDecoration(
-          color: lighthouseHeroUsesCategoryTint && !whiteBackground
-              ? accent.withAlpha(10)
-              : const Color(0xFFFFFDFF),
-          border: Border.all(color: _LhPlum.heroEdge, width: 0.7),
+          color: whiteBackground
+              ? const Color(0xFFFFFDFF)
+              : sectionTint('cash'),
+          border: Border.all(
+            color: whiteBackground ? _LhPlum.heroEdge : sectionEdge('cash'),
+            width: 0.8,
+          ),
           borderRadius: BorderRadius.circular(lighthouseHeroCardRadius),
           boxShadow: lighthouseHeroUsesCardShadow
               ? [
@@ -25460,6 +25549,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   Widget _buildSupplyFundPoolDetails(
     LighthouseFundPoolAmounts? amounts,
     String panel, {
+    required Map<String, double?> externals,
     required String? traced,
     required ValueChanged<String> onTraceTap,
   }) {
@@ -25495,6 +25585,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       required Color titleColor,
       required List<Widget> items,
       int columns = 1,
+      int? flowStart,
     }) {
       return Container(
         // 格子自己带 3 的内边距（点亮方框用），卡片这边相应收 3，
@@ -25549,7 +25640,37 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               ],
             ),
             SizedBox(height: _fs(8)),
-            metricGrid(items, columns: columns),
+            if (flowStart == null ||
+                flowStart <= 0 ||
+                flowStart >= items.length)
+              metricGrid(items, columns: columns)
+            else ...[
+              // 存量在上、流量在下，中间一条带小字的细线。
+              // 存量能相加（资产合计就是几项余额之和），流量加不进去 ——
+              // 一条线说清楚，不用给七个存量格各挂一个「存量」角标。
+              metricGrid(items.sublist(0, flowStart), columns: 1),
+              SizedBox(height: _fs(8)),
+              Row(
+                children: [
+                  Text(
+                    lighthouseFundPoolFlowDividerLabel,
+                    style: LhTypography.sans(
+                      size: _fs(8),
+                      color: LhColors.mute2,
+                      weight: FontWeight.w600,
+                      letterSpacing: 0.3,
+                      height: 1.0,
+                    ),
+                  ),
+                  SizedBox(width: _fs(5)),
+                  Expanded(
+                    child: Container(height: 0.7, color: LhColors.line2),
+                  ),
+                ],
+              ),
+              SizedBox(height: _fs(7)),
+              metricGrid(items.sublist(flowStart), columns: 2),
+            ],
           ],
         ),
       );
@@ -25584,6 +25705,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                     rows[i].left,
                     amounts,
                     section,
+                    externals: externals,
                     traced: traced,
                     onTraceTap: onTraceTap,
                   )
@@ -25592,6 +25714,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                       rows[i].left,
                       amounts,
                       section,
+                      externals: externals,
                       traced: traced,
                       onTraceTap: onTraceTap,
                     ),
@@ -25599,6 +25722,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                       rows[i].right!,
                       amounts,
                       section,
+                      externals: externals,
                       traced: traced,
                       onTraceTap: onTraceTap,
                     ),
@@ -25622,8 +25746,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       required Color titleColor,
       required List<Widget> items,
       int columns,
+      int? flowStart,
     })
     section, {
+    required Map<String, double?> externals,
     required String? traced,
     required ValueChanged<String> onTraceTap,
   }) {
@@ -25653,7 +25779,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       return _fundPoolMetricAmount(
         metricLabel,
         metric.label,
-        lighthouseFundPoolAmountByKey(amounts, metric.key),
+        // 当月 / 当日利润不在 /fund-pool 里，走外部喂进来的值。
+        lighthouseFundPoolExternalMetricKeys.contains(metric.key)
+            ? externals[metric.key]
+            : lighthouseFundPoolAmountByKey(amounts, metric.key),
         metricKey: metric.key,
         traced: traced,
         onTraceTap: onTraceTap,
@@ -25673,6 +25802,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       columns: spec.kind == LighthouseFundPoolSectionKind.invoice
           ? 1
           : (spec.metrics.length >= 3 ? 2 : 1),
+      flowStart: spec.flowStartIndex,
       items: [for (final metric in spec.metrics) amountItem(metric)],
     );
   }
@@ -25817,6 +25947,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   }) {
     final parts = lighthouseFormatFundPoolWanParts(amount);
     final missing = parts.number == '—';
+    // 增量格：数字前挂 ↑ / ↓，正负吃涨跌色（涨红跌绿，与列表环比同一套）。
+    final isGrowth =
+        !missing && lighthouseFundPoolGrowthMetricKeys.contains(metricKey);
+    final growthUp = isGrowth && (amount ?? 0) >= 0;
+    final growthColor = growthUp ? LhColors.neg : LhColors.pos;
     // 这一格是结果格（挂箭头），还是当前被追溯的加数格（点亮）？
     final ownFormula = lighthouseFundPoolFormulaForKey(metricKey);
     final isTraceOpen = traced != null && traced == metricKey;
@@ -25866,12 +26001,28 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         LhScrollRichText(
           text: TextSpan(
             children: [
+              if (isGrowth)
+                TextSpan(
+                  text: growthUp ? '↑' : '↓',
+                  style: _tabular(
+                    LhTypography.mono(
+                      size: _fs(lighthouseLedgerValueFontSize - 2),
+                      color: growthColor,
+                      weight: FontWeight.w700,
+                      height: 1.0,
+                    ),
+                  ),
+                ),
               TextSpan(
-                text: parts.number,
+                text: isGrowth
+                    ? parts.number.replaceFirst('-', '')
+                    : parts.number,
                 style: _tabular(
                   LhTypography.mono(
                     size: _fs(lighthouseLedgerValueFontSize),
-                    color: missing ? LhColors.mute2 : LhColors.ink,
+                    color: missing
+                        ? LhColors.mute2
+                        : (isGrowth ? growthColor : LhColors.ink),
                     weight: missing ? FontWeight.w500 : FontWeight.w700,
                     height: 1.0,
                   ),
@@ -25882,7 +26033,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                   text: parts.unit,
                   style: LhTypography.mono(
                     size: _fs(lighthouseLedgerUnitFontSize),
-                    color: LhColors.mute,
+                    color: isGrowth
+                        ? growthColor.withAlpha(190)
+                        : LhColors.mute,
                     weight: FontWeight.w500,
                     height: 1.0,
                     letterSpacing: 0.2,
@@ -26280,6 +26433,16 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 _buildSupplyFundPoolDetails(
                   lighthouseLookupFundPool(_fundPoolByProvince, name),
                   fundPoolPanel,
+                  externals: {
+                    'profitMonth': lighthouseLookupProvinceAmount(
+                      _fundPoolProfitMonth,
+                      name,
+                    ),
+                    'profitDay': lighthouseLookupProvinceAmount(
+                      _fundPoolProfitDay,
+                      name,
+                    ),
+                  },
                   traced: fundPoolTrace,
                   onTraceTap: (metricKey) {
                     setState(() {

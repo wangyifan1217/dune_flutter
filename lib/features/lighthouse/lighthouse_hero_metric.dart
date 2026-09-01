@@ -239,6 +239,38 @@ String? lighthouseTrendSoloAfterTap(String? current, String tapped) {
 }
 
 /// 应用 solo 后的可见性，长度恒为 6。solo 指向没有数据的项时保持原样。
+/// v20 · Hero 概览图默认只画一条线（核销 / 销售这对共用真轴时画两条）。
+///
+/// 五条各自归一化叠在一张图里，纵轴根本不是同一个：交叉点和相对高低都不表示
+/// 任何事，更要命的是**波动被伪造** —— 每条都拉满整个图高，成本环比 +1.4%
+/// 在图上和翻倍一样起伏剧烈。那不是「看不清」，是「看错」。
+///
+/// 100pt 高、300pt 宽的卡里也放不下五条可读的线。所以默认只画主线，其余四条
+/// 退成图例里的数字，点图例换线 —— 「一条走势 + 四个数」的信息量比
+/// 「五条不可比的线」高。
+///
+/// 唯一保留的双线例外是核销 + 销售：它们 [lighthouseTrendShareScaleRange]
+/// 时共用同一根 Y，两线之间的面积就是未核销差额，是真实可读的量。
+const bool lighthouseTrendDrawsSingleLine = true;
+
+/// 「哪几条有数据」。图例的可点性看这个，不受单线规则影响 ——
+/// 没画在图上不等于点不了，恰恰相反：点它就是为了把它换上去。
+List<bool> lighthouseTrendBaseFlags({
+  required bool hasRevenue,
+  required bool hasCost,
+  required bool hasProfit,
+  required bool hasScale,
+  required bool hasScaleAlt,
+  bool hasCostAlt = false,
+}) => <bool>[
+  hasRevenue,
+  hasCost,
+  hasProfit,
+  hasScale,
+  hasScaleAlt,
+  hasCostAlt,
+];
+
 List<bool> lighthouseTrendVisibleFlags({
   required bool hasRevenue,
   required bool hasCost,
@@ -247,20 +279,32 @@ List<bool> lighthouseTrendVisibleFlags({
   required bool hasScaleAlt,
   bool hasCostAlt = false,
   String? soloKey,
+  bool pairScale = false,
 }) {
-  final base = <bool>[
-    hasRevenue,
-    hasCost,
-    hasProfit,
-    hasScale,
-    hasScaleAlt,
-    hasCostAlt,
-  ];
-  if (soloKey == null || soloKey.isEmpty) return base;
-  final i = lighthouseTrendSeriesKeys.indexOf(soloKey);
-  if (i < 0 || !base[i]) return base;
+  final base = lighthouseTrendBaseFlags(
+    hasRevenue: hasRevenue,
+    hasCost: hasCost,
+    hasProfit: hasProfit,
+    hasScale: hasScale,
+    hasScaleAlt: hasScaleAlt,
+    hasCostAlt: hasCostAlt,
+  );
+  final i = soloKey == null || soloKey.isEmpty
+      ? -1
+      : lighthouseTrendSeriesKeys.indexOf(soloKey);
+  final soloValid = i >= 0 && i < base.length && base[i];
+  if (soloValid) {
+    return <bool>[
+      for (var k = 0; k < 6; k++) k == i,
+    ];
+  }
+  if (!lighthouseTrendDrawsSingleLine) return base;
+  final hero = lighthouseTrendHeroIndex(base);
+  // 核销 + 销售共用真轴，两条一起画才看得出未核销差额。
+  final keepsPair =
+      pairScale && (hero == 3 || hero == 4) && base[3] && base[4];
   return <bool>[
-    for (var k = 0; k < 6; k++) k == i,
+    for (var k = 0; k < 6; k++) keepsPair ? (k == 3 || k == 4) : k == hero,
   ];
 }
 
@@ -307,12 +351,63 @@ bool lighthouseTrendShareScaleRange({
   return (min: mn - pad, max: mx + pad);
 }
 
+/// 四个分区色 —— 跑过对比度 / 色盲分离校验。
+///
+/// 旧的现金流紫 0xFF7B5CD8 和利润蓝 0xFF5C6FB5 正常视力下只差 ΔE 8.7（门槛
+/// 15），当 14px 图标片时没人计较，铺成彩带就是两条分不开的带子。
+/// 换成紫 / 琥珀 / 绿 / 品红这一组，和资金池面板同一套色系。
+///
+/// 绿只给现金流：这个 App 里涨红跌绿，绿是状态色，给规模或利润会和它们格子里
+/// 那一片 ↓ 环比抢同一个含义；现金流只有一个指标，且「现金 = 绿」是通识。
 const lighthouseHeroSectionAccentValues = <String, int>{
-  'scale': lighthouseScaleAccentValue,
-  'cost': 0xFFB47A32,
-  'cash': 0xFF7B5CD8,
-  'profit': 0xFF5C6FB5,
+  'scale': 0xFF7B5CD8,
+  'cost': 0xFFC4791C,
+  'cash': 0xFF1E9E72,
+  'profit': 0xFFB8478F,
 };
+
+/// 分区靠整卡淡色底区分，不用彩带 —— 2.5px 的一道杠又细又硬，
+/// 四张卡顶上四条不同颜色的线，看着像贴了四条胶带。
+const bool lighthouseHeroShowsSectionBand = false;
+const double lighthouseHeroSectionBandHeight = 0;
+
+int lighthouseHeroSectionBandAlpha({required bool tracing}) =>
+    tracing ? 55 : 255;
+
+/// 标题 chip 底色 —— 试过「颜色只给标题一小块」，最后选了整卡淡底，
+/// 这套值留着备用，当前不接。
+const lighthouseHeroSectionChipValues = <String, int>{
+  'scale': 0xFFEAE3FA,
+  'cost': 0xFFF6EADA,
+  'cash': 0xFFDDF0E7,
+  'profit': 0xFFF7E5F0,
+};
+
+/// 分区卡底色 —— 整张卡吃一层淡色，颜色铺满才有分组感。
+///
+/// 查表取固定值，不用 accent.withAlpha：透明度叠色压在白底上会掉彩度，
+/// 四张卡会一起发灰，那正是「淡」和「脏」的区别。
+const lighthouseHeroSectionTintValues = <String, int>{
+  'scale': 0xFFF6F3FD,
+  'cost': 0xFFFCF6EC,
+  'cash': 0xFFEDF8F3,
+  'profit': 0xFFFBF1F7,
+};
+
+const lighthouseHeroSectionEdgeValues = <String, int>{
+  'scale': 0xFFDCD1F5,
+  'cost': 0xFFEDDCC2,
+  'cash': 0xFFC6E7D9,
+  'profit': 0xFFEFD2E4,
+};
+
+const lighthouseHeroSectionTitleValues = <String, int>{
+  'scale': 0xFF5B3FB0,
+  'cost': 0xFF8F550F,
+  'cash': 0xFF146B4E,
+  'profit': 0xFF8E3169,
+};
+
 const bool lighthouseHeroShowsSectionAccentDash = false;
 const bool lighthouseHeroMastheadLabelAboveNumber = true;
 const double lighthouseHeroMastheadLabelFontSize = 11;
@@ -1697,10 +1792,19 @@ class LighthouseFundPoolSectionSpec {
     required this.kind,
     required this.title,
     required this.metrics,
+    this.flowStartIndex,
   });
   final LighthouseFundPoolSectionKind kind;
   final String title;
   final List<LighthouseFundPoolMetricSpec> metrics;
+
+  /// 从第几格开始是**流量**（一段时间的增量），前面的都是**存量**（时点余额）。
+  ///
+  /// null = 整张卡同一种量，不画分隔。只有资产卡是混的：资产合计是余额，
+  /// 两条新增利润是区间累计。存量能相加（资产合计就是几项余额之和），
+  /// 流量加不进去 —— 中间一条细线 + 一个「期间新增」的小字，
+  /// 比给七个存量格各挂一个「存量」角标省事得多，也不用教用户会计名词。
+  final int? flowStartIndex;
 }
 
 class LighthouseFundPoolRowSpec {
@@ -1735,13 +1839,34 @@ const lighthouseFundPoolInvoiceSection = LighthouseFundPoolSectionSpec(
   ],
 );
 
+/// 资产卡 = 存量 + 增量。
+///
+/// 原来只有资产合计一个数，和左边四格的对账卡并排，整张卡三分之二是空的。
+/// 更重要的是：这两条利润是**流量**（一段时间赚了多少），其余七个数全是
+/// **存量**（某一时点的余额）——混在资金卡里，读的人会以为它也是余额。
+/// 放在资产合计旁边，一张卡回答「手上有多少 / 最近赚了多少」，两种量各就各位。
 const lighthouseFundPoolAssetsSection = LighthouseFundPoolSectionSpec(
   kind: LighthouseFundPoolSectionKind.assets,
   title: '资产',
   metrics: [
     LighthouseFundPoolMetricSpec('totalAssets', '资产合计'),
+    LighthouseFundPoolMetricSpec('profitMonth', '本月新增利润'),
+    LighthouseFundPoolMetricSpec('profitDay', '本日新增利润'),
   ],
+  flowStartIndex: 1,
 );
+
+/// 分隔线上的小字。用「期间新增」不用「流量」—— 会计名词对着数字读没人懂。
+const String lighthouseFundPoolFlowDividerLabel = '期间新增';
+
+/// 按「增长」显示的格子：数字前挂 ↑ / ↓，正负吃涨跌色。
+///
+/// 其余格子都是余额，是中性的量，染色只会把「负数」和「变差」搞混；
+/// 这两条本身就是增量，方向才是它要说的事。
+const lighthouseFundPoolGrowthMetricKeys = <String>{
+  'profitMonth',
+  'profitDay',
+};
 
 const lighthouseFundPoolFundsSection = LighthouseFundPoolSectionSpec(
   kind: LighthouseFundPoolSectionKind.funds,
@@ -1754,6 +1879,31 @@ const lighthouseFundPoolFundsSection = LighthouseFundPoolSectionSpec(
     LighthouseFundPoolMetricSpec('turnoverDays', '周转周期'),
   ],
 );
+
+/// 值不来自 `/fund-pool` 的格子 —— 由调用方按省份另行喂进来。
+const lighthouseFundPoolExternalMetricKeys = <String>{
+  'profitMonth',
+  'profitDay',
+};
+
+/// 供给行名 → 省份 map 的取值，口径和 [lighthouseLookupFundPool] 一致：
+/// 先精确，再双向包含模糊匹配，合计行不参与模糊。
+double? lighthouseLookupProvinceAmount(
+  Map<String, double> byProvince,
+  String rowName,
+) {
+  final name = rowName.trim();
+  if (name.isEmpty || byProvince.isEmpty) return null;
+  final exact = byProvince[name];
+  if (exact != null) return exact;
+  for (final entry in byProvince.entries) {
+    if (entry.key == '__TOTAL__') continue;
+    final key = entry.key.trim();
+    if (key.isEmpty) continue;
+    if (key.contains(name) || name.contains(key)) return entry.value;
+  }
+  return null;
+}
 
 const lighthouseFundPoolVouchersSection = LighthouseFundPoolSectionSpec(
   kind: LighthouseFundPoolSectionKind.vouchers,

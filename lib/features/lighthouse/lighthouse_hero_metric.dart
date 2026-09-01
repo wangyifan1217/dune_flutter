@@ -49,7 +49,9 @@ double lighthouseCompactHeroChartMaxHeightFor(double width) =>
 double lighthouseCompactHeroBlockHeightFor(double width) =>
     lighthouseCompactHeroSparkHeightFor(width) + lighthouseHeroChartCardPadding * 2;
 
-const double lighthouseCompactHeroMetricGap = 6;
+// 指标格自己带了 2 的上下内边距（追溯方框用），格间距相应从 6 收到 2，
+// 视觉上的行距还是 6。
+const double lighthouseCompactHeroMetricGap = 2;
 const bool lighthouseHeroUsesCategoryTint = false;
 const bool lighthouseHeroUsesAccentRail = false;
 const bool lighthouseHeroShowsEnglishKicker = false;
@@ -57,7 +59,8 @@ const bool lighthouseHeroUsesCardShadow = false;
 const bool lighthouseHeroMetricUsesSansLabel = true;
 const double lighthouseHeroCardRadius = 12;
 const double lighthouseHeroCardGap = 8;
-const double lighthouseHeroCardPadding = 8;
+// 指标格自己带了 4 的左内边距，卡片这边从 8 收到 5，文字左缩进仍是 9。
+const double lighthouseHeroCardPadding = 5;
 const bool lighthouseHeroChartUsesCardSurface = true;
 const double lighthouseHeroChartCardPadding = 8;
 const bool lighthouseHeroSparkShowsAxes = false;
@@ -188,15 +191,25 @@ bool lighthouseTrendLegendShouldWrap({
   return width + 1e-6 < need;
 }
 
-/// 环比永远跟在金额后面（含点选某日）；优先后端口径（上月同日 / 上月同期）。
+/// 环比：未点选用后端本期值；点选某一期用该点对前一点（2月对1月）。
+/// 点在未走完的最后一期时仍用后端同期值，避免 MTD 去对上期整期。
 double? lighthouseTrendMomPct({
   required double? periodDeltaPct,
   required bool partialPeriod,
-  required bool isSelected,
   required List<double> series,
+  int? selectedIndex,
 }) {
+  if (selectedIndex != null) {
+    if (partialPeriod && selectedIndex == series.length - 1) {
+      return periodDeltaPct;
+    }
+    if (selectedIndex <= 0 || selectedIndex >= series.length) return null;
+    final prev = series[selectedIndex - 1];
+    if (prev.abs() <= 1e-6) return null;
+    return (series[selectedIndex] - prev) / prev.abs() * 100;
+  }
   if (periodDeltaPct != null) return periodDeltaPct;
-  if (isSelected || partialPeriod || series.length < 2) return null;
+  if (partialPeriod || series.length < 2) return null;
   final prev = series[series.length - 2];
   if (prev.abs() <= 1e-6) return null;
   return (series.last - prev) / prev.abs() * 100;
@@ -564,10 +577,19 @@ String lighthouseCostBillChartLabel(Map<String, String> item) {
 const double lighthouseFundPoolExpandTapWidth = 44;
 const double lighthouseFundPoolExpandIconSize = 22;
 
-/// 票税收起格有应开 / 实开 / 原件三行，必须高于普通 KPI 格（43），否则会 overflow。
-// 预览行高。票税不再是三行的异形格之后，这里只需要和普通指标格一样高；
-// 实际取值是 max(这个数, summaryCellHeight)，所以给一个不会顶高整行的下限。
-const double lighthouseFundPoolPreviewHeight = 44;
+/// 预览格内箭头。跟标签同高一档：再大就把标签行顶高，整行跟着变高。
+const double lighthouseFundPoolPreviewChevronSize = 10;
+
+/// 预览行与上方 KPI 格等高 —— 两者都是「标签 + 数字」两行，内边距也一致，
+/// 43 装得下；高出一截只会让资金摘要看起来不属于同一张表。
+const double lighthouseFundPoolPreviewHeight = 43;
+
+/// 分区标题（资金 / 券 / 期末预付款对账 / 资产）：行高 1.0 时中文 w600
+/// 的字脚超出 TextPainter 盒，被 LhScrollText 的 clipRect 切掉。
+const double lighthouseFundPoolSectionTitleLineHeight = 1.3;
+
+/// 图标片和标题之间的空隙；再贴会挡住「资」「券」左侧笔画。
+const double lighthouseFundPoolSectionTitleIconGap = 7;
 
 double lighthouseFundPoolPreviewRowHeight({
   required double summaryCellHeight,
@@ -831,6 +853,187 @@ String lighthouseSyncedAtStamp(DateTime t) {
 const double lighthouseHeroSummaryTitleFontSize = 13.5;
 const double lighthouseHeroSummaryIconSize = 20;
 const double lighthouseHeroSummaryIconRadius = 6;
+const double lighthouseHeroSummaryRangeFontSize = 11;
+
+String lighthouseTwoDigit(int n) => n.toString().padLeft(2, '0');
+
+/// 与底部「选区间」同一写法：`08.01–08.31`。
+String lighthouseMdDashRange(DateTime start, DateTime end) =>
+    '${lighthouseTwoDigit(start.month)}.${lighthouseTwoDigit(start.day)}'
+    '–${lighthouseTwoDigit(end.month)}.${lighthouseTwoDigit(end.day)}';
+
+/// 单日 `08.25`，跨日 `08.01–08.25`。与后端 `rangeLabel` 一致。
+String lighthouseRangeLabel(DateTime start, DateTime end) {
+  final a = lighthouseDateOnly(start);
+  final b = lighthouseDateOnly(end);
+  if (a.year == b.year && a.month == b.month && a.day == b.day) {
+    return '${lighthouseTwoDigit(b.month)}.${lighthouseTwoDigit(b.day)}';
+  }
+  return lighthouseMdDashRange(a, b);
+}
+
+DateTime lighthouseDateOnly(DateTime t) => DateTime(t.year, t.month, t.day);
+
+/// 上个月同一天；3/31 → 2/28（闰年 2/29），不会滚到 3/3。
+DateTime lighthouseSameDayPrevMonth(DateTime ref) {
+  final day = lighthouseDateOnly(ref);
+  final prevFirst = DateTime(day.year, day.month - 1, 1);
+  final lastDay = DateTime(prevFirst.year, prevFirst.month + 1, 0).day;
+  final d = day.day > lastDay ? lastDay : day.day;
+  return DateTime(prevFirst.year, prevFirst.month, d);
+}
+
+(DateTime start, DateTime end) lighthouseWeekBounds(DateTime ref) {
+  final day = lighthouseDateOnly(ref);
+  final start = day.subtract(Duration(days: day.weekday - 1));
+  return (start, start.add(const Duration(days: 6)));
+}
+
+(DateTime start, DateTime end) lighthouseQuarterBounds(DateTime ref) {
+  final day = lighthouseDateOnly(ref);
+  final q0 = (day.month - 1) ~/ 3;
+  final start = DateTime(day.year, q0 * 3 + 1, 1);
+  final end = DateTime(start.year, start.month + 3, 0);
+  return (start, end);
+}
+
+class LighthouseAlignedPeriod {
+  const LighthouseAlignedPeriod({
+    required this.currentLabel,
+    required this.prevLabel,
+    required this.deltaVs,
+    required this.inProgress,
+  });
+
+  final String currentLabel;
+  final String prevLabel;
+  final String deltaVs;
+  final bool inProgress;
+}
+
+/// 2026-08 运营会：环比必须同期对同期。
+/// 日 = 上月同日；月/周/季未走完 = 已过天数对齐；年仍是整年对整年。
+LighthouseAlignedPeriod lighthouseResolveAlignedPeriod({
+  required String period,
+  required DateTime now,
+  int offset = 0,
+}) {
+  final today = lighthouseDateOnly(now);
+  switch (period) {
+    case 'day':
+      final cur = today.add(Duration(days: offset));
+      final prev = lighthouseSameDayPrevMonth(cur);
+      return LighthouseAlignedPeriod(
+        currentLabel: lighthouseRangeLabel(cur, cur),
+        prevLabel: lighthouseRangeLabel(prev, prev),
+        deltaVs: 'vs 上月同日',
+        inProgress: offset == 0,
+      );
+    case 'week':
+      var (start, end) = lighthouseWeekBounds(today);
+      if (offset != 0) {
+        start = start.add(Duration(days: offset * 7));
+        end = start.add(const Duration(days: 6));
+      }
+      return _alignElapsed(
+        start: start,
+        end: end,
+        today: today,
+        offset: offset,
+        completeVs: 'vs 上周',
+        inProgressVs: 'vs 上周同期',
+      );
+    case 'quarter':
+      var (start, end) = lighthouseQuarterBounds(today);
+      if (offset != 0) {
+        start = DateTime(start.year, start.month + offset * 3, 1);
+        end = DateTime(start.year, start.month + 3, 0);
+      }
+      return _alignElapsed(
+        start: start,
+        end: end,
+        today: today,
+        offset: offset,
+        completeVs: 'vs 上季',
+        inProgressVs: 'vs 上季同期',
+      );
+    case 'year':
+      final y = today.year + offset;
+      final last = DateTime(y, 12, 31);
+      return LighthouseAlignedPeriod(
+        currentLabel: '$y.01.01–$y.12.31',
+        prevLabel: '${y - 1}.01.01–${y - 1}.12.31',
+        deltaVs: 'vs 去年',
+        inProgress: offset == 0 && today.isBefore(last),
+      );
+    default:
+      final monthStart = DateTime(today.year, today.month + offset, 1);
+      final monthEnd = DateTime(monthStart.year, monthStart.month + 1, 0);
+      return _alignElapsed(
+        start: monthStart,
+        end: monthEnd,
+        today: today,
+        offset: offset,
+        completeVs: 'vs 上月',
+        inProgressVs: 'vs 上月同期',
+      );
+  }
+}
+
+LighthouseAlignedPeriod _alignElapsed({
+  required DateTime start,
+  required DateTime end,
+  required DateTime today,
+  required int offset,
+  required String completeVs,
+  required String inProgressVs,
+}) {
+  var currentEnd = end;
+  var inProgress = false;
+  if (offset == 0 && !today.isBefore(start) && today.isBefore(end)) {
+    currentEnd = today;
+    inProgress = true;
+  }
+  final elapsed = currentEnd.difference(start).inDays;
+  var prevStart = DateTime(start.year, start.month, start.day);
+  // 上一窗口：周 = 往前 7 天；月 = 上个月 1 号；季 = 上季首日。
+  if (completeVs == 'vs 上周') {
+    prevStart = start.subtract(const Duration(days: 7));
+  } else if (completeVs == 'vs 上季') {
+    prevStart = DateTime(start.year, start.month - 3, 1);
+  } else {
+    prevStart = DateTime(start.year, start.month - 1, 1);
+  }
+  var prevEnd = prevStart.add(Duration(days: elapsed));
+  DateTime prevLimit;
+  if (completeVs == 'vs 上周') {
+    prevLimit = start.subtract(const Duration(days: 1));
+  } else if (completeVs == 'vs 上季') {
+    prevLimit = DateTime(prevStart.year, prevStart.month + 3, 0);
+  } else {
+    prevLimit = DateTime(start.year, start.month, 0);
+  }
+  if (prevEnd.isAfter(prevLimit)) prevEnd = prevLimit;
+  return LighthouseAlignedPeriod(
+    currentLabel: lighthouseRangeLabel(start, currentEnd),
+    prevLabel: lighthouseRangeLabel(prevStart, prevEnd),
+    deltaVs: inProgress ? inProgressVs : completeVs,
+    inProgress: inProgress,
+  );
+}
+
+/// Hero「产品汇总 / 供给方汇总」右侧的区间，必须和列表控制条选中的窗口一致。
+String lighthouseHeroSelectedRangeLabel({
+  required bool isCustomRange,
+  DateTime? customStart,
+  DateTime? customEnd,
+  required String periodInstanceDetail,
+}) {
+  if (isCustomRange && customStart != null && customEnd != null) {
+    return lighthouseMdDashRange(customStart, customEnd);
+  }
+  return periodInstanceDetail.trim();
+}
 
 String lighthouseHeroSummaryIconKey(String title) {
   final normalized = title.trim();
@@ -1478,17 +1681,8 @@ String lighthouseFormatFundPoolRate(double? rate) {
   return '${rate.toStringAsFixed(rate == rate.roundToDouble() ? 0 : 2)}%';
 }
 
-/// 日清表不含票税；月结 / 季 / 年才把发票块放在资产上方。
-bool lighthouseFundPoolShowsInvoice(String period) {
-  switch (period.trim()) {
-    case 'month':
-    case 'quarter':
-    case 'year':
-      return true;
-    default:
-      return false;
-  }
-}
+/// 日 / 周 / 月 / 季 / 年 / 自定义区间展开区都带发票块（原件、应开、实开）。
+bool lighthouseFundPoolShowsInvoice(String _) => true;
 
 enum LighthouseFundPoolSectionKind { invoice, assets, funds, vouchers, recon }
 
@@ -1582,8 +1776,272 @@ const lighthouseFundPoolReconSection = LighthouseFundPoolSectionSpec(
   ],
 );
 
-/// 月结：发票与资产并列且发票在上；下面资金 → 券 → 对账。
-/// 日清：不含发票，资金 → 券 → 对账，资产放等式最后。
+/// ── Hero 指标格的关联关系 ────────────────────────────────────────────
+///
+/// 13 个格子里只有 5 个是「算出来的」。点它右上角的箭头，来源格点亮、
+/// 无关格压暗，底部出一行口径式。
+enum LighthouseHeroFormulaRole { plus, minus, numerator, denominator }
+
+/// 角标文案 —— ROI 和毛利率都点亮「毛利润」，一个当分子一个当分母，
+/// 光靠点亮分不出谁除谁。
+String lighthouseHeroFormulaRoleBadge(LighthouseHeroFormulaRole role) =>
+    switch (role) {
+      LighthouseHeroFormulaRole.plus => '+',
+      LighthouseHeroFormulaRole.minus => '−',
+      LighthouseHeroFormulaRole.numerator => '分子',
+      LighthouseHeroFormulaRole.denominator => '分母',
+    };
+
+class LighthouseHeroFormulaSource {
+  const LighthouseHeroFormulaSource(this.key, this.role);
+  final String key;
+  final LighthouseHeroFormulaRole role;
+}
+
+class LighthouseHeroFormula {
+  const LighthouseHeroFormula({
+    required this.resultKey,
+    required this.result,
+    required this.expression,
+    required this.sources,
+    this.substitutes = true,
+  });
+
+  final String resultKey;
+  final String result;
+
+  /// 空格分词，运算符单独成词。
+  final String expression;
+  final List<LighthouseHeroFormulaSource> sources;
+
+  /// 底部那行右边是否把数代进去。
+  ///
+  /// 毛利润这条按口径挂上，但代进去是 `收入 − 成本合计 = 147.7`，
+  /// 而格子里写着 140.5 —— 界面自己打自己。口径确认前只显示式子。
+  final bool substitutes;
+}
+
+const lighthouseHeroFormulas = <LighthouseHeroFormula>[
+  LighthouseHeroFormula(
+    resultKey: 'totalCost',
+    result: '成本合计',
+    expression: '项目成本 + 业务成本',
+    sources: [
+      LighthouseHeroFormulaSource('projectCost', LighthouseHeroFormulaRole.plus),
+      LighthouseHeroFormulaSource('cost', LighthouseHeroFormulaRole.plus),
+    ],
+  ),
+  LighthouseHeroFormula(
+    resultKey: 'netProfit',
+    result: '净利润',
+    expression: '毛利润 − 业务成本',
+    sources: [
+      LighthouseHeroFormulaSource('profit', LighthouseHeroFormulaRole.plus),
+      LighthouseHeroFormulaSource('cost', LighthouseHeroFormulaRole.minus),
+    ],
+  ),
+  LighthouseHeroFormula(
+    resultKey: 'grossMargin',
+    result: '毛利率',
+    expression: '毛利润 ÷ 核销额',
+    sources: [
+      LighthouseHeroFormulaSource(
+        'profit',
+        LighthouseHeroFormulaRole.numerator,
+      ),
+      LighthouseHeroFormulaSource(
+        'verifiedSales',
+        LighthouseHeroFormulaRole.denominator,
+      ),
+    ],
+  ),
+  LighthouseHeroFormula(
+    resultKey: 'rate',
+    result: 'ROI',
+    expression: '毛利润 ÷ 成本合计',
+    sources: [
+      LighthouseHeroFormulaSource(
+        'profit',
+        LighthouseHeroFormulaRole.numerator,
+      ),
+      LighthouseHeroFormulaSource(
+        'totalCost',
+        LighthouseHeroFormulaRole.denominator,
+      ),
+    ],
+  ),
+  LighthouseHeroFormula(
+    resultKey: 'profit',
+    result: '毛利润',
+    expression: '收入 − 成本合计',
+    sources: [
+      LighthouseHeroFormulaSource('revenue', LighthouseHeroFormulaRole.plus),
+      LighthouseHeroFormulaSource('totalCost', LighthouseHeroFormulaRole.minus),
+    ],
+    substitutes: false,
+  ),
+];
+
+LighthouseHeroFormula? lighthouseHeroFormulaForKey(String metricKey) {
+  for (final f in lighthouseHeroFormulas) {
+    if (f.resultKey == metricKey) return f;
+  }
+  return null;
+}
+
+/// 追溯中这一格扮演什么角色；不参与返回 null。
+LighthouseHeroFormulaRole? lighthouseHeroTraceRole(
+  String? traced,
+  String metricKey,
+) {
+  if (traced == null) return null;
+  final formula = lighthouseHeroFormulaForKey(traced);
+  if (formula == null) return null;
+  for (final source in formula.sources) {
+    if (source.key == metricKey) return source.role;
+  }
+  return null;
+}
+
+/// 追溯时无关的格子压暗 —— 只加亮的话，13 个里亮 2 个还是要找。
+bool lighthouseHeroTraceDims(String? traced, String metricKey) {
+  if (traced == null) return false;
+  if (traced == metricKey) return false;
+  return lighthouseHeroTraceRole(traced, metricKey) == null;
+}
+
+/// 点同一格收起；点另一个结果格切过去；点没有公式的键不动。
+String? lighthouseHeroTraceAfterTap(String? current, String tappedKey) {
+  if (lighthouseHeroFormulaForKey(tappedKey) == null) return current;
+  return current == tappedKey ? null : tappedKey;
+}
+
+/// 资金池预览两格各自点开自己的面板：
+/// 总资产金额 → 资金 / 券 / 期末预付款对账 / 资产；票税 · 应开 → 发票。
+const lighthouseFundPoolPanelAssets = 'assets';
+const lighthouseFundPoolPanelInvoice = 'invoice';
+
+/// 预览格 key → 它点开的面板；不认识的 key 不展开。
+String? lighthouseFundPoolPanelForPreviewKey(String key) {
+  switch (key) {
+    case 'totalAssets':
+      return lighthouseFundPoolPanelAssets;
+    case 'invoiceToIssue':
+      return lighthouseFundPoolPanelInvoice;
+  }
+  return null;
+}
+
+/// 点同一格收起；点另一格直接换到那个面板。
+String? lighthouseFundPoolPanelAfterTap(String? current, String tappedKey) {
+  final panel = lighthouseFundPoolPanelForPreviewKey(tappedKey);
+  if (panel == null) return current;
+  return current == panel ? null : panel;
+}
+
+/// 展开面板底部的口径条。
+///
+/// 八个数里只有两个是「算出来的」——资产合计和系统差异，其余都是取数。
+/// 这两条关系不写出来就只能靠猜，而且最容易猜错的是「应收资金」：它长在
+/// 资金卡里，实际进的是系统差异那条，不进资产合计。
+class LighthouseFundPoolFormula {
+  const LighthouseFundPoolFormula({
+    required this.kind,
+    required this.resultKey,
+    required this.result,
+    required this.expression,
+    required this.sourceKeys,
+  });
+
+  /// 取哪张卡的颜色 —— 口径条的配色跟着结果所在的卡走。
+  final LighthouseFundPoolSectionKind kind;
+
+  /// 结果格自己的 metric key，箭头挂在这一格上。
+  final String resultKey;
+  final String result;
+
+  /// 用空格分词，运算符单独成词，方便按 token 分色。
+  final String expression;
+
+  /// 点箭头时要点亮的加数格，顺序与 [expression] 一致。
+  final List<String> sourceKeys;
+}
+
+const lighthouseFundPoolFormulas = <LighthouseFundPoolFormula>[
+  LighthouseFundPoolFormula(
+    kind: LighthouseFundPoolSectionKind.assets,
+    resultKey: 'totalAssets',
+    result: '资产合计',
+    expression: '现金·监管户 + 现金·在途 + 期末预付款余额',
+    sourceKeys: [
+      'regulatoryAccountBalance',
+      'inTransitFunds',
+      'endingPrepaymentBalance',
+    ],
+  ),
+  LighthouseFundPoolFormula(
+    kind: LighthouseFundPoolSectionKind.recon,
+    resultKey: 'systemDifference',
+    result: '系统差异',
+    expression: '期末预付款余额 − 资金池可用 − 库存/同步券 − 应收资金',
+    sourceKeys: [
+      'endingPrepaymentBalance',
+      'fundPoolBalance',
+      'stockAndSyncVouchers',
+      'endingReceivableRebate',
+    ],
+  ),
+];
+
+/// 这一格是不是「算出来的」—— 是就挂一个箭头，点开点亮它的加数。
+LighthouseFundPoolFormula? lighthouseFundPoolFormulaForKey(String metricKey) {
+  for (final f in lighthouseFundPoolFormulas) {
+    if (f.resultKey == metricKey) return f;
+  }
+  return null;
+}
+
+/// 当前追溯的是哪条式子；`traced` 为空表示没点开。
+bool lighthouseFundPoolMetricIsTraced(String? traced, String metricKey) {
+  if (traced == null) return false;
+  final formula = lighthouseFundPoolFormulaForKey(traced);
+  if (formula == null) return false;
+  return formula.sourceKeys.contains(metricKey);
+}
+
+/// 点同一个箭头收起；点另一个直接换过去。
+String? lighthouseFundPoolTraceAfterTap(String? current, String tappedKey) {
+  if (lighthouseFundPoolFormulaForKey(tappedKey) == null) return current;
+  return current == tappedKey ? null : tappedKey;
+}
+
+/// 票税面板没有算式，三个数都是直接取的。
+List<LighthouseFundPoolFormula> lighthouseFundPoolPanelFormulas(String panel) {
+  if (panel == lighthouseFundPoolPanelInvoice) {
+    return const <LighthouseFundPoolFormula>[];
+  }
+  return lighthouseFundPoolFormulas;
+}
+
+/// 展开区按面板取分区：票税只有发票块；总资产是资金 → 券 → 对账 → 资产。
+List<LighthouseFundPoolRowSpec> lighthouseFundPoolPanelRows(String panel) {
+  if (panel == lighthouseFundPoolPanelInvoice) {
+    return const [LighthouseFundPoolRowSpec(lighthouseFundPoolInvoiceSection)];
+  }
+  return const [
+    LighthouseFundPoolRowSpec(
+      lighthouseFundPoolFundsSection,
+      lighthouseFundPoolVouchersSection,
+    ),
+    LighthouseFundPoolRowSpec(
+      lighthouseFundPoolReconSection,
+      lighthouseFundPoolAssetsSection,
+    ),
+  ];
+}
+
+/// 展开：发票与资产并列且发票在上；下面资金 → 券 → 对账。
+/// showInvoice=false 仅留给单测对照旧日清四宫格。
 List<LighthouseFundPoolRowSpec> lighthouseFundPoolDetailRows({
   required bool showInvoice,
 }) {

@@ -196,6 +196,10 @@ void main() {
     );
     expect(lighthouseFundPoolExpandTapWidth, 44);
     expect(lighthouseFundPoolExpandIconSize, 22);
+    expect(lighthouseFundPoolPreviewChevronSize, 10);
+    expect(lighthouseFundPoolPreviewHeight, 43);
+    expect(lighthouseFundPoolSectionTitleLineHeight, 1.3);
+    expect(lighthouseFundPoolSectionTitleIconGap, 7);
   });
 
   test('lighthouseTrendShareScaleRange only pairs 核销/销售', () {
@@ -388,14 +392,117 @@ void main() {
     expect(lighthouseLedgerShowsFundPoolPreview('supply'), isTrue);
     expect(lighthouseLedgerShowsFundPoolPreview('product'), isFalse);
     expect(lighthouseLedgerShowsFundPoolPreview('channel'), isFalse);
-    expect(lighthouseFundPoolPreviewHeight, 68);
-    expect(lighthouseFundPoolPreviewHeight, greaterThan(43));
+    // 两条算式锁在测试里：改了口径就得连这里一起改，避免 UI 和实际取数漂移。
+    expect(
+      lighthouseFundPoolFormulas.map((f) => [f.result, f.expression]).toList(),
+      [
+        ['资产合计', '现金·监管户 + 现金·在途 + 期末预付款余额'],
+        ['系统差异', '期末预付款余额 − 资金池可用 − 库存/同步券 − 应收资金'],
+      ],
+    );
+    // Hero 五条式子。毛利率 / ROI 与 _rowGrossMarginPct / _rowRoiPct 同口径；
+    // 成本合计 / 净利润 是反推的；毛利润那条口径未确认，所以不代入数字。
+    expect(
+      lighthouseHeroFormulas.map((f) => [f.resultKey, f.expression]).toList(),
+      [
+        ['totalCost', '项目成本 + 业务成本'],
+        ['netProfit', '毛利润 − 业务成本'],
+        ['grossMargin', '毛利润 ÷ 核销额'],
+        ['rate', '毛利润 ÷ 成本合计'],
+        ['profit', '收入 − 成本合计'],
+      ],
+    );
+    expect(lighthouseHeroFormulaForKey('profit')?.substitutes, isFalse);
+    expect(lighthouseHeroFormulaForKey('rate')?.substitutes, isTrue);
+    expect(lighthouseHeroFormulaForKey('sales'), isNull);
+    // 毛利润在 ROI 里是分子、在毛利率里也是分子；成本合计在 ROI 里是分母。
+    expect(
+      lighthouseHeroTraceRole('rate', 'profit'),
+      LighthouseHeroFormulaRole.numerator,
+    );
+    expect(
+      lighthouseHeroTraceRole('rate', 'totalCost'),
+      LighthouseHeroFormulaRole.denominator,
+    );
+    expect(lighthouseHeroTraceRole('rate', 'gmv'), isNull);
+    expect(
+      lighthouseHeroFormulaRoleBadge(LighthouseHeroFormulaRole.denominator),
+      '分母',
+    );
+    // 压暗：无关格压，来源格和被点的格子不压。
+    expect(lighthouseHeroTraceDims('rate', 'gmv'), isTrue);
+    expect(lighthouseHeroTraceDims('rate', 'profit'), isFalse);
+    expect(lighthouseHeroTraceDims('rate', 'rate'), isFalse);
+    expect(lighthouseHeroTraceDims(null, 'gmv'), isFalse);
+    expect(lighthouseHeroTraceAfterTap(null, 'rate'), 'rate');
+    expect(lighthouseHeroTraceAfterTap('rate', 'rate'), isNull);
+    expect(lighthouseHeroTraceAfterTap('rate', 'profit'), 'profit');
+    expect(lighthouseHeroTraceAfterTap('rate', 'gmv'), 'rate');
+
+    // 箭头追溯：资产合计点亮 3 格，系统差异点亮 4 格，两条共用期末预付款余额。
+    expect(
+      lighthouseFundPoolFormulaForKey('totalAssets')?.sourceKeys,
+      ['regulatoryAccountBalance', 'inTransitFunds', 'endingPrepaymentBalance'],
+    );
+    expect(
+      lighthouseFundPoolFormulaForKey('systemDifference')?.sourceKeys.length,
+      4,
+    );
+    expect(lighthouseFundPoolFormulaForKey('fundPoolBalance'), isNull);
+    expect(
+      lighthouseFundPoolMetricIsTraced('totalAssets', 'inTransitFunds'),
+      isTrue,
+    );
+    // 应收资金只进系统差异，不进资产合计 —— 这条最容易看错，锁在测试里。
+    expect(
+      lighthouseFundPoolMetricIsTraced('totalAssets', 'endingReceivableRebate'),
+      isFalse,
+    );
+    expect(
+      lighthouseFundPoolMetricIsTraced(
+        'systemDifference',
+        'endingReceivableRebate',
+      ),
+      isTrue,
+    );
+    expect(lighthouseFundPoolMetricIsTraced(null, 'inTransitFunds'), isFalse);
+    expect(
+      lighthouseFundPoolTraceAfterTap(null, 'totalAssets'),
+      'totalAssets',
+    );
+    expect(
+      lighthouseFundPoolTraceAfterTap('totalAssets', 'totalAssets'),
+      isNull,
+    );
+    expect(
+      lighthouseFundPoolTraceAfterTap('totalAssets', 'systemDifference'),
+      'systemDifference',
+    );
+    // 不是结果格的键点不动当前追溯。
+    expect(
+      lighthouseFundPoolTraceAfterTap('totalAssets', 'fundPoolBalance'),
+      'totalAssets',
+    );
+    expect(
+      lighthouseFundPoolPanelFormulas(lighthouseFundPoolPanelInvoice),
+      isEmpty,
+    );
+    expect(
+      lighthouseFundPoolPanelFormulas(lighthouseFundPoolPanelAssets).length,
+      2,
+    );
+    // 预览行与 KPI 格等高，冻结列不再需要额外补高。
+    expect(lighthouseFundPoolPreviewHeight, 43);
+    expect(
+      lighthouseFundPoolPreviewRowHeight(summaryCellHeight: 43, scale: 1),
+      43,
+    );
     expect(
       lighthouseFundPoolPreviewExtraHeight(
         summaryCellHeight: 43,
         scale: 1,
       ),
-      25,
+      0,
     );
     expect(
       lighthouseFundPoolPreviewMetrics()
@@ -449,9 +556,10 @@ void main() {
     expect(lighthouseFormatFundPoolWanParts(null), (number: '—', unit: ''));
     expect(lighthouseFormatFundPoolRate(13), '13%');
     expect(lighthouseFormatFundPoolRate(13.14), '13.14%');
-    expect(lighthouseFundPoolShowsInvoice('day'), isFalse);
-    expect(lighthouseFundPoolShowsInvoice('week'), isFalse);
+    expect(lighthouseFundPoolShowsInvoice('day'), isTrue);
+    expect(lighthouseFundPoolShowsInvoice('week'), isTrue);
     expect(lighthouseFundPoolShowsInvoice('month'), isTrue);
+    expect(lighthouseFundPoolShowsInvoice('quarter'), isTrue);
     expect(lighthouseFundPoolShowsInvoice('year'), isTrue);
     final monthly = lighthouseFundPoolDetailRows(showInvoice: true);
     expect(monthly.first.left.kind, LighthouseFundPoolSectionKind.invoice);
@@ -517,6 +625,17 @@ void main() {
       ['inflow', 'netTa'],
       ['outflow', 'sharePct'],
     ]);
+  });
+
+  test('fund pool invoice card shows for every period', () {
+    for (final period in ['day', 'week', 'month', 'quarter', 'year', 'custom']) {
+      expect(lighthouseFundPoolShowsInvoice(period), isTrue);
+    }
+    final rows = lighthouseFundPoolDetailRows(
+      showInvoice: lighthouseFundPoolShowsInvoice('day'),
+    );
+    expect(rows.first.left.kind, LighthouseFundPoolSectionKind.invoice);
+    expect(rows.first.right?.kind, LighthouseFundPoolSectionKind.assets);
   });
 
   test('netTA hero overlay series maps onto the shared trend slots', () {
@@ -708,6 +827,86 @@ void main() {
     expect(lighthouseHeroSummaryIconKey('渠道 · 产险'), 'channel');
   });
 
+  test('hero summary range matches the selected interval control', () {
+    expect(
+      lighthouseMdDashRange(DateTime(2026, 8, 1), DateTime(2026, 8, 31)),
+      '08.01–08.31',
+    );
+    expect(
+      lighthouseHeroSelectedRangeLabel(
+        isCustomRange: true,
+        customStart: DateTime(2026, 8, 1),
+        customEnd: DateTime(2026, 8, 15),
+        periodInstanceDetail: '08.01–08.31',
+      ),
+      '08.01–08.15',
+    );
+    expect(
+      lighthouseHeroSelectedRangeLabel(
+        isCustomRange: false,
+        periodInstanceDetail: '08.01–08.31',
+      ),
+      '08.01–08.31',
+    );
+    expect(lighthouseHeroSummaryRangeFontSize, 11);
+  });
+
+  test('aligned period follows 2026-08 运营会 同期口径', () {
+    final aug25 = DateTime(2026, 8, 25);
+    final day = lighthouseResolveAlignedPeriod(period: 'day', now: aug25);
+    expect(day.currentLabel, '08.25');
+    expect(day.prevLabel, '07.25');
+    expect(day.deltaVs, 'vs 上月同日');
+    expect(day.inProgress, isTrue);
+
+    expect(
+      lighthouseSameDayPrevMonth(DateTime(2026, 3, 31)),
+      DateTime(2026, 2, 28),
+    );
+    expect(
+      lighthouseSameDayPrevMonth(DateTime(2028, 3, 31)),
+      DateTime(2028, 2, 29),
+    );
+
+    final monthOpen = lighthouseResolveAlignedPeriod(
+      period: 'month',
+      now: aug25,
+    );
+    expect(monthOpen.currentLabel, '08.01–08.25');
+    expect(monthOpen.prevLabel, '07.01–07.25');
+    expect(monthOpen.deltaVs, 'vs 上月同期');
+    expect(monthOpen.inProgress, isTrue);
+
+    final monthDone = lighthouseResolveAlignedPeriod(
+      period: 'month',
+      now: DateTime(2026, 8, 31),
+    );
+    expect(monthDone.currentLabel, '08.01–08.31');
+    expect(monthDone.prevLabel, '07.01–07.31');
+    expect(monthDone.deltaVs, 'vs 上月');
+    expect(monthDone.inProgress, isFalse);
+
+    final week = lighthouseResolveAlignedPeriod(period: 'week', now: aug25);
+    expect(week.currentLabel, '08.24–08.25');
+    expect(week.prevLabel, '08.17–08.18');
+    expect(week.deltaVs, 'vs 上周同期');
+
+    final hist = lighthouseResolveAlignedPeriod(
+      period: 'month',
+      now: DateTime(2026, 8, 25),
+      offset: -1,
+    );
+    expect(hist.currentLabel, '07.01–07.31');
+    expect(hist.prevLabel, '06.01–06.30');
+    expect(hist.deltaVs, 'vs 上月');
+    expect(hist.inProgress, isFalse);
+
+    final year = lighthouseResolveAlignedPeriod(period: 'year', now: aug25);
+    expect(year.currentLabel, '2026.01.01–2026.12.31');
+    expect(year.deltaVs, 'vs 去年');
+    expect(year.inProgress, isTrue);
+  });
+
   test('category chips resolve official brand logos with generic fallback', () {
     expect(lighthouseCategoryBrandAsset('中石油'), 'assets/brands/petrochina.svg');
     expect(lighthouseCategoryBrandAsset('中石化'), 'assets/brands/sinopec.svg');
@@ -763,7 +962,7 @@ void main() {
     expect(lighthouseCompactHeroChartMaxHeightFor(800), 84);
     expect(lighthouseCompactHeroBlockHeightFor(390), 216 + 16);
     expect(lighthouseCompactHeroBlockHeightFor(800), 180 + 16);
-    expect(lighthouseCompactHeroMetricGap, 6);
+    expect(lighthouseCompactHeroMetricGap, 2);
     expect(lighthouseHeroUsesCategoryTint, isFalse);
     expect(lighthouseHeroUsesAccentRail, isFalse);
     expect(lighthouseHeroShowsEnglishKicker, isFalse);
@@ -771,7 +970,7 @@ void main() {
     expect(lighthouseHeroMetricUsesSansLabel, isTrue);
     expect(lighthouseHeroCardRadius, 12);
     expect(lighthouseHeroCardGap, 8);
-    expect(lighthouseHeroCardPadding, 8);
+    expect(lighthouseHeroCardPadding, 5);
     expect(lighthouseHeroChartUsesCardSurface, isTrue);
     expect(lighthouseHeroChartCardPadding, 8);
     expect(lighthouseHeroSparkShowsAxes, isFalse);
@@ -1500,18 +1699,45 @@ void main() {
       );
       expect(
         lighthouseTrendMomPct(
-          periodDeltaPct: 12,
+          periodDeltaPct: 3.9,
           partialPeriod: false,
-          isSelected: true,
-          series: const [1, 2],
+          selectedIndex: null,
+          series: const [2.29, 2.4, 3.83],
         ),
-        12,
+        3.9,
+      );
+      expect(
+        lighthouseTrendMomPct(
+          periodDeltaPct: 3.9,
+          partialPeriod: false,
+          selectedIndex: 0,
+          series: const [2.29, 2.4, 3.83],
+        ),
+        isNull,
+      );
+      expect(
+        lighthouseTrendMomPct(
+          periodDeltaPct: 3.9,
+          partialPeriod: false,
+          selectedIndex: 1,
+          series: const [2.29, 2.4, 3.83],
+        ),
+        closeTo((2.4 - 2.29) / 2.29 * 100, 1e-6),
+      );
+      expect(
+        lighthouseTrendMomPct(
+          periodDeltaPct: 3.9,
+          partialPeriod: true,
+          selectedIndex: 2,
+          series: const [2.29, 2.4, 3.83],
+        ),
+        3.9,
       );
       expect(
         lighthouseTrendMomPct(
           periodDeltaPct: null,
           partialPeriod: true,
-          isSelected: false,
+          selectedIndex: null,
           series: const [100, 110],
         ),
         isNull,

@@ -22,8 +22,7 @@ class MeetingUploadCoordinator extends ChangeNotifier {
   AuthSession? _session;
   NativeMeetingService? _service;
   List<MeetingUploadJob> _jobs = const [];
-  bool _workerRunning = false;
-  bool _workerKickPending = false;
+  final Set<int> _runningMeetingIds = <int>{};
   Timer? _retryTimer;
 
   List<MeetingUploadJob> get jobs => List.unmodifiable(_jobs);
@@ -139,11 +138,15 @@ class MeetingUploadCoordinator extends ChangeNotifier {
         meetingDate: meetingDate,
         generate: generate,
         createdAtMs: DateTime.now().millisecondsSinceEpoch,
+        phase: MeetingUploadPhase.uploading,
         recordingDurationSeconds: recordingDurationSeconds.clamp(0, 24 * 60 * 60),
       );
       _jobs = <MeetingUploadJob>[..._jobs, job];
+      _runningMeetingIds.add(meetingId);
       await MeetingUploadStorage.save(userId, _jobs);
       jobQueued = true;
+      _schedulePendingWatchdog(meetingId);
+      unawaited(_startJob(meetingId, alreadyClaimed: true));
       notifyListeners();
 
       // 任务已入队后可清理源文件（上传使用 destPath）。
@@ -151,11 +154,10 @@ class MeetingUploadCoordinator extends ChangeNotifier {
         await _deleteLocalFile(src);
       }
 
-      _schedulePendingWatchdog(meetingId);
-      unawaited(_runMeetingJobNow(meetingId));
       return meetingId;
     } catch (e) {
       if (!jobQueued) {
+        _runningMeetingIds.remove(meetingId);
         await _deleteLocalFile(stagingPath);
         if (destPath != stagingPath) {
           await _deleteLocalFile(destPath);
@@ -177,26 +179,29 @@ class MeetingUploadCoordinator extends ChangeNotifier {
     }
   }
 
-  Future<void> _runMeetingJobNow(int meetingId) async {
-    while (_workerRunning) {
-      _workerKickPending = true;
-      await Future<void>.delayed(const Duration(milliseconds: 30));
+  Future<void> _startJob(
+    int meetingId, {
+    bool alreadyClaimed = false,
+  }) async {
+    if (alreadyClaimed) {
+      _runningMeetingIds.add(meetingId);
+    } else if (!_runningMeetingIds.add(meetingId)) {
+      return;
     }
-    _workerRunning = true;
     try {
       final idx = _indexOfJob(meetingId);
       if (idx < 0) return;
       final job = _jobs[idx];
-      if (job.phase != MeetingUploadPhase.pending || !job.isActive) return;
+      if (!job.isActive) return;
+      if (job.phase != MeetingUploadPhase.pending &&
+          job.phase != MeetingUploadPhase.uploading) {
+        return;
+      }
       await _runJob(idx);
     } finally {
-      _workerRunning = false;
-      if (_workerKickPending) {
-        _workerKickPending = false;
-        unawaited(_drainUploadWorker());
-      }
+      _runningMeetingIds.remove(meetingId);
+      _scheduleRetryTimer();
     }
-    unawaited(_drainUploadWorker());
   }
 
   Future<void> retry(int meetingId) async {
@@ -237,14 +242,13 @@ class MeetingUploadCoordinator extends ChangeNotifier {
           .map((job) => _normalizeJobUserId(job, userId)),
       ...memoryExtra.map((job) => _normalizeJobUserId(job, userId)),
     ];
-    if (!_workerRunning) {
-      for (var i = 0; i < _jobs.length; i++) {
-        final job = _jobs[i];
-        if (job.phase == MeetingUploadPhase.uploading ||
-            job.phase == MeetingUploadPhase.attaching) {
-          _jobs = List<MeetingUploadJob>.from(_jobs)
-            ..[i] = job.copyWith(phase: MeetingUploadPhase.pending);
-        }
+    for (var i = 0; i < _jobs.length; i++) {
+      final job = _jobs[i];
+      if (_runningMeetingIds.contains(job.meetingId)) continue;
+      if (job.phase == MeetingUploadPhase.uploading ||
+          job.phase == MeetingUploadPhase.attaching) {
+        _jobs = List<MeetingUploadJob>.from(_jobs)
+          ..[i] = job.copyWith(phase: MeetingUploadPhase.pending);
       }
     }
     await _persistJobs();
@@ -253,34 +257,22 @@ class MeetingUploadCoordinator extends ChangeNotifier {
 
   Future<void> _drainUploadWorker() async {
     if (_service == null || _session == null) return;
-    if (_workerRunning) {
-      _workerKickPending = true;
-      return;
-    }
-    _workerRunning = true;
-    try {
-      do {
-        _workerKickPending = false;
-        while (true) {
-          final nextIdx = _indexOfNextPendingJob();
-          if (nextIdx < 0) break;
-          await _runJob(nextIdx);
-        }
-      } while (_workerKickPending);
-    } finally {
-      _workerRunning = false;
+    final userId = _effectiveUserId(_session?.userId ?? 0);
+    final ids = _jobs
+        .where(
+          (job) =>
+              _jobBelongsToUser(job, userId) &&
+              job.isActive &&
+              !_runningMeetingIds.contains(job.meetingId) &&
+              (job.phase == MeetingUploadPhase.pending ||
+                  job.phase == MeetingUploadPhase.uploading),
+        )
+        .map((job) => job.meetingId)
+        .toList(growable: false);
+    for (final id in ids) {
+      unawaited(_startJob(id));
     }
     _scheduleRetryTimer();
-  }
-
-  int _indexOfNextPendingJob() {
-    final userId = _effectiveUserId(_session?.userId ?? 0);
-    return _jobs.indexWhere(
-      (job) =>
-          job.isActive &&
-          job.phase == MeetingUploadPhase.pending &&
-          _jobBelongsToUser(job, userId),
-    );
   }
 
   int _indexOfJob(int meetingId) {
@@ -332,15 +324,15 @@ class MeetingUploadCoordinator extends ChangeNotifier {
     );
 
     try {
+      job = job.copyWith(phase: MeetingUploadPhase.uploading, clearError: true);
+      _jobs = List<MeetingUploadJob>.from(_jobs)..[index] = job;
+      await _persistJobs();
+      notifyListeners();
+
       final uploadPath = await _prepareJobUploadPath(index, job);
       final latestIdx = _indexOfJob(job.meetingId);
       if (latestIdx < 0) return;
       job = _jobs[latestIdx];
-
-      job = job.copyWith(phase: MeetingUploadPhase.uploading, clearError: true);
-      _jobs = List<MeetingUploadJob>.from(_jobs)..[latestIdx] = job;
-      await _persistJobs();
-      notifyListeners();
 
       final fileName = svc.filenameFromPath(uploadPath);
       final upload = await svc.uploadAudioFile(
@@ -588,7 +580,12 @@ class MeetingUploadCoordinator extends ChangeNotifier {
       final idx = _indexOfJob(meetingId);
       if (idx < 0) return;
       final job = _jobs[idx];
-      if (job.phase != MeetingUploadPhase.pending || !job.isActive) return;
+      if (!job.isActive) return;
+      if (job.phase != MeetingUploadPhase.pending &&
+          job.phase != MeetingUploadPhase.uploading) {
+        return;
+      }
+      if (_runningMeetingIds.contains(meetingId)) return;
       debugPrint(
         'MeetingUpload watchdog re-kick meetingId=$meetingId retry=${job.retryCount}',
       );

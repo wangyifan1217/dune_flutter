@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'conversation_realtime_service.dart';
 import 'inbox_hidden_storage.dart';
 
+enum ConversationMentionKind { none, me, atAll }
+
 /// 与 WebView `eventMentionsMe` / `parseEventPayload` 对齐。
 abstract final class ConversationMentionUtils {
   static bool eventMentionsMe({
@@ -10,24 +12,80 @@ abstract final class ConversationMentionUtils {
     required int selfUserId,
     String? selfDisplayName,
   }) {
-    if (selfUserId <= 0) return false;
+    return eventMentionKind(
+          event: event,
+          selfUserId: selfUserId,
+          selfDisplayName: selfDisplayName,
+        ) !=
+        ConversationMentionKind.none;
+  }
+
+  static ConversationMentionKind eventMentionKind({
+    required ConversationRealtimeEventLike event,
+    required int selfUserId,
+    String? selfDisplayName,
+  }) {
     final msg = event.message;
-    if (msg == null) return false;
+    if (msg == null) return ConversationMentionKind.none;
+    return mentionKindFromMessage(
+      msg: msg,
+      selfUserId: selfUserId,
+      selfDisplayName: selfDisplayName,
+    );
+  }
+
+  static ConversationMentionKind mentionKindFromMessage({
+    required Map<String, dynamic> msg,
+    required int selfUserId,
+    String? selfDisplayName,
+  }) {
+    if (selfUserId <= 0) return ConversationMentionKind.none;
 
     final payload = _parsePayload(msg['payload']);
-    if (payload['mentionAll'] == true || payload['atAll'] == true || payload['isAtAll'] == true) {
-      return true;
-    }
-
-    for (final key in ['mentionUserIds', 'mentionedUserIds', 'atUserIds', 'mentions']) {
-      if (_listContainsUserId(payload[key], selfUserId)) return true;
-    }
-
     final body = (msg['bodyText'] ?? '').toString();
     final mine = (selfDisplayName ?? '').trim();
-    if (body.contains('@所有人')) return true;
-    if (mine.isNotEmpty && body.contains('@$mine')) return true;
-    return false;
+    final atAll =
+        payload['mentionAll'] == true ||
+        payload['atAll'] == true ||
+        payload['isAtAll'] == true ||
+        body.contains('@所有人');
+    var atMeById = false;
+    for (final key in [
+      'mentionUserIds',
+      'mentionedUserIds',
+      'atUserIds',
+      'mentions',
+    ]) {
+      if (_listContainsUserId(payload[key], selfUserId)) {
+        atMeById = true;
+        break;
+      }
+    }
+    final atMeByName = mine.isNotEmpty && body.contains('@$mine');
+    // @所有人 发送时 mentionUserIds 常会带上全员，不能因此显示 [@了你]。
+    if (atMeByName || (atMeById && !atAll)) {
+      return ConversationMentionKind.me;
+    }
+    if (atAll) return ConversationMentionKind.atAll;
+    return ConversationMentionKind.none;
+  }
+
+  static bool unreadMentionFromJson(Map<String, dynamic> raw) {
+    if (raw['hasUnreadMention'] == true ||
+        raw['mentionedMe'] == true ||
+        raw['atMe'] == true) {
+      return true;
+    }
+    return ((raw['unreadMentionCount'] as num?)?.toInt() ?? 0) > 0;
+  }
+
+  static bool unreadAtAllFromJson(Map<String, dynamic> raw) {
+    if (raw['hasUnreadAtAll'] == true ||
+        raw['mentionedAll'] == true ||
+        raw['atAll'] == true) {
+      return true;
+    }
+    return ((raw['unreadAtAllCount'] as num?)?.toInt() ?? 0) > 0;
   }
 
   static bool eventMentionsMeFromRealtime({

@@ -333,8 +333,10 @@ class _NativeMeetingListPageState extends State<NativeMeetingListPage> {
   String _uploadStatusLabel(MeetingUploadJob job) {
     return switch (job.phase) {
       MeetingUploadPhase.pending =>
-        job.error != null && job.error!.isNotEmpty ? '上传重试中' : '排队上传中',
-      MeetingUploadPhase.uploading => '录音上传中 ${job.uploadProgressPercent}%',
+        job.error != null && job.error!.isNotEmpty ? '上传重试中' : '准备上传中',
+      MeetingUploadPhase.uploading => job.uploadProgressPercent <= 0
+          ? '正在准备上传'
+          : '录音上传中 ${job.uploadProgressPercent}%',
       MeetingUploadPhase.attaching => '正在保存',
       MeetingUploadPhase.failed => '上传失败',
       MeetingUploadPhase.done => '草稿',
@@ -360,7 +362,7 @@ class _NativeMeetingListPageState extends State<NativeMeetingListPage> {
 
   @override
   Widget build(BuildContext context) {
-    final canCreate = widget.onCreate != null && !isDesktopCommOnly;
+    final canCreate = widget.onCreate != null;
     return Scaffold(
       backgroundColor: DunesColors.bgApp,
       appBar: AppBar(
@@ -371,7 +373,7 @@ class _NativeMeetingListPageState extends State<NativeMeetingListPage> {
             IconButton(
               onPressed: _onCreatePressed,
               icon: const Icon(Icons.add_rounded),
-              tooltip: '新建会议',
+              tooltip: isDesktopCommOnly ? '上传会议纪要' : '新建会议',
             ),
         ],
       ),
@@ -380,7 +382,11 @@ class _NativeMeetingListPageState extends State<NativeMeetingListPage> {
               onPressed: _onCreatePressed,
               backgroundColor: DunesColors.brandPurple,
               foregroundColor: Colors.white,
-              child: const Icon(Icons.mic_rounded),
+              child: Icon(
+                isDesktopCommOnly
+                    ? Icons.upload_file_rounded
+                    : Icons.mic_rounded,
+              ),
             )
           : null,
       body: RefreshIndicator(
@@ -421,7 +427,9 @@ class _NativeMeetingListPageState extends State<NativeMeetingListPage> {
             message: searching
                 ? '换一个关键词试试，支持搜索会议标题和摘要。'
                 : (canCreate
-                      ? '点击下方麦克风按钮，上传录音并开始 AI 转写'
+                      ? (isDesktopCommOnly
+                            ? '点击下方按钮，上传录音并开始 AI 转写'
+                            : '点击下方麦克风按钮，上传录音并开始 AI 转写')
                       : '暂无会议纪要，请在手机端录制或上传后查看'),
             actionLabel: !searching && canCreate ? '新建会议' : null,
             onAction: !searching && canCreate ? _onCreatePressed : null,

@@ -1018,9 +1018,13 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
     if (uploadJob != null) {
       return switch (uploadJob.phase) {
         MeetingUploadPhase.failed => '录音上传失败：${uploadJob.error ?? '请稍后重试'}',
-        MeetingUploadPhase.pending => '录音正在后台压缩并上传...',
-        MeetingUploadPhase.uploading =>
-          '录音正在后台上传（${uploadJob.uploadProgressPercent}%），完成后${uploadJob.generate ? '将自动开始转写' : '可在本页开始转写'}。您可以先离开做其他事情。',
+        MeetingUploadPhase.pending =>
+          uploadJob.error != null && uploadJob.error!.isNotEmpty
+              ? '录音上传失败，系统将自动重试...'
+              : '正在准备上传录音...',
+        MeetingUploadPhase.uploading => uploadJob.uploadProgressPercent <= 0
+            ? '正在压缩并准备上传录音，完成后${uploadJob.generate ? '将自动开始转写' : '可在本页开始转写'}。您可以先离开做其他事情。'
+            : '录音正在后台上传（${uploadJob.uploadProgressPercent}%），完成后${uploadJob.generate ? '将自动开始转写' : '可在本页开始转写'}。您可以先离开做其他事情。',
         MeetingUploadPhase.attaching => '录音已上传，正在保存到云端...',
         _ => '录音后台处理中，请稍候...',
       };
@@ -1118,8 +1122,8 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
         : attaching
         ? '正在保存录音...'
         : pending
-        ? (job.error != null && job.error!.isNotEmpty ? '录音上传重试中' : '录音排队上传中')
-        : '录音后台上传中';
+        ? (job.error != null && job.error!.isNotEmpty ? '录音上传重试中' : '正在准备上传')
+        : (job.uploadProgressPercent <= 0 ? '正在准备上传' : '录音后台上传中');
     final detail = failed
         ? (job.error ?? '请检查网络后重试')
         : attaching
@@ -1127,8 +1131,10 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
         : pending
         ? (job.error != null && job.error!.isNotEmpty
               ? '${job.error} · 系统将自动重试'
-              : '上传任务已创建，正在等待开始')
-        : '当前进度 ${job.uploadProgressPercent}% · 上传完成后将自动继续，您可先使用其他功能';
+              : '正在压缩录音并开始传输')
+        : (job.uploadProgressPercent <= 0
+            ? '正在压缩录音并开始传输'
+            : '当前进度 ${job.uploadProgressPercent}% · 上传完成后将自动继续，您可先使用其他功能');
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(14),

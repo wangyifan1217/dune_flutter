@@ -11,6 +11,7 @@ import '../nova/nova_history_utils.dart';
 import '../../core/widgets/cached_network_image.dart';
 import '../chat/chat_media_cache.dart';
 import '../xflow/approval_chat_share.dart';
+import 'conversation_mention_utils.dart';
 import 'conversation_models.dart';
 import 'message_preview_text.dart';
 
@@ -2220,6 +2221,8 @@ class ConversationService {
       assistantGenerating: raw['assistantGenerating'] == true,
       assistantGeneratingStatus: (raw['assistantGeneratingStatus'] ?? '')
           .toString(),
+      hasUnreadMention: ConversationMentionUtils.unreadMentionFromJson(raw),
+      hasUnreadAtAll: ConversationMentionUtils.unreadAtAllFromJson(raw),
     );
   }
 

@@ -2631,8 +2631,7 @@ class _NativeChatViewState extends State<NativeChatView>
     } finally {
       if (gen == _messageScrollGen) {
         _messageLocateSettling = false;
-        _olderLoadCooldownUntilMs =
-            DateTime.now().millisecondsSinceEpoch + 800;
+        _olderLoadCooldownUntilMs = DateTime.now().millisecondsSinceEpoch + 800;
       }
     }
   }
@@ -4674,10 +4673,23 @@ class _NativeChatViewState extends State<NativeChatView>
     );
   }
 
+  static const _recallWindow = Duration(minutes: 10);
+
+  bool _canRecallMessage(NativeChatMessage m) {
+    if (m.id <= 0 || m.senderUserId != widget.session.userId) return false;
+    final created = m.createdAt;
+    if (created == null) return false;
+    return DateTime.now().difference(created) < _recallWindow;
+  }
+
   Future<void> _tryRecallMessage(NativeChatMessage m) async {
     final conv = _conversation;
     if (conv == null || m.id <= 0 || m.senderUserId != widget.session.userId)
       return;
+    if (!_canRecallMessage(m)) {
+      _showToast('撤回失败：已超过可撤回时间');
+      return;
+    }
     final ok = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
@@ -4935,7 +4947,7 @@ class _NativeChatViewState extends State<NativeChatView>
             label: '多选',
             icon: Icons.checklist_rounded,
           ),
-        if (mine && m.id > 0)
+        if (mine && m.id > 0 && _canRecallMessage(m))
           const _MessageQuickAction(
             id: 'recall',
             label: '撤回',
@@ -6255,13 +6267,20 @@ class _NativeChatViewState extends State<NativeChatView>
       children: [
         child,
         const SizedBox(height: 6),
-        ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 280),
-          child: ChatQuoteBlock(
-            quote: quote,
-            mine: mine,
-            onTap: () => _jumpToQuotedMessage(quote.messageId, quote: quote),
-          ),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            return ConstrainedBox(
+              constraints: BoxConstraints(
+                maxWidth: chatBubbleMaxWidth(constraints.maxWidth),
+              ),
+              child: ChatQuoteBlock(
+                quote: quote,
+                mine: mine,
+                onTap: () =>
+                    _jumpToQuotedMessage(quote.messageId, quote: quote),
+              ),
+            );
+          },
         ),
       ],
     );
@@ -7695,15 +7714,25 @@ class _NativeChatViewState extends State<NativeChatView>
     if (_isRobotMarkdownPayload(m.payload)) {
       final wide = isWideChatLayout(context);
       final screenW = MediaQuery.sizeOf(context).width;
-      final preferredMax = wide
-          ? (screenW * 0.55).clamp(420.0, 640.0)
-          : (screenW - 72).clamp(260.0, 420.0);
       return LayoutBuilder(
         builder: (context, constraints) {
           final available = constraints.maxWidth;
-          final maxW = available.isFinite && available > 0
-              ? (available < preferredMax ? available : preferredMax)
-              : preferredMax;
+          final double maxW;
+          if (wide) {
+            final preferredMax = (screenW * 0.55).clamp(420.0, 640.0);
+            maxW = available.isFinite && available > 0
+                ? (available < preferredMax ? available : preferredMax)
+                : preferredMax;
+          } else if (shouldExpandChatBubbles) {
+            maxW = chatBubbleMaxWidth(
+              available.isFinite && available > 0 ? available : 280,
+            );
+          } else {
+            final preferredMax = (screenW - 72).clamp(260.0, 420.0);
+            maxW = available.isFinite && available > 0
+                ? (available < preferredMax ? available : preferredMax)
+                : preferredMax;
+          }
           return Align(
             alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
             child: Container(
@@ -7890,54 +7919,60 @@ class _NativeChatViewState extends State<NativeChatView>
       child: InkWell(
         borderRadius: BorderRadius.circular(9),
         onTap: () => unawaited(_showForwardBundleDetail(bundle)),
-        child: Container(
-          constraints: const BoxConstraints(maxWidth: 280),
-          padding: const EdgeInsets.fromLTRB(11, 9, 11, 8),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(9),
-            border: Border.all(color: const Color(0xFFE9E9E9)),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                bundle.title,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: DunesTypography.sans(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600,
-                  color: DunesColors.text,
-                ),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            return Container(
+              constraints: BoxConstraints(
+                maxWidth: chatBubbleMaxWidth(constraints.maxWidth),
               ),
-              const SizedBox(height: 5),
-              ...preview.map(
-                (e) => Padding(
-                  padding: const EdgeInsets.only(bottom: 3),
-                  child: Text(
-                    '${e.senderName.isEmpty ? '用户' : e.senderName}: ${e.text}',
+              padding: const EdgeInsets.fromLTRB(11, 9, 11, 8),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(9),
+                border: Border.all(color: const Color(0xFFE9E9E9)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    bundle.title,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: DunesTypography.sans(
-                      fontSize: 13,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                      color: DunesColors.text,
+                    ),
+                  ),
+                  const SizedBox(height: 5),
+                  ...preview.map(
+                    (e) => Padding(
+                      padding: const EdgeInsets.only(bottom: 3),
+                      child: Text(
+                        '${e.senderName.isEmpty ? '用户' : e.senderName}: ${e.text}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: DunesTypography.sans(
+                          fontSize: 13,
+                          color: DunesColors.text3,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  const Divider(height: 1, color: Color(0xFFEFEFEF)),
+                  const SizedBox(height: 5),
+                  Text(
+                    '聊天记录',
+                    style: DunesTypography.sans(
+                      fontSize: 11,
                       color: DunesColors.text3,
                     ),
                   ),
-                ),
+                ],
               ),
-              const SizedBox(height: 6),
-              const Divider(height: 1, color: Color(0xFFEFEFEF)),
-              const SizedBox(height: 5),
-              Text(
-                '聊天记录',
-                style: DunesTypography.sans(
-                  fontSize: 11,
-                  color: DunesColors.text3,
-                ),
-              ),
-            ],
-          ),
+            );
+          },
         ),
       ),
     );

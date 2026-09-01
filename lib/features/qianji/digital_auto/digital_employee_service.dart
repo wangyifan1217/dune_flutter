@@ -1,9 +1,26 @@
 import 'dart:convert';
 
+import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
 import '../../auth/auth_session.dart';
 import 'digital_auto_config.dart';
+
+/// Catalog `iconKey` → Material icon. Hub cards and the chat page must share this.
+IconData digitalEmployeeIcon(String? key) {
+  switch (key) {
+    case 'oil_barrel':
+      return Icons.oil_barrel_rounded;
+    case 'support_agent':
+      return Icons.support_agent_rounded;
+    case 'smart_toy':
+      return Icons.smart_toy_outlined;
+    case 'hub':
+      return Icons.hub_outlined;
+    default:
+      return Icons.auto_awesome_rounded;
+  }
+}
 
 class DigitalEmployeeItem {
   const DigitalEmployeeItem({

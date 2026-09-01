@@ -1,12 +1,13 @@
 import Flutter
 import UIKit
 import AVFoundation
+import CallKit
 import UniformTypeIdentifiers
 import UserNotifications
 
 @main
 @objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate, XGPushDelegate,
-  FlutterStreamHandler
+  FlutterStreamHandler, CXCallObserverDelegate
 {
   // FlutterAppDelegate 已实现 UNUserNotificationCenterDelegate，勿再重复声明。
   private let voiceChannelName = "dunes/audio_recorder"
@@ -24,6 +25,13 @@ import UserNotifications
   private var needsCaptureRebuild = false
   private var isRecording = false
   private var isPaused = false
+  /// 来电/系统抢麦导致的暂停才允许自动续录；用户点暂停、耳机拔出不自动续。
+  private var pausedBySystemInterruption = false
+  private let callObserver = CXCallObserver()
+  private var sessionTracking = false
+  private var sessionTitle = ""
+  private var rotateTimer: Timer?
+  private var crashWav: CrashSafeWavWriter?
   /// 忽略自身 setCategory / defaultToSpeaker 触发的路由回调，避免误报「被其他软件占用」。
   private var ignoreRouteChangeUntil: Date?
   private var streamSink: FlutterEventSink?
@@ -53,6 +61,11 @@ import UserNotifications
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }
 
+  override func applicationWillTerminate(_ application: UIApplication) {
+    flushLiveSessionForDeath()
+    super.applicationWillTerminate(application)
+  }
+
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
     let messenger = engineBridge.applicationRegistrar.messenger()
@@ -77,7 +90,7 @@ import UserNotifications
       guard let self = self else { return result(nil) }
       switch call.method {
       case "start":
-        self.startRecord(result: result)
+        self.startRecord(call: call, result: result)
       case "pause":
         self.pauseRecord(result: result)
       case "resume":
@@ -91,6 +104,13 @@ import UserNotifications
           "isRecording": self.isRecording,
           "isPaused": self.isPaused,
         ])
+      case "abandonedSession":
+        result(self.abandonedSessionPayload())
+      case "recoverAbandonedSession":
+        self.recoverAbandonedSession(result: result)
+      case "discardAbandonedSession":
+        self.discardAbandonedSession()
+        result(true)
       default:
         result(FlutterMethodNotImplemented)
       }
@@ -108,6 +128,7 @@ import UserNotifications
       binaryMessenger: messenger
     )
     eventsChannel.setStreamHandler(recorderEventHandler)
+    callObserver.setDelegate(self, queue: .main)
 
     let meetingAudioChannel = FlutterMethodChannel(
       name: meetingAudioChannelName,
@@ -184,13 +205,14 @@ import UserNotifications
     }
     switch type {
     case .began:
-      autoPauseForInterruption(reason: "interruption")
+      autoPauseForInterruption(reason: "interruption", allowAutoResume: true)
     case .ended:
       guard isRecording else { return }
-      // 仅在系统建议恢复时通知 Flutter 自动续录。
       let optionsRaw = info[AVAudioSessionInterruptionOptionKey] as? UInt ?? 0
       let options = AVAudioSession.InterruptionOptions(rawValue: optionsRaw)
       if options.contains(.shouldResume) || optionsRaw == 0 {
+        tryNativeResumeAfterSystemInterruption()
+      } else {
         emitRecorderEvent(["kind": "interruptionEnded"])
       }
     @unknown default:
@@ -198,18 +220,275 @@ import UserNotifications
     }
   }
 
+  func callObserver(_ callObserver: CXCallObserver, callChanged call: CXCall) {
+    let hasActiveCall = callObserver.calls.contains { !$0.hasEnded }
+    if !hasActiveCall {
+      tryNativeResumeAfterSystemInterruption()
+    }
+  }
+
   /// 来电等系统音频中断：立即落盘当前片段并暂停，避免 stop 时录音丢失。
-  private func autoPauseForInterruption(reason: String) {
+  private func autoPauseForInterruption(reason: String, allowAutoResume: Bool = true) {
     guard isRecording else { return }
     if !isPaused {
       accumulatedDurationMs += currentSegmentDurationMs()
       activeSegmentStartedAt = nil
       isPaused = true
+      pausedBySystemInterruption = allowAutoResume
       emitRecorderEvent(["kind": "paused", "reason": reason])
+      if allowAutoResume {
+        postRecordingPausedNotification()
+      }
+    } else if allowAutoResume {
+      pausedBySystemInterruption = true
     }
     needsCaptureRebuild = true
     finalizeCurrentSegmentIfNeeded()
     teardownAudioEngine()
+    crashWav?.flushHeader()
+    persistLiveSession()
+  }
+
+  /// 挂断/系统归还麦克风后，尽量在原生层直接续录（不依赖 Flutter 是否还活着）。
+  private func tryNativeResumeAfterSystemInterruption() {
+    guard isRecording, isPaused, pausedBySystemInterruption else { return }
+    do {
+      try resumeCaptureAfterPause()
+      pausedBySystemInterruption = false
+      clearRecordingPausedNotification()
+      emitRecorderEvent(["kind": "resumed", "reason": "system"])
+    } catch {
+      emitRecorderEvent(["kind": "interruptionEnded"])
+    }
+  }
+
+  private func resumeCaptureAfterPause() throws {
+    try prepareAudioSessionForRecording()
+    if m4aWriter == nil {
+      try startNewSegmentWriter()
+    }
+    if needsCaptureRebuild || audioEngine == nil {
+      teardownAudioEngine()
+      try setupAudioEngine()
+      needsCaptureRebuild = false
+    } else if let engine = audioEngine, !engine.isRunning {
+      try engine.start()
+    }
+    isPaused = false
+    activeSegmentStartedAt = Date()
+  }
+
+  private func postRecordingPausedNotification() {
+    let content = UNMutableNotificationContent()
+    content.title = "会议录音已暂停"
+    content.body = "来电结束后将自动继续，已录部分已保存"
+    content.sound = nil
+    let request = UNNotificationRequest(
+      identifier: "dunes.meeting.recording.paused",
+      content: content,
+      trigger: nil
+    )
+    UNUserNotificationCenter.current().add(request, withCompletionHandler: nil)
+  }
+
+  private func clearRecordingPausedNotification() {
+    UNUserNotificationCenter.current().removeDeliveredNotifications(
+      withIdentifiers: ["dunes.meeting.recording.paused"]
+    )
+  }
+
+  private func liveSessionURL() -> URL {
+    URL(fileURLWithPath: voiceRecordingDirectory())
+      .appendingPathComponent("live_session.json")
+  }
+
+  private func livePcmURL() -> URL {
+    URL(fileURLWithPath: voiceRecordingDirectory()).appendingPathComponent("live_pcm.wav")
+  }
+
+  private func persistLiveSession() {
+    guard sessionTracking else { return }
+    var segs = segmentPaths.filter { FileManager.default.fileExists(atPath: $0) }
+    if let current = outputPath,
+      FileManager.default.fileExists(atPath: current),
+      !segs.contains(current)
+    {
+      segs.append(current)
+    }
+    crashWav?.flushHeader()
+    let pcmPath = livePcmURL().path
+    let pcmExists = (try? FileManager.default.attributesOfItem(atPath: pcmPath)[.size] as? NSNumber)?
+      .intValue ?? 0 > 44
+    let payload: [String: Any] = [
+      "title": sessionTitle,
+      "startedAtMs": Int((recordStartedAt ?? Date()).timeIntervalSince1970 * 1000),
+      "durationMs": pcmExists
+        ? CrashSafeWavWriter.durationMs(path: pcmPath) : currentDurationMs(),
+      "segments": segs,
+      "pcmPath": pcmPath,
+    ]
+    guard JSONSerialization.isValidJSONObject(payload),
+      let data = try? JSONSerialization.data(withJSONObject: payload)
+    else { return }
+    try? data.write(to: liveSessionURL(), options: .atomic)
+  }
+
+  private func clearLiveSessionFile() {
+    try? FileManager.default.removeItem(at: liveSessionURL())
+  }
+
+  private func startSegmentRotateTimer() {
+    rotateTimer?.invalidate()
+    guard sessionTracking else { return }
+    rotateTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
+      self?.rotateLiveSegmentIfNeeded()
+    }
+  }
+
+  private func rotateLiveSegmentIfNeeded() {
+    guard isRecording, !isPaused, sessionTracking else { return }
+    accumulatedDurationMs += currentSegmentDurationMs()
+    activeSegmentStartedAt = Date()
+    finalizeCurrentSegmentIfNeeded()
+    try? startNewSegmentWriter()
+    persistLiveSession()
+  }
+
+  private func flushLiveSessionForDeath() {
+    guard isRecording, sessionTracking else { return }
+    if !isPaused {
+      accumulatedDurationMs += currentSegmentDurationMs()
+      activeSegmentStartedAt = nil
+      isPaused = true
+    }
+    finalizeCurrentSegmentIfNeeded()
+    teardownAudioEngine()
+    crashWav?.flushHeader()
+    persistLiveSession()
+  }
+
+  private func readAbandonedSession() -> [String: Any]? {
+    if isRecording && sessionTracking { return nil }
+    if let data = try? Data(contentsOf: liveSessionURL()),
+      let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+    {
+      return json
+    }
+    let pcmPath = livePcmURL().path
+    let size = (try? FileManager.default.attributesOfItem(atPath: pcmPath)[.size] as? NSNumber)?
+      .intValue ?? 0
+    guard size > 44 + 1024 else { return nil }
+    return [
+      "title": "",
+      "durationMs": CrashSafeWavWriter.durationMs(path: pcmPath),
+      "segments": [String](),
+      "pcmPath": pcmPath,
+    ]
+  }
+
+  private func abandonedPcmPath(_ json: [String: Any]) -> String? {
+    let path = (json["pcmPath"] as? String) ?? ""
+    guard !path.isEmpty else { return nil }
+    let size = (try? FileManager.default.attributesOfItem(atPath: path)[.size] as? NSNumber)?
+      .intValue ?? 0
+    return size > 44 + 1024 ? path : nil
+  }
+
+  private func abandonedSessionPayload() -> [String: Any]? {
+    guard let json = readAbandonedSession() else { return nil }
+    let pcm = abandonedPcmPath(json)
+    let segs = ((json["segments"] as? [String]) ?? []).filter { path in
+      let attrs = try? FileManager.default.attributesOfItem(atPath: path)
+      let size = (attrs?[.size] as? NSNumber)?.intValue ?? 0
+      return size > 1024
+    }
+    if pcm == nil && segs.isEmpty { return nil }
+    let durationMs: Int
+    if let pcm {
+      durationMs = CrashSafeWavWriter.durationMs(path: pcm)
+    } else {
+      durationMs = (json["durationMs"] as? NSNumber)?.intValue
+        ?? (json["durationMs"] as? Int)
+        ?? 0
+    }
+    return [
+      "title": (json["title"] as? String) ?? "",
+      "durationMs": durationMs,
+      "segmentCount": max(segs.count, pcm == nil ? 0 : 1),
+    ]
+  }
+
+  private func recoverAbandonedSession(result: @escaping FlutterResult) {
+    guard let json = readAbandonedSession() else {
+      result(nil)
+      return
+    }
+    if let pcm = abandonedPcmPath(json) {
+      CrashSafeWavWriter.repairHeader(path: pcm)
+      let leftoverSegs = (json["segments"] as? [String]) ?? []
+      for path in leftoverSegs {
+        try? FileManager.default.removeItem(atPath: path)
+      }
+      clearLiveSessionFile()
+      result([
+        "path": pcm,
+        "durationMs": CrashSafeWavWriter.durationMs(path: pcm),
+      ])
+      return
+    }
+    let segs = ((json["segments"] as? [String]) ?? []).filter { path in
+      let attrs = try? FileManager.default.attributesOfItem(atPath: path)
+      let size = (attrs?[.size] as? NSNumber)?.intValue ?? 0
+      return size > 1024
+    }
+    guard !segs.isEmpty else {
+      discardAbandonedSession()
+      result(nil)
+      return
+    }
+    let durationMs = (json["durationMs"] as? NSNumber)?.intValue
+      ?? (json["durationMs"] as? Int)
+      ?? 0
+    DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+      guard let self else {
+        DispatchQueue.main.async { result(nil) }
+        return
+      }
+      let path = self.resolveFinalRecordingPath(from: segs)
+      DispatchQueue.main.async {
+        self.clearLiveSessionFile()
+        guard let path, !path.isEmpty else {
+          result(nil)
+          return
+        }
+        result([
+          "path": path,
+          "durationMs": durationMs,
+        ])
+      }
+    }
+  }
+
+  private func discardAbandonedSession() {
+    if let json = readAbandonedSession() {
+      let segs = (json["segments"] as? [String]) ?? []
+      for path in segs {
+        try? FileManager.default.removeItem(atPath: path)
+      }
+      if let pcm = json["pcmPath"] as? String, !pcm.isEmpty {
+        try? FileManager.default.removeItem(atPath: pcm)
+      }
+    }
+    closeCrashWav(deleteFile: true)
+    clearLiveSessionFile()
+  }
+
+  private func closeCrashWav(deleteFile: Bool) {
+    crashWav?.close()
+    crashWav = nil
+    if deleteFile {
+      try? FileManager.default.removeItem(at: livePcmURL())
+    }
   }
 
   fileprivate func setRecorderEventSink(_ sink: FlutterEventSink?) {
@@ -230,7 +509,7 @@ import UserNotifications
 
   @objc private func handleMediaServicesReset(_ note: Notification) {
     guard isRecording else { return }
-    autoPauseForInterruption(reason: "mediaServicesReset")
+    autoPauseForInterruption(reason: "mediaServicesReset", allowAutoResume: true)
   }
 
   /// 外设断开等真实路由丢失时落盘暂停。
@@ -250,7 +529,7 @@ import UserNotifications
     switch reason {
     case .oldDeviceUnavailable:
       // 耳机拔出等：采集可能中断，先落盘暂停，由用户点继续。
-      autoPauseForInterruption(reason: "routeDeviceLost")
+      autoPauseForInterruption(reason: "routeDeviceLost", allowAutoResume: false)
     default:
       break
     }
@@ -263,31 +542,16 @@ import UserNotifications
       // 暂停后熄屏时 AVAssetWriter / AVAudioEngine 容易失效，先落盘当前片段。
       finalizeCurrentSegmentIfNeeded()
       teardownAudioEngine()
+    } else if sessionTracking {
+      rotateLiveSegmentIfNeeded()
     }
+    persistLiveSession()
   }
 
   @objc private func handleAppWillEnterForeground(_ note: Notification) {
     guard isRecording else { return }
     needsCaptureRebuild = true
-  }
-
-  private func resumeEngineAfterInterruption() {
-    guard isRecording, !isPaused else { return }
-    do {
-      try prepareAudioSessionForRecording()
-      if m4aWriter == nil {
-        try startNewSegmentWriter()
-      }
-      if needsCaptureRebuild || audioEngine == nil {
-        teardownAudioEngine()
-        try setupAudioEngine()
-        needsCaptureRebuild = false
-      } else if let engine = audioEngine, !engine.isRunning {
-        try engine.start()
-      }
-    } catch {
-      // best-effort：无法恢复时保持已录部分，stop 时按已有数据处理。
-    }
+    tryNativeResumeAfterSystemInterruption()
   }
 
   // MARK: - XGPushDelegate
@@ -366,7 +630,11 @@ import UserNotifications
       .appendingPathComponent("\(prefix)-\(stamp).m4a")
   }
 
-  private func startRecord(result: @escaping FlutterResult) {
+  private func startRecord(call: FlutterMethodCall, result: @escaping FlutterResult) {
+    let args = call.arguments as? [String: Any]
+    sessionTitle = ((args?["title"] as? String) ?? "")
+      .trimmingCharacters(in: .whitespacesAndNewlines)
+    sessionTracking = args?["persistSession"] as? Bool ?? false
     let session = AVAudioSession.sharedInstance()
     let permission = session.recordPermission
     if permission == .undetermined {
@@ -392,7 +660,11 @@ import UserNotifications
   }
 
   private func startRecordImpl(result: @escaping FlutterResult) {
+    let tracking = sessionTracking
+    let title = sessionTitle
     stopInternal(deleteFile: true)
+    sessionTracking = tracking
+    sessionTitle = title
     segmentPaths = []
     needsCaptureRebuild = false
     let m4a = newVoiceRecordingPath(prefix: "voice")
@@ -403,6 +675,10 @@ import UserNotifications
       try writer.start(url: URL(fileURLWithPath: m4a))
       m4aWriter = writer
       outputPath = m4a
+      if tracking {
+        closeCrashWav(deleteFile: true)
+        crashWav = try? CrashSafeWavWriter(path: livePcmURL().path)
+      }
 
       try setupAudioEngine()
 
@@ -411,6 +687,9 @@ import UserNotifications
       accumulatedDurationMs = 0
       isRecording = true
       isPaused = false
+      pausedBySystemInterruption = false
+      persistLiveSession()
+      startSegmentRotateTimer()
       result(true)
     } catch {
       stopInternal(deleteFile: true)
@@ -473,6 +752,7 @@ import UserNotifications
     outputPath = nil
     if ok {
       segmentPaths.append(path)
+      persistLiveSession()
     } else {
       try? FileManager.default.removeItem(atPath: path)
     }
@@ -503,7 +783,18 @@ import UserNotifications
         DispatchQueue.main.async { result(nil) }
         return
       }
-      let finalPath = self.resolveFinalRecordingPath(from: paths)
+      var finalPath = self.resolveFinalRecordingPath(from: paths)
+      if let path = finalPath, !path.isEmpty {
+        try? FileManager.default.removeItem(at: self.livePcmURL())
+      } else {
+        let pcmPath = self.livePcmURL().path
+        let pcmSize = (try? FileManager.default.attributesOfItem(atPath: pcmPath)[.size] as? NSNumber)?
+          .intValue ?? 0
+        if pcmSize > 44 {
+          CrashSafeWavWriter.repairHeader(path: pcmPath)
+          finalPath = pcmPath
+        }
+      }
       DispatchQueue.main.async {
         self.outputPath = finalPath
         guard let path = finalPath, !path.isEmpty else {
@@ -519,36 +810,39 @@ import UserNotifications
   }
 
   private func pauseRecord(result: @escaping FlutterResult) {
-    guard isRecording, !isPaused else {
+    guard isRecording else {
       result(false)
       return
     }
+    if isPaused {
+      result(true)
+      return
+    }
+    pausedBySystemInterruption = false
     accumulatedDurationMs += currentSegmentDurationMs()
     activeSegmentStartedAt = nil
     isPaused = true
-    audioEngine?.pause()
+    needsCaptureRebuild = true
+    finalizeCurrentSegmentIfNeeded()
+    teardownAudioEngine()
+    crashWav?.flushHeader()
+    persistLiveSession()
     result(true)
   }
 
   private func resumeRecord(result: @escaping FlutterResult) {
-    guard isRecording, isPaused else {
+    guard isRecording else {
       result(false)
       return
     }
+    if !isPaused {
+      result(true)
+      return
+    }
     do {
-      try prepareAudioSessionForRecording()
-      if m4aWriter == nil {
-        try startNewSegmentWriter()
-      }
-      if needsCaptureRebuild || audioEngine == nil {
-        teardownAudioEngine()
-        try setupAudioEngine()
-        needsCaptureRebuild = false
-      } else if let engine = audioEngine, !engine.isRunning {
-        try engine.start()
-      }
-      isPaused = false
-      activeSegmentStartedAt = Date()
+      try resumeCaptureAfterPause()
+      pausedBySystemInterruption = false
+      clearRecordingPausedNotification()
       result(true)
     } catch {
       result(
@@ -575,10 +869,16 @@ import UserNotifications
   @discardableResult
   private func stopInternal(deleteFile: Bool, mergeIfNeeded: Bool = true) -> Int {
     let durationMs = currentDurationMs()
+    let cancelTrackedSession = deleteFile && isRecording && sessionTracking
+    let stopTrackedSession = isRecording && sessionTracking
     isRecording = false
     isPaused = false
+    pausedBySystemInterruption = false
     needsCaptureRebuild = false
     ignoreRouteChangeUntil = nil
+    clearRecordingPausedNotification()
+    rotateTimer?.invalidate()
+    rotateTimer = nil
     teardownAudioEngine()
     recordStartedAt = nil
     activeSegmentStartedAt = nil
@@ -596,31 +896,64 @@ import UserNotifications
       }
       segmentPaths.removeAll()
       pendingMergeSegmentPaths = []
+      if stopTrackedSession {
+        closeCrashWav(deleteFile: true)
+      }
+      if cancelTrackedSession {
+        discardAbandonedSession()
+      }
+      if stopTrackedSession {
+        sessionTracking = false
+        sessionTitle = ""
+      }
       return durationMs
     }
 
+    crashWav?.flushHeader()
+    closeCrashWav(deleteFile: false)
     finalizeCurrentSegmentIfNeeded()
+    if stopTrackedSession {
+      clearLiveSessionFile()
+      sessionTracking = false
+      sessionTitle = ""
+    }
     let paths = segmentPaths
     segmentPaths.removeAll()
     pendingMergeSegmentPaths = []
+    let pcmPath = livePcmURL().path
+    let pcmSize = (try? FileManager.default.attributesOfItem(atPath: pcmPath)[.size] as? NSNumber)?
+      .intValue ?? 0
+    let pcmOk = pcmSize > 44
 
     guard !paths.isEmpty else {
+      if pcmOk {
+        outputPath = pcmPath
+        return CrashSafeWavWriter.durationMs(path: pcmPath)
+      }
       outputPath = nil
       return durationMs
     }
 
     if paths.count == 1 {
       outputPath = paths[0]
+      if pcmOk {
+        try? FileManager.default.removeItem(atPath: pcmPath)
+      }
       return durationMs
     }
 
     if !mergeIfNeeded {
       pendingMergeSegmentPaths = paths
-      outputPath = nil
+      outputPath = pcmOk ? pcmPath : nil
       return durationMs
     }
 
     outputPath = resolveFinalRecordingPath(from: paths)
+    if let out = outputPath, !out.isEmpty, pcmOk {
+      try? FileManager.default.removeItem(atPath: pcmPath)
+    } else if pcmOk {
+      outputPath = pcmPath
+    }
     return durationMs
   }
 
@@ -753,6 +1086,7 @@ import UserNotifications
     }
     guard let data = resampled, !data.isEmpty else { return }
     m4aWriter?.appendPcmInt16(data)
+    crashWav?.write(data)
     streamLock.lock()
     let sink = streamSink
     streamLock.unlock()
@@ -1046,6 +1380,110 @@ private extension FixedWidthInteger {
   var leData: Data {
     var v = self.littleEndian
     return Data(bytes: &v, count: MemoryLayout<Self>.size)
+  }
+}
+
+/// 边录边追加 WAV。文件随时可播，进程被杀后按实际长度修复头即可。
+final class CrashSafeWavWriter {
+  private let handle: FileHandle
+  private var dataBytes = 0
+  private var writesSinceHeader = 0
+  private let lock = NSLock()
+  private let sampleRate = 16_000
+  private let channels = 1
+  private let bitsPerSample = 16
+
+  init(path: String) throws {
+    let url = URL(fileURLWithPath: path)
+    if FileManager.default.fileExists(atPath: path) {
+      try FileManager.default.removeItem(at: url)
+    }
+    FileManager.default.createFile(atPath: path, contents: nil)
+    guard let handle = FileHandle(forUpdatingAtPath: path) else {
+      throw NSError(
+        domain: "dunes.audio",
+        code: 10,
+        userInfo: [NSLocalizedDescriptionKey: "cannot open crash-safe wav"]
+      )
+    }
+    self.handle = handle
+    try rewriteHeaderLocked()
+  }
+
+  func write(_ data: Data) {
+    guard !data.isEmpty else { return }
+    lock.lock()
+    defer { lock.unlock() }
+    handle.seek(toFileOffset: 44 + UInt64(dataBytes))
+    handle.write(data)
+    dataBytes += data.count
+    writesSinceHeader += 1
+    if writesSinceHeader >= 40 {
+      try? rewriteHeaderLocked()
+    }
+  }
+
+  func flushHeader() {
+    lock.lock()
+    defer { lock.unlock() }
+    try? rewriteHeaderLocked()
+  }
+
+  func close() {
+    lock.lock()
+    defer { lock.unlock() }
+    try? rewriteHeaderLocked()
+    try? handle.close()
+  }
+
+  private func rewriteHeaderLocked() throws {
+    let pos = handle.offsetInFile
+    handle.seek(toFileOffset: 0)
+    handle.write(Self.headerBytes(dataLength: dataBytes, sampleRate: sampleRate, channels: channels, bitsPerSample: bitsPerSample))
+    handle.seek(toFileOffset: pos)
+    writesSinceHeader = 0
+  }
+
+  static func repairHeader(path: String) {
+    let attrs = try? FileManager.default.attributesOfItem(atPath: path)
+    let size = (attrs?[.size] as? NSNumber)?.intValue ?? 0
+    guard size > 44 else { return }
+    guard let handle = FileHandle(forUpdatingAtPath: path) else { return }
+    defer { try? handle.close() }
+    handle.seek(toFileOffset: 0)
+    handle.write(headerBytes(dataLength: size - 44, sampleRate: 16_000, channels: 1, bitsPerSample: 16))
+  }
+
+  static func durationMs(path: String) -> Int {
+    let size = (try? FileManager.default.attributesOfItem(atPath: path)[.size] as? NSNumber)?
+      .intValue ?? 0
+    guard size > 44 else { return 0 }
+    return max(0, (size - 44) / 32)
+  }
+
+  private static func headerBytes(
+    dataLength: Int,
+    sampleRate: Int,
+    channels: Int,
+    bitsPerSample: Int
+  ) -> Data {
+    let byteRate = UInt32(sampleRate * channels * bitsPerSample / 8)
+    let blockAlign = UInt16(channels * bitsPerSample / 8)
+    var data = Data()
+    data.append("RIFF".data(using: .ascii)!)
+    data.append(UInt32(36 + dataLength).leData)
+    data.append("WAVE".data(using: .ascii)!)
+    data.append("fmt ".data(using: .ascii)!)
+    data.append(UInt32(16).leData)
+    data.append(UInt16(1).leData)
+    data.append(UInt16(channels).leData)
+    data.append(UInt32(sampleRate).leData)
+    data.append(byteRate.leData)
+    data.append(blockAlign.leData)
+    data.append(UInt16(bitsPerSample).leData)
+    data.append("data".data(using: .ascii)!)
+    data.append(UInt32(dataLength).leData)
+    return data
   }
 }
 

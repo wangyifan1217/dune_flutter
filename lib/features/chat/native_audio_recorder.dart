@@ -18,6 +18,28 @@ class NativeRecordedAudio {
   final int durationMs;
 }
 
+class AbandonedRecorderSession {
+  const AbandonedRecorderSession({
+    required this.title,
+    required this.durationMs,
+    required this.segmentCount,
+  });
+
+  final String title;
+  final int durationMs;
+  final int segmentCount;
+}
+
+class NativeRecorderStatus {
+  const NativeRecorderStatus({
+    required this.isRecording,
+    required this.isPaused,
+  });
+
+  final bool isRecording;
+  final bool isPaused;
+}
+
 class NativeAudioRecorder {
   NativeAudioRecorder._();
 
@@ -35,7 +57,10 @@ class NativeAudioRecorder {
       (defaultTargetPlatform == TargetPlatform.android ||
           defaultTargetPlatform == TargetPlatform.iOS);
 
-  Future<void> start() async {
+  Future<void> start({
+    String title = '',
+    bool persistSession = false,
+  }) async {
     if (!isSupported) return;
     if (isStartBlocked?.call() == true) {
       throw const NativeAudioRecorderBusyException(
@@ -43,29 +68,85 @@ class NativeAudioRecorder {
       );
     }
     try {
-      await _channel.invokeMethod<void>('start');
+      await _channel.invokeMethod<void>('start', <String, dynamic>{
+        'title': title,
+        'persistSession': persistSession,
+      });
     } on MissingPluginException {
       // Web / 桌面调试忽略
     }
   }
 
-  Future<void> pause() async {
-    if (!isSupported) return;
+  Future<AbandonedRecorderSession?> peekAbandonedSession() async {
+    if (!isSupported) return null;
     try {
-      await _channel.invokeMethod<void>('pause');
+      final res = await _channel.invokeMethod<dynamic>('abandonedSession');
+      if (res is! Map) return null;
+      final data = Map<String, dynamic>.from(res);
+      final durationMs = (data['durationMs'] as num?)?.toInt() ?? 0;
+      final segmentCount = (data['segmentCount'] as num?)?.toInt() ?? 0;
+      if (durationMs <= 0 && segmentCount <= 0) return null;
+      return AbandonedRecorderSession(
+        title: (data['title'] ?? '').toString(),
+        durationMs: durationMs,
+        segmentCount: segmentCount,
+      );
     } on MissingPluginException {
-      // Web / 桌面调试忽略
+      return null;
+    } on PlatformException {
+      return null;
     }
   }
 
-  Future<void> resume() async {
+  Future<NativeRecordedAudio?> recoverAbandonedSession() async {
+    if (!isSupported) return null;
+    try {
+      final res = await _channel.invokeMethod<dynamic>('recoverAbandonedSession');
+      if (res is! Map) return null;
+      final data = Map<String, dynamic>.from(res);
+      final path = (data['path'] ?? '').toString();
+      if (path.isEmpty) return null;
+      return NativeRecordedAudio(
+        path: path,
+        durationMs: (data['durationMs'] as num?)?.toInt() ?? 0,
+      );
+    } on MissingPluginException {
+      return null;
+    } on PlatformException catch (e) {
+      throw Exception(e.message ?? '恢复录音失败');
+    }
+  }
+
+  Future<void> discardAbandonedSession() async {
     if (!isSupported) return;
     try {
-      await _channel.invokeMethod<void>('resume');
+      await _channel.invokeMethod<void>('discardAbandonedSession');
+    } on MissingPluginException {
+      // ignore
+    } on PlatformException {
+      // ignore
+    }
+  }
+
+  Future<bool> pause() async {
+    if (!isSupported) return false;
+    try {
+      final res = await _channel.invokeMethod<dynamic>('pause');
+      return res != false;
+    } on MissingPluginException {
+      return false;
+    }
+  }
+
+  Future<bool> resume() async {
+    if (!isSupported) return false;
+    try {
+      final res = await _channel.invokeMethod<dynamic>('resume');
+      return res != false;
     } on PlatformException catch (e) {
       throw Exception(e.message ?? '继续录音失败');
     } on MissingPluginException {
-      // Web / 桌面调试忽略
+      return false;
     }
   }
 
@@ -119,18 +200,28 @@ class NativeAudioRecorder {
   }
 
   Future<bool> status() async {
-    if (!isSupported) return false;
+    final detail = await readStatus();
+    return detail.isRecording;
+  }
+
+  Future<NativeRecorderStatus> readStatus() async {
+    if (!isSupported) {
+      return const NativeRecorderStatus(isRecording: false, isPaused: false);
+    }
     try {
       final res = await _channel.invokeMethod<dynamic>('status');
       if (res is Map) {
         final data = Map<String, dynamic>.from(res);
-        return data['isRecording'] == true;
+        return NativeRecorderStatus(
+          isRecording: data['isRecording'] == true,
+          isPaused: data['isPaused'] == true,
+        );
       }
     } on MissingPluginException {
-      return false;
+      return const NativeRecorderStatus(isRecording: false, isPaused: false);
     } on PlatformException {
-      return false;
+      return const NativeRecorderStatus(isRecording: false, isPaused: false);
     }
-    return false;
+    return const NativeRecorderStatus(isRecording: false, isPaused: false);
   }
 }

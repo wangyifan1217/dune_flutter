@@ -549,6 +549,7 @@ class ChatInboxRow extends StatelessWidget {
     this.previewGenerating = false,
     this.selected = false,
     this.robotAvatar,
+    this.mentionLabel,
   });
 
   final ChatInboxRowKind kind;
@@ -575,6 +576,8 @@ class ChatInboxRow extends StatelessWidget {
   final bool previewGenerating;
   final bool selected;
   final Widget? robotAvatar;
+  /// 群聊未读 @ 提示，如 `[@了你]`，不受后续消息预览覆盖。
+  final String? mentionLabel;
 
   Color get _rowBg {
     if (selected) return DunesColors.accentSoft;
@@ -737,6 +740,7 @@ class ChatInboxRow extends StatelessWidget {
                           preview: preview,
                           sysTag: sysTag,
                           generating: previewGenerating,
+                          mentionLabel: mentionLabel,
                         ),
                       ],
                     ),
@@ -838,11 +842,13 @@ class _PreviewLine extends StatelessWidget {
     required this.preview,
     this.sysTag,
     this.generating = false,
+    this.mentionLabel,
   });
 
   final String preview;
   final String? sysTag;
   final bool generating;
+  final String? mentionLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -869,29 +875,47 @@ class _PreviewLine extends StatelessWidget {
         ],
       );
     }
-    return Text.rich(
-      TextSpan(
-        children: [
-          if (sysTag != null && sysTag!.isNotEmpty)
-            TextSpan(
-              text: '$sysTag ',
-              style: DunesTypography.mono(
-                fontSize: 9,
-                fontWeight: FontWeight.w600,
-                color: DunesColors.accent,
-              ),
-            ),
-          TextSpan(
-            text: preview.isEmpty ? '暂无消息' : preview,
+    final mention = (mentionLabel ?? '').trim();
+    return Row(
+      children: [
+        if (mention.isNotEmpty) ...[
+          Text(
+            mention,
             style: DunesTypography.sans(
               fontSize: 12.5,
-              color: DunesColors.text3,
+              fontWeight: FontWeight.w600,
+              color: const Color(0xFFE4554D),
             ),
           ),
+          const SizedBox(width: 4),
         ],
-      ),
-      maxLines: 1,
-      overflow: TextOverflow.ellipsis,
+        Expanded(
+          child: Text.rich(
+            TextSpan(
+              children: [
+                if (sysTag != null && sysTag!.isNotEmpty)
+                  TextSpan(
+                    text: '$sysTag ',
+                    style: DunesTypography.mono(
+                      fontSize: 9,
+                      fontWeight: FontWeight.w600,
+                      color: DunesColors.accent,
+                    ),
+                  ),
+                TextSpan(
+                  text: preview.isEmpty ? '暂无消息' : preview,
+                  style: DunesTypography.sans(
+                    fontSize: 12.5,
+                    color: DunesColors.text3,
+                  ),
+                ),
+              ],
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ],
     );
   }
 }

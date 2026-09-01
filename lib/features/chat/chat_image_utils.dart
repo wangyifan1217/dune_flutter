@@ -2,15 +2,27 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:image/image.dart' as img;
 
+import '../../core/layout/chat_layout.dart';
+
 /// 微信 / 工作台 IM 风格：会话内图片上限。
 /// 宽屏用绝对上限，避免按整窗宽度比例把气泡撑得过高。
 Size chatImageBubbleMaxSize(BuildContext context) {
   final screenW = MediaQuery.sizeOf(context).width;
-  if (screenW >= 900) {
-    // 对齐 admin-web `.im-msg-image`：max-width 200 / max-height 240
-    return const Size(200, 240);
+  if (!shouldExpandChatBubbles) {
+    if (screenW >= 900) {
+      // 对齐 admin-web `.im-msg-image`：max-width 200 / max-height 240
+      return const Size(200, 240);
+    }
+    return Size(screenW * 0.32, screenW * 0.38);
   }
-  return Size(screenW * 0.32, screenW * 0.38);
+  // Android：直板机比例不变；折叠展开后按栏宽约 45%。
+  if (screenW <= kChatPhoneWidthCap) {
+    return Size(screenW * 0.32, screenW * 0.38);
+  }
+  return Size(
+    screenW * kChatImageFoldWidthFactor,
+    screenW * kChatImageFoldWidthFactor * (0.38 / 0.32),
+  );
 }
 
 /// 按原图比例缩放到上限框内，保证完整可见。

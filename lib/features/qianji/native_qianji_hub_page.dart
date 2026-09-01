@@ -337,21 +337,6 @@ class _TauHubPreview extends StatelessWidget {
   final ValueChanged<DigitalEmployeeItem>? onOpenDigitalAuto;
   final VoidCallback? onComingSoon;
 
-  IconData _iconFor(String key) {
-    switch (key) {
-      case 'oil_barrel':
-        return Icons.oil_barrel_rounded;
-      case 'support_agent':
-        return Icons.support_agent_rounded;
-      case 'smart_toy':
-        return Icons.smart_toy_outlined;
-      case 'hub':
-        return Icons.hub_outlined;
-      default:
-        return Icons.auto_awesome_rounded;
-    }
-  }
-
   VoidCallback? _onTap(DigitalEmployeeItem item) {
     if (item.comingSoon) return onComingSoon;
     switch (item.screenId) {
@@ -415,7 +400,7 @@ class _TauHubPreview extends StatelessWidget {
                       tile: _NovaHubTile(
                         title: item.name,
                         subtitle: item.subtitle,
-                        icon: _iconFor(item.iconKey),
+                        icon: digitalEmployeeIcon(item.iconKey),
                         color: _themePurple,
                         onTap: _onTap(item),
                       ),

@@ -22,7 +22,16 @@ class MeetingRecordingService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         startAsForeground()
-        return START_STICKY
+        return START_NOT_STICKY
+    }
+
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        try {
+            taskRemovedListener?.invoke()
+        } catch (_: Exception) {
+        }
+        super.onTaskRemoved(rootIntent)
+        stopSelf()
     }
 
     private fun startAsForeground() {
@@ -35,7 +44,7 @@ class MeetingRecordingService : Service() {
                     NotificationManager.IMPORTANCE_LOW
                 ).apply {
                     setShowBadge(false)
-                    description = "会议录音与实时转写进行时的常驻提示"
+                    description = "会议录音进行时的常驻提示"
                 }
                 mgr.createNotificationChannel(channel)
             }
@@ -43,7 +52,7 @@ class MeetingRecordingService : Service() {
 
         val notification: Notification = NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("沙丘 · 会议录音进行中")
-            .setContentText("正在后台录音与实时转写")
+            .setContentText("正在后台录音，结束后生成纪要")
             .setSmallIcon(R.mipmap.ic_launcher)
             .setOngoing(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
@@ -64,6 +73,9 @@ class MeetingRecordingService : Service() {
         private const val CHANNEL_ID = "dunes_meeting_recording"
         private const val NOTIFICATION_ID = 4711
 
+        @Volatile
+        var taskRemovedListener: (() -> Unit)? = null
+
         fun start(context: Context) {
             val intent = Intent(context, MeetingRecordingService::class.java)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -75,6 +87,19 @@ class MeetingRecordingService : Service() {
 
         fun stop(context: Context) {
             context.stopService(Intent(context, MeetingRecordingService::class.java))
+        }
+
+        fun update(context: Context, title: String, text: String) {
+            val mgr = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
+                ?: return
+            val notification = NotificationCompat.Builder(context, CHANNEL_ID)
+                .setContentTitle(title)
+                .setContentText(text)
+                .setSmallIcon(R.mipmap.ic_launcher)
+                .setOngoing(true)
+                .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+                .build()
+            mgr.notify(NOTIFICATION_ID, notification)
         }
     }
 }

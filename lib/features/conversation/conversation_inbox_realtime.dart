@@ -44,7 +44,12 @@ abstract final class ConversationInboxRealtime {
       final userId = (event.raw['userId'] as num?)?.toInt() ?? 0;
       if (userId != selfUserId) return items;
       final copy = items.toList(growable: true);
-      copy[index] = copyConversation(copy[index], unreadCount: 0);
+      copy[index] = copyConversation(
+        copy[index],
+        unreadCount: 0,
+        hasUnreadMention: false,
+        hasUnreadAtAll: false,
+      );
       return copy;
     }
 
@@ -70,11 +75,12 @@ abstract final class ConversationInboxRealtime {
     }
 
     final fromPeer = _isFromPeer(event, selfUserId);
-    final mentionHit = ConversationMentionUtils.eventMentionsMe(
+    final mentionKind = ConversationMentionUtils.eventMentionKind(
       event: event,
       selfUserId: selfUserId,
       selfDisplayName: selfDisplayName,
     );
+    final mentionHit = mentionKind != ConversationMentionKind.none;
     final isMutedGroup = CommUnreadNotifier.isMutedGroup(conv);
     final isMessageEvent =
         event.type == 'message' || event.type == 'system_flow';
@@ -95,12 +101,22 @@ abstract final class ConversationInboxRealtime {
         ? 0
         : (serverUnread ??
               (bumpUnread ? old.unreadCount + 1 : old.unreadCount));
+    final clearMention =
+        activeOnChatScreen || (serverUnread != null && serverUnread <= 0);
     copy[index] = copyConversation(
       old,
       preview: preview?.text,
       updatedAt: at ?? old.updatedAt,
       unreadCount: nextUnread,
       title: _titleForEvent(event, old),
+      hasUnreadMention: clearMention
+          ? false
+          : (old.hasUnreadMention ||
+                mentionKind == ConversationMentionKind.me),
+      hasUnreadAtAll: clearMention
+          ? false
+          : (old.hasUnreadAtAll ||
+                mentionKind == ConversationMentionKind.atAll),
     );
 
     copy.sort((a, b) {
@@ -316,6 +332,8 @@ abstract final class ConversationInboxRealtime {
     String? title,
     bool? muted,
     bool? pinned,
+    bool? hasUnreadMention,
+    bool? hasUnreadAtAll,
   }) {
     return NativeConversation(
       id: c.id,
@@ -341,6 +359,8 @@ abstract final class ConversationInboxRealtime {
       membershipStatus: c.membershipStatus,
       assistantGenerating: c.assistantGenerating,
       assistantGeneratingStatus: c.assistantGeneratingStatus,
+      hasUnreadMention: hasUnreadMention ?? c.hasUnreadMention,
+      hasUnreadAtAll: hasUnreadAtAll ?? c.hasUnreadAtAll,
     );
   }
 }

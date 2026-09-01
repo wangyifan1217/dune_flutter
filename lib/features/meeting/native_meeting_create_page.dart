@@ -1,11 +1,15 @@
 ﻿import 'dart:async';
+import 'dart:typed_data';
 
+import 'package:cross_file/cross_file.dart';
+import 'package:desktop_drop/desktop_drop.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import '../../core/navigation/navigation_controller.dart';
+import '../../core/platform/desktop_features.dart';
 import '../../core/theme/dunes_theme.dart';
 import '../../core/util/friendly_error.dart';
 import '../auth/auth_session.dart';
@@ -53,8 +57,9 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
   bool _pendingPersistAfterEnd = false;
   String _pendingDraftTitle = '';
   bool _handlingBack = false;
+  bool _fileDragging = false;
   String? _error;
-  _CreateMode _mode = _CreateMode.live;
+  _CreateMode _mode = isDesktopCommOnly ? _CreateMode.upload : _CreateMode.live;
   late final AnimationController _pulseController = AnimationController(
     vsync: this,
     duration: const Duration(milliseconds: 1100),
@@ -117,6 +122,31 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
     super.dispose();
   }
 
+  bool get _supportsDesktopDrop => isDesktopCommOnly;
+
+  bool _dropListening = true;
+
+  @override
+  void activate() {
+    super.activate();
+    _dropListening = true;
+  }
+
+  @override
+  void deactivate() {
+    _dropListening = false;
+    super.deactivate();
+  }
+
+  bool _canAcceptAudioDrop({required bool lookupTicker}) {
+    if (!_dropListening || !mounted) return false;
+    if (!_supportsDesktopDrop) return false;
+    if (_mode != _CreateMode.upload) return false;
+    if (_picking || _submitting || _showBusyOverlay) return false;
+    if (!lookupTicker) return true;
+    return TickerMode.valuesOf(context).enabled;
+  }
+
   Future<void> _pickFile() async {
     if (_picking || _submitting) return;
     setState(() {
@@ -136,6 +166,69 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
       setState(() => _error = msg);
       showDunesToast(context, msg, kind: DunesToastKind.error);
     } finally {
+      if (mounted) setState(() => _picking = false);
+    }
+  }
+
+  Future<void> _onDesktopDrop(DropDoneDetails detail) async {
+    if (!_canAcceptAudioDrop(lookupTicker: false)) return;
+    setState(() {
+      _fileDragging = false;
+      _picking = true;
+      _error = null;
+    });
+    final accessed = <Uint8List>[];
+    try {
+      XFile? audio;
+      var extraAudio = 0;
+      for (final item in detail.files) {
+        if (item is DropItemDirectory) continue;
+        final name = item.name.trim().isNotEmpty ? item.name : item.path;
+        if (item.path.trim().isEmpty) continue;
+        if (!MeetingAudioFilePicker.isSupportedAudioName(name)) continue;
+        if (audio != null) {
+          extraAudio++;
+          continue;
+        }
+        final bookmark = item.extraAppleBookmark;
+        if (bookmark != null && bookmark.isNotEmpty) {
+          try {
+            final ok = await DesktopDrop.instance
+                .startAccessingSecurityScopedResource(bookmark: bookmark);
+            if (ok) accessed.add(bookmark);
+          } catch (_) {}
+        }
+        audio = XFile(item.path, name: name);
+      }
+      if (audio == null) {
+        const msg = '请拖入 wav / mp3 / m4a 录音文件';
+        if (!mounted) return;
+        setState(() => _error = msg);
+        showDunesToast(context, msg, kind: DunesToastKind.error);
+        return;
+      }
+      final path = await MeetingAudioFilePicker.persistPickedAudio(audio);
+      if (!mounted) return;
+      setState(() {
+        _filePath = path.trim();
+        _error = null;
+      });
+      if (extraAudio > 0) {
+        showDunesToast(context, '已选用第一个录音文件');
+      }
+    } catch (e) {
+      if (!mounted) return;
+      final msg = friendlyErrorText(e, fallback: '无法读取拖入的录音');
+      setState(() => _error = msg);
+      showDunesToast(context, msg, kind: DunesToastKind.error);
+    } finally {
+      for (final bookmark in accessed) {
+        try {
+          await DesktopDrop.instance.stopAccessingSecurityScopedResource(
+            bookmark: bookmark,
+          );
+        } catch (_) {}
+      }
       if (mounted) setState(() => _picking = false);
     }
   }
@@ -193,6 +286,15 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
   }
 
   Future<void> _startLive() async {
+    if (isDesktopCommOnly) {
+      const msg = '桌面端请使用「上传录音转写」';
+      setState(() {
+        _mode = _CreateMode.upload;
+        _error = msg;
+      });
+      showDunesToast(context, msg, kind: DunesToastKind.error);
+      return;
+    }
     if (!_hasMeetingTitle) {
       const msg = '请先填写会议标题后再开始录音';
       setState(() => _error = msg);
@@ -574,7 +676,14 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
   }
 
   Future<void> _resumeLive() async {
-    await _live.resume();
+    try {
+      await _live.resume();
+    } catch (e) {
+      if (!mounted) return;
+      final msg = friendlyErrorText(e, fallback: '继续录音失败，请稍后再试');
+      setState(() => _error = msg);
+      showDunesToast(context, msg, kind: DunesToastKind.error);
+    }
   }
 
   Future<void> _submit() async {
@@ -604,7 +713,9 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
   }
 
   String _fileLabel() {
-    if (_filePath.isEmpty) return '未选择录音文件';
+    if (_filePath.isEmpty) {
+      return _supportsDesktopDrop ? '点击选择或拖拽录音到此处' : '未选择录音文件';
+    }
     final normalized = _filePath.replaceAll('\\', '/');
     final idx = normalized.lastIndexOf('/');
     if (idx < 0) return normalized;
@@ -643,7 +754,7 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
       MeetingRecordingState.idle => '待开始',
     };
 
-    return GestureDetector(
+    final page = GestureDetector(
       onTap: () => FocusScope.of(context).unfocus(),
       behavior: HitTestBehavior.translucent,
       child: Stack(
@@ -677,8 +788,10 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
                     color: Colors.white.withValues(alpha: 0.16),
                     shape: BoxShape.circle,
                   ),
-                  child: const Icon(
-                    Icons.mic_none_rounded,
+                  child: Icon(
+                    isDesktopCommOnly
+                        ? Icons.upload_file_rounded
+                        : Icons.mic_none_rounded,
                     color: Colors.white,
                     size: 28,
                   ),
@@ -699,7 +812,9 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
                       const SizedBox(height: 4),
                       Text(
                         _mode == _CreateMode.upload
-                            ? '上传或录制音频，生成摘要与待办'
+                            ? (isDesktopCommOnly
+                                ? '上传音频，生成摘要与待办'
+                                : '上传或录制音频，生成摘要与待办')
                             : '现场录音，结束后一键生成纪要',
                         style: DunesTypography.sans(
                           fontSize: 12,
@@ -713,8 +828,9 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
             ),
           ),
 
-          const SizedBox(height: 14),
-          Container(
+          if (!isDesktopCommOnly) ...[
+            const SizedBox(height: 14),
+            Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
               color: Colors.white,
@@ -764,6 +880,7 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
               },
             ),
           ),
+          ],
 
           const SizedBox(height: 12),
           _sectionCard(
@@ -817,39 +934,56 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
               child: Row(
                 children: [
                   Expanded(
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 11,
-                      ),
-                      decoration: BoxDecoration(
-                        color: DunesColors.bgSoft,
+                    child: Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        onTap: (_picking || _submitting) ? null : _pickFile,
                         borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: DunesColors.borderSoft),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            _fileLabel(),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: DunesTypography.sans(
-                              fontSize: 13,
-                              color: _filePath.isEmpty
-                                  ? DunesColors.text3
-                                  : DunesColors.text,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 11,
+                          ),
+                          decoration: BoxDecoration(
+                            color: _fileDragging
+                                ? DunesColors.brandPurpleSoft
+                                : DunesColors.bgSoft,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: _fileDragging
+                                  ? DunesColors.brandPurple
+                                  : DunesColors.borderSoft,
                             ),
                           ),
-                          const SizedBox(height: 2),
-                          Text(
-                            '支持 wav/mp3/m4a',
-                            style: DunesTypography.sans(
-                              fontSize: 11,
-                              color: DunesColors.text3,
-                            ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                _fileDragging ? '松开以添加录音' : _fileLabel(),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: DunesTypography.sans(
+                                  fontSize: 13,
+                                  color: _fileDragging
+                                      ? DunesColors.brandPurpleDeep
+                                      : (_filePath.isEmpty
+                                          ? DunesColors.text3
+                                          : DunesColors.text),
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                _supportsDesktopDrop
+                                    ? '支持 wav/mp3/m4a · 可拖拽文件到本页'
+                                    : '支持 wav/mp3/m4a',
+                                style: DunesTypography.sans(
+                                  fontSize: 11,
+                                  color: DunesColors.text3,
+                                ),
+                              ),
+                            ],
                           ),
-                        ],
+                        ),
                       ),
                     ),
                   ),
@@ -1107,6 +1241,25 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
         ],
       ),
     );
+    if (!_supportsDesktopDrop) return page;
+    final dropEnabled = _canAcceptAudioDrop(lookupTicker: true);
+    return DropTarget(
+      enable: dropEnabled,
+      onDragEntered: (_) {
+        if (!mounted || !_canAcceptAudioDrop(lookupTicker: false)) return;
+        if (!_fileDragging) setState(() => _fileDragging = true);
+      },
+      onDragExited: (_) {
+        if (!mounted) return;
+        if (_fileDragging) setState(() => _fileDragging = false);
+      },
+      onDragDone: (detail) {
+        if (!mounted || !_canAcceptAudioDrop(lookupTicker: false)) return;
+        if (_fileDragging) setState(() => _fileDragging = false);
+        unawaited(_onDesktopDrop(detail));
+      },
+      child: page,
+    );
   }
 
   Widget _buildRecordingStatusContent({
@@ -1127,9 +1280,18 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
       );
     }
 
-    final active = !paused;
-    final title = paused ? '录音已暂停' : '正在录音中';
-    final subtitle = paused
+    final systemPaused = paused && _live.pausedByInterruption;
+    final title = systemPaused
+        ? '来电已暂停'
+        : paused
+            ? '录音已暂停'
+            : '正在录音中';
+    final hint = _live.interruptionHint.value?.trim() ?? '';
+    final subtitle = systemPaused
+        ? (hint.isNotEmpty
+            ? hint
+            : '挂断后将自动继续，已录部分已保存。也可点「继续录音」。')
+        : paused
         ? '点击「继续录音」后恢复采集，结束后再转写生成纪要'
         : switch (recorderState) {
             MeetingRecordingState.recordingBackground =>
@@ -1143,7 +1305,7 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
         AnimatedBuilder(
           animation: _pulseController,
           builder: (context, child) {
-            final scale = active ? 0.92 + _pulseController.value * 0.16 : 1.0;
+            final scale = !paused ? 0.92 + _pulseController.value * 0.16 : 1.0;
             return Transform.scale(
               scale: scale,
               child: Container(

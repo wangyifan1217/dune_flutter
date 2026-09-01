@@ -1160,9 +1160,16 @@ class _NativeContractRegisterPageState
     );
     if (!_supportsDesktopDrop) return zone;
     return DropTarget(
-      onDragEntered: (_) => setState(() => _fileDragging = true),
+      enable: TickerMode.valuesOf(context).enabled,
+      onDragEntered: (_) {
+        if (!TickerMode.valuesOf(context).enabled) return;
+        setState(() => _fileDragging = true);
+      },
       onDragExited: (_) => setState(() => _fileDragging = false),
-      onDragDone: (d) => unawaited(_onContractFilesDropped(d)),
+      onDragDone: (d) {
+        if (!TickerMode.valuesOf(context).enabled) return;
+        unawaited(_onContractFilesDropped(d));
+      },
       child: zone,
     );
   }

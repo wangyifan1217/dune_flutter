@@ -117,7 +117,9 @@ import '../workbench/workbench_badge_notifier.dart';
 import '../lighthouse/native_lighthouse_page.dart';
 import '../lighthouse/platform_tree.dart';
 import '../meeting/meeting_list_cache.dart';
+import '../meeting/meeting_abandoned_recovery.dart';
 import '../meeting/meeting_live_controller.dart';
+import '../meeting/meeting_recording_interruption.dart';
 import '../meeting/meeting_upload_coordinator.dart';
 import '../meeting/native_meeting_create_page.dart';
 import '../meeting/native_meeting_detail_page.dart';
@@ -435,6 +437,15 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     MeetingUploadCoordinator.instance.addListener(_onMeetingUploadUpdate);
     KbUploadCoordinator.instance.addListener(_onKbUploadUpdate);
     unawaited(MeetingUploadCoordinator.instance.resumePending());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      unawaited(
+        MeetingAbandonedRecovery.promptIfNeeded(
+          context: context,
+          session: widget.session,
+        ),
+      );
+    });
     unawaited(_bootCommBadgeRealtime());
     unawaited(_refreshCommUnreadBadge());
     unawaited(_refreshWorkbenchBadge());
@@ -3194,6 +3205,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           ),
           session: widget.session,
           onBack: widget.navigation.back,
+          iconKey: _selectedDigitalEmployee?.iconKey ?? 'auto_awesome',
           configuration: _selectedDigitalEmployee?.isMeetingMinutes == true
               ? _selectedDigitalEmployee!.chatConfig
               : DigitalAutoConfig.meetingMinutes,
@@ -3214,6 +3226,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           ),
           session: widget.session,
           onBack: widget.navigation.back,
+          iconKey: _selectedDigitalEmployee?.iconKey ?? 'oil_barrel',
           configuration: _selectedDigitalEmployee?.screenId == 'QJTO'
               ? _selectedDigitalEmployee!.chatConfig
               : DigitalAutoConfig.channelDock,
@@ -4070,9 +4083,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         return NativeMeetingListPage(
           session: widget.session,
           onBack: widget.navigation.leaveMeetingList,
-          onCreate: isDesktopCommOnly
-              ? null
-              : () => widget.navigation.go('MM0'),
+          onCreate: () => widget.navigation.go('MM0'),
           onOpenDetail: (meetingId) {
             if (meetingId <= 0) return;
             setState(() => _meetingId = meetingId);
@@ -4080,18 +4091,6 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           },
         );
       case 'MM0':
-        if (isDesktopCommOnly) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) {
-              showDunesToast(context, '桌面端不支持新建或录制会议');
-              widget.navigation.go('MM-L');
-            }
-          });
-          return const Scaffold(
-            backgroundColor: DunesColors.bgApp,
-            body: Center(child: CircularProgressIndicator()),
-          );
-        }
         return NativeMeetingCreatePage(
           session: widget.session,
           navigation: widget.navigation,
@@ -4384,7 +4383,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     if (isLighthouse) {
       _lighthouseMounted = true;
     }
-    if (isInbox) {
+    if (isInbox && !isDesktopCommOnly) {
       _inboxMounted = true;
     }
     if (isContacts) {
@@ -4473,7 +4472,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         // 手机单栏会话列表：进出会话不销毁，返回时保持下滑位置。
         // 注意：不能用 Offstage——offstage 会以 0 尺寸布局，ListView 偏移会被钳成 0。
         // 用 Opacity + IgnorePointer 隐藏，仍按全尺寸布局，滚动位置才能保住。
-        if (_inboxMounted && !dualNow)
+        if (_inboxMounted && !dualNow && !isDesktopCommOnly)
           Positioned.fill(
             child: TickerMode(
               enabled: isInbox,
@@ -6074,7 +6073,11 @@ class _NativeB2PageState extends State<_NativeB2Page> {
               ),
               const SizedBox(width: 6),
               Text(
-                '${paused ? '录音已暂停' : '录音进行中'} $elapsedText',
+                MeetingRecordingInterruption.fabLabel(
+                  paused: paused,
+                  pausedByInterruption: _live.pausedByInterruption,
+                  elapsedText: elapsedText,
+                ),
                 style: DunesTypography.sans(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,

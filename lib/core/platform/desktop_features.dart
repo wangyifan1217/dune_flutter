@@ -58,8 +58,9 @@ bool isDesktopAllowedCommScreen(String screenId) {
     'K3',
     'FD1',
     'WX',
-    // 会议纪要（桌面端只读列表/详情，不含新建 MM0）
+    // 会议纪要（桌面端可上传 MM0，不含现场录音）
     'MM-L',
+    'MM0',
     'MM',
     // 千机 / 灯塔
     'QJ',

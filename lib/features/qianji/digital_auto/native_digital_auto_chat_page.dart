@@ -11,6 +11,7 @@ import '../../auth/auth_session.dart';
 import 'digital_auto_agent.dart';
 import 'digital_auto_config.dart';
 import 'digital_auto_history_store.dart';
+import 'digital_employee_service.dart';
 
 const _assistantPurple = Color(0xFF7B5CD8);
 
@@ -28,11 +29,13 @@ class NativeDigitalAutoChatPage extends StatefulWidget {
     required this.session,
     required this.onBack,
     this.configuration = DigitalAutoConfig.channelDock,
+    this.iconKey,
   });
 
   final AuthSession session;
   final VoidCallback onBack;
   final DigitalAutoAssistantConfig configuration;
+  final String? iconKey;
 
   @override
   State<NativeDigitalAutoChatPage> createState() =>
@@ -323,6 +326,7 @@ class _NativeDigitalAutoChatPageState extends State<NativeDigitalAutoChatPage>
                           _UserBubble(text: line.text)
                         else
                           _AssistantBubble(
+                            icon: _assistantIcon,
                             text: line.text,
                             toolStatus: line.toolStatus,
                             busy: _sending && identical(line, _lines.last),
@@ -339,6 +343,14 @@ class _NativeDigitalAutoChatPageState extends State<NativeDigitalAutoChatPage>
       ),
     );
   }
+
+  IconData get _assistantIcon => digitalEmployeeIcon(
+    widget.iconKey ??
+        (widget.configuration.employeeKey ==
+                DigitalAutoConfig.meetingMinutes.employeeKey
+            ? 'auto_awesome'
+            : 'oil_barrel'),
+  );
 
   Widget _buildHeader(BuildContext context) {
     final wide = isWideChatLayout(context);
@@ -361,8 +373,8 @@ class _NativeDigitalAutoChatPageState extends State<NativeDigitalAutoChatPage>
               color: _assistantPurple,
               shape: BoxShape.circle,
             ),
-            child: const Icon(
-              Icons.oil_barrel_rounded,
+            child: Icon(
+              _assistantIcon,
               color: Colors.white,
               size: 20,
             ),
@@ -860,11 +872,13 @@ class _UserBubble extends StatelessWidget {
 
 class _AssistantBubble extends StatelessWidget {
   const _AssistantBubble({
+    required this.icon,
     required this.text,
     required this.toolStatus,
     required this.busy,
   });
 
+  final IconData icon;
   final String text;
   final String toolStatus;
   final bool busy;
@@ -881,10 +895,10 @@ class _AssistantBubble extends StatelessWidget {
             color: _assistantPurple,
             shape: BoxShape.circle,
           ),
-          child: const Icon(
-            Icons.oil_barrel_rounded,
+          child: Icon(
+            icon,
             color: Colors.white,
-            size: 16,
+            size: 17,
           ),
         ),
         const SizedBox(width: 8),

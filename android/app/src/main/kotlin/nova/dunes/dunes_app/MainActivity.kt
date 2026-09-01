@@ -14,8 +14,11 @@ import android.os.PowerManager
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.plugin.common.EventChannel
+import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 import java.io.File
+import org.json.JSONArray
+import org.json.JSONObject
 
 class MainActivity : FlutterActivity() {
     private val voiceChannel = "dunes/audio_recorder"
@@ -43,6 +46,7 @@ class MainActivity : FlutterActivity() {
     private var recordBufferSize: Int = 0
     @Volatile private var isRecording = false
     @Volatile private var isPaused = false
+    @Volatile private var pausedBySystemInterruption = false
     @Volatile private var micConflictDetected = false
     private var outputPath: String? = null
     private var startedAtMs: Long = 0L
@@ -51,9 +55,16 @@ class MainActivity : FlutterActivity() {
     private var consecutiveReadErrors = 0
     /** 开录/续录后短时间内的空读不视为抢麦（设备刚就绪时常有短暂静音）。 */
     private var ignoreSilentConflictUntilMs: Long = 0L
+    private var sessionTracking = false
+    private var sessionTitle = ""
+    private var crashWav: CrashSafeWavWriter? = null
+    private val rotateRunnable = Runnable { rotateLiveSegmentIfNeeded() }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        MeetingRecordingService.taskRemovedListener = {
+            flushLiveSessionForDeath()
+        }
         tpnsBridge = TpnsPushBridge(applicationContext).also {
             it.attach(flutterEngine)
         }
@@ -61,7 +72,7 @@ class MainActivity : FlutterActivity() {
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, voiceChannel)
             .setMethodCallHandler { call, result ->
                 when (call.method) {
-                    "start" -> startRecord(result)
+                    "start" -> startRecord(call, result)
                     "pause" -> pauseRecord(result)
                     "resume" -> resumeRecord(result)
                     "stop" -> stopRecord(result, deleteFile = false)
@@ -72,6 +83,12 @@ class MainActivity : FlutterActivity() {
                             "isPaused" to isPaused,
                         )
                     )
+                    "abandonedSession" -> result.success(abandonedSessionPayload())
+                    "recoverAbandonedSession" -> recoverAbandonedSession(result)
+                    "discardAbandonedSession" -> {
+                        discardAbandonedSession()
+                        result.success(true)
+                    }
                     else -> result.notImplemented()
                 }
             }
@@ -140,9 +157,220 @@ class MainActivity : FlutterActivity() {
         return File(voiceRecordingDir(), "$prefix-$stamp.m4a").absolutePath
     }
 
-    private fun startRecord(result: MethodChannel.Result) {
+    private fun liveSessionFile(): File = File(voiceRecordingDir(), "live_session.json")
+
+    private fun livePcmFile(): File = File(voiceRecordingDir(), "live_pcm.wav")
+
+    private fun persistLiveSession() {
+        if (!sessionTracking) return
+        val segs = segmentPaths.filter { File(it).let { f -> f.exists() && f.length() > 0 } }.toMutableList()
+        val current = outputPath
+        if (!current.isNullOrBlank()) {
+            val file = File(current)
+            if (file.exists() && file.length() > 0 && !segs.contains(current)) {
+                segs.add(current)
+            }
+        }
+        val pcmPath = livePcmFile().absolutePath
+        val pcmExists = livePcmFile().exists() && livePcmFile().length() > 44
+        try {
+            crashWav?.flushHeader()
+            val json = JSONObject()
+            json.put("title", sessionTitle)
+            json.put("startedAtMs", startedAtMs)
+            json.put(
+                "durationMs",
+                if (pcmExists) CrashSafeWavWriter.durationMs(pcmPath).toLong()
+                else accumulatedDurationMs + currentSegmentDurationMs()
+            )
+            json.put("segments", JSONArray(segs))
+            json.put("pcmPath", pcmPath)
+            liveSessionFile().writeText(json.toString())
+        } catch (_: Exception) {
+        }
+    }
+
+    private fun clearLiveSessionFile() {
+        deleteQuietly(liveSessionFile())
+    }
+
+    private fun startSegmentRotateTimer() {
+        mainHandler.removeCallbacks(rotateRunnable)
+        if (!sessionTracking) return
+        mainHandler.postDelayed(rotateRunnable, 60_000L)
+    }
+
+    private fun rotateLiveSegmentIfNeeded() {
+        if (!isRecording || isPaused || !sessionTracking) return
+        accumulatedDurationMs += currentSegmentDurationMs()
+        startedAtMs = System.currentTimeMillis()
+        finalizeCurrentSegmentIfNeeded()
+        startNewSegmentEncoder(newVoiceRecordingPath("voice"))
+        persistLiveSession()
+        startSegmentRotateTimer()
+    }
+
+    private fun flushLiveSessionForDeath() {
+        if (!isRecording || !sessionTracking) return
+        if (!isPaused) {
+            pauseRecordInternal(finalizeSegment = true)
+            pausedBySystemInterruption = true
+        } else {
+            finalizeCurrentSegmentIfNeeded()
+        }
+        persistLiveSession()
+        crashWav?.flushHeader()
+    }
+
+    private fun readAbandonedSession(): JSONObject? {
+        if (isRecording && sessionTracking) return null
+        val file = liveSessionFile()
+        if (file.exists()) {
+            try {
+                return JSONObject(file.readText())
+            } catch (_: Exception) {
+            }
+        }
+        val pcm = livePcmFile()
+        if (pcm.exists() && pcm.length() > 44 + 1024) {
+            return JSONObject().apply {
+                put("title", "")
+                put("durationMs", CrashSafeWavWriter.durationMs(pcm.absolutePath))
+                put("segments", JSONArray())
+                put("pcmPath", pcm.absolutePath)
+            }
+        }
+        return null
+    }
+
+    private fun existingAbandonedSegments(json: JSONObject): List<String> {
+        val raw = json.optJSONArray("segments") ?: JSONArray()
+        val segs = mutableListOf<String>()
+        for (i in 0 until raw.length()) {
+            val path = raw.optString(i)
+            val file = File(path)
+            if (file.exists() && file.length() > 1024) segs.add(path)
+        }
+        return segs
+    }
+
+    private fun abandonedPcmPath(json: JSONObject): String? {
+        val path = json.optString("pcmPath")
+        if (path.isBlank()) return null
+        val file = File(path)
+        if (!file.exists() || file.length() <= 44 + 1024) return null
+        return path
+    }
+
+    private fun abandonedSessionPayload(): Map<String, Any>? {
+        val json = readAbandonedSession() ?: return null
+        val pcm = abandonedPcmPath(json)
+        val segs = existingAbandonedSegments(json)
+        if (pcm == null && segs.isEmpty()) return null
+        val durationMs = if (pcm != null) {
+            CrashSafeWavWriter.durationMs(pcm).toLong()
+        } else {
+            json.optLong("durationMs", 0L)
+        }
+        return mapOf(
+            "title" to json.optString("title"),
+            "durationMs" to durationMs,
+            "segmentCount" to maxOf(segs.size, if (pcm != null) 1 else 0),
+        )
+    }
+
+    private fun recoverAbandonedSession(result: MethodChannel.Result) {
+        val json = readAbandonedSession()
+        if (json == null) {
+            result.success(null)
+            return
+        }
+        val pcm = abandonedPcmPath(json)
+        val segs = existingAbandonedSegments(json)
+        if (pcm == null && segs.isEmpty()) {
+            discardAbandonedSession()
+            result.success(null)
+            return
+        }
+        Thread {
+            if (pcm != null) {
+                CrashSafeWavWriter.repairHeader(pcm)
+                val leftover = json.optJSONArray("segments") ?: JSONArray()
+                for (i in 0 until leftover.length()) {
+                    deleteQuietly(File(leftover.optString(i)))
+                }
+                val durationMs = CrashSafeWavWriter.durationMs(pcm)
+                mainHandler.post {
+                    clearLiveSessionFile()
+                    result.success(
+                        mapOf(
+                            "path" to pcm,
+                            "durationMs" to durationMs,
+                        )
+                    )
+                }
+                return@Thread
+            }
+            val durationMs = json.optLong("durationMs", 0L)
+            val path = when {
+                segs.size == 1 -> segs[0]
+                else -> {
+                    val merged = newVoiceRecordingPath("voice-recovered")
+                    if (M4aSegmentMerger.merge(segs, merged)) {
+                        for (item in segs) {
+                            if (item != merged) deleteQuietly(File(item))
+                        }
+                        merged
+                    } else {
+                        M4aSegmentMerger.largestExistingPath(segs)
+                    }
+                }
+            }
+            mainHandler.post {
+                clearLiveSessionFile()
+                if (path.isNullOrBlank()) {
+                    result.success(null)
+                } else {
+                    result.success(
+                        mapOf(
+                            "path" to path,
+                            "durationMs" to durationMs,
+                        )
+                    )
+                }
+            }
+        }.start()
+    }
+
+    private fun discardAbandonedSession() {
+        val json = readAbandonedSession()
+        if (json != null) {
+            val raw = json.optJSONArray("segments") ?: JSONArray()
+            for (i in 0 until raw.length()) {
+                deleteQuietly(File(raw.optString(i)))
+            }
+            deleteQuietly(File(json.optString("pcmPath")))
+        }
+        closeCrashWav(deleteFile = true)
+        clearLiveSessionFile()
+    }
+
+    private fun closeCrashWav(deleteFile: Boolean) {
+        try {
+            crashWav?.close()
+        } catch (_: Exception) {
+        }
+        crashWav = null
+        if (deleteFile) {
+            deleteQuietly(livePcmFile())
+        }
+    }
+
+    private fun startRecord(call: MethodCall, result: MethodChannel.Result) {
         try {
             stopInternal(deleteFile = true)
+            sessionTitle = call.argument<String>("title")?.trim().orEmpty()
+            sessionTracking = call.argument<Boolean>("persistSession") == true
             MeetingRecordingService.start(this)
             segmentPaths.clear()
             micConflictDetected = false
@@ -155,6 +383,7 @@ class MainActivity : FlutterActivity() {
 
             isRecording = true
             isPaused = false
+            pausedBySystemInterruption = false
             accumulatedDurationMs = 0L
             startedAtMs = System.currentTimeMillis()
             ignoreSilentConflictUntilMs = System.currentTimeMillis() + 3_000L
@@ -162,6 +391,12 @@ class MainActivity : FlutterActivity() {
 
             recordThread = Thread { writePcmLoop() }.also { it.start() }
             requestAudioFocusForRecording()
+            if (sessionTracking) {
+                closeCrashWav(deleteFile = true)
+                crashWav = CrashSafeWavWriter(livePcmFile().absolutePath)
+            }
+            persistLiveSession()
+            startSegmentRotateTimer()
             result.success(true)
         } catch (e: Exception) {
             stopInternal(deleteFile = true)
@@ -220,12 +455,22 @@ class MainActivity : FlutterActivity() {
     }
 
     private fun pauseRecord(result: MethodChannel.Result) {
-        if (!isRecording || isPaused) {
+        if (!isRecording) {
             result.success(false)
             return
         }
+        if (isPaused) {
+            result.success(true)
+            return
+        }
         try {
+            pausedBySystemInterruption = false
             if (pauseRecordInternal(finalizeSegment = true)) {
+                MeetingRecordingService.update(
+                    this,
+                    title = "沙丘 · 会议录音已暂停",
+                    text = "点击继续后才会再采集，已录部分已保存"
+                )
                 result.success(true)
             } else {
                 result.success(false)
@@ -247,6 +492,8 @@ class MainActivity : FlutterActivity() {
         if (finalizeSegment) {
             finalizeCurrentSegmentIfNeeded()
         }
+        crashWav?.flushHeader()
+        persistLiveSession()
         consecutiveReadErrors = 0
         return true
     }
@@ -278,6 +525,7 @@ class MainActivity : FlutterActivity() {
         }
         if (ok) {
             segmentPaths.add(path)
+            persistLiveSession()
         } else {
             deleteQuietly(File(path))
         }
@@ -285,30 +533,58 @@ class MainActivity : FlutterActivity() {
     }
 
     private fun resumeRecord(result: MethodChannel.Result) {
-        if (!isRecording || !isPaused) {
+        if (!isRecording) {
             result.success(false)
             return
         }
+        if (!isPaused) {
+            result.success(true)
+            return
+        }
         try {
-            requestAudioFocusForRecording()
-            // 其他语音软件抢麦后，旧 AudioRecord 往往已失效，必须重建。
-            openAudioRecordAndStart()
-            if (streamingEncoder == null) {
-                startNewSegmentEncoder(newVoiceRecordingPath("voice"))
-            }
-            micConflictDetected = false
-            consecutiveReadErrors = 0
-            isPaused = false
-            startedAtMs = System.currentTimeMillis()
-            ignoreSilentConflictUntilMs = System.currentTimeMillis() + 3_000L
-            // 录音线程可能已因冲突退出，必要时重启。
-            if (recordThread?.isAlive != true) {
-                recordThread = Thread { writePcmLoop() }.also { it.start() }
-            }
+            resumeRecordInternal()
+            pausedBySystemInterruption = false
+            MeetingRecordingService.update(
+                this,
+                title = "沙丘 · 会议录音进行中",
+                text = "正在后台录音，结束后生成纪要"
+            )
             result.success(true)
         } catch (e: Exception) {
             isPaused = true
             result.error("AUDIO_RESUME_FAILED", e.message, null)
+        }
+    }
+
+    private fun resumeRecordInternal() {
+        requestAudioFocusForRecording()
+        openAudioRecordAndStart()
+        if (streamingEncoder == null) {
+            startNewSegmentEncoder(newVoiceRecordingPath("voice"))
+        }
+        micConflictDetected = false
+        consecutiveReadErrors = 0
+        isPaused = false
+        startedAtMs = System.currentTimeMillis()
+        ignoreSilentConflictUntilMs = System.currentTimeMillis() + 3_000L
+        if (recordThread?.isAlive != true) {
+            recordThread = Thread { writePcmLoop() }.also { it.start() }
+        }
+    }
+
+    private fun tryNativeResumeAfterSystemInterruption() {
+        if (!isRecording || !isPaused || !pausedBySystemInterruption) return
+        try {
+            resumeRecordInternal()
+            pausedBySystemInterruption = false
+            MeetingRecordingService.update(
+                this,
+                title = "沙丘 · 会议录音进行中",
+                text = "正在后台录音，结束后生成纪要"
+            )
+            emitRecorderEvent("resumed", "system")
+        } catch (_: Exception) {
+            emitRecorderEvent("interruptionEnded")
         }
     }
 
@@ -337,6 +613,7 @@ class MainActivity : FlutterActivity() {
                         val usable = read - (read % frameBytes)
                         if (usable > 0) {
                             streamingEncoder?.writePcm(buf, 0, usable)
+                            crashWav?.write(buf, 0, usable)
                             emitAudioChunk(buf, usable)
                         }
                     }
@@ -386,7 +663,13 @@ class MainActivity : FlutterActivity() {
         mainHandler.post {
             if (!isRecording || isPaused) return@post
             if (pauseRecordInternal(finalizeSegment = true)) {
+                pausedBySystemInterruption = true
                 emitRecorderEvent("paused", reason)
+                MeetingRecordingService.update(
+                    this,
+                    title = "沙丘 · 会议录音已暂停",
+                    text = "麦克风被占用，结束后将自动继续，已录部分已保存"
+                )
             }
         }
     }
@@ -438,9 +721,13 @@ class MainActivity : FlutterActivity() {
             accumulatedDurationMs += currentSegmentDurationMs()
         }
         val duration = accumulatedDurationMs
+        val cancelTrackedSession = deleteFile && isRecording && sessionTracking
+        val stopTrackedSession = isRecording && sessionTracking
         isRecording = false
         isPaused = false
+        pausedBySystemInterruption = false
         micConflictDetected = false
+        mainHandler.removeCallbacks(rotateRunnable)
         // 先停采集，避免录音线程卡在 read() 上，join 把主线程拖死。
         stopAudioRecordCapture()
         try {
@@ -466,19 +753,43 @@ class MainActivity : FlutterActivity() {
                 deleteQuietly(File(path))
             }
             segmentPaths.clear()
+            if (stopTrackedSession) {
+                closeCrashWav(deleteFile = true)
+            }
+            if (cancelTrackedSession) {
+                discardAbandonedSession()
+            }
+            if (stopTrackedSession) {
+                sessionTracking = false
+                sessionTitle = ""
+            }
             return 0L
         }
 
+        crashWav?.flushHeader()
+        closeCrashWav(deleteFile = false)
         finalizeCurrentSegmentIfNeeded()
+        if (stopTrackedSession) {
+            clearLiveSessionFile()
+            sessionTracking = false
+            sessionTitle = ""
+        }
         val paths = segmentPaths.toList()
         segmentPaths.clear()
+        val pcm = livePcmFile()
+        val pcmOk = pcm.exists() && pcm.length() > 44
         if (paths.isEmpty()) {
+            if (pcmOk) {
+                outputPath = pcm.absolutePath
+                return CrashSafeWavWriter.durationMs(pcm.absolutePath).toLong()
+            }
             outputPath = null
             return duration
         }
 
         if (paths.size == 1) {
             outputPath = paths[0]
+            if (pcmOk) deleteQuietly(pcm)
             return duration
         }
 
@@ -488,13 +799,14 @@ class MainActivity : FlutterActivity() {
             for (path in paths) {
                 if (path != merged) deleteQuietly(File(path))
             }
+            if (pcmOk) deleteQuietly(pcm)
         } else {
-            // 合并失败时保留体积最大的片段，避免整段录音丢失。
             val keep = M4aSegmentMerger.largestExistingPath(paths)
-            outputPath = keep
+            outputPath = keep ?: if (pcmOk) pcm.absolutePath else null
             for (path in paths) {
                 if (path != keep) deleteQuietly(File(path))
             }
+            if (keep != null && pcmOk) deleteQuietly(pcm)
         }
         return duration
     }
@@ -529,7 +841,7 @@ class MainActivity : FlutterActivity() {
         val pm = getSystemService(POWER_SERVICE) as? PowerManager ?: return
         wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "dunes:meeting-recorder").apply {
             setReferenceCounted(false)
-            acquire(10 * 60 * 1000L)
+            acquire()
         }
     }
 
@@ -551,6 +863,17 @@ class MainActivity : FlutterActivity() {
         mainHandler.post { sink.success(payload) }
     }
 
+    override fun onResume() {
+        super.onResume()
+        tryNativeResumeAfterSystemInterruption()
+    }
+
+    override fun onDestroy() {
+        MeetingRecordingService.taskRemovedListener = null
+        flushLiveSessionForDeath()
+        super.onDestroy()
+    }
+
     private val audioFocusChangeListener = AudioManager.OnAudioFocusChangeListener { focusChange ->
         mainHandler.post {
             when (focusChange) {
@@ -558,13 +881,17 @@ class MainActivity : FlutterActivity() {
                 AudioManager.AUDIOFOCUS_LOSS_TRANSIENT,
                 AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> {
                     if (isRecording && !isPaused && pauseRecordInternal(finalizeSegment = true)) {
+                        pausedBySystemInterruption = true
                         emitRecorderEvent("paused", "audioFocusLoss")
+                        MeetingRecordingService.update(
+                            this,
+                            title = "沙丘 · 会议录音已暂停",
+                            text = "来电结束后将自动继续，已录部分已保存"
+                        )
                     }
                 }
                 AudioManager.AUDIOFOCUS_GAIN -> {
-                    if (isRecording && isPaused) {
-                        emitRecorderEvent("interruptionEnded")
-                    }
+                    tryNativeResumeAfterSystemInterruption()
                 }
             }
         }

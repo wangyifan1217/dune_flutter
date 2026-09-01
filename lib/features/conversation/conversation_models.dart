@@ -23,6 +23,8 @@ class NativeConversation {
     this.membershipStatus,
     this.assistantGenerating = false,
     this.assistantGeneratingStatus = '',
+    this.hasUnreadMention = false,
+    this.hasUnreadAtAll = false,
   });
 
   final int id;
@@ -49,6 +51,10 @@ class NativeConversation {
   final String? membershipStatus;
   final bool assistantGenerating;
   final String assistantGeneratingStatus;
+  /// 群聊未读 @我：后续消息只更新预览，进会话才清除。
+  final bool hasUnreadMention;
+  /// 群聊未读 @所有人。有 @我 时优先展示 [@了你]。
+  final bool hasUnreadAtAll;
 
   // 文件传输助手是单用户会话，前端交互按私聊呈现，但不包含对端在线状态。
   bool get isPrivate => kind == 'PRIVATE' || kind == 'SELF_MEMO';
@@ -135,6 +141,13 @@ class NativeConversation {
   bool get isListedInInbox => isVisible && hasInboxActivity;
 
   int get sortTimestamp => updatedAt?.millisecondsSinceEpoch ?? 0;
+
+  /// 会话列表预览前的红色 @ 提示，对齐微信：[@了你] / [@所有人]。
+  String? get unreadMentionLabel {
+    if (hasUnreadMention) return '[@了你]';
+    if (hasUnreadAtAll) return '[@所有人]';
+    return null;
+  }
 }
 
 class ConversationAvatarMember {

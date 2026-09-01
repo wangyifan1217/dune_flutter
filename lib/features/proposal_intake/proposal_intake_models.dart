@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'settlement_catalog.dart';
+
 String normalizeProposalIntakeKind(String raw) {
   switch (raw.trim().toLowerCase()) {
     case 'purchase':
@@ -384,6 +386,42 @@ class ProposalFinanceInterface {
   }
 }
 
+/// 协作提案「项目成本」表头，顺序与财务口径一致。
+const kProposalProjectCostItems = [
+  '机构返佣',
+  '万里通返佣',
+  '补贴款分润',
+  '平台交易服务费',
+  '渠道服务费分润',
+  '支付手续费',
+  '推广费',
+];
+
+/// 协作提案「经营成本」表头。
+const kProposalOperatingCostItems = ['差旅成本', '招待费'];
+
+/// 协作提案「税务成本」表头。
+const kProposalTaxCostItems = [
+  '增值税及附加（能源）',
+  '增值税及附加（运营商+公共出行）',
+  '印花税',
+  '所得税',
+];
+
+String proposalProjectCostDisplayName(String name) {
+  final text = name.trim();
+  if (text == '平台服务费') return '平台交易服务费';
+  return text;
+}
+
+Set<String> proposalProjectCostNamesOf(String name) {
+  final canonical = proposalProjectCostDisplayName(name);
+  if (canonical == '平台交易服务费') {
+    return {'平台交易服务费', '平台服务费'};
+  }
+  return {canonical};
+}
+
 class ProposalCostItemOption {
   const ProposalCostItemOption({
     required this.code,
@@ -417,10 +455,13 @@ String proposalCostAmountId(
   String name, [
   List<ProposalCostItemOption> catalog = const [],
 ]) {
+  final aliases = proposalProjectCostNamesOf(name);
   for (final item in catalog) {
-    if (item.name == name && item.code.isNotEmpty) return item.code;
+    if (aliases.contains(item.name) && item.code.isNotEmpty) return item.code;
   }
-  return name;
+  return proposalProjectCostDisplayName(name).isEmpty
+      ? name
+      : proposalProjectCostDisplayName(name);
 }
 
 double proposalCostAmountValue(Object? raw) {
@@ -453,13 +494,13 @@ Map<String, dynamic> proposalSyncCostSelection({
   required String totalKey,
   String settleTermsKey = '',
 }) {
-  final byName = {for (final item in catalog) item.name: item.code};
+  final catalogCodes = {for (final item in catalog) item.code};
   final codes = [
     for (final name in names)
-      if ((byName[name] ?? '').isNotEmpty) byName[name]!,
-  ];
+      proposalCostAmountId(name, catalog),
+  ].where(catalogCodes.contains).toList();
   final keep = <String>{
-    ...names,
+    for (final name in names) ...proposalProjectCostNamesOf(name),
     for (final name in names) proposalCostAmountId(name, catalog),
   };
   final amounts = proposalCostAmountMap(form[amountsKey])
@@ -523,7 +564,7 @@ List<String> proposalIntakeNamedCostSettleIssues(
       name: name,
       id: id,
     ).isComplete) {
-      issues.add('$label「$name」请填写结算单价/比例、结算规则、对方主体、我方主体、税率');
+      issues.add('$label「$name」请填写结算比例或单价、计算公式、对方主体、我方主体、税率');
     }
   }
   return issues;
@@ -557,6 +598,7 @@ class ProposalIntakeOptions {
     required this.products,
     required this.supplies,
     required this.channels,
+    this.institutions = const [],
     required this.profitModes,
     required this.platforms,
     required this.outputForms,
@@ -584,6 +626,7 @@ class ProposalIntakeOptions {
   final List<ProposalLinkedOption> products;
   final List<String> supplies;
   final List<String> channels;
+  final List<CatalogRef> institutions;
   final List<String> profitModes;
   final List<ProposalLinkedOption> platforms;
   final List<String> outputForms;
@@ -631,6 +674,7 @@ class ProposalIntakeOptions {
           .toList(growable: false),
       supplies: _strings(market['supplies']),
       channels: _strings(market['channels']),
+      institutions: _catalogChoices(market['institutions']),
       profitModes: _strings(market['profitModes']),
       platforms: _list(technology['platforms'])
           .map(
@@ -741,6 +785,38 @@ List<String> _strings(Object? value) => _list(value)
     .map((item) => '$item'.trim())
     .where((item) => item.isNotEmpty)
     .toList(growable: false);
+
+List<CatalogRef> _catalogChoices(Object? raw) {
+  final out = <CatalogRef>[];
+  for (final item in _list(raw)) {
+    if (item is String) {
+      final parts = item.split('|');
+      final name = parts.first.trim();
+      final code = parts.length > 1 ? parts[1].trim() : '';
+      if (name.isEmpty && code.isEmpty) continue;
+      out.add(
+        CatalogRef(
+          code: code.isEmpty ? name : code,
+          name: name.isEmpty ? code : name,
+        ),
+      );
+      continue;
+    }
+    if (item is! Map) continue;
+    final map = Map<String, dynamic>.from(item);
+    final name =
+        '${map['label'] ?? map['name'] ?? map['value'] ?? ''}'.trim();
+    final code = '${map['code'] ?? map['key'] ?? ''}'.trim();
+    if (name.isEmpty && code.isEmpty) continue;
+    out.add(
+      CatalogRef(
+        code: code.isEmpty ? name : code,
+        name: name.isEmpty ? code : name,
+      ),
+    );
+  }
+  return List<CatalogRef>.unmodifiable(out);
+}
 
 String _nonEmpty(Object? value, String fallback) {
   final text = '$value'.trim();
@@ -1246,73 +1322,295 @@ ProposalIntakeRow? nextProposalIntake({
   return items[index + 1];
 }
 
-/// 结算条款：收入或单条成本共用。
+CatalogRef? proposalIntakeFormRef(Map<String, dynamic> form, String key) =>
+    catalogRefOrNull(form[key]);
+
+/// 产品/券包上的结算渠道：优先自身 [channelRef]，否则从结算明细提升（兼容旧单）。
+CatalogRef? proposalIntakeChannelRefFromJson(Map raw) {
+  var ref = catalogRefOrNull(raw['channelRef']);
+  if (ref != null && ref.isNotEmpty) return ref;
+  final name = '${raw['channel'] ?? raw['channelName'] ?? ''}'.trim();
+  final code = '${raw['channelCode'] ?? ''}'.trim();
+  if (name.isNotEmpty || code.isNotEmpty) {
+    return CatalogRef(
+      code: code.isEmpty ? name : code,
+      name: name.isEmpty ? code : name,
+    );
+  }
+  final settlements = raw['settlements'];
+  if (settlements is List) {
+    for (final item in settlements) {
+      if (item is! Map) continue;
+      final fromSettle = catalogRefOrNull(item['channelRef']);
+      if (fromSettle != null && fromSettle.isNotEmpty) return fromSettle;
+    }
+  }
+  return null;
+}
+
+bool proposalIntakeSettleUsesRatio(ProposalFinanceSettleTerms terms) {
+  final code = terms.settleModeRef?.code.trim();
+  if (code == '1' || code == '5') return true;
+  final mode = terms.settleMode;
+  return mode.contains('比例') && !mode.contains('单价');
+}
+
+bool proposalIntakeSettleUsesUnitPrice(ProposalFinanceSettleTerms terms) {
+  final code = terms.settleModeRef?.code.trim();
+  if (code == '2' || code == '5') return true;
+  return terms.settleMode.contains('单价');
+}
+
+bool proposalIntakeSettleIsTier(ProposalFinanceSettleTerms terms) {
+  final code = terms.settleModeRef?.code.trim();
+  if (code == '3') return true;
+  return terms.settleMode.contains('阶梯');
+}
+
+/// 结算条款：收入或单条成本共用，字段对齐结算单「结算一」。
 class ProposalFinanceSettleTerms {
   const ProposalFinanceSettleTerms({
+    this.billType = '',
+    this.billTypeRef,
+    this.channelRef,
+    this.settleMode = '',
+    this.settleModeRef,
+    this.settleRatio = '',
+    this.settleUnitPrice = '',
+    this.formula = '',
+    this.formulaRef,
+    this.invoiceType = '',
+    this.taxRate = '',
+    this.effectiveTime = '',
+    this.expireTime = '',
     this.settlePrice = '',
     this.settleRule = '',
     this.counterparty = '',
     this.ourParty = '',
-    this.taxRate = '',
   });
 
+  final String billType;
+  final CatalogRef? billTypeRef;
+  final CatalogRef? channelRef;
+  final String settleMode;
+  final CatalogRef? settleModeRef;
+  final String settleRatio;
+  final String settleUnitPrice;
+  final String formula;
+  final CatalogRef? formulaRef;
+  final String invoiceType;
+  final String taxRate;
+  final String effectiveTime;
+  final String expireTime;
+
+  /// 旧字段：结算单价/比例。新数据优先写 settleRatio / settleUnitPrice。
   final String settlePrice;
+
+  /// 旧字段：结算规则。新数据优先写 formula。
   final String settleRule;
   final String counterparty;
   final String ourParty;
-  final String taxRate;
+
+  String get displayRatio {
+    if (settleRatio.isNotEmpty) return settleRatio;
+    if (settleUnitPrice.isEmpty &&
+        (proposalIntakeSettleUsesRatio(this) || settlePrice.contains('%'))) {
+      return settlePrice;
+    }
+    return '';
+  }
+
+  String get displayUnitPrice {
+    if (settleUnitPrice.isNotEmpty) return settleUnitPrice;
+    if (settleRatio.isEmpty &&
+        settlePrice.isNotEmpty &&
+        !proposalIntakeSettleUsesRatio(this) &&
+        !settlePrice.contains('%')) {
+      return settlePrice;
+    }
+    return '';
+  }
+
+  String get displayFormula {
+    if (formulaRef != null && formulaRef!.isNotEmpty) {
+      return formulaRef!.name.isNotEmpty
+          ? formulaRef!.name
+          : formulaRef!.formulaExpression;
+    }
+    return formula.isNotEmpty ? formula : settleRule;
+  }
+
+  String get resolvedPrice {
+    if (proposalIntakeSettleUsesUnitPrice(this) &&
+        !proposalIntakeSettleUsesRatio(this)) {
+      return displayUnitPrice.isNotEmpty ? displayUnitPrice : settlePrice;
+    }
+    if (proposalIntakeSettleUsesRatio(this) &&
+        !proposalIntakeSettleUsesUnitPrice(this)) {
+      return displayRatio.isNotEmpty ? displayRatio : settlePrice;
+    }
+    if (displayRatio.isNotEmpty) return displayRatio;
+    if (displayUnitPrice.isNotEmpty) return displayUnitPrice;
+    return settlePrice;
+  }
+
+  String get resolvedRule => displayFormula;
 
   bool get isBlank =>
+      billType.isEmpty &&
+      (billTypeRef == null || billTypeRef!.isEmpty) &&
+      (channelRef == null || channelRef!.isEmpty) &&
+      settleMode.isEmpty &&
+      (settleModeRef == null || settleModeRef!.isEmpty) &&
+      settleRatio.isEmpty &&
+      settleUnitPrice.isEmpty &&
+      formula.isEmpty &&
+      (formulaRef == null || formulaRef!.isEmpty) &&
+      invoiceType.isEmpty &&
+      taxRate.isEmpty &&
+      effectiveTime.isEmpty &&
+      expireTime.isEmpty &&
       settlePrice.isEmpty &&
       settleRule.isEmpty &&
       counterparty.isEmpty &&
-      ourParty.isEmpty &&
-      taxRate.isEmpty;
+      ourParty.isEmpty;
 
   bool get isComplete =>
-      settlePrice.isNotEmpty &&
-      settleRule.isNotEmpty &&
+      resolvedPrice.isNotEmpty &&
+      resolvedRule.isNotEmpty &&
       counterparty.isNotEmpty &&
       ourParty.isNotEmpty &&
       taxRate.isNotEmpty;
 
-  String get fingerprint =>
-      [settlePrice, settleRule, counterparty, ourParty, taxRate].join('|');
+  bool get isSkuComplete {
+    if (taxRate.isEmpty || resolvedRule.isEmpty) return false;
+    if (proposalIntakeSettleIsTier(this)) return true;
+    if (proposalIntakeSettleUsesRatio(this) &&
+        proposalIntakeSettleUsesUnitPrice(this)) {
+      return displayRatio.isNotEmpty && displayUnitPrice.isNotEmpty;
+    }
+    return resolvedPrice.isNotEmpty;
+  }
+
+  String get fingerprint => [
+    billTypeRef?.identity ?? billType,
+    channelRef?.identity ?? '',
+    settleModeRef?.identity ?? settleMode,
+    displayRatio,
+    displayUnitPrice,
+    formulaRef?.identity ?? resolvedRule,
+    invoiceType,
+    taxRate,
+    effectiveTime,
+    expireTime,
+    counterparty,
+    ourParty,
+  ].join('|');
 
   ProposalFinanceSettleTerms copyWith({
+    String? billType,
+    Object? billTypeRef = _catalogUnset,
+    Object? channelRef = _catalogUnset,
+    String? settleMode,
+    Object? settleModeRef = _catalogUnset,
+    String? settleRatio,
+    String? settleUnitPrice,
+    String? formula,
+    Object? formulaRef = _catalogUnset,
+    String? invoiceType,
+    String? taxRate,
+    String? effectiveTime,
+    String? expireTime,
     String? settlePrice,
     String? settleRule,
     String? counterparty,
     String? ourParty,
-    String? taxRate,
   }) => ProposalFinanceSettleTerms(
+    billType: billType ?? this.billType,
+    billTypeRef: identical(billTypeRef, _catalogUnset)
+        ? this.billTypeRef
+        : billTypeRef as CatalogRef?,
+    channelRef: identical(channelRef, _catalogUnset)
+        ? this.channelRef
+        : channelRef as CatalogRef?,
+    settleMode: settleMode ?? this.settleMode,
+    settleModeRef: identical(settleModeRef, _catalogUnset)
+        ? this.settleModeRef
+        : settleModeRef as CatalogRef?,
+    settleRatio: settleRatio ?? this.settleRatio,
+    settleUnitPrice: settleUnitPrice ?? this.settleUnitPrice,
+    formula: formula ?? this.formula,
+    formulaRef: identical(formulaRef, _catalogUnset)
+        ? this.formulaRef
+        : formulaRef as CatalogRef?,
+    invoiceType: invoiceType ?? this.invoiceType,
+    taxRate: taxRate ?? this.taxRate,
+    effectiveTime: effectiveTime ?? this.effectiveTime,
+    expireTime: expireTime ?? this.expireTime,
     settlePrice: settlePrice ?? this.settlePrice,
     settleRule: settleRule ?? this.settleRule,
     counterparty: counterparty ?? this.counterparty,
     ourParty: ourParty ?? this.ourParty,
-    taxRate: taxRate ?? this.taxRate,
   );
 
+  ProposalFinanceSettleTerms clearedCatalog({required bool keepManual}) {
+    return copyWith(
+      channelRef: null,
+      billType: keepManual ? billType : '',
+      billTypeRef: null,
+      settleMode: keepManual ? settleMode : '',
+      settleModeRef: null,
+      formula: keepManual ? formula : '',
+      formulaRef: null,
+    );
+  }
+
   Map<String, dynamic> toJson() => {
-    'settlePrice': settlePrice,
-    'settleRule': settleRule,
+    'billType': billTypeRef?.name ?? billType,
+    'billTypeRef': catalogRefToJson(billTypeRef),
+    'channelRef': catalogRefToJson(channelRef),
+    'settleMode': settleModeRef?.name ?? settleMode,
+    'settleModeRef': catalogRefToJson(settleModeRef),
+    'settleRatio': settleRatio,
+    'settleUnitPrice': settleUnitPrice,
+    'formula': displayFormula,
+    'formulaRef': catalogRefToJson(formulaRef),
+    'invoiceType': invoiceType,
+    'taxRate': taxRate,
+    'effectiveTime': effectiveTime,
+    'expireTime': expireTime,
+    'settlePrice': resolvedPrice,
+    'settleRule': resolvedRule,
     'counterparty': counterparty,
     'ourParty': ourParty,
-    'taxRate': taxRate,
   };
 
   factory ProposalFinanceSettleTerms.fromJson(Object? raw) {
     if (raw is! Map) return const ProposalFinanceSettleTerms();
     String read(String key) => '${raw[key] ?? ''}'.trim();
     return ProposalFinanceSettleTerms(
+      billType: read('billType'),
+      billTypeRef: catalogRefOrNull(raw['billTypeRef']),
+      channelRef: catalogRefOrNull(raw['channelRef']),
+      settleMode: read('settleMode'),
+      settleModeRef: catalogRefOrNull(raw['settleModeRef']),
+      settleRatio: read('settleRatio'),
+      settleUnitPrice: read('settleUnitPrice'),
+      formula: read('formula'),
+      formulaRef: catalogRefOrNull(raw['formulaRef']),
+      invoiceType: read('invoiceType'),
+      taxRate: read('taxRate'),
+      effectiveTime: read('effectiveTime'),
+      expireTime: read('expireTime'),
       settlePrice: read('settlePrice'),
       settleRule: read('settleRule'),
       counterparty: read('counterparty'),
       ourParty: read('ourParty'),
-      taxRate: read('taxRate'),
     );
   }
 }
+
+const Object _catalogUnset = Object();
 
 class ProposalFinanceCostLine {
   const ProposalFinanceCostLine({
@@ -1553,6 +1851,559 @@ List<ProposalFinanceModule> proposalIntakeFinanceModules(
 String proposalIntakeNewLaunchId() =>
     'lr-${DateTime.now().microsecondsSinceEpoch}';
 
+class ProposalSkuSettleRow {
+  const ProposalSkuSettleRow({
+    required this.id,
+    this.terms = const ProposalFinanceSettleTerms(),
+  });
+
+  final String id;
+  final ProposalFinanceSettleTerms terms;
+
+  ProposalSkuSettleRow copyWith({ProposalFinanceSettleTerms? terms}) =>
+      ProposalSkuSettleRow(id: id, terms: terms ?? this.terms);
+
+  Map<String, dynamic> toJson() => {'id': id, ...terms.toJson()};
+
+  factory ProposalSkuSettleRow.fromJson(Object? raw) {
+    if (raw is! Map) return const ProposalSkuSettleRow(id: '');
+    final id = '${raw['id'] ?? ''}'.trim();
+    return ProposalSkuSettleRow(
+      id: id,
+      terms: ProposalFinanceSettleTerms.fromJson(raw),
+    );
+  }
+}
+
+String proposalIntakeNewSkuSettleId() =>
+    'st-${DateTime.now().microsecondsSinceEpoch}';
+
+String proposalIntakeSettleLabel(int index) {
+  const names = ['一', '二', '三', '四', '五', '六', '七', '八', '九', '十'];
+  if (index >= 0 && index < names.length) return '结算${names[index]}';
+  return '结算${index + 1}';
+}
+
+List<ProposalSkuSettleRow> proposalIntakeSettlementsOf({
+  required String id,
+  required List<ProposalSkuSettleRow> settlements,
+}) {
+  if (settlements.isNotEmpty) return settlements;
+  return [ProposalSkuSettleRow(id: '$id-st-1')];
+}
+
+List<ProposalSkuSettleRow> proposalIntakeSkuSettlements(
+  ProposalSkuDetailRow row,
+) => proposalIntakeSettlementsOf(id: row.id, settlements: row.settlements);
+
+bool proposalIntakeIsCouponPack(Map<String, dynamic> form) {
+  final raw = form['isCouponPack'];
+  if (raw is bool) return raw;
+  final text = '$raw'.trim().toLowerCase();
+  return text == 'true' || text == '1' || text == '是' || text == 'yes';
+}
+
+bool proposalIntakeIsExistingBuilt(Map<String, dynamic> form) {
+  final raw = form['isExistingBuilt'];
+  if (raw is bool) return raw;
+  final text = '$raw'.trim().toLowerCase();
+  if (text == 'true' || text == '1' || text == '是' || text == 'yes') {
+    return true;
+  }
+  if (text == 'false' || text == '0' || text == '否' || text == 'no') {
+    return false;
+  }
+  return proposalIntakeSkuDetails(form).any((item) => item.isExistingBuilt) ||
+      proposalIntakeCouponPacks(form).any((item) => item.isExistingBuilt);
+}
+
+List<ProposalSkuSettleRow> proposalIntakePackSettlements(
+  ProposalCouponPackRow pack,
+) => proposalIntakeSettlementsOf(id: pack.id, settlements: pack.settlements);
+
+List<String> proposalIntakeSkuSettleReviewKeys(Map<String, dynamic> form) {
+  if (proposalIntakeIsCouponPack(form)) {
+    return [
+      for (final pack in proposalIntakeCouponPacks(form))
+        for (final settle in proposalIntakePackSettlements(pack))
+          'packSettle:${pack.id}:${settle.id}',
+    ];
+  }
+  return [
+    for (final sku in proposalIntakeSkuDetails(form))
+      for (final settle in proposalIntakeSkuSettlements(sku))
+        'skuSettle:${sku.id}:${settle.id}',
+  ];
+}
+
+List<String> proposalIntakeSkuSettleIssues(Map<String, dynamic> form) {
+  final issues = <String>[];
+  final channel = proposalIntakeSkuDetails(form);
+  for (var i = 0; i < channel.length; i++) {
+    final sku = channel[i];
+    if (sku.isExistingBuilt) {
+      if (sku.assetProduct == null || sku.assetProduct!.isEmpty) {
+        issues.add('渠道产品第${i + 1}条请搜索并选择已建产品');
+      }
+    } else if (sku.productName.isEmpty) {
+      issues.add('渠道产品第${i + 1}条请填写产品名称');
+    }
+  }
+  if (proposalIntakeIsCouponPack(form)) {
+    final packs = proposalIntakeCouponPacks(form);
+    if (packs.isEmpty) {
+      issues.add('已勾选券包，请至少创建一个券包');
+    }
+    final skuIds = {for (final sku in channel) sku.id};
+    for (var i = 0; i < packs.length; i++) {
+      final pack = packs[i];
+      if (pack.isExistingBuilt) {
+        if (pack.assetProduct == null || pack.assetProduct!.isEmpty) {
+          issues.add('券包第${i + 1}条请搜索并选择已建券包');
+        }
+      } else {
+        if (pack.name.isEmpty) {
+          issues.add('券包第${i + 1}条请填写券包名称');
+        }
+        final selected = [
+          for (final id in pack.skuIds)
+            if (skuIds.contains(id)) id,
+        ];
+        if (selected.isEmpty) {
+          final name = pack.name.isEmpty ? '第${i + 1}条' : pack.name;
+          issues.add('券包「$name」请选择包含的渠道产品');
+        }
+      }
+      final label = pack.name.isEmpty ? '第${i + 1}条' : pack.name;
+      final settlements = proposalIntakePackSettlements(pack);
+      for (var j = 0; j < settlements.length; j++) {
+        if (!settlements[j].terms.isSkuComplete) {
+          issues.add(
+            '券包「$label」${proposalIntakeSettleLabel(j)}未填完结算方式对应金额、计算公式、税率',
+          );
+        }
+      }
+    }
+    return issues;
+  }
+  for (var i = 0; i < channel.length; i++) {
+    final sku = channel[i];
+    final name = sku.productName.isEmpty ? '第${i + 1}条' : sku.productName;
+    final settlements = proposalIntakeSkuSettlements(sku);
+    for (var j = 0; j < settlements.length; j++) {
+      if (!settlements[j].terms.isSkuComplete) {
+        issues.add(
+          '渠道产品「$name」${proposalIntakeSettleLabel(j)}未填完结算方式对应金额、计算公式、税率',
+        );
+      }
+    }
+  }
+  return issues;
+}
+
+class ProposalSkuDetailRow {
+  const ProposalSkuDetailRow({
+    required this.id,
+    this.productName = '',
+    this.faceValue = '',
+    this.productCategoryL1 = '',
+    this.productCategoryL2 = '',
+    this.channelCategoryL1 = '',
+    this.channelCategoryL2 = '',
+    this.syncZhongyouHaoke = '',
+    this.effectiveDate = '',
+    this.expireDate = '',
+    this.supplierCodes = '',
+    this.inventoryQty = '',
+    this.syncSourceRef,
+    this.institutionRef,
+    this.channelRef,
+    this.existingBuilt = '',
+    this.assetProduct,
+    this.settlements = const [],
+  });
+
+  final String id;
+  final String productName;
+  final String faceValue;
+  final String productCategoryL1;
+  final String productCategoryL2;
+  final String channelCategoryL1;
+  final String channelCategoryL2;
+  final String syncZhongyouHaoke;
+  final String effectiveDate;
+  final String expireDate;
+  final String supplierCodes;
+  final String inventoryQty;
+  final CatalogRef? syncSourceRef;
+  final CatalogRef? institutionRef;
+  final CatalogRef? channelRef;
+  final String existingBuilt;
+  final ChannelProductHit? assetProduct;
+  final List<ProposalSkuSettleRow> settlements;
+
+  String get syncSourceCode => (syncSourceRef?.code ?? '').trim();
+  String get institutionCode => (institutionRef?.code ?? '').trim();
+  String get institutionName => (institutionRef?.name ?? '').trim();
+  String get channelCode => (channelRef?.code ?? '').trim();
+  String get channelName => (channelRef?.name ?? '').trim();
+  bool get isExistingBuilt => existingBuilt.trim() == '是';
+
+  bool get isBlank =>
+      productName.isEmpty &&
+      faceValue.isEmpty &&
+      productCategoryL1.isEmpty &&
+      productCategoryL2.isEmpty &&
+      channelCategoryL1.isEmpty &&
+      channelCategoryL2.isEmpty &&
+      syncZhongyouHaoke.isEmpty &&
+      effectiveDate.isEmpty &&
+      expireDate.isEmpty &&
+      supplierCodes.isEmpty &&
+      inventoryQty.isEmpty &&
+      (syncSourceRef == null || syncSourceRef!.isEmpty) &&
+      (institutionRef == null || institutionRef!.isEmpty) &&
+      (channelRef == null || channelRef!.isEmpty) &&
+      existingBuilt.isEmpty &&
+      (assetProduct == null || assetProduct!.isEmpty);
+
+  ProposalSkuDetailRow copyWith({
+    String? productName,
+    String? faceValue,
+    String? productCategoryL1,
+    String? productCategoryL2,
+    String? channelCategoryL1,
+    String? channelCategoryL2,
+    String? syncZhongyouHaoke,
+    String? effectiveDate,
+    String? expireDate,
+    String? supplierCodes,
+    String? inventoryQty,
+    Object? syncSourceRef = _catalogUnset,
+    Object? institutionRef = _catalogUnset,
+    Object? channelRef = _catalogUnset,
+    String? existingBuilt,
+    Object? assetProduct = _catalogUnset,
+    List<ProposalSkuSettleRow>? settlements,
+  }) => ProposalSkuDetailRow(
+    id: id,
+    productName: productName ?? this.productName,
+    faceValue: faceValue ?? this.faceValue,
+    productCategoryL1: productCategoryL1 ?? this.productCategoryL1,
+    productCategoryL2: productCategoryL2 ?? this.productCategoryL2,
+    channelCategoryL1: channelCategoryL1 ?? this.channelCategoryL1,
+    channelCategoryL2: channelCategoryL2 ?? this.channelCategoryL2,
+    syncZhongyouHaoke: syncZhongyouHaoke ?? this.syncZhongyouHaoke,
+    effectiveDate: effectiveDate ?? this.effectiveDate,
+    expireDate: expireDate ?? this.expireDate,
+    supplierCodes: supplierCodes ?? this.supplierCodes,
+    inventoryQty: inventoryQty ?? this.inventoryQty,
+    syncSourceRef: identical(syncSourceRef, _catalogUnset)
+        ? this.syncSourceRef
+        : syncSourceRef as CatalogRef?,
+    institutionRef: identical(institutionRef, _catalogUnset)
+        ? this.institutionRef
+        : institutionRef as CatalogRef?,
+    channelRef: identical(channelRef, _catalogUnset)
+        ? this.channelRef
+        : channelRef as CatalogRef?,
+    existingBuilt: existingBuilt ?? this.existingBuilt,
+    assetProduct: identical(assetProduct, _catalogUnset)
+        ? this.assetProduct
+        : assetProduct as ChannelProductHit?,
+    settlements: settlements ?? this.settlements,
+  );
+
+  ProposalSkuDetailRow applyAssetProduct(ChannelProductHit? hit) {
+    return copyWith(
+      assetProduct: hit,
+      productName: hit?.productName ?? '',
+      channelRef: hit?.channelRef,
+      settlements: [
+        for (final item in settlements)
+          item.copyWith(
+            terms: item.terms.copyWith(channelRef: hit?.channelRef),
+          ),
+      ],
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'productName': productName,
+    'faceValue': faceValue,
+    'productCategoryL1': productCategoryL1,
+    'productCategoryL2': productCategoryL2,
+    'channelCategoryL1': channelCategoryL1,
+    'channelCategoryL2': channelCategoryL2,
+    'syncZhongyouHaoke': syncZhongyouHaoke,
+    'effectiveDate': effectiveDate,
+    'expireDate': expireDate,
+    'supplierCodes': supplierCodes,
+    'inventoryQty': inventoryQty,
+    'syncSource': syncSourceCode,
+    'syncSourceRef': catalogRefToJson(syncSourceRef),
+    'institution': institutionName,
+    'institutionCode': institutionCode,
+    'institutionRef': catalogRefToJson(institutionRef),
+    'channel': channelName,
+    'channelCode': channelCode,
+    'channelRef': catalogRefToJson(channelRef),
+    'existingBuilt': existingBuilt,
+    'assetProduct': assetProduct?.toJson(),
+    'settlements': [
+      for (final item in settlements)
+        item
+            .copyWith(terms: item.terms.copyWith(channelRef: channelRef))
+            .toJson(),
+    ],
+  };
+
+  factory ProposalSkuDetailRow.fromJson(Object? raw) {
+    if (raw is! Map) return const ProposalSkuDetailRow(id: '');
+    var syncRef = catalogRefOrNull(raw['syncSourceRef']);
+    if (syncRef == null) {
+      final code = '${raw['syncSource'] ?? ''}'.trim();
+      if (code.isNotEmpty) syncRef = CatalogRef(code: code, name: code);
+    }
+    var institution = catalogRefOrNull(raw['institutionRef']);
+    if (institution == null) {
+      final name = '${raw['institution'] ?? raw['institutionName'] ?? ''}'
+          .trim();
+      final code = '${raw['institutionCode'] ?? ''}'.trim();
+      if (name.isNotEmpty || code.isNotEmpty) {
+        institution = CatalogRef(
+          code: code.isEmpty ? name : code,
+          name: name.isEmpty ? code : name,
+        );
+      }
+    }
+    var asset = channelProductHitOrNull(raw['assetProduct']);
+    var productName = '${raw['productName'] ?? ''}'.trim();
+    if (productName.isEmpty) productName = asset?.productName ?? '';
+    var channelRef = proposalIntakeChannelRefFromJson(raw);
+    channelRef ??= asset?.channelRef;
+    return ProposalSkuDetailRow(
+      id: '${raw['id'] ?? ''}'.trim(),
+      productName: productName,
+      faceValue: '${raw['faceValue'] ?? raw['skuFaceValue'] ?? ''}'.trim(),
+      productCategoryL1: '${raw['productCategoryL1'] ?? ''}'.trim(),
+      productCategoryL2: '${raw['productCategoryL2'] ?? ''}'.trim(),
+      channelCategoryL1: '${raw['channelCategoryL1'] ?? ''}'.trim(),
+      channelCategoryL2: '${raw['channelCategoryL2'] ?? ''}'.trim(),
+      syncZhongyouHaoke: '${raw['syncZhongyouHaoke'] ?? ''}'.trim(),
+      effectiveDate:
+          '${raw['effectiveDate'] ?? raw['productEffectiveDate'] ?? ''}'.trim(),
+      expireDate: '${raw['expireDate'] ?? raw['productExpireDate'] ?? ''}'
+          .trim(),
+      supplierCodes: '${raw['supplierCodes'] ?? ''}'.trim(),
+      inventoryQty: '${raw['inventoryQty'] ?? ''}'.trim(),
+      syncSourceRef: syncRef,
+      institutionRef: institution,
+      channelRef: channelRef,
+      existingBuilt: '${raw['existingBuilt'] ?? ''}'.trim(),
+      assetProduct: asset,
+      settlements: [
+        for (final item in raw['settlements'] is List
+            ? raw['settlements'] as List
+            : const [])
+          if (item is Map) ProposalSkuSettleRow.fromJson(item),
+      ].where((item) => item.id.isNotEmpty).toList(),
+    );
+  }
+}
+
+ProposalSkuDetailRow? proposalIntakeLegacySkuDetail(Map<String, dynamic> form) {
+  String read(String key) => '${form[key] ?? ''}'.trim();
+  final row = ProposalSkuDetailRow(
+    id: 'sku-legacy',
+    productName: read('productName'),
+    faceValue: read('skuFaceValue'),
+    productCategoryL1: read('productCategoryL1'),
+    productCategoryL2: read('productCategoryL2'),
+    channelCategoryL1: read('channelCategoryL1'),
+    channelCategoryL2: read('channelCategoryL2'),
+    syncZhongyouHaoke: read('syncZhongyouHaoke'),
+    effectiveDate: read('productEffectiveDate'),
+    expireDate: read('productExpireDate'),
+    supplierCodes: read('supplierCodes'),
+    inventoryQty: read('inventoryQty'),
+  );
+  return row.isBlank ? null : row;
+}
+
+List<ProposalSkuDetailRow> proposalIntakeSkuDetails(Map<String, dynamic> form) {
+  final raw = form['skuDetails'];
+  if (raw is List) {
+    final rows = [
+      for (final item in raw)
+        if (item is Map) ProposalSkuDetailRow.fromJson(item),
+    ].where((row) => row.id.isNotEmpty).toList();
+    if (rows.isNotEmpty) return rows;
+  }
+  final legacy = proposalIntakeLegacySkuDetail(form);
+  return legacy == null ? const [] : [legacy];
+}
+
+String proposalIntakeNewSkuId() =>
+    'sku-${DateTime.now().microsecondsSinceEpoch}';
+
+String proposalIntakeNewCouponPackId() =>
+    'pack-${DateTime.now().microsecondsSinceEpoch}';
+
+class ProposalCouponPackRow {
+  const ProposalCouponPackRow({
+    required this.id,
+    this.name = '',
+    this.skuIds = const [],
+    this.syncSourceRef,
+    this.institutionRef,
+    this.channelRef,
+    this.existingBuilt = '',
+    this.assetProduct,
+    this.settlements = const [],
+  });
+
+  final String id;
+  final String name;
+  final List<String> skuIds;
+  final CatalogRef? syncSourceRef;
+  final CatalogRef? institutionRef;
+  final CatalogRef? channelRef;
+  final String existingBuilt;
+  final ChannelProductHit? assetProduct;
+  final List<ProposalSkuSettleRow> settlements;
+
+  String get syncSourceCode => (syncSourceRef?.code ?? '').trim();
+  String get institutionCode => (institutionRef?.code ?? '').trim();
+  String get institutionName => (institutionRef?.name ?? '').trim();
+  String get channelCode => (channelRef?.code ?? '').trim();
+  String get channelName => (channelRef?.name ?? '').trim();
+  bool get isExistingBuilt => existingBuilt.trim() == '是';
+
+  ProposalCouponPackRow copyWith({
+    String? name,
+    List<String>? skuIds,
+    Object? syncSourceRef = _catalogUnset,
+    Object? institutionRef = _catalogUnset,
+    Object? channelRef = _catalogUnset,
+    String? existingBuilt,
+    Object? assetProduct = _catalogUnset,
+    List<ProposalSkuSettleRow>? settlements,
+  }) => ProposalCouponPackRow(
+    id: id,
+    name: name ?? this.name,
+    skuIds: skuIds ?? this.skuIds,
+    syncSourceRef: identical(syncSourceRef, _catalogUnset)
+        ? this.syncSourceRef
+        : syncSourceRef as CatalogRef?,
+    institutionRef: identical(institutionRef, _catalogUnset)
+        ? this.institutionRef
+        : institutionRef as CatalogRef?,
+    channelRef: identical(channelRef, _catalogUnset)
+        ? this.channelRef
+        : channelRef as CatalogRef?,
+    existingBuilt: existingBuilt ?? this.existingBuilt,
+    assetProduct: identical(assetProduct, _catalogUnset)
+        ? this.assetProduct
+        : assetProduct as ChannelProductHit?,
+    settlements: settlements ?? this.settlements,
+  );
+
+  ProposalCouponPackRow applyAssetProduct(ChannelProductHit? hit) {
+    return copyWith(
+      assetProduct: hit,
+      name: hit?.productName ?? '',
+      channelRef: hit?.channelRef,
+      settlements: [
+        for (final item in settlements)
+          item.copyWith(
+            terms: item.terms.copyWith(channelRef: hit?.channelRef),
+          ),
+      ],
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'name': name,
+    'skuIds': skuIds,
+    'syncSource': syncSourceCode,
+    'syncSourceRef': catalogRefToJson(syncSourceRef),
+    'institution': institutionName,
+    'institutionCode': institutionCode,
+    'institutionRef': catalogRefToJson(institutionRef),
+    'channel': channelName,
+    'channelCode': channelCode,
+    'channelRef': catalogRefToJson(channelRef),
+    'existingBuilt': existingBuilt,
+    'assetProduct': assetProduct?.toJson(),
+    'settlements': [
+      for (final item in settlements)
+        item
+            .copyWith(terms: item.terms.copyWith(channelRef: channelRef))
+            .toJson(),
+    ],
+  };
+
+  factory ProposalCouponPackRow.fromJson(Object? raw) {
+    if (raw is! Map) return const ProposalCouponPackRow(id: '');
+    final skuRaw = raw['skuIds'];
+    var syncRef = catalogRefOrNull(raw['syncSourceRef']);
+    if (syncRef == null) {
+      final code = '${raw['syncSource'] ?? ''}'.trim();
+      if (code.isNotEmpty) syncRef = CatalogRef(code: code, name: code);
+    }
+    var institution = catalogRefOrNull(raw['institutionRef']);
+    if (institution == null) {
+      final name = '${raw['institution'] ?? raw['institutionName'] ?? ''}'
+          .trim();
+      final code = '${raw['institutionCode'] ?? ''}'.trim();
+      if (name.isNotEmpty || code.isNotEmpty) {
+        institution = CatalogRef(
+          code: code.isEmpty ? name : code,
+          name: name.isEmpty ? code : name,
+        );
+      }
+    }
+    var asset = channelProductHitOrNull(raw['assetProduct']);
+    var name = '${raw['name'] ?? raw['packName'] ?? ''}'.trim();
+    if (name.isEmpty) name = asset?.productName ?? '';
+    var channelRef = proposalIntakeChannelRefFromJson(raw);
+    channelRef ??= asset?.channelRef;
+    return ProposalCouponPackRow(
+      id: '${raw['id'] ?? ''}'.trim(),
+      name: name,
+      skuIds: [
+        for (final item in skuRaw is List ? skuRaw : const [])
+          '${item ?? ''}'.trim(),
+      ].where((id) => id.isNotEmpty).toList(),
+      syncSourceRef: syncRef,
+      institutionRef: institution,
+      channelRef: channelRef,
+      existingBuilt: '${raw['existingBuilt'] ?? ''}'.trim(),
+      assetProduct: asset,
+      settlements: [
+        for (final item in raw['settlements'] is List
+            ? raw['settlements'] as List
+            : const [])
+          if (item is Map) ProposalSkuSettleRow.fromJson(item),
+      ].where((item) => item.id.isNotEmpty).toList(),
+    );
+  }
+}
+
+List<ProposalCouponPackRow> proposalIntakeCouponPacks(
+  Map<String, dynamic> form,
+) {
+  final raw = form['couponPacks'];
+  if (raw is! List) return const [];
+  return [
+    for (final item in raw)
+      if (item is Map) ProposalCouponPackRow.fromJson(item),
+  ].where((item) => item.id.isNotEmpty).toList();
+}
+
 String proposalIntakeNewFinanceModuleId() =>
     'fm-${DateTime.now().microsecondsSinceEpoch}';
 
@@ -1601,23 +2452,8 @@ proposalIntakeLinkFinanceModule({
 }
 
 List<String> proposalIntakeLaunchFinanceIssues(Map<String, dynamic> form) {
-  final rows = proposalIntakeLaunchRows(form);
-  final modules = {
-    for (final item in proposalIntakeFinanceModules(form)) item.id: item,
-  };
   final issues = <String>[];
-  for (var i = 0; i < rows.length; i++) {
-    final row = rows[i];
-    final n = i + 1;
-    if (row.province.isEmpty || row.faceValue.isEmpty) {
-      issues.add('上线第$n行请填写省份和面值');
-    }
-    if (!row.needFinanceModule) continue;
-    if (row.financeModuleId.isEmpty || modules[row.financeModuleId] == null) {
-      issues.add('上线第$n行已勾选需要财务模块，请新增或关联财务模块');
-      continue;
-    }
-    final module = modules[row.financeModuleId]!;
+  for (final module in proposalIntakeFinanceModules(form)) {
     final title = module.title.isEmpty ? module.id : module.title;
     if (!module.periodComplete) {
       issues.add(
@@ -1637,11 +2473,8 @@ List<String> proposalIntakeLaunchFinanceIssues(Map<String, dynamic> form) {
 }
 
 List<String> proposalIntakeLaunchModuleReviewKeys(Map<String, dynamic> form) {
-  final ids = <String>{};
-  for (final row in proposalIntakeLaunchRows(form)) {
-    if (row.needFinanceModule && row.financeModuleId.isNotEmpty) {
-      ids.add(row.financeModuleId);
-    }
-  }
-  return [for (final id in ids) 'launchModule:$id'];
+  return [
+    for (final item in proposalIntakeFinanceModules(form))
+      'launchModule:${item.id}',
+  ];
 }

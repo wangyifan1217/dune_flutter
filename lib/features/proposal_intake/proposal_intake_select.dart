@@ -1,7 +1,7 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
 
 import 'proposal_intake_ui.dart';
 
@@ -40,6 +40,7 @@ class ProposalSelectField<T> extends StatefulWidget {
     this.addLabel,
     this.onQueryChanged,
     this.remoteOptions = false,
+    this.emptyText,
   });
 
   final T? value;
@@ -54,18 +55,20 @@ class ProposalSelectField<T> extends StatefulWidget {
   final String? addLabel;
   final ValueChanged<String>? onQueryChanged;
   final bool remoteOptions;
+  final String? emptyText;
 
   @override
   State<ProposalSelectField<T>> createState() => _ProposalSelectFieldState<T>();
 }
 
 class _ProposalSelectFieldState<T> extends State<ProposalSelectField<T>> {
-  final _link = LayerLink();
   final _focus = FocusNode();
   final _controller = TextEditingController();
   final _tapGroup = Object();
   OverlayEntry? _overlay;
   Timer? _queryDebounce;
+  bool _choosing = false;
+  ScrollPosition? _scrollPosition;
 
   bool get _enabled => widget.onSelected != null;
   bool get _canSearch =>
@@ -148,9 +151,13 @@ class _ProposalSelectFieldState<T> extends State<ProposalSelectField<T>> {
         _controller.clear();
       }
       _showOverlay();
+      final onQueryChanged = widget.onQueryChanged;
+      if (onQueryChanged != null) {
+        onQueryChanged(_query);
+      }
     } else {
       _hideOverlay();
-      _syncFromValue();
+      if (!_choosing) _syncFromValue();
     }
   }
 
@@ -175,50 +182,114 @@ class _ProposalSelectFieldState<T> extends State<ProposalSelectField<T>> {
       final overlay = Overlay.of(context, rootOverlay: true);
       _overlay = OverlayEntry(builder: _buildOverlay);
       overlay.insert(_overlay!);
+      _listenScroll();
     });
   }
 
   void _hideOverlay() {
+    _stopListenScroll();
     _overlay?.remove();
     _overlay = null;
   }
 
+  void _listenScroll() {
+    final next = Scrollable.maybeOf(context)?.position;
+    if (identical(next, _scrollPosition)) return;
+    _scrollPosition?.removeListener(_onAncestorsMove);
+    _scrollPosition = next;
+    _scrollPosition?.addListener(_onAncestorsMove);
+  }
+
+  void _stopListenScroll() {
+    _scrollPosition?.removeListener(_onAncestorsMove);
+    _scrollPosition = null;
+  }
+
+  void _onAncestorsMove() {
+    _overlay?.markNeedsBuild();
+  }
+
   void _choose(T? value) {
+    _choosing = true;
+    if (value == null) {
+      _controller.text = '';
+    } else {
+      for (final option in widget.options) {
+        if (option.value == value) {
+          _controller.text = option.label;
+          break;
+        }
+      }
+    }
     widget.onSelected?.call(value);
     _focus.unfocus();
     _hideOverlay();
+    _choosing = false;
   }
 
   Widget _buildOverlay(BuildContext _) {
-    final box = context.findRenderObject();
-    final width = box is RenderBox ? box.size.width : 280.0;
-    final height = box is RenderBox ? box.size.height : 40.0;
+    final fieldBox = context.findRenderObject();
+    final overlayBox =
+        Overlay.of(context, rootOverlay: true).context.findRenderObject();
+    if (fieldBox is! RenderBox ||
+        !fieldBox.hasSize ||
+        overlayBox is! RenderBox ||
+        !overlayBox.hasSize) {
+      return const SizedBox.shrink();
+    }
+    final origin = overlayBox.globalToLocal(
+      fieldBox.localToGlobal(Offset.zero),
+    );
+    final fieldSize = fieldBox.size;
+    final overlaySize = overlayBox.size;
+    const padding = 12.0;
+    var menuWidth = math.max(fieldSize.width, 320.0);
+    menuWidth = math.min(
+      menuWidth,
+      math.max(160.0, overlaySize.width - padding * 2),
+    );
+    var left = origin.dx;
+    if (left + menuWidth > overlaySize.width - padding) {
+      left = overlaySize.width - padding - menuWidth;
+    }
+    if (left < padding) left = padding;
+    final spaceBelow =
+        overlaySize.height - origin.dy - fieldSize.height - padding;
+    final spaceAbove = origin.dy - padding;
+    const preferred = 280.0;
+    final openUp = spaceBelow < 140 && spaceAbove > spaceBelow;
+    final maxHeight = (openUp ? spaceAbove : spaceBelow)
+        .clamp(120.0, preferred)
+        .toDouble();
+    final top = openUp
+        ? origin.dy - maxHeight - 4
+        : origin.dy + fieldSize.height + 4;
     final matched = _matched;
     final emptyText = () {
+      if ((widget.emptyText ?? '').trim().isNotEmpty) {
+        return widget.emptyText!.trim();
+      }
       if (widget.requireKeyword && _query.isEmpty) {
         return widget.remoteOptions
             ? '输入关键词后从合同归集查询'
             : '输入关键词后显示匹配结果';
       }
       if (widget.remoteOptions) {
-        return '合同归集中没有匹配的合同';
+        return _query.isEmpty ? '输入关键词后查询' : '没有匹配的结果';
       }
       if (widget.options.isEmpty) {
         return widget.addLabel == null ? '请先在管理端配置选项' : '暂无选项，可新增';
       }
       return '没有匹配的选项';
     }();
-    return CompositedTransformFollower(
-      link: _link,
-      showWhenUnlinked: false,
-      offset: Offset(0, height + 4),
+    return Positioned(
+      left: left,
+      top: top,
+      width: menuWidth,
       child: TextFieldTapRegion(
         child: TapRegion(
           groupId: _tapGroup,
-          child: _ProposalMenuBox(
-            width: width,
-            maxHeight: 220,
-            child: Material(
+          child: Material(
               key: const ValueKey('proposal-select-menu'),
               color: Colors.white,
               elevation: 10,
@@ -244,7 +315,7 @@ class _ProposalSelectFieldState<T> extends State<ProposalSelectField<T>> {
                     )
                   else
                     ConstrainedBox(
-                      constraints: const BoxConstraints(maxHeight: 176),
+                      constraints: BoxConstraints(maxHeight: maxHeight),
                       child: ListView.builder(
                         padding: const EdgeInsets.fromLTRB(4, 4, 4, 4),
                         shrinkWrap: true,
@@ -269,11 +340,12 @@ class _ProposalSelectFieldState<T> extends State<ProposalSelectField<T>> {
                                       children: [
                                         Text(
                                           option.label,
-                                          maxLines: 1,
+                                          maxLines: 3,
                                           overflow: TextOverflow.ellipsis,
                                           style: TextStyle(
                                             color: ProposalPalette.text,
                                             fontSize: 13,
+                                            height: 1.35,
                                             fontWeight: active
                                                 ? FontWeight.w700
                                                 : FontWeight.w500,
@@ -286,11 +358,12 @@ class _ProposalSelectFieldState<T> extends State<ProposalSelectField<T>> {
                                             ),
                                             child: Text(
                                               option.meta!,
-                                              maxLines: 1,
+                                              maxLines: 2,
                                               overflow: TextOverflow.ellipsis,
                                               style: const TextStyle(
                                                 color: ProposalPalette.text3,
                                                 fontSize: 11,
+                                                height: 1.3,
                                               ),
                                             ),
                                           ),
@@ -343,148 +416,87 @@ class _ProposalSelectFieldState<T> extends State<ProposalSelectField<T>> {
             ),
           ),
         ),
-      ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    return CompositedTransformTarget(
-      link: _link,
-      child: TapRegion(
-        groupId: _tapGroup,
-        onTapOutside: (_) {
-          if (_focus.hasFocus) {
-            _focus.unfocus();
-            _hideOverlay();
-          }
-        },
-        child: TextField(
-          controller: _controller,
-          focusNode: _focus,
-          enabled: _enabled,
-          readOnly: !_canSearch,
-          style: const TextStyle(
-            fontSize: 13,
-            color: ProposalPalette.text,
-            fontWeight: FontWeight.w500,
-          ),
-          decoration:
-              proposalInputDecoration(
-                hint: widget.hint,
-                readOnly: !_enabled,
-              ).copyWith(
-                suffixIconConstraints: const BoxConstraints(
-                  minWidth: 36,
-                  minHeight: 36,
-                ),
-                suffixIcon: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (widget.allowClear && widget.value != null && _enabled)
-                      IconButton(
-                        visualDensity: VisualDensity.compact,
-                        padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints(
-                          minWidth: 28,
-                          minHeight: 28,
-                        ),
-                        onPressed: () => _choose(null),
-                        icon: const Icon(Icons.close_rounded, size: 16),
-                        color: ProposalPalette.text3,
-                      ),
-                    Icon(
-                      _enabled
-                          ? Icons.expand_more_rounded
-                          : Icons.lock_outline_rounded,
-                      size: _enabled ? 19 : 15,
-                      color: ProposalPalette.text3,
+    final tip = [
+      _selected?.label ?? '',
+      if ((_selected?.meta ?? '').trim().isNotEmpty) _selected!.meta!.trim(),
+    ].where((part) => part.isNotEmpty).join('\n');
+    Widget field = TextField(
+      controller: _controller,
+      focusNode: _focus,
+      enabled: _enabled,
+      readOnly: !_canSearch,
+      minLines: 1,
+      maxLines: 2,
+      style: const TextStyle(
+        fontSize: 13,
+        height: 1.35,
+        color: ProposalPalette.text,
+        fontWeight: FontWeight.w500,
+      ),
+      decoration:
+          proposalInputDecoration(
+            hint: widget.hint,
+            readOnly: !_enabled,
+          ).copyWith(
+            suffixIconConstraints: const BoxConstraints(
+              minWidth: 36,
+              minHeight: 36,
+            ),
+            suffixIcon: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (widget.allowClear && widget.value != null && _enabled)
+                  IconButton(
+                    visualDensity: VisualDensity.compact,
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(
+                      minWidth: 28,
+                      minHeight: 28,
                     ),
-                    const SizedBox(width: 8),
-                  ],
+                    onPressed: () => _choose(null),
+                    icon: const Icon(Icons.close_rounded, size: 16),
+                    color: ProposalPalette.text3,
+                  ),
+                Icon(
+                  _enabled
+                      ? Icons.expand_more_rounded
+                      : Icons.lock_outline_rounded,
+                  size: _enabled ? 19 : 15,
+                  color: ProposalPalette.text3,
                 ),
-              ),
-          onTap: _enabled
-              ? () {
-                  if (!_focus.hasFocus) _focus.requestFocus();
-                  _showOverlay();
-                }
-              : null,
-          onChanged: _canSearch ? (_) => setState(() {}) : null,
-        ),
-      ),
+                const SizedBox(width: 8),
+              ],
+            ),
+          ),
+      onTap: _enabled
+          ? () {
+              if (!_focus.hasFocus) _focus.requestFocus();
+              _showOverlay();
+            }
+          : null,
+      onChanged: _canSearch ? (_) => setState(() {}) : null,
     );
-  }
-}
-
-/// 菜单按输入框宽度布局，且只拦截菜单自身的点击，避免挡住输入。
-class _ProposalMenuBox extends SingleChildRenderObjectWidget {
-  const _ProposalMenuBox({
-    required this.width,
-    required this.maxHeight,
-    super.child,
-  });
-
-  final double width;
-  final double maxHeight;
-
-  @override
-  RenderObject createRenderObject(BuildContext context) =>
-      _RenderProposalMenuBox(width: width, maxHeight: maxHeight);
-
-  @override
-  void updateRenderObject(
-    BuildContext context,
-    _RenderProposalMenuBox renderObject,
-  ) {
-    renderObject
-      ..width = width
-      ..maxHeight = maxHeight;
-  }
-}
-
-class _RenderProposalMenuBox extends RenderShiftedBox {
-  _RenderProposalMenuBox({
-    required double width,
-    required double maxHeight,
-    RenderBox? child,
-  }) : _width = width,
-       _maxHeight = maxHeight,
-       super(child);
-
-  double _width;
-  double _maxHeight;
-
-  set width(double value) {
-    if (_width == value) return;
-    _width = value;
-    markNeedsLayout();
-  }
-
-  set maxHeight(double value) {
-    if (_maxHeight == value) return;
-    _maxHeight = value;
-    markNeedsLayout();
-  }
-
-  @override
-  void performLayout() {
-    size = constraints.biggest;
-    final child = this.child;
-    if (child == null) return;
-    child.layout(
-      BoxConstraints(
-        minWidth: _width,
-        maxWidth: _width,
-        maxHeight: _maxHeight,
-      ),
-      parentUsesSize: true,
+    if (tip.isNotEmpty) {
+      field = Tooltip(
+        message: tip,
+        waitDuration: const Duration(milliseconds: 350),
+        child: field,
+      );
+    }
+    return TapRegion(
+      groupId: _tapGroup,
+      onTapOutside: (_) {
+        if (_focus.hasFocus) {
+          _focus.unfocus();
+          _hideOverlay();
+        }
+      },
+      child: field,
     );
-    (child.parentData! as BoxParentData).offset = Offset.zero;
-  }
-
-  @override
-  bool hitTest(BoxHitTestResult result, {required Offset position}) {
-    return hitTestChildren(result, position: position);
   }
 }

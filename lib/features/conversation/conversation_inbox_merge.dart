@@ -48,7 +48,7 @@ List<NativeConversation> mergeInboxConversations(
             conversationAvatarSignature(server)) {
           return _mergeKeepingAvatars(prev, server, selfAvatar: selfAvatar);
         }
-        return server;
+        return _withStickyMention(prev, server);
       })
       .toList(growable: false);
   return applySelfAvatarToConversations(merged, selfAvatar);
@@ -115,6 +115,8 @@ NativeConversation applySelfAvatarToConversation(
     membershipStatus: c.membershipStatus,
     assistantGenerating: c.assistantGenerating,
     assistantGeneratingStatus: c.assistantGeneratingStatus,
+    hasUnreadMention: c.hasUnreadMention,
+    hasUnreadAtAll: c.hasUnreadAtAll,
   );
 }
 
@@ -159,11 +161,54 @@ NativeConversation _mergeKeepingAvatars(
     membershipStatus: server.membershipStatus,
     assistantGenerating: server.assistantGenerating,
     assistantGeneratingStatus: server.assistantGeneratingStatus,
+    hasUnreadMention: false,
+    hasUnreadAtAll: false,
   );
+  final withMention = _withStickyMention(prev, merged);
   if (selfAvatar != null && selfAvatar.userId > 0) {
-    return applySelfAvatarToConversation(merged, selfAvatar);
+    return applySelfAvatarToConversation(withMention, selfAvatar);
   }
-  return merged;
+  return withMention;
+}
+
+/// 静默刷新时：服务端仍有未读则保留本地 [@了你]，已读则清掉。
+NativeConversation _withStickyMention(
+  NativeConversation prev,
+  NativeConversation server,
+) {
+  final keep = server.unreadCount > 0;
+  final mention = keep && (prev.hasUnreadMention || server.hasUnreadMention);
+  final atAll = keep && (prev.hasUnreadAtAll || server.hasUnreadAtAll);
+  if (mention == server.hasUnreadMention && atAll == server.hasUnreadAtAll) {
+    return server;
+  }
+  return NativeConversation(
+    id: server.id,
+    kind: server.kind,
+    title: server.title,
+    unreadCount: server.unreadCount,
+    preview: server.preview,
+    updatedAt: server.updatedAt,
+    peerUserId: server.peerUserId,
+    peerDisplayName: server.peerDisplayName,
+    peerEnabled: server.peerEnabled,
+    memberCount: server.memberCount,
+    muted: server.muted,
+    pinned: server.pinned,
+    businessType: server.businessType,
+    peerDepartment: server.peerDepartment,
+    peerRoleLabel: server.peerRoleLabel,
+    peerAvatarPreset: server.peerAvatarPreset,
+    peerAvatarObjectKey: server.peerAvatarObjectKey,
+    peerAvatarUrl: server.peerAvatarUrl,
+    avatarMembers: server.avatarMembers,
+    dissolved: server.dissolved,
+    membershipStatus: server.membershipStatus,
+    assistantGenerating: server.assistantGenerating,
+    assistantGeneratingStatus: server.assistantGeneratingStatus,
+    hasUnreadMention: mention,
+    hasUnreadAtAll: atAll,
+  );
 }
 
 String _previewPreferringLocalBody(

@@ -227,7 +227,7 @@ class _NativeTravelImportPageState extends State<NativeTravelImportPage> {
   }
 
   Future<void> _onFilesDropped(DropDoneDetails detail) async {
-    if (_uploading) return;
+    if (_uploading || !_dropLive) return;
     setState(() => _fileDragging = false);
     final files = <XFile>[];
     for (final item in detail.files) {
@@ -425,12 +425,26 @@ class _NativeTravelImportPageState extends State<NativeTravelImportPage> {
     }
   }
 
+  bool get _dropLive => TickerMode.valuesOf(context).enabled;
+
   Widget _wrapDrop(Widget child) {
     if (!_supportsDesktopDrop) return child;
     return DropTarget(
-      onDragEntered: (_) => setState(() => _fileDragging = true),
-      onDragExited: (_) => setState(() => _fileDragging = false),
-      onDragDone: (d) => unawaited(_onFilesDropped(d)),
+      // 工作台 keep-alive 切走后页面仍挂在树上；desktop_drop 是窗口级监听，
+      // 不看 Offstage/IgnorePointer。未加 enable 时，在 IM 里拖文件也会
+      // 误报「请拖入携程 .xlsx 文件」。
+      enable: _dropLive && !_uploading,
+      onDragEntered: (_) {
+        if (!_dropLive) return;
+        setState(() => _fileDragging = true);
+      },
+      onDragExited: (_) {
+        if (_fileDragging) setState(() => _fileDragging = false);
+      },
+      onDragDone: (d) {
+        if (!_dropLive) return;
+        unawaited(_onFilesDropped(d));
+      },
       child: child,
     );
   }

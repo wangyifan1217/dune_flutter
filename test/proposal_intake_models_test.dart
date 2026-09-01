@@ -1,4 +1,5 @@
 import 'package:dunes_app/features/proposal_intake/proposal_intake_models.dart';
+import 'package:dunes_app/features/proposal_intake/settlement_catalog.dart';
 import 'package:dunes_app/features/xflow/approval_chat_share.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -55,6 +56,142 @@ void main() {
     expect(options.ratingFor(499), 'C');
   });
 
+  test('proposal options parse institution label and code', () {
+    final options = ProposalIntakeOptions.fromJson({
+      'market': {
+        'institutions': [
+          {'label': '卓悦C', 'code': 'ZYC'},
+          {'name': '天琨', 'key': 'TK'},
+          '力先|LX',
+        ],
+      },
+    });
+    expect(options.institutions.map((item) => item.code).toList(), [
+      'ZYC',
+      'TK',
+      'LX',
+    ]);
+    expect(options.institutions.first.name, '卓悦C');
+  });
+
+  test('sku and pack keep institution snapshot', () {
+    final sku = ProposalSkuDetailRow.fromJson({
+      'id': 'sku-1',
+      'productName': '中石油100元',
+      'institutionRef': {'code': 'ZYC', 'name': '卓悦C'},
+    });
+    expect(sku.institutionCode, 'ZYC');
+    expect(sku.toJson()['institution'], '卓悦C');
+    final pack = ProposalCouponPackRow.fromJson({
+      'id': 'pack-1',
+      'name': '券包',
+      'institution': '天琨',
+      'institutionCode': 'TK',
+    });
+    expect(pack.institutionRef?.label, '天琨');
+    expect(pack.institutionCode, 'TK');
+  });
+
+  test('sku and pack keep channel snapshot and lift from old settlements', () {
+    final sku = ProposalSkuDetailRow.fromJson({
+      'id': 'sku-1',
+      'productName': '中石油100元',
+      'channelRef': {'id': '2070026713580023809', 'code': 'C001', 'name': '银联商务'},
+      'settlements': [
+        {'id': 'st-1', 'billType': '电子券销售款'},
+      ],
+    });
+    expect(sku.channelCode, 'C001');
+    expect(sku.toJson()['channel'], '银联商务');
+    expect(sku.toJson()['settlements'][0]['channelRef']['code'], 'C001');
+
+    final lifted = ProposalSkuDetailRow.fromJson({
+      'id': 'sku-2',
+      'productName': '中石油50元',
+      'settlements': [
+        {
+          'id': 'st-1',
+          'channelRef': {'code': 'C002', 'name': '微信'},
+        },
+      ],
+    });
+    expect(lifted.channelRef?.name, '微信');
+    expect(lifted.toJson()['channelCode'], 'C002');
+
+    final pack = ProposalCouponPackRow.fromJson({
+      'id': 'pack-1',
+      'name': '券包',
+      'channel': '云闪付',
+      'channelCode': 'YSF',
+    });
+    expect(pack.channelRef?.label, '云闪付');
+    expect(pack.channelCode, 'YSF');
+  });
+
+  test('existing built sku and pack require catalog product instead of name', () {
+    expect(
+      proposalIntakeSkuSettleIssues({
+        'skuDetails': [
+          {'id': 'sku-1', 'existingBuilt': '是'},
+        ],
+      }),
+      contains('渠道产品第1条请搜索并选择已建产品'),
+    );
+    final sku = ProposalSkuDetailRow.fromJson({
+      'id': 'sku-1',
+      'existingBuilt': '是',
+      'assetProduct': {
+        'id': 10,
+        'productCode': 'CP001',
+        'productName': '中石油100',
+        'channelId': 1,
+        'channelName': '银联商务',
+      },
+    });
+    expect(sku.isExistingBuilt, isTrue);
+    expect(sku.productName, '中石油100');
+    expect(sku.toJson()['assetProduct']['productCode'], 'CP001');
+
+    expect(
+      proposalIntakeSkuSettleIssues({
+        'isCouponPack': true,
+        'skuDetails': [
+          {'id': 'sku-1', 'productName': '中石油100元'},
+        ],
+        'couponPacks': [
+          {'id': 'pack-1', 'existingBuilt': '是'},
+        ],
+      }),
+      contains('券包第1条请搜索并选择已建券包'),
+    );
+    expect(
+      proposalIntakeSkuSettleIssues({
+        'isCouponPack': true,
+        'skuDetails': [
+          {'id': 'sku-1', 'productName': '中石油100元'},
+        ],
+        'couponPacks': [
+          {
+            'id': 'pack-1',
+            'existingBuilt': '是',
+            'name': '中石油加油券包',
+            'assetProduct': {'id': 9, 'productName': '中石油加油券包'},
+            'settlements': [
+              {
+                'id': 'st-a',
+                'settleMode': '按结算比例',
+                'settleRatio': '8%',
+                'formula': '销售额*比例',
+                'taxRate': '6%',
+              },
+            ],
+          },
+        ],
+      }),
+      isEmpty,
+    );
+  });
+
   test('proposal options parse configured presidents', () {
     final options = ProposalIntakeOptions.fromJson({
       'people': {
@@ -96,6 +233,32 @@ void main() {
     expect(options.businessCostItems, ['员工提成']);
     expect(options.businessCostRules, '提成按规则累计');
     expect(options.operatingCostRules, '差旅不超过收入 2%');
+  });
+
+  test('project cost chips follow finance header order and alias 平台服务费', () {
+    expect(kProposalProjectCostItems, [
+      '机构返佣',
+      '万里通返佣',
+      '补贴款分润',
+      '平台交易服务费',
+      '渠道服务费分润',
+      '支付手续费',
+      '推广费',
+    ]);
+    expect(proposalProjectCostDisplayName('平台服务费'), '平台交易服务费');
+    expect(kProposalOperatingCostItems, ['差旅成本', '招待费']);
+    expect(kProposalTaxCostItems, [
+      '增值税及附加（能源）',
+      '增值税及附加（运营商+公共出行）',
+      '印花税',
+      '所得税',
+    ]);
+    expect(
+      proposalCostAmountId('平台交易服务费', const [
+        ProposalCostItemOption(code: 'ap_FW_PTF', name: '平台服务费'),
+      ]),
+      'ap_FW_PTF',
+    );
   });
 
   test('finance cost item options keep codes from asset', () {
@@ -162,7 +325,7 @@ void main() {
       proposalIntakeCostItemSettleIssues({
         'costItems': ['机构返佣'],
       }, catalog: catalog),
-      ['项目成本「机构返佣」请填写结算单价/比例、结算规则、对方主体、我方主体、税率'],
+      ['项目成本「机构返佣」请填写结算比例或单价、计算公式、对方主体、我方主体、税率'],
     );
 
     var form = proposalSyncCostSelection(
@@ -204,7 +367,7 @@ void main() {
       proposalIntakeCostItemSettleIssues({
         'businessCostItems': ['供给侧H'],
       }, businessCatalog: catalog),
-      ['业务成本「供给侧H」请填写结算单价/比例、结算规则、对方主体、我方主体、税率'],
+      ['业务成本「供给侧H」请填写结算比例或单价、计算公式、对方主体、我方主体、税率'],
     );
 
     var form = proposalSyncCostSelection(
@@ -843,6 +1006,182 @@ void main() {
     expect(associated.rows.single.financeModuleId, created.modules.single.id);
   });
 
+  test('settlement terms map bill-type fields and keep legacy price/rule', () {
+    final legacy = ProposalFinanceSettleTerms.fromJson({
+      'settlePrice': '1.2%',
+      'settleRule': '核销结算',
+      'counterparty': '中石化',
+      'ourParty': '沙丘',
+      'taxRate': '6%',
+    });
+    expect(legacy.displayRatio, '1.2%');
+    expect(legacy.displayFormula, '核销结算');
+    expect(legacy.isComplete, isTrue);
+
+    final next = ProposalFinanceSettleTerms.fromJson({
+      'billType': '电子券销售款',
+      'settleMode': '按结算比例',
+      'settleRatio': '8%',
+      'formula': '销售额*比例',
+      'invoiceType': '专票',
+      'taxRate': '6%',
+      'effectiveTime': '2026-08-01',
+      'expireTime': '2026-12-31',
+      'counterparty': '中石化',
+      'ourParty': '沙丘',
+    });
+    expect(next.resolvedPrice, '8%');
+    expect(next.toJson()['settlePrice'], '8%');
+    expect(next.toJson()['settleRule'], '销售额*比例');
+    expect(next.toJson()['billType'], '电子券销售款');
+  });
+
+  test('each product gets one settlement and can add more', () {
+    const sku = ProposalSkuDetailRow(id: 'sku-1', productName: '中石油100元');
+    final first = proposalIntakeSkuSettlements(sku);
+    expect(first, hasLength(1));
+    expect(first.single.id, 'sku-1-st-1');
+    expect(proposalIntakeSettleLabel(0), '结算一');
+    expect(proposalIntakeSettleLabel(1), '结算二');
+
+    final saved = sku.copyWith(
+      settlements: [
+        const ProposalSkuSettleRow(id: 'st-a'),
+        const ProposalSkuSettleRow(id: 'st-b'),
+      ],
+    );
+    expect(proposalIntakeSkuSettlements(saved), hasLength(2));
+    expect(
+      proposalIntakeSkuSettleReviewKeys({
+        'skuDetails': [saved.toJson()],
+      }),
+      ['skuSettle:sku-1:st-a', 'skuSettle:sku-1:st-b'],
+    );
+  });
+
+  test('sku settle issues match backend required fields', () {
+    expect(
+      proposalIntakeSkuSettleIssues({
+        'skuDetails': [
+          {'id': 'sku-1', 'productName': ''},
+        ],
+      }),
+      contains('渠道产品第1条请填写产品名称'),
+    );
+    expect(
+      proposalIntakeSkuSettleIssues({
+        'skuDetails': [
+          {'id': 'sku-1', 'productName': '中石油100元'},
+        ],
+      }),
+      contains('渠道产品「中石油100元」结算一未填完结算方式对应金额、计算公式、税率'),
+    );
+    expect(
+      proposalIntakeSkuSettleIssues({
+        'skuDetails': [
+          {
+            'id': 'sku-1',
+            'productName': '中石油100元',
+            'settlements': [
+              {
+                'id': 'st-1',
+                'settleMode': '按结算比例',
+                'settleRatio': '8%',
+                'formula': '销售额*比例',
+                'taxRate': '6%',
+              },
+            ],
+          },
+        ],
+      }),
+      isEmpty,
+    );
+  });
+
+  test('coupon packs group products and carry their own settlements', () {
+    expect(proposalIntakeIsCouponPack({'isCouponPack': true}), isTrue);
+    expect(proposalIntakeIsCouponPack({'isCouponPack': '是'}), isTrue);
+    expect(proposalIntakeIsCouponPack({}), isFalse);
+
+    final form = {
+      'isCouponPack': true,
+      'skuDetails': [
+        {'id': 'sku-1', 'productName': '中石油50元'},
+        {'id': 'sku-2', 'productName': '中石油100元'},
+      ],
+      'couponPacks': [
+        {
+          'id': 'pack-1',
+          'name': '中石油加油券包',
+          'skuIds': ['sku-1', 'sku-2'],
+          'settlements': [
+            {
+              'id': 'st-a',
+              'settleMode': '按结算比例',
+              'settleRatio': '8%',
+              'formula': '销售额*比例',
+              'taxRate': '6%',
+            },
+            {'id': 'st-b'},
+          ],
+        },
+      ],
+    };
+    expect(proposalIntakeSkuSettleReviewKeys(form), [
+      'packSettle:pack-1:st-a',
+      'packSettle:pack-1:st-b',
+    ]);
+    expect(
+      proposalIntakeSkuSettleIssues(form),
+      contains('券包「中石油加油券包」结算二未填完结算方式对应金额、计算公式、税率'),
+    );
+
+    form['couponPacks'] = [
+      {
+        'id': 'pack-1',
+        'name': '中石油加油券包',
+        'skuIds': ['sku-1', 'sku-2'],
+        'settlements': [
+          {
+            'id': 'st-a',
+            'settleMode': '按结算比例',
+            'settleRatio': '8%',
+            'formula': '销售额*比例',
+            'taxRate': '6%',
+          },
+        ],
+      },
+    ];
+    expect(proposalIntakeSkuSettleIssues(form), isEmpty);
+  });
+
+  test('coupon pack mode skips product-level settlement issues', () {
+    expect(
+      proposalIntakeSkuSettleIssues({
+        'isCouponPack': true,
+        'skuDetails': [
+          {'id': 'sku-1', 'productName': '中石油100元'},
+        ],
+      }),
+      contains('已勾选券包，请至少创建一个券包'),
+    );
+    expect(
+      proposalIntakeSkuSettleIssues({
+        'isCouponPack': true,
+        'skuDetails': [
+          {'id': 'sku-1', 'productName': '中石油100元'},
+        ],
+        'couponPacks': [
+          {'id': 'pack-1', 'name': '', 'skuIds': <String>[]},
+        ],
+      }),
+      allOf(
+        contains('券包第1条请填写券包名称'),
+        contains('券包「第1条」请选择包含的渠道产品'),
+      ),
+    );
+  });
+
   test('same settlement fingerprint can be reused', () {
     const terms = ProposalFinanceSettleTerms(
       settlePrice: '1.2%',
@@ -862,25 +1201,20 @@ void main() {
     );
   });
 
-  test('market need-finance rows require a complete module', () {
-    final issues = proposalIntakeLaunchFinanceIssues({
-      'launchRows': [
-        {
-          'id': 'lr-1',
-          'province': '河南',
-          'faceValue': '100',
-          'needFinanceModule': true,
-        },
-        {
-          'id': 'lr-2',
-          'province': '广东',
-          'faceValue': '50',
-          'needFinanceModule': false,
-        },
-      ],
-    });
-    expect(issues, contains('上线第1行已勾选需要财务模块，请新增或关联财务模块'));
-    expect(issues.where((item) => item.contains('第2行')), isEmpty);
+  test('finance modules are validated without launch rows', () {
+    expect(
+      proposalIntakeLaunchFinanceIssues({
+        'launchRows': [
+          {
+            'id': 'lr-1',
+            'province': '河南',
+            'faceValue': '100',
+            'needFinanceModule': true,
+          },
+        ],
+      }),
+      isEmpty,
+    );
   });
 
   test('finance module period is required and parsed from json', () {
@@ -916,30 +1250,12 @@ void main() {
     expect(withPeriod.projectPeriodLabel, '2026-01-15 ~ 2026-02-14');
     expect(
       proposalIntakeLaunchFinanceIssues({
-        'launchRows': [
-          {
-            'id': 'lr-1',
-            'province': '河南',
-            'faceValue': '100',
-            'needFinanceModule': true,
-            'financeModuleId': 'fm-2',
-          },
-        ],
         'financeModules': [missingPeriod.toJson()],
       }),
       contains('财务模块「模块乙」非自然月请选择项目周期'),
     );
     expect(
       proposalIntakeLaunchFinanceIssues({
-        'launchRows': [
-          {
-            'id': 'lr-1',
-            'province': '河南',
-            'faceValue': '100',
-            'needFinanceModule': true,
-            'financeModuleId': 'fm-1',
-          },
-        ],
         'financeModules': [
           {'id': 'fm-1', 'title': '模块甲'},
         ],
@@ -980,5 +1296,55 @@ void main() {
       ),
       natural,
     );
+  });
+
+  test('catalog refs round-trip with id/code/name for third-party export', () {
+    const sector = CatalogRef(id: 1, code: 'NY', name: '能源');
+    const pointsA = CatalogRef(code: 'POINTS_REBATE', name: '能源积分');
+    const pointsB = CatalogRef(code: 'POINTS_REBATE', name: '能源返费');
+    expect(pointsA == pointsB, isFalse);
+
+    final terms = ProposalFinanceSettleTerms(
+      billType: '电子券销售款',
+      billTypeRef: const CatalogRef(id: 8, code: 'XS', name: '电子券销售款'),
+      channelRef: const CatalogRef(id: 1, code: 'C001', name: '银联商务'),
+      settleMode: '按结算比例结算',
+      settleModeRef: const CatalogRef(code: '1', name: '按结算比例结算'),
+      settleRatio: '8%',
+      formula: '按比例',
+      formulaRef: const CatalogRef(
+        code: '101',
+        name: '按比例',
+        formulaExpression: '结算金额=面值×比例',
+        productSource: 'CHANNEL',
+      ),
+      taxRate: '6%',
+    );
+    final json = terms.toJson();
+    expect(json['billTypeRef'], {'id': 8, 'code': 'XS', 'name': '电子券销售款'});
+    expect(json['channelRef'], {'id': 1, 'code': 'C001', 'name': '银联商务'});
+    expect(json['settleModeRef'], {'code': '1', 'name': '按结算比例结算'});
+    expect(json['formulaRef'], {
+      'code': '101',
+      'name': '按比例',
+      'formulaExpression': '结算金额=面值×比例',
+      'productSource': 'CHANNEL',
+    });
+
+    final restored = ProposalFinanceSettleTerms.fromJson(json);
+    expect(restored.billTypeRef?.id, 8);
+    expect(restored.channelRef?.code, 'C001');
+    expect(restored.settleModeRef?.code, '1');
+    expect(restored.formulaRef?.formulaExpression, '结算金额=面值×比例');
+    expect(proposalIntakeSettleUsesRatio(restored), isTrue);
+
+    final sku = ProposalSkuDetailRow(
+      id: 'sku-1',
+      productName: '中石油100元',
+      syncSourceRef: const CatalogRef(code: 'DIGITALG', name: '能源'),
+    );
+    expect(sku.toJson()['syncSource'], 'DIGITALG');
+    expect(sku.toJson()['syncSourceRef']['name'], '能源');
+    expect(sector.toJson()['code'], 'NY');
   });
 }

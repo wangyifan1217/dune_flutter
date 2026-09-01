@@ -1,5 +1,6 @@
 import 'package:dunes_app/features/qianji/digital_auto/digital_auto_config.dart';
 import 'package:dunes_app/features/qianji/digital_auto/digital_employee_service.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -42,5 +43,11 @@ void main() {
     expect(item.chatConfig.welcomePrompts, ['整理本周会议']);
     expect(item.chatConfig.chatPath, '/qianji/meeting-minutes/chat');
     expect(item.chatConfig.mcpPath, DigitalAutoConfig.meetingMinutes.mcpPath);
+  });
+
+  test('catalog iconKey maps to the same Material icon on hub and chat', () {
+    expect(digitalEmployeeIcon('auto_awesome'), Icons.auto_awesome_rounded);
+    expect(digitalEmployeeIcon('oil_barrel'), Icons.oil_barrel_rounded);
+    expect(digitalEmployeeIcon(null), Icons.auto_awesome_rounded);
   });
 }

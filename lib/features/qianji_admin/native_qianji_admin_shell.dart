@@ -538,18 +538,22 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
   void _onTaskChrome(TaskShellChrome chrome) {
     if (!mounted) return;
     _contentChrome = chrome;
-    setState(() {
-      if (_pageIndex == 0) {
-        _hideShellHeader = false;
-        _shellTrailing = null;
-        _onShellBackOverride = null;
-      } else {
-        _hideShellHeader = chrome.hideShellHeader;
-        _shellTrailing = chrome.trailing;
-        _onShellBackOverride = chrome.onBack;
-      }
+    // 子页 dispose 时也会清 chrome；finalizeTree 期间不能 setState。
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      setState(() {
+        if (_pageIndex == 0) {
+          _hideShellHeader = false;
+          _shellTrailing = null;
+          _onShellBackOverride = null;
+        } else {
+          _hideShellHeader = chrome.hideShellHeader;
+          _shellTrailing = chrome.trailing;
+          _onShellBackOverride = chrome.onBack;
+        }
+      });
+      _syncBackInterceptor();
     });
-    _syncBackInterceptor();
   }
 
   Widget _buildContentPage() {

@@ -465,34 +465,19 @@ class _NativeConversationPageState extends State<NativeConversationPage>
     if (conversationId <= 0 || !mounted) return;
     final idx = _items.indexWhere((c) => c.id == conversationId);
     if (idx < 0) return;
-    if (_items[idx].unreadCount <= 0) return;
+    final old = _items[idx];
+    if (old.unreadCount <= 0 &&
+        !old.hasUnreadMention &&
+        !old.hasUnreadAtAll) {
+      return;
+    }
     setState(() {
       final copy = _items.toList(growable: true);
-      final old = copy[idx];
-      copy[idx] = NativeConversation(
-        id: old.id,
-        kind: old.kind,
-        title: old.title,
+      copy[idx] = ConversationInboxRealtime.copyConversation(
+        old,
         unreadCount: 0,
-        preview: old.preview,
-        updatedAt: old.updatedAt,
-        peerUserId: old.peerUserId,
-        peerDisplayName: old.peerDisplayName,
-        peerEnabled: old.peerEnabled,
-        memberCount: old.memberCount,
-        muted: old.muted,
-        pinned: old.pinned,
-        businessType: old.businessType,
-        peerDepartment: old.peerDepartment,
-        peerRoleLabel: old.peerRoleLabel,
-        peerAvatarPreset: old.peerAvatarPreset,
-        peerAvatarObjectKey: old.peerAvatarObjectKey,
-        peerAvatarUrl: old.peerAvatarUrl,
-        avatarMembers: old.avatarMembers,
-        dissolved: old.dissolved,
-        membershipStatus: old.membershipStatus,
-        assistantGenerating: old.assistantGenerating,
-        assistantGeneratingStatus: old.assistantGeneratingStatus,
+        hasUnreadMention: false,
+        hasUnreadAtAll: false,
       );
       _items = copy;
     });
@@ -1467,6 +1452,7 @@ class _NativeConversationPageState extends State<NativeConversationPage>
             )
           : null,
       sysTag: c.businessType,
+      mentionLabel: selected ? null : c.unreadMentionLabel,
       showDivider: true,
       onTap: onTap,
     );
@@ -1833,14 +1819,17 @@ class _NativeConversationPageState extends State<NativeConversationPage>
     final sections = _buildSections();
     final children = <Widget>[];
     for (final section in sections) {
-      children.add(
-        ChatInboxSectionHeader(
-          label: section.label,
-          count: section.count,
-          pinned: section.pinned,
-          leading: section.leading,
-        ),
-      );
+      // 「聊天」分区标题（含会话条数）不展示；审批工作群等其它分区仍保留。
+      if (section.key != 'chat') {
+        children.add(
+          ChatInboxSectionHeader(
+            label: section.label,
+            count: section.count,
+            pinned: section.pinned,
+            leading: section.leading,
+          ),
+        );
+      }
       children.addAll(section.rows);
     }
 

@@ -8,6 +8,7 @@ import 'package:just_audio/just_audio.dart';
 
 import '../../core/http/session_http.dart';
 import '../auth/auth_session.dart';
+import 'meeting_storage_multipart.dart';
 import 'native_meeting_models.dart';
 
 class NativeMeetingService {
@@ -204,7 +205,7 @@ class NativeMeetingService {
     Object? lastError;
     for (var attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
-        return await _uploadAudioViaStorageApi(
+        return await _uploadAudioPreferringMultipart(
           filePath: filePath,
           fileName: fileName,
           bucket: bucket,
@@ -255,7 +256,195 @@ class NativeMeetingService {
         msg.contains('socket') ||
         msg.contains('connection') ||
         msg.contains('排队') ||
-        msg.contains('network');
+        msg.contains('network') ||
+        msg.contains('missing part etag');
+  }
+
+  Future<Map<String, dynamic>> _uploadAudioPreferringMultipart({
+    required String filePath,
+    required String fileName,
+    required String bucket,
+    void Function(double progress)? onProgress,
+  }) async {
+    final localFile = io.File(filePath);
+    if (!await localFile.exists()) {
+      throw Exception('录音文件不存在');
+    }
+    final fileSize = await localFile.length();
+    if (fileSize <= 0) {
+      throw Exception('录音文件为空');
+    }
+    if (!MeetingStorageMultipart.shouldUse(fileSize)) {
+      return _uploadAudioViaStorageApi(
+        filePath: filePath,
+        fileName: fileName,
+        bucket: bucket,
+        onProgress: onProgress,
+      );
+    }
+    try {
+      return await _uploadAudioViaMultipart(
+        file: localFile,
+        filePath: filePath,
+        fileName: fileName,
+        fileSize: fileSize,
+        bucket: bucket,
+        onProgress: onProgress,
+      );
+    } catch (e) {
+      if (!MeetingStorageMultipart.isUnsupported(e)) rethrow;
+      debugPrint('Meeting multipart unsupported, fallback to single POST: $e');
+      return _uploadAudioViaStorageApi(
+        filePath: filePath,
+        fileName: fileName,
+        bucket: bucket,
+        onProgress: onProgress,
+      );
+    }
+  }
+
+  Future<Map<String, dynamic>> _uploadAudioViaMultipart({
+    required io.File file,
+    required String filePath,
+    required String fileName,
+    required int fileSize,
+    required String bucket,
+    void Function(double progress)? onProgress,
+  }) async {
+    final contentType = contentTypeForPath(filePath);
+    final init = await _storageJsonPost('/storage/multipart/init', {
+      'bucket': bucket,
+      'fileName': fileName,
+      'contentType': contentType,
+    });
+    final objectKey = '${init['objectKey'] ?? ''}'.trim();
+    final uploadId = '${init['uploadId'] ?? ''}'.trim();
+    final partSize =
+        (init['partSize'] as num?)?.toInt() ??
+        MeetingStorageMultipart.defaultPartSize;
+    if (objectKey.isEmpty || uploadId.isEmpty) {
+      throw Exception('初始化分片上传失败');
+    }
+    final plans = MeetingStorageMultipart.planParts(
+      fileSize,
+      partSize: partSize,
+    );
+    if (plans.isEmpty) {
+      throw Exception('录音文件为空');
+    }
+    final parts = <Map<String, dynamic>>[];
+    var uploaded = 0;
+    for (final plan in plans) {
+      final etag = await _putMultipartPart(
+        bucket: bucket,
+        objectKey: objectKey,
+        uploadId: uploadId,
+        plan: plan,
+        file: file,
+      );
+      parts.add({'partNumber': plan.partNumber, 'etag': etag});
+      uploaded += plan.length;
+      onProgress?.call((uploaded / fileSize).clamp(0.0, 0.99));
+    }
+    final done = await _storageJsonPost('/storage/multipart/complete', {
+      'bucket': bucket,
+      'objectKey': objectKey,
+      'uploadId': uploadId,
+      'contentType': contentType,
+      'fileName': fileName,
+      'fileSize': fileSize,
+      'parts': parts,
+    });
+    onProgress?.call(1);
+    final key = '${done['objectKey'] ?? objectKey}'.trim();
+    if (key.isEmpty) {
+      throw Exception('录音上传失败，未获得文件标识');
+    }
+    return <String, dynamic>{
+      ...done,
+      'objectKey': key,
+      'bucket': done['bucket'] ?? bucket,
+      'contentType': done['contentType'] ?? contentType,
+      'fileName': done['fileName'] ?? fileName,
+      'size': done['size'] ?? fileSize,
+    };
+  }
+
+  Future<String> _putMultipartPart({
+    required String bucket,
+    required String objectKey,
+    required String uploadId,
+    required MeetingStoragePartPlan plan,
+    required io.File file,
+  }) async {
+    Object? lastError;
+    for (var attempt = 1; attempt <= 3; attempt++) {
+      try {
+        final signed = await _storageJsonPost('/storage/multipart/part-url', {
+          'bucket': bucket,
+          'objectKey': objectKey,
+          'uploadId': uploadId,
+          'partNumber': plan.partNumber,
+        });
+        final url = '${signed['url'] ?? ''}'.trim();
+        if (url.isEmpty) {
+          throw Exception('upload failed: missing part url');
+        }
+        final bytes = await _readFileRange(file, plan.offset, plan.length);
+        final put = await http
+            .put(
+              Uri.parse(url),
+              headers: {'Content-Length': '${bytes.length}'},
+              body: bytes,
+            )
+            .timeout(
+              const Duration(minutes: 10),
+              onTimeout: () => throw Exception('分片上传超时，请检查网络后重试'),
+            );
+        if (put.statusCode < 200 || put.statusCode >= 300) {
+          throw Exception('upload failed: ${put.statusCode} ${put.body}');
+        }
+        final etag = MeetingStorageMultipart.etagFromHeaders(put.headers);
+        if (etag == null || etag.isEmpty) {
+          throw Exception('upload failed: missing part etag');
+        }
+        return etag;
+      } catch (e) {
+        lastError = e;
+        debugPrint(
+          'Meeting multipart part ${plan.partNumber} attempt $attempt/3 failed: $e',
+        );
+        if (attempt >= 3 || !_isRetryableUploadError(e)) break;
+        await Future<void>.delayed(Duration(milliseconds: 700 * attempt));
+      }
+    }
+    if (lastError is Exception) throw lastError as Exception;
+    throw Exception('$lastError');
+  }
+
+  Future<List<int>> _readFileRange(io.File file, int offset, int length) async {
+    final raf = await file.open();
+    try {
+      await raf.setPosition(offset);
+      return await raf.read(length);
+    } finally {
+      await raf.close();
+    }
+  }
+
+  Future<Map<String, dynamic>> _storageJsonPost(
+    String path,
+    Map<String, dynamic> body,
+  ) async {
+    final resp = await dunesHttpPost(
+      session,
+      path,
+      body: jsonEncode(body),
+    ).timeout(const Duration(seconds: 45));
+    if (resp.statusCode < 200 || resp.statusCode >= 300) {
+      throw Exception('upload failed: ${resp.statusCode} ${resp.body}');
+    }
+    return _unwrapData(resp.body);
   }
 
   Future<Map<String, dynamic>> _uploadAudioViaStorageApi({

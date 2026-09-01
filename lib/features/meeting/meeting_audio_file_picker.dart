@@ -10,6 +10,17 @@ import 'package:path_provider/path_provider.dart';
 abstract final class MeetingAudioFilePicker {
   static const MethodChannel _channel = MethodChannel('dunes/meeting_audio');
 
+  static const supportedExtensions = {'wav', 'mp3', 'm4a', 'aac', 'amr'};
+
+  static bool isSupportedAudioName(String name) {
+    final normalized = name.replaceAll('\\', '/');
+    final slash = normalized.lastIndexOf('/');
+    final fileName = slash >= 0 ? normalized.substring(slash + 1) : normalized;
+    final dot = fileName.lastIndexOf('.');
+    if (dot <= 0) return false;
+    return supportedExtensions.contains(fileName.substring(dot + 1).toLowerCase());
+  }
+
   static Future<String?> pick() async {
     if (!kIsWeb &&
         (defaultTargetPlatform == TargetPlatform.android ||
